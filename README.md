@@ -87,4 +87,4 @@ When using a GitHub CLI version that includes `gh skill`, validate locally with:
 gh skill publish --dry-run
 ```
 
-Publishing expects each `SKILL.md` to include YAML frontmatter with at least `name` and `description`, and the `name` should match its directory name.
+Publishing expects each `SKILL.md` to include YAML frontmatter with at least `name` and `description`, and the `name` must match its directory name.
