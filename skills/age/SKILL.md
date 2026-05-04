@@ -29,7 +29,7 @@ Default to the current working diff when no ref is supplied. If the base branch 
 | encapsulation | high | boundary leaks, cross-slice internals, public API sprawl |
 | spec | high | drift from stated requirements or acceptance criteria |
 | complexity | medium | unnecessary nesting, long functions, speculative abstractions |
-| deslop | medium | cleanup of dead code, AI residue, duplicated logic, vague names |
+| deslop (code cleanup) | medium | removal of dead code, AI residue, duplicated logic, vague names |
 | assertions | medium | weak tests, shallow existence checks, swallowed errors |
 | nih | medium | reinvented dependency, stdlib, or existing project helper |
 | precedent | advisory | conflict with local patterns or nearby history |

@@ -1,6 +1,6 @@
 # easy-cheese
 
-A lightweight, skills-only cheese workflow for agents that support `gh skill`-style discovery. It keeps the cheese-flow vocabulary while avoiding required delegation setup, generated harness files, or mandatory MCP setup.
+A lightweight, skills-only cheese workflow for agents that support `gh skill`-style discovery. It keeps the cheese-flow vocabulary — named stages such as mold, cook, press, age, and cure — while avoiding required delegation setup, generated harness files, or mandatory MCP setup.
 
 ## Skill layout
 
