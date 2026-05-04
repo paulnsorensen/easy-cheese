@@ -19,7 +19,7 @@ The current mold conversation state and any evidence gathered so far.
 ## Instructions
 
 1. Identify claims that affect the spec.
-2. Check code, docs, or briesearch evidence for those claims.
+2. Check code, docs, or `/briesearch` evidence for those claims.
 3. Mark unresolved claims as `[?]`, `[TBD]`, or `[BLOCKED]`.
 
 ## Tool use
