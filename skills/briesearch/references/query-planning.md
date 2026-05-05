@@ -16,11 +16,12 @@ Pulled from `tavily-best-practices/references/search.md`
 (<https://github.com/tavily-ai/skills/blob/main/skills/tavily-best-practices/references/search.md>):
 
 - **Keep queries under 400 characters.** Short query, not a long-form prompt.
-- **Don't compose one giant query** — break it into the 2-5 subqueries from step 4 and run them in parallel.
+- **Don't compose one giant query** — break it into the 2-5 subqueries from step 4 and run them in parallel. In the Claude Code harness, parallelism means a single assistant turn with multiple tool calls; sequential turns serialise.
 - **Include constraints in the query**: company names, framework versions, geographies, year. Search engines reward concrete keywords.
 - **Pick the right depth**: `basic` for general lookups (default), `advanced` for precision-sensitive questions, `fast` when latency matters.
 - **Filter freshness at the API**, not after: `time_range="month"` for current facts, `start_date`/`end_date` for absolute windows.
 - **Filter authority at the API**: `include_domains=["arxiv.org","github.com","sec.gov"]` for trusted sources, `exclude_domains=["reddit.com","quora.com"]` for noise.
+- **Don't ask `tavily_search` for raw bodies.** Leave `include_raw_content=false`; pass the surviving URLs to `tavily_extract(query=…)` instead. Cheaper, lower noise, and aligns with `context-isolation.md`.
 
 ## Subquery decomposition examples
 
