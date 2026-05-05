@@ -1,6 +1,13 @@
 # Cheese-flow runtime scratch (research notes, age sidecars, mold state, etc.)
 .cheese/
 
+# Conductor workspace scratch
+.context/
+
+# Python
+__pycache__/
+*.pyc
+
 # OS / editor
 .DS_Store
 *.swp
