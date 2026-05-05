@@ -33,7 +33,7 @@ Default to the current working diff when no ref is supplied. If the base branch 
 | assertions | medium | weak tests, shallow existence checks, swallowed errors |
 | nih | medium | reinvented dependency, stdlib, or existing project helper |
 
-Per-dimension rubrics and recommendation shapes in `references/dimensions.md`. Easy Cheese intentionally drops the `precedent` (git-history) dimension; that lives in cheese-flow proper.
+Per-dimension rubrics and recommendation shapes in `references/dimensions.md`. This reduced workflow intentionally omits the git-history/precedent dimension.
 
 ## Flow
 

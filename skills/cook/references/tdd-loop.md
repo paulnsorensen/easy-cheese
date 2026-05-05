@@ -30,7 +30,7 @@ If cook reports partial or skipped work, **stop and resolve before taste-test**.
 
 ## Taste-test — drift / readability / scope
 
-After cook says "I completed all the changes", run a taste test before press. Easy Cheese collapses the three cheese-flow taste agents into one inline step:
+After cook says "I completed all the changes", run a taste test before press. This reduced workflow uses one inline taste-test step:
 
 | Lens | Question | Pass criterion |
 | --- | --- | --- |
