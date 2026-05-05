@@ -1,9 +1,9 @@
 ---
 name: cheez-write
-description: This skill should be used when the user asks to edit, replace, modify, update, change, delete, or insert code in a file — phrases like "replace this function", "delete lines 44-89", "update validateToken", "change the implementation", "add this import", "fix this bug" (when fixing requires editing). Replaces sed / awk / Edit / Write with hash-anchored tilth MCP edits. Always read first via cheez-read to get hash anchors. Prefer surgical anchored edits over whole-file rewrites. If tilth MCP is unavailable, stop and report rather than fall back. Do NOT use for reading files (cheez-read first to get anchors), searching code (use cheez-search), or running tests/builds.
+description: This skill should be used when the user asks to edit, replace, modify, update, change, delete, or insert code in a file — phrases like "replace this function", "delete lines 44-89", "update validateToken", "change the implementation", "add this import", "fix this bug" (when fixing requires editing), or apply a cross-cutting structural change (codemod) like "rewrite every X to Y". Replaces sed / awk / perl -i / patch / tee / Edit / Write / shell redirects (`>`, `>>`) with hash-anchored tilth MCP edits for one-off block changes; sanctions `sg --rewrite` (ast-grep) for structural codemods that span many files. Always read first via cheez-read to get hash anchors for anchored edits. Prefer surgical anchored edits over whole-file rewrites. If tilth MCP is unavailable, stop and report rather than fall back. Do NOT use for reading files (cheez-read first to get anchors), searching code (use cheez-search), or running tests/builds.
 license: MIT
-compatibility: Requires tilth MCP server.
-allowed-tools: mcp__tilth__tilth_edit, mcp__tilth__tilth_read
+compatibility: Requires tilth MCP server. Optional ast-grep (`sg`) for structural codemods (`sg --rewrite`) that span many files.
+allowed-tools: mcp__tilth__tilth_edit, mcp__tilth__tilth_read, Bash
 ---
 
 # cheez-write
@@ -324,13 +324,54 @@ that bypasses tilth's hash-mismatch safety.
 
 ---
 
+## Structural codemods — `sg --rewrite` escape
+
+`tilth_edit` excels at "replace this specific block in this specific file"
+with hash-anchor concurrency safety. It handles cross-cutting structural
+changes awkwardly: one file at a time, one read-for-anchors per location.
+For codemods — "rewrite every `JSON.parse(JSON.stringify($X))` to
+`structuredClone($X)`", "convert every `var $X = $Y` to `let $X = $Y`" —
+drop to `sg --rewrite` (ast-grep) via Bash. This is the **only** sanctioned
+shell escape from cheez-write.
+
+The two tools are **complementary, not redundant**:
+
+| Tool | Safety property | Best for |
+|------|------------------|----------|
+| `tilth_edit` | Hash-anchor (concurrency) | Specific-block edits, signature changes |
+| `sg --rewrite` | Structural match (CST) | Cross-cutting codemods over N files |
+
+When the change repeats across many locations and the surrounding text
+varies, `sg --rewrite` captures the variable parts via metavars and templates
+them back into the rewrite — `tilth_edit` cannot express that without N
+reads.
+
+For invocation rules (`--lang`, `--json`, no `--interactive`), pitfalls
+(CST-not-AST, metavar binding, lenient-by-default), and the **non-negotiable
+dry-run-first protocol** (search → clean tree → `-U` → diff → revert if too
+loose), see
+[`../cheez-search/references/sg-patterns.md`](../cheez-search/references/sg-patterns.md)
+— the "Structural codemods (`sg --rewrite`)" and "Pitfalls" sections in
+particular.
+
+`sg --rewrite` does not have hash-anchor safety. Treat each codemod as a
+single transactional change between two clean git states; never layer
+additional edits on top until the codemod is committed or reverted.
+
+---
+
 ## DO NOT
 
 - **DO NOT rewrite files > 150 lines** — use hash anchors for surgical edits.
 - **DO NOT rewrite small files when the change is < 80%** — anchor the changed range only.
 - **DO NOT guess hash values** — always read first to get current anchors.
 - **DO NOT ignore hash mismatches** — re-read and retry (see Hash Mismatch Handling).
-- **DO NOT use host Edit/Write tool** — use `tilth_edit` exclusively.
+- **DO NOT use sed / awk / perl -i** to edit code — they bypass hash anchors and structural safety, and have no mismatch detection. `sg --rewrite` is the *only* sanctioned shell escape, and only for structural codemods that follow the dry-run-first protocol.
+- **DO NOT use `patch`** to apply diffs to code — `tilth_edit`'s anchored ranges are the safe equivalent.
+- **DO NOT use `tee` or shell redirects (`>`, `>>`)** to overwrite/append code files — both bypass anchors. Use `tilth_edit`.
+- **DO NOT use the host Edit/Write tool** — use `tilth_edit` (or `sg --rewrite` for structural codemods) exclusively for code.
+- **DO NOT use `sg --rewrite` for one-off block edits** — that's `tilth_edit` territory. The codemod escape is only for cross-cutting structural changes; using it on a single location wastes its strength and skips hash-anchor safety.
+- **DO NOT skip the dry-run-first protocol for `sg --rewrite`** — search-only first, clean working tree, then `-U`. Never combine search+rewrite blindly.
 - **DO NOT edit without reading** — you need the anchors.
 - **DO NOT use for reading** — use cheez-read.
 - **DO NOT use for searching** — use cheez-search.
