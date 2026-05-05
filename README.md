@@ -366,8 +366,9 @@ Minimum version for `gh skill`: **v2.90.0**.
 
 ```sh
 gh --version
-gh extension install github/gh-skill  # if gh skill is not bundled
 ```
+
+`gh skill` ships as a built-in subcommand in GitHub CLI v2.90.0+. If your installation predates that release, upgrade `gh` rather than installing an extension. Check [cli.github.com/manual/gh_skill](https://cli.github.com/manual/gh_skill) for the current status.
 
 ### ast-grep (`sg`)
 
