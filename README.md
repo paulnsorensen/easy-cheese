@@ -1,6 +1,13 @@
-# easy-cheese
+# 🧀 easy-cheese 🧀
 
-A lightweight, skills-only adaptation of [`paulnsorensen/cheese-flow`](https://github.com/paulnsorensen/cheese-flow) that ships only Agent Skills — no agents, no compiled harness bundles, and no repo-wide MCP requirement for the workflow skills. The vocabulary stays the same (mold, culture, cook, press, age, cure) so muscle memory carries over.
+> _"The cheese must flow."_
+
+A portable, skills-only toolkit of Agent Skills for shaping ideas, implementing them, and reviewing the result. No agents, no compiled harness bundles, no repo-wide MCP requirement — just self-contained `SKILL.md` files that any [Agent Skills](https://agentskills.io/specification)-compatible harness can load. The vocabulary (mold, culture, cook, press, age, cure) reads as a workflow you can dip into anywhere.
+
+## Why cheese? Two reasons:
+
+1. **Modeled after the gaming slang term "cheese."** The term traces back to early fighting-game culture in the late 1980s and early 1990s — Street Fighter II players coined "cheesy" wins to describe victories pulled off with cheap, repeatable, low-skill tactics (corner-trap fireball spam, throw loops, AI-pattern exploits). It spread from fighting games to RTS rush builds (StarCraft "cheese rushes"), to speedrun glitch routes, to MOBA cheese picks — anywhere a player gets a disproportionately good result for very little effort. That is exactly the design center of easy-cheese: the primary tenets are **correctness, token efficiency, and quality** — _cheap and easy_ in the best sense. Maximum result, minimum spend.
+2. **What's life without whimsy?** 🧀
 
 ## Skill layout
 
@@ -106,17 +113,15 @@ If those don't show up, the cheez-* skills will hard-fail with "tilth MCP server
 
 Use only the skills you need. A clear bug can go straight to `/cook`; a no-write design discussion should stay in `/culture`.
 
-## Differences from cheese-flow
+## Scope
 
-Easy Cheese is intentionally a smaller surface. Compared to upstream:
+Easy-cheese is intentionally a small surface. What that means in practice:
 
 - **Skills only.** No agents, commands, eta templates, or compiled harness bundles. Each capability is a single `SKILL.md`.
 - **No repo-wide MCP requirement.** Workflow skills suggest tools (tilth, Context7, Tavily, code-review-graph) but have host-native fallbacks. The cheez-* tool skills are the exception: they require tilth MCP by design.
-- **`/age` drops the `precedent` dimension.** Without git history analysis as a built-in agent, that dim is unreliable in a portable skill.
-- **No `/fromage`, `/fromagerie`, `/cleanup`, `/nih-audit`.** Those orchestrators live in cheese-flow proper.
+- **`/age` runs eight dimensions, not nine.** Without git history analysis as a built-in agent, the `precedent` dimension is unreliable in a portable skill, so it's omitted.
+- **No orchestrator skills** (no large-feature decomposition, no PR-rescue convoy, no whole-repo NIH audit). Each skill is a single, scoped step a human can drive.
 - **No automatic re-age loop in `/cure`.** The skill describes the protocol; the human runs the next `/age` when ready.
-
-If you need the full pipeline, install cheese-flow itself.
 
 ## Optional tools
 
