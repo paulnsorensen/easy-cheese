@@ -85,27 +85,9 @@ Outside code work (e.g. `find -mtime`, `ls /tmp`, log inspection with `tail -f`,
 
 #### Installing tilth MCP
 
-The cheez-* skills require [tilth](https://github.com/paulnsorensen/tilth) installed as an MCP server in your harness. tilth ships a one-shot installer:
+See [Installing MCP servers → tilth](#tilth-required-for-cheez--skills) below for full instructions.
 
-```sh
-# Install tilth CLI (one-time)
-cargo install tilth        # or: brew install paulnsorensen/tap/tilth
-
-# Register tilth as an MCP server in Claude Code (with edit mode for cheez-write)
-tilth install claude-code --edit
-```
-
-Drop the `--edit` flag if you only want read/search — `cheez-write` needs edit mode to expose the `tilth_edit` MCP tool. Other supported hosts (cursor, vscode, claude-desktop, opencode, gemini, codex, zed, …) follow the same pattern: `tilth install <host> --edit`.
-
-After install, restart your harness and confirm the tools appear:
-
-- `mcp__tilth__tilth_search`
-- `mcp__tilth__tilth_read`
-- `mcp__tilth__tilth_files`
-- `mcp__tilth__tilth_deps`
-- `mcp__tilth__tilth_edit` (only with `--edit`)
-
-If those don't show up, the cheez-* skills will hard-fail with "tilth MCP server is not loaded" instead of silently falling back to host tools.
+If those tools don't show up after install, the cheez-* skills will hard-fail with "tilth MCP server is not loaded" instead of silently falling back to host tools.
 
 ### Suggested flow
 
@@ -155,6 +137,59 @@ When a preferred tool is unavailable, workflow skills say so once, fall back, an
 
 ## Install
 
+### gh skill (recommended)
+
+Requires [GitHub CLI](https://cli.github.com) v2.90.0 or later with the `gh skill` command.
+
+Install all skills interactively — browse what's available and pick what you want:
+
+```sh
+gh skill install paulnsorensen/easy-cheese
+```
+
+Install every skill in one shot:
+
+```sh
+gh skill install paulnsorensen/easy-cheese --all
+```
+
+Install one specific skill by name:
+
+```sh
+gh skill install paulnsorensen/easy-cheese cook
+```
+
+Pin to a specific release tag or commit SHA for reproducibility:
+
+```sh
+gh skill install paulnsorensen/easy-cheese cook@v1.2.0
+gh skill install paulnsorensen/easy-cheese cook@abc123def
+```
+
+Control which agent and scope to install into:
+
+```sh
+# User-wide (default)
+gh skill install paulnsorensen/easy-cheese --agent claude-code --scope user
+
+# Committed into the current project repo
+gh skill install paulnsorensen/easy-cheese --agent claude-code --scope repository
+```
+
+Supported `--agent` values include `copilot`, `claude-code`, `cursor`, `codex`, `gemini`, and others. Omit `--agent` to use the harness auto-detected from your environment.
+
+Preview a skill's content before committing to an install:
+
+```sh
+gh skill preview paulnsorensen/easy-cheese cook
+```
+
+Keep installed skills up to date:
+
+```sh
+gh skill update --all
+```
+
 ### Claude Code (plugin)
 
 Once a `.claude-plugin/plugin.json` is added to this repo, install with:
@@ -190,3 +225,226 @@ skills-ref validate ./skills/age
 ```
 
 Each `SKILL.md` must have YAML frontmatter with at least `name` and `description`, and `name` must match the parent directory name.
+
+## Installing MCP servers
+
+The cheez-* tool skills and several workflow skills benefit from MCP servers. Install the ones you need.
+
+### tilth (required for cheez-* skills)
+
+[tilth](https://github.com/paulnsorensen/tilth) provides AST-aware code search, smart file reading, and hash-anchored edits. Required by `/cheez-search`, `/cheez-read`, and `/cheez-write`.
+
+```sh
+# Install tilth CLI
+cargo install tilth        # via Cargo (Rust)
+brew install paulnsorensen/tap/tilth  # via Homebrew (macOS/Linux)
+
+# Register as an MCP server — include --edit only if you plan to use cheez-write
+tilth install claude-code --edit   # Claude Code
+tilth install cursor --edit        # Cursor
+tilth install vscode --edit        # VS Code
+tilth install codex --edit         # Codex CLI
+tilth install gemini --edit        # Gemini CLI
+tilth install zed --edit           # Zed
+```
+
+After registering, restart your harness and confirm these tools appear:
+
+- `mcp__tilth__tilth_search`
+- `mcp__tilth__tilth_read`
+- `mcp__tilth__tilth_files`
+- `mcp__tilth__tilth_deps`
+- `mcp__tilth__tilth_edit` (only with `--edit`)
+
+### Context7 (library documentation)
+
+[Context7](https://github.com/upstash/context7) fetches up-to-date, version-specific library docs into your session. Used by `/briesearch` and `/cook` when available.
+
+**Claude Code:**
+
+```sh
+claude mcp add context7 -- npx -y @upstash/context7-mcp@latest
+```
+
+**Other harnesses** — add to your MCP config file:
+
+```json
+{
+  "mcpServers": {
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp@latest"]
+    }
+  }
+}
+```
+
+For higher rate limits, get a free API key at [context7.com](https://context7.com) and append `--api-key YOUR_API_KEY` to the `args` array. A keyless hosted option is also available:
+
+```json
+{
+  "mcpServers": {
+    "context7": {
+      "url": "https://mcp.context7.com/mcp"
+    }
+  }
+}
+```
+
+Requires Node.js v18+.
+
+### Tavily (web search)
+
+[Tavily](https://github.com/tavily-ai/tavily-mcp) provides real-time web search and content extraction. Used by `/briesearch` when available.
+
+Get a free API key at [tavily.com](https://tavily.com), then:
+
+**Claude Code:**
+
+```sh
+claude mcp add tavily -- npx -y tavily-mcp
+```
+
+Set your key in the environment or pass it inline:
+
+```sh
+TAVILY_API_KEY=your-key npx -y tavily-mcp
+```
+
+**Other harnesses** — add to your MCP config file:
+
+```json
+{
+  "mcpServers": {
+    "tavily": {
+      "command": "npx",
+      "args": ["-y", "tavily-mcp"],
+      "env": {
+        "TAVILY_API_KEY": "your-key"
+      }
+    }
+  }
+}
+```
+
+Requires Node.js v18+.
+
+### code-review-graph (review impact radius)
+
+[code-review-graph](https://github.com/tirth8205/code-review-graph) builds a call graph of your codebase and exposes it as MCP tools. Used by `/age` and `/cure` to scope reviews.
+
+```sh
+# Install (Python 3.10+ required)
+pip install code-review-graph   # or: pipx install code-review-graph
+
+# Auto-detect and configure your harness
+code-review-graph install
+
+# Target a specific harness
+code-review-graph install --platform claude-code
+code-review-graph install --platform cursor
+code-review-graph install --platform codex
+
+# Build the graph for the current project (re-run after large changes)
+code-review-graph build
+```
+
+## Installing CLI tools
+
+The optional tools in the table below are referenced by workflow skills. None are required, but having them available unlocks better fallbacks and richer output.
+
+### GitHub CLI (`gh`)
+
+```sh
+brew install gh           # macOS/Linux via Homebrew
+winget install GitHub.cli # Windows
+# or see https://cli.github.com for other methods
+gh auth login
+```
+
+Minimum version for `gh skill`: **v2.90.0**.
+
+```sh
+gh --version
+gh extension install github/gh-skill  # if gh skill is not bundled
+```
+
+### ast-grep (`sg`)
+
+Used by `/cook`, `/age`, and `/cure` for structural codemods when tilth is unavailable.
+
+```sh
+brew install ast-grep          # macOS/Linux
+npm install -g @ast-grep/cli   # Node.js
+cargo install ast-grep         # Rust/Cargo
+scoop install ast-grep         # Windows (Scoop)
+```
+
+### ripgrep (`rg`)
+
+Fast text search used as a fallback when tilth is unavailable.
+
+```sh
+brew install ripgrep           # macOS/Linux
+winget install BurntSushi.ripgrep.MSVC  # Windows
+cargo install ripgrep          # Rust/Cargo
+```
+
+### delta
+
+Human-readable diffs used by `/age` and `/cure`.
+
+```sh
+brew install git-delta         # macOS/Linux
+cargo install git-delta        # Rust/Cargo
+winget install dandavison.delta # Windows
+```
+
+Add to `~/.gitconfig` to enable globally:
+
+```ini
+[core]
+    pager = delta
+[interactive]
+    diffFilter = delta --color-only
+```
+
+### mergiraf
+
+Structured merge-conflict resolution used by `/melt`.
+
+```sh
+cargo install mergiraf         # Rust/Cargo
+brew install mergiraf          # macOS/Linux (if tap is available)
+```
+
+### `jq`
+
+JSON inspection used by various skills for structured output.
+
+```sh
+brew install jq                # macOS/Linux
+winget install jqlang.jq       # Windows
+apt-get install jq             # Debian/Ubuntu
+```
+
+### `fd`
+
+Fast file discovery used as a fallback when tilth is unavailable.
+
+```sh
+brew install fd                # macOS/Linux
+cargo install fd-find          # Rust/Cargo
+winget install sharkdp.fd      # Windows
+apt-get install fd-find        # Debian/Ubuntu
+```
+
+### `just`
+
+Project task runner used by `/cook` and `/press` to discover and run project commands.
+
+```sh
+brew install just              # macOS/Linux
+cargo install just             # Rust/Cargo
+winget install Casey.Just      # Windows
+```
