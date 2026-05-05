@@ -1,20 +1,76 @@
 ---
 name: cheez-search
-description: This skill should be used when the user asks to find a symbol, definition, caller, import, or text pattern in the codebase — phrases like "where is X defined", "what calls Y", "find all usages of Z", "trace this function", "find the TODO comments", "search for this error string". Replaces grep / rg / find with AST-aware tilth MCP search for name-shaped and text-shaped queries; use sg only for AST-shape patterns tilth cannot express. Use even when the user says "grep" — never call host Grep, Glob, or rg directly. If tilth MCP is unavailable, stop and report rather than fall back.
+description: This skill should be used when the user asks to find a symbol, definition, caller, import, or text pattern in the codebase — phrases like "where is X defined", "what calls Y", "find all usages of Z", "trace this function", "find the TODO comments", "search for this error string". Replaces grep / rg / find with AST-aware tilth MCP search for name-shaped and text-shaped queries; use sg only for AST-shape patterns tilth cannot express. Use even when the user says "grep" — never call host Grep, Glob, or rg directly. If tilth MCP is unavailable, stop and report rather than fall back. Do NOT use for reading whole files (use cheez-read), editing code (use cheez-write), or running tests/builds.
 license: MIT
 compatibility: Requires tilth MCP server. Optional ast-grep (`sg`) for structural metavariable patterns tilth cannot express.
-allowed-tools: mcp__tilth__tilth_search mcp__tilth__tilth_deps Bash
+allowed-tools: mcp__tilth__tilth_search, mcp__tilth__tilth_deps, Bash
 ---
 
 # cheez-search
 
 > **Hard dependency**: If `mcp__tilth__tilth_search` is unavailable, stop immediately and report
 > "tilth MCP server is not loaded — cannot proceed." Do NOT fall back to `Grep`, `Glob`, `rg`,
-> or any host tool.
+> or any host tool. Install via `tilth install <host>` (see README "Installing tilth MCP").
+
+## Capability detection
+
+Before the first call, verify tilth is reachable:
+
+1. Check that `mcp__tilth__tilth_search` is in your tool list. If absent, stop and report `"tilth MCP server is not loaded — cannot proceed."`
+2. Make a minimal probe call: `tilth_search(query: "tilth", scope: ".")`. If the response is a JSON-RPC error or transport failure, stop and report `"tilth MCP server present but unhealthy: <error>"`.
+3. Any other failure (zero matches, malformed regex, etc.) is a **content** issue — proceed normally and report the result.
 
 AST-aware code search via **tilth MCP** (`tilth_search`, `tilth_deps`).
 Tree-sitter finds where symbols are **defined** — not just where strings appear.
 Understand dependencies instead of blindly grepping.
+
+---
+
+## Examples
+
+### "Where is `handleAuth` defined?"
+
+```
+tilth_search(query: "handleAuth", scope: "src/")
+```
+
+```text
+# Search: "handleAuth" in src/ — 6 matches (2 definitions, 4 usages)
+
+## src/auth.ts:44-89 [definition]
+→ [44-89]  export fn handleAuth(req, res, next)
+## src/routes/api.ts:34 [usage]
+→ [34]   router.use('/api/protected/*', handleAuth);
+```
+
+The `[definition]` tag answers the question; usages come along for free.
+
+### "What calls `validateToken`?"
+
+```
+tilth_search(query: "validateToken", kind: "callers", scope: ".")
+```
+
+```text
+# Callers: "validateToken" — 3 call sites
+
+## src/auth.ts:62 [usage] in handleAuth
+→ [62]   const claims = validateToken(token);
+
+## src/middleware/admin.ts:18 [usage] in requireAdmin
+→ [18]   if (!validateToken(req.headers.authorization)) return next(403);
+```
+
+`kind: "callers"` filters out comments and strings — only real call sites.
+
+### "Find any TODO that mentions retries"
+
+```
+tilth_search(query: "TODO.*retry", kind: "regex", scope: "src/")
+```
+
+Use `kind: "regex"` for pattern matches across content; bound the scope to
+keep the cost down.
 
 ---
 
@@ -151,33 +207,13 @@ tilth_search(query: "FIXME\\(.*?\\):", kind: "regex", scope: "src/")
 
 ## AST-shape Patterns — ast-grep fallback
 
-tilth covers names and text. For *shapes* with metavariables — "any call to
-`JSON.parse(JSON.stringify(…))`", "any `for` loop with `time.Sleep` in its
-body" — use `sg` (ast-grep) via Bash.
+tilth covers names and text. For *shapes* with metavariables (`$X`, `$$$BODY`)
+that tilth cannot express, drop to `sg` (ast-grep) via Bash. This is the
+**only** sanctioned shell escape from cheez-search.
 
-```bash
-# AST template: $X is a metavar that matches any single node.
-sg --lang typescript -p 'JSON.parse(JSON.stringify($X))' --json src/
-
-# $$$BODY matches a sequence of statements.
-sg --lang rust -p 'impl std::fmt::Display for $TYPE { $$$BODY }' --json src/
-
-# Bound the scan; never splice unvalidated user input as the path.
-SCOPE=$(realpath "$SCOPE_INPUT")
-sg --lang python -p 're.match($PATTERN, $INPUT)' --json "$SCOPE"
-```
-
-**When `sg` is the right pick:**
-- The pattern needs metavars (`$X`, `$$$BODY`) or specific node kinds.
-- You're surveying a structural shape across a directory (anti-pattern sweeps, refactor previews).
-- Tree-sitter symbol search would over-match because the *name* isn't fixed.
-
-**Hard rules for sg invocations:**
-- Validate any path that flows from user input before splicing it into the command line.
-  Reject `;`, `&`, `|`, backtick, `$(`, `>`, `<`, newline. Resolve to an absolute path with
-  `realpath` and confirm it sits under the repo root.
-- Always pass `--json` and parse defensively — the JSON shape varies between ast-grep versions.
-- Filter test/build/vendor directories with `--globs` or by post-filtering JSON.
+For metavar pattern syntax, the language matrix, and the hard rules for safe
+`sg` invocations (path validation, `--json` parsing, scope filters), see
+[`references/sg-patterns.md`](references/sg-patterns.md).
 
 ---
 
@@ -223,28 +259,13 @@ tilth_search(query: "handleAuth", scope: ".", expand: 0)
 
 ## tilth_deps — Dependency Graph
 
-For understanding module relationships (not searching):
-
 ```
 tilth_deps(path: "src/auth.ts")
 ```
 
-**Output:**
-```
-# Dependencies for src/auth.ts
-
-── imports ──
-  express        external
-  jsonwebtoken   external
-  @/config       src/config/index.ts
-
-── imported by ──
-  src/routes/api.ts:5
-  src/routes/admin.ts:8
-  src/middleware/auth.ts:3
-```
-
-Use for: understanding blast radius before refactoring, finding consumers of a module, tracing import chains.
+Use **only** before refactoring (rename, signature change, removal). For
+output format, scope rules, and the symbol-vs-file distinction, see
+[`references/tilth-deps.md`](references/tilth-deps.md).
 
 ---
 

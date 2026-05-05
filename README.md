@@ -43,6 +43,40 @@ The workflow skills can delegate code search, reading, and editing to these MCP-
 
 The cheez-* skills require tilth MCP and hard-fail when it is unavailable rather than fall back to host tools. Workflow skills remain portable by falling back directly to host-native tools when they are not using cheez-*.
 
+#### cheez-* router protocol
+
+The three cheez-* skills are designed to chain. The standard sequence:
+
+1. **`/cheez-search`** — locate the symbol, caller, content match, or file. AST-aware; replaces grep/rg/find.
+2. **`/cheez-read`** — read the target file or section to capture hash anchors. Smart-outlines large files; replaces cat/head/tail/ls.
+3. **`/cheez-write`** — apply hash-anchored edits with the anchors from step 2. Surgical; rejects on hash mismatch.
+
+Workflow skills (`/cook`, `/age`, `/cure`) call into this chain when they need code intelligence. A skill should never search-then-edit without reading in between — the read is what produces the anchors that make the edit safe.
+
+#### Installing tilth MCP
+
+The cheez-* skills require [tilth](https://github.com/paulnsorensen/tilth) installed as an MCP server in your harness. tilth ships a one-shot installer:
+
+```sh
+# Install tilth CLI (one-time)
+cargo install tilth        # or: brew install paulnsorensen/tap/tilth
+
+# Register tilth as an MCP server in Claude Code (with edit mode for cheez-write)
+tilth install claude-code --edit
+```
+
+Drop the `--edit` flag if you only want read/search — `cheez-write` needs edit mode to expose the `tilth_edit` MCP tool. Other supported hosts (cursor, vscode, claude-desktop, opencode, gemini, codex, zed, …) follow the same pattern: `tilth install <host> --edit`.
+
+After install, restart your harness and confirm the tools appear:
+
+- `mcp__tilth__tilth_search`
+- `mcp__tilth__tilth_read`
+- `mcp__tilth__tilth_files`
+- `mcp__tilth__tilth_deps`
+- `mcp__tilth__tilth_edit` (only with `--edit`)
+
+If those don't show up, the cheez-* skills will hard-fail with "tilth MCP server is not loaded" instead of silently falling back to host tools.
+
 ### Suggested flow
 
 ```text

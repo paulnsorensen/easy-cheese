@@ -1,19 +1,87 @@
 ---
 name: cheez-write
-description: This skill should be used when the user asks to edit, replace, modify, update, change, delete, or insert code in a file — phrases like "replace this function", "delete lines 44-89", "update validateToken", "change the implementation", "add this import", "fix this bug" (when fixing requires editing). Replaces sed / awk / Edit / Write with hash-anchored tilth MCP edits. Always read first via cheez-read to get hash anchors. Never rewrite whole files. If tilth MCP is unavailable, stop and report rather than fall back.
+description: This skill should be used when the user asks to edit, replace, modify, update, change, delete, or insert code in a file — phrases like "replace this function", "delete lines 44-89", "update validateToken", "change the implementation", "add this import", "fix this bug" (when fixing requires editing). Replaces sed / awk / Edit / Write with hash-anchored tilth MCP edits. Always read first via cheez-read to get hash anchors. Prefer surgical anchored edits over whole-file rewrites. If tilth MCP is unavailable, stop and report rather than fall back. Do NOT use for reading files (cheez-read first to get anchors), searching code (use cheez-search), or running tests/builds.
 license: MIT
 compatibility: Requires tilth MCP server.
-allowed-tools: mcp__tilth__tilth_edit mcp__tilth__tilth_read
+allowed-tools: mcp__tilth__tilth_edit, mcp__tilth__tilth_read
 ---
 
 # cheez-write
 
 > **Hard dependency**: If `mcp__tilth__tilth_edit` is unavailable, stop immediately and report
 > "tilth MCP server is not loaded — cannot proceed." Do NOT fall back to `Edit`, `Write`,
-> or any host tool.
+> or any host tool. Install via `tilth install <host> --edit` — the `--edit` flag is required
+> to expose `tilth_edit` (see README "Installing tilth MCP").
+
+## Capability detection
+
+Before the first call, verify tilth's edit tool is reachable:
+
+1. Check that `mcp__tilth__tilth_edit` is in your tool list. If only `tilth_read` and `tilth_search` are present, tilth was installed without `--edit`. Stop and report `"tilth MCP server is loaded but edit mode is disabled — re-install with 'tilth install <host> --edit'."`
+2. The first edit call is a probe by definition — if it returns a JSON-RPC transport error (not a hash mismatch), stop and report `"tilth MCP server present but unhealthy: <error>"`.
+3. Hash mismatches, syntax errors in the new content, or anchor-not-found are **content** issues — recover via the protocol below, do not bail.
 
 Hash-anchored file editing via **tilth MCP** (`tilth_edit`).
-Never rewrite whole files. Use hash anchors from tilth_read to make precise, surgical edits.
+Use hash anchors from tilth_read to make precise, surgical edits. Avoid
+rewriting whole files unless the size and change ratio justify it (see
+"When full-file rewrite is acceptable" below).
+
+---
+
+## Examples
+
+### "Replace the body of `handleAuth` in `src/auth.ts`"
+
+Step 1 — read with edit mode to get anchors:
+
+```
+tilth_read(path: "src/auth.ts", section: "44-89", edit: true)
+# returns 44:b2c|... and 89:e1d|...
+```
+
+Step 2 — apply with the captured anchors:
+
+```json
+tilth_edit({
+  "path": "src/auth.ts",
+  "edits": [{
+    "start": "44:b2c",
+    "end":   "89:e1d",
+    "content": "export function handleAuth(req, res, next) {\n  const token = extractToken(req);\n  if (!validateToken(token)) return res.status(401).end();\n  next();\n}"
+  }]
+})
+```
+
+Response confirms `Edit applied to src/auth.ts` and may list callers to
+review.
+
+### "Add an import without nuking the existing one on line 13"
+
+`tilth_edit` replaces — there is no native insert. Anchor on line 13 and put
+the original line back at the top of `content`:
+
+```json
+tilth_edit({
+  "path": "src/auth.ts",
+  "edits": [{
+    "start": "13:abc",
+    "content": "import { existingThing } from './existing';\nimport { newHelper } from './helpers';"
+  }]
+})
+```
+
+### "Hash mismatch — file changed under me"
+
+```
+Error: Hash mismatch at line 44
+Expected: b2c
+Found: f9a
+```
+
+Re-read the section, capture the new anchors, retry once. If it mismatches
+again, **stop** — see "Hash Mismatch Handling → Repeated mismatches" below
+(`tilth_edit` has no fuzzy / search-replace mode, so blind retries lose
+races, not win them).
 
 ---
 
@@ -34,14 +102,14 @@ tilth_edit uses **hash anchors** — unique identifiers for each line — to:
 
 ## Hash Anchor Format
 
-When you read a file with tilth_read, lines have anchors:
+When you read a file with tilth_read in edit mode, lines have anchors:
 
 ```
-42:a3f│  let x = compute();
-43:f1b│  return x;
+42:a3f|  let x = compute();
+43:f1b|  return x;
 ```
 
-Format: `<line>:<hash>│ <content>`
+Format: `<line>:<hash>|<content>` (ASCII pipe, no space).
 
 The hash is a short content fingerprint. If someone else edits the file,
 hashes change, and your edit is safely rejected.
@@ -52,7 +120,8 @@ hashes change, and your edit is safely rejected.
 
 ### tilth_edit — Precise File Editing
 
-**Single line edit:**
+The minimal shape — single anchor, replacement content:
+
 ```json
 tilth_edit({
   "path": "src/auth.ts",
@@ -62,49 +131,10 @@ tilth_edit({
 })
 ```
 
-**Multi-line range replacement:**
-```json
-tilth_edit({
-  "path": "src/auth.ts",
-  "edits": [
-    {
-      "start": "44:b2c",
-      "end": "89:e1d",
-      "content": "export function handleAuth(req, res, next) {\n  // new implementation\n  const token = extractToken(req);\n  if (!token) return res.status(401).end();\n  next();\n}"
-    }
-  ]
-})
-```
-
-**Delete a block:**
-```json
-tilth_edit({
-  "path": "src/auth.ts",
-  "edits": [
-    { "start": "44:b2c", "end": "89:e1d", "content": "" }
-  ]
-})
-```
-
-**Multiple edits in one call:**
-```json
-tilth_edit({
-  "path": "src/auth.ts",
-  "edits": [
-    { "start": "12:a1b", "content": "import { newHelper } from './helpers';" },
-    { "start": "44:b2c", "end": "89:e1d", "content": "// replaced function\n..." }
-  ]
-})
-```
-
-**Show diff in response:**
-```json
-tilth_edit({
-  "path": "src/auth.ts",
-  "diff": true,
-  "edits": [...]
-})
-```
+For range replacement, deletion, multi-edit, insert-after, cross-file
+batches, and the `diff: true` response option, see
+[`references/edit-patterns.md`](references/edit-patterns.md). That file is the
+JSON cookbook; this body sticks to the protocol.
 
 ---
 
@@ -118,11 +148,11 @@ tilth_read(path: "src/auth.ts", section: "44-89")
 
 Output:
 ```
-44:b2c│ export function handleAuth(req, res, next) {
-45:c3d│   const token = req.headers.authorization?.split(' ')[1];
+44:b2c|export function handleAuth(req, res, next) {
+45:c3d|  const token = req.headers.authorization?.split(' ')[1];
 ...
-88:d4e│   next();
-89:e1d│ }
+88:d4e|  next();
+89:e1d|}
 ```
 
 ### Step 2: Note Your Anchors
@@ -184,7 +214,7 @@ Expected: b2c
 Found: f9a
 
 Current content:
-44:f9a│ export async function handleAuth(req, res, next) {
+44:f9a|export async function handleAuth(req, res, next) {
 ...
 ```
 
@@ -194,6 +224,28 @@ Current content:
 3. Edit with new anchors.
 
 This is a **safety feature**, not a bug.
+
+### Repeated mismatches → bail out, don't loop
+
+If you hit **two consecutive mismatches** on the same anchor, you're racing a
+concurrent writer. `tilth_edit` has no fuzzy / search-replace mode — there
+is no "ignore the hash, just match this string" option. A third retry will
+likely lose the same race.
+
+The correct move is to bail and report:
+
+1. Read the latest section one final time and capture the current content.
+2. Prepare the new content as a unified diff or full block, but **do not
+   apply** it.
+3. Report `"hash-anchor race on <path>:<line>; current content and proposed
+   replacement attached. Retry once the file is quiescent or apply manually."`
+   along with the captured anchors and proposed content.
+4. Stop. Let the orchestrator (or a human) decide whether to apply the change
+   or escalate.
+
+This trades automation for safety — losing a race twice means whatever's
+writing the file is faster than your read-edit cycle, and a third blind
+retry could overwrite real work.
 
 ---
 
@@ -216,43 +268,14 @@ Check these locations and update if needed.
 
 ## Common Patterns
 
-### Insert After a Line
-
-Use the start anchor of the line AFTER where you want to insert:
-
-```json
-tilth_edit({
-  "path": "src/auth.ts",
-  "edits": [{
-    "start": "13:abc",
-    "content": "import { newHelper } from './helpers';\nimport { oldImport } from './old';"
-  }]
-})
-```
-
-This replaces line 13. To truly "insert", include the original line 13 content
-in your new content.
-
-### Delete Multiple Functions
-
-```json
-tilth_edit({
-  "path": "src/auth.ts",
-  "edits": [
-    { "start": "44:b2c", "end": "89:e1d", "content": "" },
-    { "start": "120:f4g", "end": "180:h5i", "content": "" }
-  ]
-})
-```
-
-### Batch Edits Across Files
-
-Make separate tilth_edit calls per file (cannot batch across files):
-
-```
-tilth_edit({ path: "src/auth.ts", edits: [...] })
-tilth_edit({ path: "src/routes.ts", edits: [...] })
-```
+| Goal | Pattern | Reference |
+|------|---------|-----------|
+| Replace one line | single anchor, new `content` | [edit-patterns.md#single-line-replacement](references/edit-patterns.md#single-line-replacement) |
+| Replace a range | `start` + `end` anchors | [edit-patterns.md#multi-line-range-replacement](references/edit-patterns.md#multi-line-range-replacement) |
+| Delete a block | range with `content: ""` | [edit-patterns.md#delete-a-block](references/edit-patterns.md#delete-a-block) |
+| Insert after a line | anchor on that line, prepend its content | [edit-patterns.md#insert-after-a-line](references/edit-patterns.md#insert-after-a-line) |
+| Multi-edit in one file | `edits: [...]` ordered bottom-up | [edit-patterns.md#multiple-edits-in-one-call](references/edit-patterns.md#multiple-edits-in-one-call) |
+| Cross-file change | one `tilth_edit` call per file | [edit-patterns.md#edits-across-multiple-files](references/edit-patterns.md#edits-across-multiple-files) |
 
 ---
 
@@ -281,12 +304,33 @@ Then edit with those anchors.
 
 ---
 
+## When full-file rewrite is acceptable
+
+Hash-anchored, surgical edits are the default. There is one exception:
+
+| File size | Policy |
+|-----------|--------|
+| **> 150 lines** | Never rewrite the whole file. Always hash-anchored. |
+| **≤ 150 lines** | Anchored single-edit preferred, but a full rewrite (delete-everything + insert) is acceptable when **≥ 80%** of the file is changing. Below that threshold, do the surgical edit. |
+
+The 150-line / 80% threshold is informed by 2026 industry data (Cursor's
+published numbers, can.ac analysis, the Morph benchmark) showing full-file
+rewrites tie or beat diff-style on small files. The threshold keeps the
+spirit conservative — large files always stay anchored.
+
+When you do rewrite a small file in full, still use `tilth_edit` (anchor on
+line 1, end-anchor on the last line). Do **not** drop to host `Write` —
+that bypasses tilth's hash-mismatch safety.
+
+---
+
 ## DO NOT
 
-- **DO NOT rewrite entire files** — use hash anchors for surgical edits.
+- **DO NOT rewrite files > 150 lines** — use hash anchors for surgical edits.
+- **DO NOT rewrite small files when the change is < 80%** — anchor the changed range only.
 - **DO NOT guess hash values** — always read first to get current anchors.
-- **DO NOT ignore hash mismatches** — re-read and retry.
-- **DO NOT use host Edit/Write tool** — use tilth_edit exclusively.
+- **DO NOT ignore hash mismatches** — re-read and retry (see Hash Mismatch Handling).
+- **DO NOT use host Edit/Write tool** — use `tilth_edit` exclusively.
 - **DO NOT edit without reading** — you need the anchors.
 - **DO NOT use for reading** — use cheez-read.
 - **DO NOT use for searching** — use cheez-search.
