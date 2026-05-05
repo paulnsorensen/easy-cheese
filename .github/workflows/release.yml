@@ -44,6 +44,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh skill publish --dry-run
 
+      - name: Drop trigger tag so skill publish can recreate it
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          git push origin ":refs/tags/$TAG"
+          git tag -d "$TAG" || true
+
       - name: Publish agent skills
         env:
           GH_TOKEN: ${{ github.token }}
