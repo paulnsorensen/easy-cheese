@@ -4,7 +4,7 @@
 
 A portable, skills-only toolkit of Agent Skills for shaping ideas, implementing them, and reviewing the result. No agents, no compiled harness bundles, no repo-wide MCP requirement — just self-contained `SKILL.md` files that any [Agent Skills](https://agentskills.io/specification)-compatible harness can load. The vocabulary (mold, culture, cook, press, age, cure) reads as a workflow you can dip into anywhere.
 
-## Why cheese? Two reasons:
+## Why cheese? Two reasons
 
 1. **Modeled after the gaming slang term "cheese."** The term traces back to early fighting-game culture in the late 1980s and early 1990s — Street Fighter II players coined "cheesy" wins to describe victories pulled off with cheap, repeatable, low-skill tactics (corner-trap fireball spam, throw loops, AI-pattern exploits). It spread from fighting games to RTS rush builds (StarCraft "cheese rushes"), to speedrun glitch routes, to MOBA cheese picks — anywhere a player gets a disproportionately good result for very little effort. That is exactly the design center of easy-cheese: the primary tenets are **correctness, token efficiency, and quality** — _cheap and easy_ in the best sense. Maximum result, minimum spend.
 2. **What's life without whimsy?** 🧀
@@ -129,7 +129,7 @@ Workflow skills name preferred tools when they help, with fallbacks for portabil
 
 | Tool | Helps with | Fallback |
 | --- | --- | --- |
-| tilth (MCP) | AST-aware read/search/edit and dependency context | Required for cheez-*; workflow skills can bypass cheez-* and use host read/edit, `ripgrep`, patches |
+| tilth (MCP) | AST-aware read/search/edit and dependency context | Required for cheez-\*; workflow skills can bypass cheez-\* and use host read/edit, `ripgrep`, patches |
 | `sg` (ast-grep) | Structural pattern matching and codemods (`sg --rewrite`) with metavariables | `ripgrep`, `find`, targeted reads; `tilth_edit` for non-structural edits |
 | Context7 (MCP) | Library and API documentation | repo docs, package docs, vendor pages, web search |
 | Tavily (MCP) | Current web/vendor research | host web search or user-supplied sources |
