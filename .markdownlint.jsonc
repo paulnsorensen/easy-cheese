@@ -1,6 +1,26 @@
 {
   "default": true,
+
+  // Long lines are common in skill docs; line-length is a style choice.
   "MD013": false,
+
+  // Skill docs use HTML occasionally for callouts.
   "MD033": false,
-  "MD041": false
+
+  // First line is frequently a heading other than H1 (heading is in frontmatter context).
+  "MD041": false,
+
+  // Compact-doc style: blank lines around headings/lists/fences are not enforced.
+  "MD022": false,
+  "MD031": false,
+  "MD032": false,
+
+  // False positives on wildcard names like `cheez-*`.
+  "MD037": false,
+
+  // Many shell/text fences are intentionally unlabelled in skill prose.
+  "MD040": false,
+
+  // Table column alignment is cosmetic; not enforced.
+  "MD060": false
 }

@@ -31,19 +31,6 @@ jobs:
       - name: Validate SKILL.md frontmatter
         run: python3 .github/scripts/validate_skills.py
 
-      - name: Try gh skill publish --dry-run
-        env:
-          GH_TOKEN: ${{ github.token }}
-        continue-on-error: true
-        run: |
-          if gh skill --help >/dev/null 2>&1; then
-            gh skill publish --dry-run
-          else
-            gh extension install github/gh-skill 2>/dev/null \
-              && gh skill publish --dry-run \
-              || echo "::warning::gh skill subcommand unavailable; relying on Python validator"
-          fi
-
   lint:
     name: lint markdown and yaml
     runs-on: ubuntu-latest

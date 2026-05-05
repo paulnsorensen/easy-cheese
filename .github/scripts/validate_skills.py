@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """Validate every SKILL.md under skills/.
 
-Checks per file:
-- Begins with a YAML frontmatter block (--- ... ---).
-- Frontmatter parses as a mapping.
+Per-file checks:
+- Lives at exactly skills/<name>/SKILL.md (no scope, no nested sub-skills).
+- Begins with a YAML frontmatter block (--- ... ---). CRLF and missing
+  trailing newline are tolerated.
+- Frontmatter parses as a YAML mapping.
 - Required keys present and non-empty: name, description.
 - Only spec-allowed keys (plus Claude Code extensions) are present.
-- `name` is kebab-case, 1-64 chars, no leading/trailing/consecutive hyphens.
-- `name` matches the parent directory name.
-- `description` is non-empty.
+- name is kebab-case, 1-64 chars, no leading/trailing/consecutive hyphens.
+- name matches the parent directory name.
 
 Exit 0 on success, 1 on any failure.
 """
@@ -38,13 +39,21 @@ ALLOWED_KEYS = {
 }
 
 NAME_RE = re.compile(r"^(?!-)(?!.*--)[a-z0-9-]{1,64}(?<!-)$")
-FRONTMATTER_RE = re.compile(r"\A---\n(.*?)\n---\s*\n", re.DOTALL)
+FRONTMATTER_RE = re.compile(r"\A---\r?\n(.*?)\r?\n---\s*(\r?\n|\Z)", re.DOTALL)
 
 
-def validate(path: Path) -> list[str]:
-    errors: list[str] = []
+def validate_path_shape(path: Path) -> str | None:
+    parts = path.parts
+    if len(parts) != 3 or parts[0] != "skills" or parts[2] != "SKILL.md":
+        return (
+            f"{path}: file is not at the documented path skills/<name>/SKILL.md "
+            f"(nested sub-skills are not supported)"
+        )
+    return None
+
+
+def validate_frontmatter(path: Path) -> list[str]:
     text = path.read_text(encoding="utf-8")
-
     match = FRONTMATTER_RE.match(text)
     if not match:
         return [f"{path}: missing or malformed YAML frontmatter (expected leading --- ... ---)"]
@@ -57,6 +66,7 @@ def validate(path: Path) -> list[str]:
     if not isinstance(fm, dict):
         return [f"{path}: frontmatter must be a YAML mapping"]
 
+    errors: list[str] = []
     name = fm.get("name")
     description = fm.get("description")
 
@@ -87,6 +97,13 @@ def validate(path: Path) -> list[str]:
     return errors
 
 
+def validate(path: Path) -> list[str]:
+    shape_error = validate_path_shape(path)
+    if shape_error:
+        return [shape_error]
+    return validate_frontmatter(path)
+
+
 def main() -> int:
     root = Path("skills")
     if not root.is_dir():
@@ -105,7 +122,10 @@ def main() -> int:
     if all_errors:
         for e in all_errors:
             print(f"ERROR: {e}", file=sys.stderr)
-        print(f"\nFAIL: {len(all_errors)} error(s) across {len(skill_files)} SKILL.md file(s)", file=sys.stderr)
+        print(
+            f"\nFAIL: {len(all_errors)} error(s) across {len(skill_files)} SKILL.md file(s)",
+            file=sys.stderr,
+        )
         return 1
 
     print(f"OK: validated {len(skill_files)} SKILL.md file(s)")
