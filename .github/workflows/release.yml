@@ -30,6 +30,15 @@ jobs:
             exit 1
           fi
 
+      - name: Install latest gh CLI
+        run: |
+          set -euo pipefail
+          latest=$(curl -fsSL https://api.github.com/repos/cli/cli/releases/latest | jq -r .tag_name)
+          ver="${latest#v}"
+          curl -fsSL "https://github.com/cli/cli/releases/download/${latest}/gh_${ver}_linux_amd64.tar.gz" | tar -xz -C /tmp
+          sudo install -m 755 "/tmp/gh_${ver}_linux_amd64/bin/gh" /usr/local/bin/gh
+          gh --version
+
       - name: Validate skills
         env:
           GH_TOKEN: ${{ github.token }}
