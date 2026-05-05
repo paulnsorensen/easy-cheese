@@ -29,8 +29,9 @@ Before opening a PR or handing off to `/age`, cook produces a package-ready repo
 - [x] All changed files are intentional.
 
 ### Next step
-- /press   — harden tests and check coverage
-- /age     — review the diff
+- /press <slug>   — harden tests and check coverage
+- /age <slug>     — review the diff
+- /cure <slug>    — apply selected age findings (after /age)
 ```
 
 ## Honesty rules

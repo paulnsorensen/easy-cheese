@@ -1,6 +1,6 @@
 ---
 name: press
-description: This skill should be used right after `/cook` produces green changes, when the user wants the test surface hardened before review or shipping — phrases like "press the changes", "harden this", "check coverage", "strengthen the tests", "are the tests good enough", "press before /age", "/press". Reads the spec + cooked diff, maps changed behavior to tests, finds weak assertions and missing boundaries, adds focused hardening tests, and produces a readiness report. Use even when the user wants to "tighten things up" before review. Do NOT use to add broad new behavior — only corrective fixes that hardening tests force.
+description: This skill should be used right after `/cook` produces green changes, when the user wants the test surface hardened before review or shipping — phrases like "press the changes", "harden this", "check coverage", "strengthen the tests", "are the tests good enough", "press before /age", "/press". Reads the spec + cooked diff, maps changed behavior to tests, finds weak assertions and missing boundaries, adds focused hardening tests, writes a press report to `.cheese/press/<slug>.md`, and prompts `/age` next. Use even when the user wants to "tighten things up" before review. Do NOT use to add broad new behavior — only corrective fixes that hardening tests force. After `/cook`; before `/age` → `/cure`.
 license: MIT
 ---
 
@@ -18,7 +18,8 @@ Do not use it to implement broad new behavior. Press may add or strengthen tests
 4. **Add focused tests** — observe red first when behaviour changes. Use `cheez-write` for precise edits.
 5. **Corrective fixes** — only for defects the hardening tests expose. No new behaviour.
 6. **Run checks** — narrowest useful tests, then relevant wider gates already in the project.
-7. **Report** — ready, follow-up, or blocked.
+7. **Report** — write `.cheese/press/<slug>.md` (slug carried from `/cook`, or derived from branch/task) and print the path. Mark readiness: `ready for /age`, `follow-up recommended`, or `blocked`.
+8. **Hand off** — prompt the next step via `AskUserQuestion` (see `## Handoff` below). Never auto-invoke.
 
 ## Preferred tools and fallbacks
 
@@ -41,24 +42,48 @@ If optional tools are missing, press a narrower surface and state the residual r
 
 ## Output
 
-```markdown
-## Press Report
+Write to `.cheese/press/<slug>.md` and print the path. The report shape:
 
-### Checks run
+```markdown
+# Press Report — <slug>
+
+## Orientation
+<one or two factual sentences about what /cook changed>
+
+## Checks run
 - <command>: <pass|fail|skipped with reason>
 
-### Findings
+## Findings
 | Severity | Category | Evidence | Recommendation |
 | --- | --- | --- | --- |
 
-### Coverage
+## Coverage
 - Spec coverage:
 - Boundary coverage:
 - Assertion strength:
 
-### Handoff
+## Readiness
 <ready for /age | follow-up recommended | blocked>
+
+## Next step
+/age <slug>   — review the cooked + pressed diff
 ```
+
+Then print:
+
+```
+Press report: .cheese/press/<slug>.md
+Next step:    /age <slug>
+```
+
+## Handoff
+
+After the press report is on disk, ask via `AskUserQuestion` which downstream to run. Default options:
+
+- **Run /age `<slug>`** *(recommended when readiness is `ready for /age`)* — review the diff.
+- **Stop** — address `follow-up recommended` items before review.
+
+Pre-select `Run /age` only when readiness is `ready for /age`. If the report is `blocked`, do not pre-select anything; the user decides whether to fix or escalate.
 
 ## Rules
 
