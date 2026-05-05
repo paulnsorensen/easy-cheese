@@ -27,7 +27,7 @@ Accept one of:
 2. **Scope is bounded.** A named function, a single failing test, a specific call site, or a small region of one or two files.
 3. **Verification is obvious.** A failing test that can be made to pass, or a runnable command whose output should change in a stated way.
 
-When the fast-path applies, derive a slug from the task (e.g. `tail-trailing-newline`), proceed straight to **Cut**, and skip the spec round-trip. Route to `/mold` only when one of the three checks fails — silent ambiguity is the cardinal sin.
+When the fast-path applies, derive a slug from the task (e.g. `tail-trailing-newline`), treat **Contract** as a one-sentence restatement of the request, and proceed directly to **Cut** without a spec round-trip. Route to `/mold` only when one of the three checks fails — silent ambiguity is the cardinal sin.
 
 ## Flow
 

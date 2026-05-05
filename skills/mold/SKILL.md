@@ -60,7 +60,7 @@ Default to project-local cheese artifacts when the user wants files:
 
 After the spec is written, ask the user via `AskUserQuestion` which downstream to run. Default options:
 
-- **Run /cook `<slug>`** *(recommended)* — implement the spec.
+- **Run /cook `.cheese/specs/<slug>.md`** *(recommended)* — implement the spec.
 - **Run /briesearch** — gather more external evidence first.
 - **Stop** — leave the spec for later.
 

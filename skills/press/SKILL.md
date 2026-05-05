@@ -66,14 +66,18 @@ Write to `.cheese/press/<slug>.md` and print the path. The report shape:
 <ready for /age | follow-up recommended | blocked>
 
 ## Next step
-/age <slug>   — review the cooked + pressed diff
+<ready for /age>:           /age <slug>           — review the cooked + pressed diff
+<follow-up recommended>:    address open findings, then /age <slug>
+<blocked>:                  resolve blocking issues before proceeding
 ```
 
 Then print:
 
 ```
 Press report: .cheese/press/<slug>.md
-Next step:    /age <slug>
+Next step:    /age <slug>                       (when ready for /age)
+              address open findings, then /age  (when follow-up recommended)
+              blocked — resolve before continuing (when blocked)
 ```
 
 ## Handoff

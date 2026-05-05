@@ -16,9 +16,10 @@ Accept:
 
 ```text
 /age [<ref-or-range>] [--scope <path>] [--comprehensive]
+/age <slug>
 ```
 
-Default to the current working diff when no ref is supplied. If the base branch is unclear, ask or use the repository's documented default.
+When called with a `<slug>`, resolve `.cheese/press/<slug>.md` (if present) for press context and review the current working diff. When called with a `<ref-or-range>`, review that range. Default to the current working diff when neither is supplied. If the base branch is unclear, ask or use the repository's documented default.
 
 ## Review dimensions
 
@@ -38,7 +39,7 @@ Per-dimension rubrics and recommendation shapes in `references/dimensions.md`. T
 ## Flow
 
 1. Identify the diff, scope, and relevant spec or issue.
-2. Gather evidence: diff, touched files, tests, callers/imports. If `.cheese/press/<slug>.md` exists, read it for press-side findings and coverage notes — do not duplicate them.
+2. Gather evidence: diff, touched files, tests, callers/imports. If `.cheese/press/<slug>.md` exists, read it and include a `## Press findings` sub-section in the age report summarising unresolved items — `/cure` reads only `.cheese/age/<slug>.md` and cannot access the press report directly.
 3. Review every dimension; dimensions with no findings simply omit themselves.
 4. Group findings by stake (high → medium) and by file.
 5. Write the report to `.cheese/age/<slug>.md` and print the path.
