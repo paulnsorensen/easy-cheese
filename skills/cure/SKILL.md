@@ -1,6 +1,6 @@
 ---
 name: cure
-description: This skill should be used when the user has an `/age` report (or any list of review findings, CI failures, or a "fix these" instruction) and wants the selected items resolved — phrases like "fix these findings", "/cure <slug>", "address the high-stake items", "act on the age report", "fix the failing CI", "apply the cleanup". Loads the report, gates on explicit user selection, applies focused fixes via cheez-write, runs the project's existing test/lint/build gates, and produces a shipping-ready summary. Use even when the user just says "fix it" if a review report or finding list is in scope. Default selection is empty — never apply everything implicitly.
+description: This skill should be used when the user has an `/age` report (or any list of review findings, CI failures, or a "fix these" instruction) and wants the selected items resolved — phrases like "fix these findings", "/cure <slug>", "address the high-stake items", "act on the age report", "fix the failing CI", "apply the cleanup". Loads the report, gates on explicit user selection, applies focused fixes via cheez-write, runs the project's existing test/lint/build gates, and produces a shipping-ready summary. Use even when the user just says "fix it" if a review report or finding list is in scope. Default selection is empty — never apply everything implicitly. After `/age`; loops back to `/age --scope <touched-path>` for re-review or hands off to `/gh` to ship.
 license: MIT
 ---
 
@@ -22,8 +22,9 @@ If selection is ambiguous, render a numbered selection list per `references/sele
 2. **Select** — gate on explicit user selection. See `references/selection.md` for the recognized verbs.
 3. **Apply** — fix one logical group at a time via `cheez-read` (re-confirm anchor location) and `cheez-write` (apply).
 4. **Validate** — run the narrowest tests that prove each fix, then any relevant project-wide gates (lint, typecheck, build).
-5. **Re-review** — apply `/age` principles to the touched paths. If new findings appear, surface them in the report; the user re-invokes `/cure` to act on them.
+5. **Re-review hand-off** — recommend `/age --scope <touched-path>` so review runs through the proper skill rather than reimplementing it inline. `/cure` does not re-grade its own work. If the user picks re-age, the resulting report can feed a fresh `/cure` invocation.
 6. **Ship report** — what changed, checks run, deferred items, residual risks.
+7. **Hand off** — prompt the next step via `AskUserQuestion` (see `## Handoff` below). Never auto-invoke.
 
 ## Preferred tools and fallbacks
 
@@ -58,8 +59,18 @@ Run the narrowest tests that prove the fix, then any relevant existing wider gat
 
 ### Re-review
 - Remaining risk:
-- Suggested next step:
+- Suggested next step: `/age --scope <touched-path>` to verify the fixes, or `/gh` to ship.
 ```
+
+## Handoff
+
+After the cure report is rendered, ask via `AskUserQuestion` which downstream to run. Default options:
+
+- **Run /age `--scope <touched-path>`** *(recommended when fixes were non-trivial)* — re-review the touched code through the proper skill.
+- **Run /gh** — open or update the PR.
+- **Stop** — sit on the changes for now.
+
+Pre-select `Run /age` when any applied fix touched logic outside the original finding's hunk, when a corrective fix exposed adjacent risk, or when checks were skipped. Pre-select `Run /gh` when all selected findings applied cleanly and gates passed. Never auto-invoke.
 
 ## Rules
 

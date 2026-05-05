@@ -1,6 +1,6 @@
 ---
 name: age
-description: This skill should be used when the user wants a code review on a diff, PR, branch, or path — phrases like "review this", "/age", "is this safe to merge", "find bugs", "spot security issues", "check for slop", "review my PR", "look for problems", "what's wrong with this code". Runs eight orthogonal review dimensions (correctness, security, encapsulation, spec, complexity, deslop, assertions, NIH) over the scoped diff and emits a stake-grouped findings report. Use even when the user only asks for one dimension — the report scopes itself. Findings only — no fixes; route the user to `/cure` when they are ready to select findings.
+description: This skill should be used when the user wants a code review on a diff, PR, branch, or path — phrases like "review this", "/age", "is this safe to merge", "find bugs", "spot security issues", "check for slop", "review my PR", "look for problems", "what's wrong with this code". Runs eight orthogonal review dimensions (correctness, security, encapsulation, spec, complexity, deslop, assertions, NIH) over the scoped diff and emits a stake-grouped findings report at `.cheese/age/<slug>.md`. Use even when the user only asks for one dimension — the report scopes itself. Findings only — no fixes; route the user to `/cure` when they are ready to select findings. After `/press` (optional); before `/cure`.
 license: MIT
 ---
 
@@ -16,9 +16,10 @@ Accept:
 
 ```text
 /age [<ref-or-range>] [--scope <path>] [--comprehensive]
+/age <slug>
 ```
 
-Default to the current working diff when no ref is supplied. If the base branch is unclear, ask or use the repository's documented default.
+When called with a `<slug>`, resolve `.cheese/press/<slug>.md` (if present) for press context and review the current working diff. When called with a `<ref-or-range>`, review that range. Default to the current working diff when neither is supplied. If the base branch is unclear, ask or use the repository's documented default.
 
 ## Review dimensions
 
@@ -38,11 +39,11 @@ Per-dimension rubrics and recommendation shapes in `references/dimensions.md`. T
 ## Flow
 
 1. Identify the diff, scope, and relevant spec or issue.
-2. Gather evidence: diff, touched files, tests, callers/imports.
+2. Gather evidence: diff, touched files, tests, callers/imports. If `.cheese/press/<slug>.md` exists, read it and include a `## Press findings` sub-section in the age report summarising unresolved items — `/cure` reads only `.cheese/age/<slug>.md` and cannot access the press report directly.
 3. Review every dimension; dimensions with no findings simply omit themselves.
 4. Group findings by stake (high → medium) and by file.
 5. Write the report to `.cheese/age/<slug>.md` and print the path.
-6. Print `/cure <slug>` as the next step; `/cure` owns the finding-selection gate. Never auto-invoke `/cure`.
+6. Hand off via `AskUserQuestion` (see `## Handoff` below). `/cure` owns the finding-selection gate; age never auto-applies fixes.
 
 ## Preferred tools and fallbacks
 
@@ -85,13 +86,22 @@ Then print:
 
 ```
 Age report: .cheese/age/<slug>.md
-Next step:  /cure <slug>
 ```
+
+## Handoff
+
+After the report is on disk, ask via `AskUserQuestion` which downstream to run. Default options:
+
+- **Run /cure `<slug>`** *(recommended when there are high-stake findings)* — pick findings to fix.
+- **Stop** — leave the report for later.
+
+Pre-select `Run /cure` when at least one high-stake finding exists. `/cure` still owns its selection gate; the user picks individual findings there. Never auto-apply.
 
 ## Rules
 
 - Review is not a verdict; explain where to look and why.
 - Do not edit production files.
+- Do not auto-apply fixes. Prompting `/cure` via `AskUserQuestion` is fine; bypassing `/cure`'s selection gate is not.
 - Do not invent evidence. Cite files, diffs, commands, or unavailable-source notes.
 - Keep confidence qualitative (`low | medium | high`); never emit a numeric score.
 - Findings carry location + recommendation. Do not write JSON sidecars or hash-anchored fix payloads — `/cure` reads the markdown directly.

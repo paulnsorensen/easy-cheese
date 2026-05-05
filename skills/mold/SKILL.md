@@ -1,6 +1,6 @@
 ---
 name: mold
-description: This skill should be used when the user has a fuzzy idea, half-formed feature, or design direction and wants to converge on a spec — phrases like "let's design X", "I'm thinking about Y", "what should the API for Z look like", "shape this into a spec", "I want to add a feature that…", "/mold". Runs an iterative dialogue (Explore / Ground / Shape / Sketch / Grill / Diagnose), grounds every load-bearing claim with cheez-search or briesearch, locks public seams in pseudocode, and only writes a spec to `.cheese/specs/<slug>.md` after an explicit approval gate. Use even when the user is "just thinking out loud" if they want the dialogue to leave behind a written artifact — for pure no-write thinking, route to `/culture` instead.
+description: This skill should be used when the user has a fuzzy idea, half-formed feature, or design direction and wants to converge on a spec — phrases like "let's design X", "I'm thinking about Y", "what should the API for Z look like", "shape this into a spec", "I want to add a feature that…", "/mold". Runs an iterative dialogue (Explore / Ground / Shape / Sketch / Grill / Diagnose), grounds every load-bearing claim with cheez-search or briesearch, locks public seams in pseudocode, and only writes a spec to `.cheese/specs/<slug>.md` after an explicit approval gate. Use even when the user is "just thinking out loud" if they want the dialogue to leave behind a written artifact — for pure no-write thinking, route to `/culture` instead. After `/culture` (optional); before `/cook`.
 license: MIT
 ---
 
@@ -17,7 +17,7 @@ Do not use it for free-form discussion with no artifact intent (`/culture`), dir
 3. **Sketch** — for any feature touching >1 module or a new public interface, lock seams in pseudocode signatures before talking spec content.
 4. **Two-key handshake** — both the user (explicit verb) and the agent (coherence self-check) must agree before extraction. See `references/handshake.md`.
 5. **Curdle** — write the approved spec to `.cheese/specs/<slug>.md` (and optional `.cheese/issues/<slug>-NNN.md`). Format and slug rules in `references/curdle.md`.
-6. **Hand off** — suggest the next skill inline. Never auto-invoke.
+6. **Hand off** — once the spec is on disk, prompt the next step via `AskUserQuestion` (see `## Handoff` below). Never auto-invoke.
 
 ## Modes
 
@@ -45,16 +45,9 @@ Optional tools accelerate the work; missing tools do not block the dialogue. Whe
 
 ## Approval gate
 
-Before writing, present this check:
+Curdle requires the **two-key handshake**: an explicit user verb (e.g. `curdle`, `ship it`) and the agent's coherence self-check. The full checklist, mandatory gates, and override semantics live in `references/handshake.md` — do not duplicate them here.
 
-- [ ] Problem statement is clear and grounded.
-- [ ] Chosen option and non-goals are explicit.
-- [ ] Public seams or affected modules are sketched when relevant.
-- [ ] Open questions are marked `[TBD]`, `[BLOCKED]`, or `[?]`.
-- [ ] Quality gates or reproduction steps are named.
-- [ ] User approved artifact type, slug, and target path.
-
-If any item is unchecked, propose the smallest next question or evidence check. Write artifacts only after approval.
+If any gate is unmet, propose the smallest next question or evidence check. Write artifacts only after both keys pass.
 
 ## Output paths
 
@@ -62,6 +55,16 @@ Default to project-local cheese artifacts when the user wants files:
 
 - Spec: `.cheese/specs/<slug>.md`
 - Issues: `.cheese/issues/<slug>-001.md`, `.cheese/issues/<slug>-002.md`, ...
+
+## Handoff
+
+After the spec is written, ask the user via `AskUserQuestion` which downstream to run. Default options:
+
+- **Run /cook `.cheese/specs/<slug>.md`** *(recommended)* — implement the spec.
+- **Run /briesearch** — gather more external evidence first.
+- **Stop** — leave the spec for later.
+
+Pre-select `Run /cook` only when acceptance criteria are explicit and quality gates are runnable. Never auto-invoke; the user must select.
 
 ## Rules
 
