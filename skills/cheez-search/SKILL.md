@@ -1,6 +1,6 @@
 ---
 name: cheez-search
-description: This skill should be used when the user asks to find a symbol, definition, caller, import, or text pattern in the codebase — phrases like "where is X defined", "what calls Y", "find all usages of Z", "trace this function", "find the TODO comments", "search for this error string". Replaces grep / rg / find / sg with AST-aware tilth MCP search. Use even when the user says "grep" — never call host Grep, Glob, or rg directly. If tilth MCP is unavailable, stop and report rather than fall back.
+description: This skill should be used when the user asks to find a symbol, definition, caller, import, or text pattern in the codebase — phrases like "where is X defined", "what calls Y", "find all usages of Z", "trace this function", "find the TODO comments", "search for this error string". Replaces grep / rg / find with AST-aware tilth MCP search for name-shaped and text-shaped queries; use sg only for AST-shape patterns tilth cannot express. Use even when the user says "grep" — never call host Grep, Glob, or rg directly. If tilth MCP is unavailable, stop and report rather than fall back.
 license: MIT
 compatibility: Requires tilth MCP server. Optional ast-grep (`sg`) for structural metavariable patterns tilth cannot express.
 allowed-tools: mcp__tilth__tilth_search mcp__tilth__tilth_deps Bash

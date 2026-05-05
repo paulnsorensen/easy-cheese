@@ -17,13 +17,14 @@ After fetchers report, build a single evidence row per routed source and apply t
 
 | Situation | Overall confidence |
 | --- | --- |
-| Any routed source unavailable, failed, or skipped | cap at 49 (low) |
-| 3+ sources agree | 85–100 (high) |
-| 2 sources agree | 60–84 (medium) |
-| Sources disagree | cap at 49 (low) and explain why |
-| 1 completed source | inherit that source's score |
+| Critical routed source unavailable and no equivalent fallback exists | low |
+| Non-critical routed source unavailable, failed, or skipped | cap at medium |
+| 3+ completed sources agree | high |
+| 2 completed sources agree | medium |
+| Sources disagree | low and explain why |
+| 1 completed source | inherit that source's confidence, capped at medium unless it is authoritative |
 
-Easy Cheese uses qualitative buckets (`low | medium | high`) in user-facing output; the numeric scale only drives the cap.
+Criticality depends on the question. Context7 is critical for version-specific API claims, Tavily is critical for freshness-sensitive facts, Codebase is critical for local precedent questions, and GitHub is usually supporting evidence unless the user asked for real-world examples.
 
 ## Output shape
 

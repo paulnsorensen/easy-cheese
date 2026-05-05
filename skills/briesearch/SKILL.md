@@ -30,11 +30,11 @@ When an optional MCP source is missing, follow `references/unavailable.md` — f
 | --- | --- | --- |
 | Library/API docs | Context7 | package docs in the repo, README examples, then web search |
 | Current web/vendor facts | Tavily | generic web search or cited vendor pages supplied by the user |
-| Local code patterns | Serena or LSP, `sg` | `ripgrep`, `find`, targeted file reads |
+| Local code patterns | cheez-search + cheez-read | Serena or LSP, `sg`, `ripgrep`, `find`, targeted file reads |
 | GitHub examples | `gh` or GitHub integration | web search scoped to GitHub, or skip with a confidence note |
 | Structured JSON output | `jq` | careful manual inspection |
 
-If a preferred tool is missing, say so once and continue with the fallback. Missing optional tools should lower confidence, not block the skill.
+If a preferred tool is missing, say so once and continue with the fallback. Missing optional tools should lower confidence, not block the skill unless every routed evidence source is unavailable.
 
 ## Output
 

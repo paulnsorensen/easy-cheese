@@ -1,6 +1,6 @@
 ---
 name: age
-description: This skill should be used when the user wants a code review on a diff, PR, branch, or path — phrases like "review this", "/age", "is this safe to merge", "find bugs", "spot security issues", "check for slop", "review my PR", "look for problems", "what's wrong with this code". Runs eight orthogonal review dimensions (correctness, security, encapsulation, spec, complexity, deslop, assertions, NIH) over the scoped diff and emits a stake-grouped findings report. Use even when the user only asks for one dimension — the report scopes itself. Findings only — no fixes; route the user to `/cure` once they pick what to act on.
+description: This skill should be used when the user wants a code review on a diff, PR, branch, or path — phrases like "review this", "/age", "is this safe to merge", "find bugs", "spot security issues", "check for slop", "review my PR", "look for problems", "what's wrong with this code". Runs eight orthogonal review dimensions (correctness, security, encapsulation, spec, complexity, deslop, assertions, NIH) over the scoped diff and emits a stake-grouped findings report. Use even when the user only asks for one dimension — the report scopes itself. Findings only — no fixes; route the user to `/cure` when they are ready to select findings.
 license: MIT
 ---
 
@@ -8,7 +8,7 @@ license: MIT
 
 Use this skill to review a diff or scoped path before merging, after `/press`, or whenever the user wants evidence-backed observations rather than an approval verdict.
 
-Do not use it to apply fixes directly. Hand fix work to `/cure` after the user chooses what to address.
+Do not use it to apply fixes directly. Hand fix work to `/cure`, which owns selecting and applying findings.
 
 ## Inputs
 
@@ -42,7 +42,7 @@ Per-dimension rubrics and recommendation shapes in `references/dimensions.md`. T
 3. Review every dimension; dimensions with no findings simply omit themselves.
 4. Group findings by stake (high → medium) and by file.
 5. Write the report to `.cheese/age/<slug>.md` and print the path.
-6. Recommend `/cure <slug>` only after the user picks findings to act on. Never auto-invoke `/cure`.
+6. Print `/cure <slug>` as the next step; `/cure` owns the finding-selection gate. Never auto-invoke `/cure`.
 
 ## Preferred tools and fallbacks
 

@@ -1,6 +1,6 @@
 # easy-cheese
 
-A lightweight, skills-only adaptation of [`paulnsorensen/cheese-flow`](https://github.com/paulnsorensen/cheese-flow) that ships only Agent Skills — no agents, no compiled harness bundles, no required MCP servers. The vocabulary stays the same (mold, culture, cook, press, age, cure) so muscle memory carries over.
+A lightweight, skills-only adaptation of [`paulnsorensen/cheese-flow`](https://github.com/paulnsorensen/cheese-flow) that ships only Agent Skills — no agents, no compiled harness bundles, and no repo-wide MCP requirement for the workflow skills. The vocabulary stays the same (mold, culture, cook, press, age, cure) so muscle memory carries over.
 
 ## Skill layout
 
@@ -33,7 +33,7 @@ Each `SKILL.md` is self-contained markdown with YAML frontmatter. There are no n
 
 ### Tool skills
 
-The workflow skills delegate code search, reading, and editing to these MCP-backed skills:
+The workflow skills can delegate code search, reading, and editing to these MCP-backed skills when tilth is available:
 
 | Skill path | Command | Purpose |
 | --- | --- | --- |
@@ -41,7 +41,7 @@ The workflow skills delegate code search, reading, and editing to these MCP-back
 | `skills/cheez-read/SKILL.md` | `/cheez-read` | Smart file/directory reading with hash anchors via tilth MCP. Replaces cat / head / tail / ls. |
 | `skills/cheez-write/SKILL.md` | `/cheez-write` | Hash-anchored, surgical edits via tilth MCP. Never rewrites whole files. |
 
-The cheez-* skills hard-fail when the tilth MCP is unavailable rather than fall back to host tools — that's how they protect against silent grep regressions in long sessions.
+The cheez-* skills require tilth MCP and hard-fail when it is unavailable rather than fall back to host tools. Workflow skills remain portable by falling back directly to host-native tools when they are not using cheez-*.
 
 ### Suggested flow
 
@@ -56,7 +56,7 @@ Use only the skills you need. A clear bug can go straight to `/cook`; a no-write
 Easy Cheese is intentionally a smaller surface. Compared to upstream:
 
 - **Skills only.** No agents, commands, eta templates, or compiled harness bundles. Each capability is a single `SKILL.md`.
-- **No required MCP.** Skills suggest tools (tilth, Context7, Tavily, code-review-graph) but every step has a fallback to host-native tools.
+- **No repo-wide MCP requirement.** Workflow skills suggest tools (tilth, Context7, Tavily, code-review-graph) but have host-native fallbacks. The cheez-* tool skills are the exception: they require tilth MCP by design.
 - **`/age` drops the `precedent` dimension.** Without git history analysis as a built-in agent, that dim is unreliable in a portable skill.
 - **No `/fromage`, `/fromagerie`, `/cleanup`, `/nih-audit`.** Those orchestrators live in cheese-flow proper.
 - **No automatic re-age loop in `/cure`.** The skill describes the protocol; the human runs the next `/age` when ready.
@@ -65,11 +65,11 @@ If you need the full pipeline, install cheese-flow itself.
 
 ## Optional tools
 
-Skills name preferred tools when they help, with fallbacks for portability:
+Workflow skills name preferred tools when they help, with fallbacks for portability. Tool skills can be stricter when their purpose is to enforce a specific tool protocol.
 
 | Tool | Helps with | Fallback |
 | --- | --- | --- |
-| tilth (MCP) | AST-aware read/search/edit and dependency context | host read/edit, `ripgrep`, patches |
+| tilth (MCP) | AST-aware read/search/edit and dependency context | Required for cheez-*; workflow skills can bypass cheez-* and use host read/edit, `ripgrep`, patches |
 | `sg` (ast-grep) | Structural pattern matching with metavariables | `ripgrep`, `find`, targeted reads |
 | Context7 (MCP) | Library and API documentation | repo docs, package docs, vendor pages, web search |
 | Tavily (MCP) | Current web/vendor research | host web search or user-supplied sources |
@@ -83,7 +83,7 @@ Skills name preferred tools when they help, with fallbacks for portability:
 | `fd` | Fast file discovery | `find` |
 | `just` | Project task discovery | package scripts or documented commands |
 
-When a preferred tool is unavailable, each skill says so once, falls back, and lowers confidence only if evidence quality suffers.
+When a preferred tool is unavailable, workflow skills say so once, fall back, and lower confidence only if evidence quality suffers. The cheez-* skills stop instead because tilth is their compatibility requirement.
 
 ## Install
 
