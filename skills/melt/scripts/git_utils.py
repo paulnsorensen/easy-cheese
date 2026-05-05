@@ -12,6 +12,8 @@ def run_git(args: list[str], capture_output: bool = True) -> subprocess.Complete
         ["git"] + args,
         capture_output=capture_output,
         text=True,
+        encoding="utf-8",
+        errors="replace",
     )
 
 
@@ -20,14 +22,6 @@ def get_conflicted_files() -> list[str]:
     if result.returncode != 0:
         return []
     return [f.strip() for f in result.stdout.strip().split("\n") if f.strip()]
-
-
-def has_conflict_markers(path: str) -> bool:
-    try:
-        content = Path(path).read_text()
-        return "<<<<<<" in content or "=======" in content or ">>>>>>" in content
-    except OSError:
-        return False
 
 
 def extract_stages(path: str) -> tuple[str | None, str | None, str | None]:

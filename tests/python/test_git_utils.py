@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import subprocess
-from pathlib import Path
 from types import ModuleType
 from unittest.mock import patch
 
@@ -132,7 +131,13 @@ class TestRunGit:
         ) as run_mock:
             result = git_utils.run_git(["status"])
         assert result.stdout == "ok"
-        run_mock.assert_called_once_with(["git", "status"], capture_output=True, text=True)
+        run_mock.assert_called_once_with(
+            ["git", "status"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
 
 
 class TestGetConflictedFiles:
@@ -172,16 +177,3 @@ class TestExtractStages:
         assert theirs == "THEIRS"
 
 
-class TestHasConflictMarkers:
-    def test_returns_true_when_markers_present(self, git_utils: ModuleType, tmp_path: Path) -> None:
-        f = tmp_path / "a.txt"
-        f.write_text("<<<<<<< HEAD\na\n=======\nb\n>>>>>>> x\n")
-        assert git_utils.has_conflict_markers(str(f)) is True
-
-    def test_returns_false_when_clean(self, git_utils: ModuleType, tmp_path: Path) -> None:
-        f = tmp_path / "a.txt"
-        f.write_text("clean\n")
-        assert git_utils.has_conflict_markers(str(f)) is False
-
-    def test_returns_false_when_missing(self, git_utils: ModuleType, tmp_path: Path) -> None:
-        assert git_utils.has_conflict_markers(str(tmp_path / "missing.txt")) is False

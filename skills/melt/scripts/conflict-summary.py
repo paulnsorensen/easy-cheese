@@ -34,7 +34,7 @@ _VERBOSE_BASE_CAP = 5
 def _recommendation(path: str, ext: str, hunk_count: int, mergiraf_ok: bool) -> str:
     if mergiraf_ok and hunk_count > 0:
         return "batch-resolve.py"
-    if ext in ("lock", "sum") or "lock" in path.lower():
+    if ext in ("lock", "sum") or "lock" in Path(path).name.lower():
         return "lockfile-resolve.py"
     if ext in ("sh", "bash", "zsh", "yaml", "yml", "json", "md"):
         return "conflict-pick.py"
