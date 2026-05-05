@@ -30,6 +30,7 @@ Each `SKILL.md` is self-contained markdown with YAML frontmatter. There are no n
 
 | Skill path | Command | Purpose |
 | --- | --- | --- |
+| `skills/cheese/SKILL.md` | `/cheese` | Unified entry point. Classifies any input (idea, spec path, PR, stack trace, file path), announces the routing decision, and gates dispatch behind `AskUserQuestion`. Never auto-invokes. |
 | `skills/briesearch/SKILL.md` | `/briesearch` | Research technical questions across docs, web, codebase, and GitHub examples with confidence-capped synthesis. |
 | `skills/mold/SKILL.md` | `/mold` | Shape fuzzy ideas into grounded specs through dialogue, validate cycles, and a two-key handshake. |
 | `skills/culture/SKILL.md` | `/culture` | No-write rubber-ducking and architecture exploration. Hard invariant: writes nothing. |
@@ -37,6 +38,7 @@ Each `SKILL.md` is self-contained markdown with YAML frontmatter. There are no n
 | `skills/press/SKILL.md` | `/press` | Harden cooked changes with coverage, assertion, and boundary checks. |
 | `skills/age/SKILL.md` | `/age` | Review diffs across eight staff-engineer dimensions and produce a stake-grouped findings report. |
 | `skills/cure/SKILL.md` | `/cure` | Fix user-selected findings, validate, and prepare the branch for shipping. |
+| `skills/melt/SKILL.md` | `/melt` | Resolve merge / rebase / cherry-pick conflicts via the structural cascade (mergiraf → rerere → kdiff3) with batch, pick-side, and lockfile helpers. |
 
 ### Tool skills
 
@@ -108,10 +110,16 @@ If those don't show up, the cheez-* skills will hard-fail with "tilth MCP server
 ### Suggested flow
 
 ```text
-/briesearch → /mold → /culture → /cook → /press → /age → /cure
+/cheese  ──►  classify intent
+   ├─ need info / external evidence  ──►  /briesearch
+   ├─ rubber-duck only               ──►  /culture
+   ├─ fuzzy / multi-module idea       ──►  /mold        ──►  /cook  ──►  /press  ──►  /age  ──►  /cure
+   ├─ clear, scoped ask               ──►  /cook        ──►  /press  ──►  /age   ──►  /cure
+   ├─ debugging task                  ──►  /culture     ──►  /cook   ──►  /press ──►  /age  ──►  /cure
+   └─ review only                     ──►  /age         ──►  /cure
 ```
 
-Use only the skills you need. A clear bug can go straight to `/cook`; a no-write design discussion should stay in `/culture`.
+`/cheese` is the front door. It inspects whatever you drop in (idea, spec path, PR ref, stack trace, file path), announces its routing decision, and waits for explicit confirmation before any downstream skill runs. Use it directly, or skip it when you already know the destination — a clear bug can go straight to `/cook`, a no-write design discussion stays in `/culture`. `/melt` cuts in whenever a merge step blocks `/cook` or `/cure`.
 
 ## Scope
 
