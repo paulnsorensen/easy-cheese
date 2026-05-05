@@ -82,3 +82,4 @@ Pre-select `Run /press` when the cooked diff added new behaviour or touched unte
 - Prefer existing dependencies and patterns.
 - Do not invent architecture already rejected by the spec.
 - Stop and ask when implementation reveals a design decision the spec did not answer.
+- Place new code in the correct Sliced Bread slice: `domains/<name>` for business concepts, `adapters/<name>` for outbound infrastructure, `app/` for composition, `domains/common/` only for shape-without-behavior leaf types. Cross-slice calls go through the crust, never into another slice's internals. Architecture rules and language-specific mechanics live in `references/sliced-bread.md` (with `references/sb/{rust,go,ts}.md` for compile-enforcement details).

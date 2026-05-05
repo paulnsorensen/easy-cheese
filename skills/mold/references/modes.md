@@ -37,9 +37,9 @@ Mold has no fixed entry point. Inspect the input shape and pick a starting mode.
 
 ### Sketch — interface lockdown
 
-**Job:** lock modules, responsibilities, I/O contracts, and seams in pseudocode signatures. Before drafting, parallel `cheez-search` for sibling signatures in the same area so new ones fit conventions.
+**Job:** lock modules, responsibilities, I/O contracts, and seams in pseudocode signatures. Before drafting, parallel `cheez-search` for sibling signatures in the same area so new ones fit conventions. Every signature names its Sliced Bread slice (`domains/<name>`, `adapters/<name>`, `app`, or `domains/common`) before the pseudocode is drafted — slice ownership is part of the contract, not a layout afterthought. Full rules in `references/sliced-bread.md` at the repo root.
 
-**Exit when:** every public seam has a pseudocode signature; every cross-module call goes through public interfaces, not internals.
+**Exit when:** every public seam has a pseudocode signature; every signature declares a slice; every cross-module call goes through the crust, not internals.
 
 ### Grill — adversarial clarification
 

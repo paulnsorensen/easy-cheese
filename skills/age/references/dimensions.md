@@ -27,13 +27,18 @@ Recommendation shape: "Validate at the boundary" / "Use the project's existing `
 
 ### encapsulation
 
+The reference architecture is Sliced Bread (`references/sliced-bread.md` at the repo root). Use its dependency-direction quick-check (`app → domains → common`; `adapters → domains`; never the reverse, never adapter-to-adapter, never `common → siblings`) and crust rule (external code only imports from a slice's public API) to grade these findings. Language-specific enforcement details — Rust `pub use` / `pub(super)`, Go `internal/`, TypeScript `"exports"` maps — live in `references/sb/{rust,go,ts}.md`.
+
 Look for:
-- Cross-module imports that reach into another slice's internals instead of its public interface.
+- Cross-module imports that reach into another slice's internals instead of its public interface (the crust).
+- Domain code importing infrastructure (database driver, HTTP client, framework SDK) instead of defining a port that an adapter implements.
+- `common/` modules that import from sibling slices, breaking the leaf rule.
+- Adapters calling other adapters directly instead of going through a domain-defined port.
 - Public APIs that leak implementation types (ORM models, framework objects, infra adapters).
 - Functions that take `Context | DI container | App` when they only need one field.
 - New exports added without a use case.
 
-Recommendation shape: "Import from `<slice>/index` instead of `<slice>/internal/foo`" / "Narrow the public surface to `<minimal-type>`".
+Recommendation shape: "Import from `<slice>` (the crust) instead of `<slice>/internal/foo`" / "Define a `<port>` protocol in the domain and move the SDK call to `adapters/<name>`" / "Move shared logic out of `common/` into a named slice — `common/` is a shape-only leaf".
 
 ### spec
 
