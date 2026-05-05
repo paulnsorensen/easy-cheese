@@ -1,0 +1,8 @@
+# Cheese-flow runtime scratch (research notes, age sidecars, mold state, etc.)
+.cheese/
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
