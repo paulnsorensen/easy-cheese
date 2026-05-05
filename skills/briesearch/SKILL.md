@@ -1,0 +1,62 @@
+---
+name: briesearch
+description: This skill should be used whenever the user asks to research, look up, compare, or investigate something external to the immediate codebase — phrases like "research X", "look up the API for Y", "compare libraries", "what does the doc say about Z", "find examples of how to do W", "is this library maintained", or "before I implement, what's the right approach". Routes the question across library docs (Context7), web research (Tavily), local code patterns (cheez-search), and GitHub examples (gh), then synthesizes with explicit confidence. Use even when the user only mentions a library name without saying "research" — when in doubt, briesearch first so the spec or implementation is informed, not speculative.
+license: MIT
+---
+
+# /briesearch
+
+Use this skill when a technical question needs evidence before a decision: library behavior, current vendor docs, implementation patterns, or local precedent.
+
+Do not use it for a single obvious file lookup or when the user already supplied enough evidence.
+
+## Inputs
+
+Accept the whole user prompt as the research question. If version, framework, repo scope, or decision criteria are missing and matter, ask one clarifying question; otherwise proceed with stated assumptions.
+
+## Flow
+
+1. **Classify** — library docs, current web facts, codebase pattern, GitHub example, comparison, or best practice.
+2. **Route** — pick sources per `references/routing.md` and emit the routing block. Sources committed here MUST execute.
+3. **Gather** — fetch from each routed source in parallel where the harness supports it.
+4. **Synthesize** — build the evidence table, apply the confidence cap from `references/synthesis.md`, and produce the answer.
+5. **Stop** — do not implement the result unless the user separately asks.
+
+When an optional MCP source is missing, follow `references/unavailable.md` — fall back once, surface the cap, never silently retry.
+
+## Preferred tools and fallbacks
+
+| Need | Prefer | Fallback |
+| --- | --- | --- |
+| Library/API docs | Context7 | package docs in the repo, README examples, then web search |
+| Current web/vendor facts | Tavily | generic web search or cited vendor pages supplied by the user |
+| Local code patterns | cheez-search + cheez-read | Serena or LSP, `sg`, `ripgrep`, `find`, targeted file reads |
+| GitHub examples | `gh` or GitHub integration | web search scoped to GitHub, or skip with a confidence note |
+| Structured JSON output | `jq` | careful manual inspection |
+
+If a preferred tool is missing, say so once and continue with the fallback. Missing optional tools should lower confidence, not block the skill unless every routed evidence source is unavailable.
+
+## Output
+
+```markdown
+## Research: <question>
+
+### Answer
+<concise synthesis>
+
+### Evidence
+- <source or file ref>: <finding>
+
+### Confidence
+<low|medium|high> — <why>
+
+### Next step
+<recommended skill or action, if any>
+```
+
+## Rules
+
+- Commit to a source plan before collecting evidence.
+- Do not pretend an unavailable source was checked.
+- Prefer primary docs over blogs when both are available.
+- Keep raw notes out of the response unless the user asks for them.
