@@ -43,6 +43,61 @@ The workflow skills can delegate code search, reading, and editing to these MCP-
 
 The cheez-* skills require tilth MCP and hard-fail when it is unavailable rather than fall back to host tools. Workflow skills remain portable by falling back directly to host-native tools when they are not using cheez-*.
 
+#### cheez-* router protocol
+
+The three cheez-* skills are designed to chain. The standard sequence:
+
+1. **`/cheez-search`** — locate the symbol, caller, content match, or file. AST-aware; replaces grep/rg/find.
+2. **`/cheez-read`** — read the target file or section to capture hash anchors. Smart-outlines large files; replaces cat/head/tail/ls.
+3. **`/cheez-write`** — apply hash-anchored edits with the anchors from step 2. Surgical; rejects on hash mismatch.
+
+Workflow skills (`/cook`, `/age`, `/cure`) call into this chain when they need code intelligence. A skill should never search-then-edit without reading in between — the read is what produces the anchors that make the edit safe.
+
+##### Tool redirection map
+
+If you'd reach for one of these on a code task, route through cheez-* instead:
+
+| If you'd run... | Use this skill | Why |
+| --- | --- | --- |
+| `grep`, `rg`, `ripgrep`, `ag`, `ack` | `/cheez-search` | AST-aware; ranks definitions over usages, filters comments/strings. |
+| `find`, `fd` (by name pattern, code work) | `/cheez-read` (`tilth_files`) | Token estimates and `.gitignore` filtering for free. |
+| `ast-grep` / `sg` (for name-shaped queries) | `/cheez-search` | `sg` is reserved for structural metavariable patterns tilth can't express. |
+| LSP "find references" / "find definition" (manual) | `/cheez-search` | Same answer, no IDE round-trip; falls through to LSP under the hood when needed. |
+| `cat`, `head`, `tail`, `less`, `more`, `bat` | `/cheez-read` | Hash anchors + outline-vs-full token budgeting. |
+| `ls`, `tree`, `eza` (code dirs) | `/cheez-read` (`tilth_files`) | Token estimates; respects `.gitignore`. |
+| `Read`, `Glob` (host tools, code paths) | `/cheez-read` | Bypasses session deduplication and emits no anchors. |
+| `sed`, `awk`, `perl -i` | `/cheez-write` | No hash-mismatch safety; silent races on concurrent writes. |
+| `patch` (apply diff to code) | `/cheez-write` | Anchored range edits are the safe equivalent. |
+| `tee`, `>`, `>>` (overwrite/append code files) | `/cheez-write` | Same — no anchors, no mismatch detection. |
+| `Edit`, `Write` (host tools, code) | `/cheez-write` | `tilth_edit` is the only edit path with hash-anchor safety. |
+| `sg --rewrite` (codemod across N files) | `/cheez-write` | Sanctioned escape from cheez-write for structural codemods; `tilth_edit` stays the default for single-block edits. |
+
+Outside code work (e.g. `find -mtime`, `ls /tmp`, log inspection with `tail -f`, JSON munging with `jq`) the host tools are still the right call. The redirection rule is: **anything that touches source code goes through cheez-***.
+
+#### Installing tilth MCP
+
+The cheez-* skills require [tilth](https://github.com/paulnsorensen/tilth) installed as an MCP server in your harness. tilth ships a one-shot installer:
+
+```sh
+# Install tilth CLI (one-time)
+cargo install tilth        # or: brew install paulnsorensen/tap/tilth
+
+# Register tilth as an MCP server in Claude Code (with edit mode for cheez-write)
+tilth install claude-code --edit
+```
+
+Drop the `--edit` flag if you only want read/search — `cheez-write` needs edit mode to expose the `tilth_edit` MCP tool. Other supported hosts (cursor, vscode, claude-desktop, opencode, gemini, codex, zed, …) follow the same pattern: `tilth install <host> --edit`.
+
+After install, restart your harness and confirm the tools appear:
+
+- `mcp__tilth__tilth_search`
+- `mcp__tilth__tilth_read`
+- `mcp__tilth__tilth_files`
+- `mcp__tilth__tilth_deps`
+- `mcp__tilth__tilth_edit` (only with `--edit`)
+
+If those don't show up, the cheez-* skills will hard-fail with "tilth MCP server is not loaded" instead of silently falling back to host tools.
+
 ### Suggested flow
 
 ```text
@@ -70,7 +125,7 @@ Workflow skills name preferred tools when they help, with fallbacks for portabil
 | Tool | Helps with | Fallback |
 | --- | --- | --- |
 | tilth (MCP) | AST-aware read/search/edit and dependency context | Required for cheez-*; workflow skills can bypass cheez-* and use host read/edit, `ripgrep`, patches |
-| `sg` (ast-grep) | Structural pattern matching with metavariables | `ripgrep`, `find`, targeted reads |
+| `sg` (ast-grep) | Structural pattern matching and codemods (`sg --rewrite`) with metavariables | `ripgrep`, `find`, targeted reads; `tilth_edit` for non-structural edits |
 | Context7 (MCP) | Library and API documentation | repo docs, package docs, vendor pages, web search |
 | Tavily (MCP) | Current web/vendor research | host web search or user-supplied sources |
 | code-review-graph (MCP) | Review impact radius and caller/dep context | import searches, caller searches, tests |
