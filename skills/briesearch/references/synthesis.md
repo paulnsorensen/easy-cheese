@@ -21,7 +21,7 @@ Rules:
 
 ## Link / citation verification
 
-For deep reports (anything with a `.cheese/research/<slug>.md` artifact):
+For deep reports (anything with a `.cheese/research/<slug>/<slug>.md` artifact):
 
 1. Every URL in the evidence column resolves (HTTP 200 or matched-host redirect). Mark unreachable links `[unverified]` rather than dropping them — the user can re-check.
 2. Every quoted or paraphrased line traces back to its source (one-click verifiable for the user).
@@ -64,6 +64,6 @@ Short form (always returned to the caller):
 
 Long form (when the question warranted a deep look):
 
-- Write the full report to `.cheese/research/<slug>.md` (slug is 4-6 kebab-case words).
+- Write the full report to `.cheese/research/<slug>/<slug>.md` (slug is 4-6 kebab-case words).
 - Include the full claim table, raw bodies referenced from `.cheese/research/<slug>/raw/` (see `context-isolation.md`), and the verification log.
 - In the chat reply: a one-paragraph summary, the report path, and the confidence line. Do not paste the full report inline — the user will see only the last collapsed message by default.

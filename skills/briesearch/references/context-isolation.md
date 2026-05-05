@@ -25,7 +25,7 @@ Skip it for triage searches (snippets only, ≤10 results) and single-URL extrac
 
 ## The recipe
 
-1. **Generate a slug.** 4-6 kebab-case words derived from the question. Same slug as `synthesis.md` uses for `.cheese/research/<slug>.md`.
+1. **Generate a slug.** 4-6 kebab-case words derived from the question. Same slug as `synthesis.md` uses for `.cheese/research/<slug>/<slug>.md`.
 2. **Run the heavy call from a forked sub-agent**, not from the main context. The sub-agent receives the routing block and writes raw bodies to `.cheese/research/<slug>/raw/`.
 3. **Persist raw bodies as files.** One file per result/URL:
 
