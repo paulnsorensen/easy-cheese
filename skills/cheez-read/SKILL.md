@@ -1,6 +1,6 @@
 ---
 name: cheez-read
-description: This skill should be used when the user asks to read, view, show, open, or display the contents of a file or directory — phrases like "read src/auth.ts", "show me this file", "what's in this directory", "view lines 44-89", "look at the imports". Replaces cat / head / tail / ls / find / Read / Glob with AST-aware tilth MCP reading. Use even when the user says "cat" or "open the file" — never call host Read or Glob directly. If tilth MCP is unavailable, stop and report rather than fall back. Do NOT use for searching symbols or text (use cheez-search), editing code (use cheez-write), or git/gh operations.
+description: This skill should be used when the user asks to read, view, show, open, or display the contents of a file or directory — phrases like "read src/auth.ts", "show me this file", "what's in this directory", "view lines 44-89", "look at the imports". Replaces cat / head / tail / less / more / bat / ls / tree / eza / find / fd / Read / Glob with AST-aware tilth MCP reading and file listing. Use even when the user says "cat", "less", "bat", "tree", "ls", "find", "fd", or "open the file" — never call host Read, Glob, or any shell file viewer / lister directly. If tilth MCP is unavailable, stop and report rather than fall back. Do NOT use for searching symbols or text (use cheez-search), editing code (use cheez-write), or git/gh operations.
 license: MIT
 compatibility: Requires tilth MCP server.
 allowed-tools: mcp__tilth__tilth_read, mcp__tilth__tilth_files, mcp__tilth__tilth_deps
@@ -129,7 +129,7 @@ tilth_read(paths: ["src/auth.ts", "src/routes.ts", "src/middleware.ts"])
 
 ## Hash Anchors — The Edit Bridge
 
-When reading files, tilth outputs **hash-anchored lines**:
+When reading files in **edit mode**, tilth outputs **hash-anchored lines**:
 
 ```
 42:a3f|  let x = compute();
@@ -261,8 +261,9 @@ tilth tracks what you've read in the current session:
 
 ## DO NOT
 
-- **DO NOT use cat/head/tail** — use tilth_read.
-- **DO NOT use ls/find** — use tilth_files.
+- **DO NOT use cat / head / tail / less / more / bat** to view code — use `tilth_read`. Hash anchors and outline-vs-full token budgeting only work through tilth.
+- **DO NOT use ls / tree / eza / find / fd to enumerate code files** — use `tilth_files`. Token estimates and `.gitignore` filtering only work through tilth.
+- **DO NOT use the host Read or Glob tools** on code paths — they bypass tilth's session deduplication and emit no anchors.
 - **DO NOT re-read files** shown earlier — reference your notes.
 - **DO NOT use for searching** — use cheez-search.
 - **DO NOT use for editing** — use cheez-write.
