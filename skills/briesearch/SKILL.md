@@ -1,6 +1,6 @@
 ---
 name: briesearch
-description: Lightweight research skill that routes a question across docs, web, codebase, and GitHub examples with graceful fallbacks.
+description: This skill should be used whenever the user asks to research, look up, compare, or investigate something external to the immediate codebase — phrases like "research X", "look up the API for Y", "compare libraries", "what does the doc say about Z", "find examples of how to do W", "is this library maintained", or "before I implement, what's the right approach". Routes the question across library docs (Context7), web research (Tavily), local code patterns (cheez-search), and GitHub examples (gh), then synthesizes with explicit confidence. Use even when the user only mentions a library name without saying "research" — when in doubt, briesearch first so the spec or implementation is informed, not speculative.
 license: MIT
 ---
 

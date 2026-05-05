@@ -1,6 +1,6 @@
 ---
 name: press
-description: Harden cooked changes by checking spec coverage, strengthening assertions, adding focused boundary tests, and reporting readiness.
+description: This skill should be used right after `/cook` produces green changes, when the user wants the test surface hardened before review or shipping — phrases like "press the changes", "harden this", "check coverage", "strengthen the tests", "are the tests good enough", "press before /age", "/press". Reads the spec + cooked diff, maps changed behavior to tests, finds weak assertions and missing boundaries, adds focused hardening tests, and produces a readiness report. Use even when the user wants to "tighten things up" before review. Do NOT use to add broad new behavior — only corrective fixes that hardening tests force.
 license: MIT
 ---
 

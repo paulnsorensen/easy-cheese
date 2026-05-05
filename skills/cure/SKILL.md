@@ -1,6 +1,6 @@
 ---
 name: cure
-description: Fix selected findings from review, validate the result, prepare the branch for shipping, and hand off PR-ready status.
+description: This skill should be used when the user has an `/age` report (or any list of review findings, CI failures, or a "fix these" instruction) and wants the selected items resolved — phrases like "fix these findings", "/cure <slug>", "address the high-stake items", "act on the age report", "fix the failing CI", "apply the cleanup". Loads the report, gates on explicit user selection, applies focused fixes via cheez-write, runs the project's existing test/lint/build gates, and produces a shipping-ready summary. Use even when the user just says "fix it" if a review report or finding list is in scope. Default selection is empty — never apply everything implicitly.
 license: MIT
 ---
 

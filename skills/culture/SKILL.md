@@ -1,6 +1,6 @@
 ---
 name: culture
-description: No-write thinking space for rubber-ducking architecture, trade-offs, and ambiguous problems without producing code or specs.
+description: This skill should be used when the user wants to think out loud, rubber-duck a design, walk through trade-offs, or explore an ambiguous problem WITHOUT producing files, code, or specs — phrases like "let's talk through X", "rubber duck this with me", "I'm trying to decide between A and B", "help me think about Y", "what would happen if we…", "/culture". Hard invariant — culture never writes to production files, never commits, never opens PRs. Output is conversation, not artifacts. Use when the user wants shared mental model first; if the dialogue reveals real work to do, recommend `/mold`, `/cook`, `/age`, or `/briesearch` and stop.
 license: MIT
 ---
 

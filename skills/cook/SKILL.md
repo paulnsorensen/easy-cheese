@@ -1,6 +1,6 @@
 ---
 name: cook
-description: Implement a clear spec or focused request with scoped edits, red-green testing discipline, and fallback-aware tooling.
+description: This skill should be used when the user has an approved spec, pasted requirements, or a focused implementation request and wants the code written — phrases like "implement this", "build this feature", "write the code", "cook this spec", "make it work", "/cook .cheese/specs/<slug>.md", "fix this bug" (when the bug has a clear fix). Runs a TDD-disciplined cut → cook → taste-test → press handoff loop with scoped edits via cheez-write. Use even when the user just says "go" or "ship it" if a spec or clear acceptance criteria is in scope. If the request is fuzzy, route to `/mold` first; if it needs no writes, route to `/culture`.
 license: MIT
 ---
 
