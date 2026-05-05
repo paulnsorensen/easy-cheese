@@ -12,13 +12,12 @@ Do not use it for free-form discussion with no artifact intent (`/culture`), dir
 
 ## Flow
 
-1. Pick a starting mode from the user's input and announce it in one line.
-2. Build shared understanding through the smallest useful dialogue.
-3. Ground load-bearing claims with code, docs, or `/briesearch` evidence.
-4. Compare options, including Do Nothing when relevant.
-5. Sketch public seams in pseudocode before writing a spec.
-6. Run a coherence check and ask for explicit approval before writing artifacts.
-7. Write only the approved spec or issue drafts, then suggest the next skill.
+1. **Route** — pick a starting mode from the input shape (see `references/modes.md`) and announce it in one line.
+2. **Dialogue** — build shared understanding through the smallest useful question. Ground every load-bearing claim with `cheez-search`, `cheez-read`, or a Validate Cycle (`references/validate-cycle.md`).
+3. **Sketch** — for any feature touching >1 module or a new public interface, lock seams in pseudocode signatures before talking spec content.
+4. **Two-key handshake** — both the user (explicit verb) and the agent (coherence self-check) must agree before extraction. See `references/handshake.md`.
+5. **Curdle** — write the approved spec to `.cheese/specs/<slug>.md` (and optional `.cheese/issues/<slug>-NNN.md`). Format and slug rules in `references/curdle.md`.
+6. **Hand off** — suggest the next skill inline. Never auto-invoke.
 
 ## Modes
 
@@ -26,10 +25,12 @@ Do not use it for free-form discussion with no artifact intent (`/culture`), dir
 | --- | --- | --- |
 | Explore | The idea is vague | Identify the real problem and pain point |
 | Ground | A file, bug, or existing doc is named | Verify facts against evidence |
-| Shape | The goal is known but approach is open | Compare viable options |
+| Shape | The goal is known but approach is open | Compare viable options (Do Nothing always included) |
 | Sketch | Interfaces or module boundaries matter | Lock responsibilities and seams |
-| Grill | A favored approach needs stress-testing | Find weak assumptions and edge cases |
-| Diagnose | A symptom, failure, or trace is supplied | Reproduce and isolate root cause before spec |
+| Grill | A favoured approach needs stress-testing | Find weak assumptions and edge cases |
+| Diagnose | A symptom, failure, or trace is supplied | Build a Loop → reproduce → hypothesize → confirm root cause |
+
+Full mode definitions, exit criteria, and user knobs in `references/modes.md`.
 
 ## Preferred tools and fallbacks
 

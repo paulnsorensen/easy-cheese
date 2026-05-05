@@ -24,7 +24,7 @@ Default to the current working diff when no ref is supplied. If the base branch 
 
 | Dimension | Stake | Look for |
 | --- | --- | --- |
-| correctness | high | broken behavior, silent failures, ordering, null/empty edge cases |
+| correctness | high | broken behaviour, silent failures, ordering, null/empty edge cases |
 | security | high | auth, injection, secrets, unsafe parsing, tainted inputs |
 | encapsulation | high | boundary leaks, cross-slice internals, public API sprawl |
 | spec | high | drift from stated requirements or acceptance criteria |
@@ -33,7 +33,7 @@ Default to the current working diff when no ref is supplied. If the base branch 
 | assertions | medium | weak tests, shallow existence checks, swallowed errors |
 | nih | medium | reinvented dependency, stdlib, or existing project helper |
 
-Easy Cheese intentionally drops the `precedent` (git-history) dimension; that lives in cheese-flow proper.
+Per-dimension rubrics and recommendation shapes in `references/dimensions.md`. Easy Cheese intentionally drops the `precedent` (git-history) dimension; that lives in cheese-flow proper.
 
 ## Flow
 

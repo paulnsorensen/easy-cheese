@@ -19,17 +19,31 @@ Each `SKILL.md` is self-contained markdown with YAML frontmatter. There are no n
 
 ## Skills
 
+### Workflow skills
+
 | Skill path | Command | Purpose |
 | --- | --- | --- |
-| `skills/briesearch/SKILL.md` | `/briesearch` | Research technical questions across docs, web, codebase, and GitHub examples with fallbacks. |
-| `skills/mold/SKILL.md` | `/mold` | Shape fuzzy ideas into grounded specs or issue drafts. |
-| `skills/culture/SKILL.md` | `/culture` | No-write rubber-ducking and architecture exploration. |
-| `skills/cook/SKILL.md` | `/cook` | Implement clear specs or focused requests with scoped edits and tests. |
+| `skills/briesearch/SKILL.md` | `/briesearch` | Research technical questions across docs, web, codebase, and GitHub examples with confidence-capped synthesis. |
+| `skills/mold/SKILL.md` | `/mold` | Shape fuzzy ideas into grounded specs through dialogue, validate cycles, and a two-key handshake. |
+| `skills/culture/SKILL.md` | `/culture` | No-write rubber-ducking and architecture exploration. Hard invariant: writes nothing. |
+| `skills/cook/SKILL.md` | `/cook` | Implement clear specs via cut → cook → taste-test with scoped edits and tests. |
 | `skills/press/SKILL.md` | `/press` | Harden cooked changes with coverage, assertion, and boundary checks. |
-| `skills/age/SKILL.md` | `/age` | Review diffs across staff-engineer dimensions and produce evidence-backed findings. |
-| `skills/cure/SKILL.md` | `/cure` | Fix selected findings, validate, and prepare the branch for shipping. |
+| `skills/age/SKILL.md` | `/age` | Review diffs across eight staff-engineer dimensions and produce a stake-grouped findings report. |
+| `skills/cure/SKILL.md` | `/cure` | Fix user-selected findings, validate, and prepare the branch for shipping. |
 
-Suggested flow:
+### Tool skills
+
+The workflow skills delegate code search, reading, and editing to these MCP-backed skills:
+
+| Skill path | Command | Purpose |
+| --- | --- | --- |
+| `skills/cheez-search/SKILL.md` | `/cheez-search` | AST-aware code/text/regex/caller search via tilth MCP. Replaces grep / rg / find. |
+| `skills/cheez-read/SKILL.md` | `/cheez-read` | Smart file/directory reading with hash anchors via tilth MCP. Replaces cat / head / tail / ls. |
+| `skills/cheez-write/SKILL.md` | `/cheez-write` | Hash-anchored, surgical edits via tilth MCP. Never rewrites whole files. |
+
+The cheez-* skills hard-fail when the tilth MCP is unavailable rather than fall back to host tools — that's how they protect against silent grep regressions in long sessions.
+
+### Suggested flow
 
 ```text
 /briesearch → /mold → /culture → /cook → /press → /age → /cure

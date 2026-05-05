@@ -22,13 +22,13 @@ If the request is ambiguous, ask for the missing acceptance criteria or route to
 
 ## Flow
 
-1. Confirm the contract: behavior, non-goals, likely scope, and quality gates.
-2. Inspect relevant code and tests before editing.
-3. Add or update a failing test first when behavior changes.
-4. Implement the smallest scoped production change.
-5. Run the narrowest useful test, then relevant wider checks.
-6. Refine for readability without expanding scope.
-7. Hand off to `/press` for test hardening, then `/age` for review when appropriate.
+1. **Contract** — confirm behaviour, non-goals, likely scope, quality gates.
+2. **Cut** — write failing tests for the changed behaviour. See `references/tdd-loop.md`.
+3. **Cook** — make the cut tests pass with the smallest production change.
+4. **Taste-test** — check spec drift, readability, and scope creep. Two-round cap; details in `references/tdd-loop.md`.
+5. **Hand off** — produce the package-ready report (`references/package-report.md`) and recommend `/press` then `/age`.
+
+Use `cheez-search` to find existing patterns and `cheez-read` / `cheez-write` for precise edits.
 
 ## Preferred tools and fallbacks
 

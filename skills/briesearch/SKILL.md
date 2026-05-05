@@ -16,11 +16,13 @@ Accept the whole user prompt as the research question. If version, framework, re
 
 ## Flow
 
-1. Classify the question: library docs, current web facts, codebase pattern, GitHub example, comparison, or best practice.
-2. State the source plan briefly, including unavailable sources and their fallbacks.
-3. Gather only enough evidence to answer confidently.
-4. Synthesize the answer with source notes and a confidence level.
-5. Stop after research; do not implement the result unless the user separately asks.
+1. **Classify** — library docs, current web facts, codebase pattern, GitHub example, comparison, or best practice.
+2. **Route** — pick sources per `references/routing.md` and emit the routing block. Sources committed here MUST execute.
+3. **Gather** — fetch from each routed source in parallel where the harness supports it.
+4. **Synthesize** — build the evidence table, apply the confidence cap from `references/synthesis.md`, and produce the answer.
+5. **Stop** — do not implement the result unless the user separately asks.
+
+When an optional MCP source is missing, follow `references/unavailable.md` — fall back once, surface the cap, never silently retry.
 
 ## Preferred tools and fallbacks
 

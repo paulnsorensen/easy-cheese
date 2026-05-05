@@ -12,13 +12,13 @@ Do not use it to implement broad new behavior. Press may add or strengthen tests
 
 ## Flow
 
-1. Read the spec or acceptance criteria and the cooked diff.
-2. Map changed behavior to existing and new tests.
-3. Identify weak assertions, missing boundaries, and uncovered integration seams.
-4. Add focused tests for meaningful gaps; observe red first when behavior changes.
-5. Make minimal corrective fixes only for defects exposed by the hardening tests.
-6. Run relevant test commands.
-7. Report ready, follow-up, or blocked.
+1. **Read** — load the spec or acceptance criteria and the cooked diff.
+2. **Map** — for each changed behaviour, find the test(s) that cover it via `cheez-search`.
+3. **Gap analysis** — identify weak assertions, missing boundaries, and uncovered integration seams. See `references/gap-analysis.md` for what counts as a gap and the priority order.
+4. **Add focused tests** — observe red first when behaviour changes. Use `cheez-write` for precise edits.
+5. **Corrective fixes** — only for defects the hardening tests expose. No new behaviour.
+6. **Run checks** — narrowest useful tests, then relevant wider gates already in the project.
+7. **Report** — ready, follow-up, or blocked.
 
 ## Preferred tools and fallbacks
 

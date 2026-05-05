@@ -1,0 +1,30 @@
+# Unavailable sources
+
+Optional MCP servers (Context7, Tavily, code-review-graph, tilth) are not always present. Fallbacks exist, but evidence quality drops — surface that honestly.
+
+## Per-source fallbacks
+
+| Source | If MCP missing | Confidence impact |
+| --- | --- | --- |
+| Context7 | Read repo docs, package README, vendor pages, then web search | Medium → low for version-specific questions |
+| Tavily | Host web search or user-provided links | Medium → low when freshness matters |
+| Codebase (cheez-*) | Stop and report — Easy Cheese assumes tilth for code search; do not silently use Grep | Block, not degrade |
+| GitHub (`gh`) | Note absence; user-supplied URLs are acceptable | Skip with a confidence note |
+
+## Reporting an unavailable source
+
+Once per session, after the routing block:
+
+```text
+UNAVAILABLE: Tavily MCP not loaded. Falling back to host web search.
+Freshness-sensitive answers will be capped at medium confidence.
+```
+
+Do not retry. Do not silently swap to a different question. The cap is real and the user reads the same line you do.
+
+## When to refuse instead of fall back
+
+Stop and ask the user when:
+- The question explicitly demands a source that is unavailable (e.g., "use Context7 for this").
+- All routed sources are unavailable.
+- A fallback would require fabricating information.

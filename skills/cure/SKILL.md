@@ -12,18 +12,18 @@ Do not use it to apply every suggestion automatically. The user chooses what to 
 
 ## Inputs
 
-Accept a review report path, finding ids, pasted findings, CI failure summary, or a scoped instruction such as "fix high-stake age findings".
+Accept any of: a `/age` slug (`/cure <slug>` reads `.cheese/age/<slug>.md`), a pasted findings list, a CI failure summary, or a scoped instruction like "fix the high-stake age findings".
 
-If selection is ambiguous, present a short numbered list and ask what to apply. The default selection is none.
+If selection is ambiguous, render a numbered selection list per `references/selection.md` and ask what to apply. The default selection is empty.
 
 ## Flow
 
-1. Load or restate the selected findings.
-2. Ask for approval when the selection is not explicit.
-3. Apply focused fixes, one logical group at a time.
-4. Run relevant tests, lint, typecheck, or build commands already defined by the repo.
-5. Re-review the touched area with `/age` principles.
-6. Prepare shipping notes: what changed, checks run, risks, and PR readiness.
+1. **Load** — read the findings (markdown, not JSON sidecars).
+2. **Select** — gate on explicit user selection. See `references/selection.md` for the recognized verbs.
+3. **Apply** — fix one logical group at a time via `cheez-read` (re-confirm anchor location) and `cheez-write` (apply).
+4. **Validate** — run the narrowest tests that prove each fix, then any relevant project-wide gates (lint, typecheck, build).
+5. **Re-review** — apply `/age` principles to the touched paths. If new findings appear, surface them in the report; the user re-invokes `/cure` to act on them.
+6. **Ship report** — what changed, checks run, deferred items, residual risks.
 
 ## Preferred tools and fallbacks
 
