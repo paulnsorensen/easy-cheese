@@ -26,9 +26,9 @@ Do not use it to implement broad new behavior. Press may add or strengthen tests
 | Need | Prefer | Fallback |
 | --- | --- | --- |
 | Diff review | `delta` | plain `git diff` |
-| Coverage/blast radius | code review graph, Serena or LSP | `ripgrep` callers/imports and test references |
+| Coverage/blast radius | code-review-graph via cheez-search, Serena or LSP | `ripgrep` callers/imports and test references only after graph/semantic paths cannot answer |
 | Precise test edits | tilth edit | harness edit tools or patch application |
-| Test discovery | `sg`, ripgrep | package manager test listings or file tree |
+| Test discovery | code-review-graph tests_for query, cheez-search, `sg` | package manager test listings or file tree |
 
 If optional tools are missing, press a narrower surface and state the residual risk.
 

@@ -37,8 +37,8 @@ Full mode definitions, exit criteria, and user knobs in `references/modes.md`.
 | Need | Prefer | Fallback |
 | --- | --- | --- |
 | External validation | `/briesearch` with Context7/Tavily | user-provided docs, repo docs, or note as unverified |
-| Codebase grounding | Serena or LSP, `sg`, tilth read/search | `ripgrep`, `find`, targeted file reads |
-| Dependency/blast-radius checks | code review graph, tilth deps | import searches, caller searches, test references |
+| Codebase grounding | cheez-search + cheez-read, code-review-graph for graph-shaped questions, Serena or LSP, `sg` | `ripgrep`, `find`, targeted file reads only after MCP/semantic paths cannot answer |
+| Dependency/blast-radius checks | code-review-graph, then tilth deps | import searches, caller searches, test references |
 | Spec writing | precise edit tooling | create/update markdown directly after approval |
 
 Optional tools accelerate the work; missing tools do not block the dialogue. When a fallback is weaker, mark the affected claim `[?]` until settled.

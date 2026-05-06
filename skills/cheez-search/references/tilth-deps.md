@@ -1,7 +1,9 @@
 # `tilth_deps` — Blast-Radius Check
 
-Shows what imports a file and what that file imports. Use to understand the
-fallout of a rename, signature change, or removal **before** you make it.
+Shows what imports a file and what that file imports. Prefer code-review-graph
+for caller/callee, affected-flow, test-gap, or multi-hop impact questions; use
+`tilth_deps` when code-review-graph is unavailable or when you specifically need
+tilth's path-scoped importer list before a rename, signature change, or removal.
 
 ## Call shape
 
@@ -31,6 +33,8 @@ this one.
 
 ## When to use
 
+- **After checking code-review-graph availability** — this is the fallback for
+  path-scoped imports when the graph MCP cannot answer.
 - **Before renaming a file or module** — you'll need to update every
   importer in the bottom block.
 - **Before removing or renaming an export** — same.
@@ -51,7 +55,8 @@ this one.
 - `tilth_deps` is path-scoped, not symbol-scoped. It tells you which files
   import the target file, not which functions inside those files use a
   specific export. For that, follow up with
-  `tilth_search(query: "<symbol>", kind: "callers")`.
+  code-review-graph `query_graph_tool(pattern: "callers_of", target: "<symbol>")`
+  when available, or `tilth_search(query: "<symbol>", kind: "callers")` if not.
 - External dependencies are listed without versions. If you need version
   context, check the lockfile or `package.json` / `Cargo.toml` separately.
 - Generated, vendored, or `.gitignore`d files may not appear — tilth indexes

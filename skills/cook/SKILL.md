@@ -43,9 +43,9 @@ Use `cheez-search` to find existing patterns and `cheez-read` / `cheez-write` fo
 
 | Need | Prefer | Fallback |
 | --- | --- | --- |
-| Semantic navigation | Serena or LSP, `sg` | `ripgrep`, `find`, targeted reads |
+| Semantic navigation | code-review-graph via cheez-search, Serena or LSP, `sg` | `ripgrep`, `find`, targeted reads |
 | Precise edits | tilth edit | harness edit tools or patch application |
-| Code search | `sg`, ripgrep | language/package search commands |
+| Code search | cheez-search (code-review-graph for callers/imports/impact; tilth for symbols/text), `sg` for structural metavars | `ripgrep` only after MCP/semantic paths cannot answer |
 | Diffs | `delta` | plain `git diff` |
 | GitHub context | `gh` | local git history or user-provided links |
 | Merge assistance | mergiraf | manual conflict resolution with tests |

@@ -1,9 +1,9 @@
 ---
 name: cheez-search
-description: This skill should be used when the user asks to find a symbol, definition, caller, import, or text pattern in the codebase — phrases like "where is X defined", "what calls Y", "find all usages of Z", "trace this function", "find the TODO comments", "search for this error string". Replaces grep / rg / ripgrep / ag / ack / find / fd with AST-aware tilth MCP search for name-shaped and text-shaped queries; use ast-grep (`sg`) only for AST-shape patterns with metavariables tilth cannot express. Use even when the user says "grep", "rg", "ripgrep", "ag", "ack", "fd", or "find" — never call host Grep, Glob, ripgrep, ast-grep, or any shell search directly. If tilth MCP is unavailable, stop and report rather than fall back. Do NOT use for reading whole files (use cheez-read), editing code (use cheez-write), or running tests/builds.
+description: This skill should be used when the user asks to find a symbol, definition, caller, import, impact radius, or text pattern in the codebase — phrases like "where is X defined", "what calls Y", "find all usages of Z", "trace this function", "what breaks if I change this", "find the TODO comments", "search for this error string". Replaces grep / rg / ripgrep / ag / ack / find / fd with graph/AST-aware MCP search: prefer code-review-graph MCP for caller/callee/dependency/impact/review-context questions when available, use tilth MCP for direct symbol/content/regex lookup and reading/edit anchors, and use ast-grep (`sg`) only for AST-shape patterns with metavariables neither MCP can express. Use even when the user says "grep", "rg", "ripgrep", "ag", "ack", "fd", or "find" — never call host Grep, Glob, ripgrep, ast-grep, or any shell search directly. If tilth MCP is unavailable, stop and report rather than fall back. Do NOT use for reading whole files (use cheez-read), editing code (use cheez-write), or running tests/builds.
 license: MIT
-compatibility: Requires tilth MCP server. Optional ast-grep (`sg`) for structural metavariable patterns tilth cannot express.
-allowed-tools: mcp__tilth__tilth_search, mcp__tilth__tilth_deps, Bash
+compatibility: Requires tilth MCP server. Encourages optional code-review-graph MCP for graph-shaped searches. Optional ast-grep (`sg`) for structural metavariable patterns neither MCP can express.
+allowed-tools: mcp__tilth__tilth_search, mcp__tilth__tilth_deps, mcp__code-review-graph__build_or_update_graph_tool, mcp__code-review-graph__get_minimal_context_tool, mcp__code-review-graph__query_graph_tool, mcp__code-review-graph__semantic_search_nodes_tool, mcp__code-review-graph__get_impact_radius_tool, mcp__code-review-graph__get_review_context_tool, mcp__code-review-graph__detect_changes_tool, Bash
 ---
 
 # cheez-search
@@ -20,9 +20,10 @@ Before the first call, verify tilth is reachable:
 2. Make a minimal probe call: `tilth_search(query: "tilth", scope: ".")`. If the response is a JSON-RPC error or transport failure, stop and report `"tilth MCP server present but unhealthy: <error>"`.
 3. Any other failure (zero matches, malformed regex, etc.) is a **content** issue — proceed normally and report the result.
 
-AST-aware code search via **tilth MCP** (`tilth_search`, `tilth_deps`).
+Graph/AST-aware code search via **code-review-graph MCP** and **tilth MCP**.
 Tree-sitter finds where symbols are **defined** — not just where strings appear.
-Understand dependencies instead of blindly grepping.
+Understand callers, callees, dependencies, tests, and blast radius instead of
+blindly grepping.
 
 ---
 
@@ -81,6 +82,11 @@ Traditional grep finds text matches. tilth_search finds **semantic matches**:
 - Usages: where it's called or referenced
 - Implementations: where interfaces are implemented
 
+code-review-graph adds **relationship matches**:
+- Callers/callees: which code depends on a function or class
+- Imports/dependencies: which modules pull a file into their blast radius
+- Review context: changed files, affected flows, and test gaps
+
 Each match includes its surrounding file structure, so you know what you're
 looking at without a second read.
 
@@ -98,20 +104,57 @@ between one call and a long grep walk.
 
 | Goal | Tool | Example |
 |------|------|---------|
+| Get compact orientation before graph work | `get_minimal_context_tool` | `get_minimal_context_tool()` |
+| Build/update the review graph | `build_or_update_graph_tool` | `build_or_update_graph_tool()` |
 | Find where a symbol is defined / used | `tilth_search` (default `kind: "symbol"`) | `tilth_search(query: "handleAuth", scope: "src/")` |
-| Find every call site of a function | `tilth_search(kind: "callers")` | `tilth_search(query: "validateToken", kind: "callers")` |
+| Find every call site of a function | `query_graph_tool` when available; otherwise `tilth_search(kind: "callers")` | `query_graph_tool(pattern: "callers_of", target: "validateToken")` |
+| Find what a function/class calls | `query_graph_tool` | `query_graph_tool(pattern: "callees_of", target: "handleAuth")` |
 | Find literal strings, TODOs, error messages | `tilth_search(kind: "content")` | `tilth_search(query: "TODO: fix", kind: "content")` |
 | Find lines matching a regex | `tilth_search(kind: "regex")` | `tilth_search(query: "rate.?limit", kind: "regex")` |
 | Match an AST shape (template with metavars) | `sg` (ast-grep, via Bash) | `sg --lang typescript -p 'JSON.parse(JSON.stringify($X))' --json src/` |
-| Module import / blast-radius graph | `tilth_deps` | `tilth_deps(path: "src/auth.ts")` |
+| Module import / blast-radius graph | `get_impact_radius_tool` or `detect_changes_tool` when available; otherwise `tilth_deps` | `get_impact_radius_tool(changed_files: ["src/auth.ts"])` |
+| Review-scoped context for a diff | `get_review_context_tool` | `get_review_context_tool()` |
+| Search entities by name/meaning | `semantic_search_nodes_tool` | `semantic_search_nodes_tool(query: "auth token validation")` |
 
-**Rule of thumb:** stay in tilth for anything name-shaped or text-shaped.
-Drop to `sg` only when the pattern needs structural metavariables (`$X`,
-`$$$BODY`) that tilth can't express.
+**Rule of thumb:** stay in MCP. Use code-review-graph for graph-shaped questions
+(callers, callees, dependencies, impact radius, review context, affected tests).
+Use tilth for direct name-shaped or text-shaped lookup and for cheez-read /
+cheez-write anchors. Drop to `sg` only when the pattern needs structural
+metavariables (`$X`, `$$$BODY`) that neither MCP can express.
 
 ---
 
 ## MCP Tool Reference
+
+### code-review-graph — Caller, Dependency, and Review Graph
+
+Use code-review-graph before any grep-style fallback when the question is about
+relationships rather than raw text.
+
+**Capability detection:**
+
+1. Check whether `mcp__code-review-graph__get_minimal_context_tool` or
+   `mcp__code-review-graph__query_graph_tool` is in your tool list.
+2. If present, call `get_minimal_context_tool` first for graph status and compact
+   orientation.
+3. If the graph is missing or stale and `build_or_update_graph_tool` is
+   available, call it before graph queries.
+4. If code-review-graph is unavailable, say so once and continue with tilth MCP.
+   Do **not** jump to host `rg`, `grep`, or `find`.
+
+**Graph-shaped routing:**
+
+| Need | Preferred code-review-graph tool |
+| --- | --- |
+| "What calls X?" / "What does X call?" | `query_graph_tool` |
+| "What depends on this file/module?" | `query_graph_tool` or `get_impact_radius_tool` |
+| "What is affected by this diff?" | `detect_changes_tool`, then `get_review_context_tool` |
+| "What context should I read for review?" | `get_review_context_tool` |
+| "Find code entities related to this concept" | `semantic_search_nodes_tool` |
+
+Use the returned files/functions as the shortlist for `cheez-read`; do not expand
+the search with grep unless both MCP paths fail or the user explicitly asks for a
+non-code shell search.
 
 ### tilth_search — Symbol and Content Search
 
@@ -267,8 +310,9 @@ tilth_search(query: "handleAuth", scope: ".", expand: 0)
 tilth_deps(path: "src/auth.ts")
 ```
 
-Use **only** before refactoring (rename, signature change, removal). For
-output format, scope rules, and the symbol-vs-file distinction, see
+Use **only** before refactoring (rename, signature change, removal) when
+code-review-graph is unavailable or you need tilth's path-scoped importer list.
+For output format, scope rules, and the symbol-vs-file distinction, see
 [`references/tilth-deps.md`](references/tilth-deps.md).
 
 ---
@@ -290,11 +334,12 @@ tilth_search(query: "AuthManager", scope: ".")
 # Look for [definition] results
 
 # "What calls X?"
+query_graph_tool(pattern: "callers_of", target: "validateToken")
+# If code-review-graph is unavailable:
 tilth_search(query: "validateToken", kind: "callers", scope: ".")
 
 # "What does X call?"
-tilth_search(query: "handleAuth", scope: ".", expand: 1)
-# Check the ── calls ── footer
+query_graph_tool(pattern: "callees_of", target: "handleAuth")
 
 # "Find all implementations of an interface"
 tilth_search(query: "UserRepository", scope: ".", kind: "symbol")
@@ -304,19 +349,21 @@ tilth_search(query: "UserRepository", scope: ".", kind: "symbol")
 tilth_search(query: "invalid token format", kind: "content", scope: ".")
 
 # "What depends on this module?"
+get_impact_radius_tool(changed_files: ["src/auth/index.ts"])
+# If code-review-graph is unavailable:
 tilth_deps(path: "src/auth/index.ts")
-# Check ── imported by ── section
 ```
 
 ---
 
 ## Tree-sitter Advantages
 
-| Grep finds... | tilth_search finds... |
+| Grep finds... | MCP search finds... |
 |---------------|----------------------|
 | All occurrences of text | Definitions vs usages |
 | No structure awareness | File context (what else is nearby) |
 | No call understanding | Callee resolution in results |
+| No impact model | Callers, imports, affected flows, and test gaps |
 | False positives in strings | Only semantic code matches |
 
 **Languages supported:** Rust, TypeScript, TSX, JavaScript, Python, Go, Java, Scala, C, C++, Ruby, PHP, C#, Swift.
@@ -327,6 +374,7 @@ tilth_deps(path: "src/auth/index.ts")
 
 - **DO NOT use grep / rg / ripgrep / ag / ack** — use `tilth_search`. `sg` (ast-grep) is the *only* sanctioned shell escape, and only for AST-shape patterns with metavariables tilth can't express.
 - **DO NOT use find / fd to locate files by name pattern** — use `tilth_files` (cheez-read). `find` for non-name predicates (size, mtime, perms) is fine outside code work, but redirect anything code-related back through cheez-*.
+- **DO NOT use grep / rg to approximate callers, imports, or blast radius** — use code-review-graph first, then tilth MCP if the graph server is unavailable.
 - **DO NOT use ast-grep (`sg`) for name-shaped or text queries** — that's `tilth_search` territory. `sg` is for structural patterns with metavars (`$X`, `$$$BODY`) only.
 - **DO NOT blind text search** — use a semantic `kind` (`symbol`, `callers`, `content`, `regex`) before reaching for `sg`.
 - **DO NOT re-read expanded results** — they're already shown.

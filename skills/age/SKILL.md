@@ -50,8 +50,8 @@ Per-dimension rubrics and recommendation shapes in `references/dimensions.md`. T
 | Need | Prefer | Fallback |
 | --- | --- | --- |
 | Diff inspection | `delta` | `git diff --unified=3` |
-| Structural search | `sg`, Serena or LSP | `ripgrep`, `find`, targeted reads |
-| Dependency/caller graph | code review graph, tilth deps | import searches, caller searches, test references |
+| Structural search | code-review-graph via cheez-search, `sg`, Serena or LSP | `ripgrep`, `find`, targeted reads only after MCP/semantic paths cannot answer |
+| Dependency/caller graph | code-review-graph, then tilth deps | import searches, caller searches, test references |
 | GitHub/PR context | `gh` | local git commands or user-provided PR data |
 | Merge/conflict awareness | mergiraf | manual conflict checks |
 

@@ -42,21 +42,21 @@ Each `SKILL.md` is self-contained markdown with YAML frontmatter. There are no n
 
 ### Tool skills
 
-The workflow skills can delegate code search, reading, and editing to these MCP-backed skills when tilth is available:
+The workflow skills can delegate code search, graph context, reading, and editing to these MCP-backed skills when tilth and code-review-graph are available:
 
 | Skill path | Command | Purpose |
 | --- | --- | --- |
-| `skills/cheez-search/SKILL.md` | `/cheez-search` | AST-aware code/text/regex/caller search via tilth MCP. Replaces grep / rg / find. |
+| `skills/cheez-search/SKILL.md` | `/cheez-search` | Graph/AST-aware code/text/regex/caller/impact search via code-review-graph MCP + tilth MCP. Replaces grep / rg / find. |
 | `skills/cheez-read/SKILL.md` | `/cheez-read` | Smart file/directory reading with hash anchors via tilth MCP. Replaces cat / head / tail / ls. |
 | `skills/cheez-write/SKILL.md` | `/cheez-write` | Hash-anchored, surgical edits via tilth MCP. Never rewrites whole files. |
 
-The cheez-* skills require tilth MCP and hard-fail when it is unavailable rather than fall back to host tools. Workflow skills remain portable by falling back directly to host-native tools when they are not using cheez-*.
+The cheez-* skills require tilth MCP and hard-fail when it is unavailable rather than fall back to host tools. `/cheez-search` also prefers code-review-graph MCP for caller/callee/dependency/impact questions when available, but continues through tilth when it is not. Workflow skills remain portable by falling back directly to host-native tools when they are not using cheez-*.
 
 #### cheez-* router protocol
 
 The three cheez-* skills are designed to chain. The standard sequence:
 
-1. **`/cheez-search`** — locate the symbol, caller, content match, or file. AST-aware; replaces grep/rg/find.
+1. **`/cheez-search`** — locate the symbol, caller, dependency, impact radius, content match, or file. Graph/AST-aware; replaces grep/rg/find.
 2. **`/cheez-read`** — read the target file or section to capture hash anchors. Smart-outlines large files; replaces cat/head/tail/ls.
 3. **`/cheez-write`** — apply hash-anchored edits with the anchors from step 2. Surgical; rejects on hash mismatch.
 
@@ -69,6 +69,7 @@ If you'd reach for one of these on a code task, route through cheez-* instead:
 | If you'd run... | Use this skill | Why |
 | --- | --- | --- |
 | `grep`, `rg`, `ripgrep`, `ag`, `ack` | `/cheez-search` | AST-aware; ranks definitions over usages, filters comments/strings. |
+| `grep` / `rg` caller or import walks | `/cheez-search` with code-review-graph | Uses graph relationships for callers, callees, importers, impacted files, and tests instead of text approximations. |
 | `find`, `fd` (by name pattern, code work) | `/cheez-read` (`tilth_files`) | Token estimates and `.gitignore` filtering for free. |
 | `ast-grep` / `sg` (for name-shaped queries) | `/cheez-search` | `sg` is reserved for structural metavariable patterns tilth can't express. |
 | LSP "find references" / "find definition" (manual) | `/cheez-search` | Same answer, no IDE round-trip; falls through to LSP under the hood when needed. |
@@ -123,7 +124,7 @@ Workflow skills name preferred tools when they help, with fallbacks for portabil
 | `sg` (ast-grep) | Structural pattern matching and codemods (`sg --rewrite`) with metavariables | `ripgrep`, `find`, targeted reads; `tilth_edit` for non-structural edits |
 | Context7 (MCP) | Library and API documentation | repo docs, package docs, vendor pages, web search |
 | Tavily (MCP) | Current web/vendor research | host web search or user-supplied sources |
-| code-review-graph (MCP) | Review impact radius and caller/dep context | import searches, caller searches, tests |
+| code-review-graph (MCP) | Review impact radius, caller/callee/dependency context, affected flows, and test gaps | tilth deps/search first, then import searches, caller searches, tests |
 | LSP / Serena | Semantic navigation and symbol understanding | `sg`, `ripgrep`, targeted reads |
 | `ripgrep` | Fast text search | `grep`, `find`, editor search |
 | `gh` | GitHub issues, PRs, checks, examples | local git commands or user-provided links/logs |
@@ -331,7 +332,7 @@ Requires Node.js v18+.
 
 ### code-review-graph (review impact radius)
 
-[code-review-graph](https://github.com/tirth8205/code-review-graph) builds a call graph of your codebase and exposes it as MCP tools. Used by `/age` and `/cure` to scope reviews.
+[code-review-graph](https://github.com/tirth8205/code-review-graph) builds a call/dependency graph of your codebase and exposes it as MCP tools. Used by `/cheez-search`, `/press`, `/age`, and `/cure` to answer caller/callee/dependency/impact questions without grepping.
 
 ```sh
 # Install (Python 3.10+ required)
@@ -348,6 +349,17 @@ code-review-graph install --platform codex
 # Build the graph for the current project (re-run after large changes)
 code-review-graph build
 ```
+
+After registering, restart your harness and prefer these MCP tools before any
+grep-style caller/import walk:
+
+- `mcp__code-review-graph__get_minimal_context_tool`
+- `mcp__code-review-graph__build_or_update_graph_tool`
+- `mcp__code-review-graph__query_graph_tool`
+- `mcp__code-review-graph__get_impact_radius_tool`
+- `mcp__code-review-graph__detect_changes_tool`
+- `mcp__code-review-graph__get_review_context_tool`
+- `mcp__code-review-graph__semantic_search_nodes_tool`
 
 ## Installing CLI tools
 

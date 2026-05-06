@@ -31,11 +31,11 @@ If selection is ambiguous, render a numbered selection list per `references/sele
 | Need | Prefer | Fallback |
 | --- | --- | --- |
 | Applying precise fixes | tilth edit | harness edit tools or patch application |
-| Understanding findings | `/age` report plus code review graph | diff, touched files, tests, and `ripgrep` |
+| Understanding findings | `/age` report plus code-review-graph via cheez-search | diff, touched files, tests, and `ripgrep` only after graph/semantic paths cannot answer |
 | CI and PR context | `gh` | local test output or user-provided logs |
 | Diffs | `delta` | plain `git diff` |
 | Conflict resolution | mergiraf | manual resolution with targeted tests |
-| Search/navigation | Serena or LSP, `sg` | `ripgrep`, `find`, targeted reads |
+| Search/navigation | code-review-graph via cheez-search, Serena or LSP, `sg` | `ripgrep`, `find`, targeted reads only after MCP/semantic paths cannot answer |
 
 If a preferred tool is missing, continue with the fallback. If a missing tool prevents safe application, stop and explain the blocker.
 

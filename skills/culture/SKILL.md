@@ -26,7 +26,7 @@ Do not use it when the user wants a written spec (`/mold`), implementation (`/co
 
 | Need | Prefer | Fallback |
 | --- | --- | --- |
-| Quick code orientation | Serena or LSP, `sg` | `ripgrep`, file tree, targeted reads |
+| Quick code orientation | code-review-graph via cheez-search, Serena or LSP, `sg` | `ripgrep`, file tree, targeted reads only after MCP/semantic paths cannot answer |
 | Visualizing diffs or examples | `delta` | plain `git diff` |
 | External sanity check | `/briesearch` | clearly mark as an assumption |
 

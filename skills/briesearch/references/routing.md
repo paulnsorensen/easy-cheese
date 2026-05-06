@@ -15,7 +15,7 @@ Is it "how should I…" or a best-practice question?
   YES → Tavily advanced  (+ Context7 when a named library is in scope)
 
 Is it about patterns in this repo?
-  YES → Codebase  (cheez-search + cheez-read)
+  YES → Codebase  (cheez-search + cheez-read; code-review-graph for caller/import/impact questions)
 
 Is it about how open-source projects solve something?
   YES → GitHub  (+ Tavily if written analysis would help)
@@ -30,7 +30,7 @@ Is it deep, multi-source, comparative, or "compare X vs Y / market analysis / li
 | --- | --- | --- |
 | Context7 (MCP) | Library APIs, config, migration notes for indexed open-source dependencies | Tools: `resolve-library-id` (`libraryName` + `query`) → `query-docs` (`libraryId` + `query`). Both require a `query`. See "Context7 method" below. |
 | Tavily (MCP) | Current facts, technical articles, vendor docs, best practices, deep multi-source synthesis | Use the method matrix to pick the right rung. |
-| Codebase | Local conventions, existing usage, constraints | Use `cheez-search` and `cheez-read`. |
+| Codebase | Local conventions, existing usage, constraints | Use `cheez-search` and `cheez-read`; for graph-shaped questions, let `cheez-search` use code-review-graph before grep-style fallbacks. |
 | GitHub | Real-world OSS usage patterns | `gh` CLI or harness GitHub integration. Treat as supporting evidence unless the user asked for OSS precedent. |
 
 ## Context7 method

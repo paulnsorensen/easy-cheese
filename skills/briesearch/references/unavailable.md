@@ -8,7 +8,7 @@ Optional MCP servers (Context7, Tavily, code-review-graph, tilth) are not always
 | --- | --- | --- |
 | Context7 | Read repo docs, package README, vendor pages, then web search | Medium → low for version-specific questions |
 | Tavily | Host web search or user-provided links | Medium → low when freshness matters |
-| Codebase (cheez-*) | Fall back to Serena or LSP, `sg`, `ripgrep`, `find`, and targeted reads | Medium → low when local precedent is central |
+| Codebase (cheez-*) | Fall back to Serena or LSP, then `sg`; use `ripgrep`, `find`, and targeted reads only after MCP/semantic graph paths are unavailable | Medium → low when local precedent is central |
 | GitHub (`gh`) | Note absence; user-supplied URLs are acceptable | Skip with a confidence note |
 
 ## Reporting an unavailable source
