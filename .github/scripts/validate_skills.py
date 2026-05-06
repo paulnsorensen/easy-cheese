@@ -105,12 +105,14 @@ def validate(path: Path) -> list[str]:
 
 
 def main() -> int:
-    root = Path("skills")
-    if not root.is_dir():
+    if not Path("skills").is_dir():
         print("ERROR: skills/ directory not found", file=sys.stderr)
         return 1
 
-    skill_files = sorted(root.rglob("SKILL.md"))
+    skill_files = sorted(
+        p for p in Path(".").rglob("SKILL.md")
+        if not any(part.startswith(".") for part in p.parts)
+    )
     if not skill_files:
         print("ERROR: no SKILL.md files found under skills/", file=sys.stderr)
         return 1
