@@ -31,7 +31,7 @@ If selection is ambiguous, render a numbered selection list per `references/sele
 | Need | Prefer | Fallback |
 | --- | --- | --- |
 | Applying precise fixes | tilth edit | harness edit tools or patch application |
-| Understanding findings | `/age` report plus code review graph | diff, touched files, tests, and `ripgrep` |
+| Understanding findings | `/age` report plus code-review-graph: `get_minimal_context_tool`, `get_review_context_tool` | diff, touched files, tests, and `ripgrep` |
 | CI and PR context | `gh` | local test output or user-provided logs |
 | Diffs | `delta` | plain `git diff` |
 | Conflict resolution | mergiraf | manual resolution with targeted tests |

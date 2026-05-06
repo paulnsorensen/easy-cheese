@@ -14,7 +14,7 @@ Do not use it for free-form discussion with no artifact intent (`/culture`), dir
 
 1. **Route** — pick a starting mode from the input shape (see `references/modes.md`) and announce it in one line.
 2. **Dialogue** — build shared understanding through the smallest useful question. Ground every load-bearing claim with `cheez-search`, `cheez-read`, or a Validate Cycle (`references/validate-cycle.md`).
-3. **Sketch** — for any feature touching >1 module or a new public interface, lock seams in pseudocode signatures before talking spec content.
+3. **Sketch** — for any feature touching >1 module or a new public interface, run the shape check (`references/shape-check.md`) on the touched symbols, then lock seams in pseudocode signatures before talking spec content.
 4. **Two-key handshake** — both the user (explicit verb) and the agent (coherence self-check) must agree before extraction. See `references/handshake.md`.
 5. **Curdle** — write the approved spec to `.cheese/specs/<slug>.md` (and optional `.cheese/issues/<slug>-NNN.md`). Format and slug rules in `references/curdle.md`.
 6. **Hand off** — once the spec is on disk, prompt the next step via `AskUserQuestion` (see `## Handoff` below). Never auto-invoke.
@@ -38,7 +38,7 @@ Full mode definitions, exit criteria, and user knobs in `references/modes.md`.
 | --- | --- | --- |
 | External validation | `/briesearch` with Context7/Tavily | user-provided docs, repo docs, or note as unverified |
 | Codebase grounding | Serena or LSP, `sg`, tilth read/search | `ripgrep`, `find`, targeted file reads |
-| Dependency/blast-radius checks | code review graph, tilth deps | import searches, caller searches, test references |
+| Dependency/blast-radius checks | shape check (`references/shape-check.md`): `cheez-search kind: "callers"` + `tilth_deps` | import searches, caller searches, test references |
 | Spec writing | precise edit tooling | create/update markdown directly after approval |
 
 Optional tools accelerate the work; missing tools do not block the dialogue. When a fallback is weaker, mark the affected claim `[?]` until settled.

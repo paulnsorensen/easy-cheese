@@ -340,13 +340,13 @@ TAVILY_API_KEY=your-key npx -y tavily-mcp
 
 Requires Node.js v18+.
 
-### code-review-graph (review impact radius)
+### code-review-graph (review impact radius, architecture, semantic search)
 
-[code-review-graph](https://github.com/tirth8205/code-review-graph) builds a call graph of your codebase and exposes it as MCP tools. Used by `/age` and `/cure` to scope reviews.
+[code-review-graph](https://github.com/tirth8205/code-review-graph) builds a persistent call graph of your codebase with Tree-sitter, Louvain communities, betweenness-centrality, and optional vector embeddings. Used by `/age`, `/press`, and `/cure` for risk-scored impact (`get_impact_radius_tool`, `detect_changes_tool`), curated review context (`get_review_context_tool`, `get_minimal_context_tool`), affected flows (`get_affected_flows_tool`), architecture framing (`get_architecture_overview_tool`, `get_hub_nodes_tool`, `get_bridge_nodes_tool`), and cross-repo / semantic search (`cross_repo_search_tool`, `semantic_search_nodes_tool`). Tilth handles AST search, callers, and hash-anchored edits; code-review-graph covers the graph-algorithmic and cross-repo dimensions tilth does not.
 
 ```sh
-# Install (Python 3.10+ required)
-pip install code-review-graph   # or: pipx install code-review-graph
+# Install with the local sentence-transformers embeddings extra (Python 3.10+ required)
+pip install 'code-review-graph[embeddings]'   # or: pipx install 'code-review-graph[embeddings]'
 
 # Auto-detect and configure your harness
 code-review-graph install
@@ -358,7 +358,12 @@ code-review-graph install --platform codex
 
 # Build the graph for the current project (re-run after large changes)
 code-review-graph build
+
+# Compute embeddings for semantic_search_nodes_tool (one-time, then incremental)
+code-review-graph embed
 ```
+
+The `[embeddings]` extra pulls in `sentence-transformers` so `semantic_search_nodes_tool` works out of the box with the default `all-MiniLM-L6-v2` model. Override with `CRG_EMBEDDING_MODEL=<model-id>`. Other embedding providers (Google Gemini, MiniMax, OpenAI-compatible endpoints) are also supported — see the upstream README for `[google-embeddings]` and the `CRG_OPENAI_*` env vars.
 
 ## Installing CLI tools
 

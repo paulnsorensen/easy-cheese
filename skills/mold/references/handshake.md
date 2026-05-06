@@ -35,7 +35,7 @@ These are not soft suggestions — Curdle hard-blocks until they are addressed:
 - **Ground gate:** ≥1 Ground pass with a citation before Shape's options. Exception: pure greenfield (the agent must say so out loud).
 - **Shape gate:** ≥1 Option block weighed (Do Nothing counts).
 - **Sketch gate:** mandatory when the chosen option touches more than one module or introduces a new public interface. Skip only for trivial single-function changes (the agent must say so out loud).
-- **Grill gate:** mandatory for high-blast-radius decisions. "High blast radius" = `cheez-search` callers/imports for the touched symbols returns multiple non-test files.
+- **Grill gate:** mandatory for high-blast-radius decisions. The shape check (`shape-check.md`) ranks blast radius `low | medium | high` from `cheez-search kind: "callers"` and `tilth_deps`. A `high` verdict — multi-module callers or more than five importers — makes Grill mandatory.
 - **Open hypotheses:** any Validate Cycle launched but unjudged blocks Curdle unless the user accepts it as `[TBD]`.
 
 ## Override semantics
