@@ -95,3 +95,5 @@ Pre-select `Run /age` only when readiness is `ready for /age`. If the report is 
 - Do not weaken assertions.
 - Do not broaden implementation beyond the cooked contract.
 - Surface medium and high findings explicitly; summarize low findings.
+- If the cooked diff or spec rests on a false premise (the contract is wrong, or the test surface is solving the wrong problem), stop and surface the premise before adding tests; do not harden the wrong angle.
+- Apply the shared voice kernel (lives at `skills/age/references/voice.md` in this repo): lead the press report with the readiness verdict, flag residual risk as `certain | speculating | don't know`, agree when coverage is already sufficient without manufacturing tests.

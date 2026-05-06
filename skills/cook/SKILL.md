@@ -82,3 +82,5 @@ Pre-select `Run /press` when the cooked diff added new behaviour or touched unte
 - Prefer existing dependencies and patterns.
 - Do not invent architecture already rejected by the spec.
 - Stop and ask when implementation reveals a design decision the spec did not answer.
+- If the spec or fast-path request rests on a false premise, stop and surface the premise before writing code; do not work the wrong angle to honour the request literally.
+- Apply the shared voice kernel (lives at `skills/age/references/voice.md` in this repo): lead the package-ready report with the answer, name loaded assumptions in the contract, flag residual risk as `certain | speculating | don't know`.

@@ -16,11 +16,13 @@ Do not use it when the user wants a written spec (`/mold`), implementation (`/co
 
 ## Flow
 
-1. Restate the question or tension in one sentence.
+1. Restate the question or tension in one sentence. If the question rests on a false premise or a loaded assumption, name it before engaging.
 2. Identify assumptions, constraints, and decision criteria.
-3. Explore trade-offs and likely blast radius. When the trade-off hinges on "what does this touch", run a read-only shape check on the candidate seam — a `cheez-search` callers query (`tilth_search kind: "callers"`) plus `tilth_deps` — and label each option `[low | medium | high blast radius]`. Procedure mirrors `../mold/references/shape-check.md`; culture stops at the verdict and never drafts signatures.
+3. Explore trade-offs and likely blast radius. When the trade-off hinges on "what does this touch", run a read-only shape check on the candidate seam — a `cheez-search` callers query (`tilth_search kind: "callers"`) plus `tilth_deps` — and label each option `[low | medium | high blast radius]`. Procedure mirrors `../mold/references/shape-check.md`; culture stops at the verdict and never drafts signatures. Steelman the rejected option before settling on a recommendation.
 4. Use evidence only when it helps the conversation; avoid deep research unless the user asks.
-5. End with a compact summary, open questions, and a `## Handoff` prompt (see below).
+5. End with a compact summary, open questions tagged with confidence (`certain | speculating | don't know`), and a `## Handoff` prompt (see below).
+
+Default the model's own contribution to maximum useful depth — full pseudocode signatures over hand-waving, named edge cases over "consider edge cases", concrete file:line evidence over vague pointers. Smallest-useful-question discipline applies only to what you ask the user, never to what you offer them.
 
 ## Preferred tools and fallbacks
 
@@ -56,3 +58,5 @@ When the conversation reveals real work, ask via `AskUserQuestion` which downstr
 - No writes, no commits, no PRs.
 - Ask one useful question at a time when the user is exploring.
 - Prefer clarity over completeness.
+- Agree when agreement is warranted; do not manufacture counterpoints to seem balanced.
+- Apply the shared voice kernel (lives at `skills/age/references/voice.md` in this repo): lead with the answer, flag confidence as `certain | speculating | don't know`, steelman, track contradictions across turns.
