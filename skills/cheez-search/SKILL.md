@@ -1,6 +1,6 @@
 ---
 name: cheez-search
-description: This skill should be used when the user asks to find a symbol, definition, caller, import, impact radius, or text pattern in the codebase — phrases like "where is X defined", "what calls Y", "find all usages of Z", "trace this function", "what breaks if I change this", "find the TODO comments", "search for this error string". Replaces grep / rg / ripgrep / ag / ack / find / fd with graph/AST-aware MCP search; prefer code-review-graph MCP for caller/callee/dependency/impact/review-context questions when available, use tilth MCP for direct symbol/content/regex lookup and reading/edit anchors, and use ast-grep (`sg`) only for AST-shape patterns with metavariables neither MCP can express. Use even when the user says "grep", "rg", "ripgrep", "ag", "ack", "fd", or "find" — never call host Grep, Glob, ripgrep, ast-grep, or any shell search directly. If tilth MCP is unavailable, stop and report rather than fall back. Do NOT use for reading whole files (use cheez-read), editing code (use cheez-write), or running tests/builds.
+description: This skill should be used when the user asks to find symbols, callers, dependencies, impact radius, or text patterns in the codebase; it replaces grep/rg/find with graph/AST-aware MCP search.
 license: MIT
 compatibility: Requires tilth MCP server. Encourages optional code-review-graph MCP for graph-shaped searches. Optional ast-grep (`sg`) for structural metavariable patterns neither MCP can express.
 allowed-tools: mcp__tilth__tilth_search, mcp__tilth__tilth_deps, mcp__code-review-graph__build_or_update_graph_tool, mcp__code-review-graph__get_minimal_context_tool, mcp__code-review-graph__query_graph_tool, mcp__code-review-graph__semantic_search_nodes_tool, mcp__code-review-graph__get_impact_radius_tool, mcp__code-review-graph__get_review_context_tool, mcp__code-review-graph__detect_changes_tool, Bash
@@ -28,6 +28,13 @@ blindly grepping.
 ---
 
 ## Examples
+
+Use for questions like "where is X defined", "what calls Y", "find all usages
+of Z", "trace this function", "what breaks if I change this", "find the TODO
+comments", or "search for this error string". Prefer code-review-graph MCP for
+caller/callee/dependency/impact/review-context questions when available, tilth
+MCP for direct symbol/content/regex lookup and reading/edit anchors, and `sg`
+only for AST-shape patterns with metavariables neither MCP can express.
 
 ### "Where is `handleAuth` defined?"
 
@@ -358,7 +365,7 @@ tilth_deps(path: "src/auth/index.ts")
 
 ## Tree-sitter Advantages
 
-| Grep finds... | MCP search finds... |
+| Grep finds... | Graph/AST search finds... |
 |---------------|----------------------|
 | All occurrences of text | Definitions vs usages |
 | No structure awareness | File context (what else is nearby) |
