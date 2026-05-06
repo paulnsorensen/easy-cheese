@@ -353,6 +353,46 @@ code-review-graph build
 
 The optional tools in the table below are referenced by workflow skills. None are required, but having them available unlocks better fallbacks and richer output.
 
+### One-shot installer (macOS)
+
+`scripts/install.sh` installs every CLI tool listed below in one go and (by default) registers the tilth and Context7 MCP servers with Claude Code. Currently macOS only — it relies on Homebrew.
+
+Pipe straight from GitHub:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/paulnsorensen/easy-cheese/main/scripts/install.sh | bash
+```
+
+Or grab the script first if you'd like to read it:
+
+```sh
+curl -fsSL -o /tmp/easy-cheese-install.sh https://raw.githubusercontent.com/paulnsorensen/easy-cheese/main/scripts/install.sh
+bash /tmp/easy-cheese-install.sh --help
+bash /tmp/easy-cheese-install.sh --dry-run
+```
+
+Common flags:
+
+```sh
+# Install only ripgrep + jq, skip MCP registration
+curl -fsSL https://raw.githubusercontent.com/paulnsorensen/easy-cheese/main/scripts/install.sh \
+  | bash -s -- --tools ripgrep,jq --skip-mcp
+
+# Register MCP servers only (assumes the CLI tools are already installed)
+curl -fsSL https://raw.githubusercontent.com/paulnsorensen/easy-cheese/main/scripts/install.sh \
+  | bash -s -- --skip-tools --mcp tilth,context7,tavily
+
+# Use a different harness for tilth registration
+curl -fsSL https://raw.githubusercontent.com/paulnsorensen/easy-cheese/main/scripts/install.sh \
+  | bash -s -- --harness cursor
+```
+
+The script is idempotent — it skips any tool already on `PATH` — and accepts `--dry-run` so you can preview what it would do before letting it run.
+
+> **Heads-up:** `curl | bash` runs whatever the URL serves at the moment of the request. If you want to audit before running, use the two-step form above.
+
+If you'd rather install tools individually, the per-tool sections below cover macOS, Windows, and Linux.
+
 ### GitHub CLI (`gh`)
 
 ```sh

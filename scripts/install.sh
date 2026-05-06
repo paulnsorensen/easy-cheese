@@ -1,0 +1,380 @@
+#!/usr/bin/env bash
+#
+# easy-cheese installer — sets up the CLI tools and MCP servers used by the
+# easy-cheese skills on macOS.
+#
+# Usage:
+#   curl -fsSL https://raw.githubusercontent.com/paulnsorensen/easy-cheese/main/scripts/install.sh | bash
+#
+# Or with options:
+#   curl -fsSL https://raw.githubusercontent.com/paulnsorensen/easy-cheese/main/scripts/install.sh | bash -s -- --skip-mcp
+#
+# Run `bash install.sh --help` for the full flag list.
+
+set -euo pipefail
+
+# All known CLI tools, formula -> binary name (one is a noop check).
+EC_KNOWN_TOOLS="gh ripgrep fd jq ast-grep git-delta just mergiraf tilth"
+
+# Default selections.
+EC_DEFAULT_TOOLS="$EC_KNOWN_TOOLS"
+EC_DEFAULT_MCP="tilth context7"
+
+# Map a brew formula name to the binary it installs (when they differ).
+ec_tool_binary() {
+    case "$1" in
+        ripgrep)   echo "rg" ;;
+        ast-grep)  echo "sg" ;;
+        git-delta) echo "delta" ;;
+        *)         echo "$1" ;;
+    esac
+}
+
+# Map a brew formula name to the canonical formula spec we install.
+ec_tool_formula() {
+    case "$1" in
+        tilth) echo "paulnsorensen/tap/tilth" ;;
+        *)     echo "$1" ;;
+    esac
+}
+
+ec_log() {
+    printf '\033[1;36m==>\033[0m %s\n' "$*"
+}
+
+ec_warn() {
+    printf '\033[1;33m!! \033[0m %s\n' "$*" >&2
+}
+
+ec_err() {
+    printf '\033[1;31mxx \033[0m %s\n' "$*" >&2
+}
+
+ec_usage() {
+    cat <<'USAGE'
+easy-cheese installer (macOS)
+
+Usage:
+  install.sh [options]
+
+Options:
+  --tools <list>       Comma-separated CLI tools to install. Default: all.
+                       Choices: gh, ripgrep, fd, jq, ast-grep, git-delta,
+                                just, mergiraf, tilth
+  --mcp <list>         Comma-separated MCP servers to register. Default:
+                       tilth,context7. Choices: tilth, context7, tavily,
+                       code-review-graph, none
+  --skip-mcp           Same as --mcp none.
+  --skip-tools         Skip CLI tool installs (useful for MCP-only runs).
+  --harness <name>     Harness to register MCP servers with. Default:
+                       claude-code. Other values: cursor, vscode, codex,
+                       gemini, zed.
+  --no-edit            Register tilth without the --edit capability.
+  --dry-run            Print what would happen without changing anything.
+  -h, --help           Show this help.
+
+Environment:
+  EC_BREW              Override the brew binary (used by tests).
+  EC_TILTH             Override the tilth binary (used by tests).
+  EC_CLAUDE            Override the claude binary (used by tests).
+  EC_PIP               Override the pip binary (used by tests).
+  EC_NPX               Override the npx binary (used by tests).
+USAGE
+}
+
+# OS guard. Returns 0 on macOS, 1 otherwise.
+ec_detect_os() {
+    case "$(uname -s)" in
+        Darwin) return 0 ;;
+        *)      return 1 ;;
+    esac
+}
+
+ec_cmd_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+ec_brew() {
+    "${EC_BREW:-brew}" "$@"
+}
+
+# Verify Homebrew is installed; print install hint and fail otherwise.
+ec_ensure_homebrew() {
+    if ec_cmd_exists "${EC_BREW:-brew}"; then
+        return 0
+    fi
+    ec_err "Homebrew is required but was not found."
+    ec_err "Install it from https://brew.sh and re-run this script."
+    return 1
+}
+
+# Returns 0 if every comma-separated token in $1 is in the space-separated
+# list $2. Prints the offending token to stderr otherwise.
+ec_validate_selection() {
+    local list="$1" allowed="$2" token
+    local IFS=,
+    for token in $list; do
+        case " $allowed " in
+            *" $token "*) ;;
+            *)
+                ec_err "Unknown selection: $token"
+                return 1
+                ;;
+        esac
+    done
+}
+
+# Idempotently install one brew formula. Returns 0 if installed (or already
+# present), 1 if brew failed. Honors $EC_DRY_RUN.
+ec_brew_install_if_missing() {
+    local tool="$1"
+    local binary formula
+    binary="$(ec_tool_binary "$tool")"
+    formula="$(ec_tool_formula "$tool")"
+
+    if ec_cmd_exists "$binary"; then
+        ec_log "$tool: already installed ($binary on PATH)"
+        return 0
+    fi
+
+    if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
+        ec_log "$tool: would run 'brew install $formula'"
+        return 0
+    fi
+
+    ec_log "$tool: installing via 'brew install $formula'"
+    ec_brew install "$formula"
+}
+
+# Install every tool in the comma-separated list.
+ec_install_tools() {
+    local list="$1" tool
+    local IFS=,
+    for tool in $list; do
+        ec_brew_install_if_missing "$tool"
+    done
+}
+
+# Register a single MCP server with the chosen harness.
+ec_install_mcp() {
+    local server="$1" harness="$2" with_edit="$3"
+    case "$server" in
+        tilth)
+            ec_install_mcp_tilth "$harness" "$with_edit"
+            ;;
+        context7)
+            ec_install_mcp_context7 "$harness"
+            ;;
+        tavily)
+            ec_install_mcp_tavily "$harness"
+            ;;
+        code-review-graph)
+            ec_install_mcp_crg "$harness"
+            ;;
+        none)
+            ec_log "MCP: skipping (none selected)"
+            ;;
+        *)
+            ec_err "Unknown MCP server: $server"
+            return 1
+            ;;
+    esac
+}
+
+ec_install_mcp_tilth() {
+    local harness="$1" with_edit="$2"
+    local tilth="${EC_TILTH:-tilth}"
+    if ! ec_cmd_exists "$tilth"; then
+        ec_warn "tilth MCP: tilth CLI is not installed; include 'tilth' in --tools first."
+        return 1
+    fi
+    local args=(install "$harness")
+    if [[ "$with_edit" == "1" ]]; then
+        args+=(--edit)
+    fi
+    if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
+        ec_log "tilth MCP: would run '$tilth ${args[*]}'"
+        return 0
+    fi
+    ec_log "tilth MCP: registering with $harness"
+    "$tilth" "${args[@]}"
+}
+
+ec_install_mcp_context7() {
+    local harness="$1"
+    local claude="${EC_CLAUDE:-claude}"
+    if [[ "$harness" != "claude-code" ]]; then
+        ec_warn "context7 MCP: only claude-code is auto-registered; configure $harness manually."
+        return 0
+    fi
+    if ! ec_cmd_exists "$claude"; then
+        ec_warn "context7 MCP: claude CLI not found; install Claude Code first."
+        return 1
+    fi
+    if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
+        ec_log "context7 MCP: would run 'claude mcp add context7 -- npx -y @upstash/context7-mcp@latest'"
+        return 0
+    fi
+    ec_log "context7 MCP: registering with claude-code"
+    "$claude" mcp add context7 -- npx -y @upstash/context7-mcp@latest
+}
+
+ec_install_mcp_tavily() {
+    local harness="$1"
+    local claude="${EC_CLAUDE:-claude}"
+    if [[ "$harness" != "claude-code" ]]; then
+        ec_warn "tavily MCP: only claude-code is auto-registered; configure $harness manually."
+        return 0
+    fi
+    if ! ec_cmd_exists "$claude"; then
+        ec_warn "tavily MCP: claude CLI not found; install Claude Code first."
+        return 1
+    fi
+    if [[ -z "${TAVILY_API_KEY:-}" ]]; then
+        ec_warn "tavily MCP: TAVILY_API_KEY is not set; the server will fail until you set one."
+    fi
+    if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
+        ec_log "tavily MCP: would run 'claude mcp add tavily -- npx -y tavily-mcp'"
+        return 0
+    fi
+    ec_log "tavily MCP: registering with claude-code"
+    "$claude" mcp add tavily -- npx -y tavily-mcp
+}
+
+ec_install_mcp_crg() {
+    local harness="$1"
+    local pip="${EC_PIP:-pip}"
+    local crg="${EC_CRG:-code-review-graph}"
+    if ! ec_cmd_exists "$crg"; then
+        if ! ec_cmd_exists "$pip"; then
+            ec_warn "code-review-graph: pip not found; install Python 3.10+ first."
+            return 1
+        fi
+        if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
+            ec_log "code-review-graph: would run '$pip install code-review-graph'"
+        else
+            ec_log "code-review-graph: installing via pip"
+            "$pip" install code-review-graph
+        fi
+    fi
+    if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
+        ec_log "code-review-graph: would run '$crg install --platform $harness'"
+        return 0
+    fi
+    ec_log "code-review-graph: registering with $harness"
+    "$crg" install --platform "$harness"
+}
+
+ec_install_mcp_list() {
+    local list="$1" harness="$2" with_edit="$3" server
+    local IFS=,
+    for server in $list; do
+        ec_install_mcp "$server" "$harness" "$with_edit"
+    done
+}
+
+# Parse argv into the EC_* config variables. Echoes nothing on success;
+# echoes an error and returns non-zero on failure.
+ec_parse_args() {
+    EC_TOOLS="$EC_DEFAULT_TOOLS"
+    EC_TOOLS="${EC_TOOLS// /,}"
+    EC_MCP="$EC_DEFAULT_MCP"
+    EC_MCP="${EC_MCP// /,}"
+    EC_HARNESS="claude-code"
+    EC_WITH_EDIT="1"
+    EC_DRY_RUN="${EC_DRY_RUN:-0}"
+    EC_SKIP_TOOLS="0"
+    EC_DO_HELP="0"
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --tools)
+                shift
+                [[ $# -gt 0 ]] || { ec_err "--tools requires a value"; return 2; }
+                EC_TOOLS="$1"
+                ;;
+            --tools=*)
+                EC_TOOLS="${1#*=}"
+                ;;
+            --mcp)
+                shift
+                [[ $# -gt 0 ]] || { ec_err "--mcp requires a value"; return 2; }
+                EC_MCP="$1"
+                ;;
+            --mcp=*)
+                EC_MCP="${1#*=}"
+                ;;
+            --skip-mcp)
+                EC_MCP="none"
+                ;;
+            --skip-tools)
+                EC_SKIP_TOOLS="1"
+                ;;
+            --harness)
+                shift
+                [[ $# -gt 0 ]] || { ec_err "--harness requires a value"; return 2; }
+                EC_HARNESS="$1"
+                ;;
+            --harness=*)
+                EC_HARNESS="${1#*=}"
+                ;;
+            --no-edit)
+                EC_WITH_EDIT="0"
+                ;;
+            --dry-run)
+                EC_DRY_RUN="1"
+                ;;
+            -h|--help)
+                EC_DO_HELP="1"
+                ;;
+            --)
+                shift
+                break
+                ;;
+            -*)
+                ec_err "Unknown option: $1"
+                return 2
+                ;;
+            *)
+                ec_err "Unexpected positional argument: $1"
+                return 2
+                ;;
+        esac
+        shift
+    done
+
+    ec_validate_selection "$EC_TOOLS" "$EC_KNOWN_TOOLS" || return 2
+    ec_validate_selection "$EC_MCP" "tilth context7 tavily code-review-graph none" || return 2
+}
+
+ec_main() {
+    ec_parse_args "$@" || return $?
+
+    if [[ "$EC_DO_HELP" == "1" ]]; then
+        ec_usage
+        return 0
+    fi
+
+    if ! ec_detect_os; then
+        ec_err "easy-cheese installer currently supports macOS only."
+        ec_err "Detected: $(uname -s). See README for manual install on other platforms."
+        return 1
+    fi
+
+    if [[ "$EC_SKIP_TOOLS" != "1" ]]; then
+        ec_ensure_homebrew || return 1
+        ec_install_tools "$EC_TOOLS"
+    fi
+
+    if [[ "$EC_MCP" != "none" ]]; then
+        ec_install_mcp_list "$EC_MCP" "$EC_HARNESS" "$EC_WITH_EDIT"
+    fi
+
+    ec_log "Done. Restart your harness so MCP servers and PATH changes take effect."
+}
+
+# Only run main when executed directly, not when sourced (so tests can load
+# functions individually).
+if [[ "${BASH_SOURCE[0]:-}" == "${0}" ]]; then
+    ec_main "$@"
+fi

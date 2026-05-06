@@ -49,6 +49,22 @@ jobs:
       - name: Run melt script tests
         run: python3 -m pytest tests/python -q
 
+  install-script:
+    name: test install.sh (macOS)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install bats and shellcheck
+        run: brew install bats-core shellcheck
+
+      - name: Lint install.sh
+        run: shellcheck scripts/install.sh
+
+      - name: Run install.sh tests
+        run: bats tests/bash/test_install.bats
+
   lint:
     name: lint markdown and yaml
     runs-on: ubuntu-latest
