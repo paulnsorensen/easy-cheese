@@ -293,42 +293,49 @@ ec_install_mcp_tavily() {
     "$claude" mcp add tavily -- "$npx" -y tavily-mcp
 }
 
-# Install the code-review-graph CLI. Prefers an isolated tool install
-# (uv → pipx) so we don't poke at the system Python. Falls back to
-# 'pip install --user' with a warning so it still works on minimal boxes.
+# Install the code-review-graph CLI with the local sentence-transformers
+# embeddings extra so 'code-review-graph embed' works out of the box.
+# Prefers an isolated tool install (uv → pipx) so we don't poke at the
+# system Python. Falls back to 'pip install --user' with a warning so it
+# still works on minimal boxes.
+#
+# The package spec is quoted because '[embeddings]' contains shell glob
+# characters; inside an array invocation the quoting is implicit, but the
+# dry-run log line uses a literal single-quoted form to match.
 ec_install_crg_cli() {
     local uv="${EC_UV:-uv}"
     local pipx="${EC_PIPX:-pipx}"
     local pip="${EC_PIP:-pip}"
+    local spec='code-review-graph[embeddings]'
 
     if ec_cmd_exists "$uv"; then
         if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
-            ec_log "code-review-graph: would run '$uv tool install code-review-graph'"
+            ec_log "code-review-graph: would run '$uv tool install $spec'"
             return 0
         fi
-        ec_log "code-review-graph: installing via 'uv tool install code-review-graph'"
-        "$uv" tool install code-review-graph
+        ec_log "code-review-graph: installing via '$uv tool install $spec'"
+        "$uv" tool install "$spec"
         return $?
     fi
 
     if ec_cmd_exists "$pipx"; then
         if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
-            ec_log "code-review-graph: would run '$pipx install code-review-graph'"
+            ec_log "code-review-graph: would run '$pipx install $spec'"
             return 0
         fi
-        ec_log "code-review-graph: installing via 'pipx install code-review-graph'"
-        "$pipx" install code-review-graph
+        ec_log "code-review-graph: installing via '$pipx install $spec'"
+        "$pipx" install "$spec"
         return $?
     fi
 
     if ec_cmd_exists "$pip"; then
         ec_warn "code-review-graph: uv/pipx not found; falling back to 'pip install --user'."
         if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
-            ec_log "code-review-graph: would run '$pip install --user code-review-graph'"
+            ec_log "code-review-graph: would run '$pip install --user $spec'"
             return 0
         fi
-        ec_log "code-review-graph: installing via 'pip install --user code-review-graph'"
-        "$pip" install --user code-review-graph
+        ec_log "code-review-graph: installing via '$pip install --user $spec'"
+        "$pip" install --user "$spec"
         return $?
     fi
 

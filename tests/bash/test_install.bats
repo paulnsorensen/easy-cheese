@@ -401,7 +401,7 @@ STUB
     EC_UV="$STUB_BIN/uv" EC_PIPX="$STUB_BIN/pipx" EC_PIP="$STUB_BIN/pip" \
         EC_DRY_RUN=1 run ec_install_crg_cli
     [ "$status" -eq 0 ]
-    [[ "$output" == *"uv tool install code-review-graph"* ]]
+    [[ "$output" == *"uv tool install code-review-graph[embeddings]"* ]]
     [[ "$output" != *"pipx install"* ]]
     [[ "$output" != *"pip install"* ]]
 }
@@ -412,7 +412,7 @@ STUB
     EC_PIPX="$STUB_BIN/pipx" EC_PIP="$STUB_BIN/pip" \
         EC_DRY_RUN=1 run ec_install_crg_cli
     [ "$status" -eq 0 ]
-    [[ "$output" == *"pipx install code-review-graph"* ]]
+    [[ "$output" == *"pipx install code-review-graph[embeddings]"* ]]
     [[ "$output" != *"uv tool"* ]]
 }
 
@@ -421,7 +421,7 @@ STUB
     EC_PIP="$STUB_BIN/pip" EC_DRY_RUN=1 run ec_install_crg_cli
     [ "$status" -eq 0 ]
     [[ "$output" == *"falling back to 'pip install --user'"* ]]
-    [[ "$output" == *"pip install --user code-review-graph"* ]]
+    [[ "$output" == *"pip install --user code-review-graph[embeddings]"* ]]
 }
 
 @test "ec_install_crg_cli fails clearly when uv, pipx, and pip are all missing" {
@@ -430,12 +430,12 @@ STUB
     [[ "$output" == *"needs uv, pipx, or pip"* ]]
 }
 
-@test "ec_install_crg_cli invokes uv tool install when not dry-run" {
+@test "ec_install_crg_cli invokes uv tool install with embeddings extra when not dry-run" {
     make_stub uv
     export EC_UV="$STUB_BIN/uv"
     run ec_install_crg_cli
     [ "$status" -eq 0 ]
-    grep -q "^uv tool install code-review-graph$" "$STUB_LOG"
+    grep -q "^uv tool install code-review-graph\[embeddings\]$" "$STUB_LOG"
 }
 
 # -- ec_install_mcp_crg -------------------------------------------------------
@@ -445,7 +445,7 @@ STUB
     EC_UV="$STUB_BIN/uv" EC_CRG="$STUB_BIN/code-review-graph-not-real" \
         EC_DRY_RUN=1 run ec_install_mcp_crg claude-code
     [ "$status" -eq 0 ]
-    [[ "$output" == *"uv tool install code-review-graph"* ]]
+    [[ "$output" == *"uv tool install code-review-graph[embeddings]"* ]]
     [[ "$output" == *"install --platform claude-code"* ]]
 }
 
