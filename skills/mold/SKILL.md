@@ -38,7 +38,7 @@ Full mode definitions, exit criteria, and user knobs in `references/modes.md`.
 | --- | --- | --- |
 | External validation | `/briesearch` with Context7/Tavily | user-provided docs, repo docs, or note as unverified |
 | Codebase grounding | Serena or LSP, `sg`, tilth read/search | `ripgrep`, `find`, targeted file reads |
-| Dependency/blast-radius checks | shape check (`references/shape-check.md`): `cheez-search kind: "callers"` + `tilth_deps` | import searches, caller searches, test references |
+| Dependency/blast-radius checks | shape check (`references/shape-check.md`): `cheez-search` callers (`tilth_search kind: "callers"`) + `tilth_deps` | import searches, caller searches, test references |
 | Spec writing | precise edit tooling | create/update markdown directly after approval |
 
 Optional tools accelerate the work; missing tools do not block the dialogue. When a fallback is weaker, mark the affected claim `[?]` until settled.

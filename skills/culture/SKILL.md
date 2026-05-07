@@ -18,7 +18,7 @@ Do not use it when the user wants a written spec (`/mold`), implementation (`/co
 
 1. Restate the question or tension in one sentence.
 2. Identify assumptions, constraints, and decision criteria.
-3. Explore trade-offs and likely blast radius. When the trade-off hinges on "what does this touch", run a read-only shape check on the candidate seam — `cheez-search kind: "callers"` plus `tilth_deps` — and label each option `[low | medium | high blast radius]`. Procedure mirrors `../mold/references/shape-check.md`; culture stops at the verdict and never drafts signatures.
+3. Explore trade-offs and likely blast radius. When the trade-off hinges on "what does this touch", run a read-only shape check on the candidate seam — a `cheez-search` callers query (`tilth_search kind: "callers"`) plus `tilth_deps` — and label each option `[low | medium | high blast radius]`. Procedure mirrors `../mold/references/shape-check.md`; culture stops at the verdict and never drafts signatures.
 4. Use evidence only when it helps the conversation; avoid deep research unless the user asks.
 5. End with a compact summary, open questions, and a `## Handoff` prompt (see below).
 
@@ -27,7 +27,7 @@ Do not use it when the user wants a written spec (`/mold`), implementation (`/co
 | Need | Prefer | Fallback |
 | --- | --- | --- |
 | Quick code orientation | `cheez-search`, `cheez-read`, LSP | `ripgrep`, file tree, targeted reads |
-| Blast-radius read | `cheez-search kind: "callers"` + `tilth_deps` (read-only shape check) | guess and label option `[?]` |
+| Blast-radius read | `cheez-search` callers (`tilth_search kind: "callers"`) + `tilth_deps` (read-only shape check) | guess and label option `[?]` |
 | Visualizing diffs or examples | `delta` | plain `git diff` |
 | External sanity check | `/briesearch` | clearly mark as an assumption |
 

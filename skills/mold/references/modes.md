@@ -37,7 +37,7 @@ Mold has no fixed entry point. Inspect the input shape and pick a starting mode.
 
 ### Sketch — interface lockdown
 
-**Job:** lock modules, responsibilities, I/O contracts, and seams in pseudocode signatures. Before drafting, run the shape check (`shape-check.md`) — signatures, callers (`cheez-search kind: "callers"`), and `tilth_deps` blast radius — for every touched symbol so new seams fit existing convention and the impact is bounded. Print the four-line shape-check summary before any pseudocode.
+**Job:** lock modules, responsibilities, I/O contracts, and seams in pseudocode signatures. Before drafting, run the shape check (`shape-check.md`) — signatures, callers (via `cheez-search`, i.e. `tilth_search kind: "callers"`), and `tilth_deps` blast radius — for every touched symbol so new seams fit existing convention and the impact is bounded. Print the shape-check summary block before any pseudocode.
 
 **Exit when:** every public seam has a pseudocode signature; every cross-module call goes through public interfaces, not internals; shape-check verdict is recorded.
 

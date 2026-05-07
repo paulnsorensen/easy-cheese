@@ -42,6 +42,14 @@ The `callees` line is optional — print it only when the symbol query's `──
 
 A `high` verdict (multi-module callers or more than five importers) makes the Grill gate mandatory in mold (see `handshake.md`) and forces culture to label the option `[high blast radius]` before continuing trade-off talk.
 
+## When tilth / cheez-search is unavailable
+
+Shape-check should not block the dialogue when its preferred tools are missing. Substitute and degrade the verdict:
+
+- **Callers / callees**: fall back to LSP `find_references` / `prepare_call_hierarchy` (or `ripgrep` against the symbol name when LSP is also down). Note the substitution out loud.
+- **Imports / blast radius**: fall back to `ripgrep` for `import .*<module>` and reverse-import patterns; counts will be approximate.
+- **Verdict**: cap at `[?]` instead of `low | medium | high` — a guessed verdict is worse than an honest unknown. Sketch and culture should treat `[?]` like `high` for gating purposes (Grill gate engages, option labelled `[high blast radius]`) until the user accepts the gap.
+
 ## When to skip
 
 - The touched symbol has zero callers (greenfield) — say so out loud.

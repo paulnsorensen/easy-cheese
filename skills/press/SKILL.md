@@ -26,7 +26,7 @@ Do not use it to implement broad new behavior. Press may add or strengthen tests
 | Need | Prefer | Fallback |
 | --- | --- | --- |
 | Diff review | `delta` | plain `git diff` |
-| Coverage / blast radius | `tilth_deps` + `cheez-search kind: "callers"` | Serena/LSP, `ripgrep` callers/imports |
+| Coverage / blast radius | `tilth_deps` + `cheez-search` callers (`tilth_search kind: "callers"`) | Serena/LSP, `ripgrep` callers/imports |
 | Affected execution flows + risk scoring | code-review-graph: `get_affected_flows_tool`, `get_impact_radius_tool` | manual flow tracing from callers |
 | Precise test edits | tilth edit | harness edit tools or patch application |
 | Test discovery | `sg`, ripgrep | package manager test listings or file tree |
