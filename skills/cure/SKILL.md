@@ -12,14 +12,14 @@ Do not use it to apply every suggestion automatically. The user chooses what to 
 
 ## Inputs
 
-Accept any of: a `/age` slug (`/cure <slug>` reads `.cheese/age/<slug>.md`), a pasted findings list, a CI failure summary, or a scoped instruction like "fix the high-stake age findings".
+Accept any of: a `/age` slug (`/cure <slug>` reads `.cheese/age/<slug>.md`), a pasted findings list, a CI failure summary, or a scoped instruction like "fix the high-stake age findings". `/age` may also hand off with a pre-locked selection (e.g. `/cure <slug> --select 1,3,5` or an inline selection string in the dispatch); when that happens, skip rendering the selection list and go straight to apply.
 
-If selection is ambiguous, render a numbered selection list per `references/selection.md` and ask what to apply. The default selection is empty.
+If selection is ambiguous *and* not pre-locked from `/age`, render a numbered selection list per `references/selection.md` and ask what to apply. The default selection is empty.
 
 ## Flow
 
 1. **Load** — read the findings (markdown, not JSON sidecars).
-2. **Select** — gate on explicit user selection. See `references/selection.md` for the recognized verbs.
+2. **Select** — if `/age` handed off a pre-locked selection, adopt it as-is (re-confirm the cited ids still exist in the report). Otherwise gate on explicit user selection. See `references/selection.md` for the recognized verbs.
 3. **Apply** — fix one logical group at a time via `cheez-read` (re-confirm anchor location) and `cheez-write` (apply).
 4. **Validate** — run the narrowest tests that prove each fix, then any relevant project-wide gates (lint, typecheck, build).
 5. **Re-review hand-off** — recommend `/age --scope <touched-path>` so review runs through the proper skill rather than reimplementing it inline. `/cure` does not re-grade its own work. If the user picks re-age, the resulting report can feed a fresh `/cure` invocation.

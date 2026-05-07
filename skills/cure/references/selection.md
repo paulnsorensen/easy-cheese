@@ -2,6 +2,8 @@
 
 `/cure` never applies findings without an explicit selection. The default selection is empty.
 
+`/age` is the preferred place to render this gate — it inverts the path so the user is asked *which findings to cure* immediately after the report lands, rather than first being asked *whether to run /cure*. When `/age` hands off with a pre-locked selection, `/cure` adopts it and skips re-rendering the table; otherwise `/cure` renders the table itself using the same shape below.
+
 ## Rendering the selection list
 
 When invoked with a slug, load `.cheese/age/<slug>.md` and render a numbered table grouped by stake:
