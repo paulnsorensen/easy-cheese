@@ -350,12 +350,46 @@ STUB
     [[ "$output" == *"@upstash/context7-mcp@latest"* ]]
 }
 
+@test "ec_install_mcp_context7 dry-run shows resolved \$claude / \$npx paths" {
+    make_stub claude
+    make_stub npx
+    EC_CLAUDE="$STUB_BIN/claude" EC_NPX="$STUB_BIN/npx" EC_DRY_RUN=1 \
+        run ec_install_mcp_context7 claude-code
+    [ "$status" -eq 0 ]
+    # Resolved overrides land in the dry-run preview, not literal "claude"/"npx".
+    [[ "$output" == *"$STUB_BIN/claude mcp add context7 -- $STUB_BIN/npx -y @upstash/context7-mcp@latest"* ]]
+}
+
+@test "ec_install_mcp_context7 honors EC_NPX in real invocation" {
+    make_stub claude
+    cat > "$STUB_BIN/my-npx" <<'STUB'
+#!/usr/bin/env bash
+echo "my-npx $*" >> "$STUB_LOG"
+exit 0
+STUB
+    chmod +x "$STUB_BIN/my-npx"
+    EC_CLAUDE="$STUB_BIN/claude" EC_NPX="$STUB_BIN/my-npx" \
+        run ec_install_mcp_context7 claude-code
+    [ "$status" -eq 0 ]
+    # The claude stub captures argv; assert the EC_NPX override was forwarded.
+    grep -q "^claude mcp add context7 -- $STUB_BIN/my-npx -y @upstash/context7-mcp@latest$" "$STUB_LOG"
+}
+
 @test "ec_install_mcp_tavily warns when TAVILY_API_KEY unset (dry-run)" {
     make_stub claude
     unset TAVILY_API_KEY
     EC_CLAUDE="$STUB_BIN/claude" EC_DRY_RUN=1 run ec_install_mcp_tavily claude-code
     [ "$status" -eq 0 ]
     [[ "$output" == *"TAVILY_API_KEY is not set"* ]]
+}
+
+@test "ec_install_mcp_tavily dry-run shows resolved \$claude / \$npx paths" {
+    make_stub claude
+    make_stub npx
+    EC_CLAUDE="$STUB_BIN/claude" EC_NPX="$STUB_BIN/npx" EC_DRY_RUN=1 \
+        run ec_install_mcp_tavily claude-code
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"$STUB_BIN/claude mcp add tavily -- $STUB_BIN/npx -y tavily-mcp"* ]]
 }
 
 # -- ec_install_crg_cli -------------------------------------------------------
@@ -421,6 +455,25 @@ STUB
     run ec_install_mcp_crg claude-code
     [ "$status" -eq 0 ]
     grep -q "^code-review-graph install --platform claude-code$" "$STUB_LOG"
+}
+
+@test "ec_install_mcp_crg fails with PATH hint when binary still missing after install" {
+    # Simulate the common 'pip install --user' case: pip succeeds but the
+    # binary lands in a directory that's not on PATH, so the post-install
+    # ec_cmd_exists check still fails.
+    make_stub pip
+    export EC_PIP="$STUB_BIN/pip"
+    # EC_CRG points at a path that will never exist on PATH.
+    export EC_CRG="$BATS_TEST_TMPDIR/nope/code-review-graph"
+    run ec_install_mcp_crg claude-code
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"install succeeded but"* ]]
+    [[ "$output" == *"not on PATH"* ]]
+    [[ "$output" == *"pipx ensurepath"* ]]
+    # Crucially, the registration step must NOT fire when the binary is
+    # still missing — otherwise the user gets the generic shell error we're
+    # trying to replace with a targeted hint.
+    ! grep -q " install --platform " "$STUB_LOG" || false
 }
 
 # -- ec_install_skills --------------------------------------------------------

@@ -11,7 +11,9 @@
 #
 # Run `bash install.sh --help` for the full flag list.
 
-set -euo pipefail
+# strict-mode is enabled inside the BASH_SOURCE guard at the bottom of the
+# file so sourcing (e.g. from the bats suite) does not mutate the caller's
+# shell options.
 
 # All known CLI tools. tilth is included but installed via cargo/npm (not
 # brew — upstream jahala/tilth does not ship a Homebrew formula).
@@ -81,6 +83,7 @@ Environment:
   EC_BREW   EC_GH      Override the brew / gh binaries (used by tests).
   EC_CARGO  EC_NPM     Override the cargo / npm binaries used to install tilth.
   EC_TILTH  EC_CLAUDE  Override the tilth / claude binaries (used by tests).
+  EC_NPX               Override npx (used to launch context7 / tavily MCP).
   EC_UV     EC_PIPX    Override uv / pipx for code-review-graph install.
   EC_PIP    EC_CRG     Override pip / code-review-graph binaries.
 USAGE
@@ -250,6 +253,7 @@ ec_install_mcp_tilth() {
 ec_install_mcp_context7() {
     local harness="$1"
     local claude="${EC_CLAUDE:-claude}"
+    local npx="${EC_NPX:-npx}"
     if [[ "$harness" != "claude-code" ]]; then
         ec_warn "context7 MCP: only claude-code is auto-registered; configure $harness manually."
         return 0
@@ -259,16 +263,17 @@ ec_install_mcp_context7() {
         return 1
     fi
     if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
-        ec_log "context7 MCP: would run 'claude mcp add context7 -- npx -y @upstash/context7-mcp@latest'"
+        ec_log "context7 MCP: would run '$claude mcp add context7 -- $npx -y @upstash/context7-mcp@latest'"
         return 0
     fi
     ec_log "context7 MCP: registering with claude-code"
-    "$claude" mcp add context7 -- npx -y @upstash/context7-mcp@latest
+    "$claude" mcp add context7 -- "$npx" -y @upstash/context7-mcp@latest
 }
 
 ec_install_mcp_tavily() {
     local harness="$1"
     local claude="${EC_CLAUDE:-claude}"
+    local npx="${EC_NPX:-npx}"
     if [[ "$harness" != "claude-code" ]]; then
         ec_warn "tavily MCP: only claude-code is auto-registered; configure $harness manually."
         return 0
@@ -281,11 +286,11 @@ ec_install_mcp_tavily() {
         ec_warn "tavily MCP: TAVILY_API_KEY is not set; the server will fail until you set one."
     fi
     if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
-        ec_log "tavily MCP: would run 'claude mcp add tavily -- npx -y tavily-mcp'"
+        ec_log "tavily MCP: would run '$claude mcp add tavily -- $npx -y tavily-mcp'"
         return 0
     fi
     ec_log "tavily MCP: registering with claude-code"
-    "$claude" mcp add tavily -- npx -y tavily-mcp
+    "$claude" mcp add tavily -- "$npx" -y tavily-mcp
 }
 
 # Install the code-review-graph CLI. Prefers an isolated tool install
@@ -337,6 +342,16 @@ ec_install_mcp_crg() {
     local crg="${EC_CRG:-code-review-graph}"
     if ! ec_cmd_exists "$crg"; then
         ec_install_crg_cli || return 1
+        # 'pip install --user' and 'pipx ensurepath' can leave the binary
+        # in a directory that isn't on PATH yet (the pipx user bin or the
+        # Python user-site bin). Re-check explicitly so the user gets a
+        # targeted hint instead of a generic "command not found" later.
+        if [[ "${EC_DRY_RUN:-0}" != "1" ]] && ! ec_cmd_exists "$crg"; then
+            ec_err "code-review-graph: install succeeded but '$crg' is not on PATH."
+            ec_err "Add the install location to PATH (run 'pipx ensurepath', or"
+            ec_err "add the Python user-site bin dir for pip --user) and re-run."
+            return 1
+        fi
     fi
     if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
         ec_log "code-review-graph: would run '$crg install --platform $harness'"
@@ -515,7 +530,9 @@ ec_main() {
 }
 
 # Only run main when executed directly, not when sourced (so tests can load
-# functions individually).
+# functions individually). strict-mode is scoped here so sourcing the file
+# does not flip -e/-u/-o pipefail in the caller's shell.
 if [[ "${BASH_SOURCE[0]:-}" == "${0}" ]]; then
+    set -euo pipefail
     ec_main "$@"
 fi
