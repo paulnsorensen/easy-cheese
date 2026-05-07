@@ -414,8 +414,20 @@ ec_resolve_harnesses() {
         return 0
     fi
 
-    local harness_tokens="${selection//,/ }"
-    for harness in $harness_tokens; do
+    if [[ -z "${selection//[[:space:]]/}" ]]; then
+        printf 'error: empty --harness selection. Use --harness auto or provide one or more comma-separated harness names.\n' >&2
+        return 1
+    fi
+
+    local -a harness_tokens
+    IFS=',' read -r -a harness_tokens <<< "$selection"
+    for harness in "${harness_tokens[@]}"; do
+        harness="${harness#"${harness%%[![:space:]]*}"}"
+        harness="${harness%"${harness##*[![:space:]]}"}"
+        if [[ -z "$harness" ]]; then
+            printf 'error: invalid --harness selection "%s". Harness names must be non-empty and comma-separated.\n' "$selection" >&2
+            return 1
+        fi
         printf '%s\n' "$harness"
     done
 }
