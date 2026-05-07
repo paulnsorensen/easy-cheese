@@ -78,7 +78,7 @@ Write to `.cheese/age/<slug>.md`:
 - **[deslop]** `path/to/old.ts:55-60` — <what is wrong>. <recommendation>.
 
 ## Confidence
-<low|medium|high> — <one-line justification including which evidence sources were unavailable>
+<`certain` | `speculating` | `don't know`> — <one-line justification including which evidence sources were unavailable>
 
 ## Next step
 /cure <slug>   — pick findings to fix
@@ -105,5 +105,12 @@ Pre-select `Run /cure` when at least one high-stake finding exists. `/cure` stil
 - Do not edit production files.
 - Do not auto-apply fixes. Prompting `/cure` via `AskUserQuestion` is fine; bypassing `/cure`'s selection gate is not.
 - Do not invent evidence. Cite files, diffs, commands, or unavailable-source notes.
-- Keep confidence qualitative (`low | medium | high`); never emit a numeric score.
+- Agree when the diff is fine. Do not manufacture findings to fill a dimension; an empty dimension is a valid outcome.
+- Keep confidence qualitative (`certain | speculating | don't know`); never emit a numeric score.
 - Findings carry location + recommendation. Do not write JSON sidecars or hash-anchored fix payloads — `/cure` reads the markdown directly.
+- Apply `references/voice.md` (output discipline, reasoning posture, confidence vocabulary).
+
+## References
+
+- `references/dimensions.md` — per-dimension rubrics and recommendation shapes.
+- `references/voice.md` — shared output discipline, reasoning posture, and confidence vocabulary.

@@ -78,3 +78,5 @@ Pre-select `Run /age` when any applied fix touched logic outside the original fi
 - Keep fixes scoped to selected findings.
 - Do not hide failed or skipped checks.
 - Prefer PR-ready output, but do not open a PR unless the user asks.
+- If a selected finding rests on a false premise (the `/age` claim is wrong, or the diff already addresses it), stop and surface the premise before applying. Disagreeing with the report is allowed; silently working around it is not.
+- Apply the shared voice kernel (lives at `skills/age/references/voice.md` in this repo): lead the cure report with what was applied, flag residual risk as `certain | speculating | don't know`, agree when the diff is fine without manufacturing follow-ups.
