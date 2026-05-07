@@ -36,7 +36,7 @@ STUB
     chmod +x "$STUB_BIN/$name"
 }
 
-# -- ec_tool_binary / ec_tool_formula -----------------------------------------
+# -- ec_tool_binary -----------------------------------------------------------
 
 @test "ec_tool_binary maps formula names to binaries" {
     [[ "$(ec_tool_binary ripgrep)" == "rg" ]]
@@ -48,12 +48,6 @@ STUB
     [[ "$(ec_tool_binary mergiraf)" == "mergiraf" ]]
     [[ "$(ec_tool_binary tilth)" == "tilth" ]]
     [[ "$(ec_tool_binary gh)" == "gh" ]]
-}
-
-@test "ec_tool_formula taps tilth from paulnsorensen/tap" {
-    [[ "$(ec_tool_formula tilth)" == "paulnsorensen/tap/tilth" ]]
-    [[ "$(ec_tool_formula ripgrep)" == "ripgrep" ]]
-    [[ "$(ec_tool_formula gh)" == "gh" ]]
 }
 
 # -- ec_validate_selection ----------------------------------------------------
@@ -221,12 +215,6 @@ STUB
     [[ "$output" == *"would run 'brew install ripgrep'"* ]]
 }
 
-@test "ec_brew_install_if_missing dry-run uses tap formula for tilth" {
-    EC_DRY_RUN=1 run ec_brew_install_if_missing tilth
-    [ "$status" -eq 0 ]
-    [[ "$output" == *"paulnsorensen/tap/tilth"* ]]
-}
-
 @test "ec_brew_install_if_missing invokes brew when missing" {
     make_stub brew
     export EC_BREW="$STUB_BIN/brew"
@@ -250,6 +238,65 @@ STUB
     [[ "$output" == *"would run 'brew install ripgrep'"* ]]
     [[ "$output" == *"would run 'brew install jq'"* ]]
     [[ "$output" == *"would run 'brew install fd'"* ]]
+}
+
+@test "ec_install_tools routes tilth through ec_install_tilth, not brew" {
+    make_stub cargo
+    EC_CARGO="$STUB_BIN/cargo" EC_DRY_RUN=1 run ec_install_tools "tilth"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"cargo install tilth"* ]]
+    [[ "$output" != *"brew install tilth"* ]]
+}
+
+# -- ec_install_tilth ---------------------------------------------------------
+
+@test "ec_install_tilth short-circuits when tilth already on PATH" {
+    make_stub tilth
+    run ec_install_tilth
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"already installed"* ]]
+}
+
+@test "ec_install_tilth dry-run prefers cargo when both cargo and npm exist" {
+    make_stub cargo
+    make_stub npm
+    EC_CARGO="$STUB_BIN/cargo" EC_NPM="$STUB_BIN/npm" EC_DRY_RUN=1 \
+        run ec_install_tilth
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"would run"* ]]
+    [[ "$output" == *"cargo install tilth"* ]]
+    [[ "$output" != *"npm install -g tilth"* ]]
+}
+
+@test "ec_install_tilth invokes cargo when not dry-run" {
+    make_stub cargo
+    export EC_CARGO="$STUB_BIN/cargo"
+    run ec_install_tilth
+    [ "$status" -eq 0 ]
+    grep -q "^cargo install tilth$" "$STUB_LOG"
+}
+
+@test "ec_install_tilth falls back to npm install -g when cargo missing" {
+    make_stub npm
+    EC_NPM="$STUB_BIN/npm" EC_DRY_RUN=1 run ec_install_tilth
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"npm install -g tilth"* ]]
+    [[ "$output" == *"cargo not found"* ]]
+}
+
+@test "ec_install_tilth invokes npm install -g when cargo missing" {
+    make_stub npm
+    export EC_NPM="$STUB_BIN/npm"
+    run ec_install_tilth
+    [ "$status" -eq 0 ]
+    grep -q "^npm install -g tilth$" "$STUB_LOG"
+}
+
+@test "ec_install_tilth fails clearly when neither cargo nor npm present" {
+    run ec_install_tilth
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"needs cargo (Rust) or npm"* ]]
+    [[ "$output" == *"rustup.rs"* ]]
 }
 
 # -- ec_install_mcp_tilth -----------------------------------------------------
@@ -311,13 +358,61 @@ STUB
     [[ "$output" == *"TAVILY_API_KEY is not set"* ]]
 }
 
-@test "ec_install_mcp_crg dry-run installs via pip when missing" {
+# -- ec_install_crg_cli -------------------------------------------------------
+
+@test "ec_install_crg_cli prefers uv over pipx and pip" {
+    make_stub uv
+    make_stub pipx
     make_stub pip
-    EC_PIP="$STUB_BIN/pip" EC_CRG="$STUB_BIN/code-review-graph-not-real" \
+    EC_UV="$STUB_BIN/uv" EC_PIPX="$STUB_BIN/pipx" EC_PIP="$STUB_BIN/pip" \
+        EC_DRY_RUN=1 run ec_install_crg_cli
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"uv tool install code-review-graph"* ]]
+    [[ "$output" != *"pipx install"* ]]
+    [[ "$output" != *"pip install"* ]]
+}
+
+@test "ec_install_crg_cli falls back to pipx when uv missing" {
+    make_stub pipx
+    make_stub pip
+    EC_PIPX="$STUB_BIN/pipx" EC_PIP="$STUB_BIN/pip" \
+        EC_DRY_RUN=1 run ec_install_crg_cli
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"pipx install code-review-graph"* ]]
+    [[ "$output" != *"uv tool"* ]]
+}
+
+@test "ec_install_crg_cli falls back to 'pip install --user' last with a warning" {
+    make_stub pip
+    EC_PIP="$STUB_BIN/pip" EC_DRY_RUN=1 run ec_install_crg_cli
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"falling back to 'pip install --user'"* ]]
+    [[ "$output" == *"pip install --user code-review-graph"* ]]
+}
+
+@test "ec_install_crg_cli fails clearly when uv, pipx, and pip are all missing" {
+    run ec_install_crg_cli
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"needs uv, pipx, or pip"* ]]
+}
+
+@test "ec_install_crg_cli invokes uv tool install when not dry-run" {
+    make_stub uv
+    export EC_UV="$STUB_BIN/uv"
+    run ec_install_crg_cli
+    [ "$status" -eq 0 ]
+    grep -q "^uv tool install code-review-graph$" "$STUB_LOG"
+}
+
+# -- ec_install_mcp_crg -------------------------------------------------------
+
+@test "ec_install_mcp_crg installs CLI then registers when binary missing" {
+    make_stub uv
+    EC_UV="$STUB_BIN/uv" EC_CRG="$STUB_BIN/code-review-graph-not-real" \
         EC_DRY_RUN=1 run ec_install_mcp_crg claude-code
     [ "$status" -eq 0 ]
-    [[ "$output" == *"would run"* ]]
-    [[ "$output" == *"install code-review-graph"* ]]
+    [[ "$output" == *"uv tool install code-review-graph"* ]]
+    [[ "$output" == *"install --platform claude-code"* ]]
 }
 
 @test "ec_install_mcp_crg invokes crg install for present binary" {
@@ -327,6 +422,57 @@ STUB
     [ "$status" -eq 0 ]
     grep -q "^code-review-graph install --platform claude-code$" "$STUB_LOG"
 }
+
+# -- ec_install_skills --------------------------------------------------------
+
+@test "ec_install_skills warns and returns 0 when gh CLI missing" {
+    run ec_install_skills claude-code
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"gh CLI not found"* ]]
+}
+
+@test "ec_install_skills dry-run prints --all --agent --scope user line" {
+    make_stub gh
+    EC_GH="$STUB_BIN/gh" EC_DRY_RUN=1 run ec_install_skills claude-code
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"would run"* ]]
+    [[ "$output" == *"gh skill install paulnsorensen/easy-cheese --all --agent claude-code --scope user"* ]]
+}
+
+@test "ec_install_skills dry-run honors picked harness" {
+    make_stub gh
+    EC_GH="$STUB_BIN/gh" EC_DRY_RUN=1 run ec_install_skills cursor
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"--agent cursor"* ]]
+}
+
+@test "ec_install_skills warns and returns 1 when gh is unauthenticated" {
+    cat > "$STUB_BIN/gh" <<'STUB'
+#!/usr/bin/env bash
+echo "gh $*" >> "$STUB_LOG"
+# Simulate `gh auth status` failure when called as 'gh auth status'.
+if [[ "$1" == "auth" && "$2" == "status" ]]; then
+    exit 1
+fi
+exit 0
+STUB
+    chmod +x "$STUB_BIN/gh"
+    export EC_GH="$STUB_BIN/gh"
+    run ec_install_skills claude-code
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"gh is not authenticated"* ]]
+    [[ "$output" == *"gh auth login"* ]]
+}
+
+@test "ec_install_skills invokes gh skill install with full arg vector" {
+    make_stub gh
+    export EC_GH="$STUB_BIN/gh"
+    run ec_install_skills claude-code
+    [ "$status" -eq 0 ]
+    grep -q "^gh skill install paulnsorensen/easy-cheese --all --agent claude-code --scope user$" "$STUB_LOG"
+}
+
+# -- ec_install_mcp -----------------------------------------------------------
 
 @test "ec_install_mcp dispatches 'none' as a no-op log line" {
     run ec_install_mcp none claude-code 1
@@ -374,39 +520,48 @@ STUB
     [[ "$output" == *"Homebrew is required"* ]]
 }
 
-@test "ec_main full --dry-run on macOS prints all tool actions" {
+@test "ec_main full --dry-run on macOS prints all tool, skill, and MCP actions" {
     cat > "$STUB_BIN/uname" <<'STUB'
 #!/usr/bin/env bash
 echo Darwin
 STUB
     chmod +x "$STUB_BIN/uname"
     make_stub brew
-    make_stub tilth
+    make_stub cargo
+    make_stub gh
     make_stub claude
     EC_BREW="$STUB_BIN/brew" \
-    EC_TILTH="$STUB_BIN/tilth" \
+    EC_CARGO="$STUB_BIN/cargo" \
+    EC_GH="$STUB_BIN/gh" \
     EC_CLAUDE="$STUB_BIN/claude" \
         run ec_main --dry-run
     [ "$status" -eq 0 ]
     [[ "$output" == *"would run 'brew install gh'"* ]]
     [[ "$output" == *"would run 'brew install ripgrep'"* ]]
-    [[ "$output" == *"paulnsorensen/tap/tilth"* ]]
+    # tilth installs via cargo, NOT brew.
+    [[ "$output" == *"cargo install tilth"* ]]
+    [[ "$output" != *"brew install tilth"* ]]
+    [[ "$output" != *"paulnsorensen/tap/tilth"* ]]
+    # Skills install runs as part of the harness pick stage.
+    [[ "$output" == *"gh skill install paulnsorensen/easy-cheese --all --agent claude-code --scope user"* ]]
     [[ "$output" == *"install claude-code --edit"* ]]
     [[ "$output" == *"@upstash/context7-mcp@latest"* ]]
     [[ "$output" == *"Done."* ]]
 }
 
-@test "ec_main --skip-tools --mcp tilth registers only tilth" {
+@test "ec_main --skip-tools --mcp tilth registers only tilth (still runs skills)" {
     cat > "$STUB_BIN/uname" <<'STUB'
 #!/usr/bin/env bash
 echo Darwin
 STUB
     chmod +x "$STUB_BIN/uname"
     make_stub tilth
-    EC_TILTH="$STUB_BIN/tilth" \
+    make_stub gh
+    EC_TILTH="$STUB_BIN/tilth" EC_GH="$STUB_BIN/gh" \
         run ec_main --skip-tools --mcp tilth
     [ "$status" -eq 0 ]
     grep -q "^tilth install claude-code --edit$" "$STUB_LOG"
+    grep -q "^gh skill install paulnsorensen/easy-cheese --all --agent claude-code --scope user$" "$STUB_LOG"
     # No brew calls should have happened.
     ! grep -q "^brew" "$STUB_LOG" || false
 }

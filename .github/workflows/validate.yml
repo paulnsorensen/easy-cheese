@@ -65,6 +65,17 @@ jobs:
       - name: Run install.sh tests
         run: bats tests/bash/test_install.bats
 
+      # Real (un-stubbed) smoke test: actually resolve every brew formula,
+      # exercise the cargo-or-npm tilth install path, and run the gh-skill
+      # install on a fresh macos-latest runner. Catches "phantom formula"
+      # / "tap doesn't exist" / "this skill doesn't publish" bugs that the
+      # bats suite (which stubs everything) cannot. --skip-mcp avoids
+      # needing claude/tavily creds.
+      - name: Real install smoke test (--skip-mcp)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/install.sh --skip-mcp
+
   lint:
     name: lint markdown and yaml
     runs-on: ubuntu-latest

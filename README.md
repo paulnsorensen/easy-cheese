@@ -232,12 +232,12 @@ The cheez-* tool skills and several workflow skills benefit from MCP servers. In
 
 ### tilth (required for cheez-* skills)
 
-[tilth](https://github.com/paulnsorensen/tilth) provides AST-aware code search, smart file reading, and hash-anchored edits. Required by `/cheez-search`, `/cheez-read`, and `/cheez-write`.
+[tilth](https://github.com/jahala/tilth) provides AST-aware code search, smart file reading, and hash-anchored edits. Required by `/cheez-search`, `/cheez-read`, and `/cheez-write`.
 
 ```sh
-# Install tilth CLI
-cargo install tilth        # via Cargo (Rust)
-brew install paulnsorensen/tap/tilth  # via Homebrew (macOS/Linux)
+# Install tilth CLI — pick one (no Homebrew formula upstream)
+cargo install tilth        # via Cargo (Rust) — preferred, native binary
+npm install -g tilth       # via npm (Node 18+) — no Rust toolchain needed
 
 # Register as an MCP server — include --edit only if you plan to use cheez-write
 tilth install claude-code --edit   # Claude Code
@@ -355,7 +355,13 @@ The optional tools in the table below are referenced by workflow skills. None ar
 
 ### One-shot installer (macOS)
 
-`scripts/install.sh` installs every CLI tool listed below in one go and (by default) registers the tilth and Context7 MCP servers with Claude Code. Currently macOS only — it relies on Homebrew.
+`scripts/install.sh` does the whole setup in one shot:
+
+1. Installs every CLI tool listed below — Homebrew for the eight brew-core formulas, plus `cargo install tilth` (or `npm install -g tilth` if Rust isn't available) for tilth, which has no Homebrew formula upstream.
+2. Runs `gh skill install paulnsorensen/easy-cheese --all --agent <harness> --scope user` to drop every easy-cheese skill into the picked harness (default `claude-code`).
+3. Registers the `tilth` and `context7` MCP servers with that same harness.
+
+Currently macOS only — it relies on Homebrew. Requires `gh` to be authenticated (`gh auth login`) before running.
 
 Pipe straight from GitHub:
 
@@ -378,11 +384,11 @@ Common flags:
 curl -fsSL https://raw.githubusercontent.com/paulnsorensen/easy-cheese/main/scripts/install.sh \
   | bash -s -- --tools ripgrep,jq --skip-mcp
 
-# Register MCP servers only (assumes the CLI tools are already installed)
+# Register MCP servers only (assumes CLI tools and skills are already installed)
 curl -fsSL https://raw.githubusercontent.com/paulnsorensen/easy-cheese/main/scripts/install.sh \
   | bash -s -- --skip-tools --mcp tilth,context7,tavily
 
-# Use a different harness for tilth registration
+# Pick a different harness for skill + MCP registration
 curl -fsSL https://raw.githubusercontent.com/paulnsorensen/easy-cheese/main/scripts/install.sh \
   | bash -s -- --harness cursor
 ```

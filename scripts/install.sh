@@ -13,7 +13,8 @@
 
 set -euo pipefail
 
-# All known CLI tools, formula -> binary name (one is a noop check).
+# All known CLI tools. tilth is included but installed via cargo/npm (not
+# brew — upstream jahala/tilth does not ship a Homebrew formula).
 EC_KNOWN_TOOLS="gh ripgrep fd jq ast-grep git-delta just mergiraf tilth"
 
 # Default selections.
@@ -27,14 +28,6 @@ ec_tool_binary() {
         ast-grep)  echo "sg" ;;
         git-delta) echo "delta" ;;
         *)         echo "$1" ;;
-    esac
-}
-
-# Map a brew formula name to the canonical formula spec we install.
-ec_tool_formula() {
-    case "$1" in
-        tilth) echo "paulnsorensen/tap/tilth" ;;
-        *)     echo "$1" ;;
     esac
 }
 
@@ -66,19 +59,19 @@ Options:
                        code-review-graph, none
   --skip-mcp           Same as --mcp none.
   --skip-tools         Skip CLI tool installs (useful for MCP-only runs).
-  --harness <name>     Harness to register MCP servers with. Default:
-                       claude-code. Other values: cursor, vscode, codex,
-                       gemini, zed.
+  --harness <name>     Harness to register skills + MCP servers with.
+                       Default: claude-code. Other values include cursor,
+                       vscode, codex, gemini, zed, copilot.
   --no-edit            Register tilth without the --edit capability.
   --dry-run            Print what would happen without changing anything.
   -h, --help           Show this help.
 
 Environment:
-  EC_BREW              Override the brew binary (used by tests).
-  EC_TILTH             Override the tilth binary (used by tests).
-  EC_CLAUDE            Override the claude binary (used by tests).
-  EC_PIP               Override the pip binary (used by tests).
-  EC_NPX               Override the npx binary (used by tests).
+  EC_BREW   EC_GH      Override the brew / gh binaries (used by tests).
+  EC_CARGO  EC_NPM     Override the cargo / npm binaries used to install tilth.
+  EC_TILTH  EC_CLAUDE  Override the tilth / claude binaries (used by tests).
+  EC_UV     EC_PIPX    Override uv / pipx for code-review-graph install.
+  EC_PIP    EC_CRG     Override pip / code-review-graph binaries.
 USAGE
 }
 
@@ -128,9 +121,8 @@ ec_validate_selection() {
 # present), 1 if brew failed. Honors $EC_DRY_RUN.
 ec_brew_install_if_missing() {
     local tool="$1"
-    local binary formula
+    local binary
     binary="$(ec_tool_binary "$tool")"
-    formula="$(ec_tool_formula "$tool")"
 
     if ec_cmd_exists "$binary"; then
         ec_log "$tool: already installed ($binary on PATH)"
@@ -138,20 +130,61 @@ ec_brew_install_if_missing() {
     fi
 
     if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
-        ec_log "$tool: would run 'brew install $formula'"
+        ec_log "$tool: would run 'brew install $tool'"
         return 0
     fi
 
-    ec_log "$tool: installing via 'brew install $formula'"
-    ec_brew install "$formula"
+    ec_log "$tool: installing via 'brew install $tool'"
+    ec_brew install "$tool"
 }
 
-# Install every tool in the comma-separated list.
+# tilth has no Homebrew formula. Install via cargo (preferred — native
+# binary) or fall back to 'npm install -g tilth' (jahala/tilth ships a
+# proper bin entry on npm). Errors out clearly if neither is available.
+ec_install_tilth() {
+    local cargo="${EC_CARGO:-cargo}"
+    local npm="${EC_NPM:-npm}"
+
+    if ec_cmd_exists tilth; then
+        ec_log "tilth: already installed (tilth on PATH)"
+        return 0
+    fi
+
+    if ec_cmd_exists "$cargo"; then
+        if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
+            ec_log "tilth: would run '$cargo install tilth'"
+            return 0
+        fi
+        ec_log "tilth: installing via 'cargo install tilth'"
+        "$cargo" install tilth
+        return $?
+    fi
+
+    if ec_cmd_exists "$npm"; then
+        if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
+            ec_log "tilth: would run '$npm install -g tilth' (cargo not found)"
+            return 0
+        fi
+        ec_log "tilth: installing via 'npm install -g tilth' (cargo not found)"
+        "$npm" install -g tilth
+        return $?
+    fi
+
+    ec_err "tilth: needs cargo (Rust) or npm (Node 18+); neither was found."
+    ec_err "Install Rust from https://rustup.rs or Node.js from https://nodejs.org and re-run."
+    return 1
+}
+
+# Install every tool in the comma-separated list. tilth is routed through
+# ec_install_tilth; everything else goes through brew.
 ec_install_tools() {
     local list="$1" tool
     local IFS=,
     for tool in $list; do
-        ec_brew_install_if_missing "$tool"
+        case "$tool" in
+            tilth) ec_install_tilth ;;
+            *)     ec_brew_install_if_missing "$tool" ;;
+        esac
     done
 }
 
@@ -183,6 +216,9 @@ ec_install_mcp() {
 
 ec_install_mcp_tilth() {
     local harness="$1" with_edit="$2"
+    # Reset IFS — ec_install_mcp_list sets it to ',' which would leak into
+    # the dry-run "${args[*]}" expansion below via dynamic scoping.
+    local IFS=$' \t\n'
     local tilth="${EC_TILTH:-tilth}"
     if ! ec_cmd_exists "$tilth"; then
         ec_warn "tilth MCP: tilth CLI is not installed; include 'tilth' in --tools first."
@@ -241,21 +277,55 @@ ec_install_mcp_tavily() {
     "$claude" mcp add tavily -- npx -y tavily-mcp
 }
 
+# Install the code-review-graph CLI. Prefers an isolated tool install
+# (uv → pipx) so we don't poke at the system Python. Falls back to
+# 'pip install --user' with a warning so it still works on minimal boxes.
+ec_install_crg_cli() {
+    local uv="${EC_UV:-uv}"
+    local pipx="${EC_PIPX:-pipx}"
+    local pip="${EC_PIP:-pip}"
+
+    if ec_cmd_exists "$uv"; then
+        if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
+            ec_log "code-review-graph: would run '$uv tool install code-review-graph'"
+            return 0
+        fi
+        ec_log "code-review-graph: installing via 'uv tool install code-review-graph'"
+        "$uv" tool install code-review-graph
+        return $?
+    fi
+
+    if ec_cmd_exists "$pipx"; then
+        if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
+            ec_log "code-review-graph: would run '$pipx install code-review-graph'"
+            return 0
+        fi
+        ec_log "code-review-graph: installing via 'pipx install code-review-graph'"
+        "$pipx" install code-review-graph
+        return $?
+    fi
+
+    if ec_cmd_exists "$pip"; then
+        ec_warn "code-review-graph: uv/pipx not found; falling back to 'pip install --user'."
+        if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
+            ec_log "code-review-graph: would run '$pip install --user code-review-graph'"
+            return 0
+        fi
+        ec_log "code-review-graph: installing via 'pip install --user code-review-graph'"
+        "$pip" install --user code-review-graph
+        return $?
+    fi
+
+    ec_err "code-review-graph: needs uv, pipx, or pip; none found."
+    ec_err "Install uv from https://docs.astral.sh/uv or pipx from https://pipx.pypa.io and re-run."
+    return 1
+}
+
 ec_install_mcp_crg() {
     local harness="$1"
-    local pip="${EC_PIP:-pip}"
     local crg="${EC_CRG:-code-review-graph}"
     if ! ec_cmd_exists "$crg"; then
-        if ! ec_cmd_exists "$pip"; then
-            ec_warn "code-review-graph: pip not found; install Python 3.10+ first."
-            return 1
-        fi
-        if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
-            ec_log "code-review-graph: would run '$pip install code-review-graph'"
-        else
-            ec_log "code-review-graph: installing via pip"
-            "$pip" install code-review-graph
-        fi
+        ec_install_crg_cli || return 1
     fi
     if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
         ec_log "code-review-graph: would run '$crg install --platform $harness'"
@@ -271,6 +341,28 @@ ec_install_mcp_list() {
     for server in $list; do
         ec_install_mcp "$server" "$harness" "$with_edit"
     done
+}
+
+# Install the easy-cheese skill set into the picked harness via 'gh skill'.
+# User scope so they live alongside the user's other skills, not committed
+# into the project. Requires gh to be authenticated.
+ec_install_skills() {
+    local harness="$1"
+    local gh="${EC_GH:-gh}"
+    if ! ec_cmd_exists "$gh"; then
+        ec_warn "easy-cheese skills: gh CLI not found; skipping. Add 'gh' to --tools first."
+        return 0
+    fi
+    if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
+        ec_log "easy-cheese skills: would run '$gh skill install paulnsorensen/easy-cheese --all --agent $harness --scope user'"
+        return 0
+    fi
+    if ! "$gh" auth status >/dev/null 2>&1; then
+        ec_warn "easy-cheese skills: gh is not authenticated. Run 'gh auth login' and re-run."
+        return 1
+    fi
+    ec_log "easy-cheese skills: installing all skills into $harness (user scope)"
+    "$gh" skill install paulnsorensen/easy-cheese --all --agent "$harness" --scope user
 }
 
 # Parse argv into the EC_* config variables. Echoes nothing on success;
@@ -366,11 +458,13 @@ ec_main() {
         ec_install_tools "$EC_TOOLS"
     fi
 
+    ec_install_skills "$EC_HARNESS"
+
     if [[ "$EC_MCP" != "none" ]]; then
         ec_install_mcp_list "$EC_MCP" "$EC_HARNESS" "$EC_WITH_EDIT"
     fi
 
-    ec_log "Done. Restart your harness so MCP servers and PATH changes take effect."
+    ec_log "Done. Restart your harness so skills, MCP servers, and PATH changes take effect."
 }
 
 # Only run main when executed directly, not when sourced (so tests can load
