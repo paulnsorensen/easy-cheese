@@ -431,12 +431,16 @@ STUB
     [[ "$output" == *"gh CLI not found"* ]]
 }
 
-@test "ec_install_skills dry-run prints --all --agent --scope user line" {
+@test "ec_install_skills dry-run lists every shipped skill with --force" {
     make_stub gh
     EC_GH="$STUB_BIN/gh" EC_DRY_RUN=1 run ec_install_skills claude-code
     [ "$status" -eq 0 ]
-    [[ "$output" == *"would run"* ]]
-    [[ "$output" == *"gh skill install paulnsorensen/easy-cheese --all --agent claude-code --scope user"* ]]
+    # Spot-check first, last, and a representative middle skill in the list.
+    [[ "$output" == *"would run 'gh skill install paulnsorensen/easy-cheese age --agent claude-code --scope user --force'"* ]]
+    [[ "$output" == *"would run 'gh skill install paulnsorensen/easy-cheese cook --agent claude-code --scope user --force'"* ]]
+    [[ "$output" == *"would run 'gh skill install paulnsorensen/easy-cheese press --agent claude-code --scope user --force'"* ]]
+    # Confirm we never emit the broken --all flag again.
+    [[ "$output" != *"--all"* ]]
 }
 
 @test "ec_install_skills dry-run honors picked harness" {
@@ -444,6 +448,7 @@ STUB
     EC_GH="$STUB_BIN/gh" EC_DRY_RUN=1 run ec_install_skills cursor
     [ "$status" -eq 0 ]
     [[ "$output" == *"--agent cursor"* ]]
+    [[ "$output" != *"--agent claude-code"* ]]
 }
 
 @test "ec_install_skills warns and returns 1 when gh is unauthenticated" {
@@ -464,12 +469,39 @@ STUB
     [[ "$output" == *"gh auth login"* ]]
 }
 
-@test "ec_install_skills invokes gh skill install with full arg vector" {
+@test "ec_install_skills invokes gh skill install once per shipped skill" {
     make_stub gh
     export EC_GH="$STUB_BIN/gh"
     run ec_install_skills claude-code
     [ "$status" -eq 0 ]
-    grep -q "^gh skill install paulnsorensen/easy-cheese --all --agent claude-code --scope user$" "$STUB_LOG"
+    # Auth check fired before any install attempt.
+    grep -q "^gh auth status$" "$STUB_LOG"
+    # Spot-check first, last, and a middle skill from EC_KNOWN_SKILLS.
+    grep -q "^gh skill install paulnsorensen/easy-cheese age --agent claude-code --scope user --force$" "$STUB_LOG"
+    grep -q "^gh skill install paulnsorensen/easy-cheese cook --agent claude-code --scope user --force$" "$STUB_LOG"
+    grep -q "^gh skill install paulnsorensen/easy-cheese press --agent claude-code --scope user --force$" "$STUB_LOG"
+    # One invocation per shipped skill, no broken --all flag anywhere.
+    [ "$(grep -c '^gh skill install ' "$STUB_LOG")" -eq 12 ]
+    ! grep -q -- "--all" "$STUB_LOG" || false
+}
+
+@test "ec_install_skills returns non-zero when any skill install fails" {
+    cat > "$STUB_BIN/gh" <<'STUB'
+#!/usr/bin/env bash
+echo "gh $*" >> "$STUB_LOG"
+# Auth ok, but fail when installing the 'cook' skill.
+if [[ "$1" == "skill" && "$2" == "install" && "$4" == "cook" ]]; then
+    exit 1
+fi
+exit 0
+STUB
+    chmod +x "$STUB_BIN/gh"
+    export EC_GH="$STUB_BIN/gh"
+    run ec_install_skills claude-code
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"failed to install cook"* ]]
+    # Loop kept going past the failure — every other skill was still attempted.
+    [ "$(grep -c '^gh skill install ' "$STUB_LOG")" -eq 12 ]
 }
 
 # -- ec_install_mcp -----------------------------------------------------------
@@ -542,8 +574,11 @@ STUB
     [[ "$output" == *"cargo install tilth"* ]]
     [[ "$output" != *"brew install tilth"* ]]
     [[ "$output" != *"paulnsorensen/tap/tilth"* ]]
-    # Skills install runs as part of the harness pick stage.
-    [[ "$output" == *"gh skill install paulnsorensen/easy-cheese --all --agent claude-code --scope user"* ]]
+    # Skills install runs as part of the harness pick stage — one entry per
+    # shipped skill, never the broken --all flag.
+    [[ "$output" == *"gh skill install paulnsorensen/easy-cheese age --agent claude-code --scope user --force"* ]]
+    [[ "$output" == *"gh skill install paulnsorensen/easy-cheese press --agent claude-code --scope user --force"* ]]
+    [[ "$output" != *"--all"* ]]
     [[ "$output" == *"install claude-code --edit"* ]]
     [[ "$output" == *"@upstash/context7-mcp@latest"* ]]
     [[ "$output" == *"Done."* ]]
@@ -561,7 +596,10 @@ STUB
         run ec_main --skip-tools --mcp tilth
     [ "$status" -eq 0 ]
     grep -q "^tilth install claude-code --edit$" "$STUB_LOG"
-    grep -q "^gh skill install paulnsorensen/easy-cheese --all --agent claude-code --scope user$" "$STUB_LOG"
+    grep -q "^gh skill install paulnsorensen/easy-cheese age --agent claude-code --scope user --force$" "$STUB_LOG"
+    grep -q "^gh skill install paulnsorensen/easy-cheese press --agent claude-code --scope user --force$" "$STUB_LOG"
+    # 12 skill installs total, no broken --all flag.
+    [ "$(grep -c '^gh skill install ' "$STUB_LOG")" -eq 12 ]
     # No brew calls should have happened.
     ! grep -q "^brew" "$STUB_LOG" || false
 }

@@ -17,6 +17,12 @@ set -euo pipefail
 # brew — upstream jahala/tilth does not ship a Homebrew formula).
 EC_KNOWN_TOOLS="gh ripgrep fd jq ast-grep git-delta just mergiraf tilth"
 
+# Every skill shipped by easy-cheese. `gh skill install` requires an explicit
+# skill name (no --all flag), so we enumerate them and install one by one.
+# Kept in sync with skills/ manually so the script stays self-contained for
+# curl|bash distribution.
+EC_KNOWN_SKILLS="age briesearch cheese cheez-read cheez-search cheez-write cook culture cure melt mold press"
+
 # Default selections.
 EC_DEFAULT_TOOLS="$EC_KNOWN_TOOLS"
 EC_DEFAULT_MCP="tilth context7"
@@ -346,6 +352,11 @@ ec_install_mcp_list() {
 # Install the easy-cheese skill set into the picked harness via 'gh skill'.
 # User scope so they live alongside the user's other skills, not committed
 # into the project. Requires gh to be authenticated.
+#
+# `gh skill install` does not support an --all flag, so we loop the explicit
+# EC_KNOWN_SKILLS list and call it once per skill with --force for
+# idempotent re-runs. Failures on one skill are warned and tracked but do
+# not abort the rest of the loop.
 ec_install_skills() {
     local harness="$1"
     local gh="${EC_GH:-gh}"
@@ -353,16 +364,23 @@ ec_install_skills() {
         ec_warn "easy-cheese skills: gh CLI not found; skipping. Add 'gh' to --tools first."
         return 0
     fi
-    if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
-        ec_log "easy-cheese skills: would run '$gh skill install paulnsorensen/easy-cheese --all --agent $harness --scope user'"
-        return 0
-    fi
-    if ! "$gh" auth status >/dev/null 2>&1; then
+    if [[ "${EC_DRY_RUN:-0}" != "1" ]] && ! "$gh" auth status >/dev/null 2>&1; then
         ec_warn "easy-cheese skills: gh is not authenticated. Run 'gh auth login' and re-run."
         return 1
     fi
-    ec_log "easy-cheese skills: installing all skills into $harness (user scope)"
-    "$gh" skill install paulnsorensen/easy-cheese --all --agent "$harness" --scope user
+    local skill rc=0
+    for skill in $EC_KNOWN_SKILLS; do
+        if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
+            ec_log "easy-cheese skills: would run '$gh skill install paulnsorensen/easy-cheese $skill --agent $harness --scope user --force'"
+            continue
+        fi
+        ec_log "easy-cheese skills: installing $skill into $harness (user scope)"
+        if ! "$gh" skill install paulnsorensen/easy-cheese "$skill" --agent "$harness" --scope user --force; then
+            ec_warn "easy-cheese skills: failed to install $skill"
+            rc=1
+        fi
+    done
+    return $rc
 }
 
 # Parse argv into the EC_* config variables. Echoes nothing on success;
