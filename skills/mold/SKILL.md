@@ -34,14 +34,15 @@ Full mode definitions, exit criteria, and user knobs in `references/modes.md`.
 
 ## Preferred tools and fallbacks
 
+Code search, reading, and editing (including spec writing) all go through the cheez-* skills (`/cheez-search`, `/cheez-read`, `/cheez-write`) — see those skills for tool selection rules. Shape checks specifically use `cheez-search` callers (`kind: "callers"`) plus `tilth_deps`; the procedure lives in `references/shape-check.md`.
+
+Beyond cheez-* there are mold-specific tools:
+
 | Need | Prefer | Fallback |
 | --- | --- | --- |
 | External validation | `/briesearch` with Context7/Tavily | user-provided docs, repo docs, or note as unverified |
-| Codebase grounding | Serena or LSP, `sg`, tilth read/search | `ripgrep`, `find`, targeted file reads |
-| Dependency/blast-radius checks | shape check (`references/shape-check.md`): `cheez-search` callers (`tilth_search kind: "callers"`) + `tilth_deps` | import searches, caller searches, test references |
-| Spec writing | precise edit tooling | create/update markdown directly after approval |
 
-Optional tools accelerate the work; missing tools do not block the dialogue. When a fallback is weaker, mark the affected claim `[?]` until settled.
+Optional tools accelerate the work; missing tools do not block the dialogue. When evidence is unavailable, mark the affected claim `[?]` until settled.
 
 ## Approval gate
 

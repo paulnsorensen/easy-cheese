@@ -26,10 +26,12 @@ Default the model's own contribution to maximum useful depth — full pseudocode
 
 ## Preferred tools and fallbacks
 
+Code search and reading go through the cheez-* skills (`/cheez-search`, `/cheez-read`) — see those skills for tool selection rules. Blast-radius reads specifically use `cheez-search` callers (`kind: "callers"`) plus `tilth_deps` (read-only shape check); culture stops at the verdict and never drafts signatures.
+
+Beyond cheez-* there are culture-specific tools:
+
 | Need | Prefer | Fallback |
 | --- | --- | --- |
-| Quick code orientation | `cheez-search`, `cheez-read`, LSP | `ripgrep`, file tree, targeted reads |
-| Blast-radius read | `cheez-search` callers (`tilth_search kind: "callers"`) + `tilth_deps` (read-only shape check) | guess and label option `[?]` |
 | Visualizing diffs or examples | `delta` | plain `git diff` |
 | External sanity check | `/briesearch` | clearly mark as an assumption |
 

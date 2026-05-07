@@ -37,15 +37,12 @@ When the fast-path applies, derive a slug from the task (e.g. `tail-trailing-new
 4. **Taste-test** — check spec drift, readability, and scope creep. Two-round cap; details in `references/tdd-loop.md`.
 5. **Hand off** — produce the package-ready report (`references/package-report.md`) and prompt the next step via `AskUserQuestion` (see `## Handoff` below). The default chain is `/press` → `/age` → `/cure`.
 
-Use `cheez-search` to find existing patterns and `cheez-read` / `cheez-write` for precise edits.
+Code search, reading, and editing all go through the cheez-* skills (`/cheez-search`, `/cheez-read`, `/cheez-write`) — see those skills for tool selection rules and out-of-scope fallbacks.
 
 ## Preferred tools and fallbacks
 
 | Need | Prefer | Fallback |
 | --- | --- | --- |
-| Semantic navigation | Serena or LSP, `sg` | `ripgrep`, `find`, targeted reads |
-| Precise edits | tilth edit | harness edit tools or patch application |
-| Code search | `sg`, ripgrep | language/package search commands |
 | Diffs | `delta` | plain `git diff` |
 | GitHub context | `gh` | local git history or user-provided links |
 | Merge assistance | mergiraf | manual conflict resolution with tests |

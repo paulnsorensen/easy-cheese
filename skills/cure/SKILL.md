@@ -28,14 +28,16 @@ If selection is ambiguous *and* not pre-locked from `/age`, render a numbered se
 
 ## Preferred tools and fallbacks
 
+Code search, reading, and editing all go through the cheez-* skills (`/cheez-search`, `/cheez-read`, `/cheez-write`) — see those skills for tool selection rules.
+
+Beyond cheez-* there are cure-specific tools:
+
 | Need | Prefer | Fallback |
 | --- | --- | --- |
-| Applying precise fixes | tilth edit | harness edit tools or patch application |
-| Understanding findings | `/age` report plus code-review-graph: `get_minimal_context_tool`, `get_review_context_tool` | diff, touched files, tests, and `ripgrep` |
+| Understanding findings | `/age` report plus code-review-graph: `get_minimal_context_tool`, `get_review_context_tool` | diff, touched files, tests |
 | CI and PR context | `gh` | local test output or user-provided logs |
 | Diffs | `delta` | plain `git diff` |
 | Conflict resolution | mergiraf | manual resolution with targeted tests |
-| Search/navigation | Serena or LSP, `sg` | `ripgrep`, `find`, targeted reads |
 
 If a preferred tool is missing, continue with the fallback. If a missing tool prevents safe application, stop and explain the blocker.
 

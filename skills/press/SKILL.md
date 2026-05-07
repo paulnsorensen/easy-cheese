@@ -23,13 +23,14 @@ Do not use it to implement broad new behavior. Press may add or strengthen tests
 
 ## Preferred tools and fallbacks
 
+Code search, reading, and editing all go through the cheez-* skills (`/cheez-search`, `/cheez-read`, `/cheez-write`) — see those skills for tool selection rules. For coverage and test discovery, press uses `cheez-search` (callers via `kind: "callers"`) and `tilth_deps` (cheez-search owns the routing).
+
+Beyond cheez-* there are press-specific tools:
+
 | Need | Prefer | Fallback |
 | --- | --- | --- |
 | Diff review | `delta` | plain `git diff` |
-| Coverage / blast radius | `tilth_deps` + `cheez-search` callers (`tilth_search kind: "callers"`) | Serena/LSP, `ripgrep` callers/imports |
 | Affected execution flows + risk scoring | code-review-graph: `get_affected_flows_tool`, `get_impact_radius_tool` | manual flow tracing from callers |
-| Precise test edits | tilth edit | harness edit tools or patch application |
-| Test discovery | `sg`, ripgrep | package manager test listings or file tree |
 
 If optional tools are missing, press a narrower surface and state the residual risk.
 

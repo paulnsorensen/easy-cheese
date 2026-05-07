@@ -44,11 +44,13 @@ A `high` verdict (multi-module callers or more than five importers) makes the Gr
 
 ## When tilth / cheez-search is unavailable
 
-Shape-check should not block the dialogue when its preferred tools are missing. Substitute and degrade the verdict:
+Shape-check should not block the dialogue when its preferred tools are missing. Substitute where a sanctioned alternative exists; do not reach for `grep` / `rg` / `find` — those are banned by the global cheez-* mandate even when tilth is down.
 
-- **Callers / callees**: fall back to LSP `find_references` / `prepare_call_hierarchy` (or `ripgrep` against the symbol name when LSP is also down). Note the substitution out loud.
-- **Imports / blast radius**: fall back to `ripgrep` for `import .*<module>` and reverse-import patterns; counts will be approximate.
+- **Callers / callees**: fall back to LSP `textDocument/references` / `textDocument/prepareCallHierarchy` when a language server is reachable. Note the substitution out loud.
+- **Imports / blast radius**: no LSP equivalent. Skip the count, mark the line `unknown`, and lean on the verdict downgrade below.
 - **Verdict**: cap at `[?]` instead of `low | medium | high` — a guessed verdict is worse than an honest unknown. Sketch and culture should treat `[?]` like `high` for gating purposes (Grill gate engages, option labelled `[high blast radius]`) until the user accepts the gap.
+
+If both tilth and LSP are unavailable, say so once and proceed with `[?]`. Do not silently substitute a textual search.
 
 ## When to skip
 

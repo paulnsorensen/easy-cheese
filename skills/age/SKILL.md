@@ -47,11 +47,13 @@ Per-dimension rubrics and recommendation shapes in `references/dimensions.md`. T
 
 ## Preferred tools and fallbacks
 
+Code search and reading go through the cheez-* skills (`/cheez-search`, `/cheez-read`) — see those skills for tool selection rules. For caller graphs specifically, age uses `cheez-search` with `kind: "callers"` and `tilth_deps` (cheez-search owns the routing).
+
+Beyond cheez-* there are review-specific tools:
+
 | Need | Prefer | Fallback |
 | --- | --- | --- |
 | Diff inspection | `delta` | `git diff --unified=3` |
-| Structural search | `sg`, Serena or LSP | `ripgrep`, `find`, targeted reads |
-| Caller / dependency graph | `tilth_deps` + `cheez-search` callers (`tilth_search kind: "callers"`) | import searches, caller searches, test references |
 | Risk-scored impact + curated review context | code-review-graph: `get_review_context_tool`, `get_impact_radius_tool`, `detect_changes_tool` | `tilth_deps` + manual scoping |
 | Architecture / hotspot framing for large diffs | code-review-graph: `get_architecture_overview_tool`, `get_hub_nodes_tool`, `get_bridge_nodes_tool` | skip and note in confidence |
 | GitHub/PR context | `gh` | local git commands or user-provided PR data |
