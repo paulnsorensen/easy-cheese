@@ -150,7 +150,9 @@ gh skill install paulnsorensen/easy-cheese
 Install every skill in one shot:
 
 ```sh
-gh skill install paulnsorensen/easy-cheese --all
+for s in age briesearch cheese cheez-read cheez-search cheez-write cook culture cure melt mold press; do
+  gh skill install paulnsorensen/easy-cheese "$s"
+done
 ```
 
 Install one specific skill by name:
@@ -169,11 +171,11 @@ gh skill install paulnsorensen/easy-cheese cook@abc123def
 Control which agent and scope to install into:
 
 ```sh
-# User-wide (default)
+# User-wide (recommended for personal toolkits)
 gh skill install paulnsorensen/easy-cheese --agent claude-code --scope user
 
-# Committed into the current project repo
-gh skill install paulnsorensen/easy-cheese --agent claude-code --scope repository
+# Committed into the current project repo (default scope)
+gh skill install paulnsorensen/easy-cheese --agent claude-code --scope project
 ```
 
 Supported `--agent` values include `copilot`, `claude-code`, `cursor`, `codex`, `gemini`, and others. Omit `--agent` to use the harness auto-detected from your environment.
@@ -235,9 +237,10 @@ The cheez-* tool skills and several workflow skills benefit from MCP servers. In
 [tilth](https://github.com/paulnsorensen/tilth) provides AST-aware code search, smart file reading, and hash-anchored edits. Required by `/cheez-search`, `/cheez-read`, and `/cheez-write`.
 
 ```sh
-# Install tilth CLI
+# Install tilth CLI — pick one
 cargo install tilth        # via Cargo (Rust)
-brew install paulnsorensen/tap/tilth  # via Homebrew (macOS/Linux)
+# or run via npx — no global install needed (Node.js v18+):
+#   npx -y tilth install claude-code --edit
 
 # Register as an MCP server — include --edit only if you plan to use cheez-write
 tilth install claude-code --edit   # Claude Code
