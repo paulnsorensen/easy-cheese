@@ -241,11 +241,12 @@ The cheez-* tool skills and several workflow skills benefit from MCP servers. In
 
 ### tilth (required for cheez-* skills)
 
-[tilth](https://github.com/paulnsorensen/tilth) provides AST-aware code search, smart file reading, and hash-anchored edits. Required by `/cheez-search`, `/cheez-read`, and `/cheez-write`.
+[tilth](https://github.com/jahala/tilth) provides AST-aware code search, smart file reading, and hash-anchored edits. Required by `/cheez-search`, `/cheez-read`, and `/cheez-write`.
 
 ```sh
-# Install tilth CLI — pick one
-cargo install tilth        # via Cargo (Rust)
+# Install tilth CLI — pick one (no Homebrew formula upstream)
+cargo install tilth        # via Cargo (Rust) — preferred, native binary
+npm install -g tilth       # via npm (Node 18+) — no Rust toolchain needed
 # or run via npx — no global install needed (Node.js v18+):
 #   npx -y tilth install claude-code --edit
 
@@ -362,6 +363,52 @@ code-review-graph build
 ## Installing CLI tools
 
 The optional tools in the table below are referenced by workflow skills. None are required, but having them available unlocks better fallbacks and richer output.
+
+### One-shot installer (macOS)
+
+`scripts/install.sh` does the whole setup in one shot:
+
+1. Installs every CLI tool listed below — Homebrew for the eight brew-core formulas, plus `cargo install tilth` (or `npm install -g tilth` if Rust isn't available) for tilth, which has no Homebrew formula upstream.
+2. Runs `gh skill install paulnsorensen/easy-cheese --all --agent <harness> --scope user` to drop every easy-cheese skill into the picked harness (default `claude-code`).
+3. Registers the `tilth` and `context7` MCP servers with that same harness.
+
+Currently macOS only — it relies on Homebrew. Requires `gh` to be authenticated (`gh auth login`) before running.
+
+Pipe straight from GitHub:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/paulnsorensen/easy-cheese/main/scripts/install.sh | bash
+```
+
+Or grab the script first if you'd like to read it:
+
+```sh
+curl -fsSL -o /tmp/easy-cheese-install.sh https://raw.githubusercontent.com/paulnsorensen/easy-cheese/main/scripts/install.sh
+bash /tmp/easy-cheese-install.sh --help
+bash /tmp/easy-cheese-install.sh --dry-run
+```
+
+Common flags:
+
+```sh
+# Install only ripgrep + jq, skip MCP registration
+curl -fsSL https://raw.githubusercontent.com/paulnsorensen/easy-cheese/main/scripts/install.sh \
+  | bash -s -- --tools ripgrep,jq --skip-mcp
+
+# Register MCP servers only (assumes CLI tools and skills are already installed)
+curl -fsSL https://raw.githubusercontent.com/paulnsorensen/easy-cheese/main/scripts/install.sh \
+  | bash -s -- --skip-tools --mcp tilth,context7,tavily
+
+# Pick a different harness for skill + MCP registration
+curl -fsSL https://raw.githubusercontent.com/paulnsorensen/easy-cheese/main/scripts/install.sh \
+  | bash -s -- --harness cursor
+```
+
+The script is idempotent — it skips any tool already on `PATH` — and accepts `--dry-run` so you can preview what it would do before letting it run.
+
+> **Heads-up:** `curl | bash` runs whatever the URL serves at the moment of the request. If you want to audit before running, use the two-step form above.
+
+If you'd rather install tools individually, the per-tool sections below cover macOS, Windows, and Linux.
 
 ### GitHub CLI (`gh`)
 
