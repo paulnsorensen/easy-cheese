@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate every SKILL.md under skills/.
+"""Validate every SKILL.md in the repository.
 
 Per-file checks:
 - Lives at exactly skills/<name>/SKILL.md (no scope, no nested sub-skills).
@@ -114,7 +114,7 @@ def main() -> int:
         if not any(part.startswith(".") for part in p.parts)
     )
     if not skill_files:
-        print("ERROR: no SKILL.md files found under skills/", file=sys.stderr)
+        print("ERROR: no SKILL.md files found in repository", file=sys.stderr)
         return 1
 
     all_errors: list[str] = []
