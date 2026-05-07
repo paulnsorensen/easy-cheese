@@ -414,8 +414,8 @@ ec_resolve_harnesses() {
         return 0
     fi
 
-    local IFS=,
-    for harness in $selection; do
+    local harness_list="${selection//,/ }"
+    for harness in $harness_list; do
         printf '%s\n' "$harness"
     done
 }
