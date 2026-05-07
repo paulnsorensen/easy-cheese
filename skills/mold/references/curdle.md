@@ -55,7 +55,10 @@ gates_overridden: []   # list of unchecked handshake items if `curdle anyway` wa
 - <one-line decision> — <one-line rationale>
 
 ## Interface sketches
+Each sketch declares the Sliced Bread slice it lives in (`domains/<name>`, `adapters/<name>`, `app`, or `domains/common`) before the pseudocode. Cross-slice calls go through the crust. Architecture rules: `references/sliced-bread.md` (repo root).
+
 ```pseudocode
+slice: <domains/<name> | adapters/<name> | app | domains/common>
 <signatures, schemas, seams>
 ```
 

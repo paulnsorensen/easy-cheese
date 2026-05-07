@@ -2,7 +2,7 @@
 
 > _"The cheese must flow."_
 
-A portable, skills-only toolkit of Agent Skills for shaping ideas, implementing them, and reviewing the result. No agents, no compiled harness bundles, no repo-wide MCP requirement — just self-contained `SKILL.md` files that any [Agent Skills](https://agentskills.io/specification)-compatible harness can load. The vocabulary (mold, culture, cook, press, age, cure) reads as a workflow you can dip into anywhere.
+A portable toolkit of Agent Skills for shaping ideas, implementing them, and reviewing the result, paired with a small set of architectural references the skills cite. No agents, no compiled harness bundles, no repo-wide MCP requirement — just self-contained `SKILL.md` files that any [Agent Skills](https://agentskills.io/specification)-compatible harness can load, plus optional `references/` markdown the skills point at on demand. The vocabulary (mold, culture, cook, press, age, cure) reads as a workflow you can dip into anywhere.
 
 ## Why cheese? Two reasons
 
@@ -103,11 +103,26 @@ If those tools don't show up after install, the cheez-* skills will hard-fail wi
 
 `/cheese` is the front door. It inspects whatever you drop in (idea, spec path, PR ref, stack trace, file path), announces its routing decision, and waits for explicit confirmation before any downstream skill runs. Use it directly, or skip it when you already know the destination — a clear bug can go straight to `/cook`, a no-write design discussion stays in `/culture`. `/melt` cuts in whenever a merge step blocks `/cook` or `/cure`.
 
+## References
+
+Long-form architectural docs that workflow skills cite when slice boundaries, dependency direction, or growth decisions come up.
+
+| Path | What it covers |
+| --- | --- |
+| `references/sliced-bread.md` | Sliced Bread architecture: organic vertical slices, the crust rule, growth pattern, dependency direction quick-check, review checklist. Always start here. |
+| `references/sb/practice.md` | Judgement calls: slice-local duplication, CQRS within a slice, anti-corruption layers, testing strategy, slice graduation (folder → workspace package → library → service). |
+| `references/sb/attribution.md` | Predecessor lineage (VSA, Hexagonal, Screaming, Clean / Onion, DDD) and where Sliced Bread inherits, differs, or drops. |
+| `references/sb/rust.md` | Rust mechanics: `foo.rs` + `foo/` facade, `pub use`, `pub(super)`, Cargo workspaces. |
+| `references/sb/go.md` | Go mechanics: `internal/` as compile-time enforcement, package = directory, `go.work`. |
+| `references/sb/ts.md` | TypeScript mechanics: `package.json` `"exports"` map as the modern facade, why barrel files are now an anti-pattern, project references. |
+
+`/mold` (Sketch), `/cook`, `/age` (encapsulation), and `/culture` cite these by relative path. Add new references here when the workflow skills need shared vocabulary they can both load on demand.
+
 ## Scope
 
 Easy-cheese is intentionally a small surface. What that means in practice:
 
-- **Skills only.** No agents, commands, eta templates, or compiled harness bundles. Each capability is a single `SKILL.md`.
+- **Skills plus references.** No agents, commands, eta templates, or compiled harness bundles. Each capability is a single `SKILL.md`; long-form architectural prose the skills point at lives under `references/`.
 - **No repo-wide MCP requirement.** Workflow skills suggest tools (tilth, Context7, Tavily, code-review-graph) but have host-native fallbacks. The cheez-* tool skills are the exception: they require tilth MCP by design.
 - **`/age` runs eight dimensions, not nine.** Without git history analysis as a built-in agent, the `precedent` dimension is unreliable in a portable skill, so it's omitted.
 - **No orchestrator skills** (no large-feature decomposition, no PR-rescue convoy, no whole-repo NIH audit). Each skill is a single, scoped step a human can drive.

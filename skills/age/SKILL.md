@@ -34,7 +34,7 @@ When called with a `<slug>`, resolve `.cheese/press/<slug>.md` (if present) for 
 | assertions | medium | weak tests, shallow existence checks, swallowed errors |
 | nih | medium | reinvented dependency, stdlib, or existing project helper |
 
-Per-dimension rubrics and recommendation shapes in `references/dimensions.md`. This reduced workflow intentionally omits the git-history/precedent dimension.
+Per-dimension rubrics and recommendation shapes in `references/dimensions.md`. The encapsulation dimension judges against Sliced Bread architecture — load `references/sliced-bread.md` (repo root) for the dependency direction quick-check and review checklist when grading boundary or import-direction findings. This reduced workflow intentionally omits the git-history/precedent dimension.
 
 ## Flow
 

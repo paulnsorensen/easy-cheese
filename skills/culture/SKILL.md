@@ -55,3 +55,4 @@ When the conversation reveals real work, ask via `AskUserQuestion` which downstr
 - No writes, no commits, no PRs.
 - Ask one useful question at a time when the user is exploring.
 - Prefer clarity over completeness.
+- When the conversation turns to module boundaries, slice ownership, dependency direction, or how a feature should be laid out, treat `references/sliced-bread.md` (and `references/sb/practice.md` for graduation / CQRS / ACL judgement calls) as shared vocabulary — cite it instead of re-deriving the rules. Language-specific mechanics live in `references/sb/{rust,go,ts}.md`.
