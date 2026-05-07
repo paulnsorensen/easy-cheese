@@ -33,7 +33,6 @@ EC_FALLBACK_SKILLS="age briesearch cheese cheez-read cheez-search cheez-write co
 # Default selections.
 EC_DEFAULT_TOOLS="$EC_KNOWN_TOOLS"
 EC_DEFAULT_MCP="tilth context7"
-EC_KNOWN_HARNESSES="claude-code cursor codex"
 
 # Map a brew formula name to the binary it installs (when they differ).
 ec_tool_binary() {
