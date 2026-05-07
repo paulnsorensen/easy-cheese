@@ -17,11 +17,16 @@ set -euo pipefail
 # brew — upstream jahala/tilth does not ship a Homebrew formula).
 EC_KNOWN_TOOLS="gh ripgrep fd jq ast-grep git-delta just mergiraf tilth"
 
-# Every skill shipped by easy-cheese. `gh skill install` requires an explicit
-# skill name (no --all flag), so we enumerate them and install one by one.
-# Kept in sync with skills/ manually so the script stays self-contained for
-# curl|bash distribution.
-EC_KNOWN_SKILLS="age briesearch cheese cheez-read cheez-search cheez-write cook culture cure melt mold press"
+# Repository the installer pulls skills from. Centralized so discovery and
+# install both reference the same source.
+EC_SKILL_REPO="paulnsorensen/easy-cheese"
+
+# Embedded fallback list of skill names. The installer normally discovers
+# the live set via 'gh api repos/.../contents/skills' so it self-heals when
+# new skills land — this list is only used when the API call is
+# unavailable (offline, rate-limited, repo temporarily private). Kept
+# loosely in sync with skills/ but not load-bearing for happy-path runs.
+EC_FALLBACK_SKILLS="age briesearch cheese cheez-read cheez-search cheez-write cook culture cure melt mold press"
 
 # Default selections.
 EC_DEFAULT_TOOLS="$EC_KNOWN_TOOLS"
@@ -349,14 +354,27 @@ ec_install_mcp_list() {
     done
 }
 
+# Discover the live skill list by listing skills/ via the GitHub contents
+# API. Prints one skill name per line on success; on failure (network,
+# rate limit, private repo) returns non-zero with empty stdout and the
+# caller falls back to EC_FALLBACK_SKILLS.
+ec_discover_skills() {
+    local gh="$1"
+    "$gh" api "repos/${EC_SKILL_REPO}/contents/skills" \
+        --jq '.[] | select(.type == "dir") | .name' 2>/dev/null
+}
+
 # Install the easy-cheese skill set into the picked harness via 'gh skill'.
 # User scope so they live alongside the user's other skills, not committed
 # into the project. Requires gh to be authenticated.
 #
-# `gh skill install` does not support an --all flag, so we loop the explicit
-# EC_KNOWN_SKILLS list and call it once per skill with --force for
-# idempotent re-runs. Failures on one skill are warned and tracked but do
-# not abort the rest of the loop.
+# `gh skill install` does not support an --all flag, so we discover the
+# live skill list via 'gh api ... contents/skills' and call gh once per
+# skill with --force for idempotent re-runs. If discovery fails we fall
+# back to EC_FALLBACK_SKILLS so the installer still does something useful
+# offline. Per-skill install failures are warned and tracked but do not
+# abort the rest of the loop. Dry-run skips discovery and uses the
+# embedded list for predictable, network-free output.
 ec_install_skills() {
     local harness="$1"
     local gh="${EC_GH:-gh}"
@@ -364,18 +382,29 @@ ec_install_skills() {
         ec_warn "easy-cheese skills: gh CLI not found; skipping. Add 'gh' to --tools first."
         return 0
     fi
-    if [[ "${EC_DRY_RUN:-0}" != "1" ]] && ! "$gh" auth status >/dev/null 2>&1; then
-        ec_warn "easy-cheese skills: gh is not authenticated. Run 'gh auth login' and re-run."
-        return 1
+
+    local skills="$EC_FALLBACK_SKILLS"
+    if [[ "${EC_DRY_RUN:-0}" != "1" ]]; then
+        if ! "$gh" auth status >/dev/null 2>&1; then
+            ec_warn "easy-cheese skills: gh is not authenticated. Run 'gh auth login' and re-run."
+            return 1
+        fi
+        local discovered
+        if discovered="$(ec_discover_skills "$gh")" && [[ -n "$discovered" ]]; then
+            skills="$discovered"
+        else
+            ec_warn "easy-cheese skills: could not list skills via gh api; using embedded fallback list."
+        fi
     fi
+
     local skill rc=0
-    for skill in $EC_KNOWN_SKILLS; do
+    for skill in $skills; do
         if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
-            ec_log "easy-cheese skills: would run '$gh skill install paulnsorensen/easy-cheese $skill --agent $harness --scope user --force'"
+            ec_log "easy-cheese skills: would run '$gh skill install $EC_SKILL_REPO $skill --agent $harness --scope user --force'"
             continue
         fi
         ec_log "easy-cheese skills: installing $skill into $harness (user scope)"
-        if ! "$gh" skill install paulnsorensen/easy-cheese "$skill" --agent "$harness" --scope user --force; then
+        if ! "$gh" skill install "$EC_SKILL_REPO" "$skill" --agent "$harness" --scope user --force; then
             ec_warn "easy-cheese skills: failed to install $skill"
             rc=1
         fi
