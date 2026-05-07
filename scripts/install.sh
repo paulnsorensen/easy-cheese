@@ -381,17 +381,17 @@ ec_install_mcp_list() {
 # Detect the main-line harness CLIs that can receive Agent Skills directly.
 # Prints one gh-skill --agent value per line.
 ec_detect_harnesses() {
-    local claude="${EC_CLAUDE:-claude}"
-    local cursor="${EC_CURSOR:-cursor}"
-    local codex="${EC_CODEX:-codex}"
+    local claude_cli="${EC_CLAUDE:-claude}"
+    local cursor_cli="${EC_CURSOR:-cursor}"
+    local codex_cli="${EC_CODEX:-codex}"
 
-    if ec_cmd_exists "$claude"; then
+    if ec_cmd_exists "$claude_cli"; then
         printf 'claude-code\n'
     fi
-    if ec_cmd_exists "$cursor"; then
+    if ec_cmd_exists "$cursor_cli"; then
         printf 'cursor\n'
     fi
-    if ec_cmd_exists "$codex"; then
+    if ec_cmd_exists "$codex_cli"; then
         printf 'codex\n'
     fi
 }
@@ -414,8 +414,8 @@ ec_resolve_harnesses() {
         return 0
     fi
 
-    local harness_list="${selection//,/ }"
-    for harness in $harness_list; do
+    local harness_tokens="${selection//,/ }"
+    for harness in $harness_tokens; do
         printf '%s\n' "$harness"
     done
 }
