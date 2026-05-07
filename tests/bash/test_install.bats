@@ -782,11 +782,12 @@ STUB
     grep -q "^gh skill install paulnsorensen/easy-cheese age --agent claude-code --scope user --force$" "$STUB_LOG"
     grep -q "^gh skill install paulnsorensen/easy-cheese age --agent cursor --scope user --force$" "$STUB_LOG"
     grep -q "^gh skill install paulnsorensen/easy-cheese age --agent codex --scope user --force$" "$STUB_LOG"
+    local expected_harness_count=3
     local skill skill_count=0
     for skill in $EC_FALLBACK_SKILLS; do
         skill_count=$((skill_count + 1))
     done
-    [ "$(grep -c '^gh skill install ' "$STUB_LOG")" -eq $((skill_count * 3)) ]
+    [ "$(grep -c '^gh skill install ' "$STUB_LOG")" -eq $((skill_count * expected_harness_count)) ]
 }
 
 @test "ec_main --skip-tools --mcp tilth registers only tilth (still runs skills)" {
