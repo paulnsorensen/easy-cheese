@@ -404,7 +404,9 @@ ec_resolve_harnesses() {
     if [[ "$selection" == "auto" ]]; then
         harnesses="$(ec_detect_harnesses)"
         if [[ -n "$harnesses" ]]; then
-            printf '%s\n' "$harnesses"
+            while IFS= read -r harness; do
+                printf '%s\n' "$harness"
+            done <<< "$harnesses"
         else
             ec_warn "No supported harness CLI detected; falling back to claude-code. Use --harness to override."
             printf 'claude-code\n'

@@ -782,6 +782,7 @@ STUB
     grep -q "^gh skill install paulnsorensen/easy-cheese age --agent claude-code --scope user --force$" "$STUB_LOG"
     grep -q "^gh skill install paulnsorensen/easy-cheese age --agent cursor --scope user --force$" "$STUB_LOG"
     grep -q "^gh skill install paulnsorensen/easy-cheese age --agent codex --scope user --force$" "$STUB_LOG"
+    # 12 shipped skills × 3 detected harnesses.
     [ "$(grep -c '^gh skill install ' "$STUB_LOG")" -eq 36 ]
 }
 
