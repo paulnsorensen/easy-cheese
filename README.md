@@ -130,7 +130,7 @@ Workflow skills name preferred tools when they help, with fallbacks for portabil
 | `sg` (ast-grep) | Structural pattern matching and codemods (`sg --rewrite`) with metavariables | `ripgrep`, `find`, targeted reads; `tilth_edit` for non-structural edits |
 | Context7 (MCP) | Library and API documentation | repo docs, package docs, vendor pages, web search |
 | Tavily (MCP) | Current web/vendor research | host web search or user-supplied sources |
-| code-review-graph (MCP) | Review impact radius and caller/dep context | import searches, caller searches, tests |
+| code-review-graph (MCP) | Review impact radius, architecture framing, and embeddings-backed semantic / cross-repo search | import searches, caller searches, tests |
 | LSP / Serena | Semantic navigation and symbol understanding | `sg`, `ripgrep`, targeted reads |
 | `ripgrep` | Fast text search | `grep`, `find`, editor search |
 | `gh` | GitHub issues, PRs, checks, examples | local git commands or user-provided links/logs |
