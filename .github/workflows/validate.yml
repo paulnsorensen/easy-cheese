@@ -28,6 +28,9 @@ jobs:
       - name: Install PyYAML
         run: pip install --no-cache-dir pyyaml==6.0.2
 
+      - name: Test SKILL.md validator
+        run: python3 .github/scripts/test_validate_skills.py -v
+
       - name: Validate SKILL.md frontmatter
         run: python3 .github/scripts/validate_skills.py
 
