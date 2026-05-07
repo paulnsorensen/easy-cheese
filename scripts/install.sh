@@ -408,7 +408,7 @@ ec_resolve_harnesses() {
                 printf '%s\n' "$harness"
             done <<< "$harnesses"
         else
-            ec_warn "No supported harness CLI detected; falling back to claude-code. Use --harness to override."
+            ec_warn "No supported harness CLI detected; falling back to claude-code. Use --harness <name> to override."
             printf 'claude-code\n'
         fi
         return 0
