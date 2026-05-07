@@ -79,6 +79,24 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: bash scripts/install.sh --skip-mcp
 
+      # Real install of the code-review-graph CLI with the [embeddings]
+      # extra. Sourcing the script and calling the function directly skips
+      # the MCP-registration step that needs a claude CLI on the runner,
+      # while still exercising the actual pip/pipx/uv install path. Catches
+      # cases where 'code-review-graph[embeddings]' stops being a valid
+      # PyPI target or the embeddings extra fails to resolve.
+      - name: CRG embeddings install smoke test
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC1091
+          source scripts/install.sh
+          ec_install_crg_cli
+          # Cover every install-path bin location: pipx + uv tool install
+          # land in $HOME/.local/bin; pip --user lands under the Python
+          # user-base bin dir.
+          export PATH="$HOME/.local/bin:$(python3 -m site --user-base)/bin:$PATH"
+          code-review-graph --version
+
   lint:
     name: lint markdown and yaml
     runs-on: ubuntu-latest
