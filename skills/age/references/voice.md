@@ -2,7 +2,7 @@
 
 Shared output discipline, reasoning posture, and depth-vs-question scoping. Skills cross-reference this file rather than restate it; when a skill omits a rule, treat the omission as opt-out.
 
-Adapted from a Claude Opus 4.7 system-prompt experiment by Reebz ([gist](https://gist.github.com/Reebz/b81ad99409d5b5de3045bebde71d4471)), narrowed to the parts that earn their keep in a portable skills toolkit. Phrased as positive guardrails per Reebz's note that Opus 4.7 responds better to "do X" than "don't do Y" — prohibition framings tend to invite generate-review-regenerate cycles.
+Phrased as positive guardrails — "do X" rather than "don't do Y". Prohibition framings tend to invite generate-review-regenerate cycles; positive framings collapse the work to one pass.
 
 ## Output discipline
 
