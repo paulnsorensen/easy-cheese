@@ -63,7 +63,7 @@ Missing optional tools should not block review. State which evidence was unavail
 
 ## Sub-agent context gate
 
-`/age` should fork a read-only review-context sub-agent when evidence gathering is likely to exceed the parent context, especially for `--comprehensive` reviews. Prefer a small, fast sub-agent — whatever cheap-tier or read-only worker the host harness exposes (e.g. an explore-style default). Skills do not name specific model tiers; the harness chooses.
+`/age` should fork a read-only review-context sub-agent when evidence gathering is likely to exceed the parent context, especially for `--comprehensive` reviews.
 
 Spawn when any of these are true:
 
@@ -72,7 +72,9 @@ Spawn when any of these are true:
 - Caller / dependency graph expansion crosses multiple subsystems.
 - code-review-graph or `tilth_deps` output is needed for hotspot, bridge-node, or blast-radius framing.
 
-The sub-agent returns a digest of roughly 2 KB or less: orientation paragraph, high-signal `path:line` citations, and a gap list. No raw diff dumps, no full PR bodies. The parent owns the eight-dimension review, severity grading, and the `.cheese/age/<slug>.md` report. Do not spawn for small diffs, to outsource severity grading, or to outsource the final verdict.
+The sub-agent returns a digest: orientation paragraph, high-signal `path:line` citations, gap list. The parent owns the eight-dimension review, severity grading, and the `.cheese/age/<slug>.md` report. Do not spawn for small diffs, to outsource severity grading, or to outsource the final verdict.
+
+Digest size, parent-vs-sub-agent split, and harness-agnostic sub-agent selection live in `references/sub-agent-gate.md` — single source of truth for the cross-cutting rules.
 
 ## Output
 
@@ -134,3 +136,4 @@ Never auto-apply fixes, and never invoke `/cure` without an explicit non-empty s
 
 - `references/dimensions.md` — per-dimension rubrics and recommendation shapes.
 - `references/voice.md` — shared output discipline, reasoning posture, and confidence vocabulary.
+- `references/sub-agent-gate.md` — shared sub-agent kernel: digest contract, harness-agnostic selection, what the parent never delegates.

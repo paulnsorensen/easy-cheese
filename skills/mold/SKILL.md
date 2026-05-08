@@ -52,9 +52,9 @@ Optional tools accelerate the work; missing tools do not block the dialogue. Whe
 - Shape check touches more than 5 symbols, fans out across many modules, or requires large caller/dependency traversals.
 - Diagnose mode needs bulky logs, traces, or search output before a concise root-cause hypothesis can be formed.
 
-The sub-agent returns a digest of roughly 2 KB or less: a claim table, shape-check summary, or root-cause evidence summary with citations and confidence. The parent reads that digest, asks the user the smallest useful next question, and still owns the handshake. Do not spawn sub-agents for normal dialogue, the approval gate, or curdle/spec writing.
+The sub-agent returns a digest: a claim table, shape-check summary, or root-cause evidence summary with citations and confidence. The parent reads that digest, asks the user the smallest useful next question, and still owns the handshake. Do not spawn sub-agents for normal dialogue, the approval gate, or curdle/spec writing.
 
-Prefer a small, fast sub-agent — whatever cheap-tier or read-only worker the host harness exposes (e.g. an explore-style default). Skills do not name specific model tiers; the harness chooses.
+Digest size, parent-vs-sub-agent split, and harness-agnostic sub-agent selection live in the shared kernel at `skills/age/references/sub-agent-gate.md`.
 
 ## Approval gate
 
