@@ -72,7 +72,7 @@ Options:
                        code-review-graph, none
   --skip-mcp           Same as --mcp none.
   --skip-tools         Skip CLI tool installs (useful for MCP-only runs).
-  --harness <name>     Harness to register skills + MCP servers with.
+  --harness <selection> Harness to register skills + MCP servers with.
                        Default: auto-detect claude-code, cursor, and codex.
                        Accepts a single harness, a comma-separated list, or
                        'auto'. Other values include vscode, gemini, zed, copilot.
