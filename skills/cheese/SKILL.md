@@ -91,7 +91,7 @@ Dispatch happens through `AskUserQuestion`. Default option set per intent:
 - **research** — `Run /briesearch` (recommended), `Run /culture`, `Stop`.
 - **rubber-duck** — `Run /culture` (recommended), `Run /briesearch`, `Stop`.
 - **mold** — `Run /mold` (recommended), `Run /briesearch first`, `Stop`.
-- **cook** — `Run /cook <slug-or-path>` (recommended), `Run /mold first`, `Stop`.
+- **cook** — `Run /cook <slug-or-path>` (recommended), `Run /cook --auto <slug-or-path>` (offer only when the input is unambiguous *and* the user signalled autonomous pipeline intent — "auto", "ship it", "all the way through"; never pre-select), `Run /mold first`, `Stop`.
 - **debug** — `Run /culture` (recommended), `Run /mold (Diagnose mode)`, `Stop`.
 - **age** — `Run /age <ref>` (recommended), `Run /age --scope <path>`, `Stop`.
 - **age-then-cure** — `Run /age <slug>` (recommended), `Run /cure <slug>` (when a fresh report already exists), `Stop`.

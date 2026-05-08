@@ -1,6 +1,6 @@
 ---
 name: cook
-description: This skill should be used when the user has an approved spec, pasted requirements, or a focused unambiguous implementation request and wants the code written — phrases like "implement this", "build this feature", "write the code", "cook this spec", "make it work", "/cook .cheese/specs/<slug>.md", "fix this bug" (when the bug has a clear fix). Runs a TDD-disciplined contract → cut → implement → taste-test → handoff loop with scoped edits via cheez-write. Use even when the user just says "go" or "ship it" if a spec or clear acceptance criteria is in scope. `/cook` runs standalone when the task is unambiguous (clear inputs, expected outputs, verifiable result) — a spec is helpful but not required. If the request is genuinely fuzzy, route to `/mold` first; if it needs no writes, route to `/culture`. After `/mold` (optional); before `/press` → `/age` → `/cure`.
+description: This skill should be used when the user has an approved spec, pasted requirements, or a focused unambiguous implementation request and wants the code written — phrases like "implement this", "build this feature", "write the code", "cook this spec", "make it work", "/cook .cheese/specs/<slug>.md", "fix this bug" (when the bug has a clear fix). Runs a TDD-disciplined contract → cut → implement → taste-test → handoff loop with scoped edits via cheez-write. Supports `--auto` for the autonomous chain through `/press → /age → /cure` (see `## Auto mode`). Use even when the user just says "go" or "ship it" if a spec or clear acceptance criteria is in scope. `/cook` runs standalone when the task is unambiguous (clear inputs, expected outputs, verifiable result) — a spec is helpful but not required. If the request is genuinely fuzzy, route to `/mold` first; if it needs no writes, route to `/culture`. After `/mold` (optional); before `/press` → `/age` → `/cure`.
 license: MIT
 ---
 
@@ -18,6 +18,10 @@ Accept one of:
 - A pasted spec or issue.
 - A focused implementation request with acceptance criteria.
 - A clear, unambiguous task — single-file fix, named bug, well-scoped tweak — even without a spec.
+
+Optional flag:
+
+- `--auto` — autonomous mode. Skip every handoff `AskUserQuestion`, propagate the flag through `/press → /age → /cure`, and fix every medium-or-above finding across up to two cure passes. See `## Auto mode` below.
 
 ### Standalone fast-path
 
@@ -72,6 +76,49 @@ After the package-ready report is printed, ask via `AskUserQuestion` which downs
 - **Stop** — leave further hardening for later.
 
 Pre-select `Run /press` when the cooked diff added new behaviour or touched untested seams. The user may also chain: pressing then age then cure happens via each step's own `AskUserQuestion`. Never auto-invoke; the user must select.
+
+When invoked with `--auto`, skip this `AskUserQuestion` entirely and proceed straight into the auto-mode chain (see `## Auto mode` below).
+
+## Auto mode
+
+`--auto` is the autonomous-pipeline switch. Use it when the user has signalled they want the whole chain to run forward without being asked between steps.
+
+### What auto mode does
+
+1. After cook's package-ready report, invoke `/press <slug> --auto`.
+2. `/press --auto` runs its hardening pass and, if readiness is `ready for /age`, invokes `/age <slug> --auto`. If readiness is `follow-up recommended` or `blocked`, auto mode stops and surfaces the press report to the user.
+3. `/age <slug> --auto` writes the report and invokes `/cure <slug> --auto --stake medium+`.
+4. `/cure --auto --stake medium+` bypasses the selection gate, applies every finding of `medium` or `high` stake, then invokes `/age --scope <touched-paths> --auto` for verification.
+5. The age → cure cycle is capped at **two cure passes total**. Pass 1 fixes the initial findings. Pass 2 fixes anything the re-age surfaces. After pass 2 the chain stops with a final summary, regardless of whether new findings remain.
+6. Auto mode never invokes `/gh`. Opening or updating a PR stays user-triggered.
+
+### When auto mode stops early
+
+- A quality gate (test, lint, type, build) fails and the failure cannot be attributed to a single revertible finding.
+- `/press` returns `blocked` or `follow-up recommended`.
+- A cure pass cannot apply any finding (every selected fix breaks tests on revert-or-keep evaluation).
+- Two cure passes complete (success path).
+
+In every early-stop case, surface the report from the failing skill and tell the user the cap reached or the blocker hit. Do not silently downgrade.
+
+### Failure handling inside cure
+
+See `skills/cure/SKILL.md` `### Auto mode` for cure's per-finding revert/defer behaviour. Cook does not duplicate the contract — cure owns it.
+
+### Final report
+
+The skill that ends the chain prints the summary below. On the success path that is the final `/age --auto` (after the two-cure-pass cap is reached); on an early stop it is the skill that surfaced the blocker.
+
+```
+Auto-mode summary
+Passes:        <1|2>
+Findings fixed: <count by stake>
+Deferred:       <count, with cure-report path>
+Final age:      <path>
+Next step:      review the diff, then /gh when ready
+```
+
+Auto mode is a propagated flag, not a separate skill — every downstream invocation passes `--auto` along so each step knows to skip its own handoff `AskUserQuestion`.
 
 ## Rules
 
