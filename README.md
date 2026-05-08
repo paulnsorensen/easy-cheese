@@ -374,8 +374,8 @@ The optional tools in the table below are referenced by workflow skills. None ar
 `scripts/install.sh` does the whole setup in one shot:
 
 1. Installs every CLI tool listed below — Homebrew for the eight brew-core formulas, plus `cargo install tilth` (or `npm install -g tilth` if Rust isn't available) for tilth, which has no Homebrew formula upstream.
-2. Runs `gh skill install paulnsorensen/easy-cheese --all --agent <harness> --scope user` to drop every easy-cheese skill into the picked harness (default `claude-code`).
-3. Registers the `tilth` and `context7` MCP servers with that same harness.
+2. Auto-detects installed Claude Code, Cursor, and Codex CLIs, then installs every easy-cheese skill into each detected harness at user scope.
+3. Registers the `tilth` and `context7` MCP servers with those harnesses where supported.
 
 Currently macOS only — it relies on Homebrew. Requires `gh` to be authenticated (`gh auth login`) before running.
 
@@ -404,12 +404,16 @@ curl -fsSL https://raw.githubusercontent.com/paulnsorensen/easy-cheese/main/scri
 curl -fsSL https://raw.githubusercontent.com/paulnsorensen/easy-cheese/main/scripts/install.sh \
   | bash -s -- --skip-tools --mcp tilth,context7,tavily
 
-# Pick a different harness for skill + MCP registration
+# Pick a specific harness for skill + MCP registration
 curl -fsSL https://raw.githubusercontent.com/paulnsorensen/easy-cheese/main/scripts/install.sh \
   | bash -s -- --harness cursor
+
+# Or target a comma-separated harness list explicitly
+curl -fsSL https://raw.githubusercontent.com/paulnsorensen/easy-cheese/main/scripts/install.sh \
+  | bash -s -- --harness claude-code,cursor,codex
 ```
 
-The script is idempotent — it skips any tool already on `PATH` — and accepts `--dry-run` so you can preview what it would do before letting it run.
+The script is idempotent — it skips any tool already on `PATH` — and accepts `--dry-run` so you can preview what it would do before letting it run. If no supported harness CLI is detected, it falls back to the historical `claude-code` target; pass `--harness` to override detection.
 
 > **Heads-up:** `curl | bash` runs whatever the URL serves at the moment of the request. If you want to audit before running, use the two-step form above.
 

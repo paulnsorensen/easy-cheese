@@ -72,9 +72,10 @@ Options:
                        code-review-graph, none
   --skip-mcp           Same as --mcp none.
   --skip-tools         Skip CLI tool installs (useful for MCP-only runs).
-  --harness <name>     Harness to register skills + MCP servers with.
-                       Default: claude-code. Other values include cursor,
-                       vscode, codex, gemini, zed, copilot.
+  --harness <selection> Harness to register skills + MCP servers with.
+                       Default: auto-detect claude-code, cursor, and codex.
+                       Accepts a single harness, a comma-separated list, or
+                       'auto'. Other values include vscode, gemini, zed, copilot.
   --no-edit            Register tilth without the --edit capability.
   --dry-run            Print what would happen without changing anything.
   -h, --help           Show this help.
@@ -83,6 +84,7 @@ Environment:
   EC_BREW   EC_GH      Override the brew / gh binaries (used by tests).
   EC_CARGO  EC_NPM     Override the cargo / npm binaries used to install tilth.
   EC_TILTH  EC_CLAUDE  Override the tilth / claude binaries (used by tests).
+  EC_CURSOR EC_CODEX   Override cursor / codex binaries for detection.
   EC_NPX               Override npx (used to launch context7 / tavily MCP).
   EC_UV     EC_PIPX    Override uv / pipx for code-review-graph install.
   EC_PIP    EC_CRG     Override pip / code-review-graph binaries.
@@ -369,11 +371,84 @@ ec_install_mcp_crg() {
 }
 
 ec_install_mcp_list() {
-    local list="$1" harness="$2" with_edit="$3" server
+    local list="$1" harness="$2" with_edit="$3" server rc=0
     local IFS=,
     for server in $list; do
-        ec_install_mcp "$server" "$harness" "$with_edit"
+        ec_install_mcp "$server" "$harness" "$with_edit" || rc=1
     done
+    return $rc
+}
+
+# Detect the main-line harness CLIs that can receive Agent Skills directly.
+# Prints one gh-skill --agent value per line.
+ec_detect_harnesses() {
+    local claude_cli="${EC_CLAUDE:-claude}"
+    local cursor_cli="${EC_CURSOR:-cursor}"
+    local codex_cli="${EC_CODEX:-codex}"
+
+    if ec_cmd_exists "$claude_cli"; then
+        printf 'claude-code\n'
+    fi
+    if ec_cmd_exists "$cursor_cli"; then
+        printf 'cursor\n'
+    fi
+    if ec_cmd_exists "$codex_cli"; then
+        printf 'codex\n'
+    fi
+}
+
+# Resolve --harness into a newline-delimited harness list. 'auto' installs to
+# every detected main-line harness, falling back to claude-code to preserve the
+# historical default on machines where no supported harness CLI is on PATH.
+ec_resolve_harnesses() {
+    local selection="$1" harnesses harness
+    if [[ "$selection" == "auto" ]]; then
+        harnesses="$(ec_detect_harnesses)"
+        if [[ -n "$harnesses" ]]; then
+            while IFS= read -r harness; do
+                printf '%s\n' "$harness"
+            done <<< "$harnesses"
+        else
+            ec_warn "No supported harness CLI detected; falling back to claude-code. Use --harness <name> to override."
+            printf 'claude-code\n'
+        fi
+        return 0
+    fi
+
+    if [[ -z "${selection//[[:space:]]/}" ]]; then
+        printf 'error: empty --harness selection. Use --harness auto or provide one or more comma-separated harness names.\n' >&2
+        return 1
+    fi
+
+    local -a harness_tokens
+    IFS=',' read -r -a harness_tokens <<< "$selection"
+    for harness in "${harness_tokens[@]}"; do
+        harness="${harness#"${harness%%[![:space:]]*}"}"
+        harness="${harness%"${harness##*[![:space:]]}"}"
+        if [[ -z "$harness" ]]; then
+            printf 'error: invalid --harness selection "%s". Harness names must be non-empty and comma-separated.\n' "$selection" >&2
+            return 1
+        fi
+        printf '%s\n' "$harness"
+    done
+}
+
+ec_install_skills_for_harnesses() {
+    local harnesses="$1" harness rc=0
+    while IFS= read -r harness; do
+        [[ -n "$harness" ]] || continue
+        ec_install_skills "$harness" || rc=1
+    done <<< "$harnesses"
+    return $rc
+}
+
+ec_install_mcp_for_harnesses() {
+    local list="$1" harnesses="$2" with_edit="$3" harness rc=0
+    while IFS= read -r harness; do
+        [[ -n "$harness" ]] || continue
+        ec_install_mcp_list "$list" "$harness" "$with_edit" || rc=1
+    done <<< "$harnesses"
+    return $rc
 }
 
 # Discover the live skill list by listing skills/ via the GitHub contents
@@ -441,7 +516,7 @@ ec_parse_args() {
     EC_TOOLS="${EC_TOOLS// /,}"
     EC_MCP="$EC_DEFAULT_MCP"
     EC_MCP="${EC_MCP// /,}"
-    EC_HARNESS="claude-code"
+    EC_HARNESS="auto"
     EC_WITH_EDIT="1"
     EC_DRY_RUN="${EC_DRY_RUN:-0}"
     EC_SKIP_TOOLS="0"
@@ -527,10 +602,12 @@ ec_main() {
         ec_install_tools "$EC_TOOLS"
     fi
 
-    ec_install_skills "$EC_HARNESS"
+    local harnesses
+    harnesses="$(ec_resolve_harnesses "$EC_HARNESS")" || return $?
+    ec_install_skills_for_harnesses "$harnesses" || return 1
 
     if [[ "$EC_MCP" != "none" ]]; then
-        ec_install_mcp_list "$EC_MCP" "$EC_HARNESS" "$EC_WITH_EDIT"
+        ec_install_mcp_for_harnesses "$EC_MCP" "$harnesses" "$EC_WITH_EDIT" || return 1
     fi
 
     ec_log "Done. Restart your harness so skills, MCP servers, and PATH changes take effect."

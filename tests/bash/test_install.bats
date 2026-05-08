@@ -74,7 +74,7 @@ STUB
     ec_parse_args
     [[ "$EC_TOOLS" == *"gh"* && "$EC_TOOLS" == *"tilth"* ]]
     [[ "$EC_MCP" == "tilth,context7" ]]
-    [[ "$EC_HARNESS" == "claude-code" ]]
+    [[ "$EC_HARNESS" == "auto" ]]
     [[ "$EC_WITH_EDIT" == "1" ]]
     [[ "$EC_DRY_RUN" == "0" ]]
     [[ "$EC_DO_HELP" == "0" ]]
@@ -108,6 +108,11 @@ STUB
 @test "ec_parse_args --harness overrides default harness" {
     ec_parse_args --harness cursor
     [[ "$EC_HARNESS" == "cursor" ]]
+}
+
+@test "ec_parse_args --harness accepts comma-separated harness list" {
+    ec_parse_args --harness cursor,codex
+    [[ "$EC_HARNESS" == "cursor,codex" ]]
 }
 
 @test "ec_parse_args -h sets DO_HELP" {
@@ -478,6 +483,44 @@ STUB
 
 # -- ec_install_skills --------------------------------------------------------
 
+@test "ec_detect_harnesses finds installed main-line harness CLIs" {
+    make_stub claude
+    make_stub cursor
+    make_stub codex
+    EC_CLAUDE="$STUB_BIN/claude" EC_CURSOR="$STUB_BIN/cursor" EC_CODEX="$STUB_BIN/codex" \
+        run ec_detect_harnesses
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"claude-code"* ]]
+    [[ "$output" == *"cursor"* ]]
+    [[ "$output" == *"codex"* ]]
+}
+
+@test "ec_resolve_harnesses auto returns every detected harness" {
+    make_stub claude
+    make_stub cursor
+    EC_CLAUDE="$STUB_BIN/claude" EC_CURSOR="$STUB_BIN/cursor" EC_CODEX="$STUB_BIN/missing-codex" \
+        run ec_resolve_harnesses auto
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"claude-code"* ]]
+    [[ "$output" == *"cursor"* ]]
+    [[ "$output" != *"codex"* ]]
+}
+
+@test "ec_resolve_harnesses auto falls back to claude-code when nothing detected" {
+    EC_CLAUDE="$STUB_BIN/missing-claude" EC_CURSOR="$STUB_BIN/missing-cursor" EC_CODEX="$STUB_BIN/missing-codex" \
+        run ec_resolve_harnesses auto
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"falling back to claude-code"* ]]
+    [[ "$output" == *"claude-code"* ]]
+}
+
+@test "ec_resolve_harnesses keeps explicit comma-separated harnesses" {
+    run ec_resolve_harnesses cursor,codex
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"cursor"* ]]
+    [[ "$output" == *"codex"* ]]
+}
+
 @test "ec_install_skills warns and returns 0 when gh CLI missing" {
     run ec_install_skills claude-code
     [ "$status" -eq 0 ]
@@ -501,6 +544,15 @@ STUB
     EC_GH="$STUB_BIN/gh" EC_DRY_RUN=1 run ec_install_skills cursor
     [ "$status" -eq 0 ]
     [[ "$output" == *"--agent cursor"* ]]
+    [[ "$output" != *"--agent claude-code"* ]]
+}
+
+@test "ec_install_skills_for_harnesses installs every skill into every harness" {
+    make_stub gh
+    EC_GH="$STUB_BIN/gh" EC_DRY_RUN=1 run ec_install_skills_for_harnesses $'cursor\ncodex'
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"--agent cursor"* ]]
+    [[ "$output" == *"--agent codex"* ]]
     [[ "$output" != *"--agent claude-code"* ]]
 }
 
@@ -687,10 +739,12 @@ STUB
     make_stub cargo
     make_stub gh
     make_stub claude
+    make_stub tilth
     EC_BREW="$STUB_BIN/brew" \
     EC_CARGO="$STUB_BIN/cargo" \
     EC_GH="$STUB_BIN/gh" \
     EC_CLAUDE="$STUB_BIN/claude" \
+    EC_TILTH="$STUB_BIN/tilth" \
         run ec_main --dry-run
     [ "$status" -eq 0 ]
     [[ "$output" == *"would run 'brew install gh'"* ]]
@@ -707,6 +761,35 @@ STUB
     [[ "$output" == *"install claude-code --edit"* ]]
     [[ "$output" == *"@upstash/context7-mcp@latest"* ]]
     [[ "$output" == *"Done."* ]]
+}
+
+@test "ec_main auto-installs skills into each detected main-line harness" {
+    cat > "$STUB_BIN/uname" <<'STUB'
+#!/usr/bin/env bash
+echo Darwin
+STUB
+    chmod +x "$STUB_BIN/uname"
+    make_stub brew
+    make_stub gh
+    make_stub claude
+    make_stub cursor
+    make_stub codex
+    EC_BREW="$STUB_BIN/brew" \
+    EC_GH="$STUB_BIN/gh" \
+    EC_CLAUDE="$STUB_BIN/claude" \
+    EC_CURSOR="$STUB_BIN/cursor" \
+    EC_CODEX="$STUB_BIN/codex" \
+        run ec_main --skip-tools --skip-mcp
+    [ "$status" -eq 0 ]
+    grep -q "^gh skill install paulnsorensen/easy-cheese age --agent claude-code --scope user --force$" "$STUB_LOG"
+    grep -q "^gh skill install paulnsorensen/easy-cheese age --agent cursor --scope user --force$" "$STUB_LOG"
+    grep -q "^gh skill install paulnsorensen/easy-cheese age --agent codex --scope user --force$" "$STUB_LOG"
+    local expected_harness_count=3
+    local skill skill_count=0
+    for skill in $EC_FALLBACK_SKILLS; do
+        skill_count=$((skill_count + 1))
+    done
+    [ "$(grep -c '^gh skill install ' "$STUB_LOG")" -eq $((skill_count * expected_harness_count)) ]
 }
 
 @test "ec_main --skip-tools --mcp tilth registers only tilth (still runs skills)" {
