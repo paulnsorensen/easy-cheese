@@ -130,7 +130,7 @@ Workflow skills name preferred tools when they help, with fallbacks for portabil
 | `sg` (ast-grep) | Structural pattern matching and codemods (`sg --rewrite`) with metavariables | `ripgrep`, `find`, targeted reads; `tilth_edit` for non-structural edits |
 | Context7 (MCP) | Library and API documentation | repo docs, package docs, vendor pages, web search |
 | Tavily (MCP) | Current web/vendor research | host web search or user-supplied sources |
-| code-review-graph (MCP) | Review impact radius and caller/dep context | import searches, caller searches, tests |
+| code-review-graph (MCP) | Review impact radius, architecture framing, and embeddings-backed semantic / cross-repo search | import searches, caller searches, tests |
 | LSP / Serena | Semantic navigation and symbol understanding | `sg`, `ripgrep`, targeted reads |
 | `ripgrep` | Fast text search | `grep`, `find`, editor search |
 | `gh` | GitHub issues, PRs, checks, examples | local git commands or user-provided links/logs |
@@ -241,11 +241,12 @@ The cheez-* tool skills and several workflow skills benefit from MCP servers. In
 
 ### tilth (required for cheez-* skills)
 
-[tilth](https://github.com/paulnsorensen/tilth) provides AST-aware code search, smart file reading, and hash-anchored edits. Required by `/cheez-search`, `/cheez-read`, and `/cheez-write`.
+[tilth](https://github.com/jahala/tilth) provides AST-aware code search, smart file reading, and hash-anchored edits. Required by `/cheez-search`, `/cheez-read`, and `/cheez-write`.
 
 ```sh
-# Install tilth CLI — pick one
-cargo install tilth        # via Cargo (Rust)
+# Install tilth CLI — pick one (no Homebrew formula upstream)
+cargo install tilth        # via Cargo (Rust) — preferred, native binary
+npm install -g tilth       # via npm (Node 18+) — no Rust toolchain needed
 # or run via npx — no global install needed (Node.js v18+):
 #   npx -y tilth install claude-code --edit
 
@@ -339,13 +340,13 @@ TAVILY_API_KEY=your-key npx -y tavily-mcp
 
 Requires Node.js v18+.
 
-### code-review-graph (review impact radius)
+### code-review-graph (review impact radius, architecture, semantic search)
 
-[code-review-graph](https://github.com/tirth8205/code-review-graph) builds a call graph of your codebase and exposes it as MCP tools. Used by `/age` and `/cure` to scope reviews.
+[code-review-graph](https://github.com/tirth8205/code-review-graph) builds a persistent call graph of your codebase with Tree-sitter, Louvain communities, betweenness-centrality, and optional vector embeddings. Used by `/age`, `/press`, and `/cure` for risk-scored impact (`get_impact_radius_tool`, `detect_changes_tool`), curated review context (`get_review_context_tool`, `get_minimal_context_tool`), affected flows (`get_affected_flows_tool`), architecture framing (`get_architecture_overview_tool`, `get_hub_nodes_tool`, `get_bridge_nodes_tool`), and cross-repo / semantic search (`cross_repo_search_tool`, `semantic_search_nodes_tool`). Tilth handles AST search, callers, and hash-anchored edits; code-review-graph covers the graph-algorithmic and cross-repo dimensions tilth does not.
 
 ```sh
-# Install (Python 3.10+ required)
-pip install code-review-graph   # or: pipx install code-review-graph
+# Install with the local sentence-transformers embeddings extra (Python 3.10+ required)
+pip install 'code-review-graph[embeddings]'   # or: pipx install 'code-review-graph[embeddings]'
 
 # Auto-detect and configure your harness
 code-review-graph install
@@ -357,11 +358,66 @@ code-review-graph install --platform codex
 
 # Build the graph for the current project (re-run after large changes)
 code-review-graph build
+
+# Compute embeddings for semantic_search_nodes_tool (one-time, then incremental)
+code-review-graph embed
 ```
+
+The `[embeddings]` extra pulls in `sentence-transformers` so `semantic_search_nodes_tool` works out of the box with the default `all-MiniLM-L6-v2` model. Override with `CRG_EMBEDDING_MODEL=<model-id>`. Other embedding providers (Google Gemini, MiniMax, OpenAI-compatible endpoints) are also supported — see the upstream README for `[google-embeddings]` and the `CRG_OPENAI_*` env vars.
 
 ## Installing CLI tools
 
 The optional tools in the table below are referenced by workflow skills. None are required, but having them available unlocks better fallbacks and richer output.
+
+### One-shot installer (macOS)
+
+`scripts/install.sh` does the whole setup in one shot:
+
+1. Installs every CLI tool listed below — Homebrew for the eight brew-core formulas, plus `cargo install tilth` (or `npm install -g tilth` if Rust isn't available) for tilth, which has no Homebrew formula upstream.
+2. Auto-detects installed Claude Code, Cursor, and Codex CLIs, then installs every easy-cheese skill into each detected harness at user scope.
+3. Registers the `tilth` and `context7` MCP servers with those harnesses where supported.
+
+Currently macOS only — it relies on Homebrew. Requires `gh` to be authenticated (`gh auth login`) before running.
+
+Pipe straight from GitHub:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/paulnsorensen/easy-cheese/main/scripts/install.sh | bash
+```
+
+Or grab the script first if you'd like to read it:
+
+```sh
+curl -fsSL -o /tmp/easy-cheese-install.sh https://raw.githubusercontent.com/paulnsorensen/easy-cheese/main/scripts/install.sh
+bash /tmp/easy-cheese-install.sh --help
+bash /tmp/easy-cheese-install.sh --dry-run
+```
+
+Common flags:
+
+```sh
+# Install only ripgrep + jq, skip MCP registration
+curl -fsSL https://raw.githubusercontent.com/paulnsorensen/easy-cheese/main/scripts/install.sh \
+  | bash -s -- --tools ripgrep,jq --skip-mcp
+
+# Register MCP servers only (assumes CLI tools and skills are already installed)
+curl -fsSL https://raw.githubusercontent.com/paulnsorensen/easy-cheese/main/scripts/install.sh \
+  | bash -s -- --skip-tools --mcp tilth,context7,tavily
+
+# Pick a specific harness for skill + MCP registration
+curl -fsSL https://raw.githubusercontent.com/paulnsorensen/easy-cheese/main/scripts/install.sh \
+  | bash -s -- --harness cursor
+
+# Or target a comma-separated harness list explicitly
+curl -fsSL https://raw.githubusercontent.com/paulnsorensen/easy-cheese/main/scripts/install.sh \
+  | bash -s -- --harness claude-code,cursor,codex
+```
+
+The script is idempotent — it skips any tool already on `PATH` — and accepts `--dry-run` so you can preview what it would do before letting it run. If no supported harness CLI is detected, it falls back to the historical `claude-code` target; pass `--harness` to override detection.
+
+> **Heads-up:** `curl | bash` runs whatever the URL serves at the moment of the request. If you want to audit before running, use the two-step form above.
+
+If you'd rather install tools individually, the per-tool sections below cover macOS, Windows, and Linux.
 
 ### GitHub CLI (`gh`)
 
@@ -459,3 +515,7 @@ brew install just              # macOS/Linux
 cargo install just             # Rust/Cargo
 winget install Casey.Just      # Windows
 ```
+
+## Credits
+
+The shared voice kernel at [`skills/age/references/voice.md`](skills/age/references/voice.md) — output discipline, reasoning posture, the `certain | speculating | don't know` confidence vocabulary, and the depth-vs-question split — adapts a [Claude Opus 4.7 system-prompt experiment by Reebz](https://gist.github.com/Reebz/b81ad99409d5b5de3045bebde71d4471), narrowed to the parts that earn their keep in a portable skills toolkit. Cross-referenced from `briesearch`, `culture`, `mold`, `cook`, and `cure`.

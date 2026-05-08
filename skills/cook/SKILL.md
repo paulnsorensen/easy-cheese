@@ -41,15 +41,12 @@ When the fast-path applies, derive a slug from the task (e.g. `tail-trailing-new
 4. **Taste-test** — check spec drift, readability, and scope creep. Two-round cap; details in `references/tdd-loop.md`.
 5. **Hand off** — produce the package-ready report (`references/package-report.md`) and prompt the next step via `AskUserQuestion` (see `## Handoff` below). The default chain is `/press` → `/age` → `/cure`.
 
-Use `cheez-search` to find existing patterns and `cheez-read` / `cheez-write` for precise edits.
+Code search, reading, and editing all go through the cheez-* skills (`/cheez-search`, `/cheez-read`, `/cheez-write`) — see those skills for tool selection rules and out-of-scope fallbacks.
 
 ## Preferred tools and fallbacks
 
 | Need | Prefer | Fallback |
 | --- | --- | --- |
-| Semantic navigation | Serena or LSP, `sg` | `ripgrep`, `find`, targeted reads |
-| Precise edits | tilth edit | harness edit tools or patch application |
-| Code search | `sg`, ripgrep | language/package search commands |
 | Diffs | `delta` | plain `git diff` |
 | GitHub context | `gh` | local git history or user-provided links |
 | Merge assistance | mergiraf | manual conflict resolution with tests |
@@ -129,3 +126,5 @@ Auto mode is a propagated flag, not a separate skill — every downstream invoca
 - Prefer existing dependencies and patterns.
 - Do not invent architecture already rejected by the spec.
 - Stop and ask when implementation reveals a design decision the spec did not answer.
+- If the spec or fast-path request rests on a false premise, stop and surface the premise before writing code; do not work the wrong angle to honour the request literally.
+- Apply the shared voice kernel (lives at `skills/age/references/voice.md` in this repo): lead the package-ready report with the answer, name loaded assumptions in the contract, flag residual risk as `certain | speculating | don't know`.

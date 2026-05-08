@@ -100,6 +100,37 @@ tilth_edit uses **hash anchors** — unique identifiers for each line — to:
 
 ---
 
+## Scope: when tilth_edit, when not
+
+`tilth_edit` owns **block edits to tracked source code** — function bodies, signatures, imports, single-line tweaks, multi-edit batches, and cross-file specific changes. Hash anchors give concurrency safety; the read-edit protocol is mandatory for any code change that matters.
+
+For everything else, prefer the right tool:
+
+| Change | Use this instead | Why |
+|--------|------------------|-----|
+| Cross-cutting structural codemod (`JSON.parse(JSON.stringify($X))` → `structuredClone($X)`) across N files | `sg --rewrite` (dry-run-first protocol) | tilth_edit needs N reads-for-anchors; codemods template the variable parts |
+| Lockfile changes (`Cargo.lock`, `package-lock.json`, `uv.lock`, etc.) | the package manager (`cargo update`, `npm i`, `uv lock`) | Hand-editing lockfiles loses checksum integrity |
+| Generated / build artifacts (compiled JS, transpiled output, `*.pb.go`) | regenerate from source | Editing the artifact rots on the next build |
+| Brand-new files, no prior content | `tilth_edit` (anchor on line 1, end-anchor on the last line for a single-edit insert) | Stay on one path; the anchor cost is negligible for new files |
+| Files outside the repo or inside dependency caches (`node_modules`, `.cargo/registry`) | don't edit them | Modifying dependencies is almost always a mistake — fix the source or upstream |
+| Binary files, images, PDFs | the producing tool | tilth_edit is text-only |
+
+If the question is "which tool for this specific source-code block edit?" → `tilth_edit`. If it's "rewrite this pattern everywhere" → `sg --rewrite` with the dry-run protocol.
+
+### When LSP rename beats tilth_edit (if your harness has one)
+
+**easy-cheese does not install LSP** — it is whatever language servers your harness already exposes. There is one editing operation where an available LSP materially outperforms `tilth_edit`: **type-aware rename** of a symbol across the project.
+
+| Edit | Use this instead | Why LSP wins |
+|------|------------------|--------------|
+| Rename a function / class / variable across all type-correct usages, including aliased re-exports and generic instantiations | `textDocument/rename` (or the harness's rename refactor) | Returns a typechecker-validated `WorkspaceEdit`; covers aliased imports without textual collisions, and skips coincidental name matches in unrelated scopes. `tilth_edit` would need a separate read-edit cycle per call site, and `sg --rewrite` matches on syntax not type identity (overshoots on shadowed names, undershoots on aliased re-exports) |
+
+For everything else — block edits, signature changes, body rewrites, hand-written codemods — `tilth_edit` (one-off) and `sg --rewrite` (cross-cutting) remain the right tools. LSP rename is narrowly the best fit for **identifier renames specifically**; nothing else in LSP's edit surface improves on the cheez-write protocol.
+
+If no LSP is installed, or the rename touches a symbol the typechecker can't resolve (broken code, generated bindings), fall back to `sg --rewrite` with the dry-run-first protocol — see "Structural codemods" below.
+
+---
+
 ## Hash Anchor Format
 
 When you read a file with tilth_read in edit mode, lines have anchors:
@@ -384,4 +415,4 @@ additional edits on top until the codemod is committed or reverted.
 - **Search code** — use cheez-search to find what to edit.
 - **Run tests after editing** — use test/build skills.
 - **Commit changes** — use git/gh skills.
-- **Review your edits** — use age/code-review skills.
+- **Review your edits** — use the `/age` skill.

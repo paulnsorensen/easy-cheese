@@ -2,7 +2,15 @@
 
 `/cure` never applies findings without an explicit selection. The default selection is empty.
 
-The only sanctioned bypass is the `--auto --stake <floor>` flag pair, propagated from `/cook --auto`. See `## Auto-mode selection` at the bottom of this file. Outside of auto mode, every rule below applies as written.
+`/age` is the preferred place to render this gate — it inverts the path so the user is asked *which findings to cure* immediately after the report lands, rather than first being asked *whether to run /cure*. When `/age` hands off with a pre-locked selection, `/cure` adopts it and skips re-rendering the table; otherwise `/cure` renders the table itself using the same shape below.
+
+The only sanctioned bypass of the selection rule is the `--auto --stake <floor>` flag pair, propagated from `/cook --auto`. See `## Auto-mode selection` at the bottom of this file. Outside of auto mode, every rule below applies as written.
+
+## Handoff from /age
+
+When `/age` completes the selection gate and the user picks a non-empty set, it dispatches `/cure` with the selection locked in by passing the chosen ids as plain text in the invocation context — the same verbs accepted at the prompt (`1,3,5`, `all-high`, etc.). `/cure` reads this from the dispatch context, skips rendering the selection table, and goes straight to apply.
+
+There is no CLI flag (`--select` is not a supported syntax). The selection travels as prose context in the `AskUserQuestion` resolution, not as a parsed argument.
 
 ## Rendering the selection list
 

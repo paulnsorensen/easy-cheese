@@ -12,9 +12,9 @@ Do not use it for free-form discussion with no artifact intent (`/culture`), dir
 
 ## Flow
 
-1. **Route** — pick a starting mode from the input shape (see `references/modes.md`) and announce it in one line.
-2. **Dialogue** — build shared understanding through the smallest useful question. Ground every load-bearing claim with `cheez-search`, `cheez-read`, or a Validate Cycle (`references/validate-cycle.md`).
-3. **Sketch** — for any feature touching >1 module or a new public interface, lock seams in pseudocode signatures before talking spec content.
+1. **Route** — pick a starting mode from the input shape (see `references/modes.md`) and announce it in one line. If the user's framing rests on a false premise or a loaded assumption, name it before routing.
+2. **Dialogue** — build shared understanding through the smallest useful question to the user, but contribute at maximum useful depth between questions (full options, named edge cases, concrete evidence — not gestural sketches). Ground every load-bearing claim with `cheez-search`, `cheez-read`, or a Validate Cycle (`references/validate-cycle.md`). Track contradictions across turns; if turn N contradicts an earlier conclusion, flag and resolve it before continuing.
+3. **Sketch** — for any feature touching >1 module or a new public interface, run the shape check (`references/shape-check.md`) on the touched symbols, then lock seams in pseudocode signatures before talking spec content. Default to full signatures, not hand-waving.
 4. **Two-key handshake** — both the user (explicit verb) and the agent (coherence self-check) must agree before extraction. See `references/handshake.md`.
 5. **Curdle** — write the approved spec to `.cheese/specs/<slug>.md` (and optional `.cheese/issues/<slug>-NNN.md`). Format and slug rules in `references/curdle.md`.
 6. **Hand off** — once the spec is on disk, prompt the next step via `AskUserQuestion` (see `## Handoff` below). Never auto-invoke.
@@ -27,21 +27,34 @@ Do not use it for free-form discussion with no artifact intent (`/culture`), dir
 | Ground | A file, bug, or existing doc is named | Verify facts against evidence |
 | Shape | The goal is known but approach is open | Compare viable options (Do Nothing always included) |
 | Sketch | Interfaces or module boundaries matter | Lock responsibilities and seams |
-| Grill | A favoured approach needs stress-testing | Find weak assumptions and edge cases |
+| Grill | A favoured approach needs stress-testing | Steelman the rejected option, find weak assumptions and edge cases |
 | Diagnose | A symptom, failure, or trace is supplied | Build a Loop → reproduce → hypothesize → confirm root cause |
 
 Full mode definitions, exit criteria, and user knobs in `references/modes.md`.
 
 ## Preferred tools and fallbacks
 
+Code search, reading, and editing (including spec writing) all go through the cheez-* skills (`/cheez-search`, `/cheez-read`, `/cheez-write`) — see those skills for tool selection rules. Shape checks specifically use `cheez-search` callers (`kind: "callers"`) plus `tilth_deps`; the procedure lives in `references/shape-check.md`.
+
+Beyond cheez-* there are mold-specific tools:
+
 | Need | Prefer | Fallback |
 | --- | --- | --- |
 | External validation | `/briesearch` with Context7/Tavily | user-provided docs, repo docs, or note as unverified |
-| Codebase grounding | Serena or LSP, `sg`, tilth read/search | `ripgrep`, `find`, targeted file reads |
-| Dependency/blast-radius checks | code review graph, tilth deps | import searches, caller searches, test references |
-| Spec writing | precise edit tooling | create/update markdown directly after approval |
 
-Optional tools accelerate the work; missing tools do not block the dialogue. When a fallback is weaker, mark the affected claim `[?]` until settled.
+Optional tools accelerate the work; missing tools do not block the dialogue. When evidence is unavailable, mark the affected claim `[?]` until settled.
+
+## Sub-agent context gate
+
+`/mold` keeps the dialogue, contradictions, approval state, and the two-key handshake in the parent context — those never delegate. Spawn a read-only grounding sub-agent only when validation would flood the conversation with raw evidence or graph output:
+
+- External validation needs deep `/briesearch` evidence, three or more doc fetches, or two or more independent search angles.
+- Shape check touches more than 5 symbols, fans out across many modules, or requires large caller/dependency traversals.
+- Diagnose mode needs bulky logs, traces, or search output before a concise root-cause hypothesis can be formed.
+
+The sub-agent returns a digest: a claim table, shape-check summary, or root-cause evidence summary with citations and confidence. The parent reads that digest, asks the user the smallest useful next question, and still owns the handshake. Do not spawn sub-agents for normal dialogue, the approval gate, or curdle/spec writing.
+
+Digest size, parent-vs-sub-agent split, and harness-agnostic sub-agent selection live in the shared kernel at `skills/age/references/sub-agent-gate.md`.
 
 ## Approval gate
 
@@ -73,3 +86,4 @@ Pre-select `Run /cook` (the gated form) only when acceptance criteria are explic
 - Do not implement code.
 - Do not write production files before the approval gate.
 - Do not silently settle uncertain claims.
+- Apply the shared voice kernel (lives at `skills/age/references/voice.md` in this repo): correct false premises, flag confidence as `certain | speculating | don't know` on each load-bearing claim, steelman before dismissing, ask the smallest useful question while contributing at maximum useful depth.

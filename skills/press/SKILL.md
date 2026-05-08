@@ -23,12 +23,14 @@ Do not use it to implement broad new behavior. Press may add or strengthen tests
 
 ## Preferred tools and fallbacks
 
+Code search, reading, and editing all go through the cheez-* skills (`/cheez-search`, `/cheez-read`, `/cheez-write`) — see those skills for tool selection rules. For coverage and test discovery, press uses `cheez-search` (callers via `kind: "callers"`) and `tilth_deps` (cheez-search owns the routing).
+
+Beyond cheez-* there are press-specific tools:
+
 | Need | Prefer | Fallback |
 | --- | --- | --- |
 | Diff review | `delta` | plain `git diff` |
-| Coverage/blast radius | code review graph, Serena or LSP | `ripgrep` callers/imports and test references |
-| Precise test edits | tilth edit | harness edit tools or patch application |
-| Test discovery | `sg`, ripgrep | package manager test listings or file tree |
+| Affected execution flows + risk scoring | code-review-graph: `get_affected_flows_tool`, `get_impact_radius_tool` | manual flow tracing from callers |
 
 If optional tools are missing, press a narrower surface and state the residual risk.
 
@@ -102,3 +104,5 @@ When invoked with `--auto` (propagated from `/cook --auto`):
 - Do not weaken assertions.
 - Do not broaden implementation beyond the cooked contract.
 - Surface medium and high findings explicitly; summarize low findings.
+- If the cooked diff or spec rests on a false premise (the contract is wrong, or the test surface is solving the wrong problem), stop and surface the premise before adding tests; do not harden the wrong angle.
+- Apply the shared voice kernel (lives at `skills/age/references/voice.md` in this repo): lead the press report with the readiness verdict, flag residual risk as `certain | speculating | don't know`, agree when coverage is already sufficient without manufacturing tests.

@@ -28,6 +28,9 @@ jobs:
       - name: Install PyYAML
         run: pip install --no-cache-dir pyyaml==6.0.2
 
+      - name: Test SKILL.md validator
+        run: python3 .github/scripts/test_validate_skills.py -v
+
       - name: Validate SKILL.md frontmatter
         run: python3 .github/scripts/validate_skills.py
 
@@ -48,6 +51,51 @@ jobs:
 
       - name: Run melt script tests
         run: python3 -m pytest tests/python -q
+
+  install-script:
+    name: test install.sh (macOS)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install bats and shellcheck
+        run: brew install bats-core shellcheck
+
+      - name: Lint install.sh
+        run: shellcheck scripts/install.sh
+
+      - name: Run install.sh tests
+        run: bats tests/bash/test_install.bats
+
+      # Real (un-stubbed) smoke test: actually resolve every brew formula,
+      # exercise the cargo-or-npm tilth install path, and run the gh-skill
+      # install on a fresh macos-latest runner. Catches "phantom formula"
+      # / "tap doesn't exist" / "this skill doesn't publish" bugs that the
+      # bats suite (which stubs everything) cannot. --skip-mcp avoids
+      # needing claude/tavily creds.
+      - name: Real install smoke test (--skip-mcp)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/install.sh --skip-mcp
+
+      # Real install of the code-review-graph CLI with the [embeddings]
+      # extra. Sourcing the script and calling the function directly skips
+      # the MCP-registration step that needs a claude CLI on the runner,
+      # while still exercising the actual pip/pipx/uv install path. Catches
+      # cases where 'code-review-graph[embeddings]' stops being a valid
+      # PyPI target or the embeddings extra fails to resolve.
+      - name: CRG embeddings install smoke test
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC1091
+          source scripts/install.sh
+          ec_install_crg_cli
+          # Cover every install-path bin location: pipx + uv tool install
+          # land in $HOME/.local/bin; pip --user lands under the Python
+          # user-base bin dir.
+          export PATH="$HOME/.local/bin:$(python3 -m site --user-base)/bin:$PATH"
+          code-review-graph --version
 
   lint:
     name: lint markdown and yaml

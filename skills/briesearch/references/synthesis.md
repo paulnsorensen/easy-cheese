@@ -9,7 +9,7 @@ One row per material claim, not per source. A single source can support multiple
 ```markdown
 | Claim | Evidence | Source type | Freshness | Confidence | Caveat |
 | --- | --- | --- | --- | --- | --- |
-| <one-line claim> | <quote, file:line, or URL> | vendor docs / paper / changelog / repo / GitHub / blog | <date checked or "live"> | high / medium / low | <if any> |
+| <one-line claim> | <quote, file:line, or URL> | vendor docs / paper / changelog / repo / GitHub / blog | <date checked or "live"> | `certain` / `speculating` / `don't know` | <if any> |
 ```
 
 Rules:
@@ -17,7 +17,9 @@ Rules:
 - **Each "latest" or "current" claim must include an absolute date** ("latest as of 2026-05-04"), not just "latest".
 - **Versioned claims must include the version** ("Next.js 15.3", not "Next.js latest").
 - **Conflicting evidence is its own row pair**, not silently averaged. Surface disagreement explicitly.
-- **Single-source claims are capped at medium confidence** unless the source is authoritative for that claim type (vendor docs for an API; the codebase for a local convention).
+- **Single-source claims cap at `speculating`** unless the source is authoritative for that claim type (vendor docs for an API; the codebase for a local convention) — only authoritative single sources earn `certain`.
+
+The tokens `certain`, `speculating`, and `don't know` are exact label values — write them verbatim, never as synonyms.
 
 ## Link / citation verification
 
@@ -33,12 +35,12 @@ Skip verification only for: (a) inline file references (`file:line`), (b) the us
 
 | Situation | Overall confidence |
 | --- | --- |
-| Critical routed source unavailable and no equivalent fallback exists | low |
-| Non-critical routed source unavailable, failed, or skipped | cap at medium |
-| 3+ independent sources agree per claim | high |
-| 2 independent sources agree per claim | medium |
-| Sources disagree | low — and surface the disagreement |
-| Single source per claim | inherit that source's authority, capped at medium unless authoritative |
+| Critical routed source unavailable and no equivalent fallback exists | `don't know` |
+| Non-critical routed source unavailable, failed, or skipped | cap at `speculating` |
+| 3+ independent sources agree per claim | `certain` |
+| 2 independent sources agree per claim | `speculating` |
+| Sources disagree | `don't know` — and surface the disagreement |
+| Single source per claim | inherit that source's authority, cap at `speculating` unless authoritative |
 
 Criticality depends on the question. Context7 is critical for version-specific API claims, Tavily is critical for freshness-sensitive facts, Codebase is critical for local precedent questions, and GitHub is usually supporting evidence unless the user asked for real-world examples.
 
@@ -56,7 +58,7 @@ Short form (always returned to the caller):
 <the claim-level table above, trimmed to the load-bearing rows>
 
 ### Confidence
-<low | medium | high> — <one-line justification, including any caveat>
+<`certain` | `speculating` | `don't know`> — <one-line justification, including any caveat>
 
 ### Next step
 <recommended skill or action, if any>

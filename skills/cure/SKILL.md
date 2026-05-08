@@ -12,9 +12,9 @@ Do not use it to apply every suggestion automatically. The user chooses what to 
 
 ## Inputs
 
-Accept any of: a `/age` slug (`/cure <slug>` reads `.cheese/age/<slug>.md`), a pasted findings list, a CI failure summary, or a scoped instruction like "fix the high-stake age findings".
+Accept any of: a `/age` slug (`/cure <slug>` reads `.cheese/age/<slug>.md`), a pasted findings list, a CI failure summary, or a scoped instruction like "fix the high-stake age findings". `/age` may also hand off with a pre-locked selection by passing the chosen ids inline in the dispatch (see `references/selection.md#handoff-from-age` for the canonical format); when that happens, skip rendering the selection list and go straight to apply.
 
-If selection is ambiguous, render a numbered selection list per `references/selection.md` and ask what to apply. The default selection is empty.
+If selection is ambiguous *and* not pre-locked from `/age`, render a numbered selection list per `references/selection.md` and ask what to apply. The default selection is empty.
 
 Optional flags:
 
@@ -24,7 +24,7 @@ Optional flags:
 ## Flow
 
 1. **Load** — read the findings (markdown, not JSON sidecars).
-2. **Select** — gate on explicit user selection. See `references/selection.md` for the recognized verbs.
+2. **Select** — if `/age` handed off a pre-locked selection, adopt it as-is (re-confirm the cited ids still exist in the report). Otherwise gate on explicit user selection. See `references/selection.md` for the recognized verbs.
 3. **Apply** — fix one logical group at a time via `cheez-read` (re-confirm anchor location) and `cheez-write` (apply).
 4. **Validate** — run the narrowest tests that prove each fix, then any relevant project-wide gates (lint, typecheck, build).
 5. **Re-review hand-off** — recommend `/age --scope <touched-path>` so review runs through the proper skill rather than reimplementing it inline. `/cure` does not re-grade its own work. If the user picks re-age, the resulting report can feed a fresh `/cure` invocation.
@@ -33,14 +33,16 @@ Optional flags:
 
 ## Preferred tools and fallbacks
 
+Code search, reading, and editing all go through the cheez-* skills (`/cheez-search`, `/cheez-read`, `/cheez-write`) — see those skills for tool selection rules.
+
+Beyond cheez-* there are cure-specific tools:
+
 | Need | Prefer | Fallback |
 | --- | --- | --- |
-| Applying precise fixes | tilth edit | harness edit tools or patch application |
-| Understanding findings | `/age` report plus code review graph | diff, touched files, tests, and `ripgrep` |
+| Understanding findings | `/age` report plus code-review-graph: `get_minimal_context_tool`, `get_review_context_tool` | diff, touched files, tests |
 | CI and PR context | `gh` | local test output or user-provided logs |
 | Diffs | `delta` | plain `git diff` |
 | Conflict resolution | mergiraf | manual resolution with targeted tests |
-| Search/navigation | Serena or LSP, `sg` | `ripgrep`, `find`, targeted reads |
 
 If a preferred tool is missing, continue with the fallback. If a missing tool prevents safe application, stop and explain the blocker.
 
@@ -96,3 +98,5 @@ If no findings meet the stake floor, write an empty cure report with `### Applie
 - Keep fixes scoped to selected (or auto-selected) findings.
 - Do not hide failed or skipped checks. In auto mode, reverted findings go under `### Deferred`, never silently dropped.
 - Prefer PR-ready output, but do not open a PR unless the user asks. Auto mode never opens a PR.
+- If a selected finding rests on a false premise (the `/age` claim is wrong, or the diff already addresses it), stop and surface the premise before applying. Disagreeing with the report is allowed; silently working around it is not.
+- Apply the shared voice kernel (lives at `skills/age/references/voice.md` in this repo): lead the cure report with what was applied, flag residual risk as `certain | speculating | don't know`, agree when the diff is fine without manufacturing follow-ups.

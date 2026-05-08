@@ -37,9 +37,9 @@ Mold has no fixed entry point. Inspect the input shape and pick a starting mode.
 
 ### Sketch — interface lockdown
 
-**Job:** lock modules, responsibilities, I/O contracts, and seams in pseudocode signatures. Before drafting, parallel `cheez-search` for sibling signatures in the same area so new ones fit conventions.
+**Job:** lock modules, responsibilities, I/O contracts, and seams in pseudocode signatures. Before drafting, when the change touches more than one module or introduces a new public interface, run the shape check (`shape-check.md`) — signatures, callers (via `cheez-search`, i.e. `tilth_search kind: "callers"`), and `tilth_deps` blast radius — on the touched symbols so new seams fit existing convention and the impact is bounded. Print the shape-check summary block before any pseudocode. Single-module, internals-only sketches may skip the gate; note "shape check skipped: single-module change" instead.
 
-**Exit when:** every public seam has a pseudocode signature; every cross-module call goes through public interfaces, not internals.
+**Exit when:** every public seam has a pseudocode signature; every cross-module call goes through public interfaces, not internals; shape-check verdict is recorded (or explicitly skipped per the gate above).
 
 ### Grill — adversarial clarification
 

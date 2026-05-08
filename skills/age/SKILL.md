@@ -1,6 +1,6 @@
 ---
 name: age
-description: This skill should be used when the user wants a code review on a diff, PR, branch, or path — phrases like "review this", "/age", "is this safe to merge", "find bugs", "spot security issues", "check for slop", "review my PR", "look for problems", "what's wrong with this code". Runs eight orthogonal review dimensions (correctness, security, encapsulation, spec, complexity, deslop, assertions, NIH) over the scoped diff and emits a stake-grouped findings report at `.cheese/age/<slug>.md`. Supports `--auto` (propagated from `/cook --auto`) to skip its handoff and chain straight into `/cure --auto --stake medium+`, with a hard cap of two cure passes per auto chain. Use even when the user only asks for one dimension — the report scopes itself. Findings only — no fixes; route the user to `/cure` when they are ready to select findings. After `/press` (optional); before `/cure`.
+description: This skill should be used when the user wants a code review on a diff, PR, branch, or path — phrases like "review this", "/age", "is this safe to merge", "find bugs", "spot security issues", "check for slop", "review my PR", "look for problems", "what's wrong with this code". Runs eight orthogonal review dimensions (correctness, security, encapsulation, spec, complexity, deslop, assertions, NIH) over the scoped diff and emits a stake-grouped findings report at `.cheese/age/<slug>.md`. Use even when the user only asks for one dimension — the report scopes itself. Findings only — no fixes; after the report lands, age renders the cure-selection table inline and asks which findings to cure (no "should I run /cure?" meta-question), then hands off to `/cure` with the selection locked in. Supports `--auto` (propagated from `/cook --auto`) to skip the inline selection prompt and chain straight into `/cure --auto --stake medium+`, with a hard cap of two cure passes per auto chain. After `/press` (optional); before `/cure`.
 license: MIT
 ---
 
@@ -8,7 +8,7 @@ license: MIT
 
 Use this skill to review a diff or scoped path before merging, after `/press`, or whenever the user wants evidence-backed observations rather than an approval verdict.
 
-Do not use it to apply fixes directly. Hand fix work to `/cure`, which owns selecting and applying findings.
+Do not use it to apply fixes directly. Hand fix work to `/cure`, which owns applying findings.
 
 ## Inputs
 
@@ -45,19 +45,38 @@ Per-dimension rubrics and recommendation shapes in `references/dimensions.md`. T
 3. Review every dimension; dimensions with no findings simply omit themselves.
 4. Group findings by stake (high → medium) and by file.
 5. Write the report to `.cheese/age/<slug>.md` and print the path.
-6. Hand off via `AskUserQuestion` (see `## Handoff` below). `/cure` owns the finding-selection gate; age never auto-applies fixes.
+6. Hand off via `AskUserQuestion` (see `## Handoff` below). Age owns the selection gate: it asks the user *which findings to cure*, never *whether to run /cure*. `/cure` still owns the actual fix application — age never auto-applies fixes.
 
 ## Preferred tools and fallbacks
+
+Code search and reading go through the cheez-* skills (`/cheez-search`, `/cheez-read`) — see those skills for tool selection rules. For caller graphs specifically, age uses `cheez-search` with `kind: "callers"` and `tilth_deps` (cheez-search owns the routing).
+
+Beyond cheez-* there are review-specific tools:
 
 | Need | Prefer | Fallback |
 | --- | --- | --- |
 | Diff inspection | `delta` | `git diff --unified=3` |
-| Structural search | `sg`, Serena or LSP | `ripgrep`, `find`, targeted reads |
-| Dependency/caller graph | code review graph, tilth deps | import searches, caller searches, test references |
+| Risk-scored impact + curated review context | code-review-graph: `get_review_context_tool`, `get_impact_radius_tool`, `detect_changes_tool` | `tilth_deps` + manual scoping |
+| Architecture / hotspot framing for large diffs | code-review-graph: `get_architecture_overview_tool`, `get_hub_nodes_tool`, `get_bridge_nodes_tool` | skip and note in confidence |
 | GitHub/PR context | `gh` | local git commands or user-provided PR data |
 | Merge/conflict awareness | mergiraf | manual conflict checks |
 
 Missing optional tools should not block review. State which evidence was unavailable and reduce confidence accordingly.
+
+## Sub-agent context gate
+
+`/age` should fork a read-only review-context sub-agent when evidence gathering is likely to exceed the parent context, especially for `--comprehensive` reviews.
+
+Spawn when any of these are true:
+
+- The diff spans more than 15 files.
+- Touched code or generated review context is larger than roughly 25 KB (about 5 K tokens of raw output the parent would not read line-by-line).
+- Caller / dependency graph expansion crosses multiple subsystems.
+- code-review-graph or `tilth_deps` output is needed for hotspot, bridge-node, or blast-radius framing.
+
+The sub-agent returns a digest: orientation paragraph, high-signal `path:line` citations, gap list. The parent owns the eight-dimension review, severity grading, and the `.cheese/age/<slug>.md` report. Do not spawn for small diffs, to outsource severity grading, or to outsource the final verdict.
+
+Digest size, parent-vs-sub-agent split, and harness-agnostic sub-agent selection live in `references/sub-agent-gate.md` — single source of truth for the cross-cutting rules.
 
 ## Output
 
@@ -78,10 +97,10 @@ Write to `.cheese/age/<slug>.md`:
 - **[deslop]** `path/to/old.ts:55-60` — <what is wrong>. <recommendation>.
 
 ## Confidence
-<low|medium|high> — <one-line justification including which evidence sources were unavailable>
+<`certain` | `speculating` | `don't know`> — <one-line justification including which evidence sources were unavailable>
 
 ## Next step
-/cure <slug>   — pick findings to fix
+Selection prompt rendered inline — pick findings to cure or `none` to stop.
 ```
 
 Then print:
@@ -92,12 +111,17 @@ Age report: .cheese/age/<slug>.md
 
 ## Handoff
 
-After the report is on disk, ask via `AskUserQuestion` which downstream to run. Default options:
+After the report is on disk, skip any "should I run /cure?" meta-question and go straight to the selection gate. The user's working memory is on the findings, not on whether a follow-up step exists.
 
-- **Run /cure `<slug>`** *(recommended when there are high-stake findings)* — pick findings to fix.
-- **Stop** — leave the report for later.
+1. Render the numbered selection table per `../cure/references/selection.md` directly inline (one row per finding, grouped by stake).
+2. Ask via `AskUserQuestion` which findings to cure. Offer the recognized selection verbs as options:
+   - **Pick findings** — accept a free-text reply using the verbs from `../cure/references/selection.md` (`1,3,5`, `all-high`, `all`, `none`, `skip N`).
+   - **All high-stake** *(recommended when at least one high-stake finding exists)* — equivalent to `all-high`.
+   - **Stop** — equivalent to `none`; leave the report for later.
+3. On a non-empty selection, hand off to `/cure <slug>` with the selection locked in (pass the chosen ids through so `/cure` skips its own selection prompt and goes straight to apply). `/cure` still owns the apply / validate / report loop and may surface the chosen ids for confirmation if the report has shifted underneath it.
+4. On `none` / `Stop`, exit cleanly with the report path.
 
-Pre-select `Run /cure` when at least one high-stake finding exists. `/cure` still owns its selection gate; the user picks individual findings there. Never auto-apply.
+Never auto-apply fixes, and never invoke `/cure` without an explicit non-empty selection. The default selection remains empty.
 
 ### Auto mode
 
@@ -112,7 +136,15 @@ When invoked with `--auto`:
 
 - Review is not a verdict; explain where to look and why.
 - Do not edit production files.
-- Do not auto-apply fixes. Prompting `/cure` via `AskUserQuestion` is fine; bypassing `/cure`'s selection gate is not — the only sanctioned bypass is `--auto`, which `/cure` itself enforces with a stake floor and pass cap.
+- Do not auto-apply fixes. Age owns the *selection* gate (which findings to cure) and dispatches `/cure` only with an explicit non-empty selection; the *application* gate stays inside `/cure`. The only sanctioned bypass of either gate is `--auto`, which `/cure` enforces with a stake floor and `/age` enforces with a two-pass cap.
 - Do not invent evidence. Cite files, diffs, commands, or unavailable-source notes.
-- Keep confidence qualitative (`low | medium | high`); never emit a numeric score.
+- Agree when the diff is fine. Do not manufacture findings to fill a dimension; an empty dimension is a valid outcome.
+- Keep confidence qualitative (`certain | speculating | don't know`); never emit a numeric score.
 - Findings carry location + recommendation. Do not write JSON sidecars or hash-anchored fix payloads — `/cure` reads the markdown directly.
+- Apply `references/voice.md` (output discipline, reasoning posture, confidence vocabulary).
+
+## References
+
+- `references/dimensions.md` — per-dimension rubrics and recommendation shapes.
+- `references/voice.md` — shared output discipline, reasoning posture, and confidence vocabulary.
+- `references/sub-agent-gate.md` — shared sub-agent kernel: digest contract, harness-agnostic selection, what the parent never delegates.
