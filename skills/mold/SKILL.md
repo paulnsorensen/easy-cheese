@@ -44,6 +44,16 @@ Beyond cheez-* there are mold-specific tools:
 
 Optional tools accelerate the work; missing tools do not block the dialogue. When evidence is unavailable, mark the affected claim `[?]` until settled.
 
+## Sub-agent context gate
+
+`/mold` should keep the dialogue, contradictions, and approval state in the parent context. Spawn a read-only grounding sub-agent only when validation would flood the conversation with raw evidence or graph output:
+
+- External validation needs deep `/briesearch` evidence, many docs, or raw web/vendor bodies.
+- Shape check touches more than 5 symbols, fans out across many modules, or requires large caller/dependency traversals.
+- Diagnose mode needs bulky logs, traces, or search output before a concise root-cause hypothesis can be formed.
+
+The sub-agent returns only a compact claim table, shape-check summary, or root-cause evidence summary with citations and confidence. The parent reads that summary, keeps asking the user the smallest useful next question, and still owns the two-key handshake. Do not spawn sub-agents for normal dialogue, approval, or curdle/spec writing.
+
 ## Approval gate
 
 Curdle requires the **two-key handshake**: an explicit user verb (e.g. `curdle`, `ship it`) and the agent's coherence self-check. The full checklist, mandatory gates, and override semantics live in `references/handshake.md` — do not duplicate them here.
