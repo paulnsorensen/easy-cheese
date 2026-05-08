@@ -63,16 +63,16 @@ Missing optional tools should not block review. State which evidence was unavail
 
 ## Sub-agent context gate
 
-`/age` should spawn a read-only review-context sub-agent when the evidence-gathering phase is likely to exceed the parent context, especially for `--comprehensive` reviews.
+`/age` should fork a read-only review-context sub-agent when evidence gathering is likely to exceed the parent context, especially for `--comprehensive` reviews. Prefer a small, fast sub-agent — whatever cheap-tier or read-only worker the host harness exposes (e.g. an explore-style default). Skills do not name specific model tiers; the harness chooses.
 
 Spawn when any of these are true:
 
 - The diff spans more than 15 files.
-- The touched code or generated review context is larger than roughly 25 KB.
-- Caller/dependency graph expansion crosses multiple subsystems.
+- Touched code or generated review context is larger than roughly 25 KB (about 5 K tokens of raw output the parent would not read line-by-line).
+- Caller / dependency graph expansion crosses multiple subsystems.
 - code-review-graph or `tilth_deps` output is needed for hotspot, bridge-node, or blast-radius framing.
 
-The sub-agent gathers diff, caller, dependency, architecture, and PR evidence, then returns only a concise orientation plus high-signal file/path citations. The parent owns the eight-dimension review, final finding severity, and `.cheese/age/<slug>.md` report. Do not spawn for small diffs or to outsource the final verdict.
+The sub-agent returns a digest of roughly 2 KB or less: orientation paragraph, high-signal `path:line` citations, and a gap list. No raw diff dumps, no full PR bodies. The parent owns the eight-dimension review, severity grading, and the `.cheese/age/<slug>.md` report. Do not spawn for small diffs, to outsource severity grading, or to outsource the final verdict.
 
 ## Output
 
