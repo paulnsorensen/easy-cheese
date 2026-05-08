@@ -91,6 +91,65 @@ looking at without a second read.
 
 ---
 
+## Scope: when tilth, when not
+
+`tilth_search` owns **code in tracked, parseable source files** (Rust, TypeScript/TSX/JS, Python, Go, Java, Scala, C/C++, Ruby, PHP, C#, Swift). Symbol-shaped queries, callers, content, and bounded regex inside the tree all stay here.
+
+### Scope and freshness
+
+The tilth MCP server is launched against **one repository** — whatever directory the harness booted it in. There is no persistent index: tilth walks the working tree on demand, parses files with Tree-sitter, and respects `.gitignore`. Practical consequences:
+
+- No startup wait, no rebuild step, no staleness — your last save is what tilth sees on the next call.
+- Cannot reach files outside that one tree (sibling worktrees, `~/...`, system paths, dependency caches like `node_modules` or `.cargo/registry`).
+- Cannot answer cross-repo questions in one call. For that, see *When code-review-graph beats tilth* below.
+
+### When NOT to invoke `/cheez-search`
+
+Inside `/cheez-search`, the contract is hard: tilth-only, no host search fallback. The questions below are **out of scope** for the skill — don't enter cheez-search for them in the first place. They're listed here so workflow skills know where to route instead, consistent with the README rule "anything that touches source code goes through cheez-*; everything else stays on host tools".
+
+| Question (don't use cheez-search) | Route to | Why |
+|-----------------------------------|----------|-----|
+| Pattern with metavars (`JSON.parse(JSON.stringify($X))`) | `sg` (ast-grep) — sanctioned escape, callable from cheez-search via Bash | AST shapes tilth can't express |
+| External library docs ("how does React's `useEffect` work?") | `/briesearch` (Context7) | Not your code; live vendor docs |
+| Plain non-code text at scale (logs, build outputs, large CSVs) | host `Bash` with `rg`, `jq`, `awk`, `head`/`tail` from the calling workflow skill | Tree-sitter parsing wastes tokens here; format-specific tools win |
+| Files outside the repo (system paths, `~/Library`, `/etc`) | host `Grep` / `Bash` from the calling workflow skill | tilth is repo-scoped (see above) |
+
+If you find yourself wanting `grep` *for code in this repo*, that's the signal to stay in cheez-search and the tilth-only contract holds. If the question is non-code or out-of-tree, the calling workflow skill should answer it directly with its own host tools — never break the cheez-search contract by reaching for host search inside this skill.
+
+### When LSP beats tilth (if your harness has one)
+
+**easy-cheese does not install LSP** — it is whatever language servers your harness already exposes (Claude Code LSP plugins, Zed / VS Code language servers, etc.). When an LSP is reachable for the file's language and the question is **type-grounded**, prefer the LSP method over tilth. Tree-sitter sees syntax, not types — it cannot disambiguate `var x = GetValue()` (keyword or type?) or pick between two `pop` functions imported from different modules. LSP runs the actual language server and resolves these.
+
+| Question | LSP method (when available) | Why LSP wins |
+|----------|------------------------------|--------------|
+| "What's the resolved return type / generic instantiation of X?" | `textDocument/hover` | tilth sees syntax, not types — hover returns the resolved signature |
+| "Who implements interface / trait / abstract class Y?" | `textDocument/implementation` | Honors aliased imports, generics, and re-exports; tilth's name match misses these |
+| "Where is this exact symbol used, accounting for shadowing and module scope?" | `textDocument/references` | Scope-respecting; tilth's callers query is name-shaped |
+| "Where is the *type* (not the value) of X declared?" | `textDocument/typeDefinition` | Resolves through type aliases and generics |
+| "Are there type errors in this file?" | `textDocument/diagnostic` / pull-diagnostic | Only LSP runs the language server's typechecker |
+
+If no LSP is installed for the language, or the file is in a broken / incomplete state where the server cannot resolve, fall back to tilth — `tilth_search` still finds the symbol by name even when no semantic resolution is possible. tilth also wins on speed at scale, polyglot queries (one call across Rust + TS + Python), error-tolerant parses, and content / regex queries that LSP does not index.
+
+### When code-review-graph beats tilth (if your harness has it)
+
+[`code-review-graph`](https://github.com/tirth8205/code-review-graph) is a separate, optional MCP that builds a **persistent** call graph of one or more repositories with Tree-sitter, Louvain communities, betweenness-centrality, and (with the `[embeddings]` extra) vector embeddings. Where tilth answers "where is `handleAuth`?", code-review-graph answers "what code is *about* authentication, ranked by importance and reach across all my repos?"
+
+It wins on five questions tilth structurally cannot answer:
+
+| Question | code-review-graph tool | Why tilth can't |
+|----------|------------------------|-----------------|
+| Find code by *meaning*, not name ("rate-limiting logic", "session expiry handling") | `semantic_search_nodes_tool` | Embeddings rank by concept; tilth only matches identifiers and literal text |
+| Search across *multiple* repos in one call | `cross_repo_search_tool` | tilth is scoped to one tree per MCP session |
+| Risk-weighted blast radius (which callers actually matter, by centrality) | `get_impact_radius_tool`, `get_review_context_tool` | `tilth_deps` returns raw imports; code-review-graph weights them by graph centrality |
+| Architecture framing for a large diff (hubs, bridges, communities) | `get_architecture_overview_tool`, `get_hub_nodes_tool`, `get_bridge_nodes_tool`, `list_communities_tool` | tilth has no global graph view |
+| Affected execution flows for a change | `get_affected_flows_tool` | tilth follows callers one hop at a time; this returns full flows |
+
+**Freshness caveat — this is the trade-off vs tilth.** code-review-graph's graph is materialised by an explicit `code-review-graph build` step (and `code-review-graph embed` for the semantic search index). Unlike tilth, it goes stale if the build wasn't refreshed after recent edits. Re-run `build` (and, if you've added concept-shaped code, `embed`) before relying on its answers on a hot branch.
+
+If code-review-graph is unavailable, the cheez-search fallbacks are: name-shaped questions stay on tilth; semantic / cross-repo / architecture questions either degrade to a manual `tilth_deps` + `kind: "callers"` walk or get noted as unavailable evidence (cap confidence at `speculating`).
+
+---
+
 ## Choose your search kind
 
 All six rows below are first-class — picking the right one is the difference

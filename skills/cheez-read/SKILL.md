@@ -81,6 +81,47 @@ This means you never waste tokens on a giant lockfile or minified bundle.
 
 ---
 
+## Scope: when tilth, when not
+
+`tilth_read` owns **source code files in tracked, parseable languages** — anything you might later want to navigate by symbol, get hash anchors for, or edit through cheez-write. Smart outlining, edit-mode anchors, session deduplication, and `.gitignore`-aware listings all live here.
+
+### Scope and freshness
+
+The tilth MCP server is launched against **one repository** — whatever directory the harness booted it in. There is no persistent index: tilth walks the working tree on demand, parses files with Tree-sitter, and respects `.gitignore`. Practical consequences:
+
+- No startup wait, no rebuild step, no staleness — the latest content on disk is what tilth reads.
+- Cannot reach files outside that one tree (sibling worktrees, `~/...`, system paths, dependency caches like `node_modules`, `.cargo/registry`, `site-packages`).
+- For multi-repo reads, the calling workflow skill must use host `Read` per file directly, or use code-review-graph's cross-repo tools — see cheez-search's [When code-review-graph beats tilth](../cheez-search/SKILL.md#when-code-review-graph-beats-tilth-if-your-harness-has-it) section.
+
+### When NOT to invoke `/cheez-read`
+
+Inside `/cheez-read`, the contract is hard: tilth-only, no host fallback. The reads below are **out of scope** for the skill — don't enter cheez-read for them in the first place. They're listed here so workflow skills know where to route instead, consistent with the README rule "anything that touches source code goes through cheez-*; everything else stays on host tools".
+
+| File (don't use cheez-read) | Route to | Why |
+|-----------------------------|----------|-----|
+| Binary content (images, PDFs) | host `Read` (multimodal) from the calling workflow skill | tilth can't render these |
+| Streaming output, process logs, huge CSVs | host `Bash` with `head`/`tail`, `awk`, `jq` from the calling workflow skill | Format-specific tools beat outline mode here |
+| Lockfiles, minified bundles, generated artifacts | don't read by hand — regenerate from source | tilth deliberately skips these |
+| Files outside the repo (system paths, sibling worktrees, `~/...`) | host `Read` from the calling workflow skill | tilth is repo-scoped (see above) |
+| Dependency source (`node_modules`, `.cargo/registry`, `site-packages`, vendor caches) | LSP `textDocument/definition` from the calling workflow skill if a server is reachable; otherwise don't read by hand | Reading dependency source by hand is almost always wrong; the LSP resolves the right module version |
+
+If the file is code in this repo, **always cheez-read** — the hash anchors are non-negotiable for safe edits later, and the tilth-only contract holds inside the skill.
+
+### When LSP beats tilth for navigation (if your harness has one)
+
+**easy-cheese does not install LSP** — it is whatever language servers your harness already exposes. When an LSP is reachable for the file's language and the navigation question is type-grounded, prefer the LSP method:
+
+| Goal | LSP method (when available) | Why LSP wins |
+|------|------------------------------|--------------|
+| Jump to where a symbol is *defined*, following imports / re-exports | `textDocument/definition` | Resolves the actual import graph; tilth surfaces every textual definition with that name |
+| Read the *resolved* type / generic instantiation at a call site | `textDocument/hover` | Returns the typechecker's view of the symbol, not just the source declaration |
+| Open the file declaring the *type* of a value | `textDocument/typeDefinition` | Walks through type aliases and generic parameters |
+| Browse symbols across the whole project, semantically ranked | `workspace/symbol` | LSP indexes the project's type graph; tilth indexes the tree |
+
+If no LSP is installed for the language, or the file is in a broken / incomplete state where the server cannot resolve, stay on tilth. tilth still wins on outline reading, hash-anchored prep for edits, polyglot directory listings, and any read where a `.gitignore`-aware token estimate is what you actually need.
+
+---
+
 ## MCP Tool Reference
 
 ### tilth_read — Smart File Reading

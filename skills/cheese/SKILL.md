@@ -61,10 +61,12 @@ Never resolve uncertainty by guessing — silent misrouting is worse than asking
 
 ## Preferred tools and fallbacks
 
+When the input is a path or slug, code reading and searching go through the cheez-* skills (`/cheez-read`, `/cheez-search`) — see those skills for tool selection rules.
+
+Beyond cheez-* there are router-specific tools:
+
 | Need | Prefer | Fallback |
 | --- | --- | --- |
-| Reading the input file when it's a path | `cheez-read` | host `Read` |
-| Quickly checking whether a slug exists under `.cheese/` | `cheez-search` | `ripgrep`, `find`, file tree |
 | PR / issue context | `gh` | the URL or numbers the user provided |
 | Confirming routing target with the user | `AskUserQuestion` | a numbered list with explicit "no auto-invoke" wording |
 
