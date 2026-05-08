@@ -739,10 +739,12 @@ STUB
     make_stub cargo
     make_stub gh
     make_stub claude
+    make_stub tilth
     EC_BREW="$STUB_BIN/brew" \
     EC_CARGO="$STUB_BIN/cargo" \
     EC_GH="$STUB_BIN/gh" \
     EC_CLAUDE="$STUB_BIN/claude" \
+    EC_TILTH="$STUB_BIN/tilth" \
         run ec_main --dry-run
     [ "$status" -eq 0 ]
     [[ "$output" == *"would run 'brew install gh'"* ]]
