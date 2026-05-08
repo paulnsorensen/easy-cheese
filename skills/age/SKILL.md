@@ -1,6 +1,6 @@
 ---
 name: age
-description: This skill should be used when the user wants a code review on a diff, PR, branch, or path — phrases like "review this", "/age", "is this safe to merge", "find bugs", "spot security issues", "check for slop", "review my PR", "look for problems", "what's wrong with this code". Runs eight orthogonal review dimensions (correctness, security, encapsulation, spec, complexity, deslop, assertions, NIH) over the scoped diff and emits a stake-grouped findings report at `.cheese/age/<slug>.md`. Use even when the user only asks for one dimension — the report scopes itself. Findings only — no fixes; after the report lands, age renders the cure-selection table inline and asks which findings to cure (no "should I run /cure?" meta-question), then hands off to `/cure` with the selection locked in. Supports `--auto` (propagated from `/cook --auto`) to skip the inline selection prompt and chain straight into `/cure --auto --stake medium+`, with a hard cap of two cure passes per auto chain. After `/press` (optional); before `/cure`.
+description: This skill should be used when the user wants a code review on a diff, PR, branch, or path — phrases like "review this", "/age", "is this safe to merge", "find bugs", "spot security issues", "check for slop", "review my PR", "look for problems", "what's wrong with this code". Runs eight orthogonal review dimensions (correctness, security, encapsulation, spec, complexity, deslop, assertions, NIH) over the scoped diff and emits a stake-grouped findings report at `.cheese/age/<slug>.md`. Use even when the user only asks for one dimension — the report scopes itself. Findings only — no fixes; after the report lands, age renders the cure-selection table inline and asks which findings to cure (no "should I run /cure?" meta-question), then hands off to `/cure` with the selection locked in. Supports `--auto` (propagated from `/cook --auto`) for the autonomous chain into `/cure` (see `### Auto mode`). After `/press` (optional); before `/cure`.
 license: MIT
 ---
 
@@ -21,7 +21,7 @@ Accept:
 
 When called with a `<slug>`, resolve `.cheese/press/<slug>.md` (if present) for press context and review the current working diff. When called with a `<ref-or-range>`, review that range. Default to the current working diff when neither is supplied. If the base branch is unclear, ask or use the repository's documented default.
 
-`--auto` is the propagated autonomous-mode flag from `/cook --auto`. It changes the handoff (see `## Handoff`). Track the cure-pass count internally so the two-pass cap can be enforced; the first `/age --auto` invocation is pass 1, the post-cure re-age is pass 2. After pass 2, do not invoke `/cure` again — surface the report and stop.
+`--auto` is the propagated autonomous-mode flag from `/cook --auto`. It changes the handoff (see `## Handoff`). Track the cure-pass count internally so the two-cure-pass cap can be enforced — increment after each `/cure --auto` returns. The full chain is `age → cure → age → cure → age → stop`: up to three `/age --auto` invocations and up to two `/cure --auto` passes. Once two cure passes have completed, the next `/age --auto` writes the final report and stops without invoking `/cure` again.
 
 ## Review dimensions
 
@@ -121,16 +121,16 @@ After the report is on disk, skip any "should I run /cure?" meta-question and go
 3. On a non-empty selection, hand off to `/cure <slug>` with the selection locked in (pass the chosen ids through so `/cure` skips its own selection prompt and goes straight to apply). `/cure` still owns the apply / validate / report loop and may surface the chosen ids for confirmation if the report has shifted underneath it.
 4. On `none` / `Stop`, exit cleanly with the report path.
 
-Never auto-apply fixes, and never invoke `/cure` without an explicit non-empty selection. The default selection remains empty.
+Outside `--auto`, never auto-apply fixes and never invoke `/cure` without an explicit non-empty selection. The default selection remains empty. `--auto` substitutes a stake-floor selection — see `### Auto mode` below.
 
 ### Auto mode
 
 When invoked with `--auto`:
 
 - Skip the `AskUserQuestion`.
-- If any medium-or-above finding exists and the cure-pass cap has not been reached, invoke `/cure <slug> --auto --stake medium+`.
+- If two cure passes have already completed (cap reached), stop and surface the final report — do not invoke `/cure` again even if findings remain.
+- Otherwise, if any medium-or-above finding exists, invoke `/cure <slug> --auto --stake medium+` and increment the cure-pass count when it returns.
 - If no medium-or-above findings remain, stop the chain with a one-line "auto chain clean" note and the report path.
-- If pass 2 has just completed (cap reached), stop and surface the final report — do not invoke `/cure` again even if findings remain.
 
 ## Rules
 

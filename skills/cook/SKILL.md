@@ -1,6 +1,6 @@
 ---
 name: cook
-description: This skill should be used when the user has an approved spec, pasted requirements, or a focused unambiguous implementation request and wants the code written — phrases like "implement this", "build this feature", "write the code", "cook this spec", "make it work", "/cook .cheese/specs/<slug>.md", "fix this bug" (when the bug has a clear fix). Runs a TDD-disciplined contract → cut → implement → taste-test → handoff loop with scoped edits via cheez-write. Supports `--auto` to chain straight through `/press → /age → /cure` without per-step confirmation, fixing every medium-or-above finding across up to two `/age → /cure` passes. Use even when the user just says "go" or "ship it" if a spec or clear acceptance criteria is in scope. `/cook` runs standalone when the task is unambiguous (clear inputs, expected outputs, verifiable result) — a spec is helpful but not required. If the request is genuinely fuzzy, route to `/mold` first; if it needs no writes, route to `/culture`. After `/mold` (optional); before `/press` → `/age` → `/cure`.
+description: This skill should be used when the user has an approved spec, pasted requirements, or a focused unambiguous implementation request and wants the code written — phrases like "implement this", "build this feature", "write the code", "cook this spec", "make it work", "/cook .cheese/specs/<slug>.md", "fix this bug" (when the bug has a clear fix). Runs a TDD-disciplined contract → cut → implement → taste-test → handoff loop with scoped edits via cheez-write. Supports `--auto` for the autonomous chain through `/press → /age → /cure` (see `## Auto mode`). Use even when the user just says "go" or "ship it" if a spec or clear acceptance criteria is in scope. `/cook` runs standalone when the task is unambiguous (clear inputs, expected outputs, verifiable result) — a spec is helpful but not required. If the request is genuinely fuzzy, route to `/mold` first; if it needs no writes, route to `/culture`. After `/mold` (optional); before `/press` → `/age` → `/cure`.
 license: MIT
 ---
 
@@ -94,7 +94,7 @@ When invoked with `--auto`, skip this `AskUserQuestion` entirely and proceed str
 
 ### When auto mode stops early
 
-- A quality gate (test, lint, type, build) fails and the failure cannot be attributed to a single revertable finding.
+- A quality gate (test, lint, type, build) fails and the failure cannot be attributed to a single revertible finding.
 - `/press` returns `blocked` or `follow-up recommended`.
 - A cure pass cannot apply any finding (every selected fix breaks tests on revert-or-keep evaluation).
 - Two cure passes complete (success path).
@@ -103,11 +103,11 @@ In every early-stop case, surface the report from the failing skill and tell the
 
 ### Failure handling inside cure
 
-When a cure-applied fix breaks a previously-passing test, revert that single finding, log it under the cure report's `### Deferred` section with the test name and reason, and continue with the remaining findings. Do not stop the whole pass for one bad fix.
+See `skills/cure/SKILL.md` `### Auto mode` for cure's per-finding revert/defer behaviour. Cook does not duplicate the contract — cure owns it.
 
 ### Final report
 
-The last skill in the chain (cure or whichever stopped early) prints:
+The skill that ends the chain prints the summary below. On the success path that is the final `/age --auto` (after the two-cure-pass cap is reached); on an early stop it is the skill that surfaced the blocker.
 
 ```
 Auto-mode summary

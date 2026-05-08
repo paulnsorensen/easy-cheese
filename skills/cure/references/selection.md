@@ -69,4 +69,4 @@ When `/cure` is invoked with `--auto --stake <floor>`:
 - **On a finding that is no longer applicable** (file moved, code already fixed): record under `### Skipped` exactly as in interactive mode.
 - **After all selected findings are processed:** invoke `/age --scope <touched-paths> --auto` directly (no `AskUserQuestion`). The pass-cap is enforced inside `/age --auto`, not here — cure keeps applying when called.
 
-`--auto` is not a verb the user should type interactively. It exists to make the `/cook --auto` chain coherent. If a user types `/cure --auto` directly without `--stake`, ask which floor they want and treat it as a normal interactive invocation otherwise.
+`--auto` is not a verb the user should type interactively. It exists to make the `/cook --auto` chain coherent. If a user types `/cure --auto` directly without `--stake`, error out with a one-line message pointing them at standard interactive `/cure <slug>` — `--stake` is the contract for auto mode, and without it `/cure --auto` has no inclusion threshold. Do not prompt for a floor; do not silently fall back to interactive selection.
