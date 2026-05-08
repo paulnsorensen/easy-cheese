@@ -1,6 +1,6 @@
 ---
 name: cure
-description: This skill should be used when the user has an `/age` report (or any list of review findings, CI failures, or a "fix these" instruction) and wants the selected items resolved — phrases like "fix these findings", "/cure <slug>", "address the high-stake items", "act on the age report", "fix the failing CI", "apply the cleanup". Loads the report, gates on explicit user selection, applies focused fixes via cheez-write, runs the project's existing test/lint/build gates, and produces a shipping-ready summary. Use even when the user just says "fix it" if a review report or finding list is in scope. Default selection is empty — never apply everything implicitly. After `/age`; loops back to `/age --scope <touched-path>` for re-review or hands off to `/gh` to ship.
+description: This skill should be used when the user has an `/age` report (or any list of review findings, CI failures, or a "fix these" instruction) and wants the selected items resolved — phrases like "fix these findings", "/cure <slug>", "address the high-stake items", "act on the age report", "fix the failing CI", "apply the cleanup". Loads the report, gates on explicit user selection, applies focused fixes via cheez-write, runs the project's existing test/lint/build gates, and produces a shipping-ready summary. Supports `--auto --stake medium+` (propagated from `/cook --auto`) to bypass the selection gate, fix every medium-or-above finding, revert any fix that breaks tests, and chain back into `/age --auto` for re-review under a two-pass cap. Use even when the user just says "fix it" if a review report or finding list is in scope. Default selection is empty — never apply everything implicitly. After `/age`; loops back to `/age --scope <touched-path>` for re-review or hands off to `/gh` to ship.
 license: MIT
 ---
 
@@ -15,6 +15,11 @@ Do not use it to apply every suggestion automatically. The user chooses what to 
 Accept any of: a `/age` slug (`/cure <slug>` reads `.cheese/age/<slug>.md`), a pasted findings list, a CI failure summary, or a scoped instruction like "fix the high-stake age findings".
 
 If selection is ambiguous, render a numbered selection list per `references/selection.md` and ask what to apply. The default selection is empty.
+
+Optional flags:
+
+- `--auto` — autonomous mode (propagated from `/cook --auto`). Bypasses the user-selection step. Must be paired with `--stake <floor>` to set the inclusion threshold; `/cook --auto` always passes `--stake medium+`. See `references/selection.md` for the auto-selection rules and `## Auto mode` below for the pass-cap and revert behaviour.
+- `--stake <floor>` — used only with `--auto`. Accepts `high`, `medium+` (medium or higher), or `all`. Without `--auto` this flag is ignored — interactive selection is the only sanctioned path.
 
 ## Flow
 
@@ -72,9 +77,22 @@ After the cure report is rendered, ask via `AskUserQuestion` which downstream to
 
 Pre-select `Run /age` when any applied fix touched logic outside the original finding's hunk, when a corrective fix exposed adjacent risk, or when checks were skipped. Pre-select `Run /gh` when all selected findings applied cleanly and gates passed. Never auto-invoke.
 
+### Auto mode
+
+When invoked with `--auto --stake <floor>`:
+
+- Skip the selection-list rendering and the `AskUserQuestion`.
+- Auto-select every finding whose stake meets the floor (`high` only, `medium+` for medium or higher, or `all`).
+- Apply findings one at a time. After each fix, run the narrowest test that proves it. If the fix breaks a previously-passing test or any project-wide gate, revert that single finding's edit and record it under `### Deferred` in the cure report with the test name and the failure summary. Continue with the remaining findings.
+- After all selected findings are processed, skip the handoff `AskUserQuestion` and invoke `/age --scope <touched-paths> --auto` so the chain can re-review.
+- `/age --auto` enforces the two-pass cap. Cure does not need to track passes itself — it just keeps applying when invoked.
+- Never invoke `/gh` from auto mode. The chain ends with the final age report and the user opens a PR manually if they want.
+
+If no findings meet the stake floor, write an empty cure report with `### Applied: (none — no findings at or above <floor>)` and skip straight to the auto handoff with a one-line "auto chain clean" note.
+
 ## Rules
 
-- Nothing applies without explicit selection or approval.
-- Keep fixes scoped to selected findings.
-- Do not hide failed or skipped checks.
-- Prefer PR-ready output, but do not open a PR unless the user asks.
+- Nothing applies without explicit selection or approval. The only sanctioned bypass is `--auto --stake <floor>`, which substitutes a stake-based auto-selection for the user's selection and is meant for `/cook --auto` chains, not interactive use.
+- Keep fixes scoped to selected (or auto-selected) findings.
+- Do not hide failed or skipped checks. In auto mode, reverted findings go under `### Deferred`, never silently dropped.
+- Prefer PR-ready output, but do not open a PR unless the user asks. Auto mode never opens a PR.

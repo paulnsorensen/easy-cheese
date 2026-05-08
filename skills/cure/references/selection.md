@@ -2,6 +2,8 @@
 
 `/cure` never applies findings without an explicit selection. The default selection is empty.
 
+The only sanctioned bypass is the `--auto --stake <floor>` flag pair, propagated from `/cook --auto`. See `## Auto-mode selection` at the bottom of this file. Outside of auto mode, every rule below applies as written.
+
 ## Rendering the selection list
 
 When invoked with a slug, load `.cheese/age/<slug>.md` and render a numbered table grouped by stake:
@@ -43,3 +45,20 @@ For each selected finding:
 4. Move to the next selected item.
 
 If a finding is no longer applicable (file moved, code already fixed), record it in the cure report under "Skipped" with the reason. Do not silently drop it.
+
+## Auto-mode selection
+
+When `/cure` is invoked with `--auto --stake <floor>`:
+
+- **Skip the selection list and the user prompt entirely.** The selection is computed from the stake floor, not asked for.
+- **Stake floors:**
+  - `high` — only `high` stake findings.
+  - `medium+` — `high` and `medium` stake findings. This is what `/cook --auto` always passes.
+  - `all` — every finding regardless of stake.
+- **Order of application:** high stake first, then medium, in the order they appear in the age report. Within a stake band, group by file to minimise re-reads.
+- **Per-finding flow is the same as interactive:** `cheez-read` to re-confirm, `cheez-write` to apply, narrowest test to verify.
+- **On test breakage:** revert that single finding's edit, log it under the cure report's `### Deferred` section with the test name and one-line failure summary, and continue with the next finding. Do not stop the whole pass for one bad fix.
+- **On a finding that is no longer applicable** (file moved, code already fixed): record under `### Skipped` exactly as in interactive mode.
+- **After all selected findings are processed:** invoke `/age --scope <touched-paths> --auto` directly (no `AskUserQuestion`). The pass-cap is enforced inside `/age --auto`, not here — cure keeps applying when called.
+
+`--auto` is not a verb the user should type interactively. It exists to make the `/cook --auto` chain coherent. If a user types `/cure --auto` directly without `--stake`, ask which floor they want and treat it as a normal interactive invocation otherwise.

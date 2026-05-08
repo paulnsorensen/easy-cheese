@@ -1,6 +1,6 @@
 ---
 name: press
-description: This skill should be used right after `/cook` produces green changes, when the user wants the test surface hardened before review or shipping — phrases like "press the changes", "harden this", "check coverage", "strengthen the tests", "are the tests good enough", "press before /age", "/press". Reads the spec + cooked diff, maps changed behavior to tests, finds weak assertions and missing boundaries, adds focused hardening tests, writes a press report to `.cheese/press/<slug>.md`, and prompts `/age` next. Use even when the user wants to "tighten things up" before review. Do NOT use to add broad new behavior — only corrective fixes that hardening tests force. After `/cook`; before `/age` → `/cure`.
+description: This skill should be used right after `/cook` produces green changes, when the user wants the test surface hardened before review or shipping — phrases like "press the changes", "harden this", "check coverage", "strengthen the tests", "are the tests good enough", "press before /age", "/press". Reads the spec + cooked diff, maps changed behavior to tests, finds weak assertions and missing boundaries, adds focused hardening tests, writes a press report to `.cheese/press/<slug>.md`, and prompts `/age` next. Supports `--auto` (propagated from `/cook --auto`) to skip its handoff and chain straight into `/age --auto` when readiness is `ready for /age`. Use even when the user wants to "tighten things up" before review. Do NOT use to add broad new behavior — only corrective fixes that hardening tests force. After `/cook`; before `/age` → `/cure`.
 license: MIT
 ---
 
@@ -88,6 +88,14 @@ After the press report is on disk, ask via `AskUserQuestion` which downstream to
 - **Stop** — address `follow-up recommended` items before review.
 
 Pre-select `Run /age` only when readiness is `ready for /age`. If the report is `blocked`, do not pre-select anything; the user decides whether to fix or escalate.
+
+### Auto mode
+
+When invoked with `--auto` (propagated from `/cook --auto`):
+
+- Skip the `AskUserQuestion` entirely.
+- If readiness is `ready for /age`, invoke `/age <slug> --auto` directly.
+- If readiness is `follow-up recommended` or `blocked`, stop the auto chain and surface the press report to the user. Do not paper over a non-green press in auto mode — those statuses exist precisely because human judgement is needed.
 
 ## Rules
 

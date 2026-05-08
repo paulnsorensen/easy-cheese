@@ -61,10 +61,11 @@ Default to project-local cheese artifacts when the user wants files:
 After the spec is written, ask the user via `AskUserQuestion` which downstream to run. Default options:
 
 - **Run /cook `.cheese/specs/<slug>.md`** *(recommended)* — implement the spec.
+- **Run /cook --auto `.cheese/specs/<slug>.md`** — implement the spec and chain straight through `/press → /age → /cure` autonomously, fixing every medium-or-above finding across up to two cure passes. Offer when acceptance criteria are explicit *and* the user has signalled they want the pipeline to run forward without per-step approval. Never pre-select; auto mode is opt-in.
 - **Run /briesearch** — gather more external evidence first.
 - **Stop** — leave the spec for later.
 
-Pre-select `Run /cook` only when acceptance criteria are explicit and quality gates are runnable. Never auto-invoke; the user must select.
+Pre-select `Run /cook` (the gated form) only when acceptance criteria are explicit and quality gates are runnable. Never auto-invoke; the user must select.
 
 ## Rules
 

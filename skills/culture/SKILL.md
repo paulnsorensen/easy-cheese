@@ -42,10 +42,11 @@ Return a short conversational summary:
 
 ## Handoff
 
-When the conversation reveals real work, ask via `AskUserQuestion` which downstream to run. Default options (pick at most two of these plus a stop):
+When the conversation reveals real work, ask via `AskUserQuestion` which downstream to run. Default options (pick at most three of these plus a stop):
 
 - **Run /mold** *(recommended when the idea is still fuzzy)* — converge on a spec.
 - **Run /cook** *(recommended when the ask is clear and unambiguous)* — implement directly.
+- **Run /cook --auto** — implement directly, then chain through `/press → /age → /cure` autonomously, fixing every medium-or-above finding across up to two cure passes. Offer this when the conversation reached an unambiguous contract *and* the user signalled they want the whole pipeline to run forward without per-step approval ("just do it", "ship it", "auto", "fix it all the way through"). Never pre-select; auto mode opts the user out of the gates that exist for their protection.
 - **Pause** — keep the dialogue in head; no further action.
 
 `/briesearch` is offered only when the conversation hit a factual gap that external docs could close. `/age` is never the next step from culture — review needs a diff to look at.

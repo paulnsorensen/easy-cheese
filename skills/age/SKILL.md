@@ -1,6 +1,6 @@
 ---
 name: age
-description: This skill should be used when the user wants a code review on a diff, PR, branch, or path — phrases like "review this", "/age", "is this safe to merge", "find bugs", "spot security issues", "check for slop", "review my PR", "look for problems", "what's wrong with this code". Runs eight orthogonal review dimensions (correctness, security, encapsulation, spec, complexity, deslop, assertions, NIH) over the scoped diff and emits a stake-grouped findings report at `.cheese/age/<slug>.md`. Use even when the user only asks for one dimension — the report scopes itself. Findings only — no fixes; route the user to `/cure` when they are ready to select findings. After `/press` (optional); before `/cure`.
+description: This skill should be used when the user wants a code review on a diff, PR, branch, or path — phrases like "review this", "/age", "is this safe to merge", "find bugs", "spot security issues", "check for slop", "review my PR", "look for problems", "what's wrong with this code". Runs eight orthogonal review dimensions (correctness, security, encapsulation, spec, complexity, deslop, assertions, NIH) over the scoped diff and emits a stake-grouped findings report at `.cheese/age/<slug>.md`. Supports `--auto` (propagated from `/cook --auto`) to skip its handoff and chain straight into `/cure --auto --stake medium+`, with a hard cap of two cure passes per auto chain. Use even when the user only asks for one dimension — the report scopes itself. Findings only — no fixes; route the user to `/cure` when they are ready to select findings. After `/press` (optional); before `/cure`.
 license: MIT
 ---
 
@@ -15,11 +15,13 @@ Do not use it to apply fixes directly. Hand fix work to `/cure`, which owns sele
 Accept:
 
 ```text
-/age [<ref-or-range>] [--scope <path>] [--comprehensive]
-/age <slug>
+/age [<ref-or-range>] [--scope <path>] [--comprehensive] [--auto]
+/age <slug> [--auto]
 ```
 
 When called with a `<slug>`, resolve `.cheese/press/<slug>.md` (if present) for press context and review the current working diff. When called with a `<ref-or-range>`, review that range. Default to the current working diff when neither is supplied. If the base branch is unclear, ask or use the repository's documented default.
+
+`--auto` is the propagated autonomous-mode flag from `/cook --auto`. It changes the handoff (see `## Handoff`). Track the cure-pass count internally so the two-pass cap can be enforced; the first `/age --auto` invocation is pass 1, the post-cure re-age is pass 2. After pass 2, do not invoke `/cure` again — surface the report and stop.
 
 ## Review dimensions
 
@@ -97,11 +99,20 @@ After the report is on disk, ask via `AskUserQuestion` which downstream to run. 
 
 Pre-select `Run /cure` when at least one high-stake finding exists. `/cure` still owns its selection gate; the user picks individual findings there. Never auto-apply.
 
+### Auto mode
+
+When invoked with `--auto`:
+
+- Skip the `AskUserQuestion`.
+- If any medium-or-above finding exists and the cure-pass cap has not been reached, invoke `/cure <slug> --auto --stake medium+`.
+- If no medium-or-above findings remain, stop the chain with a one-line "auto chain clean" note and the report path.
+- If pass 2 has just completed (cap reached), stop and surface the final report — do not invoke `/cure` again even if findings remain.
+
 ## Rules
 
 - Review is not a verdict; explain where to look and why.
 - Do not edit production files.
-- Do not auto-apply fixes. Prompting `/cure` via `AskUserQuestion` is fine; bypassing `/cure`'s selection gate is not.
+- Do not auto-apply fixes. Prompting `/cure` via `AskUserQuestion` is fine; bypassing `/cure`'s selection gate is not — the only sanctioned bypass is `--auto`, which `/cure` itself enforces with a stake floor and pass cap.
 - Do not invent evidence. Cite files, diffs, commands, or unavailable-source notes.
 - Keep confidence qualitative (`low | medium | high`); never emit a numeric score.
 - Findings carry location + recommendation. Do not write JSON sidecars or hash-anchored fix payloads — `/cure` reads the markdown directly.
