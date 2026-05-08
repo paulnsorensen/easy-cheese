@@ -371,11 +371,12 @@ ec_install_mcp_crg() {
 }
 
 ec_install_mcp_list() {
-    local list="$1" harness="$2" with_edit="$3" server
+    local list="$1" harness="$2" with_edit="$3" server rc=0
     local IFS=,
     for server in $list; do
-        ec_install_mcp "$server" "$harness" "$with_edit"
+        ec_install_mcp "$server" "$harness" "$with_edit" || rc=1
     done
+    return $rc
 }
 
 # Detect the main-line harness CLIs that can receive Agent Skills directly.
@@ -602,11 +603,11 @@ ec_main() {
     fi
 
     local harnesses
-    harnesses="$(ec_resolve_harnesses "$EC_HARNESS")"
-    ec_install_skills_for_harnesses "$harnesses"
+    harnesses="$(ec_resolve_harnesses "$EC_HARNESS")" || return $?
+    ec_install_skills_for_harnesses "$harnesses" || return 1
 
     if [[ "$EC_MCP" != "none" ]]; then
-        ec_install_mcp_for_harnesses "$EC_MCP" "$harnesses" "$EC_WITH_EDIT"
+        ec_install_mcp_for_harnesses "$EC_MCP" "$harnesses" "$EC_WITH_EDIT" || return 1
     fi
 
     ec_log "Done. Restart your harness so skills, MCP servers, and PATH changes take effect."
