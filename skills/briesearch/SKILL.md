@@ -39,7 +39,14 @@ Spawn for any heavy routed source:
 - Any crawl.
 - Deep `tavily_research` or equivalent multi-source research.
 
-Do not spawn for light triage: snippets-only search, up to 10 results, a single-URL extract, or local code-pattern lookup with bounded output. The sub-agent must return only the claim table, confidence, and optional `.cheese/research/<slug>/<slug>.md` path; raw bodies stay under `.cheese/research/<slug>/raw/`.
+Do not spawn for light triage:
+
+- Snippets-only search.
+- Up to 10 results.
+- Single-URL extract.
+- Local code-pattern lookup with bounded output.
+
+The sub-agent must return only the claim table, confidence, and optional `.cheese/research/<slug>/<slug>.md` path. Raw bodies stay under `.cheese/research/<slug>/raw/`.
 
 ## Preferred tools and fallbacks
 
