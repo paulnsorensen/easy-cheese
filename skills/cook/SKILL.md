@@ -39,7 +39,7 @@ When the fast-path applies, derive a slug from the task (e.g. `tail-trailing-new
 2. **Cut** — write failing tests for the changed behaviour. See `references/tdd-loop.md`.
 3. **Implement** — make the cut tests pass with the smallest production change.
 4. **Taste-test** — check spec drift, readability, and scope creep. Two-round cap; details in `references/tdd-loop.md`.
-5. **Hand off** — produce the package-ready report (`references/package-report.md`) and prompt the next step via `AskUserQuestion` (see `## Handoff` below). The default chain is `/press` → `/age` → `/cure`.
+5. **Hand off** — produce the package-ready report (`references/package-report.md`), write the handoff slug (`## Handoff slug` below), and prompt the next step via `AskUserQuestion` (see `## Handoff` below). The default chain is `/press` → `/age` → `/cure`.
 
 Code search, reading, and editing all go through the cheez-* skills (`/cheez-search`, `/cheez-read`, `/cheez-write`) — see those skills for tool selection rules and out-of-scope fallbacks.
 
@@ -67,9 +67,22 @@ Summarize:
 - Remaining risks or skipped checks.
 - Suggested next skill: usually `/press` → `/age` → `/cure`.
 
+## Handoff slug
+
+Write a minimum-shape handoff slug to `.cheese/cook/<slug>.md` so downstream phases (and the `/ultracook` orchestrator) can resume or chain without re-reading the full package-ready report. The slug is prepended at the top of the same file the package-ready report lives in — there is no second file. Schema:
+
+```markdown
+status: ok | halt: <one-line reason>
+next: press | age | done
+artifact: <path-to-richer-report-if-any>
+<one-line orientation: what cook changed>
+```
+
+`status: ok` when cook finished cleanly. `status: halt: <reason>` when cook stopped per the package-report stop conditions (missing spec decision, blocked test, taste-test cap hit, quality gate fail outside scope). `next:` is `press` for the standard chain, `age` if the user opts to skip press, or `done` if the package-report status itself is `blocked`. The orientation line is a single factual sentence about what the diff does — not a summary of the report.
+
 ## Handoff
 
-After the package-ready report is printed, ask via `AskUserQuestion` which downstream to run. Default options:
+After the package-ready report is printed and the handoff slug is on disk, ask via `AskUserQuestion` which downstream to run. Default options:
 
 - **Run /press `<slug>`** *(recommended)* — harden tests before review.
 - **Run /age `<slug>`** — review the diff now and skip the press pass.
@@ -100,6 +113,10 @@ When invoked with `--auto`, skip this `AskUserQuestion` entirely and proceed str
 - Two cure passes complete (success path).
 
 In every early-stop case, surface the report from the failing skill and tell the user the cap reached or the blocker hit. Do not silently downgrade.
+
+### When invoked from /ultracook
+
+`/ultracook` spawns each phase as a fresh-context sub-agent and owns the chain itself. When the spawn prompt explicitly says "for THIS PHASE ONLY" and "do not chain forward to the next phase," honour the override: write `.cheese/cook/<slug>.md` and stop. Do not invoke `/press <slug> --auto` from inside the sub-agent. The orchestrator reads the handoff slug and decides whether to spawn the next phase. Without this override, sub-agent #1 would run the entire pipeline inside its own context and `/ultracook`'s per-phase isolation guarantee would be silently broken.
 
 ### Failure handling inside cure
 

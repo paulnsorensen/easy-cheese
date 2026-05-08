@@ -22,6 +22,10 @@ Accept anything the user supplies as `$ARGUMENTS`:
 - A research question about an external library, API, or pattern.
 - An empty or near-empty prompt — treat as "what's next?" and clarify.
 
+Optional flag:
+
+- `--continue <slug>` — resume an in-flight pipeline from the latest handoff slug. See `## --continue` below.
+
 If `$ARGUMENTS` is missing entirely and there is no recent context to lean on, ask one clarifying question via `AskUserQuestion` before classifying.
 
 ## Flow
@@ -48,6 +52,22 @@ If `$ARGUMENTS` is missing entirely and there is no recent context to lean on, a
 | age-then-cure | Existing `.cheese/age/<slug>.md` plus a "fix the findings" instruction | — | `/age` (re-scope if needed) → `/cure` |
 
 The full classification table — including disambiguation rules, edge cases, and confidence cues — lives in `references/classification.md`.
+
+## --continue
+
+`/cheese --continue <slug>` is the manual fresh-context resumption path. Use it after compacting the conversation, after `/ultracook` has stopped on a halt, or whenever the user wants to drive the pipeline by hand from a cleared context.
+
+Flow:
+
+1. Scan for the most recently modified handoff slug across `.cheese/{cook,press,age,cure,notes}/<slug>.md`.
+2. If none exist, offer to start the pipeline from scratch — `/mold` for fuzzy specs, `/cook` for clear asks, `/ultracook` for high-blast-radius specs — and stop.
+3. If at least one exists, read the latest one and use its `next:` field to determine the next phase. Surface the orientation line so the user knows where they are.
+4. Confirm the resumption via `AskUserQuestion`:
+   - **Run /\<next\> \<slug\>** *(recommended; the next-phase value from the latest slug)*
+   - **Run /ultracook \<slug\>** — re-enter the autonomous fresh-context chain from where the slugs left off.
+   - **Stop** — leave the pipeline paused.
+
+`/cheese --continue` never auto-invokes. The slug files are the resumability contract — they tell the router where the pipeline is, and the user picks how to move it forward.
 
 ## Confidence and the clarify gate
 

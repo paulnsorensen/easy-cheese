@@ -45,6 +45,7 @@ Each `SKILL.md` is self-contained markdown with YAML frontmatter. There are no n
 | `skills/press/SKILL.md` | `/press` | Harden cooked changes with coverage, assertion, and boundary checks. |
 | `skills/age/SKILL.md` | `/age` | Review diffs across eight staff-engineer dimensions and produce a stake-grouped findings report. |
 | `skills/cure/SKILL.md` | `/cure` | Fix user-selected findings, validate, and prepare the branch for shipping. |
+| `skills/ultracook/SKILL.md` | `/ultracook` | Autonomous fresh-context pipeline (`cook → press → age → cure → age → cure`, all `--auto`). Each phase runs inside its own full-peer sub-agent so review stays adversarial and parent context never bloats. For high-blast-radius specs. |
 | `skills/melt/SKILL.md` | `/melt` | Resolve merge / rebase / cherry-pick conflicts via the structural cascade (mergiraf → rerere → kdiff3) with batch, pick-side, and lockfile helpers. |
 
 ### Tool skills
@@ -102,9 +103,11 @@ If those tools don't show up after install, the cheez-* skills will hard-fail wi
 /cheese  ──►  classify intent
    ├─ need info / external evidence  ──►  /briesearch
    ├─ rubber-duck only               ──►  /culture
-   ├─ fuzzy / multi-module idea       ──►  /mold        ──►  /cook  ──►  /press  ──►  /age  ──►  /cure
-   ├─ clear, scoped ask               ──►  /cook        ──►  /press  ──►  /age   ──►  /cure
-   ├─ debugging task                  ──►  /culture     ──►  /cook   ──►  /press ──►  /age  ──►  /cure
+   ├─ fuzzy / multi-module idea       ──►  /mold        ──►  /cook       ──►  /press  ──►  /age  ──►  /cure
+   ├─ high-blast-radius spec          ──►  /mold        ──►  /ultracook   (fresh-context: cook → press → age → cure → age → cure)
+   ├─ clear, scoped ask               ──►  /cook        ──►  /press       ──►  /age   ──►  /cure
+   ├─ debugging task                  ──►  /culture     ──►  /cook        ──►  /press ──►  /age  ──►  /cure
+   ├─ resume in fresh context         ──►  /cheese --continue <slug>
    └─ review only                     ──►  /age         ──►  /cure
 ```
 
@@ -117,7 +120,7 @@ Easy-cheese is intentionally a small surface. What that means in practice:
 - **Skills only.** No agents, commands, eta templates, or compiled harness bundles. Each capability is a single `SKILL.md`.
 - **No repo-wide MCP requirement.** Workflow skills suggest tools (tilth, Context7, Tavily, code-review-graph) but have host-native fallbacks. The cheez-* tool skills are the exception: they require tilth MCP by design.
 - **`/age` runs eight dimensions, not nine.** Without git history analysis as a built-in agent, the `precedent` dimension is unreliable in a portable skill, so it's omitted.
-- **No orchestrator skills** (no large-feature decomposition, no PR-rescue convoy, no whole-repo NIH audit). Each skill is a single, scoped step a human can drive.
+- **One orchestrator skill, narrowly scoped.** `/ultracook` is the only orchestrator — it spawns full-peer sub-agents for the fixed `cook → press → age → cure → age → cure` chain on high-blast-radius specs. There is no large-feature decomposition, no PR-rescue convoy, no whole-repo NIH audit. Every other skill remains a single, scoped step a human can drive.
 - **No automatic re-age loop in `/cure`.** The skill describes the protocol; the human runs the next `/age` when ready.
 
 ## Optional tools
@@ -157,7 +160,7 @@ gh skill install paulnsorensen/easy-cheese
 Install every skill in one shot:
 
 ```sh
-for s in age briesearch cheese cheez-read cheez-search cheez-write cook culture cure melt mold press; do
+for s in age briesearch cheese cheez-read cheez-search cheez-write cook culture cure melt mold press ultracook; do
   gh skill install paulnsorensen/easy-cheese "$s"
 done
 ```

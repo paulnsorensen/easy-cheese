@@ -44,9 +44,14 @@ If optional tools are missing, press a narrower surface and state the residual r
 
 ## Output
 
-Write to `.cheese/press/<slug>.md` and print the path. The report shape:
+Write to `.cheese/press/<slug>.md` with a minimum handoff slug at the top so `/ultracook` and `/cheese --continue` can chain without re-parsing the report. The full report shape:
 
 ```markdown
+status: ok | halt: <one-line reason>
+next: age | done
+artifact: <path-if-any>
+<one-line orientation: what /cook changed>
+
 # Press Report — <slug>
 
 ## Orientation
@@ -73,6 +78,8 @@ Write to `.cheese/press/<slug>.md` and print the path. The report shape:
 <blocked>:                  resolve blocking issues before proceeding
 ```
 
+`status: ok` maps to readiness `ready for /age`; `status: halt: <reason>` maps to readiness `blocked` or `follow-up recommended` with the reason filled in. `next: age` when readiness is `ready for /age`; `next: done` when readiness is `blocked` or `follow-up recommended` so the orchestrator stops the chain.
+
 Then print:
 
 ```
@@ -98,6 +105,10 @@ When invoked with `--auto` (propagated from `/cook --auto`):
 - Skip the `AskUserQuestion` entirely.
 - If readiness is `ready for /age`, invoke `/age <slug> --auto` directly.
 - If readiness is `follow-up recommended` or `blocked`, stop the auto chain and surface the press report to the user. Do not paper over a non-green press in auto mode — those statuses exist precisely because human judgement is needed.
+
+### When invoked from /ultracook
+
+`/ultracook` spawns press as a fresh-context sub-agent and owns the chain itself. When the spawn prompt explicitly says "for THIS PHASE ONLY" and "do not chain forward to the next phase," honour the override: write `.cheese/press/<slug>.md` (with the handoff slug at the top) and stop. Do not invoke `/age <slug> --auto` from inside the sub-agent regardless of readiness. The orchestrator reads the handoff slug and either chains to age (when `next: age`) or halts (when `next: done`).
 
 ## Rules
 

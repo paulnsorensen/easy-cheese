@@ -71,14 +71,25 @@ Default to project-local cheese artifacts when the user wants files:
 
 ## Handoff
 
-After the spec is written, ask the user via `AskUserQuestion` which downstream to run. Default options:
+After the spec is written, ask the user via `AskUserQuestion` which downstream to run. Default options vary with the shape-check verdict:
+
+**Low- and medium-blast-radius specs (verdict `low` or `medium`):**
 
 - **Run /cook `.cheese/specs/<slug>.md`** *(recommended)* — implement the spec.
 - **Run /cook --auto `.cheese/specs/<slug>.md`** — implement the spec and chain straight through `/press → /age → /cure` autonomously, fixing every medium-or-above finding across up to two cure passes. Offer when acceptance criteria are explicit *and* the user has signalled they want the pipeline to run forward without per-step approval. Never pre-select; auto mode is opt-in.
 - **Run /briesearch** — gather more external evidence first.
 - **Stop** — leave the spec for later.
 
-Pre-select `Run /cook` (the gated form) only when acceptance criteria are explicit and quality gates are runnable. Never auto-invoke; the user must select.
+**High-blast-radius specs (verdict `high` only):**
+
+The spec is large enough that per-phase context contamination becomes a real concern — review reasoning softens when the same window contains the cook reasoning, and the parent context bloats across phases. Offer the fresh-context orchestrator and the manual compaction path:
+
+- **Run /ultracook `.cheese/specs/<slug>.md`** *(recommended)* — autonomous fresh-context pipeline (`cook → press → age → cure → age → cure → age`, all `--auto`) with each phase running inside its own sub-agent, blind to prior phases.
+- **Run /cook `.cheese/specs/<slug>.md`** — implement manually, one phase at a time.
+- **Compact, then `/cheese --continue <slug>`** — drive the chain by hand from a freshly cleared context. Resumes from the latest handoff slug.
+- **Stop** — leave the spec for later.
+
+`Run /cook --auto` is omitted from the high-blast-radius offer set: with a large footprint, the fresh-context property of `/ultracook` is the actual motivation for going autonomous, and the in-session chain it offers is the wrong transport for that need. Never pre-select an autonomous option; the user must opt in. `medium` blast radius keeps the standard handoff because the in-session `/cook --auto` chain is still the right tool for that footprint — the fresh-context premium is only worth paying when the spec actually crosses module boundaries broadly enough to flip the verdict to `high`.
 
 ## Rules
 

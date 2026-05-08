@@ -21,7 +21,7 @@ Accept:
 
 When called with a `<slug>`, resolve `.cheese/press/<slug>.md` (if present) for press context and review the current working diff. When called with a `<ref-or-range>`, review that range. Default to the current working diff when neither is supplied. If the base branch is unclear, ask or use the repository's documented default.
 
-`--auto` is the propagated autonomous-mode flag from `/cook --auto`. It changes the handoff (see `## Handoff`). Track the cure-pass count internally so the two-cure-pass cap can be enforced — increment after each `/cure --auto` returns. The full chain is `age → cure → age → cure → age → stop`: up to three `/age --auto` invocations and up to two `/cure --auto` passes. Once two cure passes have completed, the next `/age --auto` writes the final report and stops without invoking `/cure` again.
+`--auto` is the propagated autonomous-mode flag from `/cook --auto`. It changes the handoff (see `## Handoff`). Track the cure-pass count internally so the two-cure-pass cap can be enforced — increment after each `/cure --auto` returns. The full chain is `age → cure → age → cure → age → stop`: up to three `/age --auto` invocations and up to two `/cure --auto` passes. Once two cure passes have completed, the next `/age --auto` writes the final report and stops without invoking `/cure` again. (This in-session contract uses conversation memory to track passes — it works because `/cook --auto` runs every phase in the same context. When invoked from `/ultracook`, each phase boots in fresh context with no shared memory; see `### When invoked from /ultracook` below for the no-shared-memory variant.)
 
 ## Review dimensions
 
@@ -80,9 +80,14 @@ Digest size, parent-vs-sub-agent split, and harness-agnostic sub-agent selection
 
 ## Output
 
-Write to `.cheese/age/<slug>.md`:
+Write to `.cheese/age/<slug>.md` with a minimum handoff slug at the top so `/ultracook` and `/cheese --continue` can chain without re-parsing the report:
 
 ```markdown
+status: ok | halt: <one-line reason>
+next: cure | done
+artifact: <path-to-press-report-or-prior-cure-if-any>
+<one-line orientation: what the diff does>
+
 # Age Report — <slug>
 
 ## Orientation
@@ -102,6 +107,8 @@ Write to `.cheese/age/<slug>.md`:
 ## Next step
 Selection prompt rendered inline — pick findings to cure or `none` to stop.
 ```
+
+`status: ok` when the review completed. `status: halt: <reason>` when evidence was unreachable in a way that blocks honest review. `next: cure` when at least one medium-or-above finding exists and the chain has cure passes remaining; `next: done` when no medium-or-above findings remain or the two-cure-pass cap has been reached.
 
 Then print:
 
@@ -131,6 +138,14 @@ When invoked with `--auto`:
 - If two cure passes have already completed (cap reached), stop and surface the final report — do not invoke `/cure` again even if findings remain.
 - Otherwise, if any medium-or-above finding exists, invoke `/cure <slug> --auto --stake medium+` and increment the cure-pass count when it returns.
 - If no medium-or-above findings remain, stop the chain with a one-line "auto chain clean" note and the report path.
+
+### When invoked from /ultracook
+
+`/ultracook` spawns age as a fresh-context sub-agent and owns the chain itself. Honour the no-chain override:
+
+- Write `.cheese/age/<slug>.md` (with the handoff slug at the top) and stop. Do not invoke `/cure <slug> --auto --stake medium+` from inside the sub-agent.
+- Set `next:` from what you observe on this run, not from any guess about chain position. `next: cure` when at least one medium-or-above finding exists; `next: done` when none do.
+- The two-cure-pass cap is enforced by ultracook's fixed chain length, not by age's `next:` field. Fresh-context age cannot count prior cure passes anyway, so this is the only honest contract. The orchestrator uses `next: done` for early-stop signalling; the natural terminal stop is the chain table running out of entries.
 
 ## Rules
 
