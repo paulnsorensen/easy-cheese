@@ -61,6 +61,21 @@ Beyond cheez-* there are review-specific tools:
 
 Missing optional tools should not block review. State which evidence was unavailable and reduce confidence accordingly.
 
+## Sub-agent context gate
+
+`/age` should fork a read-only review-context sub-agent when evidence gathering is likely to exceed the parent context, especially for `--comprehensive` reviews.
+
+Spawn when any of these are true:
+
+- The diff spans more than 15 files.
+- Touched code or generated review context is larger than roughly 25 KB (about 5 K tokens of raw output the parent would not read line-by-line).
+- Caller / dependency graph expansion crosses multiple subsystems.
+- code-review-graph or `tilth_deps` output is needed for hotspot, bridge-node, or blast-radius framing.
+
+The sub-agent returns a digest: orientation paragraph, high-signal `path:line` citations, gap list. The parent owns the eight-dimension review, severity grading, and the `.cheese/age/<slug>.md` report. Do not spawn for small diffs, to outsource severity grading, or to outsource the final verdict.
+
+Digest size, parent-vs-sub-agent split, and harness-agnostic sub-agent selection live in `references/sub-agent-gate.md` — single source of truth for the cross-cutting rules.
+
 ## Output
 
 Write to `.cheese/age/<slug>.md`:
@@ -121,3 +136,4 @@ Never auto-apply fixes, and never invoke `/cure` without an explicit non-empty s
 
 - `references/dimensions.md` — per-dimension rubrics and recommendation shapes.
 - `references/voice.md` — shared output discipline, reasoning posture, and confidence vocabulary.
+- `references/sub-agent-gate.md` — shared sub-agent kernel: digest contract, harness-agnostic selection, what the parent never delegates.
