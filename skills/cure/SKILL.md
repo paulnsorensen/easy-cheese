@@ -12,7 +12,7 @@ Do not use it to apply every suggestion automatically. The user chooses what to 
 
 ## Inputs
 
-Accept any of: a `/age` slug (`/cure <slug>` reads `.cheese/age/<slug>.md`), a pasted findings list, a CI failure summary, or a scoped instruction like "fix the high-stake age findings". `/age` may also hand off with a pre-locked selection (e.g. `/cure <slug> --select 1,3,5` or an inline selection string in the dispatch); when that happens, skip rendering the selection list and go straight to apply.
+Accept any of: a `/age` slug (`/cure <slug>` reads `.cheese/age/<slug>.md`), a pasted findings list, a CI failure summary, or a scoped instruction like "fix the high-stake age findings". `/age` may also hand off with a pre-locked selection by passing the chosen ids inline in the dispatch (see `references/selection.md#handoff-from-age` for the canonical format); when that happens, skip rendering the selection list and go straight to apply.
 
 If selection is ambiguous *and* not pre-locked from `/age`, render a numbered selection list per `references/selection.md` and ask what to apply. The default selection is empty.
 

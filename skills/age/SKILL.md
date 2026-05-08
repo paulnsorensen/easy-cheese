@@ -8,7 +8,7 @@ license: MIT
 
 Use this skill to review a diff or scoped path before merging, after `/press`, or whenever the user wants evidence-backed observations rather than an approval verdict.
 
-Do not use it to apply fixes directly. Hand fix work to `/cure`, which owns selecting and applying findings.
+Do not use it to apply fixes directly. Hand fix work to `/cure`, which owns applying findings.
 
 ## Inputs
 
@@ -95,9 +95,9 @@ Age report: .cheese/age/<slug>.md
 After the report is on disk, skip any "should I run /cure?" meta-question and go straight to the selection gate. The user's working memory is on the findings, not on whether a follow-up step exists.
 
 1. Render the numbered selection table per `../cure/references/selection.md` directly inline (one row per finding, grouped by stake).
-2. Ask via `AskUserQuestion` which findings to cure. Offer the recognised selection verbs as options:
+2. Ask via `AskUserQuestion` which findings to cure. Offer the recognized selection verbs as options:
    - **Pick findings** — accept a free-text reply using the verbs from `../cure/references/selection.md` (`1,3,5`, `all-high`, `all`, `none`, `skip N`).
-   - **All high-stake** *(pre-selected when at least one high-stake finding exists)* — equivalent to `all-high`.
+   - **All high-stake** *(recommended when at least one high-stake finding exists)* — equivalent to `all-high`.
    - **Stop** — equivalent to `none`; leave the report for later.
 3. On a non-empty selection, hand off to `/cure <slug>` with the selection locked in (pass the chosen ids through so `/cure` skips its own selection prompt and goes straight to apply). `/cure` still owns the apply / validate / report loop and may surface the chosen ids for confirmation if the report has shifted underneath it.
 4. On `none` / `Stop`, exit cleanly with the report path.
