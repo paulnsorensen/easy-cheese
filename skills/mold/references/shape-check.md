@@ -44,13 +44,13 @@ A `high` verdict (multi-module callers or more than five importers) makes the Gr
 
 ## When tilth / cheez-search is unavailable
 
-Shape-check should not block the dialogue when its preferred tools are missing. Substitute where a sanctioned alternative exists; do not reach for `grep` / `rg` / `find` — those are banned by the global cheez-* mandate even when tilth is down.
+Shape-check should not block the dialogue when its preferred tools are missing. Substitute where a sanctioned alternative exists; **for shape-check specifically, do not substitute textual search** — `grep` / `rg` over a symbol name produces a count of string occurrences, not callers or importers, and a guessed blast-radius verdict is worse than an honest unknown. (This is a shape-check rule, not a global cheez-* ban: outside cheez-* skills, mold and other workflow skills may use host tools where they are the right answer — see the README's "host tools are still the right call outside code work" line.)
 
 - **Callers / callees**: fall back to LSP `textDocument/references` / `textDocument/prepareCallHierarchy` when a language server is reachable. Note the substitution out loud.
 - **Imports / blast radius**: no LSP equivalent. Skip the count, mark the line `unknown`, and lean on the verdict downgrade below.
 - **Verdict**: cap at `[?]` instead of `low | medium | high` — a guessed verdict is worse than an honest unknown. Sketch and culture should treat `[?]` like `high` for gating purposes (Grill gate engages, option labelled `[high blast radius]`) until the user accepts the gap.
 
-If both tilth and LSP are unavailable, say so once and proceed with `[?]`. Do not silently substitute a textual search.
+If both tilth and LSP are unavailable, say so once and proceed with `[?]`. Do not silently substitute a textual search for the shape-check itself.
 
 ## When to skip
 

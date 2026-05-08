@@ -103,16 +103,18 @@ The tilth MCP server is launched against **one repository** — whatever directo
 - Cannot reach files outside that one tree (sibling worktrees, `~/...`, system paths, dependency caches like `node_modules` or `.cargo/registry`).
 - Cannot answer cross-repo questions in one call. For that, see *When code-review-graph beats tilth* below.
 
-For everything else, prefer the right tool — never reach for `grep`/`rg`/`find` as the default fallback:
+### When NOT to invoke `/cheez-search`
 
-| Question | Use this instead | Why |
-|----------|------------------|-----|
-| Pattern with metavars (`JSON.parse(JSON.stringify($X))`) | `sg` (ast-grep) — sanctioned escape | AST shapes tilth can't express |
+Inside `/cheez-search`, the contract is hard: tilth-only, no host search fallback. The questions below are **out of scope** for the skill — don't enter cheez-search for them in the first place. They're listed here so workflow skills know where to route instead, consistent with the README rule "anything that touches source code goes through cheez-*; everything else stays on host tools".
+
+| Question (don't use cheez-search) | Route to | Why |
+|-----------------------------------|----------|-----|
+| Pattern with metavars (`JSON.parse(JSON.stringify($X))`) | `sg` (ast-grep) — sanctioned escape, callable from cheez-search via Bash | AST shapes tilth can't express |
 | External library docs ("how does React's `useEffect` work?") | `/briesearch` (Context7) | Not your code; live vendor docs |
-| Plain non-code text at scale (logs, build outputs, large CSVs) | `Bash` with `rg`, `jq`, `awk`, `head`/`tail` | Tree-sitter parsing wastes tokens here; format-specific tools win |
-| Files outside the repo (system paths, `~/Library`, `/etc`) | host `Grep` / `Bash` | tilth is repo-scoped (see above) |
+| Plain non-code text at scale (logs, build outputs, large CSVs) | host `Bash` with `rg`, `jq`, `awk`, `head`/`tail` from the calling workflow skill | Tree-sitter parsing wastes tokens here; format-specific tools win |
+| Files outside the repo (system paths, `~/Library`, `/etc`) | host `Grep` / `Bash` from the calling workflow skill | tilth is repo-scoped (see above) |
 
-If you find yourself wanting `grep` *for code*, that's the signal to stay in tilth. If you want it *for non-code or out-of-tree text*, the host tools are the right answer.
+If you find yourself wanting `grep` *for code in this repo*, that's the signal to stay in cheez-search and the tilth-only contract holds. If the question is non-code or out-of-tree, the calling workflow skill should answer it directly with its own host tools — never break the cheez-search contract by reaching for host search inside this skill.
 
 ### When LSP beats tilth (if your harness has one)
 

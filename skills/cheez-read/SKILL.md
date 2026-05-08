@@ -91,20 +91,21 @@ The tilth MCP server is launched against **one repository** — whatever directo
 
 - No startup wait, no rebuild step, no staleness — the latest content on disk is what tilth reads.
 - Cannot reach files outside that one tree (sibling worktrees, `~/...`, system paths, dependency caches like `node_modules`, `.cargo/registry`, `site-packages`).
-- For multi-repo reads, fall back to host `Read` per file or use code-review-graph's cross-repo tools — see cheez-search.
+- For multi-repo reads, the calling workflow skill must use host `Read` per file directly, or use code-review-graph's cross-repo tools — see cheez-search's [When code-review-graph beats tilth](../cheez-search/SKILL.md#when-code-review-graph-beats-tilth-if-your-harness-has-it) section.
 
-For everything else, prefer the right tool:
+### When NOT to invoke `/cheez-read`
 
-| File | Use this instead | Why |
-|------|------------------|-----|
-| Plain prose docs you won't anchor-edit (READMEs, RFCs, design notes, release notes) | host `Read` | tilth works but adds no value over a small text read |
-| Binary content (images, PDFs) | host `Read` (multimodal) | tilth can't render these |
-| Streaming output, process logs, huge CSVs | `Bash` with `head`/`tail`, `awk`, `jq` | Format-specific tools beat outline mode here |
+Inside `/cheez-read`, the contract is hard: tilth-only, no host fallback. The reads below are **out of scope** for the skill — don't enter cheez-read for them in the first place. They're listed here so workflow skills know where to route instead, consistent with the README rule "anything that touches source code goes through cheez-*; everything else stays on host tools".
+
+| File (don't use cheez-read) | Route to | Why |
+|-----------------------------|----------|-----|
+| Binary content (images, PDFs) | host `Read` (multimodal) from the calling workflow skill | tilth can't render these |
+| Streaming output, process logs, huge CSVs | host `Bash` with `head`/`tail`, `awk`, `jq` from the calling workflow skill | Format-specific tools beat outline mode here |
 | Lockfiles, minified bundles, generated artifacts | don't read by hand — regenerate from source | tilth deliberately skips these |
-| Files outside the repo (system paths, sibling worktrees, `~/...`) | host `Read` | tilth is repo-scoped (see above) |
-| Dependency source (`node_modules`, `.cargo/registry`, `site-packages`, vendor caches) | LSP `textDocument/definition` if your harness has one; otherwise don't read by hand | Reading dependency source by hand is almost always wrong; the LSP resolves the right module version |
+| Files outside the repo (system paths, sibling worktrees, `~/...`) | host `Read` from the calling workflow skill | tilth is repo-scoped (see above) |
+| Dependency source (`node_modules`, `.cargo/registry`, `site-packages`, vendor caches) | LSP `textDocument/definition` from the calling workflow skill if a server is reachable; otherwise don't read by hand | Reading dependency source by hand is almost always wrong; the LSP resolves the right module version |
 
-If the file is code you might edit, **always tilth** — the hash anchors are non-negotiable for safe edits later.
+If the file is code in this repo, **always cheez-read** — the hash anchors are non-negotiable for safe edits later, and the tilth-only contract holds inside the skill.
 
 ### When LSP beats tilth for navigation (if your harness has one)
 
