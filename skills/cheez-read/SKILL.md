@@ -16,7 +16,7 @@ allowed-tools: mcp__tilth__tilth_read, mcp__tilth__tilth_files, mcp__tilth__tilt
 
 Before the first call, verify tilth is reachable:
 
-1. Check that `mcp__tilth__tilth_read` is in your tool list. If absent, stop and report `"tilth MCP server is not loaded — cannot proceed."`
+1. Check that `mcp__tilth__tilth_read` is available. If absent, stop and report `"tilth MCP server is not loaded — cannot proceed."`
 2. Make a minimal probe call: `tilth_read(path: "README.md", section: "1-1")`. If the response is a JSON-RPC error or transport failure, stop and report `"tilth MCP server present but unhealthy: <error>"`.
 3. Any other failure (file not found, bad section range, etc.) is a **content** issue — proceed normally and report the result.
 
@@ -65,8 +65,8 @@ src/handlers/orders.ts    (~3.1k tokens)
 src/handlers/webhooks.ts  (~620 tokens)
 ```
 
-Token estimates let you decide what to read in full vs outline before you
-spend any context on it.
+Token estimates inform what to read in full vs outline before spending
+any context on it.
 
 ---
 
@@ -77,13 +77,13 @@ tilth decides what to show based on file size and structure:
 - **Large files** → structural outline with line ranges
 - **Binary/generated** → skipped with type indicator
 
-This means you never waste tokens on a giant lockfile or minified bundle.
+This avoids wasting tokens on a giant lockfile or minified bundle.
 
 ---
 
 ## Scope: when tilth, when not
 
-`tilth_read` owns **source code files in tracked, parseable languages** — anything you might later want to navigate by symbol, get hash anchors for, or edit through cheez-write. Smart outlining, edit-mode anchors, session deduplication, and `.gitignore`-aware listings all live here.
+`tilth_read` owns **source code files in tracked, parseable languages** — anything that may later need symbol navigation, hash anchors, or cheez-write edits. Smart outlining, edit-mode anchors, session deduplication, and `.gitignore`-aware listings all live here.
 
 ### Scope and freshness
 
@@ -107,9 +107,9 @@ Inside `/cheez-read`, the contract is hard: tilth-only, no host fallback. The re
 
 If the file is code in this repo, **always cheez-read** — the hash anchors are non-negotiable for safe edits later, and the tilth-only contract holds inside the skill.
 
-### When LSP beats tilth for navigation (if your harness has one)
+### When LSP beats tilth for navigation (if the harness has one)
 
-**easy-cheese does not install LSP** — it is whatever language servers your harness already exposes. When an LSP is reachable for the file's language and the navigation question is type-grounded, prefer the LSP method:
+**easy-cheese does not install LSP** — it is whatever language servers the harness already exposes. When an LSP is reachable for the file's language and the navigation question is type-grounded, prefer the LSP method:
 
 | Goal | LSP method (when available) | Why LSP wins |
 |------|------------------------------|--------------|
@@ -118,7 +118,7 @@ If the file is code in this repo, **always cheez-read** — the hash anchors are
 | Open the file declaring the *type* of a value | `textDocument/typeDefinition` | Walks through type aliases and generic parameters |
 | Browse symbols across the whole project, semantically ranked | `workspace/symbol` | LSP indexes the project's type graph; tilth indexes the tree |
 
-If no LSP is installed for the language, or the file is in a broken / incomplete state where the server cannot resolve, stay on tilth. tilth still wins on outline reading, hash-anchored prep for edits, polyglot directory listings, and any read where a `.gitignore`-aware token estimate is what you actually need.
+If no LSP is installed for the language, or the file is in a broken / incomplete state where the server cannot resolve, stay on tilth. tilth still wins on outline reading, hash-anchored prep for edits, polyglot directory listings, and any read where a `.gitignore`-aware token estimate is required.
 
 ---
 
@@ -180,16 +180,16 @@ When reading files in **edit mode**, tilth outputs **hash-anchored lines**:
 The format is `<line>:<hash>|<content>`.
 
 > Plain reads use a `│` (U+2502) column separator. **Edit-mode reads** (the
-> ones you need for cheez-write) use `:<hash>|` — note the ASCII pipe and
+> ones required for cheez-write) use `:<hash>|` — note the ASCII pipe and
 > the colon. Anchors are only emitted when tilth is run in `--edit` mode.
 
 **Why this matters:**
 - These hashes uniquely identify the line content
 - They're used by `tilth_edit` (cheez-write) for precise edits
 - If the file changes, hashes won't match → edit is rejected safely
-- You MUST read before editing to get current hashes
+- Reading before editing is mandatory to get current hashes
 
-**Memorize anchors for functions you'll edit:**
+**Memorize anchors for functions to edit:**
 - Note the start hash of function definitions
 - Note the end hash for multi-line replacements
 - Pass these to cheez-write later
@@ -211,7 +211,7 @@ src/routes.ts  (~2.1k tokens)
 src/middleware.ts  (~1.8k tokens)
 ```
 
-Token estimates help you decide what to read in full vs outline.
+Token estimates inform what to read in full vs outline.
 
 **Common patterns:**
 ```
@@ -245,10 +245,10 @@ in cheez-search:
 
 ## Session Memory (Deduplication)
 
-tilth tracks what you've read in the current session:
+tilth tracks reads within the current session:
 - Re-reading the same section shows `[shown earlier]` instead of full content
 - This saves significant tokens over long sessions
-- Forces you to reference memorized anchors instead of re-reading
+- Forces reuse of memorized anchors instead of re-reading
 
 **Implication:** Read once, memorize anchors, reference later.
 
@@ -305,10 +305,10 @@ tilth tracks what you've read in the current session:
 - **DO NOT use cat / head / tail / less / more / bat** to view code — use `tilth_read`. Hash anchors and outline-vs-full token budgeting only work through tilth.
 - **DO NOT use ls / tree / eza / find / fd to enumerate code files** — use `tilth_files`. Token estimates and `.gitignore` filtering only work through tilth.
 - **DO NOT use the host Read or Glob tools** on code paths — they bypass tilth's session deduplication and emit no anchors.
-- **DO NOT re-read files** shown earlier — reference your notes.
+- **DO NOT re-read files** shown earlier — reference the prior read.
 - **DO NOT use for searching** — use cheez-search.
 - **DO NOT use for editing** — use cheez-write.
-- **DO NOT ignore hash anchors** — you'll need them for edits.
+- **DO NOT ignore hash anchors** — they are required for edits.
 
 ---
 
