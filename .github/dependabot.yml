@@ -1,0 +1,16 @@
+# Dependabot configuration — version updates only.
+# See: https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+#
+# No top-level Python manifest; the only Python is in .github/scripts/
+# (CI helpers) with versions pinned inline in workflows. No pip ecosystem
+# entry — Dependabot can't track inline `pip install foo==x.y.z` lines.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      actions-minor-and-patch:
+        update-types: [minor, patch]

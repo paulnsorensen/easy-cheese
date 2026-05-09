@@ -1,0 +1,10 @@
+# Disable blank issues so users start from a template, and surface
+# alternative support channels for non-bug, non-feature questions.
+blank_issues_enabled: false
+contact_links:
+  - name: Question or discussion
+    url: https://github.com/paulnsorensen/easy-cheese/discussions
+    about: Ask a question or start a conversation in Discussions.
+  - name: Security vulnerability
+    url: https://github.com/paulnsorensen/easy-cheese/security/advisories/new
+    about: Report a vulnerability privately via a draft security advisory.
