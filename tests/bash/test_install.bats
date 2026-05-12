@@ -642,11 +642,12 @@ STUB
     run ec_install_skills claude-code
     [ "$status" -eq 0 ]
     [[ "$output" == *"using embedded fallback list"* ]]
-    # Fallback list ships 12 skill names today; assert via spot-checks plus
+    # Fallback list ships 13 skill names today; assert via spot-checks plus
     # an exact count so accidental drift surfaces in CI.
     grep -q "^gh skill install paulnsorensen/easy-cheese age --agent claude-code --scope user --force$" "$STUB_LOG"
     grep -q "^gh skill install paulnsorensen/easy-cheese press --agent claude-code --scope user --force$" "$STUB_LOG"
-    [ "$(grep -c '^gh skill install ' "$STUB_LOG")" -eq 12 ]
+    grep -q "^gh skill install paulnsorensen/easy-cheese ultracook --agent claude-code --scope user --force$" "$STUB_LOG"
+    [ "$(grep -c '^gh skill install ' "$STUB_LOG")" -eq 13 ]
 }
 
 @test "ec_install_skills falls back to embedded list when gh api returns empty" {
@@ -656,7 +657,7 @@ STUB
     run ec_install_skills claude-code
     [ "$status" -eq 0 ]
     [[ "$output" == *"using embedded fallback list"* ]]
-    [ "$(grep -c '^gh skill install ' "$STUB_LOG")" -eq 12 ]
+    [ "$(grep -c '^gh skill install ' "$STUB_LOG")" -eq 13 ]
 }
 
 @test "ec_install_skills returns non-zero when any skill install fails" {
@@ -806,8 +807,8 @@ STUB
     grep -q "^tilth install claude-code --edit$" "$STUB_LOG"
     grep -q "^gh skill install paulnsorensen/easy-cheese age --agent claude-code --scope user --force$" "$STUB_LOG"
     grep -q "^gh skill install paulnsorensen/easy-cheese press --agent claude-code --scope user --force$" "$STUB_LOG"
-    # 12 skill installs total, no broken --all flag.
-    [ "$(grep -c '^gh skill install ' "$STUB_LOG")" -eq 12 ]
+    # 13 skill installs total, no broken --all flag.
+    [ "$(grep -c '^gh skill install ' "$STUB_LOG")" -eq 13 ]
     # No brew calls should have happened.
     ! grep -q "^brew" "$STUB_LOG" || false
 }

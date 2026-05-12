@@ -22,6 +22,10 @@ Accept anything the user supplies as `$ARGUMENTS`:
 - A research question about an external library, API, or pattern.
 - An empty or near-empty prompt — treat as "what's next?" and clarify.
 
+Optional flag:
+
+- `--continue <slug>` — resume an in-flight pipeline from the latest handoff slug. See `## --continue` below.
+
 If `$ARGUMENTS` is missing entirely and there is no recent context to lean on, ask one clarifying question via `AskUserQuestion` before classifying.
 
 ## Flow
@@ -48,6 +52,27 @@ If `$ARGUMENTS` is missing entirely and there is no recent context to lean on, a
 | age-then-cure | Existing `.cheese/age/<slug>.md` plus a "fix the findings" instruction | — | `/age` (re-scope if needed) → `/cure` |
 
 The full classification table — including disambiguation rules, edge cases, and confidence cues — lives in `references/classification.md`.
+
+## --continue
+
+`/cheese --continue <slug>` is the manual fresh-context resumption path. Use it after compacting the conversation, after `/ultracook` has stopped on a halt, or whenever the user wants to drive the pipeline by hand from a cleared context.
+
+Flow:
+
+1. Scan for the most recently modified handoff slug across `.cheese/{cook,press,age,cure,notes}/<slug>.md`.
+2. If none exist, offer to start the pipeline from scratch — `/mold` for fuzzy specs, `/cook` for clear asks, `/ultracook` for high-blast-radius specs — and stop.
+3. If at least one exists, read the latest one and use its `next:` field to decide the recommended action. Surface the orientation line so the user knows where they are.
+4. Confirm the resumption via `AskUserQuestion`. The recommended option depends on the slug's `next:` value:
+   - **When `next:` names a phase** (`mold | cook | press | age | cure | ultracook`):
+     - **Run /\<next\> \<slug\>** *(recommended)* — continue the chain at the named phase.
+     - **Run /ultracook \<slug\>** — re-enter the autonomous fresh-context chain.
+     - **Stop** — leave the pipeline paused.
+   - **When `next:` is terminal** (`done` from a phase slug, or `stop` from a culture-notes slug — the pipeline already finished):
+     - **Stop** *(recommended)* — review the diff and `/gh` when ready; there is no further phase to run.
+     - **Run /age \<slug\>** — re-review the diff in fresh context if you want another pass.
+     - **Run /ultracook \<slug\>** — only if you want to redo the whole chain over the same slug. Refuses when phase handoffs already exist (per `/ultracook`'s existing-handoffs guard); requires removing the existing slugs first.
+
+`/cheese --continue` never auto-invokes, and it never builds `/done <slug>` or `/stop <slug>` from a terminal `next:` field — those values surface the terminal state to the user, not a runnable command. The slug files are the resumability contract: they tell the router where the pipeline is, and the user picks how to move it forward.
 
 ## Confidence and the clarify gate
 

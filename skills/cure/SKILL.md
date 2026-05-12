@@ -28,7 +28,7 @@ Optional flags:
 3. **Apply** — fix one logical group at a time via `cheez-read` (re-confirm anchor location) and `cheez-write` (apply).
 4. **Validate** — run the narrowest tests that prove each fix, then any relevant project-wide gates (lint, typecheck, build).
 5. **Re-review hand-off** — recommend `/age --scope <touched-path>` so review runs through the proper skill rather than reimplementing it inline. `/cure` does not re-grade its own work. If the user picks re-age, the resulting report can feed a fresh `/cure` invocation.
-6. **Ship report** — what changed, checks run, deferred items, residual risks.
+6. **Ship report** — what changed, checks run, deferred items, residual risks. Write the handoff slug at the top of `.cheese/cure/<slug>.md` (see `## Handoff slug` below) so the chain (and `/ultracook`) can read the outcome without re-parsing the full report.
 7. **Hand off** — prompt the next step via `AskUserQuestion` (see `## Handoff` below). Never auto-invoke.
 
 ## Preferred tools and fallbacks
@@ -50,7 +50,22 @@ If a preferred tool is missing, continue with the fallback. If a missing tool pr
 
 Run the narrowest tests that prove the fix, then any relevant existing wider gates. If a gate is unavailable, record why. Do not declare ready when selected findings remain unresolved.
 
+## Handoff slug
+
+Write the cure report to `.cheese/cure/<slug>.md` with a minimum handoff slug at the top so `/ultracook` and `/cheese --continue` can chain without re-parsing the full report:
+
+```markdown
+status: ok | halt: <one-line reason>
+next: age | done
+artifact: <path-if-any>
+<one-line orientation: what cure applied or deferred>
+```
+
+`status: ok` when at least one finding applied cleanly (or no findings met the stake floor in `--auto` mode); `status: halt: <reason>` when every selected fix failed the revert/keep evaluation or a project-wide gate cannot be made green. `next:` is `age` whenever re-review should follow — that is the autonomous-chain default and the standard interactive recommendation. `next:` is `done` only when invoked interactively without `--auto` *and* the user explicitly opts out of re-review. Cure does not track which pass it is on; the two-cure-pass cap is enforced by `/age --auto`'s third invocation, not by cure.
+
 ## Output
+
+The cure report body lives below the handoff slug in the same file at `.cheese/cure/<slug>.md`:
 
 ```markdown
 ## Cure Report
@@ -91,6 +106,10 @@ When invoked with `--auto --stake <floor>`:
 - Never invoke `/gh` from auto mode. The chain ends with the final age report and the user opens a PR manually if they want.
 
 If no findings meet the stake floor, write an empty cure report with `### Applied: (none — no findings at or above <floor>)` and skip straight to the auto handoff with a one-line "auto chain clean" note.
+
+### When invoked from /ultracook
+
+`/ultracook` spawns cure as a fresh-context sub-agent and owns the chain itself. When the spawn prompt explicitly says "for THIS PHASE ONLY" and "do not chain forward to the next phase," honour the override: apply the auto-selected findings, write `.cheese/cure/<slug>.md` (with the handoff slug at the top, `next: age`), and stop. Do not invoke `/age --scope <touched-paths> --auto` from inside the sub-agent. The orchestrator reads the cure slug and spawns the next age itself.
 
 ## Rules
 
