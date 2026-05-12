@@ -38,10 +38,12 @@ Accept one of:
 
 The chain is fixed: seven spawns. The orchestrator walks the table top-to-bottom and stops after the last entry.
 
+Every spawn uses the canonical `/<phase> <slug> --auto` form. Cook accepts a bare slug per its Inputs section; the other phases already resolve their paths from the slug.
+
 | # | Phase invocation                          | Handoff slug                  |
 |---|-------------------------------------------|-------------------------------|
-| 1 | `/cook --auto <slug>`                     | `.cheese/cook/<slug>.md`      |
-| 2 | `/press --auto <slug>`                    | `.cheese/press/<slug>.md`     |
+| 1 | `/cook <slug> --auto`                     | `.cheese/cook/<slug>.md`      |
+| 2 | `/press <slug> --auto`                    | `.cheese/press/<slug>.md`     |
 | 3 | `/age <slug> --auto`                      | `.cheese/age/<slug>.md`       |
 | 4 | `/cure <slug> --auto --stake medium+`     | `.cheese/cure/<slug>.md`      |
 | 5 | `/age <slug> --auto`                      | `.cheese/age/<slug>.md` (overwritten) |
@@ -81,14 +83,15 @@ Concrete `Agent()` signature shape (harness-agnostic; adapt the keyword names to
 Agent(
   subagent_type: "general-purpose",   # never specialised
   # model: omit — inherits parent's model. Do not pass haiku/sonnet here.
-  prompt: "Run /<phase> --auto <slug> for THIS PHASE ONLY. Write
+  prompt: "Run /<phase> <slug> --auto for THIS PHASE ONLY. Write
            .cheese/<phase>/<slug>.md with the handoff schema and stop.
            Do not chain forward to the next phase even though your
            auto-mode contract documents that. The /ultracook orchestrator
-           is driving the chain. Return the slug file's status field as
-           your final line."
+           is driving the chain."
 )
 ```
+
+The sub-agent's stdout is operator-visible but **not** the chaining contract. The orchestrator must read `.cheese/<phase>/<slug>.md` to decide what happens next; never infer success or `next:` from the sub-agent's last line. Asking the sub-agent to echo its status to stdout would tempt a future maintainer to wire stdout-driven chaining back in.
 
 Rules:
 

@@ -57,33 +57,51 @@ class TestUltracookSkillExists:
 
 
 class TestUltracookPhaseChain:
+    # The canonical seven spawns, in chain order. Every assertion in this
+    # class anchors to these literal invocations rather than bare substrings
+    # so unrelated prose mentions of "cook"/"age"/etc. cannot satisfy or
+    # break the contract checks.
+    CHAIN_INVOCATIONS = (
+        "/cook <slug> --auto",
+        "/press <slug> --auto",
+        "/age <slug> --auto",
+        "/cure <slug> --auto",
+        "/age <slug> --auto",
+        "/cure <slug> --auto",
+        "/age <slug> --auto",
+    )
+    TABLE_HEADER = "## Phases and slug paths"
+
     def test_lists_seven_phases_in_order(self) -> None:
         body = _skill("ultracook")
-        # Find the phases list / sequence and confirm the canonical order
-        # (cook → press → age → cure → age → cure → age). The seventh
-        # spawn (age₃) is the cap-enforcing terminal phase that writes
+        # Anchor to the chain-table section so reordering unrelated prose
+        # cannot satisfy or break the ordering check. The seventh spawn
+        # (age₃) is the cap-enforcing terminal phase that writes
         # `next: done` after two cure passes complete.
-        idx_cook = body.find("cook")
-        idx_press = body.find("press", idx_cook)
-        idx_age1 = body.find("age", idx_press)
-        idx_cure1 = body.find("cure", idx_age1)
-        idx_age2 = body.find("age", idx_cure1)
-        idx_cure2 = body.find("cure", idx_age2)
-        idx_age3 = body.find("age", idx_cure2)
-        assert idx_cook < idx_press < idx_age1 < idx_cure1 < idx_age2 < idx_cure2 < idx_age3
+        idx_table = body.find(self.TABLE_HEADER)
+        assert idx_table != -1, (
+            f"ultracook must have a `{self.TABLE_HEADER}` section to anchor "
+            "the chain-table contract check"
+        )
+        table_section = body[idx_table:]
+        cursor = 0
+        for invocation in self.CHAIN_INVOCATIONS:
+            next_idx = table_section.find(invocation, cursor)
+            assert next_idx != -1, (
+                f"ultracook chain table missing `{invocation}` after position "
+                f"{cursor} (expected order: {self.CHAIN_INVOCATIONS})"
+            )
+            # Advance past this match so repeated invocations (age₁/₂/₃,
+            # cure₁/₂) walk forward through the table rather than re-matching
+            # the same row.
+            cursor = next_idx + 1
 
     def test_propagates_auto_through_every_phase(self) -> None:
         body = _skill("ultracook")
         # Every phase invocation in the chain must carry --auto adjacent.
-        # Checking the prefix alone (e.g. "/age" without "--auto") would
-        # let a regression silently drop --auto from age/cure spawns and
-        # still pass — that's the assertions-dim finding from /age.
-        for invocation in (
-            "/cook --auto",
-            "/press --auto",
-            "/age <slug> --auto",
-            "/cure <slug> --auto",
-        ):
+        # Use the canonical `/<phase> <slug> --auto` form so a regression
+        # cannot silently drop --auto or reorder it relative to the slug.
+        for invocation in set(self.CHAIN_INVOCATIONS):
             assert invocation in body, f"missing `{invocation}` in ultracook chain"
         # Cure floor must be medium+ to match /cook --auto's contract.
         assert "medium+" in body

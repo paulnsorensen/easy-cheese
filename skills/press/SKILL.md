@@ -50,12 +50,12 @@ Write to `.cheese/press/<slug>.md` with a minimum handoff slug at the top so `/u
 status: ok | halt: <one-line reason>
 next: age | done
 artifact: <path-if-any>
-<one-line orientation: what /cook changed>
+<one-line orientation: what press did — e.g., "added 4 boundary tests; no defects exposed">
 
 # Press Report — <slug>
 
 ## Orientation
-<one or two factual sentences about what /cook changed>
+<one or two factual sentences about what press did this pass — the hardening added, the gaps closed, the readiness verdict. `/cheese --continue` surfaces the slug's orientation line to the user as "where you are", so press's orientation must describe press's own work, not duplicate cook's orientation.>
 
 ## Checks run
 - <command>: <pass|fail|skipped with reason>

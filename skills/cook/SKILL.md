@@ -15,6 +15,7 @@ Do not use it for fuzzy planning (`/mold`), no-write discussion (`/culture`), or
 Accept one of:
 
 - A spec path, usually `.cheese/specs/<slug>.md`.
+- A bare slug whose spec lives at `.cheese/specs/<slug>.md` (cook resolves the path; this is the form `/ultracook` uses when chaining).
 - A pasted spec or issue.
 - A focused implementation request with acceptance criteria.
 - A clear, unambiguous task — single-file fix, named bug, well-scoped tweak — even without a spec.

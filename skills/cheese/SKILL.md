@@ -61,13 +61,18 @@ Flow:
 
 1. Scan for the most recently modified handoff slug across `.cheese/{cook,press,age,cure,notes}/<slug>.md`.
 2. If none exist, offer to start the pipeline from scratch — `/mold` for fuzzy specs, `/cook` for clear asks, `/ultracook` for high-blast-radius specs — and stop.
-3. If at least one exists, read the latest one and use its `next:` field to determine the next phase. Surface the orientation line so the user knows where they are.
-4. Confirm the resumption via `AskUserQuestion`:
-   - **Run /\<next\> \<slug\>** *(recommended; the next-phase value from the latest slug)*
-   - **Run /ultracook \<slug\>** — re-enter the autonomous fresh-context chain from where the slugs left off.
-   - **Stop** — leave the pipeline paused.
+3. If at least one exists, read the latest one and use its `next:` field to decide the recommended action. Surface the orientation line so the user knows where they are.
+4. Confirm the resumption via `AskUserQuestion`. The recommended option depends on the slug's `next:` value:
+   - **When `next:` names a phase** (`mold | cook | press | age | cure | ultracook`):
+     - **Run /\<next\> \<slug\>** *(recommended)* — continue the chain at the named phase.
+     - **Run /ultracook \<slug\>** — re-enter the autonomous fresh-context chain.
+     - **Stop** — leave the pipeline paused.
+   - **When `next:` is terminal** (`done` from a phase slug, or `stop` from a culture-notes slug — the pipeline already finished):
+     - **Stop** *(recommended)* — review the diff and `/gh` when ready; there is no further phase to run.
+     - **Run /age \<slug\>** — re-review the diff in fresh context if you want another pass.
+     - **Run /ultracook \<slug\>** — only if you want to redo the whole chain over the same slug. Refuses when phase handoffs already exist (per `/ultracook`'s existing-handoffs guard); requires removing the existing slugs first.
 
-`/cheese --continue` never auto-invokes. The slug files are the resumability contract — they tell the router where the pipeline is, and the user picks how to move it forward.
+`/cheese --continue` never auto-invokes, and it never builds `/done <slug>` or `/stop <slug>` from a terminal `next:` field — those values surface the terminal state to the user, not a runnable command. The slug files are the resumability contract: they tell the router where the pipeline is, and the user picks how to move it forward.
 
 ## Confidence and the clarify gate
 

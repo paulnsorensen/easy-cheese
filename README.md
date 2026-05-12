@@ -40,12 +40,12 @@ Each `SKILL.md` is self-contained markdown with YAML frontmatter. There are no n
 | `skills/cheese/SKILL.md` | `/cheese` | Unified entry point. Classifies any input (idea, spec path, PR, stack trace, file path), announces the routing decision, and gates dispatch behind `AskUserQuestion`. Never auto-invokes. |
 | `skills/briesearch/SKILL.md` | `/briesearch` | Research technical questions across docs, web, codebase, and GitHub examples with confidence-capped synthesis. |
 | `skills/mold/SKILL.md` | `/mold` | Shape fuzzy ideas into grounded specs through dialogue, validate cycles, and a two-key handshake. |
-| `skills/culture/SKILL.md` | `/culture` | No-write rubber-ducking and architecture exploration. Hard invariant: writes nothing. |
+| `skills/culture/SKILL.md` | `/culture` | No-write rubber-ducking and architecture exploration. Hard invariant: writes only the opt-in `.cheese/notes/<slug>.md` handoff at session end, and only when the user asks for notes. |
 | `skills/cook/SKILL.md` | `/cook` | Implement clear specs via cut → cook → taste-test with scoped edits and tests. |
 | `skills/press/SKILL.md` | `/press` | Harden cooked changes with coverage, assertion, and boundary checks. |
 | `skills/age/SKILL.md` | `/age` | Review diffs across eight staff-engineer dimensions and produce a stake-grouped findings report. |
 | `skills/cure/SKILL.md` | `/cure` | Fix user-selected findings, validate, and prepare the branch for shipping. |
-| `skills/ultracook/SKILL.md` | `/ultracook` | Autonomous fresh-context pipeline (`cook → press → age → cure → age → cure`, all `--auto`). Each phase runs inside its own full-peer sub-agent so review stays adversarial and parent context never bloats. For high-blast-radius specs. |
+| `skills/ultracook/SKILL.md` | `/ultracook` | Autonomous fresh-context pipeline (`cook → press → age → cure → age → cure → age`, all `--auto`). Each phase runs inside its own full-peer sub-agent so review stays adversarial and parent context never bloats. For high-blast-radius specs. |
 | `skills/melt/SKILL.md` | `/melt` | Resolve merge / rebase / cherry-pick conflicts via the structural cascade (mergiraf → rerere → kdiff3) with batch, pick-side, and lockfile helpers. |
 
 ### Tool skills
@@ -104,7 +104,7 @@ If those tools don't show up after install, the cheez-* skills will hard-fail wi
    ├─ need info / external evidence  ──►  /briesearch
    ├─ rubber-duck only               ──►  /culture
    ├─ fuzzy / multi-module idea       ──►  /mold        ──►  /cook       ──►  /press  ──►  /age  ──►  /cure
-   ├─ high-blast-radius spec          ──►  /mold        ──►  /ultracook   (fresh-context: cook → press → age → cure → age → cure)
+   ├─ high-blast-radius spec          ──►  /mold        ──►  /ultracook   (fresh-context: cook → press → age → cure → age → cure → age)
    ├─ clear, scoped ask               ──►  /cook        ──►  /press       ──►  /age   ──►  /cure
    ├─ debugging task                  ──►  /culture     ──►  /cook        ──►  /press ──►  /age  ──►  /cure
    ├─ resume in fresh context         ──►  /cheese --continue <slug>
@@ -120,7 +120,7 @@ Easy-cheese is intentionally a small surface. What that means in practice:
 - **Skills only.** No agents, commands, eta templates, or compiled harness bundles. Each capability is a single `SKILL.md`.
 - **No repo-wide MCP requirement.** Workflow skills suggest tools (tilth, Context7, Tavily, code-review-graph) but have host-native fallbacks. The cheez-* tool skills are the exception: they require tilth MCP by design.
 - **`/age` runs eight dimensions, not nine.** Without git history analysis as a built-in agent, the `precedent` dimension is unreliable in a portable skill, so it's omitted.
-- **One orchestrator skill, narrowly scoped.** `/ultracook` is the only orchestrator — it spawns full-peer sub-agents for the fixed `cook → press → age → cure → age → cure` chain on high-blast-radius specs. There is no large-feature decomposition, no PR-rescue convoy, no whole-repo NIH audit. Every other skill remains a single, scoped step a human can drive.
+- **One orchestrator skill, narrowly scoped.** `/ultracook` is the only orchestrator — it spawns full-peer sub-agents for the fixed `cook → press → age → cure → age → cure → age` chain on high-blast-radius specs. There is no large-feature decomposition, no PR-rescue convoy, no whole-repo NIH audit. Every other skill remains a single, scoped step a human can drive.
 - **No automatic re-age loop in `/cure`.** The skill describes the protocol; the human runs the next `/age` when ready.
 
 ## Optional tools
