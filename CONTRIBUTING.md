@@ -14,16 +14,28 @@ to get from "I want to help" to "my change is merged".
 
 ## Setting up locally
 
+Requires Python 3.12+ and (for bash tests) bats-core + shellcheck.
+
 ```sh
 git clone https://github.com/paulnsorensen/easy-cheese.git
 cd easy-cheese
-# project-specific install + build instructions go here
+pip install pyyaml==6.0.2 pytest==9.0.3   # validation + Python tests
+brew install bats-core shellcheck           # macOS — bash tests
 ```
 
 ## Running tests
 
 ```sh
-# project-specific test command goes here
+# Skill YAML/frontmatter validation
+python3 .github/scripts/test_validate_skills.py -v
+python3 .github/scripts/validate_skills.py
+
+# Python unit tests
+python3 -m pytest tests/python -q
+
+# Bash tests (requires bats + shellcheck)
+shellcheck scripts/install.sh
+bats tests/bash/test_install.bats
 ```
 
 Please run the full test suite before opening a PR.
