@@ -44,6 +44,8 @@ Beyond cheez-* there are cure-specific tools:
 | Diffs | `delta` | plain `git diff` |
 | Conflict resolution | mergiraf | manual resolution with targeted tests |
 
+**Freshness:** before the first code-review-graph query in a run, call `build_or_update_graph_tool` (and `embed_graph_tool` if you'll use `semantic_search_nodes_tool` to find sibling code with the same concept under a different name). See [`/cheez-search`](../cheez-search/SKILL.md#when-code-review-graph-beats-tilth-if-your-harness-has-it) for the full freshness contract and when semantic search beats tilth.
+
 If a preferred tool is missing, continue with the fallback. If a missing tool prevents safe application, stop and explain the blocker.
 
 ## Validation

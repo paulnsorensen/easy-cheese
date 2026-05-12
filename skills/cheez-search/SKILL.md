@@ -144,7 +144,25 @@ It wins on five questions tilth structurally cannot answer:
 | Architecture framing for a large diff (hubs, bridges, communities) | `get_architecture_overview_tool`, `get_hub_nodes_tool`, `get_bridge_nodes_tool`, `list_communities_tool` | tilth has no global graph view |
 | Affected execution flows for a change | `get_affected_flows_tool` | tilth follows callers one hop at a time; this returns full flows |
 
-**Freshness caveat — this is the trade-off vs tilth.** code-review-graph's graph is materialised by an explicit `code-review-graph build` step (and `code-review-graph embed` for the semantic search index). Unlike tilth, it goes stale if the build wasn't refreshed after recent edits. Re-run `build` (and, if you've added concept-shaped code, `embed`) before relying on its answers on a hot branch.
+**Before the first query — refresh the graph via MCP.** code-review-graph keeps a persistent graph that goes stale between sessions. From inside an agent, prefer the MCP tools over the CLI:
+
+- Call `build_or_update_graph_tool` once at the start of a run. It's incremental — on a warm repo this is fast.
+- If you'll use `semantic_search_nodes_tool` *or* you've added concept-shaped code since the last embed, also call `embed_graph_tool` once. Embedding is the slow step — skip it otherwise.
+
+The CLI equivalents (`code-review-graph build` / `embed`) are for first-time setup; inside a run, the MCP tools let the agent own the lifecycle.
+
+**When `semantic_search_nodes_tool` beats tilth.** Reach for it when the question is concept-shaped, not name-shaped:
+
+- **Steel threads** — trace a feature end-to-end when each layer names the concept differently (controller → service → repo → migration → telemetry). tilth makes you guess the next layer's vocabulary; embeddings surface the chain.
+- **Shared concepts under divergent names** — "where do we handle idempotency?" when the code uses `dedupeKey`, `requestSig`, `OnceToken`. Grep is blind to the concept; embeddings find it.
+- **Vocabulary mismatch between spec and code** — product says "session continuity", code says `KeepaliveToken`. Map the stakeholder term to the implementation without an SME.
+- **Analog mining** — before adding another retry / rate-limit / cache layer, ask what already exists under different names.
+- **Cross-repo concept discovery** — pair with `cross_repo_search_tool` to find auth (or any concept) across services that named it differently.
+- **Onboarding orientation** — "what's in this repo for observability?" returns conceptually adjacent nodes ranked by graph centrality. Faster first read than walking imports.
+
+**Stay on tilth when** you know the symbol name; you need literal text or regex; you're doing a one-hop caller walk; the branch is hot and you haven't re-embedded; or the change is a mechanical rename or move.
+
+**Two gotchas.** Ranking blends similarity with graph centrality — `semantic_search_nodes_tool` biases toward hub nodes, sometimes against the leaf where the bug actually lives; after a hit, follow callers in tilth. Default embedding model is `all-MiniLM-L6-v2` (384-dim), which blurs nuanced distinctions like "session timeout" vs "session revocation" — override via `CRG_EMBEDDING_MODEL` if your domain needs it.
 
 If code-review-graph is unavailable, the cheez-search fallbacks are: name-shaped questions stay on tilth; semantic / cross-repo / architecture questions either degrade to a manual `tilth_deps` + `kind: "callers"` walk or get noted as unavailable evidence (cap confidence at `speculating`).
 
