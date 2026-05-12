@@ -61,6 +61,8 @@ Beyond cheez-* there are review-specific tools:
 | GitHub/PR context | `gh` | local git commands or user-provided PR data |
 | Merge/conflict awareness | mergiraf | manual conflict checks |
 
+**Freshness:** before the first code-review-graph query in a run, call `build_or_update_graph_tool` (and `embed_graph_tool` if you'll use `semantic_search_nodes_tool`). The graph is persistent and goes stale between sessions. See [`/cheez-search`](../cheez-search/SKILL.md#when-code-review-graph-beats-tilth-if-your-harness-has-it) for the full freshness contract and when semantic search beats tilth — steel threads across renamed layers, concepts under divergent names, spec-vs-code vocabulary mismatch.
+
 Missing optional tools should not block review. State which evidence was unavailable and reduce confidence accordingly.
 
 ## Sub-agent context gate
