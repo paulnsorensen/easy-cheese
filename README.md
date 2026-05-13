@@ -6,14 +6,30 @@
 [![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-yellow?style=flat-square)](https://www.conventionalcommits.org)
 [![Agent Skills](https://img.shields.io/badge/Agent%20Skills-spec-blueviolet?style=flat-square)](https://agentskills.io/specification)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](https://github.com/paulnsorensen/easy-cheese/pulls)
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy_Me_a_Coffee-FFDD00?style=flat-square&logo=buymeacoffee&logoColor=black)](https://www.buymeacoffee.com/paulnsorensen)
+
+**Don't know what to do? Just `/cheese` it.**
 
 > _"The cheese must flow."_
 
-A portable, skills-only toolkit of Agent Skills for shaping ideas, implementing them, and reviewing the result. No agents, no compiled harness bundles, no repo-wide MCP requirement — just self-contained `SKILL.md` files that any [Agent Skills](https://agentskills.io/specification)-compatible harness can load. The vocabulary (mold, culture, cook, press, age, cure) reads as a workflow you can dip into anywhere.
+A portable, harness-agnostic Agent Skills toolkit — self-contained `SKILL.md` files any [Agent Skills](https://agentskills.io/specification)-compatible harness can load. No agents, no compiled bundles, no repo-wide MCP requirement. The vocabulary (mold, culture, cook, press, age, cure) reads as a workflow you can dip into anywhere.
+
+## Contents
+
+- [Why cheese?](#why-cheese-two-reasons)
+- [Skill layout](#skill-layout)
+- [Skills](#skills)
+- [Scope](#scope)
+- [Optional tools](#optional-tools)
+- [Install](#install)
+- [Validate](#validate)
+- [Installing MCP servers](#installing-mcp-servers)
+- [Installing CLI tools](#installing-cli-tools)
+- [Credits](#credits)
 
 ## Why cheese? Two reasons
 
-1. **Modeled after the gaming slang term "cheese."** The term traces back to early fighting-game culture in the late 1980s and early 1990s — Street Fighter II players coined "cheesy" wins to describe victories pulled off with cheap, repeatable, low-skill tactics (corner-trap fireball spam, throw loops, AI-pattern exploits). It spread from fighting games to RTS rush builds (StarCraft "cheese rushes"), to speedrun glitch routes, to MOBA cheese picks — anywhere a player gets a disproportionately good result for very little effort. That is exactly the design center of easy-cheese: the primary tenets are **correctness, token efficiency, and quality** — _cheap and easy_ in the best sense. Maximum result, minimum spend.
+1. **From gaming slang**: a "cheese" win is cheap, easy, and disproportionately effective — exactly the design center (correctness, token efficiency, quality).
 2. **What's life without whimsy?** 🧀
 
 ## Skill layout
@@ -43,9 +59,9 @@ Each `SKILL.md` is self-contained markdown with YAML frontmatter. There are no n
 | `skills/culture/SKILL.md` | `/culture` | No-write rubber-ducking and architecture exploration. Hard invariant: writes only the opt-in `.cheese/notes/<slug>.md` handoff at session end, and only when the user asks for notes. |
 | `skills/cook/SKILL.md` | `/cook` | Implement clear specs via cut → cook → taste-test with scoped edits and tests. |
 | `skills/press/SKILL.md` | `/press` | Harden cooked changes with coverage, assertion, and boundary checks. |
-| `skills/age/SKILL.md` | `/age` | Review diffs across nine staff-engineer dimensions and produce a stake-grouped findings report. |
+| `skills/age/SKILL.md` | `/age` | Review diffs across nine staff-engineer dimensions and produce a severity-grouped findings report. |
 | `skills/cure/SKILL.md` | `/cure` | Fix user-selected findings, validate, and prepare the branch for shipping. |
-| `skills/hard-cheese/SKILL.md` | `/hard-cheese` (or `--hard` flag) | Metacognitive vibecheck gate before code is shared for review. Asks the human author to explain the diff's causal logic; a fresh-context judge sub-agent grades the explanation against the SOLO Taxonomy (pass ≥ 3 / Multistructural-or-higher; the paper labels this the "Relational" pass condition). Implements the mechanism from Sankaranarayanan 2026 ("Mitigating 'Epistemic Debt' in Generative AI-Scaffolded Novice Programming using Metacognitive Scripts"); fail-open on judge error is the one documented divergence from the paper. Standalone or via `--hard` propagation through the pipeline. |
+| `skills/hard-cheese/SKILL.md` | `/hard-cheese` (or `--hard` flag) | Metacognitive vibecheck gate before review — asks the author to explain the diff's causal logic, grades the explanation against the SOLO Taxonomy. Standalone or via `--hard` propagation through the pipeline. |
 | `skills/ultracook/SKILL.md` | `/ultracook` | Autonomous fresh-context pipeline (`cook → press → age → cure → age → cure → age`, all `--auto`). Each phase runs inside its own full-peer sub-agent so review stays adversarial and parent context never bloats. For high-blast-radius specs. |
 | `skills/melt/SKILL.md` | `/melt` | Resolve merge / rebase / cherry-pick conflicts via the structural cascade (mergiraf → rerere → kdiff3) with batch, pick-side, and lockfile helpers. |
 
@@ -94,7 +110,7 @@ Outside code work (e.g. `find -mtime`, `ls /tmp`, log inspection with `tail -f`,
 
 #### Installing tilth MCP
 
-See [Installing MCP servers → tilth](#tilth-required-for-cheez--skills) below for full instructions.
+See [Installing MCP servers](#installing-mcp-servers) below — expand the tilth section for full instructions.
 
 If those tools don't show up after install, the cheez-* skills will hard-fail with "tilth MCP server is not loaded" instead of silently falling back to host tools.
 
@@ -112,7 +128,7 @@ If those tools don't show up after install, the cheez-* skills will hard-fail wi
    └─ review only                     ──►  /age         ──►  /cure
 ```
 
-`/cheese` is the front door. It inspects whatever you drop in (idea, spec path, PR ref, stack trace, file path), announces its routing decision, and waits for explicit confirmation before any downstream skill runs. Use it directly, or skip it when you already know the destination — a clear bug can go straight to `/cook`, a no-write design discussion stays in `/culture`. `/melt` cuts in whenever a merge step blocks `/cook` or `/cure`.
+`/cheese` is the front door. It inspects whatever you drop in (idea, spec path, PR ref, stack trace, file path), announces its routing decision, and waits for explicit confirmation before any downstream skill runs. Use it directly, or skip it when you already know the destination — a clear bug can go straight to `/cook`, a no-write design discussion stays in `/culture`. `/melt` cuts in whenever a merge step blocks `/cook` or `/cure`. Append `--hard` to any pipeline step to insert `/hard-cheese` as a metacognitive vibecheck gate before review.
 
 ## Scope
 
@@ -120,7 +136,6 @@ Easy-cheese is intentionally a small surface. What that means in practice:
 
 - **Skills only.** No agents, commands, eta templates, or compiled harness bundles. Each capability is a single `SKILL.md`.
 - **No repo-wide MCP requirement.** Workflow skills suggest tools (tilth, Context7, Tavily, code-review-graph) but have host-native fallbacks. The cheez-* tool skills are the exception: they require tilth MCP by design.
-- **`/age` runs nine dimensions, not ten.** Without git history analysis as a built-in agent, the `precedent` dimension is unreliable in a portable skill, so it's omitted.
 - **One orchestrator skill, narrowly scoped.** `/ultracook` is the only orchestrator — it spawns full-peer sub-agents for the fixed `cook → press → age → cure → age → cure → age` chain on high-blast-radius specs. There is no large-feature decomposition, no PR-rescue convoy, no whole-repo NIH audit. Every other skill remains a single, scoped step a human can drive.
 - **No automatic re-age loop in `/cure`.** The skill describes the protocol; the human runs the next `/age` when ready.
 
@@ -161,7 +176,7 @@ gh skill install paulnsorensen/easy-cheese
 Install every skill in one shot:
 
 ```sh
-for s in age briesearch cheese cheez-read cheez-search cheez-write cook culture cure melt mold press ultracook; do
+for s in age briesearch cheese cheez-read cheez-search cheez-write cook culture cure hard-cheese melt mold press ultracook; do
   gh skill install paulnsorensen/easy-cheese "$s"
 done
 ```
@@ -243,7 +258,8 @@ Each `SKILL.md` must have YAML frontmatter with at least `name` and `description
 
 The cheez-* tool skills and several workflow skills benefit from MCP servers. Install the ones you need.
 
-### tilth (required for cheez-* skills)
+<details>
+<summary><strong>tilth</strong> (required for cheez-* skills) — AST-aware code search, smart reading, hash-anchored edits</summary>
 
 [tilth](https://github.com/jahala/tilth) provides AST-aware code search, smart file reading, and hash-anchored edits. Required by `/cheez-search`, `/cheez-read`, and `/cheez-write`.
 
@@ -271,7 +287,10 @@ After registering, restart your harness and confirm these tools appear:
 - `mcp__tilth__tilth_deps`
 - `mcp__tilth__tilth_edit` (only with `--edit`)
 
-### Context7 (library documentation)
+</details>
+
+<details>
+<summary><strong>Context7</strong> — library documentation for <code>/briesearch</code> and <code>/cook</code></summary>
 
 [Context7](https://github.com/upstash/context7) fetches up-to-date, version-specific library docs into your session. Used by `/briesearch` and `/cook` when available.
 
@@ -308,7 +327,10 @@ For higher rate limits, get a free API key at [context7.com](https://context7.co
 
 Requires Node.js v18+.
 
-### Tavily (web search)
+</details>
+
+<details>
+<summary><strong>Tavily</strong> — web search for <code>/briesearch</code></summary>
 
 [Tavily](https://github.com/tavily-ai/tavily-mcp) provides real-time web search and content extraction. Used by `/briesearch` when available.
 
@@ -344,7 +366,10 @@ TAVILY_API_KEY=your-key npx -y tavily-mcp
 
 Requires Node.js v18+.
 
-### code-review-graph (review impact radius, architecture, semantic search)
+</details>
+
+<details>
+<summary><strong>code-review-graph</strong> — impact radius, architecture framing, semantic search for <code>/age</code>, <code>/press</code>, <code>/cure</code></summary>
 
 [code-review-graph](https://github.com/tirth8205/code-review-graph) builds a persistent call graph of your codebase with Tree-sitter, Louvain communities, betweenness-centrality, and optional vector embeddings. Used by `/age`, `/press`, and `/cure` for risk-scored impact (`get_impact_radius_tool`, `detect_changes_tool`), curated review context (`get_review_context_tool`, `get_minimal_context_tool`), affected flows (`get_affected_flows_tool`), architecture framing (`get_architecture_overview_tool`, `get_hub_nodes_tool`, `get_bridge_nodes_tool`), and cross-repo / semantic search (`cross_repo_search_tool`, `semantic_search_nodes_tool`). Tilth handles AST search, callers, and hash-anchored edits; code-review-graph covers the graph-algorithmic and cross-repo dimensions tilth does not.
 
@@ -368,6 +393,8 @@ code-review-graph embed
 ```
 
 The `[embeddings]` extra pulls in `sentence-transformers` so `semantic_search_nodes_tool` works out of the box with the default `all-MiniLM-L6-v2` model. Override with `CRG_EMBEDDING_MODEL=<model-id>`. Other embedding providers (Google Gemini, MiniMax, OpenAI-compatible endpoints) are also supported — see the upstream README for `[google-embeddings]` and the `CRG_OPENAI_*` env vars.
+
+</details>
 
 ## Installing CLI tools
 
