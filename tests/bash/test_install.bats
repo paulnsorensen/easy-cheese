@@ -647,7 +647,7 @@ STUB
     grep -q "^gh skill install paulnsorensen/easy-cheese age --agent claude-code --scope user --force$" "$STUB_LOG"
     grep -q "^gh skill install paulnsorensen/easy-cheese press --agent claude-code --scope user --force$" "$STUB_LOG"
     grep -q "^gh skill install paulnsorensen/easy-cheese ultracook --agent claude-code --scope user --force$" "$STUB_LOG"
-    [ "$(grep -c '^gh skill install ' "$STUB_LOG")" -eq 13 ]
+    [ "$(grep -c '^gh skill install ' "$STUB_LOG")" -eq 14 ]
 }
 
 @test "ec_install_skills falls back to embedded list when gh api returns empty" {
@@ -657,17 +657,18 @@ STUB
     run ec_install_skills claude-code
     [ "$status" -eq 0 ]
     [[ "$output" == *"using embedded fallback list"* ]]
-    [ "$(grep -c '^gh skill install ' "$STUB_LOG")" -eq 13 ]
+    [ "$(grep -c '^gh skill install ' "$STUB_LOG")" -eq 14 ]
 }
 
-@test "ec_install_skills returns non-zero when any skill install fails" {
+@test "ec_install_skills warns but returns 0 when some skill installs fail" {
     cat > "$STUB_BIN/gh" <<'STUB'
 #!/usr/bin/env bash
 echo "gh $*" >> "$STUB_LOG"
 case "$1" in
     api) printf 'alpha\nbeta\ngamma\n'; exit 0 ;;
 esac
-# Auth ok, but fail when installing the 'beta' skill.
+# Auth ok, but fail when installing the 'beta' skill — simulates a
+# newly-added skill that isn't yet in the latest release tag.
 if [[ "$1" == "skill" && "$2" == "install" && "$4" == "beta" ]]; then
     exit 1
 fi
@@ -676,10 +677,30 @@ STUB
     chmod +x "$STUB_BIN/gh"
     export EC_GH="$STUB_BIN/gh"
     run ec_install_skills claude-code
-    [ "$status" -eq 1 ]
+    [ "$status" -eq 0 ]
     [[ "$output" == *"failed to install beta"* ]]
     # Loop kept going past the failure — every other skill was still attempted.
     [ "$(grep -c '^gh skill install ' "$STUB_LOG")" -eq 3 ]
+}
+
+@test "ec_install_skills returns 1 when every skill install fails" {
+    cat > "$STUB_BIN/gh" <<'STUB'
+#!/usr/bin/env bash
+echo "gh $*" >> "$STUB_LOG"
+case "$1" in
+    api) printf 'alpha\nbeta\ngamma\n'; exit 0 ;;
+    auth) exit 0 ;;
+esac
+# Every skill install fails — catastrophic (gh broken, repo gone, etc.)
+exit 1
+STUB
+    chmod +x "$STUB_BIN/gh"
+    export EC_GH="$STUB_BIN/gh"
+    run ec_install_skills claude-code
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"failed to install alpha"* ]]
+    [[ "$output" == *"failed to install beta"* ]]
+    [[ "$output" == *"failed to install gamma"* ]]
 }
 
 # -- ec_install_mcp -----------------------------------------------------------
@@ -807,8 +828,8 @@ STUB
     grep -q "^tilth install claude-code --edit$" "$STUB_LOG"
     grep -q "^gh skill install paulnsorensen/easy-cheese age --agent claude-code --scope user --force$" "$STUB_LOG"
     grep -q "^gh skill install paulnsorensen/easy-cheese press --agent claude-code --scope user --force$" "$STUB_LOG"
-    # 13 skill installs total, no broken --all flag.
-    [ "$(grep -c '^gh skill install ' "$STUB_LOG")" -eq 13 ]
+    # 14 skill installs total, no broken --all flag.
+    [ "$(grep -c '^gh skill install ' "$STUB_LOG")" -eq 14 ]
     # No brew calls should have happened.
     ! grep -q "^brew" "$STUB_LOG" || false
 }

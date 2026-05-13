@@ -28,7 +28,7 @@ EC_SKILL_REPO="paulnsorensen/easy-cheese"
 # new skills land — this list is only used when the API call is
 # unavailable (offline, rate-limited, repo temporarily private). Kept
 # loosely in sync with skills/ but not load-bearing for happy-path runs.
-EC_FALLBACK_SKILLS="age briesearch cheese cheez-read cheez-search cheez-write cook culture cure melt mold press ultracook"
+EC_FALLBACK_SKILLS="age briesearch cheese cheez-read cheez-search cheez-write cook culture cure hard-cheese melt mold press ultracook"
 
 # Default selections.
 EC_DEFAULT_TOOLS="$EC_KNOWN_TOOLS"
@@ -469,9 +469,12 @@ ec_discover_skills() {
 # live skill list via 'gh api ... contents/skills' and call gh once per
 # skill with --force for idempotent re-runs. If discovery fails we fall
 # back to EC_FALLBACK_SKILLS so the installer still does something useful
-# offline. Per-skill install failures are warned and tracked but do not
-# abort the rest of the loop. Dry-run skips discovery and uses the
-# embedded list for predictable, network-free output.
+# offline. Per-skill install failures warn but do not abort the script —
+# discovery reads from the default branch, so newly-added skills may not
+# yet exist at the latest release tag. We only return non-zero if every
+# skill failed (catastrophic, e.g. gh unauthenticated). Dry-run skips
+# discovery and uses the embedded list for predictable, network-free
+# output.
 ec_install_skills() {
     local harness="$1"
     local gh="${EC_GH:-gh}"
@@ -494,19 +497,24 @@ ec_install_skills() {
         fi
     fi
 
-    local skill rc=0
+    local skill installed=0 failed=0
     for skill in $skills; do
         if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
             ec_log "easy-cheese skills: would run '$gh skill install $EC_SKILL_REPO $skill --agent $harness --scope user --force'"
             continue
         fi
         ec_log "easy-cheese skills: installing $skill into $harness (user scope)"
-        if ! "$gh" skill install "$EC_SKILL_REPO" "$skill" --agent "$harness" --scope user --force; then
-            ec_warn "easy-cheese skills: failed to install $skill"
-            rc=1
+        if "$gh" skill install "$EC_SKILL_REPO" "$skill" --agent "$harness" --scope user --force; then
+            installed=$((installed + 1))
+        else
+            ec_warn "easy-cheese skills: failed to install $skill (not yet in latest release?)"
+            failed=$((failed + 1))
         fi
     done
-    return $rc
+    if (( installed == 0 && failed > 0 )); then
+        return 1
+    fi
+    return 0
 }
 
 # Parse argv into the EC_* config variables. Echoes nothing on success;
