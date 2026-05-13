@@ -53,9 +53,12 @@ Look for:
 - Functions over the project's complexity budget (40 lines / 4 params / 3 nesting levels are common).
 - Files over 300 lines that grew in this diff.
 - Speculative abstractions: a generic helper used in one place; a strategy pattern with one strategy.
+- Redundant state: duplicated state, or a cached value that could be derived on read.
+- Parameter sprawl: a new parameter added to thread data through, where restructuring or a smaller struct would carry it instead.
+- Stringly-typed code: raw strings where a constant, enum, or string-union type already exists.
 - Comments that try to explain code that should rename instead.
 
-Recommendation shape: "Extract `<sub-function>`" / "Inline `<one-call helper>`" / "Replace `<vague-name>` with `<concrete-name>`".
+Recommendation shape: "Extract `<sub-function>`" / "Inline `<one-call helper>`" / "Derive `<value>` instead of caching" / "Replace `<string>` with `<enum>`" / "Replace `<vague-name>` with `<concrete-name>`".
 
 ### deslop
 
@@ -63,9 +66,10 @@ Look for:
 - Dead code: unreachable branches, unused exports, commented-out blocks left as "for reference".
 - AI tells: catch-all `try/except` that re-raises a generic error, useless docstrings that restate the function name, "// TODO: implement" left in committed code.
 - Duplicated logic: copy-paste of an existing helper, two functions that should be one.
+- Copy-paste-with-variation: near-duplicate blocks that differ only in a value or branch, where a shared helper or parameter is the natural shape.
 - Vague names: `data`, `result`, `temp`, `info`, `manager`, `helper` without a noun that says what they hold.
 
-Recommendation shape: "Delete dead branch at <line>" / "Reuse `<existing-helper>`" / "Rename `data` to `<noun>`".
+Recommendation shape: "Delete dead branch at <line>" / "Reuse `<existing-helper>`" / "Extract shared `<helper>` from the two near-duplicate blocks" / "Rename `data` to `<noun>`".
 
 ### assertions
 
@@ -85,8 +89,22 @@ Look for:
 - Custom JSON walking when `jq` (in scripts) or a dependency would do.
 - New string-format / template helpers when the language stdlib has them.
 - "Utility" file that recreates a small library.
+- Newly written code that duplicates an existing in-project utility, helper, or component — including inline logic (string manipulation, path handling, parsing/formatting) that already has a project helper.
 
-Recommendation shape: "Replace with `<existing-dep>.<fn>`" / "Use the stdlib `<fn>` instead of the local helper".
+Recommendation shape: "Replace with `<existing-dep>.<fn>`" / "Use the stdlib `<fn>` instead of the local helper" / "Call the existing `<project-helper>` instead of re-implementing".
+
+### efficiency
+
+Look for:
+- Unnecessary work: redundant computation, repeated reads of the same value, N+1 query/IO patterns inside a loop.
+- Missed concurrency: independent async operations awaited sequentially when they could run in parallel.
+- Hot-path bloat: blocking work added to startup, per-request, or per-render paths.
+- Recurring no-op updates: unconditional state/store writes inside loops, intervals, or handlers without a change-detection guard.
+- Time-of-check/time-of-use (TOCTOU) pre-checks: pre-checking file/resource existence before use; prefer performing the operation and handling the resulting error.
+- Memory issues: unbounded caches/queues, missing cleanup, listener/timer leaks, retained references after teardown.
+- Overly broad operations: reading a full file or dataset when only a slice is needed.
+
+Recommendation shape: "Hoist `<call>` out of the loop" / "Run `<a>` and `<b>` in parallel with `Promise.all` (or equivalent)" / "Guard the store write on a value change" / "Drop the existence pre-check; handle the error from `<op>` instead" / "Bound `<structure>` or add cleanup on `<teardown>`" / "Read only the needed range/columns".
 
 ## Stake assignment
 

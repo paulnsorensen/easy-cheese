@@ -28,7 +28,7 @@ Implement the smallest production change that turns the cut tests green.
 
 If cook reports partial or skipped work, **stop and resolve before taste-test**.
 
-## Taste-test — drift / readability / scope
+## Taste-test — drift / readability / scope / simplify
 
 After cook says "I completed all the changes", run a taste test before press. This reduced workflow uses one inline taste-test step:
 
@@ -37,6 +37,13 @@ After cook says "I completed all the changes", run a taste test before press. Th
 | Spec | Did the implementation drift from the spec? | Every behaviour described in the spec is present; nothing extra. |
 | Readability | Is the change as concise and clear as possible? | A reviewer can understand each changed file without external context. |
 | Scope | Did cook add more than asked? | The diff matches the spec's bullets; no speculative helpers. |
+| Simplify | Does the diff reuse what exists, stay clean, and avoid wasted work? | See sub-checks below; all three must pass. |
+
+The **Simplify** lens runs three sub-checks (the same three axes `/simplify` uses):
+
+- **Reuse** — new code does not duplicate an existing utility/helper/component; inline logic that has a project helper uses it; no near-duplicates of an existing function.
+- **Quality** — no redundant state (cached value that can be derived), no parameter sprawl (added params instead of restructuring), no copy-paste-with-variation, no leaky abstraction (exposing internals across a slice boundary), no stringly-typed code where a constant/enum/union exists.
+- **Efficiency** — no unnecessary work (redundant compute, repeated reads, N+1), no missed concurrency on independent ops, no recurring no-op state/store updates in loops or handlers, no pre-existence checks that should instead perform the operation and handle the resulting error, no unbounded structures or leaked listeners/timers, no full-file/dataset reads when a slice would do.
 
 Each lens returns `pass` or `revise`. Pipe every `revise` finding back into a bounded corrective cook pass with the original spec, the cook report, and the taste evidence.
 
