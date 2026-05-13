@@ -77,6 +77,11 @@ jobs:
       - name: Real install smoke test (--skip-mcp)
         env:
           GH_TOKEN: ${{ github.token }}
+          # Pin every skill install to the commit under test so the smoke
+          # test exercises the script against this PR / push, not against
+          # the latest released tag (which can lag behind main when new
+          # skills are added).
+          EC_SKILL_REF: ${{ github.event.pull_request.head.sha || github.sha }}
         run: bash scripts/install.sh --skip-mcp
 
       # Real install of the code-review-graph CLI with the [embeddings]

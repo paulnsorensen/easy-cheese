@@ -647,7 +647,7 @@ STUB
     grep -q "^gh skill install paulnsorensen/easy-cheese age --agent claude-code --scope user --force$" "$STUB_LOG"
     grep -q "^gh skill install paulnsorensen/easy-cheese press --agent claude-code --scope user --force$" "$STUB_LOG"
     grep -q "^gh skill install paulnsorensen/easy-cheese ultracook --agent claude-code --scope user --force$" "$STUB_LOG"
-    [ "$(grep -c '^gh skill install ' "$STUB_LOG")" -eq 13 ]
+    [ "$(grep -c '^gh skill install ' "$STUB_LOG")" -eq 14 ]
 }
 
 @test "ec_install_skills falls back to embedded list when gh api returns empty" {
@@ -657,7 +657,31 @@ STUB
     run ec_install_skills claude-code
     [ "$status" -eq 0 ]
     [[ "$output" == *"using embedded fallback list"* ]]
-    [ "$(grep -c '^gh skill install ' "$STUB_LOG")" -eq 13 ]
+    [ "$(grep -c '^gh skill install ' "$STUB_LOG")" -eq 14 ]
+}
+
+@test "ec_install_skills passes --pin when EC_SKILL_REF is set" {
+    cat > "$STUB_BIN/gh" <<'STUB'
+#!/usr/bin/env bash
+echo "gh $*" >> "$STUB_LOG"
+case "$1" in
+    api) printf 'alpha\nbeta\n'; exit 0 ;;
+esac
+exit 0
+STUB
+    chmod +x "$STUB_BIN/gh"
+    EC_GH="$STUB_BIN/gh" EC_SKILL_REF="abc123def" run ec_install_skills claude-code
+    [ "$status" -eq 0 ]
+    # --pin should be threaded into every install call, slotted before --agent.
+    grep -q "^gh skill install paulnsorensen/easy-cheese alpha --pin abc123def --agent claude-code --scope user --force$" "$STUB_LOG"
+    grep -q "^gh skill install paulnsorensen/easy-cheese beta --pin abc123def --agent claude-code --scope user --force$" "$STUB_LOG"
+}
+
+@test "ec_install_skills dry-run echoes --pin in the would-run line when EC_SKILL_REF is set" {
+    make_stub gh
+    EC_GH="$STUB_BIN/gh" EC_SKILL_REF="v1.2.3" EC_DRY_RUN=1 run ec_install_skills claude-code
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"--pin v1.2.3"* ]]
 }
 
 @test "ec_install_skills returns non-zero when any skill install fails" {
@@ -807,8 +831,8 @@ STUB
     grep -q "^tilth install claude-code --edit$" "$STUB_LOG"
     grep -q "^gh skill install paulnsorensen/easy-cheese age --agent claude-code --scope user --force$" "$STUB_LOG"
     grep -q "^gh skill install paulnsorensen/easy-cheese press --agent claude-code --scope user --force$" "$STUB_LOG"
-    # 13 skill installs total, no broken --all flag.
-    [ "$(grep -c '^gh skill install ' "$STUB_LOG")" -eq 13 ]
+    # 14 skill installs total, no broken --all flag.
+    [ "$(grep -c '^gh skill install ' "$STUB_LOG")" -eq 14 ]
     # No brew calls should have happened.
     ! grep -q "^brew" "$STUB_LOG" || false
 }
