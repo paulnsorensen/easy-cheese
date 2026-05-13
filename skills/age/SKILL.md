@@ -31,7 +31,7 @@ When called with a `<slug>`, resolve `.cheese/press/<slug>.md` (if present) for 
 | security | high | auth, injection, secrets, unsafe parsing, tainted inputs |
 | encapsulation | high | boundary leaks, cross-slice internals, public API sprawl |
 | spec | high | drift from stated requirements or acceptance criteria |
-| complexity | medium | unnecessary nesting, long functions, speculative abstractions, redundant state, parameter sprawl, stringly-typed code, unnecessary JSX nesting |
+| complexity | medium | unnecessary nesting, long functions, speculative abstractions, redundant state, parameter sprawl, stringly-typed code |
 | deslop | medium | dead code, AI residue, duplicated logic, copy-paste-with-variation, vague names |
 | assertions | medium | weak tests, shallow existence checks, swallowed errors |
 | nih | medium | reinvented dependency, stdlib, or existing project helper / utility / component |

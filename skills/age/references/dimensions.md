@@ -56,7 +56,6 @@ Look for:
 - Redundant state: duplicated state, or a cached value that could be derived on read.
 - Parameter sprawl: a new parameter added to thread data through, where restructuring or a smaller struct would carry it instead.
 - Stringly-typed code: raw strings where a constant, enum, or string-union type already exists.
-- Unnecessary JSX/component nesting: wrapper elements with no layout role when the child or component props already handle it.
 - Comments that try to explain code that should rename instead.
 
 Recommendation shape: "Extract `<sub-function>`" / "Inline `<one-call helper>`" / "Derive `<value>` instead of caching" / "Replace `<string>` with `<enum>`" / "Replace `<vague-name>` with `<concrete-name>`".
