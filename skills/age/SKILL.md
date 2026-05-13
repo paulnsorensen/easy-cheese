@@ -35,7 +35,7 @@ When called with a `<slug>`, resolve `.cheese/press/<slug>.md` (if present) for 
 | deslop | medium | dead code, AI residue, duplicated logic, copy-paste-with-variation, vague names |
 | assertions | medium | weak tests, shallow existence checks, swallowed errors |
 | nih | medium | reinvented dependency, stdlib, or existing project helper / utility / component |
-| efficiency | medium | unnecessary work, missed concurrency, hot-path bloat, no-op updates, TOCTOU pre-checks, memory leaks, overly broad reads |
+| efficiency | medium | unnecessary work, missed concurrency, hot-path bloat, no-op updates, time-of-check/time-of-use (TOCTOU) pre-checks, memory leaks, overly broad reads |
 
 Per-dimension rubrics and recommendation shapes in `references/dimensions.md`. This reduced workflow intentionally omits the git-history/precedent dimension.
 
@@ -77,7 +77,7 @@ Spawn when any of these are true:
 - Caller / dependency graph expansion crosses multiple subsystems.
 - code-review-graph or `tilth_deps` output is needed for hotspot, bridge-node, or blast-radius framing.
 
-The sub-agent returns a digest: orientation paragraph, high-signal `path:line` citations, gap list. The parent owns the eight-dimension review, severity grading, and the `.cheese/age/<slug>.md` report. Do not spawn for small diffs, to outsource severity grading, or to outsource the final verdict.
+The sub-agent returns a digest: orientation paragraph, high-signal `path:line` citations, gap list. The parent owns the nine-dimension review, severity grading, and the `.cheese/age/<slug>.md` report. Do not spawn for small diffs, to outsource severity grading, or to outsource the final verdict.
 
 Digest size, parent-vs-sub-agent split, and harness-agnostic sub-agent selection live in `references/sub-agent-gate.md` — single source of truth for the cross-cutting rules.
 

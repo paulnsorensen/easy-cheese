@@ -100,7 +100,7 @@ Look for:
 - Missed concurrency: independent async operations awaited sequentially when they could run in parallel.
 - Hot-path bloat: blocking work added to startup, per-request, or per-render paths.
 - Recurring no-op updates: unconditional state/store writes inside loops, intervals, or handlers without a change-detection guard.
-- TOCTOU pre-checks: pre-checking file/resource existence before use; prefer operate-and-handle-error.
+- Time-of-check/time-of-use (TOCTOU) pre-checks: pre-checking file/resource existence before use; prefer performing the operation and handling the resulting error.
 - Memory issues: unbounded caches/queues, missing cleanup, listener/timer leaks, retained references after teardown.
 - Overly broad operations: reading a full file or dataset when only a slice is needed.
 
