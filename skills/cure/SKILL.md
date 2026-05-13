@@ -20,6 +20,7 @@ Optional flags:
 
 - `--auto` — autonomous mode (propagated from `/cook --auto`). Bypasses the user-selection step. Must be paired with `--stake <floor>` to set the inclusion threshold; `/cook --auto` always passes `--stake medium+`. See `references/selection.md` for the auto-selection rules and `## Auto mode` below for the pass-cap and revert behaviour.
 - `--stake <floor>` — used only with `--auto`. Accepts `high`, `medium+` (medium or higher), or `all`. Without `--auto` this flag is ignored — interactive selection is the only sanctioned path.
+- `--hard` — propagated metacognitive-gate flag (from `/cook --hard` or `/cheese --hard`). Cure is the *only* pipeline skill that fires the gate: when `--hard` is in scope and the user selects the share-for-review handoff option (existing `Run /gh` label), invoke `/hard-cheese <slug>` first and proceed only on exit `0`. Under `--auto --hard`, see `## --hard mode` and the auto-mode puncture clause below.
 
 ## Flow
 
@@ -96,6 +97,16 @@ After the cure report is rendered, ask via `AskUserQuestion` which downstream to
 
 Pre-select `Run /age` when any applied fix touched logic outside the original finding's hunk, when a corrective fix exposed adjacent risk, or when checks were skipped. Pre-select `Run /gh` when all selected findings applied cleanly and gates passed. Never auto-invoke.
 
+## --hard mode
+
+`/cure --hard` is the gate-firing path for the `/hard-cheese` metacognitive vibecheck. The flag propagates up the pipeline (`/cheese → /mold → /cook → /press → /age → /cure`); cure is the only step that actually fires the gate. The contract:
+
+- **Interactive `/cure --hard`:** at the handoff `AskUserQuestion`, when the user selects the share-for-review option (the existing `Run /gh` label), invoke `/hard-cheese <slug>` *before* handing off. Proceed only on exit `0`. If the gate exits non-zero (`FAILED` status — cap exhausted), surface the artifact path and abort the handoff; the user must improve their understanding before sharing for review.
+- **Picking a non-sharing option** (`Run /age --scope ...`, `Stop`) does *not* fire the gate. Re-review and pausing do not put code in front of readers.
+- **Auto-mode puncture** — see the clause in `### Auto mode` below. The auto-mode puncture is the single sanctioned point at which `--hard` overrides `--auto`'s skip-handoff semantics.
+
+The gate's mechanism (SOLO-graded fresh-context judge, Socratic retry, fail-open on judge error) lives in `skills/hard-cheese/SKILL.md`. The full composition matrix lives in `skills/hard-cheese/references/composition.md`.
+
 ### Auto mode
 
 When invoked with `--auto --stake <floor>`:
@@ -106,6 +117,15 @@ When invoked with `--auto --stake <floor>`:
 - After all selected findings are processed, skip the handoff `AskUserQuestion` and invoke `/age --scope <touched-paths> --auto` so the chain can re-review.
 - `/age --auto` enforces the two-pass cap. Cure does not need to track passes itself — it just keeps applying when invoked.
 - Never invoke `/gh` from auto mode. The chain ends with the final age report and the user opens a PR manually if they want.
+
+**`--auto --hard` puncture clause.** When `--hard` is also in scope, the chain pauses *once*, at the natural terminal point: after cure invokes `/age --auto` and the returned age slug shows `next: done` (chain-clean *or* two-cure-pass cap reached), invoke `/hard-cheese <slug>` *before returning to the caller*. This is the only sanctioned puncture of `--auto`'s skip-handoff semantics. Concretely:
+
+- The trigger is **age's `next: done`** read from the age slug cure just invoked, not cure's own slug-writing step. Cure cannot tell on its own which pass is final (the cap is enforced inside `/age --auto`, the chain-clean signal is also issued by age) — reading age's handoff is the only honest signal.
+- The puncture fires from the cure frame whose age-child returned `next: done`. That is cure pass 1 if findings cleared early, cure pass 2 if the cap is reached. Never between passes — punching the gate into every cure call would defeat its signal.
+- On `PASS`: chain exits with `"gate passed → ready to share for review"`.
+- On `FAILED`: chain exits non-zero with the artifact path.
+- On `ERROR`: chain exits `0` with a warning (the fail-open divergence documented in `skills/hard-cheese/SKILL.md`).
+- A non-TTY environment aborts with `"--hard requires an interactive TTY; remove --hard or run interactively"` — the puncture requires a human in the loop.
 
 If no findings meet the stake floor, write an empty cure report with `### Applied: (none — no findings at or above <floor>)` and skip straight to the auto handoff with a one-line "auto chain clean" note.
 

@@ -69,6 +69,10 @@ Default to project-local cheese artifacts when the user wants files:
 - Spec: `.cheese/specs/<slug>.md`
 - Issues: `.cheese/issues/<slug>-001.md`, `.cheese/issues/<slug>-002.md`, ...
 
+## --hard
+
+`/mold --hard` propagates `--hard` through to `/cook` at handoff (any of the cook-flavoured options below carries the flag forward). Mold itself runs no gate — the metacognitive vibecheck fires later, at `/cure`'s share-for-review boundary. See `skills/hard-cheese/SKILL.md` and `skills/hard-cheese/references/composition.md`.
+
 ## Handoff
 
 After the spec is written, ask the user via `AskUserQuestion` which downstream to run. Default options vary with the shape-check verdict:

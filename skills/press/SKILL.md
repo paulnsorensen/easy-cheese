@@ -10,6 +10,10 @@ Use this skill after `/cook` has produced green implementation changes and befor
 
 Do not use it to implement broad new behavior. Press may add or strengthen tests and make tiny corrective fixes only when a test exposes a clear defect in the cooked scope.
 
+## --hard propagation
+
+`/press --hard` (propagated from `/cook --hard`) is pass-through only. Press runs no gate. Hand `--hard` forward to `/age` at the handoff so it eventually reaches `/cure`, which is the only pipeline skill that fires the metacognitive vibecheck. See `skills/hard-cheese/SKILL.md`.
+
 ## Flow
 
 1. **Read** — load the spec or acceptance criteria and the cooked diff.

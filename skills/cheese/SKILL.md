@@ -22,9 +22,10 @@ Accept anything the user supplies as `$ARGUMENTS`:
 - A research question about an external library, API, or pattern.
 - An empty or near-empty prompt — treat as "what's next?" and clarify.
 
-Optional flag:
+Optional flags:
 
 - `--continue <slug>` — resume an in-flight pipeline from the latest handoff slug. See `## --continue` below.
+- `--hard` — inject the `/hard-cheese` metacognitive gate before code is shared for review. The flag propagates to whichever target the router dispatches and fires at `/cure`'s share-for-review handoff (or end of final auto pass under `--auto --hard`). See `skills/hard-cheese/SKILL.md`.
 
 If `$ARGUMENTS` is missing entirely and there is no recent context to lean on, ask one clarifying question via `AskUserQuestion` before classifying.
 
