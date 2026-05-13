@@ -100,7 +100,7 @@ When invoked with `--auto`, skip this `AskUserQuestion` entirely and proceed str
 ### What auto mode does
 
 1. After cook's package-ready report, invoke `/press <slug> --auto`.
-2. `/press --auto` runs its hardening pass and, if readiness is `ready for /age`, invokes `/age <slug> --auto`. If readiness is `follow-up recommended` or `blocked`, auto mode stops and surfaces the press report to the user.
+2. `/press --auto` runs its hardening pass and, if readiness is `ready for /age` or `follow-up recommended`, invokes `/age <slug> --auto`. Both states mean the cooked contract is sound and every changed behaviour has a hardening test; documented follow-ups are review-safe. Only `blocked` stops auto — false premise, unfixable level-1/2 gap, a changed behaviour with no stable hardening test, or spinning wheels (three attempts at one gap without green).
 3. `/age <slug> --auto` writes the report and invokes `/cure <slug> --auto --stake medium+`.
 4. `/cure --auto --stake medium+` bypasses the selection gate, applies every finding of `medium` or `high` stake, then invokes `/age --scope <touched-paths> --auto` for verification.
 5. The age → cure cycle is capped at **two cure passes total**. Pass 1 fixes the initial findings. Pass 2 fixes anything the re-age surfaces. After pass 2 the chain stops with a final summary, regardless of whether new findings remain.
@@ -109,7 +109,7 @@ When invoked with `--auto`, skip this `AskUserQuestion` entirely and proceed str
 ### When auto mode stops early
 
 - A quality gate (test, lint, type, build) fails and the failure cannot be attributed to a single revertible finding.
-- `/press` returns `blocked` or `follow-up recommended`.
+- `/press` returns `blocked` (false premise, unfixable level-1/2 gap, missing hardening test, or spinning wheels at three attempts).
 - A cure pass cannot apply any finding (every selected fix breaks tests on revert-or-keep evaluation).
 - Two cure passes complete (success path).
 

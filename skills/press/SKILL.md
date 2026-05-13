@@ -76,37 +76,36 @@ artifact: <path-if-any>
 
 ## Next step
 <ready for /age>:           /age <slug>           — review the cooked + pressed diff
-<follow-up recommended>:    address open findings, then /age <slug>
+<follow-up recommended>:    /age <slug>           — review-safe; documented follow-ups addressed after review
 <blocked>:                  resolve blocking issues before proceeding
 ```
 
-`status: ok` maps to readiness `ready for /age`; `status: halt: <reason>` maps to readiness `blocked` or `follow-up recommended` with the reason filled in. `next: age` when readiness is `ready for /age`; `next: done` when readiness is `blocked` or `follow-up recommended` so the orchestrator stops the chain.
+`status: ok` maps to readiness `ready for /age` or `follow-up recommended` (both are review-safe — the cooked contract is sound and every changed behaviour has a hardening test). `status: halt: <reason>` maps to readiness `blocked` with the reason filled in. `next: age` when readiness is `ready for /age` or `follow-up recommended`; `next: done` only when readiness is `blocked` so the orchestrator stops the chain.
 
 Then print:
 
 ```
 Press report: .cheese/press/<slug>.md
-Next step:    /age <slug>                       (when ready for /age)
-              address open findings, then /age  (when follow-up recommended)
-              blocked — resolve before continuing (when blocked)
+Next step:    /age <slug>                          (when ready for /age or follow-up recommended)
+              blocked — resolve before continuing  (when blocked)
 ```
 
 ## Handoff
 
 After the press report is on disk, ask via `AskUserQuestion` which downstream to run. Default options:
 
-- **Run /age `<slug>`** *(recommended when readiness is `ready for /age`)* — review the diff.
-- **Stop** — address `follow-up recommended` items before review.
+- **Run /age `<slug>`** *(recommended when readiness is `ready for /age` or `follow-up recommended`)* — review the diff. For `follow-up recommended`, the cooked contract is sound and every changed behaviour has a hardening test; documented follow-ups can be addressed after review.
+- **Stop** — defer review (use this if you want to harden manually before /age, even though the contract is review-safe).
 
-Pre-select `Run /age` only when readiness is `ready for /age`. If the report is `blocked`, do not pre-select anything; the user decides whether to fix or escalate.
+Pre-select `Run /age` when readiness is `ready for /age` or `follow-up recommended`. If the report is `blocked`, do not pre-select anything; the user decides whether to fix or escalate.
 
 ### Auto mode
 
 When invoked with `--auto` (propagated from `/cook --auto`):
 
 - Skip the `AskUserQuestion` entirely.
-- If readiness is `ready for /age`, invoke `/age <slug> --auto` directly.
-- If readiness is `follow-up recommended` or `blocked`, stop the auto chain and surface the press report to the user. Do not paper over a non-green press in auto mode — those statuses exist precisely because human judgement is needed.
+- If readiness is `ready for /age` or `follow-up recommended`, invoke `/age <slug> --auto` directly. Both states mean the cooked contract is sound and every changed behaviour has a hardening test; follow-ups are documented and review-safe.
+- If readiness is `blocked`, stop the auto chain and surface the press report to the user. `blocked` is reserved for cases where human judgement is genuinely required: a false premise on the cooked contract, an unfixable level-1/2 gap inside cooked scope, a changed behaviour press could not lock with a stable hardening test, or spinning wheels (three attempts at the same gap without green).
 
 ### When invoked from /ultracook
 
@@ -116,6 +115,8 @@ When invoked with `--auto` (propagated from `/cook --auto`):
 
 - Do not weaken assertions.
 - Do not broaden implementation beyond the cooked contract.
+- **Every changed behaviour in the cooked diff leaves press with an executable hardening test that would fail if the change regressed.** Even on a 3-line off-by-one fix, press writes (or confirms cook wrote) a test like `test_off_by_one_at_boundary` that locks the fix in. If press cannot produce a stable hardening test for a changed behaviour (flaky seam, missing infrastructure, design decision required), readiness is `blocked` — never `ready for /age` or `follow-up recommended`.
+- **Cap iteration at three attempts per gap.** Count test-edit + run cycles. On the third failed cycle on the same gap, mark readiness `blocked` with reason `spinning: <gap-description>` and surface the report. Do not loop indefinitely.
 - Surface medium and high findings explicitly; summarize low findings.
 - If the cooked diff or spec rests on a false premise (the contract is wrong, or the test surface is solving the wrong problem), stop and surface the premise before adding tests; do not harden the wrong angle.
 - Apply the shared voice kernel (lives at `skills/age/references/voice.md` in this repo): lead the press report with the readiness verdict, flag residual risk as `certain | speculating | don't know`, agree when coverage is already sufficient without manufacturing tests.

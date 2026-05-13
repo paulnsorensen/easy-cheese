@@ -25,7 +25,9 @@ For each function or module touched by the cooked diff:
 
 ## Priority order
 
-Address gaps in this order — stop when the time-budget runs out:
+**Hard floor — every changed behaviour gets a hardening test.** Before working through the priority list, lock each behaviour in the cooked diff with an executable test that would fail on regression. Even a 3-line off-by-one fix gets a `test_off_by_one_at_boundary`. If press cannot produce a stable hardening test for a changed behaviour, readiness is `blocked`.
+
+Then address remaining gaps in this order — stop when the time-budget runs out:
 
 1. **Spec compliance:** every promised behaviour has executable coverage.
 2. **Assertion strength:** tests fail for wrong values, wrong errors, or wrong state.
@@ -33,7 +35,13 @@ Address gaps in this order — stop when the time-budget runs out:
 4. **Integration seams:** filesystem, subprocess, network, time, dependency failure when in scope.
 5. **Happy path regression:** the primary user path still passes.
 
-Higher-priority gaps block; lower-priority gaps become follow-ups.
+Mapping to readiness:
+
+- **`blocked`** — hard floor unmet (a changed behaviour has no stable hardening test press can write), an unfixable level-1/2 gap inside cooked scope, or spinning wheels (three attempts at one gap without green).
+- **`follow-up recommended`** — hard floor met. Only level-4/5 gaps remain, plus out-of-scope findings and untouched-code coverage. Cooked contract is review-safe; follow-ups are documented for post-review attention.
+- **`ready for /age`** — hard floor met. Levels 1-3 closed on cooked scope.
+
+Spinning-wheels cap: count test-edit + run cycles per gap. On the third failed attempt without green, mark readiness `blocked` with reason `spinning: <gap-description>` and stop.
 
 ## When to fix vs follow-up
 
