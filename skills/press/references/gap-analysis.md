@@ -37,7 +37,7 @@ Then address remaining gaps in this order — stop when the time-budget runs out
 
 Mapping to readiness:
 
-- **`blocked`** — hard floor unmet (a changed behaviour has no stable hardening test press can write), an unfixable level-1/2 gap inside cooked scope, or spinning wheels (three attempts at one gap without green).
+- **`blocked`** — false premise on the cooked contract, hard floor unmet (a changed behaviour has no stable hardening test press can write), an unfixable level-1/2 gap inside cooked scope, or spinning wheels (three attempts at one gap without green).
 - **`follow-up recommended`** — hard floor met. Only level-4/5 gaps remain, plus out-of-scope findings and untouched-code coverage. Cooked contract is review-safe; follow-ups are documented for post-review attention.
 - **`ready for /age`** — hard floor met. Levels 1-3 closed on cooked scope.
 
