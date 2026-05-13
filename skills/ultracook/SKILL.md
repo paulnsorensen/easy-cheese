@@ -72,7 +72,7 @@ Each phase spawns a **full peer** sub-agent — same model as the parent, full t
 
 - `/cook` writes code across the changed files.
 - `/press` runs the project's test suite and adds tests.
-- `/age` reviews eight dimensions over the diff.
+- `/age` reviews nine dimensions over the diff.
 - `/cure` applies fixes via `cheez-write` and re-runs test gates.
 
 Diminutive defaults (haiku model, restricted tools, `Explore`-style read-only workers) will choke phases that need to edit dozens of files or run real test suites.

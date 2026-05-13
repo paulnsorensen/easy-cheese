@@ -1,6 +1,6 @@
 ---
 name: age
-description: This skill should be used when the user wants a code review on a diff, PR, branch, or path — phrases like "review this", "/age", "is this safe to merge", "find bugs", "spot security issues", "check for slop", "review my PR", "look for problems", "what's wrong with this code". Runs eight orthogonal review dimensions (correctness, security, encapsulation, spec, complexity, deslop, assertions, NIH) over the scoped diff and emits a stake-grouped findings report at `.cheese/age/<slug>.md`. Use even when the user only asks for one dimension — the report scopes itself. Findings only — no fixes; after the report lands, age renders the cure-selection table inline and asks which findings to cure (no "should I run /cure?" meta-question), then hands off to `/cure` with the selection locked in. Supports `--auto` (propagated from `/cook --auto`) for the autonomous chain into `/cure` (see `### Auto mode`). After `/press` (optional); before `/cure`.
+description: This skill should be used when the user wants a code review on a diff, PR, branch, or path — phrases like "review this", "/age", "is this safe to merge", "find bugs", "spot security issues", "check for slop", "review my PR", "look for problems", "what's wrong with this code". Runs nine orthogonal review dimensions (correctness, security, encapsulation, spec, complexity, deslop, assertions, NIH, efficiency) over the scoped diff and emits a stake-grouped findings report at `.cheese/age/<slug>.md`. Use even when the user only asks for one dimension — the report scopes itself. Findings only — no fixes; after the report lands, age renders the cure-selection table inline and asks which findings to cure (no "should I run /cure?" meta-question), then hands off to `/cure` with the selection locked in. Supports `--auto` (propagated from `/cook --auto`) for the autonomous chain into `/cure` (see `### Auto mode`). After `/press` (optional); before `/cure`.
 license: MIT
 ---
 
@@ -31,10 +31,11 @@ When called with a `<slug>`, resolve `.cheese/press/<slug>.md` (if present) for 
 | security | high | auth, injection, secrets, unsafe parsing, tainted inputs |
 | encapsulation | high | boundary leaks, cross-slice internals, public API sprawl |
 | spec | high | drift from stated requirements or acceptance criteria |
-| complexity | medium | unnecessary nesting, long functions, speculative abstractions |
-| deslop | medium | dead code, AI residue, duplicated logic, vague names |
+| complexity | medium | unnecessary nesting, long functions, speculative abstractions, redundant state, parameter sprawl, stringly-typed code, unnecessary JSX nesting |
+| deslop | medium | dead code, AI residue, duplicated logic, copy-paste-with-variation, vague names |
 | assertions | medium | weak tests, shallow existence checks, swallowed errors |
-| nih | medium | reinvented dependency, stdlib, or existing project helper |
+| nih | medium | reinvented dependency, stdlib, or existing project helper / utility / component |
+| efficiency | medium | unnecessary work, missed concurrency, hot-path bloat, no-op updates, TOCTOU pre-checks, memory leaks, overly broad reads |
 
 Per-dimension rubrics and recommendation shapes in `references/dimensions.md`. This reduced workflow intentionally omits the git-history/precedent dimension.
 
