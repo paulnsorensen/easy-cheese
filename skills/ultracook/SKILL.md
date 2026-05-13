@@ -122,7 +122,7 @@ For phases that already write rich reports (`/age`, `/press`, `/cure` once exten
 `/ultracook` stops and surfaces the report when:
 
 - A phase's slug file is missing after the sub-agent returns (the sub-agent did not write its handoff — print "phase did not write handoff — check sub-agent logs").
-- A phase writes `status: halt: <reason>` (a quality gate failed, press came back `blocked` or `follow-up recommended`, cure could not apply any finding).
+- A phase writes `status: halt: <reason>` (a quality gate failed, press came back `blocked`, cure could not apply any finding).
 - An age phase writes `next: done` because the diff is clean at the medium+ floor (early-stop). Note: this only fires from age spawns; cure always writes `next: age` and cap-enforcement does not flow through `next: done` (the chain length handles that — see `### Cap enforcement` above).
 
 In every early-stop case, surface the slug file path so the user can read the full report. The natural terminal case (chain table exhausted after spawn #7) does not need an explicit early-stop signal — the orchestrator simply runs out of entries to spawn.
