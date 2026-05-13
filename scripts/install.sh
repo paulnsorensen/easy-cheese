@@ -28,7 +28,7 @@ EC_SKILL_REPO="paulnsorensen/easy-cheese"
 # new skills land — this list is only used when the API call is
 # unavailable (offline, rate-limited, repo temporarily private). Kept
 # loosely in sync with skills/ but not load-bearing for happy-path runs.
-EC_FALLBACK_SKILLS="age briesearch cheese cheez-read cheez-search cheez-write cook culture cure melt mold press ultracook"
+EC_FALLBACK_SKILLS="age briesearch cheese cheez-read cheez-search cheez-write cook culture cure hard-cheese melt mold press ultracook"
 
 # Default selections.
 EC_DEFAULT_TOOLS="$EC_KNOWN_TOOLS"
@@ -88,6 +88,9 @@ Environment:
   EC_NPX               Override npx (used to launch context7 / tavily MCP).
   EC_UV     EC_PIPX    Override uv / pipx for code-review-graph install.
   EC_PIP    EC_CRG     Override pip / code-review-graph binaries.
+  EC_SKILL_REF         Pin skill installs to a git tag or commit SHA
+                       (passes --pin to 'gh skill install'). Used by CI
+                       to test against the commit under review.
 USAGE
 }
 
@@ -472,6 +475,12 @@ ec_discover_skills() {
 # offline. Per-skill install failures are warned and tracked but do not
 # abort the rest of the loop. Dry-run skips discovery and uses the
 # embedded list for predictable, network-free output.
+#
+# Set EC_SKILL_REF=<tag-or-sha> to pin every install to a specific git
+# ref (passes --pin to gh skill install). Used by CI so the smoke test
+# exercises the install script against the commit being tested rather
+# than the latest released tag. End users leave it unset to get the
+# latest release.
 ec_install_skills() {
     local harness="$1"
     local gh="${EC_GH:-gh}"
@@ -494,14 +503,18 @@ ec_install_skills() {
         fi
     fi
 
-    local skill rc=0
+    local skill rc=0 ref="${EC_SKILL_REF:-}" pin_log=""
+    [[ -n "$ref" ]] && pin_log=" --pin $ref"
     for skill in $skills; do
+        local cmd=("$gh" skill install "$EC_SKILL_REPO" "$skill")
+        [[ -n "$ref" ]] && cmd+=(--pin "$ref")
+        cmd+=(--agent "$harness" --scope user --force)
         if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
-            ec_log "easy-cheese skills: would run '$gh skill install $EC_SKILL_REPO $skill --agent $harness --scope user --force'"
+            ec_log "easy-cheese skills: would run '$gh skill install $EC_SKILL_REPO $skill$pin_log --agent $harness --scope user --force'"
             continue
         fi
         ec_log "easy-cheese skills: installing $skill into $harness (user scope)"
-        if ! "$gh" skill install "$EC_SKILL_REPO" "$skill" --agent "$harness" --scope user --force; then
+        if ! "${cmd[@]}"; then
             ec_warn "easy-cheese skills: failed to install $skill"
             rc=1
         fi
