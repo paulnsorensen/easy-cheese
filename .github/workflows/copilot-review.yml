@@ -1,0 +1,36 @@
+name: Request Copilot review
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  request-copilot-review:
+    if: ${{ !github.event.pull_request.draft && github.event.pull_request.user.type != 'Bot' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Request Copilot review
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+
+          if gh pr edit "$PR_NUMBER" --repo "$REPO" --add-reviewer Copilot 2>/dev/null; then
+            echo "Copilot review requested via gh CLI"
+            exit 0
+          fi
+
+          echo "gh CLI path failed; trying REST API fallback"
+          if gh api "repos/$REPO/pulls/$PR_NUMBER/requested_reviewers" \
+              -X POST \
+              -f "reviewers[]=copilot-pull-request-reviewer" 2>/dev/null; then
+            echo "Copilot review requested via REST API"
+            exit 0
+          fi
+
+          echo "::warning::Could not request Copilot review — ensure Copilot is enabled for this repo (Settings → Code & automation → Code review)"
