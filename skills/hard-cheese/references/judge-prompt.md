@@ -24,9 +24,11 @@ Implementation reference: <https://github.com/sreecharansankaranarayanan/vibeche
 > 4. **Relational** — the response explains how elements of the change interact: cause-and-effect is articulated, control flow and state are tied together, the author can defend why this change produces the desired behavior.
 > 5. **Extended Abstract** — the response generalises beyond the immediate change: invariants, trade-offs, what would change under different inputs, how this transfers to adjacent code.
 >
-> **Pass threshold: score ≥ 3 (Multistructural-or-higher; the paper labels this the 'Relational' pass condition).**
+> **Pass threshold: score ≥ 3 (Multistructural-or-higher).**
 >
-> Per Sankaranarayanan 2026, scores at or above Multistructural (3+ on this 1–5 scale; the paper names this the "Relational" pass condition) demonstrate sufficient causal understanding to defend the change in code review. Scores below 3 indicate the author has not yet integrated the change into a coherent causal account. The Multistructural-vs-Relational distinction stays informative — a level-3 pass with no cause-and-effect linkage is the minimum acceptable; a level-4 response is the aspirational target.
+> Per Sankaranarayanan 2026, scores at or above Multistructural (3+ on this 1–5 scale) demonstrate sufficient causal understanding to defend the change in code review. Scores below 3 indicate the author has not yet integrated the change into a coherent causal account. The Multistructural-vs-Relational distinction stays informative — a level-3 pass with no cause-and-effect linkage is the minimum acceptable; a level-4 response is the aspirational target.
+>
+> Note on terminology: the paper labels the pass condition "Relational". On this 1–5 mapping (Biggs & Collis), Relational is level 4 and Multistructural is level 3. The threshold rule above uses the level-3 label to stay unambiguous against the rubric; the paper's "Relational pass condition" terminology and "score ≥ 3" are the same operational gate.
 >
 > **Grading rules — strictest reading wins:**
 >

@@ -1,6 +1,6 @@
 ---
 name: hard-cheese
-description: This skill should be used when the user wants a metacognitive vibecheck gate before code is shared for review or a pull request is opened — phrases like "/hard-cheese", "/cheese --hard", "gate this before I push", "vibecheck me", "make sure I understand this diff", "epistemic-debt check", "did I actually read this". Reads the working diff, asks the human author to explain its causal logic in their own words, spawns a fresh-context judge sub-agent to grade the explanation against the SOLO Taxonomy (1-5, pass ≥ 3 / Relational), and either accepts the explanation (PASS) or returns Socratic feedback for retry (FAIL, capped at `--socratic-cap N` attempts). Writes the audit trail to `.cheese/hard/<slug>.md`. Use standalone immediately before opening a pull request, or as the propagated `--hard` flag on `/cook`, `/press`, `/age`, `/cure` so the gate fires automatically at the share-for-review handoff. Implements the metacognitive script mechanism from Sankaranarayanan 2026 — see `## Attribution` for the citation and the one documented divergence (fail-open on judge error). Do NOT use for code review (`/age`), test hardening (`/press`), or fix application (`/cure`) — those review the artifact; hard-cheese reviews the human's understanding of the artifact.
+description: This skill should be used when the user wants a metacognitive vibecheck gate before code is shared for review or a pull request is opened — phrases like "/hard-cheese", "/cheese --hard", "gate this before I push", "vibecheck me", "make sure I understand this diff", "epistemic-debt check", "did I actually read this". Reads the working diff, asks the human author to explain its causal logic in their own words, spawns a fresh-context judge sub-agent to grade the explanation against the SOLO Taxonomy (1-5, pass ≥ 3 / Multistructural-or-higher; the paper labels this the "Relational" pass condition), and either accepts the explanation (PASS) or returns Socratic feedback for retry (FAIL, capped at `--socratic-cap N` attempts). Writes the audit trail to `.cheese/hard/<slug>.md`. Use standalone immediately before opening a pull request, or as the propagated `--hard` flag on `/cook`, `/press`, `/age`, `/cure` so the gate fires automatically at the share-for-review handoff. Implements the metacognitive script mechanism from Sankaranarayanan 2026 — see `## Attribution` for the citation and the one documented divergence (fail-open on judge error). Do NOT use for code review (`/age`), test hardening (`/press`), or fix application (`/cure`) — those review the artifact; hard-cheese reviews the human's understanding of the artifact.
 license: MIT
 ---
 
@@ -81,7 +81,7 @@ attribution: |
   Scale. https://arxiv.org/abs/2602.20206
   Implementation reference:
   https://github.com/sreecharansankaranarayanan/vibecheck
-rubric: SOLO Taxonomy (1-5), pass threshold = 3 (Relational)
+rubric: SOLO Taxonomy (1-5), pass threshold = 3 (Multistructural-or-higher; the paper labels this the 'Relational' pass condition)
 divergence: fail-open on judge error (vibecheck fails closed)
 diff_base: <sha>
 diff_head: <short-sha>
