@@ -55,7 +55,7 @@ Every spawn uses the canonical `/<phase> <slug> --auto` form. Cook accepts a bar
 The two-cure-pass cap is enforced by **chain length, not by age**. Each age sub-agent boots in fresh context and cannot count prior cure passes, so the contract cannot rely on age tracking the count. Instead:
 
 - The chain table has exactly seven entries, with two cure spawns (#4 and #6) and three age spawns (#3, #5, #7). After spawn #7 completes, the orchestrator stops because the table is exhausted.
-- Each age spawn writes `next:` from what it observes on its own run: `next: cure` when at least one medium-or-above finding exists, `next: done` when none do. The field is **informational** under ultracook — it drives early-stop (when an age reports clean), but it is not load-bearing for cap enforcement.
+- Each age spawn writes `next:` from what it observes on its own run: `next: cure` when at least one medium-or-above finding exists, `next: done` when none do. The field is **informational** under ultracook — it drives early-stop (when an age reports clean), but it does not gate cap enforcement.
 - `/ultracook` does not pass a pass-ordinal hint to age. Age has no need to know whether it is age₁, age₂, or age₃; the orchestrator owns the position.
 
 ## No-chain isolation directive

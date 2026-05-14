@@ -77,4 +77,5 @@ When the conversation reveals real work, ask via `AskUserQuestion` which downstr
 - Ask one useful question at a time when the user is exploring.
 - Prefer clarity over completeness.
 - Agree when agreement is warranted; do not manufacture counterpoints to seem balanced.
+- When external evidence raises an alternative ("X uses Y or Z"), name it as a trade-off in the dialogue and a candidate option — never silently recommend "add both" or "expose a knob". Design choices need explicit user adjudication, not agent inference from a citation.
 - Apply the shared voice kernel (lives at `skills/age/references/voice.md` in this repo): lead with the answer, flag confidence as `certain | speculating | don't know`, steelman, track contradictions across turns.

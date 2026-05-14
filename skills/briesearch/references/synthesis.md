@@ -21,6 +21,20 @@ Rules:
 
 The tokens `certain`, `speculating`, and `don't know` are exact label values — write them verbatim, never as synonyms.
 
+## Alternatives are open questions, not recommendations
+
+A research call **returns evidence**. It does not pick design knobs.
+
+When a cited source mentions an alternative ("library X supports A or B", "papers recommend tuning C", "implementations vary between Y and Z"), the alternative becomes an **open question for the user**, not a synthesis recommendation. Never produce output of the form "use both" / "expose a knob to switch" / "add Y as an option alongside the existing X" — those are design choices reserved for `/mold` and the user.
+
+Rules:
+
+- **Cap confidence on alternative claims at `speculating`** until the user adjudicates which variant the project should use. A single arxiv citation saying "X or Y works" does not earn `certain` on either branch.
+- **Distinguishing nouns the user did not type (introduced by the agent or by a cited source) must appear in the Open questions block**, not in the Finding paragraph. If the user did not type "convex", "α", "BM42", "hybrid", etc., research output cannot recommend them — only flag them for adjudication.
+- **The Finding paragraph reports what the evidence says, not what to do.** "Paper X recommends tuning k in RRF" is a finding. "We should add convex fusion as a second algorithm" is a design choice — out of scope for `/briesearch`.
+
+Canonical failure to avoid: a Tavily snippet says "hybrid retrieval combines sparse and dense signals via RRF or convex score combination." A correct synthesis reports both as known approaches and lists "RRF vs convex fusion" as an open question. An incorrect synthesis (the one this rule exists to prevent) writes "recommend exposing both via a `[search].fusion` knob" — that's a design choice the research call had no mandate to make.
+
 ## Link / citation verification
 
 For deep reports (anything with a `.cheese/research/<slug>/<slug>.md` artifact):
@@ -52,16 +66,19 @@ Short form (always returned to the caller):
 ## Research: <Question>
 
 ### Finding
-<1-3 short paragraphs. Lead with the answer, not the methodology.>
+<1-3 short paragraphs. Lead with the answer the evidence supports, not a design recommendation. Report what cited sources say; do not promote alternatives mentioned in citations into design knobs.>
 
 ### Evidence
-<the claim-level table above, trimmed to the load-bearing rows>
+<the claim-level table above, trimmed to the critical rows>
+
+### Open questions
+<one bullet per alternative or unresolved choice raised by the evidence — phrased as a question for the user. Tag each `<speculative>`. If the user did not type the distinguishing noun (e.g. "convex", "α", "BM42") in their prompt, the alternative belongs here, not in Finding.>
 
 ### Confidence
 <`certain` | `speculating` | `don't know`> — <one-line justification, including any caveat>
 
 ### Next step
-<recommended skill or action, if any>
+<recommended skill or action — limited to which skill should run next (`/mold`, `/cook`, etc.), never which design knob to expose.>
 ```
 
 Long form (when the question warranted a deep look):

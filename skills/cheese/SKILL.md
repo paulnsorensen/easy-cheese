@@ -43,7 +43,7 @@ If `$ARGUMENTS` is missing entirely and there is no recent context to lean on, a
 
 | Intent | Trigger signals | Pre-step | Target skill |
 | --- | --- | --- | --- |
-| clarify | Empty input, single keyword, or load-bearing ambiguity | `AskUserQuestion` for the missing fact | re-enter `/cheese` once answered |
+| clarify | Empty input, single keyword, or critical ambiguity | `AskUserQuestion` for the missing fact | re-enter `/cheese` once answered |
 | research | Library / API / vendor question, "what's the best…", comparison | — | `/briesearch` |
 | rubber-duck | "Help me think through…", architecture discussion, no artifact intent | — | `/culture` |
 | mold | Feature description with fuzzy scope, multi-module idea, or stated need for a spec | optional `/briesearch` first if external evidence is missing | `/mold` → `/cook` |

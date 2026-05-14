@@ -19,7 +19,7 @@ Intent shapes for `/cheese`, with the signals that drive each one and the disamb
 
 ### clarify
 
-Use when classification confidence falls below `medium`, or load-bearing facts are missing.
+Use when classification confidence falls below `medium`, or critical facts are missing.
 
 | Signal | Example |
 | --- | --- |

@@ -35,7 +35,7 @@ Implementation reference: <https://github.com/sreecharansankaranarayanan/vibeche
 > - Steelman the strictest reading of the rubric. If the explanation is ambiguous between two adjacent levels, score the lower one. A generous judge defeats the gate's purpose.
 > - Demand diff-grounded cause-and-effect. Template answers, generic restatements of "the code does X", or descriptions that could apply to any code change are scored Multistructural at best. The explanation must cite specifics from the diff.
 > - Do not be charmed by fluent prose. Long, well-structured paragraphs that do not articulate causation are still Unistructural or Multistructural. Length is irrelevant; causal integration is everything.
-> - Do not infer understanding from absence. If the author omits a load-bearing element (a critical control-flow branch, a non-obvious invariant), that omission lowers the score.
+> - Do not infer understanding from absence. If the author omits a critical element (a control-flow branch, a non-obvious invariant), that omission lowers the score.
 > - The judge does not grade the code. The code may be wrong, weird, or suboptimal — that is `/age`'s job. The judge grades the author's understanding of the code as written.
 >
 > **On FAIL (score < 3):** return 2–4 Socratic questions that point the author toward the missing causal-logic component without revealing the answer. The questions should be specific to *this* diff and *this* explanation — not generic prompts. The goal is to provoke the author into the next attempt, not to teach them the code.
