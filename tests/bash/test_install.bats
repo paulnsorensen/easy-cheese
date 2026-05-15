@@ -443,6 +443,15 @@ STUB
     grep -q "^uv tool install code-review-graph\[embeddings\]$" "$STUB_LOG"
 }
 
+@test "ec_install_crg_cli honors EC_CRG_SPEC override (bare CLI, no extras)" {
+    make_stub uv
+    EC_UV="$STUB_BIN/uv" EC_CRG_SPEC="code-review-graph" EC_DRY_RUN=1 \
+        run ec_install_crg_cli
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"uv tool install code-review-graph"* ]]
+    [[ "$output" != *"code-review-graph[embeddings]"* ]]
+}
+
 # -- ec_install_mcp_crg -------------------------------------------------------
 
 @test "ec_install_mcp_crg installs CLI then registers when binary missing" {

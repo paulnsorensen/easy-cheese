@@ -311,7 +311,7 @@ ec_install_crg_cli() {
     local uv="${EC_UV:-uv}"
     local pipx="${EC_PIPX:-pipx}"
     local pip="${EC_PIP:-pip}"
-    local spec='code-review-graph[embeddings]'
+    local spec="${EC_CRG_SPEC:-code-review-graph[embeddings]}"
 
     if ec_cmd_exists "$uv"; then
         if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
