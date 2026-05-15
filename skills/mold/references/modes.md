@@ -27,11 +27,11 @@ Mold has no fixed entry point. Inspect the input shape and pick a starting mode.
 
 **Invariant:** never say "I think the code does X" without a `cheez-search` call.
 
-**Exit when:** every load-bearing claim has a citation.
+**Exit when:** every critical claim has a citation.
 
 ### Shape — option generation
 
-**Job:** turn a grounded problem into 2+ candidate approaches with trade-offs. Always include **Do Nothing**. Recommend with one-line rationale. Validate Cycle any load-bearing assumption behind a recommendation.
+**Job:** turn a grounded problem into 2+ candidate approaches with trade-offs. Always include **Do Nothing**. Recommend with one-line rationale. Validate Cycle any critical assumption behind a recommendation.
 
 **Exit when:** an option is picked (→ Sketch) or none survive (→ Explore).
 
