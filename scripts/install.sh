@@ -28,7 +28,7 @@ EC_SKILL_REPO="paulnsorensen/easy-cheese"
 # new skills land — this list is only used when the API call is
 # unavailable (offline, rate-limited, repo temporarily private). Kept
 # loosely in sync with skills/ but not load-bearing for happy-path runs.
-EC_FALLBACK_SKILLS="age briesearch cheese cheez-read cheez-search cheez-write cook culture cure hard-cheese melt mold press ultracook"
+EC_FALLBACK_SKILLS="age briesearch cheese cheese-factory cheez-read cheez-search cheez-write cook culture cure hard-cheese melt mold press ultracook"
 
 # Default selections.
 EC_DEFAULT_TOOLS="$EC_KNOWN_TOOLS"

@@ -11,6 +11,6 @@ rules:
     min-spaces-from-content: 1
   comments-indentation: disable
 
-ignore: |
+ignore: |-
   .cheese/
   .context/

@@ -63,6 +63,7 @@ Each `SKILL.md` is self-contained markdown with YAML frontmatter. There are no n
 | `skills/cure/SKILL.md` | `/cure` | Fix user-selected findings, validate, and prepare the branch for shipping. |
 | `skills/hard-cheese/SKILL.md` | `/hard-cheese` (or `--hard` flag) | Metacognitive vibecheck gate before review — asks the author to explain the diff's causal logic, grades the explanation against the SOLO Taxonomy. Standalone or via `--hard` propagation through the pipeline. |
 | `skills/ultracook/SKILL.md` | `/ultracook` | Autonomous fresh-context pipeline (`cook → press → age → cure → age → cure → age`, all `--auto`). Each phase runs inside its own full-peer sub-agent so review stays adversarial and parent context never bloats. For high-blast-radius specs. |
+| `skills/cheese-factory/SKILL.md` | `/cheese-factory` | Large-feature orchestrator. Decomposes an approved spec into seed + parallel curds + wiring, fans out per-curd `/cook → /press → /age → /cure`, merges, runs a fresh-context post-merge review pass, and ends in 1–N reviewable PRs (single, orthogonal flat, stacked linear, or diamond-stacked). Portable, harness-agnostic sibling of `/fromagerie`. |
 | `skills/melt/SKILL.md` | `/melt` | Resolve merge / rebase / cherry-pick conflicts via the structural cascade (mergiraf → rerere → kdiff3) with batch, pick-side, and lockfile helpers. |
 
 ### Tool skills
@@ -176,7 +177,7 @@ gh skill install paulnsorensen/easy-cheese
 Install every skill in one shot:
 
 ```sh
-for s in age briesearch cheese cheez-read cheez-search cheez-write cook culture cure hard-cheese melt mold press ultracook; do
+for s in age briesearch cheese cheese-factory cheez-read cheez-search cheez-write cook culture cure hard-cheese melt mold press ultracook; do
   gh skill install paulnsorensen/easy-cheese "$s"
 done
 ```

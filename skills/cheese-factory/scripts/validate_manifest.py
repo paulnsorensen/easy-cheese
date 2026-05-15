@@ -1,0 +1,232 @@
+#!/usr/bin/env python3
+"""Validate a cheese-factory run manifest.
+
+This is the structural companion to `validate_decomposition.py`: it verifies
+that the run-state document has the expected sections, then delegates the
+behavioural decomposition checks to the decomposition validator.
+"""
+
+from __future__ import annotations
+
+import re
+import sys
+from pathlib import Path
+from typing import Any
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from manifest_io import ManifestLoadError, read_mapping_arg_or_stdin
+from validate_decomposition import validate_manifest as validate_decomposition
+from validate_pr_plan import validate_pr_plan
+
+PHASES = {
+    "gate_approved",
+    "seed_complete",
+    "curds_complete",
+    "merge_complete",
+    "wiring_complete",
+    "final_merge_complete",
+    "post_review_complete",
+    "pr_publish_complete",
+}
+SEED_STATUSES = {"pending", "completed", "failed"}
+WORK_STATUSES = {"pending", "running", "completed", "failed"}
+WIRING_TYPES = {
+    "barrel_export",
+    "di_registration",
+    "route_wiring",
+    "event_subscription",
+    "config_entry",
+}
+WIRING_ID_RE = re.compile(r"^W[0-9]+$")
+
+
+def _type_name(value: object) -> str:
+    return type(value).__name__
+
+
+def _required_keys(obj: dict[str, Any], keys: tuple[str, ...], where: str) -> list[str]:
+    return [f"{where}.{key} is required" for key in keys if key not in obj]
+
+
+def _non_empty_string(obj: dict[str, Any], key: str, where: str) -> list[str]:
+    value = obj.get(key)
+    if not isinstance(value, str) or not value.strip():
+        return [f"{where}.{key} must be a non-empty string"]
+    return []
+
+
+def _string_list(value: object, where: str, *, non_empty: bool = False) -> list[str]:
+    if not isinstance(value, list):
+        return [f"{where} must be a list"]
+    if non_empty and not value:
+        return [f"{where} must be a non-empty list"]
+    errors: list[str] = []
+    for index, item in enumerate(value, start=1):
+        if not isinstance(item, str) or not item.strip():
+            errors.append(f"{where}[{index}] must be a non-empty string")
+    return errors
+
+
+def _validate_seed(seed: object) -> list[str]:
+    if not isinstance(seed, dict):
+        return [f"seed must be an object, got {_type_name(seed)}"]
+    errors = _required_keys(seed, ("items",), "seed")
+    items = seed.get("items")
+    if not isinstance(items, list):
+        errors.append("seed.items must be a list")
+        return errors
+    for index, item in enumerate(items, start=1):
+        where = f"seed.items[{index}]"
+        if not isinstance(item, dict):
+            errors.append(f"{where} must be an object, got {_type_name(item)}")
+            continue
+        errors.extend(_required_keys(item, ("description", "files", "status"), where))
+        errors.extend(_non_empty_string(item, "description", where))
+        errors.extend(_string_list(item.get("files"), f"{where}.files", non_empty=True))
+        if item.get("status") not in SEED_STATUSES:
+            errors.append(f"{where}.status must be one of pending|completed|failed")
+    return errors
+
+
+def _validate_curds(curds: object) -> list[str]:
+    if not isinstance(curds, list):
+        return ["curds must be a list"]
+    errors: list[str] = []
+    for index, curd in enumerate(curds, start=1):
+        where = f"curds[{index}]"
+        if not isinstance(curd, dict):
+            errors.append(f"{where} must be an object, got {_type_name(curd)}")
+            continue
+        errors.extend(
+            _required_keys(
+                curd,
+                (
+                    "id",
+                    "behavior",
+                    "acceptance_criterion",
+                    "files",
+                    "test_target",
+                    "status",
+                    "retry_count",
+                ),
+                where,
+            )
+        )
+        if not isinstance(curd.get("id"), int) or curd.get("id", 0) < 1:
+            errors.append(f"{where}.id must be an integer >= 1")
+        for field in ("behavior", "acceptance_criterion", "test_target"):
+            errors.extend(_non_empty_string(curd, field, where))
+        errors.extend(_string_list(curd.get("files"), f"{where}.files", non_empty=True))
+        if curd.get("status") not in WORK_STATUSES:
+            errors.append(f"{where}.status must be one of pending|running|completed|failed")
+        retry_count = curd.get("retry_count")
+        if not isinstance(retry_count, int) or not 0 <= retry_count <= 1:
+            errors.append(f"{where}.retry_count must be 0 or 1")
+    return errors
+
+
+def _validate_wiring(wiring: object) -> list[str]:
+    if not isinstance(wiring, list):
+        return ["wiring must be a list"]
+    errors: list[str] = []
+    for index, item in enumerate(wiring, start=1):
+        where = f"wiring[{index}]"
+        if not isinstance(item, dict):
+            errors.append(f"{where} must be an object, got {_type_name(item)}")
+            continue
+        errors.extend(_required_keys(item, ("id", "type", "file", "depends_on", "status"), where))
+        wid = item.get("id")
+        if not isinstance(wid, str) or not WIRING_ID_RE.match(wid):
+            errors.append(f"{where}.id must match W<number>")
+        if item.get("type") not in WIRING_TYPES:
+            errors.append(f"{where}.type must be a known wiring type")
+        errors.extend(_non_empty_string(item, "file", where))
+        errors.extend(_string_list(item.get("depends_on"), f"{where}.depends_on"))
+        if item.get("status") not in WORK_STATUSES:
+            errors.append(f"{where}.status must be one of pending|running|completed|failed")
+    return errors
+
+
+def _validate_post_review(post_review: object) -> list[str]:
+    if post_review is None:
+        return []
+    if not isinstance(post_review, dict):
+        return [f"post_review must be an object, got {_type_name(post_review)}"]
+    errors: list[str] = []
+    for key in ("press_slug", "age_slug", "cure_slug"):
+        if key in post_review:
+            errors.extend(_non_empty_string(post_review, key, "post_review"))
+    for key in ("findings_applied", "findings_deferred"):
+        if key in post_review:
+            value = post_review[key]
+            if not isinstance(value, int) or value < 0:
+                errors.append(f"post_review.{key} must be an integer >= 0")
+    return errors
+
+
+def validate_run_manifest(manifest: dict[str, Any]) -> list[str]:
+    """Return validation errors for a cheese-factory run manifest."""
+    errors: list[str] = []
+    required = (
+        "slug",
+        "spec_path",
+        "created",
+        "phase",
+        "quality_gates",
+        "host_capabilities",
+        "seed",
+        "curds",
+        "wiring",
+    )
+    errors.extend(_required_keys(manifest, required, "manifest"))
+    for key in ("slug", "spec_path", "created"):
+        errors.extend(_non_empty_string(manifest, key, "manifest"))
+    if manifest.get("phase") not in PHASES:
+        errors.append("manifest.phase must be a known phase")
+    errors.extend(_string_list(manifest.get("quality_gates"), "manifest.quality_gates", non_empty=True))
+    if not isinstance(manifest.get("host_capabilities"), dict):
+        errors.append("manifest.host_capabilities must be an object")
+
+    errors.extend(_validate_seed(manifest.get("seed")))
+    errors.extend(_validate_curds(manifest.get("curds")))
+    errors.extend(_validate_wiring(manifest.get("wiring")))
+    errors.extend(_validate_post_review(manifest.get("post_review")))
+    if "pr_plan" in manifest:
+        pr_plan = manifest.get("pr_plan")
+        if not isinstance(pr_plan, dict):
+            errors.append("manifest.pr_plan must be an object")
+        else:
+            errors.extend(f"manifest.pr_plan.{error}" for error in validate_pr_plan(pr_plan))
+
+    if "phase_summary" in manifest and not isinstance(manifest["phase_summary"], str):
+        errors.append("manifest.phase_summary must be a string")
+    if "carry_forward" in manifest:
+        errors.extend(_string_list(manifest.get("carry_forward"), "manifest.carry_forward"))
+
+    errors.extend(validate_decomposition(manifest))
+    return errors
+
+
+def main(argv: list[str]) -> int:
+    try:
+        manifest = read_mapping_arg_or_stdin(argv, "usage: validate_manifest.py [<manifest.yaml|json>]")
+    except ManifestLoadError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2 if str(exc).startswith("usage:") else 1
+
+    errors = validate_run_manifest(manifest)
+    if errors:
+        for error in errors:
+            print(f"ERROR: {error}", file=sys.stderr)
+        print(f"\nFAIL: {len(errors)} validation error(s)", file=sys.stderr)
+        return 1
+
+    print(f"OK: {len(manifest.get('curds', []))} curd(s), manifest valid")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))
