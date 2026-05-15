@@ -33,6 +33,12 @@ commands needed to create the planned branches and PRs.
 The script emits commands only; it never invokes git or gh itself. Pipe its
 output to `bash -s` to execute, or eyeball it first.
 
+The emitted stream is `set -euo pipefail` so a failed cherry-pick halts before
+push / PR create. `gh pr create` is guarded with `gh pr view` so a partially
+shipped plan can be re-run without aborting at the first already-created PR.
+`git checkout -b` and `git push -u origin` are NOT guarded — if a prior run
+already created the branch or pushed it, edit those lines out before piping.
+
 Supported shapes (from the plan's "shape" field):
   - single            One PR, one branch from main.
   - orthogonal_flat   N PRs each branching from main, no inter-dep.
@@ -69,6 +75,7 @@ def emit_commands(plan: dict[str, Any]) -> None:
             print(f"git cherry-pick {sq(sha)}")
         print(f"git push -u origin {sq(branch)}")
         print(
+            f"gh pr view {sq(branch)} --json number >/dev/null 2>&1 || "
             f"gh pr create --base {sq(base)} --head {sq(branch)} "
             f"--title {sq(title)} --body {sq(body)}"
         )

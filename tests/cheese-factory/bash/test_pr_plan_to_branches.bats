@@ -135,13 +135,17 @@ YAML
     [ "$status" -eq 0 ]
     [[ "$output" == *"shape: single"* ]]
     [[ "$output" == *"set -euo pipefail"* ]]
+    # gh pr create is guarded by gh pr view so a partial re-publish doesn't
+    # hard-stop the plan on the first already-created PR.
+    [[ "$output" == *"gh pr view 'cheese-factory/foo/pr-1' --json number"* ]]
+    [[ "$output" == *">/dev/null 2>&1 || gh pr create"* ]]
     [[ "$output" == *"git checkout -b 'cheese-factory/foo/pr-1' 'main'"* ]]
     [[ "$output" == *"git cherry-pick 'aaa1111'"* ]]
     [[ "$output" == *"git cherry-pick 'bbb2222'"* ]]
     [[ "$output" == *"git push -u origin 'cheese-factory/foo/pr-1'"* ]]
     [[ "$output" == *"gh pr create --base 'main' --head 'cheese-factory/foo/pr-1'"* ]]
     # Exactly one PR-create line.
-    [ "$(printf '%s\n' "$output" | grep -c '^gh pr create ')" -eq 1 ]
+    [ "$(printf '%s\n' "$output" | grep -c '|| gh pr create ')" -eq 1 ]
 }
 
 @test "single shape also accepts a JSON plan file" {
@@ -177,8 +181,8 @@ JSON
     [ "$status" -eq 0 ]
     [[ "$output" == *"shape: orthogonal_flat"* ]]
     # Three PR-create lines, all targeting main.
-    [ "$(printf '%s\n' "$output" | grep -c '^gh pr create ')" -eq 3 ]
-    [ "$(printf '%s\n' "$output" | grep -c "^gh pr create --base 'main'")" -eq 3 ]
+    [ "$(printf '%s\n' "$output" | grep -c '|| gh pr create ')" -eq 3 ]
+    [ "$(printf '%s\n' "$output" | grep -c "|| gh pr create --base 'main'")" -eq 3 ]
 }
 
 @test "orthogonal_flat emits exactly one cherry-pick per curd" {
@@ -195,9 +199,9 @@ JSON
     run "$SCRIPT" "$PLAN_FILE"
     [ "$status" -eq 0 ]
     [[ "$output" == *"shape: stacked_linear"* ]]
-    [ "$(printf '%s\n' "$output" | grep -c '^gh pr create ')" -eq 3 ]
+    [ "$(printf '%s\n' "$output" | grep -c '|| gh pr create ')" -eq 3 ]
     # Only the first PR targets main; the next two target the previous branch.
-    [ "$(printf '%s\n' "$output" | grep -c "^gh pr create --base 'main'")" -eq 1 ]
+    [ "$(printf '%s\n' "$output" | grep -c "|| gh pr create --base 'main'")" -eq 1 ]
     [[ "$output" == *"--base 'cheese-factory/foo/pr-1-seed'"* ]]
     [[ "$output" == *"--base 'cheese-factory/foo/pr-2-curd'"* ]]
 }
@@ -209,9 +213,9 @@ JSON
     run "$SCRIPT" "$PLAN_FILE"
     [ "$status" -eq 0 ]
     [[ "$output" == *"shape: diamond_stack"* ]]
-    [ "$(printf '%s\n' "$output" | grep -c '^gh pr create ')" -eq 4 ]
+    [ "$(printf '%s\n' "$output" | grep -c '|| gh pr create ')" -eq 4 ]
     # Two curd PRs share the seed branch as base.
-    [ "$(printf '%s\n' "$output" | grep -c "^gh pr create --base 'cheese-factory/foo/pr-seed'")" -eq 2 ]
+    [ "$(printf '%s\n' "$output" | grep -c "|| gh pr create --base 'cheese-factory/foo/pr-seed'")" -eq 2 ]
 }
 
 # -- error handling ----------------------------------------------------------
@@ -292,7 +296,12 @@ write_fake_bin() {
     mkdir -p "$FAKE_BIN"
     cat > "$FAKE_BIN/gh" <<'SH'
 #!/usr/bin/env bash
-# Print each arg on its own line wrapped in <>.
+# Print each arg on its own line wrapped in <>. Exit 1 for `pr view` so the
+# emitted idempotency guard falls through to `pr create` — the round-trip
+# tests want to verify what `pr create` actually receives.
+if [ "$1" = "pr" ] && [ "$2" = "view" ]; then
+    exit 1
+fi
 printf '<%s>\n' "$@"
 SH
     cat > "$FAKE_BIN/git" <<'SH'
@@ -322,6 +331,36 @@ YAML
     [ "$status" -eq 0 ]
     [[ "$output" == *"<feat(foo): don't break the cart>"* ]]
     [[ "$output" == *"<It's a fix.>"* ]]
+}
+
+@test "idempotency guard skips gh pr create when gh pr view succeeds" {
+    # If the PR already exists for the branch, `gh pr view` exits 0 and the
+    # guard short-circuits — `gh pr create` is never invoked. This is the
+    # property that lets a partially shipped plan be re-run safely.
+    write_single_plan
+    FAKE_BIN="$BATS_TEST_TMPDIR/fakebin"
+    mkdir -p "$FAKE_BIN"
+    cat > "$FAKE_BIN/gh" <<'SH'
+#!/usr/bin/env bash
+# Fake gh that always reports the PR exists; record any pr create attempt.
+if [ "$1" = "pr" ] && [ "$2" = "view" ]; then
+    exit 0
+fi
+if [ "$1" = "pr" ] && [ "$2" = "create" ]; then
+    echo "FAIL: gh pr create should have been skipped" >&2
+    exit 1
+fi
+SH
+    cat > "$FAKE_BIN/git" <<'SH'
+#!/usr/bin/env bash
+# Fake git is a no-op so push / cherry-pick succeed under set -e.
+exit 0
+SH
+    chmod +x "$FAKE_BIN/gh" "$FAKE_BIN/git"
+    out="$("$SCRIPT" "$PLAN_FILE")"
+    run env PATH="$FAKE_BIN:$PATH" bash -c "$out"
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"FAIL: gh pr create"* ]]
 }
 
 @test "emitted commands round-trip through bash when body contains quotes and newlines" {
