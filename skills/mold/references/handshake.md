@@ -53,7 +53,7 @@ Procedure:
    Agent-introduced scope check:
    | Term | First introduced by | Where in spec |
    | --- | --- | --- |
-   | <noun> | <agent | sub-agent | citation> | <section> |
+   | <noun> | <agent/sub-agent/citation> | <section> |
    ```
 
 4. **The user must explicitly approve each row** before the handshake fires. Acceptable approvals: "yes keep <term>", "drop <term>", "make <term> a follow-up". Vague "looks good" is not approval.
