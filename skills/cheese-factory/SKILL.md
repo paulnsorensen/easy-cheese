@@ -72,8 +72,10 @@ documented in `references/manifest-schema.json`. Keep manifests in the JSON-comp
 subset of YAML: mappings, lists, strings, numbers, booleans, and nulls only; no anchors,
 aliases, tags, or multi-document streams.
 
-`pr-plan.json` stays JSON because `scripts/pr_plan_to_branches.sh` intentionally consumes
-it with `jq` as machine output from the PR planner.
+The PR plan follows the same convention — written as YAML at
+`.cheese/cheese-factory/<slug>/pr-plan.yaml`, with its shape documented in
+`references/pr-plan-schema.json`. `scripts/pr_plan_to_branches.py` reads either YAML
+or JSON for backward compatibility, but YAML is the canonical format.
 
 ### Validation (Phase 0)
 
@@ -245,7 +247,7 @@ The planner emits one of four shapes:
 | `stacked_linear` | Linear dependencies seed → curds → wiring | gt/gh stack. |
 | `diamond_stack` | Seed and wiring exist; curds independent of each other | seed PR (base) → N parallel curd PRs → wiring PR. |
 
-The planner writes its grouping to `.cheese/cheese-factory/<slug>/pr-plan.json` and returns control.
+The planner writes its grouping to `.cheese/cheese-factory/<slug>/pr-plan.yaml` and returns control.
 
 #### Skill discovery (orchestrator-side)
 
@@ -264,8 +266,8 @@ Detection: attempt to invoke the skill via the host's Skill tool; on unrecognise
 
 For each PR group in the plan:
 
-1. Read group metadata from `pr-plan.json`.
-2. Push the branch (use `scripts/pr_plan_to_branches.sh` to convert `pr-plan.json` to branch-creation commands).
+1. Read group metadata from `pr-plan.yaml`.
+2. Push the branch (use `scripts/pr_plan_to_branches.py` to convert `pr-plan.yaml` to branch-creation commands).
 3. Create the PR (via `/gh` if available, else `gh pr create` direct).
 4. For stacks: invoke `/pr-stack` with the ordered branch list.
 5. Update manifest with PR numbers and URLs.
@@ -433,11 +435,12 @@ If the manifest references commits that no longer exist (rebased, deleted), fail
 - `references/wiring-prompt.md` — per-wiring task prompt template.
 - `references/pr-planner-prompt.md` — PR planner sub-agent prompt template.
 - `references/manifest-schema.json` — JSON Schema for the manifest.
+- `references/pr-plan-schema.json` — JSON Schema for the PR plan, `$ref`'d from `manifest-schema.json`.
 - `references/spawn-primitive-reference.md` — host-by-host invocation examples plus the five invariants.
 - `scripts/validate_manifest.py` — Phase 0 structural validation of required manifest sections and fields.
 - `scripts/validate_decomposition.py` — Phase 0 semantic validation of decomposer output against the five criteria.
 - `scripts/validate_pr_plan.py` — Phase 7 validation of PR planner output before branch creation.
-- `scripts/pr_plan_to_branches.sh` — converts `pr-plan.json` to branch-creation commands for Phase 7.
+- `scripts/pr_plan_to_branches.py` — converts `pr-plan.yaml` to branch-creation commands for Phase 7.
 
 ## Rules
 

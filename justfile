@@ -15,7 +15,7 @@ test:
 
 # Lint shell scripts
 lint-sh:
-    shellcheck scripts/install.sh skills/cheese-factory/scripts/pr_plan_to_branches.sh
+    shellcheck scripts/install.sh
 
 # Fix markdown formatting issues
 lint-md-fix:

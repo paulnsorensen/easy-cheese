@@ -116,28 +116,7 @@
       }
     },
     "pr_plan": {
-      "type": "object",
-      "required": ["shape", "groups"],
-      "properties": {
-        "shape": {"type": "string", "enum": ["single", "orthogonal_flat", "stacked_linear", "diamond_stack"]},
-        "groups": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "required": ["branch", "title", "base", "commits"],
-            "properties": {
-              "branch": {"type": "string"},
-              "title": {"type": "string"},
-              "body": {"type": "string"},
-              "base": {"type": "string"},
-              "commits": {"type": "array", "items": {"type": "string"}, "minItems": 1},
-              "depends_on": {"type": "array", "items": {"type": "string"}},
-              "pr_number": {"type": ["integer", "null"]},
-              "pr_url": {"type": ["string", "null"]}
-            }
-          }
-        }
-      }
+      "$ref": "pr-plan-schema.json"
     },
     "phase_summary": {
       "type": "string",

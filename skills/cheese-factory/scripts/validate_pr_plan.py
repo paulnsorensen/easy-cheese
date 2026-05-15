@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Validate a cheese-factory PR plan document.
 
-The PR plan stays JSON by convention because `pr_plan_to_branches.sh` consumes
-it with jq, but this validator also accepts YAML so humans can inspect draft
-plans before converting them.
+The plan's canonical on-disk format is YAML (see ``manifest_io``), but this
+validator accepts either YAML or JSON — both are read into the same Python
+mapping before shape checks run.
 """
 
 from __future__ import annotations
@@ -93,7 +93,7 @@ def validate_pr_plan(plan: dict[str, Any]) -> list[str]:
 
 def main(argv: list[str]) -> int:
     try:
-        plan = read_mapping_arg_or_stdin(argv, "usage: validate_pr_plan.py [<pr-plan.json|yaml>]")
+        plan = read_mapping_arg_or_stdin(argv, "usage: validate_pr_plan.py [<pr-plan.yaml|pr-plan.json>]")
     except ManifestLoadError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2 if str(exc).startswith("usage:") else 1

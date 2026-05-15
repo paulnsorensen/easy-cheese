@@ -57,5 +57,10 @@ def manifest_schema_path() -> Path:
 
 
 @pytest.fixture(scope="session")
+def pr_plan_schema_path() -> Path:
+    return REFERENCES_DIR / "pr-plan-schema.json"
+
+
+@pytest.fixture(scope="session")
 def skill_md_path() -> Path:
     return CF_DIR / "SKILL.md"

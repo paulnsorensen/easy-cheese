@@ -80,6 +80,7 @@ class TestBundledFilesExist:
         "wiring-prompt.md",
         "pr-planner-prompt.md",
         "manifest-schema.json",
+        "pr-plan-schema.json",
         "spawn-primitive-reference.md",
     )
 
@@ -91,7 +92,7 @@ class TestBundledFilesExist:
         "validate_decomposition.py",
         "validate_manifest.py",
         "validate_pr_plan.py",
-        "pr_plan_to_branches.sh",
+        "pr_plan_to_branches.py",
     )
 
     def test_references_present(self, cf_dir: Path) -> None:

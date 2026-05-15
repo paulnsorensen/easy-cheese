@@ -9,7 +9,7 @@ You are the PR planner sub-agent for /cheese-factory spec: {slug}
 
 Read the manifest at {manifest_path}, the merged diff at {merged_diff_path}, and the
 spec summary below. Emit a PR layout plan to
-`.cheese/cheese-factory/{slug}/pr-plan.json`.
+`.cheese/cheese-factory/{slug}/pr-plan.yaml`.
 
 ## Layout shapes
 
@@ -32,30 +32,27 @@ Heuristics (in priority order):
    `diamond_stack`.
 4. Otherwise choose `stacked_linear`.
 
-## Output: pr-plan.json
+## Output: pr-plan.yaml
 
-```json
-{
-  "shape": "single | orthogonal_flat | stacked_linear | diamond_stack",
-  "groups": [
-    {
-      "branch": "cheese-factory/{slug}/pr-1-seed",
-      "title": "feat(orders): shared types",
-      "body": "Adds the shared OrderId type and protocol used by every order curd.",
-      "base": "main",
-      "commits": ["<sha1>", "<sha2>"],
-      "depends_on": []
-    },
-    {
-      "branch": "cheese-factory/{slug}/pr-2-curd-1",
-      "title": "feat(orders): order entity",
-      "body": "Adds the order entity with full test coverage.",
-      "base": "cheese-factory/{slug}/pr-1-seed",
-      "commits": ["<sha3>"],
-      "depends_on": ["cheese-factory/{slug}/pr-1-seed"]
-    }
-  ]
-}
+```yaml
+shape: single | orthogonal_flat | stacked_linear | diamond_stack
+groups:
+  - branch: cheese-factory/{slug}/pr-1-seed
+    title: "feat(orders): shared types"
+    body: Adds the shared OrderId type and protocol used by every order curd.
+    base: main
+    commits:
+      - <sha1>
+      - <sha2>
+    depends_on: []
+  - branch: cheese-factory/{slug}/pr-2-curd-1
+    title: "feat(orders): order entity"
+    body: Adds the order entity with full test coverage.
+    base: cheese-factory/{slug}/pr-1-seed
+    commits:
+      - <sha3>
+    depends_on:
+      - cheese-factory/{slug}/pr-1-seed
 ```
 
 Each group:
@@ -70,9 +67,13 @@ Each group:
 
 For `single`, emit exactly one group. For `orthogonal_flat`, emit one group per curd
 with `base: main` and empty `depends_on`. For stacks, the orchestrator uses
-`scripts/pr_plan_to_branches.sh` to convert the plan to branch-creation commands.
+`scripts/pr_plan_to_branches.py` to convert the plan to branch-creation commands.
 The orchestrator validates your output with `scripts/validate_pr_plan.py` before
 running the branch converter.
+
+Keep the YAML in the JSON-compatible subset: mappings, lists, strings, numbers, and
+booleans only — no anchors, aliases, tags, or multi-document streams. The shape is
+defined by `references/pr-plan-schema.json`.
 
 ## Spec summary
 
@@ -80,7 +81,7 @@ running the branch converter.
 
 ## Return
 
-Write `pr-plan.json` and return a one-paragraph rationale naming the chosen shape and
+Write `pr-plan.yaml` and return a one-paragraph rationale naming the chosen shape and
 why. The orchestrator reads the rationale to confirm the layout looks sensible before
 delegating publish.
 ```

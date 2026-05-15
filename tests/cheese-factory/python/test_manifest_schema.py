@@ -19,6 +19,11 @@ def schema(manifest_schema_path: Path) -> dict:
     return json.loads(manifest_schema_path.read_text(encoding="utf-8"))
 
 
+@pytest.fixture(scope="module")
+def pr_plan_schema(pr_plan_schema_path: Path) -> dict:
+    return json.loads(pr_plan_schema_path.read_text(encoding="utf-8"))
+
+
 @pytest.fixture
 def example_manifest() -> dict:
     """An example manifest that should match the schema."""
@@ -133,8 +138,13 @@ class TestSchemaShape:
         }
         assert set(phases) == expected
 
-    def test_pr_plan_shape_enum_covers_four(self, schema: dict) -> None:
-        shapes = schema["properties"]["pr_plan"]["properties"]["shape"]["enum"]
+    def test_pr_plan_is_external_ref(self, schema: dict) -> None:
+        # The pr_plan shape is defined in its own schema file so editors and
+        # other consumers can target it directly. Manifest just $refs it.
+        assert schema["properties"]["pr_plan"] == {"$ref": "pr-plan-schema.json"}
+
+    def test_pr_plan_shape_enum_covers_four(self, pr_plan_schema: dict) -> None:
+        shapes = pr_plan_schema["properties"]["shape"]["enum"]
         assert set(shapes) == {
             "single",
             "orthogonal_flat",
@@ -177,6 +187,6 @@ class TestExampleManifestMatchesSchema:
         phases = schema["properties"]["phase"]["enum"]
         assert example_manifest["phase"] in phases
 
-    def test_pr_plan_shape_value_in_enum(self, schema: dict, example_manifest: dict) -> None:
-        shapes = schema["properties"]["pr_plan"]["properties"]["shape"]["enum"]
+    def test_pr_plan_shape_value_in_enum(self, pr_plan_schema: dict, example_manifest: dict) -> None:
+        shapes = pr_plan_schema["properties"]["shape"]["enum"]
         assert example_manifest["pr_plan"]["shape"] in shapes

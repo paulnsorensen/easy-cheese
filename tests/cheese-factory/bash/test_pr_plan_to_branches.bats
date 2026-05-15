@@ -1,75 +1,106 @@
 #!/usr/bin/env bats
 #
-# Tests for skills/cheese-factory/scripts/pr_plan_to_branches.sh.
+# Tests for skills/cheese-factory/scripts/pr_plan_to_branches.py.
 #
 # Each shape (single, orthogonal_flat, stacked_linear, diamond_stack) gets
 # at least one test verifying:
 #   - exit 0 on valid input
 #   - emitted command shape matches the PR layout
 #   - branch / base / commit / PR-create commands all appear
+#
+# Both YAML and JSON inputs are exercised — the script accepts either via
+# manifest_io.read_mapping_arg_or_stdin.
 
 setup() {
     REPO_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/../../.." && pwd)"
-    SCRIPT="$REPO_ROOT/skills/cheese-factory/scripts/pr_plan_to_branches.sh"
-    PLAN_FILE="$BATS_TEST_TMPDIR/plan.json"
+    SCRIPT="$REPO_ROOT/skills/cheese-factory/scripts/pr_plan_to_branches.py"
+    PLAN_FILE="$BATS_TEST_TMPDIR/plan.yaml"
 }
 
-# Helper: write a plan with one group.
+# Helper: write a plan with one group. YAML is the canonical format.
 write_single_plan() {
-    cat > "$PLAN_FILE" <<'JSON'
-{
-  "shape": "single",
-  "groups": [
-    {
-      "branch": "cheese-factory/foo/pr-1",
-      "title": "feat(foo): everything in one",
-      "body": "Ships the whole feature in one PR.",
-      "base": "main",
-      "commits": ["aaa111", "bbb222"]
-    }
-  ]
-}
-JSON
+    cat > "$PLAN_FILE" <<'YAML'
+shape: single
+groups:
+  - branch: cheese-factory/foo/pr-1
+    title: "feat(foo): everything in one"
+    body: Ships the whole feature in one PR.
+    base: main
+    commits:
+      - aaa111
+      - bbb222
+YAML
 }
 
 write_orthogonal_flat_plan() {
-    cat > "$PLAN_FILE" <<'JSON'
-{
-  "shape": "orthogonal_flat",
-  "groups": [
-    {"branch": "cheese-factory/foo/pr-curd-1", "title": "feat(foo): curd one", "body": "", "base": "main", "commits": ["c1"]},
-    {"branch": "cheese-factory/foo/pr-curd-2", "title": "feat(foo): curd two", "body": "", "base": "main", "commits": ["c2"]},
-    {"branch": "cheese-factory/foo/pr-curd-3", "title": "feat(foo): curd three", "body": "", "base": "main", "commits": ["c3"]}
-  ]
-}
-JSON
+    cat > "$PLAN_FILE" <<'YAML'
+shape: orthogonal_flat
+groups:
+  - branch: cheese-factory/foo/pr-curd-1
+    title: "feat(foo): curd one"
+    body: ""
+    base: main
+    commits: [c1]
+  - branch: cheese-factory/foo/pr-curd-2
+    title: "feat(foo): curd two"
+    body: ""
+    base: main
+    commits: [c2]
+  - branch: cheese-factory/foo/pr-curd-3
+    title: "feat(foo): curd three"
+    body: ""
+    base: main
+    commits: [c3]
+YAML
 }
 
 write_stacked_linear_plan() {
-    cat > "$PLAN_FILE" <<'JSON'
-{
-  "shape": "stacked_linear",
-  "groups": [
-    {"branch": "cheese-factory/foo/pr-1-seed", "title": "feat(foo): seed", "body": "", "base": "main", "commits": ["seed1"]},
-    {"branch": "cheese-factory/foo/pr-2-curd", "title": "feat(foo): curd", "body": "", "base": "cheese-factory/foo/pr-1-seed", "commits": ["atom1"]},
-    {"branch": "cheese-factory/foo/pr-3-wire", "title": "feat(foo): wire", "body": "", "base": "cheese-factory/foo/pr-2-curd", "commits": ["wire1"]}
-  ]
-}
-JSON
+    cat > "$PLAN_FILE" <<'YAML'
+shape: stacked_linear
+groups:
+  - branch: cheese-factory/foo/pr-1-seed
+    title: "feat(foo): seed"
+    body: ""
+    base: main
+    commits: [seed1]
+  - branch: cheese-factory/foo/pr-2-curd
+    title: "feat(foo): curd"
+    body: ""
+    base: cheese-factory/foo/pr-1-seed
+    commits: [atom1]
+  - branch: cheese-factory/foo/pr-3-wire
+    title: "feat(foo): wire"
+    body: ""
+    base: cheese-factory/foo/pr-2-curd
+    commits: [wire1]
+YAML
 }
 
 write_diamond_stack_plan() {
-    cat > "$PLAN_FILE" <<'JSON'
-{
-  "shape": "diamond_stack",
-  "groups": [
-    {"branch": "cheese-factory/foo/pr-seed", "title": "feat(foo): seed", "body": "", "base": "main", "commits": ["seed1"]},
-    {"branch": "cheese-factory/foo/pr-curd-1", "title": "feat(foo): curd one", "body": "", "base": "cheese-factory/foo/pr-seed", "commits": ["a1"]},
-    {"branch": "cheese-factory/foo/pr-curd-2", "title": "feat(foo): curd two", "body": "", "base": "cheese-factory/foo/pr-seed", "commits": ["a2"]},
-    {"branch": "cheese-factory/foo/pr-wire", "title": "feat(foo): wire", "body": "", "base": "cheese-factory/foo/pr-curd-2", "commits": ["w1"]}
-  ]
-}
-JSON
+    cat > "$PLAN_FILE" <<'YAML'
+shape: diamond_stack
+groups:
+  - branch: cheese-factory/foo/pr-seed
+    title: "feat(foo): seed"
+    body: ""
+    base: main
+    commits: [seed1]
+  - branch: cheese-factory/foo/pr-curd-1
+    title: "feat(foo): curd one"
+    body: ""
+    base: cheese-factory/foo/pr-seed
+    commits: [a1]
+  - branch: cheese-factory/foo/pr-curd-2
+    title: "feat(foo): curd two"
+    body: ""
+    base: cheese-factory/foo/pr-seed
+    commits: [a2]
+  - branch: cheese-factory/foo/pr-wire
+    title: "feat(foo): wire"
+    body: ""
+    base: cheese-factory/foo/pr-curd-2
+    commits: [w1]
+YAML
 }
 
 # -- preflight ---------------------------------------------------------------
@@ -78,7 +109,7 @@ JSON
     [ -x "$SCRIPT" ]
 }
 
-@test "script rejects --help with exit 0" {
+@test "script accepts --help with exit 0" {
     run "$SCRIPT" --help
     [ "$status" -eq 0 ]
     [[ "$output" == *"Usage:"* ]]
@@ -91,7 +122,7 @@ JSON
 }
 
 @test "script rejects missing file with exit 1" {
-    run "$SCRIPT" /nope/nope/nope.json
+    run "$SCRIPT" /nope/nope/nope.yaml
     [ "$status" -eq 1 ]
     [[ "$output" == *"not found"* ]]
 }
@@ -112,6 +143,31 @@ JSON
     [ "$(printf '%s\n' "$output" | grep -c '^gh pr create ')" -eq 1 ]
 }
 
+@test "single shape also accepts a JSON plan file" {
+    # Backward-compatibility: JSON is a subset of YAML and read_mapping_arg_or_stdin
+    # tries JSON first, so a .json file should still work cleanly.
+    JSON_PLAN="$BATS_TEST_TMPDIR/plan.json"
+    cat > "$JSON_PLAN" <<'JSON'
+{
+  "shape": "single",
+  "groups": [
+    {
+      "branch": "cheese-factory/foo/pr-1",
+      "title": "feat(foo): everything in one",
+      "body": "Ships the whole feature in one PR.",
+      "base": "main",
+      "commits": ["aaa111", "bbb222"]
+    }
+  ]
+}
+JSON
+    run "$SCRIPT" "$JSON_PLAN"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"shape: single"* ]]
+    [[ "$output" == *"git cherry-pick 'aaa111'"* ]]
+    [[ "$output" == *"git cherry-pick 'bbb222'"* ]]
+}
+
 # -- orthogonal_flat shape ---------------------------------------------------
 
 @test "orthogonal_flat emits N PRs each with base main" {
@@ -121,7 +177,6 @@ JSON
     [[ "$output" == *"shape: orthogonal_flat"* ]]
     # Three PR-create lines, all targeting main.
     [ "$(printf '%s\n' "$output" | grep -c '^gh pr create ')" -eq 3 ]
-    # All bases are main.
     [ "$(printf '%s\n' "$output" | grep -c "^gh pr create --base 'main'")" -eq 3 ]
 }
 
@@ -139,7 +194,6 @@ JSON
     run "$SCRIPT" "$PLAN_FILE"
     [ "$status" -eq 0 ]
     [[ "$output" == *"shape: stacked_linear"* ]]
-    # Three PRs total.
     [ "$(printf '%s\n' "$output" | grep -c '^gh pr create ')" -eq 3 ]
     # Only the first PR targets main; the next two target the previous branch.
     [ "$(printf '%s\n' "$output" | grep -c "^gh pr create --base 'main'")" -eq 1 ]
@@ -154,7 +208,6 @@ JSON
     run "$SCRIPT" "$PLAN_FILE"
     [ "$status" -eq 0 ]
     [[ "$output" == *"shape: diamond_stack"* ]]
-    # Four PRs.
     [ "$(printf '%s\n' "$output" | grep -c '^gh pr create ')" -eq 4 ]
     # Two curd PRs share the seed branch as base.
     [ "$(printf '%s\n' "$output" | grep -c "^gh pr create --base 'cheese-factory/foo/pr-seed'")" -eq 2 ]
@@ -163,27 +216,39 @@ JSON
 # -- error handling ----------------------------------------------------------
 
 @test "script rejects unknown shape" {
-    cat > "$PLAN_FILE" <<'JSON'
-{"shape": "marbled", "groups": [{"branch": "x", "title": "y", "body": "", "base": "main", "commits": ["c"]}]}
-JSON
+    cat > "$PLAN_FILE" <<'YAML'
+shape: marbled
+groups:
+  - branch: x
+    title: y
+    body: ""
+    base: main
+    commits: [c]
+YAML
     run "$SCRIPT" "$PLAN_FILE"
     [ "$status" -eq 1 ]
-    [[ "$output" == *"unknown shape"* ]]
+    [[ "$output" == *"shape must be one of"* ]]
 }
 
 @test "script rejects empty groups" {
-    cat > "$PLAN_FILE" <<'JSON'
-{"shape": "single", "groups": []}
-JSON
+    cat > "$PLAN_FILE" <<'YAML'
+shape: single
+groups: []
+YAML
     run "$SCRIPT" "$PLAN_FILE"
     [ "$status" -eq 1 ]
-    [[ "$output" == *"no groups"* ]]
+    [[ "$output" == *"groups must be a non-empty list"* ]]
 }
 
 @test "script rejects missing shape field" {
-    cat > "$PLAN_FILE" <<'JSON'
-{"groups": [{"branch": "x", "title": "y", "body": "", "base": "main", "commits": ["c"]}]}
-JSON
+    cat > "$PLAN_FILE" <<'YAML'
+groups:
+  - branch: x
+    title: y
+    body: ""
+    base: main
+    commits: [c]
+YAML
     run "$SCRIPT" "$PLAN_FILE"
     [ "$status" -eq 1 ]
     [[ "$output" == *"shape"* ]]
@@ -218,20 +283,15 @@ SH
 @test "emitted commands round-trip through bash when title contains an apostrophe" {
     # PR titles routinely contain apostrophes ("don't", "it's"). The sq()
     # escape must produce output that bash can evaluate without syntax error.
-    cat > "$PLAN_FILE" <<'JSON'
-{
-  "shape": "single",
-  "groups": [
-    {
-      "branch": "cheese-factory/foo/pr-1",
-      "title": "feat(foo): don't break the cart",
-      "body": "It's a fix.",
-      "base": "main",
-      "commits": ["abc123"]
-    }
-  ]
-}
-JSON
+    cat > "$PLAN_FILE" <<'YAML'
+shape: single
+groups:
+  - branch: cheese-factory/foo/pr-1
+    title: "feat(foo): don't break the cart"
+    body: "It's a fix."
+    base: main
+    commits: [abc123]
+YAML
     write_fake_bin
     out="$("$SCRIPT" "$PLAN_FILE")"
     # Evaluate the emitted command stream with the fakes on PATH and capture
@@ -243,7 +303,11 @@ JSON
 }
 
 @test "emitted commands round-trip through bash when body contains quotes and newlines" {
-    cat > "$PLAN_FILE" <<'JSON'
+    # Use JSON here so the literal \n escapes decode to real newlines without
+    # YAML scalar style fuss — the quoting helper is what we want to exercise,
+    # not YAML's block-vs-flow handling.
+    JSON_PLAN="$BATS_TEST_TMPDIR/plan.json"
+    cat > "$JSON_PLAN" <<'JSON'
 {
   "shape": "single",
   "groups": [
@@ -258,7 +322,7 @@ JSON
 }
 JSON
     write_fake_bin
-    out="$("$SCRIPT" "$PLAN_FILE")"
+    out="$("$SCRIPT" "$JSON_PLAN")"
     run env PATH="$FAKE_BIN:$PATH" bash -c "$out"
     [ "$status" -eq 0 ]
     # Body must survive verbatim — single quotes, newlines, and double quotes.
