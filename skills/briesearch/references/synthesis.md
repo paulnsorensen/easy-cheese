@@ -72,7 +72,7 @@ Short form (always returned to the caller):
 <the claim-level table above, trimmed to the critical rows>
 
 ### Open questions
-<one bullet per alternative or unresolved choice raised by the evidence — phrased as a question for the user. Tag each `<speculative>`. If the user did not type the distinguishing noun (e.g. "convex", "α", "BM42") in their prompt, the alternative belongs here, not in Finding.>
+<one bullet per alternative or unresolved choice raised by the evidence — phrased as a question for the user. Tag each `speculating`. If the user did not type the distinguishing noun (e.g. "convex", "α", "BM42") in their prompt, the alternative belongs here, not in Finding.>
 
 ### Confidence
 <`certain` | `speculating` | `don't know`> — <one-line justification, including any caveat>
