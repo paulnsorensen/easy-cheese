@@ -56,7 +56,7 @@ def _pr_plan() -> dict:
                 "branch": "cheese-factory/feature-name/pr-1",
                 "title": "feat(feature): ship",
                 "base": "main",
-                "commits": ["abc123"],
+                "commits": ["abc1234"],
                 "depends_on": [],
             }
         ],
@@ -144,8 +144,10 @@ class TestPrPlanValidator:
         assert validate_pr_plan.validate_pr_plan(plan) == []
 
     def test_commit_rejects_too_short(self, validate_pr_plan: ModuleType) -> None:
+        # 7 hex chars is git's default short-SHA floor — shorter values risk
+        # colliding with branch / tag names of the same shape (e.g. `feed`).
         plan = _pr_plan()
-        plan["groups"][0]["commits"] = ["abc"]  # git's minimum is 4 hex chars.
+        plan["groups"][0]["commits"] = ["abcdef"]
         errors = validate_pr_plan.validate_pr_plan(plan)
         assert any("must be a hex SHA" in error for error in errors)
 

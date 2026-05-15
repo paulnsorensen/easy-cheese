@@ -98,7 +98,7 @@ Eight phases. The orchestrator walks them top-to-bottom and stops after the last
 | # | Phase | Shape |
 |---|---|---|
 | 0 | Pre-compile | Read spec, decompose via heavy general-purpose sub-agent, validate against the five criteria, user gate |
-| 1 | Seed | Orchestrator inline edits via `cheez-write`, commit, push |
+| 1 | Seed | Orchestrator inline edits via `/cheez-write` (or host edit tool if tilth MCP is unavailable), commit, push |
 | 2 | Curds (fan-out) | N parallel general-purpose spawns; each runs `/cook --auto → /press --auto → /age --auto` (inline-degrade) `→ /cure --auto --stake medium+` and commits |
 | 3 | Merge curds (fan-in) | Cherry-pick curd commits → orchestrator branch; `/melt` on conflicts |
 | 4 | Wiring (sequential within wave) | Integration files only; per-task general-purpose spawn with wiring-only prompt |

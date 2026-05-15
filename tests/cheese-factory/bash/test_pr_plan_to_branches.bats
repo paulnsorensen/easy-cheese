@@ -27,8 +27,8 @@ groups:
     body: Ships the whole feature in one PR.
     base: main
     commits:
-      - aaa111
-      - bbb222
+      - aaa1111
+      - bbb2222
 YAML
 }
 
@@ -40,17 +40,17 @@ groups:
     title: "feat(foo): curd one"
     body: ""
     base: main
-    commits: [c1c1c1]
+    commits: [c1c1c1d]
   - branch: cheese-factory/foo/pr-curd-2
     title: "feat(foo): curd two"
     body: ""
     base: main
-    commits: [c2c2c2]
+    commits: [c2c2c2d]
   - branch: cheese-factory/foo/pr-curd-3
     title: "feat(foo): curd three"
     body: ""
     base: main
-    commits: [c3c3c3]
+    commits: [c3c3c3d]
 YAML
 }
 
@@ -62,17 +62,17 @@ groups:
     title: "feat(foo): seed"
     body: ""
     base: main
-    commits: [5eed01]
+    commits: [5eed011]
   - branch: cheese-factory/foo/pr-2-curd
     title: "feat(foo): curd"
     body: ""
     base: cheese-factory/foo/pr-1-seed
-    commits: [a701a1]
+    commits: [a701a11]
   - branch: cheese-factory/foo/pr-3-wire
     title: "feat(foo): wire"
     body: ""
     base: cheese-factory/foo/pr-2-curd
-    commits: [aaee01]
+    commits: [aaee011]
 YAML
 }
 
@@ -84,22 +84,22 @@ groups:
     title: "feat(foo): seed"
     body: ""
     base: main
-    commits: [5eed02]
+    commits: [5eed022]
   - branch: cheese-factory/foo/pr-curd-1
     title: "feat(foo): curd one"
     body: ""
     base: cheese-factory/foo/pr-seed
-    commits: [a1a1a1]
+    commits: [a1a1a11]
   - branch: cheese-factory/foo/pr-curd-2
     title: "feat(foo): curd two"
     body: ""
     base: cheese-factory/foo/pr-seed
-    commits: [a2a2a2]
+    commits: [a2a2a22]
   - branch: cheese-factory/foo/pr-wire
     title: "feat(foo): wire"
     body: ""
     base: cheese-factory/foo/pr-curd-2
-    commits: [aaee02]
+    commits: [aaee022]
 YAML
 }
 
@@ -136,8 +136,8 @@ YAML
     [[ "$output" == *"shape: single"* ]]
     [[ "$output" == *"set -euo pipefail"* ]]
     [[ "$output" == *"git checkout -b 'cheese-factory/foo/pr-1' 'main'"* ]]
-    [[ "$output" == *"git cherry-pick 'aaa111'"* ]]
-    [[ "$output" == *"git cherry-pick 'bbb222'"* ]]
+    [[ "$output" == *"git cherry-pick 'aaa1111'"* ]]
+    [[ "$output" == *"git cherry-pick 'bbb2222'"* ]]
     [[ "$output" == *"git push -u origin 'cheese-factory/foo/pr-1'"* ]]
     [[ "$output" == *"gh pr create --base 'main' --head 'cheese-factory/foo/pr-1'"* ]]
     # Exactly one PR-create line.
@@ -157,7 +157,7 @@ YAML
       "title": "feat(foo): everything in one",
       "body": "Ships the whole feature in one PR.",
       "base": "main",
-      "commits": ["aaa111", "bbb222"]
+      "commits": ["aaa1111", "bbb2222"]
     }
   ]
 }
@@ -165,8 +165,8 @@ JSON
     run "$SCRIPT" "$JSON_PLAN"
     [ "$status" -eq 0 ]
     [[ "$output" == *"shape: single"* ]]
-    [[ "$output" == *"git cherry-pick 'aaa111'"* ]]
-    [[ "$output" == *"git cherry-pick 'bbb222'"* ]]
+    [[ "$output" == *"git cherry-pick 'aaa1111'"* ]]
+    [[ "$output" == *"git cherry-pick 'bbb2222'"* ]]
 }
 
 # -- orthogonal_flat shape ---------------------------------------------------
@@ -255,6 +255,27 @@ YAML
     [[ "$output" == *"shape"* ]]
 }
 
+@test "script rejects option-shaped commit token at integration layer" {
+    # `--abort` would reach `git cherry-pick` as a flag even after single
+    # quoting, since shell quoting does not stop git from interpreting
+    # option-shaped tokens. The validator must reject this before commands
+    # are emitted.
+    cat > "$PLAN_FILE" <<'YAML'
+shape: single
+groups:
+  - branch: cheese-factory/foo/pr-1
+    title: t
+    body: ""
+    base: main
+    commits: [--abort]
+YAML
+    run "$SCRIPT" "$PLAN_FILE"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"must be a hex SHA"* ]]
+    # No git command should have leaked into stdout.
+    [[ "$output" != *"git cherry-pick"* ]]
+}
+
 @test "script reads from stdin when no argument given" {
     write_single_plan
     run bash -c "'$SCRIPT' < '$PLAN_FILE'"
@@ -291,7 +312,7 @@ groups:
     title: "feat(foo): don't break the cart"
     body: "It's a fix."
     base: main
-    commits: [abc123]
+    commits: [abc1234]
 YAML
     write_fake_bin
     out="$("$SCRIPT" "$PLAN_FILE")"
@@ -317,7 +338,7 @@ YAML
       "title": "feat(foo): ship",
       "body": "Line one with 'quoted' word.\nLine two.\nLine three with \"double\" too.",
       "base": "main",
-      "commits": ["c1c1c1"]
+      "commits": ["c1c1c1d"]
     }
   ]
 }

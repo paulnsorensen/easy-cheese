@@ -21,8 +21,10 @@ from manifest_io import ManifestLoadError, read_mapping_arg_or_stdin
 
 SHAPES = {"single", "orthogonal_flat", "stacked_linear", "diamond_stack"}
 BRANCH_RE = re.compile(r"^[A-Za-z0-9._/-]+$")
-# git's minimum abbreviated SHA is 4 hex chars; full SHA-1 is 40.
-COMMIT_SHA_RE = re.compile(r"^[0-9a-fA-F]{4,40}$")
+# 7 is git's default short-SHA floor (`core.abbrev`); shorter values risk
+# colliding with a branch / tag of the same name, since git resolves refs
+# before SHA prefixes. Full SHA-1 is 40 hex chars.
+COMMIT_SHA_RE = re.compile(r"^[0-9a-fA-F]{7,40}$")
 
 
 def _type_name(value: object) -> str:
@@ -34,6 +36,31 @@ def _require_string(obj: dict[str, Any], field: str, where: str) -> list[str]:
     if not isinstance(value, str) or not value.strip():
         return [f"{where}.{field} must be a non-empty string"]
     return []
+
+
+def _validate_commits(commits: object, where: str) -> list[str]:
+    if not isinstance(commits, list) or not commits:
+        return [f"{where}.commits must be a non-empty list"]
+    errors: list[str] = []
+    for index, commit in enumerate(commits, start=1):
+        loc = f"{where}.commits[{index}]"
+        if not isinstance(commit, str) or not commit.strip():
+            errors.append(f"{loc} must be a non-empty string")
+        elif not COMMIT_SHA_RE.match(commit):
+            errors.append(f"{loc} must be a hex SHA (7-40 hex chars); got {commit!r}")
+    return errors
+
+
+def _validate_depends_on(depends_on: object, where: str) -> list[str]:
+    if depends_on is None:
+        return []
+    if not isinstance(depends_on, list):
+        return [f"{where}.depends_on must be a list when present"]
+    errors: list[str] = []
+    for index, dep in enumerate(depends_on, start=1):
+        if not isinstance(dep, str) or not dep.strip():
+            errors.append(f"{where}.depends_on[{index}] must be a non-empty string")
+    return errors
 
 
 def validate_pr_plan(plan: dict[str, Any]) -> list[str]:
@@ -66,27 +93,8 @@ def validate_pr_plan(plan: dict[str, Any]) -> list[str]:
             if not BRANCH_RE.match(branch):
                 errors.append(f"{where}.branch contains characters unsafe for a branch name")
 
-        commits = group.get("commits")
-        if not isinstance(commits, list) or not commits:
-            errors.append(f"{where}.commits must be a non-empty list")
-        else:
-            for commit_index, commit in enumerate(commits, start=1):
-                if not isinstance(commit, str) or not commit.strip():
-                    errors.append(f"{where}.commits[{commit_index}] must be a non-empty string")
-                elif not COMMIT_SHA_RE.match(commit):
-                    errors.append(
-                        f"{where}.commits[{commit_index}] must be a hex SHA "
-                        f"(4-40 hex chars); got {commit!r}"
-                    )
-
-        depends_on = group.get("depends_on", [])
-        if depends_on is not None:
-            if not isinstance(depends_on, list):
-                errors.append(f"{where}.depends_on must be a list when present")
-            else:
-                for dep_index, dep in enumerate(depends_on, start=1):
-                    if not isinstance(dep, str) or not dep.strip():
-                        errors.append(f"{where}.depends_on[{dep_index}] must be a non-empty string")
+        errors.extend(_validate_commits(group.get("commits"), where))
+        errors.extend(_validate_depends_on(group.get("depends_on", []), where))
 
     if shape == "single" and len(groups) != 1:
         errors.append("single shape must contain exactly one group")
