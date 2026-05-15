@@ -151,6 +151,27 @@ class TestPrPlanValidator:
         errors = validate_pr_plan.validate_pr_plan(plan)
         assert any("must be a hex SHA" in error for error in errors)
 
+    def test_body_when_present_must_be_string(self, validate_pr_plan: ModuleType) -> None:
+        # Schema declares body as a string; the emitter calls `.replace()` on it,
+        # so a non-string body would crash pr_plan_to_branches. Reject at the
+        # plan boundary so malformed planner output surfaces as a validation
+        # error rather than a traceback downstream.
+        plan = _pr_plan()
+        plan["groups"][0]["body"] = 123
+        errors = validate_pr_plan.validate_pr_plan(plan)
+        assert any("body must be a string when present" in error for error in errors)
+
+    def test_body_empty_string_is_allowed(self, validate_pr_plan: ModuleType) -> None:
+        # `gh pr create --body ''` is valid, so empty body must pass.
+        plan = _pr_plan()
+        plan["groups"][0]["body"] = ""
+        assert validate_pr_plan.validate_pr_plan(plan) == []
+
+    def test_body_omitted_is_allowed(self, validate_pr_plan: ModuleType) -> None:
+        plan = _pr_plan()
+        plan["groups"][0].pop("body", None)
+        assert validate_pr_plan.validate_pr_plan(plan) == []
+
 
 class TestCLIs:
     def test_validate_manifest_cli_accepts_yaml(self, tmp_path: Path) -> None:

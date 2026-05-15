@@ -84,6 +84,11 @@ def validate_pr_plan(plan: dict[str, Any]) -> list[str]:
 
         for field in ("branch", "title", "base"):
             errors.extend(_require_string(group, field, where))
+        if "body" in group and not isinstance(group["body"], str):
+            # Body is optional and may be empty (`gh pr create --body ''` is
+            # valid). We only enforce the type, since the emitter calls
+            # `.replace()` on it.
+            errors.append(f"{where}.body must be a string when present")
 
         branch = group.get("branch")
         if isinstance(branch, str):
