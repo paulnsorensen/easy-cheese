@@ -37,9 +37,9 @@ write_orthogonal_flat_plan() {
 {
   "shape": "orthogonal_flat",
   "groups": [
-    {"branch": "cheese-factory/foo/pr-atom-1", "title": "feat(foo): atom one", "body": "", "base": "main", "commits": ["c1"]},
-    {"branch": "cheese-factory/foo/pr-atom-2", "title": "feat(foo): atom two", "body": "", "base": "main", "commits": ["c2"]},
-    {"branch": "cheese-factory/foo/pr-atom-3", "title": "feat(foo): atom three", "body": "", "base": "main", "commits": ["c3"]}
+    {"branch": "cheese-factory/foo/pr-curd-1", "title": "feat(foo): curd one", "body": "", "base": "main", "commits": ["c1"]},
+    {"branch": "cheese-factory/foo/pr-curd-2", "title": "feat(foo): curd two", "body": "", "base": "main", "commits": ["c2"]},
+    {"branch": "cheese-factory/foo/pr-curd-3", "title": "feat(foo): curd three", "body": "", "base": "main", "commits": ["c3"]}
   ]
 }
 JSON
@@ -51,8 +51,8 @@ write_stacked_linear_plan() {
   "shape": "stacked_linear",
   "groups": [
     {"branch": "cheese-factory/foo/pr-1-seed", "title": "feat(foo): seed", "body": "", "base": "main", "commits": ["seed1"]},
-    {"branch": "cheese-factory/foo/pr-2-atom", "title": "feat(foo): atom", "body": "", "base": "cheese-factory/foo/pr-1-seed", "commits": ["atom1"]},
-    {"branch": "cheese-factory/foo/pr-3-wire", "title": "feat(foo): wire", "body": "", "base": "cheese-factory/foo/pr-2-atom", "commits": ["wire1"]}
+    {"branch": "cheese-factory/foo/pr-2-curd", "title": "feat(foo): curd", "body": "", "base": "cheese-factory/foo/pr-1-seed", "commits": ["atom1"]},
+    {"branch": "cheese-factory/foo/pr-3-wire", "title": "feat(foo): wire", "body": "", "base": "cheese-factory/foo/pr-2-curd", "commits": ["wire1"]}
   ]
 }
 JSON
@@ -64,9 +64,9 @@ write_diamond_stack_plan() {
   "shape": "diamond_stack",
   "groups": [
     {"branch": "cheese-factory/foo/pr-seed", "title": "feat(foo): seed", "body": "", "base": "main", "commits": ["seed1"]},
-    {"branch": "cheese-factory/foo/pr-atom-1", "title": "feat(foo): atom one", "body": "", "base": "cheese-factory/foo/pr-seed", "commits": ["a1"]},
-    {"branch": "cheese-factory/foo/pr-atom-2", "title": "feat(foo): atom two", "body": "", "base": "cheese-factory/foo/pr-seed", "commits": ["a2"]},
-    {"branch": "cheese-factory/foo/pr-wire", "title": "feat(foo): wire", "body": "", "base": "cheese-factory/foo/pr-atom-2", "commits": ["w1"]}
+    {"branch": "cheese-factory/foo/pr-curd-1", "title": "feat(foo): curd one", "body": "", "base": "cheese-factory/foo/pr-seed", "commits": ["a1"]},
+    {"branch": "cheese-factory/foo/pr-curd-2", "title": "feat(foo): curd two", "body": "", "base": "cheese-factory/foo/pr-seed", "commits": ["a2"]},
+    {"branch": "cheese-factory/foo/pr-wire", "title": "feat(foo): wire", "body": "", "base": "cheese-factory/foo/pr-curd-2", "commits": ["w1"]}
   ]
 }
 JSON
@@ -125,7 +125,7 @@ JSON
     [ "$(printf '%s\n' "$output" | grep -c "^gh pr create --base 'main'")" -eq 3 ]
 }
 
-@test "orthogonal_flat emits exactly one cherry-pick per atom" {
+@test "orthogonal_flat emits exactly one cherry-pick per curd" {
     write_orthogonal_flat_plan
     run "$SCRIPT" "$PLAN_FILE"
     [ "$status" -eq 0 ]
@@ -144,19 +144,19 @@ JSON
     # Only the first PR targets main; the next two target the previous branch.
     [ "$(printf '%s\n' "$output" | grep -c "^gh pr create --base 'main'")" -eq 1 ]
     [[ "$output" == *"--base 'cheese-factory/foo/pr-1-seed'"* ]]
-    [[ "$output" == *"--base 'cheese-factory/foo/pr-2-atom'"* ]]
+    [[ "$output" == *"--base 'cheese-factory/foo/pr-2-curd'"* ]]
 }
 
 # -- diamond_stack shape -----------------------------------------------------
 
-@test "diamond_stack emits seed-rooted parallel atom PRs and a wiring tip" {
+@test "diamond_stack emits seed-rooted parallel curd PRs and a wiring tip" {
     write_diamond_stack_plan
     run "$SCRIPT" "$PLAN_FILE"
     [ "$status" -eq 0 ]
     [[ "$output" == *"shape: diamond_stack"* ]]
     # Four PRs.
     [ "$(printf '%s\n' "$output" | grep -c '^gh pr create ')" -eq 4 ]
-    # Two atom PRs share the seed branch as base.
+    # Two curd PRs share the seed branch as base.
     [ "$(printf '%s\n' "$output" | grep -c "^gh pr create --base 'cheese-factory/foo/pr-seed'")" -eq 2 ]
 }
 

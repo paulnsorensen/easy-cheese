@@ -43,9 +43,9 @@ class TestAgeInlineDegrade:
         assert "Inline-degrade mode" in age_body
 
     def test_marker_phrase_documented(self, age_body: str) -> None:
-        # The detection marker must be named so cheese-factory atom workers
+        # The detection marker must be named so cheese-factory curd workers
         # know what to pass.
-        assert "invoked-from: cheese-factory-atom" in age_body or (
+        assert "invoked-from: cheese-factory-curd" in age_body or (
             "invoked-from:" in age_body and "cheese-factory" in age_body
         )
 
@@ -75,7 +75,7 @@ class TestCheeseRoutesToCheeseFactory:
         # At least one of the spec-named user phrases must be present.
         assert (
             "5+" in lowered
-            or "many atoms" in lowered
+            or "many curds" in lowered
             or "parallelize" in lowered
             or "send through the factory" in lowered
         )

@@ -1,32 +1,36 @@
 #!/usr/bin/env python3
 """Validate a cheese-factory decomposition manifest against the five criteria.
 
-Reads a manifest JSON file (or stdin), runs the validation checks below, and
+Reads a manifest YAML/JSON file (or stdin), runs the validation checks below, and
 either exits 0 (valid) or 1 (invalid, with one error per line on stderr).
 
 Checks:
 
-1. Behaviour overlap — each atom's behaviour is a single declarative sentence
+1. Behaviour overlap — each curd's behaviour is a single declarative sentence
    without an "and" joining two distinct verbs.
-2. Acceptance criterion presence — every atom names its AC; 1:1 spec coverage
+2. Acceptance criterion presence — every curd names its AC; 1:1 spec coverage
    is decomposer-side (the validator can't read the spec file).
-3. Test target check — each atom has a non-empty test_target.
-4. File disjointness — no file appears in two atoms.
+3. Test target check — each curd has a non-empty test_target.
+4. File disjointness — no file appears in two curds.
 5. Wiring DAG check — no cycles, every depends_on references a known wiring id.
 6. Seed minimality — seed files are foundational (validation here only checks
-   the field exists; the "2+ atoms depend on" check is decomposer-side because
-   atom file-imports aren't represented in the manifest).
+   the field exists; the "2+ curds depend on" check is decomposer-side because
+   curd file-imports aren't represented in the manifest).
 
-The script is pure-Python stdlib — no third-party imports — per
-.github/instructions/python.instructions.md.
+The script accepts YAML via PyYAML and JSON via the stdlib json module.
 """
 from __future__ import annotations
 
-import json
 import re
 import sys
 from collections.abc import Iterable
 from pathlib import Path
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from manifest_io import ManifestLoadError, read_mapping_arg_or_stdin
 
 # ---------------------------------------------------------------------------
 # Pure validation functions — tested directly in tests/cheese-factory/python.
@@ -34,7 +38,7 @@ from pathlib import Path
 
 
 # A behaviour sentence joining two distinct verbs with "and" usually means
-# the atom should be split. We flag the simple case: "<verb> X and <verb> Y"
+# the curd should be split. We flag the simple case: "<verb> X and <verb> Y"
 # where each verb is a present-tense action word. This is intentionally
 # permissive — "X and Y" (no second verb) is fine.
 _TWO_VERB_AND = re.compile(
@@ -45,67 +49,67 @@ _TWO_VERB_AND = re.compile(
 )
 
 
-def check_one_behaviour(atom: dict) -> str | None:
-    """Criterion 1: one behaviour per atom."""
-    behavior = atom.get("behavior", "")
+def check_one_behaviour(curd: dict) -> str | None:
+    """Criterion 1: one behaviour per curd."""
+    behavior = curd.get("behavior", "")
     if not isinstance(behavior, str) or not behavior.strip():
-        return f"atom {atom.get('id', '?')}: missing or empty 'behavior'"
+        return f"curd {curd.get('id', '?')}: missing or empty 'behavior'"
     if _TWO_VERB_AND.search(behavior):
         return (
-            f"atom {atom.get('id', '?')}: behaviour joins two verbs with 'and' "
-            f"({behavior!r}) — split into two atoms"
+            f"curd {curd.get('id', '?')}: behaviour joins two verbs with 'and' "
+            f"({behavior!r}) — split into two curds"
         )
     return None
 
 
-def check_acceptance_criterion(atom: dict) -> str | None:
+def check_acceptance_criterion(curd: dict) -> str | None:
     """Criterion 2: one acceptance criterion."""
-    ac = atom.get("acceptance_criterion", "")
+    ac = curd.get("acceptance_criterion", "")
     if not isinstance(ac, str) or not ac.strip():
-        return f"atom {atom.get('id', '?')}: missing or empty 'acceptance_criterion'"
+        return f"curd {curd.get('id', '?')}: missing or empty 'acceptance_criterion'"
     return None
 
 
-def check_test_target(atom: dict) -> str | None:
+def check_test_target(curd: dict) -> str | None:
     """Criterion 3: one test target."""
-    tt = atom.get("test_target", "")
+    tt = curd.get("test_target", "")
     if not isinstance(tt, str) or not tt.strip():
-        return f"atom {atom.get('id', '?')}: missing or empty 'test_target'"
+        return f"curd {curd.get('id', '?')}: missing or empty 'test_target'"
     # Reject test targets that obviously run more than one focused test —
     # multiple commands joined with && / ; / && or a wildcard suite path.
     if "&&" in tt or ";" in tt or "||" in tt:
         return (
-            f"atom {atom.get('id', '?')}: test_target chains multiple commands "
-            f"({tt!r}) — split the atom"
+            f"curd {curd.get('id', '?')}: test_target chains multiple commands "
+            f"({tt!r}) — split the curd"
         )
     return None
 
 
-def check_file_disjointness(atoms: Iterable[dict]) -> list[str]:
-    """Criterion 4: no file appears in two atoms. HARD CONSTRAINT."""
+def check_file_disjointness(curds: Iterable[dict]) -> list[str]:
+    """Criterion 4: no file appears in two curds. HARD CONSTRAINT."""
     errors: list[str] = []
-    file_to_atom: dict[str, int] = {}
-    for atom in atoms:
+    file_to_curd: dict[str, int] = {}
+    for curd in curds:
         # Non-dict entries are reported by validate_manifest's loop; skip
         # here to avoid AttributeError on .get when the entry is None / str / int.
-        if not isinstance(atom, dict):
+        if not isinstance(curd, dict):
             continue
-        atom_id = atom.get("id", "?")
-        files = atom.get("files", [])
+        curd_id = curd.get("id", "?")
+        files = curd.get("files", [])
         if not isinstance(files, list) or not files:
-            errors.append(f"atom {atom_id}: missing or empty 'files'")
+            errors.append(f"curd {curd_id}: missing or empty 'files'")
             continue
         for f in files:
             if not isinstance(f, str):
-                errors.append(f"atom {atom_id}: non-string file entry: {f!r}")
+                errors.append(f"curd {curd_id}: non-string file entry: {f!r}")
                 continue
-            if f in file_to_atom:
+            if f in file_to_curd:
                 errors.append(
-                    f"file {f!r} appears in atom {file_to_atom[f]} and atom {atom_id} — "
-                    f"atoms must be file-disjoint (move shared content to seed or wiring)"
+                    f"file {f!r} appears in curd {file_to_curd[f]} and curd {curd_id} — "
+                    f"curds must be file-disjoint (move shared content to seed or wiring)"
                 )
             else:
-                file_to_atom[f] = atom_id
+                file_to_curd[f] = curd_id
     return errors
 
 
@@ -113,7 +117,7 @@ def check_wiring_dag(wiring: Iterable[dict]) -> list[str]:
     """Criterion: wiring DAG has no cycles and references only known ids."""
     # Drop non-dict entries up front — the validator is a user-facing CLI and
     # a stack trace on garbage input is a usability defect (mirrors the
-    # check_file_disjointness defense for atoms[]).
+    # check_file_disjointness defense for curds[]).
     wiring_list = [w for w in wiring if isinstance(w, dict)]
     ids = {w.get("id") for w in wiring_list if isinstance(w.get("id"), str)}
     errors: list[str] = []
@@ -157,11 +161,11 @@ def check_wiring_dag(wiring: Iterable[dict]) -> list[str]:
     return errors
 
 
-def check_minimum_atom_count(atoms: list[dict], minimum: int = 5) -> str | None:
-    """The spec routes to /ultracook below five atoms."""
-    if len(atoms) < minimum:
+def check_minimum_curd_count(curds: list[dict], minimum: int = 5) -> str | None:
+    """The spec routes to /ultracook below five curds."""
+    if len(curds) < minimum:
         return (
-            f"only {len(atoms)} atom(s) — /cheese-factory requires at least {minimum}; "
+            f"only {len(curds)} curd(s) — /cheese-factory requires at least {minimum}; "
             f"use /ultracook for smaller decompositions"
         )
     return None
@@ -170,24 +174,24 @@ def check_minimum_atom_count(atoms: list[dict], minimum: int = 5) -> str | None:
 def validate_manifest(manifest: dict) -> list[str]:
     """Run every check; return a list of error strings (empty = valid)."""
     errors: list[str] = []
-    atoms = manifest.get("atoms", [])
-    if not isinstance(atoms, list):
-        return ["manifest.atoms must be a list"]
+    curds = manifest.get("curds", [])
+    if not isinstance(curds, list):
+        return ["manifest.curds must be a list"]
 
-    too_few = check_minimum_atom_count(atoms)
+    too_few = check_minimum_curd_count(curds)
     if too_few:
         errors.append(too_few)
 
-    for atom in atoms:
-        if not isinstance(atom, dict):
-            errors.append(f"non-dict atom entry: {atom!r}")
+    for curd in curds:
+        if not isinstance(curd, dict):
+            errors.append(f"non-dict curd entry: {curd!r}")
             continue
         for check in (check_one_behaviour, check_acceptance_criterion, check_test_target):
-            err = check(atom)
+            err = check(curd)
             if err:
                 errors.append(err)
 
-    errors.extend(check_file_disjointness(atoms))
+    errors.extend(check_file_disjointness(curds))
 
     wiring = manifest.get("wiring", [])
     if not isinstance(wiring, list):
@@ -204,24 +208,13 @@ def validate_manifest(manifest: dict) -> list[str]:
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) > 2:
-        print("usage: validate_decomposition.py [<manifest.json>]", file=sys.stderr)
-        return 2
-    if len(argv) == 2:
-        path = Path(argv[1])
-        try:
-            text = path.read_text(encoding="utf-8")
-        except FileNotFoundError:
-            print(f"ERROR: manifest not found: {path}", file=sys.stderr)
-            return 1
-    else:
-        text = sys.stdin.read()
-
     try:
-        manifest = json.loads(text)
-    except json.JSONDecodeError as exc:
-        print(f"ERROR: invalid JSON: {exc}", file=sys.stderr)
-        return 1
+        manifest = read_mapping_arg_or_stdin(
+            argv, "usage: validate_decomposition.py [<manifest.yaml|json>]"
+        )
+    except ManifestLoadError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2 if str(exc).startswith("usage:") else 1
 
     errors = validate_manifest(manifest)
     if errors:
@@ -230,7 +223,7 @@ def main(argv: list[str]) -> int:
         print(f"\nFAIL: {len(errors)} validation error(s)", file=sys.stderr)
         return 1
 
-    print(f"OK: {len(manifest.get('atoms', []))} atoms, decomposition valid")
+    print(f"OK: {len(manifest.get('curds', []))} curds, decomposition valid")
     return 0
 
 

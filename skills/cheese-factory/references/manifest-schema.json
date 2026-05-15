@@ -1,10 +1,10 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://easy-cheese.dev/schemas/cheese-factory-manifest.json",
+  "$id": "https://easy-cheese.dev/schemas/cheese-factory-manifest.schema.json",
   "title": "Cheese-Factory Manifest",
-  "description": "Per-spec state file written by /cheese-factory at .cheese/cheese-factory/<slug>/manifest.json. Updated at every phase boundary so --resume can pick up after a crash.",
+  "description": "Per-spec state file written by /cheese-factory at .cheese/cheese-factory/<slug>/manifest.yaml. Updated at every phase boundary so --resume can pick up after a crash.",
   "type": "object",
-  "required": ["slug", "spec_path", "created", "phase", "quality_gates", "host_capabilities", "seed", "atoms", "wiring"],
+  "required": ["slug", "spec_path", "created", "phase", "quality_gates", "host_capabilities", "seed", "curds", "wiring"],
   "properties": {
     "slug": {
       "type": "string",
@@ -25,7 +25,7 @@
       "enum": [
         "gate_approved",
         "seed_complete",
-        "atoms_complete",
+        "curds_complete",
         "merge_complete",
         "wiring_complete",
         "final_merge_complete",
@@ -70,7 +70,7 @@
         }
       }
     },
-    "atoms": {
+    "curds": {
       "type": "array",
       "items": {
         "type": "object",

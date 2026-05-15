@@ -47,7 +47,7 @@ Supported shapes (from pr-plan.json "shape" field):
   - single            One PR, one branch from main.
   - orthogonal_flat   N PRs each branching from main, no inter-dep.
   - stacked_linear    Linear stack; each PR bases on the previous branch.
-  - diamond_stack     Seed PR at base, N atom PRs from seed, wiring PR last.
+  - diamond_stack     Seed PR at base, N curd PRs from seed, wiring PR last.
 USAGE
 }
 

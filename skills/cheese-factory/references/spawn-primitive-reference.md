@@ -46,7 +46,7 @@ The contract is "inheritance, not diminution" — most sub-agent patterns in thi
 ```sh
 copilot fleet \
   --agents 5 \
-  --prompt-file .cheese/cheese-factory/<slug>/atom-prompts.txt \
+  --prompt-file .cheese/cheese-factory/<slug>/curd-prompts.txt \
   --return-on-completion
 ```
 
@@ -55,7 +55,7 @@ Rules:
 - Each prompt in the prompt file must include the no-chain-forward directive.
 - `--return-on-completion` is mandatory; without it, control does not return to the orchestrator (invariant 4 fails).
 - Fleet agents inherit the same model and tool scope as the parent session, satisfying invariant 2.
-- Each agent must write the handoff slug to `.cheese/cheese-factory/<slug>/atoms/<id>.md` per the per-atom prompt template.
+- Each agent must write the handoff slug to `.cheese/cheese-factory/<slug>/curds/<id>.md` per the per-curd prompt template.
 
 ## OpenAI Codex — subagents
 
@@ -64,7 +64,7 @@ Rules:
 ```sh
 codex subagent \
   --type general-purpose \
-  --prompt-file .cheese/cheese-factory/<slug>/atom-<id>.txt \
+  --prompt-file .cheese/cheese-factory/<slug>/curd-<id>.txt \
   --inherit-tools \
   --wait
 ```

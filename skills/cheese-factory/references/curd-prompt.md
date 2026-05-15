@@ -1,9 +1,9 @@
-# Per-atom worker prompt template
+# Per-curd worker prompt template
 
 Loaded by `/cheese-factory` at Phase 2 (fan-out). Substitute `{N}`, `{slug}`, `{file_list}`, `{behaviour}`, `{acceptance_criterion}`, `{test_target}`, `{spec_summary}`, and `{hard_flag}` before dispatch.
 
 ```text
-You are executing atom #{N} for spec: {slug}
+You are executing curd #{N} for spec: {slug}
 
 ## File Assignment (HARD CONSTRAINT)
 
@@ -44,7 +44,7 @@ INLINE within your own context — do not spawn sub-agents for parallel review.
 The nesting-depth limit in Claude Code (and equivalents in other harnesses)
 blocks level-2 nesting.
 
-Detection: invoke /age with the marker `invoked-from: cheese-factory-atom` in your
+Detection: invoke /age with the marker `invoked-from: cheese-factory-curd` in your
 prompt to /age. The skill reads it and switches modes. Output (the findings report
 + handoff slug) is identical between fan-out and inline-degrade modes — only the
 internal execution differs.
@@ -57,16 +57,16 @@ attempt to fix.
 
 ## Handoff slug
 
-Write `.cheese/cheese-factory/{slug}/atoms/{N}.md` with:
+Write `.cheese/cheese-factory/{slug}/curds/{N}.md` with:
 
 ```
 status: ok | halt: <one-line reason>
 next: merge | done
 artifact: <path-to-richer-report-if-any>
-<one-line orientation: what this atom did>
+<one-line orientation: what this curd did>
 ```
 
-Set `next: merge` when the atom is ready to be cherry-picked into the orchestrator
+Set `next: merge` when the curd is ready to be cherry-picked into the orchestrator
 branch. Set `next: done` if you halted.
 
 ## Do NOT
@@ -81,4 +81,4 @@ branch. Set `next: done` if you halted.
 
 ## Variant: `--hard` propagation
 
-When `/cheese-factory` was invoked with `--hard`, substitute `{hard_flag}` with `--hard`. Otherwise substitute with the empty string. The flag flows through `/cook --hard --auto` and `/cure --hard --auto --stake medium+`. The atom worker does not invoke `/hard-cheese` directly; the gate fires inside `/cure`'s share-for-review handoff per `skills/hard-cheese/SKILL.md`.
+When `/cheese-factory` was invoked with `--hard`, substitute `{hard_flag}` with `--hard`. Otherwise substitute with the empty string. The flag flows through `/cook --hard --auto` and `/cure --hard --auto --stake medium+`. The curd worker does not invoke `/hard-cheese` directly; the gate fires inside `/cure`'s share-for-review handoff per `skills/hard-cheese/SKILL.md`.

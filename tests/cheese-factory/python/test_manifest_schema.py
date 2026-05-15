@@ -44,7 +44,7 @@ def example_manifest() -> dict:
                 }
             ]
         },
-        "atoms": [
+        "curds": [
             {
                 "id": 1,
                 "behavior": "Implement order entity",
@@ -53,7 +53,7 @@ def example_manifest() -> dict:
                 "test_target": "vitest run src/orders/order.test.ts",
                 "status": "completed",
                 "worktree_path": "/path",
-                "branch": "cheese-factory/slug/atom-1",
+                "branch": "cheese-factory/slug/curd-1",
                 "commit_sha": "def456",
                 "retry_count": 0,
                 "error": None,
@@ -91,7 +91,7 @@ def example_manifest() -> dict:
                 }
             ],
         },
-        "phase_summary": "Seed complete; atoms next.",
+        "phase_summary": "Seed complete; curds next.",
         "carry_forward": ["slug", "spec_summary", "manifest_path", "quality_gates"],
     }
 
@@ -112,7 +112,7 @@ class TestSchemaShape:
             "quality_gates",
             "host_capabilities",
             "seed",
-            "atoms",
+            "curds",
             "wiring",
         ):
             assert key in required, f"top-level required key missing: {key}"
@@ -124,7 +124,7 @@ class TestSchemaShape:
         expected = {
             "gate_approved",
             "seed_complete",
-            "atoms_complete",
+            "curds_complete",
             "merge_complete",
             "wiring_complete",
             "final_merge_complete",
@@ -155,11 +155,11 @@ class TestExampleManifestMatchesSchema:
         for key in schema.get("required", []):
             assert key in example_manifest, f"example missing top-level required key: {key}"
 
-    def test_atom_required_fields_present(self, schema: dict, example_manifest: dict) -> None:
-        atom_required = schema["properties"]["atoms"]["items"]["required"]
-        for atom in example_manifest["atoms"]:
-            for key in atom_required:
-                assert key in atom, f"atom missing required field: {key}"
+    def test_curd_required_fields_present(self, schema: dict, example_manifest: dict) -> None:
+        curd_required = schema["properties"]["curds"]["items"]["required"]
+        for curd in example_manifest["curds"]:
+            for key in curd_required:
+                assert key in curd, f"curd missing required field: {key}"
 
     def test_wiring_required_fields_present(self, schema: dict, example_manifest: dict) -> None:
         wiring_required = schema["properties"]["wiring"]["items"]["required"]

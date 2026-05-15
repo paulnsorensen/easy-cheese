@@ -31,7 +31,7 @@ This is a skills-only collection following the [Agent Skills spec](https://agent
 | `/cure` | Applies selected `/age` findings as focused fixes |
 | `/melt` | Resolves merge / rebase / cherry-pick conflicts via the structural-merge cascade |
 | `/briesearch` | External research router (Context7, Tavily, gh, local code) |
-| `/cheese-factory` | Large-feature orchestrator: decomposes an approved spec into seed + parallel atoms + wiring, fans out per-atom `/cook → /press → /age → /cure`, runs post-merge review, ends in 1–N reviewable PRs |
+| `/cheese-factory` | Large-feature orchestrator: decomposes an approved spec into seed + parallel curds + wiring, fans out per-curd `/cook → /press → /age → /cure`, runs post-merge review, ends in 1–N reviewable PRs |
 
 ### Tool skills (lower-level primitives)
 

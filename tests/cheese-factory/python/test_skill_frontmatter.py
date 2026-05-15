@@ -67,7 +67,7 @@ class TestFrontmatter:
         # The description is the trigger; load-bearing phrases must be present.
         desc = frontmatter["description"].lower()
         assert "decompose" in desc or "decomposes" in desc
-        assert "5" in desc, "must say '5+' atoms — anything fewer routes to /ultracook"
+        assert "5" in desc, "must say '5+' curds — anything fewer routes to /ultracook"
         assert "fromagerie" in desc, "name the bespoke-agent sibling for routing clarity"
 
 
@@ -76,15 +76,21 @@ class TestBundledFilesExist:
 
     REQUIRED_REFERENCES = (
         "decomposer-prompt.md",
-        "atom-prompt.md",
+        "curd-prompt.md",
         "wiring-prompt.md",
         "pr-planner-prompt.md",
         "manifest-schema.json",
         "spawn-primitive-reference.md",
     )
 
+    REQUIRED_HELPERS = (
+        "manifest_io.py",
+    )
+
     REQUIRED_SCRIPTS = (
         "validate_decomposition.py",
+        "validate_manifest.py",
+        "validate_pr_plan.py",
         "pr_plan_to_branches.sh",
     )
 
@@ -98,6 +104,12 @@ class TestBundledFilesExist:
         for script in self.REQUIRED_SCRIPTS:
             assert (cf_dir / "scripts" / script).is_file(), (
                 f"missing required script: scripts/{script}"
+            )
+
+    def test_helpers_present(self, cf_dir: Path) -> None:
+        for helper in self.REQUIRED_HELPERS:
+            assert (cf_dir / "scripts" / helper).is_file(), (
+                f"missing required helper: scripts/{helper}"
             )
 
     def test_scripts_executable(self, cf_dir: Path) -> None:
@@ -120,8 +132,8 @@ class TestBodyMentionsLoadBearingContracts:
         for phase_name in (
             "Phase 0 — Pre-compile",
             "Phase 1 — Seed",
-            "Phase 2 — Atoms",
-            "Phase 3 — Merge atoms",
+            "Phase 2 — Curds",
+            "Phase 3 — Merge curds",
             "Phase 4 — Wiring",
             "Phase 5 — Final merge",
             "Phase 6 — Post-merge review",
@@ -132,7 +144,7 @@ class TestBodyMentionsLoadBearingContracts:
     def test_five_decomposition_criteria_present(self, skill_body: str) -> None:
         # Each of the five criteria must be named in the body.
         for criterion in (
-            "One behaviour per atom",
+            "One behaviour per curd",
             "One acceptance criterion",
             "One test target",
             "File-disjoint",
@@ -162,4 +174,4 @@ class TestBodyMentionsLoadBearingContracts:
 
     def test_resume_flag_documented(self, skill_body: str) -> None:
         assert "--resume" in skill_body
-        assert "manifest.json" in skill_body
+        assert "manifest.yaml" in skill_body
