@@ -54,6 +54,7 @@ def emit_commands(plan: dict[str, Any]) -> None:
     shape = plan["shape"]
     groups = plan["groups"]
     print(f"# pr-plan shape: {shape} ({len(groups)} groups)")
+    print("set -euo pipefail")
     for index, group in enumerate(groups, start=1):
         branch = group["branch"]
         title = group["title"]

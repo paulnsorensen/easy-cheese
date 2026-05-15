@@ -159,11 +159,11 @@ Keep: slug, spec summary (≤2K chars), manifest path, quality gate commands.
 
 ### Phase 1 — Seed (sequential, inline)
 
-Seed items are minimal — only the shared types / protocols that curds cannot compile without. The orchestrator executes seed inline via `cheez-write` (a deliberate exception to the orchestrator's "never write code" rule because seed is always small).
+Seed items are minimal — only the shared types / protocols that curds cannot compile without. The orchestrator executes seed inline (a deliberate exception to the orchestrator's "never write code" rule because seed is always small).
 
 For each seed item:
 
-1. Implement the change via `cheez-write`.
+1. Implement the change. Prefer `/cheez-write` when tilth MCP is present; otherwise fall back to the host's native edit tool (per the cheez-* portability rule in `README.md`). The skill must not hard-fail when `/cheez-write` is unavailable.
 2. Run quality gates (the project's `just check` or equivalent) — if gates fail, STOP.
 3. Commit via `/commit` (if available) or `git commit` direct.
 
@@ -394,7 +394,7 @@ If the manifest references commits that no longer exist (rebased, deleted), fail
 
 | Failure | Recovery |
 |---|---|
-| No spec argument | Invoke `/mold` via Skill, resume on save |
+| No spec argument | STOP. Report `cheese-factory requires an approved spec; run /mold first if you need to shape one`. Do not auto-dispatch — cross-skill handoffs stay user-visible. |
 | Overlap / criterion violation in decomposer output | Re-run decomposer (max 2 retries) |
 | Seed gate failure | STOP, report — do not dispatch curds |
 | Curd fails | Retry once with error context, then mark failed |

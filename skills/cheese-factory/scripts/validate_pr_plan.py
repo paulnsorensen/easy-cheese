@@ -21,6 +21,8 @@ from manifest_io import ManifestLoadError, read_mapping_arg_or_stdin
 
 SHAPES = {"single", "orthogonal_flat", "stacked_linear", "diamond_stack"}
 BRANCH_RE = re.compile(r"^[A-Za-z0-9._/-]+$")
+# git's minimum abbreviated SHA is 4 hex chars; full SHA-1 is 40.
+COMMIT_SHA_RE = re.compile(r"^[0-9a-fA-F]{4,40}$")
 
 
 def _type_name(value: object) -> str:
@@ -71,6 +73,11 @@ def validate_pr_plan(plan: dict[str, Any]) -> list[str]:
             for commit_index, commit in enumerate(commits, start=1):
                 if not isinstance(commit, str) or not commit.strip():
                     errors.append(f"{where}.commits[{commit_index}] must be a non-empty string")
+                elif not COMMIT_SHA_RE.match(commit):
+                    errors.append(
+                        f"{where}.commits[{commit_index}] must be a hex SHA "
+                        f"(4-40 hex chars); got {commit!r}"
+                    )
 
         depends_on = group.get("depends_on", [])
         if depends_on is not None:

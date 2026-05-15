@@ -37,8 +37,11 @@
           "commits": {
             "type": "array",
             "minItems": 1,
-            "items": {"type": "string"},
-            "description": "Ordered list of commit SHAs from the manifest."
+            "items": {
+              "type": "string",
+              "pattern": "^[0-9a-fA-F]{4,40}$"
+            },
+            "description": "Ordered list of commit SHAs from the manifest (4-40 hex chars; rejects option-shaped strings like `--abort`)."
           },
           "depends_on": {
             "type": "array",

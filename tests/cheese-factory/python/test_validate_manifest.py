@@ -123,6 +123,32 @@ class TestPrPlanValidator:
         errors = validate_pr_plan.validate_pr_plan(plan)
         assert any("duplicates" in error for error in errors)
 
+    def test_commit_must_be_hex_sha(self, validate_pr_plan: ModuleType) -> None:
+        # An option-shaped string would reach `git cherry-pick` as a flag even
+        # after single-quoting (single quotes do not stop git from parsing
+        # option-shaped tokens). Reject those at the plan boundary.
+        plan = _pr_plan()
+        plan["groups"][0]["commits"] = ["--abort"]
+        errors = validate_pr_plan.validate_pr_plan(plan)
+        assert any("must be a hex SHA" in error for error in errors)
+
+    def test_commit_rejects_non_hex_alphabetics(self, validate_pr_plan: ModuleType) -> None:
+        plan = _pr_plan()
+        plan["groups"][0]["commits"] = ["HEAD~1"]
+        errors = validate_pr_plan.validate_pr_plan(plan)
+        assert any("must be a hex SHA" in error for error in errors)
+
+    def test_commit_accepts_full_sha1(self, validate_pr_plan: ModuleType) -> None:
+        plan = _pr_plan()
+        plan["groups"][0]["commits"] = ["a" * 40]
+        assert validate_pr_plan.validate_pr_plan(plan) == []
+
+    def test_commit_rejects_too_short(self, validate_pr_plan: ModuleType) -> None:
+        plan = _pr_plan()
+        plan["groups"][0]["commits"] = ["abc"]  # git's minimum is 4 hex chars.
+        errors = validate_pr_plan.validate_pr_plan(plan)
+        assert any("must be a hex SHA" in error for error in errors)
+
 
 class TestCLIs:
     def test_validate_manifest_cli_accepts_yaml(self, tmp_path: Path) -> None:

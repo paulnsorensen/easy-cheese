@@ -40,17 +40,17 @@ groups:
     title: "feat(foo): curd one"
     body: ""
     base: main
-    commits: [c1]
+    commits: [c1c1c1]
   - branch: cheese-factory/foo/pr-curd-2
     title: "feat(foo): curd two"
     body: ""
     base: main
-    commits: [c2]
+    commits: [c2c2c2]
   - branch: cheese-factory/foo/pr-curd-3
     title: "feat(foo): curd three"
     body: ""
     base: main
-    commits: [c3]
+    commits: [c3c3c3]
 YAML
 }
 
@@ -62,17 +62,17 @@ groups:
     title: "feat(foo): seed"
     body: ""
     base: main
-    commits: [seed1]
+    commits: [5eed01]
   - branch: cheese-factory/foo/pr-2-curd
     title: "feat(foo): curd"
     body: ""
     base: cheese-factory/foo/pr-1-seed
-    commits: [atom1]
+    commits: [a701a1]
   - branch: cheese-factory/foo/pr-3-wire
     title: "feat(foo): wire"
     body: ""
     base: cheese-factory/foo/pr-2-curd
-    commits: [wire1]
+    commits: [aaee01]
 YAML
 }
 
@@ -84,22 +84,22 @@ groups:
     title: "feat(foo): seed"
     body: ""
     base: main
-    commits: [seed1]
+    commits: [5eed02]
   - branch: cheese-factory/foo/pr-curd-1
     title: "feat(foo): curd one"
     body: ""
     base: cheese-factory/foo/pr-seed
-    commits: [a1]
+    commits: [a1a1a1]
   - branch: cheese-factory/foo/pr-curd-2
     title: "feat(foo): curd two"
     body: ""
     base: cheese-factory/foo/pr-seed
-    commits: [a2]
+    commits: [a2a2a2]
   - branch: cheese-factory/foo/pr-wire
     title: "feat(foo): wire"
     body: ""
     base: cheese-factory/foo/pr-curd-2
-    commits: [w1]
+    commits: [aaee02]
 YAML
 }
 
@@ -134,6 +134,7 @@ YAML
     run "$SCRIPT" "$PLAN_FILE"
     [ "$status" -eq 0 ]
     [[ "$output" == *"shape: single"* ]]
+    [[ "$output" == *"set -euo pipefail"* ]]
     [[ "$output" == *"git checkout -b 'cheese-factory/foo/pr-1' 'main'"* ]]
     [[ "$output" == *"git cherry-pick 'aaa111'"* ]]
     [[ "$output" == *"git cherry-pick 'bbb222'"* ]]
@@ -316,7 +317,7 @@ YAML
       "title": "feat(foo): ship",
       "body": "Line one with 'quoted' word.\nLine two.\nLine three with \"double\" too.",
       "base": "main",
-      "commits": ["c1"]
+      "commits": ["c1c1c1"]
     }
   ]
 }
