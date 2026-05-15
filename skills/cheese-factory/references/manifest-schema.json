@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://easy-cheese.dev/schemas/cheese-factory-manifest.json",
+  "title": "Cheese-Factory Manifest",
+  "description": "Per-spec state file written by /cheese-factory at .cheese/cheese-factory/<slug>/manifest.json. Updated at every phase boundary so --resume can pick up after a crash.",
+  "type": "object",
+  "required": ["slug", "spec_path", "created", "phase", "quality_gates", "host_capabilities", "seed", "atoms", "wiring"],
+  "properties": {
+    "slug": {
+      "type": "string",
+      "description": "Kebab-case identifier shared with the spec at .cheese/specs/<slug>.md.",
+      "pattern": "^(?!-)(?!.*--)[a-z0-9-]{1,64}(?<!-)$"
+    },
+    "spec_path": {
+      "type": "string",
+      "description": "Path to the source spec, usually .cheese/specs/<slug>.md."
+    },
+    "created": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC timestamp of manifest creation."
+    },
+    "phase": {
+      "type": "string",
+      "enum": [
+        "gate_approved",
+        "seed_complete",
+        "atoms_complete",
+        "merge_complete",
+        "wiring_complete",
+        "final_merge_complete",
+        "post_review_complete",
+        "pr_publish_complete"
+      ],
+      "description": "Latest completed phase. --resume picks up at the next phase after this."
+    },
+    "quality_gates": {
+      "type": "array",
+      "items": {"type": "string"},
+      "minItems": 1,
+      "description": "Shell commands run as the project's quality gate (typically [\"just check\"])."
+    },
+    "host_capabilities": {
+      "type": "object",
+      "description": "Skill-discovery cache populated at Phase 7. Each key is a probed skill name; the value is whether it was usable in this run.",
+      "properties": {
+        "pr_stack": {"type": "boolean"},
+        "melt": {"type": "boolean"},
+        "commit": {"type": "boolean"},
+        "gh": {"type": "boolean"}
+      },
+      "additionalProperties": {"type": "boolean"}
+    },
+    "seed": {
+      "type": "object",
+      "required": ["items"],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["description", "files", "status"],
+            "properties": {
+              "description": {"type": "string"},
+              "files": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+              "commit_sha": {"type": ["string", "null"]},
+              "status": {"type": "string", "enum": ["pending", "completed", "failed"]}
+            }
+          }
+        }
+      }
+    },
+    "atoms": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "behavior", "acceptance_criterion", "files", "test_target", "status", "retry_count"],
+        "properties": {
+          "id": {"type": "integer", "minimum": 1},
+          "behavior": {"type": "string"},
+          "acceptance_criterion": {"type": "string"},
+          "files": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+          "test_target": {"type": "string"},
+          "status": {"type": "string", "enum": ["pending", "running", "completed", "failed"]},
+          "worktree_path": {"type": ["string", "null"]},
+          "branch": {"type": ["string", "null"]},
+          "commit_sha": {"type": ["string", "null"]},
+          "retry_count": {"type": "integer", "minimum": 0, "maximum": 1},
+          "error": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "wiring": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "file", "depends_on", "status"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^W[0-9]+$"},
+          "type": {"type": "string", "enum": ["barrel_export", "di_registration", "route_wiring", "event_subscription", "config_entry"]},
+          "file": {"type": "string"},
+          "depends_on": {"type": "array", "items": {"type": "string"}},
+          "status": {"type": "string", "enum": ["pending", "running", "completed", "failed"]},
+          "commit_sha": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "post_review": {
+      "type": "object",
+      "properties": {
+        "press_slug": {"type": "string"},
+        "age_slug": {"type": "string"},
+        "cure_slug": {"type": "string"},
+        "findings_applied": {"type": "integer", "minimum": 0},
+        "findings_deferred": {"type": "integer", "minimum": 0}
+      }
+    },
+    "pr_plan": {
+      "type": "object",
+      "required": ["shape", "groups"],
+      "properties": {
+        "shape": {"type": "string", "enum": ["single", "orthogonal_flat", "stacked_linear", "diamond_stack"]},
+        "groups": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["branch", "title", "base", "commits"],
+            "properties": {
+              "branch": {"type": "string"},
+              "title": {"type": "string"},
+              "body": {"type": "string"},
+              "base": {"type": "string"},
+              "commits": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+              "depends_on": {"type": "array", "items": {"type": "string"}},
+              "pr_number": {"type": ["integer", "null"]},
+              "pr_url": {"type": ["string", "null"]}
+            }
+          }
+        }
+      }
+    },
+    "phase_summary": {
+      "type": "string",
+      "description": "Self-summary written at each compaction seam — 2-3 sentences. The only cross-seam continuity mechanism."
+    },
+    "carry_forward": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Keys to preserve across compaction. Typically [\"slug\", \"spec_summary\", \"manifest_path\", \"quality_gates\"]."
+    }
+  }
+}

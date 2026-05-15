@@ -152,6 +152,18 @@ When invoked with `--auto`:
 - Set `next:` from what you observe on this run, not from any guess about chain position. `next: cure` when at least one medium-or-above finding exists; `next: done` when none do.
 - The two-cure-pass cap is enforced by ultracook's fixed chain length, not by age's `next:` field. Fresh-context age cannot count prior cure passes anyway, so this is the only honest contract. The orchestrator uses `next: done` for early-stop signalling; the natural terminal stop is the chain table running out of entries.
 
+### Inline-degrade mode (invoked from a sub-agent, e.g. /cheese-factory atom worker)
+
+When `/age` detects it is running as a sub-agent (the parent passes the `invoked-from: cheese-factory-atom` marker or equivalent context line in the prompt), it runs its nine dimensions inline within its own context instead of spawning per-dimension sub-agents. This honours the host's nesting-depth limit (Claude Code allows 1 level of sub-agent nesting; equivalents in other harnesses are similar).
+
+Detection mechanism: scan the invoking prompt for an `invoked-from:` line — values like `cheese-factory-atom`, `fromagerie-atom`, or any harness-specific marker the orchestrator passes in. When present, switch modes:
+
+- Run every dimension's review inline. Do not fork the read-only review-context sub-agent gate (`## Sub-agent context gate` above is skipped under inline-degrade).
+- Output (the findings report + handoff slug) is identical between fan-out and inline-degrade modes — only the internal execution differs.
+- Honour the no-chain-forward directive as usual: write the slug and stop. Do not invoke `/cure` from the sub-agent — the orchestrator owns the chain.
+
+Inline-degrade is forced when the marker is present; there is no opt-out. Spawning a level-2 sub-agent from inside an atom worker would silently exceed the harness's nesting limit and fail — the marker is the only honest signal that the parent has already consumed level-1 depth.
+
 ## Rules
 
 - Review is not a verdict; explain where to look and why.

@@ -48,6 +48,7 @@ If `$ARGUMENTS` is missing entirely and there is no recent context to lean on, a
 | rubber-duck | "Help me think through…", architecture discussion, no artifact intent | — | `/culture` |
 | mold | Feature description with fuzzy scope, multi-module idea, or stated need for a spec | optional `/briesearch` first if external evidence is missing | `/mold` → `/cook` |
 | cook | Spec path, focused fix with clear inputs/outputs/verification, single-file tweak | — | `/cook` |
+| cheese-factory | Approved spec at `.cheese/specs/<slug>.md` with 5+ acceptance criteria / behavioural atoms, or user phrases like "send through the factory", "parallelize", "many atoms", "fan out" | — | `/cheese-factory` |
 | debug | Stack trace, failing test, reproduction steps, "why is X broken" | `/culture` (Diagnose) to converge on the cause | `/culture` → `/cook` |
 | age | PR reference, file path/glob review request, "is this safe to merge", "find bugs" | — | `/age` |
 | age-then-cure | Existing `.cheese/age/<slug>.md` plus a "fix the findings" instruction | — | `/age` (re-scope if needed) → `/cure` |
@@ -118,6 +119,7 @@ Dispatch happens through `AskUserQuestion`. Default option set per intent:
 - **rubber-duck** — `Run /culture` (recommended), `Run /briesearch`, `Stop`.
 - **mold** — `Run /mold` (recommended), `Run /briesearch first`, `Stop`.
 - **cook** — `Run /cook <slug-or-path>` (recommended), `Run /cook --auto <slug-or-path>` (offer only when the input is unambiguous *and* the user signalled autonomous pipeline intent — "auto", "ship it", "all the way through"; never pre-select), `Run /mold first`, `Stop`.
+- **cheese-factory** — `Run /cheese-factory <slug-or-path>` (recommended when the spec decomposes into 5+ atoms), `Run /ultracook <slug-or-path>` (when the user wants the sequential pipeline instead), `Run /cook --auto`, `Stop`.
 - **debug** — `Run /culture` (recommended), `Run /mold (Diagnose mode)`, `Stop`.
 - **age** — `Run /age <ref>` (recommended), `Run /age --scope <path>`, `Stop`.
 - **age-then-cure** — `Run /age <slug>` (recommended), `Run /cure <slug>` (when a fresh report already exists), `Stop`.

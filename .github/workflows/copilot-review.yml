@@ -17,7 +17,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
+        run: |-
           set -euo pipefail
 
           if gh pr edit "$PR_NUMBER" --repo "$REPO" --add-reviewer Copilot 2>/dev/null; then

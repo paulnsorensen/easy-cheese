@@ -35,7 +35,7 @@ jobs:
         run: python3 .github/scripts/validate_skills.py
 
   test:
-    name: test melt scripts
+    name: test melt + cheese-factory scripts
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -46,11 +46,14 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install pytest
-        run: pip install --no-cache-dir pytest==9.0.3
+      - name: Install pytest + pyyaml
+        run: pip install --no-cache-dir pytest==9.0.3 pyyaml==6.0.2
 
       - name: Run melt script tests
         run: python3 -m pytest tests/python -q
+
+      - name: Run cheese-factory script tests
+        run: python3 -m pytest tests/cheese-factory/python -q
 
   install-script:
     name: test install.sh (macOS)
@@ -67,6 +70,9 @@ jobs:
 
       - name: Run install.sh tests
         run: bats tests/bash/test_install.bats
+
+      - name: Run cheese-factory pr_plan_to_branches tests
+        run: bats tests/cheese-factory/bash/test_pr_plan_to_branches.bats
 
       # Real (un-stubbed) smoke test: actually resolve every brew formula,
       # exercise the cargo-or-npm tilth install path, and run the gh-skill

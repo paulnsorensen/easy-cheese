@@ -1,0 +1,268 @@
+#!/usr/bin/env bats
+#
+# Tests for skills/cheese-factory/scripts/pr_plan_to_branches.sh.
+#
+# Each shape (single, orthogonal_flat, stacked_linear, diamond_stack) gets
+# at least one test verifying:
+#   - exit 0 on valid input
+#   - emitted command shape matches the PR layout
+#   - branch / base / commit / PR-create commands all appear
+
+setup() {
+    REPO_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/../../.." && pwd)"
+    SCRIPT="$REPO_ROOT/skills/cheese-factory/scripts/pr_plan_to_branches.sh"
+    PLAN_FILE="$BATS_TEST_TMPDIR/plan.json"
+}
+
+# Helper: write a plan with one group.
+write_single_plan() {
+    cat > "$PLAN_FILE" <<'JSON'
+{
+  "shape": "single",
+  "groups": [
+    {
+      "branch": "cheese-factory/foo/pr-1",
+      "title": "feat(foo): everything in one",
+      "body": "Ships the whole feature in one PR.",
+      "base": "main",
+      "commits": ["aaa111", "bbb222"]
+    }
+  ]
+}
+JSON
+}
+
+write_orthogonal_flat_plan() {
+    cat > "$PLAN_FILE" <<'JSON'
+{
+  "shape": "orthogonal_flat",
+  "groups": [
+    {"branch": "cheese-factory/foo/pr-atom-1", "title": "feat(foo): atom one", "body": "", "base": "main", "commits": ["c1"]},
+    {"branch": "cheese-factory/foo/pr-atom-2", "title": "feat(foo): atom two", "body": "", "base": "main", "commits": ["c2"]},
+    {"branch": "cheese-factory/foo/pr-atom-3", "title": "feat(foo): atom three", "body": "", "base": "main", "commits": ["c3"]}
+  ]
+}
+JSON
+}
+
+write_stacked_linear_plan() {
+    cat > "$PLAN_FILE" <<'JSON'
+{
+  "shape": "stacked_linear",
+  "groups": [
+    {"branch": "cheese-factory/foo/pr-1-seed", "title": "feat(foo): seed", "body": "", "base": "main", "commits": ["seed1"]},
+    {"branch": "cheese-factory/foo/pr-2-atom", "title": "feat(foo): atom", "body": "", "base": "cheese-factory/foo/pr-1-seed", "commits": ["atom1"]},
+    {"branch": "cheese-factory/foo/pr-3-wire", "title": "feat(foo): wire", "body": "", "base": "cheese-factory/foo/pr-2-atom", "commits": ["wire1"]}
+  ]
+}
+JSON
+}
+
+write_diamond_stack_plan() {
+    cat > "$PLAN_FILE" <<'JSON'
+{
+  "shape": "diamond_stack",
+  "groups": [
+    {"branch": "cheese-factory/foo/pr-seed", "title": "feat(foo): seed", "body": "", "base": "main", "commits": ["seed1"]},
+    {"branch": "cheese-factory/foo/pr-atom-1", "title": "feat(foo): atom one", "body": "", "base": "cheese-factory/foo/pr-seed", "commits": ["a1"]},
+    {"branch": "cheese-factory/foo/pr-atom-2", "title": "feat(foo): atom two", "body": "", "base": "cheese-factory/foo/pr-seed", "commits": ["a2"]},
+    {"branch": "cheese-factory/foo/pr-wire", "title": "feat(foo): wire", "body": "", "base": "cheese-factory/foo/pr-atom-2", "commits": ["w1"]}
+  ]
+}
+JSON
+}
+
+# -- preflight ---------------------------------------------------------------
+
+@test "script is executable" {
+    [ -x "$SCRIPT" ]
+}
+
+@test "script rejects --help with exit 0" {
+    run "$SCRIPT" --help
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Usage:"* ]]
+}
+
+@test "script -h prints usage and exits 0" {
+    run "$SCRIPT" -h
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"shape"* ]]
+}
+
+@test "script rejects missing file with exit 1" {
+    run "$SCRIPT" /nope/nope/nope.json
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"not found"* ]]
+}
+
+# -- single shape ------------------------------------------------------------
+
+@test "single shape emits one branch, two cherry-picks, one PR" {
+    write_single_plan
+    run "$SCRIPT" "$PLAN_FILE"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"shape: single"* ]]
+    [[ "$output" == *"git checkout -b 'cheese-factory/foo/pr-1' 'main'"* ]]
+    [[ "$output" == *"git cherry-pick 'aaa111'"* ]]
+    [[ "$output" == *"git cherry-pick 'bbb222'"* ]]
+    [[ "$output" == *"git push -u origin 'cheese-factory/foo/pr-1'"* ]]
+    [[ "$output" == *"gh pr create --base 'main' --head 'cheese-factory/foo/pr-1'"* ]]
+    # Exactly one PR-create line.
+    [ "$(printf '%s\n' "$output" | grep -c '^gh pr create ')" -eq 1 ]
+}
+
+# -- orthogonal_flat shape ---------------------------------------------------
+
+@test "orthogonal_flat emits N PRs each with base main" {
+    write_orthogonal_flat_plan
+    run "$SCRIPT" "$PLAN_FILE"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"shape: orthogonal_flat"* ]]
+    # Three PR-create lines, all targeting main.
+    [ "$(printf '%s\n' "$output" | grep -c '^gh pr create ')" -eq 3 ]
+    # All bases are main.
+    [ "$(printf '%s\n' "$output" | grep -c "^gh pr create --base 'main'")" -eq 3 ]
+}
+
+@test "orthogonal_flat emits exactly one cherry-pick per atom" {
+    write_orthogonal_flat_plan
+    run "$SCRIPT" "$PLAN_FILE"
+    [ "$status" -eq 0 ]
+    [ "$(printf '%s\n' "$output" | grep -c '^git cherry-pick ')" -eq 3 ]
+}
+
+# -- stacked_linear shape ----------------------------------------------------
+
+@test "stacked_linear emits each PR with previous branch as base" {
+    write_stacked_linear_plan
+    run "$SCRIPT" "$PLAN_FILE"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"shape: stacked_linear"* ]]
+    # Three PRs total.
+    [ "$(printf '%s\n' "$output" | grep -c '^gh pr create ')" -eq 3 ]
+    # Only the first PR targets main; the next two target the previous branch.
+    [ "$(printf '%s\n' "$output" | grep -c "^gh pr create --base 'main'")" -eq 1 ]
+    [[ "$output" == *"--base 'cheese-factory/foo/pr-1-seed'"* ]]
+    [[ "$output" == *"--base 'cheese-factory/foo/pr-2-atom'"* ]]
+}
+
+# -- diamond_stack shape -----------------------------------------------------
+
+@test "diamond_stack emits seed-rooted parallel atom PRs and a wiring tip" {
+    write_diamond_stack_plan
+    run "$SCRIPT" "$PLAN_FILE"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"shape: diamond_stack"* ]]
+    # Four PRs.
+    [ "$(printf '%s\n' "$output" | grep -c '^gh pr create ')" -eq 4 ]
+    # Two atom PRs share the seed branch as base.
+    [ "$(printf '%s\n' "$output" | grep -c "^gh pr create --base 'cheese-factory/foo/pr-seed'")" -eq 2 ]
+}
+
+# -- error handling ----------------------------------------------------------
+
+@test "script rejects unknown shape" {
+    cat > "$PLAN_FILE" <<'JSON'
+{"shape": "marbled", "groups": [{"branch": "x", "title": "y", "body": "", "base": "main", "commits": ["c"]}]}
+JSON
+    run "$SCRIPT" "$PLAN_FILE"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"unknown shape"* ]]
+}
+
+@test "script rejects empty groups" {
+    cat > "$PLAN_FILE" <<'JSON'
+{"shape": "single", "groups": []}
+JSON
+    run "$SCRIPT" "$PLAN_FILE"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"no groups"* ]]
+}
+
+@test "script rejects missing shape field" {
+    cat > "$PLAN_FILE" <<'JSON'
+{"groups": [{"branch": "x", "title": "y", "body": "", "base": "main", "commits": ["c"]}]}
+JSON
+    run "$SCRIPT" "$PLAN_FILE"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"shape"* ]]
+}
+
+@test "script reads from stdin when no argument given" {
+    write_single_plan
+    run bash -c "'$SCRIPT' < '$PLAN_FILE'"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"shape: single"* ]]
+}
+
+# -- quoting safety ----------------------------------------------------------
+
+# Helper: write a fake gh/git pair that records args one-per-line so we can
+# verify the emitted commands round-trip cleanly through bash.
+write_fake_bin() {
+    FAKE_BIN="$BATS_TEST_TMPDIR/fakebin"
+    mkdir -p "$FAKE_BIN"
+    cat > "$FAKE_BIN/gh" <<'SH'
+#!/usr/bin/env bash
+# Print each arg on its own line wrapped in <>.
+printf '<%s>\n' "$@"
+SH
+    cat > "$FAKE_BIN/git" <<'SH'
+#!/usr/bin/env bash
+printf '<%s>\n' "$@"
+SH
+    chmod +x "$FAKE_BIN/gh" "$FAKE_BIN/git"
+}
+
+@test "emitted commands round-trip through bash when title contains an apostrophe" {
+    # PR titles routinely contain apostrophes ("don't", "it's"). The sq()
+    # escape must produce output that bash can evaluate without syntax error.
+    cat > "$PLAN_FILE" <<'JSON'
+{
+  "shape": "single",
+  "groups": [
+    {
+      "branch": "cheese-factory/foo/pr-1",
+      "title": "feat(foo): don't break the cart",
+      "body": "It's a fix.",
+      "base": "main",
+      "commits": ["abc123"]
+    }
+  ]
+}
+JSON
+    write_fake_bin
+    out="$("$SCRIPT" "$PLAN_FILE")"
+    # Evaluate the emitted command stream with the fakes on PATH and capture
+    # what gh saw. If sq() is broken, bash itself errors out before gh runs.
+    run env PATH="$FAKE_BIN:$PATH" bash -c "$out"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"<feat(foo): don't break the cart>"* ]]
+    [[ "$output" == *"<It's a fix.>"* ]]
+}
+
+@test "emitted commands round-trip through bash when body contains quotes and newlines" {
+    cat > "$PLAN_FILE" <<'JSON'
+{
+  "shape": "single",
+  "groups": [
+    {
+      "branch": "cheese-factory/foo/pr-1",
+      "title": "feat(foo): ship",
+      "body": "Line one with 'quoted' word.\nLine two.\nLine three with \"double\" too.",
+      "base": "main",
+      "commits": ["c1"]
+    }
+  ]
+}
+JSON
+    write_fake_bin
+    out="$("$SCRIPT" "$PLAN_FILE")"
+    run env PATH="$FAKE_BIN:$PATH" bash -c "$out"
+    [ "$status" -eq 0 ]
+    # Body must survive verbatim — single quotes, newlines, and double quotes.
+    [[ "$output" == *"'quoted'"* ]]
+    [[ "$output" == *"Line two."* ]]
+    [[ "$output" == *"\"double\""* ]]
+}
