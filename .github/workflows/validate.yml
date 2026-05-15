@@ -84,13 +84,19 @@ jobs:
           EC_SKILL_REF: ${{ github.event.pull_request.head.sha || github.sha }}
         run: bash scripts/install.sh --skip-mcp
 
-      # Real install of the code-review-graph CLI with the [embeddings]
-      # extra. Sourcing the script and calling the function directly skips
-      # the MCP-registration step that needs a claude CLI on the runner,
-      # while still exercising the actual pip/pipx/uv install path. Catches
-      # cases where 'code-review-graph[embeddings]' stops being a valid
-      # PyPI target or the embeddings extra fails to resolve.
-      - name: CRG embeddings install smoke test
+      # Real install of the code-review-graph CLI. Sourcing the script and
+      # calling the function directly skips the MCP-registration step that
+      # needs a claude CLI on the runner, while still exercising the actual
+      # pip/pipx/uv install path. EC_CRG_SPEC overrides the default
+      # 'code-review-graph[embeddings]' spec so CI installs the bare CLI;
+      # the [embeddings] extra pulls sentence-transformers, which builds
+      # the tokenizers Rust crate from source on macOS arm64 and burns
+      # minutes per run. Catches cases where 'code-review-graph' stops
+      # being a valid PyPI target; does not catch breakage in the
+      # [embeddings] extra specifically.
+      - name: CRG install smoke test
+        env:
+          EC_CRG_SPEC: code-review-graph
         run: |
           set -euo pipefail
           # shellcheck disable=SC1091
