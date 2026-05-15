@@ -32,6 +32,11 @@ def _load(name: str, path: Path) -> ModuleType:
 
 
 @pytest.fixture(scope="session")
+def manifest_io() -> ModuleType:
+    return _load("manifest_io", SCRIPTS_DIR / "manifest_io.py")
+
+
+@pytest.fixture(scope="session")
 def validate_decomposition() -> ModuleType:
     return _load("validate_decomposition", SCRIPTS_DIR / "validate_decomposition.py")
 
