@@ -234,6 +234,71 @@ class TestDetectViaLocalSynthesis:
         assert result["remedy"] == []
 
 
+class TestCommitsSince:
+    def test_returns_none_on_git_failure(self, detect_squash_residue: ModuleType) -> None:
+        with patch.object(
+            detect_squash_residue, "run_git", return_value=make_completed(returncode=128)
+        ):
+            assert detect_squash_residue._commits_since("origin/main") is None
+
+    def test_returns_empty_list_for_no_commits(
+        self, detect_squash_residue: ModuleType
+    ) -> None:
+        with patch.object(
+            detect_squash_residue, "run_git", return_value=make_completed(stdout="")
+        ):
+            assert detect_squash_residue._commits_since("origin/main") == []
+
+
+class TestGitLogFailurePropagation:
+    def test_git_log_failure_warns_with_fetch_hint(
+        self, detect_squash_residue: ModuleType
+    ) -> None:
+        with (
+            patch.object(detect_squash_residue, "_resolve_head", return_value="HEAD"),
+            patch.object(detect_squash_residue, "_commits_since", return_value=None),
+        ):
+            result = detect_squash_residue.detect("feature", "origin/main")
+
+        assert result["verdict"] == "not-detected"
+        assert any("git log failed" in w for w in result["warnings"])
+        assert any("fetched" in w for w in result["warnings"])
+
+
+class TestBranchDuringRebase:
+    def test_reads_head_name_from_rebase_merge(
+        self, detect_squash_residue: ModuleType, tmp_path: Path
+    ) -> None:
+        gd = tmp_path / "git-dir"
+        (gd / "rebase-merge").mkdir(parents=True)
+        (gd / "rebase-merge" / "head-name").write_text("refs/heads/feature-branch\n")
+        with patch.object(
+            detect_squash_residue, "run_git", return_value=make_completed(stdout=str(gd))
+        ):
+            assert detect_squash_residue._branch_during_rebase() == "feature-branch"
+
+    def test_reads_head_name_from_rebase_apply(
+        self, detect_squash_residue: ModuleType, tmp_path: Path
+    ) -> None:
+        gd = tmp_path / "git-dir"
+        (gd / "rebase-apply").mkdir(parents=True)
+        (gd / "rebase-apply" / "head-name").write_text("refs/heads/fix/my-fix\n")
+        with patch.object(
+            detect_squash_residue, "run_git", return_value=make_completed(stdout=str(gd))
+        ):
+            assert detect_squash_residue._branch_during_rebase() == "fix/my-fix"
+
+    def test_returns_none_when_no_rebase_in_progress(
+        self, detect_squash_residue: ModuleType, tmp_path: Path
+    ) -> None:
+        gd = tmp_path / "git-dir"
+        gd.mkdir()
+        with patch.object(
+            detect_squash_residue, "run_git", return_value=make_completed(stdout=str(gd))
+        ):
+            assert detect_squash_residue._branch_during_rebase() is None
+
+
 class TestEdgeCases:
     def test_no_commits_between_base_and_head(
         self, detect_squash_residue: ModuleType
@@ -419,6 +484,9 @@ class TestGhApiCall:
         captured = {}
 
         def fake_run(cmd, **kwargs):  # noqa: ANN001
+            # _base_branch_name calls `git remote` to identify registered remotes.
+            if cmd[:2] == ["git", "remote"]:
+                return make_completed(stdout="origin\n")
             captured["cmd"] = cmd
             return make_completed(stdout="[]")
 
@@ -437,22 +505,40 @@ class TestGhApiCall:
 
 
 class TestBaseBranchName:
-    def test_strips_origin_prefix(self, detect_squash_residue: ModuleType) -> None:
-        assert detect_squash_residue._base_branch_name("origin/main") == "main"
+    def test_strips_registered_remote_prefix(
+        self, detect_squash_residue: ModuleType
+    ) -> None:
+        with patch.object(
+            detect_squash_residue, "run_git", return_value=make_completed(stdout="origin\n")
+        ):
+            assert detect_squash_residue._base_branch_name("origin/main") == "main"
 
-    def test_preserves_branch_without_remote(
+    def test_preserves_branch_without_slash(
         self, detect_squash_residue: ModuleType
     ) -> None:
         assert detect_squash_residue._base_branch_name("main") == "main"
 
-    def test_handles_multi_segment_branch(
+    def test_preserves_slash_branch_not_matching_remote(
         self, detect_squash_residue: ModuleType
     ) -> None:
-        # `upstream/release/1.0` should yield `release/1.0`.
-        assert (
-            detect_squash_residue._base_branch_name("upstream/release/1.0")
-            == "release/1.0"
-        )
+        # `release/1.0` is a local slash-named branch; "release" is not a remote.
+        with patch.object(
+            detect_squash_residue, "run_git", return_value=make_completed(stdout="origin\n")
+        ):
+            assert detect_squash_residue._base_branch_name("release/1.0") == "release/1.0"
+
+    def test_strips_multi_segment_ref_with_registered_remote(
+        self, detect_squash_residue: ModuleType
+    ) -> None:
+        # `upstream/release/1.0` → strip "upstream/", keep "release/1.0".
+        with patch.object(
+            detect_squash_residue,
+            "run_git",
+            return_value=make_completed(stdout="origin\nupstream\n"),
+        ):
+            assert (
+                detect_squash_residue._base_branch_name("upstream/release/1.0") == "release/1.0"
+            )
 
 
 class TestRefValidation:

@@ -249,6 +249,43 @@ class TestDebugFile:
         assert "result: unsupported file type" in out
         assert "inspect:" not in out
 
+    def test_format_debug_short_circuits_when_tempdir_none(
+        self, batch_resolve: ModuleType
+    ) -> None:
+        d = {
+            "path": "foo.py",
+            "supported": True,
+            "tempdir": None,
+            "merged_path": None,
+            "log_path": None,
+            "conflict_markers": None,
+            "exit_code": None,
+            "message": "could not extract all three stages",
+        }
+        out = batch_resolve.format_debug(d)
+        assert "result: could not extract all three stages" in out
+        assert "inspect:" not in out
+        assert "cat None" not in out
+
+    def test_format_debug_shows_log_but_not_diff_when_merged_path_none(
+        self, batch_resolve: ModuleType
+    ) -> None:
+        d = {
+            "path": "foo.py",
+            "supported": True,
+            "tempdir": "/tmp/dbg",
+            "merged_path": None,
+            "log_path": "/tmp/dbg/mergiraf.log",
+            "conflict_markers": None,
+            "exit_code": 2,
+            "message": "mergiraf produced no merged file (exit 2)",
+        }
+        out = batch_resolve.format_debug(d)
+        assert "inspect:" in out
+        assert "cat /tmp/dbg/mergiraf.log" in out
+        assert "cat None" not in out
+        assert "diff" not in out
+
 
 class TestFormatters:
     def test_terse_includes_status_and_summary(self, batch_resolve: ModuleType) -> None:

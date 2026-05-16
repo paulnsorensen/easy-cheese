@@ -179,22 +179,26 @@ def debug_file(path: str, keep_dir: str | None = None) -> dict:
 
 def format_debug(d: dict) -> str:
     lines = [f"path: {d['path']}"]
-    if not d["supported"]:
+    if not d["supported"] or d["tempdir"] is None:
         lines.append(f"result: {d['message']}")
         return "\n".join(lines)
+    markers = d["conflict_markers"] if d["conflict_markers"] is not None else "(none)"
     lines.extend([
         f"tempdir: {d['tempdir']}",
-        f"merged:  {d['merged_path']}",
+        f"merged:  {d['merged_path'] or '(none)'}",
         f"log:     {d['log_path']}",
         f"exit:    {d['exit_code']}",
-        f"markers: {d['conflict_markers']}",
+        f"markers: {markers}",
         f"result:  {d['message']}",
         "",
         "inspect:",
-        f"  cat {d['merged_path']}",
         f"  cat {d['log_path']}",
-        f"  diff {d['tempdir']}/ours {d['merged_path']}",
     ])
+    if d["merged_path"]:
+        lines.extend([
+            f"  cat {d['merged_path']}",
+            f"  diff {d['tempdir']}/ours {d['merged_path']}",
+        ])
     return "\n".join(lines)
 
 

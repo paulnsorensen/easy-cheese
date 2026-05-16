@@ -48,10 +48,11 @@ def _merge_base(base: str, head: str = "HEAD") -> str | None:
     return r.stdout.strip() if r.returncode == 0 else None
 
 
-def _commits_since(base: str, head: str = "HEAD") -> list[dict]:
+def _commits_since(base: str, head: str = "HEAD") -> list[dict] | None:
+    """Returns commits on success (possibly empty), None on git failure."""
     r = run_git(["log", "--reverse", "--format=%H%x09%s", f"{base}..{head}"])
     if r.returncode != 0:
-        return []
+        return None
     commits = []
     for line in r.stdout.strip().split("\n"):
         if "\t" in line:
@@ -67,11 +68,15 @@ def _gh_available() -> bool:
 def _base_branch_name(base_ref: str) -> str:
     """Strip the remote prefix from a base ref so it matches gh's --base flag.
 
-    `origin/main` → `main`. `main` → `main`. A user passing a ref with multiple
-    slashes (e.g. `upstream/release/1.0`) keeps everything after the first slash.
+    Only strips the leading segment when it matches a registered remote, so
+    slash-named local branches like `release/1.0` are preserved as-is.
+    `origin/main` → `main`. `upstream/release/1.0` → `release/1.0`. `main` → `main`.
     """
-    if "/" in base_ref:
-        _, _, rest = base_ref.partition("/")
+    if "/" not in base_ref:
+        return base_ref
+    prefix, _, rest = base_ref.partition("/")
+    r = run_git(["remote"])
+    if r.returncode == 0 and prefix in r.stdout.splitlines():
         return rest
     return base_ref
 
@@ -130,6 +135,22 @@ def _check_via_synthesis(base_ref: str, head: str = "HEAD") -> bool | None:
     return first.startswith("-")
 
 
+def _branch_during_rebase() -> str | None:
+    """Read the pre-rebase branch name from git rebase metadata.
+
+    During a rebase HEAD is detached, so `git branch --show-current` returns
+    empty. The rebase state directory records the original branch in head-name.
+    """
+    r = run_git(["rev-parse", "--git-dir"])
+    if r.returncode != 0:
+        return None
+    gd = Path(r.stdout.strip())
+    for head_name_path in (gd / "rebase-merge" / "head-name", gd / "rebase-apply" / "head-name"):
+        if head_name_path.exists():
+            return head_name_path.read_text().strip().removeprefix("refs/heads/")
+    return None
+
+
 def _in_progress_abort() -> str | None:
     r = run_git(["rev-parse", "--git-dir"])
     if r.returncode != 0:
@@ -163,12 +184,20 @@ def detect(branch: str, base_ref: str) -> dict:
         "base": base_ref,
         "head_ref": head_ref,
         "pr": None,
-        "branch_commits": _commits_since(base_ref, head_ref),
+        "branch_commits": [],
         "squashed_shas": [],
         "unique_commits": [],
         "remedy": [],
         "warnings": [],
     }
+
+    branch_commits = _commits_since(base_ref, head_ref)
+    if branch_commits is None:
+        result["warnings"].append(
+            f"git log failed for {base_ref}..{head_ref} — is {base_ref} fetched?"
+        )
+        return result
+    result["branch_commits"] = branch_commits
 
     if not result["branch_commits"]:
         result["warnings"].append(f"no commits between {base_ref} and {head_ref}")
@@ -288,9 +317,9 @@ def main():
             print(msg, file=sys.stderr)
         return 1
 
-    branch = args.branch or _current_branch()
+    branch = args.branch or _current_branch() or _branch_during_rebase()
     if not branch:
-        msg = "error: not on a branch (detached HEAD?)"
+        msg = "error: cannot determine current branch — pass --branch <name>"
         if args.json:
             print(json.dumps({"verdict": "error", "error": msg}))
         else:
