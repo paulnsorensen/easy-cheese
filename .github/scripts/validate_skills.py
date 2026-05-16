@@ -41,6 +41,9 @@ ALLOWED_KEYS = {
 NAME_RE = re.compile(r"^(?!-)(?!.*--)[a-z0-9-]{1,64}(?<!-)$")
 FRONTMATTER_RE = re.compile(r"\A---\r?\n(.*?)\r?\n---\s*(\r?\n|\Z)", re.DOTALL)
 
+# Codex rejects skills whose description exceeds 1024 characters.
+DESCRIPTION_MAX_LEN = 1024
+
 
 def validate_path_shape(path: Path) -> str | None:
     parts = path.parts
@@ -89,6 +92,11 @@ def validate_frontmatter(path: Path) -> list[str]:
         errors.append(f"{path}: missing required key 'description'")
     elif not isinstance(description, str) or not description.strip():
         errors.append(f"{path}: 'description' must be a non-empty string")
+    elif len(description) > DESCRIPTION_MAX_LEN:
+        errors.append(
+            f"{path}: 'description' is {len(description)} chars, exceeds "
+            f"{DESCRIPTION_MAX_LEN}-char limit (codex rejects longer descriptions)"
+        )
 
     extra = set(fm) - ALLOWED_KEYS
     if extra:
