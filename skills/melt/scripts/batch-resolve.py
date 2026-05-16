@@ -110,6 +110,94 @@ def resolve_file(path: str, dry_run: bool = True, verbose: bool = False) -> dict
     return result
 
 
+def debug_file(path: str, keep_dir: str | None = None) -> dict:
+    """Run mergiraf on a single file with debug logging; keep the tempdir for inspection.
+
+    Returns a dict describing where the artifacts live. Never modifies the working
+    tree — the caller inspects the merged output manually.
+    """
+    result = {
+        "path": path,
+        "supported": is_mergiraf_supported(path),
+        "tempdir": None,
+        "merged_path": None,
+        "log_path": None,
+        "conflict_markers": None,
+        "exit_code": None,
+        "message": "",
+    }
+
+    if not result["supported"]:
+        result["message"] = "unsupported file type"
+        return result
+
+    base, ours, theirs = extract_stages(path)
+    if base is None or ours is None or theirs is None:
+        result["message"] = "could not extract all three stages"
+        return result
+
+    tmpdir = keep_dir or tempfile.mkdtemp(prefix="melt-debug-")
+    base_path = os.path.join(tmpdir, "base")
+    ours_path = os.path.join(tmpdir, "ours")
+    theirs_path = os.path.join(tmpdir, "theirs")
+    merged_path = os.path.join(tmpdir, "merged")
+    log_path = os.path.join(tmpdir, "mergiraf.log")
+
+    Path(base_path).write_text(base)
+    Path(ours_path).write_text(ours)
+    Path(theirs_path).write_text(theirs)
+
+    cmd = [
+        "mergiraf", "merge",
+        base_path, ours_path, theirs_path,
+        "-o", merged_path,
+        "-p", path,
+    ]
+    env = os.environ.copy()
+    env["RUST_LOG"] = "mergiraf=debug"
+    merge_result = subprocess.run(cmd, capture_output=True, text=True, env=env)
+
+    Path(log_path).write_text(merge_result.stderr or "")
+
+    result["tempdir"] = tmpdir
+    result["log_path"] = log_path
+    result["exit_code"] = merge_result.returncode
+
+    try:
+        merged_content = Path(merged_path).read_text()
+        result["merged_path"] = merged_path
+        result["conflict_markers"] = merged_content.count("<<<<<<<")
+        if result["conflict_markers"] == 0:
+            result["message"] = "clean merge"
+        else:
+            result["message"] = f"{result['conflict_markers']} conflict marker(s) remain"
+    except FileNotFoundError:
+        result["message"] = f"mergiraf produced no merged file (exit {merge_result.returncode})"
+
+    return result
+
+
+def format_debug(d: dict) -> str:
+    lines = [f"path: {d['path']}"]
+    if not d["supported"]:
+        lines.append(f"result: {d['message']}")
+        return "\n".join(lines)
+    lines.extend([
+        f"tempdir: {d['tempdir']}",
+        f"merged:  {d['merged_path']}",
+        f"log:     {d['log_path']}",
+        f"exit:    {d['exit_code']}",
+        f"markers: {d['conflict_markers']}",
+        f"result:  {d['message']}",
+        "",
+        "inspect:",
+        f"  cat {d['merged_path']}",
+        f"  cat {d['log_path']}",
+        f"  diff {d['tempdir']}/ours {d['merged_path']}",
+    ])
+    return "\n".join(lines)
+
+
 def format_terse(results: list, dry_run: bool) -> str:
     if not results:
         return "no conflicts"
@@ -162,6 +250,14 @@ def main():
     parser.add_argument(
         "--verbose", action="store_true", help="Markdown-formatted output and mergiraf debug logs."
     )
+    parser.add_argument(
+        "--debug",
+        metavar="PATH",
+        help=(
+            "Inspect mergiraf on a single file: keeps the tempdir, captures "
+            "RUST_LOG=mergiraf=debug, prints artifact paths. No working tree changes."
+        ),
+    )
     parser.add_argument("files", nargs="*", help="Specific files (default: all conflicted files).")
 
     args = parser.parse_args()
@@ -169,6 +265,11 @@ def main():
     if not check_mergiraf_available():
         print("mergiraf not found — install with: cargo install mergiraf", file=sys.stderr)
         return 1
+
+    if args.debug:
+        result = debug_file(args.debug)
+        print(format_debug(result))
+        return 0 if result["supported"] and result["conflict_markers"] == 0 else 1
 
     dry_run = not args.apply
     files = args.files if args.files else get_conflicted_files()

@@ -138,6 +138,118 @@ class TestResolveFile:
         assert "mergiraf failed" not in result["message"]
 
 
+class TestDebugFile:
+    def test_unsupported_extension_returns_message(self, batch_resolve: ModuleType) -> None:
+        result = batch_resolve.debug_file("Cargo.lock")
+        assert result["supported"] is False
+        assert result["tempdir"] is None
+        assert "unsupported" in result["message"]
+
+    def test_missing_stages_returns_message(self, batch_resolve: ModuleType) -> None:
+        with patch.object(batch_resolve, "extract_stages", return_value=(None, None, None)):
+            result = batch_resolve.debug_file("foo.py")
+        assert result["tempdir"] is None
+        assert "stages" in result["message"]
+
+    def test_clean_merge_captures_artifacts_and_passes_debug_env(
+        self, batch_resolve: ModuleType, tmp_path: Path
+    ) -> None:
+        seen = {}
+
+        def fake_run(cmd, **kwargs):  # noqa: ANN001
+            seen["env"] = kwargs.get("env") or {}
+            Path(_merged_path(cmd)).write_text("clean\n")
+            return make_completed(stderr="debug log line\n")
+
+        with (
+            patch.object(batch_resolve, "extract_stages", return_value=("B", "O", "T")),
+            patch.object(batch_resolve.subprocess, "run", side_effect=fake_run),
+            patch.object(
+                batch_resolve.tempfile, "mkdtemp", return_value=str(tmp_path / "dbg")
+            ),
+        ):
+            (tmp_path / "dbg").mkdir()
+            result = batch_resolve.debug_file("foo.py")
+
+        assert seen["env"].get("RUST_LOG") == "mergiraf=debug"
+        assert result["supported"] is True
+        assert result["conflict_markers"] == 0
+        assert result["message"] == "clean merge"
+        assert Path(result["log_path"]).read_text() == "debug log line\n"
+        assert Path(result["merged_path"]).read_text() == "clean\n"
+        # Tempdir is NOT cleaned up — caller can inspect.
+        assert Path(result["tempdir"]).exists()
+
+    def test_conflicts_remain_reports_marker_count(
+        self, batch_resolve: ModuleType, tmp_path: Path
+    ) -> None:
+        body = "<<<<<<< a\nx\n=======\ny\n>>>>>>> b\n<<<<<<< c\np\n=======\nq\n>>>>>>> d\n"
+
+        def fake_run(cmd, **kwargs):  # noqa: ANN001
+            Path(_merged_path(cmd)).write_text(body)
+            return make_completed(returncode=1, stderr="")
+
+        with (
+            patch.object(batch_resolve, "extract_stages", return_value=("B", "O", "T")),
+            patch.object(batch_resolve.subprocess, "run", side_effect=fake_run),
+            patch.object(
+                batch_resolve.tempfile, "mkdtemp", return_value=str(tmp_path / "dbg")
+            ),
+        ):
+            (tmp_path / "dbg").mkdir()
+            result = batch_resolve.debug_file("foo.py")
+
+        assert result["conflict_markers"] == 2
+        assert "2 conflict marker(s) remain" in result["message"]
+
+    def test_mergiraf_missing_output_file(
+        self, batch_resolve: ModuleType, tmp_path: Path
+    ) -> None:
+        # mergiraf fails hard and writes no output.
+        with (
+            patch.object(batch_resolve, "extract_stages", return_value=("B", "O", "T")),
+            patch.object(
+                batch_resolve.subprocess, "run", return_value=make_completed(returncode=2)
+            ),
+            patch.object(
+                batch_resolve.tempfile, "mkdtemp", return_value=str(tmp_path / "dbg")
+            ),
+        ):
+            (tmp_path / "dbg").mkdir()
+            result = batch_resolve.debug_file("foo.py")
+
+        assert result["merged_path"] is None
+        assert "no merged file" in result["message"]
+        assert result["exit_code"] == 2
+
+    def test_format_debug_includes_inspect_block(self, batch_resolve: ModuleType) -> None:
+        d = {
+            "path": "foo.py",
+            "supported": True,
+            "tempdir": "/tmp/dbg",
+            "merged_path": "/tmp/dbg/merged",
+            "log_path": "/tmp/dbg/mergiraf.log",
+            "conflict_markers": 0,
+            "exit_code": 0,
+            "message": "clean merge",
+        }
+        out = batch_resolve.format_debug(d)
+        assert "tempdir: /tmp/dbg" in out
+        assert "merged:" in out
+        assert "log:" in out
+        assert "inspect:" in out
+        assert "cat /tmp/dbg/merged" in out
+
+    def test_format_debug_short_circuits_for_unsupported(
+        self, batch_resolve: ModuleType
+    ) -> None:
+        out = batch_resolve.format_debug(
+            {"path": "x.lock", "supported": False, "message": "unsupported file type"}
+        )
+        assert "result: unsupported file type" in out
+        assert "inspect:" not in out
+
+
 class TestFormatters:
     def test_terse_includes_status_and_summary(self, batch_resolve: ModuleType) -> None:
         results = [
