@@ -205,30 +205,33 @@ def detect(branch: str, base_ref: str) -> dict:
 
     gh = _check_via_gh(branch, base_ref)
     if gh:
-        result["verdict"] = "squash-merged"
-        result["method"] = "gh-api"
-        result["pr"] = {
-            "number": gh["number"],
-            "url": gh["url"],
-            "merged_at": gh["merged_at"],
-            "merge_commit": gh["merge_commit"],
-        }
-        result["squashed_shas"] = gh["pr_commits"]
-        if gh["multiple_prs"]:
-            result["warnings"].append(
-                "multiple merged PRs from this branch — using most recent"
-            )
         squashed = set(gh["pr_commits"])
-        result["unique_commits"] = [
-            c for c in result["branch_commits"] if c["sha"] not in squashed
-        ]
-        matched = len(result["branch_commits"]) - len(result["unique_commits"])
+        unique = [c for c in result["branch_commits"] if c["sha"] not in squashed]
+        matched = len(result["branch_commits"]) - len(unique)
         if matched == 0:
+            # PR name matched but zero SHAs overlap — too weak to trust as
+            # squash residue. Could be a reused branch name or a fully
+            # rebased branch. Fall through to local-synth (tree equivalence)
+            # for a stronger signal.
             result["warnings"].append(
-                "no local commits matched PR commits by SHA — "
-                "branch may have been rebased after the squash merge; "
-                "verify the cherry-pick list manually before running the remedy"
+                f"gh found PR #{gh['number']} ({gh['url']}) for this branch but "
+                "no local commits matched its SHAs — treating as inconclusive"
             )
+        else:
+            result["verdict"] = "squash-merged"
+            result["method"] = "gh-api"
+            result["pr"] = {
+                "number": gh["number"],
+                "url": gh["url"],
+                "merged_at": gh["merged_at"],
+                "merge_commit": gh["merge_commit"],
+            }
+            result["squashed_shas"] = gh["pr_commits"]
+            result["unique_commits"] = unique
+            if gh["multiple_prs"]:
+                result["warnings"].append(
+                    "multiple merged PRs from this branch — using most recent"
+                )
 
     if result["verdict"] == "not-detected":
         synth = _check_via_synthesis(base_ref, head_ref)

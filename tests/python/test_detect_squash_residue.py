@@ -101,10 +101,12 @@ class TestDetectViaGhApi:
         assert cherry_pick_line is not None
         assert all(c["sha"] in cherry_pick_line for c in followups)
 
-    def test_force_pushed_branch_warns_on_sha_divergence(
+    def test_zero_sha_overlap_downgrades_to_not_detected_when_synth_negative(
         self, detect_squash_residue: ModuleType
     ) -> None:
-        # Local commits have completely different SHAs from PR commits (rebase after merge).
+        # PR name matched but SHAs don't overlap (reused branch name or fully
+        # rebased branch). With local-synth also negative, verdict is
+        # not-detected — too weak to emit a destructive remedy.
         local_commits = _commits("local-1", "local-2")
         gh = _gh_payload(
             number=99,
@@ -115,14 +117,44 @@ class TestDetectViaGhApi:
             patch.object(detect_squash_residue, "_resolve_head", return_value="HEAD"),
             patch.object(detect_squash_residue, "_commits_since", return_value=local_commits),
             patch.object(detect_squash_residue, "_check_via_gh", return_value=gh),
+            patch.object(detect_squash_residue, "_check_via_synthesis", return_value=False),
+            patch.object(detect_squash_residue, "_in_progress_abort", return_value=None),
+        ):
+            result = detect_squash_residue.detect("feature", "origin/main")
+
+        assert result["verdict"] == "not-detected"
+        assert result["method"] is None
+        assert result["pr"] is None
+        assert result["remedy"] == []
+        assert any("no local commits matched its SHAs" in w for w in result["warnings"])
+        assert any("inconclusive" in w for w in result["warnings"])
+
+    def test_zero_sha_overlap_falls_through_to_local_synth(
+        self, detect_squash_residue: ModuleType
+    ) -> None:
+        # PR name matched but SHAs don't overlap; local-synth detects
+        # tree-equivalent residue → squash-merged via local-synth (not gh-api).
+        local_commits = _commits("rebased-1", "rebased-2")
+        gh = _gh_payload(
+            number=99,
+            commit_oids=["a" * 40, "b" * 40],
+            merged_at="2026-05-15T12:00:00Z",
+        )
+        with (
+            patch.object(detect_squash_residue, "_resolve_head", return_value="HEAD"),
+            patch.object(detect_squash_residue, "_commits_since", return_value=local_commits),
+            patch.object(detect_squash_residue, "_check_via_gh", return_value=gh),
+            patch.object(detect_squash_residue, "_check_via_synthesis", return_value=True),
             patch.object(detect_squash_residue, "_in_progress_abort", return_value=None),
         ):
             result = detect_squash_residue.detect("feature", "origin/main")
 
         assert result["verdict"] == "squash-merged"
-        assert any("verify the cherry-pick list" in w for w in result["warnings"])
-        # All local commits treated as unique since none matched the PR.
-        assert len(result["unique_commits"]) == len(local_commits)
+        assert result["method"] == "local-synth"
+        assert result["pr"] is None  # gh-api result was discarded
+        assert any("no local commits matched its SHAs" in w for w in result["warnings"])
+        # Manual review block emitted since local-synth has no SHA list.
+        assert any(r.startswith("# review") for r in result["remedy"])
 
 
 class TestRemedyCompleteness:
@@ -130,11 +162,12 @@ class TestRemedyCompleteness:
     follow-up commits exist, and nothing extra when all branch commits were
     squashed (no follow-ups to recover)."""
 
-    def test_force_pushed_branch_still_gets_cherry_pick_remedy(
+    def test_force_pushed_branch_recovery_via_local_synth(
         self, detect_squash_residue: ModuleType
     ) -> None:
-        # SHAs diverged from PR (post-merge rebase). All local commits become
-        # unique → cherry-pick remedy lists every one of them.
+        # SHAs diverged from PR (post-merge rebase). gh-api downgrades to
+        # inconclusive; local-synth confirms via tree equivalence and the
+        # remedy is the manual-review block listing all local commits.
         local = _commits("rebased-local-1", "rebased-local-2")
         gh = _gh_payload(
             number=1,
@@ -145,14 +178,16 @@ class TestRemedyCompleteness:
             patch.object(detect_squash_residue, "_resolve_head", return_value="HEAD"),
             patch.object(detect_squash_residue, "_commits_since", return_value=local),
             patch.object(detect_squash_residue, "_check_via_gh", return_value=gh),
+            patch.object(detect_squash_residue, "_check_via_synthesis", return_value=True),
             patch.object(detect_squash_residue, "_in_progress_abort", return_value=None),
         ):
             result = detect_squash_residue.detect("feature", "origin/main")
 
-        cherry_pick_line = next((r for r in result["remedy"] if "cherry-pick" in r), None)
-        assert cherry_pick_line is not None
-        assert all(c["sha"] in cherry_pick_line for c in local)
-        assert any("verify the cherry-pick list" in w for w in result["warnings"])
+        assert result["method"] == "local-synth"
+        assert any(r.startswith("# review") for r in result["remedy"])
+        # Every branch commit appears in the manual-review block.
+        review_lines = [r for r in result["remedy"] if r.startswith("#   ")]
+        assert all(any(c["short"] in line for line in review_lines) for c in local)
 
     def test_full_sha_match_remedy_is_reset_only(
         self, detect_squash_residue: ModuleType

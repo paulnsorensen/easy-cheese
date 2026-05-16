@@ -46,7 +46,7 @@ If the verdict is `SQUASH-MERGED`, surface the printed remedy to the user verbat
 
 Verdict semantics:
 
-- `SQUASH-MERGED` (via `gh-api`) — PR found; cherry-pick list from PR commits (prints a warn if no SHAs matched — verify before running remedy).
+- `SQUASH-MERGED` (via `gh-api`) — PR found and at least one local commit's SHA matched the PR; cherry-pick list derived from the unmatched (post-squash) commits.
 - `SQUASH-MERGED` (via `local-synth`) — detected offline; cherry-pick list must be reviewed by hand.
 - `not-detected` — proceed to the cascade.
 - `not-applicable` — on the base branch.
