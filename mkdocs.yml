@@ -1,0 +1,96 @@
+site_name: easy-cheese
+site_description: A skills plugin for Claude Code — the cheese-making pipeline for code review, implementation, and refactoring.
+site_url: https://paulnsorensen.github.io/easy-cheese/
+site_author: Paul Sorensen
+
+repo_name: paulnsorensen/easy-cheese
+repo_url: https://github.com/paulnsorensen/easy-cheese
+edit_uri: edit/main/
+
+copyright: Copyright &copy; 2026 Paul Sorensen — MIT License
+
+docs_dir: docs
+
+theme:
+  name: material
+  language: en
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - navigation.footer
+    - content.code.copy
+    - content.code.annotate
+    - content.action.edit
+    - content.action.view
+    - content.tabs.link
+    - search.suggest
+    - search.highlight
+    - search.share
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep orange
+      accent: amber
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep orange
+      accent: amber
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  icon:
+    repo: fontawesome/brands/github
+    edit: material/pencil
+    view: material/eye
+
+plugins:
+  - search
+  - gen-files:
+      scripts:
+        - scripts/gen_docs.py
+  - literate-nav:
+      nav_file: SUMMARY.md
+  - section-index
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - fenced_code
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.tasklist:
+      custom_checkbox: true
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/paulnsorensen/easy-cheese
+    - icon: fontawesome/solid/mug-hot
+      link: https://www.buymeacoffee.com/paulnsorensen

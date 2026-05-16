@@ -7,9 +7,14 @@
 # Python
 __pycache__/
 *.pyc
+.venv/
 
 # OS / editor
 .DS_Store
 *.swp
 .idea/
 .vscode/
+
+# MkDocs build output
+site/
+.cache/

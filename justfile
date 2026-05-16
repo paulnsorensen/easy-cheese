@@ -38,3 +38,16 @@ check: lint-md-fix lint-yaml-fix lint-yaml lint-sh test
 
 # CI-mode verification (no autofixes)
 ci: lint-md lint-yaml lint-sh test
+
+# Install docs build dependencies into a local venv
+docs-install:
+    python3 -m venv .venv
+    .venv/bin/python -m pip install -r docs/requirements.txt
+
+# Build the docs site (output: site/)
+docs-build: docs-install
+    .venv/bin/mkdocs build --strict
+
+# Serve docs locally on http://localhost:8000 with live reload
+docs-serve: docs-install
+    .venv/bin/mkdocs serve

@@ -9,7 +9,7 @@ Optional MCP servers (Context7, Tavily, code-review-graph, tilth) are not always
 | Context7 | Read repo docs, package README, vendor pages, then web search | Cap at `speculating` for version-specific questions |
 | Tavily | Host web search or user-provided links | Cap at `speculating` when freshness matters |
 | Codebase (cheez-*) | Fall back to Serena or LSP, `sg`, `ripgrep`, `find`, and targeted reads | Cap at `speculating` when local precedent is central |
-| code-review-graph (full tool list in [README → code-review-graph](../../../README.md#code-review-graph-review-impact-radius-architecture-semantic-search)) | Use `tilth_deps` + `cheez-search` callers (`tilth_search kind: "callers"`) for blast radius; skip cross-repo, semantic search, and architecture framing | Cap at `speculating` for cross-repo or large-architecture questions |
+| code-review-graph (full tool list in [README → Optional tools](../../../README.md#optional-tools)) | Use `tilth_deps` + `cheez-search` callers (`tilth_search kind: "callers"`) for blast radius; skip cross-repo, semantic search, and architecture framing | Cap at `speculating` for cross-repo or large-architecture questions |
 | GitHub (`gh`) | Note absence; user-supplied URLs are acceptable | Skip with a confidence note |
 
 ## Reporting an unavailable source
