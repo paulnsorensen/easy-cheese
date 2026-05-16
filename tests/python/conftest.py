@@ -48,3 +48,8 @@ def batch_resolve() -> ModuleType:
 @pytest.fixture(scope="session")
 def git_utils() -> ModuleType:
     return _load("git_utils", SCRIPTS_DIR / "git_utils.py")
+
+
+@pytest.fixture(scope="session")
+def detect_squash_residue() -> ModuleType:
+    return _load("detect_squash_residue", SCRIPTS_DIR / "detect-squash-residue.py")

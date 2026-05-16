@@ -1,6 +1,6 @@
 ---
 name: melt
-description: This skill should be used when a git merge, rebase, or cherry-pick has produced conflicts and the user wants them resolved — phrases like "melt the conflicts", "fix the merge conflicts", "resolve the rebase conflicts", "what's conflicting after the merge", "/melt", "fix the cherry-pick", or any prompt that surfaces `<<<<<<<` markers, `CONFLICT (...)` git output, or a half-finished merge state. Runs the structural-merge cascade — mergiraf (AST-aware auto-resolve) → git rerere (replay remembered fixes) → kdiff3 (manual fallback) — with helper scripts for batch resolution, ours/theirs picks, and lockfile regeneration. Use even when only one file is conflicting if the user wants the structural pass attempted before manual editing. Do NOT use for general git operations without conflicts. After `/cook` or `/cure` if a merge step blocked them; before retrying the gate that surfaced the conflict.
+description: This skill should be used when a git merge, rebase, or cherry-pick has produced conflicts and the user wants them resolved — phrases like "melt the conflicts", "fix the merge conflicts", "resolve the rebase conflicts", "what's conflicting after the merge", "/melt", "fix the cherry-pick", or any prompt that surfaces `<<<<<<<` markers, `CONFLICT (...)` git output, or a half-finished merge state. First checks for squash-merge residue (rebase doomed by a squash-merged PR — abort and re-cherry-pick), then runs the structural-merge cascade — mergiraf (AST-aware auto-resolve) → git rerere (replay remembered fixes) → kdiff3 (manual fallback) — with helper scripts for batch resolution, ours/theirs picks, and lockfile regeneration. Use even when only one file is conflicting if the user wants the structural pass attempted before manual editing. Do NOT use for general git operations without conflicts. After `/cook` or `/cure` if a merge step blocked them; before retrying the gate that surfaced the conflict.
 license: MIT
 ---
 
@@ -30,9 +30,30 @@ The bash-driven flows below cover the bulk of resolution. Drop into the cheez-* 
 
 ## Protocol
 
+### 0. Squash-residue check
+
+Run this before the conflict summary. If the branch was squash-merged into base, mergiraf cannot help — the right answer is to abort and re-cherry-pick the unique commits.
+
+```bash
+python3 skills/melt/scripts/detect-squash-residue.py
+```
+
+If the verdict is `SQUASH-MERGED`, surface the printed remedy to the user verbatim and stop the cascade. The remedy is destructive (`git reset --hard`) and must be copy-pasted by the user, not auto-applied. Flags:
+
+- `--base` — base ref to compare against (default: `origin/main`).
+- `--branch` — branch to check (default: current).
+- `--json` — structured output for scripting.
+
+Verdict semantics:
+
+- `SQUASH-MERGED` (via `gh-api`) — PR found and at least one local commit's SHA matched the PR; cherry-pick list derived from the unmatched (post-squash) commits.
+- `SQUASH-MERGED` (via `local-synth`) — detected offline; cherry-pick list must be reviewed by hand.
+- `not-detected` — proceed to the cascade.
+- `not-applicable` — on the base branch.
+
 ### 1. Diagnose
 
-Run the summary script first; it replaces ad-hoc `grep -n '<<<<<<<'` parsers and is shaped for low-token output.
+Run the summary script next; it replaces ad-hoc `grep -n '<<<<<<<'` parsers and is shaped for low-token output.
 
 ```bash
 python3 skills/melt/scripts/conflict-summary.py
@@ -66,20 +87,16 @@ python3 skills/melt/scripts/batch-resolve.py --apply
 python3 skills/melt/scripts/batch-resolve.py --verbose
 ```
 
-To inspect what mergiraf would produce for a single file without touching the working copy:
+To inspect what mergiraf would produce for a single file without touching the working copy, use `--debug`:
 
 ```bash
-git show :1:<path> > /tmp/base
-git show :2:<path> > /tmp/ours
-git show :3:<path> > /tmp/theirs
-mergiraf merge /tmp/base /tmp/ours /tmp/theirs -o /tmp/merged -p <path>
-grep -c '<<<<<<' /tmp/merged    # 0 = clean
+python3 skills/melt/scripts/batch-resolve.py --debug <path>
 ```
 
-If the merged output is clean, apply it:
+The script extracts the three stages, runs mergiraf with `RUST_LOG=mergiraf=debug`, keeps the tempdir, and prints paths to the merged output, the log, and the conflict-marker count. Inspect with `cat`/`diff` against the printed paths. If the merged output is clean, apply it:
 
 ```bash
-cp /tmp/merged <path>
+cp <merged_path> <path>
 git add <path>
 ```
 
@@ -142,11 +159,10 @@ Supports `Cargo.lock`, `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`, `poet
 
 ### 6. Debug mergiraf
 
-When mergiraf is not resolving something it should:
+When mergiraf is not resolving something it should, use `--debug` for a single-file inspection (keeps the tempdir, captures `RUST_LOG=mergiraf=debug`):
 
 ```bash
-RUST_LOG=mergiraf=debug mergiraf merge /tmp/base /tmp/ours /tmp/theirs \
-    -o /tmp/merged -p <path> 2>&1
+python3 skills/melt/scripts/batch-resolve.py --debug <path>
 
 mergiraf languages | grep <extension>   # is the type registered?
 git check-attr merge -- <path>          # should show: merge: mergiraf
@@ -174,7 +190,8 @@ ls .git/rr-cache/              # browse the resolution database
 
 | Script | Purpose | When |
 | --- | --- | --- |
-| `conflict-summary.py` | Structured summary with line numbers and context | **Run first** |
+| `detect-squash-residue.py` | Detect that the branch was squash-merged and emit the abort+cherry-pick remedy | **Run first** — short-circuits the cascade |
+| `conflict-summary.py` | Structured summary with line numbers and context | After residue check |
 | `batch-resolve.py` | Run `mergiraf merge` over every conflicted file | Supported languages |
 | `conflict-pick.py` | Choose ours / theirs per hunk | Shell, SQL, formats mergiraf does not parse |
 | `lockfile-resolve.py` | Take one side and regenerate the lockfile | `Cargo.lock`, `package-lock.json`, etc. |
@@ -225,7 +242,9 @@ After resolution finishes, prompt the next step via `AskUserQuestion`. Default o
 
 ## Rules
 
+- Always run `detect-squash-residue.py` first; if positive, surface the remedy and stop the cascade.
 - Always run `conflict-summary.py` before deciding the cascade order.
 - Prefer structural resolution over manual edits when mergiraf supports the file type.
 - Never weaken or hand-edit a lockfile in place — regenerate from the manifest.
 - Surface unresolved files explicitly; do not claim a clean tree until `git status` agrees.
+- Never auto-apply the squash-residue remedy — it is destructive (`git reset --hard`); the user copy-pastes it.
