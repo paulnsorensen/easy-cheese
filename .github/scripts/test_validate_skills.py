@@ -144,6 +144,26 @@ class ValidateSkillsTest(unittest.TestCase):
         self.assertIn("disallowed frontmatter keys", err)
         self.assertIn("bogus", err)
 
+    def test_description_too_long_fails(self) -> None:
+        long_desc = "x" * (validate_skills.DESCRIPTION_MAX_LEN + 1)
+        self._write(
+            "skills/foo/SKILL.md",
+            f"---\nname: foo\ndescription: {long_desc}\n---\n",
+        )
+        rc, _, err = self._run()
+        self.assertEqual(rc, 1)
+        self.assertIn("exceeds 1024-char limit", err)
+
+    def test_description_at_limit_passes(self) -> None:
+        desc = "x" * validate_skills.DESCRIPTION_MAX_LEN
+        self._write(
+            "skills/foo/SKILL.md",
+            f"---\nname: foo\ndescription: {desc}\n---\n",
+        )
+        rc, out, _ = self._run()
+        self.assertEqual(rc, 0)
+        self.assertIn("validated 1", out)
+
     def test_allowed_optional_keys_pass(self) -> None:
         self._write(
             "skills/foo/SKILL.md",
