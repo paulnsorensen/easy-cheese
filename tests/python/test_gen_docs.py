@@ -200,3 +200,81 @@ class TestParseFrontmatter:
     def test_malformed_yaml_does_not_raise(self, gen_docs):
         meta, _ = gen_docs.parse_frontmatter("---\nname: : foo\n---\nbody")
         assert meta == {}
+
+
+class TestExtractH2Section:
+    def test_basic_extraction(self, gen_docs):
+        text = "## A\nbody-a\n\n## B\nbody-b\n"
+        assert gen_docs.extract_h2_section(text, "A") == "## A\nbody-a\n\n"
+
+    def test_drop_header_omits_h2_line(self, gen_docs):
+        text = "## A\nbody-a\n\n## B\nbody-b\n"
+        assert gen_docs.extract_h2_section(text, "A", drop_header=True) == "body-a\n\n"
+
+    def test_bump_headings_promotes_h3_to_h2(self, gen_docs):
+        text = "## A\n### Sub\nbody\n\n## B\n"
+        out = gen_docs.extract_h2_section(text, "A", drop_header=True, bump_headings=True)
+        assert "## Sub\n" in out
+        assert "### Sub" not in out
+
+    def test_missing_section_returns_empty(self, gen_docs):
+        text = "## A\nbody-a\n\n## B\nbody-b\n"
+        assert gen_docs.extract_h2_section(text, "Z") == ""
+
+    def test_section_runs_to_eof_when_no_next_h2(self, gen_docs):
+        text = "## A\nbody-a\nstill-a\n"
+        assert gen_docs.extract_h2_section(text, "A") == "## A\nbody-a\nstill-a\n"
+
+    def test_ignores_h3_with_matching_text(self, gen_docs):
+        # Only H2s anchor the section boundary; H3 with same name shouldn't trip it.
+        text = "## A\nbody-a\n### A\nstill-a\n\n## B\nbody-b\n"
+        out = gen_docs.extract_h2_section(text, "A")
+        assert "still-a" in out
+        assert "body-b" not in out
+
+
+class TestEmitInstallPage:
+    def _write_full_readme(self, path):
+        path.write_text(
+            "# Title\n\n"
+            "## Optional tools\n\n"
+            "| Tool | Helps |\n| --- | --- |\n| ripgrep | search |\n\n"
+            "## Install\n\n"
+            "### gh skill\n\n"
+            "install steps\n\n"
+            "## Installing MCP servers\n\n"
+            "mcp steps\n\n"
+            "## Installing CLI tools\n\n"
+            "cli steps\n",
+            encoding="utf-8",
+        )
+
+    def test_missing_readme_returns_false(self, gen_docs, tmp_path, monkeypatch):
+        monkeypatch.setattr(gen_docs, "REPO_ROOT", tmp_path)
+        assert gen_docs.emit_install_page() is False
+
+    def test_missing_section_raises_with_named_section(self, gen_docs, tmp_path, monkeypatch):
+        (tmp_path / "README.md").write_text(
+            "## Optional tools\n\ntable\n\n"
+            "## Install\n\ninstall\n\n"
+            "## Installing MCP servers\n\nmcp\n"
+            # "Installing CLI tools" intentionally absent
+        )
+        monkeypatch.setattr(gen_docs, "REPO_ROOT", tmp_path)
+        with pytest.raises(RuntimeError, match=r"Installing CLI tools"):
+            gen_docs.emit_install_page()
+
+    def test_missing_section_message_names_all_gaps(self, gen_docs, tmp_path, monkeypatch):
+        (tmp_path / "README.md").write_text("## Install\n\ninstall\n")
+        monkeypatch.setattr(gen_docs, "REPO_ROOT", tmp_path)
+        with pytest.raises(RuntimeError) as exc:
+            gen_docs.emit_install_page()
+        msg = str(exc.value)
+        assert "Installing MCP servers" in msg
+        assert "Optional tools" in msg
+        assert "Installing CLI tools" in msg
+
+    def test_all_sections_present_returns_true(self, gen_docs, tmp_path, monkeypatch):
+        self._write_full_readme(tmp_path / "README.md")
+        monkeypatch.setattr(gen_docs, "REPO_ROOT", tmp_path)
+        assert gen_docs.emit_install_page() is True

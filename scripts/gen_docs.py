@@ -272,6 +272,7 @@ def emit_install_page() -> bool:
     sections = {
         "Install": extract_h2_section(readme, "Install", drop_header=True, bump_headings=True),
         "Installing MCP servers": extract_h2_section(readme, "Installing MCP servers"),
+        "Optional tools": extract_h2_section(readme, "Optional tools"),
         "Installing CLI tools": extract_h2_section(readme, "Installing CLI tools"),
     }
     missing = [name for name, body in sections.items() if not body]
@@ -280,9 +281,13 @@ def emit_install_page() -> bool:
             f"README.md is missing expected H2 section(s) {missing!r} — "
             "gen_docs.py:emit_install_page can't build docs/install.md without them"
         )
-    install, mcp, cli = sections["Install"], sections["Installing MCP servers"], sections["Installing CLI tools"]
 
-    body = install.rstrip() + "\n\n" + mcp.rstrip() + "\n\n" + cli.rstrip() + "\n"
+    body = (
+        sections["Install"].rstrip() + "\n\n"
+        + sections["Installing MCP servers"].rstrip() + "\n\n"
+        + sections["Optional tools"].rstrip() + "\n\n"
+        + sections["Installing CLI tools"].rstrip() + "\n"
+    )
     body = apply_link_rewrite(body, rewrite_root_passthrough_link)
 
     front = "---\n" + yaml.safe_dump(

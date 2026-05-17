@@ -391,7 +391,7 @@ The `[embeddings]` extra pulls in `sentence-transformers` so `semantic_search_no
 
 ## Installing CLI tools
 
-The optional tools in the table below are referenced by workflow skills. None are required, but having them available unlocks better fallbacks and richer output.
+The optional tools listed under [Optional tools](#optional-tools) are referenced by workflow skills. None are required, but having them available unlocks better fallbacks and richer output.
 
 ### One-shot installer (macOS)
 
