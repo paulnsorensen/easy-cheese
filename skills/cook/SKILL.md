@@ -22,7 +22,7 @@ Accept one of:
 
 Optional flags:
 
-- `--auto` — autonomous mode. Skip every handoff `AskUserQuestion`, propagate the flag through `/press → /age → /cure`, and fix every medium-or-above finding across up to two cure passes. See `## Auto mode` below.
+- `--auto` — autonomous mode. Skip every handoff gate, propagate the flag through `/press → /age → /cure`, and fix every medium-or-above finding across up to two cure passes. See `## Auto mode` below.
 - `--hard` — propagate the `/hard-cheese` metacognitive gate flag through `/press → /age → /cure`. Cook does not fire the gate itself; it only passes the flag along. The gate fires at `/cure`'s share-for-review handoff or, under `--auto --hard`, at the end of cure's final auto pass. See `skills/hard-cheese/SKILL.md` and `skills/hard-cheese/references/composition.md`.
 
 ### Standalone fast-path
@@ -41,7 +41,7 @@ When the fast-path applies, derive a slug from the task (e.g. `tail-trailing-new
 2. **Cut** — write failing tests for the changed behaviour. See `references/tdd-loop.md`.
 3. **Implement** — make the cut tests pass with the smallest production change.
 4. **Taste-test** — check spec drift, readability, and scope creep. Two-round cap; details in `references/tdd-loop.md`.
-5. **Hand off** — produce the package-ready report (`references/package-report.md`), write the handoff slug (`## Handoff slug` below), and prompt the next step via `AskUserQuestion` (see `## Handoff` below). The default chain is `/press` → `/age` → `/cure`.
+5. **Hand off** — produce the package-ready report (`references/package-report.md`), write the handoff slug (`## Handoff slug` below), and prompt the next step via the shared handoff gate (see `## Handoff` below). The default chain is `/press` → `/age` → `/cure`.
 
 Code search, reading, and editing all go through the cheez-* skills (`/cheez-search`, `/cheez-read`, `/cheez-write`) — see those skills for tool selection rules and out-of-scope fallbacks.
 
@@ -86,15 +86,15 @@ artifact: <path-to-richer-report-if-any>
 
 **Pipeline:** culture → mold → **[cook]** → press → age → cure → ship
 
-After the package-ready report is printed and the handoff slug is on disk, ask via `AskUserQuestion` which downstream to run. Lead each option with the verb (what the user wants to *do* next); the skill command is the backing detail. Default options:
+After the package-ready report is printed and the handoff slug is on disk, ask via the shared handoff gate in `../../shared/handoff-gate.md`. Lead each option with the verb (what the user wants to *do* next); the skill command (with any in-scope `--hard` propagation) is the backing detail. Default options:
 
 - **Harden tests before review** *(recommended)* — `/press <slug>`.
 - **Review the diff now (skip the press pass)** — `/age <slug>`.
-- **Stop** — leave further hardening for later.
+- **Stop** — dispatch none; leave further hardening for later.
 
-Pre-select **Harden tests before review** when the cooked diff added new behaviour or touched untested seams. The user may also chain: pressing then age then cure happens via each step's own `AskUserQuestion`. Never auto-invoke; the user must select.
+Pre-select **Harden tests before review** when the cooked diff added new behaviour or touched untested seams. The user may also chain: pressing then age then cure happens via each step's own handoff gate. Never dispatch before selection; after a non-stop selection, run the selected command immediately.
 
-When invoked with `--auto`, skip this `AskUserQuestion` entirely and proceed straight into the auto-mode chain (see `## Auto mode` below).
+When invoked with `--auto`, skip this gate entirely and proceed straight into the auto-mode chain (see `## Auto mode` below).
 
 ## Auto mode
 
@@ -139,7 +139,7 @@ Final age:      <path>
 Next step:      review the diff, then /gh when ready
 ```
 
-Auto mode is a propagated flag, not a separate skill — every downstream invocation passes `--auto` along so each step knows to skip its own handoff `AskUserQuestion`.
+Auto mode is a propagated flag, not a separate skill — every downstream invocation passes `--auto` along so each step knows to skip its own handoff gate.
 
 ## Rules
 

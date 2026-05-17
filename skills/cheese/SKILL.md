@@ -1,6 +1,6 @@
 ---
 name: cheese
-description: This skill should be used as the unified entry point when the user drops in any kind of input — a half-formed idea, a spec path, a file path, a PR or issue number, a stack trace, a bug report, or just `/cheese` — and wants the workflow to pick the right next step. Phrases like "/cheese", "what should I do with this", "help me get started", "route this", "figure out what skill I need", or any opening message that does not already name a downstream skill. Classifies the input into an intent shape (clarify, research, rubber-duck, mold, cook, debug-then-cook, age, age-then-cure), announces the detected intent + reason, and gates dispatch behind an explicit `AskUserQuestion` so nothing fires silently. Use even when the user seems to know what they want — confirming the routing decision is the value. Never auto-invokes downstream skills; always pauses for explicit confirmation. Before any other workflow skill.
+description: This skill should be used as the unified entry point when the user drops in any input — idea, spec path, file path, PR or issue, stack trace, bug report, or just `/cheese` — and wants the workflow routed. Phrases include "/cheese", "what should I do with this", "help me get started", "route this", "figure out what skill I need", or any opening message that does not already name a downstream skill. Classifies the input into an intent shape, announces the target and reason, and gates dispatch behind explicit user selection so nothing runs silently. After a non-stop selection, immediately dispatches the selected downstream skill with the exact command and context packet. Before any other workflow skill.
 license: MIT
 ---
 
@@ -34,8 +34,8 @@ If `$ARGUMENTS` is missing entirely and there is no recent context to lean on, a
 1. **Classify** — match `$ARGUMENTS` against the intent shapes in `references/classification.md`. Pick the highest-confidence shape; below the threshold, route to `clarify` (see step 4).
 2. **Announce** — print one short paragraph with: detected intent, chosen target skill (or pre-step), and the one-line reason for the decision. Cite the signal that drove it (e.g. "spec path under `.cheese/specs/`", "stack trace present", "PR URL").
 3. **Self-check** — run the coherence questions in `references/coherence-check.md` before dispatching. If any fails, downgrade to `clarify` or `research`.
-4. **Confirm** — issue an `AskUserQuestion` with the recommended target pre-selected and at least one alternative plus a `Stop` option. The user's selection is the only trigger for dispatch; never invoke a skill silently.
-5. **Hand off** — once the user picks, name the next skill and stop. The downstream skill owns its own flow; `/cheese` does not narrate beyond the routing decision.
+4. **Confirm** — issue a handoff gate per `../../shared/handoff-gate.md`: recommended target pre-selected, at least one alternative, and a `Stop` option. The user's selection is the only trigger for dispatch; never invoke a skill silently before the selection.
+5. **Hand off** — once the user picks a non-stop option, immediately run the selected skill with the exact dispatch command and context packet. The downstream skill owns its own flow; `/cheese` does not narrate beyond the routing decision.
 
 `/cheese` is a router, not a worker. It never edits files, runs tests, opens PRs, or paraphrases the downstream skill's output.
 
@@ -64,7 +64,7 @@ Flow:
 1. Scan for the most recently modified handoff slug across `.cheese/{cook,press,age,cure,notes}/<slug>.md`.
 2. If none exist, offer to start the pipeline from scratch — `/mold` for fuzzy specs, `/cook` for clear asks, `/ultracook` for high-blast-radius specs — and stop.
 3. If at least one exists, read the latest one and use its `next:` field to decide the recommended action. Surface the orientation line so the user knows where they are.
-4. Confirm the resumption via `AskUserQuestion`. The recommended option depends on the slug's `next:` value:
+4. Confirm the resumption via the handoff gate in `../../shared/handoff-gate.md`. The recommended option depends on the slug's `next:` value:
    - **When `next:` names a phase** (`mold | cook | press | age | cure | ultracook`):
      - **Run /\<next\> \<slug\>** *(recommended)* — continue the chain at the named phase.
      - **Run /ultracook \<slug\>** — re-enter the autonomous fresh-context chain.
@@ -74,7 +74,7 @@ Flow:
      - **Run /age \<slug\>** — re-review the diff in fresh context if you want another pass.
      - **Run /ultracook \<slug\>** — only if you want to redo the whole chain over the same slug. Refuses when phase handoffs already exist (per `/ultracook`'s existing-handoffs guard); requires removing the existing slugs first.
 
-`/cheese --continue` never auto-invokes, and it never builds `/done <slug>` or `/stop <slug>` from a terminal `next:` field — those values surface the terminal state to the user, not a runnable command. The slug files are the resumability contract: they tell the router where the pipeline is, and the user picks how to move it forward.
+`/cheese --continue` never dispatches before the user selects, and it never builds `/done <slug>` or `/stop <slug>` from a terminal `next:` field — those values surface the terminal state to the user, not a runnable command. After a non-stop selection, run the selected phase immediately with the slug. The slug files are the resumability contract: they tell the router where the pipeline is, and the user picks how to move it forward.
 
 ## Confidence and the clarify gate
 
@@ -95,7 +95,7 @@ Beyond cheez-* there are router-specific tools:
 | Need | Prefer | Fallback |
 | --- | --- | --- |
 | PR / issue context | `gh` | the URL or numbers the user provided |
-| Confirming routing target with the user | `AskUserQuestion` | a numbered list with explicit "no auto-invoke" wording |
+| Confirming routing target with the user | `AskUserQuestion` / host structured question (`request_user_input` in Codex when available) | a numbered list with explicit dispatch commands and "no auto-invoke before selection" wording |
 
 `/cheese` keeps tool use light. Treat anything heavier than a single-file read or one search call as a sign the work belongs in the downstream skill, not in the router.
 
@@ -106,13 +106,13 @@ Always emit, in order:
 1. **Detected intent** — one line, e.g. `Intent: cook (clear single-file fix)`.
 2. **Reason** — one line citing the signal (`reason: spec path .cheese/specs/foo.md`).
 3. **Target** — the recommended skill, e.g. `Target: /cook .cheese/specs/foo.md`.
-4. **Confirmation prompt** — `AskUserQuestion` with the recommended target pre-selected, one alternative, and `Stop`.
+4. **Confirmation prompt** — handoff gate with the recommended target pre-selected, one alternative, `Stop`, and exact dispatch records for every non-stop option.
 
 If `clarify` is chosen, replace step 4 with the single clarifying question.
 
 ## Handoff
 
-Dispatch happens through `AskUserQuestion`. Default option set per intent:
+Dispatch happens through `../../shared/handoff-gate.md`. Default option set per intent:
 
 - **clarify** — single targeted question; no skills offered until the answer arrives.
 - **research** — `Run /briesearch` (recommended), `Run /culture`, `Stop`.
@@ -126,11 +126,11 @@ Dispatch happens through `AskUserQuestion`. Default option set per intent:
 
 Pre-select only the highest-confidence target. If two targets are viable, surface both and let the user decide.
 
-`/cheese` never auto-invokes. The user picks, then the next skill runs.
+`/cheese` never auto-invokes before the user selects. After a non-stop selection, the selected skill runs immediately with the captured dispatch packet.
 
 ## Rules
 
-- Classification is the only output until the user confirms.
+- Classification is the only output until the user confirms; after a non-stop confirmation, dispatch instead of stopping at a recommendation.
 - One clarifying question, max, before re-entering classification.
 - Below `medium` confidence, route to `clarify`, not to a guess.
 - Never paraphrase or summarise downstream skill output — that is the downstream skill's job.
@@ -140,3 +140,4 @@ Pre-select only the highest-confidence target. If two targets are viable, surfac
 
 - `references/classification.md` — intent shapes, signals, disambiguation rules.
 - `references/coherence-check.md` — pre-dispatch self-checks that downgrade misroutes.
+- `../../shared/handoff-gate.md` — Codex-safe post-selection dispatch contract (shared across workflow skills).

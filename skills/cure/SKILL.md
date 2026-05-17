@@ -12,7 +12,7 @@ Do not use it to apply every suggestion automatically. The user chooses what to 
 
 ## Inputs
 
-Accept any of: a `/age` slug (`/cure <slug>` reads `.cheese/age/<slug>.md`), a pasted findings list, a CI failure summary, or a scoped instruction like "fix the high-stake age findings". `/age` may also hand off with a pre-locked selection by passing the chosen ids inline in the dispatch (see `references/selection.md#handoff-from-age` for the canonical format); when that happens, skip rendering the selection list and go straight to apply.
+Accept any of: a `/age` slug (`/cure <slug>` reads `.cheese/age/<slug>.md`), a pasted findings list, a CI failure summary, or a scoped instruction like "fix the high-stake age findings". `/age` may also hand off with a pre-locked selection by passing the chosen ids in a structured handoff context (see `references/selection.md#handoff-from-age` for the canonical format); when that context is present, skip rendering the selection list and go straight to apply.
 
 If selection is ambiguous *and* not pre-locked from `/age`, render a numbered selection list per `references/selection.md` and ask what to apply. The default selection is empty.
 
@@ -25,12 +25,12 @@ Optional flags:
 ## Flow
 
 1. **Load** — read the findings (markdown, not JSON sidecars).
-2. **Select** — if `/age` handed off a pre-locked selection, adopt it as-is (re-confirm the cited ids still exist in the report). Otherwise gate on explicit user selection. See `references/selection.md` for the recognized verbs.
+2. **Select** — if `/age` handed off a structured pre-locked selection, adopt it as-is after re-confirming the cited ids still exist in the report. Otherwise gate on explicit user selection. See `references/selection.md` for the recognized verbs.
 3. **Apply** — fix one logical group at a time via `cheez-read` (re-confirm anchor location) and `cheez-write` (apply).
 4. **Validate** — run the narrowest tests that prove each fix, then any relevant project-wide gates (lint, typecheck, build).
 5. **Re-review hand-off** — recommend `/age --scope <touched-path>` so review runs through the proper skill rather than reimplementing it inline. `/cure` does not re-grade its own work. If the user picks re-age, the resulting report can feed a fresh `/cure` invocation.
 6. **Ship report** — what changed, checks run, deferred items, residual risks. Write the handoff slug at the top of `.cheese/cure/<slug>.md` (see `## Handoff slug` below) so the chain (and `/ultracook`) can read the outcome without re-parsing the full report.
-7. **Hand off** — prompt the next step via `AskUserQuestion` (see `## Handoff` below). Never auto-invoke.
+7. **Hand off** — prompt the next step via the shared handoff gate (see `## Handoff` below). Never dispatch before the user selects; after a non-stop selection, run the selected command immediately.
 
 ## Preferred tools and fallbacks
 
@@ -91,19 +91,19 @@ The cure report body lives below the handoff slug in the same file at `.cheese/c
 
 **Pipeline:** culture → mold → cook → press → age → **[cure]** → ship
 
-After the cure report is rendered, ask via `AskUserQuestion` which downstream to run. Lead each option with the verb (what the user wants to *do* next); the skill command is the backing detail. Default options:
+After the cure report is rendered, ask via the shared handoff gate in `../../shared/handoff-gate.md`. Lead each option with the verb (what the user wants to *do* next); the skill command is the backing detail. Default options:
 
-- **Re-review the touched code** *(recommended when fixes were non-trivial)* — `/age --scope <touched-path>`, runs review through the proper skill.
-- **Open or update the PR** — `/gh`.
-- **Stop** — sit on the changes for now.
+- **Re-review the touched code** *(recommended when fixes were non-trivial)* — `/age --scope <touched-path>`, runs review through the proper skill. Propagates `--hard` when in scope.
+- **Open or update the PR** — `/gh`. When `--hard` is in scope, this option first dispatches `/hard-cheese <slug>` and proceeds to `/gh` only if the gate exits `0`.
+- **Stop** — dispatch none; sit on the changes for now.
 
-Pre-select **Re-review the touched code** when any applied fix touched logic outside the original finding's hunk, when a corrective fix exposed adjacent risk, or when checks were skipped. Pre-select **Open or update the PR** when all selected findings applied cleanly and gates passed. Never auto-invoke.
+Pre-select **Re-review the touched code** when any applied fix touched logic outside the original finding's hunk, when a corrective fix exposed adjacent risk, or when checks were skipped. Pre-select **Open or update the PR** when all selected findings applied cleanly and gates passed. Never dispatch before selection; after a non-stop selection, run the selected command immediately.
 
 ## --hard mode
 
 `/cure --hard` is the gate-firing path for the `/hard-cheese` metacognitive vibecheck. The flag propagates up the pipeline (`/cheese → /mold → /cook → /press → /age → /cure`); cure is the only step that actually fires the gate. The contract:
 
-- **Interactive `/cure --hard`:** at the handoff `AskUserQuestion`, when the user selects the share-for-review option (the **Open or update the PR** label, which dispatches `/gh`), invoke `/hard-cheese <slug>` *before* handing off. Proceed only on exit `0`. If the gate exits non-zero (`FAILED` status — cap exhausted), surface the artifact path and abort the handoff; the user must improve their understanding before sharing for review.
+- **Interactive `/cure --hard`:** at the handoff gate, when the user selects the share-for-review option (the **Open or update the PR** label, which dispatches `/gh`), invoke `/hard-cheese <slug>` *before* handing off. Proceed only on exit `0`. If the gate exits non-zero (`FAILED` status — cap exhausted), surface the artifact path and abort the handoff; the user must improve their understanding before sharing for review.
 - **Picking a non-sharing option** (**Re-review the touched code** or **Stop**) does *not* fire the gate. Re-review and pausing do not put code in front of readers.
 - **Auto-mode puncture** — see the clause in `### Auto mode` below. The auto-mode puncture is the single sanctioned point at which `--hard` overrides `--auto`'s skip-handoff semantics.
 
@@ -113,10 +113,10 @@ The gate's mechanism (SOLO-graded fresh-context judge, Socratic retry, fail-open
 
 When invoked with `--auto --stake <floor>`:
 
-- Skip the selection-list rendering and the `AskUserQuestion`.
+- Skip the selection-list rendering and the handoff gate.
 - Auto-select every finding whose stake meets the floor (`high` only, `medium+` for medium or higher, or `all`).
 - Apply findings one at a time. After each fix, run the narrowest test that proves it. If the fix breaks a previously-passing test or any project-wide gate, revert that single finding's edit and record it under `### Deferred` in the cure report with the test name and the failure summary. Continue with the remaining findings.
-- After all selected findings are processed, skip the handoff `AskUserQuestion` and invoke `/age --scope <touched-paths> --auto` so the chain can re-review.
+- After all selected findings are processed, skip the handoff gate and invoke `/age --scope <touched-paths> --auto` so the chain can re-review.
 - `/age --auto` enforces the two-pass cap. Cure does not need to track passes itself — it just keeps applying when invoked.
 - Never invoke `/gh` from auto mode. The chain ends with the final age report and the user opens a PR manually if they want.
 

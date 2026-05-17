@@ -47,13 +47,15 @@ skills/
 
 Each `SKILL.md` is self-contained markdown with YAML frontmatter. There are no nested sub-skills; deeper material lives in `references/<topic>.md` so the harness can load it progressively.
 
+Content shared _across_ skills lives at top-level `shared/` (e.g. `shared/handoff-gate.md`), sibling to `skills/` rather than inside any one skill's `references/`. Skills reference it by relative path (`../../shared/<file>.md`). The top-level location keeps it out of skill auto-discovery and signals that it's a cross-cutting contract, not a private detail of any single skill.
+
 ## Skills
 
 ### Workflow skills
 
 | Skill path | Command | Purpose |
 | --- | --- | --- |
-| `skills/cheese/SKILL.md` | `/cheese` | Unified entry point. Classifies any input (idea, spec path, PR, stack trace, file path), announces the routing decision, and gates dispatch behind `AskUserQuestion`. Never auto-invokes. |
+| `skills/cheese/SKILL.md` | `/cheese` | Unified entry point. Classifies any input (idea, spec path, PR, stack trace, file path), announces the routing decision, gates dispatch behind explicit user selection, then immediately runs the selected non-stop target with its dispatch packet. |
 | `skills/briesearch/SKILL.md` | `/briesearch` | Research technical questions across docs, web, codebase, and GitHub examples with confidence-capped synthesis. |
 | `skills/mold/SKILL.md` | `/mold` | Shape fuzzy ideas into grounded specs through dialogue, validate cycles, and a two-key handshake. |
 | `skills/culture/SKILL.md` | `/culture` | No-write rubber-ducking and architecture exploration. Hard invariant: writes only the opt-in `.cheese/notes/<slug>.md` handoff at session end, and only when the user asks for notes. |
@@ -129,7 +131,7 @@ If those tools don't show up after install, the cheez-* skills will hard-fail wi
    └─ review only                     ──►  /age         ──►  /cure
 ```
 
-`/cheese` is the front door. It inspects whatever you drop in (idea, spec path, PR ref, stack trace, file path), announces its routing decision, and waits for explicit confirmation before any downstream skill runs. Use it directly, or skip it when you already know the destination — a clear bug can go straight to `/cook`, a no-write design discussion stays in `/culture`. `/melt` cuts in whenever a merge step blocks `/cook` or `/cure`. Append `--hard` to any pipeline step to insert `/hard-cheese` as a metacognitive vibecheck gate before review.
+`/cheese` is the front door. It inspects whatever you drop in (idea, spec path, PR ref, stack trace, file path), announces its routing decision, and waits for explicit confirmation before any downstream skill runs; after a non-stop selection, it immediately dispatches the selected target. Use it directly, or skip it when you already know the destination — a clear bug can go straight to `/cook`, a no-write design discussion stays in `/culture`. `/melt` cuts in whenever a merge step blocks `/cook` or `/cure`. Append `--hard` to any pipeline step to insert `/hard-cheese` as a metacognitive vibecheck gate before review.
 
 ## Scope
 

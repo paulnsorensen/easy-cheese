@@ -48,7 +48,7 @@ Per-dimension rubrics and recommendation shapes in `references/dimensions.md`. T
 3. Review every dimension; dimensions with no findings simply omit themselves.
 4. Group findings by stake (high → medium) and by file.
 5. Write the report to `.cheese/age/<slug>.md` and print the path.
-6. Hand off via `AskUserQuestion` (see `## Handoff` below). Age owns the selection gate: it asks the user *which findings to cure*, never *whether to run /cure*. `/cure` still owns the actual fix application — age never auto-applies fixes.
+6. Hand off via the shared handoff gate (see `## Handoff` below). Age owns the selection gate: it asks the user *which findings to cure*, never *whether to run /cure*. `/cure` still owns the actual fix application — age never auto-applies fixes.
 
 ## Preferred tools and fallbacks
 
@@ -125,14 +125,24 @@ Age report: .cheese/age/<slug>.md
 
 **Pipeline:** culture → mold → cook → press → **[age]** → cure → ship
 
-After the report is on disk, skip any "should I run /cure?" meta-question and go straight to the selection gate. The user's working memory is on the findings, not on whether a follow-up step exists.
+After the report is on disk, skip any "should I run /cure?" meta-question and go straight to the selection gate. The user's working memory is on the findings, not on whether a follow-up step exists. Use the shared handoff gate in `../../shared/handoff-gate.md` for post-selection dispatch.
 
 1. Render the numbered selection table per `../cure/references/selection.md` directly inline (one row per finding, grouped by stake).
-2. Ask via `AskUserQuestion` which findings to cure. Lead each option with the verb (what the user wants to *do* next); the underlying selection verb is the backing detail. Offer:
+2. Ask via the handoff gate which findings to cure. Lead each option with the verb (what the user wants to *do* next); the underlying selection verb is the backing detail. Offer:
    - **Pick findings to fix** — accept a free-text reply using the verbs from `../cure/references/selection.md` (`1,3,5`, `all-high`, `all`, `none`, `skip N`).
    - **Fix all high-stake findings** *(recommended when at least one high-stake finding exists)* — equivalent to `all-high`.
    - **Stop — leave the report for later** — equivalent to `none`.
-3. On a non-empty selection, hand off to `/cure <slug>` with the selection locked in (pass the chosen ids through so `/cure` skips its own selection prompt and goes straight to apply). `/cure` still owns the apply / validate / report loop and may surface the chosen ids for confirmation if the report has shifted underneath it.
+3. On a non-empty selection, immediately dispatch `/cure <slug> [--hard]` with the selection locked in via context, not a CLI flag:
+
+```yaml
+handoff_context:
+  source_skill: /age
+  source_report: .cheese/age/<slug>.md
+  selection: "<recognized verb or explicit ids>"
+  resolved_ids: [<expanded ids>]
+```
+
+`/cure` skips its own selection prompt when this context is present, re-confirms the cited ids still exist, then owns the apply / validate / report loop. `/age` never auto-applies fixes. Always emit `resolved_ids` alongside `selection` — expand the verb yourself rather than leaving the field empty; `/cure` re-confirms against the report regardless.
 4. On `none` / `Stop`, exit cleanly with the report path.
 
 Outside `--auto`, never auto-apply fixes and never invoke `/cure` without an explicit non-empty selection. The default selection remains empty. `--auto` substitutes a stake-floor selection — see `### Auto mode` below.
@@ -141,7 +151,7 @@ Outside `--auto`, never auto-apply fixes and never invoke `/cure` without an exp
 
 When invoked with `--auto`:
 
-- Skip the `AskUserQuestion`.
+- Skip the handoff gate.
 - If two cure passes have already completed (cap reached), stop and surface the final report — do not invoke `/cure` again even if findings remain.
 - Otherwise, if any medium-or-above finding exists, invoke `/cure <slug> --auto --stake medium+` and increment the cure-pass count when it returns.
 - If no medium-or-above findings remain, stop the chain with a one-line "auto chain clean" note and the report path.

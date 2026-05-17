@@ -148,9 +148,14 @@ C. Re-decompose — different boundaries
 D. Pause — hold off
 ```
 
-**Do NOT proceed without explicit approval.**
+Use the shared handoff gate in `../../shared/handoff-gate.md` for this approval step. All four options keep cheese-factory running internally (no skill transition) — they use `continue:` identifiers rather than `dispatch:` commands per the gate vocabulary:
 
-Write manifest to `.cheese/cheese-factory/<slug>/manifest.yaml`. Update: `phase: gate_approved`.
+- **Approve** — `continue: write-manifest-then-seed`: write `.cheese/cheese-factory/<slug>/manifest.yaml`, set `phase: gate_approved`, then proceed with Phase 1 (seed execution).
+- **Modify** — `continue: ask-for-decomposition-change`: ask one targeted question for the requested decomposition change, then re-render the plan.
+- **Re-decompose** — `continue: re-run-decomposer`: re-run the decomposer with the user's boundary instruction. Retry at most twice.
+- **Pause** — `dispatch: none`: leave the manifest draft and report its path.
+
+**Do NOT proceed without explicit approval.**
 
 #### Compaction seam C1
 
