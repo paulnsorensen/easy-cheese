@@ -20,7 +20,7 @@ Optional flags:
 
 - `--auto` — autonomous mode (propagated from `/cook --auto`). Bypasses the user-selection step. Must be paired with `--stake <floor>` to set the inclusion threshold; `/cook --auto` always passes `--stake medium+`. See `references/selection.md` for the auto-selection rules and `## Auto mode` below for the pass-cap and revert behaviour.
 - `--stake <floor>` — used only with `--auto`. Accepts `high`, `medium+` (medium or higher), or `all`. Without `--auto` this flag is ignored — interactive selection is the only sanctioned path.
-- `--hard` — propagated metacognitive-gate flag (from `/cook --hard` or `/cheese --hard`). Cure is the *only* pipeline skill that fires the gate: when `--hard` is in scope and the user selects the share-for-review handoff option (existing `Run /gh` label), invoke `/hard-cheese <slug>` first and proceed only on exit `0`. Under `--auto --hard`, see `## --hard mode` and the auto-mode puncture clause below.
+- `--hard` — propagated metacognitive-gate flag (from `/cook --hard` or `/cheese --hard`). Cure is the *only* pipeline skill that fires the gate: when `--hard` is in scope and the user selects the share-for-review handoff option (the **Open or update the PR** label, which dispatches `/gh`), invoke `/hard-cheese <slug>` first and proceed only on exit `0`. Under `--auto --hard`, see `## --hard mode` and the auto-mode puncture clause below.
 
 ## Flow
 
@@ -89,20 +89,22 @@ The cure report body lives below the handoff slug in the same file at `.cheese/c
 
 ## Handoff
 
-After the cure report is rendered, ask via `AskUserQuestion` which downstream to run. Default options:
+**Pipeline:** culture → mold → cook → press → age → **[cure]** → ship
 
-- **Run /age `--scope <touched-path>`** *(recommended when fixes were non-trivial)* — re-review the touched code through the proper skill.
-- **Run /gh** — open or update the PR.
+After the cure report is rendered, ask via `AskUserQuestion` which downstream to run. Lead each option with the verb (what the user wants to *do* next); the skill command is the backing detail. Default options:
+
+- **Re-review the touched code** *(recommended when fixes were non-trivial)* — `/age --scope <touched-path>`, runs review through the proper skill.
+- **Open or update the PR** — `/gh`.
 - **Stop** — sit on the changes for now.
 
-Pre-select `Run /age` when any applied fix touched logic outside the original finding's hunk, when a corrective fix exposed adjacent risk, or when checks were skipped. Pre-select `Run /gh` when all selected findings applied cleanly and gates passed. Never auto-invoke.
+Pre-select **Re-review the touched code** when any applied fix touched logic outside the original finding's hunk, when a corrective fix exposed adjacent risk, or when checks were skipped. Pre-select **Open or update the PR** when all selected findings applied cleanly and gates passed. Never auto-invoke.
 
 ## --hard mode
 
 `/cure --hard` is the gate-firing path for the `/hard-cheese` metacognitive vibecheck. The flag propagates up the pipeline (`/cheese → /mold → /cook → /press → /age → /cure`); cure is the only step that actually fires the gate. The contract:
 
-- **Interactive `/cure --hard`:** at the handoff `AskUserQuestion`, when the user selects the share-for-review option (the existing `Run /gh` label), invoke `/hard-cheese <slug>` *before* handing off. Proceed only on exit `0`. If the gate exits non-zero (`FAILED` status — cap exhausted), surface the artifact path and abort the handoff; the user must improve their understanding before sharing for review.
-- **Picking a non-sharing option** (`Run /age --scope ...`, `Stop`) does *not* fire the gate. Re-review and pausing do not put code in front of readers.
+- **Interactive `/cure --hard`:** at the handoff `AskUserQuestion`, when the user selects the share-for-review option (the **Open or update the PR** label, which dispatches `/gh`), invoke `/hard-cheese <slug>` *before* handing off. Proceed only on exit `0`. If the gate exits non-zero (`FAILED` status — cap exhausted), surface the artifact path and abort the handoff; the user must improve their understanding before sharing for review.
+- **Picking a non-sharing option** (**Re-review the touched code** or **Stop**) does *not* fire the gate. Re-review and pausing do not put code in front of readers.
 - **Auto-mode puncture** — see the clause in `### Auto mode` below. The auto-mode puncture is the single sanctioned point at which `--hard` overrides `--auto`'s skip-handoff semantics.
 
 The gate's mechanism (SOLO-graded fresh-context judge, Socratic retry, fail-open on judge error) lives in `skills/hard-cheese/SKILL.md`. The full composition matrix lives in `skills/hard-cheese/references/composition.md`.
