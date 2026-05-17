@@ -1,6 +1,6 @@
 ---
 name: pasteurize
-description: This skill should be used when the user has a hard bug, a flaky failure, or a performance regression and wants disciplined diagnosis through to a fix — phrases like "diagnose this", "debug this", "why is X broken", "this is throwing", "the test fails intermittently", "/pasteurize", or any pasted stack trace / repro steps without a stated cause. Runs Matt Pocock's six-phase diagnosis loop (feedback loop → reproduce → hypothesise → instrument → fix + regression test → cleanup) adapted to easy-cheese — phase 1 (build a deterministic, agent-runnable feedback loop) is the skill; everything else consumes that signal. Writes the regression test, applies the minimal fix, verifies the original repro is gone, then writes a handoff slug to `.cheese/pasteurize/<slug>.md` and hands off to `/cook --auto` (default) to validate and chain forward through `/press → /age → /cure`. Supports `--auto` (propagated or default) to skip the handoff `AskUserQuestion`. Halts with a written report when no feedback loop can be built. Use even when the bug "looks simple" if no cause has been confirmed — silent guessing is the cardinal sin. Do NOT use for review-only diffs (`/age`), feature design (`/mold`), or unambiguous fixes where the cause is already known (`/cook` directly). After `/cheese` (debug intent); before `/cook --auto` → `/press` → `/age` → `/cure`.
+description: This skill should be used when the user has a hard bug, flaky failure, or performance regression — phrases like "diagnose this", "debug this", "why is X broken", "the test fails intermittently", "/pasteurize", or a pasted stack trace / repro without a stated cause. Runs Matt Pocock's six-phase diagnosis loop (feedback loop → reproduce → hypothesise → instrument → fix + regression test → cleanup); phase 1 (build a deterministic, agent-runnable feedback loop) is the skill — everything else consumes the signal. Writes the regression test, applies the minimal fix, verifies the original repro is gone, then writes `.cheese/pasteurize/<slug>.md` and hands off to `/cook --auto` (default) for taste-test and the `/press → /age → /cure` chain. Supports `--auto` to skip the handoff gate. Do NOT use for review-only diffs (`/age`), feature design (`/mold`), or fixes where the cause is already known (`/cook` directly). After `/cheese` debug intent; before `/cook --auto` → `/press` → `/age` → `/cure`.
 license: MIT
 ---
 
@@ -173,9 +173,9 @@ follow_up: <architectural follow-up note, or "none">
 
 **Pipeline:** cheese (debug) → **[pasteurize]** → cook --auto → press → age → cure → ship
 
-After the report is printed and the handoff slug is on disk, ask via `AskUserQuestion` which downstream to run. Lead each option with the verb (what the user wants to *do* next):
+After the report is printed and the handoff slug is on disk, ask via `AskUserQuestion` which downstream to run. Lead each option with the verb (what the user wants to _do_ next):
 
-- **Validate and chain forward** *(recommended when `status: ok`)* — `/cook --auto <slug>`.
+- **Validate and chain forward** _(recommended when `status: ok`)_ — `/cook --auto <slug>`.
 - **Validate without auto chain** — `/cook <slug>` (cook runs taste-test, then the user picks each subsequent step).
 - **Spec the architectural follow-up first** — `/mold <slug>` (when `seam: none — architectural follow-up`).
 - **Stop** — fix is in tree; defer the chain.
