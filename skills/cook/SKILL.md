@@ -84,13 +84,15 @@ artifact: <path-to-richer-report-if-any>
 
 ## Handoff
 
-After the package-ready report is printed and the handoff slug is on disk, ask via `AskUserQuestion` which downstream to run. Default options:
+**Pipeline:** culture → mold → **[cook]** → press → age → cure → ship
 
-- **Run /press `<slug>`** *(recommended)* — harden tests before review.
-- **Run /age `<slug>`** — review the diff now and skip the press pass.
+After the package-ready report is printed and the handoff slug is on disk, ask via `AskUserQuestion` which downstream to run. Lead each option with the verb (what the user wants to *do* next); the skill command is the backing detail. Default options:
+
+- **Harden tests before review** *(recommended)* — `/press <slug>`.
+- **Review the diff now (skip the press pass)** — `/age <slug>`.
 - **Stop** — leave further hardening for later.
 
-Pre-select `Run /press` when the cooked diff added new behaviour or touched untested seams. The user may also chain: pressing then age then cure happens via each step's own `AskUserQuestion`. Never auto-invoke; the user must select.
+Pre-select **Harden tests before review** when the cooked diff added new behaviour or touched untested seams. The user may also chain: pressing then age then cure happens via each step's own `AskUserQuestion`. Never auto-invoke; the user must select.
 
 When invoked with `--auto`, skip this `AskUserQuestion` entirely and proceed straight into the auto-mode chain (see `## Auto mode` below).
 

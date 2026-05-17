@@ -96,12 +96,14 @@ Next step:    /age <slug>                          (when ready for /age or follo
 
 ## Handoff
 
-After the press report is on disk, ask via `AskUserQuestion` which downstream to run. Default options:
+**Pipeline:** culture → mold → cook → **[press]** → age → cure → ship
 
-- **Run /age `<slug>`** *(recommended when readiness is `ready for /age` or `follow-up recommended`)* — review the diff. For `follow-up recommended`, the cooked contract is sound and every changed behaviour has a hardening test; documented follow-ups can be addressed after review.
+After the press report is on disk, ask via `AskUserQuestion` which downstream to run. Lead each option with the verb (what the user wants to *do* next); the skill command is the backing detail. Default options:
+
+- **Review the diff** *(recommended when readiness is `ready for /age` or `follow-up recommended`)* — `/age <slug>`. For `follow-up recommended`, the cooked contract is sound and every changed behaviour has a hardening test; documented follow-ups can be addressed after review.
 - **Stop** — defer review (use this if you want to harden manually before /age, even though the contract is review-safe).
 
-Pre-select `Run /age` when readiness is `ready for /age` or `follow-up recommended`. If the report is `blocked`, do not pre-select anything; the user decides whether to fix or escalate.
+Pre-select **Review the diff** when readiness is `ready for /age` or `follow-up recommended`. If the report is `blocked`, do not pre-select anything; the user decides whether to fix or escalate.
 
 ### Auto mode
 
