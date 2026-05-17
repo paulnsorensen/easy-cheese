@@ -1,9 +1,8 @@
 # Dependabot configuration — version updates only.
 # See: https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
 #
-# No top-level Python manifest; the only Python is in .github/scripts/
-# (CI helpers) with versions pinned inline in workflows. No pip ecosystem
-# entry — Dependabot can't track inline `pip install foo==x.y.z` lines.
+# Python in .github/scripts/ (CI helpers) is pinned inline in workflows and
+# is not tracked here. The docs/ pip manifest is tracked below.
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -13,4 +12,13 @@ updates:
     open-pull-requests-limit: 5
     groups:
       actions-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: pip
+    directory: /docs
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      docs-minor-and-patch:
         update-types: [minor, patch]

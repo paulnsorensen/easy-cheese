@@ -14,3 +14,5 @@ rules:
 ignore: |-
   .cheese/
   .context/
+  mkdocs.yml
+  site/

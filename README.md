@@ -205,7 +205,7 @@ gh skill install paulnsorensen/easy-cheese --agent claude-code --scope user
 gh skill install paulnsorensen/easy-cheese --agent claude-code --scope project
 ```
 
-Supported `--agent` values include `copilot`, `claude-code`, `cursor`, `codex`, `gemini`, and others. Omit `--agent` to use the harness auto-detected from your environment.
+Supported `--agent` values include `github-copilot`, `claude-code`, `cursor`, `codex`, `gemini-cli`, and others. Omit `--agent` to use the harness auto-detected from your environment.
 
 Preview a skill's content before committing to an install:
 
@@ -217,14 +217,6 @@ Keep installed skills up to date:
 
 ```sh
 gh skill update --all
-```
-
-### Claude Code (plugin)
-
-Once a `.claude-plugin/plugin.json` is added to this repo, install with:
-
-```sh
-/plugin install paulnsorensen/easy-cheese
 ```
 
 ### Claude Code (manual)
