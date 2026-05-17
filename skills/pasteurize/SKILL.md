@@ -1,14 +1,12 @@
 ---
 name: pasteurize
-description: This skill should be used when the user has a hard bug, flaky failure, or performance regression — phrases like "diagnose this", "debug this", "why is X broken", "the test fails intermittently", "/pasteurize", or a pasted stack trace / repro without a stated cause. Runs Matt Pocock's six-phase diagnosis loop (feedback loop → reproduce → hypothesise → instrument → fix + regression test → cleanup); phase 1 (build a deterministic, agent-runnable feedback loop) is the skill — everything else consumes the signal. Writes the regression test, applies the minimal fix, verifies the original repro is gone, then writes `.cheese/pasteurize/<slug>.md` and hands off to `/cook --auto` (default) for taste-test and the `/press → /age → /cure` chain. Supports `--auto` to skip the handoff gate. Do NOT use for review-only diffs (`/age`), feature design (`/mold`), or fixes where the cause is already known (`/cook` directly). After `/cheese` debug intent; before `/cook --auto` → `/press` → `/age` → `/cure`.
+description: This skill should be used when the user has a hard bug, flaky failure, or performance regression — phrases like "diagnose this", "debug this", "why is X broken", "the test fails intermittently", "/pasteurize", or a pasted stack trace / repro without a stated cause. Runs a six-phase diagnosis loop (feedback loop → reproduce → hypothesise → instrument → fix + regression test → cleanup); phase 1 (build a deterministic, agent-runnable feedback loop) is the skill — everything else consumes the signal. Writes the regression test, applies the minimal fix, verifies the original repro is gone, then writes `.cheese/pasteurize/<slug>.md` and hands off to `/cook --auto` (default) for taste-test and the `/press → /age → /cure` chain. Supports `--auto` to skip the handoff gate. Do NOT use for review-only diffs (`/age`), feature design (`/mold`), or fixes where the cause is already known (`/cook` directly). After `/cheese` debug intent; before `/cook --auto` → `/press` → `/age` → `/cure`.
 license: MIT
 ---
 
 # /pasteurize
 
 A discipline for hard bugs. Skip phases only when explicitly justified.
-
-> Attribution: this skill adapts Matt Pocock's `diagnose` skill — <https://github.com/mattpocock/skills/blob/main/skills/engineering/diagnose/SKILL.md>. The six-phase structure and the "build a feedback loop first" insight are his. Easy-cheese-specific adaptations (cheez-* tooling, handoff slug, `--auto` chain, `/cook` handoff for Phase 5) are layered on top.
 
 When exploring the codebase, use `/cheez-search` to orient and check `.cheese/specs/` for any spec or design notes that touch the failing seam.
 
