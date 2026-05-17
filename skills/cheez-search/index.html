@@ -1,0 +1,2999 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="This skill should be used when the user asks to find a symbol, definition, caller, import, or text pattern in the codebase — phrases like "where is X defined", "what calls Y", "find all usages of Z", "trace this function", "find the TODO co">
+      
+      
+        <meta name="author" content="Paul Sorensen">
+      
+      
+        <link rel="canonical" href="https://paulnsorensen.github.io/easy-cheese/skills/cheez-search/">
+      
+      
+        <link rel="prev" href="../cheez-read/">
+      
+      
+        <link rel="next" href="references/sg-patterns/">
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.5.49">
+    
+    
+      
+        <title>/cheez-search - easy-cheese</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.6f8fc17f.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="deep-orange" data-md-color-accent="amber">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#cheez-search" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="easy-cheese" class="md-header__button md-logo" aria-label="easy-cheese" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            easy-cheese
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              /cheez-search
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="deep-orange" data-md-color-accent="amber"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="deep-orange" data-md-color-accent="amber"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/paulnsorensen/easy-cheese" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8M97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    paulnsorensen/easy-cheese
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../install/" class="md-tabs__link">
+        
+  
+    
+  
+  Install
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
+          
+  
+    
+  
+  Skills
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../readme/" class="md-tabs__link">
+          
+  
+    
+  
+  Project
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="easy-cheese" class="md-nav__button md-logo" aria-label="easy-cheese" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    easy-cheese
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/paulnsorensen/easy-cheese" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8M97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    paulnsorensen/easy-cheese
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Home
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../install/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Install
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    Skills
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Skills
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../age/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    /age
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3_2" id="__nav_3_2_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_2">
+            <span class="md-nav__icon md-icon"></span>
+            /age
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../age/references/dimensions/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    dimensions
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../age/references/sub-agent-gate/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    sub-agent-gate
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../age/references/voice/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    voice
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_3" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../briesearch/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    /briesearch
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3_3" id="__nav_3_3_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_3">
+            <span class="md-nav__icon md-icon"></span>
+            /briesearch
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../briesearch/references/context-isolation/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    context-isolation
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../briesearch/references/evals/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    evals
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../briesearch/references/query-planning/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    query-planning
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../briesearch/references/routing/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    routing
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../briesearch/references/safety/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    safety
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../briesearch/references/synthesis/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    synthesis
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../briesearch/references/unavailable/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    unavailable
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_4" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../cheese/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    /cheese
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3_4" id="__nav_3_4_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_4">
+            <span class="md-nav__icon md-icon"></span>
+            /cheese
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cheese/references/classification/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    classification
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cheese/references/coherence-check/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    coherence-check
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_5" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../cheese-factory/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    /cheese-factory
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3_5" id="__nav_3_5_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_5">
+            <span class="md-nav__icon md-icon"></span>
+            /cheese-factory
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cheese-factory/references/curd-prompt/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    curd-prompt
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cheese-factory/references/decomposer-prompt/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    decomposer-prompt
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cheese-factory/references/pr-planner-prompt/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    pr-planner-prompt
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cheese-factory/references/spawn-primitive-reference/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    spawn-primitive-reference
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cheese-factory/references/wiring-prompt/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    wiring-prompt
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cheez-read/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    /cheez-read
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_7" checked>
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="./" class="md-nav__link md-nav__link--active">
+              
+  
+  <span class="md-ellipsis">
+    /cheez-search
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link md-nav__link--active" for="__nav_3_7" id="__nav_3_7_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_7_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3_7">
+            <span class="md-nav__icon md-icon"></span>
+            /cheez-search
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="references/sg-patterns/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    sg-patterns
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="references/tilth-deps/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    tilth-deps
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_8" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../cheez-write/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    /cheez-write
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3_8" id="__nav_3_8_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_8">
+            <span class="md-nav__icon md-icon"></span>
+            /cheez-write
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cheez-write/references/edit-patterns/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    edit-patterns
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_9" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../cook/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    /cook
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3_9" id="__nav_3_9_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_9">
+            <span class="md-nav__icon md-icon"></span>
+            /cook
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cook/references/package-report/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    package-report
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cook/references/tdd-loop/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    tdd-loop
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../culture/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    /culture
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_11" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../cure/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    /cure
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3_11" id="__nav_3_11_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_11_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_11">
+            <span class="md-nav__icon md-icon"></span>
+            /cure
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cure/references/selection/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    selection
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_12" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../hard-cheese/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    /hard-cheese
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3_12" id="__nav_3_12_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_12_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_12">
+            <span class="md-nav__icon md-icon"></span>
+            /hard-cheese
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../hard-cheese/references/composition/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    composition
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../hard-cheese/references/judge-prompt/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    judge-prompt
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../melt/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    /melt
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_14" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../mold/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    /mold
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3_14" id="__nav_3_14_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_14_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_14">
+            <span class="md-nav__icon md-icon"></span>
+            /mold
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mold/references/curdle/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    curdle
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mold/references/handshake/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    handshake
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mold/references/modes/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    modes
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mold/references/shape-check/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    shape-check
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mold/references/validate-cycle/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    validate-cycle
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_15" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../press/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    /press
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3_15" id="__nav_3_15_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_15_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_15">
+            <span class="md-nav__icon md-icon"></span>
+            /press
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../press/references/gap-analysis/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    gap-analysis
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ultracook/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    /ultracook
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Project
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Project
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../readme/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    README
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Contributing
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../security/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Security
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../code-of-conduct/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Code of conduct
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#capability-detection" class="md-nav__link">
+    <span class="md-ellipsis">
+      Capability detection
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      Examples
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Examples">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#where-is-handleauth-defined" class="md-nav__link">
+    <span class="md-ellipsis">
+      "Where is handleAuth defined?"
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-calls-validatetoken" class="md-nav__link">
+    <span class="md-ellipsis">
+      "What calls validateToken?"
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#find-any-todo-that-mentions-retries" class="md-nav__link">
+    <span class="md-ellipsis">
+      "Find any TODO that mentions retries"
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#core-principle-definitions-first" class="md-nav__link">
+    <span class="md-ellipsis">
+      Core Principle: Definitions First
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#scope-when-tilth-when-not" class="md-nav__link">
+    <span class="md-ellipsis">
+      Scope: when tilth, when not
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Scope: when tilth, when not">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#scope-and-freshness" class="md-nav__link">
+    <span class="md-ellipsis">
+      Scope and freshness
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#when-not-to-invoke-cheez-search" class="md-nav__link">
+    <span class="md-ellipsis">
+      When NOT to invoke /cheez-search
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#when-lsp-beats-tilth-if-your-harness-has-one" class="md-nav__link">
+    <span class="md-ellipsis">
+      When LSP beats tilth (if your harness has one)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#when-code-review-graph-beats-tilth-if-your-harness-has-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      When code-review-graph beats tilth (if your harness has it)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#choose-your-search-kind" class="md-nav__link">
+    <span class="md-ellipsis">
+      Choose your search kind
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mcp-tool-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      MCP Tool Reference
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="MCP Tool Reference">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tilth_search-symbol-and-content-search" class="md-nav__link">
+    <span class="md-ellipsis">
+      tilth_search — Symbol and Content Search
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#multi-symbol-search" class="md-nav__link">
+    <span class="md-ellipsis">
+      Multi-Symbol Search
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#callers-query-find-all-call-sites" class="md-nav__link">
+    <span class="md-ellipsis">
+      Callers Query — Find All Call Sites
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#content-search-strings-and-comments" class="md-nav__link">
+    <span class="md-ellipsis">
+      Content Search — Strings and Comments
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#regex-search-kind-regex" class="md-nav__link">
+    <span class="md-ellipsis">
+      Regex Search — kind: "regex"
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ast-shape-patterns-ast-grep-fallback" class="md-nav__link">
+    <span class="md-ellipsis">
+      AST-shape Patterns — ast-grep fallback
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#glob-filtering" class="md-nav__link">
+    <span class="md-ellipsis">
+      Glob Filtering
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#context-parameter-boost-nearby-results" class="md-nav__link">
+    <span class="md-ellipsis">
+      Context Parameter — Boost Nearby Results
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#expand-budget-control-detail-level" class="md-nav__link">
+    <span class="md-ellipsis">
+      Expand Budget — Control Detail Level
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tilth_deps-dependency-graph" class="md-nav__link">
+    <span class="md-ellipsis">
+      tilth_deps — Dependency Graph
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#session-deduplication" class="md-nav__link">
+    <span class="md-ellipsis">
+      Session Deduplication
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#common-patterns" class="md-nav__link">
+    <span class="md-ellipsis">
+      Common Patterns
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tree-sitter-advantages" class="md-nav__link">
+    <span class="md-ellipsis">
+      Tree-sitter Advantages
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#do-not" class="md-nav__link">
+    <span class="md-ellipsis">
+      DO NOT
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-this-skill-doesnt-do" class="md-nav__link">
+    <span class="md-ellipsis">
+      What This Skill Doesn't Do
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+  
+    <a href="https://github.com/paulnsorensen/easy-cheese/edit/main/skills/cheez-search/SKILL.md" title="Edit this page" class="md-content__button md-icon">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20.71 7.04c.39-.39.39-1.04 0-1.41l-2.34-2.34c-.37-.39-1.02-.39-1.41 0l-1.84 1.83 3.75 3.75M3 17.25V21h3.75L17.81 9.93l-3.75-3.75z"/></svg>
+    </a>
+  
+  
+    
+      
+    
+    <a href="https://github.com/paulnsorensen/easy-cheese/raw/main/skills/cheez-search/SKILL.md" title="View source of this page" class="md-content__button md-icon">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3m0 8a5 5 0 0 1-5-5 5 5 0 0 1 5-5 5 5 0 0 1 5 5 5 5 0 0 1-5 5m0-12.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5"/></svg>
+    </a>
+  
+
+
+<h1 id="cheez-search"><code>/cheez-search</code><a class="headerlink" href="#cheez-search" title="Permanent link">&para;</a></h1>
+<div class="admonition info">
+<p class="admonition-title">Skill metadata</p>
+<ul>
+<li><strong>License:</strong> MIT</li>
+<li><strong>Source:</strong> <a href="https://github.com/paulnsorensen/easy-cheese/blob/main/skills/cheez-search/SKILL.md"><code>skills/cheez-search/SKILL.md</code></a></li>
+</ul>
+</div>
+<p><strong>When to invoke:</strong> This skill should be used when the user asks to find a symbol, definition, caller, import, or text pattern in the codebase — phrases like "where is X defined", "what calls Y", "find all usages of Z", "trace this function", "find the TODO comments", "search for this error string". Replaces grep / rg / ripgrep / ag / ack / find / fd with AST-aware tilth MCP search for name-shaped and text-shaped queries; use ast-grep (<code>sg</code>) only for AST-shape patterns with metavariables tilth cannot express. Use even when the user says "grep", "rg", "ripgrep", "ag", "ack", "fd", or "find" — never call host Grep, Glob, ripgrep, ast-grep, or any shell search directly. If tilth MCP is unavailable, stop and report rather than fall back. Do NOT use for reading whole files (use cheez-read), editing code (use cheez-write), or running tests/builds.</p>
+<hr />
+<blockquote>
+<p><strong>Hard dependency</strong>: If <code>mcp__tilth__tilth_search</code> is unavailable, stop immediately and report
+"tilth MCP server is not loaded — cannot proceed." Do NOT fall back to <code>Grep</code>, <code>Glob</code>, <code>rg</code>,
+or any host tool. Install via <code>tilth install &lt;host&gt;</code> (see README "Installing tilth MCP").</p>
+</blockquote>
+<h2 id="capability-detection">Capability detection<a class="headerlink" href="#capability-detection" title="Permanent link">&para;</a></h2>
+<p>Before the first call, verify tilth is reachable:</p>
+<ol>
+<li>Check that <code>mcp__tilth__tilth_search</code> is in your tool list. If absent, stop and report <code>"tilth MCP server is not loaded — cannot proceed."</code></li>
+<li>Make a minimal probe call: <code>tilth_search(query: "tilth", scope: ".")</code>. If the response is a JSON-RPC error or transport failure, stop and report <code>"tilth MCP server present but unhealthy: &lt;error&gt;"</code>.</li>
+<li>Any other failure (zero matches, malformed regex, etc.) is a <strong>content</strong> issue — proceed normally and report the result.</li>
+</ol>
+<p>AST-aware code search via <strong>tilth MCP</strong> (<code>tilth_search</code>, <code>tilth_deps</code>).
+Tree-sitter finds where symbols are <strong>defined</strong> — not just where strings appear.
+Understand dependencies instead of blindly grepping.</p>
+<hr />
+<h2 id="examples">Examples<a class="headerlink" href="#examples" title="Permanent link">&para;</a></h2>
+<h3 id="where-is-handleauth-defined">"Where is <code>handleAuth</code> defined?"<a class="headerlink" href="#where-is-handleauth-defined" title="Permanent link">&para;</a></h3>
+<pre><code>tilth_search(query: &quot;handleAuth&quot;, scope: &quot;src/&quot;)
+</code></pre>
+<pre><code class="language-text"># Search: &quot;handleAuth&quot; in src/ — 6 matches (2 definitions, 4 usages)
+
+## src/auth.ts:44-89 [definition]
+→ [44-89]  export fn handleAuth(req, res, next)
+## src/routes/api.ts:34 [usage]
+→ [34]   router.use('/api/protected/*', handleAuth);
+</code></pre>
+<p>The <code>[definition]</code> tag answers the question; usages come along for free.</p>
+<h3 id="what-calls-validatetoken">"What calls <code>validateToken</code>?"<a class="headerlink" href="#what-calls-validatetoken" title="Permanent link">&para;</a></h3>
+<pre><code>tilth_search(query: &quot;validateToken&quot;, kind: &quot;callers&quot;, scope: &quot;.&quot;)
+</code></pre>
+<pre><code class="language-text"># Callers: &quot;validateToken&quot; — 3 call sites
+
+## src/auth.ts:62 [usage] in handleAuth
+→ [62]   const claims = validateToken(token);
+
+## src/middleware/admin.ts:18 [usage] in requireAdmin
+→ [18]   if (!validateToken(req.headers.authorization)) return next(403);
+</code></pre>
+<p><code>kind: "callers"</code> filters out comments and strings — only real call sites.</p>
+<h3 id="find-any-todo-that-mentions-retries">"Find any TODO that mentions retries"<a class="headerlink" href="#find-any-todo-that-mentions-retries" title="Permanent link">&para;</a></h3>
+<pre><code>tilth_search(query: &quot;TODO.*retry&quot;, kind: &quot;regex&quot;, scope: &quot;src/&quot;)
+</code></pre>
+<p>Use <code>kind: "regex"</code> for pattern matches across content; bound the scope to
+keep the cost down.</p>
+<hr />
+<h2 id="core-principle-definitions-first">Core Principle: Definitions First<a class="headerlink" href="#core-principle-definitions-first" title="Permanent link">&para;</a></h2>
+<p>Traditional grep finds text matches. tilth_search finds <strong>semantic matches</strong>:
+- Definitions: where a symbol is declared
+- Usages: where it's called or referenced
+- Implementations: where interfaces are implemented</p>
+<p>Each match includes its surrounding file structure, so you know what you're
+looking at without a second read.</p>
+<p><strong>Why this matters:</strong>
+- "handleAuth" appears 47 times, but it's DEFINED in one place
+- tilth shows the definition first, then usages ranked by relevance
+- You understand the code faster with fewer tool calls</p>
+<hr />
+<h2 id="scope-when-tilth-when-not">Scope: when tilth, when not<a class="headerlink" href="#scope-when-tilth-when-not" title="Permanent link">&para;</a></h2>
+<p><code>tilth_search</code> owns <strong>code in tracked, parseable source files</strong> (Rust, TypeScript/TSX/JS, Python, Go, Java, Scala, C/C++, Ruby, PHP, C#, Swift). Symbol-shaped queries, callers, content, and bounded regex inside the tree all stay here.</p>
+<h3 id="scope-and-freshness">Scope and freshness<a class="headerlink" href="#scope-and-freshness" title="Permanent link">&para;</a></h3>
+<p>The tilth MCP server is launched against <strong>one repository</strong> — whatever directory the harness booted it in. There is no persistent index: tilth walks the working tree on demand, parses files with Tree-sitter, and respects <code>.gitignore</code>. Practical consequences:</p>
+<ul>
+<li>No startup wait, no rebuild step, no staleness — your last save is what tilth sees on the next call.</li>
+<li>Cannot reach files outside that one tree (sibling worktrees, <code>~/...</code>, system paths, dependency caches like <code>node_modules</code> or <code>.cargo/registry</code>).</li>
+<li>Cannot answer cross-repo questions in one call. For that, see <em>When code-review-graph beats tilth</em> below.</li>
+</ul>
+<h3 id="when-not-to-invoke-cheez-search">When NOT to invoke <code>/cheez-search</code><a class="headerlink" href="#when-not-to-invoke-cheez-search" title="Permanent link">&para;</a></h3>
+<p>Inside <code>/cheez-search</code>, the contract is hard: tilth-only, no host search fallback. The questions below are <strong>out of scope</strong> for the skill — don't enter cheez-search for them in the first place. They're listed here so workflow skills know where to route instead, consistent with the README rule "anything that touches source code goes through cheez-*; everything else stays on host tools".</p>
+<table>
+<thead>
+<tr>
+<th>Question (don't use cheez-search)</th>
+<th>Route to</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Pattern with metavars (<code>JSON.parse(JSON.stringify($X))</code>)</td>
+<td><code>sg</code> (ast-grep) — sanctioned escape, callable from cheez-search via Bash</td>
+<td>AST shapes tilth can't express</td>
+</tr>
+<tr>
+<td>External library docs ("how does React's <code>useEffect</code> work?")</td>
+<td><code>/briesearch</code> (Context7)</td>
+<td>Not your code; live vendor docs</td>
+</tr>
+<tr>
+<td>Plain non-code text at scale (logs, build outputs, large CSVs)</td>
+<td>host <code>Bash</code> with <code>rg</code>, <code>jq</code>, <code>awk</code>, <code>head</code>/<code>tail</code> from the calling workflow skill</td>
+<td>Tree-sitter parsing wastes tokens here; format-specific tools win</td>
+</tr>
+<tr>
+<td>Files outside the repo (system paths, <code>~/Library</code>, <code>/etc</code>)</td>
+<td>host <code>Grep</code> / <code>Bash</code> from the calling workflow skill</td>
+<td>tilth is repo-scoped (see above)</td>
+</tr>
+</tbody>
+</table>
+<p>If you find yourself wanting <code>grep</code> <em>for code in this repo</em>, that's the signal to stay in cheez-search and the tilth-only contract holds. If the question is non-code or out-of-tree, the calling workflow skill should answer it directly with its own host tools — never break the cheez-search contract by reaching for host search inside this skill.</p>
+<h3 id="when-lsp-beats-tilth-if-your-harness-has-one">When LSP beats tilth (if your harness has one)<a class="headerlink" href="#when-lsp-beats-tilth-if-your-harness-has-one" title="Permanent link">&para;</a></h3>
+<p><strong>easy-cheese does not install LSP</strong> — it is whatever language servers your harness already exposes (Claude Code LSP plugins, Zed / VS Code language servers, etc.). When an LSP is reachable for the file's language and the question is <strong>type-grounded</strong>, prefer the LSP method over tilth. Tree-sitter sees syntax, not types — it cannot disambiguate <code>var x = GetValue()</code> (keyword or type?) or pick between two <code>pop</code> functions imported from different modules. LSP runs the actual language server and resolves these.</p>
+<table>
+<thead>
+<tr>
+<th>Question</th>
+<th>LSP method (when available)</th>
+<th>Why LSP wins</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>"What's the resolved return type / generic instantiation of X?"</td>
+<td><code>textDocument/hover</code></td>
+<td>tilth sees syntax, not types — hover returns the resolved signature</td>
+</tr>
+<tr>
+<td>"Who implements interface / trait / abstract class Y?"</td>
+<td><code>textDocument/implementation</code></td>
+<td>Honors aliased imports, generics, and re-exports; tilth's name match misses these</td>
+</tr>
+<tr>
+<td>"Where is this exact symbol used, accounting for shadowing and module scope?"</td>
+<td><code>textDocument/references</code></td>
+<td>Scope-respecting; tilth's callers query is name-shaped</td>
+</tr>
+<tr>
+<td>"Where is the <em>type</em> (not the value) of X declared?"</td>
+<td><code>textDocument/typeDefinition</code></td>
+<td>Resolves through type aliases and generics</td>
+</tr>
+<tr>
+<td>"Are there type errors in this file?"</td>
+<td><code>textDocument/diagnostic</code> / pull-diagnostic</td>
+<td>Only LSP runs the language server's typechecker</td>
+</tr>
+</tbody>
+</table>
+<p>If no LSP is installed for the language, or the file is in a broken / incomplete state where the server cannot resolve, fall back to tilth — <code>tilth_search</code> still finds the symbol by name even when no semantic resolution is possible. tilth also wins on speed at scale, polyglot queries (one call across Rust + TS + Python), error-tolerant parses, and content / regex queries that LSP does not index.</p>
+<h3 id="when-code-review-graph-beats-tilth-if-your-harness-has-it">When code-review-graph beats tilth (if your harness has it)<a class="headerlink" href="#when-code-review-graph-beats-tilth-if-your-harness-has-it" title="Permanent link">&para;</a></h3>
+<p><a href="https://github.com/tirth8205/code-review-graph"><code>code-review-graph</code></a> is a separate, optional MCP that builds a <strong>persistent</strong> call graph of one or more repositories with Tree-sitter, Louvain communities, betweenness-centrality, and (with the <code>[embeddings]</code> extra) vector embeddings. Where tilth answers "where is <code>handleAuth</code>?", code-review-graph answers "what code is <em>about</em> authentication, ranked by importance and reach across all my repos?"</p>
+<p>It wins on five questions tilth structurally cannot answer:</p>
+<table>
+<thead>
+<tr>
+<th>Question</th>
+<th>code-review-graph tool</th>
+<th>Why tilth can't</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Find code by <em>meaning</em>, not name ("rate-limiting logic", "session expiry handling")</td>
+<td><code>semantic_search_nodes_tool</code></td>
+<td>Embeddings rank by concept; tilth only matches identifiers and literal text</td>
+</tr>
+<tr>
+<td>Search across <em>multiple</em> repos in one call</td>
+<td><code>cross_repo_search_tool</code></td>
+<td>tilth is scoped to one tree per MCP session</td>
+</tr>
+<tr>
+<td>Risk-weighted blast radius (which callers actually matter, by centrality)</td>
+<td><code>get_impact_radius_tool</code>, <code>get_review_context_tool</code></td>
+<td><code>tilth_deps</code> returns raw imports; code-review-graph weights them by graph centrality</td>
+</tr>
+<tr>
+<td>Architecture framing for a large diff (hubs, bridges, communities)</td>
+<td><code>get_architecture_overview_tool</code>, <code>get_hub_nodes_tool</code>, <code>get_bridge_nodes_tool</code>, <code>list_communities_tool</code></td>
+<td>tilth has no global graph view</td>
+</tr>
+<tr>
+<td>Affected execution flows for a change</td>
+<td><code>get_affected_flows_tool</code></td>
+<td>tilth follows callers one hop at a time; this returns full flows</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Before the first query — refresh the graph via MCP.</strong> code-review-graph keeps a persistent graph that goes stale between sessions. From inside an agent, prefer the MCP tools over the CLI:</p>
+<ul>
+<li>Call <code>build_or_update_graph_tool</code> once at the start of a run. It's incremental — on a warm repo this is fast.</li>
+<li>If you'll use <code>semantic_search_nodes_tool</code> <em>or</em> you've added concept-shaped code since the last embed, also call <code>embed_graph_tool</code> once. Embedding is the slow step — skip it otherwise.</li>
+</ul>
+<p>The CLI equivalents (<code>code-review-graph build</code> / <code>embed</code>) are for first-time setup; inside a run, the MCP tools let the agent own the lifecycle.</p>
+<p><strong>When <code>semantic_search_nodes_tool</code> beats tilth.</strong> Reach for it when the question is concept-shaped, not name-shaped:</p>
+<ul>
+<li><strong>Steel threads</strong> — trace a feature end-to-end when each layer names the concept differently (controller → service → repo → migration → telemetry). tilth makes you guess the next layer's vocabulary; embeddings surface the chain.</li>
+<li><strong>Shared concepts under divergent names</strong> — "where do we handle idempotency?" when the code uses <code>dedupeKey</code>, <code>requestSig</code>, <code>OnceToken</code>. Grep is blind to the concept; embeddings find it.</li>
+<li><strong>Vocabulary mismatch between spec and code</strong> — product says "session continuity", code says <code>KeepaliveToken</code>. Map the stakeholder term to the implementation without an SME.</li>
+<li><strong>Analog mining</strong> — before adding another retry / rate-limit / cache layer, ask what already exists under different names.</li>
+<li><strong>Cross-repo concept discovery</strong> — pair with <code>cross_repo_search_tool</code> to find auth (or any concept) across services that named it differently.</li>
+<li><strong>Onboarding orientation</strong> — "what's in this repo for observability?" returns conceptually adjacent nodes ranked by graph centrality. Faster first read than walking imports.</li>
+</ul>
+<p><strong>Stay on tilth when</strong> you know the symbol name; you need literal text or regex; you're doing a one-hop caller walk; the branch is hot and you haven't re-embedded; or the change is a mechanical rename or move.</p>
+<p><strong>Two gotchas.</strong> Ranking blends similarity with graph centrality — <code>semantic_search_nodes_tool</code> biases toward hub nodes, sometimes against the leaf where the bug actually lives; after a hit, follow callers in tilth. Default embedding model is <code>all-MiniLM-L6-v2</code> (384-dim), which blurs nuanced distinctions like "session timeout" vs "session revocation" — override via <code>CRG_EMBEDDING_MODEL</code> if your domain needs it.</p>
+<p>If code-review-graph is unavailable, the cheez-search fallbacks are: name-shaped questions stay on tilth; semantic / cross-repo / architecture questions either degrade to a manual <code>tilth_deps</code> + <code>kind: "callers"</code> walk or get noted as unavailable evidence (cap confidence at <code>speculating</code>).</p>
+<hr />
+<h2 id="choose-your-search-kind">Choose your search kind<a class="headerlink" href="#choose-your-search-kind" title="Permanent link">&para;</a></h2>
+<p>All six rows below are first-class — picking the right one is the difference
+between one call and a long grep walk.</p>
+<table>
+<thead>
+<tr>
+<th>Goal</th>
+<th>Tool</th>
+<th>Example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Find where a symbol is defined / used</td>
+<td><code>tilth_search</code> (default <code>kind: "symbol"</code>)</td>
+<td><code>tilth_search(query: "handleAuth", scope: "src/")</code></td>
+</tr>
+<tr>
+<td>Find every call site of a function</td>
+<td><code>tilth_search(kind: "callers")</code></td>
+<td><code>tilth_search(query: "validateToken", kind: "callers")</code></td>
+</tr>
+<tr>
+<td>Find literal strings, TODOs, error messages</td>
+<td><code>tilth_search(kind: "content")</code></td>
+<td><code>tilth_search(query: "TODO: fix", kind: "content")</code></td>
+</tr>
+<tr>
+<td>Find lines matching a regex</td>
+<td><code>tilth_search(kind: "regex")</code></td>
+<td><code>tilth_search(query: "rate.?limit", kind: "regex")</code></td>
+</tr>
+<tr>
+<td>Match an AST shape (template with metavars)</td>
+<td><code>sg</code> (ast-grep, via Bash)</td>
+<td><code>sg --lang typescript -p 'JSON.parse(JSON.stringify($X))' --json src/</code></td>
+</tr>
+<tr>
+<td>Module import / blast-radius graph</td>
+<td><code>tilth_deps</code></td>
+<td><code>tilth_deps(path: "src/auth.ts")</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Rule of thumb:</strong> stay in tilth for anything name-shaped or text-shaped.
+Drop to <code>sg</code> only when the pattern needs structural metavariables (<code>$X</code>,
+<code>$$$BODY</code>) that tilth can't express.</p>
+<hr />
+<h2 id="mcp-tool-reference">MCP Tool Reference<a class="headerlink" href="#mcp-tool-reference" title="Permanent link">&para;</a></h2>
+<h3 id="tilth_search-symbol-and-content-search">tilth_search — Symbol and Content Search<a class="headerlink" href="#tilth_search-symbol-and-content-search" title="Permanent link">&para;</a></h3>
+<p><strong>Basic symbol search:</strong></p>
+<pre><code>tilth_search(query: &quot;handleAuth&quot;, scope: &quot;src/&quot;)
+</code></pre>
+<p><strong>Output:</strong></p>
+<pre><code># Search: &quot;handleAuth&quot; in src/ — 6 matches (2 definitions, 4 usages)
+
+## src/auth.ts:44-89 [definition]
+  [24-42]  fn validateToken(token: string)
+→ [44-89]  export fn handleAuth(req, res, next)
+  [91-120] fn refreshSession(req, res)
+
+  44 │ export function handleAuth(req, res, next) {
+  45 │   const token = req.headers.authorization?.split(' ')[1];
+  ...
+  88 │   next();
+  89 │ }
+
+  ── calls ──
+  validateToken  src/auth.ts:24-42  fn validateToken(token: string): Claims | null
+  refreshSession  src/auth.ts:91-120  fn refreshSession(req, res)
+
+## src/routes/api.ts:34 [usage]
+→ [34]   router.use('/api/protected/*', handleAuth);
+</code></pre>
+<p><strong>Key features:</strong>
+- <code>[definition]</code> vs <code>[usage]</code> — know what you're looking at
+- Context lines show surrounding structure (what else is in this file)
+- <code>── calls ──</code> footer shows what the function calls (one-hop callees)
+- Expanded source blocks include full implementation</p>
+<hr />
+<h2 id="multi-symbol-search">Multi-Symbol Search<a class="headerlink" href="#multi-symbol-search" title="Permanent link">&para;</a></h2>
+<p>Trace across files in one call:</p>
+<pre><code>tilth_search(query: &quot;ServeHTTP, HandlersChain, Next&quot;, scope: &quot;.&quot;)
+</code></pre>
+<p>Each symbol gets its own result block. The expand budget is shared — at least
+one expansion per symbol, deduplicated across files.</p>
+<hr />
+<h2 id="callers-query-find-all-call-sites">Callers Query — Find All Call Sites<a class="headerlink" href="#callers-query-find-all-call-sites" title="Permanent link">&para;</a></h2>
+<p>Find all places that call a specific function using structural tree-sitter
+matching (not text search):</p>
+<pre><code>tilth_search(query: &quot;isTrustedProxy&quot;, kind: &quot;callers&quot;, scope: &quot;.&quot;)
+</code></pre>
+<p><strong>Why this beats grep:</strong> only finds actual calls, not comments or string literals.
+Shows the calling function context.</p>
+<hr />
+<h2 id="content-search-strings-and-comments">Content Search — Strings and Comments<a class="headerlink" href="#content-search-strings-and-comments" title="Permanent link">&para;</a></h2>
+<p>Search for text that isn't a code symbol:</p>
+<pre><code>tilth_search(query: &quot;TODO: fix&quot;, kind: &quot;content&quot;, scope: &quot;.&quot;)
+</code></pre>
+<p>Use content search for: TODOs, FIXMEs, NOTEs, error messages, specific literal strings.</p>
+<hr />
+<h2 id="regex-search-kind-regex">Regex Search — <code>kind: "regex"</code><a class="headerlink" href="#regex-search-kind-regex" title="Permanent link">&para;</a></h2>
+<p>For patterns that aren't a single literal:</p>
+<pre><code>tilth_search(query: &quot;rate.?limit&quot;, kind: &quot;regex&quot;, scope: &quot;.&quot;)
+tilth_search(query: &quot;FIXME\\(.*?\\):&quot;, kind: &quot;regex&quot;, scope: &quot;src/&quot;)
+</code></pre>
+<ul>
+<li>Full regex syntax — alternation, character classes, lookarounds depending on the engine.</li>
+<li>Use <code>glob</code> to bound the file set; regex is the most expensive <code>kind</code>.</li>
+<li>Don't wrap the pattern in <code>/.../</code> delimiters — pass the bare regex.</li>
+</ul>
+<hr />
+<h2 id="ast-shape-patterns-ast-grep-fallback">AST-shape Patterns — ast-grep fallback<a class="headerlink" href="#ast-shape-patterns-ast-grep-fallback" title="Permanent link">&para;</a></h2>
+<p>tilth covers names and text. For <em>shapes</em> with metavariables (<code>$X</code>, <code>$$$BODY</code>)
+that tilth cannot express, drop to <code>sg</code> (ast-grep) via Bash. This is the
+<strong>only</strong> sanctioned shell escape from cheez-search. The same escape covers
+structural codemods via <code>sg --rewrite</code> (dry-run first; <code>tilth_edit</code> remains
+the default for one-off block edits).</p>
+<p>For metavar pattern syntax, the language matrix, hard rules for safe <code>sg</code>
+invocations (<code>--lang</code>, <code>--json</code>, no <code>--interactive</code>, path validation, scope
+filters), pitfalls (CST-not-AST, metavar binding, strict vs lenient), and the
+codemod dry-run protocol, see
+<a href="references/sg-patterns/"><code>references/sg-patterns.md</code></a>.</p>
+<hr />
+<h2 id="glob-filtering">Glob Filtering<a class="headerlink" href="#glob-filtering" title="Permanent link">&para;</a></h2>
+<pre><code># Only Rust files
+tilth_search(query: &quot;handleAuth&quot;, scope: &quot;.&quot;, glob: &quot;*.rs&quot;)
+
+# Exclude test files
+tilth_search(query: &quot;handleAuth&quot;, scope: &quot;.&quot;, glob: &quot;!*.test.ts&quot;)
+
+# Multiple extensions
+tilth_search(query: &quot;handleAuth&quot;, scope: &quot;.&quot;, glob: &quot;*.{go,rs}&quot;)
+</code></pre>
+<hr />
+<h2 id="context-parameter-boost-nearby-results">Context Parameter — Boost Nearby Results<a class="headerlink" href="#context-parameter-boost-nearby-results" title="Permanent link">&para;</a></h2>
+<p>When editing a file, pass it as context to boost related results:</p>
+<pre><code>tilth_search(query: &quot;validateToken&quot;, scope: &quot;.&quot;, context: &quot;src/auth.ts&quot;)
+</code></pre>
+<hr />
+<h2 id="expand-budget-control-detail-level">Expand Budget — Control Detail Level<a class="headerlink" href="#expand-budget-control-detail-level" title="Permanent link">&para;</a></h2>
+<pre><code># Default: 2 expansions
+tilth_search(query: &quot;handleAuth&quot;, scope: &quot;.&quot;)
+
+# More detail
+tilth_search(query: &quot;handleAuth&quot;, scope: &quot;.&quot;, expand: 5)
+
+# Compact (outlines only)
+tilth_search(query: &quot;handleAuth&quot;, scope: &quot;.&quot;, expand: 0)
+</code></pre>
+<hr />
+<h2 id="tilth_deps-dependency-graph">tilth_deps — Dependency Graph<a class="headerlink" href="#tilth_deps-dependency-graph" title="Permanent link">&para;</a></h2>
+<pre><code>tilth_deps(path: &quot;src/auth.ts&quot;)
+</code></pre>
+<p>Use <strong>only</strong> before refactoring (rename, signature change, removal). For
+output format, scope rules, and the symbol-vs-file distinction, see
+<a href="references/tilth-deps/"><code>references/tilth-deps.md</code></a>.</p>
+<hr />
+<h2 id="session-deduplication">Session Deduplication<a class="headerlink" href="#session-deduplication" title="Permanent link">&para;</a></h2>
+<p>tilth tracks what you've already seen:
+- Previously expanded definitions show <code>[shown earlier]</code>
+- Saves tokens when revisiting symbols
+- Forces you to reference your notes instead of re-reading</p>
+<hr />
+<h2 id="common-patterns">Common Patterns<a class="headerlink" href="#common-patterns" title="Permanent link">&para;</a></h2>
+<pre><code># &quot;Where is X defined?&quot;
+tilth_search(query: &quot;AuthManager&quot;, scope: &quot;.&quot;)
+# Look for [definition] results
+
+# &quot;What calls X?&quot;
+tilth_search(query: &quot;validateToken&quot;, kind: &quot;callers&quot;, scope: &quot;.&quot;)
+
+# &quot;What does X call?&quot;
+tilth_search(query: &quot;handleAuth&quot;, scope: &quot;.&quot;, expand: 1)
+# Check the ── calls ── footer
+
+# &quot;Find all implementations of an interface&quot;
+tilth_search(query: &quot;UserRepository&quot;, scope: &quot;.&quot;, kind: &quot;symbol&quot;)
+# Implementations show as [impl] tags
+
+# &quot;Search error messages&quot;
+tilth_search(query: &quot;invalid token format&quot;, kind: &quot;content&quot;, scope: &quot;.&quot;)
+
+# &quot;What depends on this module?&quot;
+tilth_deps(path: &quot;src/auth/index.ts&quot;)
+# Check ── imported by ── section
+</code></pre>
+<hr />
+<h2 id="tree-sitter-advantages">Tree-sitter Advantages<a class="headerlink" href="#tree-sitter-advantages" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Grep finds...</th>
+<th>tilth_search finds...</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>All occurrences of text</td>
+<td>Definitions vs usages</td>
+</tr>
+<tr>
+<td>No structure awareness</td>
+<td>File context (what else is nearby)</td>
+</tr>
+<tr>
+<td>No call understanding</td>
+<td>Callee resolution in results</td>
+</tr>
+<tr>
+<td>False positives in strings</td>
+<td>Only semantic code matches</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Languages supported:</strong> Rust, TypeScript, TSX, JavaScript, Python, Go, Java, Scala, C, C++, Ruby, PHP, C#, Swift.</p>
+<hr />
+<h2 id="do-not">DO NOT<a class="headerlink" href="#do-not" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>DO NOT use grep / rg / ripgrep / ag / ack</strong> — use <code>tilth_search</code>. <code>sg</code> (ast-grep) is the <em>only</em> sanctioned shell escape, and only for AST-shape patterns with metavariables tilth can't express.</li>
+<li><strong>DO NOT use find / fd to locate files by name pattern</strong> — use <code>tilth_files</code> (cheez-read). <code>find</code> for non-name predicates (size, mtime, perms) is fine outside code work, but redirect anything code-related back through cheez-*.</li>
+<li><strong>DO NOT use ast-grep (<code>sg</code>) for name-shaped or text queries</strong> — that's <code>tilth_search</code> territory. <code>sg</code> is for structural patterns with metavars (<code>$X</code>, <code>$$$BODY</code>) only.</li>
+<li><strong>DO NOT blind text search</strong> — use a semantic <code>kind</code> (<code>symbol</code>, <code>callers</code>, <code>content</code>, <code>regex</code>) before reaching for <code>sg</code>.</li>
+<li><strong>DO NOT re-read expanded results</strong> — they're already shown.</li>
+<li><strong>DO NOT use for file reading</strong> — use cheez-read.</li>
+<li><strong>DO NOT use for editing</strong> — use cheez-write.</li>
+<li><strong>DO NOT overuse expand</strong> — start with default, increase if needed.</li>
+</ul>
+<hr />
+<h2 id="what-this-skill-doesnt-do">What This Skill Doesn't Do<a class="headerlink" href="#what-this-skill-doesnt-do" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Read entire files</strong> — use cheez-read.</li>
+<li><strong>Edit code</strong> — use cheez-write.</li>
+<li><strong>Run tests</strong> — use test/build skills.</li>
+<li><strong>Git operations</strong> — use git/gh skills.</li>
+</ul>
+
+
+
+
+
+
+
+  
+  
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../cheez-read/" class="md-footer__link md-footer__link--prev" aria-label="Previous: /cheez-read">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                /cheez-read
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="references/sg-patterns/" class="md-footer__link md-footer__link--next" aria-label="Next: sg-patterns">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                sg-patterns
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2026 Paul Sorensen — MIT License
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        <div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/paulnsorensen/easy-cheese" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8M97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://www.buymeacoffee.com/paulnsorensen" target="_blank" rel="noopener" title="www.buymeacoffee.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.7.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M88 0C74.7 0 64 10.7 64 24c0 38.9 23.4 59.4 39.1 73.1l1.1 1c16.3 14.2 23.8 21.8 23.8 37.9 0 13.3 10.7 24 24 24s24-10.7 24-24c0-38.9-23.4-59.4-39.1-73.1l-1.1-1C119.5 47.7 112 40.1 112 24c0-13.3-10.7-24-24-24M32 192c-17.7 0-32 14.3-32 32v192c0 53 43 96 96 96h192c53 0 96-43 96-96h16c61.9 0 112-50.1 112-112s-50.1-112-112-112H32m352 64h16c26.5 0 48 21.5 48 48s-21.5 48-48 48h-16zM224 24c0-13.3-10.7-24-24-24s-24 10.7-24 24c0 38.9 23.4 59.4 39.1 73.1l1.1 1c16.3 14.2 23.8 21.8 23.8 37.9 0 13.3 10.7 24 24 24s24-10.7 24-24c0-38.9-23.4-59.4-39.1-73.1l-1.1-1C231.5 47.7 224 40.1 224 24"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.sections", "navigation.indexes", "navigation.top", "navigation.footer", "content.code.copy", "content.code.annotate", "content.action.edit", "content.action.view", "content.tabs.link", "search.suggest", "search.highlight", "search.share", "toc.follow"], "search": "../../assets/javascripts/workers/search.6ce7567c.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.88dd0f4e.min.js"></script>
+      
+    
+  </body>
+</html>

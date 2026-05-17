@@ -1,0 +1,3185 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="This skill should be used when the user has an approved spec that decomposes into 5+ independent behavioural curds and wants the whole pipeline run in parallel with reviewable PRs at the end — phrases like "/cheese-factory .cheese/specs/<sl">
+      
+      
+        <meta name="author" content="Paul Sorensen">
+      
+      
+        <link rel="canonical" href="https://paulnsorensen.github.io/easy-cheese/skills/cheese-factory/">
+      
+      
+        <link rel="prev" href="../cheese/references/coherence-check/">
+      
+      
+        <link rel="next" href="references/curd-prompt/">
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.5.49">
+    
+    
+      
+        <title>/cheese-factory - easy-cheese</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.6f8fc17f.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="deep-orange" data-md-color-accent="amber">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#cheese-factory" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="easy-cheese" class="md-header__button md-logo" aria-label="easy-cheese" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            easy-cheese
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              /cheese-factory
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="deep-orange" data-md-color-accent="amber"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="deep-orange" data-md-color-accent="amber"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/paulnsorensen/easy-cheese" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8M97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    paulnsorensen/easy-cheese
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../install/" class="md-tabs__link">
+        
+  
+    
+  
+  Install
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
+          
+  
+    
+  
+  Skills
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../readme/" class="md-tabs__link">
+          
+  
+    
+  
+  Project
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="easy-cheese" class="md-nav__button md-logo" aria-label="easy-cheese" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    easy-cheese
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/paulnsorensen/easy-cheese" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8M97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    paulnsorensen/easy-cheese
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Home
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../install/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Install
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    Skills
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Skills
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../age/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    /age
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3_2" id="__nav_3_2_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_2">
+            <span class="md-nav__icon md-icon"></span>
+            /age
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../age/references/dimensions/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    dimensions
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../age/references/sub-agent-gate/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    sub-agent-gate
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../age/references/voice/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    voice
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_3" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../briesearch/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    /briesearch
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3_3" id="__nav_3_3_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_3">
+            <span class="md-nav__icon md-icon"></span>
+            /briesearch
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../briesearch/references/context-isolation/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    context-isolation
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../briesearch/references/evals/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    evals
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../briesearch/references/query-planning/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    query-planning
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../briesearch/references/routing/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    routing
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../briesearch/references/safety/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    safety
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../briesearch/references/synthesis/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    synthesis
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../briesearch/references/unavailable/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    unavailable
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_4" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../cheese/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    /cheese
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3_4" id="__nav_3_4_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_4">
+            <span class="md-nav__icon md-icon"></span>
+            /cheese
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cheese/references/classification/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    classification
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cheese/references/coherence-check/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    coherence-check
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_5" checked>
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="./" class="md-nav__link md-nav__link--active">
+              
+  
+  <span class="md-ellipsis">
+    /cheese-factory
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link md-nav__link--active" for="__nav_3_5" id="__nav_3_5_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3_5">
+            <span class="md-nav__icon md-icon"></span>
+            /cheese-factory
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="references/curd-prompt/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    curd-prompt
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="references/decomposer-prompt/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    decomposer-prompt
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="references/pr-planner-prompt/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    pr-planner-prompt
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="references/spawn-primitive-reference/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    spawn-primitive-reference
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="references/wiring-prompt/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    wiring-prompt
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cheez-read/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    /cheez-read
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_7" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../cheez-search/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    /cheez-search
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3_7" id="__nav_3_7_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_7">
+            <span class="md-nav__icon md-icon"></span>
+            /cheez-search
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cheez-search/references/sg-patterns/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    sg-patterns
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cheez-search/references/tilth-deps/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    tilth-deps
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_8" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../cheez-write/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    /cheez-write
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3_8" id="__nav_3_8_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_8">
+            <span class="md-nav__icon md-icon"></span>
+            /cheez-write
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cheez-write/references/edit-patterns/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    edit-patterns
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_9" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../cook/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    /cook
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3_9" id="__nav_3_9_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_9">
+            <span class="md-nav__icon md-icon"></span>
+            /cook
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cook/references/package-report/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    package-report
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cook/references/tdd-loop/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    tdd-loop
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../culture/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    /culture
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_11" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../cure/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    /cure
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3_11" id="__nav_3_11_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_11_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_11">
+            <span class="md-nav__icon md-icon"></span>
+            /cure
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cure/references/selection/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    selection
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_12" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../hard-cheese/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    /hard-cheese
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3_12" id="__nav_3_12_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_12_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_12">
+            <span class="md-nav__icon md-icon"></span>
+            /hard-cheese
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../hard-cheese/references/composition/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    composition
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../hard-cheese/references/judge-prompt/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    judge-prompt
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../melt/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    /melt
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_14" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../mold/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    /mold
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3_14" id="__nav_3_14_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_14_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_14">
+            <span class="md-nav__icon md-icon"></span>
+            /mold
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mold/references/curdle/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    curdle
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mold/references/handshake/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    handshake
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mold/references/modes/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    modes
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mold/references/shape-check/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    shape-check
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mold/references/validate-cycle/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    validate-cycle
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_15" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../press/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    /press
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3_15" id="__nav_3_15_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_15_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_15">
+            <span class="md-nav__icon md-icon"></span>
+            /press
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../press/references/gap-analysis/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    gap-analysis
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ultracook/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    /ultracook
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Project
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Project
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../readme/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    README
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Contributing
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../security/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Security
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../code-of-conduct/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Code of conduct
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#inputs" class="md-nav__link">
+    <span class="md-ellipsis">
+      Inputs
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#when-to-use-cheese-factory-vs-alternatives" class="md-nav__link">
+    <span class="md-ellipsis">
+      When to use /cheese-factory vs alternatives
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#decomposition-contract-curds-of-behaviour" class="md-nav__link">
+    <span class="md-ellipsis">
+      Decomposition contract — curds of behaviour
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Decomposition contract — curds of behaviour">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-five-criteria" class="md-nav__link">
+    <span class="md-ellipsis">
+      The five criteria
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#manifest-format" class="md-nav__link">
+    <span class="md-ellipsis">
+      Manifest format
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#validation-phase-0" class="md-nav__link">
+    <span class="md-ellipsis">
+      Validation (Phase 0)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#phases" class="md-nav__link">
+    <span class="md-ellipsis">
+      Phases
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Phases">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#phase-0-pre-compile" class="md-nav__link">
+    <span class="md-ellipsis">
+      Phase 0 — Pre-compile
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Phase 0 — Pre-compile">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#gate-user-approval" class="md-nav__link">
+    <span class="md-ellipsis">
+      Gate — User Approval
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#compaction-seam-c1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Compaction seam C1
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-1-seed-sequential-inline" class="md-nav__link">
+    <span class="md-ellipsis">
+      Phase 1 — Seed (sequential, inline)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-2-curds-fan-out" class="md-nav__link">
+    <span class="md-ellipsis">
+      Phase 2 — Curds (fan-out)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Phase 2 — Curds (fan-out)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#compaction-seam-c2" class="md-nav__link">
+    <span class="md-ellipsis">
+      Compaction seam C2
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-3-merge-curds-fan-in" class="md-nav__link">
+    <span class="md-ellipsis">
+      Phase 3 — Merge curds (fan-in)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-4-wiring-fan-out-sequential-within-wave" class="md-nav__link">
+    <span class="md-ellipsis">
+      Phase 4 — Wiring (fan-out, sequential within wave)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-5-final-merge-wiring" class="md-nav__link">
+    <span class="md-ellipsis">
+      Phase 5 — Final merge wiring
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Phase 5 — Final merge wiring">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#compaction-seam-c3" class="md-nav__link">
+    <span class="md-ellipsis">
+      Compaction seam C3
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-6-post-merge-review-ultracook-style-fresh-context" class="md-nav__link">
+    <span class="md-ellipsis">
+      Phase 6 — Post-merge review (ultracook-style fresh-context)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-7-pr-plan-publish" class="md-nav__link">
+    <span class="md-ellipsis">
+      Phase 7 — PR plan + publish
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Phase 7 — PR plan + publish">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#skill-discovery-orchestrator-side" class="md-nav__link">
+    <span class="md-ellipsis">
+      Skill discovery (orchestrator-side)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#publish" class="md-nav__link">
+    <span class="md-ellipsis">
+      Publish
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#final-report" class="md-nav__link">
+    <span class="md-ellipsis">
+      Final report
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#orchestrator-token-discipline" class="md-nav__link">
+    <span class="md-ellipsis">
+      Orchestrator token discipline
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#compaction-strategy" class="md-nav__link">
+    <span class="md-ellipsis">
+      Compaction strategy
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#spawn-primitive-contract-host-agnostic" class="md-nav__link">
+    <span class="md-ellipsis">
+      Spawn primitive contract (host-agnostic)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#handoff-slug-schema" class="md-nav__link">
+    <span class="md-ellipsis">
+      Handoff slug schema
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#quality-gates" class="md-nav__link">
+    <span class="md-ellipsis">
+      Quality gates
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#-hard-propagation" class="md-nav__link">
+    <span class="md-ellipsis">
+      --hard propagation
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#-resume-slug" class="md-nav__link">
+    <span class="md-ellipsis">
+      --resume &lt;slug&gt;
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#error-recovery" class="md-nav__link">
+    <span class="md-ellipsis">
+      Error recovery
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-the-orchestrator-never-does" class="md-nav__link">
+    <span class="md-ellipsis">
+      What the orchestrator never does
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#gotchas" class="md-nav__link">
+    <span class="md-ellipsis">
+      Gotchas
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#references" class="md-nav__link">
+    <span class="md-ellipsis">
+      References
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      Rules
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+  
+    <a href="https://github.com/paulnsorensen/easy-cheese/edit/main/skills/cheese-factory/SKILL.md" title="Edit this page" class="md-content__button md-icon">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20.71 7.04c.39-.39.39-1.04 0-1.41l-2.34-2.34c-.37-.39-1.02-.39-1.41 0l-1.84 1.83 3.75 3.75M3 17.25V21h3.75L17.81 9.93l-3.75-3.75z"/></svg>
+    </a>
+  
+  
+    
+      
+    
+    <a href="https://github.com/paulnsorensen/easy-cheese/raw/main/skills/cheese-factory/SKILL.md" title="View source of this page" class="md-content__button md-icon">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3m0 8a5 5 0 0 1-5-5 5 5 0 0 1 5-5 5 5 0 0 1 5 5 5 5 0 0 1-5 5m0-12.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5"/></svg>
+    </a>
+  
+
+
+<h1 id="cheese-factory"><code>/cheese-factory</code><a class="headerlink" href="#cheese-factory" title="Permanent link">&para;</a></h1>
+<div class="admonition info">
+<p class="admonition-title">Skill metadata</p>
+<ul>
+<li><strong>License:</strong> MIT</li>
+<li><strong>Source:</strong> <a href="https://github.com/paulnsorensen/easy-cheese/blob/main/skills/cheese-factory/SKILL.md"><code>skills/cheese-factory/SKILL.md</code></a></li>
+</ul>
+</div>
+<p><strong>When to invoke:</strong> This skill should be used when the user has an approved spec that decomposes into 5+ independent behavioural curds and wants the whole pipeline run in parallel with reviewable PRs at the end — phrases like "/cheese-factory .cheese/specs/<slug>.md", "send through the factory", "parallelize this spec", "many curds", "fan out the implementation", "cheese-factory this". Runs inline and spawns full-peer general-purpose sub-agents per phase (decomposer, per-curd workers, wiring, post-merge review, PR planner), ending in 1–N reviewable PRs via <code>/pr-stack</code>. Use even when the user mentions <code>/fromagerie</code> — <code>/cheese-factory</code> is the portable harness-agnostic sibling. Supports <code>--hard</code> propagation and <code>--resume &lt;slug&gt;</code> to continue a crashed pipeline. Do NOT use for single coherent specs (<code>/cook</code>, <code>/ultracook</code>), fuzzy planning (<code>/mold</code>), review-only work (<code>/age</code>), or specs with fewer than 5 curds (<code>/ultracook</code>).</p>
+<hr />
+<p>Use this skill when an approved spec decomposes into 5+ file-disjoint behavioural curds and the user wants the whole implementation parallelised, reviewed per-curd, integrated, reviewed again at the seam, and shipped as 1–N reviewable PRs.</p>
+<p>Do not use it for single coherent feature work (<code>/cook</code> or <code>/ultracook</code>), fuzzy planning (<code>/mold</code>), review-only work (<code>/age</code>), or specs that decompose into fewer than 5 curds (<code>/ultracook</code>).</p>
+<p><code>/cheese-factory</code> is the portable, harness-agnostic sibling of <code>/fromagerie</code>. Same decomposition pattern, same dual fan-out/fan-in, no bespoke agent files. Every sub-agent is a general-purpose full-peer worker driven by an in-prompt skill invocation.</p>
+<h2 id="inputs">Inputs<a class="headerlink" href="#inputs" title="Permanent link">&para;</a></h2>
+<p>Accept:</p>
+<pre><code class="language-text">/cheese-factory &lt;spec-path-or-slug&gt; [--hard] [--resume &lt;slug&gt;]
+</code></pre>
+<ul>
+<li>A spec path, usually <code>.cheese/specs/&lt;slug&gt;.md</code>.</li>
+<li>A bare slug whose spec lives at <code>.cheese/specs/&lt;slug&gt;.md</code>.</li>
+<li><code>--hard</code> — propagate the <code>/hard-cheese</code> metacognitive gate flag through per-curd <code>/cook --hard --auto</code> and the Phase 6 <code>/cure --hard --auto --stake medium+</code>. The orchestrator does not fire the gate itself. See <code>skills/hard-cheese/SKILL.md</code>.</li>
+<li><code>--resume &lt;slug&gt;</code> — read <code>.cheese/cheese-factory/&lt;slug&gt;/manifest.yaml</code>, find the latest phase marked complete, and continue from the next phase.</li>
+</ul>
+<p><code>/cheese-factory</code> does not accept fuzzy or open-ended asks — route those to <code>/mold</code> first. The orchestrator assumes the contract is locked.</p>
+<p><code>--auto</code> is <strong>implicit</strong>. After Phase 0 gate approval, the chain runs autonomously with no per-step handoff questions. There is no interactive mode — the value of this skill is unattended parallel execution.</p>
+<h2 id="when-to-use-cheese-factory-vs-alternatives">When to use <code>/cheese-factory</code> vs alternatives<a class="headerlink" href="#when-to-use-cheese-factory-vs-alternatives" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Skill</th>
+<th>Use when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/cook</code></td>
+<td>Single unambiguous task, no decomposition.</td>
+</tr>
+<tr>
+<td><code>/ultracook</code></td>
+<td>Single coherent spec, high-blast-radius, sequential review pipeline.</td>
+</tr>
+<tr>
+<td><code>/cheese-factory</code></td>
+<td>Spec decomposes into 5+ file-disjoint behavioural curds.</td>
+</tr>
+<tr>
+<td><code>/fromagerie</code></td>
+<td>Same problem on Anthropic Claude Code with the bespoke agent files installed and a preference for specialised agent contracts.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="decomposition-contract-curds-of-behaviour">Decomposition contract — curds of behaviour<a class="headerlink" href="#decomposition-contract-curds-of-behaviour" title="Permanent link">&para;</a></h2>
+<p>In cheese-factory terms, a curd is the smallest commit-worthy unit of behaviour:
+small enough to be worked independently, but intended to be pressed back into the
+whole feature.</p>
+<p>The Phase 0 decomposer produces three artifact lists from the spec:</p>
+<ol>
+<li><code>seed[]</code> — foundational types / interfaces / enums that 2+ curds depend on.</li>
+<li><code>curds[]</code> — parallel units of behaviour, file-disjoint, one acceptance criterion each.</li>
+<li><code>wiring[]</code> — integration tasks with topological dependencies (barrels, registrations, routes, config).</li>
+</ol>
+<h3 id="the-five-criteria">The five criteria<a class="headerlink" href="#the-five-criteria" title="Permanent link">&para;</a></h3>
+<p>Every curd must satisfy all five. Token budgets are explicitly <strong>not</strong> a criterion — LLM agents cannot estimate their own token usage reliably, and the five behavioural criteria substitute. Curds remain bounded by their file scope, which is decomposer-controlled.</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Criterion</th>
+<th>Decomposer check</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>One behaviour per curd</td>
+<td>Describable in a single declarative sentence ("adds X", "extracts Y", "renames Z", "fixes A"). If the description needs "and" between two distinct behaviours, split.</td>
+</tr>
+<tr>
+<td>2</td>
+<td>One acceptance criterion</td>
+<td>Maps to exactly one bullet in the spec's Acceptance Criteria / User Story list. Curds collectively cover every acceptance criterion 1:1.</td>
+</tr>
+<tr>
+<td>3</td>
+<td>One test target</td>
+<td>A single focused test command verifies this curd alone (e.g., <code>vitest run src/orders/order.test.ts</code>). If the curd needs N test commands, it's N curds.</td>
+</tr>
+<tr>
+<td>4</td>
+<td>File-disjoint</td>
+<td>No two curds list the same file. HARD CONSTRAINT.</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Commit-worthy alone</td>
+<td>After this curd's commit, <code>just check</code> (or project equivalent) passes without sibling curds merged. Implied by 4 plus seed carrying any shared deps.</td>
+</tr>
+</tbody>
+</table>
+<p>If criterion 4 cannot be satisfied because two curds genuinely share a file, the shared content belongs in seed (if foundational) or wiring (if integration). Curds never share files.</p>
+<h3 id="manifest-format">Manifest format<a class="headerlink" href="#manifest-format" title="Permanent link">&para;</a></h3>
+<p>The per-run manifest is written as YAML at <code>.cheese/cheese-factory/&lt;slug&gt;/manifest.yaml</code>.
+YAML is the human/agent-facing syntax; the contract stays schema-shaped and is
+documented in <code>references/manifest-schema.json</code>. Keep manifests in the JSON-compatible
+subset of YAML: mappings, lists, strings, numbers, booleans, and nulls only; no anchors,
+aliases, tags, or multi-document streams.</p>
+<p>The PR plan follows the same convention — written as YAML at
+<code>.cheese/cheese-factory/&lt;slug&gt;/pr-plan.yaml</code>, with its shape documented in
+<code>references/pr-plan-schema.json</code>. <code>scripts/pr_plan_to_branches.py</code> reads either YAML
+or JSON for backward compatibility, but YAML is the canonical format.</p>
+<h3 id="validation-phase-0">Validation (Phase 0)<a class="headerlink" href="#validation-phase-0" title="Permanent link">&para;</a></h3>
+<p>The decomposer's output is validated by <code>scripts/validate_manifest.py</code> for required
+sections and field shapes, then by <code>scripts/validate_decomposition.py</code> against:</p>
+<ul>
+<li><strong>Behaviour overlap</strong> — each curd describes one behaviour (criterion 1).</li>
+<li><strong>Spec coverage</strong> — every acceptance criterion has exactly one curd (criterion 2).</li>
+<li><strong>Test target check</strong> — each curd has a focused test command (criterion 3).</li>
+<li><strong>File disjointness</strong> — no file appears in two curds (criterion 4).</li>
+<li><strong>Wiring DAG check</strong> — no cycles, no cross-branch overlap, barrel files included where curds create new slices.</li>
+<li><strong>Seed minimality</strong> — seed contains only files that 2+ curds depend on.</li>
+</ul>
+<p>If validation fails: re-run decomposer with violations highlighted. Max 2 retries before escalating to the user.</p>
+<h2 id="phases">Phases<a class="headerlink" href="#phases" title="Permanent link">&para;</a></h2>
+<p>Eight phases. The orchestrator walks them top-to-bottom and stops after the last entry or any halt.</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Phase</th>
+<th>Shape</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>Pre-compile</td>
+<td>Read spec, decompose via heavy general-purpose sub-agent, validate against the five criteria, user gate</td>
+</tr>
+<tr>
+<td>1</td>
+<td>Seed</td>
+<td>Orchestrator inline edits via <code>/cheez-write</code> (or host edit tool if tilth MCP is unavailable), commit, push</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Curds (fan-out)</td>
+<td>N parallel general-purpose spawns; each runs <code>/cook --auto → /press --auto → /age --auto</code> (inline-degrade) <code>→ /cure --auto --stake medium+</code> and commits</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Merge curds (fan-in)</td>
+<td>Cherry-pick curd commits → orchestrator branch; <code>/melt</code> on conflicts</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Wiring (sequential within wave)</td>
+<td>Integration files only; per-task general-purpose spawn with wiring-only prompt</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Final merge wiring</td>
+<td>Wiring commits → orchestrator branch; conflicts here = halt (decomposer error)</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Post-merge review (fresh-context, ultracook-style)</td>
+<td>Three sub-agent spawns: <code>/press --auto</code>, <code>/age --auto</code>, <code>/cure --auto --stake medium+</code>. Single pass.</td>
+</tr>
+<tr>
+<td>7</td>
+<td>PR plan + publish</td>
+<td>Heavy PR planner sub-agent decides layout, orchestrator delegates publish via skill discovery (<code>/pr-stack</code>, <code>/gh</code>, fallbacks)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="phase-0-pre-compile">Phase 0 — Pre-compile<a class="headerlink" href="#phase-0-pre-compile" title="Permanent link">&para;</a></h3>
+<p>Read the spec from the argument (or, if <code>--resume &lt;slug&gt;</code>, read the manifest and skip to the next incomplete phase).</p>
+<p>Validate the spec has: Executive Summary, Problem Statement, User Stories, Acceptance Criteria, Quality Gates. Fail fast if any is missing.</p>
+<p><strong>Hard worktree gate</strong>: detect the host's worktree mechanism (Conductor, git worktrees, plain branches) and prompt if working on the default branch. Never skipped.</p>
+<p>Spawn a heavy general-purpose <strong>decomposer</strong> sub-agent (prompt template at <code>references/decomposer-prompt.md</code>) with the spec text, the five criteria, the validation checks, and instructions to produce <code>seed[]</code>, <code>curds[]</code>, <code>wiring[]</code>, and a manifest scaffold.</p>
+<p>The decomposer may invoke <code>/culture</code> or <code>/briesearch</code> internally if it needs to ground its decomposition against the codebase or external docs.</p>
+<p><strong>Front-load permissions</strong>: present the per-host permission manifest (git, the project's quality gate command, the host-specific spawn primitive) to the user. On approval, merge into the host's settings.</p>
+<h4 id="gate-user-approval">Gate — User Approval<a class="headerlink" href="#gate-user-approval" title="Permanent link">&para;</a></h4>
+<p>Present the full plan:</p>
+<pre><code class="language-text">## Cheese-Factory Plan: &lt;slug&gt;
+
+### Seed (sequential)
+1. &lt;description&gt; — files: [&lt;list&gt;]
+
+### Curds (parallel)
+| # | Behaviour | Acceptance criterion | Files | Test target |
+|---|---|---|---|---|
+
+### Wiring DAG
+| # | Type | File | Depends on |
+|---|---|---|---|
+
+### Review Pipeline
+Per-curd: /cook → /press → /age (inline-degrade) → /cure
+Post-merge: /press → /age → /cure (fresh-context sub-agents)
+
+A. Approve — start execution
+B. Modify — change the decomposition
+C. Re-decompose — different boundaries
+D. Pause — hold off
+</code></pre>
+<p><strong>Do NOT proceed without explicit approval.</strong></p>
+<p>Write manifest to <code>.cheese/cheese-factory/&lt;slug&gt;/manifest.yaml</code>. Update: <code>phase: gate_approved</code>.</p>
+<h4 id="compaction-seam-c1">Compaction seam C1<a class="headerlink" href="#compaction-seam-c1" title="Permanent link">&para;</a></h4>
+<p>Drop: full spec text, permission manifest, decomposition reasoning.
+Keep: slug, spec summary (≤2K chars), manifest path, quality gate commands.</p>
+<h3 id="phase-1-seed-sequential-inline">Phase 1 — Seed (sequential, inline)<a class="headerlink" href="#phase-1-seed-sequential-inline" title="Permanent link">&para;</a></h3>
+<p>Seed items are minimal — only the shared types / protocols that curds cannot compile without. The orchestrator executes seed inline (a deliberate exception to the orchestrator's "never write code" rule because seed is always small).</p>
+<p>For each seed item:</p>
+<ol>
+<li>Implement the change. Prefer <code>/cheez-write</code> when tilth MCP is present; otherwise fall back to the host's native edit tool (per the cheez-* portability rule in <code>README.md</code>). The skill must not hard-fail when <code>/cheez-write</code> is unavailable.</li>
+<li>Run quality gates (the project's <code>just check</code> or equivalent) — if gates fail, STOP.</li>
+<li>Commit via <code>/commit</code> (if available) or <code>git commit</code> direct.</li>
+</ol>
+<p>Push to branch — curds branch from HEAD.</p>
+<p>Update manifest: <code>phase: seed_complete</code>, commit SHAs.</p>
+<h3 id="phase-2-curds-fan-out">Phase 2 — Curds (fan-out)<a class="headerlink" href="#phase-2-curds-fan-out" title="Permanent link">&para;</a></h3>
+<p>Spawn ALL curd workers in a single message via the host's fan-out primitive. If more than 5 curds, dispatch in waves of 5.</p>
+<p>Each curd worker is a general-purpose sub-agent (full peer of the orchestrator — same model, full tools, full skills, full MCP) given the per-curd prompt at <code>references/curd-prompt.md</code>.</p>
+<p>Collect results as curds complete. For failed curds: retry ONCE with error context. Mark <code>retry_count: 1</code>; do not retry twice.</p>
+<p>Update manifest: curd statuses, worktree paths, branch names, commit SHAs.</p>
+<h4 id="compaction-seam-c2">Compaction seam C2<a class="headerlink" href="#compaction-seam-c2" title="Permanent link">&para;</a></h4>
+<p>Drop: decomposer artifacts, curd dispatch prompts, curd return summaries.
+Keep: slug, manifest path, quality gate commands, curd branch list.
+Read from disk when needed: wiring DAG.</p>
+<h3 id="phase-3-merge-curds-fan-in">Phase 3 — Merge curds (fan-in)<a class="headerlink" href="#phase-3-merge-curds-fan-in" title="Permanent link">&para;</a></h3>
+<p>Cherry-pick curd commits onto the orchestrator branch in curd-id order:</p>
+<p>For each curd (in order):</p>
+<ol>
+<li><code>git cherry-pick &lt;curd_commit_sha&gt;</code> — or, if the host fan-out used worktrees, merge the worktree branch.</li>
+<li>On conflict: invoke <code>/melt</code> if available, else fall back to mergiraf → <code>git rerere</code> → manual.</li>
+<li>If <code>/melt</code> cannot resolve: STOP, fall back to per-curd PRs in Phase 7.</li>
+</ol>
+<p>After all curds merged: run quality gates. If failing, STOP and report — curds passed individually but conflict in aggregate (decomposer error).</p>
+<h3 id="phase-4-wiring-fan-out-sequential-within-wave">Phase 4 — Wiring (fan-out, sequential within wave)<a class="headerlink" href="#phase-4-wiring-fan-out-sequential-within-wave" title="Permanent link">&para;</a></h3>
+<p>Read wiring DAG from manifest. Dispatch wiring tasks in topological order, sequentially within each wave (concurrent commits to the same working directory race on git's <code>index.lock</code>).</p>
+<p>Each wiring worker is a general-purpose sub-agent with the prompt template at <code>references/wiring-prompt.md</code>.</p>
+<p>For failed wiring tasks: retry ONCE. If still failing, mark incomplete in manifest.</p>
+<h3 id="phase-5-final-merge-wiring">Phase 5 — Final merge wiring<a class="headerlink" href="#phase-5-final-merge-wiring" title="Permanent link">&para;</a></h3>
+<p>Cherry-pick wiring commits onto the orchestrator branch.</p>
+<p>If conflicts arise here: STOP. Wiring conflicts mean the decomposer's DAG was wrong (wiring touched implementation territory, or two wiring tasks shared a file outside the DAG). Do not auto-resolve.</p>
+<h4 id="compaction-seam-c3">Compaction seam C3<a class="headerlink" href="#compaction-seam-c3" title="Permanent link">&para;</a></h4>
+<p>Drop: wiring DAG details, per-curd diffs, intermediate merger reports.
+Keep: slug, spec path (for downstream skills), quality gates, list of all changed files, list of all commit SHAs (curds + seed + wiring).</p>
+<h3 id="phase-6-post-merge-review-ultracook-style-fresh-context">Phase 6 — Post-merge review (ultracook-style fresh-context)<a class="headerlink" href="#phase-6-post-merge-review-ultracook-style-fresh-context" title="Permanent link">&para;</a></h3>
+<p>By Phase 6 the orchestrator's context is heavy. Run the final review pipeline in fresh-context sub-agents to keep review reasoning adversarial and clean.</p>
+<p>Three sequential spawns:</p>
+<ol>
+<li><code>/press --auto</code> on the merged diff — writes <code>.cheese/press/&lt;slug&gt;.md</code>.</li>
+<li><code>/age --auto</code> on the merged diff — writes <code>.cheese/age/&lt;slug&gt;.md</code>.</li>
+<li><code>/cure --auto --stake medium+</code> on the age findings — writes <code>.cheese/cure/&lt;slug&gt;.md</code>.</li>
+</ol>
+<p>Each spawn is a full-peer general-purpose sub-agent. Pass the no-chain-forward directive (same as <code>/ultracook</code>) so each spawn runs its phase only.</p>
+<p>Single pass through — no two-cure-pass cap. Curds each had their own press/age/cure; this is integration-level review.</p>
+<p>If any phase writes <code>status: halt: &lt;reason&gt;</code> in its slug, surface the halt and STOP. If <code>/cure</code> writes <code>next: done</code>, continue to Phase 7.</p>
+<h3 id="phase-7-pr-plan-publish">Phase 7 — PR plan + publish<a class="headerlink" href="#phase-7-pr-plan-publish" title="Permanent link">&para;</a></h3>
+<p>Spawn a heavy general-purpose <strong>PR planner</strong> sub-agent (prompt template at <code>references/pr-planner-prompt.md</code>) with the wiring DAG, the manifest, the merged diff, and the spec summary.</p>
+<p>The planner emits one of four shapes:</p>
+<table>
+<thead>
+<tr>
+<th>Shape</th>
+<th>When</th>
+<th>PR layout</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>single</code></td>
+<td>Small total diff, tightly coupled</td>
+<td>All commits in one PR.</td>
+</tr>
+<tr>
+<td><code>orthogonal_flat</code></td>
+<td>Curds touch disjoint slices, no seed/wiring coupling</td>
+<td>N PRs each branching from main.</td>
+</tr>
+<tr>
+<td><code>stacked_linear</code></td>
+<td>Linear dependencies seed → curds → wiring</td>
+<td>gt/gh stack.</td>
+</tr>
+<tr>
+<td><code>diamond_stack</code></td>
+<td>Seed and wiring exist; curds independent of each other</td>
+<td>seed PR (base) → N parallel curd PRs → wiring PR.</td>
+</tr>
+</tbody>
+</table>
+<p>The planner writes its grouping to <code>.cheese/cheese-factory/&lt;slug&gt;/pr-plan.yaml</code> and returns control.</p>
+<h4 id="skill-discovery-orchestrator-side">Skill discovery (orchestrator-side)<a class="headerlink" href="#skill-discovery-orchestrator-side" title="Permanent link">&para;</a></h4>
+<p>Before publishing PRs, the orchestrator detects which skills are available and picks the right delegate:</p>
+<table>
+<thead>
+<tr>
+<th>Need</th>
+<th>Prefer</th>
+<th>Fallback</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Stack publish</td>
+<td><code>/pr-stack</code> (Graphite <code>gt</code> or <code>gh stack</code>)</td>
+<td>manual <code>gh pr create --base &lt;prev-branch&gt;</code> chain</td>
+</tr>
+<tr>
+<td>Commits</td>
+<td><code>/commit</code></td>
+<td><code>git commit</code> direct</td>
+</tr>
+<tr>
+<td>PR publish</td>
+<td><code>/gh</code></td>
+<td><code>gh pr create</code> direct</td>
+</tr>
+<tr>
+<td>Merge conflicts</td>
+<td><code>/melt</code></td>
+<td>mergiraf → rerere → kdiff3 direct</td>
+</tr>
+</tbody>
+</table>
+<p>Detection: attempt to invoke the skill via the host's Skill tool; on unrecognised-skill error, fall back. Cache the result for the rest of the phase.</p>
+<h4 id="publish">Publish<a class="headerlink" href="#publish" title="Permanent link">&para;</a></h4>
+<p>For each PR group in the plan:</p>
+<ol>
+<li>Read group metadata from <code>pr-plan.yaml</code>.</li>
+<li>Push the branch (use <code>scripts/pr_plan_to_branches.py</code> to convert <code>pr-plan.yaml</code> to branch-creation commands).</li>
+<li>Create the PR (via <code>/gh</code> if available, else <code>gh pr create</code> direct).</li>
+<li>For stacks: invoke <code>/pr-stack</code> with the ordered branch list.</li>
+<li>Update manifest with PR numbers and URLs.</li>
+</ol>
+<h2 id="final-report">Final report<a class="headerlink" href="#final-report" title="Permanent link">&para;</a></h2>
+<pre><code class="language-text">## Cheese-Factory Complete: &lt;slug&gt;
+
+### Results
+| Phase | Status | Detail |
+|---|---|---|
+| Seed | complete | 2 commits |
+| Curds | 5/6 succeeded | Curd #4 failed after retry |
+| Merge | complete | — |
+| Wiring | 4/4 complete | — |
+| Final merge | complete | — |
+| Post-merge review | press: pass, age: 3 findings, cure: 3 applied |
+| PR plan | diamond_stack | seed + 5 curds + wiring = 7 PRs |
+
+### PRs
+| PR | Title | Stack base |
+|---|---|---|
+| #101 | feat(orders): shared types | main |
+| #102 | feat(orders): order entity | #101 |
+| ... |
+
+### Manual actions needed
+- Curd #4 failed: {error_summary}
+
+Manifest: .cheese/cheese-factory/&lt;slug&gt;/manifest.yaml
+</code></pre>
+<h2 id="orchestrator-token-discipline">Orchestrator token discipline<a class="headerlink" href="#orchestrator-token-discipline" title="Permanent link">&para;</a></h2>
+<p>The orchestrator reads ONE thing: the spec. Everything else is delegated.</p>
+<p><strong>Must not</strong>:</p>
+<ul>
+<li>Read / grep / glob codebase files (decomposer + per-curd workers do that).</li>
+<li>Run build / test commands (per-curd workers + post-merge sub-agents do that).</li>
+<li>Read full sub-agent reports — work from handoff slug digests.</li>
+</ul>
+<p><strong>Should</strong>:</p>
+<ul>
+<li>Read the spec once at Phase 0.</li>
+<li>Read per-phase handoff slugs (each ≤2KB).</li>
+<li>Write manifest updates after each phase.</li>
+<li>Decide chain progression based on slug <code>status</code> and <code>next</code> fields, never on sub-agent stdout.</li>
+</ul>
+<h2 id="compaction-strategy">Compaction strategy<a class="headerlink" href="#compaction-strategy" title="Permanent link">&para;</a></h2>
+<p>Three seams where the orchestrator drops accumulated context.</p>
+<table>
+<thead>
+<tr>
+<th>Seam</th>
+<th>After</th>
+<th>DROP</th>
+<th>KEEP</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>C1</td>
+<td>Phase 0 (gate approved)</td>
+<td>Full spec text, permission manifest, decomposition reasoning</td>
+<td>Slug, spec summary (≤2K), manifest path, quality gates</td>
+</tr>
+<tr>
+<td>C2</td>
+<td>Phase 2 (curds done)</td>
+<td>Decomposer artifacts, curd dispatch prompts, curd return summaries</td>
+<td>Slug, manifest path, quality gates, curd branch list</td>
+</tr>
+<tr>
+<td>C3</td>
+<td>Phase 5 (final merge done)</td>
+<td>Wiring DAG, per-curd diffs, merger details</td>
+<td>Slug, spec path, quality gates, changed files list, all commit SHAs</td>
+</tr>
+</tbody>
+</table>
+<p>At each seam, write a self-summary to the manifest before dropping:</p>
+<pre><code class="language-json">{
+  &quot;phase_summary&quot;: &quot;&lt;2-3 sentences: what happened, what succeeded/failed, what's next&gt;&quot;,
+  &quot;carry_forward&quot;: [&quot;slug&quot;, &quot;spec_summary&quot;, &quot;manifest_path&quot;, &quot;quality_gates&quot;]
+}
+</code></pre>
+<p>On <code>--resume</code>, read <code>phase_summary</code> from the manifest. This is the only cross-seam continuity mechanism — do not rely on conversation history.</p>
+<h2 id="spawn-primitive-contract-host-agnostic">Spawn primitive contract (host-agnostic)<a class="headerlink" href="#spawn-primitive-contract-host-agnostic" title="Permanent link">&para;</a></h2>
+<p>The orchestrator never names a specific host primitive. Any primitive that satisfies all five invariants below is acceptable. See <code>references/spawn-primitive-reference.md</code> for host-by-host examples.</p>
+<ol>
+<li><strong>Fresh context per spawn.</strong> The sub-agent boots with no memory of prior phases.</li>
+<li><strong>Full-peer inheritance.</strong> Same model as the parent, full tool access, full skill access, full MCP access. No diminutive workers.</li>
+<li><strong>No chain-forward.</strong> The sub-agent runs only its phase and returns. The no-chain-forward directive is passed in the prompt.</li>
+<li><strong>Returns control.</strong> The orchestrator regains control after each spawn so it can read the handoff slug.</li>
+<li><strong>Writes handoff slug.</strong> Each spawn writes its result to <code>.cheese/&lt;phase&gt;/&lt;slug&gt;.md</code> per the schema. The orchestrator decides chain progression from the slug, never from stdout.</li>
+</ol>
+<p>If the host harness exposes no fan-out primitive at all, <code>/cheese-factory</code> is the wrong skill — recommend <code>/ultracook</code> for the same review semantics in the parent's own context.</p>
+<h2 id="handoff-slug-schema">Handoff slug schema<a class="headerlink" href="#handoff-slug-schema" title="Permanent link">&para;</a></h2>
+<p>Every phase writes a handoff slug to <code>.cheese/&lt;phase&gt;/&lt;slug&gt;.md</code> (or, for per-curd workers, to <code>.cheese/cheese-factory/&lt;slug&gt;/curds/&lt;curd-id&gt;.md</code>) with the minimum shape:</p>
+<pre><code class="language-markdown">status: ok | halt: &lt;one-line reason&gt;
+next: &lt;phase-name | done&gt;
+artifact: &lt;path-to-richer-report-if-any&gt;
+&lt;one-line orientation: what this phase did&gt;
+</code></pre>
+<p>For phases that already write rich reports (<code>/age</code>, <code>/press</code>, <code>/cure</code>), the schema is prepended at the top of the same file.</p>
+<h2 id="quality-gates">Quality gates<a class="headerlink" href="#quality-gates" title="Permanent link">&para;</a></h2>
+<p><code>/cheese-factory</code> runs the project's quality gate command (typically <code>just check</code> per <code>AGENTS.md</code>) at four points:</p>
+<ol>
+<li>After seed (Phase 1).</li>
+<li>Inside each curd worker (after its <code>/cure</code> step).</li>
+<li>After curd merge (Phase 3, before wiring).</li>
+<li>After Phase 6 <code>/cure</code>.</li>
+</ol>
+<p>If any gate fails: STOP, report, do not silently fix.</p>
+<h2 id="-hard-propagation"><code>--hard</code> propagation<a class="headerlink" href="#-hard-propagation" title="Permanent link">&para;</a></h2>
+<p><code>/cheese-factory &lt;spec&gt; --hard</code>:</p>
+<ul>
+<li>Passes <code>--hard</code> to per-curd <code>/cook --hard --auto</code> — each curd gets its own hard-cheese vibecheck at its <code>/cure</code> share-for-review boundary.</li>
+<li>Passes <code>--hard</code> to Phase 6 <code>/cure --hard --auto --stake medium+</code> — the integration <code>/cure</code> runs the share-for-review vibecheck too.</li>
+</ul>
+<p>The orchestrator does not invoke <code>/hard-cheese</code> itself — it propagates the flag. See <code>skills/hard-cheese/SKILL.md</code>.</p>
+<h2 id="-resume-slug"><code>--resume &lt;slug&gt;</code><a class="headerlink" href="#-resume-slug" title="Permanent link">&para;</a></h2>
+<p>Read manifest at <code>.cheese/cheese-factory/&lt;slug&gt;/manifest.yaml</code>, find the latest phase marked complete, skip to the next phase. Report: <code>Resuming &lt;slug&gt; from phase &lt;N&gt;</code>.</p>
+<p>If the manifest references commits that no longer exist (rebased, deleted), fail fast and report — do not silently re-execute the phase.</p>
+<h2 id="error-recovery">Error recovery<a class="headerlink" href="#error-recovery" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Failure</th>
+<th>Recovery</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>No spec argument</td>
+<td>STOP. Report <code>cheese-factory requires an approved spec; run /mold first if you need to shape one</code>. Do not auto-dispatch — cross-skill handoffs stay user-visible.</td>
+</tr>
+<tr>
+<td>Overlap / criterion violation in decomposer output</td>
+<td>Re-run decomposer (max 2 retries)</td>
+</tr>
+<tr>
+<td>Seed gate failure</td>
+<td>STOP, report — do not dispatch curds</td>
+</tr>
+<tr>
+<td>Curd fails</td>
+<td>Retry once with error context, then mark failed</td>
+</tr>
+<tr>
+<td>All curds fail</td>
+<td>STOP, no merge/wiring</td>
+</tr>
+<tr>
+<td>Curd merge conflict</td>
+<td><code>/melt</code>; if <code>/melt</code> fails, fall back to per-curd PRs</td>
+</tr>
+<tr>
+<td>Wiring agent fails</td>
+<td>Retry once, mark incomplete if still failing</td>
+</tr>
+<tr>
+<td>Phase 5 conflicts</td>
+<td>STOP — decomposer error, report to user</td>
+</tr>
+<tr>
+<td>Phase 6 <code>/press</code> or <code>/age</code> halt</td>
+<td>Surface halt, STOP</td>
+</tr>
+<tr>
+<td>Phase 6 <code>/cure</code> cannot apply any finding</td>
+<td>Surface report, STOP</td>
+</tr>
+<tr>
+<td><code>/pr-stack</code> not available, plan calls for stack</td>
+<td>Fall back to manual <code>gh pr create --base</code> chain</td>
+</tr>
+<tr>
+<td><code>--resume</code> on missing manifest</td>
+<td>Fail fast</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Never proceed past Phase 0 gate without explicit user approval.</strong>
+<strong>Never claim green on partial work.</strong></p>
+<h2 id="what-the-orchestrator-never-does">What the orchestrator never does<a class="headerlink" href="#what-the-orchestrator-never-does" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Read codebase files (sub-agents explore, orchestrator routes).</li>
+<li>Run build / test commands (per-curd workers and post-merge sub-agents handle verification).</li>
+<li>Write implementation code (cook agents and wiring agents implement; the orchestrator's only inline writes are the small seed items in Phase 1).</li>
+<li>Make decomposition decisions after Phase 0 (plan is locked at gate approval).</li>
+<li>Retry more than once (curds and wiring get one retry, then mark failed).</li>
+<li>Auto-resolve Phase 5 conflicts (wiring conflicts = decomposer error).</li>
+<li>Estimate sub-agent token usage (decomposition uses behavioural criteria, not token counts).</li>
+</ul>
+<h2 id="gotchas">Gotchas<a class="headerlink" href="#gotchas" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong><code>/age</code> nesting depth</strong>: curd workers invoke <code>/age</code> which normally fans out to 6 review sub-agents (level 2, blocked). <code>/cheese-factory</code> requires <code>/age</code> to support an inline-degrade mode for sub-agent invocation — see <code>skills/age/SKILL.md</code> "Inline-degrade mode".</li>
+<li><strong>Context death after C2</strong>: after C2 the orchestrator has no curd details. The wiring DAG must be self-contained on disk. If wiring references curd internals not captured in the manifest, wiring agents will fail.</li>
+<li><strong>Wiring race conditions</strong>: wiring tasks commit to the same working directory. Phase 4 dispatches them sequentially (not in parallel) to avoid <code>git index.lock</code> races even when files differ.</li>
+<li><strong>bypassPermissions doesn't bypass Bash</strong>: curd workers can Edit/Write freely but cannot <code>git push</code> or <code>gh pr create</code> without explicit Bash allowlist. The orchestrator must handle all push / PR operations.</li>
+<li><strong>Stale worktrees</strong>: curd worktrees persist after Phase 3 merge. The orchestrator does NOT clean them up — recommend the user run <code>/worktree-sweep</code> (or host equivalent) after the pipeline completes.</li>
+</ul>
+<h2 id="references">References<a class="headerlink" href="#references" title="Permanent link">&para;</a></h2>
+<ul>
+<li><code>references/decomposer-prompt.md</code> — heavy decomposer sub-agent prompt template.</li>
+<li><code>references/curd-prompt.md</code> — per-curd worker prompt template.</li>
+<li><code>references/wiring-prompt.md</code> — per-wiring task prompt template.</li>
+<li><code>references/pr-planner-prompt.md</code> — PR planner sub-agent prompt template.</li>
+<li><code>references/manifest-schema.json</code> — JSON Schema for the manifest.</li>
+<li><code>references/pr-plan-schema.json</code> — JSON Schema for the PR plan, <code>$ref</code>'d from <code>manifest-schema.json</code>.</li>
+<li><code>references/spawn-primitive-reference.md</code> — host-by-host invocation examples plus the five invariants.</li>
+<li><code>scripts/validate_manifest.py</code> — Phase 0 structural validation of required manifest sections and fields.</li>
+<li><code>scripts/validate_decomposition.py</code> — Phase 0 semantic validation of decomposer output against the five criteria.</li>
+<li><code>scripts/validate_pr_plan.py</code> — Phase 7 validation of PR planner output before branch creation.</li>
+<li><code>scripts/pr_plan_to_branches.py</code> — converts <code>pr-plan.yaml</code> to branch-creation commands for Phase 7.</li>
+</ul>
+<h2 id="rules">Rules<a class="headerlink" href="#rules" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Sub-agents are full peers, not diminutive workers. Do not downgrade the model, do not narrow <code>subagent_type</code>, do not restrict tools or MCP access.</li>
+<li>The chain is fixed at eight phases. Do not invent extra phases or skip phases (except via <code>--resume</code>).</li>
+<li>Read each phase's handoff slug after the sub-agent returns. Do not infer success from the sub-agent's last line — read the file.</li>
+<li>Surface halts verbatim. Do not paraphrase, do not soften, do not "retry" a halted phase silently.</li>
+<li>Never invoke <code>/gh</code> directly without confirming via the user-approved permission manifest from Phase 0.</li>
+<li>Apply the shared voice kernel (lives at <code>skills/age/references/voice.md</code> in this repo): lead the final report with what happened, flag residual risk as <code>certain | speculating | don't know</code>, do not manufacture follow-ups.</li>
+</ul>
+
+
+
+
+
+
+
+  
+  
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../cheese/references/coherence-check/" class="md-footer__link md-footer__link--prev" aria-label="Previous: coherence-check">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                coherence-check
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="references/curd-prompt/" class="md-footer__link md-footer__link--next" aria-label="Next: curd-prompt">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                curd-prompt
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2026 Paul Sorensen — MIT License
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        <div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/paulnsorensen/easy-cheese" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8M97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://www.buymeacoffee.com/paulnsorensen" target="_blank" rel="noopener" title="www.buymeacoffee.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.7.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M88 0C74.7 0 64 10.7 64 24c0 38.9 23.4 59.4 39.1 73.1l1.1 1c16.3 14.2 23.8 21.8 23.8 37.9 0 13.3 10.7 24 24 24s24-10.7 24-24c0-38.9-23.4-59.4-39.1-73.1l-1.1-1C119.5 47.7 112 40.1 112 24c0-13.3-10.7-24-24-24M32 192c-17.7 0-32 14.3-32 32v192c0 53 43 96 96 96h192c53 0 96-43 96-96h16c61.9 0 112-50.1 112-112s-50.1-112-112-112H32m352 64h16c26.5 0 48 21.5 48 48s-21.5 48-48 48h-16zM224 24c0-13.3-10.7-24-24-24s-24 10.7-24 24c0 38.9 23.4 59.4 39.1 73.1l1.1 1c16.3 14.2 23.8 21.8 23.8 37.9 0 13.3 10.7 24 24 24s24-10.7 24-24c0-38.9-23.4-59.4-39.1-73.1l-1.1-1C231.5 47.7 224 40.1 224 24"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.sections", "navigation.indexes", "navigation.top", "navigation.footer", "content.code.copy", "content.code.annotate", "content.action.edit", "content.action.view", "content.tabs.link", "search.suggest", "search.highlight", "search.share", "toc.follow"], "search": "../../assets/javascripts/workers/search.6ce7567c.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.88dd0f4e.min.js"></script>
+      
+    
+  </body>
+</html>
