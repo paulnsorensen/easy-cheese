@@ -125,7 +125,7 @@ Before writing the handoff slug, confirm:
 
 **Then ask: what would have prevented this bug?** If the answer involves architectural change (no good test seam, tangled callers, hidden coupling), note it in the slug under an architectural-follow-up line. The chain still runs; the user can pick up the architectural work via `/mold` after the fix lands. Make the recommendation **after** the fix is in, not before — you have more information now than when you started.
 
-Once the checklist is green and the slug is on disk, hand off to `/cook --auto <slug>` (default). Cook --auto picks up the post-fix state, runs its taste-test against the applied diff for spec drift / readability / scope creep, produces its package-ready report, and triggers the autonomous `/press → /age → /cure` chain. Pasteurize itself does not commit, open PRs, or drive the chain — cook owns that.
+Once the checklist is green and the slug is on disk, hand off to `/cook <slug> --auto` (default). Cook --auto picks up the post-fix state, runs its taste-test against the applied diff for spec drift / readability / scope creep, produces its package-ready report, and triggers the autonomous `/press → /age → /cure` chain. Pasteurize itself does not commit, open PRs, or drive the chain — cook owns that.
 
 ## Preferred tools and fallbacks
 
@@ -149,7 +149,7 @@ Return a short report covering:
 - Hypotheses considered and which one held.
 - The regression test path and the fix's file:line footprint.
 - Cleanup status (`[DEBUG-...]` removed, harnesses deleted or relocated).
-- Suggested next skill — `/cook --auto <slug>` for the autonomous chain forward.
+- Suggested next skill — `/cook <slug> --auto` for the autonomous chain forward.
 
 ## Handoff slug
 
@@ -161,7 +161,7 @@ next: cook | mold | done
 artifact: <path-to-richer-report-if-any>
 cause: <one-sentence named cause>
 loop: <command or repro path>
-test: <regression-test path:line, or "none — architectural follow-up">
+seam: <regression-test path:line, or "none — architectural follow-up">
 fix: <production diff footprint, e.g. "src/foo.ts:42">
 follow_up: <architectural follow-up note, or "none">
 <one-line orientation: what pasteurize converged on>
@@ -175,7 +175,7 @@ follow_up: <architectural follow-up note, or "none">
 
 After the report is printed and the handoff slug is on disk, ask via `AskUserQuestion` which downstream to run. Lead each option with the verb (what the user wants to _do_ next):
 
-- **Validate and chain forward** _(recommended when `status: ok`)_ — `/cook --auto <slug>`.
+- **Validate and chain forward** _(recommended when `status: ok`)_ — `/cook <slug> --auto`.
 - **Validate without auto chain** — `/cook <slug>` (cook runs taste-test, then the user picks each subsequent step).
 - **Spec the architectural follow-up first** — `/mold <slug>` (when `seam: none — architectural follow-up`).
 - **Stop** — fix is in tree; defer the chain.
