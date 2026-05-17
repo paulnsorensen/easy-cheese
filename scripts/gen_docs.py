@@ -10,6 +10,8 @@ Invoked by mkdocs-gen-files. For each skills/<name>/SKILL.md:
 Also emits:
   - docs/skills/index.md — table listing every skill + its one-line description.
   - docs/SUMMARY.md — literate-nav for the whole site.
+  - docs/install.md — sliced out of README.md's Install / Installing MCP servers
+    / Installing CLI tools sections so install instructions stay single-sourced.
   - docs/contributing.md, docs/security.md, docs/code-of-conduct.md — slurped
     from the repo root so they stay single-sourced.
 """
@@ -224,6 +226,81 @@ def emit_skills_index(skills: list[dict]) -> None:
         fh.write("\n".join(lines))
 
 
+H2_RE = re.compile(r"^## (.+?)\s*$")
+
+
+def extract_h2_section(
+    text: str,
+    title: str,
+    *,
+    drop_header: bool = False,
+    bump_headings: bool = False,
+) -> str:
+    """Return the body of a `## <title>` section from a Markdown document.
+
+    Stops at the next `## ` header. With ``drop_header`` the section's own
+    `## <title>` line is omitted; with ``bump_headings`` every `###` inside
+    the section is promoted to `##` (used when the section's H2 wrapper is
+    dropped, to keep heading hierarchy contiguous under the page H1).
+    """
+    out: list[str] = []
+    in_section = False
+    for line in text.splitlines(keepends=True):
+        m = H2_RE.match(line)
+        if m:
+            if in_section:
+                break
+            if m.group(1) == title:
+                in_section = True
+                if not drop_header:
+                    out.append(line)
+            continue
+        if in_section:
+            if bump_headings and line.startswith("### "):
+                line = "## " + line[4:]
+            out.append(line)
+    return "".join(out)
+
+
+def emit_install_page() -> bool:
+    """Generate docs/install.md by slicing README.md's install-related H2s."""
+    src = REPO_ROOT / "README.md"
+    if not src.exists():
+        return False
+    readme = src.read_text(encoding="utf-8")
+
+    sections = {
+        "Install": extract_h2_section(readme, "Install", drop_header=True, bump_headings=True),
+        "Installing MCP servers": extract_h2_section(readme, "Installing MCP servers"),
+        "Optional tools": extract_h2_section(readme, "Optional tools"),
+        "Installing CLI tools": extract_h2_section(readme, "Installing CLI tools"),
+    }
+    missing = [name for name, body in sections.items() if not body]
+    if missing:
+        raise RuntimeError(
+            f"README.md is missing expected H2 section(s) {missing!r} — "
+            "gen_docs.py:emit_install_page can't build docs/install.md without them"
+        )
+
+    body = (
+        sections["Install"].rstrip() + "\n\n"
+        + sections["Installing MCP servers"].rstrip() + "\n\n"
+        + sections["Optional tools"].rstrip() + "\n\n"
+        + sections["Installing CLI tools"].rstrip() + "\n"
+    )
+    body = apply_link_rewrite(body, rewrite_root_passthrough_link)
+
+    front = "---\n" + yaml.safe_dump(
+        {"title": "Install", "description": "Install easy-cheese skills, MCP servers, and CLI tools."},
+        sort_keys=False, allow_unicode=True, default_flow_style=False,
+    ) + "---\n\n# Install\n\n"
+
+    with mkdocs_gen_files.open("install.md", "w") as fh:
+        fh.write(front + body.lstrip())
+    mkdocs_gen_files.set_edit_path("install.md", "README.md")
+    return True
+
+
 def emit_root_passthrough(filename: str, dest: str, title: str) -> bool:
     src = REPO_ROOT / filename
     if not src.exists():
@@ -270,6 +347,7 @@ def main() -> None:
             skills.append(page)
 
     emit_skills_index(skills)
+    emit_install_page()
 
     extras: list[tuple[str, str]] = []
     if emit_root_passthrough("README.md", "readme.md", "README"):
