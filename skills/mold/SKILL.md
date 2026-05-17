@@ -17,7 +17,7 @@ Do not use it for free-form discussion with no artifact intent (`/culture`), dir
 3. **Sketch** — for any feature touching >1 module or a new public interface, run the shape check (`references/shape-check.md`) on the touched symbols, then lock seams in pseudocode signatures before talking spec content. Default to full signatures, not hand-waving.
 4. **Two-key handshake** — both the user (explicit verb) and the agent (coherence self-check) must agree before extraction. See `references/handshake.md`.
 5. **Curdle** — write the approved spec to `.cheese/specs/<slug>.md` (and optional `.cheese/issues/<slug>-NNN.md`). Format and slug rules in `references/curdle.md`.
-6. **Hand off** — once the spec is on disk, prompt the next step via the shared handoff gate in `../../shared/handoff-gate.md`. Never dispatch before the user selects; after a non-stop selection, run the selected downstream skill immediately.
+6. **Hand off** — once the spec is on disk, prompt the next step via the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md). Never dispatch before the user selects; after a non-stop selection, run the selected downstream skill immediately.
 
 ## Modes
 
@@ -79,7 +79,7 @@ Default to project-local cheese artifacts when the user wants files:
 
 **Pipeline:** culture → **[mold]** → cook → press → age → cure → ship
 
-After the spec is written, ask the user via the shared handoff gate in `../../shared/handoff-gate.md`. Lead each option with the verb (what the user wants to *do* next); the skill command (with the spec path and any in-scope `--hard` propagation) is the backing detail. Default options vary with the shape-check verdict:
+After the spec is written, ask the user via the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md). Lead each option with the verb (what the user wants to *do* next); the skill command (with the spec path and any in-scope `--hard` propagation) is the backing detail. Default options vary with the shape-check verdict:
 
 **Low- and medium-blast-radius specs (verdict `low` or `medium`):**
 

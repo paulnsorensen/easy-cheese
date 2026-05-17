@@ -148,7 +148,7 @@ C. Re-decompose — different boundaries
 D. Pause — hold off
 ```
 
-Use the shared handoff gate in `../../shared/handoff-gate.md` for this approval step. All four options keep cheese-factory running internally (no skill transition) — they use `continue:` identifiers rather than `dispatch:` commands per the gate vocabulary:
+Use the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md) for this approval step. All four options keep cheese-factory running internally (no skill transition) — they use `continue:` identifiers rather than `dispatch:` commands per the gate vocabulary:
 
 - **Approve** — `continue: write-manifest-then-seed`: write `.cheese/cheese-factory/<slug>/manifest.yaml`, set `phase: gate_approved`, then proceed with Phase 1 (seed execution).
 - **Modify** — `continue: ask-for-decomposition-change`: ask one targeted question for the requested decomposition change, then re-render the plan.

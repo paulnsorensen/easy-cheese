@@ -34,7 +34,7 @@ If `$ARGUMENTS` is missing entirely and there is no recent context to lean on, a
 1. **Classify** — match `$ARGUMENTS` against the intent shapes in `references/classification.md`. Pick the highest-confidence shape; below the threshold, route to `clarify` (see step 4).
 2. **Announce** — print one short paragraph with: detected intent, chosen target skill (or pre-step), and the one-line reason for the decision. Cite the signal that drove it (e.g. "spec path under `.cheese/specs/`", "stack trace present", "PR URL").
 3. **Self-check** — run the coherence questions in `references/coherence-check.md` before dispatching. If any fails, downgrade to `clarify` or `research`.
-4. **Confirm** — issue a handoff gate per `../../shared/handoff-gate.md`: recommended target pre-selected, at least one alternative, and a `Stop` option. The user's selection is the only trigger for dispatch; never invoke a skill silently before the selection.
+4. **Confirm** — issue a handoff gate per [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md): recommended target pre-selected, at least one alternative, and a `Stop` option. The user's selection is the only trigger for dispatch; never invoke a skill silently before the selection.
 5. **Hand off** — once the user picks a non-stop option, immediately run the selected skill with the exact dispatch command and context packet. The downstream skill owns its own flow; `/cheese` does not narrate beyond the routing decision.
 
 `/cheese` is a router, not a worker. It never edits files, runs tests, opens PRs, or paraphrases the downstream skill's output.
@@ -64,7 +64,7 @@ Flow:
 1. Scan for the most recently modified handoff slug across `.cheese/{cook,press,age,cure,notes}/<slug>.md`.
 2. If none exist, offer to start the pipeline from scratch — `/mold` for fuzzy specs, `/cook` for clear asks, `/ultracook` for high-blast-radius specs — and stop.
 3. If at least one exists, read the latest one and use its `next:` field to decide the recommended action. Surface the orientation line so the user knows where they are.
-4. Confirm the resumption via the handoff gate in `../../shared/handoff-gate.md`. The recommended option depends on the slug's `next:` value:
+4. Confirm the resumption via the handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md). The recommended option depends on the slug's `next:` value:
    - **When `next:` names a phase** (`mold | cook | press | age | cure | ultracook`):
      - **Run /\<next\> \<slug\>** *(recommended)* — continue the chain at the named phase.
      - **Run /ultracook \<slug\>** — re-enter the autonomous fresh-context chain.
@@ -112,7 +112,7 @@ If `clarify` is chosen, replace step 4 with the single clarifying question.
 
 ## Handoff
 
-Dispatch happens through `../../shared/handoff-gate.md`. Default option set per intent:
+Dispatch happens through [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md). Default option set per intent:
 
 - **clarify** — single targeted question; no skills offered until the answer arrives.
 - **research** — `Run /briesearch` (recommended), `Run /culture`, `Stop`.
@@ -140,4 +140,4 @@ Pre-select only the highest-confidence target. If two targets are viable, surfac
 
 - `references/classification.md` — intent shapes, signals, disambiguation rules.
 - `references/coherence-check.md` — pre-dispatch self-checks that downgrade misroutes.
-- `../../shared/handoff-gate.md` — Codex-safe post-selection dispatch contract (shared across workflow skills).
+- [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md) — Codex-safe post-selection dispatch contract (shared across workflow skills).

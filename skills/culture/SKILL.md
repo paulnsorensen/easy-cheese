@@ -64,7 +64,7 @@ The notes slug is the **only** thing culture is allowed to write. No commits, no
 
 **Pipeline:** **[culture]** → mold → cook → press → age → cure → ship
 
-When the conversation reveals real work, ask via the shared handoff gate in `../../shared/handoff-gate.md`. Lead each option with the verb (what the user wants to *do* next); the skill command is the backing detail. Before asking, render a compact context packet so the downstream skill can dispatch without losing the discussion:
+When the conversation reveals real work, ask via the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md). Lead each option with the verb (what the user wants to *do* next); the skill command is the backing detail. Before asking, render a compact context packet so the downstream skill can dispatch without losing the discussion:
 
 ```yaml
 handoff_context:

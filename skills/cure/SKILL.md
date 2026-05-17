@@ -91,7 +91,7 @@ The cure report body lives below the handoff slug in the same file at `.cheese/c
 
 **Pipeline:** culture → mold → cook → press → age → **[cure]** → ship
 
-After the cure report is rendered, ask via the shared handoff gate in `../../shared/handoff-gate.md`. Lead each option with the verb (what the user wants to *do* next); the skill command is the backing detail. Default options:
+After the cure report is rendered, ask via the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md). Lead each option with the verb (what the user wants to *do* next); the skill command is the backing detail. Default options:
 
 - **Re-review the touched code** *(recommended when fixes were non-trivial)* — `/age --scope <touched-path>`, runs review through the proper skill. Propagates `--hard` when in scope.
 - **Open or update the PR** — `/gh`. When `--hard` is in scope, this option first dispatches `/hard-cheese <slug>` and proceeds to `/gh` only if the gate exits `0`.

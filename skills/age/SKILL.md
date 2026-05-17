@@ -125,7 +125,7 @@ Age report: .cheese/age/<slug>.md
 
 **Pipeline:** culture → mold → cook → press → **[age]** → cure → ship
 
-After the report is on disk, skip any "should I run /cure?" meta-question and go straight to the selection gate. The user's working memory is on the findings, not on whether a follow-up step exists. Use the shared handoff gate in `../../shared/handoff-gate.md` for post-selection dispatch.
+After the report is on disk, skip any "should I run /cure?" meta-question and go straight to the selection gate. The user's working memory is on the findings, not on whether a follow-up step exists. Use the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md) for post-selection dispatch.
 
 1. Render the numbered selection table per `../cure/references/selection.md` directly inline (one row per finding, grouped by stake).
 2. Ask via the handoff gate which findings to cure. Lead each option with the verb (what the user wants to *do* next); the underlying selection verb is the backing detail. Offer:

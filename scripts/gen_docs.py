@@ -12,6 +12,8 @@ Also emits:
   - docs/SUMMARY.md — literate-nav for the whole site.
   - docs/install.md — sliced out of README.md's Install / Installing MCP servers
     / Installing CLI tools sections so install instructions stay single-sourced.
+  - docs/shared/*.md — cross-skill contracts (e.g. handoff-gate.md) mirrored
+    from the repo's top-level shared/ directory so skills can link to them.
   - docs/contributing.md, docs/security.md, docs/code-of-conduct.md — slurped
     from the repo root so they stay single-sourced.
 """
@@ -26,6 +28,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SKILLS_DIR = REPO_ROOT / "skills"
+SHARED_DIR = REPO_ROOT / "shared"
 REPO_URL = "https://github.com/paulnsorensen/easy-cheese"
 
 LINK_RE = re.compile(r"(?<!\!)\[([^\]]+)\]\(([^)\s]+)(\s+\"[^\"]*\")?\)")
@@ -87,6 +90,13 @@ def rewrite_skill_link(url: str, skill_name: str) -> str:
     m = re.match(r"^\.\./\.\./([A-Z_]+\.md)$", path)
     if m and m.group(1) in ROOT_DOC_MAP:
         return f"../{ROOT_DOC_MAP[m.group(1)]}{anchor}"
+
+    # Cross-cutting contracts in top-level shared/ (e.g. ../../shared/handoff-gate.md).
+    # The source path climbs through repo_root; after flattening SKILL.md to
+    # docs/skills/<name>.md it only needs one `..` to reach docs/shared/.
+    m = re.match(r"^\.\./\.\./shared/(.+\.md)$", path)
+    if m:
+        return f"../shared/{m.group(1)}{anchor}"
 
     if path == "../../LICENSE":
         return f"{REPO_URL}/blob/main/LICENSE"
@@ -320,7 +330,48 @@ def emit_root_passthrough(filename: str, dest: str, title: str) -> bool:
     return True
 
 
-def emit_nav(skills: list[dict], extras: list[tuple[str, str]]) -> None:
+def emit_shared_pages() -> list[tuple[str, str]]:
+    """Emit shared/<file>.md into docs/shared/<file>.md.
+
+    The shared/ directory holds cross-skill contracts (e.g. handoff-gate.md)
+    that skill SKILL.md bodies reference via ``../../shared/<file>.md``. That
+    relative path already resolves correctly from docs/skills/<name>.md to
+    docs/shared/<file>.md, so no link rewriting is needed — but the target
+    file has to exist in the docs tree, and mkdocs --strict requires it to
+    be in the nav.
+
+    Returns ``(title, docs_path)`` pairs for ``emit_nav`` to render under a
+    "Shared contracts" section.
+    """
+    if not SHARED_DIR.is_dir():
+        return []
+
+    entries: list[tuple[str, str]] = []
+    for src in sorted(p for p in SHARED_DIR.iterdir() if p.is_file() and p.suffix == ".md"):
+        src_rel = src.relative_to(REPO_ROOT).as_posix()
+        out = f"shared/{src.name}"
+        text = src.read_text(encoding="utf-8")
+        with mkdocs_gen_files.open(out, "w") as fh:
+            fh.write(text)
+        mkdocs_gen_files.set_edit_path(out, src_rel)
+
+        title = _first_h1(text) or src.stem.replace("-", " ").capitalize()
+        entries.append((title, out))
+    return entries
+
+
+def _first_h1(text: str) -> str:
+    for line in text.splitlines():
+        if line.startswith("# "):
+            return line[2:].strip()
+    return ""
+
+
+def emit_nav(
+    skills: list[dict],
+    shared: list[tuple[str, str]],
+    extras: list[tuple[str, str]],
+) -> None:
     lines = [
         "* [Home](index.md)",
         "* [Install](install.md)",
@@ -331,6 +382,10 @@ def emit_nav(skills: list[dict], extras: list[tuple[str, str]]) -> None:
         lines.append(f"    * [/{s['name']}](skills/{s['name']}.md)")
         for ref_name, ref_path in s["refs"]:
             lines.append(f"        * [{ref_name}]({ref_path})")
+    if shared:
+        lines.append("* Shared contracts")
+        for title, path in shared:
+            lines.append(f"    * [{title}]({path})")
     if extras:
         lines.append("* Project")
         for title, path in extras:
@@ -348,6 +403,7 @@ def main() -> None:
 
     emit_skills_index(skills)
     emit_install_page()
+    shared = emit_shared_pages()
 
     extras: list[tuple[str, str]] = []
     if emit_root_passthrough("README.md", "readme.md", "README"):
@@ -359,7 +415,7 @@ def main() -> None:
     if emit_root_passthrough("CODE_OF_CONDUCT.md", "code-of-conduct.md", "Code of conduct"):
         extras.append(("Code of conduct", "code-of-conduct.md"))
 
-    emit_nav(skills, extras)
+    emit_nav(skills, shared, extras)
 
 
 main()

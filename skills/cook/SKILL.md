@@ -86,7 +86,7 @@ artifact: <path-to-richer-report-if-any>
 
 **Pipeline:** culture → mold → **[cook]** → press → age → cure → ship
 
-After the package-ready report is printed and the handoff slug is on disk, ask via the shared handoff gate in `../../shared/handoff-gate.md`. Lead each option with the verb (what the user wants to *do* next); the skill command (with any in-scope `--hard` propagation) is the backing detail. Default options:
+After the package-ready report is printed and the handoff slug is on disk, ask via the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md). Lead each option with the verb (what the user wants to *do* next); the skill command (with any in-scope `--hard` propagation) is the backing detail. Default options:
 
 - **Harden tests before review** *(recommended)* — `/press <slug>`.
 - **Review the diff now (skip the press pass)** — `/age <slug>`.

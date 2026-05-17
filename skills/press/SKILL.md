@@ -98,7 +98,7 @@ Next step:    /age <slug>                          (when ready for /age or follo
 
 **Pipeline:** culture → mold → cook → **[press]** → age → cure → ship
 
-After the press report is on disk, ask via the shared handoff gate in `../../shared/handoff-gate.md`. Lead each option with the verb (what the user wants to *do* next); the skill command (with any in-scope `--hard` propagation) is the backing detail. Default options:
+After the press report is on disk, ask via the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md). Lead each option with the verb (what the user wants to *do* next); the skill command (with any in-scope `--hard` propagation) is the backing detail. Default options:
 
 - **Review the diff** *(recommended when readiness is `ready for /age` or `follow-up recommended`)* — `/age <slug>`. For `follow-up recommended`, the cooked contract is sound and every changed behaviour has a hardening test; documented follow-ups can be addressed after review.
 - **Stop** — dispatch none; defer review (use this if you want to harden manually before /age, even though the contract is review-safe).

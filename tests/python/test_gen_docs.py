@@ -96,6 +96,22 @@ class TestRewriteSkillLink:
     def test_unknown_path_is_untouched(self, gen_docs):
         assert gen_docs.rewrite_skill_link("../../some/other/file.md", "cook") == "../../some/other/file.md"
 
+    def test_shared_contract_link_climbs_one_level(self, gen_docs):
+        # Source skills/<name>/SKILL.md uses ../../shared/<file>.md (two ups:
+        # skills/<name>/ -> skills/ -> repo_root, then shared/). After
+        # flattening to docs/skills/<name>.md the `<name>/` directory is gone,
+        # so only one `..` is needed to reach docs/shared/<file>.md.
+        assert (
+            gen_docs.rewrite_skill_link("../../shared/handoff-gate.md", "age")
+            == "../shared/handoff-gate.md"
+        )
+
+    def test_shared_contract_link_preserves_anchor(self, gen_docs):
+        assert (
+            gen_docs.rewrite_skill_link("../../shared/handoff-gate.md#vocabulary", "age")
+            == "../shared/handoff-gate.md#vocabulary"
+        )
+
 
 class TestRewriteRefLink:
     def test_external_urls_pass_through(self, gen_docs):
@@ -278,3 +294,151 @@ class TestEmitInstallPage:
         self._write_full_readme(tmp_path / "README.md")
         monkeypatch.setattr(gen_docs, "REPO_ROOT", tmp_path)
         assert gen_docs.emit_install_page() is True
+
+
+class TestEmitSharedPages:
+    """emit_shared_pages mirrors shared/*.md into the docs tree.
+
+    The function is what makes the ``../../shared/<file>.md`` links from
+    skill SKILL.md bodies actually resolve under mkdocs --strict. We test
+    the contract end-to-end: an empty dir is a no-op, files get copied,
+    non-Markdown files are skipped, and titles fall back to the slug.
+    """
+
+    def _capture_writes(self, gen_docs, monkeypatch):
+        """Intercept mkdocs_gen_files.open() so we can assert on its writes."""
+        writes: dict[str, str] = {}
+
+        class _Capturing:
+            def __init__(self, key):
+                self.key = key
+                self.buf: list[str] = []
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                writes[self.key] = "".join(self.buf)
+                return False
+
+            def write(self, data):
+                self.buf.append(data)
+
+        import mkdocs_gen_files
+
+        monkeypatch.setattr(mkdocs_gen_files, "open", lambda key, *_a, **_kw: _Capturing(key))
+        monkeypatch.setattr(mkdocs_gen_files, "set_edit_path", lambda *_a, **_kw: None)
+        return writes
+
+    def test_missing_dir_returns_empty(self, gen_docs, tmp_path, monkeypatch):
+        monkeypatch.setattr(gen_docs, "SHARED_DIR", tmp_path / "nope")
+        assert gen_docs.emit_shared_pages() == []
+
+    def test_empty_dir_returns_empty(self, gen_docs, tmp_path, monkeypatch):
+        (tmp_path / "shared").mkdir()
+        monkeypatch.setattr(gen_docs, "SHARED_DIR", tmp_path / "shared")
+        monkeypatch.setattr(gen_docs, "REPO_ROOT", tmp_path)
+        assert gen_docs.emit_shared_pages() == []
+
+    def test_emits_markdown_and_uses_h1_as_title(self, gen_docs, tmp_path, monkeypatch):
+        shared = tmp_path / "shared"
+        shared.mkdir()
+        (shared / "handoff-gate.md").write_text("# Handoff gate\n\nbody\n", encoding="utf-8")
+        monkeypatch.setattr(gen_docs, "SHARED_DIR", shared)
+        monkeypatch.setattr(gen_docs, "REPO_ROOT", tmp_path)
+        writes = self._capture_writes(gen_docs, monkeypatch)
+
+        entries = gen_docs.emit_shared_pages()
+
+        assert entries == [("Handoff gate", "shared/handoff-gate.md")]
+        assert writes["shared/handoff-gate.md"] == "# Handoff gate\n\nbody\n"
+
+    def test_falls_back_to_slug_when_no_h1(self, gen_docs, tmp_path, monkeypatch):
+        shared = tmp_path / "shared"
+        shared.mkdir()
+        (shared / "no-h1.md").write_text("just body, no heading\n", encoding="utf-8")
+        monkeypatch.setattr(gen_docs, "SHARED_DIR", shared)
+        monkeypatch.setattr(gen_docs, "REPO_ROOT", tmp_path)
+        self._capture_writes(gen_docs, monkeypatch)
+
+        entries = gen_docs.emit_shared_pages()
+
+        assert entries == [("No h1", "shared/no-h1.md")]
+
+    def test_skips_non_markdown_files(self, gen_docs, tmp_path, monkeypatch):
+        shared = tmp_path / "shared"
+        shared.mkdir()
+        (shared / "handoff-gate.md").write_text("# Gate\n", encoding="utf-8")
+        (shared / "schema.json").write_text("{}", encoding="utf-8")
+        (shared / "notes.txt").write_text("ignore me", encoding="utf-8")
+        monkeypatch.setattr(gen_docs, "SHARED_DIR", shared)
+        monkeypatch.setattr(gen_docs, "REPO_ROOT", tmp_path)
+        writes = self._capture_writes(gen_docs, monkeypatch)
+
+        entries = gen_docs.emit_shared_pages()
+
+        # Only the .md file lands in the docs tree (and the nav).
+        assert [path for _, path in entries] == ["shared/handoff-gate.md"]
+        assert set(writes) == {"shared/handoff-gate.md"}
+
+    def test_multiple_files_sorted(self, gen_docs, tmp_path, monkeypatch):
+        shared = tmp_path / "shared"
+        shared.mkdir()
+        (shared / "zebra.md").write_text("# Zebra\n", encoding="utf-8")
+        (shared / "alpha.md").write_text("# Alpha\n", encoding="utf-8")
+        monkeypatch.setattr(gen_docs, "SHARED_DIR", shared)
+        monkeypatch.setattr(gen_docs, "REPO_ROOT", tmp_path)
+        self._capture_writes(gen_docs, monkeypatch)
+
+        entries = gen_docs.emit_shared_pages()
+
+        # Sorted by source filename — keeps the generated nav stable across runs.
+        assert [path for _, path in entries] == ["shared/alpha.md", "shared/zebra.md"]
+
+
+class TestEmitNav:
+    """emit_nav renders the literate-nav SUMMARY.md.
+
+    The shared-contracts section is only added when at least one shared
+    page exists; otherwise mkdocs --strict would warn about an empty group.
+    """
+
+    def _captured_summary(self, gen_docs, monkeypatch):
+        buf: list[str] = []
+
+        class _Sink:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                return False
+
+            def write(self, data):
+                buf.append(data)
+
+        import mkdocs_gen_files
+
+        monkeypatch.setattr(mkdocs_gen_files, "open", lambda *_a, **_kw: _Sink())
+        monkeypatch.setattr(mkdocs_gen_files, "set_edit_path", lambda *_a, **_kw: None)
+        return buf
+
+    def test_includes_shared_section_when_present(self, gen_docs, monkeypatch):
+        buf = self._captured_summary(gen_docs, monkeypatch)
+        gen_docs.emit_nav(
+            skills=[{"name": "age", "refs": []}],
+            shared=[("Handoff gate", "shared/handoff-gate.md")],
+            extras=[],
+        )
+        out = "".join(buf)
+        assert "* Shared contracts" in out
+        assert "* [Handoff gate](shared/handoff-gate.md)" in out
+
+    def test_omits_shared_section_when_empty(self, gen_docs, monkeypatch):
+        buf = self._captured_summary(gen_docs, monkeypatch)
+        gen_docs.emit_nav(
+            skills=[{"name": "age", "refs": []}],
+            shared=[],
+            extras=[("README", "readme.md")],
+        )
+        out = "".join(buf)
+        assert "Shared contracts" not in out
