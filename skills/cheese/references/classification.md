@@ -11,7 +11,7 @@ Intent shapes for `/cheese`, with the signals that drive each one and the disamb
 | rubber-duck | — | `/culture` |
 | mold | optional `/briesearch` | `/mold` → `/cook` |
 | cook | — | `/cook` |
-| debug | `/culture` (Diagnose) | `/cook` |
+| debug | — | `/pasteurize` → `/cook --auto` |
 | age | — | `/age` |
 | age-then-cure | — | `/age` → `/cure` |
 
@@ -80,7 +80,7 @@ Clear, scoped implementation request meeting the standalone fast-path checks.
 
 When two of the three fast-path checks are clear but the third is borderline, downgrade to `mold`.
 
-### debug (`/culture` → `/cook`)
+### debug (`/pasteurize` → `/cook --auto`)
 
 Symptom-driven work where the cause has not been confirmed yet.
 
@@ -91,7 +91,7 @@ Symptom-driven work where the cause has not been confirmed yet.
 | Reproduction steps without a stated cause | "open page, click X, see 500" |
 | "Why is X broken" / "what's wrong with Y" framing | — |
 
-Route to `/culture` (Diagnose mode) so the cause is named before code changes; `/culture` then hands off to `/cook` once the fix is unambiguous. If the cause is already obvious from the report, jump straight to `cook` instead.
+Route to `/pasteurize` so the cause is named via a deterministic feedback loop, the regression test is written, and the minimal fix is applied before the autonomous chain runs. `/pasteurize` then hands off to `/cook --auto` by default for taste-test plus the press → age → cure chain. If the cause is already obvious **and** the fix is a single-file tweak with a known seam, jump straight to `/cook` instead. If the user explicitly wants no-write diagnosis (conversation only), route to `/culture` instead of `/pasteurize`.
 
 ### age (`/age`)
 

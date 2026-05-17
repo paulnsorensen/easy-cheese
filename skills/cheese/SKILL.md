@@ -49,7 +49,7 @@ If `$ARGUMENTS` is missing entirely and there is no recent context to lean on, a
 | mold | Feature description with fuzzy scope, multi-module idea, or stated need for a spec | optional `/briesearch` first if external evidence is missing | `/mold` → `/cook` |
 | cook | Spec path, focused fix with clear inputs/outputs/verification, single-file tweak | — | `/cook` |
 | cheese-factory | Approved spec at `.cheese/specs/<slug>.md` with 5+ acceptance criteria / behavioural curds, or user phrases like "send through the factory", "parallelize", "many curds", "fan out" | — | `/cheese-factory` |
-| debug | Stack trace, failing test, reproduction steps, "why is X broken" | `/culture` (Diagnose) to converge on the cause | `/culture` → `/cook` |
+| debug | Stack trace, failing test, reproduction steps, "why is X broken" | — | `/pasteurize` → `/cook --auto` |
 | age | PR reference, file path/glob review request, "is this safe to merge", "find bugs" | — | `/age` |
 | age-then-cure | Existing `.cheese/age/<slug>.md` plus a "fix the findings" instruction | — | `/age` (re-scope if needed) → `/cure` |
 
@@ -120,7 +120,7 @@ Dispatch happens through `AskUserQuestion`. Default option set per intent:
 - **mold** — `Run /mold` (recommended), `Run /briesearch first`, `Stop`.
 - **cook** — `Run /cook <slug-or-path>` (recommended), `Run /cook --auto <slug-or-path>` (offer only when the input is unambiguous *and* the user signalled autonomous pipeline intent — "auto", "ship it", "all the way through"; never pre-select), `Run /mold first`, `Stop`.
 - **cheese-factory** — `Run /cheese-factory <slug-or-path>` (recommended when the spec decomposes into 5+ curds), `Run /ultracook <slug-or-path>` (when the user wants the sequential pipeline instead), `Run /cook --auto`, `Stop`.
-- **debug** — `Run /culture` (recommended), `Run /mold (Diagnose mode)`, `Stop`.
+- **debug** — `Run /pasteurize <input>` (recommended), `Run /pasteurize --auto <input>` (offer only when the user signalled autonomous intent — "auto", "ship it", "fix it all the way"; never pre-select), `Run /culture` (when the user explicitly wants no-write diagnosis only), `Stop`.
 - **age** — `Run /age <ref>` (recommended), `Run /age --scope <path>`, `Stop`.
 - **age-then-cure** — `Run /age <slug>` (recommended), `Run /cure <slug>` (when a fresh report already exists), `Stop`.
 
