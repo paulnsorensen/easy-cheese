@@ -23,7 +23,7 @@ Do not use it to implement broad new behavior. Press may add or strengthen tests
 5. **Corrective fixes** — only for defects the hardening tests expose. No new behaviour.
 6. **Run checks** — narrowest useful tests, then relevant wider gates already in the project.
 7. **Report** — write `.cheese/press/<slug>.md` (slug carried from `/cook`, or derived from branch/task) and print the path. Mark readiness: `ready for /age`, `follow-up recommended`, or `blocked`.
-8. **Hand off** — in manual mode, prompt the next step via `AskUserQuestion` (see `## Handoff` below); in `--auto` mode, chain forward per `### Auto mode`.
+8. **Hand off** — in manual mode, prompt the next step via the shared handoff gate (see `## Handoff` below); in `--auto` mode, chain forward per `### Auto mode`.
 
 ## Preferred tools and fallbacks
 
@@ -98,18 +98,18 @@ Next step:    /age <slug>                          (when ready for /age or follo
 
 **Pipeline:** culture → mold → cook → **[press]** → age → cure → ship
 
-After the press report is on disk, ask via `AskUserQuestion` which downstream to run. Lead each option with the verb (what the user wants to *do* next); the skill command is the backing detail. Default options:
+After the press report is on disk, ask via the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md). Lead each option with the verb (what the user wants to *do* next); the skill command (with any in-scope `--hard` propagation) is the backing detail. Default options:
 
 - **Review the diff** *(recommended when readiness is `ready for /age` or `follow-up recommended`)* — `/age <slug>`. For `follow-up recommended`, the cooked contract is sound and every changed behaviour has a hardening test; documented follow-ups can be addressed after review.
-- **Stop** — defer review (use this if you want to harden manually before /age, even though the contract is review-safe).
+- **Stop** — dispatch none; defer review (use this if you want to harden manually before /age, even though the contract is review-safe).
 
-Pre-select **Review the diff** when readiness is `ready for /age` or `follow-up recommended`. If the report is `blocked`, do not pre-select anything; the user decides whether to fix or escalate.
+Pre-select **Review the diff** when readiness is `ready for /age` or `follow-up recommended`. If the report is `blocked`, do not pre-select anything; the user decides whether to fix or escalate. After a non-stop selection, run the selected command immediately.
 
 ### Auto mode
 
 When invoked with `--auto` (propagated from `/cook --auto`):
 
-- Skip the `AskUserQuestion` entirely.
+- Skip the handoff gate entirely.
 - If readiness is `ready for /age` or `follow-up recommended`, invoke `/age <slug> --auto` directly. Both states mean the cooked contract is sound and every changed behaviour has a hardening test; follow-ups are documented and review-safe.
 - If readiness is `blocked`, stop the auto chain and surface the press report to the user. `blocked` is reserved for cases where human judgement is genuinely required: a false premise on the cooked contract, an unfixable level-1/2 gap inside cooked scope, a changed behaviour press could not lock with a stable hardening test, or spinning wheels (three attempts at the same gap without green).
 

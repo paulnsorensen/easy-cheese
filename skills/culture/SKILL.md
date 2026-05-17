@@ -64,15 +64,25 @@ The notes slug is the **only** thing culture is allowed to write. No commits, no
 
 **Pipeline:** **[culture]** → mold → cook → press → age → cure → ship
 
-When the conversation reveals real work, ask via `AskUserQuestion` which downstream to run. Lead each option with the verb (what the user wants to *do* next); the skill command is the backing detail. Default options (pick at most three of these plus a stop):
+When the conversation reveals real work, ask via the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md). Lead each option with the verb (what the user wants to *do* next); the skill command is the backing detail. Before asking, render a compact context packet so the downstream skill can dispatch without losing the discussion:
 
-- **Shape this into a written spec** *(recommended when the idea is still fuzzy)* — `/mold`.
-- **Implement it directly** *(recommended when the ask is clear and unambiguous)* — `/cook`.
-- **Implement and auto-review** — `/cook --auto`, chains through `/press → /age → /cure` autonomously, fixing every medium-or-above finding across up to two cure passes. Stops at the final cure pass; opening or updating the PR stays a manual step. Offer this when the conversation reached an unambiguous contract *and* the user signalled they want the whole pipeline to run forward without per-step approval ("just do it", "ship it", "auto", "fix it all the way through"). Never pre-select; auto mode opts the user out of the gates that exist for their protection.
+```yaml
+handoff_context:
+  source_skill: /culture
+  summary: <one factual sentence>
+  open_questions: [<only blockers, if any>]
+  artifact: <.cheese/notes/<slug>.md if written, otherwise none>
+```
+
+Default options (pick at most three of these plus a stop):
+
+- **Shape this into a written spec** *(recommended when the idea is still fuzzy)* — `/mold` with the context packet, or `/mold .cheese/notes/<slug>.md` when a notes slug exists.
+- **Implement it directly** *(recommended when the ask is clear and unambiguous)* — `/cook` with the context packet as the accepted contract.
+- **Implement and auto-review** — `/cook --auto` with the context packet, chains through `/press → /age → /cure` autonomously, fixing every medium-or-above finding across up to two cure passes. Stops at the final cure pass; opening or updating the PR stays a manual step. Offer this when the conversation reached an unambiguous contract *and* the user signalled they want the whole pipeline to run forward without per-step approval ("just do it", "ship it", "auto", "fix it all the way through"). Never pre-select; auto mode opts the user out of the gates that exist for their protection.
 - **Research more first** *(when the conversation hit a factual gap external docs could close)* — `/briesearch`.
-- **Pause** — keep the dialogue in head; no further action.
+- **Pause** — dispatch none; keep the dialogue in head.
 
-`/age` is never the next step from culture — review needs a diff to look at.
+After a non-stop selection, run the selected downstream skill immediately with the context packet. `/age` is never the next step from culture — review needs a diff to look at.
 
 ## Rules
 

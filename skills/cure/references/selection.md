@@ -8,9 +8,19 @@ The only sanctioned bypass of the selection rule is the `--auto --stake <floor>`
 
 ## Handoff from /age
 
-When `/age` completes the selection gate and the user picks a non-empty set, it dispatches `/cure` with the selection locked in by passing the chosen ids as plain text in the invocation context — the same verbs accepted at the prompt (`1,3,5`, `all-high`, etc.). `/cure` reads this from the dispatch context, skips rendering the selection table, and goes straight to apply.
+When `/age` completes the selection gate and the user picks a non-empty set, it dispatches `/cure <slug>` with the selection locked in by passing a structured context block alongside the invocation:
 
-There is no CLI flag (`--select` is not a supported syntax). The selection travels as prose context in the `AskUserQuestion` resolution, not as a parsed argument.
+```yaml
+handoff_context:
+  source_skill: /age
+  source_report: .cheese/age/<slug>.md
+  selection: "1,3,5 | all-high | all | skip N"
+  resolved_ids: [1, 3, 5]
+```
+
+Both `selection` (the verb) and `resolved_ids` (the expanded list) are required. `/age` expands the verb before dispatch so `/cure` never has to interpret it; `/cure` re-confirms the resolved ids against the report and goes straight to apply.
+
+There is no CLI flag (`--select` is not a supported syntax). The selection travels in the handoff context, not as a parsed argument.
 
 ## Rendering the selection list
 
@@ -67,6 +77,6 @@ When `/cure` is invoked with `--auto --stake <floor>`:
 - **Per-finding flow is the same as interactive:** `cheez-read` to re-confirm, `cheez-write` to apply, narrowest test to verify.
 - **On test breakage:** revert that single finding's edit, log it under the cure report's `### Deferred` section with the test name and one-line failure summary, and continue with the next finding. Do not stop the whole pass for one bad fix.
 - **On a finding that is no longer applicable** (file moved, code already fixed): record under `### Skipped` exactly as in interactive mode.
-- **After all selected findings are processed:** invoke `/age --scope <touched-paths> --auto` directly (no `AskUserQuestion`). The pass-cap is enforced inside `/age --auto`, not here — cure keeps applying when called.
+- **After all selected findings are processed:** invoke `/age --scope <touched-paths> --auto` directly (no handoff gate). The pass-cap is enforced inside `/age --auto`, not here — cure keeps applying when called.
 
 `--auto` is not a verb the user should type interactively. It exists to make the `/cook --auto` chain coherent. If a user types `/cure --auto` directly without `--stake`, error out with a one-line message pointing them at standard interactive `/cure <slug>` — `--stake` is the contract for auto mode, and without it `/cure --auto` has no inclusion threshold. Do not prompt for a floor; do not silently fall back to interactive selection.

@@ -232,13 +232,13 @@ git cherry-pick --abort
 
 ## Handoff
 
-After resolution finishes, prompt the next step via `AskUserQuestion`. Default options:
+After resolution finishes, prompt the next step via the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md). Include the detected interrupted operation and upstream invocation in the context packet before asking. Default options:
 
-- **Resume** — `git merge --continue` / `git rebase --continue` / `git cherry-pick --continue`, then return to whatever skill triggered the merge (`/cook`, `/cure`, etc.).
-- **Re-run gates** — re-enter the upstream skill so its quality gates run on the merged state.
-- **Stop** — leave the working tree staged for the user to inspect.
+- **Resume** — dispatch the exact continuation command for the current operation (`git merge --continue`, `git rebase --continue`, or `git cherry-pick --continue`). If the triggering skill invocation is known, return to that skill with the original context after the git operation succeeds; otherwise stop with the resumed git status.
+- **Re-run gates** — dispatch the upstream skill invocation that originally surfaced the conflict so its quality gates run on the merged state.
+- **Stop** — dispatch none; leave the working tree staged for the user to inspect.
 
-`/melt` never auto-resumes. The user picks.
+`/melt` never resumes before the user selects. After a non-stop selection, run the selected continuation immediately.
 
 ## Rules
 
