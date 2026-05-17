@@ -75,7 +75,10 @@ Options:
   --harness <selection> Harness to register skills + MCP servers with.
                        Default: auto-detect claude-code, cursor, and codex.
                        Accepts a single harness, a comma-separated list, or
-                       'auto'. Other values include vscode, gemini, zed, copilot.
+                       'auto'. Values are passed through to
+                       'gh skill install --agent', so use the gh skill agent
+                       names: claude-code, cursor, codex, github-copilot,
+                       gemini-cli.
   --no-edit            Register tilth without the --edit capability.
   --dry-run            Print what would happen without changing anything.
   -h, --help           Show this help.

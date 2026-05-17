@@ -1,8 +1,8 @@
 # Install
 
-easy-cheese skills can be installed three ways. Pick the one that matches your harness.
+easy-cheese skills can be installed two ways. Pick the one that matches your harness and platform.
 
-## `gh skill` (recommended)
+## `gh skill` (recommended, all platforms)
 
 Requires [GitHub CLI](https://cli.github.com) v2.90.0+ with the `gh skill` command.
 
@@ -51,14 +51,6 @@ gh skill preview paulnsorensen/easy-cheese cook
 gh skill update --all
 ```
 
-## Claude Code plugin
-
-Once a `.claude-plugin/plugin.json` ships, install with:
-
-```bash
-/plugin install paulnsorensen/easy-cheese
-```
-
 ## Manual copy
 
 ```bash
@@ -71,9 +63,12 @@ mkdir -p .claude/skills
 cp -r skills/cook .claude/skills/
 ```
 
-## Bootstrap script (tools + MCP servers)
+## Bootstrap script (macOS only — tools + MCP servers)
 
 The repo ships an `install.sh` that handles the surrounding ecosystem — CLI tools (`ripgrep`, `jq`, `fd`, `ast-grep`, `mergiraf`, `tilth`, etc.) and MCP servers (`tilth`, `context7`, `tavily`, `code-review-graph`).
+
+!!! warning "macOS-only"
+    `install.sh` exits on non-macOS hosts and requires Homebrew. On Linux or Windows, use the `gh skill` path above and install CLI tools and MCP servers via your system package manager.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/paulnsorensen/easy-cheese/main/scripts/install.sh | bash
@@ -86,7 +81,7 @@ Flags:
 | `--tools <list>` | Comma-separated CLI tools (`gh`, `ripgrep`, `fd`, `jq`, `ast-grep`, `git-delta`, `just`, `mergiraf`, `tilth`) |
 | `--mcp <list>` | MCP servers to register (`tilth`, `context7`, `tavily`, `code-review-graph`, `none`) |
 | `--skip-mcp` / `--skip-tools` | Run one half only |
-| `--harness <list>` | Harness to register MCP servers with (`auto`, `claude-code`, `cursor`, `codex`, `gemini`, `vscode`, `zed`, `copilot`) |
+| `--harness <list>` | Harness to register skills + MCP servers with. Passed through to `gh skill install --agent`, so values must match: `auto`, `claude-code`, `cursor`, `codex`, `github-copilot`, `gemini-cli` |
 | `--no-edit` | Register tilth without the `--edit` capability |
 | `--dry-run` | Print what would happen without changing anything |
 

@@ -34,10 +34,10 @@ lint-yaml:
     yamllint -c .yamllint.yml .
 
 # Full local check with autofixes
-check: lint-md-fix lint-yaml-fix lint-yaml lint-sh test
+check: lint-md-fix lint-yaml-fix lint-yaml lint-sh test docs-build
 
 # CI-mode verification (no autofixes)
-ci: lint-md lint-yaml lint-sh test
+ci: lint-md lint-yaml lint-sh test docs-build
 
 # Install docs build dependencies into a local venv
 docs-install:

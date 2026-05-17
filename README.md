@@ -219,14 +219,6 @@ Keep installed skills up to date:
 gh skill update --all
 ```
 
-### Claude Code (plugin)
-
-Once a `.claude-plugin/plugin.json` is added to this repo, install with:
-
-```sh
-/plugin install paulnsorensen/easy-cheese
-```
-
 ### Claude Code (manual)
 
 Copy the skills you want into your skills directory:

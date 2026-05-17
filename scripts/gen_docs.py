@@ -3,7 +3,8 @@
 Invoked by mkdocs-gen-files. For each skills/<name>/SKILL.md:
   - Emit docs/skills/<name>.md mirroring the SKILL.md body, with title from
     frontmatter and an "edit this page" link back to the source.
-  - Mirror references/* under docs/skills/<name>/references/*.
+  - Mirror references/* (Markdown + asset files like JSON schemas) under
+    docs/skills/<name>/references/*. Only Markdown refs land in the nav.
   - Rewrite internal Markdown links to match the flattened docs layout.
 
 Also emits:
@@ -157,12 +158,12 @@ def emit_skill_page(skill_dir: Path) -> dict | None:
     src_rel = skill_md.relative_to(REPO_ROOT).as_posix()
     page_path = f"skills/{name}.md"
 
-    front = (
-        f"---\n"
-        f"title: /{name}\n"
-        f"description: {first_sentence(description)}\n"
-        f"---\n\n"
-    )
+    front = "---\n" + yaml.safe_dump(
+        {"title": f"/{name}", "description": first_sentence(description)},
+        sort_keys=False,
+        allow_unicode=True,
+        default_flow_style=False,
+    ) + "---\n\n"
 
     header = (
         f"# `/{name}`\n\n"
@@ -184,17 +185,23 @@ def emit_skill_page(skill_dir: Path) -> dict | None:
     refs_dir = skill_dir / "references"
     refs: list[tuple[str, str]] = []
     if refs_dir.is_dir():
-        for ref in sorted(refs_dir.glob("*.md")):
+        for ref in sorted(p for p in refs_dir.iterdir() if p.is_file()):
             ref_rel = ref.relative_to(REPO_ROOT).as_posix()
             out = f"skills/{name}/references/{ref.name}"
-            content = apply_link_rewrite(
-                ref.read_text(encoding="utf-8"),
-                lambda url: rewrite_ref_link(url, name),
-            )
-            with mkdocs_gen_files.open(out, "w") as fh:
-                fh.write(content)
-            mkdocs_gen_files.set_edit_path(out, ref_rel)
-            refs.append((ref.stem, out))
+            if ref.suffix.lower() == ".md":
+                content = apply_link_rewrite(
+                    ref.read_text(encoding="utf-8"),
+                    lambda url: rewrite_ref_link(url, name),
+                )
+                with mkdocs_gen_files.open(out, "w") as fh:
+                    fh.write(content)
+                mkdocs_gen_files.set_edit_path(out, ref_rel)
+                refs.append((ref.stem, out))
+            else:
+                # Non-Markdown reference (e.g. JSON schema) — copy as a static
+                # asset. set_edit_path() only applies to rendered pages.
+                with mkdocs_gen_files.open(out, "wb") as fh:
+                    fh.write(ref.read_bytes())
 
     return {"name": name, "description": description, "page": page_path, "refs": refs}
 
@@ -224,7 +231,12 @@ def emit_root_passthrough(filename: str, dest: str, title: str) -> bool:
     text = src.read_text(encoding="utf-8")
     text = re.sub(r"^#\s+.*\n", "", text, count=1)
     text = apply_link_rewrite(text, rewrite_root_passthrough_link)
-    front = f"---\ntitle: {title}\n---\n\n# {title}\n\n"
+    front = "---\n" + yaml.safe_dump(
+        {"title": title},
+        sort_keys=False,
+        allow_unicode=True,
+        default_flow_style=False,
+    ) + f"---\n\n# {title}\n\n"
     with mkdocs_gen_files.open(dest, "w") as fh:
         fh.write(front + text.lstrip())
     mkdocs_gen_files.set_edit_path(dest, filename)

@@ -28,12 +28,20 @@ Each skill is independently invocable — you don't have to run the full pipelin
 
 ## Quick start
 
+The portable path that works on every OS is `gh skill`:
+
 ```bash
-# Install the plugin into Claude Code
+gh skill install paulnsorensen/easy-cheese
+```
+
+If you're on macOS and want the surrounding ecosystem (CLI tools + MCP servers) wired up in one shot:
+
+```bash
+# macOS only — relies on Homebrew
 curl -fsSL https://raw.githubusercontent.com/paulnsorensen/easy-cheese/main/scripts/install.sh | bash
 ```
 
-See [Install](install.md) for per-user, per-project, and custom install layouts.
+See [Install](install.md) for per-user, per-project, manual, and platform-specific install paths.
 
 ## Skills at a glance
 
