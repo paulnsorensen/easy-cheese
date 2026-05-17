@@ -84,7 +84,7 @@ After the spec is written, ask the user via `AskUserQuestion` which downstream t
 **Low- and medium-blast-radius specs (verdict `low` or `medium`):**
 
 - **Implement the spec** *(recommended)* — `/cook .cheese/specs/<slug>.md`.
-- **Implement and auto-review through ship** — `/cook --auto .cheese/specs/<slug>.md`, chains straight through `/press → /age → /cure` autonomously, fixing every medium-or-above finding across up to two cure passes. Offer when acceptance criteria are explicit *and* the user has signalled they want the pipeline to run forward without per-step approval. Never pre-select; auto mode is opt-in.
+- **Implement and auto-review** — `/cook --auto .cheese/specs/<slug>.md`, chains straight through `/press → /age → /cure` autonomously, fixing every medium-or-above finding across up to two cure passes. Stops at the final cure pass; opening or updating the PR stays a manual step. Offer when acceptance criteria are explicit *and* the user has signalled they want the pipeline to run forward without per-step approval. Never pre-select; auto mode is opt-in.
 - **Research more first** — `/briesearch`, gather more external evidence before implementing.
 - **Stop** — leave the spec for later.
 
@@ -94,7 +94,7 @@ The spec is large enough that per-phase context contamination becomes a real con
 
 - **Run the full pipeline in fresh-context isolation** *(recommended)* — `/ultracook .cheese/specs/<slug>.md`, autonomous chain (`cook → press → age → cure → age → cure → age`, all `--auto`) with each phase running inside its own sub-agent, blind to prior phases.
 - **Implement manually, one phase at a time** — `/cook .cheese/specs/<slug>.md`.
-- **Compact and resume by hand** — clear context, then `/cheese --continue <slug>` resumes from the latest handoff slug.
+- **Compact and resume by hand** — clear context, then dispatch `/cook .cheese/specs/<slug>.md` or `/ultracook .cheese/specs/<slug>.md` directly. (`/cheese --continue` scans phase handoff slugs only — fresh specs don't surface there until cook lands a slug — so dispatching the explicit command is the resumption path here.)
 - **Stop** — leave the spec for later.
 
 `/cook --auto` is omitted from the high-blast-radius offer set: with a large footprint, the fresh-context property of `/ultracook` is the actual motivation for going autonomous, and the in-session chain it offers is the wrong transport for that need. Never pre-select an autonomous option; the user must opt in. `medium` blast radius keeps the standard handoff because the in-session `/cook --auto` chain is still the right tool for that footprint — the fresh-context premium is only worth paying when the spec actually crosses module boundaries broadly enough to flip the verdict to `high`.

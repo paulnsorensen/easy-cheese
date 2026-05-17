@@ -68,10 +68,11 @@ When the conversation reveals real work, ask via `AskUserQuestion` which downstr
 
 - **Shape this into a written spec** *(recommended when the idea is still fuzzy)* — `/mold`.
 - **Implement it directly** *(recommended when the ask is clear and unambiguous)* — `/cook`.
-- **Implement and auto-review through ship** — `/cook --auto`, chains through `/press → /age → /cure` autonomously, fixing every medium-or-above finding across up to two cure passes. Offer this when the conversation reached an unambiguous contract *and* the user signalled they want the whole pipeline to run forward without per-step approval ("just do it", "ship it", "auto", "fix it all the way through"). Never pre-select; auto mode opts the user out of the gates that exist for their protection.
+- **Implement and auto-review** — `/cook --auto`, chains through `/press → /age → /cure` autonomously, fixing every medium-or-above finding across up to two cure passes. Stops at the final cure pass; opening or updating the PR stays a manual step. Offer this when the conversation reached an unambiguous contract *and* the user signalled they want the whole pipeline to run forward without per-step approval ("just do it", "ship it", "auto", "fix it all the way through"). Never pre-select; auto mode opts the user out of the gates that exist for their protection.
+- **Research more first** *(when the conversation hit a factual gap external docs could close)* — `/briesearch`.
 - **Pause** — keep the dialogue in head; no further action.
 
-`/briesearch` is offered only when the conversation hit a factual gap that external docs could close. `/age` is never the next step from culture — review needs a diff to look at.
+`/age` is never the next step from culture — review needs a diff to look at.
 
 ## Rules
 
