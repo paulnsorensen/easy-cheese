@@ -137,7 +137,7 @@ Pre-select only the highest-confidence target. If two targets are viable, surfac
 - One clarifying question, max, before re-entering classification.
 - Below `medium` confidence, route to `clarify`, not to a guess.
 - Never paraphrase or summarise downstream skill output — that is the downstream skill's job.
-- Never edit files, write specs, or run quality gates from `/cheese`.
+- Never edit files, write specs, or run quality gates from `/cheese` — the only sanctioned write is the shared orientation cache at `.cheese/orient/<slug>.md` (per [`../../shared/orientation.md`](../../shared/orientation.md), only on cache miss or explicit user refresh).
 
 ## References
 

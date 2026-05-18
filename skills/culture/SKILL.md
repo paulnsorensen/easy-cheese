@@ -1,6 +1,6 @@
 ---
 name: culture
-description: This skill should be used when the user wants to think out loud, rubber-duck a design, walk through trade-offs, or explore an ambiguous problem WITHOUT producing production code or specs — phrases like "let's talk through X", "rubber duck this with me", "I'm trying to decide between A and B", "help me think about Y", "what would happen if we…", "/culture". Output is conversation; the only sanctioned artifact is an opt-in `.cheese/notes/<slug>.md` handoff slug at session end if the user asks for notes. Culture never writes to production code, never commits, never opens PRs. Use when the user wants shared mental model first; if the dialogue reveals real work to do, recommend `/mold` (fuzzy → spec) or `/cook` (clear ask → code) and stop. Before `/mold` or `/cook`.
+description: This skill should be used when the user wants to think out loud, rubber-duck a design, walk through trade-offs, or explore an ambiguous problem WITHOUT producing production code or specs — phrases like "let's talk through X", "rubber duck this with me", "I'm trying to decide between A and B", "help me think about Y", "what would happen if we…", "/culture". Output is conversation; sanctioned artifacts are the shared `.cheese/orient/<slug>.md` cache (only on cache miss, per `shared/orientation.md`) and an opt-in `.cheese/notes/<slug>.md` handoff slug at session end if the user asks for notes. Culture never writes to production code, never commits, never opens PRs. Use when the user wants shared mental model first; if the dialogue reveals real work to do, recommend `/mold` (fuzzy → spec) or `/cook` (clear ask → code) and stop. Before `/mold` or `/cook`.
 license: MIT
 ---
 
@@ -66,7 +66,7 @@ artifact: <path-if-any>
 
 `next:` is culture-specific — values are `mold` (fuzzy idea, route to spec), `cook` (clear ask, route to implementation), `ultracook` (clear ask with high blast radius, route to autonomous fresh-context chain), or `stop` (no further action). The orientation line captures the punchline of the dialogue in one factual sentence; deeper notes go in the body of the same file.
 
-The notes slug is the **only** thing culture is allowed to write. No commits, no PRs, no production-code edits — those route to `/mold` or `/cook`.
+The notes slug plus the shared orientation cache at `.cheese/orient/<slug>.md` (per [`../../shared/orientation.md`](../../shared/orientation.md), only on cache miss) are the **only** things culture is allowed to write. No commits, no PRs, no production-code edits — those route to `/mold` or `/cook`.
 
 ## Handoff
 

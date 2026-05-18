@@ -21,8 +21,8 @@ Every caller runs this exact sequence before doing any orientation work:
 
 1. Compute the slug: `slug=$(basename "$(git rev-parse --show-toplevel)")`.
 2. Check whether `.cheese/orient/<slug>.md` exists.
-3. **If it exists**, read it and load its contents into the parent context. Print a one-line acknowledgement (`Orientation: loaded from .cheese/orient/<slug>.md (HEAD <sha>)`). Skip the recipe. Done.
-4. **If it does not exist**, run the five-step recipe below, write the result to `.cheese/orient/<slug>.md` with the frontmatter spec'd below, then load the contents into the parent context. Print a one-line acknowledgement (`Orientation: generated at .cheese/orient/<slug>.md`). Done.
+3. **If it exists**, read it and load its contents into the parent context. Print a one-line acknowledgement (`Orientation: loaded from .cheese/orient/<slug>.md (cached HEAD <sha-from-frontmatter>)`). Skip the recipe. Done.
+4. **If it does not exist**, ensure the cache directory exists (`mkdir -p .cheese/orient`), run the five-step recipe below, write the result to `.cheese/orient/<slug>.md` with the frontmatter spec'd below, then load the contents into the parent context. Print a one-line acknowledgement (`Orientation: generated at .cheese/orient/<slug>.md (HEAD <current-sha>)`). Done.
 
 ### Staleness
 
@@ -124,12 +124,12 @@ From the manifest files, name the dependencies that shape the architecture (fram
 | Need | Prefer | Fallback |
 | --- | --- | --- |
 | Manifest detection | `cheez-read` `tilth_files` | host `ls` / `Glob` |
-| Source file counting | `tokei` | `cheez-read` `tilth_files` with extension filter |
+| Source file counting | `tokei` | `git ls-files \| wc -l` (host-native; works without tilth) |
 | Symbol discovery | `cheez-search` `tilth_search kind: "symbol"` | LSP `documentSymbol`, then text search |
 | Dependency / import map | `cheez-search` `tilth_deps` on an entry point | inspecting top-of-file imports manually |
 | Git activity | `git log` (plain) | — |
 
-If `tilth` MCP is unavailable, fall back to LSP and host tools per the cheez-* portability rule — but do not skip the recipe entirely. Mark anything you could not verify with `[?]` in the orientation body so downstream readers know.
+If `tilth` MCP is unavailable, fall back to host tooling (`git ls-files`, `rg`, `find`) and any available LSP server — workflow skills like this one stay functional without tilth even though the cheez-* skills do not. Do not skip the recipe entirely; mark anything you could not verify with `[?]` in the orientation body so downstream readers know.
 
 ## What orientation never does
 
