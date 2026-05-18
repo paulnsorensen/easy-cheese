@@ -12,12 +12,15 @@ Do not use it for free-form discussion with no artifact intent (`/culture`), dir
 
 ## Flow
 
-1. **Route** — pick a starting mode from the input shape (see `references/modes.md`) and announce it in one line. If the user's framing rests on a false premise or a loaded assumption, name it before routing.
-2. **Dialogue** — build shared understanding through the smallest useful question to the user, but contribute at maximum useful depth between questions (full options, named edge cases, concrete evidence — not gestural sketches). Ground every critical claim with `cheez-search`, `cheez-read`, or a Validate Cycle (`references/validate-cycle.md`). Track contradictions across turns; if turn N contradicts an earlier conclusion, flag and resolve it before continuing.
-3. **Sketch** — for any feature touching >1 module or a new public interface, run the shape check (`references/shape-check.md`) on the touched symbols, then lock seams in pseudocode signatures before talking spec content. Default to full signatures, not hand-waving.
-4. **Two-key handshake** — both the user (explicit verb) and the agent (coherence self-check) must agree before extraction. See `references/handshake.md`.
-5. **Curdle** — write the approved spec to `.cheese/specs/<slug>.md` (and optional `.cheese/issues/<slug>-NNN.md`). Format and slug rules in `references/curdle.md`.
-6. **Hand off** — once the spec is on disk, prompt the next step via the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md). Never dispatch before the user selects; after a non-stop selection, run the selected downstream skill immediately.
+1. **Ground the repo** — run the orientation read-or-write procedure in [`../../shared/orientation.md`](../../shared/orientation.md) before mode routing. If `.cheese/orient/<slug>.md` already exists (likely if `/cheese` or `/culture` ran first this session), load it; otherwise build it from the five-step recipe and load. Print the one-line acknowledgement. Mode routing in step 2 reads against this snapshot, not against a blind input parse.
+2. **Route** — pick a starting mode from the input shape (see `references/modes.md`) and announce it in one line. If the user's framing rests on a false premise or a loaded assumption, name it before routing.
+3. **Dialogue** — build shared understanding through the smallest useful question to the user, but contribute at maximum useful depth between questions (full options, named edge cases, concrete evidence — not gestural sketches). Ground every critical claim with `cheez-search`, `cheez-read`, or a Validate Cycle (`references/validate-cycle.md`). Track contradictions across turns; if turn N contradicts an earlier conclusion, flag and resolve it before continuing.
+4. **Sketch** — for any feature touching >1 module or a new public interface, run the shape check (`references/shape-check.md`) on the touched symbols, then lock seams in pseudocode signatures before talking spec content. Default to full signatures, not hand-waving.
+5. **Two-key handshake** — both the user (explicit verb) and the agent (coherence self-check) must agree before extraction. See `references/handshake.md`.
+6. **Curdle** — write the approved spec to `.cheese/specs/<slug>.md` (and optional `.cheese/issues/<slug>-NNN.md`). Format and slug rules in `references/curdle.md`.
+7. **Hand off** — once the spec is on disk, prompt the next step via the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md). Never dispatch before the user selects; after a non-stop selection, run the selected downstream skill immediately.
+
+Repo-level orientation (step 1) and symbol-level shape check (step 4) are deliberately separate: orientation tells you what the codebase *is*, the shape check tells you what a specific seam *touches*. Both are cached read-only artifacts under `.cheese/`; neither blocks the dialogue.
 
 ## Modes
 
@@ -103,6 +106,6 @@ The spec is large enough that per-phase context contamination becomes a real con
 
 - Dialogue first; artifacts are the by-product.
 - Do not implement code.
-- Do not write production files before the approval gate.
+- Do not write production files before the approval gate. The shared orientation cache at `.cheese/orient/<slug>.md` (per [`../../shared/orientation.md`](../../shared/orientation.md)) is the one exception, written only on cache miss.
 - Do not silently settle uncertain claims.
 - Apply the shared voice kernel (lives at `skills/age/references/voice.md` in this repo): correct false premises, flag confidence as `certain | speculating | don't know` on each critical claim, steelman before dismissing, ask the smallest useful question while contributing at maximum useful depth.

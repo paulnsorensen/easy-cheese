@@ -31,13 +31,16 @@ If `$ARGUMENTS` is missing entirely and there is no recent context to lean on, a
 
 ## Flow
 
-1. **Classify** — match `$ARGUMENTS` against the intent shapes in `references/classification.md`. Pick the highest-confidence shape; below the threshold, route to `clarify` (see step 4).
-2. **Announce** — print one short paragraph with: detected intent, chosen target skill (or pre-step), and the one-line reason for the decision. Cite the signal that drove it (e.g. "spec path under `.cheese/specs/`", "stack trace present", "PR URL").
-3. **Self-check** — run the coherence questions in `references/coherence-check.md` before dispatching. If any fails, downgrade to `clarify` or `research`.
-4. **Confirm** — issue a handoff gate per [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md): recommended target pre-selected, at least one alternative, and a `Stop` option. The user's selection is the only trigger for dispatch; never invoke a skill silently before the selection.
-5. **Hand off** — once the user picks a non-stop option, immediately run the selected skill with the exact dispatch command and context packet. The downstream skill owns its own flow; `/cheese` does not narrate beyond the routing decision.
+1. **Ground** — run the orientation read-or-write procedure in [`../../shared/orientation.md`](../../shared/orientation.md) before anything else. If `.cheese/orient/<slug>.md` exists, load it; otherwise generate it from the five-step recipe and load. Print the one-line acknowledgement so the user knows whether orientation was cached or freshly built. Classification then runs against the input *plus* the orientation snapshot.
+2. **Classify** — match `$ARGUMENTS` against the intent shapes in `references/classification.md`. Pick the highest-confidence shape; below the threshold, route to `clarify` (see step 5).
+3. **Announce** — print one short paragraph with: detected intent, chosen target skill (or pre-step), and the one-line reason for the decision. Cite the signal that drove it (e.g. "spec path under `.cheese/specs/`", "stack trace present", "PR URL").
+4. **Self-check** — run the coherence questions in `references/coherence-check.md` before dispatching. If any fails, downgrade to `clarify` or `research`.
+5. **Confirm** — issue a handoff gate per [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md): recommended target pre-selected, at least one alternative, and a `Stop` option. The user's selection is the only trigger for dispatch; never invoke a skill silently before the selection.
+6. **Hand off** — once the user picks a non-stop option, immediately run the selected skill with the exact dispatch command and context packet. The downstream skill owns its own flow; `/cheese` does not narrate beyond the routing decision.
 
-`/cheese` is a router, not a worker. It never edits files, runs tests, opens PRs, or paraphrases the downstream skill's output.
+`/cheese` is a router, not a worker. It never edits files (the orientation cache slot under `.cheese/orient/<slug>.md` is the only sanctioned write), runs tests, opens PRs, or paraphrases the downstream skill's output.
+
+Downstream skills that also load orientation (`/culture`, `/mold`) will hit the cache that `/cheese` populated, so the recipe runs at most once per session per repo.
 
 ## Intent shapes
 
@@ -141,3 +144,4 @@ Pre-select only the highest-confidence target. If two targets are viable, surfac
 - `references/classification.md` — intent shapes, signals, disambiguation rules.
 - `references/coherence-check.md` — pre-dispatch self-checks that downgrade misroutes.
 - [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md) — Codex-safe post-selection dispatch contract (shared across workflow skills).
+- [`../../shared/orientation.md`](../../shared/orientation.md) — five-step codebase grounding recipe and shared `.cheese/orient/<slug>.md` cache contract (shared with `/culture` and `/mold` so the recipe runs at most once per repo per session).
