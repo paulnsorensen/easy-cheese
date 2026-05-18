@@ -54,7 +54,7 @@ If a preferred tool is missing, say so once and continue with the fallback. Miss
 
 ## Output
 
-The output contract lives in `references/synthesis.md` (single source of truth). Short shape: one-paragraph synthesis, claim-level evidence table, open questions block, confidence with one-line justification, recommended next step. For deep looks, also write `.cheese/research/<slug>/<slug>.md` and pass back the path.
+Cross-cutting house style and citation form: [`../../shared/formatting.md`](../../shared/formatting.md). The output contract lives in `references/synthesis.md` (single source of truth). Short shape: one-paragraph synthesis, claim-level evidence table, open questions block, confidence with one-line justification, recommended next step. For deep looks, also write `.cheese/research/<slug>/<slug>.md` and pass back the path.
 
 ## Rules
 

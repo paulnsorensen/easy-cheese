@@ -28,6 +28,8 @@ A spec is the rich container; absorbs problem framing, requirements, approach, d
 
 ## Spec template
 
+Cross-cutting house style and citation form: [`shared/formatting.md`](../../../shared/formatting.md). This section owns the spec shape; formatting.md owns the voice rules and the footnote primitive.
+
 ```markdown
 ---
 slug: <slug>

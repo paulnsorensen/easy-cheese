@@ -60,6 +60,8 @@ Criticality depends on the question. Context7 is critical for version-specific A
 
 ## Output shape
 
+Cross-cutting house style and citation form: [`shared/formatting.md`](../../../shared/formatting.md). This section owns the research-report shape; formatting.md owns the voice rules and the footnote primitive.
+
 Short form (always returned to the caller):
 
 ```markdown

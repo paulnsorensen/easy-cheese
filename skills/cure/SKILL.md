@@ -68,6 +68,8 @@ artifact: <path-if-any>
 
 ## Output
 
+Cross-cutting house style and citation form: [`../../shared/formatting.md`](../../shared/formatting.md). This section owns the cure-report shape; formatting.md owns the voice rules and the footnote primitive.
+
 The cure report body lives below the handoff slug in the same file at `.cheese/cure/<slug>.md`:
 
 ```markdown

@@ -85,6 +85,8 @@ Digest size, parent-vs-sub-agent split, and harness-agnostic sub-agent selection
 
 ## Output
 
+Cross-cutting house style and citation form: [`../../shared/formatting.md`](../../shared/formatting.md). This section owns the findings-report shape; formatting.md owns the voice rules and the footnote primitive.
+
 Write to `.cheese/age/<slug>.md` with a minimum handoff slug at the top so `/ultracook` and `/cheese --continue` can chain without re-parsing the report:
 
 ```markdown

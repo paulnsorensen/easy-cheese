@@ -62,6 +62,8 @@ Use existing project commands only. Run the most relevant tests for the touched 
 
 ## Output
 
+Cross-cutting house style and citation form: [`../../shared/formatting.md`](../../shared/formatting.md). This section owns the cook-report shape; formatting.md owns the voice rules and the footnote primitive.
+
 Summarize:
 
 - Files changed and why.
