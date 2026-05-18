@@ -1,6 +1,6 @@
 # 🧀 easy-cheese
 
-A skills plugin for [Claude Code](https://docs.claude.com/claude-code) — the cheese-making pipeline for code review, implementation, refactoring, and PR rescue.
+A set of harness-agnostic [Agent Skills](https://agentskills.io) — the cheese-making pipeline for code review, implementation, refactoring, and PR rescue.
 
 [![CI](https://img.shields.io/github/actions/workflow/status/paulnsorensen/easy-cheese/validate.yml?branch=main&label=CI&style=flat-square)](https://github.com/paulnsorensen/easy-cheese/actions/workflows/validate.yml)
 [![License: MIT](https://img.shields.io/github/license/paulnsorensen/easy-cheese?style=flat-square)](https://github.com/paulnsorensen/easy-cheese/blob/main/LICENSE)

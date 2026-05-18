@@ -1,5 +1,5 @@
 site_name: 🧀 easy-cheese
-site_description: A skills plugin for Claude Code — the cheese-making pipeline that ages raw curds into shippable wheels of code.
+site_description: Harness-agnostic Agent Skills (agentskills.io) — the cheese-making pipeline that ages raw curds into shippable wheels of code.
 site_url: https://paulnsorensen.github.io/easy-cheese/
 site_author: Paul Sorensen
 
@@ -32,7 +32,7 @@ theme:
     - search.share
     - toc.follow
   font:
-    text: Fraunces
+    text: Inter
     code: JetBrains Mono
   palette:
     - media: "(prefers-color-scheme: light)"
