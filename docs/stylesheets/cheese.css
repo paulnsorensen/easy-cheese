@@ -1,5 +1,8 @@
 /* easy-cheese — cheese-themed overrides for mkdocs-material */
 
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&display=swap");
+
+
 :root {
   --cheese-rind: #b45309;
   --cheese-curd: #fde68a;
@@ -8,7 +11,15 @@
   --cheese-wax: #c2410c;
 }
 
-/* Warm the header into a wheel-of-cheese gradient */
+/* Headings keep the artisanal Fraunces; body stays on Inter for legibility */
+.md-typeset h1,
+.md-typeset h2 {
+  font-family: "Fraunces", "Source Serif 4", Georgia, serif;
+  font-optical-sizing: auto;
+  letter-spacing: -0.01em;
+}
+
+/* Warm the header into a wheel-of-cheese gradient (light mode) */
 .md-header,
 .md-tabs {
   background: linear-gradient(
@@ -16,6 +27,18 @@
     var(--cheese-wax) 0%,
     var(--cheese-melt) 55%,
     var(--cheese-wheel) 100%
+  );
+}
+
+/* Dark mode: swap to a deeper, aged-rind gradient so the header
+   doesn't glare against the slate page background */
+[data-md-color-scheme="slate"] .md-header,
+[data-md-color-scheme="slate"] .md-tabs {
+  background: linear-gradient(
+    135deg,
+    #7c2d12 0%,
+    #92400e 55%,
+    #b45309 100%
   );
 }
 
