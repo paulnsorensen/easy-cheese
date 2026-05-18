@@ -1,5 +1,5 @@
-site_name: easy-cheese
-site_description: A skills plugin for Claude Code — the cheese-making pipeline for code review, implementation, and refactoring.
+site_name: 🧀 easy-cheese
+site_description: A skills plugin for Claude Code — the cheese-making pipeline that ages raw curds into shippable wheels of code.
 site_url: https://paulnsorensen.github.io/easy-cheese/
 site_author: Paul Sorensen
 
@@ -7,7 +7,7 @@ repo_name: paulnsorensen/easy-cheese
 repo_url: https://github.com/paulnsorensen/easy-cheese
 edit_uri: edit/main/
 
-copyright: Copyright &copy; 2026 Paul Sorensen — MIT License
+copyright: Copyright &copy; 2026 Paul Sorensen — MIT License · aged to perfection 🧀
 
 docs_dir: docs
 
@@ -31,25 +31,43 @@ theme:
     - search.highlight
     - search.share
     - toc.follow
+  font:
+    text: Fraunces
+    code: JetBrains Mono
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
       primary: deep orange
       accent: amber
       toggle:
-        icon: material/brightness-7
-        name: Switch to dark mode
+        icon: material/cheese
+        name: Switch to the cave (dark mode)
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
       primary: deep orange
       accent: amber
       toggle:
-        icon: material/brightness-4
-        name: Switch to light mode
+        icon: material/cheese-off
+        name: Switch to the dairy (light mode)
   icon:
+    logo: material/cheese
     repo: fontawesome/brands/github
     edit: material/pencil
     view: material/eye
+    admonition:
+      note: material/cheese-off
+      abstract: material/clipboard-text
+      info: material/information
+      tip: material/cheese
+      success: material/check-decagram
+      question: material/help-circle
+      warning: material/alert
+      failure: material/close-octagon
+      danger: material/skull-crossbones
+      bug: material/bug
+      example: material/test-tube
+      quote: material/format-quote-close
+  favicon: assets/favicon.svg
 
 plugins:
   - search
@@ -92,9 +110,15 @@ markdown_extensions:
   - pymdownx.tasklist:
       custom_checkbox: true
 
+extra_css:
+  - stylesheets/cheese.css
+
 extra:
+  generator: false
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/paulnsorensen/easy-cheese
+      name: Source code on GitHub
     - icon: fontawesome/solid/mug-hot
       link: https://www.buymeacoffee.com/paulnsorensen
+      name: Buy the cheesemonger a coffee
