@@ -1,0 +1,80 @@
+/* easy-cheese — cheese-themed overrides for mkdocs-material */
+
+:root {
+  --cheese-rind: #b45309;
+  --cheese-curd: #fde68a;
+  --cheese-wheel: #f59e0b;
+  --cheese-melt: #fb923c;
+  --cheese-wax: #c2410c;
+}
+
+/* Warm the header into a wheel-of-cheese gradient */
+.md-header,
+.md-tabs {
+  background: linear-gradient(
+    135deg,
+    var(--cheese-wax) 0%,
+    var(--cheese-melt) 55%,
+    var(--cheese-wheel) 100%
+  );
+}
+
+/* Brand-mark gets a subtle melt */
+.md-header__title {
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+/* Logo: a tiny gentle wobble on hover, like a wheel rocking on a board */
+.md-header__button.md-logo svg,
+.md-header__button.md-logo img {
+  transition: transform 200ms ease-in-out;
+}
+.md-header__button.md-logo:hover svg,
+.md-header__button.md-logo:hover img {
+  transform: rotate(-8deg) scale(1.05);
+}
+
+/* Inline code: wax-paper background */
+.md-typeset code {
+  background-color: rgba(253, 230, 138, 0.45);
+  border: 1px solid rgba(180, 83, 9, 0.15);
+  border-radius: 4px;
+}
+
+[data-md-color-scheme="slate"] .md-typeset code {
+  background-color: rgba(180, 83, 9, 0.25);
+  border-color: rgba(253, 230, 138, 0.2);
+}
+
+/* "Tip" admonitions get a cheese-colored stripe so cheese-flavored asides pop */
+.md-typeset .admonition.tip,
+.md-typeset details.tip {
+  border-color: var(--cheese-wheel);
+}
+.md-typeset .tip > .admonition-title,
+.md-typeset .tip > summary {
+  background-color: rgba(245, 158, 11, 0.12);
+}
+.md-typeset .tip > .admonition-title::before,
+.md-typeset .tip > summary::before {
+  background-color: var(--cheese-rind);
+}
+
+/* Tables: subtle aged-paper alternating rows */
+.md-typeset table:not([class]) tbody tr:nth-child(even) {
+  background-color: rgba(253, 230, 138, 0.08);
+}
+
+/* Footer copyright a little warmer */
+.md-footer-meta__inner {
+  font-variant-caps: small-caps;
+  letter-spacing: 0.03em;
+}
+
+/* Mermaid diagrams: nudge node fills toward the cheese palette */
+.mermaid .node rect,
+.mermaid .node polygon,
+.mermaid .node circle {
+  stroke: var(--cheese-rind) !important;
+}
