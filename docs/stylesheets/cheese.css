@@ -26,13 +26,16 @@
 }
 
 /* Logo: a tiny gentle wobble on hover, like a wheel rocking on a board */
-.md-header__button.md-logo svg,
-.md-header__button.md-logo img {
-  transition: transform 200ms ease-in-out;
-}
-.md-header__button.md-logo:hover svg,
-.md-header__button.md-logo:hover img {
-  transform: rotate(-8deg) scale(1.05);
+@media (prefers-reduced-motion: no-preference) {
+  .md-header__button.md-logo svg,
+  .md-header__button.md-logo img {
+    transition: transform 200ms ease-in-out;
+  }
+
+  .md-header__button.md-logo:hover svg,
+  .md-header__button.md-logo:hover img {
+    transform: rotate(-8deg) scale(1.05);
+  }
 }
 
 /* Inline code: wax-paper background */
