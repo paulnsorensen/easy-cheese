@@ -30,6 +30,24 @@
   );
 }
 
+/* Dark mode: brighten body + heading text. mkdocs-material's slate scheme
+   uses ~82% alpha on text which reads as dim against the dark background;
+   push to full opacity with a warm cream so paragraphs and headings stay
+   crisp and on-brand */
+[data-md-color-scheme="slate"] {
+  --md-typeset-color: hsla(45, 35%, 96%, 1);
+  --md-default-fg-color: hsla(45, 35%, 96%, 1);
+  --md-default-fg-color--light: hsla(45, 30%, 90%, 1);
+  --md-default-fg-color--lighter: hsla(45, 25%, 80%, 0.85);
+}
+
+[data-md-color-scheme="slate"] .md-typeset h1,
+[data-md-color-scheme="slate"] .md-typeset h2,
+[data-md-color-scheme="slate"] .md-typeset h3,
+[data-md-color-scheme="slate"] .md-typeset h4 {
+  color: #fef3c7;
+}
+
 /* Dark mode: swap to a deeper, aged-rind gradient so the header
    doesn't glare against the slate page background */
 [data-md-color-scheme="slate"] .md-header,
