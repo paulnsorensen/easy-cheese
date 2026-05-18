@@ -4,16 +4,24 @@
 When a PR is squash-merged into the base branch, the local branch retains the
 pre-squash commits. Rebasing then re-applies commits whose content is already
 in base, producing useless conflicts that mergiraf cannot resolve — the right
-answer is to abort and re-cherry-pick the commits that postdate the squash.
+answer is to merge base in (non-destructive) or reset and re-cherry-pick the
+unique commits (destructive).
 
-Detection path:
-  1. gh API — `gh pr list --state merged --head <branch>` returns both the
-     verdict (PR exists) and the cherry-pick list (PR commit SHAs).
-  2. Local fallback — synthesize a would-be squash commit via `commit-tree`,
-     then ask `git cherry` whether base already contains an equivalent. Works
-     offline but cannot enumerate which commits were squashed.
+Detection path (most-to-least reliable, all attempted):
+  1. Tree-match — walk recent commits on base looking for one whose tree
+     equals the tree at some point on the branch. That commit is a squash
+     of branch commits up to that point. Works offline, through fork PRs,
+     and when the branch has additional commits past the squash (the case
+     `local-synth` misses).
+  2. gh API — `gh pr list --state merged --head <branch>` provides PR
+     metadata (number, URL) and an independent SHA-overlap signal.
+  3. Local synthesis — synthesize a would-be squash commit from HEAD's
+     tree and ask `git cherry` whether base contains an equivalent. Last
+     resort; cannot enumerate squashed vs unique commits, and misses the
+     case where the branch has commits past the squash.
 
-No auto-fix. Prints the remedy as a copy-paste block; the user runs it.
+No auto-fix. Prints two remedies (merge first, then reset+cherry-pick) as
+copy-paste blocks; the user picks and runs.
 """
 
 from __future__ import annotations
@@ -113,6 +121,77 @@ def _check_via_gh(branch: str, base_ref: str) -> dict | None:
     }
 
 
+def _check_via_tree_match(base_ref: str, head: str = "HEAD") -> dict | None:
+    """Find a commit on base whose tree equals the tree at some point on the
+    branch. That commit is a squash-equivalent of branch commits up to that
+    point — the canonical signature of a squash-merge.
+
+    Strongest of the three detection methods: works offline, through forks
+    and renames, and (unlike `_check_via_synthesis`) handles the case where
+    the user has committed additional work on top of the squashed commits.
+
+    Returns dict with squash_commit, squashed_commits, unique_commits when
+    a match is found; None otherwise.
+    """
+    mb = _merge_base(base_ref, head)
+    if not mb:
+        return None
+
+    branch_log = run_git(
+        ["log", "--reverse", "--format=%H%x09%T%x09%s", f"{mb}..{head}"]
+    )
+    if branch_log.returncode != 0 or not branch_log.stdout.strip():
+        return None
+
+    branch_commits: list[tuple[str, str, str]] = []
+    for line in branch_log.stdout.strip().split("\n"):
+        parts = line.split("\t", 2)
+        if len(parts) == 3:
+            branch_commits.append((parts[0], parts[1], parts[2]))
+
+    if not branch_commits:
+        return None
+
+    # Map tree SHA -> latest branch index with that tree. If multiple branch
+    # commits share a tree, prefer the latest so the unique-commit list is
+    # the smallest set that needs replaying.
+    branch_tree_to_index: dict[str, int] = {}
+    for i, (_, tree, _) in enumerate(branch_commits):
+        branch_tree_to_index[tree] = i
+
+    # Cap base log at 500 commits to stay fast on long-running base branches.
+    base_log = run_git(
+        ["log", "-500", "--format=%H%x09%T%x09%s", f"{mb}..{base_ref}"]
+    )
+    if base_log.returncode != 0:
+        return None
+
+    for line in base_log.stdout.strip().split("\n"):
+        parts = line.split("\t", 2)
+        if len(parts) != 3:
+            continue
+        base_sha, base_tree, base_subject = parts
+        if base_tree in branch_tree_to_index:
+            idx = branch_tree_to_index[base_tree]
+            squashed = branch_commits[: idx + 1]
+            unique = branch_commits[idx + 1 :]
+            return {
+                "squash_commit": base_sha,
+                "squash_short": base_sha[:8],
+                "squash_subject": base_subject,
+                "squashed_commits": [
+                    {"sha": sha, "short": sha[:8], "subject": subj}
+                    for sha, _, subj in squashed
+                ],
+                "unique_commits": [
+                    {"sha": sha, "short": sha[:8], "subject": subj}
+                    for sha, _, subj in unique
+                ],
+            }
+
+    return None
+
+
 def _check_via_synthesis(base_ref: str, head: str = "HEAD") -> bool | None:
     """Build a would-be squash commit from head's tree, then ask `git cherry`
     whether base_ref already contains an equivalent. Returns True if yes.
@@ -175,6 +254,62 @@ def _resolve_head(branch: str) -> str:
     return "HEAD"
 
 
+def _build_remedies(result: dict, base_ref: str) -> list[dict]:
+    """Build both non-destructive (merge) and destructive (reset+cherry-pick)
+    remedies. Order: non-destructive first so the user sees it as the default.
+    """
+    abort = _in_progress_abort()
+    has_unique = bool(result["unique_commits"])
+    method = result["method"] or ""
+
+    merge_commands: list[str] = []
+    if abort:
+        merge_commands.append(abort)
+    merge_commands.append(f"git merge {base_ref}")
+    merge_commands.append(
+        "# resolve any remaining conflicts with /melt — squashed commits "
+        "collapse to no-ops, so only real edits should remain"
+    )
+
+    reset_commands: list[str] = []
+    if abort:
+        reset_commands.append(abort)
+    reset_commands.append(f"git reset --hard {base_ref}")
+    if has_unique:
+        shas = " ".join(c["sha"] for c in result["unique_commits"])
+        reset_commands.append(f"git cherry-pick {shas}")
+    elif method == "local-synth":
+        reset_commands.append("# review and cherry-pick unique commits manually:")
+        for c in result["branch_commits"]:
+            reset_commands.append(f"#   {c['short']} {c['subject']}")
+
+    return [
+        {
+            "name": "merge",
+            "destructive": False,
+            "description": (
+                "Merge base into branch. Non-destructive: preserves all "
+                "branch history and refs. Squashed commits collapse to a "
+                "no-op merge, so only real conflicts surface. Prefer this "
+                "when the branch has unique work or you are not sure the "
+                "unique-commit list below is complete."
+            ),
+            "commands": merge_commands,
+        },
+        {
+            "name": "reset-and-cherry-pick",
+            "destructive": True,
+            "description": (
+                "Reset to base and replay only the unique commits. "
+                "DESTRUCTIVE: rewrites the branch and requires force-push. "
+                "Use when you want a clean linear history and the "
+                "unique-commit list looks complete."
+            ),
+            "commands": reset_commands,
+        },
+    ]
+
+
 def detect(branch: str, base_ref: str) -> dict:
     head_ref = _resolve_head(branch)
     result = {
@@ -184,10 +319,11 @@ def detect(branch: str, base_ref: str) -> dict:
         "base": base_ref,
         "head_ref": head_ref,
         "pr": None,
+        "squash_commit": None,
         "branch_commits": [],
         "squashed_shas": [],
         "unique_commits": [],
-        "remedy": [],
+        "remedies": [],
         "warnings": [],
     }
 
@@ -203,19 +339,46 @@ def detect(branch: str, base_ref: str) -> dict:
         result["warnings"].append(f"no commits between {base_ref} and {head_ref}")
         return result
 
+    # Run tree-match first — strongest signal, works offline, and unlike
+    # gh-api or local-synth it handles the case where the branch has commits
+    # past the squash (the textbook squash-residue shape this script kept
+    # missing). gh-api still runs to enrich the result with PR metadata.
+    tree = _check_via_tree_match(base_ref, head_ref)
     gh = _check_via_gh(branch, base_ref)
-    if gh:
+
+    if tree:
+        result["verdict"] = "squash-merged"
+        result["method"] = "tree-match+gh" if gh else "tree-match"
+        result["squash_commit"] = {
+            "sha": tree["squash_commit"],
+            "short": tree["squash_short"],
+            "subject": tree["squash_subject"],
+        }
+        result["unique_commits"] = tree["unique_commits"]
+        if gh:
+            result["pr"] = {
+                "number": gh["number"],
+                "url": gh["url"],
+                "merged_at": gh["merged_at"],
+                "merge_commit": gh["merge_commit"],
+            }
+            result["squashed_shas"] = gh["pr_commits"]
+            if gh["multiple_prs"]:
+                result["warnings"].append(
+                    "multiple merged PRs from this branch — using most recent"
+                )
+    elif gh:
         squashed = set(gh["pr_commits"])
         unique = [c for c in result["branch_commits"] if c["sha"] not in squashed]
         matched = len(result["branch_commits"]) - len(unique)
         if matched == 0:
-            # PR name matched but zero SHAs overlap — too weak to trust as
-            # squash residue. Could be a reused branch name or a fully
-            # rebased branch. Fall through to local-synth (tree equivalence)
-            # for a stronger signal.
+            # PR name matched but zero SHAs overlap, and tree-match found
+            # nothing either. Could be a reused branch name or a fully
+            # rebased branch. Too weak to call squash-residue.
             result["warnings"].append(
-                f"gh found PR #{gh['number']} ({gh['url']}) for this branch but "
-                "no local commits matched its SHAs — treating as inconclusive"
+                f"gh found PR #{gh['number']} ({gh['url']}) but no local "
+                "commits matched its SHAs and tree-match found no equivalent "
+                "commit on base — treating as inconclusive"
             )
         else:
             result["verdict"] = "squash-merged"
@@ -244,21 +407,7 @@ def detect(branch: str, base_ref: str) -> dict:
             )
 
     if result["verdict"] == "squash-merged":
-        remedy = []
-        abort = _in_progress_abort()
-        if abort:
-            remedy.append(abort)
-        remedy.append(f"git reset --hard {base_ref}")
-        if result["unique_commits"]:
-            shas = " ".join(c["sha"] for c in result["unique_commits"])
-            remedy.append(f"git cherry-pick {shas}")
-        elif result["method"] == "local-synth":
-            # No PR data available — list branch commits so the user has a
-            # recovery path before running `reset --hard`.
-            remedy.append("# review and cherry-pick unique commits manually:")
-            for c in result["branch_commits"]:
-                remedy.append(f"#   {c['short']} {c['subject']}")
-        result["remedy"] = remedy
+        result["remedies"] = _build_remedies(result, base_ref)
 
     return result
 
@@ -272,14 +421,16 @@ def format_terse(d: dict) -> str:
 
     lines = []
     pr = d["pr"]
+    sc = d.get("squash_commit")
+    header = f"verdict: SQUASH-MERGED method={d['method']}"
     if pr:
-        lines.append(
-            f"verdict: SQUASH-MERGED via PR #{pr['number']} "
-            f"merged={pr['merged_at']} method={d['method']}"
-        )
-        lines.append(f"  url: {pr['url']}")
-    else:
-        lines.append(f"verdict: SQUASH-MERGED method={d['method']}")
+        header += f" PR=#{pr['number']}"
+    lines.append(header)
+    if pr:
+        lines.append(f"  pr-url: {pr['url']}")
+        lines.append(f"  merged-at: {pr['merged_at']}")
+    if sc:
+        lines.append(f"  squash-commit: {sc['short']} {sc['subject']}")
 
     for w in d["warnings"]:
         lines.append(f"warn: {w}")
@@ -292,10 +443,19 @@ def format_terse(d: dict) -> str:
         lines.append(f"branch commits ({len(d['branch_commits'])}):")
         for c in d["branch_commits"]:
             lines.append(f"  {c['short']} {c['subject']}")
+    else:
+        lines.append("unique commits: 0 (branch is fully contained in base)")
 
-    lines.append("remedy (copy-paste — destructive, review first):")
-    for r in d["remedy"]:
-        lines.append(f"  {r}")
+    lines.append("")
+    lines.append("remedies — pick one, copy-paste, review before running:")
+    for i, r in enumerate(d.get("remedies", [])):
+        label = chr(ord("A") + i)
+        marker = "DESTRUCTIVE" if r["destructive"] else "non-destructive"
+        lines.append("")
+        lines.append(f"  [{label}] {r['name']} ({marker})")
+        lines.append(f"      {r['description']}")
+        for cmd in r["commands"]:
+            lines.append(f"      {cmd}")
     return "\n".join(lines)
 
 

@@ -1,13 +1,17 @@
 """Tests for detect-squash-residue.
 
 Covers detect() across all paths:
+- Tree-match positive: branch commit's tree found on base → strongest signal.
+- Tree-match + gh: PR metadata enriches tree-match result.
+- Tree-match negative + gh positive: falls back to SHA-overlap detection.
 - gh-api positive: PR found, SHAs match → unique commits computed, no warning.
 - gh-api positive: PR found, SHAs diverged → warning about manual review.
 - gh-api positive: multiple PRs → most recent wins, warning emitted.
-- Local-synthesis fallback when gh returns None.
-- Negative path: neither detector fires.
-- In-progress operation detection → correct abort command in remedy.
+- Local-synthesis fallback when tree-match and gh both return nothing.
+- Negative path: no detector fires.
+- In-progress operation detection → correct abort command in both remedies.
 - Empty branch (no commits ahead of base) → not-detected with warning.
+- Dual remedy structure: merge (non-destructive) listed first, then reset+cherry-pick.
 """
 
 from __future__ import annotations
@@ -46,6 +50,14 @@ def _gh_payload(*, number: int, commit_oids: list[str], merged_at: str) -> dict:
     }
 
 
+def _remedy(remedies: list[dict], name: str) -> dict:
+    """Look up a remedy by name. Fails the test if missing."""
+    for r in remedies:
+        if r["name"] == name:
+            return r
+    raise AssertionError(f"remedy {name!r} missing; got {[r['name'] for r in remedies]}")
+
+
 class TestDetectViaGhApi:
     def test_pr_found_shas_match_yields_no_unique_commits(
         self, detect_squash_residue: ModuleType
@@ -59,6 +71,7 @@ class TestDetectViaGhApi:
         with (
             patch.object(detect_squash_residue, "_resolve_head", return_value="HEAD"),
             patch.object(detect_squash_residue, "_commits_since", return_value=commits),
+            patch.object(detect_squash_residue, "_check_via_tree_match", return_value=None),
             patch.object(detect_squash_residue, "_check_via_gh", return_value=gh),
             patch.object(detect_squash_residue, "_in_progress_abort", return_value=None),
         ):
@@ -69,7 +82,14 @@ class TestDetectViaGhApi:
         assert result["pr"]["number"] == 42
         assert result["unique_commits"] == []
         assert not any("verify the cherry-pick list" in w for w in result["warnings"])
-        assert result["remedy"] == ["git reset --hard origin/main"]
+        merge = _remedy(result["remedies"], "merge")
+        assert merge["destructive"] is False
+        assert "git merge origin/main" in merge["commands"]
+        reset = _remedy(result["remedies"], "reset-and-cherry-pick")
+        assert reset["destructive"] is True
+        # No follow-ups → reset is just `reset --hard`, no cherry-pick line.
+        assert "git reset --hard origin/main" in reset["commands"]
+        assert not any("cherry-pick" in c for c in reset["commands"])
 
     def test_pr_found_with_unique_followups_lists_cherry_picks(
         self, detect_squash_residue: ModuleType
@@ -89,6 +109,7 @@ class TestDetectViaGhApi:
         with (
             patch.object(detect_squash_residue, "_resolve_head", return_value="HEAD"),
             patch.object(detect_squash_residue, "_commits_since", return_value=all_commits),
+            patch.object(detect_squash_residue, "_check_via_tree_match", return_value=None),
             patch.object(detect_squash_residue, "_check_via_gh", return_value=gh),
             patch.object(detect_squash_residue, "_in_progress_abort", return_value=None),
         ):
@@ -97,9 +118,12 @@ class TestDetectViaGhApi:
         assert result["verdict"] == "squash-merged"
         unique_subjects = [c["subject"] for c in result["unique_commits"]]
         assert unique_subjects == ["post-merge-fix", "another-post-merge"]
-        cherry_pick_line = next((r for r in result["remedy"] if "cherry-pick" in r), None)
+        reset = _remedy(result["remedies"], "reset-and-cherry-pick")
+        cherry_pick_line = next((c for c in reset["commands"] if "cherry-pick" in c), None)
         assert cherry_pick_line is not None
         assert all(c["sha"] in cherry_pick_line for c in followups)
+        # Merge remedy is still offered as the non-destructive first choice.
+        assert result["remedies"][0]["name"] == "merge"
 
     def test_zero_sha_overlap_downgrades_to_not_detected_when_synth_negative(
         self, detect_squash_residue: ModuleType
@@ -116,6 +140,7 @@ class TestDetectViaGhApi:
         with (
             patch.object(detect_squash_residue, "_resolve_head", return_value="HEAD"),
             patch.object(detect_squash_residue, "_commits_since", return_value=local_commits),
+            patch.object(detect_squash_residue, "_check_via_tree_match", return_value=None),
             patch.object(detect_squash_residue, "_check_via_gh", return_value=gh),
             patch.object(detect_squash_residue, "_check_via_synthesis", return_value=False),
             patch.object(detect_squash_residue, "_in_progress_abort", return_value=None),
@@ -125,7 +150,7 @@ class TestDetectViaGhApi:
         assert result["verdict"] == "not-detected"
         assert result["method"] is None
         assert result["pr"] is None
-        assert result["remedy"] == []
+        assert result["remedies"] == []
         assert any("no local commits matched its SHAs" in w for w in result["warnings"])
         assert any("inconclusive" in w for w in result["warnings"])
 
@@ -143,6 +168,7 @@ class TestDetectViaGhApi:
         with (
             patch.object(detect_squash_residue, "_resolve_head", return_value="HEAD"),
             patch.object(detect_squash_residue, "_commits_since", return_value=local_commits),
+            patch.object(detect_squash_residue, "_check_via_tree_match", return_value=None),
             patch.object(detect_squash_residue, "_check_via_gh", return_value=gh),
             patch.object(detect_squash_residue, "_check_via_synthesis", return_value=True),
             patch.object(detect_squash_residue, "_in_progress_abort", return_value=None),
@@ -153,21 +179,25 @@ class TestDetectViaGhApi:
         assert result["method"] == "local-synth"
         assert result["pr"] is None  # gh-api result was discarded
         assert any("no local commits matched its SHAs" in w for w in result["warnings"])
-        # Manual review block emitted since local-synth has no SHA list.
-        assert any(r.startswith("# review") for r in result["remedy"])
+        # Manual review block emitted in the destructive remedy since
+        # local-synth has no SHA list.
+        reset = _remedy(result["remedies"], "reset-and-cherry-pick")
+        assert any(c.startswith("# review") for c in reset["commands"])
 
 
 class TestRemedyCompleteness:
-    """The remedy must give the user a recovery path: a cherry-pick line when
-    follow-up commits exist, and nothing extra when all branch commits were
-    squashed (no follow-ups to recover)."""
+    """Every squash-merged verdict must offer both options: a non-destructive
+    merge and a destructive reset+cherry-pick. The destructive option must
+    give the user a recovery path (cherry-pick line when follow-ups exist,
+    manual-review block when local-synth, no extras when fully contained)."""
 
     def test_force_pushed_branch_recovery_via_local_synth(
         self, detect_squash_residue: ModuleType
     ) -> None:
-        # SHAs diverged from PR (post-merge rebase). gh-api downgrades to
-        # inconclusive; local-synth confirms via tree equivalence and the
-        # remedy is the manual-review block listing all local commits.
+        # SHAs diverged from PR (post-merge rebase). Tree-match misses,
+        # gh-api downgrades to inconclusive, local-synth confirms via tree
+        # equivalence. The destructive remedy must include the manual-review
+        # block listing all local commits.
         local = _commits("rebased-local-1", "rebased-local-2")
         gh = _gh_payload(
             number=1,
@@ -177,6 +207,7 @@ class TestRemedyCompleteness:
         with (
             patch.object(detect_squash_residue, "_resolve_head", return_value="HEAD"),
             patch.object(detect_squash_residue, "_commits_since", return_value=local),
+            patch.object(detect_squash_residue, "_check_via_tree_match", return_value=None),
             patch.object(detect_squash_residue, "_check_via_gh", return_value=gh),
             patch.object(detect_squash_residue, "_check_via_synthesis", return_value=True),
             patch.object(detect_squash_residue, "_in_progress_abort", return_value=None),
@@ -184,16 +215,19 @@ class TestRemedyCompleteness:
             result = detect_squash_residue.detect("feature", "origin/main")
 
         assert result["method"] == "local-synth"
-        assert any(r.startswith("# review") for r in result["remedy"])
+        reset = _remedy(result["remedies"], "reset-and-cherry-pick")
+        review_lines = [c for c in reset["commands"] if c.startswith("#   ")]
+        assert review_lines, "manual-review block missing"
         # Every branch commit appears in the manual-review block.
-        review_lines = [r for r in result["remedy"] if r.startswith("#   ")]
         assert all(any(c["short"] in line for line in review_lines) for c in local)
+        # The non-destructive option is still offered.
+        assert _remedy(result["remedies"], "merge")["destructive"] is False
 
-    def test_full_sha_match_remedy_is_reset_only(
+    def test_full_sha_match_destructive_path_is_reset_only(
         self, detect_squash_residue: ModuleType
     ) -> None:
-        # All local commits matched PR commits → no follow-ups → `reset --hard`
-        # is the complete remedy. No cherry-pick, no manual review block.
+        # All local commits matched PR commits → no follow-ups → the destructive
+        # remedy is just `reset --hard`. No cherry-pick, no manual review block.
         commits = _commits("squashed-a", "squashed-b")
         gh = _gh_payload(
             number=2,
@@ -203,12 +237,37 @@ class TestRemedyCompleteness:
         with (
             patch.object(detect_squash_residue, "_resolve_head", return_value="HEAD"),
             patch.object(detect_squash_residue, "_commits_since", return_value=commits),
+            patch.object(detect_squash_residue, "_check_via_tree_match", return_value=None),
             patch.object(detect_squash_residue, "_check_via_gh", return_value=gh),
             patch.object(detect_squash_residue, "_in_progress_abort", return_value=None),
         ):
             result = detect_squash_residue.detect("feature", "origin/main")
 
-        assert result["remedy"] == ["git reset --hard origin/main"]
+        reset = _remedy(result["remedies"], "reset-and-cherry-pick")
+        assert reset["commands"] == ["git reset --hard origin/main"]
+
+    def test_remedies_listed_in_safety_order(
+        self, detect_squash_residue: ModuleType
+    ) -> None:
+        # The non-destructive merge remedy must always come first so the user
+        # sees the safer option before the destructive one.
+        commits = _commits("a")
+        gh = _gh_payload(
+            number=3,
+            commit_oids=[c["sha"] for c in commits],
+            merged_at="2026-05-15T12:00:00Z",
+        )
+        with (
+            patch.object(detect_squash_residue, "_resolve_head", return_value="HEAD"),
+            patch.object(detect_squash_residue, "_commits_since", return_value=commits),
+            patch.object(detect_squash_residue, "_check_via_tree_match", return_value=None),
+            patch.object(detect_squash_residue, "_check_via_gh", return_value=gh),
+            patch.object(detect_squash_residue, "_in_progress_abort", return_value=None),
+        ):
+            result = detect_squash_residue.detect("feature", "origin/main")
+
+        assert [r["name"] for r in result["remedies"]] == ["merge", "reset-and-cherry-pick"]
+        assert [r["destructive"] for r in result["remedies"]] == [False, True]
 
     def test_multiple_prs_warns_and_uses_most_recent(
         self, detect_squash_residue: ModuleType
@@ -223,6 +282,7 @@ class TestRemedyCompleteness:
         with (
             patch.object(detect_squash_residue, "_resolve_head", return_value="HEAD"),
             patch.object(detect_squash_residue, "_commits_since", return_value=commits),
+            patch.object(detect_squash_residue, "_check_via_tree_match", return_value=None),
             patch.object(detect_squash_residue, "_check_via_gh", return_value=gh),
             patch.object(detect_squash_residue, "_in_progress_abort", return_value=None),
         ):
@@ -232,13 +292,14 @@ class TestRemedyCompleteness:
 
 
 class TestDetectViaLocalSynthesis:
-    def test_synth_positive_when_gh_returns_none(
+    def test_synth_positive_when_tree_and_gh_return_none(
         self, detect_squash_residue: ModuleType
     ) -> None:
         commits = _commits("a", "b")
         with (
             patch.object(detect_squash_residue, "_resolve_head", return_value="HEAD"),
             patch.object(detect_squash_residue, "_commits_since", return_value=commits),
+            patch.object(detect_squash_residue, "_check_via_tree_match", return_value=None),
             patch.object(detect_squash_residue, "_check_via_gh", return_value=None),
             patch.object(detect_squash_residue, "_check_via_synthesis", return_value=True),
             patch.object(detect_squash_residue, "_in_progress_abort", return_value=None),
@@ -249,9 +310,12 @@ class TestDetectViaLocalSynthesis:
         assert result["method"] == "local-synth"
         assert result["unique_commits"] == []
         assert any("review branch commits manually" in w for w in result["warnings"])
-        # Remedy must include the manual-review comment block.
-        assert any(r.startswith("# review") for r in result["remedy"])
-        assert any(c["short"] in r for c in commits for r in result["remedy"] if r.startswith("#"))
+        # Destructive remedy must include the manual-review comment block
+        # listing all branch commits (no SHA enumeration available).
+        reset = _remedy(result["remedies"], "reset-and-cherry-pick")
+        assert any(c.startswith("# review") for c in reset["commands"])
+        for commit in commits:
+            assert any(commit["short"] in c for c in reset["commands"] if c.startswith("#"))
 
     def test_synth_negative_yields_not_detected(
         self, detect_squash_residue: ModuleType
@@ -260,13 +324,14 @@ class TestDetectViaLocalSynthesis:
         with (
             patch.object(detect_squash_residue, "_resolve_head", return_value="HEAD"),
             patch.object(detect_squash_residue, "_commits_since", return_value=commits),
+            patch.object(detect_squash_residue, "_check_via_tree_match", return_value=None),
             patch.object(detect_squash_residue, "_check_via_gh", return_value=None),
             patch.object(detect_squash_residue, "_check_via_synthesis", return_value=False),
         ):
             result = detect_squash_residue.detect("feature", "origin/main")
 
         assert result["verdict"] == "not-detected"
-        assert result["remedy"] == []
+        assert result["remedies"] == []
 
 
 class TestCommitsSince:
@@ -347,7 +412,7 @@ class TestEdgeCases:
         assert result["verdict"] == "not-detected"
         assert any("no commits between" in w for w in result["warnings"])
 
-    def test_in_progress_rebase_prepends_abort(
+    def test_in_progress_rebase_prepends_abort_to_both_remedies(
         self, detect_squash_residue: ModuleType
     ) -> None:
         commits = _commits("a")
@@ -357,6 +422,7 @@ class TestEdgeCases:
         with (
             patch.object(detect_squash_residue, "_resolve_head", return_value="HEAD"),
             patch.object(detect_squash_residue, "_commits_since", return_value=commits),
+            patch.object(detect_squash_residue, "_check_via_tree_match", return_value=None),
             patch.object(detect_squash_residue, "_check_via_gh", return_value=gh),
             patch.object(
                 detect_squash_residue, "_in_progress_abort", return_value="git rebase --abort"
@@ -364,8 +430,12 @@ class TestEdgeCases:
         ):
             result = detect_squash_residue.detect("feature", "origin/main")
 
-        assert result["remedy"][0] == "git rebase --abort"
-        assert result["remedy"][1] == "git reset --hard origin/main"
+        merge = _remedy(result["remedies"], "merge")
+        assert merge["commands"][0] == "git rebase --abort"
+        assert "git merge origin/main" in merge["commands"]
+        reset = _remedy(result["remedies"], "reset-and-cherry-pick")
+        assert reset["commands"][0] == "git rebase --abort"
+        assert reset["commands"][1] == "git reset --hard origin/main"
 
     def test_in_progress_cherry_pick_prepends_correct_abort(
         self, detect_squash_residue: ModuleType
@@ -377,6 +447,7 @@ class TestEdgeCases:
         with (
             patch.object(detect_squash_residue, "_resolve_head", return_value="HEAD"),
             patch.object(detect_squash_residue, "_commits_since", return_value=commits),
+            patch.object(detect_squash_residue, "_check_via_tree_match", return_value=None),
             patch.object(detect_squash_residue, "_check_via_gh", return_value=gh),
             patch.object(
                 detect_squash_residue,
@@ -386,7 +457,8 @@ class TestEdgeCases:
         ):
             result = detect_squash_residue.detect("feature", "origin/main")
 
-        assert result["remedy"][0] == "git cherry-pick --abort"
+        for r in result["remedies"]:
+            assert r["commands"][0] == "git cherry-pick --abort"
 
 
 class TestInProgressAbort:
@@ -611,31 +683,440 @@ class TestFormatTerse:
         })
         assert "verdict: not-detected" in out
 
-    def test_squash_merged_includes_pr_and_remedy(
+    def test_squash_merged_includes_pr_and_both_remedies(
         self, detect_squash_residue: ModuleType
     ) -> None:
         d = {
             "verdict": "squash-merged",
-            "method": "gh-api",
+            "method": "tree-match+gh",
             "pr": {
                 "number": 42,
                 "url": "https://example.com/pr/42",
                 "merged_at": "2026-05-15T12:00:00Z",
+            },
+            "squash_commit": {
+                "sha": "c" * 40,
+                "short": "c" * 8,
+                "subject": "Squashed feature (#42)",
             },
             "warnings": [],
             "unique_commits": [
                 {"sha": "a" * 40, "short": "a" * 8, "subject": "follow-up"}
             ],
             "branch_commits": [],
-            "remedy": [
-                "git rebase --abort",
-                "git reset --hard origin/main",
-                "git cherry-pick aaaaaaaa",
+            "remedies": [
+                {
+                    "name": "merge",
+                    "destructive": False,
+                    "description": "Merge base into branch (non-destructive).",
+                    "commands": ["git rebase --abort", "git merge origin/main"],
+                },
+                {
+                    "name": "reset-and-cherry-pick",
+                    "destructive": True,
+                    "description": "Reset and replay (DESTRUCTIVE).",
+                    "commands": [
+                        "git rebase --abort",
+                        "git reset --hard origin/main",
+                        "git cherry-pick aaaaaaaa",
+                    ],
+                },
             ],
         }
         out = detect_squash_residue.format_terse(d)
-        assert "SQUASH-MERGED via PR #42" in out
+        assert "SQUASH-MERGED" in out
+        assert "PR=#42" in out
         assert "https://example.com/pr/42" in out
+        assert "Squashed feature (#42)" in out
         assert "follow-up" in out
-        assert "git rebase --abort" in out
-        assert "destructive, review first" in out
+        # Both remedies labeled and ordered.
+        assert "[A] merge" in out
+        assert "(non-destructive)" in out
+        assert "[B] reset-and-cherry-pick" in out
+        assert "(DESTRUCTIVE)" in out
+        assert out.index("[A] merge") < out.index("[B] reset-and-cherry-pick")
+        assert "git merge origin/main" in out
+        assert "git cherry-pick aaaaaaaa" in out
+
+
+def _make_git_log(rows: list[tuple[str, str, str]]) -> subprocess.CompletedProcess:
+    """Build a fake `git log --format=%H%x09%T%x09%s` response from rows of
+    (sha, tree, subject)."""
+    body = "\n".join(f"{sha}\t{tree}\t{subj}" for sha, tree, subj in rows)
+    return make_completed(stdout=body)
+
+
+class TestCheckViaTreeMatch:
+    """The detector this fix is for. A commit on base whose tree equals the
+    tree at some point on the branch is the canonical squash-merge signature.
+    This catches the textbook case the old detector missed: a branch that has
+    additional commits past the squash."""
+
+    def test_finds_squash_when_base_commit_tree_matches_branch_tip(
+        self, detect_squash_residue: ModuleType
+    ) -> None:
+        branch_rows = [
+            ("sha-feat-1", "tree-1", "feat-1"),
+            ("sha-feat-2", "tree-2", "feat-2"),
+            ("sha-feat-3", "tree-3", "feat-3"),
+        ]
+        base_rows = [("sha-squash", "tree-3", "Squashed feat (#42)")]
+
+        def fake_run_git(args: list[str]) -> subprocess.CompletedProcess:
+            if args[:1] == ["merge-base"]:
+                return make_completed(stdout="sha-mb")
+            if args[:1] == ["log"] and "--reverse" in args:
+                return _make_git_log(branch_rows)
+            if args[:1] == ["log"]:
+                return _make_git_log(base_rows)
+            return make_completed(returncode=1)
+
+        with patch.object(detect_squash_residue, "run_git", side_effect=fake_run_git):
+            result = detect_squash_residue._check_via_tree_match("origin/main", "HEAD")
+
+        assert result is not None
+        assert result["squash_commit"] == "sha-squash"
+        assert [c["subject"] for c in result["squashed_commits"]] == [
+            "feat-1",
+            "feat-2",
+            "feat-3",
+        ]
+        assert result["unique_commits"] == []
+
+    def test_finds_squash_with_followups_past_the_squash(
+        self, detect_squash_residue: ModuleType
+    ) -> None:
+        # The textbook missed case: PR was squash-merged with 3 of 4 branch
+        # commits; the 4th commit landed after the merge. Old local-synth
+        # missed this because the full HEAD tree no longer matches the squash.
+        branch_rows = [
+            ("sha-1", "tree-1", "feat-1"),
+            ("sha-2", "tree-2", "feat-2"),
+            ("sha-3", "tree-3", "feat-3"),  # squash point
+            ("sha-4", "tree-4", "follow-up after squash"),
+        ]
+        base_rows = [("sha-squash", "tree-3", "Squashed feat (#42)")]
+
+        def fake_run_git(args: list[str]) -> subprocess.CompletedProcess:
+            if args[:1] == ["merge-base"]:
+                return make_completed(stdout="sha-mb")
+            if "--reverse" in args:
+                return _make_git_log(branch_rows)
+            return _make_git_log(base_rows)
+
+        with patch.object(detect_squash_residue, "run_git", side_effect=fake_run_git):
+            result = detect_squash_residue._check_via_tree_match("origin/main", "HEAD")
+
+        assert result is not None
+        assert result["squash_commit"] == "sha-squash"
+        assert [c["subject"] for c in result["squashed_commits"]] == [
+            "feat-1",
+            "feat-2",
+            "feat-3",
+        ]
+        assert [c["subject"] for c in result["unique_commits"]] == [
+            "follow-up after squash"
+        ]
+
+    def test_returns_none_when_no_base_commit_matches(
+        self, detect_squash_residue: ModuleType
+    ) -> None:
+        branch_rows = [("sha-1", "tree-1", "feat-1")]
+        base_rows = [
+            ("sha-x", "tree-x", "unrelated"),
+            ("sha-y", "tree-y", "also unrelated"),
+        ]
+
+        def fake_run_git(args: list[str]) -> subprocess.CompletedProcess:
+            if args[:1] == ["merge-base"]:
+                return make_completed(stdout="sha-mb")
+            if "--reverse" in args:
+                return _make_git_log(branch_rows)
+            return _make_git_log(base_rows)
+
+        with patch.object(detect_squash_residue, "run_git", side_effect=fake_run_git):
+            assert detect_squash_residue._check_via_tree_match("origin/main", "HEAD") is None
+
+    def test_returns_none_on_merge_base_failure(
+        self, detect_squash_residue: ModuleType
+    ) -> None:
+        with patch.object(
+            detect_squash_residue, "run_git", return_value=make_completed(returncode=128)
+        ):
+            assert detect_squash_residue._check_via_tree_match("origin/main", "HEAD") is None
+
+    def test_returns_none_on_empty_branch_log(
+        self, detect_squash_residue: ModuleType
+    ) -> None:
+        def fake_run_git(args: list[str]) -> subprocess.CompletedProcess:
+            if args[:1] == ["merge-base"]:
+                return make_completed(stdout="sha-mb")
+            return make_completed(stdout="")
+
+        with patch.object(detect_squash_residue, "run_git", side_effect=fake_run_git):
+            assert detect_squash_residue._check_via_tree_match("origin/main", "HEAD") is None
+
+    def test_prefers_latest_branch_index_when_tree_repeats(
+        self, detect_squash_residue: ModuleType
+    ) -> None:
+        # If two branch commits share a tree (e.g. revert-then-redo), the
+        # match must point at the LATER one — that gives the smallest
+        # unique-commit set to replay.
+        branch_rows = [
+            ("sha-1", "tree-A", "first"),
+            ("sha-2", "tree-B", "second"),
+            ("sha-3", "tree-A", "third (same tree as first)"),
+            ("sha-4", "tree-C", "fourth"),
+        ]
+        base_rows = [("sha-squash", "tree-A", "Squashed")]
+
+        def fake_run_git(args: list[str]) -> subprocess.CompletedProcess:
+            if args[:1] == ["merge-base"]:
+                return make_completed(stdout="sha-mb")
+            if "--reverse" in args:
+                return _make_git_log(branch_rows)
+            return _make_git_log(base_rows)
+
+        with patch.object(detect_squash_residue, "run_git", side_effect=fake_run_git):
+            result = detect_squash_residue._check_via_tree_match("origin/main", "HEAD")
+
+        assert result is not None
+        # Latest index with tree-A is sha-3 → unique is just the trailing commit.
+        assert [c["subject"] for c in result["unique_commits"]] == ["fourth"]
+
+
+class TestDetectViaTreeMatch:
+    """Tree-match is the new primary path through detect(). It must win over
+    gh-api when both fire, and supply the unique-commit list directly."""
+
+    def test_tree_match_alone_yields_tree_match_method(
+        self, detect_squash_residue: ModuleType
+    ) -> None:
+        commits = _commits("a", "b", "c", "post")
+        tree_hit = {
+            "squash_commit": "s" * 40,
+            "squash_short": "s" * 8,
+            "squash_subject": "Squashed feature (#42)",
+            "squashed_commits": commits[:3],
+            "unique_commits": commits[3:],
+        }
+        with (
+            patch.object(detect_squash_residue, "_resolve_head", return_value="HEAD"),
+            patch.object(detect_squash_residue, "_commits_since", return_value=commits),
+            patch.object(detect_squash_residue, "_check_via_tree_match", return_value=tree_hit),
+            patch.object(detect_squash_residue, "_check_via_gh", return_value=None),
+            patch.object(detect_squash_residue, "_in_progress_abort", return_value=None),
+        ):
+            result = detect_squash_residue.detect("feature", "origin/main")
+
+        assert result["verdict"] == "squash-merged"
+        assert result["method"] == "tree-match"
+        assert result["pr"] is None
+        assert result["squash_commit"]["subject"] == "Squashed feature (#42)"
+        assert [c["subject"] for c in result["unique_commits"]] == ["post"]
+        # Cherry-pick line in the destructive remedy must use the unique SHA.
+        reset = _remedy(result["remedies"], "reset-and-cherry-pick")
+        cherry = next((c for c in reset["commands"] if "cherry-pick" in c), None)
+        assert cherry is not None and commits[3]["sha"] in cherry
+
+    def test_tree_match_plus_gh_enriches_with_pr_metadata(
+        self, detect_squash_residue: ModuleType
+    ) -> None:
+        commits = _commits("a", "b")
+        tree_hit = {
+            "squash_commit": "s" * 40,
+            "squash_short": "s" * 8,
+            "squash_subject": "Squashed",
+            "squashed_commits": commits,
+            "unique_commits": [],
+        }
+        gh = _gh_payload(
+            number=42,
+            commit_oids=[c["sha"] for c in commits],
+            merged_at="2026-05-15T12:00:00Z",
+        )
+        with (
+            patch.object(detect_squash_residue, "_resolve_head", return_value="HEAD"),
+            patch.object(detect_squash_residue, "_commits_since", return_value=commits),
+            patch.object(detect_squash_residue, "_check_via_tree_match", return_value=tree_hit),
+            patch.object(detect_squash_residue, "_check_via_gh", return_value=gh),
+            patch.object(detect_squash_residue, "_in_progress_abort", return_value=None),
+        ):
+            result = detect_squash_residue.detect("feature", "origin/main")
+
+        assert result["verdict"] == "squash-merged"
+        assert result["method"] == "tree-match+gh"
+        assert result["pr"]["number"] == 42
+        assert result["pr"]["url"] == "https://example.com/pr/42"
+        assert result["squash_commit"]["short"] == "s" * 8
+
+    def test_tree_match_takes_precedence_when_gh_disagrees(
+        self, detect_squash_residue: ModuleType
+    ) -> None:
+        # gh found a PR but with non-overlapping SHAs (rebased branch). Old
+        # detector downgraded to inconclusive. With tree-match, the verdict
+        # is squash-merged — tree equivalence is a stronger signal than
+        # SHA overlap.
+        commits = _commits("rebased-1", "rebased-2", "rebased-3")
+        tree_hit = {
+            "squash_commit": "s" * 40,
+            "squash_short": "s" * 8,
+            "squash_subject": "Squashed (rebased)",
+            "squashed_commits": commits[:2],
+            "unique_commits": commits[2:],
+        }
+        gh = _gh_payload(
+            number=99,
+            commit_oids=["a" * 40, "b" * 40],  # diverged from rebased SHAs
+            merged_at="2026-05-15T12:00:00Z",
+        )
+        with (
+            patch.object(detect_squash_residue, "_resolve_head", return_value="HEAD"),
+            patch.object(detect_squash_residue, "_commits_since", return_value=commits),
+            patch.object(detect_squash_residue, "_check_via_tree_match", return_value=tree_hit),
+            patch.object(detect_squash_residue, "_check_via_gh", return_value=gh),
+            patch.object(detect_squash_residue, "_in_progress_abort", return_value=None),
+        ):
+            result = detect_squash_residue.detect("feature", "origin/main")
+
+        assert result["verdict"] == "squash-merged"
+        assert result["method"] == "tree-match+gh"
+        # Unique commits come from tree-match, not gh's SHA diff.
+        assert [c["subject"] for c in result["unique_commits"]] == ["rebased-3"]
+        # No "inconclusive" warning — tree-match overrode the weak gh signal.
+        assert not any("inconclusive" in w for w in result["warnings"])
+
+    def test_tree_match_skips_local_synth(
+        self, detect_squash_residue: ModuleType
+    ) -> None:
+        # When tree-match fires, local-synth must NOT run — calling it would
+        # be wasteful and could produce conflicting results.
+        commits = _commits("a")
+        tree_hit = {
+            "squash_commit": "s" * 40,
+            "squash_short": "s" * 8,
+            "squash_subject": "Squashed",
+            "squashed_commits": commits,
+            "unique_commits": [],
+        }
+        synth_calls = []
+        def fake_synth(*a: object, **kw: object) -> bool:
+            synth_calls.append((a, kw))
+            return True
+
+        with (
+            patch.object(detect_squash_residue, "_resolve_head", return_value="HEAD"),
+            patch.object(detect_squash_residue, "_commits_since", return_value=commits),
+            patch.object(detect_squash_residue, "_check_via_tree_match", return_value=tree_hit),
+            patch.object(detect_squash_residue, "_check_via_gh", return_value=None),
+            patch.object(detect_squash_residue, "_check_via_synthesis", side_effect=fake_synth),
+            patch.object(detect_squash_residue, "_in_progress_abort", return_value=None),
+        ):
+            result = detect_squash_residue.detect("feature", "origin/main")
+
+        assert result["verdict"] == "squash-merged"
+        assert result["method"] == "tree-match"
+        assert synth_calls == []
+
+
+class TestBuildRemedies:
+    """The dual-remedy structure — both options always offered, safety order
+    enforced, abort prefix applied to both when an operation is in progress."""
+
+    def _scaffold(self, **overrides: object) -> dict:
+        base = {
+            "verdict": "squash-merged",
+            "method": "tree-match",
+            "branch_commits": [],
+            "unique_commits": [],
+            "squash_commit": None,
+            "pr": None,
+            "warnings": [],
+        }
+        base.update(overrides)
+        return base
+
+    def test_merge_remedy_is_non_destructive(
+        self, detect_squash_residue: ModuleType
+    ) -> None:
+        with patch.object(
+            detect_squash_residue, "_in_progress_abort", return_value=None
+        ):
+            remedies = detect_squash_residue._build_remedies(self._scaffold(), "origin/main")
+
+        merge = _remedy(remedies, "merge")
+        assert merge["destructive"] is False
+        assert merge["commands"] == [
+            "git merge origin/main",
+            # The trailing `# resolve …` comment is informational only.
+            next(c for c in merge["commands"] if c.startswith("#")),
+        ]
+        # No reset/cherry-pick commands leak into the merge option.
+        assert not any("reset --hard" in c for c in merge["commands"])
+        assert not any("cherry-pick" in c for c in merge["commands"] if not c.startswith("#"))
+
+    def test_reset_remedy_is_destructive(
+        self, detect_squash_residue: ModuleType
+    ) -> None:
+        unique = _commits("unique-1", "unique-2")
+        with patch.object(
+            detect_squash_residue, "_in_progress_abort", return_value=None
+        ):
+            remedies = detect_squash_residue._build_remedies(
+                self._scaffold(unique_commits=unique), "origin/main"
+            )
+
+        reset = _remedy(remedies, "reset-and-cherry-pick")
+        assert reset["destructive"] is True
+        assert "git reset --hard origin/main" in reset["commands"]
+        cherry = next((c for c in reset["commands"] if "cherry-pick" in c), None)
+        assert cherry is not None
+        for c in unique:
+            assert c["sha"] in cherry
+
+    def test_abort_prefix_applied_to_both_remedies(
+        self, detect_squash_residue: ModuleType
+    ) -> None:
+        with patch.object(
+            detect_squash_residue, "_in_progress_abort", return_value="git rebase --abort"
+        ):
+            remedies = detect_squash_residue._build_remedies(self._scaffold(), "origin/main")
+
+        for r in remedies:
+            assert r["commands"][0] == "git rebase --abort"
+
+    def test_local_synth_emits_manual_review_in_destructive_remedy_only(
+        self, detect_squash_residue: ModuleType
+    ) -> None:
+        branch = _commits("a", "b")
+        scaffold = self._scaffold(
+            method="local-synth",
+            branch_commits=branch,
+            unique_commits=[],
+        )
+        with patch.object(
+            detect_squash_residue, "_in_progress_abort", return_value=None
+        ):
+            remedies = detect_squash_residue._build_remedies(scaffold, "origin/main")
+
+        merge = _remedy(remedies, "merge")
+        # Merge remedy stays clean — no per-commit review block needed.
+        assert not any(c.startswith("#   ") for c in merge["commands"])
+        reset = _remedy(remedies, "reset-and-cherry-pick")
+        review_lines = [c for c in reset["commands"] if c.startswith("#   ")]
+        assert len(review_lines) == 2
+        for c in branch:
+            assert any(c["short"] in line for line in review_lines)
+
+    def test_no_unique_no_cherry_pick_in_reset_remedy(
+        self, detect_squash_residue: ModuleType
+    ) -> None:
+        with patch.object(
+            detect_squash_residue, "_in_progress_abort", return_value=None
+        ):
+            remedies = detect_squash_residue._build_remedies(
+                self._scaffold(method="tree-match", unique_commits=[]), "origin/main"
+            )
+
+        reset = _remedy(remedies, "reset-and-cherry-pick")
+        assert reset["commands"] == ["git reset --hard origin/main"]
