@@ -36,13 +36,13 @@
 }
 
 /* Inline code: wax-paper background */
-.md-typeset code {
+.md-typeset :not(pre) > code {
   background-color: rgba(253, 230, 138, 0.45);
   border: 1px solid rgba(180, 83, 9, 0.15);
   border-radius: 4px;
 }
 
-[data-md-color-scheme="slate"] .md-typeset code {
+[data-md-color-scheme="slate"] .md-typeset :not(pre) > code {
   background-color: rgba(180, 83, 9, 0.25);
   border-color: rgba(253, 230, 138, 0.2);
 }
