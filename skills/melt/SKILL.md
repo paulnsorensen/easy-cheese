@@ -32,24 +32,38 @@ The bash-driven flows below cover the bulk of resolution. Drop into the cheez-* 
 
 ### 0. Squash-residue check
 
-Run this before the conflict summary. If the branch was squash-merged into base, mergiraf cannot help — the right answer is to abort and re-cherry-pick the unique commits.
+Run this before the conflict summary. If the branch was squash-merged into base, mergiraf cannot help — the right answer is to either merge base in (non-destructive) or abort and re-cherry-pick the unique commits (destructive).
 
 ```bash
 python3 skills/melt/scripts/detect-squash-residue.py
 ```
 
-If the verdict is `SQUASH-MERGED`, surface the printed remedy to the user verbatim and stop the cascade. The remedy is destructive (`git reset --hard`) and must be copy-pasted by the user, not auto-applied. Flags:
+If the verdict is `SQUASH-MERGED`, surface both printed remedies to the user verbatim and stop the cascade. Neither remedy is auto-applied — the user picks one and copy-pastes. Flags:
 
 - `--base` — base ref to compare against (default: `origin/main`).
 - `--branch` — branch to check (default: current).
 - `--json` — structured output for scripting.
 
+Detection cascade (strongest first; later signals run only when needed):
+
+- `tree-match` — walks commits on base looking for one whose tree equals the tree at some point on the branch. That commit is a squash-equivalent of branch commits up to that point. Works offline, through fork PRs and renames, and handles branches with commits past the squash (the case `local-synth` misses). Always runs first.
+- `gh-api` — runs in parallel with tree-match. Enriches a tree-match verdict with PR metadata (number, URL, merge commit) when its SHAs correlate with the squash; supplies the verdict on its own when tree-match found nothing.
+- `local-synth` — synthesizes a would-be squash commit from HEAD's tree and asks `git cherry` whether base contains an equivalent. Last-resort fallback that only runs when neither tree-match nor gh-api produced a verdict; cannot enumerate squashed vs unique commits.
+
 Verdict semantics:
 
-- `SQUASH-MERGED` (via `gh-api`) — PR found and at least one local commit's SHA matched the PR; cherry-pick list derived from the unmatched (post-squash) commits.
-- `SQUASH-MERGED` (via `local-synth`) — detected offline; cherry-pick list must be reviewed by hand.
+- `SQUASH-MERGED` (`method=tree-match` or `tree-match+gh`) — strongest signal; unique-commit list is the slice of branch commits after the matched squash point.
+- `SQUASH-MERGED` (`method=gh-api`) — fallback when tree-match found nothing but the gh PR's SHAs overlap with branch commits.
+- `SQUASH-MERGED` (`method=local-synth`) — detected offline only; cherry-pick list must be reviewed by hand.
 - `not-detected` — proceed to the cascade.
 - `not-applicable` — on the base branch.
+
+The detector prints two remedies in order:
+
+- **[A] merge** (non-destructive) — `git merge <base>`. Preserves all branch history; squashed commits collapse to a no-op merge, so only real conflicts surface. Prefer this when the branch has unique work or the unique-commit list is uncertain.
+- **[B] reset-and-cherry-pick** (destructive) — `git reset --hard <base>` + `git cherry-pick <unique-shas>`. Rewrites the branch and requires force-push. Use when a clean linear history is wanted and the unique-commit list looks complete.
+
+Default to suggesting [A] first; only suggest [B] when the user has stated a preference for a linear-history workflow or the unique-commit count is small and verified.
 
 ### 1. Diagnose
 
@@ -190,7 +204,7 @@ ls .git/rr-cache/              # browse the resolution database
 
 | Script | Purpose | When |
 | --- | --- | --- |
-| `detect-squash-residue.py` | Detect that the branch was squash-merged and emit the abort+cherry-pick remedy | **Run first** — short-circuits the cascade |
+| `detect-squash-residue.py` | Detect that the branch was squash-merged and emit both the merge and reset+cherry-pick remedies | **Run first** — short-circuits the cascade |
 | `conflict-summary.py` | Structured summary with line numbers and context | After residue check |
 | `batch-resolve.py` | Run `mergiraf merge` over every conflicted file | Supported languages |
 | `conflict-pick.py` | Choose ours / theirs per hunk | Shell, SQL, formats mergiraf does not parse |
@@ -242,9 +256,10 @@ After resolution finishes, prompt the next step via the shared handoff gate in [
 
 ## Rules
 
-- Always run `detect-squash-residue.py` first; if positive, surface the remedy and stop the cascade.
+- Always run `detect-squash-residue.py` first; if positive, surface both remedies and stop the cascade.
 - Always run `conflict-summary.py` before deciding the cascade order.
 - Prefer structural resolution over manual edits when mergiraf supports the file type.
 - Never weaken or hand-edit a lockfile in place — regenerate from the manifest.
-- Surface unresolved files explicitly; do not claim a clean tree until `git status` agrees.
-- Never auto-apply the squash-residue remedy — it is destructive (`git reset --hard`); the user copy-pastes it.
+- Flag unresolved files explicitly; do not claim a clean tree until `git status` agrees.
+- Never auto-apply a squash-residue remedy — even the non-destructive merge path rewrites working state; the user copy-pastes their choice.
+- Lead with the merge remedy unless the user has asked for a linear-history workflow; reset+cherry-pick rewrites the branch and requires force-push.
