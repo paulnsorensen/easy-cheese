@@ -74,6 +74,9 @@ agent_introduced_scope: []   # terms in the spec the user did not type — each 
 
 ## Reproduction (Diagnose only)
 <failing test, curl, replay command, etc.>
+
+## References
+<one footnote definition per cited source; include only when out-of-scope evidence was cited above per `shared/formatting.md` § Citations>
 ```
 
 ## Issue template

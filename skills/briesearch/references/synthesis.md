@@ -9,8 +9,10 @@ One row per material claim, not per source. A single source can support multiple
 ```markdown
 | Claim | Evidence | Source type | Freshness | Confidence | Caveat |
 | --- | --- | --- | --- | --- | --- |
-| <one-line claim> | <quote, file:line, or URL> | vendor docs / paper / changelog / repo / GitHub / blog | <date checked or "live"> | `certain` / `speculating` / `don't know` | <if any> |
+| <one-line claim> | <quote or file:line>[^source-1] | vendor docs / paper / changelog / repo / GitHub / blog | <date checked or "live"> | `certain` / `speculating` / `don't know` | <if any> |
 ```
+
+The Evidence column uses footnote markers (`[^source-1]`, `[^source-2]`, …); the absolute URLs and fetch dates live in a `## References` block at the bottom of the report per [`shared/formatting.md`](../../../shared/formatting.md) § Citations. Inline `file:line` references stay raw — they are locations, not citations.
 
 Rules:
 
@@ -39,7 +41,7 @@ Canonical failure to avoid: a Tavily snippet says "hybrid retrieval combines spa
 
 For deep reports (anything with a `.cheese/research/<slug>/<slug>.md` artifact):
 
-1. Every URL in the evidence column resolves (HTTP 200 or matched-host redirect). Mark unreachable links `[unverified]` rather than dropping them — the user can re-check.
+1. Every URL in `## References` resolves (HTTP 200 or matched-host redirect). Mark unreachable footnote definitions `[unverified]` rather than dropping them — the user can re-check.
 2. Every quoted or paraphrased line traces back to its source (one-click verifiable for the user).
 3. Every "as of <date>" claim has a verified fetch date in the same row.
 
@@ -81,6 +83,10 @@ Short form (always returned to the caller):
 
 ### Next step
 <recommended skill or action — limited to which skill should run next (`/mold`, `/cook`, etc.), never which design knob to expose.>
+
+## References
+[^source-1]: <absolute URL or `.cheese/...` path> (fetched <YYYY-MM-DD>).
+[^source-2]: <absolute URL or `.cheese/...` path> (fetched <YYYY-MM-DD>).
 ```
 
 Long form (when the question warranted a deep look):

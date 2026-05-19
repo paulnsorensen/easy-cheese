@@ -33,8 +33,23 @@ These rules bind every section, every artifact. The succinctness pass catches vi
 - **No throat-clearing.** Skip "In this section," "It is important to note," "We will now discuss." Section headers are the transition.
 - **No hedging.** "It might be worth considering" becomes a clear position or moves to Open questions.
 - **No restated context.** The reader has the diff or the spec. Do not re-state what they can see.
-- **No AI vernacular.** Phrases like *load-bearing*, *footgun*, *belt-and-suspenders*, *non-trivial*, *deep dive*, *leverage* (as a verb), *let me…* openers, *surface* (as a verb), *ergonomic*, *guardrails* (abstract), *blast radius* (outside incident context) read as machine voice. Three or more in a report means it is not ready. The full banned list with replacements is in `~/.claude/CLAUDE.md` (§ Banned Phrases).
-- **Calibrated tags sit on the claim, not at sentence boundaries.** Use `` `<certain>` ``, `` `<speculative>` ``, or `` `<don't know>` `` inline next to the specific assertion. Never as a blanket disclaimer at the top of a section. Never in front of a fragment. Adjacent claims with different calibrations split into two sentences, each carrying its own tag.
+- **No AI vernacular.** These phrases have become tics. They either hedge, inflate, or substitute a cliché for a precise word. Three or more in a report means it is not ready.
+
+  | Phrase | Say instead |
+  | --- | --- |
+  | load-bearing | critical, essential, required |
+  | footgun | dangerous, unsafe by default, easy to misuse |
+  | belt-and-suspenders | doubly validated, redundant safety |
+  | non-trivial | hard, complex, involved |
+  | deep dive | analysis, investigation, reading |
+  | leverage (as a verb) | use, apply, build on |
+  | let me… (opener) | *(just say the thing; no announcement)* |
+  | surface (as a verb) | mention, flag, call out, show |
+  | ergonomic / ergonomics | readable, clean, easy to use |
+  | guardrails (abstract) | constraints, checks, limits |
+  | blast radius (outside incident context) | affected scope, reach, impact |
+
+- **Calibrated tags sit on the claim, not at sentence boundaries.** Use `` `<certain>` ``, `` `<speculating>` ``, or `` `<don't know>` `` inline next to the specific assertion. Never as a blanket disclaimer at the top of a section. Never in front of a fragment. Adjacent claims with different calibrations split into two sentences, each carrying its own tag. The three tokens are exact label values: write them verbatim, never as synonyms.
 - **Diagrams over prose.** Prefer Mermaid flowcharts and sequence diagrams for control-flow, data-flow, and integration shapes. Mermaid renders in GitHub and in the mkdocs site.
 - **No semicolons in Mermaid.** Newlines are the convention and render more reliably. One statement per line, no trailing `;`. This includes node definitions, edges, and class assignments.
 - **Pseudocode for algorithms, signatures for data shapes.** Pseudocode is clearest when the point is the algorithm; real signatures (typed function declarations, schemas) are clearest when the point is the data shape. One form per idea; the same content does not appear in two.
@@ -54,7 +69,7 @@ GitHub, the mkdocs site (`footnotes` extension is enabled in `mkdocs.yml`), and 
 | In-scope code address (file the report is about) | Inline | `src/auth.ts:42-50` |
 | In-scope test or fixture | Inline | `tests/auth.test.ts::handles missing token` |
 | Out-of-scope code (upstream library, vendor SDK, GitHub blob URL) | Footnote | `Stripe retries idempotent POSTs up to 24 hours.[^stripe-retry]` |
-| External docs, RFCs, blog posts, vendor pages | Footnote | `OIDC `sub` is the durable trust key.[^oidc-core]` |
+| External docs, RFCs, blog posts, vendor pages | Footnote | ``OIDC `sub` is the durable trust key.[^oidc-core]`` |
 | Prior `.cheese/` report, spec, or commit/PR | Footnote | `The press report flagged this gap.[^press-2026-05-12]` |
 
 ### Body form
@@ -92,7 +107,7 @@ A spec captures a design decision and its rationale before code is written.
 - **Owner:** `/mold` → curdle stage.
 - **Path:** `.cheese/specs/<slug>.md`.
 - **Shape:** see `skills/mold/references/curdle.md` § Spec template.
-- **Sections (required, in order):** frontmatter, `# <Title>`, Problem, Goals, Non-goals, Approach, Decisions, Interface sketches, Risks, Open questions, Quality gates, Reproduction (Diagnose only).
+- **Sections (required, in order):** frontmatter, `# <Title>`, Problem, Goals, Non-goals, Approach, Decisions, Interface sketches, Risks, Open questions, Quality gates, Reproduction (Diagnose only), References (when out-of-scope citations are used).
 - **Length budget:** 50–200 lines. Past 300 lines means a decision is buried; split or cut.
 
 Specs that touch existing systems open Approach with one diagram (flowchart or sequence) of the end state before any subsections.
@@ -115,7 +130,7 @@ A findings report is the output of a review skill — `/age`, `/cure`, `/press`,
   <one-line orientation: what changed or what was reviewed>
   ```
 
-- **Required sections:** Orientation (one or two factual sentences), the skill's body sections, Confidence (`certain` / `speculating` / `don't know` plus one-line justification), Next step (inline selection or terminal status), References (when out-of-scope citations were used).
+- **Section shape:** owned by each skill's `## Output` section (see the per-owner paths above). The cross-cutting rule is that whatever sections an owner template defines, the same handoff slug sits at the top and a `## References` block sits at the bottom whenever footnotes are used.
 - **Findings format.** Each finding is one bullet:
 
   ```markdown
@@ -166,7 +181,27 @@ Add:
 
 - The mechanism behind any architectural or causal claim where the prose leaves the reader to guess. A reader who has not read the diff should be able to reproduce the conclusion from the report.
 
-The fuller voice guidance, anti-pattern catalog, and rewrite examples live in `~/.claude/skills/rfd-coauthoring/references/succinctness.md` § Voice and § Patterns, paired. The rules transfer directly; only the target artifact changes.
+### Rewrite examples
+
+Hedge → claim:
+
+> ❌ "It might be worth considering whether the retry path drops the idempotency key."
+> ✅ "The retry path drops the idempotency key on the second attempt.[^stripe-retry]"
+
+Throat-clearing → header:
+
+> ❌ "In this section, we'll discuss the trade-offs between approach A and approach B."
+> ✅ *(Section header alone. First sentence states the decision.)*
+
+Restated context → cut:
+
+> ❌ "As you can see from the diff, the new `validate()` function is called from three places."
+> ✅ *(Delete. The reader has the diff.)*
+
+Prose duplicating a code block → keep one:
+
+> ❌ A paragraph describing the signature, immediately followed by the signature itself.
+> ✅ The signature, with a one-line caption only if the caption adds something the signature does not.
 
 ## Length budgets
 
