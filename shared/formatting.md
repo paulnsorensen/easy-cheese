@@ -2,7 +2,7 @@
 
 Use this reference for any artifact a skill writes to `.cheese/` — specs, findings reports (`/age`, `/cure`, `/press`, `/cook`), and research reports (`/briesearch`). The house style and citation rules are shared; the three canonical shapes are listed at the bottom and cross-referenced to the skill that owns each one.
 
-This file borrows heavily from the `rfd-coauthoring` skill (`~/.claude/skills/rfd-coauthoring/`). Where that skill targets Notion specifically, this one targets on-disk markdown rendered by GitHub and the easy-cheese mkdocs site, both of which support the standard `[^name]` footnote primitive.
+The citation primitive is the standard markdown `[^name]` footnote, which renders natively in GitHub and the easy-cheese mkdocs site (the `footnotes` extension is enabled in `mkdocs.yml`).
 
 ## Reader model
 
@@ -60,7 +60,7 @@ These rules bind every section, every artifact. The succinctness pass catches vi
 
 The citation primitive is the standard markdown footnote: `[^1]` (or any kebab-case name like `[^retry-rfc]`), with the definition at the bottom of the artifact under a `## References` heading.
 
-GitHub, the mkdocs site (`footnotes` extension is enabled in `mkdocs.yml`), and pandoc all render this form as a superscript marker with a back-link to the reference list. Notion ingests it as inline text — see the `rfd-coauthoring` skill for the Notion-native `[^URL]` variant if a report is destined for Notion specifically.
+GitHub, the mkdocs site, and pandoc all render this form as a superscript marker with a back-link to the reference list.
 
 ### When to use a footnote vs inline
 
@@ -203,13 +203,4 @@ Prose duplicating a code block → keep one:
 > ❌ A paragraph describing the signature, immediately followed by the signature itself.
 > ✅ The signature, with a one-line caption only if the caption adds something the signature does not.
 
-## Length budgets
-
-| Artifact | Budget |
-| --- | --- |
-| Spec | 50–200 lines (past 300 means a decision is buried) |
-| Findings report | 50–150 lines (past 200 means split review and triage) |
-| Research report — short form | 20–40 lines (returned inline) |
-| Research report — long form | 100–300 lines (written to `.cheese/research/<slug>/`) |
-
-A draft past its budget means the cut is not done.
+Per-shape length budgets live in each shape's `**Length budget:**` bullet under [Canonical shapes](#canonical-shapes). A draft past its budget means the cut is not done.
