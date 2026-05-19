@@ -62,6 +62,8 @@ Use existing project commands only. Run the most relevant tests for the touched 
 
 ## Output
 
+Cross-cutting house style and citation form: [`../../shared/formatting.md`](../../shared/formatting.md). The authoritative cook-report shape lives in [`references/package-report.md`](references/package-report.md); the bullets below are a sketch of what that template requires.
+
 Summarize:
 
 - Files changed and why.

@@ -50,6 +50,8 @@ If optional tools are missing, press a narrower surface and state the residual r
 
 ## Output
 
+Cross-cutting house style and citation form: [`../../shared/formatting.md`](../../shared/formatting.md). This section owns the press-report shape; formatting.md owns the voice rules and the footnote primitive.
+
 Write to `.cheese/press/<slug>.md` with a minimum handoff slug at the top so `/ultracook` and `/cheese --continue` can chain without re-parsing the report. The full report shape:
 
 ```markdown
