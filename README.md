@@ -153,7 +153,7 @@ Workflow skills name preferred tools when they help, with fallbacks for portabil
 | Context7 (MCP) | Library and API documentation | repo docs, package docs, vendor pages, web search |
 | Tavily (MCP) | Current web/vendor research | host web search or user-supplied sources |
 | code-review-graph (MCP) | Review impact radius, architecture framing, and embeddings-backed semantic / cross-repo search | import searches, caller searches, tests |
-| LSP / Serena | Semantic navigation and symbol understanding | `sg`, `ripgrep`, targeted reads |
+| LSP / [Serena](https://github.com/oraios/serena) (MCP) | Type-aware xrefs (`find_referencing_symbols`, `find_implementations`), symbol-bounded edits (`rename_symbol`, `replace_symbol_body`, `safe_delete_symbol`), and LSP diagnostics — concrete tools for the abstract "if your harness has an LSP" sections in cheez-* skills | `sg`, `tilth_search`, targeted reads via tilth |
 | `ripgrep` | Fast text search | `grep`, `find`, editor search |
 | `gh` | GitHub issues, PRs, checks, examples | local git commands or user-provided links/logs |
 | `delta` | Readable diffs | plain `git diff` |

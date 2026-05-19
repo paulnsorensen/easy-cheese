@@ -120,6 +120,17 @@ If the file is code in this repo, **always cheez-read** — the hash anchors are
 
 If no LSP is installed for the language, or the file is in a broken / incomplete state where the server cannot resolve, stay on tilth. tilth still wins on outline reading, hash-anchored prep for edits, polyglot directory listings, and any read where a `.gitignore`-aware token estimate is required.
 
+### When Serena beats tilth for symbol-table reads (if your harness has it)
+
+[Serena](https://github.com/oraios/serena) is an LSP-driven MCP. If `mcp__serena__get_symbols_overview` is in your tool list, prefer it for symbol-table reads where you don't need source lines:
+
+| Goal | Serena tool | Why |
+|------|-------------|-----|
+| Just the symbol table of one file (no source lines) | `mcp__serena__get_symbols_overview` | Cheaper than tilth outline mode — LSP-indexed, no parse pass |
+| Read a single symbol's body by name (no line range needed) | `mcp__serena__find_symbol` with body inclusion | Skips the "outline → drill into 44-89" round-trip |
+
+Stay on `tilth_read` when you need hash anchors (any edit follows up), a `tilth_files` directory listing with token estimates, or token-budgeted preview mode. Serena gives you the symbol; tilth gives you the anchor. If you're going to edit afterwards, prefer tilth so the anchor is already in hand — see [`cheez-write`](../cheez-write/SKILL.md) for the symmetric "When Serena beats `tilth_edit`" guidance.
+
 ---
 
 ## MCP Tool Reference

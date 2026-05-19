@@ -130,6 +130,19 @@ If you find yourself wanting `grep` *for code in this repo*, that's the signal t
 
 If no LSP is installed for the language, or the file is in a broken / incomplete state where the server cannot resolve, fall back to tilth — `tilth_search` still finds the symbol by name even when no semantic resolution is possible. tilth also wins on speed at scale, polyglot queries (one call across Rust + TS + Python), error-tolerant parses, and content / regex queries that LSP does not index.
 
+### When Serena beats tilth (if your harness has it)
+
+[Serena](https://github.com/oraios/serena) is an LSP-driven MCP that exposes the LSP queries above as named tools. If `mcp__serena__find_symbol` is in your tool list, prefer these concrete calls over the abstract LSP methods — same semantics, no IDE round-trip:
+
+| Question | Serena tool | Why it beats tilth |
+|----------|-------------|--------------------|
+| "Who *really* references X, accounting for aliased imports and shadowing?" | `mcp__serena__find_referencing_symbols` | Type-aware xrefs; tilth's `kind: "callers"` is name-shaped |
+| "What implements interface / trait Y?" | `mcp__serena__find_implementations` | Honors generics and re-exports; tilth surfaces every textual match |
+| "Where is the declaration of X (following imports)?" | `mcp__serena__find_declaration` | Walks the import graph; tilth returns every definition with that name |
+| "Find symbol X across the project, semantically" | `mcp__serena__find_symbol` | LSP-indexed; pair with `get_symbols_overview` for a file's symbol table |
+
+Capability detection: if `mcp__serena__find_symbol` is absent, fall back to `tilth_search` and note "Serena unavailable" in evidence — do not pretend the xref was type-validated. Serena requires `.serena/project.yml` in the repo; if missing, treat it as unconfigured rather than broken. Stay on tilth for polyglot one-call queries, content / regex search, and any case where the language server can't resolve (broken or generated code).
+
 ### When code-review-graph beats tilth (if your harness has it)
 
 [`code-review-graph`](https://github.com/tirth8205/code-review-graph) is a separate, optional MCP that builds a **persistent** call graph of one or more repositories with Tree-sitter, Louvain communities, betweenness-centrality, and (with the `[embeddings]` extra) vector embeddings. Where tilth answers "where is `handleAuth`?", code-review-graph answers "what code is *about* authentication, ranked by importance and reach across all my repos?"

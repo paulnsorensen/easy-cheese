@@ -129,6 +129,19 @@ For everything else — block edits, signature changes, body rewrites, hand-writ
 
 If no LSP is installed, or the rename touches a symbol the typechecker can't resolve (broken code, generated bindings), fall back to `sg --rewrite` with the dry-run-first protocol — see "Structural codemods" below.
 
+### When Serena beats `tilth_edit` for symbol-bounded edits (if your harness has it)
+
+[Serena](https://github.com/oraios/serena) is an LSP-driven MCP that exposes symbol-bounded edits as named tools. If `mcp__serena__rename_symbol` is in your tool list, these give the abstract LSP rename above a concrete tool — plus a broader symbol-level edit surface:
+
+| Edit | Serena tool | When to prefer over `tilth_edit` |
+|------|-------------|----------------------------------|
+| Rename a symbol type-correctly across the project | `mcp__serena__rename_symbol` | The LSP rename case above — Serena gives it a concrete tool |
+| Replace a whole function / class body by name | `mcp__serena__replace_symbol_body` | Skips the "read for anchors → edit" round-trip when the boundary is a named symbol |
+| Insert before / after a named symbol (e.g. add a method to a class, or a function next to its sibling) | `mcp__serena__insert_before_symbol`, `mcp__serena__insert_after_symbol` | No anchor needed for a moving boundary |
+| Delete a symbol and check for orphaned references | `mcp__serena__safe_delete_symbol` | Validates xrefs before the cut — `tilth_edit` would happily strand callers |
+
+**Caveat — no hash-anchor concurrency safety.** Serena's edits rely on LSP and file mtime, not the content-hash check that makes `tilth_edit` race-safe. Use Serena's symbol edits only when the file is quiescent (no parallel writers, no in-flight `/cook` or `/cure` on the same path). Fall back to `tilth_edit` whenever concurrency safety dominates, the symbol is not LSP-resolvable (broken or generated code), or the edit is sub-symbol (one line inside a function). The cheez-write floor — `tilth_edit` for everything that touches code — still applies; Serena is an acceleration, not a replacement, and capability detection follows the same pattern as the tilth probe above (absent tool ⇒ stay on `tilth_edit`, do not invent it).
+
 ---
 
 ## Hash Anchor Format
