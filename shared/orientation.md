@@ -19,7 +19,7 @@ Use this reference when a workflow skill needs a one-screen mental model of the 
 
 Every caller runs this exact sequence before doing any orientation work:
 
-1. Compute the slug: `slug=$(basename "$(git rev-parse --show-toplevel)")`.
+1. Compute the slug: `slug=$(basename "$(git rev-parse --show-toplevel)")`. If `git rev-parse` fails (no git installed, or not inside a repo), fall back to `slug=$(basename "$(pwd)")` and add `[unverified — non-git working directory]` to the orientation body's *First impressions* section so downstream readers know the slug is provisional.
 2. Check whether `.cheese/orient/<slug>.md` exists.
 3. **If it exists**, read it and load its contents into the parent context. Print a one-line acknowledgement (`Orientation: loaded from .cheese/orient/<slug>.md (cached HEAD <sha-from-frontmatter>)`). Skip the recipe. Done.
 4. **If it does not exist**, ensure the cache directory exists (`mkdir -p .cheese/orient`), run the five-step recipe below, write the result to `.cheese/orient/<slug>.md` with the frontmatter spec'd below, then load the contents into the parent context. Print a one-line acknowledgement (`Orientation: generated at .cheese/orient/<slug>.md (HEAD <current-sha>)`). Done.
@@ -146,4 +146,4 @@ A workflow skill wiring this in should:
 1. Run the read-or-write procedure as the first substantive step (after the input parse, before classification / dialogue / mode routing).
 2. Print the one-line acknowledgement so the user knows whether orientation was cached or freshly generated.
 3. Reference orientation in subsequent reasoning (`per orientation, the domain models are X, Y, Z`) rather than re-deriving facts the cache already supplies.
-4. Honour explicit refresh verbs from the user (`re-orient`, `refresh orientation`) by deleting the cache and re-running the recipe.
+4. Honour explicit refresh verbs from the user (`re-orient`, `refresh orientation`) by re-running the read-or-write procedure's write branch, overwriting `.cheese/orient/<slug>.md` in place (per the Staleness section).
