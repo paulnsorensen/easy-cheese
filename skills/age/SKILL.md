@@ -1,6 +1,6 @@
 ---
 name: age
-description: This skill should be used when the user wants a code review on a diff, PR, branch, or path — phrases like "review this", "/age", "is this safe to merge", "find bugs", "spot security issues", "check for slop", "review my PR", "look for problems", "what's wrong with this code". Runs nine orthogonal review dimensions (correctness, security, encapsulation, spec, complexity, deslop, assertions, NIH, efficiency) over the scoped diff and emits a stake-grouped findings report at `.cheese/age/<slug>.md`. Use even when the user only asks for one dimension — the report scopes itself. Findings only — no fixes; after the report lands, age renders the cure-selection table inline and asks which findings to cure (no "should I run /cure?" meta-question), then hands off to `/cure` with the selection locked in. Supports `--auto` (propagated from `/cook --auto`) for the autonomous chain into `/cure` (see `### Auto mode`). After `/press` (optional); before `/cure`.
+description: This skill should be used when the user wants a code review on a diff, PR, branch, or path — phrases like "review this", "/age", "is this safe to merge", "find bugs", "spot security issues", "check for slop", "review my PR", "look for problems", "what's wrong with this code". Runs ten orthogonal review dimensions (correctness, security, encapsulation, spec, complexity, deslop, assertions, NIH, efficiency, telemetry) over the scoped diff and emits a stake-grouped findings report at `.cheese/age/<slug>.md`. Use even when the user only asks for one dimension — the report scopes itself. Findings only — no fixes; after the report lands, age renders the cure-selection table inline and asks which findings to cure (no "should I run /cure?" meta-question), then hands off to `/cure` with the selection locked in. Supports `--auto` (propagated from `/cook --auto`) for the autonomous chain into `/cure` (see `### Auto mode`). After `/press` (optional); before `/cure`.
 license: MIT
 ---
 
@@ -38,6 +38,7 @@ When called with a `<slug>`, resolve `.cheese/press/<slug>.md` (if present) for 
 | assertions | medium | weak tests, shallow existence checks, swallowed errors |
 | nih | medium | reinvented dependency, stdlib, or existing project helper / utility / component |
 | efficiency | medium | unnecessary work, missed concurrency, hot-path bloat, no-op updates, time-of-check/time-of-use (TOCTOU) pre-checks, memory leaks, overly broad reads |
+| telemetry | medium | silent error branches on non-interactive paths (servers, daemons, workers, outbound API/DB/queue calls), un-instrumented outbound calls, silent worker loops, hand-rolled logging infrastructure when stdlib/ecosystem covers it, missing rotation/retention/config hygiene on new file logging, unstructured logs, wrong log levels, double-logging, errors logged without context, missing correlation/trace ids, high-cardinality metric labels or span names, logs-as-metrics, `print()`/`console.log` in production, tests asserting on log strings |
 
 Per-dimension rubrics and recommendation shapes in `references/dimensions.md`. This reduced workflow intentionally omits the git-history/precedent dimension.
 
@@ -79,7 +80,7 @@ Spawn when any of these are true:
 - Caller / dependency graph expansion crosses multiple subsystems.
 - code-review-graph or `tilth_deps` output is needed for hotspot, bridge-node, or blast-radius framing.
 
-The sub-agent returns a digest: orientation paragraph, high-signal `path:line` citations, gap list. The parent owns the nine-dimension review, severity grading, and the `.cheese/age/<slug>.md` report. Do not spawn for small diffs, to outsource severity grading, or to outsource the final verdict.
+The sub-agent returns a digest: orientation paragraph, high-signal `path:line` citations, gap list. The parent owns the ten-dimension review, severity grading, and the `.cheese/age/<slug>.md` report. Do not spawn for small diffs, to outsource severity grading, or to outsource the final verdict.
 
 Digest size, parent-vs-sub-agent split, and harness-agnostic sub-agent selection live in `references/sub-agent-gate.md` — single source of truth for the cross-cutting rules.
 
@@ -166,7 +167,7 @@ When invoked with `--auto`:
 
 ### Inline-degrade mode (invoked from a sub-agent, e.g. /cheese-factory curd worker)
 
-When `/age` detects it is running as a sub-agent (the parent passes the `invoked-from: cheese-factory-curd` marker or equivalent context line in the prompt), it runs its nine dimensions inline within its own context instead of spawning per-dimension sub-agents. This honours the host's nesting-depth limit (Claude Code allows 1 level of sub-agent nesting; equivalents in other harnesses are similar).
+When `/age` detects it is running as a sub-agent (the parent passes the `invoked-from: cheese-factory-curd` marker or equivalent context line in the prompt), it runs its ten dimensions inline within its own context instead of spawning per-dimension sub-agents. This honours the host's nesting-depth limit (Claude Code allows 1 level of sub-agent nesting; equivalents in other harnesses are similar).
 
 Detection mechanism: scan the invoking prompt for an `invoked-from:` line — values like `cheese-factory-curd`, `fromagerie-curd`, or any harness-specific marker the orchestrator passes in. When present, switch modes:
 
