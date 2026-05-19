@@ -16,8 +16,11 @@ from pathlib import Path
 # must be updated in lockstep — keep in sync via manual review.
 KEBAB_SLUG = re.compile(r"^(?!-)(?!.*--)[a-z0-9-]{1,64}(?<!-)$")
 
-# Phases that own a `.cheese/<phase>/<slug>.md` artifact tree. Read by
-# `/cheese --continue` and `/ultracook` when scanning for prior handoffs.
+# Phases that own a `.cheese/<phase>/<slug>.md` artifact tree. Different
+# orchestrators scan different subsets — see CHAIN_PHASES below for the
+# pipeline that `/cheese --continue` walks. The wider set here includes
+# phases owned by other orchestrators (`/cheese-factory`, `/pasteurize`,
+# `/research`) and one-off notes/specs/hard artifacts.
 PHASES: frozenset[str] = frozenset(
     {
         "cook",
@@ -80,7 +83,13 @@ def artifact_path(phase: str, slug: str, *, root: Path | str = ".cheese") -> Pat
 
 
 def parse_artifact_path(path: Path | str) -> tuple[str, str]:
-    """Inverse of artifact_path. Returns (phase, slug). Raises on mismatch."""
+    """Extract (phase, slug) from a canonical ``.cheese/<phase>/<slug>.md`` path.
+
+    Only the canonical root is parsed — paths produced by ``artifact_path``
+    with a custom ``root=`` argument (e.g. a pytest ``tmp_path``) are not
+    round-trippable here. Callers operating outside ``.cheese/`` should
+    construct (phase, slug) themselves.
+    """
     p = Path(path)
     parts = p.parts
     if len(parts) < 3 or parts[-3] != ".cheese":

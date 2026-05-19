@@ -58,25 +58,31 @@ def _parse_status(line: str) -> tuple[str, str | None]:
 
 
 def parse_handoff_slug(text: str) -> HandoffSlug:
-    """Parse the four-line preamble from the top of an artifact body."""
-    lines = [line for line in text.splitlines() if line.strip()]
-    if len(lines) < 4:
-        raise HandoffParseError(
-            f"handoff preamble needs status / next / artifact / orientation; got {len(lines)} lines"
-        )
-    status, halt_reason = _parse_status(lines[0])
+    """Parse the four-line preamble from the top of an artifact body.
 
-    next_match = _NEXT_RE.match(lines[1])
+    The preamble is strictly the first four *physical* lines: status, next,
+    artifact (value may be empty), orientation. Treating blank lines as
+    skippable would let a missing orientation silently consume the first
+    body line (e.g. a `# Press Report` heading) as the orientation.
+    """
+    raw_lines = text.splitlines()
+    if len(raw_lines) < 4:
+        raise HandoffParseError(
+            f"handoff preamble needs status / next / artifact / orientation; got {len(raw_lines)} lines"
+        )
+    status, halt_reason = _parse_status(raw_lines[0])
+
+    next_match = _NEXT_RE.match(raw_lines[1])
     if not next_match:
-        raise HandoffParseError(f"expected 'next:' line, got {lines[1]!r}")
+        raise HandoffParseError(f"expected 'next:' line, got {raw_lines[1]!r}")
     next_skill = next_match.group("value").lstrip("/")
 
-    artifact_match = _ARTIFACT_RE.match(lines[2])
+    artifact_match = _ARTIFACT_RE.match(raw_lines[2])
     if not artifact_match:
-        raise HandoffParseError(f"expected 'artifact:' line, got {lines[2]!r}")
+        raise HandoffParseError(f"expected 'artifact:' line, got {raw_lines[2]!r}")
     artifact_value = artifact_match.group("value") or None
 
-    orientation = lines[3].strip()
+    orientation = raw_lines[3].strip()
     if not orientation:
         raise HandoffParseError("orientation line must be non-empty")
 

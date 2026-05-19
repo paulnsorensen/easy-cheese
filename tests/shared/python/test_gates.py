@@ -57,6 +57,32 @@ class TestClassifyReadiness:
         )
         assert result is gates.Readiness.READY
 
+    def test_hard_floor_not_met_blocks_even_with_clean_gaps(
+        self, gates: ModuleType
+    ) -> None:
+        # Hard floor is a precondition: failing it BLOCKs regardless of gap state.
+        result = gates.classify_readiness(
+            hard_floor_met=False,
+            has_open_level_1_or_2=False,
+            has_open_level_3=False,
+            has_open_level_4_or_5=False,
+            any_spinning=False,
+        )
+        assert result is gates.Readiness.BLOCKED
+
+    def test_hard_floor_not_met_blocks_with_only_level_4_or_5(
+        self, gates: ModuleType
+    ) -> None:
+        # Without the hard floor, even soft gaps don't promote to FOLLOW_UP.
+        result = gates.classify_readiness(
+            hard_floor_met=False,
+            has_open_level_1_or_2=False,
+            has_open_level_3=False,
+            has_open_level_4_or_5=True,
+            any_spinning=False,
+        )
+        assert result is gates.Readiness.BLOCKED
+
 
 class TestCurePassCounter:
     def test_cap_default(self, gates: ModuleType) -> None:

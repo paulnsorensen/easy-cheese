@@ -60,9 +60,10 @@ def classify_readiness(
     classify each gap's level. The function then maps the deterministic
     summary state to the verdict.
     """
-    if any_spinning or (has_open_level_1_or_2 and not hard_floor_met):
-        return Readiness.BLOCKED
-    if has_open_level_1_or_2:
+    # hard_floor_met is a precondition: without it, the press scoreboard is
+    # incomplete (failing gates, missing tests, etc.) and the verdict is
+    # BLOCKED regardless of which gap levels are still open.
+    if any_spinning or not hard_floor_met or has_open_level_1_or_2:
         return Readiness.BLOCKED
     if has_open_level_3:
         return Readiness.READY  # level-3 gaps are encouraged to close in /age
@@ -86,7 +87,7 @@ class CurePassCounter:
         return self.completed >= self.cap
 
     def next_action(self) -> str:
-        """Return the next chain action: 'cure', 'age-final', or 'done'."""
+        """Return the next chain action: 'cure' (more passes allowed) or 'done'."""
         if self.completed >= self.cap:
             return "done"
         return "cure"
