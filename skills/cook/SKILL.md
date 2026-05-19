@@ -107,7 +107,7 @@ When invoked with `--auto`, skip this gate entirely and proceed straight into th
 1. After cook's package-ready report, invoke `/press <slug> --auto`.
 2. `/press --auto` runs its hardening pass and, if readiness is `ready for /age` or `follow-up recommended`, invokes `/age <slug> --auto`. Both states mean the cooked contract is sound and every changed behaviour has a hardening test; documented follow-ups are review-safe. Only `blocked` stops auto — false premise, unfixable level-1/2 gap, a changed behaviour with no stable hardening test, or spinning wheels (three attempts at one gap without green).
 3. `/age <slug> --auto` writes the report and invokes `/cure <slug> --auto --stake medium+`.
-4. `/cure --auto --stake medium+` bypasses the selection gate, applies every finding of `medium` or `high` stake, then invokes `/age --scope <touched-paths> --auto` for verification.
+4. `/cure --auto --stake medium+` bypasses the selection gate, applies every finding of `blocker`, `high`, or `medium` severity, then invokes `/age --scope <touched-paths> --auto` for verification.
 5. The age → cure cycle is capped at **two cure passes total**. Pass 1 fixes the initial findings. Pass 2 fixes anything the re-age surfaces. After pass 2 the chain stops with a final summary, regardless of whether new findings remain.
 6. Auto mode never invokes `/gh`. Opening or updating a PR stays user-triggered.
 
@@ -135,7 +135,7 @@ The skill that ends the chain prints the summary below. On the success path that
 ```
 Auto-mode summary
 Passes:        <1|2>
-Findings fixed: <count by stake>
+Findings fixed: <count by severity>
 Deferred:       <count, with cure-report path>
 Final age:      <path>
 Next step:      review the diff, then /gh when ready

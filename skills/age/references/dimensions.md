@@ -2,134 +2,270 @@
 
 Each dimension has its own rubric. Apply each dimension to the scoped diff. A dimension with nothing to say simply omits itself from the report — do not pad with no-op observations.
 
-## High-stake
+Dimensions answer **what kind of problem**. Severity answers **how bad this one is**. The two stay orthogonal.
+
+## Severity vocabulary
+
+Four tiers, in order:
+
+```
+blocker > high > medium > low
+```
+
+| Tier | Meaning |
+| --- | --- |
+| `blocker` | Do not merge — contract broken, exposure open, or data at risk |
+| `high` | Fix before merge — risk of incident or rework |
+| `medium` | Real defect — fix before next release |
+| `low` | Annoyance — safe to merge, fix at leisure |
+
+## Severity computation
+
+Each finding's severity is computed, not declared. Three independent contributors, max-merged, capped at `blocker`:
+
+1. **Base** — from the dimension's per-tier rubric (see § Per-dimension rubrics below).
+2. **Location bump** — `+1` tier if `location = contract` *and* the dimension is location-sensitive (see § Location sensitivity).
+3. **Compounding bump** — `+1` tier if `fix-cost-later = structural`.
+
+Pseudocode:
+
+```
+sev = base(dimension, finding)
+if location == "contract" and dimension in LOCATION_SENSITIVE:
+    sev = bump(sev)
+if fix_cost_later == "structural":
+    sev = bump(sev)
+# v2: sev = max(sev, criticality_floor(file))   — criticality inference is bookshelved
+sev = cap(sev, "blocker")
+```
+
+`bump(low) = medium`, `bump(medium) = high`, `bump(high) = blocker`, `bump(blocker) = blocker`.
+
+Mental shortcut: a class-private encapsulation leak lands `low`; the same leak at a slice's `index` re-export lands `blocker` (base `high` → contract bump → structural fix-cost bump, capped).
+
+## Per-finding fields
+
+Every finding carries these fields:
+
+| Field | Values | Source |
+| --- | --- | --- |
+| `dimension` | correctness, security, encapsulation, spec, complexity, deslop, assertions, nih, efficiency, telemetry | reviewer-tagged |
+| `severity` | `blocker / high / medium / low` | computed (formula above) |
+| `location` | `class / module / cross-module / contract` | reviewer-classified |
+| `fix-cost-now` | `contained / moderate / sprawling` | bucketed from blast-radius count |
+| `fix-cost-later` | `contained / spreading / structural` | reviewer-classified |
+| `recommendation` | one-line action | reviewer |
+
+## Location classification
+
+| Tier | Definition |
+| --- | --- |
+| `class` | Within a single class / type / file's private scope. Caller graph stays inside the file. |
+| `module` | Within a single module / slice. Crosses files but stays inside the slice's internal namespace. |
+| `cross-module` | Reaches into another module's internals (bypasses the public index/crust). |
+| `contract` | Crosses an ingress/egress boundary: slice's public `index` re-exports, HTTP/RPC handler signature, DB schema, language-FFI boundary, plugin extension point, published library API. |
+
+## Location sensitivity
+
+The `contract` bump only applies to dimensions where boundary position genuinely changes how bad a finding is:
+
+| Dimension | Contract bump? | Why |
+| --- | --- | --- |
+| correctness | yes | A bug at the contract leaks into every consumer; internal bugs stay contained |
+| security | yes | Tainted input crossing a trust boundary is the canonical case |
+| encapsulation | yes | The whole dimension is about boundary integrity |
+| spec | yes | Spec drift at the API surface contradicts the published contract |
+| complexity | no | Complexity grades by function/file shape, not boundary position |
+| deslop | no | Dead code is dead code wherever it lives |
+| assertions | no | Test quality doesn't change by where the SUT lives |
+| nih | yes | Reinventing primitives that cross the boundary is worse than internal helpers |
+| efficiency | yes | Hot path on a public handler is the typical blocker shape |
+| telemetry | yes | Silent failure on an outbound call (boundary) is the canonical blocker |
+
+## Fix-cost-now
+
+> "How hard would it be to fix this *right now*?"
+
+Bucket the blast-radius file count for the proposed fix:
+
+| Tier | Heuristic |
+| --- | --- |
+| `contained` | 1-2 files, single module |
+| `moderate` | 3-10 files, single module |
+| `sprawling` | 10+ files, **or** spans multiple modules |
+
+Source priority:
+
+1. **`tilth_deps`** — primary. Returns the file set that would need to change.
+2. **CRG `get_impact_radius_tool`** — when code-review-graph is wired. Equivalent blast-radius output.
+3. **LSP `find-references` / `find-callers`** — fallback when neither tilth nor CRG is available.
+
+Fix-cost-now is **reported, not bumped**. Severity decides what to fix; fix-cost-now explains effort and lets triage schedule.
+
+## Fix-cost-later (compounding)
+
+> "How much harder does this get if we leave it?"
+
+| Tier | Meaning |
+| --- | --- |
+| `contained` | Cost stays roughly fixed. A typo in a docstring is the same fix in six months. |
+| `spreading` | Cost grows linearly. New code piles onto the bad pattern; each new caller adds one unit of fix work. |
+| `structural` | Cost grows non-linearly. Consumers *harden* against the current shape — types get re-exported, mocks calcify, downstream APIs build on the leak. Public-API leaks, DB-schema mistakes, and ingress-contract violations live here. |
+
+`structural` triggers the compounding `+1` bump in the formula. The point of carrying this tag is to surface "fix now or pay exponentially later" to the user without dressing it up as severity.
+
+## Per-dimension rubrics
+
+Each dimension's base-severity table — *severity-by-violation-shape*, before modifiers. Modifiers (location, compounding) layer on top per the formula.
 
 ### correctness
 
-Look for:
-- Off-by-one, ordering, null/empty, undefined-behaviour edge cases.
-- Silent failures: caught exceptions that swallow the error, default values that hide a missing input.
-- Race conditions when concurrency is in scope (locks, atomics, transaction boundaries).
-- Logic that contradicts itself across branches of an `if` / `match`.
+Look for: off-by-one, ordering, null/empty edge cases, silent failures, races, contradictory branches, lost writes.
+
+| Base | Trigger |
+| --- | --- |
+| `blocker` | Data loss, data corruption, race in shared concurrent state, lost write, irreversible side effect on wrong input |
+| `high` | Wrong data returned, ordering bug, silent failure with no recovery path |
+| `medium` | Edge case in a flow with a recovery path; null/empty handling that misbehaves on rare input |
+| `low` | Cosmetic edge case in well-bounded leaf code |
 
 Recommendation shape: "Add a guard for X" / "Return early when Y" / "Replace `catch (_)` with explicit handling".
 
 ### security
 
-Look for:
-- AuthN/AuthZ holes: missing checks, role confusion, privilege escalation paths.
-- Injection: SQL, shell, template, deserialization, path traversal, ReDoS.
-- Secrets: hardcoded tokens, secrets in logs, secrets passed via URL/query string.
-- Tainted inputs reaching `eval`, `exec`, `system`, file paths, or HTTP redirects without validation.
-- Crypto missteps: hand-rolled hashing, missing salts, weak randomness, known-broken algorithms.
+Look for: authN/authZ holes, injection, secrets in source/logs/URLs, tainted inputs reaching dangerous sinks, crypto missteps.
+
+| Base | Trigger |
+| --- | --- |
+| `blocker` | Injection (SQL/shell/template/deser), authn bypass, secret in source, RCE, plaintext secret on the wire |
+| `high` | Unvalidated input reaches dangerous sink; broken authz on internal route; weak crypto on durable data |
+| `medium` | Tainted input reaches limited surface with secondary validation; missing rate-limit on auth-adjacent route |
+| `low` | Missing defense-in-depth on already-validated input |
 
 Recommendation shape: "Validate at the boundary" / "Use the project's existing `<helper>`" / "Move secret to env or vault".
 
 ### encapsulation
 
-Look for:
-- Cross-module imports that reach into another slice's internals instead of its public interface.
-- Public APIs that leak implementation types (ORM models, framework objects, infra adapters).
-- Functions that take `Context | DI container | App` when they only need one field.
-- New exports added without a use case.
+Look for: cross-module reach into internals, public APIs leaking implementation types, parameters that take more context than needed, new exports without a use case.
+
+| Base | Trigger |
+| --- | --- |
+| `blocker` | **Ingress/egress contract violation** — public API leaks ORM model, infra adapter, framework type, or storage internal across the slice boundary; slice's `index` re-exports an internal type |
+| `high` | Cross-module reach into another slice's internals, bypassing crust/index |
+| `medium` | Module-internal leak (cross-file inside one slice exposes private detail) |
+| `low` | Class-level — one class touches another's private member within the same file |
+
+Note: base tier *is* the location tier here, so the contract bump tends to redundantly raise an already-blocker finding (capped).
 
 Recommendation shape: "Import from `<slice>/index` instead of `<slice>/internal/foo`" / "Narrow the public surface to `<minimal-type>`".
 
 ### spec
 
-Look for:
-- Behaviour described in the spec that is not present in the diff.
-- Behaviour in the diff that is not described in the spec.
-- Renamed concepts, changed defaults, or relocated boundaries that the spec did not approve.
-- Missing acceptance criteria the user's request implied (e.g. "should return 401" with no 401 path).
+Look for: behaviour in the spec but not in the diff, behaviour in the diff but not in the spec, renamed concepts or relocated boundaries, missing acceptance criteria.
+
+| Base | Trigger |
+| --- | --- |
+| `blocker` | Silent drift on a security/data/correctness requirement the spec explicitly nailed down |
+| `high` | Behavior contradicts spec |
+| `medium` | Acceptance criterion partially implemented |
+| `low` | Naming/style drift the user can re-align in 30s |
 
 Recommendation shape: "Restore the X requirement" / "Confirm with the user that Y is intentional" / "Update the spec to reflect Z".
 
-## Medium-stake
-
 ### complexity
 
-Look for:
-- Functions over the project's complexity budget (40 lines / 4 params / 3 nesting levels are common).
-- Files over 300 lines that grew in this diff.
-- Speculative abstractions: a generic helper used in one place; a strategy pattern with one strategy.
-- Redundant state: duplicated state, or a cached value that could be derived on read.
-- Parameter sprawl: a new parameter added to thread data through, where restructuring or a smaller struct would carry it instead.
-- Stringly-typed code: raw strings where a constant, enum, or string-union type already exists.
-- Comments that try to explain code that should rename instead.
+Look for: functions over budget (40 lines / 4 params / 3 nesting), files over 300 lines that grew, speculative abstractions, redundant state, parameter sprawl, stringly-typed code, explanatory-renaming comments.
+
+| Base | Trigger |
+| --- | --- |
+| `high` | God function (3× budget), param sprawl threading through 3+ layers, new god module created in this diff |
+| `medium` | 2× budget, generic helper with one user, redundant cached state |
+| `low` | Few lines over budget, mildly speculative abstraction |
+
+No default `blocker` row — complexity blockers are rare. (Once criticality returns, the floor may push complexity findings up on `critical`-tier paths.)
 
 Recommendation shape: "Extract `<sub-function>`" / "Inline `<one-call helper>`" / "Derive `<value>` instead of caching" / "Replace `<string>` with `<enum>`" / "Replace `<vague-name>` with `<concrete-name>`".
 
 ### deslop
 
-Look for:
-- Dead code: unreachable branches, unused exports, commented-out blocks left as "for reference".
-- AI tells: catch-all `try/except` that re-raises a generic error, useless docstrings that restate the function name, "// TODO: implement" left in committed code.
-- Duplicated logic: copy-paste of an existing helper, two functions that should be one.
-- Copy-paste-with-variation: near-duplicate blocks that differ only in a value or branch, where a shared helper or parameter is the natural shape.
-- Vague names: `data`, `result`, `temp`, `info`, `manager`, `helper` without a noun that says what they hold.
+Look for: dead code, AI tells (generic catches, useless docstrings, "// TODO: implement"), duplicated logic, copy-paste-with-variation, vague names.
+
+| Base | Trigger |
+| --- | --- |
+| `high` | Large duplicated logic with diverging behavior; AI residue actively misshapes flow |
+| `medium` | Dead branch left "for reference", duplicated small block, "// TODO: implement" committed |
+| `low` | Vague name; single weak copy-paste |
+
+No default `blocker` row.
 
 Recommendation shape: "Delete dead branch at <line>" / "Reuse `<existing-helper>`" / "Extract shared `<helper>` from the two near-duplicate blocks" / "Rename `data` to `<noun>`".
 
 ### assertions
 
-Look for:
-- Tests that assert existence (`toBeDefined`, `is not None`) instead of value equality.
-- Tests that catch any error instead of the specific expected error.
-- Tests that pass when the implementation is wrong (no-crash-as-success).
-- Mocks that mock the system under test.
-- Tests that depend on time, random, or external state without bounding it.
+Look for: existence assertions instead of equality, catch-any-error, no-crash-as-success, mocked SUT, time/random/external coupling.
+
+| Base | Trigger |
+| --- | --- |
+| `blocker` | SUT itself is mocked; test asserts the bug as correct behavior |
+| `high` | Test passes when the implementation is wrong (no-crash-as-success) |
+| `medium` | Catches generic `Exception`; depends on time/random without bounding |
+| `low` | `toBeDefined` where equality is one line away |
 
 Recommendation shape: "Replace `toBeTruthy` with `toEqual(<expected>)`" / "Catch `<specific-error>` not `Exception`".
 
 ### nih
 
-Look for:
-- Hand-rolled retry, validation, UUID, debounce, date parse, argparse, deep-equality, sanitizer that the project already imports a library for.
-- Custom JSON walking when `jq` (in scripts) or a dependency would do.
-- New string-format / template helpers when the language stdlib has them.
-- "Utility" file that recreates a small library.
-- Newly written code that duplicates an existing in-project utility, helper, or component — including inline logic (string manipulation, path handling, parsing/formatting) that already has a project helper.
+Look for: hand-rolled retry/validation/UUID/debounce/date-parse/argparse/deep-equality/sanitizer when an import exists; in-project utility duplication.
+
+| Base | Trigger |
+| --- | --- |
+| `high` | Reinvented logging/telemetry/concurrency primitives the project already wires; reinvented crypto |
+| `medium` | Reinvented retry, debounce, validation, UUID |
+| `low` | Reinvented small util the stdlib already has |
+
+No default `blocker` row.
 
 Recommendation shape: "Replace with `<existing-dep>.<fn>`" / "Use the stdlib `<fn>` instead of the local helper" / "Call the existing `<project-helper>` instead of re-implementing".
 
 ### efficiency
 
-Look for:
-- Unnecessary work: redundant computation, repeated reads of the same value, N+1 query/IO patterns inside a loop.
-- Missed concurrency: independent async operations awaited sequentially when they could run in parallel.
-- Hot-path bloat: blocking work added to startup, per-request, or per-render paths.
-- Recurring no-op updates: unconditional state/store writes inside loops, intervals, or handlers without a change-detection guard.
-- Time-of-check/time-of-use (TOCTOU) pre-checks: pre-checking file/resource existence before use; prefer performing the operation and handling the resulting error.
-- Memory issues: unbounded caches/queues, missing cleanup, listener/timer leaks, retained references after teardown.
-- Overly broad operations: reading a full file or dataset when only a slice is needed.
+Look for: unnecessary work, missed concurrency, hot-path bloat, no-op updates, TOCTOU pre-checks, memory leaks, overly broad reads.
+
+| Base | Trigger |
+| --- | --- |
+| `blocker` | Unbounded cache/queue, listener/timer leak, retained references after teardown — anything that grows without bound in a long-running process |
+| `high` | Blocking work on per-request / startup / per-render path; N+1 on a high-traffic endpoint |
+| `medium` | N+1 on a moderate endpoint; redundant compute in a non-hot loop |
+| `low` | Redundant compute outside hot paths |
 
 Recommendation shape: "Hoist `<call>` out of the loop" / "Run `<a>` and `<b>` in parallel with `Promise.all` (or equivalent)" / "Guard the store write on a value change" / "Drop the existence pre-check; handle the error from `<op>` instead" / "Bound `<structure>` or add cleanup on `<teardown>`" / "Read only the needed range/columns".
 
 ### telemetry
 
-Covers logging, metrics, and tracing hygiene — both **presence** (is the path instrumented at all?) and **shape** (structure / levels / context / cardinality). Non-interactive paths need real telemetry (HTTP/RPC handlers, outbound API/DB/queue/cache calls, daemons, queue consumers, schedulers, background workers, retry loops); interactive paths where the operator watches stdout (CLI tools, dev scripts, one-shot commands) do not need backend-shipped telemetry on the happy path, though structured error output still helps. Secrets-in-logs stays under `security`; hot-path log-volume cost stays under `efficiency`; exceptions swallowed with no handling at all stay under `correctness`.
+Covers logging, metrics, and tracing hygiene — both **presence** (is the path instrumented at all?) and **shape** (structure / levels / context / cardinality). Non-interactive paths need real telemetry (servers, daemons, workers, outbound calls); interactive paths where the operator watches stdout do not need backend-shipped telemetry on the happy path. Secrets-in-logs stays under `security`; hot-path log-volume cost stays under `efficiency`; exceptions swallowed with no handling at all stay under `correctness`.
 
-Look for:
-- **Silent error branches on non-interactive paths.** `catch` / `except` / `if err != nil` blocks in servers, daemons, workers, and outbound calls that handle the error but emit no log and no metric. The failure becomes invisible to anyone not attached to a debugger.
-- **Outbound calls without observability.** HTTP / RPC / DB / queue / cache calls with no surrounding span, no error log, and no failure counter. Operators learn the integration broke only from downstream symptoms.
-- **Silent daemons / workers / schedulers.** Long-running processes with no startup log, no heartbeat or per-iteration progress signal, and no per-item error emission. When the worker stalls or crashes, there is nothing to grep.
-- **Missing request/response instrumentation on server handlers.** New routes or RPC methods added with no entry/exit log, no latency metric, and no error counter.
-- **Hand-rolled logging infrastructure.** New logger class, formatter, level filter, JSON serializer, ring buffer, or log-shipping code when the project already wires a logger or the ecosystem has a standard one (Python `logging` / `structlog`; Node `pino` / `winston`; Go `slog` / `zerolog`; Rust `tracing` / `log`; Java `slf4j` / `logback`). Overlaps with `nih`; both dimensions may flag the same line.
-- **Missing operational hygiene on new file-based logging.** Logs written to disk without rotation (size cap, age cap, archive policy), no retention bound, hardcoded log paths that bypass project config, synchronous writes on the request path, or custom log-shipping where the project's standard handler / sidecar / OTel collector already does the job.
-- Unstructured or string-concatenated log messages where structured (key-value or JSON) fields would be queryable — `f"user {id} failed"` instead of `log.error("operation failed", user_id=id)`.
-- Wrong log levels: DEBUG-spam in production hot paths, ERROR used for expected outcomes, everything-at-INFO walls that bury real signal.
-- Double-logging: code that logs an error and then rethrows / returns it, so the same failure appears at every frame up the stack.
-- Errors logged without context: `log.error("failed")` with no exception object, stack trace, or causal fields. Use `exc_info=True` (Python) / `{ err }` (JS) / equivalent.
-- Missing correlation: cross-service or async work without a trace/request/correlation id threaded through the log line and span.
-- High-cardinality metric labels or span names: `user_id`, `request_id`, full URLs with query strings, timestamps, or other unbounded values used as metric labels or in span names. Belongs in span attributes (sampled) or log fields, not in metric label sets.
-- Logs-as-metrics: counting log occurrences in a downstream pipeline instead of emitting a counter, gauge, or histogram directly.
-- `print()` / `console.log` / raw stderr scribbles left in production code paths instead of the project's logger.
-- Tests asserting on log strings — couples implementation details to test assertions and breaks on cosmetic log changes.
-- Unbounded list / object / request-body dumps into logs (can balloon log volume and leak sensitive structure).
+| Base | Trigger |
+| --- | --- |
+| `blocker` | Silent failure on critical infra (payments, auth, irreversible side effects) where the operator has nothing to grep |
+| `high` | Silent error branches on outbound calls to external services; un-instrumented new handler on a non-interactive path |
+| `medium` | Silent catch on a non-critical worker; un-instrumented new background loop |
+| `low` | Missing one structured field; wrong level on dev path |
+
+Look for: silent error branches on non-interactive paths; outbound calls without observability; silent daemons/workers/schedulers; missing request/response instrumentation; hand-rolled logging infrastructure; missing operational hygiene (rotation/retention) on new file logging; unstructured/string-concat log messages; wrong log levels; double-logging; errors logged without context; missing correlation/trace ids; high-cardinality metric labels or span names; logs-as-metrics; `print()`/`console.log` left in production; tests asserting on log strings; unbounded list/object dumps into logs.
 
 Recommendation shape: "Emit a structured error log (and a failure counter) in this catch block before re-raising" / "Wrap the outbound `<call>` in a span and add a failure-counter metric" / "Add startup + per-iteration logs to the `<worker>` loop with the failing item id on error" / "Add entry/exit log + latency metric to the new `<handler>`" / "Use the project's existing logger / standard `<stdlib-or-ecosystem-library>` instead of the hand-rolled `<class>`" / "Configure rotation (size + age cap, retention policy) on the new file handler" / "Read log path / level from project config instead of hardcoding" / "Replace string-concat log with structured fields" / "Demote to DEBUG (or drop)" / "Log once at the boundary, not at every catch" / "Add `exc_info=True` (or equivalent) to capture the stack" / "Thread `trace_id` through the log context at the request boundary" / "Move `<high-cardinality-attr>` from metric label to span attribute" / "Emit a counter instead of grepping logs" / "Replace `print()` with the project logger" / "Assert on behavior, not on log text".
 
-## Stake assignment
+## Deferred: criticality inference (v2)
 
-Stake is fixed per dimension. Do not vary it at runtime based on diff size or perceived severity — the rubric already encodes severity. A high-stake dimension produces fewer findings when the rubric does not match the diff; do not promote a medium-stake finding to fill space.
+A fourth severity contributor — a **criticality floor** keyed off the file's path/import/structural fingerprint — is bookshelved for v1. When wired, the formula extends with:
+
+```
+sev = max(sev, criticality_floor(file))   # inserted before the cap
+```
+
+Bookshelved material lives in:
+
+- `.cheese/research/severity-rubric/rubric-draft.md` § Deferred: criticality inference — full inference ladder (critical / high / standard / low), four-tier vocabulary, two consumers (severity floor + weighted fix-cost-now), `.cheese/criticality.toml` override schema.
+- `.cheese/research/critical-pathways/critical-pathways.md` — 35+ detection rules across six signal classes (taint sources/sinks, compliance libraries, framework convention markers, production-pathway layout, graph-structural signals, empirical Pareto from Walkinshaw 2018 ESEM).
+
+v1 does **not** mine the catalogs, build the override file, or compute the floor. v1 ships without any criticality awareness; the deferred material is read-only context for the v2 ticket.

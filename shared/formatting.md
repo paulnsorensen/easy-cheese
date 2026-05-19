@@ -117,7 +117,7 @@ Specs that touch existing systems open Approach with one diagram (flowchart or s
 A findings report is the output of a review skill — `/age`, `/cure`, `/press`, or `/cook` taste-test. Each skill owns its own variant; the cross-cutting rules below apply to all of them.
 
 - **Owners and paths:**
-  - `/age` → `.cheese/age/<slug>.md` (review findings, stake-grouped). See `skills/age/SKILL.md` § Output.
+  - `/age` → `.cheese/age/<slug>.md` (review findings, severity-grouped). See `skills/age/SKILL.md` § Output.
   - `/cure` → `.cheese/cure/<slug>.md` (applied fixes + gate results). See `skills/cure/SKILL.md` § Output.
   - `/press` → `.cheese/press/<slug>.md` (test-hardening report). See `skills/press/SKILL.md` § Output.
   - `/cook` → `.cheese/cook/<slug>.md` (implementation report). See `skills/cook/SKILL.md` § Output.

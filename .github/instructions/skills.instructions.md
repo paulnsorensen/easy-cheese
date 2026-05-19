@@ -31,7 +31,7 @@ Spend your review budget on the things linters cannot see.
   if instructions repeat themselves, pull them into `references/<topic>.md`
   and link from `SKILL.md` with a one-line "read this when …" pointer.
 - For skills that span multiple variants (per-language fixers, per-conflict
-  cascade stages, per-stake findings flows), keep the selection logic in
+  cascade stages, per-severity findings flows), keep the selection logic in
   `SKILL.md` and put the variant-specific detail in `references/`. Claude
   only loads what it needs.
 - Tables of contents only earn their place in reference files >300 lines.

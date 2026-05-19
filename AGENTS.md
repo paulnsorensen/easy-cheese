@@ -27,7 +27,7 @@ This is a skills-only collection following the [Agent Skills spec](https://agent
 | `/culture` | Deep no-write exploration of a codebase or topic |
 | `/cook` | TDD-disciplined implementation of an approved spec |
 | `/press` | Adversarial test hardening after `/cook` |
-| `/age` | Eight-dimension code review producing a stake-grouped findings report |
+| `/age` | Ten-dimension code review producing a severity-grouped findings report |
 | `/cure` | Applies selected `/age` findings as focused fixes |
 | `/melt` | Resolves merge / rebase / cherry-pick conflicts via the structural-merge cascade |
 | `/briesearch` | External research router (Context7, Tavily, gh, local code) |

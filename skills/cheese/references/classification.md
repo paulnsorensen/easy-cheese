@@ -144,7 +144,7 @@ When two intents are plausible, apply in order:
 | `.cheese/specs/dark-mode.md` | cook | spec path resolves; fast-path obvious |
 | `add dark mode to the web client` | mold | feature scope, no spec, multi-module likely |
 | `PR#142` | age | PR reference, no fix verb |
-| `review and fix the high-stake items in PR#142` | age-then-cure | review verb + fix verb + PR ref |
+| `review and fix the high-severity items in PR#142` | age-then-cure | review verb + fix verb + PR ref |
 | stack trace pasted | debug | trace present, cause not stated |
 | `what's the best rate limiter library for fastify` | research | external library question |
 | `help me think about splitting orders into a sub-slice` | rubber-duck | no artifact intent |
