@@ -44,11 +44,11 @@ If the verdict is `SQUASH-MERGED`, surface both printed remedies to the user ver
 - `--branch` — branch to check (default: current).
 - `--json` — structured output for scripting.
 
-Detection methods (most-to-least reliable, all attempted):
+Detection cascade (strongest first; later signals run only when needed):
 
-- `tree-match` — walks commits on base looking for one whose tree equals the tree at some point on the branch. That commit is a squash-equivalent of branch commits up to that point. Works offline, through fork PRs and renames, and handles branches with commits past the squash (the case `local-synth` misses).
-- `gh-api` — enriches the result with PR metadata (number, URL, merge commit) and provides an independent SHA-overlap signal.
-- `local-synth` — synthesizes a would-be squash commit from HEAD's tree and asks `git cherry` whether base contains an equivalent. Last-resort fallback; cannot enumerate squashed vs unique commits.
+- `tree-match` — walks commits on base looking for one whose tree equals the tree at some point on the branch. That commit is a squash-equivalent of branch commits up to that point. Works offline, through fork PRs and renames, and handles branches with commits past the squash (the case `local-synth` misses). Always runs first.
+- `gh-api` — runs in parallel with tree-match. Enriches a tree-match verdict with PR metadata (number, URL, merge commit) when its SHAs correlate with the squash; supplies the verdict on its own when tree-match found nothing.
+- `local-synth` — synthesizes a would-be squash commit from HEAD's tree and asks `git cherry` whether base contains an equivalent. Last-resort fallback that only runs when neither tree-match nor gh-api produced a verdict; cannot enumerate squashed vs unique commits.
 
 Verdict semantics:
 

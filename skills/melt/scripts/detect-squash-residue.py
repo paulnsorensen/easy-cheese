@@ -7,18 +7,21 @@ in base, producing useless conflicts that mergiraf cannot resolve — the right
 answer is to merge base in (non-destructive) or reset and re-cherry-pick the
 unique commits (destructive).
 
-Detection path (most-to-least reliable, all attempted):
+Detection cascade (strongest first; later signals run only when needed):
   1. Tree-match — walk recent commits on base looking for one whose tree
      equals the tree at some point on the branch. That commit is a squash
      of branch commits up to that point. Works offline, through fork PRs,
      and when the branch has additional commits past the squash (the case
-     `local-synth` misses).
+     `local-synth` misses). Always runs first.
   2. gh API — `gh pr list --state merged --head <branch>` provides PR
-     metadata (number, URL) and an independent SHA-overlap signal.
+     metadata (number, URL) and an independent SHA-overlap signal. Always
+     runs alongside tree-match so it can enrich a tree-match verdict, and
+     supplies the verdict on its own when tree-match found nothing.
   3. Local synthesis — synthesize a would-be squash commit from HEAD's
-     tree and ask `git cherry` whether base contains an equivalent. Last
-     resort; cannot enumerate squashed vs unique commits, and misses the
-     case where the branch has commits past the squash.
+     tree and ask `git cherry` whether base contains an equivalent. Only
+     runs when neither tree-match nor gh produced a verdict. Last resort;
+     cannot enumerate squashed vs unique commits, and misses the case
+     where the branch has commits past the squash.
 
 No auto-fix. Prints two remedies (merge first, then reset+cherry-pick) as
 copy-paste blocks; the user picks and runs.
@@ -121,6 +124,51 @@ def _check_via_gh(branch: str, base_ref: str) -> dict | None:
     }
 
 
+def _log_with_trees(
+    range_ref: str, *, reverse: bool = False, limit: int | None = None
+) -> list[tuple[str, str, str]] | None:
+    """git log --format='%H<tab>%T<tab>%s' <range> → [(sha, tree, subject)].
+    Returns None on git failure, [] when the range is empty.
+    """
+    args = ["log"]
+    if limit is not None:
+        args.append(f"-{limit}")
+    if reverse:
+        args.append("--reverse")
+    args += ["--format=%H%x09%T%x09%s", range_ref]
+    r = run_git(args)
+    if r.returncode != 0:
+        return None
+    rows: list[tuple[str, str, str]] = []
+    if not r.stdout.strip():
+        return rows
+    for line in r.stdout.strip().split("\n"):
+        parts = line.split("\t", 2)
+        if len(parts) == 3:
+            rows.append((parts[0], parts[1], parts[2]))
+    return rows
+
+
+def _format_commit_list(rows: list[tuple[str, str, str]]) -> list[dict]:
+    return [{"sha": sha, "short": sha[:8], "subject": subj} for sha, _, subj in rows]
+
+
+def _build_tree_match_result(
+    base_sha: str,
+    base_subject: str,
+    branch_commits: list[tuple[str, str, str]],
+    squash_index: int,
+) -> dict:
+    """Format a tree-match hit into the result dict shape."""
+    return {
+        "squash_commit": base_sha,
+        "squash_short": base_sha[:8],
+        "squash_subject": base_subject,
+        "squashed_commits": _format_commit_list(branch_commits[: squash_index + 1]),
+        "unique_commits": _format_commit_list(branch_commits[squash_index + 1 :]),
+    }
+
+
 def _check_via_tree_match(base_ref: str, head: str = "HEAD") -> dict | None:
     """Find a commit on base whose tree equals the tree at some point on the
     branch. That commit is a squash-equivalent of branch commits up to that
@@ -129,66 +177,29 @@ def _check_via_tree_match(base_ref: str, head: str = "HEAD") -> dict | None:
     Strongest of the three detection methods: works offline, through forks
     and renames, and (unlike `_check_via_synthesis`) handles the case where
     the user has committed additional work on top of the squashed commits.
-
-    Returns dict with squash_commit, squashed_commits, unique_commits when
-    a match is found; None otherwise.
     """
     mb = _merge_base(base_ref, head)
     if not mb:
         return None
 
-    branch_log = run_git(
-        ["log", "--reverse", "--format=%H%x09%T%x09%s", f"{mb}..{head}"]
-    )
-    if branch_log.returncode != 0 or not branch_log.stdout.strip():
-        return None
-
-    branch_commits: list[tuple[str, str, str]] = []
-    for line in branch_log.stdout.strip().split("\n"):
-        parts = line.split("\t", 2)
-        if len(parts) == 3:
-            branch_commits.append((parts[0], parts[1], parts[2]))
-
+    branch_commits = _log_with_trees(f"{mb}..{head}", reverse=True)
     if not branch_commits:
         return None
 
-    # Map tree SHA -> latest branch index with that tree. If multiple branch
-    # commits share a tree, prefer the latest so the unique-commit list is
-    # the smallest set that needs replaying.
-    branch_tree_to_index: dict[str, int] = {}
-    for i, (_, tree, _) in enumerate(branch_commits):
-        branch_tree_to_index[tree] = i
+    # Map tree SHA -> latest branch index with that tree. Revert-then-redo
+    # collisions prefer the latest so the unique-commit replay set stays small.
+    branch_tree_to_index = {tree: i for i, (_, tree, _) in enumerate(branch_commits)}
 
     # Cap base log at 500 commits to stay fast on long-running base branches.
-    base_log = run_git(
-        ["log", "-500", "--format=%H%x09%T%x09%s", f"{mb}..{base_ref}"]
-    )
-    if base_log.returncode != 0:
+    base_commits = _log_with_trees(f"{mb}..{base_ref}", limit=500)
+    if base_commits is None:
         return None
 
-    for line in base_log.stdout.strip().split("\n"):
-        parts = line.split("\t", 2)
-        if len(parts) != 3:
-            continue
-        base_sha, base_tree, base_subject = parts
+    for base_sha, base_tree, base_subject in base_commits:
         if base_tree in branch_tree_to_index:
-            idx = branch_tree_to_index[base_tree]
-            squashed = branch_commits[: idx + 1]
-            unique = branch_commits[idx + 1 :]
-            return {
-                "squash_commit": base_sha,
-                "squash_short": base_sha[:8],
-                "squash_subject": base_subject,
-                "squashed_commits": [
-                    {"sha": sha, "short": sha[:8], "subject": subj}
-                    for sha, _, subj in squashed
-                ],
-                "unique_commits": [
-                    {"sha": sha, "short": sha[:8], "subject": subj}
-                    for sha, _, subj in unique
-                ],
-            }
-
+            return _build_tree_match_result(
+                base_sha, base_subject, branch_commits, branch_tree_to_index[base_tree]
+            )
     return None
 
 
@@ -254,60 +265,77 @@ def _resolve_head(branch: str) -> str:
     return "HEAD"
 
 
-def _build_remedies(result: dict, base_ref: str) -> list[dict]:
-    """Build both non-destructive (merge) and destructive (reset+cherry-pick)
-    remedies. Order: non-destructive first so the user sees it as the default.
-    """
-    abort = _in_progress_abort()
-    has_unique = bool(result["unique_commits"])
-    method = result["method"] or ""
-
-    merge_commands: list[str] = []
+def _build_merge_remedy(base_ref: str, abort: str | None) -> dict:
+    commands: list[str] = []
     if abort:
-        merge_commands.append(abort)
-    merge_commands.append(f"git merge {base_ref}")
-    merge_commands.append(
+        commands.append(abort)
+    commands.append(f"git merge {base_ref}")
+    commands.append(
         "# resolve any remaining conflicts with /melt — squashed commits "
         "collapse to no-ops, so only real edits should remain"
     )
+    return {
+        "name": "merge",
+        "destructive": False,
+        "description": (
+            "Merge base into branch. Non-destructive: preserves all "
+            "branch history and refs. Squashed commits collapse to a "
+            "no-op merge, so only real conflicts surface. Prefer this "
+            "when the branch has unique work or you are not sure the "
+            "unique-commit list below is complete."
+        ),
+        "commands": commands,
+    }
 
-    reset_commands: list[str] = []
+
+def _build_reset_remedy(result: dict, base_ref: str, abort: str | None) -> dict:
+    commands: list[str] = []
     if abort:
-        reset_commands.append(abort)
-    reset_commands.append(f"git reset --hard {base_ref}")
-    if has_unique:
+        commands.append(abort)
+    commands.append(f"git reset --hard {base_ref}")
+    if result["unique_commits"]:
         shas = " ".join(c["sha"] for c in result["unique_commits"])
-        reset_commands.append(f"git cherry-pick {shas}")
-    elif method == "local-synth":
-        reset_commands.append("# review and cherry-pick unique commits manually:")
+        commands.append(f"git cherry-pick {shas}")
+    elif result["method"] == "local-synth":
+        commands.append("# review and cherry-pick unique commits manually:")
         for c in result["branch_commits"]:
-            reset_commands.append(f"#   {c['short']} {c['subject']}")
+            commands.append(f"#   {c['short']} {c['subject']}")
+    return {
+        "name": "reset-and-cherry-pick",
+        "destructive": True,
+        "description": (
+            "Reset to base and replay only the unique commits. "
+            "DESTRUCTIVE: rewrites the branch and requires force-push. "
+            "Use when you want a clean linear history and the "
+            "unique-commit list looks complete."
+        ),
+        "commands": commands,
+    }
 
+
+def _build_remedies(result: dict, base_ref: str) -> list[dict]:
+    """Both remedies, non-destructive first so the user sees it as the default."""
+    abort = _in_progress_abort()
     return [
-        {
-            "name": "merge",
-            "destructive": False,
-            "description": (
-                "Merge base into branch. Non-destructive: preserves all "
-                "branch history and refs. Squashed commits collapse to a "
-                "no-op merge, so only real conflicts surface. Prefer this "
-                "when the branch has unique work or you are not sure the "
-                "unique-commit list below is complete."
-            ),
-            "commands": merge_commands,
-        },
-        {
-            "name": "reset-and-cherry-pick",
-            "destructive": True,
-            "description": (
-                "Reset to base and replay only the unique commits. "
-                "DESTRUCTIVE: rewrites the branch and requires force-push. "
-                "Use when you want a clean linear history and the "
-                "unique-commit list looks complete."
-            ),
-            "commands": reset_commands,
-        },
+        _build_merge_remedy(base_ref, abort),
+        _build_reset_remedy(result, base_ref, abort),
     ]
+
+
+def _gh_correlates_with_tree(gh: dict, tree: dict) -> bool:
+    """True iff the gh PR is the same squash that tree-match found.
+
+    Branch names get reused across PRs, so the gh PR currently advertising
+    this branch is not always the one whose squash sits on base. Confirm
+    via merge-commit equality (strongest) or SHA overlap between the PR's
+    source commits and the tree-match squashed set before attaching gh
+    metadata — otherwise we'd point the user at an unrelated PR.
+    """
+    if gh.get("merge_commit") and gh["merge_commit"] == tree["squash_commit"]:
+        return True
+    pr_shas = set(gh.get("pr_commits", []))
+    squashed_shas = {c["sha"] for c in tree.get("squashed_commits", [])}
+    return bool(pr_shas & squashed_shas)
 
 
 def detect(branch: str, base_ref: str) -> dict:
@@ -348,14 +376,14 @@ def detect(branch: str, base_ref: str) -> dict:
 
     if tree:
         result["verdict"] = "squash-merged"
-        result["method"] = "tree-match+gh" if gh else "tree-match"
         result["squash_commit"] = {
             "sha": tree["squash_commit"],
             "short": tree["squash_short"],
             "subject": tree["squash_subject"],
         }
         result["unique_commits"] = tree["unique_commits"]
-        if gh:
+        if gh and _gh_correlates_with_tree(gh, tree):
+            result["method"] = "tree-match+gh"
             result["pr"] = {
                 "number": gh["number"],
                 "url": gh["url"],
@@ -366,6 +394,14 @@ def detect(branch: str, base_ref: str) -> dict:
             if gh["multiple_prs"]:
                 result["warnings"].append(
                     "multiple merged PRs from this branch — using most recent"
+                )
+        else:
+            result["method"] = "tree-match"
+            if gh:
+                result["warnings"].append(
+                    f"gh found PR #{gh['number']} ({gh['url']}) but its "
+                    "commits do not correlate with the tree-match squash — "
+                    "branch name may have been reused; not attaching PR metadata"
                 )
     elif gh:
         squashed = set(gh["pr_commits"])

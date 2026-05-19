@@ -950,13 +950,13 @@ class TestDetectViaTreeMatch:
         assert result["pr"]["url"] == "https://example.com/pr/42"
         assert result["squash_commit"]["short"] == "s" * 8
 
-    def test_tree_match_takes_precedence_when_gh_disagrees(
+    def test_tree_match_keeps_verdict_when_gh_pr_does_not_correlate(
         self, detect_squash_residue: ModuleType
     ) -> None:
-        # gh found a PR but with non-overlapping SHAs (rebased branch). Old
-        # detector downgraded to inconclusive. With tree-match, the verdict
-        # is squash-merged — tree equivalence is a stronger signal than
-        # SHA overlap.
+        # gh found a PR with this branch name but its commits don't overlap
+        # the tree-match squash (different PR, reused branch name). The
+        # verdict still stands on tree-match alone; gh metadata must NOT
+        # attach, and a warning must surface so the user knows why.
         commits = _commits("rebased-1", "rebased-2", "rebased-3")
         tree_hit = {
             "squash_commit": "s" * 40,
@@ -980,11 +980,48 @@ class TestDetectViaTreeMatch:
             result = detect_squash_residue.detect("feature", "origin/main")
 
         assert result["verdict"] == "squash-merged"
-        assert result["method"] == "tree-match+gh"
+        # Gate refuses gh enrichment when SHAs and merge_commit both diverge.
+        assert result["method"] == "tree-match"
+        assert result["pr"] is None
         # Unique commits come from tree-match, not gh's SHA diff.
         assert [c["subject"] for c in result["unique_commits"]] == ["rebased-3"]
-        # No "inconclusive" warning — tree-match overrode the weak gh signal.
-        assert not any("inconclusive" in w for w in result["warnings"])
+        # User gets a "did not correlate" warning citing the diverged PR.
+        assert any(
+            "PR #99" in w and "do not correlate" in w for w in result["warnings"]
+        )
+
+    def test_tree_match_plus_gh_attached_when_merge_commit_matches_squash(
+        self, detect_squash_residue: ModuleType
+    ) -> None:
+        # Strongest correlation: gh's mergeCommit.oid equals the tree-match
+        # squash commit. Even with no SHA overlap (rebased branch), the PR
+        # is provably the same one and metadata must attach.
+        commits = _commits("rebased-1", "rebased-2")
+        tree_hit = {
+            "squash_commit": "s" * 40,
+            "squash_short": "s" * 8,
+            "squash_subject": "Squashed (rebased)",
+            "squashed_commits": commits,
+            "unique_commits": [],
+        }
+        gh = _gh_payload(
+            number=77,
+            commit_oids=["a" * 40, "b" * 40],  # diverged source SHAs
+            merged_at="2026-05-15T12:00:00Z",
+        )
+        gh["merge_commit"] = "s" * 40  # but the merge commit equals the squash
+        with (
+            patch.object(detect_squash_residue, "_resolve_head", return_value="HEAD"),
+            patch.object(detect_squash_residue, "_commits_since", return_value=commits),
+            patch.object(detect_squash_residue, "_check_via_tree_match", return_value=tree_hit),
+            patch.object(detect_squash_residue, "_check_via_gh", return_value=gh),
+            patch.object(detect_squash_residue, "_in_progress_abort", return_value=None),
+        ):
+            result = detect_squash_residue.detect("feature", "origin/main")
+
+        assert result["method"] == "tree-match+gh"
+        assert result["pr"]["number"] == 77
+        assert not any("do not correlate" in w for w in result["warnings"])
 
     def test_tree_match_skips_local_synth(
         self, detect_squash_residue: ModuleType
