@@ -12,6 +12,8 @@ from pathlib import Path
 
 # Source of truth: skills/cheese-factory/references/manifest-schema.json.
 # Kebab-case, no leading/trailing hyphen, no double hyphens, 1-64 chars.
+# If manifest-schema.json changes (e.g., adding allowed characters), this regex
+# must be updated in lockstep — keep in sync via manual review.
 KEBAB_SLUG = re.compile(r"^(?!-)(?!.*--)[a-z0-9-]{1,64}(?<!-)$")
 
 # Phases that own a `.cheese/<phase>/<slug>.md` artifact tree. Read by

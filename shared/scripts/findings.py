@@ -29,6 +29,9 @@ class Finding:
     extra: dict[str, str] = field(default_factory=dict)
 
 
+# Matches: - **[<dimension>]** `<location>` — <body>
+# The separator accepts both em-dash (—) and hyphen (-) to tolerate
+# both careful markdown and auto-converted variants from plain text.
 _BULLET_RE = re.compile(
     r"^-\s+\*\*\[(?P<dim>[^\]]+)\]\*\*\s+`(?P<loc>[^`]+)`\s*[—-]\s*(?P<body>.+?)\s*$"
 )
