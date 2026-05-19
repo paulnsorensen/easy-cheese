@@ -17,9 +17,11 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 CF_DIR = REPO_ROOT / "skills" / "cheese-factory"
 SCRIPTS_DIR = CF_DIR / "scripts"
 REFERENCES_DIR = CF_DIR / "references"
+SHARED_SCRIPTS = REPO_ROOT / "shared" / "scripts"
 
-if str(SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS_DIR))
+for _path in (SCRIPTS_DIR, SHARED_SCRIPTS):
+    if str(_path) not in sys.path:
+        sys.path.insert(0, str(_path))
 
 
 def _load(name: str, path: Path) -> ModuleType:
@@ -29,11 +31,6 @@ def _load(name: str, path: Path) -> ModuleType:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
-
-
-@pytest.fixture(scope="session")
-def manifest_io() -> ModuleType:
-    return _load("manifest_io", SCRIPTS_DIR / "manifest_io.py")
 
 
 @pytest.fixture(scope="session")

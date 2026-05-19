@@ -14,10 +14,13 @@ from pathlib import Path
 from typing import Any
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-if str(SCRIPT_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPT_DIR))
+SHARED_SCRIPTS = SCRIPT_DIR.parents[2] / "shared" / "scripts"
+for _path in (SCRIPT_DIR, SHARED_SCRIPTS):
+    if str(_path) not in sys.path:
+        sys.path.insert(0, str(_path))
 
 from manifest_io import ManifestLoadError, read_mapping_arg_or_stdin
+from schema import non_empty_string, type_name
 
 SHAPES = {"single", "orthogonal_flat", "stacked_linear", "diamond_stack"}
 BRANCH_RE = re.compile(r"^[A-Za-z0-9._/-]+$")
@@ -25,17 +28,6 @@ BRANCH_RE = re.compile(r"^[A-Za-z0-9._/-]+$")
 # colliding with a branch / tag of the same name, since git resolves refs
 # before SHA prefixes. Full SHA-1 is 40 hex chars.
 COMMIT_SHA_RE = re.compile(r"^[0-9a-fA-F]{7,40}$")
-
-
-def _type_name(value: object) -> str:
-    return type(value).__name__
-
-
-def _require_string(obj: dict[str, Any], field: str, where: str) -> list[str]:
-    value = obj.get(field)
-    if not isinstance(value, str) or not value.strip():
-        return [f"{where}.{field} must be a non-empty string"]
-    return []
 
 
 def _validate_commits(commits: object, where: str) -> list[str]:
@@ -79,11 +71,11 @@ def validate_pr_plan(plan: dict[str, Any]) -> list[str]:
     for index, group in enumerate(groups, start=1):
         where = f"groups[{index}]"
         if not isinstance(group, dict):
-            errors.append(f"{where} must be an object, got {_type_name(group)}")
+            errors.append(f"{where} must be an object, got {type_name(group)}")
             continue
 
         for field in ("branch", "title", "base"):
-            errors.extend(_require_string(group, field, where))
+            errors.extend(non_empty_string(group, field, where))
         if "body" in group and not isinstance(group["body"], str):
             # Body is optional and may be empty (`gh pr create --body ''` is
             # valid). We only enforce the type, since the emitter calls
