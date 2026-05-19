@@ -356,6 +356,46 @@ def _pr_metadata(gh: dict) -> dict:
     }
 
 
+def _warn_multiple_prs(result: dict, gh: dict) -> None:
+    """Both apply paths surface the same caveat when gh found more than one
+    merged PR — single edit point for the wording."""
+    if gh["multiple_prs"]:
+        result["warnings"].append(
+            "multiple merged PRs from this branch — using most recent"
+        )
+
+
+def _init_result(branch: str, base_ref: str, head_ref: str) -> dict:
+    return {
+        "verdict": "not-detected",
+        "method": None,
+        "branch": branch,
+        "base": base_ref,
+        "head_ref": head_ref,
+        "pr": None,
+        "squash_commit": None,
+        "branch_commits": [],
+        "squashed_shas": [],
+        "unique_commits": [],
+        "remedies": [],
+        "warnings": [],
+    }
+
+
+def _apply_synth_fallback(result: dict, base_ref: str, head_ref: str) -> None:
+    """Last-resort detection when tree-match and gh both came up empty.
+    `git cherry`-based equivalence check — cannot enumerate squashed vs
+    unique commits, so the user has to review the branch list by hand."""
+    synth = _check_via_synthesis(base_ref, head_ref)
+    if synth:
+        result["verdict"] = "squash-merged"
+        result["method"] = "local-synth"
+        result["warnings"].append(
+            "detected via local synthesis; cannot enumerate which commits "
+            "were squashed vs unique — review branch commits manually"
+        )
+
+
 def _apply_tree_match_to_result(result: dict, tree: dict, gh: dict | None) -> None:
     """Populate result with the tree-match verdict, enriched by gh when the
     gh PR correlates with the squash."""
@@ -376,10 +416,7 @@ def _apply_tree_match_to_result(result: dict, tree: dict, gh: dict | None) -> No
                 f"differs from tree-match squash {tree['squash_commit'][:8]} — "
                 "PR commits overlap but the recorded squash may be a different one"
             )
-        if gh["multiple_prs"]:
-            result["warnings"].append(
-                "multiple merged PRs from this branch — using most recent"
-            )
+        _warn_multiple_prs(result, gh)
         return
     result["method"] = "tree-match"
     if gh:
@@ -408,28 +445,12 @@ def _apply_gh_only_to_result(result: dict, gh: dict) -> None:
     result["pr"] = _pr_metadata(gh)
     result["squashed_shas"] = gh["pr_commits"]
     result["unique_commits"] = unique
-    if gh["multiple_prs"]:
-        result["warnings"].append(
-            "multiple merged PRs from this branch — using most recent"
-        )
+    _warn_multiple_prs(result, gh)
 
 
 def detect(branch: str, base_ref: str) -> dict:
     head_ref = _resolve_head(branch)
-    result = {
-        "verdict": "not-detected",
-        "method": None,
-        "branch": branch,
-        "base": base_ref,
-        "head_ref": head_ref,
-        "pr": None,
-        "squash_commit": None,
-        "branch_commits": [],
-        "squashed_shas": [],
-        "unique_commits": [],
-        "remedies": [],
-        "warnings": [],
-    }
+    result = _init_result(branch, base_ref, head_ref)
 
     branch_commits = _commits_since(base_ref, head_ref)
     if branch_commits is None:
@@ -456,14 +477,7 @@ def detect(branch: str, base_ref: str) -> dict:
         _apply_gh_only_to_result(result, gh)
 
     if result["verdict"] == "not-detected":
-        synth = _check_via_synthesis(base_ref, head_ref)
-        if synth:
-            result["verdict"] = "squash-merged"
-            result["method"] = "local-synth"
-            result["warnings"].append(
-                "detected via local synthesis; cannot enumerate which commits "
-                "were squashed vs unique — review branch commits manually"
-            )
+        _apply_synth_fallback(result, base_ref, head_ref)
 
     if result["verdict"] == "squash-merged":
         result["remedies"] = _build_remedies(result, base_ref)
