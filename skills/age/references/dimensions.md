@@ -106,6 +106,30 @@ Look for:
 
 Recommendation shape: "Hoist `<call>` out of the loop" / "Run `<a>` and `<b>` in parallel with `Promise.all` (or equivalent)" / "Guard the store write on a value change" / "Drop the existence pre-check; handle the error from `<op>` instead" / "Bound `<structure>` or add cleanup on `<teardown>`" / "Read only the needed range/columns".
 
+### telemetry
+
+Covers logging, metrics, and tracing hygiene — both **presence** (is the path instrumented at all?) and **shape** (structure / levels / context / cardinality). Non-interactive paths need real telemetry (HTTP/RPC handlers, outbound API/DB/queue/cache calls, daemons, queue consumers, schedulers, background workers, retry loops); interactive paths where the operator watches stdout (CLI tools, dev scripts, one-shot commands) do not need backend-shipped telemetry on the happy path, though structured error output still helps. Secrets-in-logs stays under `security`; hot-path log-volume cost stays under `efficiency`; exceptions swallowed with no handling at all stay under `correctness`.
+
+Look for:
+- **Silent error branches on non-interactive paths.** `catch` / `except` / `if err != nil` blocks in servers, daemons, workers, and outbound calls that handle the error but emit no log and no metric. The failure becomes invisible to anyone not attached to a debugger.
+- **Outbound calls without observability.** HTTP / RPC / DB / queue / cache calls with no surrounding span, no error log, and no failure counter. Operators learn the integration broke only from downstream symptoms.
+- **Silent daemons / workers / schedulers.** Long-running processes with no startup log, no heartbeat or per-iteration progress signal, and no per-item error emission. When the worker stalls or crashes, there is nothing to grep.
+- **Missing request/response instrumentation on server handlers.** New routes or RPC methods added with no entry/exit log, no latency metric, and no error counter.
+- **Hand-rolled logging infrastructure.** New logger class, formatter, level filter, JSON serializer, ring buffer, or log-shipping code when the project already wires a logger or the ecosystem has a standard one (Python `logging` / `structlog`; Node `pino` / `winston`; Go `slog` / `zerolog`; Rust `tracing` / `log`; Java `slf4j` / `logback`). Overlaps with `nih`; both dimensions may flag the same line.
+- **Missing operational hygiene on new file-based logging.** Logs written to disk without rotation (size cap, age cap, archive policy), no retention bound, hardcoded log paths that bypass project config, synchronous writes on the request path, or custom log-shipping where the project's standard handler / sidecar / OTel collector already does the job.
+- Unstructured or string-concatenated log messages where structured (key-value or JSON) fields would be queryable — `f"user {id} failed"` instead of `log.error("operation failed", user_id=id)`.
+- Wrong log levels: DEBUG-spam in production hot paths, ERROR used for expected outcomes, everything-at-INFO walls that bury real signal.
+- Double-logging: code that logs an error and then rethrows / returns it, so the same failure appears at every frame up the stack.
+- Errors logged without context: `log.error("failed")` with no exception object, stack trace, or causal fields. Use `exc_info=True` (Python) / `{ err }` (JS) / equivalent.
+- Missing correlation: cross-service or async work without a trace/request/correlation id threaded through the log line and span.
+- High-cardinality metric labels or span names: `user_id`, `request_id`, full URLs with query strings, timestamps, or other unbounded values used as metric labels or in span names. Belongs in span attributes (sampled) or log fields, not in metric label sets.
+- Logs-as-metrics: counting log occurrences in a downstream pipeline instead of emitting a counter, gauge, or histogram directly.
+- `print()` / `console.log` / raw stderr scribbles left in production code paths instead of the project's logger.
+- Tests asserting on log strings — couples implementation details to test assertions and breaks on cosmetic log changes.
+- Unbounded list / object / request-body dumps into logs (can balloon log volume and leak sensitive structure).
+
+Recommendation shape: "Emit a structured error log (and a failure counter) in this catch block before re-raising" / "Wrap the outbound `<call>` in a span and add a failure-counter metric" / "Add startup + per-iteration logs to the `<worker>` loop with the failing item id on error" / "Add entry/exit log + latency metric to the new `<handler>`" / "Use the project's existing logger / standard `<stdlib-or-ecosystem-library>` instead of the hand-rolled `<class>`" / "Configure rotation (size + age cap, retention policy) on the new file handler" / "Read log path / level from project config instead of hardcoding" / "Replace string-concat log with structured fields" / "Demote to DEBUG (or drop)" / "Log once at the boundary, not at every catch" / "Add `exc_info=True` (or equivalent) to capture the stack" / "Thread `trace_id` through the log context at the request boundary" / "Move `<high-cardinality-attr>` from metric label to span attribute" / "Emit a counter instead of grepping logs" / "Replace `print()` with the project logger" / "Assert on behavior, not on log text".
+
 ## Stake assignment
 
 Stake is fixed per dimension. Do not vary it at runtime based on diff size or perceived severity — the rubric already encodes severity. A high-stake dimension produces fewer findings when the rubric does not match the diff; do not promote a medium-stake finding to fill space.

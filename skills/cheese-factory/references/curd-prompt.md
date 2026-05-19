@@ -32,14 +32,14 @@ Do NOT run the full test suite.
 
 1. /cook --auto {hard_flag}                  — implement the behaviour against the acceptance criterion
 2. /press --auto                             — adversarial test hardening (single pass)
-3. /age --auto                               — nine-dimension review of YOUR diff only, inline-degrade
+3. /age --auto                               — ten-dimension review of YOUR diff only, inline-degrade
 4. /cure --auto --stake medium+ {hard_flag}  — fix every medium-or-above finding
 5. /commit (or git commit direct)            — single commit with conventional message
 6. Write pr-metadata.json: {{title, body}} for the slicer to pick up later
 
 ## /age inline-degrade contract
 
-You are running as a sub-agent. The /age skill must run its nine dimensions
+You are running as a sub-agent. The /age skill must run its ten dimensions
 INLINE within your own context — do not spawn sub-agents for parallel review.
 The nesting-depth limit in Claude Code (and equivalents in other harnesses)
 blocks level-2 nesting.
