@@ -39,11 +39,17 @@ def _commits(*subjects: str) -> list[dict]:
     ]
 
 
-def _gh_payload(*, number: int, commit_oids: list[str], merged_at: str) -> dict:
+def _gh_payload(
+    *,
+    number: int,
+    commit_oids: list[str],
+    merged_at: str,
+    merge_commit: str | None = None,
+) -> dict:
     return {
         "number": number,
         "url": f"https://example.com/pr/{number}",
-        "merge_commit": "f" * 40,
+        "merge_commit": merge_commit,
         "merged_at": merged_at,
         "pr_commits": commit_oids,
         "multiple_prs": False,
@@ -1008,8 +1014,8 @@ class TestDetectViaTreeMatch:
             number=77,
             commit_oids=["a" * 40, "b" * 40],  # diverged source SHAs
             merged_at="2026-05-15T12:00:00Z",
+            merge_commit="s" * 40,  # merge commit equals the squash
         )
-        gh["merge_commit"] = "s" * 40  # but the merge commit equals the squash
         with (
             patch.object(detect_squash_residue, "_resolve_head", return_value="HEAD"),
             patch.object(detect_squash_residue, "_commits_since", return_value=commits),
@@ -1022,6 +1028,49 @@ class TestDetectViaTreeMatch:
         assert result["method"] == "tree-match+gh"
         assert result["pr"]["number"] == 77
         assert not any("do not correlate" in w for w in result["warnings"])
+        assert not any("differs from tree-match squash" in w for w in result["warnings"])
+
+    def test_tree_match_warns_when_gh_merge_commit_disagrees_but_shas_overlap(
+        self, detect_squash_residue: ModuleType
+    ) -> None:
+        # Soft-signal case: gh PR's source SHAs overlap the squashed set so
+        # correlation passes and metadata attaches — but gh's recorded
+        # merge_commit points somewhere else, suggesting the PR currently
+        # advertised on this branch may not be the one whose squash sits on
+        # base. User gets a warning even though enrichment proceeds.
+        commits = _commits("a", "b")
+        tree_hit = {
+            "squash_commit": "s" * 40,
+            "squash_short": "s" * 8,
+            "squash_subject": "Squashed",
+            "squashed_commits": commits,
+            "unique_commits": [],
+        }
+        gh = _gh_payload(
+            number=55,
+            commit_oids=[c["sha"] for c in commits],  # SHA overlap → correlate True
+            merged_at="2026-05-15T12:00:00Z",
+            merge_commit="m" * 40,  # but the recorded merge differs from the squash
+        )
+        with (
+            patch.object(detect_squash_residue, "_resolve_head", return_value="HEAD"),
+            patch.object(detect_squash_residue, "_commits_since", return_value=commits),
+            patch.object(detect_squash_residue, "_check_via_tree_match", return_value=tree_hit),
+            patch.object(detect_squash_residue, "_check_via_gh", return_value=gh),
+            patch.object(detect_squash_residue, "_in_progress_abort", return_value=None),
+        ):
+            result = detect_squash_residue.detect("feature", "origin/main")
+
+        assert result["method"] == "tree-match+gh"
+        assert result["pr"]["number"] == 55
+        # Disagreement warning fires, citing both short SHAs.
+        assert any(
+            "PR #55" in w
+            and "differs from tree-match squash" in w
+            and "mmmmmmmm" in w
+            and "ssssssss" in w
+            for w in result["warnings"]
+        )
 
     def test_tree_match_skips_local_synth(
         self, detect_squash_residue: ModuleType
@@ -1054,6 +1103,106 @@ class TestDetectViaTreeMatch:
         assert result["verdict"] == "squash-merged"
         assert result["method"] == "tree-match"
         assert synth_calls == []
+
+
+class TestGhCorrelatesWithTree:
+    """Direct unit tests for the gate that decides whether a gh PR is the
+    same squash that tree-match found. Branch names get reused — this gate
+    is what prevents an unrelated PR's metadata from being attached to a
+    tree-match result."""
+
+    def test_returns_true_when_merge_commit_equals_squash_commit(
+        self, detect_squash_residue: ModuleType
+    ) -> None:
+        # Strongest signal: gh's recorded merge commit IS the tree-match
+        # squash. Even with no overlapping SHAs (rebased PR), this is
+        # provably the same merge.
+        gh = {"merge_commit": "s" * 40, "pr_commits": ["x" * 40]}
+        tree = {"squash_commit": "s" * 40, "squashed_commits": [{"sha": "y" * 40}]}
+        assert detect_squash_residue._gh_correlates_with_tree(gh, tree) is True
+
+    def test_returns_true_on_pr_sha_overlap_even_when_merge_commit_differs(
+        self, detect_squash_residue: ModuleType
+    ) -> None:
+        # Fallback signal: merge commits diverge but at least one PR source
+        # commit appears in the squashed set. Real-world case: gh recorded a
+        # different merge for some reason but the same source commits.
+        gh = {"merge_commit": "m" * 40, "pr_commits": ["a" * 40, "b" * 40]}
+        tree = {
+            "squash_commit": "s" * 40,
+            "squashed_commits": [{"sha": "b" * 40}, {"sha": "c" * 40}],
+        }
+        assert detect_squash_residue._gh_correlates_with_tree(gh, tree) is True
+
+    def test_returns_false_when_neither_merge_commit_nor_shas_match(
+        self, detect_squash_residue: ModuleType
+    ) -> None:
+        # Both signals fail → no correlation. The gate's whole reason for
+        # being: do not let an unrelated PR get attached.
+        gh = {"merge_commit": "m" * 40, "pr_commits": ["a" * 40, "b" * 40]}
+        tree = {
+            "squash_commit": "s" * 40,
+            "squashed_commits": [{"sha": "c" * 40}, {"sha": "d" * 40}],
+        }
+        assert detect_squash_residue._gh_correlates_with_tree(gh, tree) is False
+
+    def test_returns_false_when_merge_commit_missing_and_no_sha_overlap(
+        self, detect_squash_residue: ModuleType
+    ) -> None:
+        # gh did not record a merge commit (None) and SHAs don't overlap.
+        # The strong check must short-circuit on falsy merge_commit, not
+        # raise from comparing None to a string.
+        gh = {"merge_commit": None, "pr_commits": ["a" * 40]}
+        tree = {"squash_commit": "s" * 40, "squashed_commits": [{"sha": "b" * 40}]}
+        assert detect_squash_residue._gh_correlates_with_tree(gh, tree) is False
+
+    def test_returns_false_when_pr_commits_field_missing(
+        self, detect_squash_residue: ModuleType
+    ) -> None:
+        # Defensive: empty / missing pr_commits must not crash the set
+        # intersection. Returning False is the safer default.
+        gh = {"merge_commit": None}
+        tree = {"squash_commit": "s" * 40, "squashed_commits": [{"sha": "b" * 40}]}
+        assert detect_squash_residue._gh_correlates_with_tree(gh, tree) is False
+
+
+class TestGhMergeCommitDisagrees:
+    """Soft-signal helper: PR commits correlate via SHA overlap so we still
+    attach metadata, but the recorded merge commit disagrees with the
+    tree-match squash. Used to warn the user that the linked PR may not be
+    the one whose squash sits on base."""
+
+    def test_returns_true_when_merge_commit_differs_from_squash(
+        self, detect_squash_residue: ModuleType
+    ) -> None:
+        gh = {"merge_commit": "m" * 40}
+        tree = {"squash_commit": "s" * 40}
+        assert detect_squash_residue._gh_merge_commit_disagrees(gh, tree) is True
+
+    def test_returns_false_when_merge_commit_equals_squash(
+        self, detect_squash_residue: ModuleType
+    ) -> None:
+        # No disagreement when they're the same SHA — that's the strongest
+        # correlation, not a warning case.
+        gh = {"merge_commit": "s" * 40}
+        tree = {"squash_commit": "s" * 40}
+        assert detect_squash_residue._gh_merge_commit_disagrees(gh, tree) is False
+
+    def test_returns_false_when_merge_commit_missing(
+        self, detect_squash_residue: ModuleType
+    ) -> None:
+        # No recorded merge commit → nothing to disagree with → no warning.
+        gh = {"merge_commit": None}
+        tree = {"squash_commit": "s" * 40}
+        assert detect_squash_residue._gh_merge_commit_disagrees(gh, tree) is False
+
+    def test_returns_false_when_merge_commit_field_absent(
+        self, detect_squash_residue: ModuleType
+    ) -> None:
+        # Defensive: dict without the key at all behaves like None.
+        gh: dict = {}
+        tree = {"squash_commit": "s" * 40}
+        assert detect_squash_residue._gh_merge_commit_disagrees(gh, tree) is False
 
 
 class TestBuildRemedies:

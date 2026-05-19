@@ -338,6 +338,82 @@ def _gh_correlates_with_tree(gh: dict, tree: dict) -> bool:
     return bool(pr_shas & squashed_shas)
 
 
+def _gh_merge_commit_disagrees(gh: dict, tree: dict) -> bool:
+    """True iff gh recorded a merge_commit that differs from the tree-match
+    squash commit. Soft signal — correlation may still hold via SHA overlap,
+    but the recorded merge points elsewhere, so warn the user.
+    """
+    mc = gh.get("merge_commit")
+    return bool(mc and mc != tree["squash_commit"])
+
+
+def _pr_metadata(gh: dict) -> dict:
+    return {
+        "number": gh["number"],
+        "url": gh["url"],
+        "merged_at": gh["merged_at"],
+        "merge_commit": gh["merge_commit"],
+    }
+
+
+def _apply_tree_match_to_result(result: dict, tree: dict, gh: dict | None) -> None:
+    """Populate result with the tree-match verdict, enriched by gh when the
+    gh PR correlates with the squash."""
+    result["verdict"] = "squash-merged"
+    result["squash_commit"] = {
+        "sha": tree["squash_commit"],
+        "short": tree["squash_short"],
+        "subject": tree["squash_subject"],
+    }
+    result["unique_commits"] = tree["unique_commits"]
+    if gh and _gh_correlates_with_tree(gh, tree):
+        result["method"] = "tree-match+gh"
+        result["pr"] = _pr_metadata(gh)
+        result["squashed_shas"] = gh["pr_commits"]
+        if _gh_merge_commit_disagrees(gh, tree):
+            result["warnings"].append(
+                f"gh PR #{gh['number']} merge-commit {gh['merge_commit'][:8]} "
+                f"differs from tree-match squash {tree['squash_commit'][:8]} — "
+                "PR commits overlap but the recorded squash may be a different one"
+            )
+        if gh["multiple_prs"]:
+            result["warnings"].append(
+                "multiple merged PRs from this branch — using most recent"
+            )
+        return
+    result["method"] = "tree-match"
+    if gh:
+        result["warnings"].append(
+            f"gh found PR #{gh['number']} ({gh['url']}) but its "
+            "commits do not correlate with the tree-match squash — "
+            "branch name may have been reused; not attaching PR metadata"
+        )
+
+
+def _apply_gh_only_to_result(result: dict, gh: dict) -> None:
+    """Populate result from gh alone when tree-match found nothing. Treat
+    zero SHA overlap as inconclusive (reused branch name or full rebase)."""
+    squashed = set(gh["pr_commits"])
+    unique = [c for c in result["branch_commits"] if c["sha"] not in squashed]
+    matched = len(result["branch_commits"]) - len(unique)
+    if matched == 0:
+        result["warnings"].append(
+            f"gh found PR #{gh['number']} ({gh['url']}) but no local "
+            "commits matched its SHAs and tree-match found no equivalent "
+            "commit on base — treating as inconclusive"
+        )
+        return
+    result["verdict"] = "squash-merged"
+    result["method"] = "gh-api"
+    result["pr"] = _pr_metadata(gh)
+    result["squashed_shas"] = gh["pr_commits"]
+    result["unique_commits"] = unique
+    if gh["multiple_prs"]:
+        result["warnings"].append(
+            "multiple merged PRs from this branch — using most recent"
+        )
+
+
 def detect(branch: str, base_ref: str) -> dict:
     head_ref = _resolve_head(branch)
     result = {
@@ -369,68 +445,15 @@ def detect(branch: str, base_ref: str) -> dict:
 
     # Run tree-match first — strongest signal, works offline, and unlike
     # gh-api or local-synth it handles the case where the branch has commits
-    # past the squash (the textbook squash-residue shape this script kept
-    # missing). gh-api still runs to enrich the result with PR metadata.
+    # past the squash. gh runs in parallel to enrich tree-match or to
+    # supply the verdict on its own.
     tree = _check_via_tree_match(base_ref, head_ref)
     gh = _check_via_gh(branch, base_ref)
 
     if tree:
-        result["verdict"] = "squash-merged"
-        result["squash_commit"] = {
-            "sha": tree["squash_commit"],
-            "short": tree["squash_short"],
-            "subject": tree["squash_subject"],
-        }
-        result["unique_commits"] = tree["unique_commits"]
-        if gh and _gh_correlates_with_tree(gh, tree):
-            result["method"] = "tree-match+gh"
-            result["pr"] = {
-                "number": gh["number"],
-                "url": gh["url"],
-                "merged_at": gh["merged_at"],
-                "merge_commit": gh["merge_commit"],
-            }
-            result["squashed_shas"] = gh["pr_commits"]
-            if gh["multiple_prs"]:
-                result["warnings"].append(
-                    "multiple merged PRs from this branch — using most recent"
-                )
-        else:
-            result["method"] = "tree-match"
-            if gh:
-                result["warnings"].append(
-                    f"gh found PR #{gh['number']} ({gh['url']}) but its "
-                    "commits do not correlate with the tree-match squash — "
-                    "branch name may have been reused; not attaching PR metadata"
-                )
+        _apply_tree_match_to_result(result, tree, gh)
     elif gh:
-        squashed = set(gh["pr_commits"])
-        unique = [c for c in result["branch_commits"] if c["sha"] not in squashed]
-        matched = len(result["branch_commits"]) - len(unique)
-        if matched == 0:
-            # PR name matched but zero SHAs overlap, and tree-match found
-            # nothing either. Could be a reused branch name or a fully
-            # rebased branch. Too weak to call squash-residue.
-            result["warnings"].append(
-                f"gh found PR #{gh['number']} ({gh['url']}) but no local "
-                "commits matched its SHAs and tree-match found no equivalent "
-                "commit on base — treating as inconclusive"
-            )
-        else:
-            result["verdict"] = "squash-merged"
-            result["method"] = "gh-api"
-            result["pr"] = {
-                "number": gh["number"],
-                "url": gh["url"],
-                "merged_at": gh["merged_at"],
-                "merge_commit": gh["merge_commit"],
-            }
-            result["squashed_shas"] = gh["pr_commits"]
-            result["unique_commits"] = unique
-            if gh["multiple_prs"]:
-                result["warnings"].append(
-                    "multiple merged PRs from this branch — using most recent"
-                )
+        _apply_gh_only_to_result(result, gh)
 
     if result["verdict"] == "not-detected":
         synth = _check_via_synthesis(base_ref, head_ref)
