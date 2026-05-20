@@ -52,19 +52,20 @@ If optional tools are missing, press a narrower surface and state the residual r
 
 Cross-cutting house style and citation form: [`../../shared/formatting.md`](../../shared/formatting.md). This section owns the press-report shape; formatting.md owns the voice rules and the footnote primitive.
 
-Write to `.cheese/press/<slug>.md` with a minimum handoff slug at the top so `/ultracook` and `/cheese --continue` can chain without re-parsing the report. Compose the report body in a tmp file, then write the artifact atomically with the canonical 4-line preamble (`status: <ok|halt: …>` / `next: <age|done>` / `artifact: <path>` / `<orientation>`) via `shared/scripts/write_handoff_artifact.py`:
+Write to `.cheese/press/<slug>.md` with a minimum handoff slug at the top so `/ultracook` and `/cheese --continue` can chain without re-parsing the report. Compose the report body in a tmp file, then write the artifact atomically with the canonical 4-line preamble (`status: <ok|halt: …>` / `next: <age|done>` / `artifact: <path>` / `<orientation>`) via `shared/scripts/write_handoff_artifact.py`. Pass `--phase press` so the file lands in press's own directory; `--artifact` carries the *prior* phase's report (cook), not press's own:
 
 ```bash
 python3 shared/scripts/write_handoff_artifact.py \
     --slug <slug> \
     --status "ok" \
+    --phase "press" \
     --next "age" \
-    --artifact ".cheese/press/<slug>.md" \
+    --artifact ".cheese/cook/<slug>.md" \
     --orientation "<one-line: what press did — e.g., added 4 boundary tests; no defects exposed>" \
     --body-file <tmp-body>
 ```
 
-For `blocked`, pass `--status "halt: <reason>"` and `--next "done"`. The script renders the preamble and writes `.cheese/<next>/<slug>.md` atomically (tmp + rename) so readers never see a half-written file. The body content follows the preamble after a blank line. Body shape:
+For `blocked`, pass `--status "halt: <reason>"` and `--next "done"`. The script renders the preamble and writes `.cheese/<phase>/<slug>.md` atomically (tmp + rename) so readers never see a half-written file. The body content follows the preamble after a blank line. Body shape:
 
 ```markdown
 # Press Report — <slug>

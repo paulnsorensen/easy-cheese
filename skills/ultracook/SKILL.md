@@ -117,12 +117,15 @@ Do not hand-stencil the four-line preamble — invoke `shared/scripts/write_hand
 
 ```bash
 python3 shared/scripts/write_handoff_artifact.py \
-    --slug <slug> --status "ok" --next <phase-name|done> \
-    --artifact <path-to-richer-report-or-empty> \
+    --slug <slug> --status "ok" \
+    --phase <this-phase-name> --next <next-phase-name|done> \
+    --artifact <path-to-prior-phase-report-or-empty> \
     --orientation "<one-line: what this phase did>" \
     [--body-file <path-to-rich-report-body>]
-# writes .cheese/<next>/<slug>.md
+# writes .cheese/<phase>/<slug>.md
 ```
+
+Pass `--phase` so the file lands in *this* phase's own directory; `--next` is preamble-content only — the next phase the chain *would* run if the orchestrator chose to continue.
 
 Pass `--status "halt: <reason>"` (quoted) when the phase needs to stop the chain.
 

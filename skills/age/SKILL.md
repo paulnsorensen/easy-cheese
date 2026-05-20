@@ -98,11 +98,14 @@ Write the report by composing the body in a temp file and invoking `write_handof
 python3 shared/scripts/write_handoff_artifact.py \
   --slug <slug> \
   --status "ok" \
+  --phase "age" \
   --next "cure" \
   --artifact "<path-to-press-report-or-prior-cure-if-any>" \
   --orientation "<one-line orientation: what the diff does>" \
   --body-file <tmp-report-body.md>
 ```
+
+`--phase age` is the on-disk path authority — the file lands at `.cheese/age/<slug>.md`. `--next cure` is preamble-content only (it tells the chain where to go, not where this report lives).
 
 `--status` is `ok` when the review completed, `halt: <reason>` when evidence was unreachable. `--next` is `cure` when at least one medium-or-above severity finding exists and the chain has cure passes remaining; otherwise `done`. The body file contains the findings sections shown below — the script prepends the canonical 4-line preamble.
 

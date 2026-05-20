@@ -177,6 +177,76 @@ class TestPathDerivation:
         assert target.is_file()
 
 
+class TestPhaseFlag:
+    """`--phase` names this phase's own directory; `--next` stays as preamble-only."""
+
+    def test_phase_overrides_next_for_on_disk_path(
+        self, writer: ModuleType, tmp_path: Path
+    ) -> None:
+        # Press writes its own report at .cheese/press/<slug>.md while pointing
+        # the next phase at age. Before --phase existed, the writer derived the
+        # path from --next and so dropped press's report into .cheese/age/.
+        target = writer.write_artifact(
+            slug="my-task",
+            status="ok",
+            next_skill="age",
+            artifact=".cheese/cook/my-task.md",
+            orientation="press hardened the diff",
+            body=None,
+            root=tmp_path,
+            phase="press",
+        )
+        assert target == tmp_path / ".cheese" / "press" / "my-task.md"
+        assert not (tmp_path / ".cheese" / "age" / "my-task.md").exists()
+
+    def test_phase_cli_flag_lands_artifact_under_phase_dir(
+        self,
+        handoff_mod: ModuleType,
+        tmp_path: Path,
+    ) -> None:
+        # Subprocess: --phase age --next cure means the file lives at
+        # .cheese/age/<slug>.md and the preamble names cure as next.
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WRITER_CLI),
+                "--slug", "phase-flag",
+                "--status", "ok",
+                "--phase", "age",
+                "--next", "cure",
+                "--artifact", ".cheese/press/phase-flag.md",
+                "--orientation", "age reviewed press output",
+                "--root", str(tmp_path),
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        target = tmp_path / ".cheese" / "age" / "phase-flag.md"
+        assert target.exists()
+        assert result.stdout.strip().endswith(str(target))
+        slug = handoff_mod.parse_handoff_slug(target.read_text(encoding="utf-8"))
+        assert slug.next_skill == "cure"
+        assert slug.artifact == ".cheese/press/phase-flag.md"
+
+    def test_phase_omitted_falls_back_to_next(
+        self, writer: ModuleType, tmp_path: Path
+    ) -> None:
+        # Backward compatibility: callers that have not migrated still get the
+        # legacy "write to next-phase directory" shape so existing chains keep
+        # working until they update their invocations.
+        target = writer.write_artifact(
+            slug="legacy",
+            status="ok",
+            next_skill="age",
+            artifact="",
+            orientation="cook done",
+            body=None,
+            root=tmp_path,
+        )
+        assert target == tmp_path / ".cheese" / "age" / "legacy.md"
+
+
 class TestAtomicRename:
     def test_no_partial_file_when_rename_fails(
         self,

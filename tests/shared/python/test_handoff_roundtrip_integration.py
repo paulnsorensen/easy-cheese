@@ -22,7 +22,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SHARED = REPO_ROOT / "shared" / "scripts"
@@ -249,3 +248,63 @@ class TestThreeScriptChain:
         read_proc = _run(READER, "--phase", "press", "--slug", slug, cwd=tmp_path)
         assert read_proc.returncode == 2
         assert "artifact not found" in read_proc.stderr
+
+    def test_cross_phase_chain_cook_press_age_paths_resolve(
+        self, tmp_path: Path
+    ) -> None:
+        # Regression test for the H1 handoff path-contract break: each phase
+        # writes ITS OWN .cheese/<phase>/<slug>.md, and the next phase reads
+        # from that same path. Before --phase existed, the writer derived the
+        # path from --next, so press's report landed at .cheese/age/<slug>.md
+        # and age could not find it via `--phase press`. This test locks the
+        # full cook → press → age chain to the now-canonical convention.
+        slug = "cross-phase-chain"
+
+        # 1. Cook writes its handoff to .cheese/cook/<slug>.md.
+        cook_proc = _run(
+            WRITER,
+            "--slug", slug,
+            "--status", "ok",
+            "--phase", "cook",
+            "--next", "press",
+            "--artifact", "",
+            "--orientation", "cook implemented widget",
+            cwd=tmp_path,
+        )
+        assert cook_proc.returncode == 0, cook_proc.stderr
+        cook_path = tmp_path / ".cheese" / "cook" / f"{slug}.md"
+        assert cook_path.exists(), f"cook artifact missing at {cook_path}"
+
+        # 2. Press reads cook's handoff via `--phase cook --slug <slug>`.
+        press_read = _run(READER, "--phase", "cook", "--slug", slug, cwd=tmp_path)
+        assert press_read.returncode == 0, press_read.stderr
+        cook_payload = json.loads(press_read.stdout)
+        assert cook_payload["next"] == "press"
+        assert cook_payload["orientation"] == "cook implemented widget"
+
+        # 3. Press writes its own handoff to .cheese/press/<slug>.md while the
+        #    preamble points the chain at age. Critically: the file does NOT
+        #    land in .cheese/age/<slug>.md (the H1 defect).
+        press_proc = _run(
+            WRITER,
+            "--slug", slug,
+            "--status", "ok",
+            "--phase", "press",
+            "--next", "age",
+            "--artifact", str(cook_path.relative_to(tmp_path)),
+            "--orientation", "press hardened 4 boundary tests",
+            cwd=tmp_path,
+        )
+        assert press_proc.returncode == 0, press_proc.stderr
+        press_path = tmp_path / ".cheese" / "press" / f"{slug}.md"
+        assert press_path.exists(), f"press artifact missing at {press_path}"
+        assert not (tmp_path / ".cheese" / "age" / f"{slug}.md").exists()
+
+        # 4. Age reads the press handoff via `--phase press --slug <slug>` —
+        #    the exact invocation skills/age/SKILL.md advertises.
+        age_read = _run(READER, "--phase", "press", "--slug", slug, cwd=tmp_path)
+        assert age_read.returncode == 0, age_read.stderr
+        press_payload = json.loads(age_read.stdout)
+        assert press_payload["next"] == "age"
+        assert press_payload["orientation"] == "press hardened 4 boundary tests"
+        assert press_payload["artifact"] == str(cook_path.relative_to(tmp_path))

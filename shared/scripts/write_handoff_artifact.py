@@ -3,16 +3,23 @@
 CLI:
 
     python3 shared/scripts/write_handoff_artifact.py \\
-        --slug my-task --status ok --next age \\
-        --artifact .cheese/press/my-task.md \\
-        --orientation "implemented X" \\
+        --slug my-task --status ok --phase press --next age \\
+        --artifact .cheese/cook/my-task.md \\
+        --orientation "press hardened X" \\
         [--body-file path/to/body.md]
 
-Writes ``.cheese/<next>/<slug>.md`` containing the canonical four-line
+Writes ``.cheese/<phase>/<slug>.md`` containing the canonical four-line
 preamble (status / next / artifact / orientation) followed by an optional
 body separated by a blank line. The write is atomic: contents land in a tmp
 file inside the target directory and are then ``os.rename``'d into place, so
 readers never observe a half-written file.
+
+``--phase`` names *this* phase's own directory and is the on-disk path
+authority. ``--next`` is preamble-content only — it tells the *next* phase
+where the chain should go, but does not influence where this artifact lands.
+For backward compatibility, ``--phase`` is optional: when omitted, the path
+falls back to ``.cheese/<next>/<slug>.md`` (the legacy "write the next phase's
+input" shape, kept so existing tests and callers do not break mid-rollout).
 
 When ``shared/scripts/handoff.py`` exposes ``render_handoff_slug`` with a
 matching ``(status, next, artifact, orientation) -> str`` signature, the
@@ -68,8 +75,15 @@ def write_artifact(
     orientation: str,
     body: str | None,
     root: Path,
+    phase: str | None = None,
 ) -> Path:
-    """Write the artifact atomically; return the final path."""
+    """Write the artifact atomically; return the final path.
+
+    The on-disk path is ``.cheese/<phase>/<slug>.md`` when ``phase`` is given;
+    otherwise it falls back to ``.cheese/<next_skill>/<slug>.md`` (legacy).
+    ``next_skill`` always lands in the preamble's ``next:`` field regardless,
+    so callers can decouple "where this report lives" from "what runs next".
+    """
     if not slug:
         raise cli.CliError("--slug must be non-empty")
     if not next_skill:
@@ -77,7 +91,8 @@ def write_artifact(
     if not orientation:
         raise cli.CliError("--orientation must be non-empty")
 
-    target_dir = root / ".cheese" / next_skill
+    path_dir = phase if phase else next_skill
+    target_dir = root / ".cheese" / path_dir
     target_dir.mkdir(parents=True, exist_ok=True)
     target = target_dir / f"{slug}.md"
 
@@ -119,6 +134,7 @@ def _cmd_write(args: argparse.Namespace) -> None:
         orientation=args.orientation,
         body=body,
         root=root,
+        phase=args.phase,
     )
     cli.emit(str(target))
 
@@ -131,9 +147,18 @@ def _setup(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--orientation", required=True, help="one-line orientation")
     parser.add_argument("--body-file", default=None, help="optional path to body content")
     parser.add_argument(
+        "--phase",
+        default=None,
+        help=(
+            "name of THIS phase's own directory under .cheese/ "
+            "(path authority). Optional for backward compatibility; "
+            "when omitted, falls back to --next."
+        ),
+    )
+    parser.add_argument(
         "--root",
         default=None,
-        help="repo root (default: cwd); .cheese/<next>/<slug>.md is written under this",
+        help="repo root (default: cwd); .cheese/<phase|next>/<slug>.md is written under this",
     )
     parser.set_defaults(func=_cmd_write)
 
