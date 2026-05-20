@@ -33,7 +33,7 @@ Optional flags:
 2. **Scope is bounded.** A named function, a single failing test, a specific call site, or a small region of one or two files.
 3. **Verification is obvious.** A failing test that can be made to pass, or a runnable command whose output should change in a stated way.
 
-When the fast-path applies, derive a slug from the task (e.g. `tail-trailing-newline`), treat **Contract** as a one-sentence restatement of the request, and proceed directly to **Cut** without a spec round-trip. Route to `/mold` only when one of the three checks fails — silent ambiguity is the cardinal sin.
+When the fast-path applies, derive the slug deterministically with `python3 shared/scripts/slugify.py from-task --task "<task text>" --json` and read the `slug` and `path` fields from the JSON (`path` is `.cheese/specs/<slug>.md`). The script enforces kebab-case, stopword dropping, the 5-word cap, and collision detection — never hand-roll the slug. Treat **Contract** as a one-sentence restatement of the request, and proceed directly to **Cut** without a spec round-trip. Route to `/mold` only when one of the three checks fails — silent ambiguity is the cardinal sin.
 
 ## Flow
 
@@ -41,7 +41,7 @@ When the fast-path applies, derive a slug from the task (e.g. `tail-trailing-new
 2. **Cut** — write failing tests for the changed behaviour. See `references/tdd-loop.md`.
 3. **Implement** — make the cut tests pass with the smallest production change.
 4. **Taste-test** — check spec drift, readability, and scope creep. Two-round cap; details in `references/tdd-loop.md`.
-5. **Hand off** — produce the package-ready report (`references/package-report.md`), write the handoff slug (`## Handoff slug` below), and prompt the next step via the shared handoff gate (see `## Handoff` below). The default chain is `/press` → `/age` → `/cure`.
+5. **Hand off** — produce the package-ready report (`references/package-report.md`), then run `python3 skills/cook/scripts/self_eval_check.py --report .cheese/cook/<slug>.md` to scan for honesty-rule violations (skipped-claimed-pass, unverified-claim, scope-creep). Non-empty output (exit 1) means stop and fix the report or the underlying work before handoff — do not eyeball the self-eval. Then write the handoff slug (`## Handoff slug` below) and prompt the next step via the shared handoff gate (see `## Handoff` below). The default chain is `/press` → `/age` → `/cure`.
 
 Code search, reading, and editing all go through the cheez-* skills (`/cheez-search`, `/cheez-read`, `/cheez-write`) — see those skills for tool selection rules and out-of-scope fallbacks.
 
