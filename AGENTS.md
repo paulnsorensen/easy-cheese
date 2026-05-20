@@ -6,7 +6,7 @@ This document is for LLMs, agents, and automation tools working in this reposito
 
 **Always run `just check` before declaring work done — before any commit, push, PR open, or hand-off.** Treat green from `just check` as the only signal that a change is shippable.
 
-`just check` autofixes lint (markdown, yaml, python via `ruff`) and runs the full local build: skill frontmatter validation (`skills-ref`), shell lint, python + bash test suites, and `mkdocs build --strict`. CI runs `just ci` (same checks, no autofixes).
+`just check` autofixes lint (markdown, yaml, python via `ruff`) and runs the full local build: skill frontmatter validation (`validate_skills.py`), shell lint, python + bash test suites, and `mkdocs build --strict`. CI runs `just ci` (same checks, no autofixes).
 
 ```bash
 just check
@@ -18,7 +18,6 @@ Do NOT commit or push when `just check` fails. If CI fails, pull the branch loca
 
 - [`just`](https://github.com/casey/just) — recipe runner
 - [`uv`](https://github.com/astral-sh/uv) — `lint-py-fix` invokes `uvx ruff` (no global ruff install needed)
-- [`skills-ref`](https://github.com/agentskills/agentskills) — `pip install skills-ref` or `uv tool install skills-ref`
 - `yamllint`, `yamlfmt`, `markdownlint-cli2`, `shellcheck`, `bats` — see README for install hints
 
 ## Skills in this repo

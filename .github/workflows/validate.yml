@@ -25,21 +25,14 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install validators
-        run: pip install --no-cache-dir pyyaml==6.0.2 skills-ref
+      - name: Install PyYAML
+        run: pip install --no-cache-dir pyyaml==6.0.2
 
       - name: Test SKILL.md validator
         run: python3 .github/scripts/test_validate_skills.py -v
 
       - name: Validate SKILL.md frontmatter
         run: python3 .github/scripts/validate_skills.py
-
-      - name: Validate skills with skills-ref
-        run: |
-          set -euo pipefail
-          for dir in skills/*/; do
-            skills-ref validate "$dir"
-          done
 
   test:
     name: test melt + shared + cheese-factory scripts

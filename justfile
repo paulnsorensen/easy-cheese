@@ -38,19 +38,11 @@ lint-yaml:
 lint-py-fix:
     uvx ruff check --fix .
 
-# Validate skill frontmatter with the agentskills reference validator
-skills-ref:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    for dir in skills/*/; do
-        skills-ref validate "$dir"
-    done
-
 # Full local check with autofixes
-check: lint-md-fix lint-yaml-fix lint-yaml lint-py-fix lint-sh skills-ref test docs-build
+check: lint-md-fix lint-yaml-fix lint-yaml lint-py-fix lint-sh test docs-build
 
 # CI-mode verification (no autofixes)
-ci: lint-md lint-yaml lint-sh skills-ref test docs-build
+ci: lint-md lint-yaml lint-sh test docs-build
 
 # Install docs build dependencies into a local venv
 docs-install:
