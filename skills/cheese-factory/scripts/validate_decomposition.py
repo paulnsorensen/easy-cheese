@@ -1,24 +1,5 @@
 #!/usr/bin/env python3
-"""Validate a cheese-factory decomposition manifest against the five criteria.
-
-Reads a manifest YAML/JSON file (or stdin), runs the validation checks below, and
-either exits 0 (valid) or 1 (invalid, with one error per line on stderr).
-
-Checks:
-
-1. Behaviour overlap — each curd's behaviour is a single declarative sentence
-   without an "and" joining two distinct verbs.
-2. Acceptance criterion presence — every curd names its AC; 1:1 spec coverage
-   is decomposer-side (the validator can't read the spec file).
-3. Test target check — each curd has a non-empty test_target.
-4. File disjointness — no file appears in two curds.
-5. Wiring DAG check — no cycles, every depends_on references a known wiring id.
-6. Seed minimality — seed files are foundational (validation here only checks
-   the field exists; the "2+ curds depend on" check is decomposer-side because
-   curd file-imports aren't represented in the manifest).
-
-The script accepts YAML via PyYAML and JSON via the stdlib json module.
-"""
+"""Validate a cheese-factory decomposition manifest. Exit 0 on success, 1 on errors (one per line on stderr)."""
 from __future__ import annotations
 
 import re
@@ -52,7 +33,6 @@ _TWO_VERB_AND = re.compile(
 
 
 def check_one_behaviour(curd: dict) -> str | None:
-    """Criterion 1: one behaviour per curd."""
     behavior = curd.get("behavior", "")
     if not isinstance(behavior, str) or not behavior.strip():
         return f"curd {curd.get('id', '?')}: missing or empty 'behavior'"
@@ -65,7 +45,6 @@ def check_one_behaviour(curd: dict) -> str | None:
 
 
 def check_acceptance_criterion(curd: dict) -> str | None:
-    """Criterion 2: one acceptance criterion."""
     ac = curd.get("acceptance_criterion", "")
     if not isinstance(ac, str) or not ac.strip():
         return f"curd {curd.get('id', '?')}: missing or empty 'acceptance_criterion'"
@@ -73,7 +52,6 @@ def check_acceptance_criterion(curd: dict) -> str | None:
 
 
 def check_test_target(curd: dict) -> str | None:
-    """Criterion 3: one test target."""
     tt = curd.get("test_target", "")
     if not isinstance(tt, str) or not tt.strip():
         return f"curd {curd.get('id', '?')}: missing or empty 'test_target'"
@@ -116,7 +94,6 @@ def check_file_disjointness(curds: Iterable[dict]) -> list[str]:
 
 
 def check_wiring_dag(wiring: Iterable[dict]) -> list[str]:
-    """Criterion: wiring DAG has no cycles and references only known ids."""
     # Drop non-dict entries up front — the validator is a user-facing CLI and
     # a stack trace on garbage input is a usability defect (mirrors the
     # check_file_disjointness defense for curds[]).
@@ -163,18 +140,17 @@ def check_wiring_dag(wiring: Iterable[dict]) -> list[str]:
     return errors
 
 
-def check_minimum_curd_count(curds: list[dict], minimum: int = 5) -> str | None:
+def check_minimum_curd_count(curds: list[dict]) -> str | None:
     """The spec routes to /ultracook below five curds."""
-    if len(curds) < minimum:
+    if len(curds) < 5:
         return (
-            f"only {len(curds)} curd(s) — /cheese-factory requires at least {minimum}; "
+            f"only {len(curds)} curd(s) — /cheese-factory requires at least 5; "
             f"use /ultracook for smaller decompositions"
         )
     return None
 
 
 def validate_manifest(manifest: dict) -> list[str]:
-    """Run every check; return a list of error strings (empty = valid)."""
     errors: list[str] = []
     curds = manifest.get("curds", [])
     if not isinstance(curds, list):

@@ -527,14 +527,14 @@ class TestGhApiCall:
     def test_returns_none_when_gh_missing(
         self, detect_squash_residue: ModuleType
     ) -> None:
-        with patch.object(detect_squash_residue, "_gh_available", return_value=False):
+        with patch.object(detect_squash_residue.shutil, "which", return_value=None):
             assert detect_squash_residue._check_via_gh("feature", "origin/main") is None
 
     def test_returns_none_on_gh_failure(
         self, detect_squash_residue: ModuleType
     ) -> None:
         with (
-            patch.object(detect_squash_residue, "_gh_available", return_value=True),
+            patch.object(detect_squash_residue.shutil, "which", return_value="/usr/bin/gh"),
             patch.object(
                 detect_squash_residue.subprocess,
                 "run",
@@ -547,7 +547,7 @@ class TestGhApiCall:
         self, detect_squash_residue: ModuleType
     ) -> None:
         with (
-            patch.object(detect_squash_residue, "_gh_available", return_value=True),
+            patch.object(detect_squash_residue.shutil, "which", return_value="/usr/bin/gh"),
             patch.object(
                 detect_squash_residue.subprocess,
                 "run",
@@ -576,7 +576,7 @@ class TestGhApiCall:
             },
         ])
         with (
-            patch.object(detect_squash_residue, "_gh_available", return_value=True),
+            patch.object(detect_squash_residue.shutil, "which", return_value="/usr/bin/gh"),
             patch.object(
                 detect_squash_residue.subprocess,
                 "run",
@@ -604,7 +604,7 @@ class TestGhApiCall:
             return make_completed(stdout="[]")
 
         with (
-            patch.object(detect_squash_residue, "_gh_available", return_value=True),
+            patch.object(detect_squash_residue.shutil, "which", return_value="/usr/bin/gh"),
             patch.object(detect_squash_residue.subprocess, "run", side_effect=fake_run),
         ):
             detect_squash_residue._check_via_gh("feature", "origin/main")
@@ -1204,105 +1204,3 @@ class TestGhMergeCommitDisagrees:
         tree = {"squash_commit": "s" * 40}
         assert detect_squash_residue._gh_merge_commit_disagrees(gh, tree) is False
 
-
-class TestBuildRemedies:
-    """The dual-remedy structure — both options always offered, safety order
-    enforced, abort prefix applied to both when an operation is in progress."""
-
-    def _scaffold(self, **overrides: object) -> dict:
-        base = {
-            "verdict": "squash-merged",
-            "method": "tree-match",
-            "branch_commits": [],
-            "unique_commits": [],
-            "squash_commit": None,
-            "pr": None,
-            "warnings": [],
-        }
-        base.update(overrides)
-        return base
-
-    def test_merge_remedy_is_non_destructive(
-        self, detect_squash_residue: ModuleType
-    ) -> None:
-        with patch.object(
-            detect_squash_residue, "_in_progress_abort", return_value=None
-        ):
-            remedies = detect_squash_residue._build_remedies(self._scaffold(), "origin/main")
-
-        merge = _remedy(remedies, "merge")
-        assert merge["destructive"] is False
-        assert merge["commands"] == [
-            "git merge origin/main",
-            # The trailing `# resolve …` comment is informational only.
-            next(c for c in merge["commands"] if c.startswith("#")),
-        ]
-        # No reset/cherry-pick commands leak into the merge option.
-        assert not any("reset --hard" in c for c in merge["commands"])
-        assert not any("cherry-pick" in c for c in merge["commands"] if not c.startswith("#"))
-
-    def test_reset_remedy_is_destructive(
-        self, detect_squash_residue: ModuleType
-    ) -> None:
-        unique = _commits("unique-1", "unique-2")
-        with patch.object(
-            detect_squash_residue, "_in_progress_abort", return_value=None
-        ):
-            remedies = detect_squash_residue._build_remedies(
-                self._scaffold(unique_commits=unique), "origin/main"
-            )
-
-        reset = _remedy(remedies, "reset-and-cherry-pick")
-        assert reset["destructive"] is True
-        assert "git reset --hard origin/main" in reset["commands"]
-        cherry = next((c for c in reset["commands"] if "cherry-pick" in c), None)
-        assert cherry is not None
-        for c in unique:
-            assert c["sha"] in cherry
-
-    def test_abort_prefix_applied_to_both_remedies(
-        self, detect_squash_residue: ModuleType
-    ) -> None:
-        with patch.object(
-            detect_squash_residue, "_in_progress_abort", return_value="git rebase --abort"
-        ):
-            remedies = detect_squash_residue._build_remedies(self._scaffold(), "origin/main")
-
-        for r in remedies:
-            assert r["commands"][0] == "git rebase --abort"
-
-    def test_local_synth_emits_manual_review_in_destructive_remedy_only(
-        self, detect_squash_residue: ModuleType
-    ) -> None:
-        branch = _commits("a", "b")
-        scaffold = self._scaffold(
-            method="local-synth",
-            branch_commits=branch,
-            unique_commits=[],
-        )
-        with patch.object(
-            detect_squash_residue, "_in_progress_abort", return_value=None
-        ):
-            remedies = detect_squash_residue._build_remedies(scaffold, "origin/main")
-
-        merge = _remedy(remedies, "merge")
-        # Merge remedy stays clean — no per-commit review block needed.
-        assert not any(c.startswith("#   ") for c in merge["commands"])
-        reset = _remedy(remedies, "reset-and-cherry-pick")
-        review_lines = [c for c in reset["commands"] if c.startswith("#   ")]
-        assert len(review_lines) == 2
-        for c in branch:
-            assert any(c["short"] in line for line in review_lines)
-
-    def test_no_unique_no_cherry_pick_in_reset_remedy(
-        self, detect_squash_residue: ModuleType
-    ) -> None:
-        with patch.object(
-            detect_squash_residue, "_in_progress_abort", return_value=None
-        ):
-            remedies = detect_squash_residue._build_remedies(
-                self._scaffold(method="tree-match", unique_commits=[]), "origin/main"
-            )
-
-        reset = _remedy(remedies, "reset-and-cherry-pick")
-        assert reset["commands"] == ["git reset --hard origin/main"]

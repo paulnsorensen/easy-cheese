@@ -144,7 +144,6 @@ def _validate_post_review(post_review: object) -> list[str]:
 
 
 def validate_run_manifest(manifest: dict[str, Any]) -> list[str]:
-    """Return validation errors for a cheese-factory run manifest."""
     errors: list[str] = []
     required = (
         "slug",

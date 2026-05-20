@@ -50,11 +50,7 @@ Supported shapes (from the plan's "shape" field):
 
 
 def sq(value: str) -> str:
-    """Single-quote a value for a POSIX shell command line, always wrapping.
-
-    Mirrors the four-character escape used by the previous bash implementation:
-    close quote, backslash-escaped quote, open quote — ``'\\''``.
-    """
+    # Single-quote a value for POSIX shell using the four-character escape '\''.
     return "'" + value.replace("'", "'\\''") + "'"
 
 

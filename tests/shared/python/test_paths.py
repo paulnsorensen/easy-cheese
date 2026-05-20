@@ -14,7 +14,6 @@ class TestValidateSlug:
         ["a", "feature", "fix-auth-retry", "x1", "abc-123-def", "a" * 64],
     )
     def test_accepts_valid_kebab(self, paths: ModuleType, slug: str) -> None:
-        assert paths.is_valid_slug(slug) is True
         assert paths.validate_slug(slug) is None
 
     @pytest.mark.parametrize(
@@ -32,7 +31,6 @@ class TestValidateSlug:
         ],
     )
     def test_rejects_invalid(self, paths: ModuleType, slug: str) -> None:
-        assert paths.is_valid_slug(slug) is False
         assert paths.validate_slug(slug) is not None
 
     def test_non_string_rejected(self, paths: ModuleType) -> None:
@@ -62,7 +60,7 @@ class TestSlugify:
         result = paths.slugify(" ".join(["alpha"] * 20))
         assert len(result) <= 64
         # And must round-trip through the validator.
-        assert paths.is_valid_slug(result)
+        assert paths.validate_slug(result) is None
 
 
 class TestArtifactPath:

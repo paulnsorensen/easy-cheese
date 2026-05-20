@@ -71,7 +71,6 @@ def _split_anchor(path: str) -> tuple[str, str]:
 
 
 def rewrite_skill_link(url: str, skill_name: str) -> str:
-    """Rewrite link from skills/<name>/SKILL.md space to docs/skills/<name>.md space."""
     if url.startswith(("http://", "https://", "mailto:", "#")):
         return url
     path, anchor = _split_anchor(url)
@@ -105,7 +104,6 @@ def rewrite_skill_link(url: str, skill_name: str) -> str:
 
 
 def rewrite_ref_link(url: str, skill_name: str) -> str:
-    """Rewrite link from skills/<name>/references/<file>.md to docs/skills/<name>/references/<file>.md."""
     if url.startswith(("http://", "https://", "mailto:", "#")):
         return url
     path, anchor = _split_anchor(url)
@@ -132,7 +130,6 @@ def rewrite_ref_link(url: str, skill_name: str) -> str:
 
 
 def rewrite_root_passthrough_link(url: str) -> str:
-    """Rewrite link inside CONTRIBUTING/SECURITY/CODE_OF_CONDUCT after they move into docs/."""
     if url.startswith(("http://", "https://", "mailto:", "#")):
         return url
     path, anchor = _split_anchor(url)
@@ -246,13 +243,7 @@ def extract_h2_section(
     drop_header: bool = False,
     bump_headings: bool = False,
 ) -> str:
-    """Return the body of a `## <title>` section from a Markdown document.
-
-    Stops at the next `## ` header. With ``drop_header`` the section's own
-    `## <title>` line is omitted; with ``bump_headings`` every `###` inside
-    the section is promoted to `##` (used when the section's H2 wrapper is
-    dropped, to keep heading hierarchy contiguous under the page H1).
-    """
+    # Stops at the next `## ` header.
     out: list[str] = []
     in_section = False
     for line in text.splitlines(keepends=True):
@@ -273,7 +264,6 @@ def extract_h2_section(
 
 
 def emit_install_page() -> bool:
-    """Generate docs/install.md by slicing README.md's install-related H2s."""
     src = REPO_ROOT / "README.md"
     if not src.exists():
         return False
@@ -331,18 +321,7 @@ def emit_root_passthrough(filename: str, dest: str, title: str) -> bool:
 
 
 def emit_shared_pages() -> list[tuple[str, str]]:
-    """Emit shared/<file>.md into docs/shared/<file>.md.
-
-    The shared/ directory holds cross-skill contracts (e.g. handoff-gate.md)
-    that skill SKILL.md bodies reference via ``../../shared/<file>.md``. That
-    relative path already resolves correctly from docs/skills/<name>.md to
-    docs/shared/<file>.md, so no link rewriting is needed — but the target
-    file has to exist in the docs tree, and mkdocs --strict requires it to
-    be in the nav.
-
-    Returns ``(title, docs_path)`` pairs for ``emit_nav`` to render under a
-    "Shared contracts" section.
-    """
+    # mkdocs --strict requires shared files to exist in the docs tree and the nav.
     if not SHARED_DIR.is_dir():
         return []
 
