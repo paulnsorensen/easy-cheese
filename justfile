@@ -34,8 +34,12 @@ lint-yaml-fix:
 lint-yaml:
     yamllint -c .yamllint.yml .
 
+# Autofix Python lint with ruff (via uvx, no global install needed)
+lint-py-fix:
+    uvx ruff check --fix .
+
 # Full local check with autofixes
-check: lint-md-fix lint-yaml-fix lint-yaml lint-sh test docs-build
+check: lint-md-fix lint-yaml-fix lint-yaml lint-py-fix lint-sh test docs-build
 
 # CI-mode verification (no autofixes)
 ci: lint-md lint-yaml lint-sh test docs-build

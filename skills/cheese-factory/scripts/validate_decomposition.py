@@ -13,7 +13,7 @@ for _path in (SCRIPT_DIR, SHARED_SCRIPTS):
     if str(_path) not in sys.path:
         sys.path.insert(0, str(_path))
 
-from manifest_io import ManifestLoadError, read_mapping_arg_or_stdin
+from manifest_io import ManifestLoadError, read_mapping_arg_or_stdin  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Pure validation functions — tested directly in tests/cheese-factory/python.

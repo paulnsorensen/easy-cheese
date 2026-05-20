@@ -4,6 +4,9 @@
 # Conductor workspace scratch
 .context/
 
+# Serena MCP project state
+.serena/
+
 # Python
 __pycache__/
 *.pyc

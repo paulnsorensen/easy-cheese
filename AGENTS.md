@@ -4,15 +4,21 @@ This document is for LLMs, agents, and automation tools working in this reposito
 
 ## Single Quality Gate: `just check`
 
-**Before shipping any work (commit, PR, or merge), run `just check` and verify 0 errors/failures.**
+**Always run `just check` before declaring work done — before any commit, push, PR open, or hand-off.** Treat green from `just check` as the only signal that a change is shippable.
 
-`just check` autofixes lint and runs tests. CI runs `just ci` (same checks, no autofixes).
+`just check` autofixes lint (markdown, yaml, python via `ruff`) and runs the full local build: skill frontmatter validation (`validate_skills.py`), shell lint, python + bash test suites, and `mkdocs build --strict`. CI runs `just ci` (same checks, no autofixes).
 
 ```bash
 just check
 ```
 
 Do NOT commit or push when `just check` fails. If CI fails, pull the branch locally, run `just check`, commit the autofixes, and push.
+
+### Prerequisites
+
+- [`just`](https://github.com/casey/just) — recipe runner
+- [`uv`](https://github.com/astral-sh/uv) — `lint-py-fix` invokes `uvx ruff` (no global ruff install needed)
+- `yamllint`, `yamlfmt`, `markdownlint-cli2`, `shellcheck`, `bats` — see README for install hints
 
 ## Skills in this repo
 
