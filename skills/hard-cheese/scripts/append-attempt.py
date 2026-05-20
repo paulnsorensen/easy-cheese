@@ -85,6 +85,8 @@ def _atomic_rewrite(target: Path, new_text: str) -> None:
         try:
             os.unlink(tmp_name)
         except OSError:
+            # tmpfile already cleaned up by the OS or never created; swallow
+            # so the original write error propagates uncovered.
             pass
         raise
 
@@ -102,8 +104,9 @@ def _append_row(target: Path, row: str) -> None:
 def _with_flock(lock_path: Path, fn) -> None:
     """Run fn() while holding an exclusive POSIX flock on lock_path."""
     lock_path.parent.mkdir(parents=True, exist_ok=True)
-    # O_CREAT so concurrent processes share the same lockfile inode.
-    fd = os.open(str(lock_path), os.O_RDWR | os.O_CREAT, 0o644)
+    # O_CREAT so concurrent processes share the same lockfile inode. 0o600
+    # so the lockfile is not world-readable (CodeQL py/overly-permissive-file).
+    fd = os.open(str(lock_path), os.O_RDWR | os.O_CREAT, 0o600)
     try:
         fcntl.flock(fd, fcntl.LOCK_EX)
         fn()

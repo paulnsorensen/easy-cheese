@@ -85,6 +85,8 @@ def _atomic_write_yaml(path: Path, data: dict[str, Any]) -> None:
             try:
                 tmp.unlink()
             except OSError:
+                # tmpfile is gone or already locked; nothing to undo. Swallow
+                # so the original write error propagates uncovered.
                 pass
         raise
 

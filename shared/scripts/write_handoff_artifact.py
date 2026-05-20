@@ -112,6 +112,8 @@ def write_artifact(
         try:
             tmp.unlink()
         except FileNotFoundError:
+            # tmp was never created or has already been cleaned up; nothing
+            # to undo. Swallow so the original write error propagates uncovered.
             pass
         raise
     return target
