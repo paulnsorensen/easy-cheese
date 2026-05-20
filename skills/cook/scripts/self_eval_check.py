@@ -7,9 +7,13 @@ violations against the honesty rules in `skills/cook/references/package-report.m
 itself green even when partial work was shipped).
 
 Violation kinds (regex over the report text):
-  - skipped-claimed-pass: report contains BOTH a skip marker
+  - skipped-claimed-pass: a SINGLE LINE contains both a skip marker
       ("skipped" / "@pytest.mark.skip") AND a green claim
-      ("all tests pass" / "all green").
+      ("all tests pass" / "all green"). Cross-line co-occurrence (e.g. an
+      honest "we skipped lint because the upstream rule is broken" line on
+      one line plus a separate "all tests pass" line on another) is NOT a
+      violation — those are factually compatible reports the honesty rules
+      do not target.
   - unverified-claim: report contains hedging language
       ("should work" / "probably" / "I think") near a correctness assertion.
   - scope-creep: report mentions changes outside the spec's file list
@@ -56,15 +60,17 @@ def _line_of(text: str, match: re.Match[str]) -> tuple[int, str]:
 def detect_violations(report_text: str) -> list[dict]:
     """Scan report text for honesty-rule violations.
 
-    skipped-claimed-pass fires once per skip-marker line when any green claim
-    also exists in the report — both signals must be present.
+    `skipped-claimed-pass` fires only when a single line contains both a
+    skip marker AND a green claim. Cross-line co-occurrence — e.g. an honest
+    "we skipped the lint pass because the upstream rule is broken" line plus
+    a separate factually-true "all tests pass" line — is not a violation.
     """
     violations: list[dict] = []
-    has_green = bool(GREEN_RE.search(report_text))
-    if has_green:
-        for m in SKIP_RE.finditer(report_text):
-            line_no, snippet = _line_of(report_text, m)
-            violations.append({"kind": "skipped-claimed-pass", "line": line_no, "snippet": snippet})
+    for line_no, raw_line in enumerate(report_text.splitlines(), start=1):
+        if SKIP_RE.search(raw_line) and GREEN_RE.search(raw_line):
+            violations.append(
+                {"kind": "skipped-claimed-pass", "line": line_no, "snippet": raw_line.strip()}
+            )
     for m in HEDGE_RE.finditer(report_text):
         line_no, snippet = _line_of(report_text, m)
         violations.append({"kind": "unverified-claim", "line": line_no, "snippet": snippet})
@@ -81,9 +87,17 @@ def _cmd_check(args: argparse.Namespace) -> None:
         raise cli.CliError(f"report not found: {report_path}")
     text = report_path.read_text(encoding="utf-8")
     violations = detect_violations(text)
-    # Script's purpose is a JSON list of violations; --json/--full are honored
-    # by cli.emit but JSON is the canonical shape downstream consumers parse.
-    cli.emit(violations, json_mode=True, full=getattr(args, "full", False))
+    # Honor the auto-injected --json toggle per the helper convention
+    # (shared/scripts/cli.py says structured-output scripts read
+    # args.json_mode rather than hard-coding the shape). With --json or no
+    # violations, emit JSON; in plain mode with violations, emit a one-line
+    # human summary per violation so callers running interactively get a
+    # readable trace and `--json` gives them the parseable form.
+    if args.json_mode or not violations:
+        cli.emit(violations, json_mode=True, full=getattr(args, "full", False))
+    else:
+        for v in violations:
+            cli.emit(f"{v['kind']} (line {v['line']}): {v['snippet']}")
     if violations:
         sys.exit(1)
 
