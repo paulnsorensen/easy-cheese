@@ -15,6 +15,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS_DIR = REPO_ROOT / "skills" / "melt" / "scripts"
 MOLD_SCRIPTS_DIR = REPO_ROOT / "skills" / "mold" / "scripts"
+AFFINAGE_SCRIPTS_DIR = REPO_ROOT / "skills" / "affinage" / "scripts"
 SHARED_SCRIPTS = REPO_ROOT / "shared" / "scripts"
 
 
@@ -55,3 +56,8 @@ def detect_squash_residue() -> ModuleType:
 @pytest.fixture(scope="session")
 def curd_count() -> ModuleType:
     return _load("curd_count", MOLD_SCRIPTS_DIR / "curd-count.py")
+
+
+@pytest.fixture(scope="session")
+def pr_status() -> ModuleType:
+    return _load("pr_status", AFFINAGE_SCRIPTS_DIR / "pr-status.py")
