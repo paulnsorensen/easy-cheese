@@ -20,7 +20,7 @@ for _path in (SCRIPT_DIR, SHARED_SCRIPTS):
         sys.path.insert(0, str(_path))
 
 from manifest_io import ManifestLoadError, read_mapping_arg_or_stdin
-from schema import non_empty_string, type_name
+from schema import non_empty_string, string_list, type_name
 
 SHAPES = {"single", "orthogonal_flat", "stacked_linear", "diamond_stack"}
 BRANCH_RE = re.compile(r"^[A-Za-z0-9._/-]+$")
@@ -43,20 +43,7 @@ def _validate_commits(commits: object, where: str) -> list[str]:
     return errors
 
 
-def _validate_depends_on(depends_on: object, where: str) -> list[str]:
-    if depends_on is None:
-        return []
-    if not isinstance(depends_on, list):
-        return [f"{where}.depends_on must be a list when present"]
-    errors: list[str] = []
-    for index, dep in enumerate(depends_on, start=1):
-        if not isinstance(dep, str) or not dep.strip():
-            errors.append(f"{where}.depends_on[{index}] must be a non-empty string")
-    return errors
-
-
 def validate_pr_plan(plan: dict[str, Any]) -> list[str]:
-    """Return validation errors for a pr-plan document."""
     errors: list[str] = []
     shape = plan.get("shape")
     if shape not in SHAPES:
@@ -91,7 +78,7 @@ def validate_pr_plan(plan: dict[str, Any]) -> list[str]:
                 errors.append(f"{where}.branch contains characters unsafe for a branch name")
 
         errors.extend(_validate_commits(group.get("commits"), where))
-        errors.extend(_validate_depends_on(group.get("depends_on", []), where))
+        errors.extend(string_list(group.get("depends_on") or [], f"{where}.depends_on"))
 
     if shape == "single" and len(groups) != 1:
         errors.append("single shape must contain exactly one group")

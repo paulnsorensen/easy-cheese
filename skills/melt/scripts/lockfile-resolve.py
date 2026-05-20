@@ -121,7 +121,7 @@ def resolve_lockfile(
         config["regen_cmd"],
         capture_output=True,
         text=True,
-        cwd=Path(lockfile_path).parent or ".",
+        cwd=Path(lockfile_path).parent,
     )
 
     if regen_result.returncode != 0:

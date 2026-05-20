@@ -104,7 +104,6 @@ def _render_hunk_terse(hunk: dict) -> list[str]:
 
 
 def format_terse_output(summaries: list) -> str:
-    """Compact, LLM-oriented format. One header line per file, minimal hunk framing."""
     if not summaries:
         return "no conflicts"
 
@@ -151,7 +150,6 @@ def _render_hunk_verbose(hunk: dict) -> list[str]:
 
 
 def format_verbose_output(summaries: list) -> str:
-    """Markdown-formatted human view, retained for --verbose."""
     if not summaries:
         return "No conflicted files found."
 

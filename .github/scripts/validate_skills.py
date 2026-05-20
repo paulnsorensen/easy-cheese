@@ -1,18 +1,5 @@
 #!/usr/bin/env python3
-"""Validate every SKILL.md in the repository.
-
-Per-file checks:
-- Lives at exactly skills/<name>/SKILL.md (no scope, no nested sub-skills).
-- Begins with a YAML frontmatter block (--- ... ---). CRLF and missing
-  trailing newline are tolerated.
-- Frontmatter parses as a YAML mapping.
-- Required keys present and non-empty: name, description.
-- Only spec-allowed keys (plus Claude Code extensions) are present.
-- name is kebab-case, 1-64 chars, no leading/trailing/consecutive hyphens.
-- name matches the parent directory name.
-
-Exit 0 on success, 1 on any failure.
-"""
+"""Validate every SKILL.md in the repository. Exit 0 on success, 1 on any failure."""
 from __future__ import annotations
 
 import re
@@ -20,6 +7,13 @@ import sys
 from pathlib import Path
 
 import yaml
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+SHARED_SCRIPTS = SCRIPT_DIR.parents[1] / "shared" / "scripts"
+if str(SHARED_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(SHARED_SCRIPTS))
+
+from paths import KEBAB_SLUG  # noqa: E402
 
 ALLOWED_KEYS = {
     "name",
@@ -38,7 +32,6 @@ ALLOWED_KEYS = {
     "hooks",
 }
 
-NAME_RE = re.compile(r"^(?!-)(?!.*--)[a-z0-9-]{1,64}(?<!-)$")
 FRONTMATTER_RE = re.compile(r"\A---\r?\n(.*?)\r?\n---\s*(\r?\n|\Z)", re.DOTALL)
 
 # Codex rejects skills whose description exceeds 1024 characters.
@@ -78,7 +71,7 @@ def validate_frontmatter(path: Path) -> list[str]:
     elif not isinstance(name, str):
         errors.append(f"{path}: 'name' must be a string")
     else:
-        if not NAME_RE.match(name):
+        if not KEBAB_SLUG.match(name):
             errors.append(
                 f"{path}: name '{name}' is not kebab-case "
                 f"(1-64 chars, lowercase a-z 0-9, no leading/trailing/consecutive hyphens)"

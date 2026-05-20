@@ -39,10 +39,6 @@ PHASES: frozenset[str] = frozenset(
 CHAIN_PHASES: tuple[str, ...] = ("cook", "press", "age", "cure")
 
 
-def is_valid_slug(slug: str) -> bool:
-    return bool(KEBAB_SLUG.match(slug))
-
-
 def validate_slug(slug: str) -> str | None:
     """Return an error string if invalid, else None."""
     if not isinstance(slug, str) or not slug:
@@ -83,12 +79,9 @@ def artifact_path(phase: str, slug: str, *, root: Path | str = ".cheese") -> Pat
 
 
 def parse_artifact_path(path: Path | str) -> tuple[str, str]:
-    """Extract (phase, slug) from a canonical ``.cheese/<phase>/<slug>.md`` path.
-
-    Only the canonical root is parsed — paths produced by ``artifact_path``
-    with a custom ``root=`` argument (e.g. a pytest ``tmp_path``) are not
-    round-trippable here. Callers operating outside ``.cheese/`` should
-    construct (phase, slug) themselves.
+    """Only the canonical ``.cheese/`` root is parsed. Paths produced by
+    ``artifact_path`` with a custom ``root=`` (e.g. pytest ``tmp_path``)
+    are not round-trippable here.
     """
     p = Path(path)
     parts = p.parts

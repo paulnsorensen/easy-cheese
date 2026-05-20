@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -25,16 +26,7 @@ from git_utils import (
 )
 
 
-def check_mergiraf_available() -> bool:
-    try:
-        result = subprocess.run(["mergiraf", "--version"], capture_output=True, text=True)
-        return result.returncode == 0
-    except FileNotFoundError:
-        return False
-
-
 def resolve_file(path: str, dry_run: bool = True, verbose: bool = False) -> dict:
-    """Attempt to resolve a single file with mergiraf. Returns status dict."""
     result = {
         "path": path,
         "supported": is_mergiraf_supported(path),
@@ -111,11 +103,7 @@ def resolve_file(path: str, dry_run: bool = True, verbose: bool = False) -> dict
 
 
 def debug_file(path: str, keep_dir: str | None = None) -> dict:
-    """Run mergiraf on a single file with debug logging; keep the tempdir for inspection.
-
-    Returns a dict describing where the artifacts live. Never modifies the working
-    tree — the caller inspects the merged output manually.
-    """
+    """Run mergiraf with debug logging; never modifies the working tree."""
     result = {
         "path": path,
         "supported": is_mergiraf_supported(path),
@@ -266,7 +254,7 @@ def main():
 
     args = parser.parse_args()
 
-    if not check_mergiraf_available():
+    if not shutil.which("mergiraf"):
         print("mergiraf not found — install with: cargo install mergiraf", file=sys.stderr)
         return 1
 

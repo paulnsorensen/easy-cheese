@@ -76,7 +76,7 @@ def _recommend(candidate_curds: int, blast_radius: str | None) -> tuple[str, str
 
 
 class SpecReadError(Exception):
-    """Raised when the spec file cannot be read or decoded."""
+    pass
 
 
 def _read_spec(spec_path: Path) -> str:

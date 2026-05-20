@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Shared git utilities for melt skill."""
+"""Git subprocess wrappers and conflict-marker helpers."""
 
 from __future__ import annotations
 
