@@ -172,6 +172,29 @@ class TestPrPlanValidator:
         plan["groups"][0].pop("body", None)
         assert validate_pr_plan.validate_pr_plan(plan) == []
 
+    def test_depends_on_omitted_is_allowed(self, validate_pr_plan: ModuleType) -> None:
+        plan = _pr_plan()
+        plan["groups"][0].pop("depends_on", None)
+        assert validate_pr_plan.validate_pr_plan(plan) == []
+
+    def test_depends_on_none_is_allowed(self, validate_pr_plan: ModuleType) -> None:
+        plan = _pr_plan()
+        plan["groups"][0]["depends_on"] = None
+        assert validate_pr_plan.validate_pr_plan(plan) == []
+
+    def test_depends_on_string_is_rejected(self, validate_pr_plan: ModuleType) -> None:
+        # Regression: `depends_on or []` silently accepted falsy non-lists.
+        plan = _pr_plan()
+        plan["groups"][0]["depends_on"] = ""
+        errors = validate_pr_plan.validate_pr_plan(plan)
+        assert any("depends_on must be a list" in error for error in errors)
+
+    def test_depends_on_non_list_is_rejected(self, validate_pr_plan: ModuleType) -> None:
+        plan = _pr_plan()
+        plan["groups"][0]["depends_on"] = "main"
+        errors = validate_pr_plan.validate_pr_plan(plan)
+        assert any("depends_on must be a list" in error for error in errors)
+
 
 class TestCLIs:
     def test_validate_manifest_cli_accepts_yaml(self, tmp_path: Path) -> None:

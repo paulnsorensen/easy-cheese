@@ -78,7 +78,9 @@ def validate_pr_plan(plan: dict[str, Any]) -> list[str]:
                 errors.append(f"{where}.branch contains characters unsafe for a branch name")
 
         errors.extend(_validate_commits(group.get("commits"), where))
-        errors.extend(string_list(group.get("depends_on") or [], f"{where}.depends_on"))
+        depends_on = group.get("depends_on")
+        if depends_on is not None:
+            errors.extend(string_list(depends_on, f"{where}.depends_on"))
 
     if shape == "single" and len(groups) != 1:
         errors.append("single shape must contain exactly one group")
