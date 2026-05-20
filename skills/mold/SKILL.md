@@ -96,7 +96,7 @@ The spec splits into many independent slices, so the natural fit is fan-out para
 - **Implement manually, one phase at a time** — `/cook .cheese/specs/<slug>.md`.
 - **Stop** — dispatch none; leave the spec for later.
 
-**Non-decomposable, high-blast-radius specs (`decomposable: false`, verdict `high`):**
+**Non-decomposable, high-blast-radius specs (`decomposable: false`, verdict `high` only):**
 
 The spec is large enough that per-phase context contamination becomes a real concern: review reasoning softens when the same window contains the cook reasoning, and the parent context bloats across phases. Offer the fresh-context orchestrator and the manual compaction path:
 
