@@ -84,9 +84,9 @@ class TestBundledFilesExist:
         "spawn-primitive-reference.md",
     )
 
-    REQUIRED_HELPERS = (
-        "manifest_io.py",
-    )
+    # manifest_io.py and the schema helpers now live in shared/scripts/ and
+    # are imported via a sys.path shim from each script. See
+    # tests/shared/python/test_manifest_io.py for direct coverage.
 
     REQUIRED_SCRIPTS = (
         "validate_decomposition.py",
@@ -107,10 +107,11 @@ class TestBundledFilesExist:
                 f"missing required script: scripts/{script}"
             )
 
-    def test_helpers_present(self, cf_dir: Path) -> None:
-        for helper in self.REQUIRED_HELPERS:
-            assert (cf_dir / "scripts" / helper).is_file(), (
-                f"missing required helper: scripts/{helper}"
+    def test_shared_helpers_present(self) -> None:
+        repo_root = Path(__file__).resolve().parents[3]
+        for helper in ("manifest_io.py", "schema.py"):
+            assert (repo_root / "shared" / "scripts" / helper).is_file(), (
+                f"missing required shared helper: shared/scripts/{helper}"
             )
 
     def test_scripts_executable(self, cf_dir: Path) -> None:

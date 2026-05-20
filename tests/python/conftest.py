@@ -14,6 +14,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS_DIR = REPO_ROOT / "skills" / "melt" / "scripts"
+SHARED_SCRIPTS = REPO_ROOT / "shared" / "scripts"
 
 
 def _load(name: str, path: Path) -> ModuleType:
@@ -43,11 +44,6 @@ def lockfile_resolve() -> ModuleType:
 @pytest.fixture(scope="session")
 def batch_resolve() -> ModuleType:
     return _load("batch_resolve", SCRIPTS_DIR / "batch-resolve.py")
-
-
-@pytest.fixture(scope="session")
-def git_utils() -> ModuleType:
-    return _load("git_utils", SCRIPTS_DIR / "git_utils.py")
 
 
 @pytest.fixture(scope="session")

@@ -27,8 +27,10 @@ from collections.abc import Iterable
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-if str(SCRIPT_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPT_DIR))
+SHARED_SCRIPTS = SCRIPT_DIR.parents[2] / "shared" / "scripts"
+for _path in (SCRIPT_DIR, SHARED_SCRIPTS):
+    if str(_path) not in sys.path:
+        sys.path.insert(0, str(_path))
 
 from manifest_io import ManifestLoadError, read_mapping_arg_or_stdin
 
