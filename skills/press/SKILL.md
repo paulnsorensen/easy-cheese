@@ -52,14 +52,21 @@ If optional tools are missing, press a narrower surface and state the residual r
 
 Cross-cutting house style and citation form: [`../../shared/formatting.md`](../../shared/formatting.md). This section owns the press-report shape; formatting.md owns the voice rules and the footnote primitive.
 
-Write to `.cheese/press/<slug>.md` with a minimum handoff slug at the top so `/ultracook` and `/cheese --continue` can chain without re-parsing the report. The full report shape:
+Write to `.cheese/press/<slug>.md` with a minimum handoff slug at the top so `/ultracook` and `/cheese --continue` can chain without re-parsing the report. Compose the report body in a tmp file, then write the artifact atomically with the canonical 4-line preamble via `shared/scripts/write_handoff_artifact.py`:
+
+```bash
+python3 shared/scripts/write_handoff_artifact.py \
+    --slug <slug> \
+    --status "ok" \
+    --next "age" \
+    --artifact ".cheese/press/<slug>.md" \
+    --orientation "<one-line: what press did — e.g., added 4 boundary tests; no defects exposed>" \
+    --body-file <tmp-body>
+```
+
+For `blocked`, pass `--status "halt: <reason>"` and `--next "done"`. The script renders the preamble and writes `.cheese/<next>/<slug>.md` atomically (tmp + rename) so readers never see a half-written file. The body content follows the preamble after a blank line. Body shape:
 
 ```markdown
-status: ok | halt: <one-line reason>
-next: age | done
-artifact: <path-if-any>
-<one-line orientation: what press did — e.g., "added 4 boundary tests; no defects exposed">
-
 # Press Report — <slug>
 
 ## Orientation
