@@ -1,6 +1,6 @@
 ---
 name: age
-description: This skill should be used when the user wants a code review on a diff, PR, branch, or path — phrases like "review this", "/age", "is this safe to merge", "find bugs", "spot security issues", "check for slop", "review my PR", "look for problems", "what's wrong with this code". Runs ten orthogonal review dimensions (correctness, security, encapsulation, spec, complexity, deslop, assertions, NIH, efficiency, telemetry) over the scoped diff and emits a stake-grouped findings report at `.cheese/age/<slug>.md`. Use even when the user only asks for one dimension — the report scopes itself. Findings only — no fixes; after the report lands, age renders the cure-selection table inline and asks which findings to cure (no "should I run /cure?" meta-question), then hands off to `/cure` with the selection locked in. Supports `--auto` (propagated from `/cook --auto`) for the autonomous chain into `/cure` (see `### Auto mode`). After `/press` (optional); before `/cure`.
+description: This skill should be used when the user wants a code review on a diff, PR, branch, or path — phrases like "review this", "/age", "is this safe to merge", "find bugs", "spot security issues", "check for slop", "review my PR", "look for problems", "what's wrong with this code". Runs ten orthogonal review dimensions (correctness, security, encapsulation, spec, complexity, deslop, assertions, NIH, efficiency, telemetry) over the scoped diff and emits a severity-grouped findings report (`## Blocker / ## High / ## Medium / ## Low`) at `.cheese/age/<slug>.md`, with each finding tagged by dimension. Use even when the user only asks for one dimension — the report scopes itself. Findings only — no fixes; after the report lands, age renders the cure-selection table inline and asks which findings to cure (no "should I run /cure?" meta-question), then hands off to `/cure` with the selection locked in. Supports `--auto` (propagated from `/cook --auto`) for the autonomous chain into `/cure` (see `### Auto mode`). After `/press` (optional); before `/cure`.
 license: MIT
 ---
 
@@ -15,9 +15,11 @@ Do not use it to apply fixes directly. Hand fix work to `/cure`, which owns appl
 Accept:
 
 ```text
-/age [<ref-or-range>] [--scope <path>] [--comprehensive] [--auto]
-/age <slug> [--auto]
+/age [<ref-or-range>] [--scope <path>] [--comprehensive] [--full] [--auto]
+/age <slug> [--full] [--auto]
 ```
+
+`--full` un-collapses the `## Low` section when 10 or more low-severity findings exist (the default report collapses them to a one-line summary). Suppressed lows feed the cure-selection table only when `--full` is passed.
 
 When called with a `<slug>`, resolve `.cheese/press/<slug>.md` (if present) for press context and review the current working diff. When called with a `<ref-or-range>`, review that range. Default to the current working diff when neither is supplied. If the base branch is unclear, ask or use the repository's documented default.
 
@@ -27,27 +29,29 @@ When called with a `<slug>`, resolve `.cheese/press/<slug>.md` (if present) for 
 
 ## Review dimensions
 
-| Dimension | Stake | Look for |
-| --- | --- | --- |
-| correctness | high | broken behaviour, silent failures, ordering, null/empty edge cases |
-| security | high | auth, injection, secrets, unsafe parsing, tainted inputs |
-| encapsulation | high | boundary leaks, cross-slice internals, public API sprawl |
-| spec | high | drift from stated requirements or acceptance criteria |
-| complexity | medium | unnecessary nesting, long functions, speculative abstractions, redundant state, parameter sprawl, stringly-typed code |
-| deslop | medium | dead code, AI residue, duplicated logic, copy-paste-with-variation, vague names |
-| assertions | medium | weak tests, shallow existence checks, swallowed errors |
-| nih | medium | reinvented dependency, stdlib, or existing project helper / utility / component |
-| efficiency | medium | unnecessary work, missed concurrency, hot-path bloat, no-op updates, time-of-check/time-of-use (TOCTOU) pre-checks, memory leaks, overly broad reads |
-| telemetry | medium | silent error branches on non-interactive paths (servers, daemons, workers, outbound API/DB/queue calls), un-instrumented outbound calls, silent worker loops, hand-rolled logging infrastructure when stdlib/ecosystem covers it, missing rotation/retention/config hygiene on new file logging, unstructured logs, wrong log levels, double-logging, errors logged without context, missing correlation/trace ids, high-cardinality metric labels or span names, logs-as-metrics, `print()`/`console.log` in production, tests asserting on log strings |
+Dimensions answer **what kind of problem**. Severity (`blocker / high / medium / low`) is per-finding, computed from base + location + compounding modifiers (see `references/dimensions.md` § Severity computation).
 
-Per-dimension rubrics and recommendation shapes in `references/dimensions.md`. This reduced workflow intentionally omits the git-history/precedent dimension.
+| Dimension | Base range | Look for |
+| --- | --- | --- |
+| correctness | low → blocker | broken behaviour, silent failures, ordering, null/empty edge cases, races, lost writes |
+| security | low → blocker | auth, injection, secrets, unsafe parsing, tainted inputs, weak crypto |
+| encapsulation | low → blocker | class-private peeks, module-internal leaks, cross-slice internals, ingress/egress contract violations |
+| spec | low → blocker | drift from stated requirements or acceptance criteria; silent drift on security/data/correctness reqs |
+| complexity | low → high | unnecessary nesting, long functions, speculative abstractions, redundant state, parameter sprawl, stringly-typed code |
+| deslop | low → high | dead code, AI residue, duplicated logic, copy-paste-with-variation, vague names |
+| assertions | low → blocker | weak tests, shallow existence checks, swallowed errors, mocked SUT |
+| nih | low → high | reinvented dependency, stdlib, or existing project helper / utility / component |
+| efficiency | low → blocker | unnecessary work, missed concurrency, hot-path bloat, no-op updates, time-of-check/time-of-use (TOCTOU) pre-checks, memory leaks, overly broad reads |
+| telemetry | low → blocker | silent error branches on non-interactive paths (servers, daemons, workers, outbound API/DB/queue calls), un-instrumented outbound calls, silent worker loops, hand-rolled logging infrastructure, missing rotation/retention/config hygiene on new file logging, unstructured logs, wrong log levels, double-logging, errors logged without context, missing correlation/trace ids, high-cardinality metric labels or span names, logs-as-metrics, `print()`/`console.log` in production, tests asserting on log strings |
+
+Per-dimension base-severity tables, location-sensitivity, fix-cost-now / fix-cost-later, and recommendation shapes live in `references/dimensions.md`. This reduced workflow intentionally omits the git-history/precedent dimension.
 
 ## Flow
 
 1. Identify the diff, scope, and relevant spec or issue.
 2. Gather evidence: diff, touched files, tests, callers/imports. If `.cheese/press/<slug>.md` exists, read it and include a `## Press findings` sub-section in the age report summarising unresolved items — `/cure` reads only `.cheese/age/<slug>.md` and cannot access the press report directly.
 3. Review every dimension; dimensions with no findings simply omit themselves.
-4. Group findings by stake (high → medium) and by file.
+4. Compute severity per finding (base + location bump + compounding bump, capped at `blocker`). Group findings by severity (`## Blocker → ## High → ## Medium → ## Low`); within a severity group, order by file.
 5. Write the report to `.cheese/age/<slug>.md` and print the path.
 6. Hand off via the shared handoff gate (see `## Handoff` below). Age owns the selection gate: it asks the user *which findings to cure*, never *whether to run /cure*. `/cure` still owns the actual fix application — age never auto-applies fixes.
 
@@ -101,13 +105,28 @@ artifact: <path-to-press-report-or-prior-cure-if-any>
 ## Orientation
 <one or two factual sentences about what the diff does>
 
-## High-stake findings
-- **[correctness]** `path/to/file.ts:42-50` — <what is wrong, in plain terms>. <recommendation>.
-- **[security]** `path/to/handler.ts:108` — <what is wrong>. <recommendation>.
+## Press findings
+<omit this section when `.cheese/press/<slug>.md` does not exist. When it does, summarise unresolved press items in one or two bullets so `/cure` (which never reads the press report directly) sees them.>
 
-## Medium-stake findings
-- **[complexity]** `path/to/util.ts:200-240` — <what is wrong>. <recommendation>.
-- **[deslop]** `path/to/old.ts:55-60` — <what is wrong>. <recommendation>.
+## Blocker
+- **[encapsulation:blocker]** `src/users/index.ts:42` — `index` re-exports `SqlPgUser` (infra ORM type) across slice boundary. 3 consumer slices already import it.
+  - location: contract · fix-cost-now: sprawling · fix-cost-later: structural
+  - recommendation: define `User` in the slice's public types, map at the boundary, deprecate the leaked export.
+
+## High
+- **[security:high]** `src/api/admin/users.ts:55` — admin route accepts user-supplied filter without validation.
+  - location: contract · fix-cost-now: contained · fix-cost-later: contained
+  - recommendation: validate against `AdminFilter` schema at boundary.
+
+## Medium
+- **[complexity:medium]** `src/utils/format.ts:200-240` — 60-line function, 5 params.
+  - location: module · fix-cost-now: contained · fix-cost-later: contained
+  - recommendation: extract `formatHeader` / `formatBody`.
+
+## Low
+- **[deslop:low]** `src/utils/format.ts:18` — variable `data` shadows outer `data`.
+  - location: class · fix-cost-now: contained · fix-cost-later: contained
+  - recommendation: rename to `lineItems`.
 
 ## Confidence
 <`certain` | `speculating` | `don't know`> — <one-line justification including which evidence sources were unavailable>
@@ -116,7 +135,16 @@ artifact: <path-to-press-report-or-prior-cure-if-any>
 Selection prompt rendered inline — pick findings to cure or `none` to stop.
 ```
 
-`status: ok` when the review completed. `status: halt: <reason>` when evidence was unreachable in a way that blocks honest review. `next: cure` when at least one medium-or-above finding exists and the chain has cure passes remaining; `next: done` when no medium-or-above findings remain or the two-cure-pass cap has been reached.
+Empty severity sections are omitted entirely. When ten or more `low` findings exist, collapse the `## Low` section to a single line:
+
+```markdown
+## Low
+*N low-severity findings suppressed.* Re-run with `--full` (or `/age --full`) to see them.
+```
+
+Suppressed lows feed the cure-selection table only when `--full` is passed.
+
+`status: ok` when the review completed. `status: halt: <reason>` when evidence was unreachable in a way that blocks honest review. `next: cure` when at least one medium-or-above severity finding exists and the chain has cure passes remaining; `next: done` when no medium-or-above severity findings remain or the two-cure-pass cap has been reached.
 
 Then print:
 
@@ -130,10 +158,11 @@ Age report: .cheese/age/<slug>.md
 
 After the report is on disk, skip any "should I run /cure?" meta-question and go straight to the selection gate. The user's working memory is on the findings, not on whether a follow-up step exists. Use the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md) for post-selection dispatch.
 
-1. Render the numbered selection table per `../cure/references/selection.md` directly inline (one row per finding, grouped by stake).
+1. Render the numbered selection table per `../cure/references/selection.md` directly inline (one row per finding, grouped by severity).
 2. Ask via the handoff gate which findings to cure. Lead each option with the verb (what the user wants to *do* next); the underlying selection verb is the backing detail. Offer:
-   - **Pick findings to fix** — accept a free-text reply using the verbs from `../cure/references/selection.md` (`1,3,5`, `all-high`, `all`, `none`, `skip N`).
-   - **Fix all high-stake findings** *(recommended when at least one high-stake finding exists)* — equivalent to `all-high`.
+   - **Pick findings to fix** — accept a free-text reply using the verbs from `../cure/references/selection.md` (`1,3,5`, `all-blocker`, `all-high`, `cheap`, `all`, `none`, `skip N`; comma-compose to union).
+   - **Fix every blocker** *(strict; useful when you want to land only the must-fix blockers and defer high-severity work to a follow-up)* — equivalent to `all-blocker`.
+   - **Fix blockers and high-severity findings** *(recommended when at least one blocker or high-severity finding exists)* — equivalent to `all-high` (floor at high, includes blockers).
    - **Stop — leave the report for later** — equivalent to `none`.
 3. On a non-empty selection, immediately dispatch `/cure <slug> [--hard]` with the selection locked in via context, not a CLI flag:
 
@@ -148,7 +177,7 @@ handoff_context:
 `/cure` skips its own selection prompt when this context is present, re-confirms the cited ids still exist, then owns the apply / validate / report loop. `/age` never auto-applies fixes. Always emit `resolved_ids` alongside `selection` — expand the verb yourself rather than leaving the field empty; `/cure` re-confirms against the report regardless.
 4. On `none` / `Stop`, exit cleanly with the report path.
 
-Outside `--auto`, never auto-apply fixes and never invoke `/cure` without an explicit non-empty selection. The default selection remains empty. `--auto` substitutes a stake-floor selection — see `### Auto mode` below.
+Outside `--auto`, never auto-apply fixes and never invoke `/cure` without an explicit non-empty selection. The default selection remains empty. `--auto` substitutes a severity-floor selection — see `### Auto mode` below.
 
 ### Auto mode
 
@@ -156,15 +185,15 @@ When invoked with `--auto`:
 
 - Skip the handoff gate.
 - If two cure passes have already completed (cap reached), stop and surface the final report — do not invoke `/cure` again even if findings remain.
-- Otherwise, if any medium-or-above finding exists, invoke `/cure <slug> --auto --stake medium+` and increment the cure-pass count when it returns.
-- If no medium-or-above findings remain, stop the chain with a one-line "auto chain clean" note and the report path.
+- Otherwise, if any medium-or-above severity finding exists, invoke `/cure <slug> --auto --stake medium+` and increment the cure-pass count when it returns.
+- If no medium-or-above severity findings remain, stop the chain with a one-line "auto chain clean" note and the report path.
 
 ### When invoked from /ultracook
 
 `/ultracook` spawns age as a fresh-context sub-agent and owns the chain itself. Honour the no-chain override:
 
 - Write `.cheese/age/<slug>.md` (with the handoff slug at the top) and stop. Do not invoke `/cure <slug> --auto --stake medium+` from inside the sub-agent.
-- Set `next:` from what you observe on this run, not from any guess about chain position. `next: cure` when at least one medium-or-above finding exists; `next: done` when none do.
+- Set `next:` from what you observe on this run, not from any guess about chain position. `next: cure` when at least one medium-or-above severity finding exists; `next: done` when none do.
 - The two-cure-pass cap is enforced by ultracook's fixed chain length, not by age's `next:` field. Fresh-context age cannot count prior cure passes anyway, so this is the only honest contract. The orchestrator uses `next: done` for early-stop signalling; the natural terminal stop is the chain table running out of entries.
 
 ### Inline-degrade mode (invoked from a sub-agent, e.g. /cheese-factory curd worker)
@@ -183,7 +212,7 @@ Inline-degrade is forced when the marker is present; there is no opt-out. Spawni
 
 - Review is not a verdict; explain where to look and why.
 - Do not edit production files.
-- Do not auto-apply fixes. Age owns the *selection* gate (which findings to cure) and dispatches `/cure` only with an explicit non-empty selection; the *application* gate stays inside `/cure`. The only sanctioned bypass of either gate is `--auto`, which `/cure` enforces with a stake floor and `/age` enforces with a two-pass cap.
+- Do not auto-apply fixes. Age owns the *selection* gate (which findings to cure) and dispatches `/cure` only with an explicit non-empty selection; the *application* gate stays inside `/cure`. The only sanctioned bypass of either gate is `--auto`, which `/cure` enforces with a severity floor and `/age` enforces with a two-pass cap.
 - Do not invent evidence. Cite files, diffs, commands, or unavailable-source notes.
 - Agree when the diff is fine. Do not manufacture findings to fill a dimension; an empty dimension is a valid outcome.
 - Keep confidence qualitative (`certain | speculating | don't know`); never emit a numeric score.

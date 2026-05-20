@@ -10,7 +10,7 @@ Use this skill when the user wants the whole `cook → press → age → cure �
 
 Do not use it for short focused changes (`/cook --auto` is cheaper and continuous), for fuzzy planning (`/mold`), or for review-only work (`/age`).
 
-`/ultracook` is the sub-agent-transport sibling of `/cook --auto`. Same seven spawns, same `--auto` semantics propagated end-to-end, same medium+ stake floor, same two-cure-pass cap. The only difference is that each phase runs inside its own freshly-spawned sub-agent, so the parent context never accumulates phase-internal reasoning and review is adversarial rather than continuous.
+`/ultracook` is the sub-agent-transport sibling of `/cook --auto`. Same seven spawns, same `--auto` semantics propagated end-to-end, same medium+ severity floor, same two-cure-pass cap. The only difference is that each phase runs inside its own freshly-spawned sub-agent, so the parent context never accumulates phase-internal reasoning and review is adversarial rather than continuous.
 
 ## Inputs
 
@@ -28,7 +28,7 @@ Accept one of:
 2. **Guard against re-entry** — if any of `.cheese/{cook,press,age,cure}/<slug>.md` already exist, stop with a one-line list of the existing handoffs and tell the user to either run `/cheese --continue <slug>` to resume from the latest phase or `rm` the relevant files to start fresh. Never silently wipe.
 3. **Phase loop** — for each phase in `cook, press, age, cure, age, cure, age`, spawn a fresh sub-agent (see `## Sub-agent contract` below), wait for it to return, read `.cheese/<phase>/<slug>.md`, and decide:
    - `status:` starts with `halt` → surface the halt reason and stop.
-   - `next:` is `done` and the phase is age → stop early with a clean summary (the diff is clean at the medium+ floor; cure has nothing to apply).
+   - `next:` is `done` and the phase is age → stop early with a clean summary (the diff is clean at the medium+ severity floor; cure has nothing to apply).
    - Otherwise → continue to the next phase.
 4. **Final summary** — after the third age spawn (or any earlier stop), print a four-line summary: passes completed, total findings applied / deferred, the final age-report path, and the next-step nudge ("review the diff, then `/gh` when ready").
 
@@ -55,7 +55,7 @@ Every spawn uses the canonical `/<phase> <slug> --auto` form. Cook accepts a bar
 The two-cure-pass cap is enforced by **chain length, not by age**. Each age sub-agent boots in fresh context and cannot count prior cure passes, so the contract cannot rely on age tracking the count. Instead:
 
 - The chain table has exactly seven entries, with two cure spawns (#4 and #6) and three age spawns (#3, #5, #7). After spawn #7 completes, the orchestrator stops because the table is exhausted.
-- Each age spawn writes `next:` from what it observes on its own run: `next: cure` when at least one medium-or-above finding exists, `next: done` when none do. The field is **informational** under ultracook — it drives early-stop (when an age reports clean), but it does not gate cap enforcement.
+- Each age spawn writes `next:` from what it observes on its own run: `next: cure` when at least one medium-or-above severity finding exists, `next: done` when none do. The field is **informational** under ultracook — it drives early-stop (when an age reports clean), but it does not gate cap enforcement.
 - `/ultracook` does not pass a pass-ordinal hint to age. Age has no need to know whether it is age₁, age₂, or age₃; the orchestrator owns the position.
 
 ## No-chain isolation directive
@@ -113,7 +113,7 @@ artifact: <path-to-richer-report-if-any>
 <one-line orientation: what this phase did>
 ```
 
-`status: ok` means the phase finished cleanly and `next` names the next phase the chain *would* run if the orchestrator chose to continue. `status: halt: <reason>` means the chain stops; `/ultracook` surfaces the reason verbatim. `next: done` is informational: an age phase writes it when the diff is clean at the medium+ floor (early-stop signal). The two-cure-pass cap is enforced by chain length, not by `next: done` — see `### Cap enforcement` above.
+`status: ok` means the phase finished cleanly and `next` names the next phase the chain *would* run if the orchestrator chose to continue. `status: halt: <reason>` means the chain stops; `/ultracook` surfaces the reason verbatim. `next: done` is informational: an age phase writes it when the diff is clean at the medium+ severity floor (early-stop signal). The two-cure-pass cap is enforced by chain length, not by `next: done` — see `### Cap enforcement` above.
 
 For phases that already write rich reports (`/age`, `/press`, `/cure` once extended, `/cook` once extended), the slug schema is prepended at the top of the same file — there is no second file. The schema is the contract; the body is whatever the phase normally writes.
 
@@ -123,7 +123,7 @@ For phases that already write rich reports (`/age`, `/press`, `/cure` once exten
 
 - A phase's slug file is missing after the sub-agent returns (the sub-agent did not write its handoff — print "phase did not write handoff — check sub-agent logs").
 - A phase writes `status: halt: <reason>` (a quality gate failed, press came back `blocked`, cure could not apply any finding).
-- An age phase writes `next: done` because the diff is clean at the medium+ floor (early-stop). Note: this only fires from age spawns; cure always writes `next: age` and cap-enforcement does not flow through `next: done` (the chain length handles that — see `### Cap enforcement` above).
+- An age phase writes `next: done` because the diff is clean at the medium+ severity floor (early-stop). Note: this only fires from age spawns; cure always writes `next: age` and cap-enforcement does not flow through `next: done` (the chain length handles that — see `### Cap enforcement` above).
 
 In every early-stop case, surface the slug file path so the user can read the full report. The natural terminal case (chain table exhausted after spawn #7) does not need an explicit early-stop signal — the orchestrator simply runs out of entries to spawn.
 
@@ -172,7 +172,7 @@ If the host harness does not expose a sub-agent primitive at all, `/ultracook` i
 ## Rules
 
 - Sub-agents are full peers, not diminutive workers. Do not downgrade the model, do not narrow `subagent_type`, do not restrict tools or MCP access.
-- The chain is fixed: cook → press → age → cure → age → cure → age, all `--auto`, cure stake floor `medium+`. Do not invent extra phases or skip phases.
+- The chain is fixed: cook → press → age → cure → age → cure → age, all `--auto`, cure severity floor `medium+` (the `--stake` flag literal is preserved across callers). Do not invent extra phases or skip phases.
 - Read each phase's handoff slug after the sub-agent returns. Do not infer success from the sub-agent's last line — read the file.
 - Surface halts verbatim. Do not paraphrase, do not soften, do not "retry" a halted phase silently.
 - Never invoke `/gh`. PR creation stays user-triggered.

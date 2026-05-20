@@ -67,3 +67,8 @@ def findings() -> ModuleType:
 @pytest.fixture(scope="session")
 def gates() -> ModuleType:
     return _load("gates", SHARED_SCRIPTS / "gates.py")
+
+
+@pytest.fixture(scope="session")
+def severity() -> ModuleType:
+    return _load("severity", SHARED_SCRIPTS / "severity.py")
