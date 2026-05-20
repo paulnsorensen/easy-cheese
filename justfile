@@ -13,10 +13,11 @@ test:
     python3 -m pytest tests/cheese-factory/python -q
     bats tests/bash/test_install.bats
     bats tests/cheese-factory/bash/test_pr_plan_to_branches.bats
+    bats tests/bash/test_post_reply.bats
 
 # Lint shell scripts
 lint-sh:
-    shellcheck scripts/install.sh
+    shellcheck scripts/install.sh shared/post-reply.sh
 
 # Fix markdown formatting issues
 lint-md-fix:

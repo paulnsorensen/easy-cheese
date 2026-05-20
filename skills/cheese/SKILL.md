@@ -61,7 +61,7 @@ The full classification table — including disambiguation rules, edge cases, an
 
 Flow:
 
-1. Scan for the most recently modified handoff slug across `.cheese/{cook,press,age,cure,notes}/<slug>.md`.
+1. Scan for the most recently modified handoff slug across `.cheese/{cook,press,age,cure,affinage,notes}/<slug>.md`.
 2. If none exist, offer to start the pipeline from scratch — `/mold` for fuzzy specs, `/cook` for clear asks, `/ultracook` for high-blast-radius specs — and stop.
 3. If at least one exists, read the latest one and use its `next:` field to decide the recommended action. Surface the orientation line so the user knows where they are.
 4. Confirm the resumption via the handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md). The recommended option depends on the slug's `next:` value:
