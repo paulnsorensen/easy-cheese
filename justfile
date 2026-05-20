@@ -11,7 +11,7 @@ test:
     python3 -m pytest tests/python -q
     python3 -m pytest tests/shared/python -q
     python3 -m pytest tests/cheese-factory/python -q
-    python3 -m pytest tests/briesearch/python tests/cheese/python tests/cheez-search/python tests/cook/python tests/hard-cheese/python tests/pasteurize/python -q
+    python3 -m pytest tests/briesearch/python tests/cheese/python tests/cheez-search/python tests/cook/python tests/hard-cheese/python tests/mold/python tests/pasteurize/python tests/ultracook/python -q
     bats tests/bash/test_install.bats
     bats tests/cheese-factory/bash/test_pr_plan_to_branches.bats
 

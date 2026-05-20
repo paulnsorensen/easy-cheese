@@ -57,6 +57,7 @@ The two-cure-pass cap is enforced by **chain length, not by age**. Each age sub-
 - The chain table has exactly seven entries, with two cure spawns (#4 and #6) and three age spawns (#3, #5, #7). After spawn #7 completes, the orchestrator stops because the table is exhausted.
 - Each age spawn writes `next:` from what it observes on its own run: `next: cure` when at least one medium-or-above severity finding exists, `next: done` when none do. The field is **informational** under ultracook — it drives early-stop (when an age reports clean), but it does not gate cap enforcement.
 - `/ultracook` does not pass a pass-ordinal hint to age. Age has no need to know whether it is age₁, age₂, or age₃; the orchestrator owns the position.
+- After each phase sub-agent returns, run `python3 skills/ultracook/scripts/phase_decision.py --phase-index <0-6> --status <ok|halt:...> [--next <next-field>]` and branch on the JSON `action` field (`spawn` / `stop` / `stop_early` / `halt`). Do not re-derive the phase table in prose.
 
 ## No-chain isolation directive
 
