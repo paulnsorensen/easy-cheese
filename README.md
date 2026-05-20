@@ -47,7 +47,7 @@ skills/
 
 Each `SKILL.md` is self-contained markdown with YAML frontmatter. There are no nested sub-skills; deeper material lives in `references/<topic>.md` so the harness can load it progressively.
 
-Content shared _across_ skills lives at top-level `shared/` (e.g. `shared/handoff-gate.md`), sibling to `skills/` rather than inside any one skill's `references/`. Skills reference it by relative path (`../../shared/<file>.md`). The top-level location keeps it out of skill auto-discovery and signals that it's a cross-cutting contract, not a private detail of any single skill.
+Content shared _across_ skills lives at top-level `shared/` (e.g. `shared/handoff-gate.md`, `shared/orientation.md`), sibling to `skills/` rather than inside any one skill's `references/`. Skills reference it by relative path (`../../shared/<file>.md`). The top-level location keeps it out of skill auto-discovery and signals that it's a cross-cutting contract, not a private detail of any single skill.
 
 ## Skills
 

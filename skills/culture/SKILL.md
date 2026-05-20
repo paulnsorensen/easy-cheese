@@ -1,6 +1,6 @@
 ---
 name: culture
-description: This skill should be used when the user wants to think out loud, rubber-duck a design, walk through trade-offs, or explore an ambiguous problem WITHOUT producing production code or specs — phrases like "let's talk through X", "rubber duck this with me", "I'm trying to decide between A and B", "help me think about Y", "what would happen if we…", "/culture". Output is conversation; the only sanctioned artifact is an opt-in `.cheese/notes/<slug>.md` handoff slug at session end if the user asks for notes. Culture never writes to production code, never commits, never opens PRs. Use when the user wants shared mental model first; if the dialogue reveals real work to do, recommend `/mold` (fuzzy → spec) or `/cook` (clear ask → code) and stop. Before `/mold` or `/cook`.
+description: This skill should be used when the user wants to think out loud, rubber-duck a design, walk through trade-offs, or explore an ambiguous problem WITHOUT producing production code or specs — phrases like "let's talk through X", "rubber duck this with me", "I'm trying to decide between A and B", "help me think about Y", "what would happen if we…", "/culture". Output is conversation; sanctioned artifacts are the shared `.cheese/orient/<slug>.md` cache (only on cache miss, per `shared/orientation.md`) and an opt-in `.cheese/notes/<slug>.md` handoff slug at session end if the user asks for notes. Culture never writes to production code, never commits, never opens PRs. Use when the user wants shared mental model first; if the dialogue reveals real work to do, recommend `/mold` (fuzzy → spec) or `/cook` (clear ask → code) and stop. Before `/mold` or `/cook`.
 license: MIT
 ---
 
@@ -12,15 +12,23 @@ Do not use it when the user wants a written spec (`/mold`), implementation (`/co
 
 ## Invariant
 
-`/culture` does not write production code, commit changes, open PRs, or mutate project state. The only sanctioned artifact is the **opt-in** notes handoff at `.cheese/notes/<slug>.md` (see `## Handoff slug` below), written only at session end and only when the user asks for notes — never during dialogue. If the conversation reveals that something should be built, route to `/mold` or `/cook` and stop.
+`/culture` does not write production code, commit changes, open PRs, or mutate project state. Two narrow writes are sanctioned:
+
+- The **shared orientation cache** at `.cheese/orient/<slug>.md` (gitignored), populated on a cache miss per [`../../shared/orientation.md`](../../shared/orientation.md) so `/cheese`, `/mold`, and `/culture` do not each rerun the same five-step recipe.
+- The **opt-in notes handoff** at `.cheese/notes/<slug>.md` (see `## Handoff slug` below), written only at session end and only when the user asks for notes — never during dialogue.
+
+If the conversation reveals that something should be built, route to `/mold` or `/cook` and stop.
 
 ## Flow
 
-1. Restate the question or tension in one sentence. If the question rests on a false premise or a loaded assumption, name it before engaging.
-2. Identify assumptions, constraints, and decision criteria.
-3. Explore trade-offs and likely blast radius. When the trade-off hinges on "what does this touch", run a read-only shape check on the candidate seam — a `cheez-search` callers query (`tilth_search kind: "callers"`) plus `tilth_deps` — and label each option `[low | medium | high blast radius]`. Procedure mirrors `../mold/references/shape-check.md`; culture stops at the verdict and never drafts signatures. Steelman the rejected option before settling on a recommendation.
-4. Use evidence only when it helps the conversation; avoid deep research unless the user asks.
-5. End with a compact summary, open questions tagged with confidence (`certain | speculating | don't know`), and a `## Handoff` prompt (see below).
+1. **Ground** — run the orientation read-or-write procedure in [`../../shared/orientation.md`](../../shared/orientation.md) before the dialogue starts. If the cache file exists, load it; otherwise build it from the five-step recipe and load. Print the one-line acknowledgement. The orientation snapshot then frames every subsequent restatement, trade-off, and shape-check below.
+2. Restate the question or tension in one sentence. If the question rests on a false premise or a loaded assumption, name it before engaging.
+3. Identify assumptions, constraints, and decision criteria.
+4. Explore trade-offs and likely blast radius. When the trade-off hinges on "what does this touch", run a read-only shape check on the candidate seam — a `cheez-search` callers query (`tilth_search kind: "callers"`) plus `tilth_deps` — and label each option `[low | medium | high blast radius]`. Procedure mirrors `../mold/references/shape-check.md`; culture stops at the verdict and never drafts signatures. Steelman the rejected option before settling on a recommendation.
+5. Use evidence only when it helps the conversation; avoid deep research unless the user asks.
+6. End with a compact summary, open questions tagged with confidence (`certain | speculating | don't know`), and a `## Handoff` prompt (see below).
+
+Orientation is codebase-level (vital signs, entry points, domain models, architecture, deps); the shape check in step 4 is symbol-level. Run orientation once at step 1; run the shape check only when a specific seam comes up.
 
 Default the model's own contribution to maximum useful depth — full pseudocode signatures over hand-waving, named edge cases over "consider edge cases", concrete file:line evidence over vague pointers. Smallest-useful-question discipline applies only to what you ask the user, never to what you offer them.
 
@@ -58,7 +66,7 @@ artifact: <path-if-any>
 
 `next:` is culture-specific — values are `mold` (fuzzy idea, route to spec), `cook` (clear ask, route to implementation), `ultracook` (clear ask with high blast radius, route to autonomous fresh-context chain), or `stop` (no further action). The orientation line captures the punchline of the dialogue in one factual sentence; deeper notes go in the body of the same file.
 
-The notes slug is the **only** thing culture is allowed to write. No commits, no PRs, no production-code edits — those route to `/mold` or `/cook`.
+The notes slug plus the shared orientation cache at `.cheese/orient/<slug>.md` (per [`../../shared/orientation.md`](../../shared/orientation.md), only on cache miss) are the **only** things culture is allowed to write. No commits, no PRs, no production-code edits — those route to `/mold` or `/cook`.
 
 ## Handoff
 
@@ -86,7 +94,7 @@ After a non-stop selection, run the selected downstream skill immediately with t
 
 ## Rules
 
-- No production-code writes, no commits, no PRs. The only sanctioned write is the opt-in `.cheese/notes/<slug>.md` handoff at session end, and only when the user asks for it.
+- No production-code writes, no commits, no PRs. The only sanctioned writes are the shared orientation cache at `.cheese/orient/<slug>.md` (per [`../../shared/orientation.md`](../../shared/orientation.md), only on cache miss) and the opt-in notes handoff at `.cheese/notes/<slug>.md` (session end, only when the user asks).
 - Ask one useful question at a time when the user is exploring.
 - Prefer clarity over completeness.
 - Agree when agreement is warranted; do not manufacture counterpoints to seem balanced.
