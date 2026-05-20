@@ -92,20 +92,47 @@ def _last_pass_sha_from_headings(body: str) -> str | None:
 
 
 def _last_pass_sha_from_table(body: str) -> str | None:
-    """Walk `| status | score | head_sha | ...` rows; return last PASS row's sha."""
+    """Walk attempt-log table rows; return last PASS row's recorded head sha.
+
+    The writer in `append-attempt.py` produces the canonical schema
+    `| timestamp | head_sha | status | score | feedback | explanation |`,
+    so the row's status cell is index 2 and the head_sha cell is index 1.
+    The parser reads the header row to locate the `status` and `head_sha`
+    columns by name, so callers who later reorder the schema do not silently
+    break the freshness check.
+    """
+    rows = list(_TABLE_ROW_RE.finditer(body))
+    status_col: int | None = None
+    sha_col: int | None = None
     last_sha: str | None = None
-    for row in _TABLE_ROW_RE.finditer(body):
+    for row in rows:
         cells = [c.strip() for c in row.group("cells").split("|")]
-        if len(cells) < 3:
+        # Strip the empty edge cells produced by leading/trailing pipes.
+        if cells and cells[0] == "":
+            cells = cells[1:]
+        if cells and cells[-1] == "":
+            cells = cells[:-1]
+        if len(cells) < 2:
             continue
-        # Skip the header separator row (`| --- | --- | --- |`).
+        # Header row: locate the columns we care about by name.
+        if status_col is None and "status" in (c.lower() for c in cells):
+            lowered = [c.lower() for c in cells]
+            status_col = lowered.index("status")
+            sha_col = lowered.index("head_sha") if "head_sha" in lowered else None
+            continue
+        # Separator row (`| --- | --- | --- |`).
         if all(set(cell) <= {"-", ":"} and cell for cell in cells):
             continue
-        if not _is_pass_status(cells[0]):
+        # Data row — fall back to the legacy column order (head_sha at index 2)
+        # when no header was seen, otherwise honour the discovered indices.
+        s_col = status_col if status_col is not None else 0
+        h_col = sha_col if sha_col is not None else 2
+        if s_col >= len(cells) or h_col >= len(cells):
             continue
-        # head_sha is the third cell per the seed's documented column order.
-        sha = cells[2]
-        if sha and sha != "head_sha":  # ignore header row that happens to start with "pass" — defensive
+        if not _is_pass_status(cells[s_col]):
+            continue
+        sha = cells[h_col]
+        if sha and sha.lower() != "head_sha":
             last_sha = sha
     return last_sha
 
@@ -127,17 +154,34 @@ def last_pass_sha(log_path: Path) -> str | None:
 
 
 def decide(slug: str, *, cheese_root: Path, repo_root: Path | None = None) -> dict:
-    """Compute {state, diff_head} for `slug`. Pure modulo git + filesystem."""
+    """Compute {state, diff_head} for `slug`. Pure modulo git + filesystem.
+
+    `append-attempt.py` writes the short (abbreviated) HEAD sha; `git rev-parse
+    HEAD` returns the full sha. Treat the recorded sha as a match when it's a
+    prefix of `diff_head` (or vice versa) so the writer/reader pair round-trips.
+    """
     diff_head = git_head(cwd=repo_root)
     log_path = cheese_root / "hard-cheese" / f"{slug}.md"
     recorded = last_pass_sha(log_path)
     if recorded is None:
         state = "new"
-    elif recorded == diff_head:
+    elif _sha_matches(recorded, diff_head):
         state = "previously_passed"
     else:
         state = "stale"
     return {"state": state, "diff_head": diff_head}
+
+
+def _sha_matches(recorded: str, diff_head: str) -> bool:
+    """True when `recorded` is the same sha as `diff_head`, allowing either to
+    be the abbreviated form (`git rev-parse --short`). Empty / 'unknown' never
+    matches — the writer falls back to 'unknown' when git fails, and that
+    sentinel must not silently mark every diff `previously_passed`."""
+    if not recorded or not diff_head:
+        return False
+    if recorded.lower() == "unknown":
+        return False
+    return diff_head.startswith(recorded) or recorded.startswith(diff_head)
 
 
 def _cmd_check(args: argparse.Namespace) -> None:

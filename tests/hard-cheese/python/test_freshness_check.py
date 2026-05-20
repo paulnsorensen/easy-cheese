@@ -93,10 +93,21 @@ def _heading_log(slug: str, sha: str, status: str = "PASS") -> str:
 
 
 def _table_log(slug: str, sha: str, status: str = "pass") -> str:
+    """Canonical attempt-log table per skills/hard-cheese/scripts/append-attempt.py."""
     return (
         f"# freshness log for {slug}\n\n"
-        f"| status | score | head_sha | timestamp |\n"
-        f"| --- | --- | --- | --- |\n"
+        f"| timestamp | head_sha | status | score | feedback | explanation |\n"
+        f"| --- | --- | --- | --- | --- | --- |\n"
+        f"| 2026-05-19T10:00:00+00:00 | {sha} | {status} | 4 | solid | I get it |\n"
+    )
+
+
+def _legacy_table_log(slug: str, sha: str, status: str = "pass") -> str:
+    """Pre-canonical table shape (status first, head_sha at column 2 — the
+    seed's documented but never-actually-written order). Kept to lock the
+    parser's fallback for any logs that predate the schema alignment."""
+    return (
+        f"# freshness log for {slug}\n\n"
         f"| {status} | 4 | {sha} | 2026-05-19T10:00 |\n"
     )
 
@@ -198,6 +209,63 @@ class TestStateStale:
         result = _run_cli(repo, "feat-d")
         assert result.returncode == 2
         assert result.stdout.strip() == "stale"
+
+
+class TestAppendAttemptIntegration:
+    """End-to-end: the canonical table written by append-attempt.py must be
+    parseable by freshness-check.py. M3 regression."""
+
+    def test_canonical_table_schema_round_trips(
+        self, repo: Path, freshness_check: ModuleType
+    ) -> None:
+        # Write the *exact* table shape `append-attempt.py` produces (HEADER +
+        # one row). The parser must read head_sha out of column 1, not 2 —
+        # the pre-fix code mis-indexed every cell and silently returned None
+        # for any real-world log.
+        head = _head(repo)
+        short_head = _git(repo, "rev-parse", "--short", "HEAD")
+        artifact = (repo / ".cheese" / "hard-cheese")
+        artifact.mkdir(parents=True, exist_ok=True)
+        path = artifact / "real.md"
+        path.write_text(
+            "| timestamp | head_sha | status | score | feedback | explanation |\n"
+            "| --- | --- | --- | --- | --- | --- |\n"
+            f"| 2026-05-19T10:00:00+00:00 | {short_head} | PASS | 4 | solid | I get it |\n",
+            encoding="utf-8",
+        )
+
+        # last_pass_sha returns the canonical-column head sha verbatim.
+        assert freshness_check.last_pass_sha(path) == short_head
+
+        # decide() treats the short sha as a prefix of the full HEAD sha so
+        # the writer/reader pair round-trips end-to-end.
+        result = freshness_check.decide(
+            "real", cheese_root=repo / ".cheese", repo_root=repo
+        )
+        assert result == {"state": "previously_passed", "diff_head": head}
+
+    def test_legacy_table_shape_still_parses(
+        self, freshness_check: ModuleType, tmp_path: Path
+    ) -> None:
+        # Pre-canonical table (status at col 0, head_sha at col 2) still
+        # parses via the legacy fallback so any old logs do not silently
+        # report `new`.
+        path = tmp_path / "legacy.md"
+        path.write_text(_legacy_table_log("x", "feedface" * 5), encoding="utf-8")
+        assert freshness_check.last_pass_sha(path) == "feedface" * 5
+
+    def test_sha_matches_handles_short_and_full(
+        self, freshness_check: ModuleType
+    ) -> None:
+        full = "deadbeef" * 5
+        short = full[:7]
+        assert freshness_check._sha_matches(short, full) is True
+        assert freshness_check._sha_matches(full, short) is True
+        assert freshness_check._sha_matches("cafebabe", full) is False
+        # 'unknown' sentinel (writer fallback when git fails) must never
+        # silently match — otherwise every diff would be previously_passed.
+        assert freshness_check._sha_matches("unknown", full) is False
+        assert freshness_check._sha_matches("", full) is False
 
 
 class TestMalformedLog:
