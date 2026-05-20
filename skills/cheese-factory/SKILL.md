@@ -174,7 +174,7 @@ For each seed item:
 
 Push to branch — curds branch from HEAD.
 
-Update manifest: `phase: seed_complete`, commit SHAs.
+Update manifest via `python3 skills/cheese-factory/scripts/manifest_update.py set-phase --manifest <path> --phase seed_complete` (atomic, schema-validated). Do not hand-edit the YAML.
 
 ### Phase 2 — Curds (fan-out)
 
@@ -184,7 +184,7 @@ Each curd worker is a general-purpose sub-agent (full peer of the orchestrator �
 
 Collect results as curds complete. For failed curds: retry ONCE with error context. Mark `retry_count: 1`; do not retry twice.
 
-Update manifest: curd statuses, worktree paths, branch names, commit SHAs.
+Update manifest per-curd via `python3 skills/cheese-factory/scripts/manifest_update.py set-curd-status --manifest <path> --curd <id> --status completed|failed [--commit-sha <sha>]`. After all curds resolve, set the top-level phase with `set-phase --phase curds_complete`. Do not hand-edit the YAML.
 
 #### Compaction seam C2
 
@@ -206,11 +206,11 @@ After all curds merged: run quality gates. If failing, STOP and report — curds
 
 ### Phase 4 — Wiring (fan-out, sequential within wave)
 
-Read wiring DAG from manifest. Dispatch wiring tasks in topological order, sequentially within each wave (concurrent commits to the same working directory race on git's `index.lock`).
+Compute the wiring waves with `python3 skills/cheese-factory/scripts/wiring_topo_sort.py --manifest <path>` (add `--json` for machine-readable output). The script Kahn-sorts `wiring[]` by `depends_on` and emits ordered waves — do not hand-sort the topology. Dispatch each wave sequentially within the wave (concurrent commits to the same working directory race on git's `index.lock`); waves themselves run in DAG order.
 
 Each wiring worker is a general-purpose sub-agent with the prompt template at `references/wiring-prompt.md`.
 
-For failed wiring tasks: retry ONCE. If still failing, mark incomplete in manifest.
+For failed wiring tasks: retry ONCE. If still failing, mark incomplete in manifest. Record per-wiring status via `python3 skills/cheese-factory/scripts/manifest_update.py set-wiring-status --manifest <path> --wiring <id> --status completed|failed [--commit-sha <sha>]`. After all waves resolve, set `set-phase --phase wiring_complete`.
 
 ### Phase 5 — Final merge wiring
 
@@ -446,6 +446,8 @@ If the manifest references commits that no longer exist (rebased, deleted), fail
 - `scripts/validate_decomposition.py` — Phase 0 semantic validation of decomposer output against the five criteria.
 - `scripts/validate_pr_plan.py` — Phase 7 validation of PR planner output before branch creation.
 - `scripts/pr_plan_to_branches.py` — converts `pr-plan.yaml` to branch-creation commands for Phase 7.
+- `scripts/wiring_topo_sort.py` — Phase 4 manifest → ordered wiring waves (Kahn sort over `depends_on`).
+- `scripts/manifest_update.py` — atomic schema-validated manifest writes (`set-phase`, `set-curd-status`, `set-wiring-status`).
 
 ## Rules
 
