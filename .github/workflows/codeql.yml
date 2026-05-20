@@ -23,6 +23,12 @@ jobs:
   analyze:
     name: analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
+    # Fork PRs can't get security-events: write (GitHub restricts the
+    # GITHUB_TOKEN), so the upload step would 403. Skip the whole job on
+    # fork PRs; push/schedule runs still cover the same code.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
     permissions:
       security-events: write
       packages: read
