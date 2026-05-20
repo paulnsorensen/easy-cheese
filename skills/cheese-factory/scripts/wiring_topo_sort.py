@@ -19,8 +19,8 @@ for _path in (SCRIPT_DIR, SHARED_SCRIPTS):
     if str(_path) not in sys.path:
         sys.path.insert(0, str(_path))
 
-import cli
-from manifest_io import ManifestLoadError, parse_mapping
+import cli  # noqa: E402  # path inserted above
+from manifest_io import ManifestLoadError, parse_mapping  # noqa: E402
 
 
 def _load_manifest(path: Path) -> dict[str, Any]:

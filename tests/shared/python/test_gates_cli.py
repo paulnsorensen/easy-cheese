@@ -88,49 +88,10 @@ class TestClassifyHappyPath:
         assert "press-status" in result.stderr.lower()
 
 
-class TestAttemptBudget:
-    def test_initial_state_for_slug(self) -> None:
-        result = _run("attempt-budget", "--slug", "foo", "--json")
-        assert result.returncode == 0, result.stderr
-        payload = json.loads(result.stdout)
-        assert payload == {
-            "slug": "foo",
-            "completed": 0,
-            "cap": 2,
-            "at_cap": False,
-            "next_action": "cure",
-        }
-
-    def test_different_slug_same_initial_state(self) -> None:
-        # No persistence — every slug starts fresh.
-        result = _run("attempt-budget", "--slug", "bar", "--json")
-        assert result.returncode == 0, result.stderr
-        payload = json.loads(result.stdout)
-        assert payload["slug"] == "bar"
-        assert payload["completed"] == 0
-        assert payload["next_action"] == "cure"
-
-    def test_missing_slug_exits_two(self) -> None:
-        result = _run("attempt-budget", "--json")
-        assert result.returncode == 2
-
-    def test_empty_slug_exits_two_with_cli_error(self) -> None:
-        # argparse accepts empty strings; our CliError guard catches them.
-        result = _run("attempt-budget", "--slug", "", "--json")
-        assert result.returncode == 2
-        assert "slug must be non-empty" in result.stderr
-
-
 class TestJsonMode:
-    def test_json_flag_emits_valid_json(self) -> None:
-        result = _run("attempt-budget", "--slug", "foo", "--json")
-        assert result.returncode == 0
-        # Must parse cleanly as JSON.
-        json.loads(result.stdout)
-
-    def test_default_dict_emit_is_also_json(self) -> None:
-        # cli.emit always JSON-serialises dicts (see cli.py emit rules).
-        result = _run("attempt-budget", "--slug", "foo")
+    def test_classify_default_dict_emit_is_json(self) -> None:
+        # cli.emit always JSON-serialises dicts (see cli.py emit rules) even without --json.
+        result = _run("classify", "--press-status", "ready-for-age", "--hard-floor-met")
         assert result.returncode == 0
         json.loads(result.stdout)
 
@@ -163,14 +124,3 @@ class TestInProcessClassify:
         gates_cli._cmd_classify(ns)
         payload = json.loads(capsys.readouterr().out)
         assert payload == {"press_status": "ready-for-age", "readiness": "ready for /age"}
-
-    def test_attempt_budget_helper_emits_dict(
-        self, gates_cli: ModuleType, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        import argparse
-
-        ns = argparse.Namespace(slug="my-slug", json_mode=True)
-        gates_cli._cmd_attempt_budget(ns)
-        payload = json.loads(capsys.readouterr().out)
-        assert payload["slug"] == "my-slug"
-        assert payload["completed"] == 0

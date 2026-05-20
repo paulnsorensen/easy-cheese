@@ -13,7 +13,6 @@ exits 2 via ``cli.CliError``.
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 
 import cli
 import paths
