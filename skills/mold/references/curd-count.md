@@ -7,11 +7,16 @@ and stays out of the conversation's token budget.
 ## What it answers
 
 Which downstream skill should hold the *(recommended)* slot in the Handoff menu —
-`/cheese-factory`, `/ultracook`, `/cook --auto`, or `/cook`?
+`/cheese-factory`, `/ultracook`, or `/cook`?
+
+`/cook --auto` is a user-opt-in alternative the menu always offers in the
+non-decomposable low/medium branch, but it is never a *recommended* pick: per
+existing mold rules, "Never pre-select; auto mode is opt-in" — so the script
+does not consider it.
 
 `/cheese-factory`'s own trigger is "decomposes into 5+ independent behavioural
-curds". Below that count, the choice between `/cook`, `/cook --auto`, and
-`/ultracook` is driven by the shape-check's blast-radius verdict.
+curds". Below that count, the choice between `/cook` and `/ultracook` is driven
+by the shape-check's blast-radius verdict.
 
 ## Procedure
 
@@ -85,8 +90,9 @@ slot should fall back to `/ultracook` even when the count clears the threshold.
 ## When tilth / Python is unavailable
 
 The script depends only on the Python 3 stdlib. If the host has no `python3`,
-mold falls back to the pre-script Handoff: blast-radius alone picks
-`/ultracook` (high) or `/cook --auto`/`/cook` (low or medium), and
+mold falls back to the pre-script Handoff: blast-radius alone picks `/ultracook`
+(high) or `/cook` (low or medium) for the *(recommended)* slot, and
 `/cheese-factory` appears in the option list with a manual "if this spec
-decomposes into 5+ independent curds, pick this" tagline. The user makes the
-call without a computed recommendation. Say the substitution out loud.
+decomposes into 5+ independent curds, pick this" tagline. `/cook --auto` stays
+where it always lives — as a user-opt-in alternative in the non-decomposable
+low/medium menu, never the recommended pick. Say the substitution out loud.

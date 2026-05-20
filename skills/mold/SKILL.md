@@ -17,7 +17,7 @@ Do not use it for free-form discussion with no artifact intent (`/culture`), dir
 3. **Sketch** — for any feature touching >1 module or a new public interface, run the shape check (`references/shape-check.md`) on the touched symbols, then lock seams in pseudocode signatures before talking spec content. Default to full signatures, not hand-waving.
 4. **Two-key handshake** — both the user (explicit verb) and the agent (coherence self-check) must agree before extraction. See `references/handshake.md`.
 5. **Curdle** — write the approved spec to `.cheese/specs/<slug>.md` (and optional `.cheese/issues/<slug>-NNN.md`). Format and slug rules in `references/curdle.md`.
-6. **Hand off** — once the spec is on disk, run `scripts/curd-count.py` (passing the shape-check verdict as `--blast-radius`) to compute the recommended downstream skill (`references/curd-count.md`), then prompt the next step via the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md). Never dispatch before the user selects; after a non-stop selection, run the selected downstream skill immediately.
+6. **Hand off** — once the spec is on disk, run `python3 skills/mold/scripts/curd-count.py .cheese/specs/<slug>.md --blast-radius <low|medium|high>` to compute the recommended downstream skill (full procedure in `references/curd-count.md`). Omit `--blast-radius` when the shape-check verdict is `[?]` or shape-check was skipped — the script degrades to `/cook` for sub-threshold specs in that case. Then prompt the next step via the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md). Never dispatch before the user selects; after a non-stop selection, run the selected downstream skill immediately.
 
 ## Modes
 
@@ -79,20 +79,22 @@ Default to project-local cheese artifacts when the user wants files:
 
 **Pipeline:** culture → **[mold]** → cook → press → age → cure → ship
 
-After Curdle writes the spec, run `scripts/curd-count.py` with the shape-check verdict to compute the recommended downstream skill — full procedure in [`references/curd-count.md`](references/curd-count.md):
+After Curdle writes the spec, run the curd-count script with the shape-check verdict to compute the recommended downstream skill — full procedure in [`references/curd-count.md`](references/curd-count.md):
 
 ```bash
 python3 skills/mold/scripts/curd-count.py .cheese/specs/<slug>.md --blast-radius <low|medium|high>
 ```
 
-Read the JSON digest. Its `decomposable` field (true when `candidate_curds ≥ 5`) picks the option set rendered below; its `recommended_skill` field picks which option holds the *(recommended)* slot. Then ask the user via the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md). Lead each option with the verb; the skill command (with the spec path and any in-scope `--hard` propagation) is the backing detail.
+Omit `--blast-radius` when the shape-check verdict is `[?]` or skipped; the script accepts only `low|medium|high` and degrades to `/cook` for sub-threshold specs without the flag.
+
+Read the JSON digest. Its `decomposable` field (true when `candidate_curds ≥ 5`) picks the option set rendered below; its `recommended_skill` field picks which option holds the *(recommended)* slot — subject to one user-confirmed override in the decomposable branch (see below). Then ask the user via the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md). Lead each option with the verb; the skill command (with the spec path and any in-scope `--hard` propagation) is the backing detail.
 
 **Decomposable specs (`decomposable: true`, `candidate_curds ≥ 5`):**
 
-The spec splits into many independent slices, so the natural fit is fan-out parallelism with reviewable PRs. Before dispatching `/cheese-factory`, confirm with the user that the candidate curds are file-disjoint (criterion 4) — the script counts signals, it does not verify independence. If any two curds share a file, fall back to `/ultracook`.
+The spec splits into many independent slices, so the natural fit is fan-out parallelism with reviewable PRs. Before rendering the menu, confirm with the user that the candidate curds are file-disjoint (criterion 4) — the script counts signals, it does not verify independence. **If the user confirms any two candidate curds share a file, override the digest's `recommended_skill`**: shift the *(recommended)* marker from `/cheese-factory` to `/ultracook` for this menu. The option list itself is unchanged.
 
-- **Fan out into parallel curds with reviewable PRs** *(recommended)* — `/cheese-factory .cheese/specs/<slug>.md`. Spawns per-curd worker sub-agents; ends in 1–N reviewable PRs via `/pr-stack`.
-- **Run the full pipeline in fresh-context isolation** — `/ultracook .cheese/specs/<slug>.md`. Autonomous chain with each phase blind to prior phases. Prefer when the candidate curds are not actually file-disjoint.
+- **Fan out into parallel curds with reviewable PRs** *(recommended when curds are file-disjoint)* — `/cheese-factory .cheese/specs/<slug>.md`. Spawns per-curd worker sub-agents; ends in 1–N reviewable PRs via `/pr-stack`.
+- **Run the full pipeline in fresh-context isolation** *(recommended when curds share files)* — `/ultracook .cheese/specs/<slug>.md`. Autonomous chain with each phase blind to prior phases.
 - **Implement manually, one phase at a time** — `/cook .cheese/specs/<slug>.md`.
 - **Stop** — dispatch none; leave the spec for later.
 

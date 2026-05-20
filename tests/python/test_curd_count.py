@@ -332,3 +332,31 @@ class TestMain:
         curd_count.main([str(spec)])
         out = capsys.readouterr().out
         assert out.endswith("\n")
+
+
+class TestSpecReadError:
+    def test_analyze_raises_on_non_utf8(
+        self, curd_count: ModuleType, tmp_path: Path
+    ) -> None:
+        spec = tmp_path / "bad-encoding.md"
+        # latin-1-only bytes that are invalid UTF-8 start sequences
+        spec.write_bytes(b"## Goals\n- bad byte: \xff\n")
+        with pytest.raises(curd_count.SpecReadError) as exc_info:
+            curd_count.analyze(spec, "low")
+        assert "UTF-8" in str(exc_info.value)
+
+    def test_main_returns_2_on_non_utf8(
+        self, curd_count: ModuleType, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        spec = tmp_path / "bad-encoding.md"
+        spec.write_bytes(b"## Goals\n- bad byte: \xff\n")
+        exit_code = curd_count.main([str(spec)])
+        assert exit_code == 2
+        err = capsys.readouterr().err
+        assert "UTF-8" in err
+        # Stack trace must not leak — only the clean error line.
+        assert "Traceback" not in err
+
+    def test_specreaderror_is_exception_subclass(self, curd_count: ModuleType) -> None:
+        # Importable as a public type so callers can catch it specifically.
+        assert issubclass(curd_count.SpecReadError, Exception)

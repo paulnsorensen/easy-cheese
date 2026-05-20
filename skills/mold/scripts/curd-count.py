@@ -75,8 +75,23 @@ def _recommend(candidate_curds: int, blast_radius: str | None) -> tuple[str, str
     )
 
 
+class SpecReadError(Exception):
+    """Raised when the spec file cannot be read or decoded."""
+
+
+def _read_spec(spec_path: Path) -> str:
+    try:
+        return spec_path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise SpecReadError(
+            f"spec is not valid UTF-8 ({exc.reason} at byte {exc.start})"
+        ) from exc
+    except OSError as exc:
+        raise SpecReadError(f"could not read spec: {exc.strerror or exc}") from exc
+
+
 def analyze(spec_path: Path, blast_radius: str | None) -> dict:
-    body = spec_path.read_text()
+    body = _read_spec(spec_path)
     goals = _count_bullets(_extract_section(body, GOALS_HEADINGS))
     quality_gates = _count_bullets(_extract_section(body, QUALITY_GATES_HEADINGS))
     decisions = _count_bullets(_extract_section(body, DECISIONS_HEADINGS))
@@ -128,7 +143,11 @@ def main(argv: list[str]) -> int:
         print(f"error: not a file: {args.spec_path}", file=sys.stderr)
         return 2
 
-    digest = analyze(args.spec_path, args.blast_radius)
+    try:
+        digest = analyze(args.spec_path, args.blast_radius)
+    except SpecReadError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     json.dump(digest, sys.stdout, indent=2)
     sys.stdout.write("\n")
     return 0
