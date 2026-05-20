@@ -35,7 +35,7 @@ jobs:
         run: python3 .github/scripts/validate_skills.py
 
   test:
-    name: test melt + cheese-factory scripts
+    name: test melt + shared + cheese-factory scripts
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -51,6 +51,9 @@ jobs:
 
       - name: Run melt script tests
         run: python3 -m pytest tests/python -q
+
+      - name: Run shared script tests
+        run: python3 -m pytest tests/shared/python -q
 
       - name: Run cheese-factory script tests
         run: python3 -m pytest tests/cheese-factory/python -q

@@ -27,7 +27,17 @@ Each finding's severity is computed, not declared. Three independent contributor
 2. **Location bump** — `+1` tier if `location = contract` *and* the dimension is location-sensitive (see § Location sensitivity).
 3. **Compounding bump** — `+1` tier if `fix-cost-later = structural`.
 
-Pseudocode:
+Do not compute the formula in-head — invoke `shared/scripts/severity.py compute` (canonical reference; pseudocode below is for human readers, not for the reviewer to re-derive):
+
+```bash
+python3 shared/scripts/severity.py compute \
+    --dimension <dim> --base <low|medium|high|blocker> \
+    --location <class|module|cross-module|contract> \
+    --fix-cost-later <contained|spreading|structural>
+# -> blocker | high | medium | low
+```
+
+Reference pseudocode (mirrors the script):
 
 ```
 sev = base(dimension, finding)
@@ -86,15 +96,22 @@ The `contract` bump only applies to dimensions where boundary position genuinely
 
 > "How hard would it be to fix this *right now*?"
 
-Bucket the blast-radius file count for the proposed fix:
+Bucket the blast-radius file count for the proposed fix. Do not bucket in-head — pipe the raw file/module counts through `shared/scripts/severity.py bucket`:
+
+```bash
+python3 shared/scripts/severity.py bucket --files <N> [--modules <M>]
+# -> contained | moderate | sprawling
+```
+
+Reference table (mirrors the script):
 
 | Tier | Heuristic |
 | --- | --- |
 | `contained` | 1-2 files, single module |
 | `moderate` | 3-10 files, single module |
-| `sprawling` | 10+ files, **or** spans multiple modules |
+| `sprawling` | 11+ files, **or** spans multiple modules |
 
-Source priority:
+Source priority for the raw count:
 
 1. **`tilth_deps`** — primary. Returns the file set that would need to change.
 2. **CRG `get_impact_radius_tool`** — when code-review-graph is wired. Equivalent blast-radius output.
