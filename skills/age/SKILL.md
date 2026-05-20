@@ -49,10 +49,10 @@ Per-dimension base-severity tables, location-sensitivity, fix-cost-now / fix-cos
 ## Flow
 
 1. Identify the diff, scope, and relevant spec or issue.
-2. Gather evidence: diff, touched files, tests, callers/imports. If `.cheese/press/<slug>.md` exists, read it and include a `## Press findings` sub-section in the age report summarising unresolved items — `/cure` reads only `.cheese/age/<slug>.md` and cannot access the press report directly.
+2. Gather evidence: diff, touched files, tests, callers/imports. If `.cheese/press/<slug>.md` exists, parse its preamble with `python3 shared/scripts/read_handoff_slug.py --phase press --slug <slug>` to pick up `status` / `next` / `artifact` / `orientation` without re-parsing the body, then read the body for unresolved items and include a `## Press findings` sub-section in the age report — `/cure` reads only `.cheese/age/<slug>.md` and cannot access the press report directly.
 3. Review every dimension; dimensions with no findings simply omit themselves.
 4. Compute severity per finding (base + location bump + compounding bump, capped at `blocker`). Group findings by severity (`## Blocker → ## High → ## Medium → ## Low`); within a severity group, order by file.
-5. Write the report to `.cheese/age/<slug>.md` and print the path.
+5. Write the report to `.cheese/age/<slug>.md` via `python3 shared/scripts/write_handoff_artifact.py` (see `## Output` for the exact invocation). The script renders the canonical 4-line preamble and atomically writes preamble + body. Print the path.
 6. Hand off via the shared handoff gate (see `## Handoff` below). Age owns the selection gate: it asks the user *which findings to cure*, never *whether to run /cure*. `/cure` still owns the actual fix application — age never auto-applies fixes.
 
 ## Preferred tools and fallbacks
@@ -92,7 +92,24 @@ Digest size, parent-vs-sub-agent split, and harness-agnostic sub-agent selection
 
 Cross-cutting house style and citation form: [`../../shared/formatting.md`](../../shared/formatting.md). This section owns the findings-report shape; formatting.md owns the voice rules and the footnote primitive.
 
-Write to `.cheese/age/<slug>.md` with a minimum handoff slug at the top so `/ultracook` and `/cheese --continue` can chain without re-parsing the report:
+Write the report by composing the body in a temp file and invoking `write_handoff_artifact.py` — the script owns preamble rendering and atomic write, age owns the body content:
+
+```bash
+python3 shared/scripts/write_handoff_artifact.py \
+  --slug <slug> \
+  --status "ok" \
+  --phase "age" \
+  --next "cure" \
+  --artifact "<path-to-press-report-or-prior-cure-if-any>" \
+  --orientation "<one-line orientation: what the diff does>" \
+  --body-file <tmp-report-body.md>
+```
+
+`--phase age` is the on-disk path authority — the file lands at `.cheese/age/<slug>.md`. `--next cure` is preamble-content only (it tells the chain where to go, not where this report lives).
+
+`--status` is `ok` when the review completed, `halt: <reason>` when evidence was unreachable. `--next` is `cure` when at least one medium-or-above severity finding exists and the chain has cure passes remaining; otherwise `done`. The body file contains the findings sections shown below — the script prepends the canonical 4-line preamble.
+
+The full on-disk shape at `.cheese/age/<slug>.md`:
 
 ```markdown
 status: ok | halt: <one-line reason>
@@ -144,8 +161,6 @@ Empty severity sections are omitted entirely. When ten or more `low` findings ex
 
 Suppressed lows feed the cure-selection table only when `--full` is passed.
 
-`status: ok` when the review completed. `status: halt: <reason>` when evidence was unreachable in a way that blocks honest review. `next: cure` when at least one medium-or-above severity finding exists and the chain has cure passes remaining; `next: done` when no medium-or-above severity findings remain or the two-cure-pass cap has been reached.
-
 Then print:
 
 ```
@@ -158,23 +173,37 @@ Age report: .cheese/age/<slug>.md
 
 After the report is on disk, skip any "should I run /cure?" meta-question and go straight to the selection gate. The user's working memory is on the findings, not on whether a follow-up step exists. Use the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md) for post-selection dispatch.
 
-1. Render the numbered selection table per `../cure/references/selection.md` directly inline (one row per finding, grouped by severity).
+1. Render the numbered selection table by invoking:
+
+   ```bash
+   python3 shared/scripts/findings_cli.py render-table --report .cheese/age/<slug>.md
+   ```
+
+   The script reads the report, groups findings by severity, and prints the numbered table per `../cure/references/selection.md`. Render its output inline.
 2. Ask via the handoff gate which findings to cure. Lead each option with the verb (what the user wants to *do* next); the underlying selection verb is the backing detail. Offer:
    - **Pick findings to fix** — accept a free-text reply using the verbs from `../cure/references/selection.md` (`1,3,5`, `all-blocker`, `all-high`, `cheap`, `all`, `none`, `skip N`; comma-compose to union).
    - **Fix every blocker** *(strict; useful when you want to land only the must-fix blockers and defer high-severity work to a follow-up)* — equivalent to `all-blocker`.
    - **Fix blockers and high-severity findings** *(recommended when at least one blocker or high-severity finding exists)* — equivalent to `all-high` (floor at high, includes blockers).
    - **Stop — leave the report for later** — equivalent to `none`.
-3. On a non-empty selection, immediately dispatch `/cure <slug> [--hard]` with the selection locked in via context, not a CLI flag:
+3. On a non-empty selection, expand the verb to concrete ids by invoking:
+
+   ```bash
+   python3 shared/scripts/findings_cli.py parse-selection \
+     --report .cheese/age/<slug>.md \
+     --selection "<verb>" --json
+   ```
+
+   The script returns the expanded id list. Immediately dispatch `/cure <slug> [--hard]` with the selection locked in via context, not a CLI flag:
 
 ```yaml
 handoff_context:
   source_skill: /age
   source_report: .cheese/age/<slug>.md
   selection: "<recognized verb or explicit ids>"
-  resolved_ids: [<expanded ids>]
+  resolved_ids: [<expanded ids from parse-selection>]
 ```
 
-`/cure` skips its own selection prompt when this context is present, re-confirms the cited ids still exist, then owns the apply / validate / report loop. `/age` never auto-applies fixes. Always emit `resolved_ids` alongside `selection` — expand the verb yourself rather than leaving the field empty; `/cure` re-confirms against the report regardless.
+`/cure` skips its own selection prompt when this context is present, re-confirms the cited ids still exist, then owns the apply / validate / report loop. `/age` never auto-applies fixes. Always emit `resolved_ids` alongside `selection` — `parse-selection` is the authority on verb expansion; never hand-expand verbs.
 4. On `none` / `Stop`, exit cleanly with the report path.
 
 Outside `--auto`, never auto-apply fixes and never invoke `/cure` without an explicit non-empty selection. The default selection remains empty. `--auto` substitutes a severity-floor selection — see `### Auto mode` below.

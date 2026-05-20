@@ -27,7 +27,7 @@ Optional flags:
 ## Flow
 
 1. **Load** — read the findings (markdown, not JSON sidecars).
-2. **Select** — if `/age` handed off a structured pre-locked selection, adopt it as-is after re-confirming the cited ids still exist in the report. Otherwise gate on explicit user selection. See `references/selection.md` for the recognized verbs.
+2. **Select** — if `/age` handed off a structured pre-locked selection, adopt it as-is after re-confirming the cited ids still exist in the report. Otherwise gate on explicit user selection, then expand the verb deterministically with `python3 shared/scripts/findings_cli.py parse-selection --report .cheese/age/<slug>.md --selection "<verb>" --json` — never hand-expand `all-high`, `all-blocker`, `cheap`, `M1,H2`, `skip N`, or composite verbs in prose. See `references/selection.md` for the recognized verbs.
 3. **Apply** — fix one logical group at a time via `cheez-read` (re-confirm anchor location) and `cheez-write` (apply).
 4. **Validate** — run the narrowest tests that prove each fix, then any relevant project-wide gates (lint, typecheck, build).
 5. **Re-review hand-off** — recommend `/age --scope <touched-path>` so review runs through the proper skill rather than reimplementing it inline. `/cure` does not re-grade its own work. If the user picks re-age, the resulting report can feed a fresh `/cure` invocation.
@@ -66,7 +66,7 @@ artifact: <path-if-any>
 <one-line orientation: what cure applied or deferred>
 ```
 
-`status: ok` when at least one finding applied cleanly (or no findings met the severity floor in `--auto` mode); `status: halt: <reason>` when every selected fix failed the revert/keep evaluation or a project-wide gate cannot be made green. `next:` is `age` whenever re-review should follow — that is the autonomous-chain default and the standard interactive recommendation. `next:` is `done` only when invoked interactively without `--auto` *and* the user explicitly opts out of re-review. Cure does not track which pass it is on; the two-cure-pass cap is enforced by `/age --auto`'s third invocation, not by cure.
+Compute the readiness verdict with `python3 shared/scripts/gates_cli.py classify --press-status <label> [--hard-floor-met] [--has-open-level-1-or-2] [--has-open-level-3] [--has-open-level-4-or-5] [--any-spinning] --json` rather than hand-classifying — pass the scoreboard booleans from the applied/deferred set and read `readiness` from the JSON. `status: ok` when at least one finding applied cleanly (or no findings met the severity floor in `--auto` mode); `status: halt: <reason>` when every selected fix failed the revert/keep evaluation or a project-wide gate cannot be made green. `next:` is `age` whenever re-review should follow — that is the autonomous-chain default and the standard interactive recommendation. `next:` is `done` only when invoked interactively without `--auto` *and* the user explicitly opts out of re-review. Cure does not track which pass it is on; the two-cure-pass cap is enforced by `/age --auto`'s third invocation, not by cure.
 
 ## Output
 

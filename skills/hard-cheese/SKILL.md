@@ -1,6 +1,6 @@
 ---
 name: hard-cheese
-description: This skill should be used when the user wants a metacognitive vibecheck gate before code is shared for review or a pull request is opened — phrases like "/hard-cheese", "/cheese --hard", "gate this before I push", "vibecheck me", "make sure I understand this diff", "epistemic-debt check". Reads the working diff, asks the human author to explain its causal logic in their own words, spawns a fresh-context judge sub-agent to grade the explanation against the SOLO Taxonomy (pass ≥ Multistructural), and either accepts (PASS) or returns Socratic feedback for retry (FAIL, capped at `--socratic-cap N`). Writes the audit trail to `.cheese/hard/<slug>.md`. Use standalone before opening a PR, or as the propagated `--hard` flag on `/cook`, `/press`, `/age`, `/cure` so the gate fires at the share-for-review handoff. Do NOT use for code review (`/age`), test hardening (`/press`), or fix application (`/cure`) — those review the artifact; hard-cheese reviews the human's understanding of it.
+description: This skill should be used when the user wants a metacognitive vibecheck gate before code is shared for review or a pull request is opened — phrases like "/hard-cheese", "/cheese --hard", "gate this before I push", "vibecheck me", "make sure I understand this diff", "epistemic-debt check". Reads the working diff, asks the human author to explain its causal logic in their own words, spawns a fresh-context judge sub-agent to grade the explanation against the SOLO Taxonomy (pass ≥ Multistructural), and either accepts (PASS) or returns Socratic feedback for retry (FAIL, capped at `--socratic-cap N`). Writes the audit trail to `.cheese/hard-cheese/<slug>.md`. Use standalone before opening a PR, or as the propagated `--hard` flag on `/cook`, `/press`, `/age`, `/cure` so the gate fires at the share-for-review handoff. Do NOT use for code review (`/age`), test hardening (`/press`), or fix application (`/cure`) — those review the artifact; hard-cheese reviews the human's understanding of it.
 license: MIT
 ---
 
@@ -18,7 +18,7 @@ Do not use it for code review (`/age` covers eight orthogonal review dimensions)
 
 Arguments:
 
-- `<slug>` — optional. Identifies the artifact at `.cheese/hard/<slug>.md`. When omitted, fall back to the git short SHA of `HEAD`. An explicit slug always wins.
+- `<slug>` — optional. Identifies the artifact at `.cheese/hard-cheese/<slug>.md`. When omitted, fall back to the git short SHA of `HEAD`. An explicit slug always wins.
 - `--socratic-cap N` — max retry attempts before the gate marks the artifact `FAILED` and exits non-zero. Default `3`. Vibecheck does not cap; easy-cheese does to avoid infinite loops.
 - `--no-judge` — log-only mode. Capture the user's explanation, write the artifact with `status: LOGGED`, skip the judge sub-agent spawn. Mirrors vibecheck's optional JSONL telemetry mode.
 
@@ -39,9 +39,19 @@ Arguments:
    - Slug fallback when none supplied: the HEAD short SHA.
    - If the working tree has no diff against `origin/main`, exit `0` with `"nothing to gate on"` and write no artifact.
 
-2. **Freshness check.**
-   - If `.cheese/hard/<slug>.md` exists and its `diff_head` matches the current HEAD short SHA, print `"previously passed at attempt <N>"` and exit `0`.
-   - If the artifact exists but `diff_head` differs (or `status` is not `PASS`/`LOGGED`), start a fresh attempt sequence. Prior attempts are *not* erased — they stay in the same file as historical context, and the new sequence appends below.
+2. **Freshness check.** Run the staleness gate as a script, not as an LLM judgement:
+
+   ```bash
+   python3 skills/hard-cheese/scripts/freshness-check.py --slug <slug>
+   ```
+
+   The script reads `.cheese/hard-cheese/<slug>.md`, compares the last recorded PASS row's SHA against `git rev-parse HEAD`, and emits one of three states with matching exit codes:
+
+   - `previously_passed` (exit `0`) — last pass matches current HEAD. Print `"previously passed at attempt <N>"` and exit `0`. Do not re-run the gate.
+   - `stale` (exit `2`) — last pass exists but HEAD has moved. Start a fresh attempt sequence. Prior attempts are *not* erased — they stay in the same file as historical context, and the new sequence appends below.
+   - `new` (exit `3`) — no prior attempt (or log is unreadable/malformed). Start an attempt sequence from scratch.
+
+   Do not ask the LLM "did this slug already pass since last diff?" — that is confirmation-bias prone. The script is the gate.
 
 3. **Compose the vibecheck prompt** (faithful to Sankaranarayanan 2026, generalised to "share for review" so the gate stays implementation-agnostic):
 
@@ -58,18 +68,30 @@ Arguments:
 
    See `references/judge-prompt.md` for the full system prompt and output shape.
 
-   Skip this step when `--no-judge` is set: mark the attempt `status: LOGGED`, write the artifact, exit `0`.
+   Skip this step when `--no-judge` is set: append the attempt with `--status LOGGED --score -` via `python3 skills/hard-cheese/scripts/append-attempt.py` (same shape as step 6), then exit `0`.
 
-6. **On judge result:**
-   - `score >= 3` → append PASS attempt to artifact, set `status: PASS`, exit `0`.
-   - `score < 3` → append FAIL attempt, render the Socratic questions inline for the user, loop back to step 4 if `attempts < --socratic-cap`.
-   - Judge error (crash, timeout, malformed output) → append ERROR attempt, print a clear warning, exit `0` (FAIL OPEN — see `## Divergence from the paper`).
+6. **On judge result, append the attempt row via the script** — do not hand-write the markdown. The atomic appender serialises concurrent runs and escapes user content correctly:
+
+   ```bash
+   python3 skills/hard-cheese/scripts/append-attempt.py \
+       --slug <slug> \
+       --status <PASS|FAIL|ERROR|LOGGED> \
+       --score <1-5 or '-' when LOGGED> \
+       --feedback "<one-line judge feedback>" \
+       --explanation "<user explanation verbatim>"
+   ```
+
+   Then branch on the judge result:
+
+   - `score >= 3` → append PASS attempt (script call above), set `status: PASS`, exit `0`.
+   - `score < 3` → append FAIL attempt (script call above), render the Socratic questions inline for the user, loop back to step 4 if `attempts < --socratic-cap`.
+   - Judge error (crash, timeout, malformed output) → append ERROR attempt (script call above with `--status ERROR`), print a clear warning, exit `0` (FAIL OPEN — see `## Divergence from the paper`).
 
 7. **On cap exhaustion:** set the artifact `status: FAILED`, print the path, exit non-zero. Downstream chains must not proceed.
 
 ## Artifact
 
-`.cheese/hard/<slug>.md` is the audit trail. The directory is gitignored by repo convention (`.gitignore` already ignores `.cheese/`), so the trail stays local — matching vibecheck's local-only stance on telemetry.
+`.cheese/hard-cheese/<slug>.md` is the audit trail. The directory is gitignored by repo convention (`.gitignore` already ignores `.cheese/`), so the trail stays local — matching vibecheck's local-only stance on telemetry.
 
 ```markdown
 ---
@@ -132,7 +154,7 @@ The implementation reference (intercept-at-acceptance, SOLO rubric, Socratic ret
 
 <https://github.com/sreecharansankaranarayanan/vibecheck>
 
-The attribution appears in this `SKILL.md`, in `references/judge-prompt.md`, and in every `.cheese/hard/<slug>.md` artifact's frontmatter so the citation travels with the audit trail.
+The attribution appears in this `SKILL.md`, in `references/judge-prompt.md`, and in every `.cheese/hard-cheese/<slug>.md` artifact's frontmatter so the citation travels with the audit trail.
 
 ## Divergence from the paper
 
@@ -166,7 +188,7 @@ Non-TTY guard: if the gate detects it is running without a human (no interactive
 When the gate ends, print:
 
 ```
-Hard-cheese artifact: .cheese/hard/<slug>.md
+Hard-cheese artifact: .cheese/hard-cheese/<slug>.md
 Status: PASS | FAILED | LOGGED | ERROR
 Attempts: <n>
 ```
