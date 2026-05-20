@@ -118,10 +118,16 @@ def parse_selection(verb: str, findings: list[Finding]) -> list[int]:
 
         1,3,5         specific item ids
         1-3           inclusive range
-        all-high      every high-stake finding
+        all-high      every blocker- or high-severity finding (floor semantics;
+                      under the legacy two-tier stake model this collapses to
+                      every high-stake finding because no blocker tier exists)
         all           every finding
         none          empty selection (default)
         skip N        every finding *except* N
+
+    The runtime below still filters on the legacy `stake` field — once the
+    severity migration lands on `Finding`, the `all-high` branch widens to
+    include blocker-severity findings without changing this docstring.
     """
     verb = verb.strip().lower()
     ids = {f.id for f in findings}

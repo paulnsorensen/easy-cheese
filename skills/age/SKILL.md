@@ -161,8 +161,8 @@ After the report is on disk, skip any "should I run /cure?" meta-question and go
 1. Render the numbered selection table per `../cure/references/selection.md` directly inline (one row per finding, grouped by severity).
 2. Ask via the handoff gate which findings to cure. Lead each option with the verb (what the user wants to *do* next); the underlying selection verb is the backing detail. Offer:
    - **Pick findings to fix** — accept a free-text reply using the verbs from `../cure/references/selection.md` (`1,3,5`, `all-blocker`, `all-high`, `cheap`, `all`, `none`, `skip N`; comma-compose to union).
-   - **Fix every blocker** *(recommended when at least one blocker exists)* — equivalent to `all-blocker`.
-   - **Fix high-severity findings** *(recommended when no blockers but high-severity findings exist)* — equivalent to `all-high`.
+   - **Fix every blocker** *(strict; useful when you want to land only the must-fix blockers and defer high-severity work to a follow-up)* — equivalent to `all-blocker`.
+   - **Fix blockers and high-severity findings** *(recommended when at least one blocker or high-severity finding exists)* — equivalent to `all-high` (floor at high, includes blockers).
    - **Stop — leave the report for later** — equivalent to `none`.
 3. On a non-empty selection, immediately dispatch `/cure <slug> [--hard]` with the selection locked in via context, not a CLI flag:
 

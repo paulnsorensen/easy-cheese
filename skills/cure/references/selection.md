@@ -41,20 +41,22 @@ If no slug is supplied, accept any of: a pasted findings list, a `.cheese/age/` 
 
 ```
 1,3,5         # specific item ids
-all-blocker   # every blocker-severity item
-all-high      # every high-severity item (note: severity, not stake)
+all-blocker   # every blocker-severity item (strict; no high included)
+all-high      # every blocker- or high-severity item (floor at high; matches --stake high auto-floor)
 cheap         # every finding where fix-cost-now == contained, regardless of severity
 all           # every item (requires explicit type-out, not assumed)
 none          # default; exit cleanly
 skip N        # drop item N from the change-order
 ```
 
+Interactive verbs use **floor** semantics, aligned with auto-mode: `all-blocker` is the only strict selector (because blocker is the top of the ladder, there is nothing above it to include); `all-high` includes blockers + high; future `all-medium` would include blockers + high + medium. Use composition (`all-blocker, ...`) when you specifically want strict blocker-only behaviour combined with another verb.
+
 ### Verb composition
 
 Verbs may be combined with commas. Set algebra:
 
 - `all-blocker, cheap` = blockers ∪ contained-fix-cost findings; dedup at apply time.
-- `all-high, 7` = every high-severity item ∪ item #7.
+- `all-high, 7` = every blocker- or high-severity item ∪ item #7.
 - `all-blocker, cheap, skip 4` = (blockers ∪ contained-fix-cost) − item #4.
 
 `skip N` always applies last. `all` and `none` are mutually exclusive with every other verb.
