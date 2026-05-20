@@ -244,7 +244,8 @@ Copy `skills/<name>/` into wherever the harness loads Agent Skills from. The for
 The reference validator from [`agentskills/agentskills`](https://github.com/agentskills/agentskills) checks frontmatter and naming:
 
 ```sh
-skills-ref validate ./skills/age
+pip install skills-ref   # ships the `agentskills` CLI
+agentskills validate ./skills/age
 ```
 
 Each `SKILL.md` must have YAML frontmatter with at least `name` and `description`, and `name` must match the parent directory name.
