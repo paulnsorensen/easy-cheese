@@ -17,7 +17,7 @@ Do not use it for free-form discussion with no artifact intent (`/culture`), dir
 3. **Sketch** — for any feature touching >1 module or a new public interface, run the shape check (`references/shape-check.md`) on the touched symbols, then lock seams in pseudocode signatures before talking spec content. Default to full signatures, not hand-waving.
 4. **Two-key handshake** — both the user (explicit verb) and the agent (coherence self-check) must agree before extraction. See `references/handshake.md`.
 5. **Curdle** — write the approved spec to `.cheese/specs/<slug>.md` (and optional `.cheese/issues/<slug>-NNN.md`). Format and slug rules in `references/curdle.md`.
-6. **Hand off** — once the spec is on disk, prompt the next step via the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md). Never dispatch before the user selects; after a non-stop selection, run the selected downstream skill immediately.
+6. **Hand off** — once the spec is on disk, run `python3 skills/mold/scripts/curd-count.py .cheese/specs/<slug>.md --blast-radius <low|medium|high>` to compute the recommended downstream skill (full procedure in `references/curd-count.md`). Omit `--blast-radius` when the shape-check verdict is `[?]` or shape-check was skipped — the script degrades to `/cook` for sub-threshold specs in that case. Then prompt the next step via the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md). Never dispatch before the user selects; after a non-stop selection, run the selected downstream skill immediately.
 
 ## Modes
 
@@ -79,16 +79,26 @@ Default to project-local cheese artifacts when the user wants files:
 
 **Pipeline:** culture → **[mold]** → cook → press → age → cure → ship
 
-After the spec is written, ask the user via the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md). Lead each option with the verb (what the user wants to *do* next); the skill command (with the spec path and any in-scope `--hard` propagation) is the backing detail. Default options vary with the shape-check verdict:
+After Curdle writes the spec, run the curd-count script with the shape-check verdict to compute the recommended downstream skill — full procedure in [`references/curd-count.md`](references/curd-count.md):
 
-**Low- and medium-blast-radius specs (verdict `low` or `medium`):**
+```bash
+python3 skills/mold/scripts/curd-count.py .cheese/specs/<slug>.md --blast-radius <low|medium|high>
+```
 
-- **Implement the spec** *(recommended)* — `/cook .cheese/specs/<slug>.md`.
-- **Implement and auto-review** — `/cook --auto .cheese/specs/<slug>.md`, chains straight through `/press → /age → /cure` autonomously, fixing every medium-or-above finding across up to two cure passes. Stops at the final cure pass; opening or updating the PR stays a manual step. Offer when acceptance criteria are explicit *and* the user has signalled they want the pipeline to run forward without per-step approval. Never pre-select; auto mode is opt-in.
-- **Research more first** — `/briesearch`, gather more external evidence before implementing.
+Omit `--blast-radius` when the shape-check verdict is `[?]` or skipped; the script accepts only `low|medium|high` and degrades to `/cook` for sub-threshold specs without the flag.
+
+Read the JSON digest. Its `decomposable` field (true when `candidate_curds ≥ 5`) picks the option set rendered below; its `recommended_skill` field picks which option holds the *(recommended)* slot — subject to one user-confirmed override in the decomposable branch (see below). Then ask the user via the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md). Lead each option with the verb; the skill command (with the spec path and any in-scope `--hard` propagation) is the backing detail.
+
+**Decomposable specs (`decomposable: true`, `candidate_curds ≥ 5`):**
+
+The spec splits into many independent slices, so the natural fit is fan-out parallelism with reviewable PRs. Before rendering the menu, confirm with the user that the candidate curds are file-disjoint (criterion 4) — the script counts signals, it does not verify independence. **If the user confirms any two candidate curds share a file, override the digest's `recommended_skill`**: shift the *(recommended)* marker from `/cheese-factory` to `/ultracook` for this menu. The option list itself is unchanged.
+
+- **Fan out into parallel curds with reviewable PRs** *(recommended when curds are file-disjoint)* — `/cheese-factory .cheese/specs/<slug>.md`. Spawns per-curd worker sub-agents; ends in 1–N reviewable PRs via `/pr-stack`.
+- **Run the full pipeline in fresh-context isolation** *(recommended when curds share files)* — `/ultracook .cheese/specs/<slug>.md`. Autonomous chain with each phase blind to prior phases.
+- **Implement manually, one phase at a time** — `/cook .cheese/specs/<slug>.md`.
 - **Stop** — dispatch none; leave the spec for later.
 
-**High-blast-radius specs (verdict `high` only):**
+**Non-decomposable, high-blast-radius specs (`decomposable: false`, verdict `high` only):**
 
 The spec is large enough that per-phase context contamination becomes a real concern: review reasoning softens when the same window contains the cook reasoning, and the parent context bloats across phases. Offer the fresh-context orchestrator and the manual compaction path:
 
@@ -97,7 +107,14 @@ The spec is large enough that per-phase context contamination becomes a real con
 - **Compact and resume by hand** — dispatch none; clear context, then dispatch `/cook .cheese/specs/<slug>.md` or `/ultracook .cheese/specs/<slug>.md` directly. (`/cheese --continue` scans phase handoff slugs only — fresh specs don't surface there until cook lands a slug — so dispatching the explicit command is the resumption path here.)
 - **Stop** — dispatch none; leave the spec for later.
 
-`/cook --auto` is omitted from the high-blast-radius offer set: with a large footprint, the fresh-context property of `/ultracook` is the actual motivation for going autonomous, and the in-session chain it offers is the wrong transport for that need. Never pre-select an autonomous option; the user must opt in. `medium` blast radius keeps the standard handoff because the in-session `/cook --auto` chain is still the right tool for that footprint — the fresh-context premium is only worth paying when the spec actually crosses module boundaries broadly enough to flip the verdict to `high`.
+**Non-decomposable, low- or medium-blast-radius specs (`decomposable: false`, verdict `low` or `medium`):**
+
+- **Implement the spec** *(recommended)* — `/cook .cheese/specs/<slug>.md`.
+- **Implement and auto-review** — `/cook --auto .cheese/specs/<slug>.md`, chains straight through `/press → /age → /cure` autonomously, fixing every medium-or-above finding across up to two cure passes. Stops at the final cure pass; opening or updating the PR stays a manual step. Offer when acceptance criteria are explicit *and* the user has signalled they want the pipeline to run forward without per-step approval. Never pre-select; auto mode is opt-in.
+- **Research more first** — `/briesearch`, gather more external evidence before implementing.
+- **Stop** — dispatch none; leave the spec for later.
+
+`/cook --auto` is omitted from the decomposable and high-blast-radius offer sets: with many parallel curds or a wide footprint, fan-out parallelism (`/cheese-factory`) or fresh-context isolation (`/ultracook`) is the actual motivation for going autonomous, and the in-session chain is the wrong transport. Never pre-select an autonomous option; the user must opt in. `medium` blast radius keeps the standard handoff because the in-session `/cook --auto` chain is still the right tool for that footprint — the fresh-context premium is only worth paying when the spec actually crosses module boundaries broadly enough to flip the verdict to `high`, or when the spec decomposes into 5+ independent curds.
 
 ## Rules
 

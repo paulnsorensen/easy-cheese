@@ -1,7 +1,7 @@
 """Shared pytest config.
 
-The melt scripts use hyphenated filenames that can't be imported by the
-normal `import` machinery, so we load them by path with importlib.
+The melt and mold scripts use hyphenated filenames that can't be imported by
+the normal `import` machinery, so we load them by path with importlib.
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS_DIR = REPO_ROOT / "skills" / "melt" / "scripts"
+MOLD_SCRIPTS_DIR = REPO_ROOT / "skills" / "mold" / "scripts"
 SHARED_SCRIPTS = REPO_ROOT / "shared" / "scripts"
 
 
@@ -49,3 +50,8 @@ def batch_resolve() -> ModuleType:
 @pytest.fixture(scope="session")
 def detect_squash_residue() -> ModuleType:
     return _load("detect_squash_residue", SCRIPTS_DIR / "detect-squash-residue.py")
+
+
+@pytest.fixture(scope="session")
+def curd_count() -> ModuleType:
+    return _load("curd_count", MOLD_SCRIPTS_DIR / "curd-count.py")
