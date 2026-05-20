@@ -31,7 +31,13 @@ If `$ARGUMENTS` is missing entirely and there is no recent context to lean on, a
 
 ## Flow
 
-1. **Classify** — match `$ARGUMENTS` against the intent shapes in `references/classification.md`. Pick the highest-confidence shape; below the threshold, route to `clarify` (see step 4).
+1. **Classify** — match `$ARGUMENTS` against the intent shapes in `references/classification.md`. Pick the highest-confidence shape; below the threshold, route to `clarify` (see step 4). Run the deterministic classifier on the raw input first so the LLM's verdict can be compared against a script-grounded one, catching silent misroutes:
+
+   ```bash
+   python3 skills/cheese/scripts/classify.py --input "<user $ARGUMENTS>"
+   ```
+
+   The script emits `{intent, confidence, signals, target_skill}`. When it returns `unknown` (no rule fired with enough weight), fall through to the prose classifier; otherwise the LLM's choice should match the script's verdict — disagreement is the cue to slow down and re-read the input rather than commit to a route.
 2. **Announce** — print one short paragraph with: detected intent, chosen target skill (or pre-step), and the one-line reason for the decision. Cite the signal that drove it (e.g. "spec path under `.cheese/specs/`", "stack trace present", "PR URL").
 3. **Self-check** — run the coherence questions in `references/coherence-check.md` before dispatching. If any fails, downgrade to `clarify` or `research`.
 4. **Confirm** — issue a handoff gate per [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md): recommended target pre-selected, at least one alternative, and a `Stop` option. The user's selection is the only trigger for dispatch; never invoke a skill silently before the selection.

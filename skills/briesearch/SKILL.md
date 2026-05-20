@@ -18,9 +18,30 @@ Accept the whole user prompt as the research question. If version, framework, re
 
 1. **Classify** — library docs, current web facts, codebase pattern, GitHub example, comparison, or best practice.
 2. **Plan** — restate the decision being supported, extract constraints (dates, versions, scope), decompose into 2-5 focused subqueries, name stop criteria. See `references/query-planning.md`.
-3. **Route** — pick sources per `references/routing.md` and emit the routing block. Sources committed here MUST execute.
+3. **Route** — pick sources per `references/routing.md` and emit the routing block. Sources committed here MUST execute. Run the decision-table router first so the routing block is grounded, not freelanced:
+
+   ```bash
+   python3 skills/briesearch/scripts/route_research.py --question "<question>" --json
+   ```
+
+   The script emits `{tool, rationale, depth, question}` and writes a sidecar JSON under `.cheese/briesearch/<slug>.json`. When the routed tool is a Tavily rung, pick the lowest-cost depth via:
+
+   ```bash
+   python3 skills/briesearch/scripts/pick_tavily_rung.py --question "<question>" --json
+   ```
+
+   which returns `{tool, depth, filters, question}` — `tool` is one of `tavily-search`, `tavily-research`, `tavily-extract`, `tavily-map`, `tavily-crawl`.
 4. **Gather** — fetch from each routed source in parallel (single assistant turn, multiple tool calls) where the harness supports it. For heavy calls **fork to a small, fast research sub-agent** that writes raw bodies to `.cheese/research/<slug>/raw/` and returns only the synthesis. Triggers and on-disk layout live in `references/context-isolation.md`; light triage runs inline without a fork.
-5. **Synthesize** — build the claim-level evidence table per `references/synthesis.md`, verify links resolve, apply the confidence cap.
+5. **Synthesize** — build the claim-level evidence table per `references/synthesis.md`, verify links resolve, apply the confidence cap. Run the cap deterministically against the routed source list rather than eyeballing it:
+
+   ```bash
+   python3 skills/briesearch/scripts/confidence_cap.py --sources <sources.json>
+   # or stream the source list via stdin:
+   echo '[{"url":"...","quality":"high","age_days":30,"concordance":"agrees"}, ...]' \
+     | python3 skills/briesearch/scripts/confidence_cap.py --sources -
+   ```
+
+   The script emits `{confidence, justification}` per the rubric in `references/synthesis.md` — single source caps at `don't know`, conflicting sources cap at `don't know`, three concordant high-quality recent sources reach `certain`.
 6. **Stop** — hand off. Do not implement the result, and do not promote citations into design choices; the next skill (`/cook`, `/mold`, etc.) takes the report. Alternatives raised by cited sources become open questions for the user, not recommendations (see `references/synthesis.md` § Alternatives are open questions). Implement only if the current prompt explicitly asks for research-informed implementation.
 
 When an optional MCP source is missing, follow `references/unavailable.md` — fall back once, surface the cap, never silently retry.
