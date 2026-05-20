@@ -108,16 +108,22 @@ def compute_severity(
 
 
 def bucket_fix_cost_now(*, file_count: int, module_count: int = 1) -> str:
-    """Bucket a blast-radius file/module count into contained / moderate / sprawling."""
+    """Bucket a blast-radius file/module count into contained / moderate / sprawling.
+
+    Returns one of `FIX_COST_NOW` — the tuple defines the ladder (index 0 =
+    least costly), so callers can compare buckets ordinally if they need to.
+    """
     if file_count < 0:
         raise RubricError(f"file_count must be >= 0, got {file_count}")
     if module_count < 1:
         raise RubricError(f"module_count must be >= 1, got {module_count}")
     if module_count >= 2 or file_count >= 11:
-        return "sprawling"
-    if file_count >= 3:
-        return "moderate"
-    return "contained"
+        tier = 2
+    elif file_count >= 3:
+        tier = 1
+    else:
+        tier = 0
+    return FIX_COST_NOW[tier]
 
 
 def _cmd_compute(args: argparse.Namespace) -> int:
