@@ -132,16 +132,16 @@ If no LSP is installed for the language, or the file is in a broken / incomplete
 
 ### When Serena beats tilth (if your harness has it)
 
-[Serena](https://github.com/oraios/serena) is an LSP-driven MCP that exposes the LSP queries above as named tools. If `mcp__serena__find_symbol` is in your tool list, prefer these concrete calls over the abstract LSP methods — same semantics, no IDE round-trip:
+[Serena](https://github.com/oraios/serena) is an LSP-driven MCP that exposes the LSP queries above as named tools. When Serena is configured for the codebase (`.serena/project.yml` present) and the question is type-grounded, the **calling workflow skill** should route directly to Serena rather than entering `/cheez-search` — same semantics as the abstract LSP methods above, with concrete tool names:
 
 | Question | Serena tool | Why it beats tilth |
 |----------|-------------|--------------------|
 | "Who *really* references X, accounting for aliased imports and shadowing?" | `mcp__serena__find_referencing_symbols` | Type-aware xrefs; tilth's `kind: "callers"` is name-shaped |
 | "What implements interface / trait Y?" | `mcp__serena__find_implementations` | Honors generics and re-exports; tilth surfaces every textual match |
 | "Where is the declaration of X (following imports)?" | `mcp__serena__find_declaration` | Walks the import graph; tilth returns every definition with that name |
-| "Find symbol X across the project, semantically" | `mcp__serena__find_symbol` | LSP-indexed; pair with `get_symbols_overview` for a file's symbol table |
+| "Find symbol X across the project, semantically" | `mcp__serena__find_symbol` | LSP-indexed; pair with `mcp__serena__get_symbols_overview` for a file's symbol table |
 
-Capability detection: if `mcp__serena__find_symbol` is absent, fall back to `tilth_search` and note "Serena unavailable" in evidence — do not pretend the xref was type-validated. Serena requires `.serena/project.yml` in the repo; if missing, treat it as unconfigured rather than broken. Stay on tilth for polyglot one-call queries, content / regex search, and any case where the language server can't resolve (broken or generated code).
+`/cheez-search` itself stays tilth-only — the `allowed-tools` frontmatter does not (and should not) include `mcp__serena__*`. The routing decision happens in the workflow skill *before* it enters `/cheez-search`, matching the redirection-map pattern above. If Serena is unavailable, `.serena/project.yml` is missing, or the symbol isn't LSP-resolvable (broken or generated code), the workflow skill enters `/cheez-search` and uses `tilth_search` — note "Serena unavailable" in evidence so confidence calibration reflects that the xref wasn't type-validated. tilth also remains the right call for polyglot one-call queries, content / regex search, and any case where speed at scale matters more than type fidelity.
 
 ### When code-review-graph beats tilth (if your harness has it)
 

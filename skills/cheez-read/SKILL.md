@@ -122,14 +122,14 @@ If no LSP is installed for the language, or the file is in a broken / incomplete
 
 ### When Serena beats tilth for symbol-table reads (if your harness has it)
 
-[Serena](https://github.com/oraios/serena) is an LSP-driven MCP. If `mcp__serena__get_symbols_overview` is in your tool list, prefer it for symbol-table reads where you don't need source lines:
+[Serena](https://github.com/oraios/serena) is an LSP-driven MCP. When Serena is configured for the codebase (`.serena/project.yml` present) and the read is symbol-shaped, the **calling workflow skill** should route directly to Serena rather than entering `/cheez-read`:
 
 | Goal | Serena tool | Why |
 |------|-------------|-----|
 | Just the symbol table of one file (no source lines) | `mcp__serena__get_symbols_overview` | Cheaper than tilth outline mode — LSP-indexed, no parse pass |
 | Read a single symbol's body by name (no line range needed) | `mcp__serena__find_symbol` with body inclusion | Skips the "outline → drill into 44-89" round-trip |
 
-Stay on `tilth_read` when you need hash anchors (any edit follows up), a `tilth_files` directory listing with token estimates, or token-budgeted preview mode. Serena gives you the symbol; tilth gives you the anchor. If you're going to edit afterwards, prefer tilth so the anchor is already in hand — see [`cheez-write`](../cheez-write/SKILL.md) for the symmetric "When Serena beats `tilth_edit`" guidance.
+`/cheez-read` itself stays tilth-only — its `allowed-tools` frontmatter does not include `mcp__serena__*` and shouldn't. The routing decision happens in the workflow skill *before* it enters `/cheez-read`. Enter `/cheez-read` when you need hash anchors (any edit follows up), a `tilth_files` directory listing with token estimates, token-budgeted preview mode, or when Serena is unavailable. Serena gives you the symbol; tilth gives you the anchor — if you're going to edit afterwards, prefer tilth so the anchor is already in hand. See [`cheez-write`](../cheez-write/SKILL.md) for the symmetric "When Serena beats `tilth_edit`" guidance.
 
 ---
 

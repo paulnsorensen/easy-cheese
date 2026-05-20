@@ -131,7 +131,7 @@ If no LSP is installed, or the rename touches a symbol the typechecker can't res
 
 ### When Serena beats `tilth_edit` for symbol-bounded edits (if your harness has it)
 
-[Serena](https://github.com/oraios/serena) is an LSP-driven MCP that exposes symbol-bounded edits as named tools. If `mcp__serena__rename_symbol` is in your tool list, these give the abstract LSP rename above a concrete tool — plus a broader symbol-level edit surface:
+[Serena](https://github.com/oraios/serena) is an LSP-driven MCP that exposes symbol-bounded edits as named tools. When Serena is configured for the codebase (`.serena/project.yml` present) and the edit is symbol-shaped, the **calling workflow skill** should route directly to Serena rather than entering `/cheez-write` — same pattern as the abstract LSP rename above, with a broader edit surface:
 
 | Edit | Serena tool | When to prefer over `tilth_edit` |
 |------|-------------|----------------------------------|
@@ -140,7 +140,9 @@ If no LSP is installed, or the rename touches a symbol the typechecker can't res
 | Insert before / after a named symbol (e.g. add a method to a class, or a function next to its sibling) | `mcp__serena__insert_before_symbol`, `mcp__serena__insert_after_symbol` | No anchor needed for a moving boundary |
 | Delete a symbol and check for orphaned references | `mcp__serena__safe_delete_symbol` | Validates xrefs before the cut — `tilth_edit` would happily strand callers |
 
-**Caveat — no hash-anchor concurrency safety.** Serena's edits rely on LSP and file mtime, not the content-hash check that makes `tilth_edit` race-safe. Use Serena's symbol edits only when the file is quiescent (no parallel writers, no in-flight `/cook` or `/cure` on the same path). Fall back to `tilth_edit` whenever concurrency safety dominates, the symbol is not LSP-resolvable (broken or generated code), or the edit is sub-symbol (one line inside a function). The cheez-write floor — `tilth_edit` for everything that touches code — still applies; Serena is an acceleration, not a replacement, and capability detection follows the same pattern as the tilth probe above (absent tool ⇒ stay on `tilth_edit`, do not invent it).
+`/cheez-write` itself stays tilth-only — its `allowed-tools` frontmatter does not include `mcp__serena__*` and shouldn't. The routing decision happens in the workflow skill *before* it enters `/cheez-write`, preserving the hash-anchor concurrency floor.
+
+**Caveat — no hash-anchor concurrency safety.** Serena's edits rely on LSP and file mtime, not the content-hash check that makes `tilth_edit` race-safe. The workflow skill should route to Serena only when the file is quiescent (no parallel writers, no in-flight `/cook` or `/cure` on the same path). Route back into `/cheez-write` whenever concurrency safety dominates, the symbol isn't LSP-resolvable (broken or generated code), the edit is sub-symbol (one line inside a function), or Serena is unavailable. The cheez-write floor — `tilth_edit` for everything that touches code from inside this skill — still applies; Serena is a routing alternative the caller chooses, not an in-skill acceleration.
 
 ---
 
