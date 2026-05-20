@@ -113,9 +113,22 @@ artifact: <path-to-richer-report-if-any>
 <one-line orientation: what this phase did>
 ```
 
+Do not hand-stencil the four-line preamble — invoke `shared/scripts/write_handoff_artifact.py`, which writes atomically (tmp file + `os.rename`) so the orchestrator never reads a half-written handoff:
+
+```bash
+python3 shared/scripts/write_handoff_artifact.py \
+    --slug <slug> --status "ok" --next <phase-name|done> \
+    --artifact <path-to-richer-report-or-empty> \
+    --orientation "<one-line: what this phase did>" \
+    [--body-file <path-to-rich-report-body>]
+# writes .cheese/<next>/<slug>.md
+```
+
+Pass `--status "halt: <reason>"` (quoted) when the phase needs to stop the chain.
+
 `status: ok` means the phase finished cleanly and `next` names the next phase the chain *would* run if the orchestrator chose to continue. `status: halt: <reason>` means the chain stops; `/ultracook` surfaces the reason verbatim. `next: done` is informational: an age phase writes it when the diff is clean at the medium+ severity floor (early-stop signal). The two-cure-pass cap is enforced by chain length, not by `next: done` — see `### Cap enforcement` above.
 
-For phases that already write rich reports (`/age`, `/press`, `/cure` once extended, `/cook` once extended), the slug schema is prepended at the top of the same file — there is no second file. The schema is the contract; the body is whatever the phase normally writes.
+For phases that already write rich reports (`/age`, `/press`, `/cure` once extended, `/cook` once extended), pass the rich body via `--body-file` so it lands beneath the preamble in the same file — there is no second file. The schema is the contract; the body is whatever the phase normally writes.
 
 ## When auto mode stops early
 
@@ -164,6 +177,7 @@ If the chain stopped on a halt, replace "Next step" with the halt reason and the
 | Need                              | Prefer                | Fallback                          |
 |-----------------------------------|-----------------------|-----------------------------------|
 | Spawning the per-phase worker     | `Agent()` / harness sub-agent primitive | none — without sub-agent spawn, the fresh-context property cannot be honoured |
+| Writing a phase handoff slug      | `shared/scripts/write_handoff_artifact.py` (atomic rename) | hand-written file (loses atomicity guarantee) |
 | Reading the handoff slug          | `cheez-read` / host file read | host file read                    |
 | Detecting existing handoffs       | host file glob / list | `cheez-search` `tilth_files` glob |
 
