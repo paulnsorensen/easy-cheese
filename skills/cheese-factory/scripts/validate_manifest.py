@@ -19,10 +19,10 @@ for _path in (SCRIPT_DIR, SHARED_SCRIPTS):
     if str(_path) not in sys.path:
         sys.path.insert(0, str(_path))
 
-from manifest_io import ManifestLoadError, read_mapping_arg_or_stdin
-from schema import non_empty_string, required_keys, string_list, type_name
-from validate_decomposition import validate_manifest as validate_decomposition
-from validate_pr_plan import validate_pr_plan
+from manifest_io import ManifestLoadError, read_mapping_arg_or_stdin  # noqa: E402
+from schema import non_empty_string, required_keys, string_list, type_name  # noqa: E402
+from validate_decomposition import validate_manifest as validate_decomposition  # noqa: E402
+from validate_pr_plan import validate_pr_plan  # noqa: E402
 
 PHASES = {
     "gate_approved",

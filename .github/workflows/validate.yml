@@ -25,14 +25,21 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install PyYAML
-        run: pip install --no-cache-dir pyyaml==6.0.2
+      - name: Install validators
+        run: pip install --no-cache-dir pyyaml==6.0.2 skills-ref
 
       - name: Test SKILL.md validator
         run: python3 .github/scripts/test_validate_skills.py -v
 
       - name: Validate SKILL.md frontmatter
         run: python3 .github/scripts/validate_skills.py
+
+      - name: Validate skills with skills-ref
+        run: |
+          set -euo pipefail
+          for dir in skills/*/; do
+            skills-ref validate "$dir"
+          done
 
   test:
     name: test melt + shared + cheese-factory scripts
@@ -126,7 +133,7 @@ jobs:
           code-review-graph --version
 
   lint:
-    name: lint markdown and yaml
+    name: lint markdown, yaml, python
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -145,6 +152,17 @@ jobs:
           file_or_dir: .
           config_file: .yamllint.yml
           format: github
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+
+      - name: Install ruff
+        run: pip install --no-cache-dir ruff
+
+      - name: ruff check
+        run: ruff check .
 
   pr-title:
     name: conventional commits pr title

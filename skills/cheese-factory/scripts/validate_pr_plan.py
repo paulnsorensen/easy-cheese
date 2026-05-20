@@ -19,8 +19,8 @@ for _path in (SCRIPT_DIR, SHARED_SCRIPTS):
     if str(_path) not in sys.path:
         sys.path.insert(0, str(_path))
 
-from manifest_io import ManifestLoadError, read_mapping_arg_or_stdin
-from schema import non_empty_string, type_name
+from manifest_io import ManifestLoadError, read_mapping_arg_or_stdin  # noqa: E402
+from schema import non_empty_string, type_name  # noqa: E402
 
 SHAPES = {"single", "orthogonal_flat", "stacked_linear", "diamond_stack"}
 BRANCH_RE = re.compile(r"^[A-Za-z0-9._/-]+$")
