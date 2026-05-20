@@ -73,7 +73,7 @@ def _run_gh(args: list[str], *, allow_fail: bool = False) -> str:
 
 def fetch_checks(pr: int) -> list[dict[str, Any]]:
     """Return raw check entries from `gh pr checks --json`."""
-    raw = _run_gh(["pr", "checks", str(pr), "--json", "name,state,conclusion,link"])
+    raw = _run_gh(["pr", "checks", str(pr), "--json", "name,state,bucket,link"])
     if not raw.strip():
         return []
     try:
@@ -82,7 +82,11 @@ def fetch_checks(pr: int) -> list[dict[str, Any]]:
         sys.stderr.write(f"pr-status.py: could not parse gh pr checks JSON: {exc}\n")
         sys.exit(1)
     if not isinstance(data, list):
-        return []
+        sys.stderr.write(
+            f"pr-status.py: gh pr checks returned non-list JSON (got {type(data).__name__}); "
+            "the CLI schema may have changed\n"
+        )
+        sys.exit(1)
     return data
 
 
@@ -134,13 +138,18 @@ def fetch_failure_summary(link: str) -> tuple[str, list[str]]:
 
 
 def classify_status(checks: list[dict[str, Any]]) -> str:
+    """Classify overall build state from per-check `bucket` values.
+
+    `gh pr checks` exposes a pre-classified `bucket` field (pass / fail /
+    pending / skipping) which is more stable than enumerating raw `state`
+    values across event types. Skipping counts as passing.
+    """
     if not checks:
         return "passing"
-    conclusions = {(c.get("conclusion") or "").lower() for c in checks}
-    if {"failure", "timed_out", "cancelled"} & conclusions:
+    buckets = {(c.get("bucket") or "").lower() for c in checks}
+    if "fail" in buckets:
         return "failing"
-    states = {(c.get("state") or "").lower() for c in checks}
-    if states & {"pending", "in_progress", "queued"}:
+    if "pending" in buckets:
         return "pending"
     return "passing"
 
@@ -152,14 +161,22 @@ def build_output(pr: int) -> dict[str, Any]:
 
     enriched: list[dict[str, Any]] = []
     for check in raw_checks:
+        bucket = (check.get("bucket") or "").lower()
+        state = (check.get("state") or "")
         entry: dict[str, Any] = {
             "name": check.get("name", ""),
-            "conclusion": check.get("conclusion", "") or "",
+            # Output key stays `conclusion` per spec; we derive it from gh's
+            # canonical `state` (SUCCESS / FAILURE / CANCELLED / TIMED_OUT /
+            # SKIPPED / IN_PROGRESS / QUEUED / ...) lowercased.
+            "conclusion": state.lower(),
             "url": check.get("link", "") or "",
             "failure_summary": "",
             "failed_tests": [],
         }
-        if entry["conclusion"].lower() == "failure":
+        # Enrich for the whole failure family (failure, cancelled, timed_out)
+        # via gh's pre-classified `bucket` so classification and enrichment
+        # stay in lockstep.
+        if bucket == "fail":
             summary, failed = fetch_failure_summary(entry["url"])
             entry["failure_summary"] = summary
             entry["failed_tests"] = failed

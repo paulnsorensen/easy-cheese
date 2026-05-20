@@ -1,6 +1,6 @@
 ---
 name: affinage
-description: Use this skill to triage external claims about a PR — review comments AND CI failures — by running them through the /age lens. Phrases like "respond to PR comments", "handle review feedback", "affinage the PR", "/affinage <pr>", "address the reviewer comments", "grade the PR comments". Fetches inline + review-body comments via `gh` and CI failures via `scripts/pr-status.py`, grades each through the ten age dimensions, and writes a report at `.cheese/affinage/pr-<n>.md` with extra `## Needs-investigation` and `## Reviewer-rejected` sections. Hands off to `/cure` via `handoff_context`; on return, posts per-finding GitHub replies — fixes confirmed, reverts explained, push-backs delivered. Supports `--auto --stake <floor>` for the autonomous chain. Every reply carries an `agent on behalf of;` attribution. Do NOT use to generate fresh review findings — use `/age` or `/copilot-review`. Before `/cure`; parallel to `/age`.
+description: Use this skill to triage external claims about a PR — review comments AND CI failures — by running them through the /age lens. Phrases like "respond to PR comments", "handle review feedback", "affinage the PR", "/affinage <pr>", "address the reviewer comments", "grade the PR comments". Fetches inline + review-body comments via `gh` and CI failures via `scripts/pr-status.py`, grades each through the ten age dimensions, and writes a report at `.cheese/affinage/pr-<n>.md` with extra `## Needs-investigation` and `## Reviewer-rejected` sections. Hands off to `/cure` via `handoff_context`; on return, posts per-finding GitHub replies — fixes confirmed, reverts explained, push-backs delivered. Supports `--auto --stake <floor>` for the autonomous chain. Every reply carries an `agent on behalf of;` attribution. Do NOT use to generate fresh review findings — use `/age` instead. Before `/cure`; parallel to `/age`.
 license: MIT
 ---
 
@@ -8,7 +8,7 @@ license: MIT
 
 Use this skill when the user wants to act on external claims about a PR — review comments from humans or bots, plus failing CI checks — and wants those claims graded through the same lens `/age` uses for fresh review, then handed to `/cure` for application.
 
-Do not use it to generate fresh review findings. That is `/age` (your code) or `/copilot-review` (asking another reviewer). `/affinage` only refines claims that already exist on the PR.
+Do not use it to generate fresh review findings. That is `/age` (your code). `/affinage` only refines claims that already exist on the PR.
 
 The metaphor: an *affineur* evaluates each wheel of cheese by sight / smell / sound and decides its fate. Here the wheels are review comments and CI failures.
 
@@ -32,7 +32,7 @@ Flags:
 1. **Resolve PR.** From `<pr-ref>` or `gh pr view --json number` on the current branch. Resolve `<owner>/<repo>` from the git remote.
 2. **Fetch PR status.** Call `python3 skills/affinage/scripts/pr-status.py <pr>`. The script returns JSON with build status, per-check failure summaries (last ~10 lines of failed logs + parsed failed-test names), and merge state. If the script exits non-zero, write `status: halt: pr-status-unavailable` and stop.
 3. **Fetch comments.**
-   - Inline threads: `gh api repos/<owner>/<repo>/pulls/<pr>/comments`. Filter to unresolved. Skip outdated (`outdated: true` heuristic via `position == null` for inline comments) unless `--include-outdated`.
+   - Inline threads: `gh api repos/<owner>/<repo>/pulls/<pr>/comments`. This REST endpoint returns individual review comments without thread-level resolution state, so the skill cannot filter on `isResolved` from this surface; it skips comments whose `position` is `null` (the diff has moved past the anchored line) unless `--include-outdated`. For true unresolved-only filtering, switch to the GraphQL `pullRequest.reviewThreads { isResolved }` endpoint — documented as a future enhancement.
    - Review bodies: `gh api repos/<owner>/<repo>/pulls/<pr>/reviews`. Filter to non-empty bodies. Dedupe against inline comments via `pull_request_review_id`.
 4. **Skip already-replied threads.** A thread whose most recent comment is from the resolved GitHub handle (env `RESPOND_GH_HANDLE` → `gh api user --jq .login` → `git config user.name`) has already been responded to; skip it. This keeps re-runs idempotent.
 5. **Grade through the age lens.** For each input (comment OR CI failure):
@@ -180,7 +180,7 @@ If no findings meet the floor, skip the `/cure` dispatch, post replies for `Revi
 - Grading is code-grounded, not reviewer-asserted. `CHANGES_REQUESTED` is metadata, not a severity bump.
 - Never auto-apply fixes from `/affinage` itself. Fixes go through `/cure`.
 - Every posted reply ends with the literal `agent on behalf of;` attribution via `shared/post-reply.sh`. Never call `gh api` directly to post.
-- Idempotent re-runs: skip threads where the latest comment is from the resolved handle; respect `is_resolved` from the API.
+- Idempotent re-runs: skip threads where the latest comment is from the resolved handle. The REST `/comments` endpoint does not expose thread resolution, so honest idempotency relies on the latest-comment-from-self heuristic; switch to GraphQL `reviewThreads` if cross-session resolution-state visibility becomes required.
 - CI-sourced findings get no reply (no reviewer to notify).
 - Do not invoke `/gh`. Opening or updating the PR stays user-triggered.
 - Apply the shared voice kernel (`skills/age/references/voice.md`): name confidence as `certain | speculating | don't know`; agree when no findings warrant grading.

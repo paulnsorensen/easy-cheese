@@ -65,8 +65,8 @@ def test_failing_build_extracts_summary_and_tests(pr_status, monkeypatch):
         [
             {
                 "name": "test-suite",
-                "state": "completed",
-                "conclusion": "failure",
+                "state": "FAILURE",
+                "bucket": "fail",
                 "link": "https://github.com/foo/bar/actions/runs/12345/job/67890",
             }
         ]
@@ -116,7 +116,7 @@ def test_failing_build_extracts_summary_and_tests(pr_status, monkeypatch):
 def test_pending_check_classified_pending(pr_status, monkeypatch):
     """A check still in_progress reports pending."""
     checks_json = json.dumps(
-        [{"name": "slow-job", "state": "in_progress", "conclusion": "", "link": ""}]
+        [{"name": "slow-job", "state": "IN_PROGRESS", "bucket": "pending", "link": ""}]
     )
     monkeypatch.setattr(
         subprocess,
@@ -210,7 +210,7 @@ def test_extract_failed_tests_dedups(pr_status):
 
 
 def test_classify_status_with_cancelled_is_failing(pr_status):
-    checks = [{"name": "lint", "state": "completed", "conclusion": "cancelled", "link": ""}]
+    checks = [{"name": "lint", "state": "CANCELLED", "bucket": "fail", "link": ""}]
     assert pr_status.classify_status(checks) == "failing"
 
 
@@ -239,7 +239,7 @@ def test_main_writes_json_to_stdout(pr_status, monkeypatch, capsys):
 
 def test_classify_status_with_timed_out_is_failing(pr_status):
     """timed_out conclusion classifies as failing (sibling of failure/cancelled)."""
-    checks = [{"name": "slow", "state": "completed", "conclusion": "timed_out", "link": ""}]
+    checks = [{"name": "slow", "state": "TIMED_OUT", "bucket": "fail", "link": ""}]
     assert pr_status.classify_status(checks) == "failing"
 
 
@@ -249,14 +249,14 @@ def test_multiple_failing_checks_get_independent_summaries(pr_status, monkeypatc
         [
             {
                 "name": "unit-tests",
-                "state": "completed",
-                "conclusion": "failure",
+                "state": "FAILURE",
+                "bucket": "fail",
                 "link": "https://github.com/foo/bar/actions/runs/111/job/1",
             },
             {
                 "name": "e2e",
-                "state": "completed",
-                "conclusion": "failure",
+                "state": "FAILURE",
+                "bucket": "fail",
                 "link": "https://github.com/foo/bar/actions/runs/222/job/2",
             },
         ]
@@ -319,8 +319,8 @@ def test_failing_check_with_empty_log_yields_empty_summary(pr_status, monkeypatc
         [
             {
                 "name": "slow",
-                "state": "completed",
-                "conclusion": "failure",
+                "state": "FAILURE",
+                "bucket": "fail",
                 "link": "https://github.com/foo/bar/actions/runs/999/job/1",
             }
         ]
@@ -354,8 +354,8 @@ def test_failing_check_with_no_run_id_in_link_yields_empty_summary(pr_status, mo
         [
             {
                 "name": "weird",
-                "state": "completed",
-                "conclusion": "failure",
+                "state": "FAILURE",
+                "bucket": "fail",
                 "link": "https://example.com/no-run-id-here",
             }
         ]
@@ -377,3 +377,89 @@ def test_failing_check_with_no_run_id_in_link_yields_empty_summary(pr_status, mo
     output = pr_status.build_output(42)
     assert output["build"]["checks"][0]["failure_summary"] == ""
     assert output["build"]["checks"][0]["failed_tests"] == []
+
+
+def test_non_list_json_from_gh_checks_exits_one(pr_status, monkeypatch):
+    """Regression for cure #3: valid JSON that isn't a list now exits 1
+    (was silently returning []), so a future schema flip is loud not silent."""
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        _fake_run([(_matcher(["gh", "pr", "checks"]), '{"error": "unexpected shape"}', 0)]),
+    )
+    with pytest.raises(SystemExit) as exc:
+        pr_status.fetch_checks(42)
+    assert exc.value.code == 1
+
+
+def test_gh_pr_checks_uses_real_schema_fields(pr_status, monkeypatch):
+    """Regression for cure #1: the --json arg passed to `gh pr checks` must use
+    fields that the CLI actually returns. The original implementation requested
+    `conclusion` (which does not exist on `gh pr checks`) and died on every real
+    invocation; only the recursive integration test caught it because the unit
+    mocks lied. Lock in the correct shape so future edits stay honest."""
+    captured: list[list[str]] = []
+
+    def runner(cmd, **kwargs):
+        captured.append(list(cmd))
+        if cmd[:3] == ["gh", "pr", "checks"]:
+            return _FakeCompletedProcess(stdout="[]")
+        return _FakeCompletedProcess(stdout="")
+
+    monkeypatch.setattr(subprocess, "run", runner)
+    pr_status.fetch_checks(42)
+
+    check_call = next(c for c in captured if c[:3] == ["gh", "pr", "checks"])
+    json_arg_idx = check_call.index("--json") + 1
+    fields = check_call[json_arg_idx].split(",")
+    # `conclusion` does NOT exist on `gh pr checks --json`; `bucket` is the real
+    # pre-classified field. The original bug landed exactly here.
+    assert "conclusion" not in fields, (
+        "gh pr checks has no `conclusion` field; use `bucket` (pass/fail/pending/skipping)"
+    )
+    assert "bucket" in fields, "must request `bucket` so classify_status has its input"
+    # `state` is also a real field and is used to derive the per-check `conclusion`
+    # output value, so it must be requested too.
+    assert "state" in fields
+
+
+def test_failing_state_with_cancelled_bucket_fail_enriches(pr_status, monkeypatch):
+    """Regression for cure #4: enrichment runs on bucket==fail, so cancelled
+    and timed_out states (which gh classifies as bucket=fail) now get summary
+    + failed_tests population, not just classification."""
+    checks_json = json.dumps(
+        [
+            {
+                "name": "slow",
+                "state": "CANCELLED",
+                "bucket": "fail",
+                "link": "https://github.com/foo/bar/actions/runs/555/job/1",
+            }
+        ]
+    )
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        _fake_run(
+            [
+                (_matcher(["gh", "pr", "checks"]), checks_json, 0),
+                (
+                    _matcher(["gh", "pr", "view"]),
+                    json.dumps({"mergeable": "MERGEABLE", "mergeStateStatus": "CLEAN"}),
+                    0,
+                ),
+                (
+                    _matcher(["gh", "run", "view"]),
+                    "job cancelled by user at step 3\nFAILED tests/cancel.py::test_x",
+                    0,
+                ),
+            ]
+        ),
+    )
+    output = pr_status.build_output(42)
+    check = output["build"]["checks"][0]
+    # state lowercased into conclusion (spec output contract preserved).
+    assert check["conclusion"] == "cancelled"
+    # bucket==fail triggers enrichment for non-failure states too — the cure #4 fix.
+    assert "tests/cancel.py::test_x" in check["failed_tests"]
+    assert "cancelled by user" in check["failure_summary"]

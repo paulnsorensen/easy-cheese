@@ -12,6 +12,8 @@ setup() {
     FAKE_BIN="$BATS_TEST_TMPDIR/bin"
     GH_LOG="$BATS_TEST_TMPDIR/gh.log"
     export GH_LOG
+    : > "$GH_LOG"
+    ORIG_PATH="$PATH"
 
     mkdir -p "$FAKE_BIN"
 
@@ -37,6 +39,11 @@ EOF
 
     export PATH="$FAKE_BIN:$PATH"
     unset RESPOND_GH_HANDLE
+}
+
+teardown() {
+    export PATH="${ORIG_PATH:-$PATH}"
+    unset ORIG_PATH
 }
 
 @test "--thread mode hits the pulls comments replies endpoint" {
