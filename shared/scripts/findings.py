@@ -283,9 +283,6 @@ def _split_composed_verb(verb: str) -> list[str]:
     `1,3,5` stays one atom (numeric list). `all-high, 7` becomes ["all-high", "7"].
     `all-blocker, cheap, skip 4` becomes ["all-blocker", "cheap", "skip 4"].
     """
-    # If the whole thing is just digits and commas, it's a numeric atom.
     if _NUM_LIST_RE.match(verb.replace(" ", "")):
         return [verb]
-    # Otherwise split on comma. Each piece may be a named verb, a single id,
-    # a range, or a skip — _resolve_atom handles all of them.
     return [piece.strip() for piece in verb.split(",") if piece.strip()]

@@ -3,21 +3,6 @@
 Encodes the rubric documented in skills/age/references/dimensions.md so the
 reviewer LLM does not re-derive the formula on every finding.
 
-Severity formula:
-
-    sev = base(dimension, finding)
-    if location == "contract" and dimension in LOCATION_SENSITIVE:
-        sev = bump(sev)
-    if fix_cost_later == "structural":
-        sev = bump(sev)
-    sev = cap(sev, "blocker")
-
-Fix-cost-now bucketing:
-
-    contained  : 1-2 files, single module
-    moderate   : 3-10 files, single module
-    sprawling  : 11+ files, OR multiple modules
-
 CLI:
 
     python3 shared/scripts/severity.py compute \\

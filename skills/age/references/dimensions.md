@@ -27,7 +27,7 @@ Each finding's severity is computed, not declared. Three independent contributor
 2. **Location bump** — `+1` tier if `location = contract` *and* the dimension is location-sensitive (see § Location sensitivity).
 3. **Compounding bump** — `+1` tier if `fix-cost-later = structural`.
 
-Do not compute the formula in-head — invoke `shared/scripts/severity.py compute` (canonical reference; pseudocode below is for human readers, not for the reviewer to re-derive):
+Do not compute the formula in-head — invoke `shared/scripts/severity.py compute`:
 
 ```bash
 python3 shared/scripts/severity.py compute \
@@ -36,20 +36,6 @@ python3 shared/scripts/severity.py compute \
     --fix-cost-later <contained|spreading|structural>
 # -> blocker | high | medium | low
 ```
-
-Reference pseudocode (mirrors the script):
-
-```
-sev = base(dimension, finding)
-if location == "contract" and dimension in LOCATION_SENSITIVE:
-    sev = bump(sev)
-if fix_cost_later == "structural":
-    sev = bump(sev)
-# v2: sev = max(sev, criticality_floor(file))   — criticality inference is bookshelved
-sev = cap(sev, "blocker")
-```
-
-`bump(low) = medium`, `bump(medium) = high`, `bump(high) = blocker`, `bump(blocker) = blocker`.
 
 Mental shortcut: a class-private encapsulation leak lands `low`; the same leak at a slice's `index` re-export lands `blocker` (base `high` → contract bump → structural fix-cost bump, capped).
 
@@ -102,14 +88,6 @@ Bucket the blast-radius file count for the proposed fix. Do not bucket in-head �
 python3 shared/scripts/severity.py bucket --files <N> [--modules <M>]
 # -> contained | moderate | sprawling
 ```
-
-Reference table (mirrors the script):
-
-| Tier | Heuristic |
-| --- | --- |
-| `contained` | 1-2 files, single module |
-| `moderate` | 3-10 files, single module |
-| `sprawling` | 11+ files, **or** spans multiple modules |
 
 Source priority for the raw count:
 
