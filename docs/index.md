@@ -24,10 +24,14 @@ Each skill is independently invocable — you don't have to run the full pipelin
 ## Get started
 
 ```bash
-gh skill install paulnsorensen/easy-cheese
+npx skills@latest add paulnsorensen/easy-cheese
 ```
 
-That's the portable path. macOS users who want the surrounding ecosystem (CLI tools + MCP servers) in one shot can use the bootstrap script. See [Install](install.md) for every install path, MCP server setup, and CLI tool setup.
+Pick the skills and agents you want in the installer, then start with
+`/cheese` if you want routing help. macOS users who also want the surrounding
+ecosystem (CLI tools + MCP servers) in one shot can use the optional bootstrap
+script. See [Install](install.md) for every install path, MCP server setup, and
+CLI tool setup.
 
 ## Skills
 
