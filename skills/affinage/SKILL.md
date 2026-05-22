@@ -169,6 +169,8 @@ When invoked with `--auto --stake <floor>`:
 - Needs-investigation items: post the human-investigating reply.
 - Never invoke `/gh`.
 
+The whole cure chain (cure → `/age --scope --auto` → up to the two-cure-pass cap) must run in the parent affinage context so the post-cure reply step still has the original graded findings (slug, ids, `from-comment:<id>` tags, drafted push-back text) in memory. Same in-session-memory contract as `/age --auto`'s two-pass cap. Spawning the cure chain in a sub-agent silently breaks reply posting — do not.
+
 If no findings meet the floor, skip the `/cure` dispatch, post replies for `Reviewer-rejected` + `Needs-investigation` items only, and exit with `status: ok / next: done / "no findings at or above <floor>"`.
 
 ### --hard mode

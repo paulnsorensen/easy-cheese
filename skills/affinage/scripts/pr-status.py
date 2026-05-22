@@ -44,7 +44,7 @@ _FAILED_TEST_PATTERNS = (
     # rust:    test foo::bar ... FAILED
     re.compile(r"test\s+(\S+)\s+\.\.\.\s+FAILED"),
     # jest:    ✗ test name
-    re.compile(r"^\s*[✗×]\s+(.+?)$", re.MULTILINE),
+    re.compile(r"^\s*[✗×]\s+(.+)$", re.MULTILINE),
 )
 
 
@@ -62,6 +62,10 @@ def _run_gh(args: list[str], *, allow_fail: bool = False) -> str:
         sys.exit(2)
     if result.returncode != 0:
         if allow_fail:
+            sys.stderr.write(
+                f"pr-status.py: gh {' '.join(args)} failed (exit {result.returncode}); "
+                "continuing with empty result\n"
+            )
             return ""
         sys.stderr.write(
             f"pr-status.py: gh {' '.join(args)} failed (exit {result.returncode}): "
@@ -96,7 +100,11 @@ def fetch_merge_state(pr: int) -> dict[str, str]:
         return {"mergeable": "UNKNOWN", "state": "UNKNOWN"}
     try:
         data = json.loads(raw)
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as exc:
+        sys.stderr.write(
+            f"pr-status.py: could not parse gh pr view JSON ({exc}); "
+            "treating merge state as UNKNOWN\n"
+        )
         return {"mergeable": "UNKNOWN", "state": "UNKNOWN"}
     return {
         "mergeable": data.get("mergeable", "UNKNOWN") or "UNKNOWN",
