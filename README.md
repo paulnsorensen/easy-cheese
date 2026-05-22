@@ -425,10 +425,11 @@ The optional tools listed under [Optional tools](#optional-tools) are referenced
 
 ### macOS bootstrap script (optional)
 
-Use [`scripts/install.sh`](scripts/install.sh) when you want the surrounding
-macOS toolchain and MCP servers set up for you. The recommended way to install
-the skills themselves is still the `skills.sh` flow above; this script is the
-fast lane for the wider ecosystem.
+Use
+[`scripts/install.sh`](https://github.com/paulnsorensen/easy-cheese/blob/main/scripts/install.sh)
+when you want the surrounding macOS toolchain and MCP servers set up for you.
+The recommended way to install the skills themselves is still the `skills.sh`
+flow above; this script is the fast lane for the wider ecosystem.
 
 It does the following in one shot:
 
