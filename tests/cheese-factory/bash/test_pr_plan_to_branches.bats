@@ -14,6 +14,8 @@
 setup() {
     REPO_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/../../.." && pwd)"
     SCRIPT="$REPO_ROOT/skills/cheese-factory/scripts/pr_plan_to_branches.py"
+    # Bundles run self-contained; raw-source tests shim shared/ + sibling scripts.
+    export PYTHONPATH="$REPO_ROOT/shared/scripts:$REPO_ROOT/skills/cheese-factory/scripts${PYTHONPATH:+:$PYTHONPATH}"
     PLAN_FILE="$BATS_TEST_TMPDIR/plan.yaml"
 }
 

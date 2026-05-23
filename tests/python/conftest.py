@@ -7,6 +7,7 @@ the normal `import` machinery, so we load them by path with importlib.
 from __future__ import annotations
 
 import importlib.util
+import sys
 from pathlib import Path
 from types import ModuleType
 
@@ -17,6 +18,9 @@ SCRIPTS_DIR = REPO_ROOT / "skills" / "melt" / "scripts"
 MOLD_SCRIPTS_DIR = REPO_ROOT / "skills" / "mold" / "scripts"
 AFFINAGE_SCRIPTS_DIR = REPO_ROOT / "skills" / "affinage" / "scripts"
 SHARED_SCRIPTS = REPO_ROOT / "shared" / "scripts"
+
+if str(SHARED_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(SHARED_SCRIPTS))
 
 
 def _load(name: str, path: Path) -> ModuleType:

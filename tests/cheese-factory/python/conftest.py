@@ -7,6 +7,7 @@ already, but we keep the loader pattern consistent with the wider repo).
 from __future__ import annotations
 
 import importlib.util
+import os
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -22,6 +23,12 @@ SHARED_SCRIPTS = REPO_ROOT / "shared" / "scripts"
 for _path in (SCRIPTS_DIR, SHARED_SCRIPTS):
     if str(_path) not in sys.path:
         sys.path.insert(0, str(_path))
+
+# Subprocess CLI tests spawn the raw scripts; bundles run self-contained, so
+# the source-level tests inherit shared/ + sibling scripts via PYTHONPATH.
+os.environ["PYTHONPATH"] = os.pathsep.join(
+    p for p in (str(SCRIPTS_DIR), str(SHARED_SCRIPTS), os.environ.get("PYTHONPATH", "")) if p
+)
 
 
 def _load(name: str, path: Path) -> ModuleType:

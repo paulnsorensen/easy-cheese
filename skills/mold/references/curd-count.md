@@ -24,7 +24,7 @@ After `curdle.md` writes the spec to disk, run the script and read the JSON
 digest into context:
 
 ```bash
-python3 skills/mold/scripts/curd-count.py .cheese/specs/<slug>.md \
+python3 ${CLAUDE_SKILL_DIR}/scripts/curd-count.py .cheese/specs/<slug>.md \
   --blast-radius <low|medium|high>
 ```
 
