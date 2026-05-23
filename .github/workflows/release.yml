@@ -56,16 +56,15 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/build_pyz.py
-          bundles="skills/melt/scripts/melt.pyz skills/cheese-factory/scripts/cheese-factory.pyz"
-          # Fail loudly if a bundle is missing rather than publishing a broken skill.
-          for pyz in $bundles; do
-            test -f "$pyz" || { echo "::error::expected bundle missing after build: $pyz"; exit 1; }
-          done
-          git add -f $bundles
-          # Confirm bundles are actually staged before they get published.
-          staged="$(git diff --cached --name-only -- '*.pyz')"
-          for pyz in $bundles; do
-            echo "$staged" | grep -qxF "$pyz" || { echo "::error::bundle not staged for publish: $pyz"; exit 1; }
+          shopt -s nullglob
+          bundles=(skills/*/scripts/easy-cheese.pyz)
+          # Fail loudly if nothing was built rather than publishing broken skills.
+          test ${#bundles[@]} -gt 0 || { echo "::error::no skill bundles were built"; exit 1; }
+          git add -f "${bundles[@]}"
+          # Confirm every built bundle is actually staged before publish.
+          staged="$(git diff --cached --name-only)"
+          for pyz in "${bundles[@]}"; do
+            printf '%s\n' "$staged" | grep -qxF "$pyz" || { echo "::error::bundle not staged for publish: $pyz"; exit 1; }
           done
           git -c user.email=actions@github.com -c user.name="github-actions[bot]" commit -m "build: bundle skill .pyz for release"
 

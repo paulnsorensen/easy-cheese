@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Build self-contained .pyz bundles for skills that consume shared/scripts.
+"""Build one self-contained .pyz bundling every skill-runtime Python module.
 
-Each consuming skill ships one ``<skill>.pyz`` whose entry point is a generated
-``__main__.py`` dispatcher: the first argument selects a subcommand and the rest
-are forwarded to that tool's existing ``main``. ``shared/scripts`` stays the
-single source of truth; it is copied (never forked) into the staging dir before
-``zipapp`` archives it, so the bundle resolves ``from git_utils import ...`` and
-friends as ordinary intra-zip imports with no sys.path traversal.
+`easy-cheese.pyz` contains all of `shared/scripts` plus every consuming skill's
+scripts, with a generated `__main__.py` subcommand dispatcher (`runpy`). Skills are
+installed individually (`gh skill install`), so a single shared bundle has nowhere
+to live that survives install — the one artifact is therefore copied into each
+consuming skill's `scripts/` dir, leaving every skill self-contained. `shared/scripts`
+stays the single source of truth: it is copied (never forked) into the bundle at
+build time and resolved as ordinary intra-zip imports with no sys.path traversal.
 """
 
 from __future__ import annotations
@@ -20,24 +21,29 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SHARED_SCRIPTS = REPO_ROOT / "shared" / "scripts"
+BUNDLE_NAME = "easy-cheese.pyz"
 
-# skill -> {subcommand: source script filename}. Subcommands keep the script's
-# stem verbatim (hyphens included); the staged module name underscores it.
-CONSUMERS: dict[str, dict[str, str]] = {
-    "melt": {
-        "batch-resolve": "batch-resolve.py",
-        "conflict-pick": "conflict-pick.py",
-        "conflict-summary": "conflict-summary.py",
-        "detect-squash-residue": "detect-squash-residue.py",
-        "lockfile-resolve": "lockfile-resolve.py",
-    },
-    "cheese-factory": {
-        "pr_plan_to_branches": "pr_plan_to_branches.py",
-        "validate_decomposition": "validate_decomposition.py",
-        "validate_manifest": "validate_manifest.py",
-        "validate_pr_plan": "validate_pr_plan.py",
-    },
+# subcommand -> (skill, source script filename). Subcommands keep each script's
+# stem verbatim (hyphens included); the staged module name underscores it. Every
+# subcommand is unique across skills, so the dispatch namespace is flat.
+TOOLS: dict[str, tuple[str, str]] = {
+    "batch-resolve": ("melt", "batch-resolve.py"),
+    "conflict-pick": ("melt", "conflict-pick.py"),
+    "conflict-summary": ("melt", "conflict-summary.py"),
+    "detect-squash-residue": ("melt", "detect-squash-residue.py"),
+    "lockfile-resolve": ("melt", "lockfile-resolve.py"),
+    "pr_plan_to_branches": ("cheese-factory", "pr_plan_to_branches.py"),
+    "validate_decomposition": ("cheese-factory", "validate_decomposition.py"),
+    "validate_manifest": ("cheese-factory", "validate_manifest.py"),
+    "validate_pr_plan": ("cheese-factory", "validate_pr_plan.py"),
+    "pr-status": ("affinage", "pr-status.py"),
+    "curd-count": ("mold", "curd-count.py"),
 }
+
+# Skills whose SKILL.md invokes a subcommand and therefore ship a copy of the bundle.
+DEPLOY_SKILLS = sorted({skill for skill, _ in TOOLS.values()})
+
+_CACHED_BUNDLE: Path | None = None
 
 
 def _module_name(filename: str) -> str:
@@ -62,45 +68,56 @@ def _dispatcher_source(sub_to_module: dict[str, str]) -> str:
     )
 
 
-def build_skill(skill: str, out_dir: Path | None = None) -> Path:
-    """Build ``<skill>.pyz``. Writes to ``out_dir`` if given, else the skill's
-    own ``scripts/`` directory. Returns the archive path."""
-    files = CONSUMERS[skill]
-    skill_scripts = REPO_ROOT / "skills" / skill / "scripts"
-    dest = out_dir if out_dir is not None else skill_scripts
-    dest.mkdir(parents=True, exist_ok=True)
-    sub_to_module = {sub: _module_name(fn) for sub, fn in files.items()}
+def build_bundle(target: Path) -> Path:
+    """Build the unified bundle at ``target`` (a .pyz path). Returns it."""
+    target.parent.mkdir(parents=True, exist_ok=True)
+    sub_to_module = {sub: _module_name(fn) for sub, (_, fn) in TOOLS.items()}
     with tempfile.TemporaryDirectory() as td:
         stage = Path(td)
         for py in SHARED_SCRIPTS.glob("*.py"):
             shutil.copy(py, stage / py.name)
-        for fn in files.values():
-            shutil.copy(skill_scripts / fn, stage / f"{_module_name(fn)}.py")
+        for skill, fn in TOOLS.values():
+            shutil.copy(REPO_ROOT / "skills" / skill / "scripts" / fn, stage / f"{_module_name(fn)}.py")
         (stage / "__main__.py").write_text(_dispatcher_source(sub_to_module))
-        target = dest / f"{skill}.pyz"
         zipapp.create_archive(stage, target=target, interpreter="/usr/bin/env python3")
     return target
 
 
-def build_all(out_dir: Path | None = None) -> list[Path]:
-    return [build_skill(skill, out_dir) for skill in CONSUMERS]
+def cached_bundle() -> Path:
+    """Build the bundle once per process (to a temp dir) and reuse it. Used by the
+    test conftests so the suite imports modules from the bundled artifact."""
+    global _CACHED_BUNDLE
+    if _CACHED_BUNDLE is None or not _CACHED_BUNDLE.exists():
+        _CACHED_BUNDLE = build_bundle(Path(tempfile.mkdtemp(prefix="ec-pyz-")) / BUNDLE_NAME)
+    return _CACHED_BUNDLE
+
+
+def deploy() -> list[Path]:
+    """Build once and copy the bundle into each consuming skill's scripts/ dir."""
+    with tempfile.TemporaryDirectory() as td:
+        built = build_bundle(Path(td) / BUNDLE_NAME)
+        out: list[Path] = []
+        for skill in DEPLOY_SKILLS:
+            dest = REPO_ROOT / "skills" / skill / "scripts" / BUNDLE_NAME
+            shutil.copy(built, dest)
+            out.append(dest)
+    return out
 
 
 def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(description="Build .pyz bundles for shared-consuming skills.")
+    parser = argparse.ArgumentParser(description="Build the unified easy-cheese .pyz bundle.")
     parser.add_argument(
         "--out-dir",
         type=Path,
         default=None,
-        help="Write bundles here instead of each skill's scripts/ dir.",
+        help="Build a single bundle here instead of deploying into each skill's scripts/ dir.",
     )
-    parser.add_argument("skills", nargs="*", help="Skills to build (default: all).")
     args = parser.parse_args(argv[1:])
-    unknown = [s for s in args.skills if s not in CONSUMERS]
-    if unknown:
-        parser.error(f"unknown skill(s): {', '.join(unknown)}; known: {', '.join(CONSUMERS)}")
-    for skill in args.skills or list(CONSUMERS):
-        print(f"built {build_skill(skill, args.out_dir)}")
+    if args.out_dir is not None:
+        print(f"built {build_bundle(args.out_dir / BUNDLE_NAME)}")
+    else:
+        for dest in deploy():
+            print(f"deployed {dest}")
     return 0
 
 

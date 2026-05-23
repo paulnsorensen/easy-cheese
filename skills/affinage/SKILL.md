@@ -30,7 +30,7 @@ Flags:
 ## Flow
 
 1. **Resolve PR.** From `<pr-ref>` or `gh pr view --json number` on the current branch. Resolve `<owner>/<repo>` from the git remote.
-2. **Fetch PR status.** Call `python3 ${CLAUDE_SKILL_DIR}/scripts/pr-status.py <pr>`. The script returns JSON with build status, per-check failure summaries (last ~10 lines of failed logs + parsed failed-test names), and merge state. If the script exits non-zero, write `status: halt: pr-status-unavailable` and stop.
+2. **Fetch PR status.** Call `python3 ${CLAUDE_SKILL_DIR}/scripts/easy-cheese.pyz pr-status <pr>`. The script returns JSON with build status, per-check failure summaries (last ~10 lines of failed logs + parsed failed-test names), and merge state. If the script exits non-zero, write `status: halt: pr-status-unavailable` and stop.
 3. **Fetch comments.**
    - Inline threads: `gh api repos/<owner>/<repo>/pulls/<pr>/comments`. This REST endpoint returns individual review comments without thread-level resolution state, so the skill cannot filter on `isResolved` from this surface; it skips comments whose `position` is `null` (the diff has moved past the anchored line) unless `--include-outdated`. For true unresolved-only filtering, switch to the GraphQL `pullRequest.reviewThreads { isResolved }` endpoint — documented as a future enhancement.
    - Review bodies: `gh api repos/<owner>/<repo>/pulls/<pr>/reviews`. Filter to non-empty bodies. Dedupe against inline comments via `pull_request_review_id`.
@@ -70,7 +70,7 @@ Code search and reading go through cheez-* skills (`/cheez-search`, `/cheez-read
 
 | Need | Prefer | Fallback |
 | --- | --- | --- |
-| PR status (build + merge) | `${CLAUDE_SKILL_DIR}/scripts/pr-status.py` | manual `gh pr checks` + `gh pr view` |
+| PR status (build + merge) | `${CLAUDE_SKILL_DIR}/scripts/easy-cheese.pyz pr-status` | manual `gh pr checks` + `gh pr view` |
 | GitHub fetch | `gh api` | none (skill halts) |
 | Reply posting | `shared/post-reply.sh` | none — direct `gh api` calls bypass the `agent on behalf of;` attribution |
 | Diff inspection | `delta` | `git diff --unified=3` |
@@ -195,4 +195,4 @@ If no findings meet the floor, skip the `/cure` dispatch, post replies for `Revi
 - `skills/cure/references/selection.md` — selection verbs and composition.
 - `shared/handoff-gate.md` — gate primitives.
 - `shared/post-reply.sh` — reply posting with `agent on behalf of;` attribution.
-- `${CLAUDE_SKILL_DIR}/scripts/pr-status.py` — PR status fetcher.
+- `${CLAUDE_SKILL_DIR}/scripts/easy-cheese.pyz pr-status` — PR status fetcher.

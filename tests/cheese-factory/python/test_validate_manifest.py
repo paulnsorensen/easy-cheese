@@ -10,6 +10,10 @@ from types import ModuleType
 
 import yaml
 
+import build_pyz
+
+BUNDLE = build_pyz.cached_bundle()
+
 
 def _curds(n: int = 5) -> list[dict]:
     return [
@@ -200,41 +204,20 @@ class TestCLIs:
     def test_validate_manifest_cli_accepts_yaml(self, tmp_path: Path) -> None:
         path = tmp_path / "manifest.yaml"
         path.write_text(yaml.safe_dump(_manifest(), sort_keys=False), encoding="utf-8")
-        script = (
-            Path(__file__).resolve().parents[3]
-            / "skills"
-            / "cheese-factory"
-            / "scripts"
-            / "validate_manifest.py"
-        )
-        result = subprocess.run([sys.executable, str(script), str(path)], capture_output=True, text=True)
+        result = subprocess.run([sys.executable, str(BUNDLE), "validate_manifest", str(path)], capture_output=True, text=True)
         assert result.returncode == 0, result.stderr
         assert "manifest valid" in result.stdout
 
     def test_validate_decomposition_cli_accepts_yaml(self, tmp_path: Path) -> None:
         path = tmp_path / "manifest.yaml"
         path.write_text(yaml.safe_dump(_manifest(), sort_keys=False), encoding="utf-8")
-        script = (
-            Path(__file__).resolve().parents[3]
-            / "skills"
-            / "cheese-factory"
-            / "scripts"
-            / "validate_decomposition.py"
-        )
-        result = subprocess.run([sys.executable, str(script), str(path)], capture_output=True, text=True)
+        result = subprocess.run([sys.executable, str(BUNDLE), "validate_decomposition", str(path)], capture_output=True, text=True)
         assert result.returncode == 0, result.stderr
         assert "decomposition valid" in result.stdout
 
     def test_validate_pr_plan_cli_accepts_json(self, tmp_path: Path) -> None:
         path = tmp_path / "pr-plan.json"
         path.write_text(json.dumps(_pr_plan()), encoding="utf-8")
-        script = (
-            Path(__file__).resolve().parents[3]
-            / "skills"
-            / "cheese-factory"
-            / "scripts"
-            / "validate_pr_plan.py"
-        )
-        result = subprocess.run([sys.executable, str(script), str(path)], capture_output=True, text=True)
+        result = subprocess.run([sys.executable, str(BUNDLE), "validate_pr_plan", str(path)], capture_output=True, text=True)
         assert result.returncode == 0, result.stderr
         assert "plan valid" in result.stdout
