@@ -36,6 +36,12 @@ STUB
     chmod +x "$STUB_BIN/$name"
 }
 
+# Count the embedded skills in $EC_FALLBACK_SKILLS without spawning subshells.
+count_skills() {
+    set -- $EC_FALLBACK_SKILLS
+    echo $#
+}
+
 # -- ec_tool_binary -----------------------------------------------------------
 
 @test "ec_tool_binary maps formula names to binaries" {
@@ -657,11 +663,7 @@ STUB
     grep -q "^gh skill install paulnsorensen/easy-cheese press --agent claude-code --scope user --force$" "$STUB_LOG"
     grep -q "^gh skill install paulnsorensen/easy-cheese ultracook --agent claude-code --scope user --force$" "$STUB_LOG"
     grep -q "^gh skill install paulnsorensen/easy-cheese cheese-factory --agent claude-code --scope user --force$" "$STUB_LOG"
-    local skill skill_count=0
-    for skill in $EC_FALLBACK_SKILLS; do
-        skill_count=$((skill_count + 1))
-    done
-    [ "$(grep -c '^gh skill install ' "$STUB_LOG")" -eq "$skill_count" ]
+    [ "$(grep -c '^gh skill install ' "$STUB_LOG")" -eq "$(count_skills)" ]
 }
 
 @test "ec_install_skills falls back to embedded list when gh api returns empty" {
@@ -671,11 +673,7 @@ STUB
     run ec_install_skills claude-code
     [ "$status" -eq 0 ]
     [[ "$output" == *"using embedded fallback list"* ]]
-    local skill skill_count=0
-    for skill in $EC_FALLBACK_SKILLS; do
-        skill_count=$((skill_count + 1))
-    done
-    [ "$(grep -c '^gh skill install ' "$STUB_LOG")" -eq "$skill_count" ]
+    [ "$(grep -c '^gh skill install ' "$STUB_LOG")" -eq "$(count_skills)" ]
 }
 
 @test "ec_install_skills passes --pin when EC_SKILL_REF is set" {
@@ -829,11 +827,8 @@ STUB
     grep -q "^gh skill install paulnsorensen/easy-cheese age --agent claude-code --scope user --force$" "$STUB_LOG"
     grep -q "^gh skill install paulnsorensen/easy-cheese age --agent cursor --scope user --force$" "$STUB_LOG"
     grep -q "^gh skill install paulnsorensen/easy-cheese age --agent codex --scope user --force$" "$STUB_LOG"
-    local expected_harness_count=3
-    local skill skill_count=0
-    for skill in $EC_FALLBACK_SKILLS; do
-        skill_count=$((skill_count + 1))
-    done
+    local expected_harness_count=3 skill_count
+    skill_count=$(count_skills)
     [ "$(grep -c '^gh skill install ' "$STUB_LOG")" -eq $((skill_count * expected_harness_count)) ]
 }
 
@@ -852,11 +847,7 @@ STUB
     grep -q "^gh skill install paulnsorensen/easy-cheese age --agent claude-code --scope user --force$" "$STUB_LOG"
     grep -q "^gh skill install paulnsorensen/easy-cheese press --agent claude-code --scope user --force$" "$STUB_LOG"
     # One install per fallback skill, no broken --all flag.
-    local skill skill_count=0
-    for skill in $EC_FALLBACK_SKILLS; do
-        skill_count=$((skill_count + 1))
-    done
-    [ "$(grep -c '^gh skill install ' "$STUB_LOG")" -eq "$skill_count" ]
+    [ "$(grep -c '^gh skill install ' "$STUB_LOG")" -eq "$(count_skills)" ]
     # No brew calls should have happened.
     ! grep -q "^brew" "$STUB_LOG" || false
 }
