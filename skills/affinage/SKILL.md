@@ -30,7 +30,10 @@ Flags:
 ## Flow
 
 1. **Resolve PR.** From `<pr-ref>` or `gh pr view --json number` on the current branch. Resolve `<owner>/<repo>` from the git remote.
-2. **Fetch PR status.** Call `python3 skills/affinage/scripts/pr-status.py <pr>`. The script returns JSON with build status, per-check failure summaries (last ~10 lines of failed logs + parsed failed-test names), and merge state. If the script exits non-zero, write `status: halt: pr-status-unavailable` and stop.
+2. **Fetch PR status.** Call `python3 skills/affinage/scripts/pr-status.py <pr>`. The script returns JSON with build status, per-check failure summaries (last ~10 lines of failed logs + parsed failed-test names), and merge state. Map the exit code:
+   - **Exit 0** — proceed with grading.
+   - **Exit 3** (`logs-expired`) — the build is failing but every failing check's log was unfetchable (typically expired GitHub Actions logs past the retention window), so there is nothing to ground a CI finding on. Write `status: halt: pr-status-logs-expired` and stop with the hint: *"CI is failing but the logs have expired — rerun the failed jobs (`gh run rerun <run-id> --failed`) and re-invoke `/affinage`."* Affineurs often run a few days after a PR opens, so this is routine, not an edge case.
+   - **Any other non-zero** (1 PR/gh API error, 2 missing gh binary) — write `status: halt: pr-status-unavailable` and stop.
 3. **Fetch comments.**
    - Inline threads: `gh api repos/<owner>/<repo>/pulls/<pr>/comments`. This REST endpoint returns individual review comments without thread-level resolution state, so the skill cannot filter on `isResolved` from this surface; it skips comments whose `position` is `null` (the diff has moved past the anchored line) unless `--include-outdated`. For true unresolved-only filtering, switch to the GraphQL `pullRequest.reviewThreads { isResolved }` endpoint — documented as a future enhancement.
    - Review bodies: `gh api repos/<owner>/<repo>/pulls/<pr>/reviews`. Filter to non-empty bodies. Dedupe against inline comments via `pull_request_review_id`.
@@ -44,13 +47,19 @@ Flags:
      - `## Needs-investigation` when the claim is plausible but requires evidence outside the diff (e.g., downstream caller in another repo).
      - `## Reviewer-rejected` when the claim maps to no dimension, is ungrounded, or is pure style.
 6. **Write report** to `.cheese/affinage/pr-<n>.md` with the four-line handoff slug at the top, then the age-format body plus the two extra sections. See `## Output` below.
-7. **Selection gate** (interactive mode). Render the cure-selection table inline using `/cure`'s verbs (`skills/cure/references/selection.md`). Ask via `shared/handoff-gate.md`. On non-empty selection, dispatch `/cure <slug>` with locked `handoff_context:`. On `none` / `Stop`, exit cleanly with the report path.
-8. **Post-cure reply posting.** When `/cure` returns, read `.cheese/cure/pr-<n>.md`'s `### Applied` / `### Deferred` sections and post per-finding replies via `shared/post-reply.sh`:
-   - **Applied** (with `from-comment:<id>` tag) → `"Fixed — <applied summary>."`
-   - **Deferred** (with `from-comment:<id>` tag) → `"Attempted fix reverted — <reason>."`
+7. **Selection gate** (interactive mode). Branch on what graded out:
+   - **At least one `Blocker` / `High` / `Medium` finding.** Render the cure-selection table inline using `/cure`'s verbs (`skills/cure/references/selection.md`). Ask via `shared/handoff-gate.md`. On non-empty selection, dispatch `/cure <slug>` with locked `handoff_context:`, then post replies (steps 8 + 9 when `/cure` returns). On `none` / `Stop`, run step 8 for any drafted push-backs / investigating notes, then exit with the report path.
+   - **No medium-or-above findings, but `Reviewer-rejected` or `Needs-investigation` has items.** Skip `/cure` dispatch entirely — there is nothing to apply. Render a small gate that lets the user pick `post all`, `post pushbacks only`, `skip posting`, or per-finding choices. On the selection, run step 8 to post the chosen replies. Exit with `status: ok / next: done`. This mirrors the documented auto-mode "no findings meet the floor" branch (see `### Auto mode`) so interactive and auto behave the same.
+   - **Nothing graded into any section.** Exit cleanly with the report path; there is nothing to post or cure.
+8. **Post non-cure replies** (runs whenever grading produced these items, with or without `/cure`). Post via `shared/post-reply.sh`:
    - **Reviewer-rejected items** → post the pre-drafted push-back text from the affinage report.
    - **Needs-investigation items** → post `"Human investigating — will follow up."`
    - **CI-sourced findings** (`from-check:<job>` tag) → no reply.
+
+   Decoupling this from `/cure` is deliberate: drafted push-backs and investigating notes must reach GitHub even when no medium-or-above finding exists and `/cure` never runs — otherwise the drafted reply is write-only, useful to the human reading the report but invisible to the reviewer waiting on GitHub.
+9. **Post-cure reply posting** (only when `/cure` ran). When `/cure` returns, read `.cheese/cure/pr-<n>.md`'s `### Applied` / `### Deferred` sections and post per-finding replies via `shared/post-reply.sh`:
+   - **Applied** (with `from-comment:<id>` tag) → `"Fixed — <applied summary>."`
+   - **Deferred** (with `from-comment:<id>` tag) → `"Attempted fix reverted — <reason>."`
 
 ## Sub-agent context gate
 
@@ -138,14 +147,25 @@ Empty severity sections are omitted entirely. `## Needs-investigation` and `## R
 
 **Pipeline:** culture → mold → cook → press → age → cure → ship · `/affinage` is parallel to `/age` and feeds the same `/cure`.
 
-After the report lands, render the cure-selection table inline (per `skills/cure/references/selection.md`) and ask via `shared/handoff-gate.md`. Options:
+After the report lands, the gate depends on whether any medium-or-above finding exists (Flow step 7).
+
+**When at least one `Blocker` / `High` / `Medium` finding exists** — render the cure-selection table inline (per `skills/cure/references/selection.md`) and ask via `shared/handoff-gate.md`. Options:
 
 - **Pick findings to fix** — free-text reply using `/age`/`/cure` verbs (`1,3,5`, `all-blocker`, `all-high`, `cheap`, `all`, `none`, `skip N`).
 - **Fix every blocker** — equivalent to `all-blocker`.
 - **Fix blockers and high-severity findings** *(recommended when at least one blocker or high-severity finding exists)* — equivalent to `all-high`.
 - **Stop — leave the report for later** — equivalent to `none`.
 
-On non-empty selection, immediately dispatch `/cure <slug>` with locked context:
+**When no medium-or-above finding exists but `Reviewer-rejected` or `Needs-investigation` has items** — `/cure` has nothing to act on, so skip it and render a reply-only gate instead:
+
+- **Post all** *(recommended)* — post every drafted push-back and human-investigating note.
+- **Post pushbacks only** — post `Reviewer-rejected` drafts; skip `Needs-investigation` notices.
+- **Skip posting** — leave the report for later; post nothing.
+- **Per-finding** — free-text pick of which drafts to post.
+
+On the selection, post via Flow step 8 and exit with `status: ok / next: done`. This mirrors the documented auto-mode "no findings meet the floor" branch (see `### Auto mode`).
+
+On a non-empty cure selection, immediately dispatch `/cure <slug>` with locked context:
 
 ```yaml
 handoff_context:

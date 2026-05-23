@@ -12,6 +12,9 @@ Returns JSON on stdout:
             "name": str,
             "conclusion": str,
             "url": str,
+            "failing": bool,           # True iff gh bucket == "fail" — the
+                                       # single source of truth for "this check
+                                       # made the build fail"
             "failure_summary": str,   # last ~10 lines of the failing log
             "failed_tests": [str]      # heuristic parse of FAILED test names
           }
@@ -21,8 +24,18 @@ Returns JSON on stdout:
     }
 
 Wraps `gh pr checks`, `gh pr view`, and `gh run view --log-failed`. Exits
-non-zero (1 on PR/gh API error, 2 on missing gh binary) so the caller can
-halt cleanly with `status: halt: pr-status-unavailable`.
+non-zero so the caller can halt cleanly:
+
+    1  PR / gh API error            -> status: halt: pr-status-unavailable
+    2  missing gh binary            -> status: halt: pr-status-unavailable
+    3  failing build, no groundable -> status: halt: pr-status-logs-expired
+       log evidence (every failing
+       check's failure_summary empty)
+
+Exit 3 is the "logs entirely unfetchable" case: the build is failing but no
+failing check produced a single line of log to ground on (typically expired
+GitHub Actions logs past the retention window). Grading a blank CI line is
+worse than halting and asking the human to rerun the failed jobs first.
 """
 
 from __future__ import annotations
@@ -35,6 +48,10 @@ import sys
 from typing import Any
 
 FAILURE_TAIL_LINES = 10
+
+# Exit code for "failing build, but no failing check produced any groundable
+# log evidence" — see the module docstring.
+EXIT_LOGS_EXPIRED = 3
 
 # Heuristic patterns for extracting failed-test names from log output.
 # Conservative — false positives are noise but not incorrect grading.
@@ -178,13 +195,16 @@ def build_output(pr: int) -> dict[str, Any]:
             # SKIPPED / IN_PROGRESS / QUEUED / ...) lowercased.
             "conclusion": state.lower(),
             "url": check.get("link", "") or "",
+            # `failing` is the single source of truth for "this check made the
+            # build fail" — derived from gh's pre-classified `bucket`, the same
+            # signal that drives classification and enrichment. Downstream halt
+            # logic reads this, never the conclusion string, so the three stay
+            # in lockstep across every gh state that maps to bucket==fail.
+            "failing": bucket == "fail",
             "failure_summary": "",
             "failed_tests": [],
         }
-        # Enrich for the whole failure family (failure, cancelled, timed_out)
-        # via gh's pre-classified `bucket` so classification and enrichment
-        # stay in lockstep.
-        if bucket == "fail":
+        if entry["failing"]:
             summary, failed = fetch_failure_summary(entry["url"])
             entry["failure_summary"] = summary
             entry["failed_tests"] = failed
@@ -197,6 +217,28 @@ def build_output(pr: int) -> dict[str, Any]:
     }
 
 
+def all_failures_ungroundable(output: dict[str, Any]) -> bool:
+    """True when the build is failing but no failing check produced any log
+    evidence (every failing check has an empty `failure_summary`).
+
+    This is the expired-Actions-logs case: there is nothing to ground a CI
+    finding on, so the caller should halt rather than grade a blank. Returns
+    False as soon as one failing check has a summary — that finding can be
+    graded and the empty ones become Needs-investigation.
+
+    "Failing" reads the per-check `failing` flag (gh bucket == "fail"), the same
+    signal `build_output` uses to enrich, so this never drifts from the set of
+    checks that actually made the build fail.
+    """
+    build = output.get("build", {})
+    if build.get("status") != "failing":
+        return False
+    failing = [c for c in build.get("checks", []) if c.get("failing")]
+    if not failing:
+        return False
+    return all(not (c.get("failure_summary") or "") for c in failing)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Fetch PR status (build + merge) for /affinage grading.",
@@ -207,6 +249,13 @@ def main(argv: list[str] | None = None) -> int:
     output = build_output(args.pr)
     json.dump(output, sys.stdout, indent=2)
     sys.stdout.write("\n")
+    if all_failures_ungroundable(output):
+        sys.stderr.write(
+            "pr-status.py: build is failing but no failing check produced any "
+            "log evidence (logs likely expired); exiting "
+            f"{EXIT_LOGS_EXPIRED} so the caller can halt\n"
+        )
+        return EXIT_LOGS_EXPIRED
     return 0
 
 
