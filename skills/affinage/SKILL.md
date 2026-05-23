@@ -138,12 +138,19 @@ Empty severity sections are omitted entirely. `## Needs-investigation` and `## R
 
 **Pipeline:** culture → mold → cook → press → age → cure → ship · `/affinage` is parallel to `/age` and feeds the same `/cure`.
 
-After the report lands, render the cure-selection table inline (per `skills/cure/references/selection.md`) and ask via `shared/handoff-gate.md`. Options:
+After the report lands, render the cure-selection table inline (per `skills/cure/references/selection.md`) and ask via `shared/handoff-gate.md`. Always present the same four severity-floor options, in the same most-inclusive-to-least order, so the gate is predictable across every run:
 
-- **Pick findings to fix** — free-text reply using `/age`/`/cure` verbs (`1,3,5`, `all-blocker`, `all-high`, `cheap`, `all`, `none`, `skip N`).
-- **Fix every blocker** — equivalent to `all-blocker`.
-- **Fix blockers and high-severity findings** *(recommended when at least one blocker or high-severity finding exists)* — equivalent to `all-high`.
+- **Fix everything** — equivalent to `all` (every finding regardless of severity).
+- **Fix medium-severity and above** — equivalent to `all-medium` (floor at medium: blockers + high + medium; the interactive form of the `medium+` auto-floor).
+- **Fix high-severity and blockers** *(recommended when at least one blocker or high-severity finding exists)* — equivalent to `all-high`.
+- **Fix blockers only** *(strict)* — equivalent to `all-blocker`.
+
+Then offer the two non-floor options last:
+
+- **Pick findings to fix** — free-text reply using `/age`/`/cure` verbs (`1,3,5`, `all-blocker`, `all-medium`, `all-high`, `cheap`, `all`, `none`, `skip N`).
 - **Stop — leave the report for later** — equivalent to `none`.
+
+Present all four severity options on every run even when a severity band is empty: a floor that resolves to an empty set is a valid, predictable no-op — do not drop or reorder options based on which bands happen to be populated.
 
 On non-empty selection, immediately dispatch `/cure <slug>` with locked context:
 

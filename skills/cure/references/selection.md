@@ -14,7 +14,7 @@ When `/age` completes the selection gate and the user picks a non-empty set, it 
 handoff_context:
   source_skill: /age
   source_report: .cheese/age/<slug>.md
-  selection: "1,3,5 | all-blocker | all-high | cheap | all | skip N"
+  selection: "1,3,5 | all-blocker | all-high | all-medium | cheap | all | skip N"
   resolved_ids: [1, 3, 5]
 ```
 
@@ -43,13 +43,14 @@ If no slug is supplied, accept any of: a pasted findings list, a `.cheese/age/` 
 1,3,5         # specific item ids
 all-blocker   # every blocker-severity item (strict; no high included)
 all-high      # every blocker- or high-severity item (floor at high; matches --stake high auto-floor)
+all-medium    # every blocker-, high-, or medium-severity item (floor at medium; matches --stake medium+ auto-floor)
 cheap         # every finding where fix-cost-now == contained, regardless of severity
 all           # every item (requires explicit type-out, not assumed)
 none          # default; exit cleanly
 skip N        # drop item N from the change-order
 ```
 
-Interactive verbs use **floor** semantics, aligned with auto-mode: `all-blocker` is the only strict selector (because blocker is the top of the ladder, there is nothing above it to include); `all-high` includes blockers + high; future `all-medium` would include blockers + high + medium. Use composition (`all-blocker, ...`) when you specifically want strict blocker-only behaviour combined with another verb.
+Interactive verbs use **floor** semantics, aligned with auto-mode: `all-blocker` is the only strict selector (because blocker is the top of the ladder, there is nothing above it to include); `all-high` includes blockers + high; `all-medium` includes blockers + high + medium (the interactive equivalent of the `medium+` auto-floor). Use composition (`all-blocker, ...`) when you specifically want strict blocker-only behaviour combined with another verb.
 
 ### Verb composition
 
