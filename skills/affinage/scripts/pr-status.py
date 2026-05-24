@@ -30,12 +30,16 @@ non-zero so the caller can halt cleanly:
     2  missing gh binary            -> status: halt: pr-status-unavailable
     3  failing build, no groundable -> status: halt: pr-status-logs-expired
        log evidence (every failing
-       check's failure_summary empty)
+       Actions check's failure_summary
+       empty)
 
-Exit 3 is the "logs entirely unfetchable" case: the build is failing but no
-failing check produced a single line of log to ground on (typically expired
-GitHub Actions logs past the retention window). Grading a blank CI line is
-worse than halting and asking the human to rerun the failed jobs first.
+Exit 3 is the expired-Actions-logs case: the build is failing and every failing
+check whose logs are fetchable (has a `/runs/<id>` run id) produced no log to
+ground on (typically expired GitHub Actions logs past the retention window).
+Grading a blank CI line is worse than halting and asking the human to rerun the
+failed jobs first. Failing checks with no fetchable run id (external CI /
+non-Actions status checks) are excluded — rerunning them won't help — so a build
+failing solely on those exits 0 and they become Needs-investigation.
 """
 
 from __future__ import annotations
@@ -218,13 +222,20 @@ def build_output(pr: int) -> dict[str, Any]:
 
 
 def all_failures_ungroundable(output: dict[str, Any]) -> bool:
-    """True when the build is failing but no failing check produced any log
-    evidence (every failing check has an empty `failure_summary`).
+    """True when the build is failing and every failing check whose logs are
+    *fetchable* produced no log evidence — the expired-Actions-logs case, where
+    rerunning the failed jobs is the right remediation.
 
-    This is the expired-Actions-logs case: there is nothing to ground a CI
-    finding on, so the caller should halt rather than grade a blank. Returns
-    False as soon as one failing check has a summary — that finding can be
-    graded and the empty ones become Needs-investigation.
+    Only failing checks with an extractable GitHub Actions run id are counted: a
+    check whose `url` has no `/runs/<id>` segment (external CI / non-Actions
+    status check) has an empty `failure_summary` by design — `fetch_failure_summary`
+    never attempts a fetch — not because logs expired, so rerunning a run id
+    won't help. A build failing solely on such checks is NOT ungroundable; the
+    caller proceeds (exit 0) and those become Needs-investigation rather than a
+    misdirected logs-expired halt.
+
+    Returns False as soon as one fetchable failing check has a summary — that
+    finding can be graded and the empty ones become Needs-investigation.
 
     "Failing" reads the per-check `failing` flag (gh bucket == "fail"), the same
     signal `build_output` uses to enrich, so this never drifts from the set of
@@ -233,10 +244,14 @@ def all_failures_ungroundable(output: dict[str, Any]) -> bool:
     build = output.get("build", {})
     if build.get("status") != "failing":
         return False
-    failing = [c for c in build.get("checks", []) if c.get("failing")]
-    if not failing:
+    fetchable = [
+        c
+        for c in build.get("checks", [])
+        if c.get("failing") and extract_run_id(c.get("url") or "")
+    ]
+    if not fetchable:
         return False
-    return all(not (c.get("failure_summary") or "") for c in failing)
+    return all(not (c.get("failure_summary") or "") for c in fetchable)
 
 
 def main(argv: list[str] | None = None) -> int:

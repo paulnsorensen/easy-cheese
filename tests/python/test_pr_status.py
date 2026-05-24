@@ -441,25 +441,40 @@ def test_all_failures_ungroundable_pending_build_is_false(pr_status):
 
 
 def test_all_failures_ungroundable_all_empty_is_true(pr_status):
-    """Failing build whose every failing check has an empty summary → halt-worthy."""
+    """Failing build whose every fetchable failing check has an empty summary
+    (expired Actions logs) → halt-worthy."""
     output = {
         "build": {
             "status": "failing",
-            "checks": [{"failing": True, "failure_summary": ""}],
+            "checks": [
+                {
+                    "failing": True,
+                    "url": "https://github.com/foo/bar/actions/runs/1/job/1",
+                    "failure_summary": "",
+                }
+            ],
         }
     }
     assert pr_status.all_failures_ungroundable(output) is True
 
 
 def test_all_failures_ungroundable_one_summary_present_is_false(pr_status):
-    """If at least one failing check has grounded evidence, the affineur can
-    ground that one — not ungroundable, no halt."""
+    """If at least one fetchable failing check has grounded evidence, the
+    affineur can ground that one — not ungroundable, no halt."""
     output = {
         "build": {
             "status": "failing",
             "checks": [
-                {"failing": True, "failure_summary": ""},
-                {"failing": True, "failure_summary": "AssertionError on line 9"},
+                {
+                    "failing": True,
+                    "url": "https://github.com/foo/bar/actions/runs/1/job/1",
+                    "failure_summary": "",
+                },
+                {
+                    "failing": True,
+                    "url": "https://github.com/foo/bar/actions/runs/2/job/2",
+                    "failure_summary": "AssertionError on line 9",
+                },
             ],
         }
     }
@@ -474,8 +489,63 @@ def test_all_failures_ungroundable_ignores_non_failing_checks(pr_status):
         "build": {
             "status": "failing",
             "checks": [
-                {"failing": False, "failure_summary": "irrelevant noise"},
-                {"failing": True, "failure_summary": ""},
+                {
+                    "failing": False,
+                    "url": "https://github.com/foo/bar/actions/runs/1/job/1",
+                    "failure_summary": "irrelevant noise",
+                },
+                {
+                    "failing": True,
+                    "url": "https://github.com/foo/bar/actions/runs/2/job/2",
+                    "failure_summary": "",
+                },
+            ],
+        }
+    }
+    assert pr_status.all_failures_ungroundable(output) is True
+
+
+def test_all_failures_ungroundable_excludes_non_actions_checks(pr_status):
+    """Finding #3292480022: a build failing solely on a non-Actions check (a
+    `url` with no `/runs/<id>` segment) is NOT ungroundable. Its empty summary is
+    by design — `fetch_failure_summary` never attempts a fetch — not expired
+    Actions logs, so rerunning a run id won't help. The caller proceeds (exit 0)
+    and the check becomes Needs-investigation rather than a misdirected
+    logs-expired halt. Fails if the run-id filter is dropped from the predicate."""
+    output = {
+        "build": {
+            "status": "failing",
+            "checks": [
+                {
+                    "failing": True,
+                    "url": "https://external-ci.example.com/build/42",
+                    "failure_summary": "",
+                }
+            ],
+        }
+    }
+    assert pr_status.all_failures_ungroundable(output) is False
+
+
+def test_all_failures_ungroundable_actions_failure_not_masked_by_non_actions(pr_status):
+    """A non-Actions failing check (no run id, by-design empty summary) must not
+    mask an Actions failing check whose logs expired: the fetchable set is the
+    one Actions check with an empty summary, so the build is still ungroundable
+    and halt-worthy."""
+    output = {
+        "build": {
+            "status": "failing",
+            "checks": [
+                {
+                    "failing": True,
+                    "url": "https://external-ci.example.com/build/42",
+                    "failure_summary": "",
+                },
+                {
+                    "failing": True,
+                    "url": "https://github.com/foo/bar/actions/runs/9/job/1",
+                    "failure_summary": "",
+                },
             ],
         }
     }
