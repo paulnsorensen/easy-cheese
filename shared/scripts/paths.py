@@ -10,6 +10,7 @@ slug accepted by one validator is accepted by all.
 
 from __future__ import annotations
 
+import functools
 import os
 import re
 import subprocess
@@ -137,6 +138,7 @@ def _slug_from_remote(url: str) -> str:
     return "/".join(segments[-2:])
 
 
+@functools.lru_cache(maxsize=1)
 def _git_identity() -> str | None:
     """``owner/repo`` from origin, else the git toplevel dir name, else None."""
     try:
@@ -180,11 +182,12 @@ def project_key() -> str:
 def corpus_home() -> Path:
     """Base dir holding every project's durable corpus.
 
-    ``$EASY_CHEESE_HOME`` overrides; otherwise ``$XDG_DATA_HOME/cheese``
+    ``$EASY_CHEESE_HOME`` overrides when it is an absolute path (a relative value
+    is ignored, matching the XDG convention); otherwise ``$XDG_DATA_HOME/cheese``
     (default ``~/.local/share/cheese``).
     """
     override = os.environ.get("EASY_CHEESE_HOME", "").strip()
-    if override:
+    if override and os.path.isabs(override):
         return Path(override)
     return xdg_data_home() / "cheese"
 
@@ -211,6 +214,10 @@ def default_root_for_phase(phase: str, *, project: str | None = None) -> Path:
 
 
 def _under_project_corpus(p: Path) -> bool:
+    # corpus_home() consults no git, so reject anything outside the XDG base
+    # before resolving the project key (project_key() may shell out to git).
+    if not p.is_relative_to(corpus_home()):
+        return False
     return p.is_relative_to(project_corpus_root())
 
 
@@ -220,6 +227,10 @@ def artifact_path(phase: str, slug: str, *, root: Path | str | None = None) -> P
     With ``root`` omitted, the root is resolved per phase via
     ``default_root_for_phase`` (durable phases → XDG corpus, rest → ``.cheese/``).
     Pass ``root=`` to override, e.g. a pytest ``tmp_path``.
+
+    Covers flat-phase artifacts (specs, transient reports). Research long-form
+    reports use a nested ``research/<slug>/<slug>.md`` layout composed from
+    ``project_corpus_root()`` by ``/briesearch``; this flat helper is not that path.
     """
     if phase not in PHASES:
         raise ValueError(f"unknown phase {phase!r}; expected one of {sorted(PHASES)}")

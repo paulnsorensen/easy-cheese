@@ -92,11 +92,19 @@ class TestArtifactPath:
         assert paths.artifact_path("cook", "demo") == Path(".cheese/cook/demo.md")
 
     @pytest.mark.parametrize("phase", ["specs", "research"])
-    def test_durable_phase_anchors_at_xdg_corpus(
+    def test_durable_phase_root_anchors_at_xdg_corpus(
         self, paths: ModuleType, xdg_corpus: Path, phase: str
     ) -> None:
-        result = paths.artifact_path(phase, "demo")
-        assert result == xdg_corpus / phase / "demo.md"
+        # Durable phases route their root to the per-project XDG corpus.
+        assert paths.default_root_for_phase(phase) == xdg_corpus
+
+    def test_spec_artifact_is_flat_under_corpus(
+        self, paths: ModuleType, xdg_corpus: Path
+    ) -> None:
+        # specs/<slug>.md is flat. Research long-form uses a nested
+        # research/<slug>/<slug>.md layout composed by /briesearch from
+        # project_corpus_root(), not from this flat helper.
+        assert paths.artifact_path("specs", "demo") == xdg_corpus / "specs" / "demo.md"
 
     def test_rejects_unknown_phase(self, paths: ModuleType) -> None:
         with pytest.raises(ValueError, match="unknown phase"):
@@ -128,6 +136,15 @@ class TestCorpusResolution:
         monkeypatch.setenv("XDG_DATA_HOME", "/should/be/ignored")
         monkeypatch.setenv("EASY_CHEESE_HOME", str(tmp_path / "override"))
         assert paths.corpus_home() == tmp_path / "override"
+
+    def test_easy_cheese_home_ignores_relative(
+        self, paths: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        # A relative override is ignored, matching the XDG convention.
+        monkeypatch.delenv("EASY_CHEESE_HOME", raising=False)
+        monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+        monkeypatch.setenv("EASY_CHEESE_HOME", "relative/corpus")
+        assert paths.corpus_home() == tmp_path / "cheese"
 
     def test_project_key_override(
         self, paths: ModuleType, monkeypatch: pytest.MonkeyPatch
