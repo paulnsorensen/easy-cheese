@@ -42,8 +42,6 @@ from pathlib import Path
 # remedy block (which the user copy-pastes).
 _SAFE_REF = re.compile(r"^[A-Za-z0-9._/-]+$")
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "shared" / "scripts"))
-
 from git_utils import run_git  # noqa: E402
 
 

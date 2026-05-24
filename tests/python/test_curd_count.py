@@ -1,4 +1,4 @@
-"""Tests for skills/mold/scripts/curd-count.py.
+"""Tests for src/mold/curd-count.py.
 
 Covers section extraction, bullet counting, the recommendation decision rule,
 the full analyze() digest, and the CLI entry point. Pure functions plus a
