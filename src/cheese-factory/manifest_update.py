@@ -8,33 +8,25 @@ Three subcommands rewrite one field at a time:
     set-wiring-status --manifest <path> --wiring <id> --status <status> [--commit-sha <sha>]
 
 The file is rewritten via tmp-then-rename so a concurrent reader never sees a
-partial document. After the rename, `validate_manifest.py` is re-run; if it
-rejects the new file the original bytes are restored from an in-memory backup
-and the CLI exits 2 with the validator's error message.
+partial document. After the rename, the manifest is re-validated in-process
+via `validate_manifest.validate_run_manifest`; if it rejects the new file the
+original bytes are restored from an in-memory backup and the CLI exits 2 with
+the validator's error message.
 """
 
 from __future__ import annotations
 
 import argparse
 import os
-import subprocess
-import sys
 import tempfile
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-SHARED_SCRIPTS = SCRIPT_DIR.parents[2] / "shared" / "scripts"
-for _path in (SCRIPT_DIR, SHARED_SCRIPTS):
-    if str(_path) not in sys.path:
-        sys.path.insert(0, str(_path))
-
 import cli  # noqa: E402
 from manifest_io import ManifestLoadError, parse_mapping  # noqa: E402
-
-VALIDATOR = SCRIPT_DIR / "validate_manifest.py"
+from validate_manifest import validate_run_manifest  # noqa: E402
 
 # Mirror validate_manifest.PHASES — kept in sync with manifest-schema.json.
 PHASES = {
@@ -92,16 +84,15 @@ def _atomic_write_yaml(path: Path, data: dict[str, Any]) -> None:
 
 
 def _revalidate_or_restore(path: Path, original: bytes) -> None:
-    """Run validate_manifest.py; on failure, restore <path> from original bytes."""
-    result = subprocess.run(
-        [sys.executable, str(VALIDATOR), str(path)],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
+    """Re-validate the written manifest in-process; restore <path> on failure."""
+    try:
+        reparsed, _ = _load_manifest(path)
+        errors = validate_run_manifest(reparsed)
+    except cli.CliError as exc:
+        errors = [str(exc)]
+    if errors:
         path.write_bytes(original)
-        message = (result.stderr or result.stdout or "validation failed").strip().splitlines()
-        raise cli.CliError(f"validation rejected update; restored original ({message[-1] if message else 'no detail'})")
+        raise cli.CliError(f"validation rejected update; restored original ({errors[-1]})")
 
 
 def _commit(path: Path, data: dict[str, Any], original: bytes) -> None:

@@ -9,15 +9,9 @@ can dispatch each wave in parallel.
 from __future__ import annotations
 
 import argparse
-import sys
 from pathlib import Path
 from typing import Any
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-SHARED_SCRIPTS = SCRIPT_DIR.parents[2] / "shared" / "scripts"
-for _path in (SCRIPT_DIR, SHARED_SCRIPTS):
-    if str(_path) not in sys.path:
-        sys.path.insert(0, str(_path))
 
 import cli  # noqa: E402  # path inserted above
 from manifest_io import ManifestLoadError, parse_mapping  # noqa: E402

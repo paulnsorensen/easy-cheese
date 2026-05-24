@@ -21,10 +21,7 @@ Output is the rung digest:
 from __future__ import annotations
 
 import re
-import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "shared" / "scripts"))
 import cli  # noqa: E402
 
 URL_RE = re.compile(r"https?://\S+")

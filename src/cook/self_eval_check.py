@@ -34,7 +34,6 @@ import sys
 from pathlib import Path
 
 # Load shared cli helper from repo-root/shared/scripts.
-sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "shared" / "scripts"))
 import cli  # noqa: E402
 
 

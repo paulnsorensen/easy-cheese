@@ -30,7 +30,6 @@ import sys
 from pathlib import Path
 
 # Seed: cli helper at repo-root/shared/scripts/cli.py.
-sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "shared" / "scripts"))
 import cli  # noqa: E402  (path-insert seed pattern)
 
 STATES = ("previously_passed", "stale", "new")

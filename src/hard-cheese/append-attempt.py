@@ -27,14 +27,12 @@ import datetime as _dt
 import fcntl
 import os
 import subprocess
-import sys
 import tempfile
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "shared" / "scripts"))
 import cli  # noqa: E402
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+REPO_ROOT = Path.cwd()
 
 
 def _artifact_dir() -> Path:
