@@ -19,6 +19,11 @@ test:
 bundle:
     python3 scripts/build_pyz.py
 
+# Preview the exact tree a release ships (skills + .pyz only, no sources)
+release-preview:
+    python3 scripts/stage_release.py --out .release-preview
+    @echo "Staged release tree at .release-preview — inspect with: find .release-preview -type f"
+
 # Lint shell scripts
 lint-sh:
     shellcheck scripts/install.sh shared/post-reply.sh

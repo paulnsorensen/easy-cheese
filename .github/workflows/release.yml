@@ -44,32 +44,41 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh skill publish --dry-run
 
-      - name: Drop trigger tag so skill publish can recreate it
-        env:
-          TAG: ${{ github.ref_name }}
-        run: |
-          set -euo pipefail
-          git push origin ":refs/tags/$TAG"
-          git tag -d "$TAG" || true
+      - name: Stage shippable release tree
+        run: python3 scripts/stage_release.py --out "$RUNNER_TEMP/release"
 
-      - name: Build and stage skill bundles
-        run: |
-          set -euo pipefail
-          python3 scripts/build_pyz.py
-          shopt -s nullglob
-          bundles=(skills/*/scripts/*.pyz)
-          # Fail loudly if nothing was built rather than publishing broken skills.
-          test ${#bundles[@]} -gt 0 || { echo "::error::no skill bundles were built"; exit 1; }
-          git add -f "${bundles[@]}"
-          # Confirm every built bundle is actually staged before publish.
-          staged="$(git diff --cached --name-only)"
-          for pyz in "${bundles[@]}"; do
-            printf '%s\n' "$staged" | grep -qxF "$pyz" || { echo "::error::bundle not staged for publish: $pyz"; exit 1; }
-          done
-          git -c user.email=actions@github.com -c user.name="github-actions[bot]" commit -m "build: bundle skill .pyz for release"
-
-      - name: Publish agent skills
+      # `gh skill install` reads the git tree at the resolved tag, so the tag must
+      # point at a commit that actually contains the built .pyz. We commit the
+      # staged tree to the `release` branch and force the version tag onto THAT
+      # commit — never main, which keeps its .pyz gitignored. Pushes use
+      # GITHUB_TOKEN, which by design does not re-trigger this tag-push workflow.
+      - name: Publish release branch and retarget tag
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
-        run: gh skill publish --tag "$TAG"
+        run: |
+          set -euo pipefail
+          src_sha="$GITHUB_SHA"
+          remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          cd "$RUNNER_TEMP/release"
+          git init -q
+          git checkout -q -b release
+          git add -A
+          git -c user.email=actions@github.com -c user.name="github-actions[bot]" \
+            commit -qm "release: $TAG from main@${src_sha}"
+          git push -f "$remote" "release:refs/heads/release"
+          git tag -f "$TAG"
+          git push -f "$remote" "refs/tags/$TAG"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |-
+          set -euo pipefail
+          gh repo edit "$GITHUB_REPOSITORY" --add-topic agent-skills || true
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --verify-tag
+          else
+            gh release create "$TAG" --verify-tag --generate-notes --title "$TAG"
+          fi
