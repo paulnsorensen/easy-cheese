@@ -1,13 +1,14 @@
-"""Pytest config for the shared/scripts library.
+"""Pytest config for the shared/scripts library, tested from source.
 
-These modules live under repo-root/shared/scripts and are loaded by path so
-the tests don't depend on the surrounding skill directories. The pattern
-mirrors tests/python/conftest.py and tests/cheese-factory/python/conftest.py.
+These modules are the shared library. Each is vendored into a per-skill bundle
+only where that skill imports it, so several (findings, severity, handoff, gates,
+paths) are used only by skills not bundled here. The library itself is the unit
+under test, so it is loaded from source rather than from any one skill's bundle.
 """
 
 from __future__ import annotations
 
-import importlib.util
+import importlib
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -15,60 +16,44 @@ from types import ModuleType
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-SHARED_SCRIPTS = REPO_ROOT / "shared" / "scripts"
-
-if str(SHARED_SCRIPTS) not in sys.path:
-    sys.path.insert(0, str(SHARED_SCRIPTS))
-
-
-def _load(name: str, path: Path) -> ModuleType:
-    spec = importlib.util.spec_from_file_location(name, path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"Could not load {path}")
-    module = importlib.util.module_from_spec(spec)
-    # Register in sys.modules so @dataclass can resolve cls.__module__ during
-    # class body execution. Without this, dataclasses raises AttributeError
-    # on sys.modules.get(cls.__module__).__dict__.
-    sys.modules[name] = module
-    spec.loader.exec_module(module)
-    return module
+sys.path.insert(0, str(REPO_ROOT / "shared" / "scripts"))
 
 
 @pytest.fixture(scope="session")
 def git_utils() -> ModuleType:
-    return _load("git_utils", SHARED_SCRIPTS / "git_utils.py")
+    return importlib.import_module("git_utils")
 
 
 @pytest.fixture(scope="session")
 def manifest_io() -> ModuleType:
-    return _load("manifest_io", SHARED_SCRIPTS / "manifest_io.py")
+    return importlib.import_module("manifest_io")
 
 
 @pytest.fixture(scope="session")
 def schema() -> ModuleType:
-    return _load("schema", SHARED_SCRIPTS / "schema.py")
+    return importlib.import_module("schema")
 
 
 @pytest.fixture(scope="session")
 def paths() -> ModuleType:
-    return _load("paths", SHARED_SCRIPTS / "paths.py")
+    return importlib.import_module("paths")
 
 
 @pytest.fixture(scope="session")
 def handoff() -> ModuleType:
-    return _load("handoff", SHARED_SCRIPTS / "handoff.py")
+    return importlib.import_module("handoff")
 
 
 @pytest.fixture(scope="session")
 def findings() -> ModuleType:
-    return _load("findings", SHARED_SCRIPTS / "findings.py")
+    return importlib.import_module("findings")
 
 
 @pytest.fixture(scope="session")
 def gates() -> ModuleType:
-    return _load("gates", SHARED_SCRIPTS / "gates.py")
+    return importlib.import_module("gates")
 
 
 @pytest.fixture(scope="session")
 def severity() -> ModuleType:
-    return _load("severity", SHARED_SCRIPTS / "severity.py")
+    return importlib.import_module("severity")

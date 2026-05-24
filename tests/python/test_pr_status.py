@@ -1,4 +1,4 @@
-"""Tests for skills/affinage/scripts/pr-status.py."""
+"""Tests for src/affinage/pr-status.py."""
 
 from __future__ import annotations
 

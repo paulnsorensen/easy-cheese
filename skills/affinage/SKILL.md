@@ -30,7 +30,7 @@ Flags:
 ## Flow
 
 1. **Resolve PR.** From `<pr-ref>` or `gh pr view --json number` on the current branch. Resolve `<owner>/<repo>` from the git remote.
-2. **Fetch PR status.** Call `python3 skills/affinage/scripts/pr-status.py <pr>`. The script returns JSON with build status, per-check failure summaries (last ~10 lines of failed logs + parsed failed-test names), and merge state. Map the exit code:
+2. **Fetch PR status.** Call `python3 ${CLAUDE_SKILL_DIR}/scripts/affinage.pyz pr-status <pr>`. The script returns JSON with build status, per-check failure summaries (last ~10 lines of failed logs + parsed failed-test names), and merge state. Map the exit code:
    - **Exit 0** — proceed with grading.
    - **Exit 3** (`logs-expired`) — the build is failing but every failing check's log was unfetchable (typically expired GitHub Actions logs past the retention window), so there is nothing to ground a CI finding on. Write `status: halt: pr-status-logs-expired` and stop with the hint: *"CI is failing but the logs have expired — rerun the failed jobs (`gh run rerun <run-id> --failed`, where `<run-id>` is the `/actions/runs/<id>/` segment of the failing check's `url`, or read it from `gh pr checks`) and re-invoke `/affinage`."* Affineurs often run a few days after a PR opens, so this is routine, not an edge case.
    - **Any other non-zero** (1 PR/gh API error, 2 missing gh binary) — write `status: halt: pr-status-unavailable` and stop.
@@ -79,7 +79,7 @@ Code search and reading go through cheez-* skills (`/cheez-search`, `/cheez-read
 
 | Need | Prefer | Fallback |
 | --- | --- | --- |
-| PR status (build + merge) | `skills/affinage/scripts/pr-status.py` | manual `gh pr checks` + `gh pr view` |
+| PR status (build + merge) | `${CLAUDE_SKILL_DIR}/scripts/affinage.pyz pr-status` | manual `gh pr checks` + `gh pr view` |
 | GitHub fetch | `gh api` | none (skill halts) |
 | Reply posting | `shared/post-reply.sh` | none — direct `gh api` calls bypass the `agent on behalf of;` attribution |
 | Diff inspection | `delta` | `git diff --unified=3` |
@@ -215,4 +215,4 @@ If no findings meet the floor, skip the `/cure` dispatch, post replies for `Revi
 - `skills/cure/references/selection.md` — selection verbs and composition.
 - `shared/handoff-gate.md` — gate primitives.
 - `shared/post-reply.sh` — reply posting with `agent on behalf of;` attribution.
-- `skills/affinage/scripts/pr-status.py` — PR status fetcher.
+- `${CLAUDE_SKILL_DIR}/scripts/affinage.pyz pr-status` — PR status fetcher.

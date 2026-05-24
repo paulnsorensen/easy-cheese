@@ -84,8 +84,8 @@ class TestBundledFilesExist:
         "spawn-primitive-reference.md",
     )
 
-    # manifest_io.py and the schema helpers now live in shared/scripts/ and
-    # are imported via a sys.path shim from each script. See
+    # manifest_io.py and schema.py live in shared/scripts/ and are bundled into
+    # cheese-factory.pyz by scripts/build_pyz.py. See
     # tests/shared/python/test_manifest_io.py for direct coverage.
 
     REQUIRED_SCRIPTS = (
@@ -101,10 +101,11 @@ class TestBundledFilesExist:
                 f"missing required reference: references/{ref}"
             )
 
-    def test_scripts_present(self, cf_dir: Path) -> None:
+    def test_scripts_present(self) -> None:
+        src = Path(__file__).resolve().parents[3] / "src" / "cheese-factory"
         for script in self.REQUIRED_SCRIPTS:
-            assert (cf_dir / "scripts" / script).is_file(), (
-                f"missing required script: scripts/{script}"
+            assert (src / script).is_file(), (
+                f"missing required script: src/cheese-factory/{script}"
             )
 
     def test_shared_helpers_present(self) -> None:
@@ -114,11 +115,11 @@ class TestBundledFilesExist:
                 f"missing required shared helper: shared/scripts/{helper}"
             )
 
-    def test_scripts_executable(self, cf_dir: Path) -> None:
+    def test_scripts_executable(self) -> None:
+        src = Path(__file__).resolve().parents[3] / "src" / "cheese-factory"
         for script in self.REQUIRED_SCRIPTS:
-            path = cf_dir / "scripts" / script
-            mode = path.stat().st_mode
-            assert mode & 0o111, f"scripts/{script} must be executable"
+            mode = (src / script).stat().st_mode
+            assert mode & 0o111, f"src/cheese-factory/{script} must be executable"
 
 
 class TestBodyMentionsLoadBearingContracts:

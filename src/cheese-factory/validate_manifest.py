@@ -10,14 +10,7 @@ from __future__ import annotations
 
 import re
 import sys
-from pathlib import Path
 from typing import Any
-
-SCRIPT_DIR = Path(__file__).resolve().parent
-SHARED_SCRIPTS = SCRIPT_DIR.parents[2] / "shared" / "scripts"
-for _path in (SCRIPT_DIR, SHARED_SCRIPTS):
-    if str(_path) not in sys.path:
-        sys.path.insert(0, str(_path))
 
 from manifest_io import ManifestLoadError, read_mapping_arg_or_stdin  # noqa: E402
 from schema import non_empty_string, required_keys, string_list, type_name  # noqa: E402
