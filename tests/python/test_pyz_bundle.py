@@ -16,6 +16,8 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BUILD = REPO_ROOT / "scripts" / "build_pyz.py"
 
+# Every shipped bundle (real skills + the cross-cutting "common" bundle) and the
+# subcommands it must dispatch. Keys are .pyz basenames under the build out-dir.
 SKILL_SUBCOMMANDS = {
     "melt": [
         "batch-resolve",
@@ -29,9 +31,27 @@ SKILL_SUBCOMMANDS = {
         "validate_decomposition",
         "validate_manifest",
         "validate_pr_plan",
+        "wiring_topo_sort",
+        "manifest_update",
     ],
     "affinage": ["pr-status"],
-    "mold": ["curd-count"],
+    "mold": ["curd-count", "agent_scope_diff"],
+    "briesearch": ["route_research", "pick_tavily_rung", "confidence_cap"],
+    "cheese": ["classify"],
+    "cheez-search": ["pick_kind"],
+    "cook": ["self_eval_check"],
+    "hard-cheese": ["append-attempt", "freshness-check"],
+    "pasteurize": ["debug-tag-sweep", "repro-rerun"],
+    "ultracook": ["phase_decision"],
+    "common": [
+        "slugify",
+        "write_handoff_artifact",
+        "read_handoff_slug",
+        "findings_cli",
+        "gates_cli",
+        "paths_cli",
+        "handoff_cli",
+    ],
 }
 
 
@@ -120,3 +140,23 @@ def test_bundle_carries_only_its_own_skill(bundles: Path) -> None:
     affinage = set(zipfile.ZipFile(bundles / "affinage.pyz").namelist())
     assert "pr_status.py" in affinage
     assert not (affinage & {"git_utils.py", "manifest_io.py", "schema.py"})  # no shared needed
+
+
+def test_common_slugify_executes_end_to_end(bundles: Path) -> None:
+    """The fanned-out common bundle resolves cli from inside the zip and runs."""
+    result = _run(
+        bundles / "common.pyz", "slugify", "from-task",
+        "--task", "Add retry to the upload client", "--json",
+    )
+    assert result.returncode == 0, result.stderr
+    assert '"slug": "add-retry-upload-client"' in result.stdout
+
+
+def test_common_bundle_carries_clis_plus_libs_not_skill_scripts(bundles: Path) -> None:
+    """common.pyz ships the cross-cutting CLI entrypoints and the shared libs they
+    import (e.g. cli), but no skill-specific script."""
+    common = set(zipfile.ZipFile(bundles / "common.pyz").namelist())
+    assert {"slugify.py", "findings_cli.py", "write_handoff_artifact.py"} <= common
+    assert "cli.py" in common  # the shared argparse helper every CLI imports
+    assert "conflict_pick.py" not in common  # melt's
+    assert "self_eval_check.py" not in common  # cook's

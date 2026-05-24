@@ -12,7 +12,6 @@ and the curd acceptance criterion:
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import subprocess
 import sys
@@ -21,18 +20,10 @@ from types import ModuleType
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-SCRIPT_PATH = REPO_ROOT / "skills" / "briesearch" / "scripts" / "confidence_cap.py"
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
+import build_pyz  # noqa: E402
 
-
-@pytest.fixture(scope="module")
-def mod() -> ModuleType:
-    spec = importlib.util.spec_from_file_location("confidence_cap", SCRIPT_PATH)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules["confidence_cap"] = module
-    spec.loader.exec_module(module)
-    return module
+BUNDLE = build_pyz.cached_bundle("briesearch")
 
 
 def _write_sources(tmp_path: Path, sources: list[dict]) -> Path:
@@ -44,83 +35,83 @@ def _write_sources(tmp_path: Path, sources: list[dict]) -> Path:
 class TestRubric:
     """Direct calls to cap() exercising each branch of the decision table."""
 
-    def test_single_low_quality_caps_at_dont_know(self, mod: ModuleType) -> None:
-        result = mod.cap([
+    def test_single_low_quality_caps_at_dont_know(self, confidence_cap: ModuleType) -> None:
+        result = confidence_cap.cap([
             {"url": "u", "quality": "low", "age_days": 10, "concordance": "agrees"},
         ])
         assert result["confidence"] == "don't know"
         assert result["justification"]
 
-    def test_single_high_quality_still_caps_at_dont_know(self, mod: ModuleType) -> None:
+    def test_single_high_quality_still_caps_at_dont_know(self, confidence_cap: ModuleType) -> None:
         # Per synthesis.md: single source caps below certain; curd default treats
         # single source as the don't-know branch regardless of quality.
-        result = mod.cap([
+        result = confidence_cap.cap([
             {"url": "u", "quality": "high", "age_days": 10, "concordance": "agrees"},
         ])
         assert result["confidence"] == "don't know"
 
-    def test_three_concordant_high_recent_cap_at_certain(self, mod: ModuleType) -> None:
+    def test_three_concordant_high_recent_cap_at_certain(self, confidence_cap: ModuleType) -> None:
         sources = [
             {"url": f"u{i}", "quality": "high", "age_days": 30, "concordance": "agrees"}
             for i in range(3)
         ]
-        result = mod.cap(sources)
+        result = confidence_cap.cap(sources)
         assert result["confidence"] == "certain"
         assert "concordant" in result["justification"] or "3" in result["justification"]
 
-    def test_mixed_quality_caps_at_dont_know_due_to_any_low(self, mod: ModuleType) -> None:
+    def test_mixed_quality_caps_at_dont_know_due_to_any_low(self, confidence_cap: ModuleType) -> None:
         # Any low-quality source caps at don't know per the rubric ordering.
         sources = [
             {"url": "u1", "quality": "high", "age_days": 30, "concordance": "agrees"},
             {"url": "u2", "quality": "medium", "age_days": 30, "concordance": "agrees"},
             {"url": "u3", "quality": "low", "age_days": 30, "concordance": "agrees"},
         ]
-        result = mod.cap(sources)
+        result = confidence_cap.cap(sources)
         assert result["confidence"] == "don't know"
 
-    def test_two_high_quality_concordant_caps_at_speculating(self, mod: ModuleType) -> None:
+    def test_two_high_quality_concordant_caps_at_speculating(self, confidence_cap: ModuleType) -> None:
         # Two sources of corroborating high-quality evidence: rubric says speculating
         # (not enough for certain; not weak enough for don't know).
         sources = [
             {"url": "u1", "quality": "high", "age_days": 30, "concordance": "agrees"},
             {"url": "u2", "quality": "high", "age_days": 30, "concordance": "agrees"},
         ]
-        result = mod.cap(sources)
+        result = confidence_cap.cap(sources)
         assert result["confidence"] == "speculating"
 
-    def test_mixed_medium_and_high_caps_at_speculating(self, mod: ModuleType) -> None:
+    def test_mixed_medium_and_high_caps_at_speculating(self, confidence_cap: ModuleType) -> None:
         sources = [
             {"url": "u1", "quality": "high", "age_days": 30, "concordance": "agrees"},
             {"url": "u2", "quality": "medium", "age_days": 30, "concordance": "agrees"},
             {"url": "u3", "quality": "medium", "age_days": 30, "concordance": "neutral"},
         ]
-        result = mod.cap(sources)
+        result = confidence_cap.cap(sources)
         assert result["confidence"] == "speculating"
 
-    def test_all_stale_caps_at_dont_know(self, mod: ModuleType) -> None:
+    def test_all_stale_caps_at_dont_know(self, confidence_cap: ModuleType) -> None:
         sources = [
             {"url": f"u{i}", "quality": "high", "age_days": 400, "concordance": "agrees"}
             for i in range(3)
         ]
-        result = mod.cap(sources)
+        result = confidence_cap.cap(sources)
         assert result["confidence"] == "don't know"
         assert "stale" in result["justification"].lower() or "365" in result["justification"]
 
-    def test_conflicting_caps_at_dont_know(self, mod: ModuleType) -> None:
+    def test_conflicting_caps_at_dont_know(self, confidence_cap: ModuleType) -> None:
         sources = [
             {"url": "u1", "quality": "high", "age_days": 30, "concordance": "agrees"},
             {"url": "u2", "quality": "high", "age_days": 30, "concordance": "conflicts"},
             {"url": "u3", "quality": "high", "age_days": 30, "concordance": "agrees"},
         ]
-        result = mod.cap(sources)
+        result = confidence_cap.cap(sources)
         assert result["confidence"] == "don't know"
         assert "conflict" in result["justification"].lower()
 
-    def test_empty_list_raises_cli_error(self, mod: ModuleType) -> None:
-        with pytest.raises(mod.cli.CliError, match="no sources provided"):
-            mod.cap([])
+    def test_empty_list_raises_cli_error(self, confidence_cap: ModuleType) -> None:
+        with pytest.raises(confidence_cap.cli.CliError, match="no sources provided"):
+            confidence_cap.cap([])
 
-    def test_three_high_with_one_stale_does_not_reach_certain(self, mod: ModuleType) -> None:
+    def test_three_high_with_one_stale_does_not_reach_certain(self, confidence_cap: ModuleType) -> None:
         sources = [
             {"url": "u1", "quality": "high", "age_days": 30, "concordance": "agrees"},
             {"url": "u2", "quality": "high", "age_days": 30, "concordance": "agrees"},
@@ -128,32 +119,32 @@ class TestRubric:
         ]
         # Not all_recent, so it must drop below certain — neither low nor stale-only
         # nor conflict, so the residual bucket is speculating.
-        result = mod.cap(sources)
+        result = confidence_cap.cap(sources)
         assert result["confidence"] == "speculating"
 
 
 class TestValidation:
-    def test_invalid_quality_raises(self, mod: ModuleType) -> None:
-        with pytest.raises(mod.cli.CliError, match="quality"):
-            mod.cap([
+    def test_invalid_quality_raises(self, confidence_cap: ModuleType) -> None:
+        with pytest.raises(confidence_cap.cli.CliError, match="quality"):
+            confidence_cap.cap([
                 {"url": "u", "quality": "great", "age_days": 1, "concordance": "agrees"},
             ])
 
-    def test_invalid_concordance_raises(self, mod: ModuleType) -> None:
-        with pytest.raises(mod.cli.CliError, match="concordance"):
-            mod.cap([
+    def test_invalid_concordance_raises(self, confidence_cap: ModuleType) -> None:
+        with pytest.raises(confidence_cap.cli.CliError, match="concordance"):
+            confidence_cap.cap([
                 {"url": "u", "quality": "high", "age_days": 1, "concordance": "maybe"},
             ])
 
-    def test_negative_age_raises(self, mod: ModuleType) -> None:
-        with pytest.raises(mod.cli.CliError, match="age_days"):
-            mod.cap([
+    def test_negative_age_raises(self, confidence_cap: ModuleType) -> None:
+        with pytest.raises(confidence_cap.cli.CliError, match="age_days"):
+            confidence_cap.cap([
                 {"url": "u", "quality": "high", "age_days": -1, "concordance": "agrees"},
             ])
 
-    def test_non_dict_source_raises(self, mod: ModuleType) -> None:
-        with pytest.raises(mod.cli.CliError, match="must be an object"):
-            mod.cap(["not a dict"])  # type: ignore[list-item]
+    def test_non_dict_source_raises(self, confidence_cap: ModuleType) -> None:
+        with pytest.raises(confidence_cap.cli.CliError, match="must be an object"):
+            confidence_cap.cap(["not a dict"])  # type: ignore[list-item]
 
 
 class TestCli:
@@ -161,7 +152,7 @@ class TestCli:
 
     def _run(self, *args: str, stdin: str | None = None) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            [sys.executable, str(SCRIPT_PATH), *args],
+            [sys.executable, str(BUNDLE), "confidence_cap", *args],
             capture_output=True,
             text=True,
             input=stdin,

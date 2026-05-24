@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import subprocess
 import sys
@@ -12,21 +11,9 @@ from types import ModuleType
 import pytest
 import yaml
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-SCRIPT_PATH = REPO_ROOT / "skills" / "cheese-factory" / "scripts" / "wiring_topo_sort.py"
+import build_pyz
 
-
-def _load_module() -> ModuleType:
-    spec = importlib.util.spec_from_file_location("wiring_topo_sort", SCRIPT_PATH)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-@pytest.fixture(scope="module")
-def wts() -> ModuleType:
-    return _load_module()
+BUNDLE = build_pyz.cached_bundle("cheese-factory")
 
 
 def _wiring(*entries: tuple[str, list[str]]) -> list[dict]:
@@ -39,53 +26,53 @@ def _write_manifest(path: Path, wiring: list[dict]) -> None:
 
 def _run_cli(*args: str) -> subprocess.CompletedProcess:
     return subprocess.run(
-        [sys.executable, str(SCRIPT_PATH), *args],
+        [sys.executable, str(BUNDLE), "wiring_topo_sort", *args],
         capture_output=True,
         text=True,
     )
 
 
 class TestComputeWaves:
-    def test_linear_chain(self, wts: ModuleType) -> None:
+    def test_linear_chain(self, wiring_topo_sort: ModuleType) -> None:
         # W1 <- W2 <- W3 must serialize into three single-item waves.
         wiring = _wiring(("W1", []), ("W2", ["W1"]), ("W3", ["W2"]))
-        assert wts.compute_waves(wiring) == [["W1"], ["W2"], ["W3"]]
+        assert wiring_topo_sort.compute_waves(wiring) == [["W1"], ["W2"], ["W3"]]
 
-    def test_branching_dag(self, wts: ModuleType) -> None:
+    def test_branching_dag(self, wiring_topo_sort: ModuleType) -> None:
         # Two independent children of W1 must land in the same second wave —
         # the whole point of waves is to surface parallelism for dispatch.
         wiring = _wiring(("W1", []), ("W2", ["W1"]), ("W3", ["W1"]))
-        assert wts.compute_waves(wiring) == [["W1"], ["W2", "W3"]]
+        assert wiring_topo_sort.compute_waves(wiring) == [["W1"], ["W2", "W3"]]
 
-    def test_empty_wiring_returns_empty(self, wts: ModuleType) -> None:
-        assert wts.compute_waves([]) == []
+    def test_empty_wiring_returns_empty(self, wiring_topo_sort: ModuleType) -> None:
+        assert wiring_topo_sort.compute_waves([]) == []
 
-    def test_cycle_raises_cli_error(self, wts: ModuleType) -> None:
+    def test_cycle_raises_cli_error(self, wiring_topo_sort: ModuleType) -> None:
         # A->B->A would deadlock the dispatcher — fail loudly with the cycle
         # ids so the operator can locate it without re-running.
         wiring = _wiring(("W1", ["W2"]), ("W2", ["W1"]))
-        with pytest.raises(wts.cli.CliError) as exc_info:
-            wts.compute_waves(wiring)
+        with pytest.raises(wiring_topo_sort.cli.CliError) as exc_info:
+            wiring_topo_sort.compute_waves(wiring)
         msg = str(exc_info.value)
         assert "cycle detected" in msg
         assert "W1" in msg and "W2" in msg
 
-    def test_self_loop_is_ignored(self, wts: ModuleType) -> None:
+    def test_self_loop_is_ignored(self, wiring_topo_sort: ModuleType) -> None:
         # A wiring item depending on itself is meaningless, not a cycle —
         # strip it so the dispatcher can still make progress.
         wiring = _wiring(("W1", ["W1"]))
-        assert wts.compute_waves(wiring) == [["W1"]]
+        assert wiring_topo_sort.compute_waves(wiring) == [["W1"]]
 
-    def test_unknown_dep_treated_as_satisfied(self, wts: ModuleType) -> None:
+    def test_unknown_dep_treated_as_satisfied(self, wiring_topo_sort: ModuleType) -> None:
         # `depends_on` legitimately references curds too; deps outside the
         # wiring set must not block topo sort.
         wiring = _wiring(("W1", ["curd-3"]))
-        assert wts.compute_waves(wiring) == [["W1"]]
+        assert wiring_topo_sort.compute_waves(wiring) == [["W1"]]
 
-    def test_wave_ordering_is_deterministic(self, wts: ModuleType) -> None:
+    def test_wave_ordering_is_deterministic(self, wiring_topo_sort: ModuleType) -> None:
         # IDs within a wave are sorted so output is stable across runs.
         wiring = _wiring(("W3", []), ("W1", []), ("W2", []))
-        assert wts.compute_waves(wiring) == [["W1", "W2", "W3"]]
+        assert wiring_topo_sort.compute_waves(wiring) == [["W1", "W2", "W3"]]
 
 
 class TestCLI:

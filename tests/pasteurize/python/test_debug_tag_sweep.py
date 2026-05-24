@@ -8,7 +8,6 @@ skipping — against synthetic trees only. No conftest; load the module by path.
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import subprocess
 import sys
@@ -17,22 +16,15 @@ from types import ModuleType
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-SCRIPT_PATH = REPO_ROOT / "skills" / "pasteurize" / "scripts" / "debug-tag-sweep.py"
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
+import build_pyz  # noqa: E402
 
-
-@pytest.fixture(scope="module")
-def sweep_mod() -> ModuleType:
-    spec = importlib.util.spec_from_file_location("debug_tag_sweep", SCRIPT_PATH)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+BUNDLE = build_pyz.cached_bundle("pasteurize")
 
 
 def _run(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, str(SCRIPT_PATH), *args],
+        [sys.executable, str(BUNDLE), "debug-tag-sweep", *args],
         capture_output=True,
         text=True,
     )
@@ -168,16 +160,16 @@ class TestDefaultTags:
 
 
 class TestSweepFunction:
-    def test_sweep_returns_relative_paths(self, sweep_mod: ModuleType, tmp_path: Path) -> None:
+    def test_sweep_returns_relative_paths(self, debug_tag_sweep: ModuleType, tmp_path: Path) -> None:
         sub = tmp_path / "pkg"
         sub.mkdir()
         (sub / "mod.py").write_text("# DEBUG x\n")
-        result = sweep_mod.sweep(tmp_path, ("# DEBUG",))
+        result = debug_tag_sweep.sweep(tmp_path, ("# DEBUG",))
         assert result["files"] == ["pkg/mod.py"]
         assert result["total"] == 1
 
-    def test_sweep_files_sorted(self, sweep_mod: ModuleType, tmp_path: Path) -> None:
+    def test_sweep_files_sorted(self, debug_tag_sweep: ModuleType, tmp_path: Path) -> None:
         for name in ("z.py", "a.py", "m.py"):
             (tmp_path / name).write_text("DEBUG: hit\n")
-        result = sweep_mod.sweep(tmp_path, ("DEBUG:",))
+        result = debug_tag_sweep.sweep(tmp_path, ("DEBUG:",))
         assert result["files"] == ["a.py", "m.py", "z.py"]

@@ -6,7 +6,6 @@ stays self-contained under tests/ultracook/python/.
 """
 from __future__ import annotations
 
-import importlib.util
 import json
 import subprocess
 import sys
@@ -15,20 +14,10 @@ from types import ModuleType
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-SCRIPT_PATH = REPO_ROOT / "skills" / "ultracook" / "scripts" / "phase_decision.py"
-SHARED_SCRIPTS = REPO_ROOT / "shared" / "scripts"
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
+import build_pyz  # noqa: E402
 
-
-@pytest.fixture(scope="module")
-def phase_decision() -> ModuleType:
-    if str(SHARED_SCRIPTS) not in sys.path:
-        sys.path.insert(0, str(SHARED_SCRIPTS))
-    spec = importlib.util.spec_from_file_location("phase_decision", SCRIPT_PATH)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+BUNDLE = build_pyz.cached_bundle("ultracook")
 
 
 class TestSpawnPhases:
@@ -179,7 +168,7 @@ class TestOutputShape:
 
 def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, str(SCRIPT_PATH), *args],
+        [sys.executable, str(BUNDLE), "phase_decision", *args],
         capture_output=True,
         text=True,
     )

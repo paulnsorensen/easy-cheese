@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib.util
 import multiprocessing
 import subprocess
 import sys
@@ -12,23 +11,9 @@ from types import ModuleType
 import pytest
 import yaml
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-SCRIPTS_DIR = REPO_ROOT / "skills" / "cheese-factory" / "scripts"
-SCRIPT_PATH = SCRIPTS_DIR / "manifest_update.py"
-VALIDATOR = SCRIPTS_DIR / "validate_manifest.py"
+import build_pyz
 
-
-def _load(name: str, path: Path) -> ModuleType:
-    spec = importlib.util.spec_from_file_location(name, path)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-@pytest.fixture(scope="module")
-def manifest_update() -> ModuleType:
-    return _load("manifest_update", SCRIPT_PATH)
+BUNDLE = build_pyz.cached_bundle("cheese-factory")
 
 
 def _curds(n: int = 5) -> list[dict]:
@@ -76,7 +61,7 @@ def _write_fixture(tmp_path: Path) -> Path:
 
 def _run_cli(*args: str) -> subprocess.CompletedProcess:
     return subprocess.run(
-        [sys.executable, str(SCRIPT_PATH), *args],
+        [sys.executable, str(BUNDLE), "manifest_update", *args],
         capture_output=True,
         text=True,
     )
@@ -84,7 +69,7 @@ def _run_cli(*args: str) -> subprocess.CompletedProcess:
 
 def _validate(path: Path) -> subprocess.CompletedProcess:
     return subprocess.run(
-        [sys.executable, str(VALIDATOR), str(path)],
+        [sys.executable, str(BUNDLE), "validate_manifest", str(path)],
         capture_output=True,
         text=True,
     )
@@ -229,7 +214,8 @@ def _worker(args: tuple[str, int]) -> tuple[int, str]:
     result = subprocess.run(
         [
             sys.executable,
-            str(SCRIPT_PATH),
+            str(BUNDLE),
+            "manifest_update",
             "set-curd-status",
             "--manifest",
             manifest_path,

@@ -2,31 +2,16 @@
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
 
-import pytest
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
+import build_pyz  # noqa: E402
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-SCRIPT_PATH = REPO_ROOT / "skills" / "cook" / "scripts" / "self_eval_check.py"
-SHARED_SCRIPTS = REPO_ROOT / "shared" / "scripts"
-
-
-@pytest.fixture(scope="module")
-def self_eval_check() -> ModuleType:
-    # Mirror the script's path-insert so the in-process import of `cli` works.
-    if str(SHARED_SCRIPTS) not in sys.path:
-        sys.path.insert(0, str(SHARED_SCRIPTS))
-    spec = importlib.util.spec_from_file_location("self_eval_check", SCRIPT_PATH)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules["self_eval_check"] = module
-    spec.loader.exec_module(module)
-    return module
+BUNDLE = build_pyz.cached_bundle("cook")
 
 
 # ---------------------------------------------------------------------------
@@ -186,7 +171,7 @@ class TestMixedViolations:
 
 def _run_cli(report_path: Path, *extra: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, str(SCRIPT_PATH), "--report", str(report_path), *extra],
+        [sys.executable, str(BUNDLE), "self_eval_check", "--report", str(report_path), *extra],
         capture_output=True,
         text=True,
     )

@@ -14,7 +14,6 @@ is self-contained.
 """
 from __future__ import annotations
 
-import importlib.util
 import multiprocessing as mp
 import os
 import subprocess
@@ -25,24 +24,17 @@ from types import ModuleType
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-SCRIPT = REPO_ROOT / "skills" / "hard-cheese" / "scripts" / "append-attempt.py"
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
+import build_pyz  # noqa: E402
 
-
-@pytest.fixture(scope="module")
-def mod() -> ModuleType:
-    spec = importlib.util.spec_from_file_location("append_attempt", SCRIPT)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules["append_attempt"] = module
-    spec.loader.exec_module(module)
-    return module
+BUNDLE = build_pyz.cached_bundle("hard-cheese")
 
 
 def _run(env_dir: Path, *args: str) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["HARD_CHEESE_ARTIFACT_DIR"] = str(env_dir)
     return subprocess.run(
-        [sys.executable, str(SCRIPT), *args],
+        [sys.executable, str(BUNDLE), "append-attempt", *args],
         capture_output=True, text=True, env=env, cwd=str(REPO_ROOT),
     )
 
@@ -54,32 +46,32 @@ def _read_rows(artifact: Path) -> list[str]:
 
 
 class TestSlugValidation:
-    def test_rejects_traversal(self, mod: ModuleType) -> None:
-        with pytest.raises(mod.cli.CliError):
-            mod._validate_slug("../escape")
+    def test_rejects_traversal(self, append_attempt: ModuleType) -> None:
+        with pytest.raises(append_attempt.cli.CliError):
+            append_attempt._validate_slug("../escape")
 
-    def test_rejects_forward_slash(self, mod: ModuleType) -> None:
-        with pytest.raises(mod.cli.CliError):
-            mod._validate_slug("foo/bar")
+    def test_rejects_forward_slash(self, append_attempt: ModuleType) -> None:
+        with pytest.raises(append_attempt.cli.CliError):
+            append_attempt._validate_slug("foo/bar")
 
-    def test_rejects_backslash(self, mod: ModuleType) -> None:
-        with pytest.raises(mod.cli.CliError):
-            mod._validate_slug("foo\\bar")
+    def test_rejects_backslash(self, append_attempt: ModuleType) -> None:
+        with pytest.raises(append_attempt.cli.CliError):
+            append_attempt._validate_slug("foo\\bar")
 
-    def test_rejects_empty(self, mod: ModuleType) -> None:
-        with pytest.raises(mod.cli.CliError):
-            mod._validate_slug("")
+    def test_rejects_empty(self, append_attempt: ModuleType) -> None:
+        with pytest.raises(append_attempt.cli.CliError):
+            append_attempt._validate_slug("")
 
-    def test_accepts_kebab(self, mod: ModuleType) -> None:
-        assert mod._validate_slug("my-slug-42") == "my-slug-42"
+    def test_accepts_kebab(self, append_attempt: ModuleType) -> None:
+        assert append_attempt._validate_slug("my-slug-42") == "my-slug-42"
 
 
 class TestEscapeCell:
-    def test_pipe_is_escaped(self, mod: ModuleType) -> None:
-        assert mod._escape_cell("a | b") == "a \\| b"
+    def test_pipe_is_escaped(self, append_attempt: ModuleType) -> None:
+        assert append_attempt._escape_cell("a | b") == "a \\| b"
 
-    def test_newline_becomes_br(self, mod: ModuleType) -> None:
-        assert mod._escape_cell("line1\nline2") == "line1<br>line2"
+    def test_newline_becomes_br(self, append_attempt: ModuleType) -> None:
+        assert append_attempt._escape_cell("line1\nline2") == "line1<br>line2"
 
 
 class TestCli:
@@ -164,7 +156,7 @@ def _spawn_one(args: tuple[str, str, int]) -> int:
     env["HARD_CHEESE_ARTIFACT_DIR"] = artifact_dir
     result = subprocess.run(
         [
-            sys.executable, str(SCRIPT),
+            sys.executable, str(BUNDLE), "append-attempt",
             "--slug", slug,
             "--status", "FAIL" if idx % 2 == 0 else "PASS",
             "--score", str(2 + (idx % 3)),

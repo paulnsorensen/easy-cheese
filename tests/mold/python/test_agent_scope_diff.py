@@ -5,29 +5,16 @@ new tests/mold/python/ directory.
 """
 from __future__ import annotations
 
-import importlib.util
 import json
 import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
 
-import pytest
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
+import build_pyz  # noqa: E402
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-SCRIPT_PATH = REPO_ROOT / "skills" / "mold" / "scripts" / "agent_scope_diff.py"
-SHARED_SCRIPTS = REPO_ROOT / "shared" / "scripts"
-
-
-@pytest.fixture(scope="module")
-def agent_scope_diff() -> ModuleType:
-    if str(SHARED_SCRIPTS) not in sys.path:
-        sys.path.insert(0, str(SHARED_SCRIPTS))
-    spec = importlib.util.spec_from_file_location("agent_scope_diff", SCRIPT_PATH)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+BUNDLE = build_pyz.cached_bundle("mold")
 
 
 class TestDiffPure:
@@ -118,7 +105,8 @@ class TestIOErrors:
         result = subprocess.run(
             [
                 sys.executable,
-                str(SCRIPT_PATH),
+                str(BUNDLE),
+                "agent_scope_diff",
                 "--spec",
                 str(tmp_path / "does-not-exist.md"),
                 "--transcript",
@@ -138,7 +126,8 @@ class TestIOErrors:
         result = subprocess.run(
             [
                 sys.executable,
-                str(SCRIPT_PATH),
+                str(BUNDLE),
+                "agent_scope_diff",
                 "--spec",
                 str(spec),
                 "--transcript",
@@ -159,7 +148,8 @@ class TestIOErrors:
         result = subprocess.run(
             [
                 sys.executable,
-                str(SCRIPT_PATH),
+                str(BUNDLE),
+                "agent_scope_diff",
                 "--spec",
                 str(tmp_path),
                 "--transcript",
@@ -186,7 +176,8 @@ def _run_cli(
     return subprocess.run(
         [
             sys.executable,
-            str(SCRIPT_PATH),
+            str(BUNDLE),
+            "agent_scope_diff",
             "--spec",
             str(spec),
             "--transcript",
@@ -223,7 +214,7 @@ class TestCli:
     def test_missing_spec_arg_exits_2(self) -> None:
         # argparse handles `required=True` and exits with status 2.
         result = subprocess.run(
-            [sys.executable, str(SCRIPT_PATH)],
+            [sys.executable, str(BUNDLE), "agent_scope_diff"],
             capture_output=True,
             text=True,
         )
@@ -231,7 +222,7 @@ class TestCli:
 
     def test_help_lists_required_flags(self) -> None:
         result = subprocess.run(
-            [sys.executable, str(SCRIPT_PATH), "--help"],
+            [sys.executable, str(BUNDLE), "agent_scope_diff", "--help"],
             capture_output=True,
             text=True,
         )

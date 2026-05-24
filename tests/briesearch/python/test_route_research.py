@@ -7,7 +7,6 @@ via importlib so no conftest is needed.
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import subprocess
 import sys
@@ -16,21 +15,10 @@ from types import ModuleType
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-SCRIPT_PATH = REPO_ROOT / "skills" / "briesearch" / "scripts" / "route_research.py"
-SHARED_SCRIPTS = REPO_ROOT / "shared" / "scripts"
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
+import build_pyz  # noqa: E402
 
-
-@pytest.fixture(scope="module")
-def route_research() -> ModuleType:
-    if str(SHARED_SCRIPTS) not in sys.path:
-        sys.path.insert(0, str(SHARED_SCRIPTS))
-    spec = importlib.util.spec_from_file_location("route_research", SCRIPT_PATH)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules["route_research"] = module
-    spec.loader.exec_module(module)
-    return module
+BUNDLE = build_pyz.cached_bundle("briesearch")
 
 
 # ---------------------------------------------------------------------------
@@ -165,15 +153,13 @@ class TestPreferenceFlags:
 
 class TestEmptyQuestion:
     def test_empty_string_raises_clierror(self, route_research: ModuleType) -> None:
-        import cli  # loaded via path-insert in fixture
-        with pytest.raises(cli.CliError):
+        with pytest.raises(route_research.cli.CliError):
             route_research.classify("")
 
     def test_whitespace_only_raises_clierror(
         self, route_research: ModuleType
     ) -> None:
-        import cli
-        with pytest.raises(cli.CliError):
+        with pytest.raises(route_research.cli.CliError):
             route_research.classify("   \n  ")
 
 
@@ -235,7 +221,7 @@ class TestSidecarFile:
 
 def _run(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, str(SCRIPT_PATH), *args],
+        [sys.executable, str(BUNDLE), "route_research", *args],
         capture_output=True,
         text=True,
         cwd=cwd,

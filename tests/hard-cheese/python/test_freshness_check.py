@@ -10,7 +10,6 @@ subtree). The repo root is resolved via parents[N] from this file.
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import subprocess
 import sys
@@ -19,23 +18,10 @@ from types import ModuleType
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-SCRIPT_PATH = REPO_ROOT / "skills" / "hard-cheese" / "scripts" / "freshness-check.py"
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
+import build_pyz  # noqa: E402
 
-
-def _load(name: str, path: Path) -> ModuleType:
-    spec = importlib.util.spec_from_file_location(name, path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"Could not load {path}")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-@pytest.fixture(scope="module")
-def freshness_check() -> ModuleType:
-    return _load("freshness_check", SCRIPT_PATH)
+BUNDLE = build_pyz.cached_bundle("hard-cheese")
 
 
 # ---------- git fixture --------------------------------------------------- #
@@ -119,7 +105,8 @@ def _run_cli(repo: Path, slug: str, *extra: str) -> subprocess.CompletedProcess[
     return subprocess.run(
         [
             sys.executable,
-            str(SCRIPT_PATH),
+            str(BUNDLE),
+            "freshness-check",
             "--slug",
             slug,
             "--cheese-root",
@@ -310,7 +297,7 @@ class TestMalformedLog:
 class TestArgHandling:
     def test_missing_slug_exits_2(self, repo: Path) -> None:
         result = subprocess.run(
-            [sys.executable, str(SCRIPT_PATH)],
+            [sys.executable, str(BUNDLE), "freshness-check"],
             cwd=str(repo),
             capture_output=True,
             text=True,
