@@ -204,7 +204,7 @@ helper to pick the kind deterministically (and surface the escalate-to-`sg`
 hint when the pattern has metavariables):
 
 ```bash
-python3 skills/cheez-search/scripts/pick_kind.py --query "<raw query>" --json
+python3 ${CLAUDE_SKILL_DIR}/scripts/cheez-search.pyz pick_kind --query "<raw query>" --json
 ```
 
 The script emits `{query, kind, scope?, glob?}` for tilth-routable queries

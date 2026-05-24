@@ -21,13 +21,13 @@ Accept the whole user prompt as the research question. If version, framework, re
 3. **Route** — pick sources per `references/routing.md` and emit the routing block. Sources committed here MUST execute. Run the decision-table router first so the routing block is grounded, not freelanced:
 
    ```bash
-   python3 skills/briesearch/scripts/route_research.py --question "<question>" --json
+   python3 ${CLAUDE_SKILL_DIR}/scripts/briesearch.pyz route_research --question "<question>" --json
    ```
 
    The script emits `{tool, rationale, depth, question}` and writes a sidecar JSON under `.cheese/briesearch/<slug>.json`. When the routed tool is a Tavily rung, pick the lowest-cost depth via:
 
    ```bash
-   python3 skills/briesearch/scripts/pick_tavily_rung.py --question "<question>" --json
+   python3 ${CLAUDE_SKILL_DIR}/scripts/briesearch.pyz pick_tavily_rung --question "<question>" --json
    ```
 
    which returns `{tool, depth, filters, question}` — `tool` is one of `tavily-search`, `tavily-research`, `tavily-extract`, `tavily-map`, `tavily-crawl`.
@@ -35,10 +35,10 @@ Accept the whole user prompt as the research question. If version, framework, re
 5. **Synthesize** — build the claim-level evidence table per `references/synthesis.md`, verify links resolve, apply the confidence cap. Run the cap deterministically against the routed source list rather than eyeballing it:
 
    ```bash
-   python3 skills/briesearch/scripts/confidence_cap.py --sources <sources.json>
+   python3 ${CLAUDE_SKILL_DIR}/scripts/briesearch.pyz confidence_cap --sources <sources.json>
    # or stream the source list via stdin:
    echo '[{"url":"...","quality":"high","age_days":30,"concordance":"agrees"}, ...]' \
-     | python3 skills/briesearch/scripts/confidence_cap.py --sources -
+     | python3 ${CLAUDE_SKILL_DIR}/scripts/briesearch.pyz confidence_cap --sources -
    ```
 
    The script emits `{confidence, justification}` per the rubric in `references/synthesis.md` — single source caps at `don't know`, conflicting sources cap at `don't know`, three concordant high-quality recent sources reach `certain`.

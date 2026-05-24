@@ -34,7 +34,7 @@ If `$ARGUMENTS` is missing entirely and there is no recent context to lean on, a
 1. **Classify** — match `$ARGUMENTS` against the intent shapes in `references/classification.md`. Pick the highest-confidence shape; below the threshold, route to `clarify` (see step 4). Run the deterministic classifier on the raw input first so the LLM's verdict can be compared against a script-grounded one, catching silent misroutes:
 
    ```bash
-   python3 skills/cheese/scripts/classify.py --input "<user $ARGUMENTS>"
+   python3 ${CLAUDE_SKILL_DIR}/scripts/cheese.pyz classify --input "<user $ARGUMENTS>"
    ```
 
    The script emits `{intent, confidence, signals, target_skill}`. When it returns `unknown` (no rule fired with enough weight), fall through to the prose classifier; otherwise the LLM's choice should match the script's verdict — disagreement is the cue to slow down and re-read the input rather than commit to a route.

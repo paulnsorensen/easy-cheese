@@ -42,7 +42,7 @@ Arguments:
 2. **Freshness check.** Run the staleness gate as a script, not as an LLM judgement:
 
    ```bash
-   python3 skills/hard-cheese/scripts/freshness-check.py --slug <slug>
+   python3 ${CLAUDE_SKILL_DIR}/scripts/hard-cheese.pyz freshness-check --slug <slug>
    ```
 
    The script reads `.cheese/hard-cheese/<slug>.md`, compares the last recorded PASS row's SHA against `git rev-parse HEAD`, and emits one of three states with matching exit codes:
@@ -68,12 +68,12 @@ Arguments:
 
    See `references/judge-prompt.md` for the full system prompt and output shape.
 
-   Skip this step when `--no-judge` is set: append the attempt with `--status LOGGED --score -` via `python3 skills/hard-cheese/scripts/append-attempt.py` (same shape as step 6), then exit `0`.
+   Skip this step when `--no-judge` is set: append the attempt with `--status LOGGED --score -` via `python3 ${CLAUDE_SKILL_DIR}/scripts/hard-cheese.pyz append-attempt` (same shape as step 6), then exit `0`.
 
 6. **On judge result, append the attempt row via the script** — do not hand-write the markdown. The atomic appender serialises concurrent runs and escapes user content correctly:
 
    ```bash
-   python3 skills/hard-cheese/scripts/append-attempt.py \
+   python3 ${CLAUDE_SKILL_DIR}/scripts/hard-cheese.pyz append-attempt \
        --slug <slug> \
        --status <PASS|FAIL|ERROR|LOGGED> \
        --score <1-5 or '-' when LOGGED> \

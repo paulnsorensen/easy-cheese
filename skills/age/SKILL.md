@@ -49,10 +49,10 @@ Per-dimension base-severity tables, location-sensitivity, fix-cost-now / fix-cos
 ## Flow
 
 1. Identify the diff, scope, and relevant spec or issue.
-2. Gather evidence: diff, touched files, tests, callers/imports. If `.cheese/press/<slug>.md` exists, parse its preamble with `python3 shared/scripts/read_handoff_slug.py --phase press --slug <slug>` to pick up `status` / `next` / `artifact` / `orientation` without re-parsing the body, then read the body for unresolved items and include a `## Press findings` sub-section in the age report — `/cure` reads only `.cheese/age/<slug>.md` and cannot access the press report directly.
+2. Gather evidence: diff, touched files, tests, callers/imports. If `.cheese/press/<slug>.md` exists, parse its preamble with `python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz read_handoff_slug --phase press --slug <slug>` to pick up `status` / `next` / `artifact` / `orientation` without re-parsing the body, then read the body for unresolved items and include a `## Press findings` sub-section in the age report — `/cure` reads only `.cheese/age/<slug>.md` and cannot access the press report directly.
 3. Review every dimension; dimensions with no findings simply omit themselves.
 4. Compute severity per finding (base + location bump + compounding bump, capped at `blocker`). Group findings by severity (`## Blocker → ## High → ## Medium → ## Low`); within a severity group, order by file.
-5. Write the report to `.cheese/age/<slug>.md` via `python3 shared/scripts/write_handoff_artifact.py` (see `## Output` for the exact invocation). The script renders the canonical 4-line preamble and atomically writes preamble + body. Print the path.
+5. Write the report to `.cheese/age/<slug>.md` via `python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz write_handoff_artifact` (see `## Output` for the exact invocation). The script renders the canonical 4-line preamble and atomically writes preamble + body. Print the path.
 6. Hand off via the shared handoff gate (see `## Handoff` below). Age owns the selection gate: it asks the user *which findings to cure*, never *whether to run /cure*. `/cure` still owns the actual fix application — age never auto-applies fixes.
 
 ## Preferred tools and fallbacks
@@ -95,7 +95,7 @@ Cross-cutting house style and citation form: [`../../shared/formatting.md`](../.
 Write the report by composing the body in a temp file and invoking `write_handoff_artifact.py` — the script owns preamble rendering and atomic write, age owns the body content:
 
 ```bash
-python3 shared/scripts/write_handoff_artifact.py \
+python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz write_handoff_artifact \
   --slug <slug> \
   --status "ok" \
   --phase "age" \
@@ -176,7 +176,7 @@ After the report is on disk, skip any "should I run /cure?" meta-question and go
 1. Render the numbered selection table by invoking:
 
    ```bash
-   python3 shared/scripts/findings_cli.py render-table --report .cheese/age/<slug>.md
+   python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz findings_cli render-table --report .cheese/age/<slug>.md
    ```
 
    The script reads the report, groups findings by severity, and prints the numbered table per `../cure/references/selection.md`. Render its output inline.
@@ -194,7 +194,7 @@ After the report is on disk, skip any "should I run /cure?" meta-question and go
 3. On a non-empty selection, expand the verb to concrete ids by invoking:
 
    ```bash
-   python3 shared/scripts/findings_cli.py parse-selection \
+   python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz findings_cli parse-selection \
      --report .cheese/age/<slug>.md \
      --selection "<verb>" --json
    ```

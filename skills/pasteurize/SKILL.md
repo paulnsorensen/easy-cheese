@@ -56,7 +56,7 @@ Do not proceed to Phase 2 until you have a loop you believe in.
 Run the loop N times and read the verdict — don't eyeball a single run.
 
 ```bash
-python3 skills/pasteurize/scripts/repro-rerun.py --cmd "<repro>" --runs N
+python3 ${CLAUDE_SKILL_DIR}/scripts/pasteurize.pyz repro-rerun --cmd "<repro>" --runs N
 ```
 
 Emits `{exit_code, reproduced, runs, failures}`. `failures == runs` is a deterministic repro; `0 < failures < runs` is a flake (raise N or harden the loop per Phase 1); `failures == 0` means the loop does not reproduce — go back to Phase 1.
@@ -117,9 +117,9 @@ Broader implementation (related cleanup, follow-on changes, anything beyond the 
 
 Before writing the handoff slug, confirm:
 
-- [ ] Original repro no longer reproduces (re-run the Phase 1 loop via `python3 skills/pasteurize/scripts/repro-rerun.py --cmd "<repro>" --runs N`; expect `failures: 0`).
+- [ ] Original repro no longer reproduces (re-run the Phase 1 loop via `python3 ${CLAUDE_SKILL_DIR}/scripts/pasteurize.pyz repro-rerun --cmd "<repro>" --runs N`; expect `failures: 0`).
 - [ ] Regression test passes (or absence of seam is documented in the slug).
-- [ ] All instrumentation removed — run `python3 skills/pasteurize/scripts/debug-tag-sweep.py [--root <dir>]` and verify exit 0 (clean tree). The sweep scans `DEBUG:`, `TEMP:`, `TODO-pasteurize:` and the common comment-prefixed shapes; judgement still decides whether a tagged line is real instrumentation or a TODO worth keeping (genuine follow-up, not a leftover probe).
+- [ ] All instrumentation removed — run `python3 ${CLAUDE_SKILL_DIR}/scripts/pasteurize.pyz debug-tag-sweep [--root <dir>]` and verify exit 0 (clean tree). The sweep scans `DEBUG:`, `TEMP:`, `TODO-pasteurize:` and the common comment-prefixed shapes; judgement still decides whether a tagged line is real instrumentation or a TODO worth keeping (genuine follow-up, not a leftover probe).
 - [ ] Throwaway harnesses / prototypes deleted (or moved to a clearly-marked debug location and called out in the slug).
 - [ ] The confirmed hypothesis is captured in the slug so the commit message downstream can reference it.
 
@@ -209,6 +209,6 @@ In every early-stop case, write the halt slug and surface the report. Do not sil
 - Do not skip Phase 1. The feedback loop is the skill; everything else is mechanical.
 - Do not hypothesise without a reproducing loop.
 - Phase 5 writes only the regression test and the **minimal** production change. Broader implementation — related cleanup, follow-on features, refactors the bug suggests — belongs in `/cook`, not pasteurize.
-- Do not leave `[DEBUG-...]` tags in the tree — `python3 skills/pasteurize/scripts/debug-tag-sweep.py` must exit 0 before the handoff slug is written.
+- Do not leave `[DEBUG-...]` tags in the tree — `python3 ${CLAUDE_SKILL_DIR}/scripts/pasteurize.pyz debug-tag-sweep` must exit 0 before the handoff slug is written.
 - Do not claim "shipped". Pasteurize claims "cause named, regression green, fix in tree, ready for chain". The chain (cook → press → age → cure) claims shipped.
 - If the bug exposes an architectural gap (no correct regression-test seam), say so in the slug. Do not silently paper over it.

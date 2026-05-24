@@ -52,10 +52,10 @@ If optional tools are missing, press a narrower surface and state the residual r
 
 Cross-cutting house style and citation form: [`../../shared/formatting.md`](../../shared/formatting.md). This section owns the press-report shape; formatting.md owns the voice rules and the footnote primitive.
 
-Write to `.cheese/press/<slug>.md` with a minimum handoff slug at the top so `/ultracook` and `/cheese --continue` can chain without re-parsing the report. Compose the report body in a tmp file, then write the artifact atomically with the canonical 4-line preamble (`status: <ok|halt: …>` / `next: <age|done>` / `artifact: <path>` / `<orientation>`) via `shared/scripts/write_handoff_artifact.py`. Pass `--phase press` so the file lands in press's own directory; `--artifact` carries the *prior* phase's report (cook), not press's own:
+Write to `.cheese/press/<slug>.md` with a minimum handoff slug at the top so `/ultracook` and `/cheese --continue` can chain without re-parsing the report. Compose the report body in a tmp file, then write the artifact atomically with the canonical 4-line preamble (`status: <ok|halt: …>` / `next: <age|done>` / `artifact: <path>` / `<orientation>`) via `${CLAUDE_SKILL_DIR}/scripts/common.pyz write_handoff_artifact`. Pass `--phase press` so the file lands in press's own directory; `--artifact` carries the *prior* phase's report (cook), not press's own:
 
 ```bash
-python3 shared/scripts/write_handoff_artifact.py \
+python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz write_handoff_artifact \
     --slug <slug> \
     --status "ok" \
     --phase "press" \
