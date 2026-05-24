@@ -74,13 +74,13 @@ aliases, tags, or multi-document streams.
 
 The PR plan follows the same convention — written as YAML at
 `.cheese/cheese-factory/<slug>/pr-plan.yaml`, with its shape documented in
-`references/pr-plan-schema.json`. `${CLAUDE_SKILL_DIR}/scripts/easy-cheese.pyz pr_plan_to_branches` reads either YAML
+`references/pr-plan-schema.json`. `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz pr_plan_to_branches` reads either YAML
 or JSON for backward compatibility, but YAML is the canonical format.
 
 ### Validation (Phase 0)
 
-The decomposer's output is validated by `${CLAUDE_SKILL_DIR}/scripts/easy-cheese.pyz validate_manifest` for required
-sections and field shapes, then by `${CLAUDE_SKILL_DIR}/scripts/easy-cheese.pyz validate_decomposition` against:
+The decomposer's output is validated by `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz validate_manifest` for required
+sections and field shapes, then by `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz validate_decomposition` against:
 
 - **Behaviour overlap** — each curd describes one behaviour (criterion 1).
 - **Spec coverage** — every acceptance criterion has exactly one curd (criterion 2).
@@ -272,7 +272,7 @@ Detection: attempt to invoke the skill via the host's Skill tool; on unrecognise
 For each PR group in the plan:
 
 1. Read group metadata from `pr-plan.yaml`.
-2. Push the branch (use `${CLAUDE_SKILL_DIR}/scripts/easy-cheese.pyz pr_plan_to_branches` to convert `pr-plan.yaml` to branch-creation commands).
+2. Push the branch (use `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz pr_plan_to_branches` to convert `pr-plan.yaml` to branch-creation commands).
 3. Create the PR (via `/gh` if available, else `gh pr create` direct).
 4. For stacks: invoke `/pr-stack` with the ordered branch list.
 5. Update manifest with PR numbers and URLs.
@@ -442,10 +442,10 @@ If the manifest references commits that no longer exist (rebased, deleted), fail
 - `references/manifest-schema.json` — JSON Schema for the manifest.
 - `references/pr-plan-schema.json` — JSON Schema for the PR plan, `$ref`'d from `manifest-schema.json`.
 - `references/spawn-primitive-reference.md` — host-by-host invocation examples plus the five invariants.
-- `${CLAUDE_SKILL_DIR}/scripts/easy-cheese.pyz validate_manifest` — Phase 0 structural validation of required manifest sections and fields.
-- `${CLAUDE_SKILL_DIR}/scripts/easy-cheese.pyz validate_decomposition` — Phase 0 semantic validation of decomposer output against the five criteria.
-- `${CLAUDE_SKILL_DIR}/scripts/easy-cheese.pyz validate_pr_plan` — Phase 7 validation of PR planner output before branch creation.
-- `${CLAUDE_SKILL_DIR}/scripts/easy-cheese.pyz pr_plan_to_branches` — converts `pr-plan.yaml` to branch-creation commands for Phase 7.
+- `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz validate_manifest` — Phase 0 structural validation of required manifest sections and fields.
+- `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz validate_decomposition` — Phase 0 semantic validation of decomposer output against the five criteria.
+- `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz validate_pr_plan` — Phase 7 validation of PR planner output before branch creation.
+- `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz pr_plan_to_branches` — converts `pr-plan.yaml` to branch-creation commands for Phase 7.
 
 ## Rules
 

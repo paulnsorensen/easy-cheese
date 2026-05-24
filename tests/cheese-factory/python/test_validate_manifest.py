@@ -12,7 +12,7 @@ import yaml
 
 import build_pyz
 
-BUNDLE = build_pyz.cached_bundle()
+BUNDLE = build_pyz.cached_bundle("cheese-factory")
 
 
 def _curds(n: int = 5) -> list[dict]:

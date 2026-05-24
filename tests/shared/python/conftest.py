@@ -1,8 +1,9 @@
-"""Pytest config for the shared/scripts library, exercised through the bundle.
+"""Pytest config for the shared/scripts library, tested from source.
 
-Modules are imported from the freshly-built easy-cheese.pyz (not the source tree)
-so the tests verify the bundled artifact. import_module registers each module in
-sys.modules before its body runs, so @dataclass resolves cls.__module__ natively.
+These modules are the shared library. Each is vendored into a per-skill bundle
+only where that skill imports it, so several (findings, severity, handoff, gates,
+paths) are used only by skills not bundled here. The library itself is the unit
+under test, so it is loaded from source rather than from any one skill's bundle.
 """
 
 from __future__ import annotations
@@ -15,10 +16,7 @@ from types import ModuleType
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_ROOT / "scripts"))
-import build_pyz  # noqa: E402
-
-sys.path.insert(0, str(build_pyz.cached_bundle()))
+sys.path.insert(0, str(REPO_ROOT / "shared" / "scripts"))
 
 
 @pytest.fixture(scope="session")

@@ -57,7 +57,7 @@ jobs:
           set -euo pipefail
           python3 scripts/build_pyz.py
           shopt -s nullglob
-          bundles=(skills/*/scripts/easy-cheese.pyz)
+          bundles=(skills/*/scripts/*.pyz)
           # Fail loudly if nothing was built rather than publishing broken skills.
           test ${#bundles[@]} -gt 0 || { echo "::error::no skill bundles were built"; exit 1; }
           git add -f "${bundles[@]}"

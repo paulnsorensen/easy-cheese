@@ -1,8 +1,7 @@
 """Shared pytest config for cheese-factory tests.
 
-Validators are imported from the built easy-cheese.pyz, and the CLI subprocess
-tests invoke that same bundle, so the suite verifies the bundled artifact rather
-than the source tree.
+Validators are imported from cheese-factory's built .pyz, and the CLI subprocess
+tests invoke that same bundle, so the suite verifies the bundled artifact.
 """
 
 from __future__ import annotations
@@ -20,7 +19,7 @@ REFERENCES_DIR = CF_DIR / "references"
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 import build_pyz  # noqa: E402
 
-_BUNDLE = build_pyz.cached_bundle()
+_BUNDLE = build_pyz.cached_bundle("cheese-factory")
 sys.path.insert(0, str(_BUNDLE))
 
 

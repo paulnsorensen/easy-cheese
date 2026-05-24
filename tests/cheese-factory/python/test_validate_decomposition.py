@@ -1,4 +1,4 @@
-"""Unit tests for skills/cheese-factory/scripts/validate_decomposition.py.
+"""Unit tests for src/cheese-factory/validate_decomposition.py.
 
 Each of the five decomposition criteria gets positive + negative coverage,
 plus DAG cycle detection and the minimum-curd-count gate.
@@ -14,7 +14,7 @@ from types import ModuleType
 
 import build_pyz
 
-BUNDLE = build_pyz.cached_bundle()
+BUNDLE = build_pyz.cached_bundle("cheese-factory")
 
 
 def _curds(n: int = 5) -> list[dict]:

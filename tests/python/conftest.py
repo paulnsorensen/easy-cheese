@@ -1,8 +1,8 @@
 """Shared pytest config.
 
-Modules are imported from the built easy-cheese.pyz so the melt, mold, and affinage
-script tests verify the bundled artifact rather than the source tree. The bundle
-underscores hyphenated stems (conflict-pick.py -> conflict_pick) for importability.
+The melt, mold, and affinage script tests import their modules from each skill's
+built .pyz, verifying the bundled artifacts. Every bundle carries only its own
+skill's scripts plus the shared modules that skill imports.
 """
 
 from __future__ import annotations
@@ -18,7 +18,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 import build_pyz  # noqa: E402
 
-sys.path.insert(0, str(build_pyz.cached_bundle()))
+for _skill in ("melt", "mold", "affinage"):
+    sys.path.insert(0, str(build_pyz.cached_bundle(_skill)))
 
 
 @pytest.fixture(scope="session")

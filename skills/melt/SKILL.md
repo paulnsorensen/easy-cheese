@@ -35,7 +35,7 @@ The bash-driven flows below cover the bulk of resolution. Drop into the cheez-* 
 Run this before the conflict summary. If the branch was squash-merged into base, mergiraf cannot help — the right answer is to either merge base in (non-destructive) or abort and re-cherry-pick the unique commits (destructive).
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/easy-cheese.pyz detect-squash-residue
+python3 ${CLAUDE_SKILL_DIR}/scripts/melt.pyz detect-squash-residue
 ```
 
 If the verdict is `SQUASH-MERGED`, surface both printed remedies to the user verbatim and stop the cascade. Neither remedy is auto-applied — the user picks one and copy-pastes. Flags:
@@ -70,7 +70,7 @@ Default to suggesting [A] first; only suggest [B] when the user has stated a pre
 Run the summary script next; it replaces ad-hoc `grep -n '<<<<<<<'` parsers and is shaped for low-token output.
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/easy-cheese.pyz conflict-summary
+python3 ${CLAUDE_SKILL_DIR}/scripts/melt.pyz conflict-summary
 ```
 
 Default output is terse: one metadata line per file plus minimally framed hunks. Flags:
@@ -92,19 +92,19 @@ For every file mergiraf supports, attempt structural merge:
 
 ```bash
 # Preview (dry-run is the default)
-python3 ${CLAUDE_SKILL_DIR}/scripts/easy-cheese.pyz batch-resolve
+python3 ${CLAUDE_SKILL_DIR}/scripts/melt.pyz batch-resolve
 
 # Apply clean resolutions and stage them
-python3 ${CLAUDE_SKILL_DIR}/scripts/easy-cheese.pyz batch-resolve --apply
+python3 ${CLAUDE_SKILL_DIR}/scripts/melt.pyz batch-resolve --apply
 
 # Markdown output and mergiraf debug logs
-python3 ${CLAUDE_SKILL_DIR}/scripts/easy-cheese.pyz batch-resolve --verbose
+python3 ${CLAUDE_SKILL_DIR}/scripts/melt.pyz batch-resolve --verbose
 ```
 
 To inspect what mergiraf would produce for a single file without touching the working copy, use `--debug`:
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/easy-cheese.pyz batch-resolve --debug <path>
+python3 ${CLAUDE_SKILL_DIR}/scripts/melt.pyz batch-resolve --debug <path>
 ```
 
 The script extracts the three stages, runs mergiraf with `RUST_LOG=mergiraf=debug`, keeps the tempdir, and prints paths to the merged output, the log, and the conflict-marker count. Inspect with `cat`/`diff` against the printed paths. If the merged output is clean, apply it:
@@ -145,13 +145,13 @@ For shell, SQL, YAML, JSON, and other formats mergiraf does not parse, use `conf
 
 ```bash
 # Take ours for every hunk
-python3 ${CLAUDE_SKILL_DIR}/scripts/easy-cheese.pyz conflict-pick hooks/session-start.sh --ours
+python3 ${CLAUDE_SKILL_DIR}/scripts/melt.pyz conflict-pick hooks/session-start.sh --ours
 
 # Take theirs for every hunk
-python3 ${CLAUDE_SKILL_DIR}/scripts/easy-cheese.pyz conflict-pick .gitignore --theirs
+python3 ${CLAUDE_SKILL_DIR}/scripts/melt.pyz conflict-pick .gitignore --theirs
 
 # Match by regex; matched hunks resolve, others remain
-python3 ${CLAUDE_SKILL_DIR}/scripts/easy-cheese.pyz conflict-pick config.yaml --grep "timeout" --ours
+python3 ${CLAUDE_SKILL_DIR}/scripts/melt.pyz conflict-pick config.yaml --grep "timeout" --ours
 ```
 
 ### 5. Lockfiles
@@ -160,13 +160,13 @@ Lockfile content has structure that text or AST merge cannot validate. Take one 
 
 ```bash
 # Auto-detect conflicted lockfiles, take theirs, regenerate, stage
-python3 ${CLAUDE_SKILL_DIR}/scripts/easy-cheese.pyz lockfile-resolve
+python3 ${CLAUDE_SKILL_DIR}/scripts/melt.pyz lockfile-resolve
 
 # Preview
-python3 ${CLAUDE_SKILL_DIR}/scripts/easy-cheese.pyz lockfile-resolve --dry-run
+python3 ${CLAUDE_SKILL_DIR}/scripts/melt.pyz lockfile-resolve --dry-run
 
 # Take ours instead
-python3 ${CLAUDE_SKILL_DIR}/scripts/easy-cheese.pyz lockfile-resolve --strategy ours
+python3 ${CLAUDE_SKILL_DIR}/scripts/melt.pyz lockfile-resolve --strategy ours
 ```
 
 Supports `Cargo.lock`, `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`, `poetry.lock`, `Pipfile.lock`, `uv.lock`, `Gemfile.lock`, and `go.sum`.
@@ -176,7 +176,7 @@ Supports `Cargo.lock`, `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`, `poet
 When mergiraf is not resolving something it should, use `--debug` for a single-file inspection (keeps the tempdir, captures `RUST_LOG=mergiraf=debug`):
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/easy-cheese.pyz batch-resolve --debug <path>
+python3 ${CLAUDE_SKILL_DIR}/scripts/melt.pyz batch-resolve --debug <path>
 
 mergiraf languages | grep <extension>   # is the type registered?
 git check-attr merge -- <path>          # should show: merge: mergiraf
