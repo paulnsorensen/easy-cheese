@@ -99,6 +99,17 @@ def _source_dir(skill: str) -> Path:
     return SHARED_SCRIPTS if skill == COMMON else SRC_ROOT / skill
 
 
+def _common_consumers(targets: list[str], *, explicit: bool) -> frozenset[str]:
+    """Which consumer skills receive common.pyz for this build request.
+
+    A full build (no explicit targets) or an explicit ``common`` build fans out
+    to every consumer; an explicit skill list fans only to the consumers named.
+    """
+    if not explicit or COMMON in targets:
+        return COMMON_CONSUMERS
+    return frozenset(s for s in targets if s in COMMON_CONSUMERS)
+
+
 def _imported_top_names(path: Path) -> set[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"))
     names: set[str] = set()
@@ -182,13 +193,16 @@ def main(argv: list[str]) -> int:
     )
     parser.add_argument("skills", nargs="*", help="Skills to build (default: all).")
     args = parser.parse_args(argv[1:])
-    known = {*SKILLS, COMMON}
+    # Consumer-only skills (age/cure/press) have no own bundle but receive
+    # common.pyz, so they are valid targets even though they are not in SKILLS.
+    known = {*SKILLS, COMMON, *COMMON_CONSUMERS}
     unknown = [s for s in args.skills if s not in known]
     if unknown:
         parser.error(f"unknown skill(s): {', '.join(unknown)}; known: {', '.join(sorted(known))}")
     targets = args.skills or [*SKILLS, COMMON]
-    real = [s for s in targets if s != COMMON]
-    want_common = COMMON in targets or any(s in COMMON_CONSUMERS for s in real)
+    real = [s for s in targets if s in SKILLS]  # only skills that ship their own .pyz
+    want_common = COMMON in targets or any(s in COMMON_CONSUMERS for s in targets)
+    consumers = _common_consumers(targets, explicit=bool(args.skills))
 
     if args.out_dir is not None:
         for skill in real:
@@ -202,7 +216,6 @@ def main(argv: list[str]) -> int:
     if want_common:
         # Build once, then fan the same artifact out to each consuming skill so
         # every skill ships self-contained — common has no skill dir of its own.
-        consumers = COMMON_CONSUMERS if (COMMON in targets or not args.skills) else {s for s in real if s in COMMON_CONSUMERS}
         with tempfile.TemporaryDirectory() as td:
             common = build_bundle(COMMON, Path(td) / "common.pyz")
             for consumer in sorted(consumers):

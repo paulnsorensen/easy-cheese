@@ -153,8 +153,9 @@ class TestCollision:
         assert result.returncode == 2
         assert result.stderr.startswith("ERROR:"), result.stderr
         assert "already exists" in result.stderr
-        # Hint mentions --suffix or alternative.
-        assert "--suffix" in result.stderr or "another name" in result.stderr
+        # Hint guides recovery without referencing a flag the CLI does not define.
+        assert "--suffix" not in result.stderr
+        assert "rephrase --task" in result.stderr or "remove the existing" in result.stderr
         # No stdout on error.
         assert result.stdout == ""
 

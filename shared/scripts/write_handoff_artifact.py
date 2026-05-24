@@ -11,8 +11,9 @@ CLI:
 Writes ``.cheese/<phase>/<slug>.md`` containing the canonical four-line
 preamble (status / next / artifact / orientation) followed by an optional
 body separated by a blank line. The write is atomic: contents land in a tmp
-file inside the target directory and are then ``os.rename``'d into place, so
-readers never observe a half-written file.
+file inside the target directory and are then ``os.replace``'d into place
+(atomic overwrite on POSIX and Windows alike), so readers never observe a
+half-written file.
 
 ``--phase`` names *this* phase's own directory and is the on-disk path
 authority. ``--next`` is preamble-content only — it tells the *next* phase
@@ -60,6 +61,12 @@ def _render_preamble(*, status: str, next_skill: str, artifact: str, orientation
     )
 
 
+def _reject_traversal(field: str, value: str) -> None:
+    """Reject path-traversal segments in values used to build the on-disk path."""
+    if ".." in value or "/" in value or "\\" in value:
+        raise cli.CliError(f"{field} rejects path traversal: {value!r}")
+
+
 def _build_contents(*, preamble: str, body: str | None) -> str:
     if body is None:
         return preamble + "\n"
@@ -90,11 +97,17 @@ def write_artifact(
         raise cli.CliError("--next must be non-empty")
     if not orientation:
         raise cli.CliError("--orientation must be non-empty")
+    _reject_traversal("--slug", slug)
 
     path_dir = phase if phase else next_skill
-    target_dir = root / ".cheese" / path_dir
+    cheese_root = (root / ".cheese").resolve()
+    target = cheese_root / path_dir / f"{slug}.md"
+    # Nested path_dir subdirs are allowed (factory chains write to subdirs); a
+    # `..` or absolute escape out of .cheese/ is not.
+    if cheese_root not in target.resolve().parents:
+        raise cli.CliError(f"--phase/--next must stay under .cheese/: {path_dir!r}")
+    target_dir = target.parent
     target_dir.mkdir(parents=True, exist_ok=True)
-    target = target_dir / f"{slug}.md"
 
     preamble = _render_preamble(
         status=status, next_skill=next_skill, artifact=artifact, orientation=orientation
@@ -104,7 +117,7 @@ def write_artifact(
     tmp = target.with_name(target.name + ".tmp")
     try:
         tmp.write_text(contents, encoding="utf-8")
-        os.rename(tmp, target)
+        os.replace(tmp, target)
     except BaseException:
         # Atomic-rename contract: clean up the tmp on failure so callers never
         # see a half-written sibling. swallow tmp-cleanup errors — the real

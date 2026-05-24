@@ -13,10 +13,13 @@ Inputs are two file paths:
     --transcript  Path to the agent's proposed draft (Approach / Decisions /
                   Interface sketches block).
 
-Output (JSON list on stdout): every alphanumeric word that appears in the
-transcript but not in the spec, lowercased, deduplicated, and stripped of
-stopwords + bare numerics. Words are compared after normalising case and
-collapsing internal hyphens — `retry-loop` matches `Retry-Loop`.
+Output (JSON object on stdout) with keys ``spec`` / ``transcript`` (the input
+paths), ``agent_introduced`` (the verdict list), and ``count`` (its length).
+``agent_introduced`` holds every alphanumeric word that appears in the
+transcript but not in the spec, deduplicated and stripped of stopwords + bare
+numerics. Words are compared after lowercasing and stripping leading/trailing
+``-``/``_`` (internal hyphens are preserved) — so `Retry-Loop` matches
+`retry-loop`.
 
 Exit codes:
 

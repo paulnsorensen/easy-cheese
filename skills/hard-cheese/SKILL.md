@@ -47,7 +47,7 @@ Arguments:
 
    The script reads `.cheese/hard-cheese/<slug>.md`, compares the last recorded PASS row's SHA against `git rev-parse HEAD`, and emits one of three states with matching exit codes:
 
-   - `previously_passed` (exit `0`) — last pass matches current HEAD. Print `"previously passed at attempt <N>"` and exit `0`. Do not re-run the gate.
+   - `previously_passed` (exit `0`) — last pass matches current HEAD. Report `"previously passed — HEAD unchanged since the last PASS"` and exit `0`. Do not re-run the gate.
    - `stale` (exit `2`) — last pass exists but HEAD has moved. Start a fresh attempt sequence. Prior attempts are *not* erased — they stay in the same file as historical context, and the new sequence appends below.
    - `new` (exit `3`) — no prior attempt (or log is unreadable/malformed). Start an attempt sequence from scratch.
 

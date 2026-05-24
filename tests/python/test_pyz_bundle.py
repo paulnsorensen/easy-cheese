@@ -160,3 +160,24 @@ def test_common_bundle_carries_clis_plus_libs_not_skill_scripts(bundles: Path) -
     assert "cli.py" in common  # the shared argparse helper every CLI imports
     assert "conflict_pick.py" not in common  # melt's
     assert "self_eval_check.py" not in common  # cook's
+
+
+def test_consumer_only_skill_builds_common(tmp_path: Path) -> None:
+    """A bare consumer name (age/cure/press — no own bundle) is a valid target
+    and yields common.pyz, not an 'unknown skill' error."""
+    result = subprocess.run(
+        [sys.executable, str(BUILD), "press", "--out-dir", str(tmp_path)],
+        cwd=str(REPO_ROOT), capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / "common.pyz").exists()
+    assert not (tmp_path / "press.pyz").exists()  # press ships no own scripts
+
+
+def test_unknown_skill_name_still_errors(tmp_path: Path) -> None:
+    result = subprocess.run(
+        [sys.executable, str(BUILD), "not-a-skill", "--out-dir", str(tmp_path)],
+        cwd=str(REPO_ROOT), capture_output=True, text=True,
+    )
+    assert result.returncode != 0
+    assert "unknown skill" in result.stderr.lower()

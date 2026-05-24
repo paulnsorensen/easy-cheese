@@ -30,7 +30,8 @@ def _from_task(args: argparse.Namespace) -> None:
     artifact = paths.artifact_path("specs", slug, root=args.root)
     if artifact.exists():
         raise cli.CliError(
-            f"{artifact} already exists; pass --suffix or pick another name"
+            f"{artifact} already exists; rephrase --task for a distinct slug "
+            "or remove the existing spec"
         )
     cli.emit(
         {"slug": slug, "path": str(artifact)},

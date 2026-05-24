@@ -80,6 +80,39 @@ class TestPreambleRoundTrip:
         assert slug.next_skill == "cure"
 
 
+class TestPathTraversalRejected:
+    @pytest.mark.parametrize("bad_slug", ["../escape", "a/b", "..", "win\\esc"])
+    def test_traversal_slug_rejected(
+        self, writer: ModuleType, tmp_path: Path, bad_slug: str
+    ) -> None:
+        with pytest.raises(writer.cli.CliError):
+            writer.write_artifact(
+                slug=bad_slug, status="ok", next_skill="age", artifact="",
+                orientation="x", body=None, root=tmp_path,
+            )
+
+    def test_traversal_phase_rejected(self, writer: ModuleType, tmp_path: Path) -> None:
+        with pytest.raises(writer.cli.CliError):
+            writer.write_artifact(
+                slug="ok-slug", status="ok", next_skill="age", artifact="",
+                orientation="x", body=None, root=tmp_path, phase="../etc",
+            )
+
+
+class TestRerunOverwrite:
+    def test_rerun_same_slug_overwrites(self, writer: ModuleType, tmp_path: Path) -> None:
+        # os.replace (not os.rename) must overwrite an existing artifact cleanly
+        # on a re-run — the cross-platform atomic-overwrite contract.
+        common = dict(
+            slug="rerun", status="ok", next_skill="age", artifact="",
+            body=None, root=tmp_path,
+        )
+        writer.write_artifact(orientation="first pass", **common)
+        target = writer.write_artifact(orientation="second pass", **common)
+        assert "second pass" in target.read_text(encoding="utf-8")
+        assert "first pass" not in target.read_text(encoding="utf-8")
+
+
 class TestBodyFile:
     def test_body_content_appended_with_blank_separator(
         self, writer: ModuleType, handoff_mod: ModuleType, tmp_path: Path
@@ -254,13 +287,13 @@ class TestAtomicRename:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        # Force os.rename to fail; assert target is absent and no .tmp lingers.
+        # Force the atomic move to fail; assert target is absent and no .tmp lingers.
         import os as _os
 
         def boom(src: str, dst: str) -> None:  # noqa: ARG001
             raise OSError("simulated rename failure")
 
-        monkeypatch.setattr(_os, "rename", boom)
+        monkeypatch.setattr(_os, "replace", boom)
 
         with pytest.raises(OSError, match="simulated rename failure"):
             writer.write_artifact(

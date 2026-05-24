@@ -17,22 +17,36 @@ Row shape (matches the hard-cheese audit-trail schema):
     | <ISO8601 timestamp> | <HEAD short sha> | <status> | <score> | <feedback> | <explanation> |
 
 First write creates the file with a matching header. Re-invocations append
-below the existing rows. A POSIX `fcntl.flock` sidecar serialises concurrent
-appends; the read-modify-write itself is atomic via tmpfile + `os.rename`.
+below the existing rows. An advisory lock sidecar (`fcntl.flock` on POSIX,
+`msvcrt.locking` on Windows) serialises concurrent appends; the read-modify-write
+itself is atomic via tmpfile + `os.replace`.
 """
 from __future__ import annotations
 
 import argparse
 import datetime as _dt
-import fcntl
 import os
 import subprocess
 import tempfile
 from pathlib import Path
 
+try:
+    import fcntl  # POSIX advisory file locks
+except ImportError:  # pragma: no cover - exercised only on Windows
+    fcntl = None
+    import msvcrt
+
 import cli  # noqa: E402
 
 REPO_ROOT = Path.cwd()
+
+
+def _lock(fd: int, *, exclusive: bool) -> None:
+    """Acquire (exclusive=True) or release an advisory lock on fd, cross-platform."""
+    if fcntl is not None:
+        fcntl.flock(fd, fcntl.LOCK_EX if exclusive else fcntl.LOCK_UN)
+    else:  # pragma: no cover - Windows only
+        msvcrt.locking(fd, msvcrt.LK_LOCK if exclusive else msvcrt.LK_UNLCK, 1)
 
 
 def _artifact_dir() -> Path:
@@ -77,7 +91,7 @@ def _atomic_rewrite(target: Path, new_text: str) -> None:
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             fh.write(new_text)
-        os.rename(tmp_name, target)
+        os.replace(tmp_name, target)
     except Exception:
         # Best-effort cleanup; do not mask the original error.
         try:
@@ -100,17 +114,21 @@ def _append_row(target: Path, row: str) -> None:
 
 
 def _with_flock(lock_path: Path, fn) -> None:
-    """Run fn() while holding an exclusive POSIX flock on lock_path."""
+    """Run fn() while holding an exclusive advisory lock on lock_path.
+
+    Uses POSIX ``fcntl.flock`` where available and falls back to
+    ``msvcrt.locking`` on Windows so the concurrency guard is not silently lost.
+    """
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     # O_CREAT so concurrent processes share the same lockfile inode. 0o600
     # so the lockfile is not world-readable (CodeQL py/overly-permissive-file).
     fd = os.open(str(lock_path), os.O_RDWR | os.O_CREAT, 0o600)
     try:
-        fcntl.flock(fd, fcntl.LOCK_EX)
+        _lock(fd, exclusive=True)
         fn()
     finally:
         try:
-            fcntl.flock(fd, fcntl.LOCK_UN)
+            _lock(fd, exclusive=False)
         finally:
             os.close(fd)
 

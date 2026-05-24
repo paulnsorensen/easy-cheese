@@ -78,6 +78,19 @@ def test_missing_file_raises_cli_error(tmp_path: Path) -> None:
     assert "ghost" in result.stderr
 
 
+def test_malformed_preamble_raises_cli_error(tmp_path: Path) -> None:
+    # A garbled preamble must surface as the CliError contract (ERROR: / exit 2),
+    # not an uncaught HandoffParseError traceback (exit 1).
+    _write_artifact(tmp_path, "age", "garbled", "this is not a handoff preamble\n")
+
+    result = _run(tmp_path, "--phase", "age", "--slug", "garbled")
+    assert result.returncode == 2, result.stderr
+    assert result.stderr.startswith("ERROR:")
+    assert "malformed handoff preamble" in result.stderr
+    assert "Traceback" not in result.stderr
+    assert result.stdout == ""
+
+
 def test_missing_required_arg_exits_2(tmp_path: Path) -> None:
     # Omit --slug; argparse should error and exit 2.
     result = _run(tmp_path, "--phase", "age")
