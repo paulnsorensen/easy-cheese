@@ -15,6 +15,10 @@ test:
     bats tests/cheese-factory/bash/test_pr_plan_to_branches.bats
     bats tests/bash/test_post_reply.bats
 
+# Build self-contained .pyz bundles for shared-consuming skills (built on publish)
+bundle:
+    python3 scripts/build_pyz.py
+
 # Lint shell scripts
 lint-sh:
     shellcheck scripts/install.sh shared/post-reply.sh

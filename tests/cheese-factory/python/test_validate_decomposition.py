@@ -1,4 +1,4 @@
-"""Unit tests for skills/cheese-factory/scripts/validate_decomposition.py.
+"""Unit tests for src/cheese-factory/validate_decomposition.py.
 
 Each of the five decomposition criteria gets positive + negative coverage,
 plus DAG cycle detection and the minimum-curd-count gate.
@@ -11,6 +11,10 @@ import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
+
+import build_pyz
+
+BUNDLE = build_pyz.cached_bundle("cheese-factory")
 
 
 def _curds(n: int = 5) -> list[dict]:
@@ -357,21 +361,12 @@ class TestValidateManifestE2E:
 # ---------------------------------------------------------------------------
 
 
-SCRIPT = (
-    Path(__file__).resolve().parents[3]
-    / "skills"
-    / "cheese-factory"
-    / "scripts"
-    / "validate_decomposition.py"
-)
-
-
 class TestCLI:
     def test_exits_zero_on_valid_manifest(self, tmp_path: Path) -> None:
         manifest_path = tmp_path / "manifest.yaml"
         manifest_path.write_text(json.dumps(_manifest()), encoding="utf-8")
         result = subprocess.run(
-            [sys.executable, str(SCRIPT), str(manifest_path)],
+            [sys.executable, str(BUNDLE), "validate_decomposition", str(manifest_path)],
             capture_output=True,
             text=True,
         )
@@ -381,7 +376,7 @@ class TestCLI:
         manifest_path = tmp_path / "manifest.yaml"
         manifest_path.write_text(json.dumps(_manifest(curds=_curds(2))), encoding="utf-8")
         result = subprocess.run(
-            [sys.executable, str(SCRIPT), str(manifest_path)],
+            [sys.executable, str(BUNDLE), "validate_decomposition", str(manifest_path)],
             capture_output=True,
             text=True,
         )
@@ -390,7 +385,7 @@ class TestCLI:
 
     def test_exits_nonzero_on_missing_file(self, tmp_path: Path) -> None:
         result = subprocess.run(
-            [sys.executable, str(SCRIPT), str(tmp_path / "nope.json")],
+            [sys.executable, str(BUNDLE), "validate_decomposition", str(tmp_path / "nope.json")],
             capture_output=True,
             text=True,
         )
@@ -399,7 +394,7 @@ class TestCLI:
 
     def test_reads_from_stdin_when_no_arg(self) -> None:
         result = subprocess.run(
-            [sys.executable, str(SCRIPT)],
+            [sys.executable, str(BUNDLE), "validate_decomposition"],
             input=json.dumps(_manifest()),
             capture_output=True,
             text=True,

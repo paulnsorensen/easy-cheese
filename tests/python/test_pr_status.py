@@ -1,4 +1,4 @@
-"""Tests for skills/affinage/scripts/pr-status.py."""
+"""Tests for src/affinage/pr-status.py."""
 
 from __future__ import annotations
 
@@ -421,6 +421,287 @@ def test_gh_pr_checks_uses_real_schema_fields(pr_status, monkeypatch):
     # `state` is also a real field and is used to derive the per-check `conclusion`
     # output value, so it must be requested too.
     assert "state" in fields
+
+
+def test_all_failures_ungroundable_passing_build_is_false(pr_status):
+    """A passing build is never ungroundable — nothing to halt on."""
+    output = {"build": {"status": "passing", "checks": []}}
+    assert pr_status.all_failures_ungroundable(output) is False
+
+
+def test_all_failures_ungroundable_pending_build_is_false(pr_status):
+    """A pending build hasn't failed yet, so it isn't ungroundable."""
+    output = {
+        "build": {
+            "status": "pending",
+            "checks": [{"failing": False, "failure_summary": ""}],
+        }
+    }
+    assert pr_status.all_failures_ungroundable(output) is False
+
+
+def test_all_failures_ungroundable_all_empty_is_true(pr_status):
+    """Failing build whose every fetchable failing check has an empty summary
+    (expired Actions logs) → halt-worthy."""
+    output = {
+        "build": {
+            "status": "failing",
+            "checks": [
+                {
+                    "failing": True,
+                    "url": "https://github.com/foo/bar/actions/runs/1/job/1",
+                    "failure_summary": "",
+                }
+            ],
+        }
+    }
+    assert pr_status.all_failures_ungroundable(output) is True
+
+
+def test_all_failures_ungroundable_one_summary_present_is_false(pr_status):
+    """If at least one fetchable failing check has grounded evidence, the
+    affineur can ground that one — not ungroundable, no halt."""
+    output = {
+        "build": {
+            "status": "failing",
+            "checks": [
+                {
+                    "failing": True,
+                    "url": "https://github.com/foo/bar/actions/runs/1/job/1",
+                    "failure_summary": "",
+                },
+                {
+                    "failing": True,
+                    "url": "https://github.com/foo/bar/actions/runs/2/job/2",
+                    "failure_summary": "AssertionError on line 9",
+                },
+            ],
+        }
+    }
+    assert pr_status.all_failures_ungroundable(output) is False
+
+
+def test_all_failures_ungroundable_ignores_non_failing_checks(pr_status):
+    """Only checks flagged `failing` count toward grounding. A non-failing check
+    carrying a (non-empty) summary must NOT mask an ungroundable failing check —
+    this fails if the `failing` filter is dropped and every check is considered."""
+    output = {
+        "build": {
+            "status": "failing",
+            "checks": [
+                {
+                    "failing": False,
+                    "url": "https://github.com/foo/bar/actions/runs/1/job/1",
+                    "failure_summary": "irrelevant noise",
+                },
+                {
+                    "failing": True,
+                    "url": "https://github.com/foo/bar/actions/runs/2/job/2",
+                    "failure_summary": "",
+                },
+            ],
+        }
+    }
+    assert pr_status.all_failures_ungroundable(output) is True
+
+
+def test_all_failures_ungroundable_excludes_non_actions_checks(pr_status):
+    """Finding #3292480022: a build failing solely on a non-Actions check (a
+    `url` with no `/runs/<id>` segment) is NOT ungroundable. Its empty summary is
+    by design — `fetch_failure_summary` never attempts a fetch — not expired
+    Actions logs, so rerunning a run id won't help. The caller proceeds (exit 0)
+    and the check becomes Needs-investigation rather than a misdirected
+    logs-expired halt. Fails if the run-id filter is dropped from the predicate."""
+    output = {
+        "build": {
+            "status": "failing",
+            "checks": [
+                {
+                    "failing": True,
+                    "url": "https://external-ci.example.com/build/42",
+                    "failure_summary": "",
+                }
+            ],
+        }
+    }
+    assert pr_status.all_failures_ungroundable(output) is False
+
+
+def test_all_failures_ungroundable_actions_failure_not_masked_by_non_actions(pr_status):
+    """A non-Actions failing check (no run id, by-design empty summary) must not
+    mask an Actions failing check whose logs expired: the fetchable set is the
+    one Actions check with an empty summary, so the build is still ungroundable
+    and halt-worthy."""
+    output = {
+        "build": {
+            "status": "failing",
+            "checks": [
+                {
+                    "failing": True,
+                    "url": "https://external-ci.example.com/build/42",
+                    "failure_summary": "",
+                },
+                {
+                    "failing": True,
+                    "url": "https://github.com/foo/bar/actions/runs/9/job/1",
+                    "failure_summary": "",
+                },
+            ],
+        }
+    }
+    assert pr_status.all_failures_ungroundable(output) is True
+
+
+def test_build_output_tags_failing_from_bucket(pr_status, monkeypatch):
+    """`failing` is derived from gh's bucket, not the conclusion string — so a
+    bucket==fail check whose state is OUTSIDE {failure,cancelled,timed_out}
+    (e.g. action_required) is still flagged failing, and a bucket==pass check is
+    not. This is the single source of truth that keeps the halt predicate in
+    lockstep with enrichment."""
+    checks_json = json.dumps(
+        [
+            {
+                "name": "needs-approval",
+                "state": "ACTION_REQUIRED",
+                "bucket": "fail",
+                "link": "https://github.com/foo/bar/actions/runs/777/job/1",
+            },
+            {"name": "lint", "state": "SUCCESS", "bucket": "pass", "link": ""},
+        ]
+    )
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        _fake_run(
+            [
+                (_matcher(["gh", "pr", "checks"]), checks_json, 0),
+                (
+                    _matcher(["gh", "pr", "view"]),
+                    json.dumps({"mergeable": "MERGEABLE", "mergeStateStatus": "CLEAN"}),
+                    0,
+                ),
+                (_matcher(["gh", "run", "view"]), "", 1),
+            ]
+        ),
+    )
+    checks = pr_status.build_output(42)["build"]["checks"]
+    action_required = next(c for c in checks if c["name"] == "needs-approval")
+    lint = next(c for c in checks if c["name"] == "lint")
+    assert action_required["failing"] is True
+    assert lint["failing"] is False
+
+
+def test_main_exits_three_for_out_of_family_fail_state(pr_status, monkeypatch):
+    """Regression for the predicate-divergence finding: a build failing solely on
+    a bucket==fail check whose state is outside the old conclusion family
+    (action_required) with expired logs must exit 3 — under the old
+    conclusion-family filter this returned 0 and graded a blank."""
+    checks_json = json.dumps(
+        [
+            {
+                "name": "needs-approval",
+                "state": "ACTION_REQUIRED",
+                "bucket": "fail",
+                "link": "https://github.com/foo/bar/actions/runs/888/job/1",
+            }
+        ]
+    )
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        _fake_run(
+            [
+                (_matcher(["gh", "pr", "checks"]), checks_json, 0),
+                (
+                    _matcher(["gh", "pr", "view"]),
+                    json.dumps({"mergeable": "MERGEABLE", "mergeStateStatus": "CLEAN"}),
+                    0,
+                ),
+                (_matcher(["gh", "run", "view"]), "", 1),
+            ]
+        ),
+    )
+    assert pr_status.main(["42"]) == 3
+
+
+def test_main_exits_three_when_failing_logs_unfetchable(pr_status, monkeypatch, capsys):
+    """#76: a failing build with every failing check's log unfetchable (expired
+    Actions logs) exits 3 so the skill's halt branch fires instead of grading a
+    blank. The JSON is still emitted to stdout for debugging."""
+    checks_json = json.dumps(
+        [
+            {
+                "name": "test-suite",
+                "state": "FAILURE",
+                "bucket": "fail",
+                "link": "https://github.com/foo/bar/actions/runs/999/job/1",
+            }
+        ]
+    )
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        _fake_run(
+            [
+                (_matcher(["gh", "pr", "checks"]), checks_json, 0),
+                (
+                    _matcher(["gh", "pr", "view"]),
+                    json.dumps({"mergeable": "MERGEABLE", "mergeStateStatus": "CLEAN"}),
+                    0,
+                ),
+                # Expired logs: gh run view --log-failed returns non-zero/empty.
+                (_matcher(["gh", "run", "view"]), "", 1),
+            ]
+        ),
+    )
+    rc = pr_status.main(["42"])
+    assert rc == 3
+    captured = capsys.readouterr()
+    # JSON still printed so a human can inspect the empty-summary failure.
+    payload = json.loads(captured.out)
+    assert payload["build"]["status"] == "failing"
+    assert payload["build"]["checks"][0]["failure_summary"] == ""
+
+
+def test_main_exits_zero_when_some_failure_groundable(pr_status, monkeypatch):
+    """#76: a failing build is NOT halted when at least one failing check has a
+    fetchable log — that finding can be graded; the empty ones become
+    Needs-investigation, not a blanket halt."""
+    checks_json = json.dumps(
+        [
+            {
+                "name": "expired",
+                "state": "FAILURE",
+                "bucket": "fail",
+                "link": "https://github.com/foo/bar/actions/runs/111/job/1",
+            },
+            {
+                "name": "fresh",
+                "state": "FAILURE",
+                "bucket": "fail",
+                "link": "https://github.com/foo/bar/actions/runs/222/job/2",
+            },
+        ]
+    )
+
+    def runner(cmd, **kwargs):
+        if cmd[:3] == ["gh", "pr", "checks"]:
+            return _FakeCompletedProcess(stdout=checks_json)
+        if cmd[:3] == ["gh", "pr", "view"]:
+            return _FakeCompletedProcess(
+                stdout=json.dumps({"mergeable": "MERGEABLE", "mergeStateStatus": "CLEAN"})
+            )
+        if cmd[:3] == ["gh", "run", "view"]:
+            run_id = cmd[3]
+            if run_id == "111":
+                return _FakeCompletedProcess(stdout="", returncode=1)  # expired
+            if run_id == "222":
+                return _FakeCompletedProcess(stdout="FAILED tests/fresh.py::test_b\n")
+        raise AssertionError(f"unmocked: {cmd}")
+
+    monkeypatch.setattr(subprocess, "run", runner)
+    rc = pr_status.main(["42"])
+    assert rc == 0
 
 
 def test_failing_state_with_cancelled_bucket_fail_enriches(pr_status, monkeypatch):

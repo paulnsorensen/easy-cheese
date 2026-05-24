@@ -52,6 +52,22 @@ jobs:
           git push origin ":refs/tags/$TAG"
           git tag -d "$TAG" || true
 
+      - name: Build and stage skill bundles
+        run: |
+          set -euo pipefail
+          python3 scripts/build_pyz.py
+          shopt -s nullglob
+          bundles=(skills/*/scripts/*.pyz)
+          # Fail loudly if nothing was built rather than publishing broken skills.
+          test ${#bundles[@]} -gt 0 || { echo "::error::no skill bundles were built"; exit 1; }
+          git add -f "${bundles[@]}"
+          # Confirm every built bundle is actually staged before publish.
+          staged="$(git diff --cached --name-only)"
+          for pyz in "${bundles[@]}"; do
+            printf '%s\n' "$staged" | grep -qxF "$pyz" || { echo "::error::bundle not staged for publish: $pyz"; exit 1; }
+          done
+          git -c user.email=actions@github.com -c user.name="github-actions[bot]" commit -m "build: bundle skill .pyz for release"
+
       - name: Publish agent skills
         env:
           GH_TOKEN: ${{ github.token }}

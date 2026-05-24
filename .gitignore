@@ -21,3 +21,6 @@ __pycache__/
 # MkDocs build output
 site/
 .cache/
+
+# Built skill bundles (built on publish; never committed to main)
+skills/*/scripts/*.pyz

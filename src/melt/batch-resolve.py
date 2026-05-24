@@ -15,9 +15,6 @@ import sys
 import tempfile
 from pathlib import Path
 
-# Add shared/scripts to path for imports
-sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "shared" / "scripts"))
-
 from git_utils import (
     extract_stages,
     get_conflicted_files,
