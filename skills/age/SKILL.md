@@ -180,11 +180,17 @@ After the report is on disk, skip any "should I run /cure?" meta-question and go
    ```
 
    The script reads the report, groups findings by severity, and prints the numbered table per `../cure/references/selection.md`. Render its output inline.
-2. Ask via the handoff gate which findings to cure. Lead each option with the verb (what the user wants to *do* next); the underlying selection verb is the backing detail. Offer:
-   - **Pick findings to fix** — accept a free-text reply using the verbs from `../cure/references/selection.md` (`1,3,5`, `all-blocker`, `all-high`, `cheap`, `all`, `none`, `skip N`; comma-compose to union).
-   - **Fix every blocker** *(strict; useful when you want to land only the must-fix blockers and defer high-severity work to a follow-up)* — equivalent to `all-blocker`.
-   - **Fix blockers and high-severity findings** *(recommended when at least one blocker or high-severity finding exists)* — equivalent to `all-high` (floor at high, includes blockers).
+2. Ask via the handoff gate which findings to cure. Lead each option with the verb (what the user wants to *do* next); the underlying selection verb is the backing detail. Always present the same four severity-floor options, in the same most-inclusive-to-least order, so the gate is predictable across every run:
+   - **Fix everything** — equivalent to `all` (every finding regardless of severity).
+   - **Fix medium-severity and above** — equivalent to `all-medium` (floor at medium: blockers + high + medium; the interactive form of the `medium+` auto-floor).
+   - **Fix high-severity and blockers** *(recommended when at least one blocker or high-severity finding exists)* — equivalent to `all-high` (floor at high, includes blockers).
+   - **Fix blockers only** *(strict; land only the must-fix blockers and defer the rest to a follow-up)* — equivalent to `all-blocker`.
+
+   Then offer the two non-floor options last:
+   - **Pick findings to fix** — accept a free-text reply using the verbs from `../cure/references/selection.md` (`1,3,5`, `all-blocker`, `all-medium`, `all-high`, `cheap`, `all`, `none`, `skip N`; comma-compose to union).
    - **Stop — leave the report for later** — equivalent to `none`.
+
+   Present all four severity options on every run even when a severity band is empty (e.g. no blockers): a floor that resolves to an empty set is a valid, predictable no-op — do not drop or reorder options based on which bands happen to be populated. If the user selects a floor that resolves to an empty set, treat the selection as `none`: report that no findings match and do not dispatch `/cure` with empty `resolved_ids` (the non-empty-selection contract in step 3 still holds).
 3. On a non-empty selection, expand the verb to concrete ids by invoking:
 
    ```bash

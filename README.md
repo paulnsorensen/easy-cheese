@@ -3,6 +3,7 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/paulnsorensen/easy-cheese/validate.yml?branch=main&label=CI&style=flat-square)](https://github.com/paulnsorensen/easy-cheese/actions/workflows/validate.yml)
 [![License: MIT](https://img.shields.io/github/license/paulnsorensen/easy-cheese?style=flat-square)](LICENSE)
 [![Latest release](https://img.shields.io/github/v/release/paulnsorensen/easy-cheese?style=flat-square)](https://github.com/paulnsorensen/easy-cheese/releases/latest)
+[![skills.sh](https://skills.sh/b/paulnsorensen/easy-cheese)](https://skills.sh/paulnsorensen/easy-cheese)
 [![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-yellow?style=flat-square)](https://www.conventionalcommits.org)
 [![Agent Skills](https://img.shields.io/badge/Agent%20Skills-spec-blueviolet?style=flat-square)](https://agentskills.io/specification)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](https://github.com/paulnsorensen/easy-cheese/pulls)
@@ -59,9 +60,11 @@ Content shared _across_ skills lives at top-level `shared/` (e.g. `shared/handof
 | `skills/briesearch/SKILL.md` | `/briesearch` | Research technical questions across docs, web, codebase, and GitHub examples with confidence-capped synthesis. |
 | `skills/mold/SKILL.md` | `/mold` | Shape fuzzy ideas into grounded specs through dialogue, validate cycles, and a two-key handshake. |
 | `skills/culture/SKILL.md` | `/culture` | No-write rubber-ducking and architecture exploration. Hard invariant: writes only the opt-in `.cheese/notes/<slug>.md` handoff at session end, and only when the user asks for notes. |
+| `skills/pasteurize/SKILL.md` | `/pasteurize` | Diagnose hard bugs, flaky failures, and performance regressions with a feedback-loop-first investigation, then hand off into `/cook → /press → /age → /cure`. |
 | `skills/cook/SKILL.md` | `/cook` | Implement clear specs via cut → cook → taste-test with scoped edits and tests. |
 | `skills/press/SKILL.md` | `/press` | Harden cooked changes with coverage, assertion, and boundary checks. |
 | `skills/age/SKILL.md` | `/age` | Review diffs across nine staff-engineer dimensions and produce a severity-grouped findings report. |
+| `skills/affinage/SKILL.md` | `/affinage` | Triage external PR claims — review comments and CI failures — through the `/age` lens, hand the chosen fixes to `/cure`, then post replies back on GitHub. |
 | `skills/cure/SKILL.md` | `/cure` | Fix user-selected findings, validate, and prepare the branch for shipping. |
 | `skills/hard-cheese/SKILL.md` | `/hard-cheese` (or `--hard` flag) | Metacognitive vibecheck gate before review — asks the author to explain the diff's causal logic, grades the explanation against the SOLO Taxonomy. Standalone or via `--hard` propagation through the pipeline. |
 | `skills/ultracook/SKILL.md` | `/ultracook` | Autonomous fresh-context pipeline (`cook → press → age → cure → age → cure → age`, all `--auto`). Each phase runs inside its own full-peer sub-agent so review stays adversarial and parent context never bloats. For high-blast-radius specs. |
@@ -126,12 +129,21 @@ If those tools don't show up after install, the cheez-* skills will hard-fail wi
    ├─ fuzzy / multi-module idea       ──►  /mold        ──►  /cook       ──►  /press  ──►  /age  ──►  /cure
    ├─ high-blast-radius spec          ──►  /mold        ──►  /ultracook   (fresh-context: cook → press → age → cure → age → cure → age)
    ├─ clear, scoped ask               ──►  /cook        ──►  /press       ──►  /age   ──►  /cure
-   ├─ debugging task                  ──►  /culture     ──►  /cook        ──►  /press ──►  /age  ──►  /cure
+   ├─ debugging task                  ──►  /pasteurize  ──►  /cook        ──►  /press ──►  /age  ──►  /cure
+   ├─ PR comments / CI failures       ──►  /affinage    ──►  /cure
    ├─ resume in fresh context         ──►  /cheese --continue <slug>
    └─ review only                     ──►  /age         ──►  /cure
 ```
 
-`/cheese` is the front door. It inspects whatever you drop in (idea, spec path, PR ref, stack trace, file path), announces its routing decision, and waits for explicit confirmation before any downstream skill runs; after a non-stop selection, it immediately dispatches the selected target. Use it directly, or skip it when you already know the destination — a clear bug can go straight to `/cook`, a no-write design discussion stays in `/culture`. `/melt` cuts in whenever a merge step blocks `/cook` or `/cure`. Append `--hard` to any pipeline step to insert `/hard-cheese` as a metacognitive vibecheck gate before review.
+`/cheese` is the front door. It inspects whatever you drop in (idea, spec path,
+PR ref, stack trace, file path), announces its routing decision, and waits for
+explicit confirmation before any downstream skill runs; after a non-stop
+selection, it immediately dispatches the selected target. Use it directly, or
+skip it when you already know the destination — a hard bug can go straight to
+`/pasteurize`, a known-scope fix can go to `/cook`, and a no-write design
+discussion stays in `/culture`. `/melt` cuts in whenever a merge step blocks
+`/cook` or `/cure`. Append `--hard` to any pipeline step to insert
+`/hard-cheese` as a metacognitive vibecheck gate before review.
 
 ## Scope
 
@@ -166,20 +178,35 @@ When a preferred tool is unavailable, workflow skills say so once, fall back, an
 
 ## Install
 
-### gh skill (recommended)
+### skills.sh (recommended)
+
+Install with the [skills.sh](https://skills.sh) installer:
+
+```sh
+npx skills@latest add paulnsorensen/easy-cheese
+```
+
+The installer reads this repo's published skill manifest, lets you pick the
+skills you want, and installs them into the coding agents you select.
+
+After install, start with `/cheese` if you're not sure which wheel to cut into
+first, or jump straight to a specific skill like `/cook`, `/age`, or
+`/pasteurize`. There is no required follow-up setup skill.
+
+### gh skill (GitHub CLI alternative)
 
 Requires [GitHub CLI](https://cli.github.com) v2.90.0 or later with the `gh skill` command.
 
-Install all skills interactively — browse what's available and pick what you want:
+Install all skills interactively:
 
 ```sh
 gh skill install paulnsorensen/easy-cheese
 ```
 
-Install every skill in one shot:
+Install every current skill in one shot:
 
 ```sh
-for s in age briesearch cheese cheese-factory cheez-read cheez-search cheez-write cook culture cure hard-cheese melt mold press ultracook; do
+for s in age affinage briesearch cheese cheese-factory cheez-read cheez-search cheez-write cook culture cure hard-cheese melt mold pasteurize press ultracook; do
   gh skill install paulnsorensen/easy-cheese "$s"
 done
 ```
@@ -396,12 +423,18 @@ The `[embeddings]` extra pulls in `sentence-transformers` so `semantic_search_no
 
 The optional tools listed under [Optional tools](#optional-tools) are referenced by workflow skills. None are required, but having them available unlocks better fallbacks and richer output.
 
-### One-shot installer (macOS)
+### macOS bootstrap script (optional)
 
-`scripts/install.sh` does the whole setup in one shot:
+Use
+[`scripts/install.sh`](https://github.com/paulnsorensen/easy-cheese/blob/main/scripts/install.sh)
+when you want the surrounding macOS toolchain and MCP servers set up for you.
+The recommended way to install the skills themselves is still the `skills.sh`
+flow above; this script is the fast lane for the wider ecosystem.
+
+It does the following in one shot:
 
 1. Installs every CLI tool listed below — Homebrew for the eight brew-core formulas, plus `cargo install tilth` (or `npm install -g tilth` if Rust isn't available) for tilth, which has no Homebrew formula upstream.
-2. Auto-detects installed Claude Code, Cursor, and Codex CLIs, then installs every easy-cheese skill into each detected harness at user scope.
+2. Auto-detects installed Claude Code, Cursor, and Codex CLIs, then installs every easy-cheese skill into each detected harness at user scope as a convenience bootstrap.
 3. Registers the `tilth` and `context7` MCP servers with those harnesses where supported.
 
 Currently macOS only — it relies on Homebrew. Requires `gh` to be authenticated (`gh auth login`) before running.

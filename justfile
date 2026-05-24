@@ -14,10 +14,15 @@ test:
     python3 -m pytest tests/briesearch/python tests/cheese/python tests/cheez-search/python tests/cook/python tests/hard-cheese/python tests/mold/python tests/pasteurize/python tests/ultracook/python -q
     bats tests/bash/test_install.bats
     bats tests/cheese-factory/bash/test_pr_plan_to_branches.bats
+    bats tests/bash/test_post_reply.bats
+
+# Build self-contained .pyz bundles for shared-consuming skills (built on publish)
+bundle:
+    python3 scripts/build_pyz.py
 
 # Lint shell scripts
 lint-sh:
-    shellcheck scripts/install.sh
+    shellcheck scripts/install.sh shared/post-reply.sh
 
 # Fix markdown formatting issues
 lint-md-fix:

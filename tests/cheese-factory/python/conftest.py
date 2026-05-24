@@ -1,12 +1,12 @@
 """Shared pytest config for cheese-factory tests.
 
-Loads the validate_decomposition script by path (it's a hyphen-free name
-already, but we keep the loader pattern consistent with the wider repo).
+Validators are imported from cheese-factory's built .pyz, and the CLI subprocess
+tests invoke that same bundle, so the suite verifies the bundled artifact.
 """
 
 from __future__ import annotations
 
-import importlib.util
+import importlib
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -15,37 +15,32 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 CF_DIR = REPO_ROOT / "skills" / "cheese-factory"
-SCRIPTS_DIR = CF_DIR / "scripts"
 REFERENCES_DIR = CF_DIR / "references"
-SHARED_SCRIPTS = REPO_ROOT / "shared" / "scripts"
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
+import build_pyz  # noqa: E402
 
-for _path in (SCRIPTS_DIR, SHARED_SCRIPTS):
-    if str(_path) not in sys.path:
-        sys.path.insert(0, str(_path))
+_BUNDLE = build_pyz.cached_bundle("cheese-factory")
+sys.path.insert(0, str(_BUNDLE))
 
 
-def _load(name: str, path: Path) -> ModuleType:
-    spec = importlib.util.spec_from_file_location(name, path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"Could not load {path}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+@pytest.fixture(scope="session")
+def bundle() -> Path:
+    return _BUNDLE
 
 
 @pytest.fixture(scope="session")
 def validate_decomposition() -> ModuleType:
-    return _load("validate_decomposition", SCRIPTS_DIR / "validate_decomposition.py")
+    return importlib.import_module("validate_decomposition")
 
 
 @pytest.fixture(scope="session")
 def validate_manifest() -> ModuleType:
-    return _load("validate_manifest", SCRIPTS_DIR / "validate_manifest.py")
+    return importlib.import_module("validate_manifest")
 
 
 @pytest.fixture(scope="session")
 def validate_pr_plan() -> ModuleType:
-    return _load("validate_pr_plan", SCRIPTS_DIR / "validate_pr_plan.py")
+    return importlib.import_module("validate_pr_plan")
 
 
 @pytest.fixture(scope="session")

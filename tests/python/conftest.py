@@ -1,57 +1,57 @@
 """Shared pytest config.
 
-The melt and mold scripts use hyphenated filenames that can't be imported by
-the normal `import` machinery, so we load them by path with importlib.
+The melt, mold, and affinage script tests import their modules from each skill's
+built .pyz, verifying the bundled artifacts. Every bundle carries only its own
+skill's scripts plus the shared modules that skill imports.
 """
 
 from __future__ import annotations
 
-import importlib.util
+import importlib
+import sys
 from pathlib import Path
 from types import ModuleType
 
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SCRIPTS_DIR = REPO_ROOT / "skills" / "melt" / "scripts"
-MOLD_SCRIPTS_DIR = REPO_ROOT / "skills" / "mold" / "scripts"
-SHARED_SCRIPTS = REPO_ROOT / "shared" / "scripts"
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
+import build_pyz  # noqa: E402
 
-
-def _load(name: str, path: Path) -> ModuleType:
-    spec = importlib.util.spec_from_file_location(name, path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"Could not load {path}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+for _skill in ("melt", "mold", "affinage"):
+    sys.path.insert(0, str(build_pyz.cached_bundle(_skill)))
 
 
 @pytest.fixture(scope="session")
 def conflict_pick() -> ModuleType:
-    return _load("conflict_pick", SCRIPTS_DIR / "conflict-pick.py")
+    return importlib.import_module("conflict_pick")
 
 
 @pytest.fixture(scope="session")
 def conflict_summary() -> ModuleType:
-    return _load("conflict_summary", SCRIPTS_DIR / "conflict-summary.py")
+    return importlib.import_module("conflict_summary")
 
 
 @pytest.fixture(scope="session")
 def lockfile_resolve() -> ModuleType:
-    return _load("lockfile_resolve", SCRIPTS_DIR / "lockfile-resolve.py")
+    return importlib.import_module("lockfile_resolve")
 
 
 @pytest.fixture(scope="session")
 def batch_resolve() -> ModuleType:
-    return _load("batch_resolve", SCRIPTS_DIR / "batch-resolve.py")
+    return importlib.import_module("batch_resolve")
 
 
 @pytest.fixture(scope="session")
 def detect_squash_residue() -> ModuleType:
-    return _load("detect_squash_residue", SCRIPTS_DIR / "detect-squash-residue.py")
+    return importlib.import_module("detect_squash_residue")
 
 
 @pytest.fixture(scope="session")
 def curd_count() -> ModuleType:
-    return _load("curd_count", MOLD_SCRIPTS_DIR / "curd-count.py")
+    return importlib.import_module("curd_count")
+
+
+@pytest.fixture(scope="session")
+def pr_status() -> ModuleType:
+    return importlib.import_module("pr_status")

@@ -74,13 +74,13 @@ aliases, tags, or multi-document streams.
 
 The PR plan follows the same convention — written as YAML at
 `.cheese/cheese-factory/<slug>/pr-plan.yaml`, with its shape documented in
-`references/pr-plan-schema.json`. `scripts/pr_plan_to_branches.py` reads either YAML
+`references/pr-plan-schema.json`. `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz pr_plan_to_branches` reads either YAML
 or JSON for backward compatibility, but YAML is the canonical format.
 
 ### Validation (Phase 0)
 
-The decomposer's output is validated by `scripts/validate_manifest.py` for required
-sections and field shapes, then by `scripts/validate_decomposition.py` against:
+The decomposer's output is validated by `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz validate_manifest` for required
+sections and field shapes, then by `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz validate_decomposition` against:
 
 - **Behaviour overlap** — each curd describes one behaviour (criterion 1).
 - **Spec coverage** — every acceptance criterion has exactly one curd (criterion 2).
@@ -174,7 +174,7 @@ For each seed item:
 
 Push to branch — curds branch from HEAD.
 
-Update manifest via `python3 skills/cheese-factory/scripts/manifest_update.py set-phase --manifest <path> --phase seed_complete` (atomic, schema-validated). Do not hand-edit the YAML.
+Update manifest via `python3 ${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz manifest_update set-phase --manifest <path> --phase seed_complete` (atomic, schema-validated). Do not hand-edit the YAML.
 
 ### Phase 2 — Curds (fan-out)
 
@@ -184,7 +184,7 @@ Each curd worker is a general-purpose sub-agent (full peer of the orchestrator �
 
 Collect results as curds complete. For failed curds: retry ONCE with error context. Mark `retry_count: 1`; do not retry twice.
 
-Update manifest per-curd via `python3 skills/cheese-factory/scripts/manifest_update.py set-curd-status --manifest <path> --curd <id> --status completed|failed [--commit-sha <sha>]`. After all curds resolve, set the top-level phase with `set-phase --phase curds_complete`. Do not hand-edit the YAML.
+Update manifest per-curd via `python3 ${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz manifest_update set-curd-status --manifest <path> --curd <id> --status completed|failed [--commit-sha <sha>]`. After all curds resolve, set the top-level phase with `set-phase --phase curds_complete`. Do not hand-edit the YAML.
 
 #### Compaction seam C2
 
@@ -206,11 +206,11 @@ After all curds merged: run quality gates. If failing, STOP and report — curds
 
 ### Phase 4 — Wiring (fan-out, sequential within wave)
 
-Compute the wiring waves with `python3 skills/cheese-factory/scripts/wiring_topo_sort.py --manifest <path>` (add `--json` for machine-readable output). The script Kahn-sorts `wiring[]` by `depends_on` and emits ordered waves — do not hand-sort the topology. Dispatch each wave sequentially within the wave (concurrent commits to the same working directory race on git's `index.lock`); waves themselves run in DAG order.
+Compute the wiring waves with `python3 ${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz wiring_topo_sort --manifest <path>` (add `--json` for machine-readable output). The script Kahn-sorts `wiring[]` by `depends_on` and emits ordered waves — do not hand-sort the topology. Dispatch each wave sequentially within the wave (concurrent commits to the same working directory race on git's `index.lock`); waves themselves run in DAG order.
 
 Each wiring worker is a general-purpose sub-agent with the prompt template at `references/wiring-prompt.md`.
 
-For failed wiring tasks: retry ONCE. If still failing, mark incomplete in manifest. Record per-wiring status via `python3 skills/cheese-factory/scripts/manifest_update.py set-wiring-status --manifest <path> --wiring <id> --status completed|failed [--commit-sha <sha>]`. After all waves resolve, set `set-phase --phase wiring_complete`.
+For failed wiring tasks: retry ONCE. If still failing, mark incomplete in manifest. Record per-wiring status via `python3 ${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz manifest_update set-wiring-status --manifest <path> --wiring <id> --status completed|failed [--commit-sha <sha>]`. After all waves resolve, set `set-phase --phase wiring_complete`.
 
 ### Phase 5 — Final merge wiring
 
@@ -272,7 +272,7 @@ Detection: attempt to invoke the skill via the host's Skill tool; on unrecognise
 For each PR group in the plan:
 
 1. Read group metadata from `pr-plan.yaml`.
-2. Push the branch (use `scripts/pr_plan_to_branches.py` to convert `pr-plan.yaml` to branch-creation commands).
+2. Push the branch (use `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz pr_plan_to_branches` to convert `pr-plan.yaml` to branch-creation commands).
 3. Create the PR (via `/gh` if available, else `gh pr create` direct).
 4. For stacks: invoke `/pr-stack` with the ordered branch list.
 5. Update manifest with PR numbers and URLs.
@@ -442,12 +442,12 @@ If the manifest references commits that no longer exist (rebased, deleted), fail
 - `references/manifest-schema.json` — JSON Schema for the manifest.
 - `references/pr-plan-schema.json` — JSON Schema for the PR plan, `$ref`'d from `manifest-schema.json`.
 - `references/spawn-primitive-reference.md` — host-by-host invocation examples plus the five invariants.
-- `scripts/validate_manifest.py` — Phase 0 structural validation of required manifest sections and fields.
-- `scripts/validate_decomposition.py` — Phase 0 semantic validation of decomposer output against the five criteria.
-- `scripts/validate_pr_plan.py` — Phase 7 validation of PR planner output before branch creation.
-- `scripts/pr_plan_to_branches.py` — converts `pr-plan.yaml` to branch-creation commands for Phase 7.
-- `scripts/wiring_topo_sort.py` — Phase 4 manifest → ordered wiring waves (Kahn sort over `depends_on`).
-- `scripts/manifest_update.py` — atomic schema-validated manifest writes (`set-phase`, `set-curd-status`, `set-wiring-status`).
+- `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz validate_manifest` — Phase 0 structural validation of required manifest sections and fields.
+- `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz validate_decomposition` — Phase 0 semantic validation of decomposer output against the five criteria.
+- `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz validate_pr_plan` — Phase 7 validation of PR planner output before branch creation.
+- `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz pr_plan_to_branches` — converts `pr-plan.yaml` to branch-creation commands for Phase 7.
+- `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz wiring_topo_sort` — Phase 4 manifest → ordered wiring waves (Kahn sort over `depends_on`).
+- `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz manifest_update` — atomic schema-validated manifest writes (`set-phase`, `set-curd-status`, `set-wiring-status`).
 
 ## Rules
 

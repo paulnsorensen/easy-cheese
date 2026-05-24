@@ -36,6 +36,12 @@ STUB
     chmod +x "$STUB_BIN/$name"
 }
 
+# Count the embedded skills in $EC_FALLBACK_SKILLS without spawning subshells.
+count_skills() {
+    set -- $EC_FALLBACK_SKILLS
+    echo $#
+}
+
 # -- ec_tool_binary -----------------------------------------------------------
 
 @test "ec_tool_binary maps formula names to binaries" {
@@ -238,7 +244,7 @@ STUB
 # -- ec_install_tools ---------------------------------------------------------
 
 @test "ec_install_tools (dry-run) iterates each formula in the list" {
-    EC_DRY_RUN=1 run ec_install_tools "ripgrep,jq,fd"
+    PATH="$STUB_BIN" EC_DRY_RUN=1 run ec_install_tools "ripgrep,jq,fd"
     [ "$status" -eq 0 ]
     [[ "$output" == *"would run 'brew install ripgrep'"* ]]
     [[ "$output" == *"would run 'brew install jq'"* ]]
@@ -430,7 +436,7 @@ STUB
 }
 
 @test "ec_install_crg_cli fails clearly when uv, pipx, and pip are all missing" {
-    run ec_install_crg_cli
+    PATH="$STUB_BIN" run ec_install_crg_cli
     [ "$status" -eq 1 ]
     [[ "$output" == *"needs uv, pipx, or pip"* ]]
 }
@@ -531,14 +537,14 @@ STUB
 }
 
 @test "ec_install_skills warns and returns 0 when gh CLI missing" {
-    run ec_install_skills claude-code
+    PATH="$STUB_BIN" run ec_install_skills claude-code
     [ "$status" -eq 0 ]
     [[ "$output" == *"gh CLI not found"* ]]
 }
 
 @test "ec_install_skills dry-run lists every shipped skill with --force" {
     make_stub gh
-    EC_GH="$STUB_BIN/gh" EC_DRY_RUN=1 run ec_install_skills claude-code
+    PATH="$STUB_BIN" EC_GH=gh EC_DRY_RUN=1 run ec_install_skills claude-code
     [ "$status" -eq 0 ]
     # Spot-check first, last, and a representative middle skill in the list.
     [[ "$output" == *"would run 'gh skill install paulnsorensen/easy-cheese age --agent claude-code --scope user --force'"* ]]
@@ -647,27 +653,27 @@ fi
 exit 0
 STUB
     chmod +x "$STUB_BIN/gh"
-    export EC_GH="$STUB_BIN/gh"
+    export EC_GH=gh
     run ec_install_skills claude-code
     [ "$status" -eq 0 ]
     [[ "$output" == *"using embedded fallback list"* ]]
-    # Fallback list ships 15 skill names today; assert via spot-checks plus
-    # an exact count so accidental drift surfaces in CI.
+    # Fallback list ships one install per embedded skill; assert via
+    # spot-checks plus an exact count so accidental drift surfaces in CI.
     grep -q "^gh skill install paulnsorensen/easy-cheese age --agent claude-code --scope user --force$" "$STUB_LOG"
     grep -q "^gh skill install paulnsorensen/easy-cheese press --agent claude-code --scope user --force$" "$STUB_LOG"
     grep -q "^gh skill install paulnsorensen/easy-cheese ultracook --agent claude-code --scope user --force$" "$STUB_LOG"
     grep -q "^gh skill install paulnsorensen/easy-cheese cheese-factory --agent claude-code --scope user --force$" "$STUB_LOG"
-    [ "$(grep -c '^gh skill install ' "$STUB_LOG")" -eq 15 ]
+    [ "$(grep -c '^gh skill install ' "$STUB_LOG")" -eq "$(count_skills)" ]
 }
 
 @test "ec_install_skills falls back to embedded list when gh api returns empty" {
     # Basic stub: every gh call exits 0 with no stdout, including `gh api`.
     make_stub gh
-    export EC_GH="$STUB_BIN/gh"
+    export EC_GH=gh
     run ec_install_skills claude-code
     [ "$status" -eq 0 ]
     [[ "$output" == *"using embedded fallback list"* ]]
-    [ "$(grep -c '^gh skill install ' "$STUB_LOG")" -eq 15 ]
+    [ "$(grep -c '^gh skill install ' "$STUB_LOG")" -eq "$(count_skills)" ]
 }
 
 @test "ec_install_skills passes --pin when EC_SKILL_REF is set" {
@@ -775,17 +781,19 @@ STUB
     make_stub gh
     make_stub claude
     make_stub tilth
-    EC_BREW="$STUB_BIN/brew" \
-    EC_CARGO="$STUB_BIN/cargo" \
-    EC_GH="$STUB_BIN/gh" \
-    EC_CLAUDE="$STUB_BIN/claude" \
-    EC_TILTH="$STUB_BIN/tilth" \
+    ln -sf /bin/bash "$STUB_BIN/bash"
+    PATH="$STUB_BIN" \
+    EC_BREW=brew \
+    EC_CARGO=cargo \
+    EC_GH=gh \
+    EC_CLAUDE=claude \
+    EC_TILTH=tilth \
         run ec_main --dry-run
     [ "$status" -eq 0 ]
-    [[ "$output" == *"would run 'brew install gh'"* ]]
+    [[ "$output" == *"gh: already installed (gh on PATH)"* ]]
     [[ "$output" == *"would run 'brew install ripgrep'"* ]]
-    # tilth installs via cargo, NOT brew.
-    [[ "$output" == *"cargo install tilth"* ]]
+    # tilth is detected on PATH and should never route through brew.
+    [[ "$output" == *"tilth: already installed (tilth on PATH)"* ]]
     [[ "$output" != *"brew install tilth"* ]]
     [[ "$output" != *"paulnsorensen/tap/tilth"* ]]
     # Skills install runs as part of the harness pick stage — one entry per
@@ -819,11 +827,8 @@ STUB
     grep -q "^gh skill install paulnsorensen/easy-cheese age --agent claude-code --scope user --force$" "$STUB_LOG"
     grep -q "^gh skill install paulnsorensen/easy-cheese age --agent cursor --scope user --force$" "$STUB_LOG"
     grep -q "^gh skill install paulnsorensen/easy-cheese age --agent codex --scope user --force$" "$STUB_LOG"
-    local expected_harness_count=3
-    local skill skill_count=0
-    for skill in $EC_FALLBACK_SKILLS; do
-        skill_count=$((skill_count + 1))
-    done
+    local expected_harness_count=3 skill_count
+    skill_count=$(count_skills)
     [ "$(grep -c '^gh skill install ' "$STUB_LOG")" -eq $((skill_count * expected_harness_count)) ]
 }
 
@@ -841,8 +846,8 @@ STUB
     grep -q "^tilth install claude-code --edit$" "$STUB_LOG"
     grep -q "^gh skill install paulnsorensen/easy-cheese age --agent claude-code --scope user --force$" "$STUB_LOG"
     grep -q "^gh skill install paulnsorensen/easy-cheese press --agent claude-code --scope user --force$" "$STUB_LOG"
-    # 15 skill installs total, no broken --all flag.
-    [ "$(grep -c '^gh skill install ' "$STUB_LOG")" -eq 15 ]
+    # One install per fallback skill, no broken --all flag.
+    [ "$(grep -c '^gh skill install ' "$STUB_LOG")" -eq "$(count_skills)" ]
     # No brew calls should have happened.
     ! grep -q "^brew" "$STUB_LOG" || false
 }
