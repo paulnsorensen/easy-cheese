@@ -150,7 +150,7 @@ Then offer the two non-floor options last:
 - **Pick findings to fix** — free-text reply using `/age`/`/cure` verbs (`1,3,5`, `all-blocker`, `all-medium`, `all-high`, `cheap`, `all`, `none`, `skip N`).
 - **Stop — leave the report for later** — equivalent to `none`.
 
-Present all four severity options on every run even when a severity band is empty: a floor that resolves to an empty set is a valid, predictable no-op — do not drop or reorder options based on which bands happen to be populated.
+Present all four severity options on every run even when a severity band is empty: a floor that resolves to an empty set is a valid, predictable no-op — do not drop or reorder options based on which bands happen to be populated. If the user selects a floor that resolves to an empty set, treat the selection as `none`: report that no findings match and do not dispatch `/cure` with empty `resolved_ids` (the non-empty-selection dispatch rule below still holds).
 
 On non-empty selection, immediately dispatch `/cure <slug>` with locked context:
 
