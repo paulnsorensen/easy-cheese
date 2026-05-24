@@ -1,6 +1,6 @@
 ---
 name: affinage
-description: Use this skill to triage external claims about a PR — review comments, CI failures, AND merge conflicts — by running them through the /age lens. Phrases like "respond to PR comments", "handle review feedback", "affinage the PR", "/affinage <pr>", "address the reviewer comments", "grade the PR comments", "fix the failing build", "resolve the conflicts and respond". Fetches inline + review-body comments via `gh` and CI failures via `scripts/pr-status.py`, grades each through the ten age dimensions, and writes a report at `.cheese/affinage/pr-<n>.md` with extra `## Needs-investigation` and `## Reviewer-rejected` sections. Resolves merge conflicts via `/melt` and routes build/CI failures to fixes through `/cure`. When invoked standalone (no upstream `handoff_context` from `/cook` or `/cure`) it also runs `/age` over the PR diff and folds the fresh findings into the report; when chained, it skips that pass and only refines existing claims. Hands off to `/cure` via `handoff_context`; on return, posts per-finding GitHub replies — fixes confirmed, reverts explained, push-backs delivered. Supports `--auto --stake <floor>` for the autonomous chain. Every reply carries an `agent on behalf of;` attribution. Before `/cure`; parallel to `/age`.
+description: Use this skill to triage external claims about a PR — review comments, CI failures, AND merge conflicts — by running them through the /age lens. Phrases like "respond to PR comments", "handle review feedback", "affinage the PR", "/affinage <pr>", "address the reviewer comments", "fix the failing build", "resolve the conflicts and respond". Fetches inline + review-body comments via `gh` and CI failures via `affinage.pyz pr-status`, grades each through the ten age dimensions, and writes a report at `.cheese/affinage/pr-<n>.md`. Resolves merge conflicts via `/melt` and routes build/CI failures to fixes through `/cure`. When invoked standalone (no upstream `handoff_context` from `/cook` or `/cure`) it also runs `/age` over the PR diff and folds fresh findings into the report; when chained, it skips that pass and only refines existing claims. Hands off to `/cure`, then posts per-finding GitHub replies via `agent on behalf of;`. Supports `--auto --stake <floor>`. Before `/cure`; parallel to `/age`.
 license: MIT
 ---
 
@@ -58,8 +58,8 @@ Flags:
      - `## Reviewer-rejected` when the claim maps to no dimension, is ungrounded, or is pure style.
 7. **Write report** to `.cheese/affinage/pr-<n>.md` with the four-line handoff slug at the top, then the age-format body plus the two extra sections. See `## Output` below.
 8. **Selection gate** (interactive mode). Branch on what graded out:
-   - **At least one `Blocker` / `High` / `Medium` finding.** Render the cure-selection table inline using `/cure`'s verbs (`skills/cure/references/selection.md`). Ask via `shared/handoff-gate.md`. On non-empty selection, **first run step 8** to post any drafted push-backs / investigating notes — they don't depend on cure's outcome, so they must reach GitHub even if `/cure` later halts or the session is interrupted — then dispatch `/cure <slug>` with locked `handoff_context:` and post the cure-dependent replies (step 9) when `/cure` returns. On `none` / `Stop`, run step 8 for any drafted push-backs / investigating notes, then exit with the report path.
-   - **No medium-or-above findings, but `Reviewer-rejected` or `Needs-investigation` has items.** Skip `/cure` dispatch entirely — there is nothing to apply. Render a small gate that lets the user pick `post all`, `post pushbacks only`, `skip posting`, or per-finding choices. On the selection, run step 8 to post the chosen replies. Exit with `status: ok / next: done`. This mirrors the documented auto-mode "no findings meet the floor" branch (see `### Auto mode`) so interactive and auto behave the same.
+   - **At least one `Blocker` / `High` / `Medium` finding.** Render the cure-selection table inline using `/cure`'s verbs (`skills/cure/references/selection.md`). Ask via `shared/handoff-gate.md`. On non-empty selection, **first run step 9** to post any drafted push-backs / investigating notes — they don't depend on cure's outcome, so they must reach GitHub even if `/cure` later halts or the session is interrupted — then dispatch `/cure <slug>` with locked `handoff_context:` and post the cure-dependent replies (step 10) when `/cure` returns. On `none` / `Stop`, run step 9 for any drafted push-backs / investigating notes, then exit with the report path.
+   - **No medium-or-above findings, but `Reviewer-rejected` or `Needs-investigation` has items.** Skip `/cure` dispatch entirely — there is nothing to apply. Render a small gate that lets the user pick `post all`, `post pushbacks only`, `skip posting`, or per-finding choices. On the selection, run step 9 to post the chosen replies. Exit with `status: ok / next: done`. This mirrors the documented auto-mode "no findings meet the floor" branch (see `### Auto mode`) so interactive and auto behave the same.
    - **Nothing graded into any section.** Exit cleanly with the report path; there is nothing to post or cure.
 9. **Post non-cure replies** (runs whenever grading produced these items, with or without `/cure`). Post via `shared/post-reply.sh`:
    - **Reviewer-rejected items** → post the pre-drafted push-back text from the affinage report.
@@ -67,9 +67,9 @@ Flags:
    - **CI-sourced findings** (`from-check:<job>` tag) and **fresh-review findings** (`from-age:<dimension>` tag) → no reply (no reviewer to notify).
 
    Decoupling this from `/cure` is deliberate: drafted push-backs and investigating notes must reach GitHub even when no medium-or-above finding exists and `/cure` never runs — otherwise the drafted reply is write-only, useful to the human reading the report but invisible to the reviewer waiting on GitHub.
-9. **Post-cure reply posting** (only when `/cure` ran). When `/cure` returns, read `.cheese/cure/pr-<n>.md`'s `### Applied` / `### Deferred` sections and post per-finding replies via `shared/post-reply.sh`:
-   - **Applied** (with `from-comment:<id>` tag) → `"Fixed — <applied summary>."`
-   - **Deferred** (with `from-comment:<id>` tag) → `"Attempted fix reverted — <reason>."`
+10. **Post-cure reply posting** (only when `/cure` ran). When `/cure` returns, read `.cheese/cure/pr-<n>.md`'s `### Applied` / `### Deferred` sections and post per-finding replies via `shared/post-reply.sh`:
+    - **Applied** (with `from-comment:<id>` tag) → `"Fixed — <applied summary>."`
+    - **Deferred** (with `from-comment:<id>` tag) → `"Attempted fix reverted — <reason>."`
 
 ## Fresh-window review
 
@@ -189,7 +189,7 @@ Empty severity sections are omitted entirely. `## Needs-investigation` and `## R
 
 **Pipeline:** culture → mold → cook → press → age → cure → ship · `/affinage` is parallel to `/age` and feeds the same `/cure`.
 
-After the report lands, the gate depends on whether any medium-or-above finding exists (Flow step 7).
+After the report lands, the gate depends on whether any medium-or-above finding exists (Flow step 8).
 
 **When at least one `Blocker` / `High` / `Medium` finding exists** — render the cure-selection table inline (per `skills/cure/references/selection.md`) and ask via `shared/handoff-gate.md`. Options:
 
@@ -206,7 +206,7 @@ After the report lands, the gate depends on whether any medium-or-above finding 
 - **Skip posting** — leave the report for later; post nothing.
 - **Per-finding** — free-text pick of which drafts to post.
 
-On the selection, post via Flow step 8 and exit with `status: ok / next: done`. This mirrors the documented auto-mode "no findings meet the floor" branch (see `### Auto mode`).
+On the selection, post via Flow step 9 and exit with `status: ok / next: done`. This mirrors the documented auto-mode "no findings meet the floor" branch (see `### Auto mode`).
 
 On a non-empty cure selection, immediately dispatch `/cure <slug>` with locked context:
 
