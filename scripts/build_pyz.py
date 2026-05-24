@@ -40,16 +40,63 @@ SKILLS: dict[str, dict[str, str]] = {
         "validate_decomposition": "validate_decomposition.py",
         "validate_manifest": "validate_manifest.py",
         "validate_pr_plan": "validate_pr_plan.py",
+        "wiring_topo_sort": "wiring_topo_sort.py",
+        "manifest_update": "manifest_update.py",
     },
     "affinage": {"pr-status": "pr-status.py"},
-    "mold": {"curd-count": "curd-count.py"},
+    "mold": {
+        "curd-count": "curd-count.py",
+        "agent_scope_diff": "agent_scope_diff.py",
+    },
+    "briesearch": {
+        "route_research": "route_research.py",
+        "pick_tavily_rung": "pick_tavily_rung.py",
+        "confidence_cap": "confidence_cap.py",
+    },
+    "cheese": {"classify": "classify.py"},
+    "cheez-search": {"pick_kind": "pick_kind.py"},
+    "cook": {"self_eval_check": "self_eval_check.py"},
+    "hard-cheese": {
+        "append-attempt": "append-attempt.py",
+        "freshness-check": "freshness-check.py",
+    },
+    "pasteurize": {
+        "debug-tag-sweep": "debug-tag-sweep.py",
+        "repro-rerun": "repro-rerun.py",
+    },
+    "ultracook": {"phase_decision": "phase_decision.py"},
 }
+
+# The "common" bundle ships cross-cutting CLI entrypoints sourced from
+# shared/scripts/ (not src/<skill>/). It has no skill dir of its own; instead a
+# copy is fanned out into every consuming skill's scripts/ dir so each skill
+# stays self-contained after `gh skill install`.
+COMMON = "common"
+COMMON_SUBCOMMANDS: dict[str, str] = {
+    "slugify": "slugify.py",
+    "write_handoff_artifact": "write_handoff_artifact.py",
+    "read_handoff_slug": "read_handoff_slug.py",
+    "findings_cli": "findings_cli.py",
+    "gates_cli": "gates_cli.py",
+    "paths_cli": "paths_cli.py",
+    "handoff_cli": "handoff_cli.py",
+}
+# Skills whose SKILL.md invokes a common subcommand — they receive common.pyz.
+COMMON_CONSUMERS = frozenset({"age", "cook", "cure", "mold", "press", "ultracook"})
 
 _CACHE: dict[str, Path] = {}
 
 
 def _module_name(filename: str) -> str:
     return filename[:-3].replace("-", "_")
+
+
+def _files(skill: str) -> dict[str, str]:
+    return COMMON_SUBCOMMANDS if skill == COMMON else SKILLS[skill]
+
+
+def _source_dir(skill: str) -> Path:
+    return SHARED_SCRIPTS if skill == COMMON else SRC_ROOT / skill
 
 
 def _imported_top_names(path: Path) -> set[str]:
@@ -65,9 +112,10 @@ def _imported_top_names(path: Path) -> set[str]:
 
 def needed_shared(skill: str) -> set[str]:
     """Shared modules transitively imported by the skill's scripts."""
+    src_dir = _source_dir(skill)
     frontier: set[str] = set()
-    for fn in SKILLS[skill].values():
-        frontier |= _imported_top_names(SRC_ROOT / skill / fn) & SHARED_MODULES
+    for fn in _files(skill).values():
+        frontier |= _imported_top_names(src_dir / fn) & SHARED_MODULES
     resolved: set[str] = set()
     while frontier:
         module = frontier.pop()
@@ -99,14 +147,17 @@ def _dispatcher_source(sub_to_module: dict[str, str]) -> str:
 def build_bundle(skill: str, target: Path) -> Path:
     """Build ``skill``'s bundle at ``target`` (a .pyz path). Returns it."""
     target.parent.mkdir(parents=True, exist_ok=True)
-    files = SKILLS[skill]
+    files = _files(skill)
+    src_dir = _source_dir(skill)
     sub_to_module = {sub: _module_name(fn) for sub, fn in files.items()}
     with tempfile.TemporaryDirectory() as td:
         stage = Path(td)
         for module in needed_shared(skill):
+            if module in sub_to_module.values():
+                continue  # already staged below as a subcommand (common bundle)
             shutil.copy(SHARED_SCRIPTS / f"{module}.py", stage / f"{module}.py")
         for fn in files.values():
-            shutil.copy(SRC_ROOT / skill / fn, stage / f"{_module_name(fn)}.py")
+            shutil.copy(src_dir / fn, stage / f"{_module_name(fn)}.py")
         (stage / "__main__.py").write_text(_dispatcher_source(sub_to_module))
         zipapp.create_archive(stage, target=target, interpreter="/usr/bin/env python3")
     return target
@@ -131,16 +182,34 @@ def main(argv: list[str]) -> int:
     )
     parser.add_argument("skills", nargs="*", help="Skills to build (default: all).")
     args = parser.parse_args(argv[1:])
-    unknown = [s for s in args.skills if s not in SKILLS]
+    known = {*SKILLS, COMMON}
+    unknown = [s for s in args.skills if s not in known]
     if unknown:
-        parser.error(f"unknown skill(s): {', '.join(unknown)}; known: {', '.join(SKILLS)}")
-    for skill in args.skills or list(SKILLS):
-        if args.out_dir is not None:
-            target = args.out_dir / f"{skill}.pyz"
-            print(f"built {build_bundle(skill, target)}")
-        else:
-            target = REPO_ROOT / "skills" / skill / "scripts" / f"{skill}.pyz"
-            print(f"deployed {build_bundle(skill, target)}")
+        parser.error(f"unknown skill(s): {', '.join(unknown)}; known: {', '.join(sorted(known))}")
+    targets = args.skills or [*SKILLS, COMMON]
+    real = [s for s in targets if s != COMMON]
+    want_common = COMMON in targets or any(s in COMMON_CONSUMERS for s in real)
+
+    if args.out_dir is not None:
+        for skill in real:
+            print(f"built {build_bundle(skill, args.out_dir / f'{skill}.pyz')}")
+        if want_common:
+            print(f"built {build_bundle(COMMON, args.out_dir / 'common.pyz')}")
+        return 0
+
+    for skill in real:
+        print(f"deployed {build_bundle(skill, REPO_ROOT / 'skills' / skill / 'scripts' / f'{skill}.pyz')}")
+    if want_common:
+        # Build once, then fan the same artifact out to each consuming skill so
+        # every skill ships self-contained — common has no skill dir of its own.
+        consumers = COMMON_CONSUMERS if (COMMON in targets or not args.skills) else {s for s in real if s in COMMON_CONSUMERS}
+        with tempfile.TemporaryDirectory() as td:
+            common = build_bundle(COMMON, Path(td) / "common.pyz")
+            for consumer in sorted(consumers):
+                dest = REPO_ROOT / "skills" / consumer / "scripts" / "common.pyz"
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy(common, dest)
+                print(f"deployed {dest}")
     return 0
 
 
