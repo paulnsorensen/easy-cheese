@@ -29,7 +29,8 @@ def test_every_skill_ships_its_bundle(staged: Path) -> None:
         pyz = staged / "skills" / skill / "scripts" / f"{skill}.pyz"
         assert pyz.is_file(), f"missing bundle for {skill}"
         # A real zipapp, not an empty placeholder: it carries the dispatcher.
-        assert "__main__.py" in zipfile.ZipFile(pyz).namelist()
+        with zipfile.ZipFile(pyz) as zf:
+            assert "__main__.py" in zf.namelist()
 
 
 def test_skill_metadata_ships(staged: Path) -> None:
@@ -52,6 +53,14 @@ def test_dev_scaffolding_excluded(staged: Path, dev_dir: str) -> None:
 def test_top_level_metadata_present(staged: Path) -> None:
     assert (staged / "README.md").is_file()
     assert (staged / "LICENSE").is_file()
+
+
+@pytest.mark.parametrize("danger", ["/", str(REPO_ROOT), str(REPO_ROOT.parent)])
+def test_stage_refuses_to_wipe_dangerous_paths(danger: str) -> None:
+    """rmtree on --out must never touch the filesystem root, the repo, or an
+    ancestor — accidental data loss is the irreversible failure mode here."""
+    with pytest.raises(SystemExit, match="refusing to wipe"):
+        stage_release.stage(Path(danger))
 
 
 def test_verify_rejects_missing_bundle(tmp_path: Path) -> None:

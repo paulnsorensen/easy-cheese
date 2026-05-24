@@ -44,14 +44,25 @@ def _copy(src: Path, dst: Path) -> None:
         shutil.copy2(src, dst)
 
 
-def stage(out: Path, repo: Path = REPO_ROOT) -> Path:
+def _guard_out(out: Path) -> None:
+    """``stage`` wipes ``out`` with rmtree — refuse paths whose loss would be
+    catastrophic: the filesystem root, the repo itself, or an ancestor of it."""
+    resolved = out.resolve()
+    if resolved == Path(resolved.anchor):
+        raise SystemExit(f"stage_release: refusing to wipe filesystem root {resolved}")
+    if resolved == REPO_ROOT or resolved in REPO_ROOT.parents:
+        raise SystemExit(f"stage_release: refusing to wipe {resolved} (repo root or ancestor)")
+
+
+def stage(out: Path) -> Path:
     """Build the release tree at ``out`` (wiped first). Returns ``out``."""
+    _guard_out(out)
     if out.exists():
         shutil.rmtree(out)
     out.mkdir(parents=True)
 
     for rel in SHIP:
-        src = repo / rel
+        src = REPO_ROOT / rel
         if src.exists():
             _copy(src, out / rel)
 
