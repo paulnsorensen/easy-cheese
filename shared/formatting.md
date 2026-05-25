@@ -100,12 +100,14 @@ Reserve plain parenthetical hyperlinks (`see [name](URL)`) for cases where the l
 
 Three shapes are written often enough to deserve a single owner each. The owner skill holds the authoritative shape; this file lists the entry point and the cross-cutting rules.
 
+**Corpus location.** Two roots hold artifacts. Durable, project-scoped knowledge — specs and research reports — anchors at a stable XDG path so it survives branch switches and clones and stays out of git: `$XDG_DATA_HOME/cheese/<project>/` (default `~/.local/share/cheese/<project>/`), where `<project>` matches the git repository (origin `owner/repo`, sanitized; falls back to the toplevel dir name). Transient pipeline handoffs — `cook`/`press`/`age`/`cure` reports, `notes`, `hard` — stay repo-local under `.cheese/` so they travel with the branch and surface in the PR. Override the base with `EASY_CHEESE_HOME` and the project key with `EASY_CHEESE_PROJECT`. The path math is owned by `shared/scripts/paths.py`: `artifact_path` builds flat-phase paths (specs, transient reports), and `project_corpus_root` gives the durable root that `/briesearch` composes the nested `research/<slug>/<slug>.md` report path under. This is the target layout: skills are being migrated onto these helpers, and per-skill docs that still name `.cheese/specs/<slug>.md` predate the durable/transient split and have not yet been updated.
+
 ### Spec
 
 A spec captures a design decision and its rationale before code is written.
 
 - **Owner:** `/mold` → curdle stage.
-- **Path:** `.cheese/specs/<slug>.md`.
+- **Path:** `$XDG_DATA_HOME/cheese/<project>/specs/<slug>.md` (durable corpus; see **Corpus location** above).
 - **Shape:** see `skills/mold/references/curdle.md` § Spec template.
 - **Sections (required, in order):** frontmatter, `# <Title>`, Problem, Goals, Non-goals, Approach, Decisions, Interface sketches, Risks, Open questions, Quality gates, Reproduction (Diagnose only), References (when out-of-scope citations are used).
 - **Length budget:** 50–200 lines. Past 300 lines means a decision is buried; split or cut.
@@ -146,7 +148,7 @@ A findings report is the output of a review skill — `/age`, `/cure`, `/press`,
 A research report is the output of `/briesearch` when the question warranted a deep look.
 
 - **Owner:** `/briesearch` synthesis stage.
-- **Paths:** short form returned inline to the caller; long form written to `.cheese/research/<slug>/<slug>.md` with raw bodies under `.cheese/research/<slug>/raw/`.
+- **Paths:** short form returned inline to the caller; long form written to the durable corpus (see **Corpus location** above) at `$XDG_DATA_HOME/cheese/<project>/research/<slug>/<slug>.md` with raw bodies under `…/research/<slug>/raw/`.
 - **Shape:** see `skills/briesearch/references/synthesis.md` § Output shape.
 - **Required sections (long form):** `## Research: <Question>`, Finding, Evidence (claim-level table), Open questions, Confidence, Next step, References.
 - **Claim-level evidence table.** One row per material claim, not per source:

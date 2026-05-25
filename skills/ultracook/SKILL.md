@@ -16,15 +16,15 @@ Do not use it for short focused changes (`/cook --auto` is cheaper and continuou
 
 Accept one of:
 
-- A spec path, usually `.cheese/specs/<slug>.md`.
-- A bare slug whose spec lives under `.cheese/specs/<slug>.md`.
+- A spec path. When explicit, it points wherever the user wrote the spec.
+- A bare slug whose spec lives in the per-project durable corpus (see `shared/formatting.md` § Corpus location).
 - A pasted spec, with a slug supplied alongside.
 
 `/ultracook` does not accept fuzzy or open-ended asks — those go to `/mold` first. The orchestrator assumes the contract is already locked.
 
 ## Flow
 
-1. **Resolve slug** — derive `<slug>` from the input. If a spec path is given, the slug is the basename without `.md`; if a bare slug is given, confirm the spec exists at `.cheese/specs/<slug>.md`.
+1. **Resolve slug** — derive `<slug>` from the input. If a spec path is given, the slug is the basename without `.md`; if a bare slug is given, confirm the spec exists at the durable path the spawned `/cook` resolves (`python3 ${CLAUDE_SKILL_DIR}/scripts/cook.pyz artifact-path specs <slug>`; see `shared/formatting.md` § Corpus location).
 2. **Guard against re-entry** — if any of `.cheese/{cook,press,age,cure}/<slug>.md` already exist, stop with a one-line list of the existing handoffs and tell the user to either run `/cheese --continue <slug>` to resume from the latest phase or `rm` the relevant files to start fresh. Never silently wipe.
 3. **Phase loop** — for each phase in `cook, press, age, cure, age, cure, age`, spawn a fresh sub-agent (see `## Sub-agent contract` below), wait for it to return, read `.cheese/<phase>/<slug>.md`, and decide:
    - `status:` starts with `halt` → surface the halt reason and stop.

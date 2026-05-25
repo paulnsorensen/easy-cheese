@@ -14,8 +14,8 @@ Do not use it for fuzzy planning (`/mold`), no-write discussion (`/culture`), or
 
 Accept one of:
 
-- A spec path, usually `.cheese/specs/<slug>.md`.
-- A bare slug whose spec lives at `.cheese/specs/<slug>.md` (cook resolves the path; this is the form `/ultracook` uses when chaining).
+- A spec path. When explicit, read it verbatim wherever it points.
+- A bare slug. Resolve it to the durable spec path with `SPEC=$(python3 ${CLAUDE_SKILL_DIR}/scripts/cook.pyz artifact-path specs <slug>)`, then read `"$SPEC"`. The resolver anchors specs at the per-project durable corpus (see `shared/formatting.md` § Corpus location); this is the form `/ultracook` uses when chaining.
 - A pasted spec or issue.
 - A focused implementation request with acceptance criteria.
 - A clear, unambiguous task — single-file fix, named bug, well-scoped tweak — even without a spec.

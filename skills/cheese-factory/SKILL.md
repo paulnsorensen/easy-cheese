@@ -20,8 +20,8 @@ Accept:
 /cheese-factory <spec-path-or-slug> [--hard] [--resume <slug>]
 ```
 
-- A spec path, usually `.cheese/specs/<slug>.md`.
-- A bare slug whose spec lives at `.cheese/specs/<slug>.md`.
+- A spec path. When explicit, read it verbatim wherever it points.
+- A bare slug. Resolve it to the durable spec path with `SPEC=$(python3 ${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz artifact-path specs <slug>)`, then read `"$SPEC"`. The resolver anchors specs at the per-project durable corpus (see `shared/formatting.md` § Corpus location).
 - `--hard` — propagate the `/hard-cheese` metacognitive gate flag through per-curd `/cook --hard --auto` and the Phase 6 `/cure --hard --auto --stake medium+`. The orchestrator does not fire the gate itself. See `skills/hard-cheese/SKILL.md`.
 - `--resume <slug>` — read `.cheese/cheese-factory/<slug>/manifest.yaml`, find the latest phase marked complete, and continue from the next phase.
 
