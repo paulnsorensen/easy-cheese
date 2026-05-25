@@ -38,31 +38,6 @@ class TestValidateSlug:
         assert paths.validate_slug(42) is not None  # type: ignore[arg-type]
 
 
-class TestSlugify:
-    def test_basic_conversion(self, paths: ModuleType) -> None:
-        assert paths.slugify("Fix Auth Retry Bug") == "fix-auth-retry-bug"
-
-    def test_drops_stopwords(self, paths: ModuleType) -> None:
-        # "of", "the", "to" are stopwords; "rate" and "limit" survive.
-        result = paths.slugify("Add rate limit to the API")
-        assert result == "add-rate-limit-api"
-
-    def test_strips_punctuation(self, paths: ModuleType) -> None:
-        result = paths.slugify("Don't break!!! User-facing API.")
-        assert result == "dont-break-user-facing-api"
-
-    def test_caps_word_count(self, paths: ModuleType) -> None:
-        result = paths.slugify("one two three four five six seven", max_words=3)
-        assert result == "one-two-three"
-
-    def test_caps_length_at_64(self, paths: ModuleType) -> None:
-        # 20 long words; should still slug to <=64 chars.
-        result = paths.slugify(" ".join(["alpha"] * 20))
-        assert len(result) <= 64
-        # And must round-trip through the validator.
-        assert paths.validate_slug(result) is None
-
-
 @pytest.fixture
 def xdg_corpus(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     """Pin the per-project corpus to a deterministic tmp location.
@@ -152,11 +127,6 @@ class TestCorpusResolution:
         monkeypatch.setenv("EASY_CHEESE_PROJECT", "My Repo!!")
         assert paths.project_key() == "my-repo"
 
-    def test_config_path_layout(self, paths: ModuleType, xdg_corpus: Path) -> None:
-        # xdg_corpus pins EASY_CHEESE_PROJECT=owner-repo.
-        result = paths.project_config_path()
-        assert result.parts[-3:] == ("cheese", "owner-repo", "config.toml")
-
 
 class TestSlugFromRemote:
     @pytest.mark.parametrize(
@@ -174,45 +144,3 @@ class TestSlugFromRemote:
         self, paths: ModuleType, url: str, expected: str
     ) -> None:
         assert paths._slug_from_remote(url) == expected
-
-
-class TestParseArtifactPath:
-    def test_round_trip(self, paths: ModuleType) -> None:
-        original = paths.artifact_path("press", "demo-slug")
-        phase, slug = paths.parse_artifact_path(original)
-        assert phase == "press"
-        assert slug == "demo-slug"
-
-    def test_round_trip_xdg_corpus(
-        self, paths: ModuleType, xdg_corpus: Path
-    ) -> None:
-        original = paths.artifact_path("specs", "demo-slug")
-        assert original == xdg_corpus / "specs" / "demo-slug.md"
-        phase, slug = paths.parse_artifact_path(original)
-        assert (phase, slug) == ("specs", "demo-slug")
-
-    def test_rejects_non_cheese_path(self, paths: ModuleType) -> None:
-        with pytest.raises(ValueError, match=".cheese"):
-            paths.parse_artifact_path("some/other/dir/age/x.md")
-
-    def test_rejects_non_md_suffix(self, paths: ModuleType) -> None:
-        with pytest.raises(ValueError, match=".md"):
-            paths.parse_artifact_path(".cheese/age/x.txt")
-
-
-class TestExistingArtifacts:
-    def test_scans_chain_phases(self, paths: ModuleType, tmp_path: Path) -> None:
-        for phase in ("cook", "age"):
-            (tmp_path / phase).mkdir(parents=True)
-            (tmp_path / phase / "demo.md").write_text("body", encoding="utf-8")
-
-        result = paths.existing_artifacts("demo", root=tmp_path)
-        assert set(result.keys()) == {"cook", "age"}
-        assert result["cook"].is_file()
-
-    def test_empty_when_none_present(self, paths: ModuleType, tmp_path: Path) -> None:
-        assert paths.existing_artifacts("demo", root=tmp_path) == {}
-
-    def test_invalid_slug_rejected(self, paths: ModuleType, tmp_path: Path) -> None:
-        with pytest.raises(ValueError):
-            paths.existing_artifacts("Bad_Slug", root=tmp_path)

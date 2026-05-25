@@ -22,11 +22,9 @@ from pathlib import Path
 # must be updated in lockstep — keep in sync via manual review.
 KEBAB_SLUG = re.compile(r"^(?!-)(?!.*--)[a-z0-9-]{1,64}(?<!-)$")
 
-# Phases that own a `.cheese/<phase>/<slug>.md` artifact tree. Different
-# orchestrators scan different subsets — see CHAIN_PHASES below for the
-# pipeline that `/cheese --continue` walks. The wider set here includes
-# phases owned by other orchestrators (`/cheese-factory`, `/pasteurize`,
-# `/research`) and one-off notes/specs/hard artifacts.
+# Phases that own a `.cheese/<phase>/<slug>.md` artifact tree. The set spans
+# phases owned by several orchestrators (`/cheese-factory`, `/pasteurize`,
+# `/research`) plus one-off notes/specs/hard artifacts.
 PHASES: frozenset[str] = frozenset(
     {
         "cook",
@@ -41,8 +39,6 @@ PHASES: frozenset[str] = frozenset(
         "pasteurize",
     }
 )
-
-CHAIN_PHASES: tuple[str, ...] = ("cook", "press", "age", "cure")
 
 # Phases whose artifacts are durable, project-scoped knowledge worth a stable
 # home outside any single checkout: a spec or research report stays useful
@@ -69,23 +65,6 @@ def validate_slug(slug: str) -> str | None:
     return None
 
 
-# Stopwords dropped during slugify — too generic to carry meaning in a slug.
-_STOPWORDS = frozenset(
-    {"a", "an", "and", "the", "of", "for", "to", "in", "on", "with", "is"}
-)
-
-
-def slugify(text: str, *, max_words: int = 5) -> str:
-    """Best-effort kebab-slug from arbitrary text. May still need validation."""
-    # Drop punctuation, keep alphanumerics, whitespace, and hyphens. Apostrophes
-    # are removed so "Don't" -> "dont", not "don-t".
-    lowered = re.sub(r"[^a-z0-9\s-]+", "", text.lower())
-    words = [w for w in lowered.split() if w and w not in _STOPWORDS]
-    slug = "-".join(words[:max_words])
-    slug = re.sub(r"-+", "-", slug).strip("-")
-    return slug[:64]
-
-
 def _xdg_dir(env_var: str, *default: str) -> Path:
     """An XDG base dir from ``env_var``, or ``~/<default...>`` as the fallback.
 
@@ -101,11 +80,6 @@ def _xdg_dir(env_var: str, *default: str) -> Path:
 def xdg_data_home() -> Path:
     """``$XDG_DATA_HOME`` or ``~/.local/share``."""
     return _xdg_dir("XDG_DATA_HOME", ".local", "share")
-
-
-def xdg_config_home() -> Path:
-    """``$XDG_CONFIG_HOME`` or ``~/.config``."""
-    return _xdg_dir("XDG_CONFIG_HOME", ".config")
 
 
 def _sanitize_segment(name: str) -> str:
@@ -197,11 +171,6 @@ def project_corpus_root(project: str | None = None) -> Path:
     return corpus_home() / (project or project_key())
 
 
-def project_config_path(project: str | None = None) -> Path:
-    """``$XDG_CONFIG_HOME/cheese/<project>/config.toml`` for this project."""
-    return xdg_config_home() / "cheese" / (project or project_key()) / "config.toml"
-
-
 def default_root_for_phase(phase: str, *, project: str | None = None) -> Path:
     """Where a phase's artifacts live when no explicit ``root`` is given.
 
@@ -211,14 +180,6 @@ def default_root_for_phase(phase: str, *, project: str | None = None) -> Path:
     if phase in XDG_PHASES:
         return project_corpus_root(project)
     return REPO_LOCAL_ROOT
-
-
-def _under_project_corpus(p: Path) -> bool:
-    # corpus_home() consults no git, so reject anything outside the XDG base
-    # before resolving the project key (project_key() may shell out to git).
-    if not p.is_relative_to(corpus_home()):
-        return False
-    return p.is_relative_to(project_corpus_root())
 
 
 def artifact_path(phase: str, slug: str, *, root: Path | str | None = None) -> Path:
@@ -239,44 +200,3 @@ def artifact_path(phase: str, slug: str, *, root: Path | str | None = None) -> P
         raise ValueError(err)
     base = Path(root) if root is not None else default_root_for_phase(phase)
     return base / phase / f"{slug}.md"
-
-
-def parse_artifact_path(path: Path | str) -> tuple[str, str]:
-    """Recover ``(phase, slug)`` from a corpus artifact path.
-
-    Accepts both layouts ``artifact_path`` produces: the repo-local
-    ``.cheese/<phase>/<slug>.md`` and the per-project XDG corpus
-    ``<corpus>/<project>/<phase>/<slug>.md``. Paths produced with a custom
-    ``root=`` (e.g. pytest ``tmp_path``) are not round-trippable here.
-    """
-    p = Path(path)
-    parts = p.parts
-    if len(parts) < 3:
-        raise ValueError(f"{path!r} is not under a recognized corpus root")
-    if parts[-3] != ".cheese" and not _under_project_corpus(p):
-        raise ValueError(f"{path!r} is not under .cheese/<phase>/ or the XDG corpus")
-    phase = parts[-2]
-    if phase not in PHASES:
-        raise ValueError(f"unknown phase {phase!r} in {path!r}")
-    if p.suffix != ".md":
-        raise ValueError(f"artifact must end in .md, got {p.suffix!r}")
-    slug = p.stem
-    err = validate_slug(slug)
-    if err is not None:
-        raise ValueError(err)
-    return phase, slug
-
-
-def existing_artifacts(
-    slug: str, *, root: Path | str = ".cheese", phases: tuple[str, ...] = CHAIN_PHASES
-) -> dict[str, Path]:
-    """Return {phase: path} for each chain-phase artifact present on disk."""
-    err = validate_slug(slug)
-    if err is not None:
-        raise ValueError(err)
-    found: dict[str, Path] = {}
-    for phase in phases:
-        candidate = Path(root) / phase / f"{slug}.md"
-        if candidate.is_file():
-            found[phase] = candidate
-    return found
