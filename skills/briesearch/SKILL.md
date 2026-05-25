@@ -19,7 +19,7 @@ Accept the whole user prompt as the research question. If version, framework, re
 1. **Classify** — library docs, current web facts, codebase pattern, GitHub example, comparison, or best practice.
 2. **Plan** — restate the decision being supported, extract constraints (dates, versions, scope), decompose into 2-5 focused subqueries, name stop criteria. See `references/query-planning.md`.
 3. **Route** — pick sources per `references/routing.md` and emit the routing block. Sources committed here MUST execute.
-4. **Gather** — fetch from each routed source in parallel (single assistant turn, multiple tool calls) where the harness supports it. For heavy calls **fork to a small, fast research sub-agent** that writes raw bodies to `.cheese/research/<slug>/raw/` and returns only the synthesis. Triggers and on-disk layout live in `references/context-isolation.md`; light triage runs inline without a fork.
+4. **Gather** — fetch from each routed source in parallel (single assistant turn, multiple tool calls) where the harness supports it. For heavy calls **fork to a small, fast research sub-agent** that writes raw bodies under the durable corpus's `research/<slug>/raw/` and returns only the synthesis. Resolver, triggers, and on-disk layout live in `references/context-isolation.md`; light triage runs inline without a fork.
 5. **Synthesize** — build the claim-level evidence table per `references/synthesis.md`, verify links resolve, apply the confidence cap.
 6. **Stop** — hand off. Do not implement the result, and do not promote citations into design choices; the next skill (`/cook`, `/mold`, etc.) takes the report. Alternatives raised by cited sources become open questions for the user, not recommendations (see `references/synthesis.md` § Alternatives are open questions). Implement only if the current prompt explicitly asks for research-informed implementation.
 
@@ -33,7 +33,7 @@ When a routed source is heavy enough to flood the parent with raw bodies, fork t
 
 Triggers and the on-disk layout for raw bodies live in `references/context-isolation.md` — single source of truth for `/briesearch`-specific cutoffs.
 
-The sub-agent returns the claim table, confidence, gaps, and optional `.cheese/research/<slug>/<slug>.md` path; raw bodies stay under `.cheese/research/<slug>/raw/`. Digest size, parent-vs-sub-agent split, and harness-agnostic sub-agent selection live in the shared kernel at `skills/age/references/sub-agent-gate.md`.
+The sub-agent returns the claim table, confidence, gaps, and the optional durable-corpus `research/<slug>/<slug>.md` path; raw bodies stay under the corpus's `research/<slug>/raw/`. Digest size, parent-vs-sub-agent split, and harness-agnostic sub-agent selection live in the shared kernel at `skills/age/references/sub-agent-gate.md`.
 
 When two or more heavy sources are independent, spawn one small sub-agent per source in parallel and merge their claim tables in the parent — one sub-agent doing five things sequentially is the wrong shape.
 
@@ -54,7 +54,7 @@ If a preferred tool is missing, say so once and continue with the fallback. Miss
 
 ## Output
 
-Cross-cutting house style and citation form: [`../../shared/formatting.md`](../../shared/formatting.md). The output contract lives in `references/synthesis.md` (single source of truth). Short shape: one-paragraph synthesis, claim-level evidence table, open questions block, confidence with one-line justification, recommended next step. For deep looks, also write `.cheese/research/<slug>/<slug>.md` and pass back the path.
+Cross-cutting house style and citation form: [`../../shared/formatting.md`](../../shared/formatting.md). The output contract lives in `references/synthesis.md` (single source of truth). Short shape: one-paragraph synthesis, claim-level evidence table, open questions block, confidence with one-line justification, recommended next step. For deep looks, also write the long form to the durable corpus's `research/<slug>/<slug>.md` (resolve the root via `artifact-path research <slug>` — see `references/synthesis.md`) and pass back the path.
 
 ## Rules
 

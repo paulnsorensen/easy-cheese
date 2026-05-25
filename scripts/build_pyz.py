@@ -36,13 +36,19 @@ SKILLS: dict[str, dict[str, str]] = {
         "lockfile-resolve": "lockfile-resolve.py",
     },
     "cheese-factory": {
+        "artifact-path": "artifact-path.py",
         "pr_plan_to_branches": "pr_plan_to_branches.py",
         "validate_decomposition": "validate_decomposition.py",
         "validate_manifest": "validate_manifest.py",
         "validate_pr_plan": "validate_pr_plan.py",
     },
     "affinage": {"pr-status": "pr-status.py"},
-    "mold": {"curd-count": "curd-count.py"},
+    "mold": {
+        "artifact-path": "artifact-path.py",
+        "curd-count": "curd-count.py",
+    },
+    "briesearch": {"artifact-path": "artifact-path.py"},
+    "cook": {"artifact-path": "artifact-path.py"},
 }
 
 _CACHE: dict[str, Path] = {}
