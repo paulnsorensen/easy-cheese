@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Resolve a durable-corpus artifact path for this skill.
+"""Resolve a durable-corpus artifact path for a prose-driven skill.
 
-Thin shim over ``shared/scripts/paths.py`` so a prose-driven skill can ask for
-the on-disk home of an artifact without knowing the project key or XDG routing.
-Prints one absolute path on stdout.
+Thin CLI over ``paths.py`` so a skill can ask for the on-disk home of an
+artifact without knowing the project key or XDG routing. Prints one absolute
+path on stdout.
 
   research -> project_corpus_root(); the caller composes
               <root>/research/<slug>/<slug>.md + raw/ (the nested layout
@@ -12,8 +12,9 @@ Prints one absolute path on stdout.
 
 Exit 2 on bad args; nonzero on a paths validation error (unknown phase, bad slug).
 
-This file is identical across the skills that ship it (mold, briesearch, cook,
-cheese-factory) and is auto-vendored with ``paths`` by build_pyz.py.
+Shared source: build_pyz.py registers this one file as the ``artifact-path``
+subcommand across the skills that need it (mold, briesearch, cook,
+cheese-factory) and auto-vendors ``paths`` alongside it.
 """
 
 from __future__ import annotations

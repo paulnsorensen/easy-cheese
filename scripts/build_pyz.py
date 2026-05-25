@@ -18,6 +18,7 @@ import shutil
 import sys
 import tempfile
 import zipapp
+from dataclasses import dataclass
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -25,9 +26,19 @@ SRC_ROOT = REPO_ROOT / "src"
 SHARED_SCRIPTS = REPO_ROOT / "shared" / "scripts"
 SHARED_MODULES = {p.stem for p in SHARED_SCRIPTS.glob("*.py")}
 
-# skill -> {subcommand: source filename in src/<skill>/}. Subcommands keep each
-# script's stem verbatim; the staged module name underscores it for importability.
-SKILLS: dict[str, dict[str, str]] = {
+
+@dataclass(frozen=True)
+class Shared:
+    """A subcommand sourced from a shared/scripts/ module rather than a
+    src/<skill>/ script, so one file backs the subcommand across every skill
+    that registers it — no per-skill copy to keep in sync."""
+
+    filename: str
+
+# skill -> {subcommand: source}. A plain string names a src/<skill>/ script;
+# Shared(...) names a shared/scripts/ module reused across skills. Subcommands
+# keep each script's stem verbatim; the staged module name underscores it.
+SKILLS: dict[str, dict[str, str | Shared]] = {
     "melt": {
         "batch-resolve": "batch-resolve.py",
         "conflict-pick": "conflict-pick.py",
@@ -36,7 +47,7 @@ SKILLS: dict[str, dict[str, str]] = {
         "lockfile-resolve": "lockfile-resolve.py",
     },
     "cheese-factory": {
-        "artifact-path": "artifact-path.py",
+        "artifact-path": Shared("artifact_path.py"),
         "pr_plan_to_branches": "pr_plan_to_branches.py",
         "validate_decomposition": "validate_decomposition.py",
         "validate_manifest": "validate_manifest.py",
@@ -44,11 +55,11 @@ SKILLS: dict[str, dict[str, str]] = {
     },
     "affinage": {"pr-status": "pr-status.py"},
     "mold": {
-        "artifact-path": "artifact-path.py",
+        "artifact-path": Shared("artifact_path.py"),
         "curd-count": "curd-count.py",
     },
-    "briesearch": {"artifact-path": "artifact-path.py"},
-    "cook": {"artifact-path": "artifact-path.py"},
+    "briesearch": {"artifact-path": Shared("artifact_path.py")},
+    "cook": {"artifact-path": Shared("artifact_path.py")},
 }
 
 _CACHE: dict[str, Path] = {}
@@ -56,6 +67,16 @@ _CACHE: dict[str, Path] = {}
 
 def _module_name(filename: str) -> str:
     return filename[:-3].replace("-", "_")
+
+
+def _filename(source: str | Shared) -> str:
+    return source.filename if isinstance(source, Shared) else source
+
+
+def _source_path(skill: str, source: str | Shared) -> Path:
+    if isinstance(source, Shared):
+        return SHARED_SCRIPTS / source.filename
+    return SRC_ROOT / skill / source
 
 
 def _imported_top_names(path: Path) -> set[str]:
@@ -72,8 +93,8 @@ def _imported_top_names(path: Path) -> set[str]:
 def needed_shared(skill: str) -> set[str]:
     """Shared modules transitively imported by the skill's scripts."""
     frontier: set[str] = set()
-    for fn in SKILLS[skill].values():
-        frontier |= _imported_top_names(SRC_ROOT / skill / fn) & SHARED_MODULES
+    for source in SKILLS[skill].values():
+        frontier |= _imported_top_names(_source_path(skill, source)) & SHARED_MODULES
     resolved: set[str] = set()
     while frontier:
         module = frontier.pop()
@@ -106,13 +127,13 @@ def build_bundle(skill: str, target: Path) -> Path:
     """Build ``skill``'s bundle at ``target`` (a .pyz path). Returns it."""
     target.parent.mkdir(parents=True, exist_ok=True)
     files = SKILLS[skill]
-    sub_to_module = {sub: _module_name(fn) for sub, fn in files.items()}
+    sub_to_module = {sub: _module_name(_filename(src)) for sub, src in files.items()}
     with tempfile.TemporaryDirectory() as td:
         stage = Path(td)
         for module in needed_shared(skill):
             shutil.copy(SHARED_SCRIPTS / f"{module}.py", stage / f"{module}.py")
-        for fn in files.values():
-            shutil.copy(SRC_ROOT / skill / fn, stage / f"{_module_name(fn)}.py")
+        for source in files.values():
+            shutil.copy(_source_path(skill, source), stage / f"{_module_name(_filename(source))}.py")
         (stage / "__main__.py").write_text(_dispatcher_source(sub_to_module))
         zipapp.create_archive(stage, target=target, interpreter="/usr/bin/env python3")
     return target

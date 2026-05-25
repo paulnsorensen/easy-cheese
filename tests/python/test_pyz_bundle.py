@@ -40,8 +40,9 @@ SKILL_SUBCOMMANDS = {
     "cook": ["artifact-path"],
 }
 
-# Every skill that ships the durable-corpus resolver shim. The shim is byte-identical
-# across these and must agree with paths.artifact_path / paths.project_corpus_root.
+# Every skill that registers the durable-corpus resolver shim. One shared source
+# (shared/scripts/artifact_path.py) backs them all; each must agree with
+# paths.artifact_path / paths.project_corpus_root.
 ARTIFACT_PATH_SKILLS = ("mold", "cheese-factory", "briesearch", "cook")
 
 
@@ -159,19 +160,6 @@ def test_artifact_path_specs_matches_paths_module(bundles: Path, skill: str) -> 
     assert result.stdout.strip() == expected
 
 
-def test_artifact_path_specs_agrees_across_skills(bundles: Path) -> None:
-    """All four shims resolve the same specs path — they are byte-identical and
-    must not drift."""
-    outs = {
-        skill: _run(
-            bundles / f"{skill}.pyz", "artifact-path", "specs", "demo-slug", extra_env=_CORPUS_ENV
-        ).stdout.strip()
-        for skill in ARTIFACT_PATH_SKILLS
-    }
-    assert len(set(outs.values())) == 1, outs
-    assert outs["mold"] == "/tmp/ec-corpus/demo-project/specs/demo-slug.md"
-
-
 def test_artifact_path_research_returns_corpus_root(bundles: Path) -> None:
     """research resolves to the bare project corpus root; briesearch composes the
     nested research/<slug>/<slug>.md layout on top of it."""
@@ -180,21 +168,6 @@ def test_artifact_path_research_returns_corpus_root(bundles: Path) -> None:
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "/tmp/ec-corpus/demo-project"
-
-
-def test_artifact_path_research_agrees_across_skills(bundles: Path) -> None:
-    """The research branch is the shim's other conditional arm. It too is byte-
-    identical across the four skills and must not drift: editing one shim's research
-    handling without the others would diverge here, where the specs-agreement test
-    cannot see it."""
-    outs = {
-        skill: _run(
-            bundles / f"{skill}.pyz", "artifact-path", "research", "demo-slug", extra_env=_CORPUS_ENV
-        ).stdout.strip()
-        for skill in ARTIFACT_PATH_SKILLS
-    }
-    assert len(set(outs.values())) == 1, outs
-    assert outs["briesearch"] == "/tmp/ec-corpus/demo-project"
 
 
 def test_artifact_path_research_returns_root_and_ignores_slug(bundles: Path) -> None:
