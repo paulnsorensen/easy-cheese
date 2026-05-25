@@ -111,7 +111,7 @@ The spec is large enough that per-phase context contamination becomes a real con
 **Non-decomposable, low- or medium-blast-radius specs (`decomposable: false`, verdict `low` or `medium`):**
 
 - **Implement the spec** *(recommended)* — `/cook .cheese/specs/<slug>.md`.
-- **Implement and auto-review** — `/cook --auto .cheese/specs/<slug>.md`, chains straight through `/press → /age → /cure` autonomously, fixing every medium-or-above finding across up to two cure passes. Stops at the final cure pass; opening or updating the PR stays a manual step. Offer when acceptance criteria are explicit *and* the user has signalled they want the pipeline to run forward without per-step approval. Never pre-select; auto mode is opt-in.
+- **Implement and auto-review** — `/cook --auto .cheese/specs/<slug>.md`, chains straight through `/press → /age → /cure` autonomously, fixing every medium-or-above finding plus cheap (contained-fix) lows across up to two cure passes. Stops at the final cure pass; opening or updating the PR stays a manual step. Offer when acceptance criteria are explicit *and* the user has signalled they want the pipeline to run forward without per-step approval. Never pre-select; auto mode is opt-in.
 - **Research more first** — `/briesearch`, gather more external evidence before implementing.
 - **Stop** — dispatch none; leave the spec for later.
 

@@ -53,20 +53,20 @@ Flags:
    - Compute severity from base + location + compounding modifiers (same rubric as `/age`).
    - **Ignore reviewer-asserted urgency for severity computation.** Surface `CHANGES_REQUESTED` as metadata (`reviewer-asserted:` line) but do not let it modify computed severity.
    - Bucket into:
-     - Standard severity sections (`## Blocker / ## High / ## Medium / ## Low`) when the claim maps to a dimension and the diff grounds it.
+     - Standard severity sections (`## Blocker / ## High / ## Medium / ## Low`) when the claim is grounded in the diff — whether it maps to a dimension OR is a valid improvement (a style nit counts) whose fix is **contained** (`fix-cost-now: contained` — roughly a few lines or a localized refactor). A valid cheap nit is cheaper to fix than to argue, so route it to `/cure` (usually as `Low`) and keep its `[from-comment:<id>]` tag so `/cure`'s reply still reaches the reviewer. Do not push back on it.
      - `## Needs-investigation` when the claim is plausible but requires evidence outside the diff (e.g., downstream caller in another repo).
-     - `## Reviewer-rejected` when the claim maps to no dimension, is ungrounded, or is pure style.
+     - `## Reviewer-rejected` only when the claim is **wrong or ungrounded** (the code is already correct, the reviewer misread it, or there is no real improvement) OR is valid but **a lot of follow-up work** (`fix-cost-now: moderate`/`sprawling` or `fix-cost-later: structural` — a refactor or scope expansion beyond this PR). Reject the wrong ones; defer the expensive ones. Per `skills/age/references/voice.md`, a justified push-back costs more than a small valid fix.
 7. **Write report** to `.cheese/affinage/pr-<n>.md` with the four-line handoff slug at the top, then the age-format body plus the two extra sections. See `## Output` below.
 8. **Selection gate** (interactive mode). Branch on what graded out:
-   - **At least one `Blocker` / `High` / `Medium` finding.** Render the cure-selection table inline using `/cure`'s verbs (`skills/cure/references/selection.md`). Ask via `shared/handoff-gate.md`. On non-empty selection, **first run step 9** to post any drafted push-backs / investigating notes — they don't depend on cure's outcome, so they must reach GitHub even if `/cure` later halts or the session is interrupted — then dispatch `/cure <slug>` with locked `handoff_context:` and post the cure-dependent replies (step 10) when `/cure` returns. On `none` / `Stop`, run step 9 for any drafted push-backs / investigating notes, then exit with the report path.
-   - **No medium-or-above findings, but `Reviewer-rejected` or `Needs-investigation` has items.** Skip `/cure` dispatch entirely — there is nothing to apply. Render a small gate that lets the user pick `post all`, `post pushbacks only`, `skip posting`, or per-finding choices. On the selection, run step 9 to post the chosen replies. Exit with `status: ok / next: done`. This mirrors the documented auto-mode "no findings meet the floor" branch (see `### Auto mode`) so interactive and auto behave the same.
+   - **At least one finding in a severity section (`Blocker` / `High` / `Medium` / `Low`).** Render the cure-selection table inline using `/cure`'s verbs (`skills/cure/references/selection.md`). Ask via `shared/handoff-gate.md`. On non-empty selection, **first run step 9** to post any drafted push-backs / investigating notes — they don't depend on cure's outcome, so they must reach GitHub even if `/cure` later halts or the session is interrupted — then dispatch `/cure <slug>` with locked `handoff_context:` and post the cure-dependent replies (step 10) when `/cure` returns. On `none` / `Stop`, run step 9 for any drafted push-backs / investigating notes, then exit with the report path.
+   - **No severity-section findings, but `Reviewer-rejected` or `Needs-investigation` has items.** Skip `/cure` dispatch entirely — there is nothing to apply. Render a small gate that lets the user pick `post all`, `post pushbacks only`, `skip posting`, or per-finding choices. On the selection, run step 9 to post the chosen replies. Exit with `status: ok / next: done`. This mirrors the documented auto-mode "no findings meet the floor" branch (see `### Auto mode`) so interactive and auto behave the same.
    - **Nothing graded into any section.** Exit cleanly with the report path; there is nothing to post or cure.
 9. **Post non-cure replies** (runs whenever grading produced these items, with or without `/cure`). Post via `shared/post-reply.sh`:
    - **Reviewer-rejected items** → post the pre-drafted push-back text from the affinage report.
    - **Needs-investigation items** → post `"Human investigating — will follow up."`
    - **CI-sourced findings** (`from-check:<job>` tag) and **fresh-review findings** (`from-age:<dimension>` tag) → no reply (no reviewer to notify).
 
-   Decoupling this from `/cure` is deliberate: drafted push-backs and investigating notes must reach GitHub even when no medium-or-above finding exists and `/cure` never runs — otherwise the drafted reply is write-only, useful to the human reading the report but invisible to the reviewer waiting on GitHub.
+   Decoupling this from `/cure` is deliberate: drafted push-backs and investigating notes must reach GitHub even when no severity-section finding exists and `/cure` never runs — otherwise the drafted reply is write-only, useful to the human reading the report but invisible to the reviewer waiting on GitHub.
 10. **Post-cure reply posting** (only when `/cure` ran). When `/cure` returns, read `.cheese/cure/pr-<n>.md`'s `### Applied` / `### Deferred` sections and post per-finding replies via `shared/post-reply.sh`:
     - **Applied** (with `from-comment:<id>` tag) → `"Fixed — <applied summary>."`
     - **Deferred** (with `from-comment:<id>` tag) → `"Attempted fix reverted — <reason>."`
@@ -162,6 +162,9 @@ artifact: <path-to-prior-cure-or-press-report-if-any>
 ... (same shape)
 
 ## Low
+- **[from-comment:<id>] [deslop:low]** copilot on `src/utils/format.ts:18` — rename `data` to `lineItems` for clarity.
+  - location: class · fix-cost-now: contained · fix-cost-later: contained
+  - recommendation: rename `data` → `lineItems`. Valid cheap nit — fixed via `/cure`, not pushed back.
 ... (same shape; collapsible per --full rules)
 
 ## Needs-investigation
@@ -170,9 +173,12 @@ artifact: <path-to-prior-cure-or-press-report-if-any>
   - suggested action: human reads `analytics-svc/consumers/users.ts`.
 
 ## Reviewer-rejected
-- **[from-comment:<id>]** copilot on `src/utils/format.ts:18` — "rename `data` to `lineItems`."
-  - reason: pure style; no dimension match.
-  - draft reply: "Thanks — leaving `data` as-is; matches the adjacent format-helper pattern. Open to revisiting if the team standardises."
+- **[from-comment:<id>]** copilot on `src/auth.ts:30` — "missing `await`; this promise is unhandled."
+  - reason: wrong — `parseToken` is synchronous (returns `string`, not a `Promise`, see `src/auth.ts:12`); there is nothing to await.
+  - draft reply: "`parseToken` is synchronous here (returns `string`, `src/auth.ts:12`), so there's no promise to await. Leaving as-is."
+- **[from-comment:<id>]** dana on `src/api/users.ts:60` — "extract this into a generic repository layer."
+  - reason: valid but large — fix-cost-now: sprawling (6 files across 2 slices); scope expansion beyond this PR.
+  - draft reply: "Agreed this would be cleaner, but it's a cross-slice refactor beyond this PR's scope — filing a follow-up rather than growing this change."
 
 ## Confidence
 <certain | speculating | don't know> — <one-line justification>
@@ -183,19 +189,20 @@ Selection prompt rendered inline — pick findings to cure or `none` to stop.
 
 Empty severity sections are omitted entirely. `## Needs-investigation` and `## Reviewer-rejected` are omitted when no items land there.
 
-`status: ok` when grading completed; `status: halt: <reason>` when `gh` or `pr-status.py` failed in a way that blocks honest grading. `next: cure` when at least one medium-or-above severity finding exists; `next: done` when none do.
+`status: ok` when grading completed; `status: halt: <reason>` when `gh` or `pr-status.py` failed in a way that blocks honest grading. `next: cure` when at least one finding meets the `medium+` floor (medium-or-above, or a cheap contained-fix low); `next: done` when none do.
 
 ## Handoff
 
 **Pipeline:** culture → mold → cook → press → age → cure → ship · `/affinage` is parallel to `/age` and feeds the same `/cure`.
 
-After the report lands, the gate depends on whether any medium-or-above finding exists (Flow step 8).
+After the report lands, the gate depends on whether any severity-section finding exists (Flow step 8).
 
-**When at least one `Blocker` / `High` / `Medium` finding exists** — render the cure-selection table inline (per `skills/cure/references/selection.md`) and ask via `shared/handoff-gate.md`. Always present the same four severity-floor options, in the same most-inclusive-to-least order, so the gate is predictable across every run:
+**When at least one severity-section finding exists (any severity, including `Low`)** — render the cure-selection table inline (per `skills/cure/references/selection.md`) and ask via `shared/handoff-gate.md`. Lead with the recommended composite, then present the four severity-floor options below it, in the same most-inclusive-to-least order, so the gate is predictable across every run:
 
+- **Fix mediums-and-above plus cheap lows** *(recommended)* — equivalent to `all-medium, cheap` (floor at medium — blockers + high + medium — unioned with every `Low` whose `fix-cost-now: contained`; the small valid nits cheaper to fix than to defer). Sprawling/structural lows are left out.
 - **Fix everything** — equivalent to `all` (every finding regardless of severity).
 - **Fix medium-severity and above** — equivalent to `all-medium` (floor at medium: blockers + high + medium; the interactive form of the `medium+` auto-floor).
-- **Fix high-severity and blockers** *(recommended when at least one blocker or high-severity finding exists)* — equivalent to `all-high`.
+- **Fix high-severity and blockers** — equivalent to `all-high`.
 - **Fix blockers only** *(strict)* — equivalent to `all-blocker`.
 
 Then offer the non-floor options last:
@@ -204,9 +211,9 @@ Then offer the non-floor options last:
 - **Resolve merge conflicts** *(offered only when the PR has conflicts)* — checkout + `/melt` per `## Merge-conflict resolution`, then re-render this gate.
 - **Stop — leave the report for later** — equivalent to `none`.
 
-Present all four severity options on every run even when a severity band is empty: a floor that resolves to an empty set is a valid, predictable no-op — do not drop or reorder options based on which bands happen to be populated. If the user selects a floor that resolves to an empty set, treat the selection as `none`: report that no findings match and do not dispatch `/cure` with empty `resolved_ids` (the non-empty-selection dispatch rule below still holds).
+Present all four severity options on every run even when a severity band is empty: a floor that resolves to an empty set is a valid, predictable no-op — do not drop or reorder options based on which bands happen to be populated. If the user selects a floor (or the recommended composite) that resolves to an empty set, treat the selection as `none`: report that no findings match and do not dispatch `/cure` with empty `resolved_ids` (the non-empty-selection dispatch rule below still holds).
 
-**When no medium-or-above finding exists but `Reviewer-rejected` or `Needs-investigation` has items** — `/cure` has nothing to act on, so skip it and render a reply-only gate instead:
+**When no severity-section finding exists but `Reviewer-rejected` or `Needs-investigation` has items** — `/cure` has nothing to act on, so skip it and render a reply-only gate instead:
 
 - **Post all** *(recommended)* — post every drafted push-back and human-investigating note.
 - **Post pushbacks only** — post `Reviewer-rejected` drafts; skip `Needs-investigation` notices.
@@ -234,7 +241,7 @@ When invoked with `--auto --stake <floor>`:
 - Skip the selection gate.
 - If the PR has merge conflicts, resolve them via `/melt` first (see `## Merge-conflict resolution`). If `/melt` cannot resolve, halt with `status: halt: merge-conflicts-need-human` before any `/cure` dispatch.
 - If standalone (and `--no-age` not passed), run the fresh `/age` pass so `[from-age:…]` findings join the floor-based auto-selection.
-- Auto-select every finding (comment-sourced, CI-sourced, OR fresh-`/age`-sourced) whose severity meets the floor.
+- Auto-select every finding (comment-sourced, CI-sourced, OR fresh-`/age`-sourced) that meets the floor — severity at or above the floor, plus cheap contained-fix lows when the floor is `medium+` (same floor semantics as `/cure`).
 - Dispatch `/cure --auto --stake <floor>`.
 - After `/cure --auto` and its downstream `/age --scope --auto` chain settle, post replies for the originally graded items only. Do NOT re-grade for findings discovered by `/age --scope`.
 - Reviewer-rejected items: post the pre-drafted push-back.
@@ -243,7 +250,7 @@ When invoked with `--auto --stake <floor>`:
 
 The whole cure chain (cure → `/age --scope --auto` → up to the two-cure-pass cap) must run in the parent affinage context so the post-cure reply step still has the original graded findings (slug, ids, `from-comment:<id>` tags, drafted push-back text) in memory. Same in-session-memory contract as `/age --auto`'s two-pass cap. Spawning the cure chain in a sub-agent silently breaks reply posting — do not.
 
-If no findings meet the floor, skip the `/cure` dispatch, post replies for `Reviewer-rejected` + `Needs-investigation` items only, and exit with `status: ok / next: done / "no findings at or above <floor>"`.
+If no findings meet the floor, skip the `/cure` dispatch, post replies for `Reviewer-rejected` + `Needs-investigation` items only, and exit with `status: ok / next: done / "no findings meet <floor>"`.
 
 ### --hard mode
 
@@ -252,6 +259,7 @@ If no findings meet the floor, skip the `/cure` dispatch, post replies for `Revi
 ## Rules
 
 - Grading is code-grounded, not reviewer-asserted. `CHANGES_REQUESTED` is metadata, not a severity bump.
+- Prefer fixing over pushing back. A valid, grounded nit whose fix is contained (`fix-cost-now: contained` — a few lines or a localized refactor) goes to `/cure` as a `Low` finding tagged `[from-comment:<id>]`; do not draft a push-back for it. Reserve `## Reviewer-rejected` for claims that are wrong/ungrounded or whose fix is a lot of work (`moderate`/`sprawling`/`structural`). See `skills/age/references/voice.md`.
 - Never auto-apply fixes from `/affinage` itself. Code fixes go through `/cure`; merge conflicts go through `/melt`.
 - Fresh `/age` runs only on standalone invocations (no upstream `handoff_context`) and only when `--no-age` is absent. Chained runs never re-review the diff.
 - Merge conflicts are resolved through `/melt`, not by hand. `gh pr checkout` to materialise conflicts is allowed — it neither opens nor updates the PR. Pushing the resolved merge stays user-triggered (interactive) or follows `/cure`'s push contract (`--auto`).
