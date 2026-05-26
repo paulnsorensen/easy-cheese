@@ -21,7 +21,7 @@ If selection is ambiguous *and* not pre-locked from `/age`, render a numbered se
 Optional flags:
 
 - `--auto` — autonomous mode (propagated from `/cook --auto`). Bypasses the user-selection step. Must be paired with `--stake <floor>` to set the inclusion threshold; `/cook --auto` always passes `--stake medium+`. See `references/selection.md` for the auto-selection rules and `## Auto mode` below for the pass-cap and revert behaviour.
-- `--stake <floor>` — used only with `--auto`. Despite the flag name (preserved across callers for stability), the floor is a per-finding **severity** floor, not a dimension-bucket. Accepts `blocker`, `high` (blocker + high), `medium+` (blocker + high + medium), or `all`. Without `--auto` this flag is ignored — interactive selection is the only sanctioned path.
+- `--stake <floor>` — used only with `--auto`. Despite the flag name (preserved across callers for stability), the floor is primarily a per-finding **severity** floor, not a dimension-bucket. Accepts `blocker`, `high` (blocker + high), `medium+` (blocker + high + medium **plus cheap contained-fix lows**), or `all`. The floors are severity thresholds; `medium+` is the one exception — it additionally unions the cheap lows (see `references/selection.md` § Auto-mode selection). Without `--auto` this flag is ignored — interactive selection is the only sanctioned path.
 - `--hard` — propagated metacognitive-gate flag (from `/cook --hard` or `/cheese --hard`). Cure is the *only* pipeline skill that fires the gate: when `--hard` is in scope and the user selects the share-for-review handoff option (the **Open or update the PR** label, which dispatches `/gh`), invoke `/hard-cheese <slug>` first and proceed only on exit `0`. Under `--auto --hard`, see `## --hard mode` and the auto-mode puncture clause below.
 
 ## Flow
@@ -118,7 +118,7 @@ The gate's mechanism (SOLO-graded fresh-context judge, Socratic retry, fail-open
 When invoked with `--auto --stake <floor>`:
 
 - Skip the selection-list rendering and the handoff gate.
-- Auto-select every finding whose severity meets the floor (`blocker` only, `high` for blocker + high, `medium+` for blocker + high + medium, or `all`).
+- Auto-select every finding that meets the floor (`blocker` only; `high` for blocker + high; `medium+` for blocker + high + medium **plus cheap contained-fix lows**; or `all`).
 - Apply findings one at a time. After each fix, run the narrowest test that proves it. If the fix breaks a previously-passing test or any project-wide gate, revert that single finding's edit and record it under `### Deferred` in the cure report with the test name and the failure summary. Continue with the remaining findings.
 - After all selected findings are processed, skip the handoff gate and invoke `/age --scope <touched-paths> --auto` so the chain can re-review.
 - `/age --auto` enforces the two-pass cap. Cure does not need to track passes itself — it just keeps applying when invoked.
@@ -133,7 +133,7 @@ When invoked with `--auto --stake <floor>`:
 - On `ERROR`: chain exits `0` with a warning (the fail-open divergence documented in `skills/hard-cheese/SKILL.md`).
 - A non-TTY environment aborts with `"--hard requires an interactive TTY; remove --hard or run interactively"` — the puncture requires a human in the loop.
 
-If no findings meet the severity floor, write an empty cure report with `### Applied: (none — no findings at or above <floor>)` and skip straight to the auto handoff with a one-line "auto chain clean" note.
+If no findings meet the floor, write an empty cure report with `### Applied: (none — no findings meet <floor>)` and skip straight to the auto handoff with a one-line "auto chain clean" note.
 
 ### When invoked from /ultracook
 

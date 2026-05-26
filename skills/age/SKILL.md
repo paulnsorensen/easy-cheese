@@ -144,7 +144,7 @@ Empty severity sections are omitted entirely. When ten or more `low` findings ex
 
 Suppressed lows feed the cure-selection table only when `--full` is passed.
 
-`status: ok` when the review completed. `status: halt: <reason>` when evidence was unreachable in a way that blocks honest review. `next: cure` when at least one medium-or-above severity finding exists and the chain has cure passes remaining; `next: done` when no medium-or-above severity findings remain or the two-cure-pass cap has been reached.
+`status: ok` when the review completed. `status: halt: <reason>` when evidence was unreachable in a way that blocks honest review. `next: cure` when at least one finding meets the `medium+` floor (medium-or-above, or a cheap contained-fix low) and the chain has cure passes remaining; `next: done` when no finding meets the `medium+` floor or the two-cure-pass cap has been reached.
 
 Then print:
 
@@ -159,17 +159,18 @@ Age report: .cheese/age/<slug>.md
 After the report is on disk, skip any "should I run /cure?" meta-question and go straight to the selection gate. The user's working memory is on the findings, not on whether a follow-up step exists. Use the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md) for post-selection dispatch.
 
 1. Render the numbered selection table per `../cure/references/selection.md` directly inline (one row per finding, grouped by severity).
-2. Ask via the handoff gate which findings to cure. Lead each option with the verb (what the user wants to *do* next); the underlying selection verb is the backing detail. Always present the same four severity-floor options, in the same most-inclusive-to-least order, so the gate is predictable across every run:
+2. Ask via the handoff gate which findings to cure. Lead each option with the verb (what the user wants to *do* next); the underlying selection verb is the backing detail. Lead with the recommended composite, then present the same four severity-floor options below it, in the same most-inclusive-to-least order, so the gate is predictable across every run:
+   - **Fix mediums-and-above plus cheap lows** *(recommended)* — equivalent to `all-medium, cheap` (floor at medium — blockers + high + medium — unioned with every `Low` whose `fix-cost-now: contained`). The cheap lows are the small valid nits that are cheaper to fix than to defer; sprawling/structural lows are left out.
    - **Fix everything** — equivalent to `all` (every finding regardless of severity).
-   - **Fix medium-severity and above** — equivalent to `all-medium` (floor at medium: blockers + high + medium; the interactive form of the `medium+` auto-floor).
-   - **Fix high-severity and blockers** *(recommended when at least one blocker or high-severity finding exists)* — equivalent to `all-high` (floor at high, includes blockers).
+   - **Fix medium-severity and above** — equivalent to `all-medium` (floor at medium: blockers + high + medium — the severity-floor portion of the `medium+` auto-floor; add `cheap` to also union the contained-fix lows, i.e. the recommended composite above).
+   - **Fix high-severity and blockers** — equivalent to `all-high` (floor at high, includes blockers).
    - **Fix blockers only** *(strict; land only the must-fix blockers and defer the rest to a follow-up)* — equivalent to `all-blocker`.
 
    Then offer the two non-floor options last:
    - **Pick findings to fix** — accept a free-text reply using the verbs from `../cure/references/selection.md` (`1,3,5`, `all-blocker`, `all-medium`, `all-high`, `cheap`, `all`, `none`, `skip N`; comma-compose to union).
    - **Stop — leave the report for later** — equivalent to `none`.
 
-   Present all four severity options on every run even when a severity band is empty (e.g. no blockers): a floor that resolves to an empty set is a valid, predictable no-op — do not drop or reorder options based on which bands happen to be populated. If the user selects a floor that resolves to an empty set, treat the selection as `none`: report that no findings match and do not dispatch `/cure` with empty `resolved_ids` (the non-empty-selection contract in step 3 still holds).
+   Present all four severity options on every run even when a severity band is empty (e.g. no blockers): a floor that resolves to an empty set is a valid, predictable no-op — do not drop or reorder options based on which bands happen to be populated. If the user selects a floor (or the recommended composite) that resolves to an empty set, treat the selection as `none`: report that no findings match and do not dispatch `/cure` with empty `resolved_ids` (the non-empty-selection contract in step 3 still holds).
 3. On a non-empty selection, immediately dispatch `/cure <slug> [--hard]` with the selection locked in via context, not a CLI flag:
 
 ```yaml
@@ -191,15 +192,15 @@ When invoked with `--auto`:
 
 - Skip the handoff gate.
 - If two cure passes have already completed (cap reached), stop and surface the final report — do not invoke `/cure` again even if findings remain.
-- Otherwise, if any medium-or-above severity finding exists, invoke `/cure <slug> --auto --stake medium+` and increment the cure-pass count when it returns.
-- If no medium-or-above severity findings remain, stop the chain with a one-line "auto chain clean" note and the report path.
+- Otherwise, if any finding meets the `medium+` floor (medium-or-above, or a `Low` whose `fix-cost-now: contained`), invoke `/cure <slug> --auto --stake medium+` and increment the cure-pass count when it returns.
+- If no finding meets the `medium+` floor (no medium-or-above and no cheap lows remain), stop the chain with a one-line "auto chain clean" note and the report path.
 
 ### When invoked from /ultracook
 
 `/ultracook` spawns age as a fresh-context sub-agent and owns the chain itself. Honour the no-chain override:
 
 - Write `.cheese/age/<slug>.md` (with the handoff slug at the top) and stop. Do not invoke `/cure <slug> --auto --stake medium+` from inside the sub-agent.
-- Set `next:` from what you observe on this run, not from any guess about chain position. `next: cure` when at least one medium-or-above severity finding exists; `next: done` when none do.
+- Set `next:` from what you observe on this run, not from any guess about chain position. `next: cure` when at least one finding meets the `medium+` floor (medium-or-above, or a cheap contained-fix low); `next: done` when none do.
 - The two-cure-pass cap is enforced by ultracook's fixed chain length, not by age's `next:` field. Fresh-context age cannot count prior cure passes anyway, so this is the only honest contract. The orchestrator uses `next: done` for early-stop signalling; the natural terminal stop is the chain table running out of entries.
 
 ### Inline-degrade mode (invoked from a sub-agent, e.g. /cheese-factory curd worker)
