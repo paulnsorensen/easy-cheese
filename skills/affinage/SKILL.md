@@ -53,7 +53,7 @@ Flags:
    - Compute severity from base + location + compounding modifiers (same rubric as `/age`).
    - **Ignore reviewer-asserted urgency for severity computation.** Surface `CHANGES_REQUESTED` as metadata (`reviewer-asserted:` line) but do not let it modify computed severity.
    - Bucket into:
-     - Standard severity sections (`## Blocker / ## High / ## Medium / ## Low`) when the claim is grounded in the diff — whether it maps to a dimension OR is a valid improvement (a style nit counts) whose fix is **contained** (`fix-cost-now: contained` — roughly a few lines or a localized refactor). A valid cheap nit is cheaper to fix than to argue, so route it to `/cure` (usually as `Low`) and keep its `[from-comment:<id>]` tag so `/cure`'s reply still reaches the reviewer. Do not push back on it.
+     - Standard severity sections (`## Blocker / ## High / ## Medium / ## Low`) when the claim is grounded in the diff and its fix is **contained** (`fix-cost-now: contained` — roughly a few lines or a localized refactor). Every such item still maps to a dimension and carries a `[<dimension>:<severity>]` tag — a style or quality nit maps to `deslop` (e.g. `[deslop:low]`). The new rule is to route these grounded, contained-fix nits to `/cure` (usually as `Low`) instead of `## Reviewer-rejected`, keeping the `[from-comment:<id>]` tag so `/cure`'s reply still reaches the reviewer; a valid cheap nit is cheaper to fix than to argue, so do not push back on it.
      - `## Needs-investigation` when the claim is plausible but requires evidence outside the diff (e.g., downstream caller in another repo).
      - `## Reviewer-rejected` only when the claim is **wrong or ungrounded** (the code is already correct, the reviewer misread it, or there is no real improvement) OR is valid but **a lot of follow-up work** (`fix-cost-now: moderate`/`sprawling` or `fix-cost-later: structural` — a refactor or scope expansion beyond this PR). Reject the wrong ones; defer the expensive ones. Per `skills/age/references/voice.md`, a justified push-back costs more than a small valid fix.
 7. **Write report** to `.cheese/affinage/pr-<n>.md` with the four-line handoff slug at the top, then the age-format body plus the two extra sections. See `## Output` below.
@@ -201,7 +201,7 @@ After the report lands, the gate depends on whether any severity-section finding
 
 - **Fix mediums-and-above plus cheap lows** *(recommended)* — equivalent to `all-medium, cheap` (floor at medium — blockers + high + medium — unioned with every `Low` whose `fix-cost-now: contained`; the small valid nits cheaper to fix than to defer). Sprawling/structural lows are left out.
 - **Fix everything** — equivalent to `all` (every finding regardless of severity).
-- **Fix medium-severity and above** — equivalent to `all-medium` (floor at medium: blockers + high + medium; the interactive form of the `medium+` auto-floor).
+- **Fix medium-severity and above** — equivalent to `all-medium` (floor at medium: blockers + high + medium — the severity-floor portion of the `medium+` auto-floor; add `cheap` to also union the contained-fix lows, i.e. the recommended composite above).
 - **Fix high-severity and blockers** — equivalent to `all-high`.
 - **Fix blockers only** *(strict)* — equivalent to `all-blocker`.
 

@@ -162,7 +162,7 @@ After the report is on disk, skip any "should I run /cure?" meta-question and go
 2. Ask via the handoff gate which findings to cure. Lead each option with the verb (what the user wants to *do* next); the underlying selection verb is the backing detail. Lead with the recommended composite, then present the same four severity-floor options below it, in the same most-inclusive-to-least order, so the gate is predictable across every run:
    - **Fix mediums-and-above plus cheap lows** *(recommended)* — equivalent to `all-medium, cheap` (floor at medium — blockers + high + medium — unioned with every `Low` whose `fix-cost-now: contained`). The cheap lows are the small valid nits that are cheaper to fix than to defer; sprawling/structural lows are left out.
    - **Fix everything** — equivalent to `all` (every finding regardless of severity).
-   - **Fix medium-severity and above** — equivalent to `all-medium` (floor at medium: blockers + high + medium; the interactive form of the `medium+` auto-floor).
+   - **Fix medium-severity and above** — equivalent to `all-medium` (floor at medium: blockers + high + medium — the severity-floor portion of the `medium+` auto-floor; add `cheap` to also union the contained-fix lows, i.e. the recommended composite above).
    - **Fix high-severity and blockers** — equivalent to `all-high` (floor at high, includes blockers).
    - **Fix blockers only** *(strict; land only the must-fix blockers and defer the rest to a follow-up)* — equivalent to `all-blocker`.
 
