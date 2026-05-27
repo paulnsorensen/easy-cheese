@@ -24,7 +24,11 @@ Coherence self-check before curdle:
 - [ ] Open questions all marked [TBD] / [BLOCKED] / [?] (none silent)
 - [ ] Quality gates specified (≥1 runnable command)
 - [ ] Reproduction loop captured if Diagnose ran (or [BLOCKED] if no loop is possible)
+- [ ] Glossary terms: if any domain language was pinned, every term is logged with a canonical name; conflicts resolved or [TBD] (n/a if no glossary work)
+- [ ] ADRs: every ADR candidate meets all three criteria or is dropped (n/a if none offered)
 ```
+
+Domain docs (CONTEXT.md, CONTEXT-MAP.md, ADRs) ride the same gate as the spec — they are written at curdle, never mid-dialogue. The two rows above are no-ops when no glossary or ADR work happened; they exist so accumulated `glossary_terms` / `adr_candidates` cannot be flushed to disk without passing the check. See `domain-docs.md`.
 
 If any box is unchecked, name it and propose the smallest move to fill it. The user can override with `curdle anyway`.
 

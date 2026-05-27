@@ -1,4 +1,4 @@
-# The six modes of mold
+# The seven modes of mold
 
 Mold has no fixed entry point. Inspect the input shape and pick a starting mode. Announce the mode in one line. Low-confidence classifications default to **Explore**.
 
@@ -8,6 +8,7 @@ Mold has no fixed entry point. Inspect the input shape and pick a starting mode.
 | --- | --- | --- |
 | Stack trace, "X is broken/slow/flaky" | Diagnose | error markers, `file:line` refs, symptom verbs |
 | File path, PR ref, existing spec under `.cheese/specs/` | Ground | concrete artifact exists; read it first |
+| Fuzzy/overloaded domain terms, "what do we call X", a `CONTEXT.md` to challenge against | Glossary | naming and definition questions, term conflicts |
 | Half-baked design doc with signatures or schemas | Sketch | already has interfaces; refine them |
 | "I want to add X" with concrete nouns | Shape | named the thing → jump to options |
 | "Should we do X? thinking about Y" | Grill | tentative plan exists → stress-test it |
@@ -29,6 +30,14 @@ Mold has no fixed entry point. Inspect the input shape and pick a starting mode.
 
 **Exit when:** every critical claim has a citation.
 
+### Glossary — ubiquitous language
+
+**Job:** pin the project's domain language. Sharpen fuzzy or overloaded terms into canonical names with aliases-to-avoid, challenge new usage against an existing `CONTEXT.md`, and resolve term conflicts as `[CONFLICT <id>]`. Accumulate resolved terms in the state ledger (`glossary_terms`); they flush to `CONTEXT.md` at curdle, gated by the handshake — never written mid-dialogue. Full discipline, formats, and multi-context routing in `domain-docs.md`.
+
+**Relation to Ground:** Ground resolves a single overloaded term in the moment to unblock a claim; Glossary owns the durable lexicon and the challenge-against-`CONTEXT.md` loop.
+
+**Exit when:** every domain term in scope has a canonical name (or is logged `[CONFLICT]` / `[TBD]`), and the example-dialogue boundary cases hold.
+
 ### Shape — option generation
 
 **Job:** turn a grounded problem into 2+ candidate approaches with trade-offs. Always include **Do Nothing**. Recommend with one-line rationale. Validate Cycle any critical assumption behind a recommendation.
@@ -43,7 +52,7 @@ Mold has no fixed entry point. Inspect the input shape and pick a starting mode.
 
 ### Grill — adversarial clarification
 
-**Job:** stress-test the chosen approach plus sketched interfaces. **One question at a time**, paired with the agent's recommended answer (recommendation is non-optional). Traverse decision branches and contract corners. Pause for a Validate Cycle when an unverified assumption surfaces.
+**Job:** stress-test the chosen approach plus sketched interfaces. **One question at a time**, paired with the agent's recommended answer (recommendation is non-optional). Traverse decision branches and contract corners. When domain boundaries are in play, stress-test them with invented concrete scenarios that force precision on where one concept ends and another begins (see `domain-docs.md`). Pause for a Validate Cycle when an unverified assumption surfaces.
 
 **Exit when:** every branch and contract corner is touched and agent confidence ≥ user confidence.
 
@@ -58,7 +67,7 @@ Diagnose is **diagnostic-only** — hand off to Shape ("what's the fix?") then C
 
 ## User knobs (free-form interrupts)
 
-`explore`, `ground`, `shape`, `sketch`, `grill`, `diagnose`, `validate <hypothesis>`, `curdle`, `pause`, `enough`. Honour these immediately.
+`explore`, `ground`, `glossary`, `shape`, `sketch`, `grill`, `diagnose`, `validate <hypothesis>`, `curdle`, `pause`, `enough`. Honour these immediately.
 
 ## Uncertainty markers
 

@@ -1,6 +1,6 @@
 ---
 name: mold
-description: This skill should be used when the user has a fuzzy idea, half-formed feature, or design direction and wants to converge on a spec — phrases like "let's design X", "I'm thinking about Y", "what should the API for Z look like", "shape this into a spec", "I want to add a feature that…", "/mold". Runs an iterative dialogue (Explore / Ground / Shape / Sketch / Grill / Diagnose), grounds every critical claim with cheez-search or briesearch, locks public seams in pseudocode, and only writes a spec to `.cheese/specs/<slug>.md` after an explicit approval gate. Use even when the user is "just thinking out loud" if they want the dialogue to leave behind a written artifact — for pure no-write thinking, route to `/culture` instead. After `/culture` (optional); before `/cook`.
+description: This skill should be used when the user has a fuzzy idea, half-formed feature, or design direction and wants to converge on a spec — phrases like "let's design X", "I'm thinking about Y", "what should the API for Z look like", "shape this into a spec", "I want to add a feature that…", "/mold". Runs an iterative dialogue (Explore / Ground / Glossary / Shape / Sketch / Grill / Diagnose), grounds every critical claim with cheez-search or briesearch, locks public seams in pseudocode, optionally captures the domain glossary (CONTEXT.md) and architecture decision records, and only writes a spec to `.cheese/specs/<slug>.md` after an explicit approval gate. Use even when the user is "just thinking out loud" if they want the dialogue to leave behind a written artifact — for pure no-write thinking, route to `/culture` instead. After `/culture` (optional); before `/cook`.
 license: MIT
 ---
 
@@ -16,7 +16,7 @@ Do not use it for free-form discussion with no artifact intent (`/culture`), dir
 2. **Dialogue** — build shared understanding through the smallest useful question to the user, but contribute at maximum useful depth between questions (full options, named edge cases, concrete evidence — not gestural sketches). Ground every critical claim with `cheez-search`, `cheez-read`, or a Validate Cycle (`references/validate-cycle.md`). Track contradictions across turns; if turn N contradicts an earlier conclusion, flag and resolve it before continuing.
 3. **Sketch** — for any feature touching >1 module or a new public interface, run the shape check (`references/shape-check.md`) on the touched symbols, then lock seams in pseudocode signatures before talking spec content. Default to full signatures, not hand-waving.
 4. **Two-key handshake** — both the user (explicit verb) and the agent (coherence self-check) must agree before extraction. See `references/handshake.md`.
-5. **Curdle** — resolve the durable spec path with `SPEC=$(python3 ${CLAUDE_SKILL_DIR}/scripts/mold.pyz artifact-path specs <slug>)`, then write the approved spec to `"$SPEC"` (and optional issues alongside). The resolver anchors specs at the per-project durable corpus (see `shared/formatting.md` § Corpus location); never hardcode a `.cheese/specs/` path. Format and slug rules in `references/curdle.md`.
+5. **Curdle** — resolve the durable spec path with `SPEC=$(python3 ${CLAUDE_SKILL_DIR}/scripts/mold.pyz artifact-path specs <slug>)`, then write the approved spec to `"$SPEC"` (and optional issues alongside). The resolver anchors specs at the per-project durable corpus (see `shared/formatting.md` § Corpus location); never hardcode a `.cheese/specs/` path. Format and slug rules in `references/curdle.md`. If the dialogue pinned domain terms or surfaced ADR-worthy decisions, flush them to `CONTEXT.md` / `docs/adr/` at the same gate — see `references/domain-docs.md`.
 6. **Hand off** — once the spec is on disk, run `python3 ${CLAUDE_SKILL_DIR}/scripts/mold.pyz curd-count "$SPEC" --blast-radius <low|medium|high>` to compute the recommended downstream skill (full procedure in `references/curd-count.md`). Omit `--blast-radius` when the shape-check verdict is `[?]` or shape-check was skipped — the script degrades to `/cook` for sub-threshold specs in that case. Then prompt the next step via the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md). Never dispatch before the user selects; after a non-stop selection, run the selected downstream skill immediately.
 
 ## Modes
@@ -25,6 +25,7 @@ Do not use it for free-form discussion with no artifact intent (`/culture`), dir
 | --- | --- | --- |
 | Explore | The idea is vague | Identify the real problem and pain point |
 | Ground | A file, bug, or existing doc is named | Verify facts against evidence |
+| Glossary | Domain terms are fuzzy, conflicting, or a `CONTEXT.md` exists to challenge against | Pin the ubiquitous language; resolve term conflicts |
 | Shape | The goal is known but approach is open | Compare viable options (Do Nothing always included) |
 | Sketch | Interfaces or module boundaries matter | Lock responsibilities and seams |
 | Grill | A favoured approach needs stress-testing | Steelman the rejected option, find weak assumptions and edge cases |
@@ -70,6 +71,7 @@ Resolve durable artifact locations through the resolver, never hardcode them:
 
 - Spec: `python3 ${CLAUDE_SKILL_DIR}/scripts/mold.pyz artifact-path specs <slug>` (anchored at the per-project durable corpus — see `shared/formatting.md` § Corpus location).
 - Issues: stay repo-local at `.cheese/issues/<slug>-001.md`, `.cheese/issues/<slug>-002.md`, ... — `issues` is a transient phase, not a durable-corpus artifact.
+- Domain docs: repo-local at their literal paths — glossary at `CONTEXT.md` (root or per-context), ADRs at `docs/adr/NNNN-slug.md`. Written at the handshake, lazily, not through the resolver — see `references/domain-docs.md`.
 
 ## --hard
 
@@ -121,6 +123,10 @@ The spec is large enough that per-phase context contamination becomes a real con
 
 - Dialogue first; artifacts are the by-product.
 - Do not implement code.
-- Do not write production files before the approval gate.
+- Do not write production files — including domain docs (CONTEXT.md, CONTEXT-MAP.md, ADRs) — before the approval gate. Accumulate them in the state ledger and flush at curdle (`references/domain-docs.md`).
 - Do not silently settle uncertain claims.
 - Apply the shared voice kernel (lives at `skills/age/references/voice.md` in this repo): correct false premises, flag confidence as `certain | speculating | don't know` on each critical claim, steelman before dismissing, ask the smallest useful question while contributing at maximum useful depth.
+
+## Credits
+
+The domain-documentation layer — the Glossary mode, `CONTEXT.md` as a ubiquitous-language glossary, lazy `CONTEXT-MAP.md` for bounded contexts, and the sparingly-offered ADR with its three-part test — is adapted from Matt Pocock's **grill-with-docs** skill (MIT): <https://github.com/mattpocock/skills/tree/main/skills/engineering/grill-with-docs>. mold integrates it behind the two-key handshake rather than writing docs inline.
