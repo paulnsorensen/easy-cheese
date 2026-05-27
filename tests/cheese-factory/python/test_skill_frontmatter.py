@@ -66,7 +66,8 @@ class TestFrontmatter:
     def test_description_names_orchestrator_role(self, frontmatter: dict) -> None:
         # The description is the trigger; load-bearing phrases must be present.
         desc = frontmatter["description"].lower()
-        assert "decompose" in desc or "decomposes" in desc
+        assert "parallel" in desc, "must convey the parallel-orchestrator role"
+        assert "curd" in desc, "must name curds — the unit of decomposition"
         assert "5" in desc, "must say '5+' curds — anything fewer routes to /ultracook"
         assert "fromagerie" in desc, "name the bespoke-agent sibling for routing clarity"
 
