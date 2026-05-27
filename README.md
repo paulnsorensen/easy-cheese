@@ -3,6 +3,8 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/paulnsorensen/easy-cheese/validate.yml?branch=main&label=CI&style=flat-square)](https://github.com/paulnsorensen/easy-cheese/actions/workflows/validate.yml)
 [![License: MIT](https://img.shields.io/github/license/paulnsorensen/easy-cheese?style=flat-square)](LICENSE)
 [![Latest release](https://img.shields.io/github/v/release/paulnsorensen/easy-cheese?style=flat-square)](https://github.com/paulnsorensen/easy-cheese/releases/latest)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/paulnsorensen/easy-cheese/badge)](https://scorecard.dev/viewer/?uri=github.com/paulnsorensen/easy-cheese)
+[![CodeQL](https://github.com/paulnsorensen/easy-cheese/actions/workflows/codeql.yml/badge.svg)](https://github.com/paulnsorensen/easy-cheese/actions/workflows/codeql.yml)
 [![skills.sh](https://skills.sh/b/paulnsorensen/easy-cheese)](https://skills.sh/paulnsorensen/easy-cheese)
 [![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-yellow?style=flat-square)](https://www.conventionalcommits.org)
 [![Agent Skills](https://img.shields.io/badge/Agent%20Skills-spec-blueviolet?style=flat-square)](https://agentskills.io/specification)
