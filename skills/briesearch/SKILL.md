@@ -39,9 +39,9 @@ When two or more heavy sources are independent, spawn one small sub-agent per so
 
 ## Preferred tools and fallbacks
 
-Local code patterns go through the cheez-* skills (`/cheez-search`, `/cheez-read`) — see those skills for tool selection rules.
+Local code patterns go through the `cheez-*` skills (`/cheez-search`, `/cheez-read`) — see those skills for tool selection rules.
 
-Beyond cheez-* there are research-specific tools:
+Beyond `cheez-*` there are research-specific tools:
 
 | Need | Prefer | Fallback |
 | --- | --- | --- |

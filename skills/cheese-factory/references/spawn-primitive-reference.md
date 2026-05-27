@@ -34,7 +34,7 @@ Rules:
 
 - **Do not downgrade the model.** Omit the `model` parameter so the sub-agent inherits.
 - **Do not narrow `subagent_type`.** Use `general-purpose` (or the harness equivalent that grants full tool access). Do not pass `Explore`, `lsp-probe`, or any other read-only / scoped worker type.
-- **Do not restrict tools or MCP access.** Each phase needs Bash, Edit, Write, Read, the cheez-* skills, and any MCP servers the parent has.
+- **Do not restrict tools or MCP access.** Each phase needs Bash, Edit, Write, Read, the `cheez-*` skills, and any MCP servers the parent has.
 - **Do pass the slug.** The phase skill resolves its own paths from the slug.
 
 The contract is "inheritance, not diminution" — most sub-agent patterns in this ecosystem (Explore, lsp-probe, whey-drainer, ricotta-reducer) are deliberately scoped down for cheap focused queries. `/cheese-factory` does the opposite: it spawns workers that are full peers of the parent.

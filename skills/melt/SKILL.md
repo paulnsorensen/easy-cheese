@@ -12,13 +12,13 @@ Do not use it for general git operations without conflicts (those go to a `commi
 
 ## File IO delegation
 
-`melt` orchestrates the resolution chain via bash and the helper scripts. For per-file inspection or manual edits, delegate to the cheez-* skills:
+`melt` orchestrates the resolution chain via bash and the helper scripts. For per-file inspection or manual edits, delegate to the `cheez-*` skills:
 
 - **`/cheez-search`** — locate conflict markers or related symbols across the tree.
 - **`/cheez-read`** — inspect conflicted files, view conflict hunks, list directory contents.
 - **`/cheez-write`** — apply hash-anchored resolutions when bash flows are not enough.
 
-The bash-driven flows below cover the bulk of resolution. Drop into the cheez-* skills only when you need to inspect or rewrite a specific file by hand.
+The bash-driven flows below cover the bulk of resolution. Drop into the `cheez-*` skills only when you need to inspect or rewrite a specific file by hand.
 
 ## Resolution chain
 

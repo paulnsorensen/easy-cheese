@@ -36,9 +36,9 @@ Optional flags:
 
 ## Preferred tools and fallbacks
 
-Code search, reading, and editing all go through the cheez-* skills (`/cheez-search`, `/cheez-read`, `/cheez-write`) — see those skills for tool selection rules.
+Code search, reading, and editing all go through the `cheez-*` skills (`/cheez-search`, `/cheez-read`, `/cheez-write`) — see those skills for tool selection rules.
 
-Beyond cheez-* there are cure-specific tools:
+Beyond `cheez-*` there are cure-specific tools:
 
 | Need | Prefer | Fallback |
 | --- | --- | --- |

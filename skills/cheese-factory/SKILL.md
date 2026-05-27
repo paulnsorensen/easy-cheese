@@ -168,7 +168,7 @@ Seed items are minimal — only the shared types / protocols that curds cannot c
 
 For each seed item:
 
-1. Implement the change. Prefer `/cheez-write` when tilth MCP is present; otherwise fall back to the host's native edit tool (per the cheez-* portability rule in `README.md`). The skill must not hard-fail when `/cheez-write` is unavailable.
+1. Implement the change. Prefer `/cheez-write` when tilth MCP is present; otherwise fall back to the host's native edit tool (per the `cheez-*` portability rule in `README.md`). The skill must not hard-fail when `/cheez-write` is unavailable.
 2. Run quality gates (the project's `just check` or equivalent) — if gates fail, STOP.
 3. Commit via `/commit` (if available) or `git commit` direct.
 
