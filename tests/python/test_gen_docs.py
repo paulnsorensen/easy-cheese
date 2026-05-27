@@ -233,6 +233,15 @@ class TestExtractH2Section:
         assert "## Sub\n" in out
         assert "### Sub" not in out
 
+    def test_bump_headings_promotes_h4_to_h3(self, gen_docs):
+        # Deeper headings must also bump by one level, otherwise an h4 under a
+        # promoted h3 would skip a level in the rendered install page.
+        text = "## A\n### Sub\n#### Deep\nbody\n\n## B\n"
+        out = gen_docs.extract_h2_section(text, "A", drop_header=True, bump_headings=True)
+        assert "## Sub\n" in out
+        assert "### Deep\n" in out
+        assert "#### Deep" not in out
+
     def test_missing_section_returns_empty(self, gen_docs):
         text = "## A\nbody-a\n\n## B\nbody-b\n"
         assert gen_docs.extract_h2_section(text, "Z") == ""

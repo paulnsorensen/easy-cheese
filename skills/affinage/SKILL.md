@@ -110,7 +110,7 @@ Digest size, parent-vs-sub-agent split, and harness-agnostic sub-agent selection
 
 ## Preferred tools and fallbacks
 
-Code search and reading go through cheez-* skills (`/cheez-search`, `/cheez-read`). Beyond cheez-* there are affinage-specific tools:
+Code search and reading go through `cheez-*` skills (`/cheez-search`, `/cheez-read`). Beyond `cheez-*` there are affinage-specific tools:
 
 | Need | Prefer | Fallback |
 | --- | --- | --- |
