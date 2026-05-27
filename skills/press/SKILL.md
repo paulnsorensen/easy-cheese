@@ -27,9 +27,9 @@ Do not use it to implement broad new behavior. Press may add or strengthen tests
 
 ## Preferred tools and fallbacks
 
-Code search, reading, and editing all go through the cheez-* skills (`/cheez-search`, `/cheez-read`, `/cheez-write`) — see those skills for tool selection rules. For coverage and test discovery, press uses `cheez-search` (callers via `kind: "callers"`) and `tilth_deps` (cheez-search owns the routing).
+Code search, reading, and editing all go through the `cheez-*` skills (`/cheez-search`, `/cheez-read`, `/cheez-write`) — see those skills for tool selection rules. For coverage and test discovery, press uses `cheez-search` (callers via `kind: "callers"`) and `tilth_deps` (cheez-search owns the routing).
 
-Beyond cheez-* there are press-specific tools:
+Beyond `cheez-*` there are press-specific tools:
 
 | Need | Prefer | Fallback |
 | --- | --- | --- |

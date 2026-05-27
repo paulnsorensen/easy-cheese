@@ -34,9 +34,9 @@ Full mode definitions, exit criteria, and user knobs in `references/modes.md`.
 
 ## Preferred tools and fallbacks
 
-Code search, reading, and editing (including spec writing) all go through the cheez-* skills (`/cheez-search`, `/cheez-read`, `/cheez-write`) — see those skills for tool selection rules. Shape checks specifically use `cheez-search` callers (`kind: "callers"`) plus `tilth_deps`; the procedure lives in `references/shape-check.md`.
+Code search, reading, and editing (including spec writing) all go through the `cheez-*` skills (`/cheez-search`, `/cheez-read`, `/cheez-write`) — see those skills for tool selection rules. Shape checks specifically use `cheez-search` callers (`kind: "callers"`) plus `tilth_deps`; the procedure lives in `references/shape-check.md`.
 
-Beyond cheez-* there are mold-specific tools:
+Beyond `cheez-*` there are mold-specific tools:
 
 | Need | Prefer | Fallback |
 | --- | --- | --- |

@@ -88,9 +88,9 @@ Never resolve uncertainty by guessing — silent misrouting is worse than asking
 
 ## Preferred tools and fallbacks
 
-When the input is a path or slug, code reading and searching go through the cheez-* skills (`/cheez-read`, `/cheez-search`) — see those skills for tool selection rules.
+When the input is a path or slug, code reading and searching go through the `cheez-*` skills (`/cheez-read`, `/cheez-search`) — see those skills for tool selection rules.
 
-Beyond cheez-* there are router-specific tools:
+Beyond `cheez-*` there are router-specific tools:
 
 | Need | Prefer | Fallback |
 | --- | --- | --- |

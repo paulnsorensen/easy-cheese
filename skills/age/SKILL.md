@@ -57,9 +57,9 @@ Per-dimension base-severity tables, location-sensitivity, fix-cost-now / fix-cos
 
 ## Preferred tools and fallbacks
 
-Code search and reading go through the cheez-* skills (`/cheez-search`, `/cheez-read`) — see those skills for tool selection rules. For caller graphs specifically, age uses `cheez-search` with `kind: "callers"` and `tilth_deps` (cheez-search owns the routing).
+Code search and reading go through the `cheez-*` skills (`/cheez-search`, `/cheez-read`) — see those skills for tool selection rules. For caller graphs specifically, age uses `cheez-search` with `kind: "callers"` and `tilth_deps` (cheez-search owns the routing).
 
-Beyond cheez-* there are review-specific tools:
+Beyond `cheez-*` there are review-specific tools:
 
 | Need | Prefer | Fallback |
 | --- | --- | --- |

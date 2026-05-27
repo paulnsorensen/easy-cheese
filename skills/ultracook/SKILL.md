@@ -97,7 +97,7 @@ Rules:
 
 - **Do not downgrade the model.** Omit the model parameter so the sub-agent inherits the parent's model. Never pass a smaller tier (haiku, lighter task workers) for ultracook phases.
 - **Do not narrow `subagent_type`.** Use `general-purpose` (or the harness equivalent that grants full tool access). Do not pass `Explore`, `lsp-probe`, or any other read-only / scoped worker type.
-- **Do not restrict tools or MCP access.** Each phase needs Bash, Edit, Write, Read, the cheez-* skills, and any MCP servers the parent has. Restricting them is the failure mode the contract exists to prevent.
+- **Do not restrict tools or MCP access.** Each phase needs Bash, Edit, Write, Read, the `cheez-*` skills, and any MCP servers the parent has. Restricting them is the failure mode the contract exists to prevent.
 - **Do pass the slug.** The phase skill resolves its own paths from the slug; `/ultracook` does not pre-compute paths for the sub-agent.
 
 The contract is "inheritance, not diminution" because most sub-agent patterns in this ecosystem (Explore, lsp-probe, whey-drainer, ricotta-reducer) are deliberately scoped down for cheap focused queries. `/ultracook` does the opposite: it spawns workers that are full peers of the parent, doing major work in their own context window.

@@ -95,7 +95,7 @@ The tilth MCP server is launched against **one repository** — whatever directo
 
 ### When NOT to invoke `/cheez-read`
 
-Inside `/cheez-read`, the contract is hard: tilth-only, no host fallback. The reads below are **out of scope** for the skill — don't enter cheez-read for them in the first place. They're listed here so workflow skills know where to route instead, consistent with the README rule "anything that touches source code goes through cheez-*; everything else stays on host tools".
+Inside `/cheez-read`, the contract is hard: tilth-only, no host fallback. The reads below are **out of scope** for the skill — don't enter cheez-read for them in the first place. They're listed here so workflow skills know where to route instead, consistent with the README rule "anything that touches source code goes through `cheez-*`; everything else stays on host tools".
 
 | File (don't use cheez-read) | Route to | Why |
 |-----------------------------|----------|-----|
