@@ -1,6 +1,6 @@
 ---
 name: cheese
-description: This skill should be used as the unified entry point when the user drops in any input — idea, spec path, file path, PR or issue, stack trace, bug report, or just `/cheese` — and wants the workflow routed. Phrases include "/cheese", "what should I do with this", "help me get started", "route this", "figure out what skill I need", or any opening message that does not already name a downstream skill. Classifies the input into an intent shape, announces the target and reason, and gates dispatch behind explicit user selection so nothing runs silently. After a non-stop selection, immediately dispatches the selected downstream skill with the exact command and context packet. Before any other workflow skill.
+description: Route any dropped-in input — idea, spec path, file path, PR or issue, stack trace, bug report, or bare `/cheese` — to the right workflow skill. Use as the unified entry point — phrases include "/cheese", "what should I do with this", "help me get started", "route this", "figure out what skill I need", or any opening message that does not already name a downstream skill. Classifies the input into an intent shape, announces the target and reason, and gates dispatch behind explicit user selection so nothing runs silently. After a non-stop selection, immediately dispatches the selected downstream skill with the exact command and context packet. Before any other workflow skill.
 license: MIT
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: culture
-description: This skill should be used when the user wants to think out loud, rubber-duck a design, walk through trade-offs, or explore an ambiguous problem WITHOUT producing production code or specs — phrases like "let's talk through X", "rubber duck this with me", "I'm trying to decide between A and B", "help me think about Y", "what would happen if we…", "/culture". Output is conversation; the only sanctioned artifact is an opt-in `.cheese/notes/<slug>.md` handoff slug at session end if the user asks for notes. Culture never writes to production code, never commits, never opens PRs. Use when the user wants shared mental model first; if the dialogue reveals real work to do, recommend `/mold` (fuzzy → spec) or `/cook` (clear ask → code) and stop. Before `/mold` or `/cook`.
+description: Think out loud, rubber-duck a design, or explore trade-offs WITHOUT producing production code or specs. Use when the user wants to talk through a problem — phrases like "let's talk through X", "rubber duck this with me", "I'm trying to decide between A and B", "help me think about Y", "what would happen if we…", "/culture". Output is conversation; the only sanctioned artifact is an opt-in `.cheese/notes/<slug>.md` handoff slug at session end if the user asks for notes. Culture never writes to production code, never commits, never opens PRs. Use when the user wants a shared mental model first; if the dialogue reveals real work to do, recommend `/mold` (fuzzy → spec) or `/cook` (clear ask → code) and stop. Before `/mold` or `/cook`.
 license: MIT
 ---
 
