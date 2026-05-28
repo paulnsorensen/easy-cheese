@@ -48,10 +48,12 @@ jobs:
         run: python3 scripts/stage_release.py --out "$RUNNER_TEMP/release"
 
       # `gh skill install` reads the git tree at the resolved tag, so the tag must
-      # point at a commit that actually contains the built .pyz. We commit the
-      # staged tree to the `release` branch and force the version tag onto THAT
-      # commit — never main, which keeps its .pyz gitignored. Pushes use
-      # GITHUB_TOKEN, which by design does not re-trigger this tag-push workflow.
+      # point at a commit that actually contains the built .pyz. main carries the
+      # bundles (build-pyz.yml keeps them in sync), but we still publish a slim
+      # `release` branch — SKILL.md + .pyz + top-level metadata, no src/shared/
+      # tests/docs — and force the version tag onto THAT commit so releases ship
+      # only the runtime surface. Pushes use GITHUB_TOKEN, which by design does
+      # not re-trigger this tag-push workflow.
       - name: Publish release branch and retarget tag
         env:
           GH_TOKEN: ${{ github.token }}

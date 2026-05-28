@@ -1,0 +1,50 @@
+name: build-pyz
+
+# Keep the per-skill .pyz bundles on main in sync with their sources so anyone
+# pinning `gh skill install` to a main commit (e.g. via EC_SKILL_REF, or any
+# between-release smoke test) gets a working skill — not a SKILL.md invoking a
+# bundle the gitignore filtered out. Releases still go through release.yml.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: build .pyz bundles
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          token: ${{ github.token }}
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+
+      - name: Build bundles
+        run: python3 scripts/build_pyz.py
+
+      # GITHUB_TOKEN-driven pushes do not retrigger workflows, so this will not
+      # loop on its own commits.
+      - name: Commit and push if changed
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- 'skills/*/scripts/*.pyz'; then
+            echo "No bundle changes to commit."
+            exit 0
+          fi
+          git config user.email "actions@github.com"
+          git config user.name "github-actions[bot]"
+          git add skills/*/scripts/*.pyz
+          git commit -m "chore(build): rebuild .pyz bundles for ${GITHUB_SHA}"
+          git push origin HEAD:main
