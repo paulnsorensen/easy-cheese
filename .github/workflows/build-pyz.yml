@@ -35,16 +35,18 @@ jobs:
         run: python3 scripts/build_pyz.py
 
       # GITHUB_TOKEN-driven pushes do not retrigger workflows, so this will not
-      # loop on its own commits.
+      # loop on its own commits. Stage first so newly-built bundles for a
+      # freshly-added skill (still untracked) are caught by the index-vs-HEAD
+      # diff — a plain `git diff` on the working tree would skip them.
       - name: Commit and push if changed
         run: |
           set -euo pipefail
-          if git diff --quiet -- 'skills/*/scripts/*.pyz'; then
+          git add -- 'skills/*/scripts/*.pyz'
+          if git diff --cached --quiet; then
             echo "No bundle changes to commit."
             exit 0
           fi
           git config user.email "actions@github.com"
           git config user.name "github-actions[bot]"
-          git add skills/*/scripts/*.pyz
           git commit -m "chore(build): rebuild .pyz bundles for ${GITHUB_SHA}"
           git push origin HEAD:main
