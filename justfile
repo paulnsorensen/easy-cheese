@@ -15,7 +15,7 @@ test:
     bats tests/cheese-factory/bash/test_pr_plan_to_branches.bats
     bats tests/bash/test_post_reply.bats
 
-# Build self-contained .pyz bundles for shared-consuming skills (built on publish)
+# Build self-contained .pyz bundles for shared-consuming skills (CI rebuilds on every push to main)
 bundle:
     python3 scripts/build_pyz.py
 

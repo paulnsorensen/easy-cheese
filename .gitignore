@@ -22,8 +22,5 @@ __pycache__/
 site/
 .cache/
 
-# Built skill bundles (built on publish; never committed to main)
-skills/*/scripts/*.pyz
-
 # `just release-preview` staging output (hidden so validate_skills.py skips it)
 .release-preview/
