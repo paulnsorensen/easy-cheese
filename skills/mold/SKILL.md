@@ -41,7 +41,7 @@ Full mode definitions, exit criteria, and user knobs in `references/modes.md`.
 
 1. **Derive slug** from the user's ask (kebab-case noun-phrase, ≤ 4 words).
 2. **Write `.cheese/specs/<slug>.md`** with the mini-spec schema below. Resolve the path via `python3 ${CLAUDE_SKILL_DIR}/scripts/mold.pyz artifact-path specs <slug>` when the resolver is available; otherwise fall back to the literal `.cheese/specs/<slug>.md` path.
-3. **Return the path** to `/cheese` so it can dispatch `/cook --auto <slug>`.
+3. **Return the explicit spec path** to `/cheese` so it can dispatch `/cook --auto <spec-path>` (the full `.cheese/specs/<slug>.md` form, not a bare `<slug>`).
 
 The two-key handshake does not fire in this mode. The agent-introduced-scope check still runs implicitly: every distinguishing noun in the mini-spec must come from the user's input or from the tier-2 `/culture` / `/briesearch` synthesis recorded in `## Provenance`. Anything else is a silent agent addition and is forbidden — the mini-spec records only what the user asked for, not what the agent thinks they might have meant.
 
