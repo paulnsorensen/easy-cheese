@@ -8,6 +8,12 @@ name: build-pyz
 on:
   push:
     branches: [main]
+    # Bundles depend only on skill sources, shared scripts, and the build
+    # script itself — doc/workflow/.gitignore-only pushes skip the rebuild.
+    paths:
+      - 'src/**'
+      - 'shared/scripts/**'
+      - 'scripts/build_pyz.py'
 
 permissions:
   contents: write
@@ -49,4 +55,14 @@ jobs:
           git config user.email "actions@github.com"
           git config user.name "github-actions[bot]"
           git commit -m "chore(build): rebuild .pyz bundles for ${GITHUB_SHA}"
-          git push origin HEAD:main
+          # main may have advanced since checkout (a concurrent push slipped
+          # in); rebase before push and retry once if we lose the race again.
+          for attempt in 1 2; do
+            git fetch origin main
+            git rebase origin/main
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+          done
+          echo "Failed to push after rebase retry" >&2
+          exit 1
