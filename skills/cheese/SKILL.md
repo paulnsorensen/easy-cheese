@@ -72,6 +72,8 @@ Flow:
 
 Under `--safe`, gate the resumption through the handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md); otherwise run the named phase immediately with the slug. The slug files are the resumability contract: they tell the router where the pipeline is and how to move it forward.
 
+`--continue` does *not* propagate `--auto`. The "manual fresh-context resumption path" framing is intentional: resuming after a compact or halt is a moment to drive the pipeline by hand, not to silently re-enter an autonomous chain. Dispatch `/<next> <slug>` — without `--auto` — even when no `--safe` flag is present. The user can append `--auto` explicitly (`/cheese --continue <slug> --auto`) to opt back into auto-mode propagation; otherwise the dispatched phase runs in its default interactive mode.
+
 ## Confidence and the clarify gate
 
 Treat classification confidence qualitatively (`low | medium | high`). Threshold for direct routing is `medium` or better. Below that:
