@@ -8,6 +8,11 @@ license: MIT
 
 Use this skill when a technical question needs evidence before a decision: library behavior, current vendor docs, implementation patterns, or local precedent.
 
+`/briesearch` runs in two contexts:
+
+- **User-invoked (default).** The user asked for research; produce the full report per `## Output` below.
+- **Internal-mode tier-2 caller.** `/cheese`'s tier-2 escalation (see `skills/cheese/SKILL.md` § Escalation) invokes `/briesearch` silently to fill missing external context when the cook-fast-path clarity check fails on the raw input. The synthesis returned to the caller is a one-liner suitable for the mini-spec's `## Provenance` section — the parent classifier only needs a verdict, not a deliverable. **The full cited research still gets written to disk** at the durable corpus's `research/<slug>/<slug>.md` per `## Output` below, with the slug derived from the parent's mini-spec slug. The mini-spec's `## Provenance` line links the artifact path so the citations are preserved and we never re-research later. Skip the durable write only when no source was actually fetched (e.g., the question was answered from local code patterns alone).
+
 Do not use it for a single obvious file lookup or when the user already supplied enough evidence.
 
 ## Inputs

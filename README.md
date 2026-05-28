@@ -58,10 +58,10 @@ Content shared _across_ skills lives at top-level `shared/` (e.g. `shared/handof
 
 | Skill path | Command | Purpose |
 | --- | --- | --- |
-| `skills/cheese/SKILL.md` | `/cheese` | Unified entry point. Classifies any input (idea, spec path, PR, stack trace, file path), announces the routing decision, gates dispatch behind explicit user selection, then immediately runs the selected non-stop target with its dispatch packet. |
+| `skills/cheese/SKILL.md` | `/cheese` | Unified entry point. Classifies any input (idea, spec path, PR, stack trace, file path), announces the routing decision as a short three-line block (Intent / Reason / Target), and dispatches the chosen target immediately with `--auto` propagated downstream. Add `--safe` to gate dispatch behind a confirmation prompt and surface non-auto alternatives. |
 | `skills/briesearch/SKILL.md` | `/briesearch` | Research technical questions across docs, web, codebase, and GitHub examples with confidence-capped synthesis. |
 | `skills/mold/SKILL.md` | `/mold` | Shape fuzzy ideas into grounded specs through dialogue, validate cycles, and a two-key handshake. |
-| `skills/culture/SKILL.md` | `/culture` | No-write rubber-ducking and architecture exploration. Hard invariant: writes only the opt-in `.cheese/notes/<slug>.md` handoff at session end, and only when the user asks for notes. |
+| `skills/culture/SKILL.md` | `/culture` | The agent's internal-thinking skill — invoked silently by `/cheese` and other workflow skills to model a problem before dispatching. Surfaces to the user only when they explicitly opted out of writes ("no writes", "rubber-duck this"). Hard invariant: writes only the opt-in `.cheese/notes/<slug>.md` handoff at session end, and only when the user asks for notes. |
 | `skills/pasteurize/SKILL.md` | `/pasteurize` | Diagnose hard bugs, flaky failures, and performance regressions with a feedback-loop-first investigation, then hand off into `/cook → /press → /age → /cure`. |
 | `skills/cook/SKILL.md` | `/cook` | Implement clear specs via cut → cook → taste-test with scoped edits and tests. |
 | `skills/press/SKILL.md` | `/press` | Harden cooked changes with coverage, assertion, and boundary checks. |
@@ -125,27 +125,31 @@ If those tools don't show up after install, the `cheez-*` skills will hard-fail 
 ### Suggested flow
 
 ```text
-/cheese  ──►  classify intent
+/cheese  ──►  classify intent  ──►  dispatch immediately (autonomous by default)
    ├─ need info / external evidence  ──►  /briesearch
-   ├─ rubber-duck only               ──►  /culture
-   ├─ fuzzy / multi-module idea       ──►  /mold        ──►  /cook       ──►  /press  ──►  /age  ──►  /cure
-   ├─ high-blast-radius spec          ──►  /mold        ──►  /ultracook   (fresh-context: cook → press → age → cure → age → cure → age)
-   ├─ clear, scoped ask               ──►  /cook        ──►  /press       ──►  /age   ──►  /cure
-   ├─ debugging task                  ──►  /pasteurize  ──►  /cook        ──►  /press ──►  /age  ──►  /cure
+   ├─ no-writes discussion only      ──►  /culture                  (user explicitly opted out of writes)
+   ├─ fuzzy / multi-module idea       ──►  /mold        ──►  /cook --auto      ──►  /press  ──►  /age  ──►  /cure
+   ├─ high-blast-radius spec          ──►  /mold        ──►  /ultracook        (fresh-context: cook → press → age → cure → age → cure → age)
+   ├─ clear, scoped ask               ──►  /cook --auto                                                ──►  /press  ──►  /age  ──►  /cure
+   ├─ debugging task                  ──►  /pasteurize --auto ──►  /cook --auto                        ──►  /press  ──►  /age  ──►  /cure
    ├─ PR comments / CI failures       ──►  /affinage    ──►  /cure
    ├─ resume in fresh context         ──►  /cheese --continue <slug>
    └─ review only                     ──►  /age         ──►  /cure
 ```
 
 `/cheese` is the front door. It inspects whatever you drop in (idea, spec path,
-PR ref, stack trace, file path), announces its routing decision, and waits for
-explicit confirmation before any downstream skill runs; after a non-stop
-selection, it immediately dispatches the selected target. Use it directly, or
-skip it when you already know the destination — a hard bug can go straight to
-`/pasteurize`, a known-scope fix can go to `/cook`, and a no-write design
-discussion stays in `/culture`. `/melt` cuts in whenever a merge step blocks
-`/cook` or `/cure`. Append `--hard` to any pipeline step to insert
-`/hard-cheese` as a metacognitive vibecheck gate before review.
+PR ref, stack trace, file path), announces its routing decision as a short
+three-line block (Intent / Reason / Target), and dispatches the chosen skill in
+the same turn — `--auto` propagates
+downstream so the chain runs all the way through. Use `--safe` when you want
+the chance to redirect before anything runs: it puts the confirmation prompt
+back in front of dispatch and surfaces non-auto variants as alternatives. Skip
+`/cheese` entirely when you already know the destination — a hard bug can go
+straight to `/pasteurize`, a known-scope fix can go to `/cook`, and an
+explicit no-writes design discussion goes to `/culture`. `/melt` cuts in
+whenever a merge step blocks `/cook` or `/cure`. Append `--hard` to any
+pipeline step to insert `/hard-cheese` as a metacognitive vibecheck gate
+before review.
 
 ## Scope
 

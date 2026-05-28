@@ -86,4 +86,6 @@ Keep payloads short and factual. If a payload would exceed a compact screenful, 
 
 ## Flag propagation
 
-Propagate `--hard` through every runnable downstream option while the flag is in scope. Propagate `--auto` only inside documented auto-mode chains. Interactive gates must not add `--auto` unless the option explicitly says `--auto` and the user selected it.
+Propagate `--hard` through every runnable downstream option while the flag is in scope. Propagate `--auto` inside documented auto-mode chains and inside `/cheese`'s autonomous-by-default dispatch path (see `skills/cheese/SKILL.md` § Escalation — tier-1 and tier-2 dispatches pre-select the auto variant and run it without a gate unless `--safe` is set).
+
+Outside those autonomous paths, interactive gates must not add `--auto` unless the option explicitly says `--auto` and the user selected it. Inside them, the auto variant is the pre-selected recommended target by design — `--safe` is the user's opt-out to a gated flow, where the auto variant remains pre-selected but dispatch waits for confirmation.
