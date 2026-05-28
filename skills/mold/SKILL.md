@@ -6,9 +6,12 @@ license: MIT
 
 # /mold
 
-Use this skill when the user has a fuzzy feature idea, bug symptom, or design direction and wants a coherent spec or issue set before implementation.
+Two modes, by analogy to `/culture`:
 
-Do not use it for free-form discussion with no artifact intent (`/culture`), direct implementation (`/cook`), or research-only questions (`/briesearch`).
+1. **User-invoked full ceremony (default).** The user typed `/mold` (or `/cheese` routed an explicit fuzzy-design ask straight here). Runs the full Explore/Ground/Shape/Sketch/Grill/Diagnose dialogue and the two-key handshake before any spec is written. The flow below describes this mode.
+2. **Agent-invoked mini-spec mode.** `/cheese` calls into `/mold` at tier 1 of its escalation (see `skills/cheese/SKILL.md` § Escalation) when the cook fast-path checks all pass and a spec needs to materialise before `/cook --auto` runs. No dialogue, no handshake — the agent writes a mini-spec directly from the user's input (plus any tier-2 `/culture` / `/briesearch` synthesis) and returns the spec path. See `## Agent-invoked mini-spec mode` below.
+
+Do not use the user-invoked ceremony for free-form discussion with no artifact intent (`/culture`), direct implementation (`/cook`), or research-only questions (`/briesearch`).
 
 ## Flow
 
@@ -31,6 +34,48 @@ Do not use it for free-form discussion with no artifact intent (`/culture`), dir
 | Diagnose | A symptom, failure, or trace is supplied | Build a Loop → reproduce → hypothesize → confirm root cause |
 
 Full mode definitions, exit criteria, and user knobs in `references/modes.md`.
+
+## Agent-invoked mini-spec mode
+
+`/cheese`'s tier-1 escalation calls into `/mold` to produce a spec without a user-facing dialogue. The cook fast-path checks have already passed at the call site, so the input is unambiguous by construction — there is nothing left to ground, no trade-offs to grill. The mode skips the Flow above entirely:
+
+1. **Derive slug** from the user's ask (kebab-case noun-phrase, ≤ 4 words).
+2. **Write `.cheese/specs/<slug>.md`** with the mini-spec schema below. Resolve the path via `python3 ${CLAUDE_SKILL_DIR}/scripts/mold.pyz artifact-path specs <slug>` when the resolver is available; otherwise fall back to the literal `.cheese/specs/<slug>.md` path.
+3. **Return the path** to `/cheese` so it can dispatch `/cook --auto <slug>`.
+
+The two-key handshake does not fire in this mode. The agent-introduced-scope check still runs implicitly: every distinguishing noun in the mini-spec must come from the user's input or from the tier-2 `/culture` / `/briesearch` synthesis recorded in `## Provenance`. Anything else is a silent agent addition and is forbidden — the mini-spec records only what the user asked for, not what the agent thinks they might have meant.
+
+### Mini-spec schema
+
+```markdown
+---
+slug: <kebab-slug>
+source: agent-mini-spec
+intent: <one-sentence restatement of the user's ask>
+blast_radius: low | medium | high
+inputs: <one-line>
+outputs: <one-line>
+verification: <one-line: the obvious check>
+---
+
+## Contract
+<one paragraph: behaviour change, scope boundary>
+
+## Acceptance
+- <verifiable check 1>
+- <verifiable check 2>
+
+## Non-goals
+- <what we are NOT changing>
+
+## Provenance (tier 2 only)
+- culture: <one-line synthesis of what /culture concluded>
+- briesearch: <one-line synthesis if invoked, else omitted>
+```
+
+`source: agent-mini-spec` is the marker that downstream skills (`/cook`, `/age`, etc.) can read if they ever want different taste-test stringency for agent-written vs handshake-approved specs. They are not required to act on it today. User-invoked-ceremony specs omit `source:` or use `source: mold-handshake`.
+
+`## Provenance` appears only when `/cheese` reached tier 2 before falling into tier 1 — i.e., when `/culture` or `/briesearch` contributed context the original input lacked. Omit the section when tier 1 fires on the raw input.
 
 ## Preferred tools and fallbacks
 
@@ -111,7 +156,7 @@ The spec is large enough that per-phase context contamination becomes a real con
 **Non-decomposable, low- or medium-blast-radius specs (`decomposable: false`, verdict `low` or `medium`):**
 
 - **Implement the spec** *(recommended)* — `/cook .cheese/specs/<slug>.md`.
-- **Implement and auto-review** — `/cook --auto .cheese/specs/<slug>.md`, chains straight through `/press → /age → /cure` autonomously, fixing every medium-or-above finding plus cheap (contained-fix) lows across up to two cure passes. Stops at the final cure pass; opening or updating the PR stays a manual step. Offer when acceptance criteria are explicit *and* the user has signalled they want the pipeline to run forward without per-step approval. Never pre-select; auto mode is opt-in.
+- **Implement and auto-review** — `/cook --auto .cheese/specs/<slug>.md`, chains straight through `/press → /age → /cure` autonomously, fixing every medium-or-above finding plus cheap (contained-fix) lows across up to two cure passes. Stops at the final cure pass; opening or updating the PR stays a manual step. Offer when acceptance criteria are explicit *and* the user has signalled they want the pipeline to run forward without per-step approval. In the user-invoked ceremony, never pre-select this option — auto mode is opt-in here because the user has stayed in the loop through the whole dialogue and the gate is the natural place to confirm autonomy. The agent-invoked mini-spec mode bypasses this gate entirely (no handoff prompt is rendered); `/cheese` dispatches `/cook --auto` directly from tier 1.
 - **Research more first** — `/briesearch`, gather more external evidence before implementing.
 - **Stop** — dispatch none; leave the spec for later.
 

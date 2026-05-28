@@ -8,7 +8,10 @@ license: MIT
 
 Two modes:
 
-1. **Internal mode (default).** Other workflow skills — and `/cheese` itself — invoke `/culture` silently as a thinking pass: restate the question, list assumptions, name candidate options, run a quick shape check, pick the next action. The dialogue does not surface to the user; only the resulting decision (and any code edits the calling skill makes) does.
+1. **Internal mode (default).** Other workflow skills — and `/cheese` itself — invoke `/culture` silently as a thinking pass: restate the question, list assumptions, name candidate options, run a quick shape check, pick the next action. The dialogue does not surface to the user; only the resulting decision (and any code edits the calling skill makes) does. The most common callers are:
+   - `/cheese` step 1 — silent classification reasoning before announce.
+   - `/cheese` **tier-2 escalation** (see `skills/cheese/SKILL.md` § Escalation) — fills missing context when the cook-fast-path clarity check fails on the raw input; the synthesis lands in the mini-spec's `## Provenance` section.
+   - Other workflow skills' own pre-dispatch reasoning passes (mold, cook taste-test, etc.).
 2. **User-facing mode.** The user has explicitly opted out of writes for this session. Conversation is the deliverable; no code, no spec, no PR. Reach this mode only when the user said "no writes" / "rubber-duck this" / "just talk" or equivalent.
 
 Do not use the user-facing mode when the user wants a written spec (`/mold`), implementation (`/cook`), review (`/age`), or external evidence gathering (`/briesearch`) — those targets get the internal-mode call instead, and the calling skill does the work.

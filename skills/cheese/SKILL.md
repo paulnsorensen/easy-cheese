@@ -33,12 +33,14 @@ If `$ARGUMENTS` is missing entirely and there is no recent context to lean on, a
 ## Flow
 
 1. **Think first (silent).** Before announcing, model the problem internally per `skills/culture/SKILL.md` — restate the ask in one sentence, list the candidate targets, name the deciding signal. This is the agent's own reasoning, not a user-facing dialogue; the only output of this step is the classification decision that drives step 2.
-2. **Classify** — match `$ARGUMENTS` against the intent shapes in `references/classification.md`. Pick the highest-confidence shape; below the threshold, route to `clarify` (see step 5).
-3. **Announce** — print a short three-line block (Intent / Reason / Target) per the format in `## Output`. Cite the signal that drove the routing decision (e.g. "spec path under `.cheese/specs/`", "stack trace present", "PR URL").
-4. **Self-check** — run the coherence questions in `references/coherence-check.md`. If any fails, downgrade to `clarify` or `research`.
-5. **Dispatch** — without `--safe`, run the chosen skill immediately with its exact dispatch command and context packet, in the same turn as the announce. With `--safe`, issue a handoff gate per [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md) (recommended target pre-selected, at least one alternative, `Stop`) and wait for the user's selection before dispatching. Either way the downstream skill owns its flow; `/cheese` does not narrate beyond the routing decision.
+2. **Classify** — match `$ARGUMENTS` against the intent shapes in `references/classification.md`. Pick the highest-confidence shape; below the threshold, route to `clarify` (handled by the tier-3 escalation in step 4).
+3. **Clarity check (implementation intents only).** For `cook` and `mold` intents, run the cook fast-path check (`skills/cook/SKILL.md:30-35` — clear I/O, bounded scope, obvious verification). The result drives the three-tier escalation in `## Escalation` below. Non-implementation intents (`research`, `rubber-duck`, `debug`, `age`, `age-then-cure`, `cheese-factory`) skip the clarity check and route directly to their target skill.
+4. **Escalate (if needed).** Tier 1 dispatches the chosen target (writing a mini-spec via `/mold`'s agent-invoked mode when the dispatch is `/cook --auto` and no spec path was supplied). Tier 2 autonomously invokes `/culture` and/or `/briesearch` in internal mode, then re-runs the clarity check. Tier 3 blocks on a single targeted `AskUserQuestion` and re-enters classification on the answer. See `## Escalation`.
+5. **Announce** — print a short three-line block (Intent / Reason / Target) per the format in `## Output`. Cite the signal that drove the routing decision.
+6. **Self-check** — run the coherence questions in `references/coherence-check.md`. If any fails, downgrade to `clarify` (tier 3) or `research`.
+7. **Dispatch** — without `--safe`, run the chosen skill immediately with its exact dispatch command and context packet, in the same turn as the announce. With `--safe`, issue a handoff gate per [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md) (recommended target pre-selected, at least one alternative, `Stop`) and wait for the user's selection before dispatching. Either way the downstream skill owns its flow; `/cheese` does not narrate beyond the routing decision.
 
-`/cheese` is a router, not a worker. It never edits files, runs tests, opens PRs, or paraphrases the downstream skill's output.
+`/cheese` is a router, not a worker. It never edits files, runs tests, or opens PRs. It does invoke `/mold`'s agent-invoked mini-spec mode in tier 1 when a spec needs to materialise before `/cook --auto` can run; that write is the only file-touching `/cheese` ever does.
 
 ## Intent shapes
 
@@ -58,6 +60,20 @@ If `$ARGUMENTS` is missing entirely and there is no recent context to lean on, a
 
 The full classification table — including disambiguation rules, edge cases, and confidence cues — lives in `references/classification.md`.
 
+## Escalation
+
+For implementation intents (`cook` and `mold`), `/cheese` runs the cook fast-path check from `skills/cook/SKILL.md:30-35` (clear I/O, bounded scope, obvious verification) and escalates through three tiers based on the result:
+
+**Tier 1 — clear (all three checks pass).** Agent invokes `/mold`'s agent-invoked mini-spec mode (see `skills/mold/SKILL.md` § Agent-invoked mini-spec mode) to write `.cheese/specs/<slug>.md`, then dispatches `/cook --auto <slug>` in the same turn as the announce. No user interaction. When the input already names a spec path under `.cheese/specs/`, skip the mini-spec write and dispatch `/cook --auto` against the existing path directly.
+
+**Tier 2 — borderline (any check fails or is uncertain).** Agent autonomously invokes `/culture` (internal-mode thinking) and/or `/briesearch` (internal-mode research) — agent's choice each call, no fixed order, no requirement to run both — to fill the missing context. After the internal pass, re-run the cook fast-path check on the refined understanding. If all three checks now pass, drop into tier 1 (the mini-spec records the culture / briesearch synthesis under `## Provenance`). Otherwise tier 3.
+
+**Tier 3 — still borderline after tier 2.** Block on the human via a single targeted `AskUserQuestion` whose answer closes the failing check. On the answer, re-enter classification with the augmented input. This is the only sanctioned user-facing prompt in the autonomous-by-default path; the `clarify` intent and the below-`medium`-confidence path both map here.
+
+`--safe` does not skip the escalation logic — the tiers still run silently — but it inserts a handoff gate before the final dispatch in every tier. The recommended option stays auto-flavoured (`/cook --auto <slug>` etc.); the non-auto variant is offered as the alternative.
+
+Non-implementation intents bypass the escalation entirely. Their target skills own their own internal escalation: `/pasteurize` has its Phase 1 feedback-loop check, `/briesearch` clarifies missing version/scope inline, `/age` and `/cure` work directly against the supplied diff or report.
+
 ## --continue
 
 `/cheese --continue <slug>` is the manual fresh-context resumption path. Use it after compacting the conversation, after `/ultracook` has stopped on a halt, or whenever the user wants to drive the pipeline by hand from a cleared context.
@@ -76,13 +92,13 @@ Under `--safe`, gate the resumption through the handoff gate in [`../../shared/h
 
 ## Confidence and the clarify gate
 
-Treat classification confidence qualitatively (`low | medium | high`). Threshold for direct routing is `medium` or better. Below that:
+Treat classification confidence qualitatively (`low | medium | high`). Threshold for direct routing is `medium` or better. Below that, route to tier 3 (`clarify`):
 
-- Pick the **clarify** path and ask exactly one question via `AskUserQuestion`.
+- Ask exactly one question via `AskUserQuestion`.
 - Offer the two most-likely targets as alternatives plus `Stop`.
 - Re-enter `/cheese` with the answer.
 
-At `medium` or above, dispatch — don't second-guess a clear signal with extra questions. Silent misrouting is worse than asking once, but reflexive gating is worse than acting on a confident read.
+At `medium` or above, dispatch — don't second-guess a clear signal with extra questions. For implementation intents, the cook-fast-path clarity check in `## Escalation` is the additional layer: low intent confidence sends you to tier 3 directly, while a confident-intent + borderline-clarity input goes through tier 2 first. Silent misrouting is worse than asking once, but reflexive gating is worse than acting on a confident read.
 
 ## Preferred tools and fallbacks
 
@@ -128,9 +144,10 @@ Pre-select only the highest-confidence target. Without `--safe`, surface the tar
 ## Rules
 
 - Default mode is autonomous: announce the routing decision and dispatch in the same turn. `--safe` is the only switch that re-introduces a confirmation prompt.
-- Below `medium` confidence — or when a coherence check trips — route to `clarify` instead of guessing. One clarifying question, max, before re-entering classification.
+- Implementation intents (`cook`, `mold`) go through the cook-fast-path clarity check and escalate through the three tiers in `## Escalation`. Other intents dispatch directly.
+- Below `medium` intent confidence — or when a coherence check trips — route to tier 3 (`clarify`) instead of guessing. One clarifying question, max, before re-entering classification.
+- The only file `/cheese` ever writes is a mini-spec at `.cheese/specs/<slug>.md` via `/mold`'s agent-invoked mode, and only when tier 1 needs one before dispatching `/cook --auto`. No code edits, no tests, no quality gates.
 - Never paraphrase or summarise downstream skill output — that is the downstream skill's job.
-- Never edit files, write specs, or run quality gates from `/cheese`.
 
 ## References
 

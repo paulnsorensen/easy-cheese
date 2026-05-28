@@ -8,6 +8,11 @@ license: MIT
 
 Use this skill when a technical question needs evidence before a decision: library behavior, current vendor docs, implementation patterns, or local precedent.
 
+`/briesearch` runs in two contexts:
+
+- **User-invoked (default).** The user asked for research; produce the full report per `## Output` below.
+- **Internal-mode tier-2 caller.** `/cheese`'s tier-2 escalation (see `skills/cheese/SKILL.md` § Escalation) invokes `/briesearch` silently to fill missing external context when the cook-fast-path clarity check fails on the raw input. In this context, return a one-line synthesis suitable for the mini-spec's `## Provenance` section instead of the full report — the parent classifier needs a verdict, not a deliverable.
+
 Do not use it for a single obvious file lookup or when the user already supplied enough evidence.
 
 ## Inputs
