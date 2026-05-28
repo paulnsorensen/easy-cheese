@@ -1,6 +1,6 @@
 # Classification reference
 
-Intent shapes for `/cheese`, with the signals that drive each one and the disambiguation rules that resolve ambiguity. Confidence stays qualitative (`low | medium | high`); only `medium` or better dispatches.
+Intent shapes for `/cheese`, with the signals that drive each one and the disambiguation rules that resolve ambiguity. Confidence stays qualitative (`low | medium | high`); only `medium` or better dispatches. `/cheese` dispatches the chosen target immediately; `--safe` is the only switch that gates dispatch behind a confirmation prompt.
 
 ## Shape index
 
@@ -8,10 +8,10 @@ Intent shapes for `/cheese`, with the signals that drive each one and the disamb
 | --- | --- | --- |
 | clarify | one `AskUserQuestion` | re-enter `/cheese` |
 | research | — | `/briesearch` |
-| rubber-duck | — | `/culture` |
+| rubber-duck | — | `/culture` (only when the user explicitly opted out of writes) |
 | mold | optional `/briesearch` | `/mold` → `/cook` |
-| cook | — | `/cook` |
-| debug | — | `/pasteurize` → `/cook --auto` |
+| cook | — | `/cook --auto` (default — propagates through `/press → /age → /cure`) |
+| debug | — | `/pasteurize --auto` (default) → `/cook --auto` |
 | age | — | `/age` |
 | age-then-cure | — | `/age` → `/cure` |
 
@@ -45,15 +45,16 @@ Defer to `/briesearch` even when the user did not say "research" — the router'
 
 ### rubber-duck (`/culture`)
 
-Conversational thinking with no artifact intent.
+The user has explicitly asked for discussion only — no production writes, no code, no PRs. This is a narrow path; in all other cases, agent reasoning happens silently via `/culture` during step 1 of `/cheese` and never surfaces to the user.
 
 | Signal | Example |
 | --- | --- |
-| "help me think through…" / "let's talk about…" / "rubber duck this" | "help me think about whether to split this slice" |
-| Trade-off discussion with no concrete goal yet | "should the cache live in the adapter or the domain" |
-| User explicitly says "no writes" or "just thinking" | — |
+| "no writes" / "just thinking" / "rubber duck this" / "let's just talk about X" | "let's rubber-duck whether to split this slice — don't write anything" |
+| Explicit "discuss only" framing | "I want to think about this with you before we touch code" |
 
-If the conversation later reveals real work, `/culture` itself recommends `/mold` or `/cook`. `/cheese` does not pre-empt that.
+If the user dropped a debug or implementation signal *and* asked for discussion only, the rubber-duck signal wins — they opted out of writes. If the conversation later reveals real work, `/culture` itself recommends `/mold` or `/cook`.
+
+`/culture` is otherwise the agent's internal-thinking skill — invoked silently by `/cheese` (and other workflow skills) to model the problem before dispatching. Never route to it as a user-facing target unless the rubber-duck signal is present.
 
 ### mold (`/mold`)
 
@@ -80,9 +81,9 @@ Clear, scoped implementation request meeting the standalone fast-path checks.
 
 When two of the three fast-path checks are clear but the third is borderline, downgrade to `mold`.
 
-### debug (`/pasteurize` → `/cook --auto`)
+### debug (`/pasteurize --auto` → `/cook --auto`)
 
-Symptom-driven work where the cause has not been confirmed yet.
+Symptom-driven work where the cause has not been confirmed yet and a code-level fix is expected.
 
 | Signal | Example |
 | --- | --- |
@@ -90,8 +91,9 @@ Symptom-driven work where the cause has not been confirmed yet.
 | Failing test name or output | "test_foo_handles_empty fails on main" |
 | Reproduction steps without a stated cause | "open page, click X, see 500" |
 | "Why is X broken" / "what's wrong with Y" framing | — |
+| Visual / behavioural bug with a clear repro | "flash of white between two clips" with a file path |
 
-Route to `/pasteurize` so the cause is named via a deterministic feedback loop, the regression test is written, and the minimal fix is applied before the autonomous chain runs. `/pasteurize` then hands off to `/cook --auto` by default for taste-test plus the press → age → cure chain. If the cause is already obvious **and** the fix is a single-file tweak with a known seam, jump straight to `/cook` instead. If the user explicitly wants no-write diagnosis (conversation only), route to `/culture` instead of `/pasteurize`.
+Route to `/pasteurize` so the cause is named via a deterministic feedback loop, the regression test is written, and the minimal fix is applied. `/pasteurize` then hands off forward into the standard `/cook → /press → /age → /cure` chain. If the cause is already obvious **and** the fix is a single-file tweak with a known seam, jump straight to `/cook` instead. Only route a debug signal to `/culture` when the user explicitly opted out of writes (see the rubber-duck shape).
 
 ### age (`/age`)
 
@@ -122,9 +124,9 @@ If a fresh `.cheese/age/<slug>.md` already exists and the user only wants fixes,
 
 When two intents are plausible, apply in order:
 
-1. **Explicit verb wins.** "Review" → `age`. "Fix" → `cook` or `cure`. "Design" → `mold`. "Think through" → `culture`.
+1. **Explicit verb wins.** "Review" → `age`. "Fix" → `cook` or `cure`. "Design" → `mold`. "Think through with no writes" → `culture`; "think through" alone is just the agent's internal reasoning before dispatching to `mold` or `cook`.
 2. **Strongest signal wins.** A spec path beats free text. A stack trace beats a feature description. A PR URL beats a path glob.
-3. **Smallest committed scope wins.** Prefer `cook` over `mold` when the fast-path checks pass. Prefer `culture` over `mold` when no artifact is requested.
+3. **Smallest committed scope wins.** Prefer `cook` over `mold` when the fast-path checks pass. Only prefer `culture` over `mold` when the user has explicitly opted out of writes.
 4. **If still tied, clarify.** Ask one question; do not guess.
 
 ## Confidence cues
@@ -147,6 +149,7 @@ When two intents are plausible, apply in order:
 | `review and fix the high-severity items in PR#142` | age-then-cure | review verb + fix verb + PR ref |
 | stack trace pasted | debug | trace present, cause not stated |
 | `what's the best rate limiter library for fastify` | research | external library question |
-| `help me think about splitting orders into a sub-slice` | rubber-duck | no artifact intent |
+| `help me think about splitting orders into a sub-slice — don't write anything yet` | rubber-duck | explicit no-writes opt-out |
+| `help me think about splitting orders into a sub-slice` | mold | fuzzy multi-module idea; agent thinks via `/culture` internally, then routes to `/mold` |
 | `/cheese` | clarify | empty input; ask what they want |
 | `make the cli help flag respect NO_COLOR` | cook | scoped, single-flag, verifiable |

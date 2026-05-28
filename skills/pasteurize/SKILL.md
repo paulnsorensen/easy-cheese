@@ -1,6 +1,6 @@
 ---
 name: pasteurize
-description: Diagnose a hard bug, flaky failure, or performance regression via a feedback-loop-first six-phase debugging loop. Use when the user has such a problem — phrases like "diagnose this", "debug this", "why is X broken", "the test fails intermittently", "/pasteurize", or a pasted stack trace / repro without a stated cause. The loop runs feedback loop → reproduce → hypothesise → instrument → fix + regression test → cleanup; phase 1 (build a deterministic, agent-runnable feedback loop) is the skill — everything else consumes the signal. Writes the regression test, applies the minimal fix, verifies the original repro is gone, then writes `.cheese/pasteurize/<slug>.md` and hands off to `/cook --auto` (default) for taste-test and the `/press → /age → /cure` chain. Supports `--auto` to skip the handoff gate. Do NOT use for review-only diffs (`/age`), feature design (`/mold`), or fixes where the cause is already known (`/cook` directly). After `/cheese` debug intent; before `/cook --auto` → `/press` → `/age` → `/cure`.
+description: Hard-bug DIAGNOSIS + FIX. Build a deterministic agent-runnable feedback loop, reproduce the failure, name the cause, write a regression test, apply the minimal production fix, and hand the chain forward. Use when the user reports a bug, flaky test, performance regression, or visible misbehaviour — phrases like "diagnose this", "debug this", "why is X broken", "the test fails intermittently", "/pasteurize", or a pasted stack trace / repro / "this looks wrong, investigate" with no stated cause. Pasteurize EDITS code (the regression test and the fix); culture does not. The skill is the six-phase loop — feedback loop → reproduce → hypothesise → instrument → fix + regression test → cleanup — anchored on phase 1 because the loop is what makes the rest mechanical. After cleanup, writes `.cheese/pasteurize/<slug>.md` and hands off to `/cook --auto` by default for taste-test and the `/press → /age → /cure` chain. Supports `--auto` to skip the handoff gate. Do NOT use for review-only diffs (`/age`), feature design (`/mold`), fixes where the cause is already known (`/cook` directly), or when the user explicitly opted out of writes (`/culture`). After `/cheese` debug intent; before `/cook --auto` → `/press` → `/age` → `/cure`.
 license: MIT
 ---
 
@@ -184,7 +184,7 @@ When invoked with `--auto`, skip this `AskUserQuestion` entirely and invoke `/co
 
 ## Auto mode
 
-`--auto` is the autonomous-pipeline switch. Propagated from upstream skills (`/cheese --auto`) or invoked directly with `--auto`.
+`--auto` is the autonomous-pipeline switch. Propagated from upstream skills (`/cheese` propagates `--auto` by default unless invoked with `--safe`) or invoked directly with `--auto`.
 
 What auto mode does:
 

@@ -24,7 +24,7 @@ Run these questions before issuing the dispatch `AskUserQuestion`. If any answer
    - When in doubt, surface the contradiction in the dispatch question.
 
 5. **Does the chosen target's invariants hold?**
-   - `/culture` cannot write — never route here when the user explicitly asked for a file or PR.
+   - `/culture` cannot write — only route here as a user-facing target when the user explicitly opted out of writes. For everything else, culture is the agent's silent internal-thinking pass, not a user destination.
    - `/cook` needs the standalone fast-path checks to all pass — if one is borderline, route to `/mold` instead.
    - `/age` needs a diff to look at — if there is no branch divergence and no path scope, `clarify` first.
    - `/cure` needs a finding list — if no `.cheese/age/<slug>.md` and no pasted findings, route to `/age` first.
