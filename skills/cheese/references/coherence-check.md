@@ -1,6 +1,6 @@
 # Coherence self-check
 
-Run these questions before issuing the dispatch `AskUserQuestion`. If any answer is `no`, downgrade the routing decision (usually to `clarify` or `research`) instead of pre-selecting a target.
+Run these questions before dispatching the chosen target. If any answer is `no`, downgrade the routing decision (usually to `clarify` or `research`) instead of pre-selecting a target. Under `--safe` the downgrade lands in the dispatch gate; otherwise it lands in the announce block, and on the `clarify` path it replaces the dispatch with a single targeted `AskUserQuestion`.
 
 ## Pre-dispatch checklist
 
@@ -21,7 +21,7 @@ Run these questions before issuing the dispatch `AskUserQuestion`. If any answer
 4. **Is recent context contradicting the new signal?**
    - User just finished `/cure` and now drops a path → likely `age --scope`, not a fresh `cook`.
    - User is mid-`/mold` and pastes a stack trace → likely a Diagnose detour inside `/mold`, not a re-route.
-   - When in doubt, surface the contradiction in the dispatch question.
+   - When in doubt, surface the contradiction in the announce block — and, under `--safe`, in the dispatch gate.
 
 5. **Does the chosen target's invariants hold?**
    - `/culture` cannot write — only route here as a user-facing target when the user explicitly opted out of writes. For everything else, culture is the agent's silent internal-thinking pass, not a user destination.
@@ -36,8 +36,8 @@ Run these questions before issuing the dispatch `AskUserQuestion`. If any answer
 
 When the checklist trips:
 
-- Switch the announce paragraph to name the failing check (e.g. "spec path `.cheese/specs/foo.md` does not exist on disk").
-- Replace the dispatch `AskUserQuestion` with a single clarifying question whose options resolve the failed check.
+- Switch the announce block to name the failing check (e.g. "spec path `.cheese/specs/foo.md` does not exist on disk").
+- Replace the dispatch with a single clarifying `AskUserQuestion` whose options resolve the failed check. Under `--safe` the gate already exists, so swap its options for the clarifying ones; without `--safe` the clarify path is the only sanctioned reason to ask the user at all.
 - Never pre-select a target the checklist downgraded.
 
 ## Why this is separate

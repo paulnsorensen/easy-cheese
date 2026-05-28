@@ -184,7 +184,7 @@ When invoked with `--auto`, skip this `AskUserQuestion` entirely and invoke `/co
 
 ## Auto mode
 
-`--auto` is the autonomous-pipeline switch. Propagated from upstream skills (`/cheese` propagates `--auto` by default unless invoked with `--safe`) or invoked directly with `--auto`.
+`--auto` is the autonomous-pipeline switch. Propagated from upstream skills (`/cheese` propagates `--auto` by default; under `--safe`, `--auto` becomes an explicit selection in the dispatch gate rather than the silent default) or invoked directly with `--auto`.
 
 What auto mode does:
 

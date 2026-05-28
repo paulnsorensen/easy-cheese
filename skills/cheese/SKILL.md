@@ -1,12 +1,12 @@
 ---
 name: cheese
-description: Route any dropped-in input — idea, spec path, file path, PR or issue, stack trace, bug report, or bare `/cheese` — to the right workflow skill and dispatch it immediately. Use as the unified entry point — phrases include "/cheese", "what should I do with this", "help me get started", "route this", "figure out what skill I need", or any opening message that does not already name a downstream skill. Classifies the input into an intent shape, announces the target and reason in one line, then runs the chosen skill with the exact command and context packet. Add `--safe` to gate dispatch behind a confirmation prompt; otherwise cheese decides and acts. Before any other workflow skill.
+description: Route any dropped-in input — idea, spec path, file path, PR or issue, stack trace, bug report, or bare `/cheese` — to the right workflow skill and dispatch it immediately. Use as the unified entry point — phrases include "/cheese", "what should I do with this", "help me get started", "route this", "figure out what skill I need", or any opening message that does not already name a downstream skill. Classifies the input into an intent shape, announces the target and reason in a short three-line block (Intent / Reason / Target), then runs the chosen skill with the exact command and context packet. Add `--safe` to gate dispatch behind a confirmation prompt; otherwise cheese decides and acts. Before any other workflow skill.
 license: MIT
 ---
 
 # /cheese
 
-Use this skill as the single front door to the easy-cheese workflow. Inspect whatever the user dropped in, classify it into an intent shape, announce the routing decision in one line, and dispatch immediately to the chosen skill. Cheese is autonomous by default — it picks the best target and runs it, only stopping to ask when `--safe` is passed or when the input is genuinely ambiguous.
+Use this skill as the single front door to the easy-cheese workflow. Inspect whatever the user dropped in, classify it into an intent shape, announce the routing decision as a short three-line block (Intent / Reason / Target — see `## Output`), and dispatch immediately to the chosen skill. Cheese is autonomous by default — it picks the best target and runs it, only stopping to ask when `--safe` is passed or when the input is genuinely ambiguous.
 
 Do not use it once a downstream skill is already running, or when the user has already named the skill they want (`/mold ...`, `/cook ...`, `/age`, etc.) — pass straight through to that skill instead.
 
@@ -26,7 +26,7 @@ Optional flags:
 
 - `--safe` — gate dispatch behind a confirmation prompt. Use when the user wants the chance to redirect routing before the chosen skill runs. Without this flag, cheese announces and dispatches in the same turn.
 - `--continue <slug>` — resume an in-flight pipeline from the latest handoff slug. See `## --continue` below.
-- `--hard` — inject the `/hard-cheese` metacognitive gate before code is shared for review. The flag propagates to whichever target the router dispatches and fires at `/cure`'s share-for-review handoff (or end of the autonomous chain under `--hard`). See `skills/hard-cheese/SKILL.md`.
+- `--hard` — inject the `/hard-cheese` metacognitive gate before code is shared for review. The flag propagates to whichever target the router dispatches and fires at `/cure`'s share-for-review handoff (or end of `/cure`'s final auto pass under `--auto --hard`). See `skills/hard-cheese/SKILL.md`.
 
 If `$ARGUMENTS` is missing entirely and there is no recent context to lean on, ask one clarifying question via `AskUserQuestion` before classifying.
 
@@ -34,7 +34,7 @@ If `$ARGUMENTS` is missing entirely and there is no recent context to lean on, a
 
 1. **Think first (silent).** Before announcing, model the problem internally per `skills/culture/SKILL.md` — restate the ask in one sentence, list the candidate targets, name the deciding signal. This is the agent's own reasoning, not a user-facing dialogue; the only output of this step is the classification decision that drives step 2.
 2. **Classify** — match `$ARGUMENTS` against the intent shapes in `references/classification.md`. Pick the highest-confidence shape; below the threshold, route to `clarify` (see step 5).
-3. **Announce** — print one short paragraph with: detected intent, chosen target skill (or pre-step), and the one-line reason for the decision. Cite the signal that drove it (e.g. "spec path under `.cheese/specs/`", "stack trace present", "PR URL").
+3. **Announce** — print a short three-line block (Intent / Reason / Target) per the format in `## Output`. Cite the signal that drove the routing decision (e.g. "spec path under `.cheese/specs/`", "stack trace present", "PR URL").
 4. **Self-check** — run the coherence questions in `references/coherence-check.md`. If any fails, downgrade to `clarify` or `research`.
 5. **Dispatch** — without `--safe`, run the chosen skill immediately with its exact dispatch command and context packet, in the same turn as the announce. With `--safe`, issue a handoff gate per [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md) (recommended target pre-selected, at least one alternative, `Stop`) and wait for the user's selection before dispatching. Either way the downstream skill owns its flow; `/cheese` does not narrate beyond the routing decision.
 
@@ -107,7 +107,7 @@ Then dispatch the target in the same turn. Under `--safe`, append a handoff gate
 
 ## Handoff
 
-Dispatch happens through [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md) when `--safe` is set; otherwise cheese runs the target directly. Without `--safe`, cheese propagates `--auto` to any target that supports it, so the chain runs all the way through without per-step gates. Under `--safe`, the auto variant becomes an alternative the user can pick, not the default.
+Dispatch happens through [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md) when `--safe` is set; otherwise cheese runs the target directly. Without `--safe`, cheese propagates `--auto` to any target that supports it, so the chain runs all the way through without per-step gates. Under `--safe`, dispatch waits for the user's selection, but the auto variant remains the pre-selected recommended target (the non-auto variant is offered as the alternative).
 
 Default targets per intent:
 

@@ -58,7 +58,7 @@ Content shared _across_ skills lives at top-level `shared/` (e.g. `shared/handof
 
 | Skill path | Command | Purpose |
 | --- | --- | --- |
-| `skills/cheese/SKILL.md` | `/cheese` | Unified entry point. Classifies any input (idea, spec path, PR, stack trace, file path), announces the routing decision in one line, and dispatches the chosen target immediately with `--auto` propagated downstream. Add `--safe` to gate dispatch behind a confirmation prompt and surface non-auto alternatives. |
+| `skills/cheese/SKILL.md` | `/cheese` | Unified entry point. Classifies any input (idea, spec path, PR, stack trace, file path), announces the routing decision as a short three-line block (Intent / Reason / Target), and dispatches the chosen target immediately with `--auto` propagated downstream. Add `--safe` to gate dispatch behind a confirmation prompt and surface non-auto alternatives. |
 | `skills/briesearch/SKILL.md` | `/briesearch` | Research technical questions across docs, web, codebase, and GitHub examples with confidence-capped synthesis. |
 | `skills/mold/SKILL.md` | `/mold` | Shape fuzzy ideas into grounded specs through dialogue, validate cycles, and a two-key handshake. |
 | `skills/culture/SKILL.md` | `/culture` | The agent's internal-thinking skill — invoked silently by `/cheese` and other workflow skills to model a problem before dispatching. Surfaces to the user only when they explicitly opted out of writes ("no writes", "rubber-duck this"). Hard invariant: writes only the opt-in `.cheese/notes/<slug>.md` handoff at session end, and only when the user asks for notes. |
@@ -138,8 +138,9 @@ If those tools don't show up after install, the `cheez-*` skills will hard-fail 
 ```
 
 `/cheese` is the front door. It inspects whatever you drop in (idea, spec path,
-PR ref, stack trace, file path), announces its routing decision in one line,
-and dispatches the chosen skill in the same turn — `--auto` propagates
+PR ref, stack trace, file path), announces its routing decision as a short
+three-line block (Intent / Reason / Target), and dispatches the chosen skill in
+the same turn — `--auto` propagates
 downstream so the chain runs all the way through. Use `--safe` when you want
 the chance to redirect before anything runs: it puts the confirmation prompt
 back in front of dispatch and surfaces non-auto variants as alternatives. Skip
