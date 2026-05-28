@@ -70,12 +70,12 @@ verification: <one-line: the obvious check>
 
 ## Provenance (tier 2 only)
 - culture: <one-line synthesis of what /culture concluded>
-- briesearch: <one-line synthesis if invoked, else omitted>
+- briesearch: <one-line synthesis>; artifact: research/<slug>/<slug>.md
 ```
 
 `source: agent-mini-spec` is the marker that downstream skills (`/cook`, `/age`, etc.) can read if they ever want different taste-test stringency for agent-written vs handshake-approved specs. They are not required to act on it today. User-invoked-ceremony specs omit `source:` or use `source: mold-handshake`.
 
-`## Provenance` appears only when `/cheese` reached tier 2 before falling into tier 1 — i.e., when `/culture` or `/briesearch` contributed context the original input lacked. Omit the section when tier 1 fires on the raw input.
+`## Provenance` appears only when `/cheese` reached tier 2 before falling into tier 1 — i.e., when `/culture` or `/briesearch` contributed context the original input lacked. Omit the section when tier 1 fires on the raw input. When `/briesearch` ran, the `artifact:` field links the durable cited research at `research/<slug>/<slug>.md` so the citations are preserved and `/cook` (or any later skill) can re-read them without re-researching. Omit `artifact:` only when `/briesearch` answered from local code patterns alone and wrote no durable file.
 
 ## Preferred tools and fallbacks
 
