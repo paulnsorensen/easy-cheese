@@ -1,14 +1,14 @@
 # Selection gate
 
-`/cure` never applies findings without an explicit selection. The default selection is empty.
+The default selection is the **recommended composite** (`all-medium, cheap`) — mediums-and-above plus cheap contained-fix lows. `/cure` applies it without a gate unless `--safe` is passed, a recommended fix is sprawling/structural, or findings conflict — in which cases the gate below is rendered. (This inverts the old "default is empty" contract: gating is now the exception, not the rule, mirroring `/cheese`'s autonomous-by-default routing.)
 
-`/age` is the preferred place to render this gate — it inverts the path so the user is asked *which findings to cure* immediately after the report lands, rather than first being asked *whether to run /cure*. When `/age` hands off with a pre-locked selection, `/cure` adopts it and skips re-rendering the table; otherwise `/cure` renders the table itself using the same shape below.
+`/age` and `/affinage` are the preferred places to compute this selection — they pass it to `/cure` as a pre-locked handoff so the user sees the work happen, not a "whether to run /cure" prompt. When `/age` / `/affinage` hands off with a pre-locked selection, `/cure` adopts it and skips re-rendering the table; otherwise `/cure` computes the recommended composite itself, gating only on the reasons above.
 
-The only sanctioned bypass of the selection rule is the `--auto --stake <floor>` flag pair, propagated from `/cook --auto`. (`--stake` is a severity floor — the flag literal is preserved across callers, the underlying semantics is per-finding severity, not a dimension bucket.) See `## Auto-mode selection` at the bottom of this file. Outside of auto mode, every rule below applies as written.
+The `--auto --stake <floor>` flag pair (propagated from `/cook --auto`) substitutes a severity floor for the recommended composite and runs the headless chain. (`--stake` is a severity floor — the flag literal is preserved across callers, the underlying semantics is per-finding severity, not a dimension bucket.) See `## Auto-mode selection` at the bottom of this file.
 
 ## Handoff from /age
 
-When `/age` completes the selection gate and the user picks a non-empty set, it dispatches `/cure <slug>` with the selection locked in by passing a structured context block alongside the invocation:
+When `/age` or `/affinage` resolves a non-empty selection — auto-selected by default (the recommended composite) or chosen at the gate — it dispatches `/cure <slug>` with the selection locked in by passing a structured context block alongside the invocation:
 
 ```yaml
 handoff_context:
@@ -66,8 +66,8 @@ When an age report lacks the `fix-cost-now` sub-field on its findings (older rep
 
 ## Hard rules
 
-- **Default is `none`.** A bare return / "ok" / "go" is not a selection.
-- **`all` is opt-in only.** Never assume the user wants everything.
+- **Default is the recommended composite (`all-medium, cheap`).** Applied without a gate unless `--safe`, a sprawling/structural fix, or conflicting findings forces the gate. When the gate *is* rendered, a bare return / "ok" / "go" selects the pre-selected recommended composite.
+- **`all` is opt-in only.** The default sweeps mediums-and-above plus cheap lows, never the expensive lows — `all` still requires an explicit type-out.
 - **Selection is locked once chosen.** If new findings appear during cure (e.g. a fix exposes a new bug), surface them in the report and let the user re-invoke `/cure`.
 
 ## After selection

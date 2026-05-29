@@ -24,7 +24,8 @@ Accept anything the user supplies as `$ARGUMENTS`:
 
 Optional flags:
 
-- `--safe` — gate dispatch behind a confirmation prompt. Use when the user wants the chance to redirect routing before the chosen skill runs. Without this flag, cheese announces and dispatches in the same turn.
+- `--safe` — gate dispatch behind a confirmation prompt. Use when the user wants the chance to redirect routing before the chosen skill runs. Without this flag, cheese announces and dispatches in the same turn. `--safe` also propagates downstream, re-introducing the per-skill gates that the autonomous default skips (`/age` / `/affinage` cure-selection, `/cure`'s PR push).
+- `--open-pr` — propagate to `/cure` so a clean cure may open a *new* PR when none exists (the default only pushes an already-open one). Useful when routing a fresh branch through the pipeline and you want the PR created at the end.
 - `--continue <slug>` — resume an in-flight pipeline from the latest handoff slug. See `## --continue` below.
 - `--hard` — inject the `/hard-cheese` metacognitive gate before code is shared for review. The flag propagates to whichever target the router dispatches and fires at `/cure`'s share-for-review handoff (or end of `/cure`'s final auto pass under `--auto --hard`). See `skills/hard-cheese/SKILL.md`.
 

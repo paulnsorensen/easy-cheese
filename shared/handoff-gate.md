@@ -88,4 +88,6 @@ Keep payloads short and factual. If a payload would exceed a compact screenful, 
 
 Propagate `--hard` through every runnable downstream option while the flag is in scope. Propagate `--auto` inside documented auto-mode chains and inside `/cheese`'s autonomous-by-default dispatch path (see `skills/cheese/SKILL.md` § Escalation — tier-1 and tier-2 dispatches pre-select the auto variant and run it without a gate unless `--safe` is set).
 
+Propagate `--safe` and `--open-pr` through every runnable downstream option while in scope. `--safe` re-introduces the gates that the autonomous default skips (`/age` / `/affinage` cure-selection, `/cure`'s PR push); it travels down the `/cheese → … → /cure` chain so a single `--safe` at the front gates the whole pipeline. `--open-pr` rides to `/cure`, authorizing a clean cure to open a *new* PR when none exists (the default only pushes an already-open one).
+
 Outside those autonomous paths, interactive gates must not add `--auto` unless the option explicitly says `--auto` and the user selected it. Inside them, the auto variant is the pre-selected recommended target by design — `--safe` is the user's opt-out to a gated flow, where the auto variant remains pre-selected but dispatch waits for confirmation.
