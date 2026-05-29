@@ -1,6 +1,6 @@
 ---
 name: age
-description: Review a diff, PR, branch, or path across ten orthogonal dimensions (correctness, security, encapsulation, spec, complexity, deslop, assertions, NIH, efficiency, telemetry) and emit a severity-grouped findings report. Use when the user wants a code review — phrases like "review this", "/age", "is this safe to merge", "find bugs", "spot security issues", "check for slop", "review my PR", "look for problems", "what's wrong with this code". Report (`## Blocker / ## High / ## Medium / ## Low`) lands at `.cheese/age/<slug>.md`, each finding tagged by dimension. Use even when the user only asks for one dimension — the report scopes itself. Findings only — no fixes; after the report lands, age renders the cure-selection table inline and asks which findings to cure, then hands off to `/cure` with the selection locked in. Supports `--auto` (propagated from `/cook --auto`) for the autonomous chain into `/cure` (see `### Auto mode`). After `/press` (optional); before `/cure`.
+description: Review a diff, PR, branch, or path across ten orthogonal dimensions (correctness, security, encapsulation, spec, complexity, deslop, assertions, NIH, efficiency, telemetry) and emit a severity-grouped findings report. Use when the user wants a code review — phrases like "review this", "/age", "is this safe to merge", "find bugs", "spot security issues", "check for slop", "review my PR", "look for problems", "what's wrong with this code". Report (`## Blocker / ## High / ## Medium / ## Low`) lands at `.cheese/age/<slug>.md`, each finding tagged by dimension. Use even when the user only asks for one dimension — the report scopes itself. Findings only — no fixes; after the report lands, age auto-applies the recommended set (mediums-and-above plus cheap lows) via `/cure`, gating only when a fix is sprawling/structural or findings conflict; `--safe` restores the selection gate. Supports `--auto` (propagated from `/cook --auto`) for the autonomous chain into `/cure`. After `/press` (optional); before `/cure`.
 license: MIT
 ---
 
@@ -15,11 +15,13 @@ Do not use it to apply fixes directly. Hand fix work to `/cure`, which owns appl
 Accept:
 
 ```text
-/age [<ref-or-range>] [--scope <path>] [--comprehensive] [--full] [--auto]
-/age <slug> [--full] [--auto]
+/age [<ref-or-range>] [--scope <path>] [--comprehensive] [--full] [--safe] [--open-pr] [--auto]
+/age <slug> [--full] [--safe] [--open-pr] [--auto]
 ```
 
 `--full` un-collapses the `## Low` section when 10 or more low-severity findings exist (the default report collapses them to a one-line summary). Suppressed lows feed the cure-selection table only when `--full` is passed.
+
+`--safe` re-introduces the cure-selection gate that the autonomous default skips (see `## Handoff`). Use it when you want to choose findings before anything is fixed. `--open-pr` propagates to `/cure` so a clean cure may open a *new* PR when none exists (otherwise `/cure` only pushes an already-open one); see `skills/cure/SKILL.md`. Both flags propagate forward to `/cure` at the handoff.
 
 When called with a `<slug>`, resolve `.cheese/press/<slug>.md` (if present) for press context and review the current working diff. When called with a `<ref-or-range>`, review that range. Default to the current working diff when neither is supplied. If the base branch is unclear, ask or use the repository's documented default.
 
@@ -53,7 +55,7 @@ Per-dimension base-severity tables, location-sensitivity, fix-cost-now / fix-cos
 3. Review every dimension; dimensions with no findings simply omit themselves.
 4. Compute severity per finding (base + location bump + compounding bump, capped at `blocker`). Group findings by severity (`## Blocker → ## High → ## Medium → ## Low`); within a severity group, order by file.
 5. Write the report to `.cheese/age/<slug>.md` and print the path.
-6. Hand off via the shared handoff gate (see `## Handoff` below). Age owns the selection gate: it asks the user *which findings to cure*, never *whether to run /cure*. `/cure` still owns the actual fix application — age never auto-applies fixes.
+6. Hand off (see `## Handoff` below). By default age auto-selects the recommended fix set and dispatches `/cure` in the same turn, gating for a human decision only when there is a genuine reason (a sprawling/structural fix in the set, or conflicting findings) or when `--safe` is passed. Age never *applies* fixes itself — `/cure` owns application — it only owns the *selection* and the dispatch.
 
 ## Preferred tools and fallbacks
 
@@ -132,7 +134,7 @@ artifact: <path-to-press-report-or-prior-cure-if-any>
 <`certain` | `speculating` | `don't know`> — <one-line justification including which evidence sources were unavailable>
 
 ## Next step
-Selection prompt rendered inline — pick findings to cure or `none` to stop.
+Auto-fixing the recommended set via `/cure` (or, on a reason to ask / `--safe`, the selection prompt rendered inline — pick findings to cure or `none` to stop).
 ```
 
 Empty severity sections are omitted entirely. When ten or more `low` findings exist, collapse the `## Low` section to a single line:
@@ -156,10 +158,27 @@ Age report: .cheese/age/<slug>.md
 
 **Pipeline:** culture → mold → cook → press → **[age]** → cure → ship
 
-After the report is on disk, skip any "should I run /cure?" meta-question and go straight to the selection gate. The user's working memory is on the findings, not on whether a follow-up step exists. Use the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md) for post-selection dispatch.
+After the report is on disk, age decides whether to *act* or *ask*. The default is to act: auto-select the recommended fix set and dispatch `/cure` in the same turn, no gate. The gate is reserved for the cases that genuinely need a human decision. Age never *applies* fixes — `/cure` owns application — it only owns the *selection*.
 
-1. Render the numbered selection table per `../cure/references/selection.md` directly inline (one row per finding, grouped by severity).
-2. Ask via the handoff gate which findings to cure. Lead each option with the verb (what the user wants to *do* next); the underlying selection verb is the backing detail. Lead with the recommended composite, then present the same four severity-floor options below it, in the same most-inclusive-to-least order, so the gate is predictable across every run:
+**Compute the recommended set.** The recommended selection is the composite `all-medium, cheap` — floor at medium (blockers + high + medium) unioned with every `Low` whose `fix-cost-now: contained`. Expand it against the report into `resolved_ids`.
+
+**Decide act vs ask:**
+
+- **Empty set** — no finding meets the medium floor and no cheap lows exist. Nothing to cure: write `next: done`, print the report path, and stop. No question.
+- **Reason to ask present** — render the selection gate (below) and wait for a choice. A reason to ask is any of:
+  - a finding in the recommended set has `fix-cost-now: sprawling` **or** `fix-cost-later: structural` (auto-applying a large/structural change is unrequested scope);
+  - findings in the set conflict, or a fix forces a design decision the user should make;
+  - `--safe` was passed (always gate).
+
+  When the only reason is heavy findings, pre-select the recommended composite in the gate and flag the heavy rows so the user can drop them while the rest still go.
+- **Otherwise** — act. Announce the selection in one line (e.g. `Auto-fixing 4 findings (all-medium, cheap) → /cure`) and dispatch `/cure` immediately (see **Dispatch** below). No gate.
+
+### Selection gate (`--safe`, or a reason to ask)
+
+Use the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md).
+
+1. Render the numbered selection table per `../cure/references/selection.md` directly inline (one row per finding, grouped by severity); mark any sprawling/structural-fix row as *heavy*.
+2. Ask which findings to cure. Lead each option with the verb (what the user wants to *do* next); the underlying selection verb is the backing detail. Lead with the recommended composite, then present the same four severity-floor options below it, in the same most-inclusive-to-least order, so the gate is predictable across every run:
    - **Fix mediums-and-above plus cheap lows** *(recommended)* — equivalent to `all-medium, cheap` (floor at medium — blockers + high + medium — unioned with every `Low` whose `fix-cost-now: contained`). The cheap lows are the small valid nits that are cheaper to fix than to defer; sprawling/structural lows are left out.
    - **Fix everything** — equivalent to `all` (every finding regardless of severity).
    - **Fix medium-severity and above** — equivalent to `all-medium` (floor at medium: blockers + high + medium — the severity-floor portion of the `medium+` auto-floor; add `cheap` to also union the contained-fix lows, i.e. the recommended composite above).
@@ -170,8 +189,11 @@ After the report is on disk, skip any "should I run /cure?" meta-question and go
    - **Pick findings to fix** — accept a free-text reply using the verbs from `../cure/references/selection.md` (`1,3,5`, `all-blocker`, `all-medium`, `all-high`, `cheap`, `all`, `none`, `skip N`; comma-compose to union).
    - **Stop — leave the report for later** — equivalent to `none`.
 
-   Present all four severity options on every run even when a severity band is empty (e.g. no blockers): a floor that resolves to an empty set is a valid, predictable no-op — do not drop or reorder options based on which bands happen to be populated. If the user selects a floor (or the recommended composite) that resolves to an empty set, treat the selection as `none`: report that no findings match and do not dispatch `/cure` with empty `resolved_ids` (the non-empty-selection contract in step 3 still holds).
-3. On a non-empty selection, immediately dispatch `/cure <slug> [--hard]` with the selection locked in via context, not a CLI flag:
+   Present all four severity options on every run even when a severity band is empty (e.g. no blockers): a floor that resolves to an empty set is a valid, predictable no-op — do not drop or reorder options based on which bands happen to be populated. If the user selects a floor (or the recommended composite) that resolves to an empty set, treat the selection as `none`: report that no findings match and do not dispatch `/cure` with empty `resolved_ids` (the non-empty-selection contract in **Dispatch** still holds).
+
+### Dispatch
+
+On a non-empty selection — whether auto-selected by default or chosen at the gate — immediately dispatch `/cure <slug> [--safe] [--open-pr] [--hard]` with the selection locked in via context, not a CLI flag:
 
 ```yaml
 handoff_context:
@@ -181,10 +203,11 @@ handoff_context:
   resolved_ids: [<expanded ids>]
 ```
 
-`/cure` skips its own selection prompt when this context is present, re-confirms the cited ids still exist, then owns the apply / validate / report loop. `/age` never auto-applies fixes. Always emit `resolved_ids` alongside `selection` — expand the verb yourself rather than leaving the field empty; `/cure` re-confirms against the report regardless.
-4. On `none` / `Stop`, exit cleanly with the report path.
+`/cure` skips its own selection prompt when this context is present, re-confirms the cited ids still exist, then owns the apply / validate / push loop. Always emit `resolved_ids` alongside `selection` — expand the verb yourself rather than leaving the field empty; `/cure` re-confirms against the report regardless. Propagate `--safe`, `--open-pr`, and `--hard` to `/cure` when they are in scope.
 
-Outside `--auto`, never auto-apply fixes and never invoke `/cure` without an explicit non-empty selection. The default selection remains empty. `--auto` substitutes a severity-floor selection — see `### Auto mode` below.
+On `none` / `Stop` (only reachable via the gate), exit cleanly with the report path.
+
+`--auto` substitutes a severity-floor selection and its own chain — see `### Auto mode` below.
 
 ### Auto mode
 
@@ -192,7 +215,7 @@ When invoked with `--auto`:
 
 - Skip the handoff gate.
 - If two cure passes have already completed (cap reached), stop and surface the final report — do not invoke `/cure` again even if findings remain.
-- Otherwise, if any finding meets the `medium+` floor (medium-or-above, or a `Low` whose `fix-cost-now: contained`), invoke `/cure <slug> --auto --stake medium+` and increment the cure-pass count when it returns.
+- Otherwise, if any finding meets the `medium+` floor (medium-or-above, or a `Low` whose `fix-cost-now: contained`), invoke `/cure <slug> --auto --stake medium+` (forward `--open-pr` when it is in scope) and increment the cure-pass count when it returns.
 - If no finding meets the `medium+` floor (no medium-or-above and no cheap lows remain), stop the chain with a one-line "auto chain clean" note and the report path.
 
 ### When invoked from /ultracook
@@ -218,8 +241,8 @@ Inline-degrade is forced when the marker is present; there is no opt-out. Spawni
 ## Rules
 
 - Review is not a verdict; explain where to look and why.
-- Do not edit production files.
-- Do not auto-apply fixes. Age owns the *selection* gate (which findings to cure) and dispatches `/cure` only with an explicit non-empty selection; the *application* gate stays inside `/cure`. The only sanctioned bypass of either gate is `--auto`, which `/cure` enforces with a severity floor and `/age` enforces with a two-pass cap.
+- Do not edit production files. Age never *applies* fixes — it owns the *selection* and dispatches `/cure`, which owns application.
+- Default to acting: auto-select the recommended set and dispatch `/cure` without a gate. Ask first only on a genuine reason (a sprawling/structural fix in the set, or conflicting findings) or under `--safe`. An empty recommended set is a clean stop, not a question.
 - Do not invent evidence. Cite files, diffs, commands, or unavailable-source notes.
 - Agree when the diff is fine. Do not manufacture findings to fill a dimension; an empty dimension is a valid outcome.
 - Keep confidence qualitative (`certain | speculating | don't know`); never emit a numeric score.

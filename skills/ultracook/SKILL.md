@@ -22,6 +22,8 @@ Accept one of:
 
 `/ultracook` does not accept fuzzy or open-ended asks — those go to `/mold` first. The orchestrator assumes the contract is already locked.
 
+Optional flag: `--open-pr` — at the terminal, open a *new* PR when none exists (the default only pushes an already-open one). The orchestrator performs the terminal push itself; the phase-only cure sub-agents never push.
+
 ## Flow
 
 1. **Resolve slug** — derive `<slug>` from the input. If a spec path is given, the slug is the basename without `.md`; if a bare slug is given, confirm the spec exists at the durable path the spawned `/cook` resolves (`python3 ${CLAUDE_SKILL_DIR}/scripts/cook.pyz artifact-path specs <slug>`; see `shared/formatting.md` § Corpus location).
@@ -30,9 +32,10 @@ Accept one of:
    - `status:` starts with `halt` → surface the halt reason and stop.
    - `next:` is `done` and the phase is age → stop early with a clean summary (the diff is clean at the medium+ severity floor; cure has nothing to apply).
    - Otherwise → continue to the next phase.
-4. **Final summary** — after the third age spawn (or any earlier stop), print a four-line summary: passes completed, total findings applied / deferred, the final age-report path, and the next-step nudge ("review the diff, then `/gh` when ready").
+4. **Terminal push** — after the third age spawn (or any earlier non-halt stop), if an open PR exists for the branch, dispatch `/gh` to commit + push the chain's changes to it (Rule 11 — the existing PR is the authorization). Open a *new* PR only when `--open-pr` is in scope. A halt never pushes.
+5. **Final summary** — print a four-line summary: passes completed, total findings applied / deferred, the final age-report path, and whether the PR was pushed (or the next-step nudge "review the diff, then `/gh` when ready" if no PR existed and `--open-pr` was absent).
 
-`/ultracook` never invokes `/gh`. PR creation stays user-triggered.
+`/ultracook` opens a *new* PR only with `--open-pr`; otherwise it pushes to an already-open PR at the terminal and never creates one.
 
 ## Phases and slug paths
 
@@ -175,6 +178,6 @@ If the host harness does not expose a sub-agent primitive at all, `/ultracook` i
 - The chain is fixed: cook → press → age → cure → age → cure → age, all `--auto`, cure severity floor `medium+` (the `--stake` flag literal is preserved across callers). Do not invent extra phases or skip phases.
 - Read each phase's handoff slug after the sub-agent returns. Do not infer success from the sub-agent's last line — read the file.
 - Surface halts verbatim. Do not paraphrase, do not soften, do not "retry" a halted phase silently.
-- Never invoke `/gh`. PR creation stays user-triggered.
+- At the terminal, push to an already-open PR via `/gh` (Rule 11); create a *new* PR only with `--open-pr`. Never push on a halt.
 - Never wipe existing handoffs. Stop and tell the user to use `/cheese --continue` or `rm` by hand.
 - Apply the shared voice kernel (lives at `skills/age/references/voice.md` in this repo): lead the final summary with what happened, flag residual risk as `certain | speculating | don't know`, do not manufacture follow-ups.

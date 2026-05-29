@@ -24,6 +24,7 @@ Optional flags:
 
 - `--auto` — autonomous mode. Skip every handoff gate, propagate the flag through `/press → /age → /cure`, and fix every medium-or-above finding plus cheap (contained-fix) lows across up to two cure passes. See `## Auto mode` below.
 - `--hard` — propagate the `/hard-cheese` metacognitive gate flag through `/press → /age → /cure`. Cook does not fire the gate itself; it only passes the flag along. The gate fires at `/cure`'s share-for-review handoff or, under `--auto --hard`, at the end of cure's final auto pass. See `skills/hard-cheese/SKILL.md` and `skills/hard-cheese/references/composition.md`.
+- `--open-pr` — propagate to `/cure` so the chain's terminal cure pass may open a *new* PR when none exists. Without it the chain only pushes to an already-open PR (Rule 11) and otherwise leaves the remote untouched.
 
 ### Standalone fast-path
 
@@ -104,12 +105,12 @@ When invoked with `--auto`, skip this gate entirely and proceed straight into th
 
 ### What auto mode does
 
-1. After cook's package-ready report, invoke `/press <slug> --auto`.
+1. After cook's package-ready report, invoke `/press <slug> --auto` (append `--open-pr` when it is in scope so the terminal cure can open the PR).
 2. `/press --auto` runs its hardening pass and, if readiness is `ready for /age` or `follow-up recommended`, invokes `/age <slug> --auto`. Both states mean the cooked contract is sound and every changed behaviour has a hardening test; documented follow-ups are review-safe. Only `blocked` stops auto — false premise, unfixable level-1/2 gap, a changed behaviour with no stable hardening test, or spinning wheels (three attempts at one gap without green).
 3. `/age <slug> --auto` writes the report and invokes `/cure <slug> --auto --stake medium+`.
 4. `/cure --auto --stake medium+` bypasses the selection gate, applies every finding of `blocker`, `high`, or `medium` severity plus every cheap (contained-fix) `Low`, then invokes `/age --scope <touched-paths> --auto` for verification.
 5. The age → cure cycle is capped at **two cure passes total**. Pass 1 fixes the initial findings. Pass 2 fixes anything the re-age surfaces. After pass 2 the chain stops with a final summary, regardless of whether new findings remain.
-6. Auto mode never invokes `/gh`. Opening or updating a PR stays user-triggered.
+6. `/cook` itself never invokes `/gh`. At the chain's terminal, `/cure`'s push contract takes over: the final cure pass pushes to an already-open PR (Rule 11), and opens a *new* PR only when `--open-pr` is in scope. A fresh branch with no PR and no `--open-pr` ends with the final age report and touches no remote, as before.
 
 ### When auto mode stops early
 
