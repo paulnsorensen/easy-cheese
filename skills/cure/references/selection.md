@@ -46,7 +46,7 @@ all-high      # every blocker- or high-severity item (floor at high; matches --s
 all-medium    # every blocker-, high-, or medium-severity item (floor at medium; compose `all-medium, cheap` to match the --stake medium+ auto-floor, which also sweeps cheap lows)
 cheap         # every finding where fix-cost-now == contained, regardless of severity
 all           # every item (requires explicit type-out, not assumed)
-none          # default; exit cleanly
+none          # explicit opt-out; exit cleanly (the default is the recommended composite — see Hard rules)
 skip N        # drop item N from the change-order
 ```
 

@@ -215,7 +215,7 @@ When invoked with `--auto`:
 
 - Skip the handoff gate.
 - If two cure passes have already completed (cap reached), stop and surface the final report — do not invoke `/cure` again even if findings remain.
-- Otherwise, if any finding meets the `medium+` floor (medium-or-above, or a `Low` whose `fix-cost-now: contained`), invoke `/cure <slug> --auto --stake medium+` and increment the cure-pass count when it returns.
+- Otherwise, if any finding meets the `medium+` floor (medium-or-above, or a `Low` whose `fix-cost-now: contained`), invoke `/cure <slug> --auto --stake medium+` (forward `--open-pr` when it is in scope) and increment the cure-pass count when it returns.
 - If no finding meets the `medium+` floor (no medium-or-above and no cheap lows remain), stop the chain with a one-line "auto chain clean" note and the report path.
 
 ### When invoked from /ultracook

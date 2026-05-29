@@ -112,7 +112,7 @@ Pre-select **Review the diff** when readiness is `ready for /age` or `follow-up 
 When invoked with `--auto` (propagated from `/cook --auto`):
 
 - Skip the handoff gate entirely.
-- If readiness is `ready for /age` or `follow-up recommended`, invoke `/age <slug> --auto` directly. Both states mean the cooked contract is sound and every changed behaviour has a hardening test; follow-ups are documented and review-safe.
+- If readiness is `ready for /age` or `follow-up recommended`, invoke `/age <slug> --auto` directly (forward `--open-pr` when it is in scope). Both states mean the cooked contract is sound and every changed behaviour has a hardening test; follow-ups are documented and review-safe.
 - If readiness is `blocked`, stop the auto chain and surface the press report to the user. `blocked` is reserved for cases where human judgement is genuinely required: a false premise on the cooked contract, an unfixable level-1/2 gap inside cooked scope, a changed behaviour press could not lock with a stable hardening test, or spinning wheels (three attempts at the same gap without green).
 
 ### When invoked from /ultracook
