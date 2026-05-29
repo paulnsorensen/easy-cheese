@@ -25,7 +25,7 @@ _CONVENTIONAL = re.compile(
 )
 _PR_SUFFIX = re.compile(r"\s*\(#(?P<num>\d+)\)\s*$")
 _SOURCE_SHA = re.compile(r"main@(?P<sha>[0-9a-f]{7,40})")
-_SEMVER = re.compile(r"^v(?P<maj>\d+)\.(?P<min>\d+)\.(?P<patch>\d+)")
+_SEMVER = re.compile(r"^v(?P<maj>\d+)\.(?P<min>\d+)\.(?P<patch>\d+)$")
 
 # Conventional type -> section heading, in render order.
 _SECTIONS = [
