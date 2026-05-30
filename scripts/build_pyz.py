@@ -53,7 +53,7 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
         "validate_manifest": "validate_manifest.py",
         "validate_pr_plan": "validate_pr_plan.py",
     },
-    "affinage": {"pr-status": "pr-status.py"},
+    "affinage": {"pr-status": "pr-status.py", "post-reply": "post-reply.py"},
     "mold": {
         "artifact-path": Shared("artifact_path.py"),
         "curd-count": "curd-count.py",
