@@ -214,7 +214,7 @@ gh skill install paulnsorensen/easy-cheese
 Install every current skill in one shot:
 
 ```sh
-for s in age affinage briesearch cheese cheese-factory cheez-read cheez-search cheez-write cook culture cure hard-cheese melt mold pasteurize press ultracook; do
+for s in age affinage briesearch cheese cheese-factory cheez-read cheez-search cheez-write cook culture cure hard-cheese melt mold pasteurize press ultracook wheypoint; do
   gh skill install paulnsorensen/easy-cheese "$s"
 done
 ```
