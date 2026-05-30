@@ -1,6 +1,6 @@
 ---
 name: mold
-description: This skill should be used when the user has a fuzzy idea, half-formed feature, or design direction and wants to converge on a spec — phrases like "let's design X", "I'm thinking about Y", "what should the API for Z look like", "shape this into a spec", "I want to add a feature that…", "/mold". Runs an iterative dialogue (Explore / Ground / Glossary / Shape / Sketch / Grill / Diagnose), grounds every critical claim with cheez-search or briesearch, locks public seams in pseudocode, optionally captures the domain glossary (CONTEXT.md) and architecture decision records, and only writes a spec to `.cheese/specs/<slug>.md` after an explicit approval gate. Use even when the user is "just thinking out loud" if they want the dialogue to leave behind a written artifact — for pure no-write thinking, route to `/culture` instead. After `/culture` (optional); before `/cook`.
+description: This skill should be used when the user has a fuzzy idea, half-formed feature, or design direction and wants to converge on a spec — phrases like "let's design X", "I'm thinking about Y", "what should the API for Z look like", "shape this into a spec", "I want to add a feature that…", "/mold". Runs an iterative dialogue (Explore / Ground / Glossary / Shape / Sketch / Grill / Diagnose), grounds every critical claim with cheez-search or briesearch, locks public seams in pseudocode, optionally captures the domain glossary (CONTEXT.md) and architecture decision records, and only writes a spec to the durable corpus path after an explicit approval gate. Use even when the user is "just thinking out loud" if they want the dialogue to leave behind a written artifact — for pure no-write thinking, route to `/culture` instead. After `/culture` (optional); before `/cook`.
 license: MIT
 ---
 
@@ -71,7 +71,7 @@ Resolve durable artifact locations through the resolver, never hardcode them:
 
 - Spec: `python3 ${CLAUDE_SKILL_DIR}/scripts/mold.pyz artifact-path specs <slug>` (anchored at the per-project durable corpus — see `shared/formatting.md` § Corpus location).
 - Issues: stay repo-local at `.cheese/issues/<slug>-001.md`, `.cheese/issues/<slug>-002.md`, ... — `issues` is a transient phase, not a durable-corpus artifact.
-- Domain docs: repo-local at their literal paths — glossary at `CONTEXT.md` (root or per-context), ADRs at `docs/adr/NNNN-slug.md`. Written at the handshake, lazily, not through the resolver — see `references/domain-docs.md`.
+- Domain docs: repo-local at their literal paths — glossary at `CONTEXT.md` (root or per-context), ADRs at `docs/adr/NNNN-slug.md`. Written at curdle, gated by the handshake, lazily, not through the resolver — see `references/domain-docs.md`.
 
 ## --hard
 

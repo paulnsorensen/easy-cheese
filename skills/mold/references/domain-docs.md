@@ -1,6 +1,6 @@
 # Domain documentation
 
-mold's spec captures *this change*. Domain docs capture *the project's shared language and durable decisions* — knowledge that outlives any one spec. mold accumulates both during the dialogue and writes them at the same two-key handshake that gates the spec.
+mold's spec captures *this change*. Domain docs capture *the project's shared language and durable decisions* — knowledge that outlives any one spec. mold accumulates both during the dialogue and writes them at curdle, gated by the same two-key handshake that gates the spec.
 
 Three artifacts, all optional, all lazy (created only when there is something to write):
 
