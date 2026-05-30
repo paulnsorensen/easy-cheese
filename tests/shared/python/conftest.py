@@ -1,9 +1,9 @@
 """Pytest config for the shared/scripts library, tested from source.
 
 These modules are the shared library. Each is vendored into a per-skill bundle
-only where that skill imports it, so several (findings, severity, handoff, gates,
-paths) are used only by skills not bundled here. The library itself is the unit
-under test, so it is loaded from source rather than from any one skill's bundle.
+only where that skill imports it, so several (severity, paths) are used only by
+skills not bundled here. The library itself is the unit under test, so it is
+loaded from source rather than from any one skill's bundle.
 """
 
 from __future__ import annotations
@@ -37,21 +37,6 @@ def schema() -> ModuleType:
 @pytest.fixture(scope="session")
 def paths() -> ModuleType:
     return importlib.import_module("paths")
-
-
-@pytest.fixture(scope="session")
-def handoff() -> ModuleType:
-    return importlib.import_module("handoff")
-
-
-@pytest.fixture(scope="session")
-def findings() -> ModuleType:
-    return importlib.import_module("findings")
-
-
-@pytest.fixture(scope="session")
-def gates() -> ModuleType:
-    return importlib.import_module("gates")
 
 
 @pytest.fixture(scope="session")
