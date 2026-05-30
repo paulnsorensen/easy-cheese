@@ -101,11 +101,10 @@ def _run_gh(args: list[str], *, allow_fail: bool = False) -> str:
     return result.stdout
 
 
-# `gh pr checks --json` synthesizes the same per-check shape the plain-text
-# fallback reproduces. The plain STATUS column already carries gh's `bucket`
-# label (pass/fail/pending/skipping; `cancel` is printed as `fail`), so the
-# fallback reads bucket directly and derives a `state` for the `conclusion`
-# output value. Keep these inverse to gh's own state -> bucket mapping.
+# Plain `gh pr checks` prints the `bucket` label in its STATUS column
+# (`cancel` renders as `fail`). This vocabulary is stable from pre-`--json` gh
+# (verified at v2.40.0) through current (v2.93.0), so the fallback maps bucket
+# -> state directly. Keep inverse to gh's own state -> bucket mapping.
 _BUCKET_TO_STATE = {
     "pass": "SUCCESS",
     "fail": "FAILURE",
