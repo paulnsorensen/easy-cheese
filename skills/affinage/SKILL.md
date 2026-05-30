@@ -63,13 +63,13 @@ Flags:
    - **At least one finding in a severity section (`Blocker` / `High` / `Medium` / `Low`).** Compute the recommended composite (`all-medium, cheap`). With no reason to ask and no `--safe`: announce the selection in one line, **first run step 9** to post any drafted push-backs / investigating notes (they don't depend on cure's outcome, so they must reach GitHub even if `/cure` later halts), then dispatch `/cure <slug>` with locked `handoff_context:` and post the cure-dependent replies (step 10) when `/cure` returns. On a reason to ask or `--safe`: render the cure-selection table inline using `/cure`'s verbs (`skills/cure/references/selection.md`), pre-select the recommended composite (flagging heavy rows), ask via `shared/handoff-gate.md`, then proceed as above for the chosen selection; on `none` / `Stop`, run step 9 for the drafted replies and exit with the report path. If the recommended set is empty (only heavy/expensive items graded into severity sections), treat it as the reply-only branch below.
    - **No severity-section findings, but `Reviewer-rejected` or `Needs-investigation` has items.** Skip `/cure` dispatch entirely — there is nothing to apply. By default run step 9 to post all drafted replies (push-backs + investigating notes). Under `--safe`, render a small gate first that lets the user pick `post all`, `post pushbacks only`, `skip posting`, or per-finding choices. Exit with `status: ok / next: done`. This mirrors the documented auto-mode "no findings meet the floor" branch (see `### Auto mode`).
    - **Nothing graded into any section.** Exit cleanly with the report path; there is nothing to post or cure.
-9. **Post non-cure replies** (runs whenever grading produced these items, with or without `/cure`). Post via `shared/post-reply.sh`:
+9. **Post non-cure replies** (runs whenever grading produced these items, with or without `/cure`). Post via `python3 ${CLAUDE_SKILL_DIR}/scripts/affinage.pyz post-reply`:
    - **Reviewer-rejected items** → post the pre-drafted push-back text from the affinage report.
    - **Needs-investigation items** → post `"Human investigating — will follow up."`
    - **CI-sourced findings** (`from-check:<job>` tag) and **fresh-review findings** (`from-age:<dimension>` tag) → no reply (no reviewer to notify).
 
    Decoupling this from `/cure` is deliberate: drafted push-backs and investigating notes must reach GitHub even when no severity-section finding exists and `/cure` never runs — otherwise the drafted reply is write-only, useful to the human reading the report but invisible to the reviewer waiting on GitHub.
-10. **Post-cure reply posting** (only when `/cure` ran). When `/cure` returns, read `.cheese/cure/pr-<n>.md`'s `### Applied` / `### Deferred` sections and post per-finding replies via `shared/post-reply.sh`:
+10. **Post-cure reply posting** (only when `/cure` ran). When `/cure` returns, read `.cheese/cure/pr-<n>.md`'s `### Applied` / `### Deferred` sections and post per-finding replies via `python3 ${CLAUDE_SKILL_DIR}/scripts/affinage.pyz post-reply`:
     - **Applied** (with `from-comment:<id>` tag) → `"Fixed — <applied summary>."`
     - **Deferred** (with `from-comment:<id>` tag) → `"Attempted fix reverted — <reason>."`
 
@@ -118,7 +118,7 @@ Code search and reading go through `cheez-*` skills (`/cheez-search`, `/cheez-re
 | --- | --- | --- |
 | PR status (build + merge) | `${CLAUDE_SKILL_DIR}/scripts/affinage.pyz pr-status` | manual `gh pr checks` + `gh pr view` |
 | GitHub fetch | `gh api` | none (skill halts) |
-| Reply posting | `shared/post-reply.sh` | none — direct `gh api` calls bypass the `agent on behalf of;` attribution |
+| Reply posting | `${CLAUDE_SKILL_DIR}/scripts/affinage.pyz post-reply` | none — direct `gh api` calls bypass the `agent on behalf of;` attribution |
 | Diff inspection | `delta` | `git diff --unified=3` |
 
 ## Output
@@ -265,7 +265,7 @@ If no findings meet the floor, skip the `/cure` dispatch, post replies for `Revi
 - Never auto-apply fixes from `/affinage` itself. Code fixes go through `/cure`; merge conflicts go through `/melt`.
 - Fresh `/age` runs only on standalone invocations (no upstream `handoff_context`) and only when `--no-age` is absent. Chained runs never re-review the diff.
 - Merge conflicts are resolved through `/melt`, not by hand. `gh pr checkout` to materialise conflicts is allowed — it neither opens nor updates the PR. Pushing the resolved merge follows `/cure`'s push contract (push to the already-open PR after a clean cure); `--safe` re-gates it.
-- Every posted reply ends with the literal `agent on behalf of;` attribution via `shared/post-reply.sh`. Never call `gh api` directly to post.
+- Every posted reply ends with the literal `agent on behalf of;` attribution via `${CLAUDE_SKILL_DIR}/scripts/affinage.pyz post-reply`. Never call `gh api` directly to post.
 - Idempotent re-runs: skip threads where the latest comment is from the resolved handle. The REST `/comments` endpoint does not expose thread resolution, so honest idempotency relies on the latest-comment-from-self heuristic; switch to GraphQL `reviewThreads` if cross-session resolution-state visibility becomes required.
 - CI-sourced findings get no reply (no reviewer to notify).
 - `/affinage` never invokes `/gh` itself. The PR push happens inside `/cure` after a clean cure (push to the already-open PR by default; `--open-pr` opens a new one; `--safe` re-gates).
@@ -279,5 +279,5 @@ If no findings meet the floor, skip the `/cure` dispatch, post replies for `Revi
 - `skills/cure/references/selection.md` — selection verbs and composition.
 - `skills/melt/SKILL.md` — merge-conflict resolution cascade (mergiraf → rerere → kdiff3).
 - `shared/handoff-gate.md` — gate primitives.
-- `shared/post-reply.sh` — reply posting with `agent on behalf of;` attribution.
+- `${CLAUDE_SKILL_DIR}/scripts/affinage.pyz post-reply` — reply posting with `agent on behalf of;` attribution.
 - `${CLAUDE_SKILL_DIR}/scripts/affinage.pyz pr-status` — PR status fetcher.

@@ -55,3 +55,8 @@ def curd_count() -> ModuleType:
 @pytest.fixture(scope="session")
 def pr_status() -> ModuleType:
     return importlib.import_module("pr_status")
+
+
+@pytest.fixture(scope="session")
+def post_reply() -> ModuleType:
+    return importlib.import_module("post_reply")

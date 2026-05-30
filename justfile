@@ -13,7 +13,6 @@ test:
     python3 -m pytest tests/cheese-factory/python -q
     bats tests/bash/test_install.bats
     bats tests/cheese-factory/bash/test_pr_plan_to_branches.bats
-    bats tests/bash/test_post_reply.bats
 
 # Build self-contained .pyz bundles for shared-consuming skills (CI rebuilds on every push to main)
 bundle:
@@ -26,7 +25,7 @@ release-preview:
 
 # Lint shell scripts
 lint-sh:
-    shellcheck scripts/install.sh shared/post-reply.sh
+    shellcheck scripts/install.sh
 
 # Fix markdown formatting issues
 lint-md-fix:
