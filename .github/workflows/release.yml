@@ -79,8 +79,16 @@ jobs:
         run: |-
           set -euo pipefail
           gh repo edit "$GITHUB_REPOSITORY" --add-topic agent-skills || true
+          # `gh --generate-notes` is useless once the tag is retargeted onto the
+          # orphan release snapshot (no main history to diff). Build notes from
+          # main directly, anchored on GITHUB_SHA — the commit the tag was pushed
+          # to before the retarget.
+          git fetch --tags --force origin
+          python3 scripts/release_notes.py \
+            --tag "$TAG" --to "$GITHUB_SHA" --repo "$GITHUB_REPOSITORY" \
+            > "$RUNNER_TEMP/notes.md"
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release edit "$TAG" --verify-tag
+            gh release edit "$TAG" --verify-tag --notes-file "$RUNNER_TEMP/notes.md"
           else
-            gh release create "$TAG" --verify-tag --generate-notes --title "$TAG"
+            gh release create "$TAG" --verify-tag --notes-file "$RUNNER_TEMP/notes.md" --title "$TAG"
           fi
