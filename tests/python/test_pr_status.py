@@ -170,12 +170,15 @@ def test_missing_gh_exits_two(pr_status, monkeypatch):
 
 
 def test_gh_failure_exits_one(pr_status, monkeypatch):
-    """gh exits non-zero (e.g. PR not found) → exit 1."""
-    monkeypatch.setattr(
-        subprocess,
-        "run",
-        _fake_run([(_matcher(["gh", "pr", "checks"]), "", 1)]),
-    )
+    """Both the --json fast path and the plain fallback failing (e.g. PR not
+    found: non-zero exit, empty stdout, no 'no checks reported' marker) → exit 1."""
+
+    def runner(cmd, **kwargs):
+        # Same gh pr checks invocation for both --json and plain: empty stdout,
+        # non-zero exit, error stderr that is NOT the no-checks marker.
+        return _FakeCompletedProcess(stdout="", returncode=1, stderr="GraphQL: Could not resolve to a PullRequest")
+
+    monkeypatch.setattr(subprocess, "run", runner)
     with pytest.raises(SystemExit) as exc:
         pr_status.fetch_checks(42)
     assert exc.value.code == 1
@@ -290,16 +293,26 @@ def test_multiple_failing_checks_get_independent_summaries(pr_status, monkeypatc
     assert "tests/e2e.py::test_b" not in unit["failed_tests"]
 
 
-def test_malformed_json_from_gh_checks_exits_one(pr_status, monkeypatch):
-    """Non-JSON output from gh pr checks exits 1 (defensive parse)."""
-    monkeypatch.setattr(
-        subprocess,
-        "run",
-        _fake_run([(_matcher(["gh", "pr", "checks"]), "not json at all", 0)]),
-    )
+def test_unparseable_json_falls_back_then_exits_one_if_plain_also_fails(pr_status, monkeypatch):
+    """Unparseable --json output triggers the plain fallback; if the plain path
+    also yields nothing usable (empty stdout, error stderr), exit 1 — both
+    paths must fail before halting."""
+    calls: list[list[str]] = []
+
+    def runner(cmd, **kwargs):
+        calls.append(list(cmd))
+        if "--json" in cmd:
+            # gh emitted garbage instead of JSON on the fast path.
+            return _FakeCompletedProcess(stdout="not json at all", returncode=0)
+        # Plain fallback: genuine error, not a no-checks PR.
+        return _FakeCompletedProcess(stdout="", returncode=1, stderr="API error")
+
+    monkeypatch.setattr(subprocess, "run", runner)
     with pytest.raises(SystemExit) as exc:
         pr_status.fetch_checks(42)
     assert exc.value.code == 1
+    # The fallback was actually attempted (a plain, no-`--json` invocation ran).
+    assert any("--json" not in c for c in calls if c[:3] == ["gh", "pr", "checks"])
 
 
 def test_malformed_json_from_gh_pr_view_falls_back_to_unknown(pr_status, monkeypatch):
@@ -380,16 +393,161 @@ def test_failing_check_with_no_run_id_in_link_yields_empty_summary(pr_status, mo
 
 
 def test_non_list_json_from_gh_checks_exits_one(pr_status, monkeypatch):
-    """Regression for cure #3: valid JSON that isn't a list now exits 1
-    (was silently returning []), so a future schema flip is loud not silent."""
-    monkeypatch.setattr(
-        subprocess,
-        "run",
-        _fake_run([(_matcher(["gh", "pr", "checks"]), '{"error": "unexpected shape"}', 0)]),
-    )
+    """Valid JSON that isn't a list is treated as an unusable fast path and
+    triggers the plain fallback; with the plain path also failing, exit 1 —
+    a schema flip is never silently swallowed into a false 'passing'."""
+
+    def runner(cmd, **kwargs):
+        if "--json" in cmd:
+            return _FakeCompletedProcess(stdout='{"error": "unexpected shape"}', returncode=0)
+        return _FakeCompletedProcess(stdout="", returncode=1, stderr="API error")
+
+    monkeypatch.setattr(subprocess, "run", runner)
     with pytest.raises(SystemExit) as exc:
         pr_status.fetch_checks(42)
     assert exc.value.code == 1
+
+
+def _fallback_runner(plain_stdout: str, plain_rc: int = 0, plain_stderr: str = ""):
+    """A subprocess.run fake where `gh pr checks --json` is rejected (old gh)
+    and the plain `gh pr checks` returns the given output."""
+
+    def runner(cmd, **kwargs):
+        if cmd[:3] == ["gh", "pr", "checks"]:
+            if "--json" in cmd:
+                return _FakeCompletedProcess(
+                    stdout="",
+                    returncode=1,
+                    stderr="unknown flag: --json\n",
+                )
+            return _FakeCompletedProcess(
+                stdout=plain_stdout, returncode=plain_rc, stderr=plain_stderr
+            )
+        if cmd[:3] == ["gh", "pr", "view"]:
+            return _FakeCompletedProcess(
+                stdout=json.dumps({"mergeable": "MERGEABLE", "mergeStateStatus": "CLEAN"})
+            )
+        if cmd[:3] == ["gh", "run", "view"]:
+            return _FakeCompletedProcess(stdout="boom\nProcess completed with exit code 1")
+        raise AssertionError(f"unmocked subprocess call: {cmd}")
+
+    return runner
+
+
+def test_fallback_parses_plain_checks_when_json_unsupported(pr_status, monkeypatch):
+    """gh < 2.49 rejects --json; the plain tab-separated output is parsed and the
+    `bucket` field synthesized from the STATUS column (which already carries gh's
+    bucket label), so classify_status/failing still work without the fast path."""
+    # NAME \t STATUS(bucket) \t ELAPSED \t URL \t DESCRIPTION
+    plain = "\t".join(
+        ["unit-tests", "fail", "1m2s", "https://github.com/o/r/actions/runs/77/job/9", "failed"]
+    )
+    monkeypatch.setattr(subprocess, "run", _fallback_runner(plain, plain_rc=1))
+
+    checks = pr_status.fetch_checks(42)
+    assert checks == [
+        {
+            "name": "unit-tests",
+            "state": "FAILURE",
+            "bucket": "fail",
+            "link": "https://github.com/o/r/actions/runs/77/job/9",
+        }
+    ]
+    # The synthesized shape drives the same downstream classification and enrichment.
+    assert pr_status.classify_status(checks) == "failing"
+
+
+def test_fallback_full_build_output_failing_enriches(pr_status, monkeypatch):
+    """End-to-end: with only the plain path available, a failing check still gets
+    its `failing` flag set and its log fetched/summarized."""
+    plain = "\t".join(
+        ["e2e", "fail", "30s", "https://github.com/o/r/actions/runs/77/job/9", ""]
+    )
+    monkeypatch.setattr(subprocess, "run", _fallback_runner(plain, plain_rc=1))
+
+    output = pr_status.build_output(42)
+    assert output["build"]["status"] == "failing"
+    check = output["build"]["checks"][0]
+    assert check["name"] == "e2e"
+    assert check["conclusion"] == "failure"
+    assert check["failing"] is True
+    assert "Process completed with exit code 1" in check["failure_summary"]
+
+
+def test_fallback_pending_and_pass_buckets(pr_status, monkeypatch):
+    """The plain STATUS column carries pass/pending buckets directly; a pending
+    check classifies the build pending."""
+    plain = "\n".join(
+        [
+            "\t".join(["lint", "pass", "5s", "https://github.com/o/r/actions/runs/1/job/1", ""]),
+            "\t".join(["slow", "pending", "0", "https://github.com/o/r/actions/runs/2/job/2", ""]),
+        ]
+    )
+    monkeypatch.setattr(subprocess, "run", _fallback_runner(plain, plain_rc=8))
+
+    checks = pr_status.fetch_checks(42)
+    assert [c["bucket"] for c in checks] == ["pass", "pending"]
+    assert [c["state"] for c in checks] == ["SUCCESS", "IN_PROGRESS"]
+    assert pr_status.classify_status(checks) == "pending"
+
+
+def test_fallback_no_checks_reported_is_empty_not_error(pr_status, monkeypatch):
+    """gh exits non-zero with empty stdout and a 'no checks reported' message when
+    a PR has no checks — that is a real passing/no-checks answer, not a failure."""
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        _fallback_runner(
+            "", plain_rc=1, plain_stderr="no checks reported on the 'feature' branch\n"
+        ),
+    )
+    assert pr_status.fetch_checks(42) == []
+
+
+def test_json_fast_path_used_when_supported(pr_status, monkeypatch):
+    """When --json works, the plain fallback is never invoked."""
+    plain_called = {"hit": False}
+
+    def runner(cmd, **kwargs):
+        if cmd[:3] == ["gh", "pr", "checks"]:
+            if "--json" in cmd:
+                return _FakeCompletedProcess(
+                    stdout=json.dumps(
+                        [{"name": "ci", "state": "SUCCESS", "bucket": "pass", "link": ""}]
+                    )
+                )
+            plain_called["hit"] = True
+            return _FakeCompletedProcess(stdout="should-not-be-read")
+        raise AssertionError(f"unmocked subprocess call: {cmd}")
+
+    monkeypatch.setattr(subprocess, "run", runner)
+    checks = pr_status.fetch_checks(42)
+    assert checks == [{"name": "ci", "state": "SUCCESS", "bucket": "pass", "link": ""}]
+    assert plain_called["hit"] is False, "plain fallback must not run when --json succeeds"
+
+
+def test_json_fast_path_succeeds_despite_nonzero_exit(pr_status, monkeypatch):
+    """gh exits non-zero (8) when checks are *failing* yet still prints valid JSON;
+    the fast path must accept that output rather than dropping to the fallback."""
+    plain_called = {"hit": False}
+
+    def runner(cmd, **kwargs):
+        if cmd[:3] == ["gh", "pr", "checks"]:
+            if "--json" in cmd:
+                return _FakeCompletedProcess(
+                    stdout=json.dumps(
+                        [{"name": "ci", "state": "FAILURE", "bucket": "fail", "link": ""}]
+                    ),
+                    returncode=8,
+                )
+            plain_called["hit"] = True
+            return _FakeCompletedProcess(stdout="")
+        raise AssertionError(f"unmocked subprocess call: {cmd}")
+
+    monkeypatch.setattr(subprocess, "run", runner)
+    checks = pr_status.fetch_checks(42)
+    assert checks[0]["bucket"] == "fail"
+    assert plain_called["hit"] is False
 
 
 def test_gh_pr_checks_uses_real_schema_fields(pr_status, monkeypatch):

@@ -69,10 +69,10 @@ _FAILED_TEST_PATTERNS = (
 )
 
 
-def _run_gh(args: list[str], *, allow_fail: bool = False) -> str:
-    """Invoke gh and return stdout. Exits the process on failure unless allow_fail."""
+def _gh(args: list[str]) -> subprocess.CompletedProcess[str]:
+    """Run gh, returning the completed process. Exits 2 if gh is not installed."""
     try:
-        result = subprocess.run(
+        return subprocess.run(
             ["gh", *args],
             capture_output=True,
             text=True,
@@ -81,6 +81,11 @@ def _run_gh(args: list[str], *, allow_fail: bool = False) -> str:
     except FileNotFoundError:
         sys.stderr.write("pr-status.py: gh CLI not found in PATH\n")
         sys.exit(2)
+
+
+def _run_gh(args: list[str], *, allow_fail: bool = False) -> str:
+    """Invoke gh and return stdout. Exits the process on failure unless allow_fail."""
+    result = _gh(args)
     if result.returncode != 0:
         if allow_fail:
             sys.stderr.write(
@@ -96,23 +101,83 @@ def _run_gh(args: list[str], *, allow_fail: bool = False) -> str:
     return result.stdout
 
 
+# `gh pr checks --json` synthesizes the same per-check shape the plain-text
+# fallback reproduces. The plain STATUS column already carries gh's `bucket`
+# label (pass/fail/pending/skipping; `cancel` is printed as `fail`), so the
+# fallback reads bucket directly and derives a `state` for the `conclusion`
+# output value. Keep these inverse to gh's own state -> bucket mapping.
+_BUCKET_TO_STATE = {
+    "pass": "SUCCESS",
+    "fail": "FAILURE",
+    "pending": "IN_PROGRESS",
+    "skipping": "SKIPPED",
+}
+
+
 def fetch_checks(pr: int) -> list[dict[str, Any]]:
-    """Return raw check entries from `gh pr checks --json`."""
-    raw = _run_gh(["pr", "checks", str(pr), "--json", "name,state,bucket,link"])
-    if not raw.strip():
+    """Return raw check entries for ``pr``.
+
+    Fast path: `gh pr checks --json name,state,bucket,link` (gh >= 2.49.0).
+    `gh` exits non-zero when checks are *failing* yet still prints valid JSON,
+    so the fast path succeeds on any parseable list regardless of exit code.
+    If `--json` is unsupported (older gh rejects the flag, exit non-zero with
+    no JSON), fall back to parsing the plain tab-separated output. Only exit 1
+    when both paths fail.
+    """
+    json_result = _gh(["pr", "checks", str(pr), "--json", "name,state,bucket,link"])
+    raw = json_result.stdout
+    if raw.strip():
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            data = None
+        if isinstance(data, list):
+            return data
+    elif json_result.returncode == 0:
+        # gh succeeded and reported no checks at all.
         return []
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        sys.stderr.write(f"pr-status.py: could not parse gh pr checks JSON: {exc}\n")
-        sys.exit(1)
-    if not isinstance(data, list):
+
+    return _fetch_checks_plain(pr, json_result)
+
+
+def _fetch_checks_plain(
+    pr: int, json_result: subprocess.CompletedProcess[str]
+) -> list[dict[str, Any]]:
+    """Parse plain `gh pr checks` output when the `--json` fast path is unusable."""
+    plain = _gh(["pr", "checks", str(pr)])
+    text = plain.stdout
+    if not text.strip():
+        # `gh pr checks` exits non-zero with empty stdout in two cases that look
+        # alike: a PR with no checks ("no checks reported on the ... branch")
+        # and a genuine error (PR not found / API failure). Only the former is a
+        # real "passing, no checks" answer; the latter must surface as exit 1.
+        if "no checks reported" in plain.stderr.lower():
+            return []
         sys.stderr.write(
-            f"pr-status.py: gh pr checks returned non-list JSON (got {type(data).__name__}); "
-            "the CLI schema may have changed\n"
+            "pr-status.py: gh pr checks --json failed (exit "
+            f"{json_result.returncode}: {json_result.stderr.strip()}) and the "
+            f"plain fallback also failed (exit {plain.returncode}: "
+            f"{plain.stderr.strip()})\n"
         )
         sys.exit(1)
-    return data
+
+    checks: list[dict[str, Any]] = []
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        cols = line.split("\t")
+        name = cols[0] if cols else ""
+        bucket = (cols[1].lower() if len(cols) > 1 else "")
+        link = next((c for c in cols[2:] if c.startswith("http")), "")
+        checks.append(
+            {
+                "name": name,
+                "state": _BUCKET_TO_STATE.get(bucket, ""),
+                "bucket": bucket,
+                "link": link,
+            }
+        )
+    return checks
 
 
 def fetch_merge_state(pr: int) -> dict[str, str]:
