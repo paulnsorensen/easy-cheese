@@ -19,7 +19,7 @@ Rules:
 - **Each "latest" or "current" claim must include an absolute date** ("latest as of 2026-05-04"), not just "latest".
 - **Versioned claims must include the version** ("Next.js 15.3", not "Next.js latest").
 - **Conflicting evidence is its own row pair**, not silently averaged. Surface disagreement explicitly.
-- **Single-source claims cap at `speculating`** unless the source is authoritative for that claim type (vendor docs for an API; the codebase for a local convention) — only authoritative single sources earn `certain`.
+- **Single-source claims cap at `speculating`** unless the source is authoritative for that claim type (vendor docs for an API; the codebase for a local convention) — only authoritative single sources earn `certain`. A lone Context7 chunk is authoritative *only when its version matches the version in the question*; on a version mismatch (or when the question pins a version the chunk does not state), cap at `speculating` — Context7 IDs can be version-stale (see `routing.md` § Cache library IDs).
 
 The tokens `certain`, `speculating`, and `don't know` are exact label values — write them verbatim, never as synonyms.
 
@@ -39,11 +39,12 @@ Canonical failure to avoid: a Tavily snippet says "hybrid retrieval combines spa
 
 ## Link / citation verification
 
-For deep reports (anything with a `research/<slug>/<slug>.md` artifact in the durable corpus):
+**Short form (always returned) — minimum verification:** before returning any claim, confirm **every URL cited in `## References` resolves** (HTTP 200 or matched-host redirect), except the inline-file and user-supplied URLs exempted below. Mark unreachable footnote definitions `[unverified]` rather than dropping them — the user can re-check. This runs on the always-returned path; it is not deferred to deep reports.
 
-1. Every URL in `## References` resolves (HTTP 200 or matched-host redirect). Mark unreachable footnote definitions `[unverified]` rather than dropping them — the user can re-check.
-2. Every quoted or paraphrased line traces back to its source (one-click verifiable for the user).
-3. Every "as of <date>" claim has a verified fetch date in the same row.
+Deep reports (anything with a `research/<slug>/<slug>.md` artifact in the durable corpus) add, on top of the above:
+
+1. Quote tracing: every quoted or paraphrased line traces back to its source (one-click verifiable for the user).
+2. Every "as of <date>" claim has a verified fetch date in the same row.
 
 Skip verification only for: (a) inline file references (`file:line`), (b) the user's own supplied URLs.
 
@@ -52,13 +53,13 @@ Skip verification only for: (a) inline file references (`file:line`), (b) the us
 | Situation | Overall confidence |
 | --- | --- |
 | Critical routed source unavailable and no equivalent fallback exists | `don't know` |
-| Non-critical routed source unavailable, failed, or skipped | cap at `speculating` |
+| Non-critical routed source unavailable, failed, skipped, or searched-but-empty | cap at `speculating` |
 | 3+ independent sources agree per claim | `certain` |
 | 2 independent sources agree per claim | `speculating` |
 | Sources disagree | `don't know` — and surface the disagreement |
-| Single source per claim | inherit that source's authority, cap at `speculating` unless authoritative |
+| Single source per claim | inherit that source's authority, cap at `speculating` unless authoritative (see lone-Context7 caveat above) |
 
-Criticality depends on the question. Context7 is critical for version-specific API claims, Tavily is critical for freshness-sensitive facts, Codebase is critical for local precedent questions, and GitHub is usually supporting evidence unless the user asked for real-world examples.
+**"Independent" means distinct origin, not distinct URL.** Before counting sources toward the cap, dedup by origin: collapse to one source any that share a root domain, or that quote/paraphrase the same upstream (three blogs reprinting one vendor post are one source, not three). Count only the surviving distinct origins. Criticality depends on the question. Context7 is critical for version-specific API claims, Tavily is critical for freshness-sensitive facts, Codebase is critical for local precedent questions, and GitHub is usually supporting evidence unless the user asked for real-world examples.
 
 ## Output shape
 
@@ -83,6 +84,9 @@ Short form (always returned to the caller):
 
 ### Next step
 <recommended skill or action — limited to which skill should run next (`/mold`, `/cook`, etc.), never which design knob to expose.>
+
+### Searched, empty
+<one line per routed source that ran and returned nothing usable, naming the query/filters that came up dry (e.g. "Tavily `basic`, time_range=month, \"<query>\" → 0 results above score 0.5"). This is the provenance for any `don't know` or lowered cap — proof the search ran. Omit the section only when no routed source came back empty.>
 
 ## References
 [^source-1]: <absolute URL or `.cheese/...` path> (fetched <YYYY-MM-DD>).
