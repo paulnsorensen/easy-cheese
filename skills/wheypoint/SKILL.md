@@ -29,7 +29,7 @@ Prepend the standard resumable slug to the top of the file so `/cheese --continu
 
 ```markdown
 status: ok | halt: <one-line reason>
-next: mold | cook | press | age | cure | done
+next: mold | cook | press | age | cure | affinage | done
 artifact: <path-to-richer-report-if-any, else none>
 <one-line orientation: where the session is and what is mid-flight>
 ```
@@ -61,7 +61,7 @@ Pick the next move from where the session actually is, name it as an easy-cheese
 | Code written, not yet hardened or reviewed | `/press <slug>` then `/age` | `press` |
 | Implementation done, review wanted now | `/age <ref>` | `age` |
 | Review findings in hand, fixes not applied | `/cure <slug>` | `cure` |
-| PR has review comments or failing CI | `/affinage <pr>` | `cure` |
+| PR has review comments or failing CI | `/affinage <pr>` | `affinage` |
 | Hard bug still un-diagnosed | `/pasteurize <input>` | `cook` |
 | Work genuinely finished | record only, no baton | `done` |
 
