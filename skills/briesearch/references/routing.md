@@ -148,3 +148,5 @@ SOURCE PRIORITY: vendor docs > release notes > repo precedent
 ## Hard rule
 
 If a source was committed in routing, spawn it. If it returns "unavailable", report that — do not silently drop a routed source because it later seems low-value.
+
+Make this mechanical, not honor-system. After gather, diff the emitted `ROUTING DECISION` against what actually ran: for each source marked `YES`, confirm a call executed and produced evidence, an `unavailable` result, or an empty result. Any committed source with no corresponding execution is **committed-but-skipped** — mark it explicitly in the report (a `Searched, empty` line if it ran dry, an UNAVAILABLE note per `unavailable.md` if it failed, or a flagged gap if it was simply not run) and apply the matching confidence cap from `synthesis.md`. A `YES` in the routing block with nothing to show for it is a reconciliation failure, not a silent drop.

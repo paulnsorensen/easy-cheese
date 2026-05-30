@@ -40,8 +40,8 @@ Skip it for triage searches (snippets only, ≤10 results) and single-URL extrac
    └── <slug>.md                 # the human-readable report
    ```
 
-5. **Filter inside the sub-agent.** Score threshold, paragraph keyword match, regex on body — whatever the question demands. Build the claim-level rows from `synthesis.md`.
-6. **Return only the synthesis.** The sub-agent's reply to the parent contains: the short-form output (claim table + confidence + path), nothing else. Raw bodies stay on disk for re-extraction in later turns.
+5. **Filter inside the sub-agent.** Score threshold, paragraph keyword match, regex on body — whatever the question demands. Build the claim-level rows from `synthesis.md`. **Bind the Freshness column to `manifest.json`, not free text:** each row's Freshness is the `fetch_date` of the raw file the claim cites (or `"live"` for an unstored live check), so the column can't drift from what was actually fetched.
+6. **Return the synthesis with auditable pointers.** The sub-agent's reply to the parent contains: the short-form output (claim table + confidence + path), nothing else. **Every claim row's Evidence cell must cite an on-disk raw pointer** — `raw/NN-<host>.md#Lstart-end` — so the parent (or a later turn) can spot-check the claim→evidence binding without re-fetching. A row whose evidence is not traceable to a stored raw body does not ship. Raw bodies stay on disk for re-extraction in later turns.
 
 ## Re-extraction in later turns
 
