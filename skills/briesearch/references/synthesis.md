@@ -39,7 +39,7 @@ Canonical failure to avoid: a Tavily snippet says "hybrid retrieval combines spa
 
 ## Link / citation verification
 
-**Short form (always returned) — minimum verification:** before returning any claim, confirm **every URL cited in `## References` resolves** (HTTP 200 or matched-host redirect). Mark unreachable footnote definitions `[unverified]` rather than dropping them — the user can re-check. This runs on the always-returned path; it is not deferred to deep reports.
+**Short form (always returned) — minimum verification:** before returning any claim, confirm **every URL cited in `## References` resolves** (HTTP 200 or matched-host redirect), except the inline-file and user-supplied URLs exempted below. Mark unreachable footnote definitions `[unverified]` rather than dropping them — the user can re-check. This runs on the always-returned path; it is not deferred to deep reports.
 
 Deep reports (anything with a `research/<slug>/<slug>.md` artifact in the durable corpus) add, on top of the above:
 
@@ -53,7 +53,7 @@ Skip verification only for: (a) inline file references (`file:line`), (b) the us
 | Situation | Overall confidence |
 | --- | --- |
 | Critical routed source unavailable and no equivalent fallback exists | `don't know` |
-| Non-critical routed source unavailable, failed, or skipped | cap at `speculating` |
+| Non-critical routed source unavailable, failed, skipped, or searched-but-empty | cap at `speculating` |
 | 3+ independent sources agree per claim | `certain` |
 | 2 independent sources agree per claim | `speculating` |
 | Sources disagree | `don't know` — and surface the disagreement |
