@@ -30,11 +30,11 @@ Prepend the standard resumable slug to the top of the file so `/cheese --continu
 ```markdown
 status: ok | halt: <one-line reason>
 next: mold | cook | press | age | cure | affinage | done
-artifact: <path-to-richer-report-if-any, else none>
+artifact: <path-to-richer-report, or PR ref (PR#<n> / URL) when next: affinage, else none>
 <one-line orientation: where the session is and what is mid-flight>
 ```
 
-`next:` names the skill the cold reader should run, which is the machine-readable form of the suggested-skills section below. Use `done` only when the work is genuinely finished and the handoff is a record, not a baton. `/cheese --continue <slug>` scans `.cheese/notes/<slug>.md` and dispatches `next:` directly.
+`next:` names the skill the cold reader should run, which is the machine-readable form of the suggested-skills section below. Use `done` only when the work is genuinely finished and the handoff is a record, not a baton. `/cheese --continue <slug>` scans `.cheese/notes/<slug>.md` and dispatches `next:` directly. When `next: affinage`, record the PR reference (`PR#<n>` or its URL) in `artifact:` so the resume dispatches `/affinage <pr>` explicitly rather than relying on branch auto-detection.
 
 ## Document
 
