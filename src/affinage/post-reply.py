@@ -135,9 +135,9 @@ def post_issue_comment(pr: str, full_body: str) -> None:
     _post(f"repos/{repo}/issues/{pr}/comments", full_body)
 
 
-def _parse_args(argv: list[str]) -> tuple[str, str, str, str]:
-    """Parse argv into (mode, pr, comment_id, body). Raises SystemExit with the
-    bash-compatible exit codes and messages on any validation failure."""
+def _scan_flags(argv: list[str]) -> tuple[str, str, str, str]:
+    """Scan argv into (mode, pr, comment_id, body) without post-parse validation.
+    Raises SystemExit on mode conflicts or unknown flags."""
     mode = ""
     pr = ""
     comment_id = ""
@@ -174,6 +174,12 @@ def _parse_args(argv: list[str]) -> tuple[str, str, str, str]:
         else:
             raise _die(f"unknown argument: {arg}")
 
+    return mode, pr, comment_id, body
+
+
+def _validate(mode: str, pr: str, comment_id: str, body: str) -> None:
+    """Enforce the cross-flag rules. Raises SystemExit with the bash-compatible
+    exit codes (2 for usage, 1 for operational) on any violation."""
     if not mode:
         raise _usage_error()
     if not pr:
@@ -185,6 +191,12 @@ def _parse_args(argv: list[str]) -> tuple[str, str, str, str]:
     if mode == "issue" and comment_id:
         raise _die("--comment-id is not valid for --issue mode")
 
+
+def _parse_args(argv: list[str]) -> tuple[str, str, str, str]:
+    """Parse argv into (mode, pr, comment_id, body) via scan + validate. Raises
+    SystemExit with the bash-compatible exit codes on any validation failure."""
+    mode, pr, comment_id, body = _scan_flags(argv)
+    _validate(mode, pr, comment_id, body)
     return mode, pr, comment_id, body
 
 
