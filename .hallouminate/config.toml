@@ -1,0 +1,14 @@
+# Repo-layer hallouminate config.
+#
+# Declares this repo as a hallouminate tenant so the wiki under
+# .hallouminate/wiki/ is searchable as the `repo:easy-cheese:wiki` corpus.
+# `path = "."` resolves against the repo root (the parent of .hallouminate/),
+# so this works from any checkout or worktree without per-machine config —
+# the daemon reads the repo layer fresh on every request (no restart needed).
+#
+# Do NOT also declare `[[repository]] name = "easy-cheese"` in the XDG
+# baseline: both layers would derive `repo:easy-cheese:wiki` and collide on
+# the duplicate-name check.
+[[repository]]
+name = "easy-cheese"
+path = "."
