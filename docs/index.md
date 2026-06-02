@@ -28,11 +28,11 @@ npx skills@latest add paulnsorensen/easy-cheese
 ```
 
 Pick the skills and agents you want in the installer, then start with
-`/cheese` if you want routing help. The default `skills.sh` install is
-project-local; see [Install](install.md) for Codex user-wide install flags,
-every install path, MCP server setup, and CLI tool setup. macOS users who also
-want the surrounding ecosystem (CLI tools + MCP servers) in one shot can use
-the optional bootstrap script.
+`/cheese` if you want routing help. The skills CLI supports project-local and
+user-wide installs; see [Install](install.md) for global install flags, Codex
+examples, every install path, MCP server setup, and CLI tool setup. macOS users
+who also want the surrounding ecosystem (CLI tools + MCP servers) in one shot
+can use the optional bootstrap script.
 
 ## Skills
 

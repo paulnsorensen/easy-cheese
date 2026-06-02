@@ -200,9 +200,10 @@ Install all currently published skills in this repo's manifest without prompts:
 npx skills@latest add paulnsorensen/easy-cheese --skill "*" -y
 ```
 
-Without `--global`, `skills.sh` uses project-level scope. With `-y`, it
-auto-detects project scope when run inside a project. Run those commands from
-the repo where you want easy-cheese recorded under `.agents/skills/`.
+Without `--global`, the skills CLI uses project-level scope. Run those
+commands from the repo where you want easy-cheese recorded under
+`.agents/skills/`. The `-y` flag only skips confirmation prompts; it does not
+make a project install global.
 
 For a user-wide Codex install that is available across repos, pass the Codex
 agent and global scope explicitly:
