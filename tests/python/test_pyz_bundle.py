@@ -380,31 +380,46 @@ def test_ground_check_flags_short_row_as_malformed(bundles: Path, tmp_path: Path
     assert "MALFORMED" in result.stderr
 
 
+def test_bundle_build_is_byte_deterministic(tmp_path: Path) -> None:
+    """The PR freshness check compares raw .pyz bytes after rebuilding, so two
+    builds of identical source must produce byte-identical archives."""
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    for out in (first, second):
+        result = subprocess.run(
+            [sys.executable, str(BUILD), "--out-dir", str(out)],
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stderr
+
+    for skill in SKILL_SUBCOMMANDS:
+        assert (first / f"{skill}.pyz").read_bytes() == (second / f"{skill}.pyz").read_bytes()
+
+
 def _bundle_content(pyz: Path) -> dict[str, bytes]:
-    """Map each zip entry name to its bytes — content only, ignoring the archive's
-    timestamps and metadata so two builds of identical source compare equal."""
     with zipfile.ZipFile(pyz) as archive:
         return {name: archive.read(name) for name in archive.namelist()}
 
 
 @pytest.mark.parametrize("skill", list(SKILL_SUBCOMMANDS))
 def test_committed_bundle_matches_source(bundles: Path, skill: str) -> None:
-    """Every committed skills/<skill>/scripts/<skill>.pyz must equal a fresh build of
-    the current source. The other bundle tests build into a tmp dir and exercise
-    *that*, so a stale committed artifact — source edited but the bundle not rebuilt,
-    as in #103 shipping an outdated affinage.pyz — is otherwise invisible to the
-    suite. Compares entry contents, not raw zip bytes, so timestamp churn between the
-    commit-time build and this build does not trip it."""
+    """Every committed skills/<skill>/scripts/<skill>.pyz must byte-match a fresh
+    build of the current source, because CI gates PRs with the same rebuild+diff."""
     committed = REPO_ROOT / "skills" / skill / "scripts" / f"{skill}.pyz"
+    fresh = bundles / f"{skill}.pyz"
     assert committed.exists(), f"committed bundle missing: {committed}"
-    fresh = _bundle_content(bundles / f"{skill}.pyz")
+    if committed.read_bytes() == fresh.read_bytes():
+        return
+
     have = _bundle_content(committed)
-    if have != fresh:
-        added = sorted(set(fresh) - set(have))
-        removed = sorted(set(have) - set(fresh))
-        changed = sorted(n for n in set(have) & set(fresh) if have[n] != fresh[n])
-        raise AssertionError(
-            f"committed {skill}.pyz is stale vs its source "
-            f"(changed={changed}, added={added}, removed={removed}). "
-            f"Rebuild and commit it: python3 scripts/build_pyz.py"
-        )
+    want = _bundle_content(fresh)
+    added = sorted(set(want) - set(have))
+    removed = sorted(set(have) - set(want))
+    changed = sorted(n for n in set(have) & set(want) if have[n] != want[n])
+    raise AssertionError(
+        f"committed {skill}.pyz is stale or not byte-reproducible vs its source "
+        f"(changed={changed}, added={added}, removed={removed}). "
+        f"Rebuild and commit it: python3 scripts/build_pyz.py"
+    )

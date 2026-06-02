@@ -17,7 +17,7 @@ import ast
 import shutil
 import sys
 import tempfile
-import zipapp
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -25,6 +25,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = REPO_ROOT / "src"
 SHARED_SCRIPTS = REPO_ROOT / "shared" / "scripts"
 SHARED_MODULES = {p.stem for p in SHARED_SCRIPTS.glob("*.py")}
+ZIP_TIMESTAMP = (1980, 1, 2, 0, 0, 0)
 
 
 @dataclass(frozen=True)
@@ -126,6 +127,18 @@ def _dispatcher_source(sub_to_module: dict[str, str]) -> str:
     )
 
 
+def _write_zipapp(source: Path, target: Path) -> None:
+    with target.open("wb") as pyz:
+        pyz.write(b"#!/usr/bin/env python3\n")
+        with zipfile.ZipFile(pyz, "w", compression=zipfile.ZIP_STORED) as archive:
+            for staged_file in sorted(source.iterdir(), key=lambda p: p.name):
+                info = zipfile.ZipInfo(staged_file.name, date_time=ZIP_TIMESTAMP)
+                info.create_system = 3
+                info.external_attr = 0o644 << 16
+                archive.writestr(info, staged_file.read_bytes())
+    target.chmod(0o755)
+
+
 def build_bundle(skill: str, target: Path) -> Path:
     """Build ``skill``'s bundle at ``target`` (a .pyz path). Returns it."""
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -133,12 +146,12 @@ def build_bundle(skill: str, target: Path) -> Path:
     sub_to_module = {sub: _module_name(_filename(src)) for sub, src in files.items()}
     with tempfile.TemporaryDirectory() as td:
         stage = Path(td)
-        for module in needed_shared(skill):
+        for module in sorted(needed_shared(skill)):
             shutil.copy(SHARED_SCRIPTS / f"{module}.py", stage / f"{module}.py")
         for source in files.values():
             shutil.copy(_source_path(skill, source), stage / f"{_module_name(_filename(source))}.py")
-        (stage / "__main__.py").write_text(_dispatcher_source(sub_to_module))
-        zipapp.create_archive(stage, target=target, interpreter="/usr/bin/env python3")
+        (stage / "__main__.py").write_text(_dispatcher_source(sub_to_module), encoding="utf-8")
+        _write_zipapp(stage, target)
     return target
 
 
