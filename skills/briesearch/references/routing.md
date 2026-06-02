@@ -98,6 +98,7 @@ The Tavily MCP exposes 5 tools at increasing cost and precision. Pick the lowest
 
 - **Search-then-Extract** (default two-step): `tavily_search` for discovery → drop results with `score ≤ 0.5` → `tavily_extract(urls=[…], query=<focused question>)` on the survivors. Cheaper and lower-noise than `include_raw_content=true` on search.
 - **Map-then-Extract** (large docs sites): `tavily_map(url=…, select_paths=[…])` to find the 1-3 right URLs without paying for content → `tavily_extract` only those. Cheaper than `tavily_crawl` when you don't need every page.
+- **Verify-then-cite** (link verification): to confirm a URL loads *and* actually covers the claimed topic, use `tavily_extract(urls=[…], query=<the claim>)` — its LLM-optimized clean content makes the "does this page cover X" judgment sharper and cheaper than raw HTML. This is the preferred verification/extraction primitive. WebFetch is the fallback, not the default — reach for it only when the Tavily MCP is unavailable (see `unavailable.md`).
 
 ### When to use `tavily_research`
 

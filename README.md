@@ -194,6 +194,12 @@ Install with the [skills.sh](https://skills.sh) installer:
 npx skills@latest add paulnsorensen/easy-cheese
 ```
 
+Install all currently published skills in this repo's manifest without prompts:
+
+```sh
+npx skills@latest add paulnsorensen/easy-cheese --skill "*" -y
+```
+
 The installer reads this repo's published skill manifest, lets you pick the
 skills you want, and installs them into the coding agents you select.
 
