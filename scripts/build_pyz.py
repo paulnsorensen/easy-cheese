@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import os
 import shutil
 import sys
 import tempfile
@@ -25,6 +26,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = REPO_ROOT / "src"
 SHARED_SCRIPTS = REPO_ROOT / "shared" / "scripts"
 SHARED_MODULES = {p.stem for p in SHARED_SCRIPTS.glob("*.py")}
+ZIP_EPOCH = 315619200  # 1980-01-02 UTC, safely inside zip's date range.
 
 
 @dataclass(frozen=True)
@@ -133,11 +135,14 @@ def build_bundle(skill: str, target: Path) -> Path:
     sub_to_module = {sub: _module_name(_filename(src)) for sub, src in files.items()}
     with tempfile.TemporaryDirectory() as td:
         stage = Path(td)
-        for module in needed_shared(skill):
+        for module in sorted(needed_shared(skill)):
             shutil.copy(SHARED_SCRIPTS / f"{module}.py", stage / f"{module}.py")
         for source in files.values():
             shutil.copy(_source_path(skill, source), stage / f"{_module_name(_filename(source))}.py")
         (stage / "__main__.py").write_text(_dispatcher_source(sub_to_module))
+        for staged_file in stage.iterdir():
+            os.utime(staged_file, (ZIP_EPOCH, ZIP_EPOCH))
+            staged_file.chmod(0o644)
         zipapp.create_archive(stage, target=target, interpreter="/usr/bin/env python3")
     return target
 

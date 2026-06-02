@@ -37,8 +37,8 @@ from pathlib import Path
 CONFIDENCE_LABELS = {"certain", "speculating", "don't know"}
 
 # A verifiable citation marker: footnote ref, URL, inline path:line, or a
-# durable-corpus / raw-capture path. Naming a source in prose ("the X docs") is
-# not a citation — it cannot be re-checked.
+# durable-corpus / raw-capture path. A prose source name can describe evidence,
+# but it cannot be re-checked by the gate.
 _CITATION = re.compile(
     r"\[\^[^\]]+\]"  # footnote marker [^source-1]
     r"|https?://\S+"  # URL

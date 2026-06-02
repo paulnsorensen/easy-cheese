@@ -1,22 +1,29 @@
 name: build-pyz
 
-# Keep the per-skill .pyz bundles on main in sync with their sources so anyone
-# pinning `gh skill install` to a main commit (e.g. via EC_SKILL_REF, or any
-# between-release smoke test) gets a working skill — not a SKILL.md invoking a
-# bundle the gitignore filtered out. Releases still go through release.yml.
+# Verify that per-skill .pyz bundles match their sources. Releases still go
+# through release.yml; this PR check prevents source changes from landing without
+# their generated bundles.
 
 on:
-  push:
-    branches: [main]
-    # Bundles depend only on skill sources, shared scripts, and the build
-    # script itself — doc/workflow/.gitignore-only pushes skip the rebuild.
+  pull_request:
     paths:
+      - '.github/workflows/build-pyz.yml'
       - 'src/**'
       - 'shared/scripts/**'
       - 'scripts/build_pyz.py'
+      - 'skills/*/scripts/*.pyz'
+  push:
+    branches: [main]
+    # Keep the check on main too so stale bundles are visible after merges.
+    paths:
+      - '.github/workflows/build-pyz.yml'
+      - 'src/**'
+      - 'shared/scripts/**'
+      - 'scripts/build_pyz.py'
+      - 'skills/*/scripts/*.pyz'
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -24,7 +31,7 @@ concurrency:
 
 jobs:
   build:
-    name: build .pyz bundles
+    name: check .pyz bundles are current
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -40,29 +47,15 @@ jobs:
       - name: Build bundles
         run: python3 scripts/build_pyz.py
 
-      # GITHUB_TOKEN-driven pushes do not retrigger workflows, so this will not
-      # loop on its own commits. Stage first so newly-built bundles for a
-      # freshly-added skill (still untracked) are caught by the index-vs-HEAD
-      # diff — a plain `git diff` on the working tree would skip them.
-      - name: Commit and push if changed
+      - name: Check bundles are current
         run: |-
           set -euo pipefail
           git add -- 'skills/*/scripts/*.pyz'
           if git diff --cached --quiet; then
-            echo "No bundle changes to commit."
+            echo ".pyz bundles are current."
             exit 0
           fi
-          git config user.email "actions@github.com"
-          git config user.name "github-actions[bot]"
-          git commit -m "chore(build): rebuild .pyz bundles for ${GITHUB_SHA}"
-          # main may have advanced since checkout (a concurrent push slipped
-          # in); rebase before push and retry once if we lose the race again.
-          for attempt in 1 2; do
-            git fetch origin main
-            git rebase origin/main
-            if git push origin HEAD:main; then
-              exit 0
-            fi
-          done
-          echo "Failed to push after rebase retry" >&2
+          echo "::error::.pyz bundles are stale; run 'python3 scripts/build_pyz.py' and commit the generated skills/*/scripts/*.pyz files."
+          git diff --cached --name-only -- 'skills/*/scripts/*.pyz'
+          git diff --cached --stat -- 'skills/*/scripts/*.pyz'
           exit 1
