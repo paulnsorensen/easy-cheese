@@ -7,7 +7,7 @@ Optional MCP servers (Context7, Tavily, code-review-graph, tilth) are not always
 | Source | If MCP missing | Confidence impact |
 | --- | --- | --- |
 | Context7 | Read repo docs, package README, vendor pages, then web search | Cap at `speculating` for version-specific questions |
-| Tavily | Host web search or user-provided links | Cap at `speculating` when freshness matters |
+| Tavily | WebFetch (host fetch) for verify/extract; host web search or user-provided links for discovery | Cap at `speculating` when freshness matters |
 | Codebase (`cheez-*`) | Fall back to Serena or LSP, `sg`, `ripgrep`, `find`, and targeted reads | Cap at `speculating` when local precedent is central |
 | code-review-graph (full tool list in [README → Optional tools](../../../README.md#optional-tools)) | Use `tilth_deps` + `cheez-search` callers (`tilth_search kind: "callers"`) for blast radius; skip cross-repo, semantic search, and architecture framing | Cap at `speculating` for cross-repo or large-architecture questions |
 | GitHub (`gh`) | Note absence; user-supplied URLs are acceptable | Skip with a confidence note |
@@ -17,7 +17,7 @@ Optional MCP servers (Context7, Tavily, code-review-graph, tilth) are not always
 Once per session, after the routing block:
 
 ```text
-UNAVAILABLE: Tavily MCP not loaded. Falling back to host web search.
+UNAVAILABLE: Tavily MCP not loaded. Falling back to WebFetch for link verification and host web search for discovery.
 Freshness-sensitive answers will be capped at `speculating`.
 ```
 
