@@ -14,11 +14,10 @@ from __future__ import annotations
 
 import argparse
 import ast
-import os
 import shutil
 import sys
 import tempfile
-import zipapp
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -26,7 +25,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = REPO_ROOT / "src"
 SHARED_SCRIPTS = REPO_ROOT / "shared" / "scripts"
 SHARED_MODULES = {p.stem for p in SHARED_SCRIPTS.glob("*.py")}
-ZIP_EPOCH = 315619200  # 1980-01-02 UTC, safely inside zip's date range.
+ZIP_TIMESTAMP = (1980, 1, 2, 0, 0, 0)
 
 
 @dataclass(frozen=True)
@@ -128,6 +127,18 @@ def _dispatcher_source(sub_to_module: dict[str, str]) -> str:
     )
 
 
+def _write_zipapp(source: Path, target: Path) -> None:
+    with target.open("wb") as pyz:
+        pyz.write(b"#!/usr/bin/env python3\n")
+        with zipfile.ZipFile(pyz, "w", compression=zipfile.ZIP_STORED) as archive:
+            for staged_file in sorted(source.iterdir(), key=lambda p: p.name):
+                info = zipfile.ZipInfo(staged_file.name, date_time=ZIP_TIMESTAMP)
+                info.create_system = 3
+                info.external_attr = 0o644 << 16
+                archive.writestr(info, staged_file.read_bytes())
+    target.chmod(0o755)
+
+
 def build_bundle(skill: str, target: Path) -> Path:
     """Build ``skill``'s bundle at ``target`` (a .pyz path). Returns it."""
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -139,11 +150,8 @@ def build_bundle(skill: str, target: Path) -> Path:
             shutil.copy(SHARED_SCRIPTS / f"{module}.py", stage / f"{module}.py")
         for source in files.values():
             shutil.copy(_source_path(skill, source), stage / f"{_module_name(_filename(source))}.py")
-        (stage / "__main__.py").write_text(_dispatcher_source(sub_to_module))
-        for staged_file in stage.iterdir():
-            os.utime(staged_file, (ZIP_EPOCH, ZIP_EPOCH))
-            staged_file.chmod(0o644)
-        zipapp.create_archive(stage, target=target, interpreter="/usr/bin/env python3")
+        (stage / "__main__.py").write_text(_dispatcher_source(sub_to_module), encoding="utf-8")
+        _write_zipapp(stage, target)
     return target
 
 
