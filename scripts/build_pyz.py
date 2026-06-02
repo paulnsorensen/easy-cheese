@@ -58,7 +58,10 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
         "artifact-path": Shared("artifact_path.py"),
         "curd-count": "curd-count.py",
     },
-    "briesearch": {"artifact-path": Shared("artifact_path.py")},
+    "briesearch": {
+        "artifact-path": Shared("artifact_path.py"),
+        "ground-check": "ground_check.py",
+    },
     "cook": {"artifact-path": Shared("artifact_path.py")},
 }
 

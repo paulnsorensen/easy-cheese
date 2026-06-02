@@ -36,7 +36,7 @@ SKILL_SUBCOMMANDS = {
     ],
     "affinage": ["pr-status"],
     "mold": ["artifact-path", "curd-count"],
-    "briesearch": ["artifact-path"],
+    "briesearch": ["artifact-path", "ground-check"],
     "cook": ["artifact-path"],
 }
 
@@ -197,3 +197,149 @@ def test_artifact_path_rejects_unknown_phase(bundles: Path) -> None:
     result = _run(bundles / "mold.pyz", "artifact-path", "nonsense", "demo-slug", extra_env=_CORPUS_ENV)
     assert result.returncode == 1
     assert "unknown phase" in result.stderr
+
+
+# briesearch ground-check: the mechanical grounding gate behind issue #113. The
+# original failure was a synthesis that concluded "Codex has no static config
+# permission surface" with no citation, contradicting a fact its own raw notes
+# recorded. These pin that an un-grounded claim can no longer pass silently.
+_GROUNDED_REPORT = """## Research: q
+
+### Evidence
+
+| Claim | Evidence | Source type | Freshness | Confidence | Caveat |
+| --- | --- | --- | --- | --- | --- |
+| Codex exposes a granular approval_policy permission surface | ref.md:25 | vendor docs | 2026-06-01 | certain | |
+| No broader sandbox knob was found in the config reference searched | [^s1] | vendor docs | 2026-06-01 | speculating | only config.toml checked |
+
+## References
+[^s1]: https://example.com/codex (fetched 2026-06-01).
+"""
+
+
+def _write(tmp_path: Path, body: str) -> Path:
+    report = tmp_path / "report.md"
+    report.write_text(body)
+    return report
+
+
+def test_ground_check_fails_uncited_claim(bundles: Path, tmp_path: Path) -> None:
+    """The exact #113 failure: an absence claim with no citation. Ask 1 says every
+    claim must carry a verifiable citation — this must be a hard, non-zero exit so
+    the un-grounded claim cannot survive into the artifact."""
+    body = _GROUNDED_REPORT.replace("ref.md:25", "(synthesized from the docs)")
+    report = _write(tmp_path, body)
+    result = _run(bundles / "briesearch.pyz", "ground-check", str(report))
+    assert result.returncode == 1, result.stderr
+    assert "CITATION" in result.stderr
+    assert "granular approval_policy" in result.stderr
+
+
+def test_ground_check_passes_grounded_report(bundles: Path, tmp_path: Path) -> None:
+    """A fully-cited report whose only absence claim is hedged (speculating +
+    'searched') is clean — the gate enforces grounding, it does not forbid
+    well-grounded negatives."""
+    result = _run(bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, _GROUNDED_REPORT)))
+    assert result.returncode == 0, result.stderr
+    assert "grounding ok" in result.stderr
+
+
+def test_ground_check_rejects_nonlabel_confidence(bundles: Path, tmp_path: Path) -> None:
+    """Confidence must be one of the three exact labels. A synonym like 'high' is a
+    silent confidence drift the cap rules can't reason about — fail it."""
+    body = _GROUNDED_REPORT.replace("| certain |", "| high |")
+    result = _run(bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body)))
+    assert result.returncode == 1, result.stderr
+    assert "CONFIDENCE" in result.stderr
+
+
+def test_ground_check_absence_advisory_does_not_fail(bundles: Path, tmp_path: Path) -> None:
+    """A cited, certain absence claim with no ruling-out phrase is surfaced as an
+    ADVISORY (feeds the synthesis-fidelity self-check) but does NOT fail the gate:
+    observed-vs-inferred absence is not decidable from text, so it is flagged for
+    judgement, not auto-rejected. Pins that the advisory stays soft."""
+    body = _GROUNDED_REPORT.replace(
+        "| No broader sandbox knob was found in the config reference searched | [^s1] | vendor docs | 2026-06-01 | speculating | only config.toml checked |",
+        "| Codex does not expose a global sandbox knob | [^s1] | vendor docs | 2026-06-01 | certain | |",
+    )
+    result = _run(bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body)))
+    assert result.returncode == 0, result.stderr
+    assert "ADVISORY" in result.stderr
+    assert "ABSENCE" in result.stderr
+
+
+def test_ground_check_no_table_is_error(bundles: Path, tmp_path: Path) -> None:
+    """A synthesis with prose claims but no evidence table grounds nothing — that is
+    itself a grounding failure, not a pass-by-default."""
+    report = _write(tmp_path, "## Research: q\n\nCodex has no permission surface.\n")
+    result = _run(bundles / "briesearch.pyz", "ground-check", str(report))
+    assert result.returncode == 1, result.stderr
+    assert "no evidence table" in result.stderr
+
+
+def test_ground_check_accepts_url_and_raw_path_citations(bundles: Path, tmp_path: Path) -> None:
+    """A verifiable citation is a footnote, URL, path:line, OR a raw-capture path —
+    not just the footnote form the headline test uses. Locks all marker branches so a
+    narrowed citation regex (e.g. footnote-only) fails loudly instead of rejecting
+    legitimately-grounded reports."""
+    body = (
+        "## Research: q\n\n### Evidence\n\n"
+        "| Claim | Evidence | Confidence |\n| --- | --- | --- |\n"
+        "| A holds | https://example.com/a | certain |\n"
+        "| B holds | raw/01-example.md#L3-8 | certain |\n"
+    )
+    result = _run(bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body)))
+    assert result.returncode == 0, result.stderr
+    assert "grounding ok" in result.stderr
+
+
+def test_ground_check_scans_every_table(bundles: Path, tmp_path: Path) -> None:
+    """A deep report has several tables (per-finding tables + the Evidence table). The
+    gate must check every one — an un-cited claim in the *second* table must still fail.
+    Locks against a regression that stops after the first table and skips later claims."""
+    body = (
+        "## Research: q\n\n### Findings\n\n"
+        "| Claim | Evidence | Confidence |\n| --- | --- | --- |\n"
+        "| X holds | [^s1] | certain |\n\n"
+        "### Evidence\n\n"
+        "| Claim | Evidence | Confidence |\n| --- | --- | --- |\n"
+        "| Y holds | naming a source in prose | certain |\n\n"
+        "## References\n[^s1]: https://example.com (fetched 2026-06-01).\n"
+    )
+    result = _run(bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body)))
+    assert result.returncode == 1, result.stderr
+    assert "CITATION" in result.stderr
+    assert "Y holds" in result.stderr
+    assert "2 table(s)" in result.stderr
+
+
+def test_ground_check_reads_source_column_in_three_col_table(bundles: Path, tmp_path: Path) -> None:
+    """The real deep-report artifact uses | Claim | Source | Confidence |. The gate must
+    map the Source column as the evidence column: a claim whose Claim cell has no
+    citation but whose Source cell does must PASS. Locks the Source≡Evidence mapping —
+    if a regression stopped recognising 'Source', evidence would fall back to the Claim
+    cell and this grounded row would wrongly fail."""
+    body = (
+        "## Research: q\n\n### Evidence\n\n"
+        "| Claim | Source | Confidence |\n| --- | --- | --- |\n"
+        "| Z holds | https://example.com/z | certain |\n"
+    )
+    result = _run(bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body)))
+    assert result.returncode == 0, result.stderr
+
+
+def test_ground_check_absence_guard_avoids_false_positives(bundles: Path, tmp_path: Path) -> None:
+    """The absence advisory must not fire on (a) a positive claim that merely contains a
+    negation substring mid-word ('another'), nor (b) a certain absence already grounded
+    by a ruling-out phrase ('not found in ... searched'). Locks the word-boundary match
+    and the ruled-out escape so the advisory stays signal, not noise."""
+    body = (
+        "## Research: q\n\n### Evidence\n\n"
+        "| Claim | Evidence | Confidence |\n| --- | --- | --- |\n"
+        "| Cargo exposes another download feature | [^s1] | certain |\n"
+        "| The knob was not found in the two references searched | [^s1] | certain |\n\n"
+        "## References\n[^s1]: https://example.com (fetched 2026-06-01).\n"
+    )
+    result = _run(bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body)))
+    assert result.returncode == 0, result.stderr
+    assert "ADVISORY" not in result.stderr

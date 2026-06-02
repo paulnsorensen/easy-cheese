@@ -25,7 +25,7 @@ Accept the whole user prompt as the research question. If version, framework, re
 2. **Plan** — restate the decision being supported, extract constraints (dates, versions, scope), decompose into 2-5 focused subqueries, name stop criteria. See `references/query-planning.md`.
 3. **Route** — pick sources per `references/routing.md` and emit the routing block. Sources committed here MUST execute.
 4. **Gather** — fetch from each routed source in parallel (single assistant turn, multiple tool calls) where the harness supports it. For heavy calls **fork to a small, fast research sub-agent** that writes raw bodies under the durable corpus's `research/<slug>/raw/` and returns only the synthesis. Resolver, triggers, and on-disk layout live in `references/context-isolation.md`; light triage runs inline without a fork.
-5. **Synthesize** — build the claim-level evidence table per `references/synthesis.md`, verify links resolve, apply the confidence cap.
+5. **Synthesize** — build the claim-level evidence table per `references/synthesis.md`, verify links resolve, apply the confidence cap, and run the synthesis-fidelity self-check (`ground-check` + conclusion-vs-raw diff) before finalizing a deep report.
 6. **Stop** — hand off. Do not implement the result, and do not promote citations into design choices; the next skill (`/cook`, `/mold`, etc.) takes the report. Alternatives raised by cited sources become open questions for the user, not recommendations (see `references/synthesis.md` § Alternatives are open questions). Implement only if the current prompt explicitly asks for research-informed implementation.
 
 When an optional MCP source is missing, follow `references/unavailable.md` — fall back once, surface the cap, never silently retry.
