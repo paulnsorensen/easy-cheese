@@ -29,14 +29,14 @@ Optional flags:
 - `--continue <slug>` — resume an in-flight pipeline from the latest handoff slug. See `## --continue` below.
 - `--hard` — inject the `/hard-cheese` metacognitive gate before code is shared for review. The flag propagates to whichever target the router dispatches and fires at `/cure`'s share-for-review handoff (or end of `/cure`'s final auto pass under `--auto --hard`). See `skills/hard-cheese/SKILL.md`.
 
-If `$ARGUMENTS` is missing entirely and there is no recent context to lean on, ask one clarifying question via `AskUserQuestion` before classifying.
+If `$ARGUMENTS` is missing entirely and there is no recent context to lean on, ask one clarifying question through the host routing guide in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md) before classifying.
 
 ## Flow
 
 1. **Think first (silent).** Before announcing, model the problem internally per `skills/culture/SKILL.md` — restate the ask in one sentence, list the candidate targets, name the deciding signal. This is the agent's own reasoning, not a user-facing dialogue; the only output of this step is the classification decision that drives step 2.
 2. **Classify** — match `$ARGUMENTS` against the intent shapes in `references/classification.md`. Pick the highest-confidence shape; below the threshold, route to `clarify` (handled by the tier-3 escalation in step 4).
 3. **Clarity check (implementation intents only).** For `cook` and `mold` intents, run the cook fast-path check (`skills/cook/SKILL.md:30-35` — clear I/O, bounded scope, obvious verification). The result drives the three-tier escalation in `## Escalation` below. Non-implementation intents (`research`, `rubber-duck`, `debug`, `age`, `age-then-cure`, `cheese-factory`) skip the clarity check and route directly to their target skill.
-4. **Escalate (if needed).** Tier 1 dispatches the chosen target (writing a mini-spec via `/mold`'s agent-invoked mode when the dispatch is `/cook --auto` and no spec path was supplied). Tier 2 autonomously invokes `/culture` and/or `/briesearch` in internal mode, then re-runs the clarity check. Tier 3 blocks on a single targeted `AskUserQuestion` and re-enters classification on the answer. See `## Escalation`.
+4. **Escalate (if needed).** Tier 1 dispatches the chosen target (writing a mini-spec via `/mold`'s agent-invoked mode when the dispatch is `/cook --auto` and no spec path was supplied). Tier 2 autonomously invokes `/culture` and/or `/briesearch` in internal mode, then re-runs the clarity check. Tier 3 blocks on a single targeted host-routed question and re-enters classification on the answer. See `## Escalation`.
 5. **Announce** — print a short three-line block (Intent / Reason / Target) per the format in `## Output`. Cite the signal that drove the routing decision.
 6. **Self-check** — run the coherence questions in `references/coherence-check.md`. If any fails, downgrade to `clarify` (tier 3) or `research`.
 7. **Dispatch** — without `--safe`, run the chosen skill immediately with its exact dispatch command and context packet, in the same turn as the announce. With `--safe`, issue a handoff gate per [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md) (recommended target pre-selected, at least one alternative, `Stop`) and wait for the user's selection before dispatching. Either way the downstream skill owns its flow; `/cheese` does not narrate beyond the routing decision.
@@ -47,7 +47,7 @@ If `$ARGUMENTS` is missing entirely and there is no recent context to lean on, a
 
 | Intent | Trigger signals | Pre-step | Target skill |
 | --- | --- | --- | --- |
-| clarify | Empty input, single keyword, or critical ambiguity | `AskUserQuestion` for the missing fact | re-enter `/cheese` once answered |
+| clarify | Empty input, single keyword, or critical ambiguity | host-routed question for the missing fact | re-enter `/cheese` once answered |
 | research | Library / API / vendor question, "what's the best…", comparison | — | `/briesearch` |
 | rubber-duck | User explicitly asks for discussion only — "no writes", "let's just talk", "rubber-duck this" — with no artifact intent | — | `/culture` |
 | mold | Feature description with fuzzy scope, multi-module idea, or stated need for a spec | optional `/briesearch` first if external evidence is missing | `/mold` → `/cook` |
@@ -69,7 +69,7 @@ For implementation intents (`cook` and `mold`), `/cheese` runs the cook fast-pat
 
 **Tier 2 — borderline (any check fails or is uncertain).** Agent autonomously invokes `/culture` (internal-mode thinking) and/or `/briesearch` (internal-mode research) — agent's choice each call, no fixed order, no requirement to run both — to fill the missing context. After the internal pass, re-run the cook fast-path check on the refined understanding. If all three checks now pass, drop into tier 1 (the mini-spec records the culture / briesearch synthesis under `## Provenance`). Otherwise tier 3.
 
-**Tier 3 — still borderline after tier 2.** Block on the human via a single targeted `AskUserQuestion` whose answer closes the failing check. On the answer, re-enter classification with the augmented input. This is the only sanctioned user-facing prompt in the autonomous-by-default path; the `clarify` intent and the below-`medium`-confidence path both map here.
+**Tier 3 — still borderline after tier 2.** Block on the human via a single targeted host-routed question whose answer closes the failing check. On the answer, re-enter classification with the augmented input. This is the only sanctioned user-facing prompt in the autonomous-by-default path; the `clarify` intent and the below-`medium`-confidence path both map here.
 
 `--safe` does not skip the escalation logic — the tiers still run silently — but it inserts a handoff gate before the final dispatch in every tier. The recommended option stays auto-flavoured (`/cook --auto <spec-path>` etc., using the explicit mini-spec path); the non-auto variant is offered as the alternative.
 
@@ -95,7 +95,7 @@ Under `--safe`, gate the resumption through the handoff gate in [`../../shared/h
 
 Treat classification confidence qualitatively (`low | medium | high`). Threshold for direct routing is `medium` or better. Below that, route to tier 3 (`clarify`):
 
-- Ask exactly one question via `AskUserQuestion`.
+- Ask exactly one question through the host routing guide in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md).
 - Offer the two most-likely targets as alternatives plus `Stop`.
 - Re-enter `/cheese` with the answer.
 
@@ -110,7 +110,7 @@ Beyond `cheez-*` there are router-specific tools:
 | Need | Prefer | Fallback |
 | --- | --- | --- |
 | PR / issue context | `gh` | the URL or numbers the user provided |
-| Confirming routing target with the user (only under `--safe` or `clarify`) | `AskUserQuestion` / host structured question (`request_user_input` in Codex when available) | a numbered list with explicit dispatch commands |
+| Confirming routing target with the user (only under `--safe` or `clarify`) | host-routed structured question per [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md) | a numbered list with explicit dispatch commands |
 
 `/cheese` keeps tool use light. Treat anything heavier than a single-file read or one search call as a sign the work belongs in the downstream skill, not in the router.
 

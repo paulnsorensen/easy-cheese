@@ -73,7 +73,7 @@ Each hypothesis must be **falsifiable**: state the prediction it makes.
 
 If you cannot state the prediction, the hypothesis is a vibe — discard or sharpen it.
 
-**Show the ranked list to the user via `AskUserQuestion` before testing.** They often have domain knowledge that re-ranks instantly ("we just deployed a change to #3"), or know hypotheses they've already ruled out. Cheap checkpoint, big time saver. Don't block on it — proceed with your ranking if the user is AFK or running `--auto`.
+**Show the ranked list to the user through the host routing guide in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md) before testing.** They often have domain knowledge that re-ranks instantly ("we just deployed a change to #3"), or know hypotheses they've already ruled out. Cheap checkpoint, big time saver. Don't block on it — proceed with your ranking if the user is AFK or running `--auto`.
 
 ## Phase 4 — Instrument
 
@@ -171,7 +171,7 @@ follow_up: <architectural follow-up note, or "none">
 
 **Pipeline:** cheese (debug) → **[pasteurize]** → cook --auto → press → age → cure → ship
 
-After the report is printed and the handoff slug is on disk, ask via `AskUserQuestion` which downstream to run. Lead each option with the verb (what the user wants to _do_ next):
+After the report is printed and the handoff slug is on disk, ask through the host routing guide in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md) which downstream to run. Lead each option with the verb (what the user wants to _do_ next):
 
 - **Validate and chain forward** _(recommended when `status: ok`)_ — `/cook <slug> --auto`.
 - **Validate without auto chain** — `/cook <slug>` (cook runs taste-test, then the user picks each subsequent step).
@@ -180,7 +180,7 @@ After the report is printed and the handoff slug is on disk, ask via `AskUserQue
 
 Pre-select **Validate and chain forward** when `status: ok`. The chain default is `--auto` because pasteurize already wrote and verified the fix; the work left for cook → press → age → cure is mechanical validation, not new authoring. Never auto-invoke; the user must still select.
 
-When invoked with `--auto`, skip this `AskUserQuestion` entirely and invoke `/cook <slug> --auto` directly.
+When invoked with `--auto`, skip this host-routed question entirely and invoke `/cook <slug> --auto` directly.
 
 ## Auto mode
 
