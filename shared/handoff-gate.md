@@ -74,13 +74,17 @@ never name a host tool in the transcript unless it is callable in that session.
 
 ```markdown
 Question: <one short question>
-Recommended: 1 — <why>
+Recommended: <label> — <why>
 
 1. <label> — <effect/tradeoff>
 2. <label> — <effect/tradeoff>
 3. <label> — <effect/tradeoff>
 Other: reply with `other: <short answer>`
 ```
+
+Use the option label from `handoff_gate.recommended`; do not assume the
+recommended option is numbered `1` unless you deliberately rendered that label
+as option 1 in this fallback.
 
 Keep gates small: one decision by default, at most three questions when the
 host primitive explicitly supports batching. Include a free-form `Other` path
