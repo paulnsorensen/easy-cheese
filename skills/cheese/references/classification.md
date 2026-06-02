@@ -4,7 +4,7 @@ Intent shapes for `/cheese`, with the signals that drive each one and the disamb
 
 ## Clarity check (implementation intents)
 
-For `cook` and `mold` intents — and only these — classification feeds into the cook-fast-path clarity check (`skills/cook/SKILL.md:30-35`: clear I/O, bounded scope, obvious verification). All three checks passing means tier 1: write a mini-spec via `/mold`'s agent-invoked mode and dispatch `/cook --auto`. Any check borderline means tier 2: invoke `/culture` and/or `/briesearch` internally, re-check. Still borderline means tier 3: a single targeted `AskUserQuestion`. The full three-tier escalation lives in `skills/cheese/SKILL.md` § Escalation.
+For `cook` and `mold` intents — and only these — classification feeds into the cook-fast-path clarity check (`skills/cook/SKILL.md:30-35`: clear I/O, bounded scope, obvious verification). All three checks passing means tier 1: write a mini-spec via `/mold`'s agent-invoked mode and dispatch `/cook --auto`. Any check borderline means tier 2: invoke `/culture` and/or `/briesearch` internally, re-check. Still borderline means tier 3: a single targeted host-routed question. The full three-tier escalation lives in `skills/cheese/SKILL.md` § Escalation.
 
 The `clarify` intent below is exclusively the tier-3 path; classify a request as `clarify` when the cook-fast-path check fails twice (input + post-tier-2-refined input) or when intent confidence stays below `medium` after the silent culture pass.
 
@@ -14,7 +14,7 @@ Other intents (`research`, `rubber-duck`, `debug`, `age`, `age-then-cure`, `chee
 
 | Intent | Pre-step | Target |
 | --- | --- | --- |
-| clarify | one `AskUserQuestion` | re-enter `/cheese` |
+| clarify | one host-routed question | re-enter `/cheese` |
 | research | — | `/briesearch` |
 | rubber-duck | — | `/culture` (only when the user explicitly opted out of writes) |
 | mold | optional `/briesearch` | `/mold` → `/cook` |

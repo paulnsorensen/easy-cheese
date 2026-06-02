@@ -1,6 +1,6 @@
 # Coherence self-check
 
-Run these questions before dispatching the chosen target. If any answer is `no`, downgrade the routing decision (usually to `clarify` or `research`) instead of pre-selecting a target. Under `--safe` the downgrade lands in the dispatch gate; otherwise it lands in the announce block, and on the `clarify` path it replaces the dispatch with a single targeted `AskUserQuestion`.
+Run these questions before dispatching the chosen target. If any answer is `no`, downgrade the routing decision (usually to `clarify` or `research`) instead of pre-selecting a target. Under `--safe` the downgrade lands in the dispatch gate; otherwise it lands in the announce block, and on the `clarify` path it replaces the dispatch with a single targeted host-routed question per `shared/handoff-gate.md`.
 
 ## Pre-dispatch checklist
 
@@ -37,7 +37,7 @@ Run these questions before dispatching the chosen target. If any answer is `no`,
 When the checklist trips:
 
 - Switch the announce block to name the failing check (e.g. "spec path `.cheese/specs/foo.md` does not exist on disk").
-- Replace the dispatch with a single clarifying `AskUserQuestion` whose options resolve the failed check. Under `--safe` the gate already exists, so swap its options for the clarifying ones; without `--safe` the clarify path is the only sanctioned reason to ask the user at all.
+- Replace the dispatch with a single clarifying host-routed question whose options resolve the failed check. Under `--safe` the gate already exists, so swap its options for the clarifying ones; without `--safe` the clarify path is the only sanctioned reason to ask the user at all.
 - Never pre-select a target the checklist downgraded.
 
 ## Why this is separate
