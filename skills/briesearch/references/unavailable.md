@@ -17,7 +17,7 @@ Optional MCP servers (Context7, Tavily, code-review-graph, tilth) are not always
 Once per session, after the routing block:
 
 ```text
-UNAVAILABLE: Tavily MCP not loaded. Falling back to host web search.
+UNAVAILABLE: Tavily MCP not loaded. Falling back to WebFetch for link verification and host web search for discovery.
 Freshness-sensitive answers will be capped at `speculating`.
 ```
 
