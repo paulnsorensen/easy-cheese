@@ -200,6 +200,17 @@ Install all currently published skills in this repo's manifest without prompts:
 npx skills@latest add paulnsorensen/easy-cheese --skill "*" -y
 ```
 
+Without `--global`, `skills.sh` uses project-level scope. With `-y`, it
+auto-detects project scope when run inside a project. Run those commands from
+the repo where you want easy-cheese recorded under `.agents/skills/`.
+
+For a user-wide Codex install that is available across repos, pass the Codex
+agent and global scope explicitly:
+
+```sh
+npx skills@latest add paulnsorensen/easy-cheese --skill "*" --agent codex --global -y
+```
+
 The installer reads this repo's published skill manifest, lets you pick the
 skills you want, and installs them into the coding agents you select.
 
