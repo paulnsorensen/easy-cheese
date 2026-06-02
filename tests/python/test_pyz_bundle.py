@@ -343,3 +343,36 @@ def test_ground_check_absence_guard_avoids_false_positives(bundles: Path, tmp_pa
     result = _run(bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body)))
     assert result.returncode == 0, result.stderr
     assert "ADVISORY" not in result.stderr
+
+
+def test_ground_check_rejects_numeric_ratio_as_citation(bundles: Path, tmp_path: Path) -> None:
+    """The inline path:line citation marker must require a real, alpha-led file
+    extension. A numeric ratio/timestamp/verse ('4.5:1', '3.30:15') is <word>.<digit>:<digit>
+    shaped and would satisfy a loose `\\.\\w+:\\d+` matcher, letting an un-cited prose
+    evidence cell pass exit 0 — the exact #113 failure shape (prose, no citation). Pins
+    that such a cell fails CITATION so the core grounding guarantee can't be bypassed."""
+    body = (
+        "## Research: q\n\n### Evidence\n\n"
+        "| Claim | Evidence | Confidence |\n| --- | --- | --- |\n"
+        "| WCAG AA needs a 4.5:1 contrast ratio | the 4.5:1 ratio is recommended | certain |\n"
+    )
+    result = _run(bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body)))
+    assert result.returncode == 1, result.stderr
+    assert "CITATION" in result.stderr
+    assert "contrast ratio" in result.stderr
+
+
+def test_ground_check_flags_short_row_as_malformed(bundles: Path, tmp_path: Path) -> None:
+    """A data row with fewer cells than the header's column count can't be graded —
+    the evidence/confidence cells it claims to have are missing. The gate must fail it
+    as MALFORMED rather than index past the row's end or skip it silently, so a
+    truncated table is a loud error, not a coverage hole."""
+    body = (
+        "## Research: q\n\n### Evidence\n\n"
+        "| Claim | Evidence | Confidence |\n| --- | --- | --- |\n"
+        "| A holds | [^s1] |\n\n"
+        "## References\n[^s1]: https://example.com (fetched 2026-06-01).\n"
+    )
+    result = _run(bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body)))
+    assert result.returncode == 1, result.stderr
+    assert "MALFORMED" in result.stderr

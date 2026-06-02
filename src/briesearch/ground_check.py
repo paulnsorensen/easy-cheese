@@ -42,7 +42,7 @@ CONFIDENCE_LABELS = {"certain", "speculating", "don't know"}
 _CITATION = re.compile(
     r"\[\^[^\]]+\]"  # footnote marker [^source-1]
     r"|https?://\S+"  # URL
-    r"|[\w./-]+\.\w+:\d+(?:-\d+)?"  # inline path:line(-line)
+    r"|[\w./-]+\.[A-Za-z]\w*:\d+(?:-\d+)?"  # inline path:line(-line) — alpha-led ext, not a numeric ratio
     r"|(?:\.cheese|raw)/\S+",  # corpus or raw-capture path
     re.IGNORECASE,
 )
