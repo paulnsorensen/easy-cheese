@@ -61,6 +61,21 @@ Skip verification only for: (a) inline file references (`file:line`), (b) the us
 
 **"Independent" means distinct origin, not distinct URL.** Before counting sources toward the cap, dedup by origin: collapse to one source any that share a root domain, or that quote/paraphrase the same upstream (three blogs reprinting one vendor post are one source, not three). Count only the surviving distinct origins. Criticality depends on the question. Context7 is critical for version-specific API claims, Tavily is critical for freshness-sensitive facts, Codebase is critical for local precedent questions, and GitHub is usually supporting evidence unless the user asked for real-world examples.
 
+## Absence and negative claims
+
+A claim that something *does not exist* ("X has no Y", "Z doesn't support W") is the most dangerous shape in a synthesis: it is easy to infer from silence, hard to falsify, and an un-grounded one can survive many turns of pushback (issue #113). Hold negatives to a higher bar than positives.
+
+- **Never assert a bare "doesn't exist" as `certain`.** A `certain` absence claim must either cite a source that *states* the absence, or enumerate the candidate mechanisms that would satisfy it and cite a ruling-out for each.
+- **Otherwise downgrade.** If you only failed to find it, the claim is "not found in `<sources checked>`" at `speculating` — name the sources searched, never "does not exist".
+- **A recorded fact outranks an inferred absence.** If any raw capture or evidence row records the thing existing, the absence claim is the error, not the note.
+
+## Synthesis-fidelity self-check
+
+Before finalizing a deep report (`research/<slug>/<slug>.md`), run the mechanical grounding gate and reconcile the conclusion against what the run actually captured:
+
+1. **Run `ground-check`:** `python3 ${CLAUDE_SKILL_DIR}/scripts/briesearch.pyz ground-check "$ROOT/research/<slug>/<slug>.md"`. It exits non-zero on any claim with no verifiable citation or a non-label confidence value, and prints `ADVISORY` lines for `certain` absence claims. Resolve every error before returning; treat each advisory as a prompt to enumerate-and-rule-out or downgrade per the section above.
+2. **Diff the conclusion against the raw capture:** a conclusion may not contradict a fact the run already recorded. Re-read the cited `raw/NN-host.md` lines behind each material claim; if the Finding contradicts a recorded fact, the Finding is wrong — fix it or halt. Do not ship the contradiction.
+
 ## Output shape
 
 Cross-cutting house style and citation form: [`shared/formatting.md`](../../../shared/formatting.md). This section owns the research-report shape; formatting.md owns the voice rules and the footnote primitive.
