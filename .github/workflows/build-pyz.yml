@@ -45,7 +45,7 @@ jobs:
       # freshly-added skill (still untracked) are caught by the index-vs-HEAD
       # diff — a plain `git diff` on the working tree would skip them.
       - name: Commit and push if changed
-        run: |
+        run: |-
           set -euo pipefail
           git add -- 'skills/*/scripts/*.pyz'
           if git diff --cached --quiet; then

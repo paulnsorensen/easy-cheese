@@ -56,9 +56,9 @@ _ABSENCE = re.compile(
     re.IGNORECASE,
 )
 
-# Phrases that ground an absence in what was actually checked, not in silence.
+# Phrases that claim a stronger ruling-out than a searched-but-empty source.
 _RULED_OUT = re.compile(
-    r"not found in|searched|ruled out|no evidence (?:of|for)|checked\b",
+    r"ruled out|checked\b",
     re.IGNORECASE,
 )
 

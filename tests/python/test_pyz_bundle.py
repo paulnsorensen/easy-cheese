@@ -328,11 +328,13 @@ def test_ground_check_reads_source_column_in_three_col_table(bundles: Path, tmp_
     assert result.returncode == 0, result.stderr
 
 
-def test_ground_check_absence_guard_avoids_false_positives(bundles: Path, tmp_path: Path) -> None:
-    """The absence advisory must not fire on (a) a positive claim that merely contains a
-    negation substring mid-word ('another'), nor (b) a certain absence already grounded
-    by a ruling-out phrase ('not found in ... searched'). Locks the word-boundary match
-    and the ruled-out escape so the advisory stays signal, not noise."""
+def test_ground_check_absence_guard_flags_inferred_absence_without_false_positive(
+    bundles: Path, tmp_path: Path
+) -> None:
+    """The absence advisory must not fire on a positive claim containing a negation
+    substring mid-word ('another'), but it must still flag a certain absence inferred
+    from a searched-but-empty source. 'Not found in ... searched' is the downgraded
+    claim shape from synthesis.md, not proof that earns `certain`."""
     body = (
         "## Research: q\n\n### Evidence\n\n"
         "| Claim | Evidence | Confidence |\n| --- | --- | --- |\n"
@@ -342,7 +344,7 @@ def test_ground_check_absence_guard_avoids_false_positives(bundles: Path, tmp_pa
     )
     result = _run(bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body)))
     assert result.returncode == 0, result.stderr
-    assert "ADVISORY" not in result.stderr
+    assert result.stderr.count("ADVISORY") == 1
 
 
 def test_ground_check_rejects_numeric_ratio_as_citation(bundles: Path, tmp_path: Path) -> None:
