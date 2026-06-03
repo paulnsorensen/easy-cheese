@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """Count candidate curds in a mold-generated spec and recommend the next skill.
 
-Reads `.cheese/specs/<slug>.md`, counts behavioural curd candidates from the
-`## Goals` and `## Quality gates` sections, and emits a JSON digest naming
-the recommended downstream skill based on the count plus the shape-check
-blast-radius verdict.
+Reads `.cheese/specs/<slug>.md`, counts distinct behavioural goals under
+`## Goals`, and emits a JSON digest naming the recommended downstream skill
+based on that count plus the shape-check blast-radius verdict. The `## Quality
+gates` (acceptance criteria) and `## Decisions` bullets are reported as signals
+but do NOT drive the count: they are facets of one coherent change, not
+independent file-disjoint curds, so counting them inflates the recommendation
+toward fan-out for specs that are emphatically not decomposable (issue #111).
 
 Decision rule (recommended slot only — `--auto` variants are user-opt-in
 alternatives surfaced by the Handoff menu, not picks the script makes):
 
-  candidate_curds = max(goals_bullets, quality_gates_bullets)
+  candidate_curds = goals_bullets   # distinct behaviours; NOT acceptance criteria
   candidate_curds >= 5                   -> /cheese-factory
   candidate_curds <  5 and blast == high -> /ultracook
   candidate_curds <  5 (else)            -> /cook
@@ -96,7 +99,7 @@ def analyze(spec_path: Path, blast_radius: str | None) -> dict:
     quality_gates = _count_bullets(_extract_section(body, QUALITY_GATES_HEADINGS))
     decisions = _count_bullets(_extract_section(body, DECISIONS_HEADINGS))
 
-    candidate_curds = max(goals, quality_gates)
+    candidate_curds = goals
     recommended, rationale = _recommend(candidate_curds, blast_radius)
 
     return {
@@ -115,6 +118,7 @@ def analyze(spec_path: Path, blast_radius: str | None) -> dict:
         "rationale": rationale,
         "notes": [
             "Count is a signal, not a verdict.",
+            "candidate_curds = goals only; acceptance-criteria / quality-gate count does not drive it (issue #111).",
             "Confirm curd independence (criterion 4: file-disjoint) before dispatching /cheese-factory.",
         ],
     }

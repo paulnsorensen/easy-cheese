@@ -66,6 +66,27 @@ SPEC_EMPTY = """\
 Nothing actionable yet.
 """
 
+SPEC_GATES_HEAVY = """\
+---
+slug: one-coherent-refactor
+---
+
+# Producer-owned validation refactor
+
+## Goals
+- Move validation into the producer
+
+## Quality gates
+- `pytest tests/change`: green
+- `pytest tests/planner`: green
+- `pytest tests/mcp`: green
+- `pytest tests/cli`: green
+- `ruff check`: clean
+- `mypy`: clean
+- existing callers unaffected
+- digest schema unchanged
+"""
+
 
 class TestExtractSection:
     def test_returns_none_when_heading_missing(self, curd_count: ModuleType) -> None:
@@ -207,15 +228,58 @@ class TestAnalyze:
         digest = curd_count.analyze(spec, None)
         assert digest["recommended_skill"] == "/cook"
 
-    def test_candidate_curds_is_max_of_goals_and_gates(
+    def test_candidate_curds_counts_goals_not_gates(
         self, curd_count: ModuleType, tmp_path: Path
     ) -> None:
-        # SPEC_LARGE has 7 goals + 3 gates; max is 7.
+        # SPEC_LARGE has 7 goals + 3 gates. candidate_curds tracks distinct
+        # behavioural goals (7), not the acceptance-criteria count (issue #111).
         spec = self._write(tmp_path, "big.md", SPEC_LARGE)
         digest = curd_count.analyze(spec, "high")
         assert digest["signals"]["goals"] == 7
         assert digest["signals"]["quality_gates"] == 3
         assert digest["candidate_curds"] == 7
+
+    def test_acceptance_criteria_do_not_inflate_candidate_curds(
+        self, curd_count: ModuleType, tmp_path: Path
+    ) -> None:
+        # Issue #111: a single coherent refactor with 1 goal but 8 acceptance
+        # criteria must NOT be graded decomposable. Acceptance criteria are
+        # facets of one diff, not independent file-disjoint curds; counting them
+        # as curds flipped `decomposable` true and mis-recommended /cheese-factory.
+        spec = self._write(tmp_path, "refactor.md", SPEC_GATES_HEAVY)
+        digest = curd_count.analyze(spec, "medium")
+        assert digest["signals"]["quality_gates"] == 8  # still reported
+        assert digest["candidate_curds"] == 1  # driven by goals, not gates
+        assert digest["decomposable"] is False
+        assert digest["recommended_skill"] == "/cook"
+
+    def test_gates_heavy_high_blast_routes_ultracook_not_cheese_factory(
+        self, curd_count: ModuleType, tmp_path: Path
+    ) -> None:
+        # Even at high blast radius, gate count alone must not trigger fan-out.
+        spec = self._write(tmp_path, "refactor.md", SPEC_GATES_HEAVY)
+        digest = curd_count.analyze(spec, "high")
+        assert digest["recommended_skill"] == "/ultracook"
+
+    def test_missing_goals_section_with_gates_yields_zero_curds(
+        self, curd_count: ModuleType, tmp_path: Path
+    ) -> None:
+        # The literal issue #111 digest: a spec with NO `## Goals` heading but
+        # several acceptance criteria. goals=0 must yield candidate_curds=0 and
+        # /cook — an absent goals count must never fall back to the gate count.
+        body = (
+            "# Refactor with no goals heading\n\n"
+            "## Quality gates\n"
+            "- gate one\n- gate two\n- gate three\n"
+            "- gate four\n- gate five\n- gate six\n"
+        )
+        spec = self._write(tmp_path, "no-goals.md", body)
+        digest = curd_count.analyze(spec, None)
+        assert digest["signals"]["goals"] == 0
+        assert digest["signals"]["quality_gates"] == 6
+        assert digest["candidate_curds"] == 0
+        assert digest["decomposable"] is False
+        assert digest["recommended_skill"] == "/cook"
 
     def test_decisions_counted_but_not_used(
         self, curd_count: ModuleType, tmp_path: Path

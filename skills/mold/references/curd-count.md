@@ -39,12 +39,16 @@ specs.
 | Signal | Source in the spec |
 | --- | --- |
 | `goals` | Bullets under `## Goals` |
-| `quality_gates` | Bullets under `## Quality gates` (also matches `## Acceptance criteria` for legacy specs) |
+| `quality_gates` | Bullets under `## Quality gates` (also matches `## Acceptance criteria` for legacy specs) — reported, **not** counted |
 | `decisions` | Bullets under `## Decisions` (reported but not used in the rule) |
 
-`candidate_curds = max(goals, quality_gates)`. Decisions are reported as a
-sanity check — a spec with 8 decisions but 2 goals is usually one coherent
-change with many tradeoffs, not 8 curds.
+`candidate_curds = goals` — only distinct behavioural goals drive the count.
+`quality_gates` (acceptance criteria) and `decisions` are reported as signals
+but deliberately excluded from the count: they are facets of one coherent
+change, not independent file-disjoint curds. Counting acceptance criteria as
+curds inflated the recommendation toward `/cheese-factory` for single coherent
+refactors whose own criteria reference the same files (issue #111) — the more
+thoroughly a spec was written, the more likely it mis-recommended fan-out.
 
 ## Decision rule
 
@@ -74,6 +78,7 @@ surfaced by the Handoff menu — the script never recommends them, because
   "rationale": "7 candidate curds >= 5 threshold",
   "notes": [
     "Count is a signal, not a verdict.",
+    "candidate_curds = goals only; acceptance-criteria / quality-gate count does not drive it (issue #111).",
     "Confirm curd independence (criterion 4: file-disjoint) before dispatching /cheese-factory."
   ]
 }
