@@ -28,12 +28,13 @@ Optional flag: `--open-pr` — at the terminal, open a *new* PR when none exists
 
 1. **Resolve slug** — derive `<slug>` from the input. If a spec path is given, the slug is the basename without `.md`; if a bare slug is given, confirm the spec exists at the durable path the spawned `/cook` resolves (`python3 ${CLAUDE_SKILL_DIR}/scripts/cook.pyz artifact-path specs <slug>`; see `shared/formatting.md` § Corpus location).
 2. **Guard against re-entry** — if any of `.cheese/{cook,press,age,cure}/<slug>.md` already exist, stop with a one-line list of the existing handoffs and tell the user to either run `/cheese --continue <slug>` to resume from the latest phase or `rm` the relevant files to start fresh. Never silently wipe.
-3. **Phase loop** — for each phase in `cook, press, age, cure, age, cure, age`, spawn a fresh sub-agent (see `## Sub-agent contract` below), wait for it to return, read `.cheese/<phase>/<slug>.md`, and decide:
+3. **Phase loop** — for each phase in `cook, press, age, cure, age, cure, age`, spawn a fresh sub-agent (see `## Sub-agent contract` below), wait for it in bounded intervals, read `.cheese/<phase>/<slug>.md` after the sub-agent returns, and decide:
    - `status:` starts with `halt` → surface the halt reason and stop.
    - `next:` is `done` and the phase is age → stop early with a clean summary (the diff is clean at the medium+ severity floor; cure has nothing to apply).
    - Otherwise → continue to the next phase.
-4. **Terminal push** — after the third age spawn (or any earlier non-halt stop), if an open PR exists for the branch, dispatch `/gh` to commit + push the chain's changes to it (Rule 11 — the existing PR is the authorization). Open a *new* PR only when `--open-pr` is in scope. A halt never pushes.
-5. **Final summary** — print a four-line summary: passes completed, total findings applied / deferred, the final age-report path, and whether the PR was pushed (or the next-step nudge "review the diff, then `/gh` when ready" if no PR existed and `--open-pr` was absent).
+4. **Watchdog recovery** — while a phase is still running, do not wait forever. If the phase exceeds 15 minutes with either a dirty worktree or visible long-running verification and no handoff slug, send one interrupt asking the worker to finish or write `status: halt: <reason>`. If one more bounded wait interval passes without a handoff, stop the chain, surface the dirty-file list, and do not spawn the next phase. If a checkpoint handoff exists but the worker has not returned, keep waiting only until the watchdog fires, then stop with that handoff path as the recovery artifact.
+5. **Terminal push** — after the third age spawn (or any earlier non-halt stop), if an open PR exists for the branch, dispatch `/gh` to commit + push the chain's changes to it (Rule 11 — the existing PR is the authorization). Open a *new* PR only when `--open-pr` is in scope. A halt never pushes.
+6. **Final summary** — print a four-line summary: passes completed, total findings applied / deferred, the final age-report path, and whether the PR was pushed (or the next-step nudge "review the diff, then `/gh` when ready" if no PR existed and `--open-pr` was absent).
 
 `/ultracook` opens a *new* PR only with `--open-pr`; otherwise it pushes to an already-open PR at the terminal and never creates one.
 
@@ -88,6 +89,8 @@ Agent(
   # model: omit — inherits parent's model. Do not pass haiku/sonnet here.
   prompt: "Run /<phase> <slug> --auto for THIS PHASE ONLY. Write
            .cheese/<phase>/<slug>.md with the handoff schema and stop.
+           Before any verification command expected to run longer than two
+           minutes, write a checkpoint handoff that names the command.
            Do not chain forward to the next phase even though your
            auto-mode contract documents that. The /ultracook orchestrator
            is driving the chain."
@@ -104,6 +107,20 @@ Rules:
 - **Do pass the slug.** The phase skill resolves its own paths from the slug; `/ultracook` does not pre-compute paths for the sub-agent.
 
 The contract is "inheritance, not diminution" because most sub-agent patterns in this ecosystem (Explore, lsp-probe, whey-drainer, ricotta-reducer) are deliberately scoped down for cheap focused queries. `/ultracook` does the opposite: it spawns workers that are full peers of the parent, doing major work in their own context window.
+
+## Checkpoint handoffs before long gates
+
+A phase worker must not leave the orchestrator with a dirty worktree and no resumable state while it runs slow verification. Before starting any verification command expected to run longer than two minutes, the worker writes or refreshes `.cheese/<phase>/<slug>.md` with the normal schema plus a short verification line:
+
+```markdown
+status: ok
+next: <next-phase>
+artifact: .cheese/<phase>/<slug>.md
+<one-line orientation: implementation is complete enough for this phase; verification is running>
+verification: running `<command>`
+```
+
+This checkpoint is a recovery artifact, not permission for the orchestrator to advance early. `/ultracook` still waits for the sub-agent to return before moving to the next phase. If verification later fails, the worker overwrites the same slug with `status: halt: <failing gate>` and the failing command. If the worker wedges, the orchestrator surfaces the checkpoint path and dirty-file list instead of waiting indefinitely.
 
 ## Handoff slug schema
 
