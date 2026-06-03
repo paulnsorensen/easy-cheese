@@ -37,7 +37,7 @@ Dimensions answer **what kind of problem**. Severity (`blocker / high / medium /
 | --- | --- | --- |
 | correctness | low → blocker | broken behaviour, silent failures, ordering, null/empty edge cases, races, lost writes |
 | security | low → blocker | auth, injection, secrets, unsafe parsing, tainted inputs, weak crypto |
-| encapsulation | low → blocker | class-private peeks, module-internal leaks, cross-slice internals, ingress/egress contract violations |
+| encapsulation | low → blocker | class-private peeks, module-internal leaks, cross-slice internals, ingress/egress contract violations, caller-shadowed domain invariants |
 | spec | low → blocker | drift from stated requirements or acceptance criteria; silent drift on security/data/correctness reqs |
 | complexity | low → high | unnecessary nesting, long functions, speculative abstractions, redundant state, parameter sprawl, stringly-typed code |
 | deslop | low → high | dead code, AI residue, duplicated logic, copy-paste-with-variation, vague names |
