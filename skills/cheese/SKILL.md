@@ -33,7 +33,15 @@ If `$ARGUMENTS` is missing entirely and there is no recent context to lean on, a
 
 ## Flow
 
-1. **Think first (silent).** Before announcing, model the problem internally per `skills/culture/SKILL.md` — restate the ask in one sentence, list the candidate targets, name the deciding signal. This is the agent's own reasoning, not a user-facing dialogue; the only output of this step is the classification decision that drives step 2.
+1. **Classify** — match `$ARGUMENTS` against the intent shapes in `references/classification.md`. Pick the highest-confidence shape; below the threshold, route to `clarify` (see step 4). Run the deterministic classifier on the raw input first so the LLM's verdict can be compared against a script-grounded one, catching silent misroutes:
+
+   ```bash
+   python3 ${CLAUDE_SKILL_DIR}/scripts/cheese.pyz classify --input "<user $ARGUMENTS>"
+   ```
+
+   The script emits `{intent, confidence, signals, target_skill}`. When it returns `unknown` (no rule fired with enough weight), fall through to the prose classifier; otherwise the LLM's choice should match the script's verdict — disagreement is the cue to slow down and re-read the input rather than commit to a route.
+
+   **Think first (silent).** Before announcing, model the problem internally per `skills/culture/SKILL.md` — restate the ask in one sentence, list the candidate targets, name the deciding signal. This is the agent's own reasoning, not a user-facing dialogue; the only output of this step is the classification decision that drives step 2.
 2. **Classify** — match `$ARGUMENTS` against the intent shapes in `references/classification.md`. Pick the highest-confidence shape; below the threshold, route to `clarify` (handled by the tier-3 escalation in step 4).
 3. **Clarity check (implementation intents only).** For `cook` and `mold` intents, run the cook fast-path check (`skills/cook/SKILL.md:30-35` — clear I/O, bounded scope, obvious verification). The result drives the three-tier escalation in `## Escalation` below. Non-implementation intents (`research`, `rubber-duck`, `debug`, `age`, `age-then-cure`, `cheese-factory`) skip the clarity check and route directly to their target skill.
 4. **Escalate (if needed).** Tier 1 dispatches the chosen target (writing a mini-spec via `/mold`'s agent-invoked mode when the dispatch is `/cook --auto` and no spec path was supplied). Tier 2 autonomously invokes `/culture` and/or `/briesearch` in internal mode, then re-runs the clarity check. Tier 3 blocks on a single targeted host-routed question and re-enters classification on the answer. See `## Escalation`.

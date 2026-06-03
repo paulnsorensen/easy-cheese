@@ -199,6 +199,19 @@ between one call and a long grep walk.
 Drop to `sg` only when the pattern needs structural metavariables (`$X`,
 `$$$BODY`) that tilth can't express.
 
+When the query shape isn't obvious from a glance, run the decision-table
+helper to pick the kind deterministically (and surface the escalate-to-`sg`
+hint when the pattern has metavariables):
+
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/cheez-search.pyz pick_kind --query "<raw query>" --json
+```
+
+The script emits `{query, kind, scope?, glob?}` for tilth-routable queries
+or `{query, escalate: true, reason: ...}` for AST-shape patterns that must
+go to ast-grep. Cheez-search uses this to stop freelancing classification
+on every call.
+
 ---
 
 ## MCP Tool Reference

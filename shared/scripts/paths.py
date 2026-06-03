@@ -52,6 +52,10 @@ XDG_PHASES: frozenset[str] = frozenset({"specs", "research"})
 # the working directory so artifacts live with the branch being worked on.
 REPO_LOCAL_ROOT = Path(".cheese")
 
+# Phases of the cook → press → age → cure pipeline chain. Orchestrators scan
+# this subset to find an in-flight slug's existing artifacts.
+CHAIN_PHASES: tuple[str, ...] = ("cook", "press", "age", "cure")
+
 
 def validate_slug(slug: str) -> str | None:
     """Return an error string if invalid, else None."""
@@ -63,6 +67,23 @@ def validate_slug(slug: str) -> str | None:
             "no leading/trailing hyphen, no double hyphens"
         )
     return None
+
+
+# Stopwords dropped during slugify — too generic to carry meaning in a slug.
+_STOPWORDS = frozenset(
+    {"a", "an", "and", "the", "of", "for", "to", "in", "on", "with", "is"}
+)
+
+
+def slugify(text: str, *, max_words: int = 5) -> str:
+    """Best-effort kebab-slug from arbitrary text. May still need validation."""
+    # Drop punctuation, keep alphanumerics, whitespace, and hyphens. Apostrophes
+    # are removed so "Don't" -> "dont", not "don-t".
+    lowered = re.sub(r"[^a-z0-9\s-]+", "", text.lower())
+    words = [w for w in lowered.split() if w and w not in _STOPWORDS]
+    slug = "-".join(words[:max_words])
+    slug = re.sub(r"-+", "-", slug).strip("-")
+    return slug[:64]
 
 
 def _xdg_dir(env_var: str, *default: str) -> Path:
@@ -200,3 +221,39 @@ def artifact_path(phase: str, slug: str, *, root: Path | str | None = None) -> P
         raise ValueError(err)
     base = Path(root) if root is not None else default_root_for_phase(phase)
     return base / phase / f"{slug}.md"
+
+
+def parse_artifact_path(path: Path | str) -> tuple[str, str]:
+    """Only the canonical ``.cheese/`` root is parsed. Paths produced by
+    ``artifact_path`` with a custom ``root=`` (e.g. pytest ``tmp_path``)
+    are not round-trippable here.
+    """
+    p = Path(path)
+    parts = p.parts
+    if len(parts) < 3 or parts[-3] != ".cheese":
+        raise ValueError(f"{path!r} is not under .cheese/<phase>/")
+    phase = parts[-2]
+    if phase not in PHASES:
+        raise ValueError(f"unknown phase {phase!r} in {path!r}")
+    if p.suffix != ".md":
+        raise ValueError(f"artifact must end in .md, got {p.suffix!r}")
+    slug = p.stem
+    err = validate_slug(slug)
+    if err is not None:
+        raise ValueError(err)
+    return phase, slug
+
+
+def existing_artifacts(
+    slug: str, *, root: Path | str = ".cheese", phases: tuple[str, ...] = CHAIN_PHASES
+) -> dict[str, Path]:
+    """Return {phase: path} for each chain-phase artifact present on disk."""
+    err = validate_slug(slug)
+    if err is not None:
+        raise ValueError(err)
+    found: dict[str, Path] = {}
+    for phase in phases:
+        candidate = Path(root) / phase / f"{slug}.md"
+        if candidate.is_file():
+            found[phase] = candidate
+    return found

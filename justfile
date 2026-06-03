@@ -4,13 +4,14 @@ set dotenv-load := true
 @default:
     just --list
 
-# Run all tests (skill validators + melt + shared + cheese-factory suites + bash install tests + cheese-factory bats)
+# Run all tests (skill validators + melt + shared + cheese-factory suites + per-skill scripts + bash install tests + cheese-factory bats)
 test:
     python3 .github/scripts/test_validate_skills.py -v
     python3 .github/scripts/validate_skills.py
     python3 -m pytest tests/python -q
     python3 -m pytest tests/shared/python -q
     python3 -m pytest tests/cheese-factory/python -q
+    python3 -m pytest tests/briesearch/python tests/cheese/python tests/cheez-search/python tests/cook/python tests/hard-cheese/python tests/mold/python tests/pasteurize/python tests/ultracook/python -q
     bats tests/bash/test_install.bats
     bats tests/cheese-factory/bash/test_pr_plan_to_branches.bats
 
