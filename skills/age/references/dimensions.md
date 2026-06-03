@@ -141,18 +141,21 @@ Recommendation shape: "Validate at the boundary" / "Use the project's existing `
 
 ### encapsulation
 
-Look for: cross-module reach into internals, public APIs leaking implementation types, parameters that take more context than needed, new exports without a use case.
+Look for: cross-module reach into internals, public APIs leaking implementation types, parameters that take more context than needed, new exports without a use case, and the inverse — a domain invariant lifted *out* of the producer and enforced above it by every caller.
 
 | Base | Trigger |
 | --- | --- |
 | `blocker` | **Ingress/egress contract violation** — public API leaks ORM model, infra adapter, framework type, or storage internal across the slice boundary; slice's `index` re-exports an internal type |
 | `high` | Cross-module reach into another slice's internals, bypassing crust/index |
+| `high` | **Caller-shadowed domain invariant** — a guard/validation that all callers must invoke (or redundantly do) lives *outside* the producer; the domain doesn't enforce its own invariant, so a caller can skip it. Especially when a symbol is made public *solely* to be called from above the domain layer. |
 | `medium` | Module-internal leak (cross-file inside one slice exposes private detail) |
 | `low` | Class-level — one class touches another's private member within the same file |
 
+Detection signals for the caller-shadowed invariant: a guard defined inside a slice but never called by that slice (only by external entrypoints); N callers each repeating the same check before/after one producer; a public/exported guard whose only consumers sit above the domain layer; asymmetry where some callers apply the check and others skip it. Beware the false-clean trap — this often reads as good Sliced-Bread hygiene (a private helper promoted to public + crust-exported), so a diff-scoped pass grades it clean. The violation is usually *inherited*, not introduced by the diff under review.
+
 Note: base tier *is* the location tier here, so the contract bump tends to redundantly raise an already-blocker finding (capped).
 
-Recommendation shape: "Import from `<slice>/index` instead of `<slice>/internal/foo`" / "Narrow the public surface to `<minimal-type>`".
+Recommendation shape: "Import from `<slice>/index` instead of `<slice>/internal/foo`" / "Narrow the public surface to `<minimal-type>`" / "Move the `<invariant>` into `<producer>` so every caller inherits it; drop the external guard and narrow the public surface".
 
 ### spec
 
