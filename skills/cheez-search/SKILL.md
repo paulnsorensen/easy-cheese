@@ -1,6 +1,6 @@
 ---
 name: cheez-search
-description: This skill should be used when the user asks to find a symbol, definition, caller, import, or text pattern in the codebase — phrases like "where is X defined", "what calls Y", "find all usages of Z", "trace this function", "find the TODO comments", "search for this error string". Replaces grep / rg / ripgrep / ag / ack / find / fd with AST-aware tilth MCP search for name-shaped and text-shaped queries; use ast-grep (`sg`) only for AST-shape patterns with metavariables tilth cannot express. Use even when the user says "grep", "rg", "ripgrep", "ag", "ack", "fd", or "find" — never call host Grep, Glob, ripgrep, ast-grep, or any shell search directly. If tilth MCP is unavailable, stop and report rather than fall back. Do NOT use for reading whole files (use cheez-read), editing code (use cheez-write), or running tests/builds.
+description: Search code via AST-aware tilth MCP — finds symbols, definitions, callers, imports, and text, replacing grep / rg / ripgrep / ag / ack / find / fd. Use when the user asks to find a symbol, definition, caller, import, or text pattern — phrases like "where is X defined", "what calls Y", "find all usages of Z", "trace this function", "find the TODO comments", "search for this error string". Use ast-grep (`sg`) only for AST-shape patterns with metavariables tilth cannot express. Use even when the user says "grep", "rg", "ripgrep", "ag", "ack", "fd", or "find" — never call host Grep, Glob, ripgrep, ast-grep, or any shell search directly. If tilth MCP is unavailable, stop and report rather than fall back. Do NOT use for reading whole files (use cheez-read), editing code (use cheez-write), or running tests/builds.
 license: MIT
 compatibility: Requires tilth MCP server. Optional ast-grep (`sg`) for structural metavariable patterns tilth cannot express.
 allowed-tools: mcp__tilth__tilth_search, mcp__tilth__tilth_deps, Bash
@@ -105,7 +105,7 @@ The tilth MCP server is launched against **one repository** — whatever directo
 
 ### When NOT to invoke `/cheez-search`
 
-Inside `/cheez-search`, the contract is hard: tilth-only, no host search fallback. The questions below are **out of scope** for the skill — don't enter cheez-search for them in the first place. They're listed here so workflow skills know where to route instead, consistent with the README rule "anything that touches source code goes through cheez-*; everything else stays on host tools".
+Inside `/cheez-search`, the contract is hard: tilth-only, no host search fallback. The questions below are **out of scope** for the skill — don't enter cheez-search for them in the first place. They're listed here so workflow skills know where to route instead, consistent with the README rule "anything that touches source code goes through `cheez-*`; everything else stays on host tools".
 
 | Question (don't use cheez-search) | Route to | Why |
 |-----------------------------------|----------|-----|
@@ -429,7 +429,7 @@ tilth_deps(path: "src/auth/index.ts")
 ## DO NOT
 
 - **DO NOT use grep / rg / ripgrep / ag / ack** — use `tilth_search`. `sg` (ast-grep) is the *only* sanctioned shell escape, and only for AST-shape patterns with metavariables tilth can't express.
-- **DO NOT use find / fd to locate files by name pattern** — use `tilth_files` (cheez-read). `find` for non-name predicates (size, mtime, perms) is fine outside code work, but redirect anything code-related back through cheez-*.
+- **DO NOT use find / fd to locate files by name pattern** — use `tilth_files` (cheez-read). `find` for non-name predicates (size, mtime, perms) is fine outside code work, but redirect anything code-related back through `cheez-*`.
 - **DO NOT use ast-grep (`sg`) for name-shaped or text queries** — that's `tilth_search` territory. `sg` is for structural patterns with metavars (`$X`, `$$$BODY`) only.
 - **DO NOT blind text search** — use a semantic `kind` (`symbol`, `callers`, `content`, `regex`) before reaching for `sg`.
 - **DO NOT re-read expanded results** — they're already shown.

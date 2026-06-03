@@ -1,12 +1,17 @@
 ---
 name: briesearch
-description: This skill should be used whenever the user asks to research, look up, compare, or investigate something external to the immediate codebase — phrases like "research X", "look up the API for Y", "compare libraries", "what does the doc say about Z", "find examples of how to do W", "is this library maintained", or "before I implement, what's the right approach". Routes the question across library docs (Context7), web research (Tavily), local code patterns (cheez-search), and GitHub examples (gh), then synthesizes with explicit confidence. Use even when the user only mentions a library name without saying "research" — when in doubt, briesearch first so the spec or implementation is informed, not speculative.
+description: Research questions external to the codebase across library docs (Context7), the web (Tavily), local code (cheez-search), and GitHub examples (gh), then synthesize with explicit confidence. Use whenever the user asks to research, look up, compare, or investigate something — phrases like "research X", "look up the API for Y", "compare libraries", "what does the doc say about Z", "find examples of how to do W", "is this library maintained", or "before I implement, what's the right approach". Use even when the user only mentions a library name without saying "research" — when in doubt, briesearch first so the spec or implementation is informed, not speculative.
 license: MIT
 ---
 
 # /briesearch
 
 Use this skill when a technical question needs evidence before a decision: library behavior, current vendor docs, implementation patterns, or local precedent.
+
+`/briesearch` runs in two contexts:
+
+- **User-invoked (default).** The user asked for research; produce the full report per `## Output` below.
+- **Internal-mode tier-2 caller.** `/cheese`'s tier-2 escalation (see `skills/cheese/SKILL.md` § Escalation) invokes `/briesearch` silently to fill missing external context when the cook-fast-path clarity check fails on the raw input. The synthesis returned to the caller is a one-liner suitable for the mini-spec's `## Provenance` section — the parent classifier only needs a verdict, not a deliverable. **The full cited research still gets written to disk** at the durable corpus's `research/<slug>/<slug>.md` per `## Output` below, with the slug derived from the parent's mini-spec slug. The mini-spec's `## Provenance` line links the artifact path so the citations are preserved and we never re-research later. Skip the durable write only when no source was actually fetched (e.g., the question was answered from local code patterns alone).
 
 Do not use it for a single obvious file lookup or when the user already supplied enough evidence.
 
@@ -31,7 +36,7 @@ Accept the whole user prompt as the research question. If version, framework, re
    ```
 
    which returns `{tool, depth, filters, question}` — `tool` is one of `tavily-search`, `tavily-research`, `tavily-extract`, `tavily-map`, `tavily-crawl`.
-4. **Gather** — fetch from each routed source in parallel (single assistant turn, multiple tool calls) where the harness supports it. For heavy calls **fork to a small, fast research sub-agent** that writes raw bodies to `.cheese/research/<slug>/raw/` and returns only the synthesis. Triggers and on-disk layout live in `references/context-isolation.md`; light triage runs inline without a fork.
+4. **Gather** — fetch from each routed source in parallel (single assistant turn, multiple tool calls) where the harness supports it. For heavy calls **fork to a small, fast research sub-agent** that writes raw bodies under the durable corpus's `research/<slug>/raw/` and returns only the synthesis. Resolver, triggers, and on-disk layout live in `references/context-isolation.md`; light triage runs inline without a fork. When a fetched URL must be verified — does it load, does it cover the claimed topic — `tavily_extract` (`urls=[…], query=<the claim>`) is the verification primitive: its clean content sharpens the "covers X?" check. WebFetch is the fallback, not the default (see `references/unavailable.md`).
 5. **Synthesize** — build the claim-level evidence table per `references/synthesis.md`, verify links resolve, apply the confidence cap. Run the cap deterministically against the routed source list rather than eyeballing it:
 
    ```bash
@@ -41,7 +46,7 @@ Accept the whole user prompt as the research question. If version, framework, re
      | python3 ${CLAUDE_SKILL_DIR}/scripts/briesearch.pyz confidence_cap --sources -
    ```
 
-   The script emits `{confidence, justification}` per the rubric in `references/synthesis.md` — single source caps at `don't know`, conflicting sources cap at `don't know`, three concordant high-quality recent sources reach `certain`.
+   The script emits `{confidence, justification}` per the rubric in `references/synthesis.md` — single source caps at `don't know`, conflicting sources cap at `don't know`, three concordant high-quality recent sources reach `certain`. Before finalizing a deep report, run the synthesis-fidelity self-check (`ground-check` + conclusion-vs-raw diff).
 6. **Stop** — hand off. Do not implement the result, and do not promote citations into design choices; the next skill (`/cook`, `/mold`, etc.) takes the report. Alternatives raised by cited sources become open questions for the user, not recommendations (see `references/synthesis.md` § Alternatives are open questions). Implement only if the current prompt explicitly asks for research-informed implementation.
 
 When an optional MCP source is missing, follow `references/unavailable.md` — fall back once, surface the cap, never silently retry.
@@ -54,15 +59,15 @@ When a routed source is heavy enough to flood the parent with raw bodies, fork t
 
 Triggers and the on-disk layout for raw bodies live in `references/context-isolation.md` — single source of truth for `/briesearch`-specific cutoffs.
 
-The sub-agent returns the claim table, confidence, gaps, and optional `.cheese/research/<slug>/<slug>.md` path; raw bodies stay under `.cheese/research/<slug>/raw/`. Digest size, parent-vs-sub-agent split, and harness-agnostic sub-agent selection live in the shared kernel at `skills/age/references/sub-agent-gate.md`.
+The sub-agent returns the claim table, confidence, gaps, and the optional durable-corpus `research/<slug>/<slug>.md` path; raw bodies stay under the corpus's `research/<slug>/raw/`. Digest size, parent-vs-sub-agent split, and harness-agnostic sub-agent selection live in the shared kernel at `skills/age/references/sub-agent-gate.md`.
 
 When two or more heavy sources are independent, spawn one small sub-agent per source in parallel and merge their claim tables in the parent — one sub-agent doing five things sequentially is the wrong shape.
 
 ## Preferred tools and fallbacks
 
-Local code patterns go through the cheez-* skills (`/cheez-search`, `/cheez-read`) — see those skills for tool selection rules.
+Local code patterns go through the `cheez-*` skills (`/cheez-search`, `/cheez-read`) — see those skills for tool selection rules.
 
-Beyond cheez-* there are research-specific tools:
+Beyond `cheez-*` there are research-specific tools:
 
 | Need | Prefer | Fallback |
 | --- | --- | --- |
@@ -75,7 +80,7 @@ If a preferred tool is missing, say so once and continue with the fallback. Miss
 
 ## Output
 
-Cross-cutting house style and citation form: [`../../shared/formatting.md`](../../shared/formatting.md). The output contract lives in `references/synthesis.md` (single source of truth). Short shape: one-paragraph synthesis, claim-level evidence table, open questions block, confidence with one-line justification, recommended next step. For deep looks, also write `.cheese/research/<slug>/<slug>.md` and pass back the path.
+Cross-cutting house style and citation form: [`../../shared/formatting.md`](../../shared/formatting.md). The output contract lives in `references/synthesis.md` (single source of truth). Short shape: one-paragraph synthesis, claim-level evidence table, open questions block, confidence with one-line justification, recommended next step. For deep looks, also write the long form to the durable corpus's `research/<slug>/<slug>.md` (resolve the root via `artifact-path research <slug>` — see `references/synthesis.md`) and pass back the path.
 
 ## Rules
 

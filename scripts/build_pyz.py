@@ -17,17 +17,29 @@ import ast
 import shutil
 import sys
 import tempfile
-import zipapp
+import zipfile
+from dataclasses import dataclass
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = REPO_ROOT / "src"
 SHARED_SCRIPTS = REPO_ROOT / "shared" / "scripts"
 SHARED_MODULES = {p.stem for p in SHARED_SCRIPTS.glob("*.py")}
+ZIP_TIMESTAMP = (1980, 1, 2, 0, 0, 0)
 
-# skill -> {subcommand: source filename in src/<skill>/}. Subcommands keep each
-# script's stem verbatim; the staged module name underscores it for importability.
-SKILLS: dict[str, dict[str, str]] = {
+
+@dataclass(frozen=True)
+class Shared:
+    """A subcommand sourced from a shared/scripts/ module rather than a
+    src/<skill>/ script, so one file backs the subcommand across every skill
+    that registers it — no per-skill copy to keep in sync."""
+
+    filename: str
+
+# skill -> {subcommand: source}. A plain string names a src/<skill>/ script;
+# Shared(...) names a shared/scripts/ module reused across skills. Subcommands
+# keep each script's stem verbatim; the staged module name underscores it.
+SKILLS: dict[str, dict[str, str | Shared]] = {
     "melt": {
         "batch-resolve": "batch-resolve.py",
         "conflict-pick": "conflict-pick.py",
@@ -36,6 +48,7 @@ SKILLS: dict[str, dict[str, str]] = {
         "lockfile-resolve": "lockfile-resolve.py",
     },
     "cheese-factory": {
+        "artifact-path": Shared("artifact_path.py"),
         "pr_plan_to_branches": "pr_plan_to_branches.py",
         "validate_decomposition": "validate_decomposition.py",
         "validate_manifest": "validate_manifest.py",
@@ -43,19 +56,25 @@ SKILLS: dict[str, dict[str, str]] = {
         "wiring_topo_sort": "wiring_topo_sort.py",
         "manifest_update": "manifest_update.py",
     },
-    "affinage": {"pr-status": "pr-status.py"},
+    "affinage": {"pr-status": "pr-status.py", "post-reply": "post-reply.py"},
     "mold": {
+        "artifact-path": Shared("artifact_path.py"),
         "curd-count": "curd-count.py",
         "agent_scope_diff": "agent_scope_diff.py",
     },
     "briesearch": {
+        "artifact-path": Shared("artifact_path.py"),
+        "ground-check": "ground_check.py",
         "route_research": "route_research.py",
         "pick_tavily_rung": "pick_tavily_rung.py",
         "confidence_cap": "confidence_cap.py",
     },
     "cheese": {"classify": "classify.py"},
     "cheez-search": {"pick_kind": "pick_kind.py"},
-    "cook": {"self_eval_check": "self_eval_check.py"},
+    "cook": {
+        "artifact-path": Shared("artifact_path.py"),
+        "self_eval_check": "self_eval_check.py",
+    },
     "hard-cheese": {
         "append-attempt": "append-attempt.py",
         "freshness-check": "freshness-check.py",
@@ -91,12 +110,8 @@ def _module_name(filename: str) -> str:
     return filename[:-3].replace("-", "_")
 
 
-def _files(skill: str) -> dict[str, str]:
+def _files(skill: str) -> dict[str, str | Shared]:
     return COMMON_SUBCOMMANDS if skill == COMMON else SKILLS[skill]
-
-
-def _source_dir(skill: str) -> Path:
-    return SHARED_SCRIPTS if skill == COMMON else SRC_ROOT / skill
 
 
 def _common_consumers(targets: list[str], *, explicit: bool) -> frozenset[str]:
@@ -108,6 +123,19 @@ def _common_consumers(targets: list[str], *, explicit: bool) -> frozenset[str]:
     if not explicit or COMMON in targets:
         return COMMON_CONSUMERS
     return frozenset(s for s in targets if s in COMMON_CONSUMERS)
+
+
+def _filename(source: str | Shared) -> str:
+    return source.filename if isinstance(source, Shared) else source
+
+
+def _source_path(skill: str, source: str | Shared) -> Path:
+    """Resolve a subcommand's source file. Shared() modules and every
+    common-bundle subcommand live in shared/scripts/; a plain string in a real
+    skill lives in src/<skill>/."""
+    if isinstance(source, Shared) or skill == COMMON:
+        return SHARED_SCRIPTS / _filename(source)
+    return SRC_ROOT / skill / source
 
 
 def _imported_top_names(path: Path) -> set[str]:
@@ -123,10 +151,9 @@ def _imported_top_names(path: Path) -> set[str]:
 
 def needed_shared(skill: str) -> set[str]:
     """Shared modules transitively imported by the skill's scripts."""
-    src_dir = _source_dir(skill)
     frontier: set[str] = set()
-    for fn in _files(skill).values():
-        frontier |= _imported_top_names(src_dir / fn) & SHARED_MODULES
+    for source in _files(skill).values():
+        frontier |= _imported_top_names(_source_path(skill, source)) & SHARED_MODULES
     resolved: set[str] = set()
     while frontier:
         module = frontier.pop()
@@ -155,22 +182,33 @@ def _dispatcher_source(sub_to_module: dict[str, str]) -> str:
     )
 
 
+def _write_zipapp(source: Path, target: Path) -> None:
+    with target.open("wb") as pyz:
+        pyz.write(b"#!/usr/bin/env python3\n")
+        with zipfile.ZipFile(pyz, "w", compression=zipfile.ZIP_STORED) as archive:
+            for staged_file in sorted(source.iterdir(), key=lambda p: p.name):
+                info = zipfile.ZipInfo(staged_file.name, date_time=ZIP_TIMESTAMP)
+                info.create_system = 3
+                info.external_attr = 0o644 << 16
+                archive.writestr(info, staged_file.read_bytes())
+    target.chmod(0o755)
+
+
 def build_bundle(skill: str, target: Path) -> Path:
     """Build ``skill``'s bundle at ``target`` (a .pyz path). Returns it."""
     target.parent.mkdir(parents=True, exist_ok=True)
     files = _files(skill)
-    src_dir = _source_dir(skill)
-    sub_to_module = {sub: _module_name(fn) for sub, fn in files.items()}
+    sub_to_module = {sub: _module_name(_filename(src)) for sub, src in files.items()}
     with tempfile.TemporaryDirectory() as td:
         stage = Path(td)
-        for module in needed_shared(skill):
+        for module in sorted(needed_shared(skill)):
             if module in sub_to_module.values():
                 continue  # already staged below as a subcommand (common bundle)
             shutil.copy(SHARED_SCRIPTS / f"{module}.py", stage / f"{module}.py")
-        for fn in files.values():
-            shutil.copy(src_dir / fn, stage / f"{_module_name(fn)}.py")
-        (stage / "__main__.py").write_text(_dispatcher_source(sub_to_module))
-        zipapp.create_archive(stage, target=target, interpreter="/usr/bin/env python3")
+        for source in files.values():
+            shutil.copy(_source_path(skill, source), stage / f"{_module_name(_filename(source))}.py")
+        (stage / "__main__.py").write_text(_dispatcher_source(sub_to_module), encoding="utf-8")
+        _write_zipapp(stage, target)
     return target
 
 

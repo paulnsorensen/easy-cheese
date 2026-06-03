@@ -1,6 +1,6 @@
 ---
 name: cheese-factory
-description: This skill should be used when the user has an approved spec that decomposes into 5+ independent behavioural curds and wants the whole pipeline run in parallel with reviewable PRs at the end — phrases like "/cheese-factory .cheese/specs/<slug>.md", "send through the factory", "parallelize this spec", "many curds", "fan out the implementation", "cheese-factory this". Runs inline and spawns full-peer general-purpose sub-agents per phase (decomposer, per-curd workers, wiring, post-merge review, PR planner), ending in 1–N reviewable PRs via `/pr-stack`. Use even when the user mentions `/fromagerie` — `/cheese-factory` is the portable harness-agnostic sibling. Supports `--hard` propagation and `--resume <slug>` to continue a crashed pipeline. Do NOT use for single coherent specs (`/cook`, `/ultracook`), fuzzy planning (`/mold`), review-only work (`/age`), or specs with fewer than 5 curds (`/ultracook`).
+description: Parallelize an approved spec across 5+ independent behavioural curds into reviewable PRs, running the whole pipeline fanned out at once. Use when the user has such a spec — phrases like "/cheese-factory .cheese/specs/<slug>.md", "send through the factory", "parallelize this spec", "many curds", "fan out the implementation", "cheese-factory this". Runs inline and spawns full-peer general-purpose sub-agents per phase (decomposer, per-curd workers, wiring, post-merge review, PR planner), ending in 1–N reviewable PRs via `/pr-stack`. Use even when the user mentions `/fromagerie` — `/cheese-factory` is the portable harness-agnostic sibling. Supports `--hard` propagation and `--resume <slug>` to continue a crashed pipeline. Do NOT use for single coherent specs (`/cook`, `/ultracook`), fuzzy planning (`/mold`), review-only work (`/age`), or specs with fewer than 5 curds (`/ultracook`).
 license: MIT
 ---
 
@@ -20,8 +20,8 @@ Accept:
 /cheese-factory <spec-path-or-slug> [--hard] [--resume <slug>]
 ```
 
-- A spec path, usually `.cheese/specs/<slug>.md`.
-- A bare slug whose spec lives at `.cheese/specs/<slug>.md`.
+- A spec path. When explicit, read it verbatim wherever it points.
+- A bare slug. Resolve it to the durable spec path with `SPEC=$(python3 ${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz artifact-path specs <slug>)`, then read `"$SPEC"`. The resolver anchors specs at the per-project durable corpus (see `shared/formatting.md` § Corpus location).
 - `--hard` — propagate the `/hard-cheese` metacognitive gate flag through per-curd `/cook --hard --auto` and the Phase 6 `/cure --hard --auto --stake medium+`. The orchestrator does not fire the gate itself. See `skills/hard-cheese/SKILL.md`.
 - `--resume <slug>` — read `.cheese/cheese-factory/<slug>/manifest.yaml`, find the latest phase marked complete, and continue from the next phase.
 
@@ -168,7 +168,7 @@ Seed items are minimal — only the shared types / protocols that curds cannot c
 
 For each seed item:
 
-1. Implement the change. Prefer `/cheez-write` when tilth MCP is present; otherwise fall back to the host's native edit tool (per the cheez-* portability rule in `README.md`). The skill must not hard-fail when `/cheez-write` is unavailable.
+1. Implement the change. Prefer `/cheez-write` when tilth MCP is present; otherwise fall back to the host's native edit tool (per the `cheez-*` portability rule in `README.md`). The skill must not hard-fail when `/cheez-write` is unavailable.
 2. Run quality gates (the project's `just check` or equivalent) — if gates fail, STOP.
 3. Commit via `/commit` (if available) or `git commit` direct.
 

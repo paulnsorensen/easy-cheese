@@ -17,6 +17,7 @@
     "./skills/mold",
     "./skills/pasteurize",
     "./skills/press",
-    "./skills/ultracook"
+    "./skills/ultracook",
+    "./skills/wheypoint"
   ]
 }

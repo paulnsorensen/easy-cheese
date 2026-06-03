@@ -1,6 +1,6 @@
 ---
 name: cook
-description: This skill should be used when the user has an approved spec, pasted requirements, or a focused unambiguous implementation request and wants the code written — phrases like "implement this", "build this feature", "write the code", "cook this spec", "make it work", "/cook .cheese/specs/<slug>.md", "fix this bug" (when the bug has a clear fix). Runs a TDD-disciplined contract → cut → implement → taste-test → handoff loop with scoped edits via cheez-write. Supports `--auto` for the autonomous chain through `/press → /age → /cure` (see `## Auto mode`). Use even when the user just says "go" or "ship it" if a spec or clear acceptance criteria is in scope. `/cook` runs standalone when the task is unambiguous (clear inputs, expected outputs, verifiable result) — a spec is helpful but not required. If the request is genuinely fuzzy, route to `/mold` first; if it needs no writes, route to `/culture`. After `/mold` (optional); before `/press` → `/age` → `/cure`.
+description: Implement an approved spec or focused unambiguous task with a TDD-disciplined contract → cut → implement → taste-test → handoff loop, editing through cheez-write. Use when the user wants code written — phrases like "implement this", "build this feature", "write the code", "cook this spec", "make it work", "/cook .cheese/specs/<slug>.md", "fix this bug" (when the bug has a clear fix). Supports `--auto` for the autonomous chain through `/press → /age → /cure` (see `## Auto mode`). Use even when the user just says "go" or "ship it" if a spec or clear acceptance criteria is in scope. `/cook` runs standalone when the task is unambiguous (clear inputs, expected outputs, verifiable result) — a spec is helpful but not required. If the request is genuinely fuzzy, route to `/mold` first; if it needs no writes, route to `/culture`. After `/mold` (optional); before `/press` → `/age` → `/cure`.
 license: MIT
 ---
 
@@ -14,16 +14,17 @@ Do not use it for fuzzy planning (`/mold`), no-write discussion (`/culture`), or
 
 Accept one of:
 
-- A spec path, usually `.cheese/specs/<slug>.md`.
-- A bare slug whose spec lives at `.cheese/specs/<slug>.md` (cook resolves the path; this is the form `/ultracook` uses when chaining).
+- A spec path. When explicit, read it verbatim wherever it points.
+- A bare slug. Resolve it to the durable spec path with `SPEC=$(python3 ${CLAUDE_SKILL_DIR}/scripts/cook.pyz artifact-path specs <slug>)`, then read `"$SPEC"`. The resolver anchors specs at the per-project durable corpus (see `shared/formatting.md` § Corpus location); this is the form `/ultracook` uses when chaining.
 - A pasted spec or issue.
 - A focused implementation request with acceptance criteria.
 - A clear, unambiguous task — single-file fix, named bug, well-scoped tweak — even without a spec.
 
 Optional flags:
 
-- `--auto` — autonomous mode. Skip every handoff gate, propagate the flag through `/press → /age → /cure`, and fix every medium-or-above finding across up to two cure passes. See `## Auto mode` below.
+- `--auto` — autonomous mode. Skip every handoff gate, propagate the flag through `/press → /age → /cure`, and fix every medium-or-above finding plus cheap (contained-fix) lows across up to two cure passes. See `## Auto mode` below.
 - `--hard` — propagate the `/hard-cheese` metacognitive gate flag through `/press → /age → /cure`. Cook does not fire the gate itself; it only passes the flag along. The gate fires at `/cure`'s share-for-review handoff or, under `--auto --hard`, at the end of cure's final auto pass. See `skills/hard-cheese/SKILL.md` and `skills/hard-cheese/references/composition.md`.
+- `--open-pr` — propagate to `/cure` so the chain's terminal cure pass may open a *new* PR when none exists. Without it the chain only pushes to an already-open PR (Rule 11) and otherwise leaves the remote untouched.
 
 ### Standalone fast-path
 
@@ -43,7 +44,7 @@ When the fast-path applies, derive the slug deterministically with `python3 ${CL
 4. **Taste-test** — check spec drift, readability, and scope creep. Two-round cap; details in `references/tdd-loop.md`.
 5. **Hand off** — produce the package-ready report (`references/package-report.md`), then run `python3 ${CLAUDE_SKILL_DIR}/scripts/cook.pyz self_eval_check --report .cheese/cook/<slug>.md --json` to scan for honesty-rule violations (skipped-claimed-pass, unverified-claim, scope-creep) and parse the JSON list for ids and lines. Non-empty list (exit 1) means stop and fix the report or the underlying work before handoff — do not eyeball the self-eval. (Drop `--json` for a one-line-per-violation human summary when running interactively.) Then write the handoff slug (`## Handoff slug` below) and prompt the next step via the shared handoff gate (see `## Handoff` below). The default chain is `/press` → `/age` → `/cure`.
 
-Code search, reading, and editing all go through the cheez-* skills (`/cheez-search`, `/cheez-read`, `/cheez-write`) — see those skills for tool selection rules and out-of-scope fallbacks.
+Code search, reading, and editing all go through the `cheez-*` skills (`/cheez-search`, `/cheez-read`, `/cheez-write`) — see those skills for tool selection rules and out-of-scope fallbacks.
 
 ## Preferred tools and fallbacks
 
@@ -104,12 +105,12 @@ When invoked with `--auto`, skip this gate entirely and proceed straight into th
 
 ### What auto mode does
 
-1. After cook's package-ready report, invoke `/press <slug> --auto`.
+1. After cook's package-ready report, invoke `/press <slug> --auto` (append `--open-pr` when it is in scope so the terminal cure can open the PR).
 2. `/press --auto` runs its hardening pass and, if readiness is `ready for /age` or `follow-up recommended`, invokes `/age <slug> --auto`. Both states mean the cooked contract is sound and every changed behaviour has a hardening test; documented follow-ups are review-safe. Only `blocked` stops auto — false premise, unfixable level-1/2 gap, a changed behaviour with no stable hardening test, or spinning wheels (three attempts at one gap without green).
 3. `/age <slug> --auto` writes the report and invokes `/cure <slug> --auto --stake medium+`.
-4. `/cure --auto --stake medium+` bypasses the selection gate, applies every finding of `blocker`, `high`, or `medium` severity, then invokes `/age --scope <touched-paths> --auto` for verification.
+4. `/cure --auto --stake medium+` bypasses the selection gate, applies every finding of `blocker`, `high`, or `medium` severity plus every cheap (contained-fix) `Low`, then invokes `/age --scope <touched-paths> --auto` for verification.
 5. The age → cure cycle is capped at **two cure passes total**. Pass 1 fixes the initial findings. Pass 2 fixes anything the re-age surfaces. After pass 2 the chain stops with a final summary, regardless of whether new findings remain.
-6. Auto mode never invokes `/gh`. Opening or updating a PR stays user-triggered.
+6. `/cook` itself never invokes `/gh`. At the chain's terminal, `/cure`'s push contract takes over: the final cure pass pushes to an already-open PR (Rule 11), and opens a *new* PR only when `--open-pr` is in scope. A fresh branch with no PR and no `--open-pr` ends with the final age report and touches no remote, as before.
 
 ### When auto mode stops early
 

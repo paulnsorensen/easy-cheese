@@ -1,0 +1,61 @@
+name: build-pyz
+
+# Verify that per-skill .pyz bundles match their sources. Releases still go
+# through release.yml; this PR check prevents source changes from landing without
+# their generated bundles.
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/build-pyz.yml'
+      - 'src/**'
+      - 'shared/scripts/**'
+      - 'scripts/build_pyz.py'
+      - 'skills/*/scripts/*.pyz'
+  push:
+    branches: [main]
+    # Keep the check on main too so stale bundles are visible after merges.
+    paths:
+      - '.github/workflows/build-pyz.yml'
+      - 'src/**'
+      - 'shared/scripts/**'
+      - 'scripts/build_pyz.py'
+      - 'skills/*/scripts/*.pyz'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: check .pyz bundles are current
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          token: ${{ github.token }}
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+
+      - name: Build bundles
+        run: python3 scripts/build_pyz.py
+
+      - name: Check bundles are current
+        run: |-
+          set -euo pipefail
+          git add -- 'skills/*/scripts/*.pyz'
+          if git diff --cached --quiet; then
+            echo ".pyz bundles are current."
+            exit 0
+          fi
+          echo "::error::.pyz bundles are stale; run 'python3 scripts/build_pyz.py' and commit the generated skills/*/scripts/*.pyz files."
+          git diff --cached --name-only -- 'skills/*/scripts/*.pyz'
+          git diff --cached --stat -- 'skills/*/scripts/*.pyz'
+          exit 1

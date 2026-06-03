@@ -1,6 +1,6 @@
 ---
 name: ultracook
-description: This skill should be used when the user has an approved spec or unambiguous task with a high-blast-radius footprint and wants the whole pipeline (cook → press → age → cure → age → cure → age, all `--auto`) to run forward in fresh-context isolation per phase — phrases like "/ultracook .cheese/specs/<slug>.md", "ultracook this", "run the full pipeline in isolation", "fresh-context auto chain", "send it through the cave", "pipeline with no contamination". Runs inline and spawns full-peer general-purpose sub-agents (one per phase), each invoking the phase skill with `--auto` and writing its handoff slug under `.cheese/<phase>/<slug>.md`. Sub-agents inherit the parent's model and full tool / MCP / skill access. Use when the user wants `/cook --auto`'s autonomous chain semantics but with each phase reasoning blind to prior phases. After `/mold`; ends after the third age spawn (or earlier on halt / early-stop).
+description: Pipeline one approved high-blast-radius spec sequentially through cook → press → age → cure → age → cure → age (all `--auto`), with fresh-context isolation per phase. Use when the user has such a spec — phrases like "/ultracook .cheese/specs/<slug>.md", "ultracook this", "run the full pipeline in isolation", "fresh-context auto chain", "send it through the cave", "pipeline with no contamination". Runs inline and spawns full-peer general-purpose sub-agents (one per phase), each invoking the phase skill with `--auto` and writing its handoff slug under `.cheese/<phase>/<slug>.md`. Sub-agents inherit the parent's model and full tool / MCP / skill access. Use when the user wants `/cook --auto`'s autonomous chain semantics but with each phase reasoning blind to prior phases. After `/mold`; ends after the third age spawn (or earlier on halt / early-stop).
 license: MIT
 ---
 
@@ -16,23 +16,26 @@ Do not use it for short focused changes (`/cook --auto` is cheaper and continuou
 
 Accept one of:
 
-- A spec path, usually `.cheese/specs/<slug>.md`.
-- A bare slug whose spec lives under `.cheese/specs/<slug>.md`.
+- A spec path. When explicit, it points wherever the user wrote the spec.
+- A bare slug whose spec lives in the per-project durable corpus (see `shared/formatting.md` § Corpus location).
 - A pasted spec, with a slug supplied alongside.
 
 `/ultracook` does not accept fuzzy or open-ended asks — those go to `/mold` first. The orchestrator assumes the contract is already locked.
 
+Optional flag: `--open-pr` — at the terminal, open a *new* PR when none exists (the default only pushes an already-open one). The orchestrator performs the terminal push itself; the phase-only cure sub-agents never push.
+
 ## Flow
 
-1. **Resolve slug** — derive `<slug>` from the input. If a spec path is given, the slug is the basename without `.md`; if a bare slug is given, confirm the spec exists at `.cheese/specs/<slug>.md`.
+1. **Resolve slug** — derive `<slug>` from the input. If a spec path is given, the slug is the basename without `.md`; if a bare slug is given, confirm the spec exists at the durable path the spawned `/cook` resolves (`python3 ${CLAUDE_SKILL_DIR}/scripts/cook.pyz artifact-path specs <slug>`; see `shared/formatting.md` § Corpus location).
 2. **Guard against re-entry** — if any of `.cheese/{cook,press,age,cure}/<slug>.md` already exist, stop with a one-line list of the existing handoffs and tell the user to either run `/cheese --continue <slug>` to resume from the latest phase or `rm` the relevant files to start fresh. Never silently wipe.
 3. **Phase loop** — for each phase in `cook, press, age, cure, age, cure, age`, spawn a fresh sub-agent (see `## Sub-agent contract` below), wait for it to return, read `.cheese/<phase>/<slug>.md`, and decide:
    - `status:` starts with `halt` → surface the halt reason and stop.
    - `next:` is `done` and the phase is age → stop early with a clean summary (the diff is clean at the medium+ severity floor; cure has nothing to apply).
    - Otherwise → continue to the next phase.
-4. **Final summary** — after the third age spawn (or any earlier stop), print a four-line summary: passes completed, total findings applied / deferred, the final age-report path, and the next-step nudge ("review the diff, then `/gh` when ready").
+4. **Terminal push** — after the third age spawn (or any earlier non-halt stop), if an open PR exists for the branch, dispatch `/gh` to commit + push the chain's changes to it (Rule 11 — the existing PR is the authorization). Open a *new* PR only when `--open-pr` is in scope. A halt never pushes.
+5. **Final summary** — print a four-line summary: passes completed, total findings applied / deferred, the final age-report path, and whether the PR was pushed (or the next-step nudge "review the diff, then `/gh` when ready" if no PR existed and `--open-pr` was absent).
 
-`/ultracook` never invokes `/gh`. PR creation stays user-triggered.
+`/ultracook` opens a *new* PR only with `--open-pr`; otherwise it pushes to an already-open PR at the terminal and never creates one.
 
 ## Phases and slug paths
 
@@ -55,7 +58,7 @@ Every spawn uses the canonical `/<phase> <slug> --auto` form. Cook accepts a bar
 The two-cure-pass cap is enforced by **chain length, not by age**. Each age sub-agent boots in fresh context and cannot count prior cure passes, so the contract cannot rely on age tracking the count. Instead:
 
 - The chain table has exactly seven entries, with two cure spawns (#4 and #6) and three age spawns (#3, #5, #7). After spawn #7 completes, the orchestrator stops because the table is exhausted.
-- Each age spawn writes `next:` from what it observes on its own run: `next: cure` when at least one medium-or-above severity finding exists, `next: done` when none do. The field is **informational** under ultracook — it drives early-stop (when an age reports clean), but it does not gate cap enforcement.
+- Each age spawn writes `next:` from what it observes on its own run: `next: cure` when at least one finding meets the `medium+` floor (medium-or-above, or a cheap contained-fix low), `next: done` when none do. The field is **informational** under ultracook — it drives early-stop (when an age reports clean), but it does not gate cap enforcement.
 - `/ultracook` does not pass a pass-ordinal hint to age. Age has no need to know whether it is age₁, age₂, or age₃; the orchestrator owns the position.
 - After each phase sub-agent returns, run `python3 ${CLAUDE_SKILL_DIR}/scripts/ultracook.pyz phase_decision --phase-index <0-6> --status <ok|halt:...> [--next <next-field>]` and branch on the JSON `action` field (`spawn` / `stop` / `stop_early` / `halt`). Do not re-derive the phase table in prose.
 
@@ -98,7 +101,7 @@ Rules:
 
 - **Do not downgrade the model.** Omit the model parameter so the sub-agent inherits the parent's model. Never pass a smaller tier (haiku, lighter task workers) for ultracook phases.
 - **Do not narrow `subagent_type`.** Use `general-purpose` (or the harness equivalent that grants full tool access). Do not pass `Explore`, `lsp-probe`, or any other read-only / scoped worker type.
-- **Do not restrict tools or MCP access.** Each phase needs Bash, Edit, Write, Read, the cheez-* skills, and any MCP servers the parent has. Restricting them is the failure mode the contract exists to prevent.
+- **Do not restrict tools or MCP access.** Each phase needs Bash, Edit, Write, Read, the `cheez-*` skills, and any MCP servers the parent has. Restricting them is the failure mode the contract exists to prevent.
 - **Do pass the slug.** The phase skill resolves its own paths from the slug; `/ultracook` does not pre-compute paths for the sub-agent.
 
 The contract is "inheritance, not diminution" because most sub-agent patterns in this ecosystem (Explore, lsp-probe, whey-drainer, ricotta-reducer) are deliberately scoped down for cheap focused queries. `/ultracook` does the opposite: it spawns workers that are full peers of the parent, doing major work in their own context window.
@@ -193,6 +196,6 @@ If the host harness does not expose a sub-agent primitive at all, `/ultracook` i
 - The chain is fixed: cook → press → age → cure → age → cure → age, all `--auto`, cure severity floor `medium+` (the `--stake` flag literal is preserved across callers). Do not invent extra phases or skip phases.
 - Read each phase's handoff slug after the sub-agent returns. Do not infer success from the sub-agent's last line — read the file.
 - Surface halts verbatim. Do not paraphrase, do not soften, do not "retry" a halted phase silently.
-- Never invoke `/gh`. PR creation stays user-triggered.
+- At the terminal, push to an already-open PR via `/gh` (Rule 11); create a *new* PR only with `--open-pr`. Never push on a halt.
 - Never wipe existing handoffs. Stop and tell the user to use `/cheese --continue` or `rm` by hand.
 - Apply the shared voice kernel (lives at `skills/age/references/voice.md` in this repo): lead the final summary with what happened, flag residual risk as `certain | speculating | don't know`, do not manufacture follow-ups.

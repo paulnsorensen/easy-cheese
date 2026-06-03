@@ -1,6 +1,6 @@
 ---
 name: melt
-description: This skill should be used when a git merge, rebase, or cherry-pick has produced conflicts and the user wants them resolved — phrases like "melt the conflicts", "fix the merge conflicts", "resolve the rebase conflicts", "what's conflicting after the merge", "/melt", "fix the cherry-pick", or any prompt that surfaces `<<<<<<<` markers, `CONFLICT (...)` git output, or a half-finished merge state. First checks for squash-merge residue (rebase doomed by a squash-merged PR — abort and re-cherry-pick), then runs the structural-merge cascade — mergiraf (AST-aware auto-resolve) → git rerere (replay remembered fixes) → kdiff3 (manual fallback) — with helper scripts for batch resolution, ours/theirs picks, and lockfile regeneration. Use even when only one file is conflicting if the user wants the structural pass attempted before manual editing. Do NOT use for general git operations without conflicts. After `/cook` or `/cure` if a merge step blocked them; before retrying the gate that surfaced the conflict.
+description: Resolve git merge, rebase, or cherry-pick conflicts via a structural-merge cascade — mergiraf (AST-aware auto-resolve) → git rerere (replay remembered fixes) → kdiff3 (manual fallback). Use when conflicts exist and the user wants them resolved — phrases like "melt the conflicts", "fix the merge conflicts", "resolve the rebase conflicts", "what's conflicting after the merge", "/melt", "fix the cherry-pick", or any prompt that surfaces `<<<<<<<` markers, `CONFLICT (...)` git output, or a half-finished merge state. First checks for squash-merge residue (rebase doomed by a squash-merged PR — abort and re-cherry-pick), then runs the cascade with helper scripts for batch resolution, ours/theirs picks, and lockfile regeneration. Use even when only one file is conflicting if the user wants the structural pass attempted before manual editing. Do NOT use for general git operations without conflicts. After `/cook` or `/cure` if a merge step blocked them; before retrying the gate that surfaced the conflict.
 license: MIT
 ---
 
@@ -12,13 +12,13 @@ Do not use it for general git operations without conflicts (those go to a `commi
 
 ## File IO delegation
 
-`melt` orchestrates the resolution chain via bash and the helper scripts. For per-file inspection or manual edits, delegate to the cheez-* skills:
+`melt` orchestrates the resolution chain via bash and the helper scripts. For per-file inspection or manual edits, delegate to the `cheez-*` skills:
 
 - **`/cheez-search`** — locate conflict markers or related symbols across the tree.
 - **`/cheez-read`** — inspect conflicted files, view conflict hunks, list directory contents.
 - **`/cheez-write`** — apply hash-anchored resolutions when bash flows are not enough.
 
-The bash-driven flows below cover the bulk of resolution. Drop into the cheez-* skills only when you need to inspect or rewrite a specific file by hand.
+The bash-driven flows below cover the bulk of resolution. Drop into the `cheez-*` skills only when you need to inspect or rewrite a specific file by hand.
 
 ## Resolution chain
 

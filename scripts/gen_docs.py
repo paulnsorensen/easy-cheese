@@ -21,6 +21,7 @@ Also emits:
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 from pathlib import Path
 
 import mkdocs_gen_files
@@ -30,6 +31,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 SKILLS_DIR = REPO_ROOT / "skills"
 SHARED_DIR = REPO_ROOT / "shared"
 REPO_URL = "https://github.com/paulnsorensen/easy-cheese"
+LICENSE_URL = f"{REPO_URL}/blob/main/LICENSE"
 
 LINK_RE = re.compile(r"(?<!\!)\[([^\]]+)\]\(([^)\s]+)(\s+\"[^\"]*\")?\)")
 NESTED_IMAGE_LINK_RE = re.compile(r"(\[!\[[^\]]*\]\([^)]+\)\]\()([^)\s]+)(\))")
@@ -70,8 +72,24 @@ def _split_anchor(path: str) -> tuple[str, str]:
     return path, ""
 
 
+def _is_external(url: str) -> bool:
+    return url.startswith(("http://", "https://", "mailto:", "#"))
+
+
+@lru_cache(maxsize=None)
+def _read_text_cached(path: Path, _mtime: float) -> str:
+    return path.read_text(encoding="utf-8")
+
+
+def _read_text(path: Path) -> str:
+    # README.md is consumed by both emit_install_page and emit_root_passthrough;
+    # cache so each repo file is read from disk once per build. Keyed on mtime so a
+    # changed file is never served stale if these are ever re-driven in-process.
+    return _read_text_cached(path, path.stat().st_mtime)
+
+
 def rewrite_skill_link(url: str, skill_name: str) -> str:
-    if url.startswith(("http://", "https://", "mailto:", "#")):
+    if _is_external(url):
         return url
     path, anchor = _split_anchor(url)
 
@@ -98,13 +116,13 @@ def rewrite_skill_link(url: str, skill_name: str) -> str:
         return f"../shared/{m.group(1)}{anchor}"
 
     if path == "../../LICENSE":
-        return f"{REPO_URL}/blob/main/LICENSE"
+        return LICENSE_URL
 
     return url
 
 
 def rewrite_ref_link(url: str, skill_name: str) -> str:
-    if url.startswith(("http://", "https://", "mailto:", "#")):
+    if _is_external(url):
         return url
     path, anchor = _split_anchor(url)
 
@@ -124,13 +142,13 @@ def rewrite_ref_link(url: str, skill_name: str) -> str:
         return f"../../../{ROOT_DOC_MAP[m.group(1)]}{anchor}"
 
     if path == "../../../LICENSE":
-        return f"{REPO_URL}/blob/main/LICENSE"
+        return LICENSE_URL
 
     return url
 
 
 def rewrite_root_passthrough_link(url: str) -> str:
-    if url.startswith(("http://", "https://", "mailto:", "#")):
+    if _is_external(url):
         return url
     path, anchor = _split_anchor(url)
     stripped = path[2:] if path.startswith("./") else path
@@ -138,7 +156,7 @@ def rewrite_root_passthrough_link(url: str) -> str:
     if stripped in ROOT_DOC_MAP:
         return f"./{ROOT_DOC_MAP[stripped]}{anchor}"
     if stripped == "LICENSE":
-        return f"{REPO_URL}/blob/main/LICENSE"
+        return LICENSE_URL
     return url
 
 
@@ -257,8 +275,8 @@ def extract_h2_section(
                     out.append(line)
             continue
         if in_section:
-            if bump_headings and line.startswith("### "):
-                line = "## " + line[4:]
+            if bump_headings and re.match(r"^#{3,} ", line):
+                line = line[1:]  # drop one '#' — promote h3+ by a level
             out.append(line)
     return "".join(out)
 
@@ -267,7 +285,7 @@ def emit_install_page() -> bool:
     src = REPO_ROOT / "README.md"
     if not src.exists():
         return False
-    readme = src.read_text(encoding="utf-8")
+    readme = _read_text(src)
 
     sections = {
         "Install": extract_h2_section(readme, "Install", drop_header=True, bump_headings=True),
@@ -305,7 +323,7 @@ def emit_root_passthrough(filename: str, dest: str, title: str) -> bool:
     src = REPO_ROOT / filename
     if not src.exists():
         return False
-    text = src.read_text(encoding="utf-8")
+    text = _read_text(src)
     text = re.sub(r"^#\s+.*\n", "", text, count=1)
     text = apply_link_rewrite(text, rewrite_root_passthrough_link)
     front = "---\n" + yaml.safe_dump(

@@ -4,10 +4,12 @@ Curdle is the terminal state of mold. It runs only after the two-key handshake (
 
 ## Artifact types
 
+Resolve the spec path with `SPEC=$(python3 ${CLAUDE_SKILL_DIR}/scripts/mold.pyz artifact-path specs <slug>)` — it anchors at the per-project durable corpus (see `shared/formatting.md` § Corpus location). Issues stay repo-local: write them as `.cheese/issues/<slug>-NNN.md`.
+
 | Type | When | Path |
 | --- | --- | --- |
-| **Spec** | Any meaningful design discussion | `.cheese/specs/<slug>.md` |
-| **Spec + Issues** | Side-channel actionables surfaced (out-of-scope bugs, follow-ups) | spec at `.cheese/specs/<slug>.md`; issues at `.cheese/issues/<slug>-001.md`, `-002.md`, … |
+| **Spec** | Any meaningful design discussion | `$SPEC` (resolver output) |
+| **Spec + Issues** | Side-channel actionables surfaced (out-of-scope bugs, follow-ups) | spec at `$SPEC`; issues at `.cheese/issues/<slug>-001.md`, `-002.md`, … |
 | **Issues only** | Pure standalone bug tickets, no design | `.cheese/issues/<slug>-001.md`, … |
 
 A spec is the rich container; absorbs problem framing, requirements, approach, decisions, interface sketches, risks, gates. An issue is a separate, GitHub-flavoured item the user can paste into a tracker.

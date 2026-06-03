@@ -98,6 +98,7 @@ The Tavily MCP exposes 5 tools at increasing cost and precision. Pick the lowest
 
 - **Search-then-Extract** (default two-step): `tavily_search` for discovery → drop results with `score ≤ 0.5` → `tavily_extract(urls=[…], query=<focused question>)` on the survivors. Cheaper and lower-noise than `include_raw_content=true` on search.
 - **Map-then-Extract** (large docs sites): `tavily_map(url=…, select_paths=[…])` to find the 1-3 right URLs without paying for content → `tavily_extract` only those. Cheaper than `tavily_crawl` when you don't need every page.
+- **Verify-then-cite** (link verification): to confirm a URL loads *and* actually covers the claimed topic, use `tavily_extract(urls=[…], query=<the claim>)` — its LLM-optimized clean content makes the "does this page cover X" judgment sharper and cheaper than raw HTML. This is the preferred verification/extraction primitive. WebFetch is the fallback, not the default — reach for it only when the Tavily MCP is unavailable (see `unavailable.md`).
 
 ### When to use `tavily_research`
 
@@ -148,3 +149,5 @@ SOURCE PRIORITY: vendor docs > release notes > repo precedent
 ## Hard rule
 
 If a source was committed in routing, spawn it. If it returns "unavailable", report that — do not silently drop a routed source because it later seems low-value.
+
+Make this mechanical, not honor-system. After gather, diff the emitted `ROUTING DECISION` against what actually ran: for each source marked `YES`, confirm a call executed and produced evidence, an `unavailable` result, or an empty result. Any committed source with no corresponding execution is **committed-but-skipped** — mark it explicitly in the report (a `Searched, empty` line if it ran dry, an UNAVAILABLE note per `unavailable.md` if it failed, or a flagged gap if it was simply not run) and apply the matching confidence cap from `synthesis.md`. A `YES` in the routing block with nothing to show for it is a reconciliation failure, not a silent drop.

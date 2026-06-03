@@ -51,11 +51,46 @@ Every option must include:
 
 `dispatch: none` is for *terminal* options only. Options that keep the current skill running must use `continue:`, not `dispatch: none`, so the gate reader can tell "stop" apart from "do something else in this skill".
 
-## Codex-compatible asking
+## Host routing guide
 
-Prefer the host's structured question primitive when it is callable (`AskUserQuestion`, Codex `request_user_input`, or the host equivalent). If no structured primitive is available, ask a plain numbered question and wait for the next user reply.
+The `handoff_gate:` block is the semantic source of truth. After building it,
+choose the richest question mechanism the current harness actually exposes;
+never name a host tool in the transcript unless it is callable in that session.
 
-After the answer arrives:
+| Harness | Prefer | Notes |
+| --- | --- | --- |
+| Claude Code | `AskUserQuestion` | Supports `questions[]` with `question`, short `header`, `options[]`, and optional `multiSelect`; hooks can fill `answers` via `updatedInput`. Source: [Claude Code hooks reference](https://docs.anthropic.com/en/docs/claude-code/hooks#askuserquestion). |
+| Codex / OpenAI app-server | `request_user_input` / `tool/requestUserInput` when exposed | OpenAI's app server documents `tool/requestUserInput` for 1-3 short questions and free-form `isOther` options. In Codex CLI, use `request_user_input` only when the active tool list and current collaboration mode both allow it; otherwise fall back to numbered text. Source: [Codex app-server reference](https://developers.openai.com/codex/app-server). |
+| Conductor | Underlying agent primitive | Conductor runs Claude Code or Codex sessions; route to that agent's question primitive. Conductor Plan Mode exists for both, but Conductor is not a separate question API. Source: [Conductor agent modes](https://conductor.build/docs/concepts/agent-modes). |
+| OpenCode | `question` tool | The built-in `question` tool asks during execution with header, question text, options, and custom answers; ensure `permission.question` is not denied. Source: [OpenCode tools](https://opencode.ai/docs/tools#question). |
+| GitHub Copilot CLI | `ask_user` tool | Copilot CLI lists `ask_user` as "Ask the user a question" and `--no-ask-user` disables it. Use it when available; otherwise numbered text. Source: [Copilot CLI command reference](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-command-reference). |
+| Gemini CLI | `ask_user` tool | Google codelab output lists `Ask User (ask_user)` in `/tools`; use it when present. Source: [Gemini CLI codelab](https://codelabs.developers.google.com/gemini-cli-hands-on). |
+| Cursor CLI / ACP | `cursor/ask_question` when exposed | Cursor ACP documents `cursor/ask_question` as a blocking extension method; use it only inside hosts that expose that ACP method. Source: [Cursor ACP docs](https://cursor.com/docs/cli/acp#cursor-extension-methods). |
+| Windsurf Cascade | Plan-mode interactive questions when in Plan Mode | Cascade Plan Mode can ask clarifying questions and present multiple options with an interactive interface. Outside that mode, fall back to numbered text unless a host tool is exposed. Source: [Cascade modes](https://docs.windsurf.com/windsurf/cascade/modes). |
+| MCP server flows | `elicitation/create` | Use only when an MCP server is requesting user input through a client that supports elicitation. It is not a general assistant-to-user question primitive. Source: [MCP elicitation](https://modelcontextprotocol.io/specification/2025-11-25/client/elicitation). |
+| Aider and unknown harnesses | Numbered text | If no structured primitive is visible, ask a plain numbered question and wait for the next user reply. |
+
+### Portable fallback format
+
+```markdown
+Question: <one short question>
+Recommended: <label> — <why>
+
+1. <label> — <effect/tradeoff>
+2. <label> — <effect/tradeoff>
+3. <label> — <effect/tradeoff>
+Other: reply with `other: <short answer>`
+```
+
+Use the option label from `handoff_gate.recommended`; do not assume the
+recommended option is numbered `1` unless you deliberately rendered that label
+as option 1 in this fallback.
+
+Keep gates small: one decision by default, at most three questions when the
+host primitive explicitly supports batching. Include a free-form `Other` path
+when the host supports it; otherwise spell out the `other:` fallback in text.
+
+## After the answer arrives
 
 1. Normalize the answer to one option label or recognized free-text verb.
 2. If the answer is ambiguous, ask one clarifying question; do not guess.
@@ -86,4 +121,8 @@ Keep payloads short and factual. If a payload would exceed a compact screenful, 
 
 ## Flag propagation
 
-Propagate `--hard` through every runnable downstream option while the flag is in scope. Propagate `--auto` only inside documented auto-mode chains. Interactive gates must not add `--auto` unless the option explicitly says `--auto` and the user selected it.
+Propagate `--hard` through every runnable downstream option while the flag is in scope. Propagate `--auto` inside documented auto-mode chains and inside `/cheese`'s autonomous-by-default dispatch path (see `skills/cheese/SKILL.md` § Escalation — tier-1 and tier-2 dispatches pre-select the auto variant and run it without a gate unless `--safe` is set).
+
+Propagate `--safe` and `--open-pr` through every runnable downstream option while in scope. `--safe` re-introduces the gates that the autonomous default skips — the `/age` / `/affinage` cure-selection and `/cure`'s PR push. It only has meaning for skills that *have* such a gate to re-introduce: `/age`, `/affinage`, and `/cure`. It does **not** turn a `--auto` chain interactive (the two flags are opposites) — `/cook --auto` and `/press --auto` have no selection or push gate of their own, so they neither declare nor forward `--safe`; a `/cheese --safe` route that dispatches a `--auto` variant gates only `/cheese`'s own dispatch decision, then runs the chain headless. `--open-pr` rides all the way to the terminal `/cure`, authorizing a clean cure to open a *new* PR when none exists (the default only pushes an already-open one); inside the `--auto` chain it is threaded through each invocation (`/cook → /press → /age → /cure`).
+
+Outside those autonomous paths, interactive gates must not add `--auto` unless the option explicitly says `--auto` and the user selected it. Inside them, the auto variant is the pre-selected recommended target by design — `--safe` is the user's opt-out to a gated flow, where the auto variant remains pre-selected but dispatch waits for confirmation.

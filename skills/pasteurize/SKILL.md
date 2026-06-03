@@ -1,6 +1,6 @@
 ---
 name: pasteurize
-description: This skill should be used when the user has a hard bug, flaky failure, or performance regression — phrases like "diagnose this", "debug this", "why is X broken", "the test fails intermittently", "/pasteurize", or a pasted stack trace / repro without a stated cause. Runs a six-phase diagnosis loop (feedback loop → reproduce → hypothesise → instrument → fix + regression test → cleanup); phase 1 (build a deterministic, agent-runnable feedback loop) is the skill — everything else consumes the signal. Writes the regression test, applies the minimal fix, verifies the original repro is gone, then writes `.cheese/pasteurize/<slug>.md` and hands off to `/cook --auto` (default) for taste-test and the `/press → /age → /cure` chain. Supports `--auto` to skip the handoff gate. Do NOT use for review-only diffs (`/age`), feature design (`/mold`), or fixes where the cause is already known (`/cook` directly). After `/cheese` debug intent; before `/cook --auto` → `/press` → `/age` → `/cure`.
+description: Hard-bug DIAGNOSIS + FIX. Builds a deterministic agent-runnable feedback loop, reproduces the failure, names the cause, writes a regression test, applies the minimal production fix. Use when the user reports a bug, flaky test, perf regression, or visible misbehaviour — phrases like "diagnose this", "debug this", "why is X broken", "/pasteurize", or a pasted stack trace / repro / "this looks wrong, investigate" with no stated cause. Pasteurize EDITS code (regression test + fix); culture does not. Runs the six-phase loop — feedback loop → reproduce → hypothesise → instrument → fix + regression test → cleanup — anchored on phase 1. Writes `.cheese/pasteurize/<slug>.md` and hands off to `/cook <slug> --auto` for the `/press → /age → /cure` chain; pasteurize's own `--auto` skips its handoff gate. Do NOT use for review-only diffs (`/age`), feature design (`/mold`), known-cause fixes (`/cook`), or when the user explicitly opted out of writes (`/culture`). After `/cheese` debug intent; before `/cook <slug> --auto`.
 license: MIT
 ---
 
@@ -75,7 +75,7 @@ Each hypothesis must be **falsifiable**: state the prediction it makes.
 
 If you cannot state the prediction, the hypothesis is a vibe — discard or sharpen it.
 
-**Show the ranked list to the user via `AskUserQuestion` before testing.** They often have domain knowledge that re-ranks instantly ("we just deployed a change to #3"), or know hypotheses they've already ruled out. Cheap checkpoint, big time saver. Don't block on it — proceed with your ranking if the user is AFK or running `--auto`.
+**Show the ranked list to the user through the host routing guide in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md) before testing.** They often have domain knowledge that re-ranks instantly ("we just deployed a change to #3"), or know hypotheses they've already ruled out. Cheap checkpoint, big time saver. Don't block on it — proceed with your ranking if the user is AFK or running `--auto`.
 
 ## Phase 4 — Instrument
 
@@ -173,7 +173,7 @@ follow_up: <architectural follow-up note, or "none">
 
 **Pipeline:** cheese (debug) → **[pasteurize]** → cook --auto → press → age → cure → ship
 
-After the report is printed and the handoff slug is on disk, ask via `AskUserQuestion` which downstream to run. Lead each option with the verb (what the user wants to _do_ next):
+After the report is printed and the handoff slug is on disk, ask through the host routing guide in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md) which downstream to run. Lead each option with the verb (what the user wants to _do_ next):
 
 - **Validate and chain forward** _(recommended when `status: ok`)_ — `/cook <slug> --auto`.
 - **Validate without auto chain** — `/cook <slug>` (cook runs taste-test, then the user picks each subsequent step).
@@ -182,11 +182,11 @@ After the report is printed and the handoff slug is on disk, ask via `AskUserQue
 
 Pre-select **Validate and chain forward** when `status: ok`. The chain default is `--auto` because pasteurize already wrote and verified the fix; the work left for cook → press → age → cure is mechanical validation, not new authoring. Never auto-invoke; the user must still select.
 
-When invoked with `--auto`, skip this `AskUserQuestion` entirely and invoke `/cook <slug> --auto` directly.
+When invoked with `--auto`, skip this host-routed question entirely and invoke `/cook <slug> --auto` directly.
 
 ## Auto mode
 
-`--auto` is the autonomous-pipeline switch. Propagated from upstream skills (`/cheese --auto`) or invoked directly with `--auto`.
+`--auto` is the autonomous-pipeline switch. Propagated from upstream skills (`/cheese` propagates `--auto` by default; under `--safe`, `--auto` becomes an explicit selection in the dispatch gate rather than the silent default) or invoked directly with `--auto`.
 
 What auto mode does:
 

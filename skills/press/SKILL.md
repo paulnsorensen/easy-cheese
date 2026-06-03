@@ -1,6 +1,6 @@
 ---
 name: press
-description: This skill should be used right after `/cook` produces green changes, when the user wants the test surface hardened before review or shipping — phrases like "press the changes", "harden this", "check coverage", "strengthen the tests", "are the tests good enough", "press before /age", "/press". Reads the spec + cooked diff, maps changed behavior to tests, finds weak assertions and missing boundaries, adds focused hardening tests, writes a press report to `.cheese/press/<slug>.md`, and prompts `/age` next. Supports `--auto` (propagated from `/cook --auto`) to skip its handoff and chain straight into `/age --auto` when readiness is `ready for /age` or `follow-up recommended`; only `blocked` halts the auto chain. Use even when the user wants to "tighten things up" before review. Do NOT use to add broad new behavior — only corrective fixes that hardening tests force. After `/cook`; before `/age` → `/cure`.
+description: Harden the test surface after `/cook` — map changed behavior to tests, find weak assertions and missing boundaries, and add focused hardening tests. Use when the user wants the tests strengthened before review or shipping — phrases like "press the changes", "harden this", "check coverage", "strengthen the tests", "are the tests good enough", "press before /age", "/press". Reads the spec + cooked diff, writes a press report to `.cheese/press/<slug>.md`, and prompts `/age` next. Supports `--auto` (propagated from `/cook --auto`) to skip its handoff and chain straight into `/age --auto` when readiness is `ready for /age` or `follow-up recommended`; only `blocked` halts the auto chain. Use even when the user wants to "tighten things up" before review. Do NOT use to add broad new behavior — only corrective fixes that hardening tests force. After `/cook`; before `/age` → `/cure`.
 license: MIT
 ---
 
@@ -27,9 +27,9 @@ Do not use it to implement broad new behavior. Press may add or strengthen tests
 
 ## Preferred tools and fallbacks
 
-Code search, reading, and editing all go through the cheez-* skills (`/cheez-search`, `/cheez-read`, `/cheez-write`) — see those skills for tool selection rules. For coverage and test discovery, press uses `cheez-search` (callers via `kind: "callers"`) and `tilth_deps` (cheez-search owns the routing).
+Code search, reading, and editing all go through the `cheez-*` skills (`/cheez-search`, `/cheez-read`, `/cheez-write`) — see those skills for tool selection rules. For coverage and test discovery, press uses `cheez-search` (callers via `kind: "callers"`) and `tilth_deps` (cheez-search owns the routing).
 
-Beyond cheez-* there are press-specific tools:
+Beyond `cheez-*` there are press-specific tools:
 
 | Need | Prefer | Fallback |
 | --- | --- | --- |
@@ -120,7 +120,7 @@ Pre-select **Review the diff** when readiness is `ready for /age` or `follow-up 
 When invoked with `--auto` (propagated from `/cook --auto`):
 
 - Skip the handoff gate entirely.
-- If readiness is `ready for /age` or `follow-up recommended`, invoke `/age <slug> --auto` directly. Both states mean the cooked contract is sound and every changed behaviour has a hardening test; follow-ups are documented and review-safe.
+- If readiness is `ready for /age` or `follow-up recommended`, invoke `/age <slug> --auto` directly (forward `--open-pr` when it is in scope). Both states mean the cooked contract is sound and every changed behaviour has a hardening test; follow-ups are documented and review-safe.
 - If readiness is `blocked`, stop the auto chain and surface the press report to the user. `blocked` is reserved for cases where human judgement is genuinely required: a false premise on the cooked contract, an unfixable level-1/2 gap inside cooked scope, a changed behaviour press could not lock with a stable hardening test, or spinning wheels (three attempts at the same gap without green).
 
 ### When invoked from /ultracook

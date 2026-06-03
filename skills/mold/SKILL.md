@@ -1,14 +1,17 @@
 ---
 name: mold
-description: This skill should be used when the user has a fuzzy idea, half-formed feature, or design direction and wants to converge on a spec — phrases like "let's design X", "I'm thinking about Y", "what should the API for Z look like", "shape this into a spec", "I want to add a feature that…", "/mold". Runs an iterative dialogue (Explore / Ground / Shape / Sketch / Grill / Diagnose), grounds every critical claim with cheez-search or briesearch, locks public seams in pseudocode, and only writes a spec to `.cheese/specs/<slug>.md` after an explicit approval gate. Use even when the user is "just thinking out loud" if they want the dialogue to leave behind a written artifact — for pure no-write thinking, route to `/culture` instead. After `/culture` (optional); before `/cook`.
+description: Converge a fuzzy idea or half-formed feature into an approved spec through an iterative, grounded design dialogue. Use when the user has a fuzzy idea or design direction — phrases like "let's design X", "I'm thinking about Y", "what should the API for Z look like", "shape this into a spec", "I want to add a feature that…", "/mold". Runs an iterative dialogue (Explore / Ground / Shape / Sketch / Grill / Diagnose), grounds every critical claim with cheez-search or briesearch, locks public seams in pseudocode, and only writes a spec to `.cheese/specs/<slug>.md` after an explicit approval gate. Use even when the user is "just thinking out loud" if they want the dialogue to leave behind a written artifact — for pure no-write thinking, route to `/culture` instead. After `/culture` (optional); before `/cook`.
 license: MIT
 ---
 
 # /mold
 
-Use this skill when the user has a fuzzy feature idea, bug symptom, or design direction and wants a coherent spec or issue set before implementation.
+Two modes, by analogy to `/culture`:
 
-Do not use it for free-form discussion with no artifact intent (`/culture`), direct implementation (`/cook`), or research-only questions (`/briesearch`).
+1. **User-invoked full ceremony (default).** The user typed `/mold` (or `/cheese` routed an explicit fuzzy-design ask straight here). Runs the full Explore/Ground/Shape/Sketch/Grill/Diagnose dialogue and the two-key handshake before any spec is written. The flow below describes this mode.
+2. **Agent-invoked mini-spec mode.** `/cheese` calls into `/mold` at tier 1 of its escalation (see `skills/cheese/SKILL.md` § Escalation) when the cook fast-path checks all pass and a spec needs to materialise before `/cook --auto` runs. No dialogue, no handshake — the agent writes a mini-spec directly from the user's input (plus any tier-2 `/culture` / `/briesearch` synthesis) and returns the spec path. See `## Agent-invoked mini-spec mode` below.
+
+Do not use the user-invoked ceremony for free-form discussion with no artifact intent (`/culture`), direct implementation (`/cook`), or research-only questions (`/briesearch`).
 
 ## Flow
 
@@ -16,8 +19,8 @@ Do not use it for free-form discussion with no artifact intent (`/culture`), dir
 2. **Dialogue** — build shared understanding through the smallest useful question to the user, but contribute at maximum useful depth between questions (full options, named edge cases, concrete evidence — not gestural sketches). Ground every critical claim with `cheez-search`, `cheez-read`, or a Validate Cycle (`references/validate-cycle.md`). Track contradictions across turns; if turn N contradicts an earlier conclusion, flag and resolve it before continuing.
 3. **Sketch** — for any feature touching >1 module or a new public interface, run the shape check (`references/shape-check.md`) on the touched symbols, then lock seams in pseudocode signatures before talking spec content. Default to full signatures, not hand-waving.
 4. **Two-key handshake** — both the user (explicit verb) and the agent (coherence self-check) must agree before extraction. See `references/handshake.md`.
-5. **Curdle** — derive the slug and target path with `python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz slugify from-task --task "<working problem statement>"` (honour any user-passed slug verbatim instead of re-deriving), then write the approved spec to that path (and optional `.cheese/issues/<slug>-NNN.md`). Format and collision rules in `references/curdle.md`.
-6. **Hand off** — once the spec is on disk, run `python3 ${CLAUDE_SKILL_DIR}/scripts/mold.pyz curd-count .cheese/specs/<slug>.md --blast-radius <low|medium|high>` to compute the recommended downstream skill (full procedure in `references/curd-count.md`). Omit `--blast-radius` when the shape-check verdict is `[?]` or shape-check was skipped — the script degrades to `/cook` for sub-threshold specs in that case. Then prompt the next step via the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md). Never dispatch before the user selects; after a non-stop selection, run the selected downstream skill immediately.
+5. **Curdle** — derive the slug with `python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz slugify from-task --task "<working problem statement>" --json` (read the `slug` field; honour any user-passed slug verbatim instead of re-deriving), then resolve the durable spec path with `SPEC=$(python3 ${CLAUDE_SKILL_DIR}/scripts/mold.pyz artifact-path specs <slug>)` and write the approved spec to `"$SPEC"` (and optional issues alongside). The resolver anchors specs at the per-project durable corpus (see `shared/formatting.md` § Corpus location); never hardcode a `.cheese/specs/` path. Format and slug rules in `references/curdle.md`.
+6. **Hand off** — once the spec is on disk, run `python3 ${CLAUDE_SKILL_DIR}/scripts/mold.pyz curd-count "$SPEC" --blast-radius <low|medium|high>` to compute the recommended downstream skill (full procedure in `references/curd-count.md`). Omit `--blast-radius` when the shape-check verdict is `[?]` or shape-check was skipped — the script degrades to `/cook` for sub-threshold specs in that case. Then prompt the next step via the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md). Never dispatch before the user selects; after a non-stop selection, run the selected downstream skill immediately.
 
 ## Modes
 
@@ -32,11 +35,53 @@ Do not use it for free-form discussion with no artifact intent (`/culture`), dir
 
 Full mode definitions, exit criteria, and user knobs in `references/modes.md`.
 
+## Agent-invoked mini-spec mode
+
+`/cheese`'s tier-1 escalation calls into `/mold` to produce a spec without a user-facing dialogue. The cook fast-path checks have already passed at the call site, so the input is unambiguous by construction — there is nothing left to ground, no trade-offs to grill. The mode skips the Flow above entirely:
+
+1. **Derive slug** from the user's ask (kebab-case noun-phrase, ≤ 4 words).
+2. **Write `.cheese/specs/<slug>.md`** with the mini-spec schema below. Resolve the path via `python3 ${CLAUDE_SKILL_DIR}/scripts/mold.pyz artifact-path specs <slug>` when the resolver is available; otherwise fall back to the literal `.cheese/specs/<slug>.md` path.
+3. **Return the explicit spec path** to `/cheese` so it can dispatch `/cook --auto <spec-path>` (the full `.cheese/specs/<slug>.md` form, not a bare `<slug>`).
+
+The two-key handshake does not fire in this mode. The agent-introduced-scope check still runs implicitly: every distinguishing noun in the mini-spec must come from the user's input or from the tier-2 `/culture` / `/briesearch` synthesis recorded in `## Provenance`. Anything else is a silent agent addition and is forbidden — the mini-spec records only what the user asked for, not what the agent thinks they might have meant.
+
+### Mini-spec schema
+
+```markdown
+---
+slug: <kebab-slug>
+source: agent-mini-spec
+intent: <one-sentence restatement of the user's ask>
+blast_radius: low | medium | high
+inputs: <one-line>
+outputs: <one-line>
+verification: <one-line: the obvious check>
+---
+
+## Contract
+<one paragraph: behaviour change, scope boundary>
+
+## Acceptance
+- <verifiable check 1>
+- <verifiable check 2>
+
+## Non-goals
+- <what we are NOT changing>
+
+## Provenance (tier 2 only)
+- culture: <one-line synthesis of what /culture concluded>
+- briesearch: <one-line synthesis>; artifact: research/<slug>/<slug>.md
+```
+
+`source: agent-mini-spec` is the marker that downstream skills (`/cook`, `/age`, etc.) can read if they ever want different taste-test stringency for agent-written vs handshake-approved specs. They are not required to act on it today. User-invoked-ceremony specs omit `source:` or use `source: mold-handshake`.
+
+`## Provenance` appears only when `/cheese` reached tier 2 before falling into tier 1 — i.e., when `/culture` or `/briesearch` contributed context the original input lacked. Omit the section when tier 1 fires on the raw input. When `/briesearch` ran, the `artifact:` field links the durable cited research at `research/<slug>/<slug>.md` so the citations are preserved and `/cook` (or any later skill) can re-read them without re-researching. Omit `artifact:` only when `/briesearch` answered from local code patterns alone and wrote no durable file.
+
 ## Preferred tools and fallbacks
 
-Code search, reading, and editing (including spec writing) all go through the cheez-* skills (`/cheez-search`, `/cheez-read`, `/cheez-write`) — see those skills for tool selection rules. Shape checks specifically use `cheez-search` callers (`kind: "callers"`) plus `tilth_deps`; the procedure lives in `references/shape-check.md`.
+Code search, reading, and editing (including spec writing) all go through the `cheez-*` skills (`/cheez-search`, `/cheez-read`, `/cheez-write`) — see those skills for tool selection rules. Shape checks specifically use `cheez-search` callers (`kind: "callers"`) plus `tilth_deps`; the procedure lives in `references/shape-check.md`.
 
-Beyond cheez-* there are mold-specific tools:
+Beyond `cheez-*` there are mold-specific tools:
 
 | Need | Prefer | Fallback |
 | --- | --- | --- |
@@ -66,10 +111,10 @@ If any gate is unmet, propose the smallest next question or evidence check. Writ
 
 ## Output paths
 
-Default to project-local cheese artifacts when the user wants files:
+Resolve durable artifact locations through the resolver, never hardcode them:
 
-- Spec: `.cheese/specs/<slug>.md`
-- Issues: `.cheese/issues/<slug>-001.md`, `.cheese/issues/<slug>-002.md`, ...
+- Spec: `python3 ${CLAUDE_SKILL_DIR}/scripts/mold.pyz artifact-path specs <slug>` (anchored at the per-project durable corpus — see `shared/formatting.md` § Corpus location).
+- Issues: stay repo-local at `.cheese/issues/<slug>-001.md`, `.cheese/issues/<slug>-002.md`, ... — `issues` is a transient phase, not a durable-corpus artifact.
 
 ## --hard
 
@@ -82,7 +127,8 @@ Default to project-local cheese artifacts when the user wants files:
 After Curdle writes the spec, run the curd-count script with the shape-check verdict to compute the recommended downstream skill — full procedure in [`references/curd-count.md`](references/curd-count.md):
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/mold.pyz curd-count .cheese/specs/<slug>.md --blast-radius <low|medium|high>
+SPEC=$(python3 ${CLAUDE_SKILL_DIR}/scripts/mold.pyz artifact-path specs <slug>)
+python3 ${CLAUDE_SKILL_DIR}/scripts/mold.pyz curd-count "$SPEC" --blast-radius <low|medium|high>
 ```
 
 Omit `--blast-radius` when the shape-check verdict is `[?]` or skipped; the script accepts only `low|medium|high` and degrades to `/cook` for sub-threshold specs without the flag.
@@ -110,7 +156,7 @@ The spec is large enough that per-phase context contamination becomes a real con
 **Non-decomposable, low- or medium-blast-radius specs (`decomposable: false`, verdict `low` or `medium`):**
 
 - **Implement the spec** *(recommended)* — `/cook .cheese/specs/<slug>.md`.
-- **Implement and auto-review** — `/cook --auto .cheese/specs/<slug>.md`, chains straight through `/press → /age → /cure` autonomously, fixing every medium-or-above finding across up to two cure passes. Stops at the final cure pass; opening or updating the PR stays a manual step. Offer when acceptance criteria are explicit *and* the user has signalled they want the pipeline to run forward without per-step approval. Never pre-select; auto mode is opt-in.
+- **Implement and auto-review** — `/cook --auto .cheese/specs/<slug>.md`, chains straight through `/press → /age → /cure` autonomously, fixing every medium-or-above finding plus cheap (contained-fix) lows across up to two cure passes. Stops at the final cure pass; opening or updating the PR stays a manual step. Offer when acceptance criteria are explicit *and* the user has signalled they want the pipeline to run forward without per-step approval. In the user-invoked ceremony, never pre-select this option — auto mode is opt-in here because the user has stayed in the loop through the whole dialogue and the gate is the natural place to confirm autonomy. The agent-invoked mini-spec mode bypasses this gate entirely (no handoff prompt is rendered); `/cheese` dispatches `/cook --auto` directly from tier 1.
 - **Research more first** — `/briesearch`, gather more external evidence before implementing.
 - **Stop** — dispatch none; leave the spec for later.
 
