@@ -34,7 +34,7 @@ SKILL_SUBCOMMANDS = {
         "validate_manifest",
         "validate_pr_plan",
     ],
-    "affinage": ["pr-status"],
+    "affinage": ["pr-status", "post-reply", "timing"],
     "mold": ["artifact-path", "curd-count"],
     "briesearch": ["artifact-path", "ground-check"],
     "cook": ["artifact-path"],
@@ -132,6 +132,8 @@ def test_bundle_carries_only_its_own_skill(bundles: Path) -> None:
 
     affinage = set(zipfile.ZipFile(bundles / "affinage.pyz").namelist())
     assert "pr_status.py" in affinage
+    assert "post_reply.py" in affinage
+    assert "timing.py" in affinage
     assert not (affinage & {"git_utils.py", "manifest_io.py", "schema.py"})  # no shared needed
 
 
