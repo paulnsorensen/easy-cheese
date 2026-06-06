@@ -11,8 +11,11 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 _SENSITIVE_REPLACEMENTS = (
-    (re.compile(r"(?i)(authorization:\s*bearer\s+)[^\s|]+"), r"\1[redacted]"),
-    (re.compile(r"(?i)\b(token|api[_-]?key|password|secret)=([^\s|]+)"), r"\1=[redacted]"),
+    (re.compile(r"(?i)(authorization:\s*(?:bearer|token)\s+)[^\s|]+"), r"\1[redacted]"),
+    (
+        re.compile(r"(?i)\b([\w-]*(?:token|api[_-]?key|password|secret))(\s*[:=]\s*)([^\s|]+)"),
+        r"\1\2[redacted]",
+    ),
 )
 
 
@@ -115,7 +118,11 @@ def render_timing_section(payload: Mapping[str, Any] | Sequence[Any]) -> str:
 
 
 def _load_json(path: str) -> Any:
-    raw = sys.stdin.read() if path == "-" else open(path, encoding="utf-8").read()
+    if path == "-":
+        raw = sys.stdin.read()
+    else:
+        with open(path, encoding="utf-8") as handle:
+            raw = handle.read()
     return json.loads(raw)
 
 

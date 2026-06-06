@@ -107,6 +107,33 @@ def test_timing_subcommand_redacts_common_secret_shapes(tmp_path: Path) -> None:
     assert "api_key=[redacted]" in result.stdout
 
 
+def test_timing_subcommand_redacts_env_var_and_scheme_secret_shapes(tmp_path: Path) -> None:
+    result = _run_timing(
+        tmp_path,
+        {
+            "phases": [
+                {
+                    "phase": "reply_posting",
+                    "duration_ms": 1_000,
+                    "notes": (
+                        "GITHUB_TOKEN=ghp_envsecret "
+                        "Authorization: token schemesecret "
+                        "password: colonsecret"
+                    ),
+                }
+            ]
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "ghp_envsecret" not in result.stdout
+    assert "schemesecret" not in result.stdout
+    assert "colonsecret" not in result.stdout
+    assert "GITHUB_TOKEN=[redacted]" in result.stdout
+    assert "Authorization: token [redacted]" in result.stdout
+    assert "password: [redacted]" in result.stdout
+
+
 def test_timing_subcommand_rejects_empty_phase_list(tmp_path: Path) -> None:
     result = _run_timing(tmp_path, {"phases": []})
 
