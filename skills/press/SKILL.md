@@ -56,7 +56,7 @@ Write to `.cheese/press/<slug>.md` with a minimum handoff slug at the top so `/u
 
 ```markdown
 status: ok | halt: <one-line reason>
-next: age | done
+next: press | age | done
 artifact: <path-if-any>
 <one-line orientation: what press did — e.g., "added 4 boundary tests; no defects exposed">
 
@@ -86,7 +86,7 @@ artifact: <path-if-any>
 <blocked>:                  resolve blocking issues before proceeding
 ```
 
-`status: ok` maps to readiness `ready for /age` or `follow-up recommended` (both are review-safe — the cooked contract is sound and every changed behaviour has a hardening test). `status: halt: <reason>` maps to readiness `blocked` with the reason filled in. `next: age` when readiness is `ready for /age` or `follow-up recommended`; `next: done` only when readiness is `blocked` so the orchestrator stops the chain.
+`status: ok` maps to readiness `ready for /age` or `follow-up recommended` (both are review-safe — the cooked contract is sound and every changed behaviour has a hardening test). `status: halt: <reason>` maps to readiness `blocked` with the reason filled in. `next:` always names the next runnable phase if the human chooses to proceed: `age` when readiness is `ready for /age` or `follow-up recommended`, or `press` when blocking issues must be resolved and the hardening phase rerun. Use `next: done` only for true terminal completion, not for a blocked-but-resumable halt. `/ultracook` still stops automatically on any `status: halt`; `next:` is the resume hint for `/cheese --continue`.
 
 Then print:
 
@@ -117,7 +117,7 @@ When invoked with `--auto` (propagated from `/cook --auto`):
 
 ### When invoked from /ultracook
 
-`/ultracook` spawns press as a fresh-context sub-agent and owns the chain itself. When the spawn prompt explicitly says "for THIS PHASE ONLY" and "do not chain forward to the next phase," honour the override: write `.cheese/press/<slug>.md` (with the handoff slug at the top) and stop. Do not invoke `/age <slug> --auto` from inside the sub-agent regardless of readiness. The orchestrator reads the handoff slug and either chains to age (when `next: age`) or halts (when `next: done`).
+`/ultracook` spawns press as a fresh-context sub-agent and owns the chain itself. When the spawn prompt explicitly says "for THIS PHASE ONLY" and "do not chain forward to the next phase," honour the override: write `.cheese/press/<slug>.md` (with the handoff slug at the top) and stop. Do not invoke `/age <slug> --auto` from inside the sub-agent regardless of readiness. The orchestrator reads the handoff slug and either chains to age (when `status: ok` and `next: age`) or halts (when `status: halt`, regardless of `next:`). `next:` remains the resume hint for `/cheese --continue`.
 
 ## Rules
 
