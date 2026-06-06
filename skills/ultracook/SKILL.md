@@ -94,7 +94,8 @@ Agent(
            and `verification: running <command>`.
            Do not chain forward to the next phase even though your
            auto-mode contract documents that. The /ultracook orchestrator
-           is driving the chain."
+           is driving the chain. Edit through /cheez-write; if you fall back
+           to the host `Edit`/`Write` tool, `Read` the file first."
 )
 ```
 
@@ -135,7 +136,7 @@ artifact: <path-to-richer-report-if-any>
 <one-line orientation: what this phase did>
 ```
 
-`status: ok` means the phase finished cleanly and `next` names the next phase the chain *would* run if the orchestrator chose to continue. `status: halt: <reason>` means the chain stops; `/ultracook` surfaces the reason verbatim. `next: done` is informational: an age phase writes it when the diff is clean at the medium+ severity floor (early-stop signal). A handoff with `checkpoint: true` is the only exception: its `status: ok` says the worker has left a recovery artifact, not that the phase may advance. The two-cure-pass cap is enforced by chain length, not by `next: done` — see `### Cap enforcement` above.
+`status: ok` means the phase finished cleanly and `next` names the next phase the chain should run. `status: halt: <reason>` means the automatic `/ultracook` chain stops and surfaces the reason verbatim; for cook and press slugs, `next` still names the next runnable phase if a human later chooses to resume via `/cheese --continue <slug>` (age and cure halt slugs keep their finding-driven `next:` values — `cure | done` and `age | done` respectively). `next: done` is terminal: age writes it when the diff is clean at the medium+ severity floor (early-stop signal), and other phases use it only when no runnable resume phase exists. A handoff with `checkpoint: true` is the only exception: its `status: ok` says the worker has left a recovery artifact, not that the phase may advance. The two-cure-pass cap is enforced by chain length, not by `next: done` — see `### Cap enforcement` above.
 
 For phases that already write rich reports (`/age`, `/press`, `/cure` once extended, `/cook` once extended), the slug schema is prepended at the top of the same file — there is no second file. The schema is the contract; the body is whatever the phase normally writes.
 
@@ -144,7 +145,7 @@ For phases that already write rich reports (`/age`, `/press`, `/cure` once exten
 `/ultracook` stops and surfaces the report when:
 
 - A phase's slug file is missing after the sub-agent returns (the sub-agent did not write its handoff — print "phase did not write handoff — check sub-agent logs").
-- A phase writes `status: halt: <reason>` (a quality gate failed, press came back `blocked`, cure could not apply any finding).
+- A phase writes `status: halt: <reason>` (a quality gate failed, press came back `blocked`, cure could not apply any finding). Surface both the halt reason and the slug's `next:` value when it is not `done`, so the user can explicitly resume later with `/cheese --continue <slug>`.
 - An age phase writes `next: done` because the diff is clean at the medium+ severity floor (early-stop). Note: this only fires from age spawns; cure always writes `next: age` and cap-enforcement does not flow through `next: done` (the chain length handles that — see `### Cap enforcement` above).
 
 In every early-stop case, surface the slug file path so the user can read the full report. The natural terminal case (chain table exhausted after spawn #7) does not need an explicit early-stop signal — the orchestrator simply runs out of entries to spawn.

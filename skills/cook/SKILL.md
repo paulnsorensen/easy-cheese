@@ -78,12 +78,12 @@ Write a minimum-shape handoff slug to `.cheese/cook/<slug>.md` so downstream pha
 
 ```markdown
 status: ok | halt: <one-line reason>
-next: press | age | done
+next: mold | cook | press | age | done
 artifact: <path-to-richer-report-if-any>
 <one-line orientation: what cook changed>
 ```
 
-`status: ok` when cook finished cleanly. `status: halt: <reason>` when cook stopped per the package-report stop conditions (missing spec decision, blocked test, taste-test cap hit, quality gate fail outside scope). `next:` is `press` for the standard chain, `age` if the user opts to skip press, or `done` if the package-report status itself is `blocked`. The orientation line is a single factual sentence about what the diff does — not a summary of the report.
+`status: ok` when cook finished cleanly. `status: halt: <reason>` when cook stopped per the package-report stop conditions (missing spec decision, blocked test, taste-test cap hit, quality gate fail outside scope). `next:` always names the next runnable phase if the human chooses to proceed: `press` for the standard chain, `age` if the user opts to skip press, `cook` when the cooked phase must be rerun after resolving a blocker, or `mold` when the spec itself needs another pass. Use `next: done` only for true terminal completion, never for a blocked-but-resumable or external-gate halt. The orientation line is a single factual sentence about what the diff does — not a summary of the report.
 
 ## Handoff
 

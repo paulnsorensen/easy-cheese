@@ -21,7 +21,7 @@ Do not use it for no-write design dialogue (`/culture`) or as a substitute for a
 2. **Inventory what already exists.** List the `.cheese/` artifacts, specs, PRs, issues, commits, and diffs this session produced or touched. These get referenced, never re-summarised.
 3. **Write the handoff document** to `.cheese/notes/<slug>.md` with the slug header (`## Handoff slug`) and body (`## Document`) below.
 4. **Redact** secrets on the way out (`## Redaction`).
-5. **Point at resumption.** End by telling the user to run `/cheese --continue <slug>` from the fresh context.
+5. **Point at resumption.** End by telling the user how to resume with `/cheese --continue <slug>` from the original repo, and include an absolute clickable path to the handoff note so the user can find it from any working directory.
 
 ## Handoff slug
 
@@ -34,7 +34,7 @@ artifact: <path-to-richer-report, or PR ref (PR#<n> / URL) when next: affinage, 
 <one-line orientation: where the session is and what is mid-flight>
 ```
 
-`next:` names the skill the cold reader should run, which is the machine-readable form of the suggested-skills section below. Use `done` only when the work is genuinely finished and the handoff is a record, not a baton. `/cheese --continue <slug>` scans `.cheese/notes/<slug>.md` and dispatches `next:` directly. When `next: affinage`, record the PR reference (`PR#<n>` or its URL) in `artifact:` so the resume dispatches `/affinage <pr>` explicitly rather than relying on branch auto-detection.
+`next:` names the skill the cold reader should run, which is the machine-readable form of the suggested-skills section below. Use `done` only when the work is genuinely finished and the handoff is a record, not a baton. `/cheese --continue <slug>` scans `.cheese/notes/<slug>.md` and dispatches `next:` directly; `/cheese --continue <absolute-note-path>` reads that handoff file directly when the user is outside the original repo. When `next: affinage`, record the PR reference (`PR#<n>` or its URL) in `artifact:` so the resume dispatches `/affinage <pr>` explicitly rather than relying on branch auto-detection.
 
 ## Document
 
@@ -83,9 +83,17 @@ Strip anything sensitive before writing: API keys, tokens, passwords, connection
 
 ## Handoff
 
-The handoff document is the only thing `/wheypoint` writes. No commits, no PRs, no production-code edits. End by surfacing the slug's orientation line and the exact resumption command:
+The handoff document is the only thing `/wheypoint` writes. No commits, no PRs, no production-code edits. End by surfacing the slug's orientation line, a normal Markdown link to the note, and repo-root-aware resumption commands. Keep the note link outside fenced code so it is clickable. The link line should match this shape: `Wheypoint dropped: [.cheese/notes/<slug>.md](<absolute-note-path>)`.
 
-```text
-Wheypoint dropped → .cheese/notes/<slug>.md
-Resume with: /cheese --continue <slug>
+Resume from original repo:
+
+```bash
+cd <absolute-repo-path>
+/cheese --continue <slug>
+```
+
+Resume from anywhere:
+
+```bash
+/cheese --continue <absolute-repo-path>/.cheese/notes/<slug>.md
 ```

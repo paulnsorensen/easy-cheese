@@ -26,7 +26,7 @@ Optional flags:
 
 - `--safe` — gate dispatch behind a confirmation prompt. Use when the user wants the chance to redirect routing before the chosen skill runs. Without this flag, cheese announces and dispatches in the same turn. `--safe` also propagates downstream, re-introducing the per-skill gates that the autonomous default skips (`/age` / `/affinage` cure-selection, `/cure`'s PR push).
 - `--open-pr` — propagate to `/cure` so a clean cure may open a *new* PR when none exists (the default only pushes an already-open one). Useful when routing a fresh branch through the pipeline and you want the PR created at the end.
-- `--continue <slug>` — resume an in-flight pipeline from the latest handoff slug. See `## --continue` below.
+- `--continue <slug-or-note-path>` — resume an in-flight pipeline from a handoff slug, or from an explicit `.cheese/.../<slug>.md` note path when outside the original repo. See `## --continue` below.
 - `--hard` — inject the `/hard-cheese` metacognitive gate before code is shared for review. The flag propagates to whichever target the router dispatches and fires at `/cure`'s share-for-review handoff (or end of `/cure`'s final auto pass under `--auto --hard`). See `skills/hard-cheese/SKILL.md`.
 
 If `$ARGUMENTS` is missing entirely and there is no recent context to lean on, ask one clarifying question through the host routing guide in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md) before classifying.
@@ -77,15 +77,17 @@ Non-implementation intents bypass the escalation entirely. Their target skills o
 
 ## --continue
 
-`/cheese --continue <slug>` is the manual fresh-context resumption path. Use it after compacting the conversation, after `/ultracook` has stopped on a halt, or whenever the user wants to drive the pipeline by hand from a cleared context.
+`/cheese --continue <slug-or-note-path>` is the manual fresh-context resumption path. Use it after compacting the conversation, after `/ultracook` has stopped on a halt, or whenever the user wants to drive the pipeline by hand from a cleared context.
 
 Flow:
 
-1. Scan for the most recently modified handoff slug across `.cheese/{cook,press,age,cure,affinage,notes}/<slug>.md`.
-2. If none exist, offer to start the pipeline from scratch — `/mold` for fuzzy specs, `/cook` for clear asks, `/ultracook` for high-blast-radius specs — and stop.
-3. If at least one exists, read the latest one and surface the orientation line so the user knows where they are. Decide the next action from the slug's `next:` field:
-   - **When `next:` names a phase** (`mold | cook | press | age | cure | affinage | ultracook`) — dispatch `/\<next\> \<slug\>` directly. `affinage` is the exception: it takes a PR ref, not a slug, so read the PR from the slug's `artifact:` field (`PR#<n>` or its URL) and dispatch `/affinage <pr>`; fall back to a bare `/affinage` (branch auto-detect) only when `artifact:` carries no PR. Under `--safe`, offer it as the pre-selected option, with `/ultracook \<slug\>` as an alternative and `Stop` last.
-   - **When `next:` is terminal** (`done` from a phase slug, or `stop` from a culture-notes slug — the pipeline already finished) — report the terminal state and stop. The terminal values surface state to the user, not a runnable command; never construct `/done <slug>` or `/stop <slug>`.
+1. If the argument is a readable `.md` handoff path, read that file directly and derive `<slug>` from its basename. If the path contains a `.cheese/` parent, treat the directory above `.cheese/` as the original repo root for any repo-relative paths in the handoff.
+2. Otherwise, scan for the most recently modified handoff slug across `.cheese/{cook,press,age,cure,affinage,notes}/<slug>.md`.
+3. If none exist, offer to start the pipeline from scratch — `/mold` for fuzzy specs, `/cook` for clear asks, `/ultracook` for high-blast-radius specs — and stop.
+4. If a handoff exists, read it and surface the orientation line so the user knows where they are. Parse both `status:` and `next:`:
+   - **When `status:` starts with `halt` and `next:` names a phase** (`mold | cook | press | age | cure | affinage | ultracook`) — surface the halt reason, then treat `/cheese --continue <slug>` as the user's explicit permission to dispatch the next phase. `affinage` is the exception: it takes a PR ref, not a slug, so read the PR from the slug's `artifact:` field (`PR#<n>` or its URL) and dispatch `/affinage <pr>`; fall back to a bare `/affinage` (branch auto-detect) only when `artifact:` carries no PR. Under `--safe`, offer the dispatch as the pre-selected option, with `/ultracook \<slug\>` as an alternative and `Stop` last.
+   - **When `status:` is `ok` and `next:` names a phase** — dispatch `/\<next\> \<slug\>` directly, with the same `affinage` exception above. Under `--safe`, offer it as the pre-selected option, with `/ultracook \<slug\>` as an alternative and `Stop` last.
+   - **When `next:` is terminal** (`done` from a phase slug, or `stop` from a culture-notes slug) — report the terminal state and stop. If `status:` starts with `halt`, call it a non-resumable halt (per cook/press's slug contract a resumable halt carries a runnable `next:`, so `halt` + `next: done` can only mean non-resumable); otherwise call it pipeline completion. The terminal values surface state to the user, not a runnable command; never construct `/done <slug>` or `/stop <slug>`.
 
 Under `--safe`, gate the resumption through the handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md); otherwise run the named phase immediately with the slug. The slug files are the resumability contract: they tell the router where the pipeline is and how to move it forward.
 
