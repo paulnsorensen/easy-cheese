@@ -37,8 +37,15 @@ Flags:
 
 ## Flow
 
+Maintain a timing ledger from the start of the run. Record `total`, `pr_status`,
+`fresh_review` when it runs, `comment_intake`, `grading`, `report_write`, and
+any post-report phases that actually execute (`cure_wait`, `reply_posting`,
+`thread_resolution`). Use monotonic elapsed time for durations; wall-clock
+`started_at` / `ended_at` fields are optional. On a halt, keep every completed
+phase plus the halted phase so the report still proves where the run stopped.
+
 1. **Resolve PR.** From `<pr-ref>` or `gh pr view --json number` on the current branch. Resolve `<owner>/<repo>` from the git remote.
-2. **Fetch PR status.** Call `python3 ${CLAUDE_SKILL_DIR}/scripts/affinage.pyz pr-status <pr>`. The script returns JSON with build status, per-check failure summaries (last ~10 lines of failed logs + parsed failed-test names), and merge state. Map the exit code:
+2. **Fetch PR status.** Call `python3 ${CLAUDE_SKILL_DIR}/scripts/affinage.pyz pr-status <pr>` and record it as the `pr_status` phase with attempts, duration, and coarse exit status. The script returns JSON with build status, per-check failure summaries (last ~10 lines of failed logs + parsed failed-test names), and merge state. Map the exit code:
    - **Exit 0** — proceed with grading.
    - **Exit 3** (`logs-expired`) — the build is failing but every failing check's log was unfetchable (typically expired GitHub Actions logs past the retention window), so there is nothing to ground a CI finding on. Write `status: halt: pr-status-logs-expired` and stop with the hint: *"CI is failing but the logs have expired — rerun the failed jobs (`gh run rerun <run-id> --failed`, where `<run-id>` is the `/actions/runs/<id>/` segment of the failing check's `url`, or read it from `gh pr checks`) and re-invoke `/affinage`."* Affineurs often run a few days after a PR opens, so this is routine, not an edge case.
    - **Any other non-zero** (1 PR/gh API error, 2 missing gh binary) — write `status: halt: pr-status-unavailable` and stop.
@@ -47,6 +54,7 @@ Flags:
 4. **Fetch comments.**
    - Inline threads: `gh api repos/<owner>/<repo>/pulls/<pr>/comments`. This REST endpoint returns individual review comments without thread-level resolution state, so the skill cannot filter on `isResolved` from this surface; it skips comments whose `position` is `null` (the diff has moved past the anchored line) unless `--include-outdated`. For true unresolved-only filtering, switch to the GraphQL `pullRequest.reviewThreads { isResolved }` endpoint — documented as a future enhancement.
    - Review bodies: `gh api repos/<owner>/<repo>/pulls/<pr>/reviews`. Filter to non-empty bodies. Dedupe against inline comments via `pull_request_review_id`.
+   Record this as `comment_intake` with `items_seen` and `items_actionable` when cheap to count.
 5. **Skip already-replied threads.** A thread whose most recent comment is from the resolved GitHub handle (env `RESPOND_GH_HANDLE` → `gh api user --jq .login` → `git config user.name`) has already been responded to; skip it. This keeps re-runs idempotent.
 6. **Grade through the age lens.** For each input (comment, CI/build failure, OR fresh `/age` finding):
    - Classify dimension from the **code + claim** (or check type + failure summary, for CI items). See `skills/age/references/dimensions.md` for the dimension rubric.
@@ -58,7 +66,7 @@ Flags:
      - Standard severity sections (`## Blocker / ## High / ## Medium / ## Low`) when the claim is grounded in the diff and its fix is **contained** (`fix-cost-now: contained` — roughly a few lines or a localized refactor). Every such item still maps to a dimension and carries a `[<dimension>:<severity>]` tag — a style or quality nit maps to `deslop` (e.g. `[deslop:low]`). The new rule is to route these grounded, contained-fix nits to `/cure` (usually as `Low`) instead of `## Reviewer-rejected`, keeping the `[from-comment:<id>]` tag so `/cure`'s reply still reaches the reviewer; a valid cheap nit is cheaper to fix than to argue, so do not push back on it.
      - `## Needs-investigation` when the claim is plausible but requires evidence outside the diff (e.g., downstream caller in another repo).
      - `## Reviewer-rejected` only when the claim is **wrong or ungrounded** (the code is already correct, the reviewer misread it, or there is no real improvement) OR is valid but **a lot of follow-up work** (`fix-cost-now: moderate`/`sprawling` or `fix-cost-later: structural` — a refactor or scope expansion beyond this PR). Reject the wrong ones; defer the expensive ones. Per `skills/age/references/voice.md`, a justified push-back costs more than a small valid fix.
-7. **Write report** to `.cheese/affinage/pr-<n>.md` with the four-line handoff slug at the top, then the age-format body plus the two extra sections. See `## Output` below.
+7. **Write report** to `.cheese/affinage/pr-<n>.md` with the four-line handoff slug at the top, then the age-format body plus `## Timing` and the two extra sections. Render `## Timing` from structured phase data with `python3 ${CLAUDE_SKILL_DIR}/scripts/affinage.pyz timing <timing-json>`. See `## Output` below.
 8. **Act or ask.** By default affinage acts — auto-applies the recommended set and posts the drafted replies — and asks only on a genuine reason (a sprawling/structural fix in the recommended set, conflicting findings) or under `--safe`. Branch on what graded out (full gate shapes in `## Handoff`):
    - **At least one finding in a severity section (`Blocker` / `High` / `Medium` / `Low`).** Compute the recommended composite (`all-medium, cheap`). With no reason to ask and no `--safe`: announce the selection in one line, **first run step 9** to post any drafted push-backs / investigating notes (they don't depend on cure's outcome, so they must reach GitHub even if `/cure` later halts), then dispatch `/cure <slug>` with locked `handoff_context:` and post the cure-dependent replies (step 10) when `/cure` returns. On a reason to ask or `--safe`: render the cure-selection table inline using `/cure`'s verbs (`skills/cure/references/selection.md`), pre-select the recommended composite (flagging heavy rows), ask via `shared/handoff-gate.md`, then proceed as above for the chosen selection; on `none` / `Stop`, run step 9 for the drafted replies and exit with the report path. If the recommended set is empty (only heavy/expensive items graded into severity sections), treat it as the reply-only branch below.
    - **No severity-section findings, but `Reviewer-rejected` or `Needs-investigation` has items.** Skip `/cure` dispatch entirely — there is nothing to apply. By default run step 9 to post all drafted replies (push-backs + investigating notes). Under `--safe`, render a small gate first that lets the user pick `post all`, `post pushbacks only`, `skip posting`, or per-finding choices. Exit with `status: ok / next: done`. This mirrors the documented auto-mode "no findings meet the floor" branch (see `### Auto mode`).
@@ -72,6 +80,10 @@ Flags:
 10. **Post-cure reply posting** (only when `/cure` ran). When `/cure` returns, read `.cheese/cure/pr-<n>.md`'s `### Applied` / `### Deferred` sections and post per-finding replies via `python3 ${CLAUDE_SKILL_DIR}/scripts/affinage.pyz post-reply`:
     - **Applied** (with `from-comment:<id>` tag) → `"Fixed — <applied summary>."`
     - **Deferred** (with `from-comment:<id>` tag) → `"Attempted fix reverted — <reason>."`
+
+When steps 8-10 run after the first report write, update the same report's
+`## Timing` section with `cure_wait`, `reply_posting`, and `thread_resolution`
+rows before the final handoff whenever the run reaches a durable stopping point.
 
 ## Fresh-window review
 
@@ -142,6 +154,18 @@ artifact: <path-to-prior-cure-or-press-report-if-any>
 - Comments: K unresolved (M skipped as outdated)
 - Fresh review: ran /age (N findings) | skipped (chained) | skipped (--no-age)
 
+## Timing
+
+| Phase | Duration | Attempts | Status | Items | Notes |
+| --- | ---: | ---: | --- | --- | --- |
+| total | 10m30s | 1 | ok | - | end-to-end affinage handling |
+| pr_status | 12s | 1 | ok | - | passing |
+| comment_intake | 44s | 1 | ok | 8 seen / 1 actionable | REST comments + review bodies |
+| grading | 31s | 1 | ok | 1 seen / 1 actionable | 1 finding |
+| report_write | 3s | 1 | ok | - | .cheese/affinage/pr-16.md |
+| cure_wait | 8m02s | 1 | ok | - | dispatched .cheese/cure/pr-16.md |
+| reply_posting | 28s | 1 | ok | 1 seen / 1 actionable | 1 reply posted |
+
 ## Blocker
 - **[from-comment:<id>] [security:blocker]** alice on `src/auth.ts:42` — token parsed without validation.
   - location: contract · fix-cost-now: contained · fix-cost-later: structural
@@ -190,6 +214,8 @@ Auto-fixing the recommended set via `/cure` and posting the drafted replies (or,
 ```
 
 Empty severity sections are omitted entirely. `## Needs-investigation` and `## Reviewer-rejected` are omitted when no items land there.
+
+`## Timing` is always present on successful runs. Halted runs include it when a report is written, with completed phases and the halt phase preserved. The timing helper accepts JSON shaped like `{"phases": [{"phase": "comment_intake", "duration_ms": 44000, "attempts": 1, "status": "ok", "items_seen": 8, "items_actionable": 1, "notes": "8 comments fetched"}]}` and emits the Markdown section.
 
 `status: ok` when grading completed; `status: halt: <reason>` when `gh` or `pr-status.py` failed in a way that blocks honest grading. `next: cure` when at least one finding meets the `medium+` floor (medium-or-above, or a cheap contained-fix low); `next: done` when none do.
 
@@ -268,6 +294,7 @@ If no findings meet the floor, skip the `/cure` dispatch, post replies for `Revi
 - Every posted reply ends with the literal `agent on behalf of;` attribution via `${CLAUDE_SKILL_DIR}/scripts/affinage.pyz post-reply`. Never call `gh api` directly to post.
 - Idempotent re-runs: skip threads where the latest comment is from the resolved handle. The REST `/comments` endpoint does not expose thread resolution, so honest idempotency relies on the latest-comment-from-self heuristic; switch to GraphQL `reviewThreads` if cross-session resolution-state visibility becomes required.
 - CI-sourced findings get no reply (no reviewer to notify).
+- Timing metadata must stay small and non-sensitive: no auth headers, tokens, cookies, raw command output, full logs, or secrets. Prefer counts, coarse status, durations, and short notes.
 - `/affinage` never invokes `/gh` itself. The PR push happens inside `/cure` after a clean cure (push to the already-open PR by default; `--open-pr` opens a new one; `--safe` re-gates).
 - Apply the shared voice kernel (`skills/age/references/voice.md`): name confidence as `certain | speculating | don't know`; agree when no findings warrant grading.
 
