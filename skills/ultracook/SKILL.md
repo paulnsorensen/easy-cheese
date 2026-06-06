@@ -116,7 +116,7 @@ artifact: <path-to-richer-report-if-any>
 <one-line orientation: what this phase did>
 ```
 
-`status: ok` means the phase finished cleanly and `next` names the next phase the chain should run. `status: halt: <reason>` means the automatic `/ultracook` chain stops and surfaces the reason verbatim; `next` still names the next runnable phase if a human later chooses to resume via `/cheese --continue <slug>`. `next: done` is terminal: age writes it when the diff is clean at the medium+ severity floor (early-stop signal), and other phases use it only when no runnable resume phase exists. The two-cure-pass cap is enforced by chain length, not by `next: done` — see `### Cap enforcement` above.
+`status: ok` means the phase finished cleanly and `next` names the next phase the chain should run. `status: halt: <reason>` means the automatic `/ultracook` chain stops and surfaces the reason verbatim; for cook and press slugs, `next` still names the next runnable phase if a human later chooses to resume via `/cheese --continue <slug>` (age and cure halt slugs keep their finding-driven `next:` values — `cure | done` and `age | done` respectively). `next: done` is terminal: age writes it when the diff is clean at the medium+ severity floor (early-stop signal), and other phases use it only when no runnable resume phase exists. The two-cure-pass cap is enforced by chain length, not by `next: done` — see `### Cap enforcement` above.
 
 For phases that already write rich reports (`/age`, `/press`, `/cure` once extended, `/cook` once extended), the slug schema is prepended at the top of the same file — there is no second file. The schema is the contract; the body is whatever the phase normally writes.
 
