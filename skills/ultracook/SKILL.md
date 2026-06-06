@@ -90,7 +90,8 @@ Agent(
            .cheese/<phase>/<slug>.md with the handoff schema and stop.
            Do not chain forward to the next phase even though your
            auto-mode contract documents that. The /ultracook orchestrator
-           is driving the chain."
+           is driving the chain. Edit through /cheez-write; if you fall back
+           to the host `Edit`/`Write` tool, `Read` the file first."
 )
 ```
 
