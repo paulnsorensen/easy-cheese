@@ -102,7 +102,7 @@ def test_attribution_appended_with_resolved_handle(post_reply, monkeypatch):
     rec: list[list[str]] = []
     monkeypatch.setattr(subprocess, "run", _healthy(rec))
     post_reply.main(["--issue", "--pr", "42", "--body", "Hello world."])
-    assert "agent on behalf of; stub-user" in _posted_body(rec)
+    assert "agent on behalf of stub-user;" in _posted_body(rec)
 
 
 def test_respond_gh_handle_overrides_resolution(post_reply, monkeypatch):
@@ -110,7 +110,7 @@ def test_respond_gh_handle_overrides_resolution(post_reply, monkeypatch):
     monkeypatch.setenv("RESPOND_GH_HANDLE", "override-handle")
     monkeypatch.setattr(subprocess, "run", _healthy(rec))
     post_reply.main(["--issue", "--pr", "42", "--body", "Hello."])
-    assert "agent on behalf of; override-handle" in _posted_body(rec)
+    assert "agent on behalf of override-handle;" in _posted_body(rec)
     # gh api user must never be called when the env var short-circuits.
     assert not any(cmd[:3] == ["gh", "api", "user"] for cmd in rec)
 
@@ -118,17 +118,17 @@ def test_respond_gh_handle_overrides_resolution(post_reply, monkeypatch):
 def test_idempotent_no_double_append(post_reply, monkeypatch):
     rec: list[list[str]] = []
     monkeypatch.setattr(subprocess, "run", _healthy(rec))
-    body = "Hello.\n\n---\nagent on behalf of; stub-user"
+    body = "Hello.\n\n---\nagent on behalf of stub-user;"
     post_reply.main(["--issue", "--pr", "42", "--body", body])
-    assert _posted_body(rec).count("agent on behalf of; stub-user") == 1
+    assert _posted_body(rec).count("agent on behalf of stub-user;") == 1
 
 
 def test_idempotent_tolerates_trailing_newline(post_reply, monkeypatch):
     rec: list[list[str]] = []
     monkeypatch.setattr(subprocess, "run", _healthy(rec))
-    body = "Hello.\n\n---\nagent on behalf of; stub-user\n"
+    body = "Hello.\n\n---\nagent on behalf of stub-user;\n"
     post_reply.main(["--issue", "--pr", "42", "--body", body])
-    assert _posted_body(rec).count("agent on behalf of; stub-user") == 1
+    assert _posted_body(rec).count("agent on behalf of stub-user;") == 1
 
 
 def test_attribution_appended_when_body_only_quotes_it(post_reply):
@@ -136,18 +136,18 @@ def test_attribution_appended_when_body_only_quotes_it(post_reply):
     phrase mid-text but does not END with the suffix block still gets a real
     attribution appended."""
     out = post_reply.compose_body(
-        'I cited "agent on behalf of; someone" in the spec, but this is the reply.',
+        'I cited "agent on behalf of someone;" in the spec, but this is the reply.',
         "stub-user",
     )
-    assert out.rstrip().endswith("---\nagent on behalf of; stub-user")
-    assert out.count("agent on behalf of;") == 2
+    assert out.rstrip().endswith("---\nagent on behalf of stub-user;")
+    assert out.count("agent on behalf of") == 2
 
 
 def test_compose_body_preserves_metacharacters(post_reply):
     body = 'Backticks `code` and $vars and "quotes" and newlines\nstill survive.'
     out = post_reply.compose_body(body, "u")
     assert "Backticks `code` and $vars" in out
-    assert out.endswith("---\nagent on behalf of; u\n")
+    assert out.endswith("---\nagent on behalf of u;\n")
 
 
 # --- handle resolution precedence -----------------------------------------
@@ -169,7 +169,7 @@ def test_handle_falls_through_to_git_config(post_reply, monkeypatch):
         ),
     )
     post_reply.main(["--issue", "--pr", "42", "--body", "Hello."])
-    assert "agent on behalf of; fallback-user" in _posted_body(rec)
+    assert "agent on behalf of fallback-user;" in _posted_body(rec)
 
 
 def test_handle_resolution_exhausted_exits_1(post_reply, monkeypatch):
