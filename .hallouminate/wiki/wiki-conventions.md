@@ -10,29 +10,46 @@ here.
 
 ## Durable vs transient — the boundary that decides everything
 
-Before writing anything, decide which lane the fact belongs in. This is
-the single most important rule in this repo's memory model.
+Before writing anything, decide which lane the fact belongs in — and
+note that **durability is not the same axis as git-tracking**. There are
+three lanes, two of which live outside git (`shared/formatting.md:103`):
 
-| Where | Indexed as | Git | Lifecycle | Use for |
-|---|---|---|---|---|
-| `.hallouminate/wiki/` | `repo:easy-cheese:wiki` | **tracked** | durable across sessions | architecture, protocols, conventions, "why this design not that one" |
-| `.cheese/` | `cheese-local` | **gitignored** | transient per-task | `/cook` `/age` `/press` `/cure` output, specs, handoffs, exploration |
+| Where | Git | Lifecycle | Use for |
+|---|---|---|---|
+| `.hallouminate/wiki/` (`repo:easy-cheese:wiki`) | **tracked** | durable across sessions | architecture, protocols, conventions, "why this design not that one" |
+| `$XDG_DATA_HOME/cheese/<project>/` (`paths.py`) | **out of git** | durable across branches/clones | specs, research reports |
+| `.cheese/` (`cheese-local`) | **gitignored** | transient per-task | `/cook` `/age` `/press` `/cure` reports, notes, hard, handoffs, exploration |
 
-**The durable/transient split is the git-tracking split.** If a fact is
-worth committing for the next agent who lands here cold, it is durable —
-write it to the wiki. If it only makes sense inside one task, it is
-transient — leave it in `.cheese/` (which `.gitignore` keeps out of the
-tree, see `.gitignore:2`).
+**Durable ≠ git-tracked.** Architecture/convention/rationale notes are
+durable *and* committed into the tree — they go in this wiki. Specs and
+research reports are just as durable but anchor at a stable XDG path
+(`$XDG_DATA_HOME/cheese/<project>/`, default
+`~/.local/share/cheese/<project>/`) so they survive branch switches and
+clones while staying out of git; the path math is owned by
+`shared/scripts/paths.py` (`project_corpus_root`, `artifact_path`). Only
+per-task pipeline output is *transient*, and it stays repo-local under
+`.cheese/` so it travels with the branch and shows up in the PR
+(`.gitignore:2`).
 
-Rule of thumb: *would a future agent benefit from this note with zero
-context about the task that produced it?* Yes → wiki. No → `.cheese/`.
+> **Migration note.** Some skill docs still name `.cheese/specs/<slug>.md`.
+> That path predates the durable/transient split and is being moved onto
+> the `paths.py` helpers (`shared/formatting.md:103`); treat the XDG
+> corpus as the home for specs.
+
+Classify in two steps:
+
+1. *Worth keeping past the task that produced it?* No → transient,
+   `.cheese/`.
+2. If durable: *architecture / protocol / convention / rationale* → this
+   wiki; *spec or research report* → the XDG project corpus.
 
 Concrete classification examples:
 
-- "The pipeline order is culture → mold → cook → press → age → cure" → **durable**.
-- "Curd #3 of the durable-memory spec failed its press pass" → **transient**.
-- "cheez-* skills hard-fail without tilth MCP; everything else degrades" → **durable**.
-- "The age report for PR #107 flagged two medium findings" → **transient**.
+- "The pipeline order is culture → mold → cook → press → age → cure" → **durable → wiki**.
+- "The approved spec for the durable-memory boundary" → **durable → XDG corpus**.
+- "Curd #3 of the durable-memory spec failed its press pass" → **transient → `.cheese/`**.
+- "cheez-* skills hard-fail without tilth MCP; everything else degrades" → **durable → wiki**.
+- "The age report for PR #107 flagged two medium findings" → **transient → `.cheese/`**.
 
 ## One topic per file
 

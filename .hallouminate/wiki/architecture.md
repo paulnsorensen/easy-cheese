@@ -81,10 +81,13 @@ trade by refusing to run without it (`skills/cheez-search/SKILL.md:3-5`).
 
 ## Why a wiki at all
 
-Transient task output lives in `.cheese/` (gitignored). Durable
-architecture/convention/rationale knowledge needs a git-tracked home
-that survives the task that produced it — that is this wiki. The split
-is enforced as a git-tracking boundary; see
-[wiki-conventions](./wiki-conventions.md) for the classification rule and
+Durable architecture/convention/rationale knowledge needs a home that
+survives the task that produced it and is worth committing into the tree
+— that is this wiki. It is one of three memory lanes: specs and research
+reports are durable too but anchor at the out-of-git XDG project corpus,
+and transient per-task output stays gitignored under `.cheese/`.
+Durability is not the same axis as git-tracking
+(`shared/formatting.md:103`); see [wiki-conventions](./wiki-conventions.md)
+for the classification rule and
 [workflow-invariants](./workflow-invariants.md) for where it sits among
 the other pipeline invariants.

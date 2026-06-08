@@ -1,11 +1,14 @@
 # easy-cheese wiki — index
 
-This wiki is the durable memory lane for the `easy-cheese` repo. It lives
-at `.hallouminate/wiki/`, is **git-tracked**, and is indexed as the
-`repo:easy-cheese:wiki` corpus — distinct from the per-task scratch under
-`.cheese/` (corpus `cheese-local`, gitignored). Write here when a fact is
-worth remembering across sessions: architecture, protocols, conventions,
-and "why this design not that one" rationale.
+This wiki is the **git-tracked** durable memory lane for the
+`easy-cheese` repo. It lives at `.hallouminate/wiki/` and is indexed as
+the `repo:easy-cheese:wiki` corpus. Write here when a fact is worth
+remembering across sessions: architecture, protocols, conventions, and
+"why this design not that one" rationale. Two sibling lanes hold the
+rest: durable specs and research reports live out of git at the XDG
+project corpus (`$XDG_DATA_HOME/cheese/<project>/`), and transient
+per-task scratch stays gitignored under `.cheese/`. Durability is not the
+git-tracking axis (`shared/formatting.md:103`).
 
 ## Topics
 

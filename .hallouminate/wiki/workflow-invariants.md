@@ -14,8 +14,9 @@ culture → mold → cook → press → age → cure → ship
 ```
 
 - **culture** — no-write thinking; never edits code, never the gate.
-- **mold** — converges a fuzzy idea into an approved spec under
-  `.cheese/specs/<slug>.md` (or the durable resolver path).
+- **mold** — converges a fuzzy idea into an approved spec at the durable
+  XDG corpus path (`$XDG_DATA_HOME/cheese/<project>/specs/<slug>.md`,
+  resolved by `shared/scripts/paths.py`; `shared/formatting.md:103`).
 - **cook** — TDD-disciplined implementation of that spec.
 - **press** — adversarial test hardening of the cooked diff.
 - **age** — ten-dimension review producing a findings report.
@@ -80,10 +81,14 @@ recipe breakdown.
 
 ## The durable/transient boundary
 
-Durable knowledge (architecture, protocols, conventions, rationale) is
-git-tracked under `.hallouminate/wiki/`. Transient task output (specs,
-`/cook` `/age` `/press` `/cure` reports, handoffs) is gitignored under
-`.cheese/` (`.gitignore:2`). The split is the git-tracking split — see
-[wiki-conventions](./wiki-conventions.md) for the classification rule.
-This invariant exists so later integration seams cannot dump transient
-noise into durable memory.
+Durable knowledge splits two ways. Architecture, protocols, conventions,
+and rationale are git-tracked under `.hallouminate/wiki/`; specs and
+research reports are durable too but live out of git at the XDG project
+corpus (`$XDG_DATA_HOME/cheese/<project>/`, owned by
+`shared/scripts/paths.py`). Only per-task pipeline output (`/cook` `/age`
+`/press` `/cure` reports, notes, hard, handoffs) is transient, gitignored
+under `.cheese/` (`.gitignore:2`). Durability is not the git-tracking
+axis (`shared/formatting.md:103`) — see
+[wiki-conventions](./wiki-conventions.md) for the full classification
+rule. This invariant exists so later integration seams cannot dump
+transient noise into durable memory.
