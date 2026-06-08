@@ -66,7 +66,7 @@ after the user chooses (`shared/handoff-gate.md:7`).
 `--auto` propagates through the chain to skip these gates for autonomous
 runs. `/ultracook` runs the chain
 `cook → press → age → cure → age → cure → age` (all `--auto`), capped at
-**two cure passes** (`skills/cook/SKILL.md:132`, `README.md:72`).
+**two cure passes** (`skills/cook/SKILL.md:132`).
 
 ## `just check` is the single quality gate
 

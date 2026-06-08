@@ -14,7 +14,7 @@ PR, or hand-off (`AGENTS.md:7`).
 |---|---|---|
 | markdown | `lint-md-fix` (autofix) | `lint-md` (check only) |
 | yaml | `lint-yaml-fix` + `lint-yaml` | `lint-yaml` |
-| python | `lint-py-fix` (`uvx ruff --fix`) | — |
+| python | `lint-py-fix` (`uvx ruff check --fix .`) | — |
 | shell | `lint-sh` (`shellcheck scripts/install.sh`) | `lint-sh` |
 | tests | `test` | `test` |
 | docs | `docs-build` (`mkdocs build --strict`) | `docs-build` |
