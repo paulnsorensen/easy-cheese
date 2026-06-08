@@ -87,7 +87,8 @@ Procedure:
    Entity-referent binding check:
    | design noun | code referent | citation | divergence note |
    | --- | --- | --- | --- |
-   | run | NEW ENTITY | — | code `run` = one dispatch (make_run_id); design needs a session spanning siblings |
+   | run | ALIAS — make_run_id (one dispatch) | — | code `run` is one dispatch, not a session; design assumed a session spanning siblings (a search *hit* of the wrong shape) — state the divergence, rebind to the real entity |
+   | session | NEW ENTITY | — | no symbol; the coordinator session the design needs must be designed |
    ```
 
 4. **An unresolved binding hard-blocks curdle**, exactly as an unapproved `[AGENT-INTRODUCED]` noun does. A search *hit* is not resolution: if the design's usage diverges from the code's existing meaning of the same word, the aliasing must be stated and settled before extraction.
