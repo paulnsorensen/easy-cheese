@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Post a reply to a GitHub PR thread or PR conversation with the mandatory
-"agent on behalf of <handle>;" attribution suffix appended.
+"agent on behalf of <handle>" attribution suffix appended.
 
 Used by /affinage. Single source of truth for the attribution suffix — never
 duplicate the literal phrase into callers.
@@ -30,7 +30,8 @@ import sys
 
 # IMPORTANT: This is the attribution suffix's verbatim fixed text. Do not
 # paraphrase, do not change capitalization, do not change punctuation. The
-# handle is inserted before the final semicolon — see skills/affinage/SKILL.md,
+# handle is appended to the prefix with no terminal punctuation — see
+# skills/affinage/SKILL.md,
 # section "Rules".
 ATTRIBUTION_PREFIX = "agent on behalf of"
 
@@ -100,7 +101,7 @@ def compose_body(body: str, handle: str) -> str:
     followed by a trailing newline), return it unchanged. An exact-suffix match
     (not a substring match) ensures a body that merely quotes the attribution
     elsewhere still gets a real attribution appended."""
-    attribution_line = f"{ATTRIBUTION_PREFIX} {handle};"
+    attribution_line = f"{ATTRIBUTION_PREFIX} {handle}"
     suffix = f"\n\n{ATTRIBUTION_SEPARATOR}\n{attribution_line}"
     # Strip a single trailing newline (the form compose_body itself emits)
     # before comparing, so the check accepts both "...handle" and "...handle\n".
