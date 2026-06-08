@@ -47,7 +47,7 @@ Flags:
 4. **Fetch comments.**
    - Inline threads: `gh api repos/<owner>/<repo>/pulls/<pr>/comments`. This REST endpoint returns individual review comments without thread-level resolution state, so the skill cannot filter on `isResolved` from this surface; it skips comments whose `position` is `null` (the diff has moved past the anchored line) unless `--include-outdated`. For true unresolved-only filtering, switch to the GraphQL `pullRequest.reviewThreads { isResolved }` endpoint — documented as a future enhancement.
    - Review bodies: `gh api repos/<owner>/<repo>/pulls/<pr>/reviews`. Filter to non-empty bodies. Dedupe against inline comments via `pull_request_review_id`.
-5. **Skip already-replied threads.** A thread whose most recent comment is from the resolved GitHub handle (env `RESPOND_GH_HANDLE` → `gh api user --jq .login` → `git config user.name`) has already been responded to; skip it. This keeps re-runs idempotent.
+5. **Skip already-replied threads.** A thread whose most recent comment is from the resolved GitHub handle (env `RESPOND_GH_HANDLE` → `gh api user --jq .login` → `git config user.name`) has already been responded to; skip it. The same resolved handle is rendered in the reply footer as `agent on behalf of <handle>`. This keeps re-runs idempotent and makes `RESPOND_GH_HANDLE` the explicit footer knob.
 6. **Grade through the age lens.** For each input (comment, CI/build failure, OR fresh `/age` finding):
    - Classify dimension from the **code + claim** (or check type + failure summary, for CI items). See `skills/age/references/dimensions.md` for the dimension rubric.
    - **Build failures count, not just test failures.** A failing check is a finding whether the failure is a compile error, a lint/type-check failure, or a failing test — grade the `build.status: failing` checks from `affinage.pyz pr-status` and route them to `/cure` exactly like test failures. Tag CI-sourced items `[from-check:<job>]`.
@@ -118,7 +118,7 @@ Code search and reading go through `cheez-*` skills (`/cheez-search`, `/cheez-re
 | --- | --- | --- |
 | PR status (build + merge) | `${CLAUDE_SKILL_DIR}/scripts/affinage.pyz pr-status` | manual `gh pr checks` + `gh pr view` |
 | GitHub fetch | `gh api` | none (skill halts) |
-| Reply posting | `${CLAUDE_SKILL_DIR}/scripts/affinage.pyz post-reply` | none — direct `gh api` calls bypass the `agent on behalf of;` attribution |
+| Reply posting | `${CLAUDE_SKILL_DIR}/scripts/affinage.pyz post-reply` | none — direct `gh api` calls bypass the `agent on behalf of <handle>` attribution |
 | Diff inspection | `delta` | `git diff --unified=3` |
 
 ## Output
@@ -265,7 +265,7 @@ If no findings meet the floor, skip the `/cure` dispatch, post replies for `Revi
 - Never auto-apply fixes from `/affinage` itself. Code fixes go through `/cure`; merge conflicts go through `/melt`.
 - Fresh `/age` runs only on standalone invocations (no upstream `handoff_context`) and only when `--no-age` is absent. Chained runs never re-review the diff.
 - Merge conflicts are resolved through `/melt`, not by hand. `gh pr checkout` to materialise conflicts is allowed — it neither opens nor updates the PR. Pushing the resolved merge follows `/cure`'s push contract (push to the already-open PR after a clean cure); `--safe` re-gates it.
-- Every posted reply ends with the literal `agent on behalf of;` attribution via `${CLAUDE_SKILL_DIR}/scripts/affinage.pyz post-reply`. Never call `gh api` directly to post.
+- Every posted reply ends with the literal `agent on behalf of <handle>` attribution via `${CLAUDE_SKILL_DIR}/scripts/affinage.pyz post-reply`, where `<handle>` is resolved from `RESPOND_GH_HANDLE` → `gh api user --jq .login` → `git config user.name`. Never call `gh api` directly to post.
 - Idempotent re-runs: skip threads where the latest comment is from the resolved handle. The REST `/comments` endpoint does not expose thread resolution, so honest idempotency relies on the latest-comment-from-self heuristic; switch to GraphQL `reviewThreads` if cross-session resolution-state visibility becomes required.
 - CI-sourced findings get no reply (no reviewer to notify).
 - `/affinage` never invokes `/gh` itself. The PR push happens inside `/cure` after a clean cure (push to the already-open PR by default; `--open-pr` opens a new one; `--safe` re-gates).
@@ -279,5 +279,5 @@ If no findings meet the floor, skip the `/cure` dispatch, post replies for `Revi
 - `skills/cure/references/selection.md` — selection verbs and composition.
 - `skills/melt/SKILL.md` — merge-conflict resolution cascade (mergiraf → rerere → kdiff3).
 - `shared/handoff-gate.md` — gate primitives.
-- `${CLAUDE_SKILL_DIR}/scripts/affinage.pyz post-reply` — reply posting with `agent on behalf of;` attribution.
+- `${CLAUDE_SKILL_DIR}/scripts/affinage.pyz post-reply` — reply posting with `agent on behalf of <handle>` attribution.
 - `${CLAUDE_SKILL_DIR}/scripts/affinage.pyz pr-status` — PR status fetcher.
