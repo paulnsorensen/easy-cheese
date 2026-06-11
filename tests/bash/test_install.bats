@@ -5,6 +5,25 @@
 # The script is sourced (the BASH_SOURCE != $0 guard skips main on source)
 # so each test can call individual functions with controlled stubs.
 
+# Build a hermetic essentials dir once per file: symlinks to the only
+# external commands the script and suite actually use. Resolved against
+# the original full PATH, which is still active here. env and bash are
+# allowlisted only to back the stubs' `#!/usr/bin/env bash` shebangs,
+# not direct use — don't prune them.
+setup_file() {
+    ESSENTIALS_BIN="$BATS_FILE_TMPDIR/essentials"
+    mkdir -p "$ESSENTIALS_BIN"
+    local cmd resolved
+    for cmd in bash cat chmod grep mkdir ln dirname basename sort tr uname env; do
+        resolved="$(command -v "$cmd")" || {
+            echo "setup_file: essential command not found: $cmd" >&2
+            return 1
+        }
+        ln -sf "$resolved" "$ESSENTIALS_BIN/$cmd"
+    done
+    export ESSENTIALS_BIN
+}
+
 setup() {
     REPO_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/../.." && pwd)"
     INSTALL_SH="$REPO_ROOT/scripts/install.sh"
@@ -14,9 +33,10 @@ setup() {
     : > "$STUB_LOG"
     export STUB_LOG
     PATH_ORIG="$PATH"
-    # Use a sparse PATH so the only commands available are real /usr/bin
-    # essentials plus whatever stubs each test adds.
-    PATH="$STUB_BIN:/usr/bin:/bin"
+    # Hermetic PATH: stubs first, then only the allowlisted essentials.
+    # No /usr/bin or /bin, so real host tools cannot satisfy the install
+    # script's command -v probes in absence-asserting tests.
+    PATH="$STUB_BIN:$ESSENTIALS_BIN"
     # shellcheck disable=SC1090
     source "$INSTALL_SH"
 }
@@ -863,4 +883,30 @@ STUB
         echo "actual:   $actual"
         return 1
     fi
+}
+
+# -- test harness hermeticity -------------------------------------------------
+
+@test "hermetic PATH: non-allowlisted host tools are unreachable" {
+    # sed and awk live in /usr/bin on both Linux and macOS but are not
+    # essentials; if setup()'s PATH regresses to include /usr/bin or /bin
+    # this goes red. type -P is a PATH-only lookup, so an env-exported
+    # shell function can't satisfy it.
+    run type -P sed
+    [ "$status" -ne 0 ]
+    run type -P awk
+    [ "$status" -ne 0 ]
+}
+
+@test "hermetic PATH: stubs shadow allowlisted essentials" {
+    # Both halves of precedence: the essential resolves from the allowlist
+    # dir before any stub exists, and the stub wins once dropped in. Goes
+    # red if $ESSENTIALS_BIN drops out of PATH or the ordering flips.
+    [[ "$(command -v uname)" == "$ESSENTIALS_BIN/uname" ]]
+    make_stub uname
+    [[ "$(command -v uname)" == "$STUB_BIN/uname" ]]
+}
+
+@test "hermetic PATH: allowlisted essentials resolve from the essentials dir" {
+    [[ "$(command -v grep)" == "$ESSENTIALS_BIN/grep" ]]
 }
