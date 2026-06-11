@@ -856,12 +856,8 @@ STUB
 
 @test "EC_FALLBACK_SKILLS matches the skills/ directories exactly" {
     local expected actual d
-    expected=""
-    for d in "$REPO_ROOT"/skills/*/; do
-        expected="$expected$(basename "$d")\n"
-    done
-    expected="$(printf '%b' "$expected" | sort)"
-    actual="$(printf '%s\n' $EC_FALLBACK_SKILLS | sort)"
+    expected="$(for d in "$REPO_ROOT"/skills/*/; do basename "$d"; done | LC_ALL=C sort)"
+    actual="$(tr ' ' '\n' <<<"$EC_FALLBACK_SKILLS" | LC_ALL=C sort)"
     if [[ "$actual" != "$expected" ]]; then
         echo "expected: $expected"
         echo "actual:   $actual"
