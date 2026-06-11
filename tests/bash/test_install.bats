@@ -7,13 +7,19 @@
 
 # Build a hermetic essentials dir once per file: symlinks to the only
 # external commands the script and suite actually use. Resolved against
-# the original full PATH, which is still active here.
+# the original full PATH, which is still active here. env and bash are
+# allowlisted only to back the stubs' `#!/usr/bin/env bash` shebangs,
+# not direct use — don't prune them.
 setup_file() {
     ESSENTIALS_BIN="$BATS_FILE_TMPDIR/essentials"
     mkdir -p "$ESSENTIALS_BIN"
-    local cmd
+    local cmd resolved
     for cmd in bash cat chmod grep mkdir ln dirname basename sort tr uname env; do
-        ln -sf "$(command -v "$cmd")" "$ESSENTIALS_BIN/$cmd"
+        resolved="$(command -v "$cmd")" || {
+            echo "setup_file: essential command not found: $cmd" >&2
+            return 1
+        }
+        ln -sf "$resolved" "$ESSENTIALS_BIN/$cmd"
     done
     export ESSENTIALS_BIN
 }
@@ -882,13 +888,21 @@ STUB
 # -- test harness hermeticity -------------------------------------------------
 
 @test "hermetic PATH: non-allowlisted host tools are unreachable" {
-    # sed lives in /usr/bin on both Linux and macOS but is not an essential;
-    # if setup()'s PATH regresses to include /usr/bin or /bin this goes red.
-    run command -v sed
+    # sed and awk live in /usr/bin on both Linux and macOS but are not
+    # essentials; if setup()'s PATH regresses to include /usr/bin or /bin
+    # this goes red. type -P is a PATH-only lookup, so an env-exported
+    # shell function can't satisfy it.
+    run type -P sed
+    [ "$status" -ne 0 ]
+    run type -P awk
     [ "$status" -ne 0 ]
 }
 
 @test "hermetic PATH: stubs shadow allowlisted essentials" {
+    # Both halves of precedence: the essential resolves from the allowlist
+    # dir before any stub exists, and the stub wins once dropped in. Goes
+    # red if $ESSENTIALS_BIN drops out of PATH or the ordering flips.
+    [[ "$(command -v uname)" == "$ESSENTIALS_BIN/uname" ]]
     make_stub uname
     [[ "$(command -v uname)" == "$STUB_BIN/uname" ]]
 }
