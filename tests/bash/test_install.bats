@@ -5,6 +5,19 @@
 # The script is sourced (the BASH_SOURCE != $0 guard skips main on source)
 # so each test can call individual functions with controlled stubs.
 
+# Build a hermetic essentials dir once per file: symlinks to the only
+# external commands the script and suite actually use. Resolved against
+# the original full PATH, which is still active here.
+setup_file() {
+    ESSENTIALS_BIN="$BATS_FILE_TMPDIR/essentials"
+    mkdir -p "$ESSENTIALS_BIN"
+    local cmd
+    for cmd in bash cat chmod grep mkdir ln dirname basename sort tr uname env; do
+        ln -sf "$(command -v "$cmd")" "$ESSENTIALS_BIN/$cmd"
+    done
+    export ESSENTIALS_BIN
+}
+
 setup() {
     REPO_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/../.." && pwd)"
     INSTALL_SH="$REPO_ROOT/scripts/install.sh"
@@ -14,9 +27,10 @@ setup() {
     : > "$STUB_LOG"
     export STUB_LOG
     PATH_ORIG="$PATH"
-    # Use a sparse PATH so the only commands available are real /usr/bin
-    # essentials plus whatever stubs each test adds.
-    PATH="$STUB_BIN:/usr/bin:/bin"
+    # Hermetic PATH: stubs first, then only the allowlisted essentials.
+    # No /usr/bin or /bin, so real host tools cannot satisfy the install
+    # script's command -v probes in absence-asserting tests.
+    PATH="$STUB_BIN:$ESSENTIALS_BIN"
     # shellcheck disable=SC1090
     source "$INSTALL_SH"
 }
@@ -863,4 +877,22 @@ STUB
         echo "actual:   $actual"
         return 1
     fi
+}
+
+# -- test harness hermeticity -------------------------------------------------
+
+@test "hermetic PATH: non-allowlisted host tools are unreachable" {
+    # sed lives in /usr/bin on both Linux and macOS but is not an essential;
+    # if setup()'s PATH regresses to include /usr/bin or /bin this goes red.
+    run command -v sed
+    [ "$status" -ne 0 ]
+}
+
+@test "hermetic PATH: stubs shadow allowlisted essentials" {
+    make_stub uname
+    [[ "$(command -v uname)" == "$STUB_BIN/uname" ]]
+}
+
+@test "hermetic PATH: allowlisted essentials resolve from the essentials dir" {
+    [[ "$(command -v grep)" == "$ESSENTIALS_BIN/grep" ]]
 }
