@@ -200,14 +200,15 @@ ec_install_tilth() {
 # Install every tool in the comma-separated list. tilth is routed through
 # ec_install_tilth; everything else goes through brew.
 ec_install_tools() {
-    local list="$1" tool
+    local list="$1" tool rc=0
     local IFS=,
     for tool in $list; do
         case "$tool" in
-            tilth) ec_install_tilth ;;
-            *)     ec_brew_install_if_missing "$tool" ;;
+            tilth) ec_install_tilth || rc=1 ;;
+            *)     ec_brew_install_if_missing "$tool" || rc=1 ;;
         esac
     done
+    return $rc
 }
 
 # Register a single MCP server with the chosen harness.

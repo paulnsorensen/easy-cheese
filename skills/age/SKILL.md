@@ -71,7 +71,7 @@ Beyond `cheez-*` there are review-specific tools:
 | GitHub/PR context | `gh` | local git commands or user-provided PR data |
 | Merge/conflict awareness | mergiraf | manual conflict checks |
 
-**Freshness:** before the first code-review-graph query in a run, call `build_or_update_graph_tool` (and `embed_graph_tool` if you'll use `semantic_search_nodes_tool`). The graph is persistent and goes stale between sessions. See [`/cheez-search`](../cheez-search/SKILL.md#when-code-review-graph-beats-tilth-if-your-harness-has-it) for the full freshness contract and when semantic search beats tilth — steel threads across renamed layers, concepts under divergent names, spec-vs-code vocabulary mismatch.
+**Freshness:** before the first code-review-graph query in a run, call `build_or_update_graph_tool`. The graph is persistent and goes stale between sessions. See [`/cheez-search`](../cheez-search/SKILL.md#when-code-review-graph-beats-tilth-if-your-harness-has-it) for the full freshness contract and when semantic search beats tilth — steel threads across renamed layers, concepts under divergent names, spec-vs-code vocabulary mismatch.
 
 Missing optional tools should not block review. State which evidence was unavailable and reduce confidence accordingly.
 
@@ -228,7 +228,7 @@ When invoked with `--auto`:
 
 ### Inline-degrade mode (invoked from a sub-agent, e.g. /cheese-factory curd worker)
 
-When `/age` detects it is running as a sub-agent (the parent passes the `invoked-from: cheese-factory-curd` marker or equivalent context line in the prompt), it runs its ten dimensions inline within its own context instead of spawning per-dimension sub-agents. This honours the host's nesting-depth limit (Claude Code allows 1 level of sub-agent nesting; equivalents in other harnesses are similar).
+When `/age` detects it is running as a sub-agent (the parent passes the `invoked-from: cheese-factory-curd` marker or equivalent context line in the prompt), it runs its ten dimensions inline within its own context instead of spawning per-dimension sub-agents. This honours the host's nesting-depth limit (harnesses cap sub-agent nesting depth, and the orchestrator's own spawn may already sit at that cap).
 
 Detection mechanism: scan the invoking prompt for an `invoked-from:` line — values like `cheese-factory-curd`, `fromagerie-curd`, or any harness-specific marker the orchestrator passes in. When present, switch modes:
 
@@ -236,7 +236,7 @@ Detection mechanism: scan the invoking prompt for an `invoked-from:` line — va
 - Output (the findings report + handoff slug) is identical between fan-out and inline-degrade modes — only the internal execution differs.
 - Honour the no-chain-forward directive as usual: write the slug and stop. Do not invoke `/cure` from the sub-agent — the orchestrator owns the chain.
 
-Inline-degrade is forced when the marker is present; there is no opt-out. Spawning a level-2 sub-agent from inside a curd worker would silently exceed the harness's nesting limit and fail — the marker is the only honest signal that the parent has already consumed level-1 depth.
+Inline-degrade is forced when the marker is present; there is no opt-out. Spawning a deeper sub-agent from inside a curd worker can exceed the harness's nesting limit and fail silently — the marker is the only honest signal that the parent has already consumed the available depth.
 
 ## Rules
 

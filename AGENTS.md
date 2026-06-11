@@ -29,15 +29,20 @@ This is a skills-only collection following the [Agent Skills spec](https://agent
 | Skill | Purpose |
 |---|---|
 | `/cheese` | Unified entry — classifies input and routes to the right downstream skill |
+| `/briesearch` | External research router (Context7, Tavily, gh, local code) |
 | `/mold` | Iterative dialogue to converge a fuzzy idea into an approved spec |
 | `/culture` | Deep no-write exploration of a codebase or topic |
+| `/pasteurize` | Hard-bug diagnosis — feedback-loop-first investigation, regression test, minimal fix, then handoff to `/cook` |
 | `/cook` | TDD-disciplined implementation of an approved spec |
 | `/press` | Adversarial test hardening after `/cook` |
 | `/age` | Ten-dimension code review producing a severity-grouped findings report |
+| `/affinage` | Triages a PR's review comments and CI failures through the `/age` lens, routes fixes to `/cure`, posts replies |
 | `/cure` | Applies selected `/age` findings as focused fixes |
+| `/hard-cheese` | Metacognitive vibecheck gate before sharing for review (standalone or via `--hard` propagation) |
+| `/ultracook` | Autonomous fresh-context pipeline — `cook → press → age → cure → age → cure → age`, all `--auto`, one sub-agent per phase |
 | `/melt` | Resolves merge / rebase / cherry-pick conflicts via the structural-merge cascade |
-| `/briesearch` | External research router (Context7, Tavily, gh, local code) |
 | `/cheese-factory` | Large-feature orchestrator: decomposes an approved spec into seed + parallel curds + wiring, fans out per-curd `/cook → /press → /age → /cure`, runs post-merge review, ends in 1–N reviewable PRs |
+| `/wheypoint` | Checkpoints a mid-task conversation into a durable handoff at `.cheese/notes/<slug>.md`, resumable via `/cheese --continue` |
 
 ### Tool skills (lower-level primitives)
 
@@ -46,7 +51,6 @@ This is a skills-only collection following the [Agent Skills spec](https://agent
 | `/cheez-search` | AST-aware search via tilth MCP — replaces grep / rg / ripgrep |
 | `/cheez-read` | Smart-outlining file reader via tilth MCP — replaces cat / head / tail |
 | `/cheez-write` | Batched edit writer via tilth MCP — replaces inline Edit / Write |
-| `/ultracook` | Composite workflow chaining `/cook` → `/press` → `/age` → `/cure` |
 
 See `README.md` for the full workflow and the suggested skill ordering.
 
