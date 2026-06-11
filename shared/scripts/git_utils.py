@@ -6,6 +6,16 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+# Conflict-marker prefixes (diff3 adds the ||||||| base marker). Single source
+# for marker checks here and in importers (conflict-pick).
+MARKER_OURS = "<<<<<<<"
+MARKER_BASE = "|||||||"
+MARKER_SEP = "======="
+MARKER_THEIRS = ">>>>>>>"
+CONFLICT_MARKERS = (MARKER_OURS, MARKER_BASE, MARKER_SEP, MARKER_THEIRS)
+# Loose 6-char forms for context scans (match markers anywhere in a line).
+_MARKER_FRAGMENTS = tuple(m[:6] for m in CONFLICT_MARKERS)
+
 
 def run_git(args: list[str], capture_output: bool = True) -> subprocess.CompletedProcess:
     return subprocess.run(
@@ -87,7 +97,7 @@ def parse_conflict_hunks(content: str) -> list[dict]:
     section = None
 
     for i, line in enumerate(lines, 1):
-        if line.startswith("<<<<<<<"):
+        if line.startswith(MARKER_OURS):
             current_hunk = {
                 "start_line": i,
                 "end_line": None,
@@ -98,11 +108,11 @@ def parse_conflict_hunks(content: str) -> list[dict]:
                 "marker_theirs": None,
             }
             section = "ours"
-        elif line.startswith("|||||||") and current_hunk:
+        elif line.startswith(MARKER_BASE) and current_hunk:
             section = "base"
-        elif line.startswith("=======") and current_hunk:
+        elif line.startswith(MARKER_SEP) and current_hunk:
             section = "theirs"
-        elif line.startswith(">>>>>>>") and current_hunk:
+        elif line.startswith(MARKER_THEIRS) and current_hunk:
             current_hunk["end_line"] = i
             current_hunk["marker_theirs"] = line
             hunks.append(current_hunk)
@@ -124,14 +134,14 @@ def get_surrounding_context(
     before = []
     for i in range(before_start, start_line - 1):
         line = lines[i]
-        if not any(marker in line for marker in ["<<<<<<", "======", ">>>>>>", "||||||"]):
+        if not any(fragment in line for fragment in _MARKER_FRAGMENTS):
             before.append(f"{i + 1}: {line}")
 
     after_end = min(len(lines), end_line + context_lines)
     after = []
     for i in range(end_line, after_end):
         line = lines[i]
-        if not any(marker in line for marker in ["<<<<<<", "======", ">>>>>>", "||||||"]):
+        if not any(fragment in line for fragment in _MARKER_FRAGMENTS):
             after.append(f"{i + 1}: {line}")
 
     return before, after

@@ -61,7 +61,7 @@ def check_test_target(curd: dict) -> str | None:
 def check_file_disjointness(curds: Iterable[dict]) -> list[str]:
     """Criterion 4: no file appears in two curds. HARD CONSTRAINT."""
     errors: list[str] = []
-    file_to_curd: dict[str, int] = {}
+    file_to_curd: dict[str, int | str] = {}
     for curd in curds:
         # Non-dict entries are reported by validate_manifest's loop; skip
         # here to avoid AttributeError on .get when the entry is None / str / int.

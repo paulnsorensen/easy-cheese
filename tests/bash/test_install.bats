@@ -851,3 +851,20 @@ STUB
     # No brew calls should have happened.
     ! grep -q "^brew" "$STUB_LOG" || false
 }
+
+# -- EC_FALLBACK_SKILLS sync --------------------------------------------------
+
+@test "EC_FALLBACK_SKILLS matches the skills/ directories exactly" {
+    local expected actual d
+    expected=""
+    for d in "$REPO_ROOT"/skills/*/; do
+        expected="$expected$(basename "$d")\n"
+    done
+    expected="$(printf '%b' "$expected" | sort)"
+    actual="$(printf '%s\n' $EC_FALLBACK_SKILLS | sort)"
+    if [[ "$actual" != "$expected" ]]; then
+        echo "expected: $expected"
+        echo "actual:   $actual"
+        return 1
+    fi
+}

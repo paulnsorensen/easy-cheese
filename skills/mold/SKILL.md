@@ -139,7 +139,7 @@ Read the JSON digest. Its `decomposable` field (true when `candidate_curds ≥ 5
 
 The spec splits into many independent slices, so the natural fit is fan-out parallelism with reviewable PRs. Before rendering the menu, confirm with the user that the candidate curds are file-disjoint (criterion 4) — the script counts signals, it does not verify independence. **If the user confirms any two candidate curds share a file, override the digest's `recommended_skill`**: shift the *(recommended)* marker from `/cheese-factory` to `/ultracook` for this menu. The option list itself is unchanged.
 
-- **Fan out into parallel curds with reviewable PRs** *(recommended when curds are file-disjoint)* — `/cheese-factory .cheese/specs/<slug>.md`. Spawns per-curd worker sub-agents; ends in 1–N reviewable PRs via `/pr-stack`.
+- **Fan out into parallel curds with reviewable PRs** *(recommended when curds are file-disjoint)* — `/cheese-factory .cheese/specs/<slug>.md`. Spawns per-curd worker sub-agents; ends in 1–N reviewable PRs (published via a discovered `/pr-stack` skill when available, plain `gh` otherwise).
 - **Run the full pipeline in fresh-context isolation** *(recommended when curds share files)* — `/ultracook .cheese/specs/<slug>.md`. Autonomous chain with each phase blind to prior phases.
 - **Implement manually, one phase at a time** — `/cook .cheese/specs/<slug>.md`.
 - **Stop** — dispatch none; leave the spec for later.

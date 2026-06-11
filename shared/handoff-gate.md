@@ -67,7 +67,7 @@ never name a host tool in the transcript unless it is callable in that session.
 | Gemini CLI | `ask_user` tool | Google codelab output lists `Ask User (ask_user)` in `/tools`; use it when present. Source: [Gemini CLI codelab](https://codelabs.developers.google.com/gemini-cli-hands-on). |
 | Cursor CLI / ACP | `cursor/ask_question` when exposed | Cursor ACP documents `cursor/ask_question` as a blocking extension method; use it only inside hosts that expose that ACP method. Source: [Cursor ACP docs](https://cursor.com/docs/cli/acp#cursor-extension-methods). |
 | Windsurf Cascade | Plan-mode interactive questions when in Plan Mode | Cascade Plan Mode can ask clarifying questions and present multiple options with an interactive interface. Outside that mode, fall back to numbered text unless a host tool is exposed. Source: [Cascade modes](https://docs.windsurf.com/windsurf/cascade/modes). |
-| MCP server flows | `elicitation/create` | Use only when an MCP server is requesting user input through a client that supports elicitation. It is not a general assistant-to-user question primitive. Source: [MCP elicitation](https://modelcontextprotocol.io/specification/2025-11-25/client/elicitation). |
+| MCP server flows | `elicitation/create` | Use only when an MCP server is requesting user input through a client that supports elicitation. It is not a general assistant-to-user question primitive. Source: [MCP elicitation](https://modelcontextprotocol.io/specification/latest/client/elicitation). |
 | Aider and unknown harnesses | Numbered text | If no structured primitive is visible, ask a plain numbered question and wait for the next user reply. |
 
 ### Portable fallback format

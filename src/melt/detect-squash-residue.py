@@ -109,6 +109,8 @@ def _check_via_gh(branch: str, base_ref: str) -> dict | None:
         return None
     prs.sort(key=lambda p: p.get("mergedAt", ""), reverse=True)
     pr = prs[0]
+    if any(k not in pr for k in ("number", "url", "mergedAt")):
+        return None
     return {
         "number": pr["number"],
         "url": pr["url"],
@@ -174,6 +176,9 @@ def _check_via_tree_match(base_ref: str, head: str = "HEAD") -> dict | None:
         return None
 
     branch_commits = _log_with_trees(f"{mb}..{head}", reverse=True)
+    if branch_commits is None:
+        print("warning: tree-match detection skipped (git log failed)", file=sys.stderr)
+        return None
     if not branch_commits:
         return None
 
@@ -184,6 +189,7 @@ def _check_via_tree_match(base_ref: str, head: str = "HEAD") -> dict | None:
     # Cap base log at 500 commits to stay fast on long-running base branches.
     base_commits = _log_with_trees(f"{mb}..{base_ref}", limit=500)
     if base_commits is None:
+        print("warning: tree-match detection skipped (git log failed)", file=sys.stderr)
         return None
 
     for base_sha, base_tree, base_subject in base_commits:

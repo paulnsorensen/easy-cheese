@@ -160,7 +160,7 @@ It wins on five questions tilth structurally cannot answer:
 **Before the first query — refresh the graph via MCP.** code-review-graph keeps a persistent graph that goes stale between sessions. From inside an agent, prefer the MCP tools over the CLI:
 
 - Call `build_or_update_graph_tool` once at the start of a run. It's incremental — on a warm repo this is fast.
-- If you'll use `semantic_search_nodes_tool` *or* you've added concept-shaped code since the last embed, also call `embed_graph_tool` once. Embedding is the slow step — skip it otherwise.
+- `semantic_search_nodes_tool` needs embeddings. Current server versions handle embedding without a separate tool call; if your server's tool list includes `embed_graph_tool`, call it once after build (embedding is the slow step — skip it otherwise).
 
 The CLI equivalents (`code-review-graph build` / `embed`) are for first-time setup; inside a run, the MCP tools let the agent own the lifecycle.
 

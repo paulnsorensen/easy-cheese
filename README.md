@@ -65,7 +65,7 @@ Content shared _across_ skills lives at top-level `shared/` (e.g. `shared/handof
 | `skills/pasteurize/SKILL.md` | `/pasteurize` | Diagnose hard bugs, flaky failures, and performance regressions with a feedback-loop-first investigation, then hand off into `/cook → /press → /age → /cure`. |
 | `skills/cook/SKILL.md` | `/cook` | Implement clear specs via cut → cook → taste-test with scoped edits and tests. |
 | `skills/press/SKILL.md` | `/press` | Harden cooked changes with coverage, assertion, and boundary checks. |
-| `skills/age/SKILL.md` | `/age` | Review diffs across nine staff-engineer dimensions and produce a severity-grouped findings report. |
+| `skills/age/SKILL.md` | `/age` | Review diffs across ten staff-engineer dimensions and produce a severity-grouped findings report. |
 | `skills/affinage/SKILL.md` | `/affinage` | Triage external PR claims — review comments and CI failures — through the `/age` lens, hand the chosen fixes to `/cure`, then post replies back on GitHub. |
 | `skills/cure/SKILL.md` | `/cure` | Fix user-selected findings, validate, and prepare the branch for shipping. |
 | `skills/hard-cheese/SKILL.md` | `/hard-cheese` (or `--hard` flag) | Metacognitive vibecheck gate before review — asks the author to explain the diff's causal logic, grades the explanation against the SOLO Taxonomy. Standalone or via `--hard` propagation through the pipeline. |

@@ -17,6 +17,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 BUILD = REPO_ROOT / "scripts" / "build_pyz.py"
 
 sys.path.insert(0, str(REPO_ROOT / "shared" / "scripts"))
+import build_pyz  # noqa: E402  bundle manifest — single source for the orphan check
 import paths  # noqa: E402  the path-math single source the shim must agree with
 
 SKILL_SUBCOMMANDS = {
@@ -423,3 +424,15 @@ def test_committed_bundle_matches_source(bundles: Path, skill: str) -> None:
         f"(changed={changed}, added={added}, removed={removed}). "
         f"Rebuild and commit it: python3 scripts/build_pyz.py"
     )
+
+
+def test_no_orphan_committed_bundles():
+    """A skill dropped from build_pyz.SKILLS must not leave a stale committed
+    .pyz behind — the build-pyz workflow only diffs bundles it rebuilds, so an
+    orphan would ship silently."""
+    committed = {
+        p.relative_to(REPO_ROOT).as_posix()
+        for p in REPO_ROOT.glob("skills/*/scripts/*.pyz")
+    }
+    expected = {f"skills/{skill}/scripts/{skill}.pyz" for skill in build_pyz.SKILLS}
+    assert committed == expected
