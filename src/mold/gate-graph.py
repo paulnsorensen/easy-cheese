@@ -207,9 +207,14 @@ def render(
 
 def _load_state(path: Path) -> dict:
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        obj = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
         raise RenderError(f"could not read state file {path}: {exc}") from exc
+    if not isinstance(obj, dict):
+        raise RenderError(
+            f"state file {path} must be a JSON object, got {type(obj).__name__}"
+        )
+    return obj
 
 
 def main(argv: list[str]) -> int:
@@ -229,7 +234,8 @@ def main(argv: list[str]) -> int:
     parser.add_argument(
         "--out",
         type=Path,
-        help="Write to this path instead of stdout (required for binary targets).",
+        help="Write to this path instead of stdout (required when the effective "
+        "output is binary — svg/png with Graphviz present).",
     )
     args = parser.parse_args(argv)
 

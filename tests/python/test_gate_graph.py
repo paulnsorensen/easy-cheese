@@ -80,7 +80,10 @@ class TestToMermaid:
         bracketed = [n for n in gate_graph.GATE_MODEL.nodes if "[" in n.label or "]" in n.label]
         assert bracketed, "expected at least one label with brackets to exercise escaping"
         for node in bracketed:
-            assert "&#91;" in mermaid or "&#93;" in mermaid, node.label
+            escaped = (
+                node.label.replace('"', "'").replace("[", "&#91;").replace("]", "&#93;")
+            )
+            assert escaped in mermaid, f"label not escaped/present in mermaid: {node.label!r}"
 
     def test_derives_from_same_node_set_as_dot(self, gate_graph: ModuleType) -> None:
         # Both targets enumerate the same node ids — the no-drift guarantee.
