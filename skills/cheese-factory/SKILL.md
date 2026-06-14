@@ -108,7 +108,7 @@ Eight phases. The orchestrator walks them top-to-bottom and stops after the last
 
 ### Optional: milknado prerequisite-graph backend
 
-If milknado MCP is available (`mcp__plugin_milknado_milknado__milknado_todo_add` in toolset), persist the curd prerequisite graph to the milknado task graph during Phase 0 decomposition. Use `milknado_todo_add` per curd and `milknado_graph_summary` to surface the dependency order alongside the manifest. This provides cross-session tracking and a visual prerequisite graph. If milknado is absent, proceed with the in-report curd decomposition (manifest YAML at `.cheese/cheese-factory/<slug>/manifest.yaml`) — the decomposition itself is unchanged. See `shared/optional-plugins.md` for the detect-and-degrade contract.
+If milknado MCP is available (`mcp__plugin_milknado_milknado__milknado_todo_add` in toolset), persist the curd prerequisite graph to the milknado task graph during Phase 0 decomposition. Use `milknado_todo_add` per curd and `milknado_graph_summary` to surface the dependency order alongside the manifest. This provides cross-session tracking and a visual prerequisite graph. If milknado is absent, proceed with the in-report curd decomposition (manifest YAML at `.cheese/cheese-factory/<slug>/manifest.yaml`) — the decomposition itself is unchanged. See [`../../shared/optional-plugins.md`](../../shared/optional-plugins.md) for the detect-and-degrade contract.
 
 ### Phase 0 — Pre-compile
 

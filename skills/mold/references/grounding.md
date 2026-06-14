@@ -4,7 +4,7 @@ During the **Ground** phase of a `/mold` dialogue, if hallouminate is available,
 
 ## Probe shape
 
-Mirrors the ADR resolution in `adr.md`:
+Mirrors the wiki probe pattern from the detect-and-degrade contract in [`../../../shared/optional-plugins.md`](../../../shared/optional-plugins.md):
 
 ```pseudocode
 ground_wiki(topic):
@@ -40,4 +40,4 @@ Skip the probe for pure Explore mode (no named system) and for Diagnose mode (ev
 
 ## Confidence when absent
 
-If hallouminate is absent and design rationale is central to the Ground question, cap at `speculating` and note it inline. See `shared/optional-plugins.md` for the full degrade contract.
+If hallouminate is absent and design rationale is central to the Ground question, cap at `speculating` and note it inline. See [`../../../shared/optional-plugins.md`](../../../shared/optional-plugins.md) for the full degrade contract.
