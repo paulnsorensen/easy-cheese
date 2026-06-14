@@ -80,7 +80,9 @@ Each phase spawns a **full peer** sub-agent — same model as the parent, full t
 
 Diminutive defaults (haiku model, restricted tools, `Explore`-style read-only workers) will choke phases that need to edit dozens of files or run real test suites.
 
-Concrete `Agent()` signature shape (harness-agnostic; adapt the keyword names to the host):
+The spawn call must satisfy the five invariants (fresh context, full-peer inheritance, no-chain-forward, returns control, writes handoff slug) regardless of harness. For the complete per-harness invocation examples — Claude Code `Agent()`, GitHub Copilot CLI fleets, OpenAI Codex subagents, and the evaluation checklist for new harnesses — see [`../cheese-factory/references/spawn-primitive-reference.md`](../cheese-factory/references/spawn-primitive-reference.md).
+
+Claude Code example (one harness; adapt keyword names on other hosts):
 
 ```
 Agent(
