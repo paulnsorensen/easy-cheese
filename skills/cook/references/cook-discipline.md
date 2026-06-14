@@ -1,6 +1,6 @@
 # /cook — TDD Discipline
 
-See [`../../shared/skill-authoring.md`](../../shared/skill-authoring.md) for the
+See [`../../../shared/skill-authoring.md`](../../../shared/skill-authoring.md) for the
 Iron Law / Red Flags / Rationalization-table template that governs this section.
 
 ---
