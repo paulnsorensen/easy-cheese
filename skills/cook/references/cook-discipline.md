@@ -24,8 +24,7 @@ Stop if you notice yourself thinking any of these:
 - "This is a small change; tests are overkill."
 - "The existing tests already cover this implicitly."
 - "The type system / linter makes a test redundant here."
-- Reaching for `taste_test: deferred-to-orchestrator` before writing a single
-  test.
+- Treating the post-implementation taste-test as proof the Cut step can be skipped.
 
 Each of these is a rationalization. Name it and stop.
 

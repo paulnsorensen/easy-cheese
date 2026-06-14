@@ -119,7 +119,8 @@ Before a skill ships, verify:
   a gate or a loop carries the three-part template above.
 - [ ] **Dual-listed.** The skill's directory appears in `.claude-plugin/
   plugin.json` `skills` array. The CI check `tests/python/
-  test_skill_listing.py` enforces this.
+  test_plugin_manifest.py::test_claude_plugin_manifest_matches_top_level_skills`
+  enforces this.
 
 ---
 
