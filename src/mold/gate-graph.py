@@ -195,11 +195,15 @@ def render(
     # svg / png — need the binary, else degrade to mermaid.
     if not have_dot:
         return "mermaid", to_mermaid(model).encode("utf-8")
-    proc = subprocess.run(
-        ["dot", f"-T{target}"],
-        input=to_dot(model).encode("utf-8"),
-        capture_output=True,
-    )
+    try:
+        proc = subprocess.run(
+            ["dot", f"-T{target}"],
+            input=to_dot(model).encode("utf-8"),
+            capture_output=True,
+            timeout=30,
+        )
+    except subprocess.TimeoutExpired:
+        raise RenderError(f"dot -T{target} timed out after 30 s")
     if proc.returncode != 0:
         raise RenderError(f"dot -T{target} failed: {proc.stderr.decode('utf-8', 'replace').strip()}")
     return target, proc.stdout
@@ -259,7 +263,11 @@ def main(argv: list[str]) -> int:
         )
 
     if args.out is not None:
-        args.out.write_bytes(payload)
+        try:
+            args.out.write_bytes(payload)
+        except OSError as exc:
+            print(f"error: could not write {args.out}: {exc}", file=sys.stderr)
+            return 2
         print(str(args.out))
         return 0
 
