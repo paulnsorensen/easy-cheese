@@ -106,6 +106,10 @@ Eight phases. The orchestrator walks them top-to-bottom and stops after the last
 | 6 | Post-merge review (fresh-context, ultracook-style) | Three sub-agent spawns: `/press --auto`, `/age --auto`, `/cure --auto --stake medium+`. Single pass. |
 | 7 | PR plan + publish | Heavy PR planner sub-agent decides layout, orchestrator delegates publish via skill discovery (`/pr-stack`, `/gh`, fallbacks) |
 
+### Optional: milknado prerequisite-graph backend
+
+If milknado MCP is available (`mcp__plugin_milknado_milknado__milknado_todo_add` in toolset), persist the curd prerequisite graph to the milknado task graph during Phase 0 decomposition. Use `milknado_todo_add` per curd and `milknado_graph_summary` to surface the dependency order alongside the manifest. This provides cross-session tracking and a visual prerequisite graph. If milknado is absent, proceed with the in-report curd decomposition (manifest YAML at `.cheese/cheese-factory/<slug>/manifest.yaml`) — the decomposition itself is unchanged. See `shared/optional-plugins.md` for the detect-and-degrade contract.
+
 ### Phase 0 — Pre-compile
 
 Read the spec from the argument (or, if `--resume <slug>`, read the manifest and skip to the next incomplete phase).

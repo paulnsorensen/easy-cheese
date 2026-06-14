@@ -69,7 +69,7 @@ Options:
                                 just, mergiraf, tilth
   --mcp <list>         Comma-separated MCP servers to register. Default:
                        tilth,context7. Choices: tilth, context7, tavily,
-                       code-review-graph, none
+                       code-review-graph, hallouminate, milknado, none
   --skip-mcp           Same as --mcp none.
   --skip-tools         Skip CLI tool installs (useful for MCP-only runs).
   --harness <selection> Harness to register skills + MCP servers with.
@@ -227,6 +227,12 @@ ec_install_mcp() {
         code-review-graph)
             ec_install_mcp_crg "$harness"
             ;;
+        hallouminate)
+            ec_install_mcp_hallouminate "$harness"
+            ;;
+        milknado)
+            ec_install_mcp_milknado "$harness"
+            ;;
         none)
             ec_log "MCP: skipping (none selected)"
             ;;
@@ -375,6 +381,45 @@ ec_install_mcp_crg() {
     fi
     ec_log "code-review-graph: registering with $harness"
     "$crg" install --platform "$harness"
+}
+ec_install_mcp_hallouminate() {
+    local harness="$1"
+    local claude="${EC_CLAUDE:-claude}"
+    local npx="${EC_NPX:-npx}"
+    if [[ "$harness" != "claude-code" ]]; then
+        ec_warn "hallouminate MCP: only claude-code is auto-registered; configure $harness manually."
+        return 0
+    fi
+    if ! ec_cmd_exists "$claude"; then
+        ec_warn "hallouminate MCP: claude CLI not found; install Claude Code first."
+        return 1
+    fi
+    if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
+        ec_log "hallouminate MCP: would run '$claude mcp add hallouminate -- $npx -y @agentskills/hallouminate-mcp@latest'"
+        return 0
+    fi
+    ec_log "hallouminate MCP: registering with claude-code"
+    "$claude" mcp add hallouminate -- "$npx" -y @agentskills/hallouminate-mcp@latest
+}
+
+ec_install_mcp_milknado() {
+    local harness="$1"
+    local claude="${EC_CLAUDE:-claude}"
+    local npx="${EC_NPX:-npx}"
+    if [[ "$harness" != "claude-code" ]]; then
+        ec_warn "milknado MCP: only claude-code is auto-registered; configure $harness manually."
+        return 0
+    fi
+    if ! ec_cmd_exists "$claude"; then
+        ec_warn "milknado MCP: claude CLI not found; install Claude Code first."
+        return 1
+    fi
+    if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
+        ec_log "milknado MCP: would run '$claude mcp add milknado -- $npx -y @agentskills/milknado-mcp@latest'"
+        return 0
+    fi
+    ec_log "milknado MCP: registering with claude-code"
+    "$claude" mcp add milknado -- "$npx" -y @agentskills/milknado-mcp@latest
 }
 
 ec_install_mcp_list() {
@@ -597,7 +642,7 @@ ec_parse_args() {
     done
 
     ec_validate_selection "$EC_TOOLS" "$EC_KNOWN_TOOLS" || return 2
-    ec_validate_selection "$EC_MCP" "tilth context7 tavily code-review-graph none" || return 2
+    ec_validate_selection "$EC_MCP" "tilth context7 tavily code-review-graph hallouminate milknado none" || return 2
 }
 
 ec_main() {

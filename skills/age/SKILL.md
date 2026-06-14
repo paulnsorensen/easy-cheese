@@ -68,10 +68,13 @@ Beyond `cheez-*` there are review-specific tools:
 | Diff inspection | `delta` | `git diff --unified=3` |
 | Risk-scored impact + curated review context | code-review-graph: `get_review_context_tool`, `get_impact_radius_tool`, `detect_changes_tool` | `tilth_deps` + manual scoping |
 | Architecture / hotspot framing for large diffs | code-review-graph: `get_architecture_overview_tool`, `get_hub_nodes_tool`, `get_bridge_nodes_tool` | skip and note in confidence |
+| Design rationale for encapsulation/spec dimensions (optional) | hallouminate `ground` on `repo:<repo>:wiki` corpus — if available, ground design intent before grading encapsulation and spec findings | skip; proceed with diff + code evidence only; cap at `speculating` when rationale is the primary evidence |
 | GitHub/PR context | `gh` | local git commands or user-provided PR data |
 | Merge/conflict awareness | mergiraf | manual conflict checks |
 
 **Freshness:** before the first code-review-graph query in a run, call `build_or_update_graph_tool`. The graph is persistent and goes stale between sessions. See [`/cheez-search`](../cheez-search/SKILL.md#when-code-review-graph-beats-tilth-if-your-harness-has-it) for the full freshness contract and when semantic search beats tilth — steel threads across renamed layers, concepts under divergent names, spec-vs-code vocabulary mismatch.
+
+**Optional MCPs:** code-review-graph, hallouminate, and milknado follow the detect-and-degrade contract in [`../../shared/optional-plugins.md`](../../shared/optional-plugins.md) — state absence once, fall back, reduce confidence only if evidence quality suffers, never block.
 
 Missing optional tools should not block review. State which evidence was unavailable and reduce confidence accordingly.
 
