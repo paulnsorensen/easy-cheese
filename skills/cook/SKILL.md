@@ -152,3 +152,9 @@ Auto mode is a propagated flag, not a separate skill — every downstream invoca
 - Stop and ask when implementation reveals a design decision the spec did not answer.
 - If the spec or fast-path request rests on a false premise, stop and surface the premise before writing code; do not work the wrong angle to honour the request literally.
 - Apply the shared voice kernel (lives at `skills/age/references/voice.md` in this repo): lead the package-ready report with the answer, name loaded assumptions in the contract, flag residual risk as `certain | speculating | don't know`.
+
+## Discipline
+
+Iron Law, Red Flags, and the TDD Rationalization table live in
+[`references/cook-discipline.md`](references/cook-discipline.md).
+See [`../../shared/skill-authoring.md`](../../shared/skill-authoring.md) for the template these follow.
