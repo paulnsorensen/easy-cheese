@@ -90,6 +90,7 @@ Environment:
   EC_CURSOR EC_CODEX   Override cursor / codex binaries for detection.
   EC_NPX               Override npx (used to launch context7 / tavily MCP).
   EC_UVX               Override uvx (used to launch milknado MCP).
+  EC_HALLOUMINATE      Override hallouminate binary (used to launch hallouminate MCP).
   EC_UV     EC_PIPX    Override uv / pipx for code-review-graph install.
   EC_PIP    EC_CRG     Override pip / code-review-graph binaries.
   EC_SKILL_REF         Pin skill installs to a git tag or commit SHA
@@ -383,9 +384,11 @@ ec_install_mcp_crg() {
     ec_log "code-review-graph: registering with $harness"
     "$crg" install --platform "$harness"
 }
+
 ec_install_mcp_hallouminate() {
     local harness="$1"
     local claude="${EC_CLAUDE:-claude}"
+    local hallouminate="${EC_HALLOUMINATE:-hallouminate}"
     if [[ "$harness" != "claude-code" ]]; then
         ec_warn "hallouminate MCP: only claude-code is auto-registered; configure $harness manually."
         return 0
@@ -394,16 +397,16 @@ ec_install_mcp_hallouminate() {
         ec_warn "hallouminate MCP: claude CLI not found; install Claude Code first."
         return 1
     fi
-    if ! ec_cmd_exists hallouminate; then
+    if ! ec_cmd_exists "$hallouminate"; then
         ec_warn "hallouminate MCP: hallouminate binary not found — install via 'cargo install hallouminate' or the release installer, then re-run with --mcp hallouminate"
         return 0
     fi
     if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
-        ec_log "hallouminate MCP: would run '$claude mcp add hallouminate -- hallouminate serve'"
+        ec_log "hallouminate MCP: would run '$claude mcp add hallouminate -- $hallouminate serve'"
         return 0
     fi
     ec_log "hallouminate MCP: registering with claude-code"
-    "$claude" mcp add hallouminate -- hallouminate serve
+    "$claude" mcp add hallouminate -- "$hallouminate" serve
 }
 
 ec_install_mcp_milknado() {
