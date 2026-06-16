@@ -318,7 +318,7 @@ Recommendation shape: "Emit a structured error log (and a failure counter) in th
 
 ## Dimension boundaries
 
-When two dimensions could tag the same `path:line`, this table decides the primary. The per-dimension `Boundaries:` lines point here. The parent grader dedups by `file:line` when writing the report, keeping the higher-base finding and noting the secondary dimension.
+When two dimensions could tag the same `path:line`, this table decides the primary. The per-dimension `Boundaries:` lines point here. The grader dedups by `file:line` when writing the report, keeping the higher-base finding and noting the secondary dimension.
 
 | Pair | Tiebreaker |
 | --- | --- |
