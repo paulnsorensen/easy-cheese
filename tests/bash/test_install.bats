@@ -531,6 +531,7 @@ STUB
         run ec_install_mcp_hallouminate claude-code
     [ "$status" -eq 0 ]
     [[ "$output" == *"hallouminate binary not found"* ]]
+    ! grep -q "mcp add hallouminate" "$STUB_LOG"
 }
 
 @test "ec_install_mcp_hallouminate dry-run shows resolved claude and hallouminate paths" {
@@ -557,6 +558,7 @@ STUB
         run ec_install_mcp_milknado claude-code
     [ "$status" -eq 0 ]
     [[ "$output" == *"uvx not found"* ]]
+    ! grep -q "mcp add milknado" "$STUB_LOG"
 }
 
 @test "ec_install_mcp_milknado dry-run shows resolved claude and uvx paths" {
@@ -566,6 +568,41 @@ STUB
         run ec_install_mcp_milknado claude-code
     [ "$status" -eq 0 ]
     [[ "$output" == *"$STUB_BIN/claude mcp add milknado -- $STUB_BIN/uvx --from milknado milknado-mcp"* ]]
+}
+
+@test "ec_install_mcp_hallouminate real invocation logs correct argv" {
+    make_stub claude
+    make_stub hallouminate
+    EC_CLAUDE="$STUB_BIN/claude" EC_HALLOUMINATE="$STUB_BIN/hallouminate" \
+        run ec_install_mcp_hallouminate claude-code
+    [ "$status" -eq 0 ]
+    grep -q "^claude mcp add hallouminate -- $STUB_BIN/hallouminate serve$" "$STUB_LOG"
+}
+
+@test "ec_install_mcp_milknado real invocation logs correct argv" {
+    make_stub claude
+    make_stub uvx
+    EC_CLAUDE="$STUB_BIN/claude" EC_UVX="$STUB_BIN/uvx" \
+        run ec_install_mcp_milknado claude-code
+    [ "$status" -eq 0 ]
+    grep -q "^claude mcp add milknado -- $STUB_BIN/uvx --from milknado milknado-mcp$" "$STUB_LOG"
+}
+
+@test "ec_parse_args accepts --mcp hallouminate,milknado" {
+    ec_parse_args --mcp hallouminate,milknado
+    [[ "$EC_MCP" == "hallouminate,milknado" ]]
+}
+
+@test "ec_install_mcp_hallouminate fails when claude CLI missing" {
+    run ec_install_mcp_hallouminate claude-code
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"claude CLI not found"* ]]
+}
+
+@test "ec_install_mcp_milknado fails when claude CLI missing" {
+    run ec_install_mcp_milknado claude-code
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"claude CLI not found"* ]]
 }
 
 # -- ec_install_skills --------------------------------------------------------

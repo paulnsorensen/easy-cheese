@@ -9,18 +9,18 @@ Mirrors the wiki probe pattern from the detect-and-degrade contract in [`../../.
 ```pseudocode
 ground_wiki(topic):
   # 1. Check hallouminate availability.
-  if "mcp__plugin_hallouminate_hallouminate__list_corpora" not in available_tools:
-    note once: "OPTIONAL MCP ABSENT: hallouminate not loaded. Skipping wiki grounding."
+  if "mcp__hallouminate__list_corpora" not in available_tools:
+    note once: "OPTIONAL MCP ABSENT: hallouminate not loaded. Falling back to diff + code evidence only."
     return []
 
   # 2. Find the consumer's wiki corpus (dynamic; their repo, not ours).
-  corpora = hallouminate.list_corpora()
+  corpora = mcp__hallouminate__list_corpora()
   wiki = first(c for c in corpora if c.startswith("repo:") and c.endswith(":wiki"))
   if not wiki:
     return []   # no wiki configured; skip silently
 
   # 3. Ground the topic.
-  results = hallouminate.ground(query=topic, corpus=wiki, limit=5)
+  results = mcp__hallouminate__ground(query=topic, corpus=wiki, limit=5)
   return results
 ```
 

@@ -62,6 +62,7 @@ if build_or_update_graph_tool in available_tools:
     build_or_update_graph_tool()   # warm the graph once; age sub-agents reuse it
 # then spawn phase 3
 ```
+
 ### Cap enforcement
 
 The two-cure-pass cap is enforced by **chain length, not by age**. Each age sub-agent boots in fresh context and cannot count prior cure passes, so the contract cannot rely on age tracking the count. Instead:
