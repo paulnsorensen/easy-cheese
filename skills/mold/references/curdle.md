@@ -40,7 +40,7 @@ created: <YYYY-MM-DD>
 confidence: <low | medium | high>
 gates_overridden: []   # list of unchecked handshake items if `curdle anyway` was used
 agent_introduced_scope: []   # terms in the spec the user did not type — each approved per `handshake.md` § Agent-introduced scope (audit trail; downstream skills trust this list)
-entity_referent_bindings: []   # identity/ownership-role nouns bound to code referents or marked NEW ENTITY — each resolved per `handshake.md` § Entity-referent binding (audit trail; downstream skills trust this list)
+entity_referent_bindings: []   # list of binding records {noun, verdict, referent, citation, note} for identity/ownership-role nouns bound to code referents or marked NEW ENTITY — each resolved per `handshake.md` § Entity-referent binding (audit trail; downstream skills trust this list)
 ---
 
 # <Title>
