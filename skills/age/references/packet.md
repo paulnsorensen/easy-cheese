@@ -8,9 +8,9 @@ The orchestrator assembles this packet once per fan-out run and writes it to `.c
 2. **Dependency manifest contents** — `package.json`, `Cargo.toml`, `pyproject.toml`, or equivalent for the project under review.
 3. **Project-helper index** — one `tilth_search` for `sanitize / validate / escape / safe / retry / debounce / logger` across `src/` and `shared/`, so workers can flag NIH or missing helper usage.
 4. **Path-context map** — which entrypoints are non-interactive or hot (servers, daemons, CLI handlers, outbound callers); workers need this for location classification and telemetry coverage.
-5. **Per-dimension rubric slice + shared formula sections** — the worker's assigned dimension rubric from `references/dimensions.md`, plus the shared `§ Severity computation`, `§ Location sensitivity`, and `§ Fix-cost-now / fix-cost-later` sections so each worker can compute severity independently.
-6. **The severity machinery** — the full `§ Severity computation` section (included so workers do not need to read `references/dimensions.md` beyond their rubric slice).
-7. **Output contract** — the per-finding fields table and finding format from `SKILL.md § Output`, so workers emit digests the orchestrator can parse unambiguously.
+5. **Per-dimension rubric slice + shared formula sections** — the worker's assigned dimension rubric from `references/dimensions.md`, plus `§ Location sensitivity`, `§ Fix-cost-now`, and `§ Fix-cost-later` so each worker can compute severity independently.
+6. **The severity machinery** — the full `§ Severity computation` section.
+7. **Output contract** — the per-finding fields table and finding format from `SKILL.md § Output`, so workers emit full per-finding rows the orchestrator can parse unambiguously.
 8. **Dedup-ownership statement** — explicit: workers do NOT dedup, apply boundary tiebreakers, reconcile severity across dimensions, or write the report. The orchestrator owns those steps (Seam 4).
 
 ## Orientation and citations block

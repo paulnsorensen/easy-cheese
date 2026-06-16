@@ -50,7 +50,7 @@ Per-dimension base-severity tables, location-sensitivity, fix-cost-now / fix-cos
 
 ## Flow
 
-1. Identify the diff, scope, and relevant spec or issue. **Mode check (one decision point):** if the scale threshold is met — `(diff > 15 files) OR (review context > ~25 KB) OR (caller graph crosses multiple subsystems)` — and `/age` is not itself a sub-agent, switch to `### Scale-triggered fan-out mode`; steps 2–6 are the single-parent path only.
+1. Identify the diff, scope, and relevant spec or issue. **Mode check (one decision point):** if the scale threshold is met — `(diff > 15 files) OR (review context > ~25 KB) OR (caller graph crosses multiple subsystems)` — and `/age` is not itself a sub-agent, switch to `### Scale-triggered fan-out mode`; steps 2–4 (evidence-gather, per-dimension review, severity computation) are replaced by the fan-out path — both modes converge on steps 5–6.
 2. Gather evidence: diff, touched files, tests, callers/imports. If `.cheese/press/<slug>.md` exists, read it and include a `## Press findings` sub-section in the age report summarising unresolved items — `/cure` reads only `.cheese/age/<slug>.md` and cannot access the press report directly.
 3. Review every dimension; dimensions with no findings simply omit themselves.
 4. Compute severity per finding (base + location bump + compounding bump, capped at `blocker`). Group findings by severity (`## Blocker → ## High → ## Medium → ## Low`); within a severity group, order by file.
@@ -102,14 +102,15 @@ Activates when **all** hold: the size threshold above is met AND `/age` is not i
 - Reviews only its assigned dimension.
 - Computes **full per-finding severity** for that dimension (base + location bump + compounding bump).
 - Tags each finding with its dimension and an `also-relevant-to: [<dim>, ...]` field when cross-dimension overlap is suspected.
-- Returns a ≤~2 KB digest per `references/sub-agent-gate.md § Digest contract`.
+- Returns its dimension's findings as full per-finding rows in the `SKILL.md § Output` finding format (`**[dim:sev]** path:line — claim` + `location / fix-cost-now / fix-cost-later` + `recommendation`). Not an orientation digest — the `§ Digest contract` size ceiling does not apply.
 - Does **not** dedup, apply boundary tiebreakers, reconcile severity across dimensions, or write the report.
 
-**Seam 4 — Orchestrator reconciliation.** After all workers return: collect findings; for any `file:line` flagged by two or more workers, apply the `## Dimension boundaries` table (`references/dimensions.md:319–340`) verbatim — keep the higher-base finding / suppress / emit-both-with-cross-reference per the 15 tiebreaker rules. The pass touches only colliding lines. Group by severity; write `.cheese/age/<slug>.md`. The parent owns the canonical artifact.
+**Seam 4 — Orchestrator reconciliation.** After all workers return, apply the `## Dimension boundaries` table (`references/dimensions.md:319-340`) verbatim to any line meeting EITHER condition: (1) flagged by two or more workers at the same `file:line`; (2) tagged `also-relevant-to: [d]` by any worker — the orchestrator re-evaluates dimension `d` against that line and applies the tiebreaker (keep the higher-base finding / suppress / emit-both-with-cross-reference per the 15 rules). This consumes the `also-relevant-to` signal and provides the cross-dimension coverage single-parent gets for free. Lines neither flagged by ≥2 workers nor tagged `also-relevant-to` need no reconciliation. Group by severity. The parent owns the canonical artifact. After reconciliation, continue at step 5 (write + print the report path) and `## Handoff` exactly as the single-parent path does.
 
-**Seam 5 — Graph freshness.** The orchestrator calls `build_or_update_graph_tool` **once** before fan-out (per `## Preferred tools and fallbacks` above). The packet carries a "graph fresh as of this run" marker. Workers never call `build_or_update_graph_tool`.
+**Seam 5 — Graph freshness.** The orchestrator calls `build_or_update_graph_tool` **once** before fan-out (per `## Preferred tools and fallbacks` above). The packet carries a "graph fresh as of this run" marker. Workers never call `build_or_update_graph_tool`, but they MAY issue read-only code-review-graph queries (e.g. `get_impact_radius_tool`, `get_review_context_tool`, `get_hub_nodes_tool`, `get_bridge_nodes_tool`) against the pre-built graph for impact and hotspot framing — the same evidence the single-parent path uses for large diffs.
 
 **Output mode-invariance (invariant).** The findings report (`.cheese/age/<slug>.md`) is identical in shape — same dedup rule, same severity grouping, same finding format — whether produced by the single-parent path or fan-out mode. Only the internal execution path differs. (Mirrors the inline-degrade invariant at `### Inline-degrade mode` below.)
+
 ## Output
 
 Cross-cutting house style and citation form: [`../../shared/formatting.md`](../../shared/formatting.md). This section owns the findings-report shape; formatting.md owns the voice rules and the footnote primitive.
