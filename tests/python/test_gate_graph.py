@@ -196,18 +196,41 @@ class TestCli:
         assert rc == 0
         assert out.read_text(encoding="utf-8") == gate_graph.to_dot()
 
-    def test_binary_to_stdout_is_rejected(
-        self, gate_graph: ModuleType, capsys: pytest.CaptureFixture[str]
+    def test_svg_degrades_to_mermaid_note_when_dot_absent(
+        self,
+        gate_graph: ModuleType,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
-        if gate_graph.dot_available():
-            pytest.skip("dot present: svg would degrade only without it")
-        # Without dot, svg degrades to mermaid (text) and prints fine; force the
-        # binary-without-out error path by checking a present-dot environment is
-        # the only one that hits it. Here we assert the degrade note instead.
+        # No dot: svg degrades to mermaid (text) and prints fine, with a note on
+        # stderr. Forced via monkeypatch so this covers the degrade path on hosts
+        # that DO have graphviz too, not only on bare ones.
+        monkeypatch.setattr(gate_graph, "dot_available", lambda: False)
         rc = gate_graph.main(["--render", "svg"])
         assert rc == 0
-        err = capsys.readouterr().err
-        assert "degraded svg -> mermaid" in err
+        assert "degraded svg -> mermaid" in capsys.readouterr().err
+
+    def test_binary_to_stdout_is_rejected(
+        self,
+        gate_graph: ModuleType,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        # dot present + svg to stdout with no --out: main must reject the binary
+        # payload (rc 2) rather than write bytes to a text stream. Both dot
+        # presence and the subprocess are faked, so the rejection branch is
+        # covered with no real graphviz — it only fires when render does NOT
+        # degrade, which never happens on a dot-less host.
+        import subprocess as _sp
+
+        def fake_run(*_a, **_k):
+            return _sp.CompletedProcess(args=_a, returncode=0, stdout=b"<svg>fake</svg>", stderr=b"")
+
+        monkeypatch.setattr(gate_graph, "dot_available", lambda: True)
+        monkeypatch.setattr(gate_graph.subprocess, "run", fake_run)
+        rc = gate_graph.main(["--render", "svg"])
+        assert rc == 2
+        assert "is binary; pass --out" in capsys.readouterr().err
 
     def test_bad_state_file_exits_2(
         self, gate_graph: ModuleType, tmp_path: Path, capsys: pytest.CaptureFixture[str]
