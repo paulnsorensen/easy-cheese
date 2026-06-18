@@ -1,0 +1,14 @@
+{
+  "enabledPlugins": {
+    "easy-cheese@easy-cheese": true
+  },
+  "extraKnownMarketplaces": {
+    "easy-cheese": {
+      "source": {
+        "source": "directory",
+        "path": "."
+      },
+      "autoUpdate": true
+    }
+  }
+}

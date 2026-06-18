@@ -54,6 +54,29 @@ This is a skills-only collection following the [Agent Skills spec](https://agent
 
 See `README.md` for the full workflow and the suggested skill ordering.
 
+## Dogfooding the skills in this repo
+
+To test this repo's *working-tree* skills (not the published copies you may have installed globally), the repo ships a self-referential local marketplace:
+
+- `.claude-plugin/marketplace.json` — lists this repo as a single plugin (`source: "./"`).
+- `.claude/settings.json` — registers the marketplace as a `directory` source (`path: "."`, `autoUpdate: true`) and enables the plugin.
+
+One-time setup (or accept the trust-prompt Claude Code shows when you first open the repo):
+
+```bash
+just dogfood-setup   # claude plugin marketplace add ./ && claude plugin install easy-cheese@easy-cheese --scope project
+```
+
+The skills then load **namespaced** as `/easy-cheese:<name>` (e.g. `/easy-cheese:cook`, `/easy-cheese:age`), distinct from any bare-named global copies — so you always know you're invoking the repo version.
+
+**Edits are not live.** A `directory` install copies the working tree into `~/.claude/plugins/cache/` at install/update time (`autoUpdate: true` re-syncs it at each session start). After editing a skill mid-session:
+
+```bash
+just dogfood-refresh   # claude plugin marketplace update easy-cheese
+```
+
+then run `/reload-plugins` in the session. For tight live-edit iteration without the cache, launch with `claude --plugin-dir .` instead, which loads the plugin directly from the working tree.
+
 ## Development notes
 
 - Python validators in `.github/scripts/` allow only `pyyaml` and `pytest` as third-party deps — see `.github/instructions/python.instructions.md`.
