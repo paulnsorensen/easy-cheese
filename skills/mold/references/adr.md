@@ -12,7 +12,7 @@ One ADR per decision a future reader would otherwise have to reverse-engineer:
 - a chosen approach over a real alternative (the trade-off, not the obvious pick);
 - a constraint discovered mid-dialogue (a Prototype Cycle answer that changed the
   design; a `[CONFLICT]` the codebase forced);
-- anything tagged a Decision in the spec that has a non-trivial rationale.
+- anything tagged a Decision in the spec that has a substantive rationale.
 
 Do **not** write an ADR for a forced move with no alternative, or for a detail the
 spec body already states plainly.

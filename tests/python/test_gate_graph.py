@@ -232,6 +232,24 @@ class TestCli:
         assert rc == 2
         assert "is binary; pass --out" in capsys.readouterr().err
 
+    def test_binary_to_stdout_rejected_with_dot_present(
+        self,
+        gate_graph: ModuleType,
+        capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        import types
+
+        monkeypatch.setattr(gate_graph, "dot_available", lambda: True)
+        monkeypatch.setattr(
+            gate_graph.subprocess,
+            "run",
+            lambda *_a, **_k: types.SimpleNamespace(returncode=0, stdout=b"<svg>fake</svg>"),
+        )
+        rc = gate_graph.main(["--render", "svg"])
+        assert rc == 2
+        assert "is binary; pass --out" in capsys.readouterr().err
+
     def test_bad_state_file_exits_2(
         self, gate_graph: ModuleType, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
