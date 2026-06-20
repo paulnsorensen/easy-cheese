@@ -8,7 +8,7 @@ handshake. Both render targets derive from it, so they cannot drift:
   - `to_dot()` emits a canonical Graphviz `.dot` document.
   - `to_mermaid()` emits a GitHub/markdown-native `flowchart` block (no binary).
 
-`render()` picks the target: `dot`/`svg`/`png` need Graphviz `dot` on PATH; when
+`render()` picks the target: `svg`/`png` need Graphviz `dot` on PATH; when
 it is absent it degrades to `mermaid` text so the tool runs anywhere (ADR-001).
 
 The `gate` nodes double as the gate-prose-sync source: a test asserts they match
@@ -204,6 +204,8 @@ def render(
         )
     except subprocess.TimeoutExpired:
         raise RenderError(f"dot -T{target} timed out after 30 s")
+    except OSError as exc:
+        raise RenderError(f"could not run dot -T{target}: {exc}")
     if proc.returncode != 0:
         raise RenderError(f"dot -T{target} failed: {proc.stderr.decode('utf-8', 'replace').strip()}")
     return target, proc.stdout
