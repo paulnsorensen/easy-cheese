@@ -10,7 +10,7 @@ The orchestrator assembles this packet once per fan-out run and writes it to `.c
 4. **Path-context map** — which entrypoints are non-interactive or hot (servers, daemons, CLI handlers, outbound callers); workers need this for location classification and telemetry coverage.
 5. **Per-dimension rubric slice + shared formula sections** — the worker's assigned dimension rubric from `references/dimensions.md`, plus `§ Location sensitivity`, `§ Fix-cost-now`, and `§ Fix-cost-later` so each worker can compute severity independently. Extract from the dimension's `## <Dimension name>` heading to the next `##` heading.
 6. **The severity machinery** — the full `§ Severity computation` section.
-7. **Output contract** — the per-finding fields table and finding format from `SKILL.md § Output`, so workers emit full per-finding rows the orchestrator can parse unambiguously.
+7. **Output contract** — the per-finding fields table and finding format from `SKILL.md § Output`, **plus the `also-relevant-to: [<dim>, ...]` field from Seam 3** — it is the cross-dimension signal Seam 4 reconciliation consumes and is not part of `§ Output`'s base format, so a worker following `§ Output` alone would omit it. Workers emit full per-finding rows (format fields + `also-relevant-to`) the orchestrator can parse and reconcile unambiguously.
 8. **Dedup-ownership statement** — explicit: workers do NOT dedup, apply boundary tiebreakers, reconcile severity across dimensions, or write the report. The orchestrator owns those steps (Seam 4).
 
 ## Orientation and citations block
