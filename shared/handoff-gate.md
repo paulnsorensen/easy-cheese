@@ -129,7 +129,7 @@ Outside those autonomous paths, interactive gates must not add `--auto` unless t
 
 ## Standard forward-step menu
 
-The forward code gates — `/cook`, `/press`, `/age`, `/cure` — share one menu skeleton so the next step is predictable across the pipeline. The forward command and its label vary per gate; the four-option shape does not:
+The forward command and its label vary per gate. Simple gates share one four-option shape — a forward step plus the standard tail (**Ship it**, **Checkpoint & stop**, **Stop**); gates with a richer *core* decision render that decision's options first, then append the same tail (see below):
 
 - **\<forward verb\>** *(recommended)* — the plain forward command: one phase, interactive downstream (e.g. `/press <slug>`).
 - **Ship it** — the forward command plus `--auto --open-pr`: run the rest of the pipeline headless and open (or push) the PR at the terminal cure (e.g. `/press <slug> --auto --open-pr`).
