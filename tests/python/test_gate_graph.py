@@ -232,6 +232,34 @@ class TestCli:
         assert rc == 2
         assert "is binary; pass --out" in capsys.readouterr().err
 
+    def test_dot_timeout_exits_2(
+        self,
+        gate_graph: ModuleType,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        import subprocess as _sp
+
+        def fake_run(*_a, **_k):
+            raise _sp.TimeoutExpired(cmd="dot", timeout=30)
+
+        monkeypatch.setattr(gate_graph, "dot_available", lambda: True)
+        monkeypatch.setattr(gate_graph.subprocess, "run", fake_run)
+        rc = gate_graph.main(["--render", "svg"])
+        assert rc == 2
+        assert "timed out" in capsys.readouterr().err
+
+    def test_out_write_failure_exits_2(
+        self,
+        gate_graph: ModuleType,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        out = tmp_path / "nope" / "g.dot"
+        rc = gate_graph.main(["--render", "dot", "--out", str(out)])
+        assert rc == 2
+        assert "could not write" in capsys.readouterr().err
+
     def test_bad_state_file_exits_2(
         self, gate_graph: ModuleType, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
