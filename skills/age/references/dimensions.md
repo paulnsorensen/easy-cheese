@@ -97,7 +97,7 @@ Source priority for the raw count:
 2. **CRG `get_impact_radius_tool`** — when code-review-graph is wired. Equivalent blast-radius output.
 3. **LSP `find-references` / `find-callers`** — fallback when neither tilth nor CRG is available.
 
-**Worked recipe.** Given a finding at `path:line`, run `tilth_deps` on the *containing file*. Count the imported-by entries as `--files` and the distinct top-level directories among them as `--modules`, then `python3 shared/scripts/severity.py bucket --files <N> --modules <M>`. Falling back to CRG `get_impact_radius_tool` or LSP callers, count the same way (touched files, distinct module dirs) so buckets stay comparable across tools.
+**Worked recipe.** Given a finding at `path:line`, run `tilth_deps` on the *containing file*. Count the **distinct files** in the imported-by set as `--files` — use the `<N> dependents` header count, since the `Used by` list emits one entry per call site and several entries can map to one file (counting raw entries overcounts). Count the **distinct slice/module roots** among them as `--modules` — the directory immediately under `src/` (so `src/melt` and `src/affinage` are two modules, not the shared `src` parent). Then run `python3 shared/scripts/severity.py bucket --files <N> --modules <M>`. Falling back to CRG `get_impact_radius_tool` or LSP callers, count the same way (distinct touched files, distinct module dirs) so buckets stay comparable across tools.
 
 Fix-cost-now is **reported, not bumped**. Severity decides what to fix; fix-cost-now explains effort and lets triage schedule.
 
@@ -147,7 +147,7 @@ Look for: off-by-one, ordering, null/empty edge cases, silent failures, races, c
 
 Inherited shape: a race, lost write, or contradictory branch already present in the caller graph that the diff's new path now exercises. Expand callers one level before grading clean.
 
-Boundaries: telemetry (no-log failure to here), security (access-control to security), deslop (silent-failure claim to here), efficiency (TOCTOU wrong-data to here), spec (runtime risk to here, contract to spec). Full rules in § Dimension boundaries.
+Boundaries: telemetry (no-log failure to here), security (access-control to security), deslop (silent-failure claim to here), efficiency (TOCTOU wrong-data to here), spec (contract commitment to spec, runtime risk to here; emit both). Full rules in § Dimension boundaries.
 
 Recommendation shape: "Add a guard for X" / "Return early when Y" / "Replace `catch (_)` with explicit handling".
 
@@ -203,7 +203,7 @@ Look for: behaviour in the spec but not in the diff, behaviour in the diff but n
 
 Inherited shape: a requirement dropped in an earlier commit that the current diff neither restores nor violates outright. Compare against the spec, not only the diff.
 
-Spec resolution: locate the spec before grading. Search order: `.cheese/specs/<slug>.md`, then unresolved items in `.cheese/press/<slug>.md`, then the PR body or linked issue (`gh pr view`), then a commit-message ticket ref. If none resolves, record "no spec located; searched [list]" and grade spec findings `don't know` rather than clean.
+Spec resolution: locate the spec before grading. Search order: the durable spec corpus via `python3 shared/scripts/paths.py artifact_path specs <slug>` (or `mold.pyz artifact-path specs <slug>`), falling back to the legacy literal `.cheese/specs/<slug>.md` only when the resolver is unavailable (see `shared/formatting.md` § Corpus location; never hardcode `.cheese/specs/`); then unresolved items in `.cheese/press/<slug>.md`, then the PR body or linked issue (`gh pr view`), then a commit-message ticket ref. If none resolves, record "no spec located; searched [list]" and grade spec findings `don't know` rather than clean.
 
 Boundaries: correctness (contract commitment to spec, runtime risk to correctness; emit both). Full rules in § Dimension boundaries.
 
@@ -258,7 +258,7 @@ Look for: existence assertions instead of equality, catch-any-error, no-crash-as
 
 Inherited shape: a weak assertion in a touched-but-unmodified test that the diff's behaviour change now leaves under-covering. Read the touched test bodies, not only the diff hunks.
 
-Boundaries: deslop (generic catch in production to deslop), telemetry (asserting on log strings to telemetry). Full rules in § Dimension boundaries.
+Boundaries: deslop (generic catch in production to deslop, correctness, or telemetry per the claim), telemetry (asserting on log strings to telemetry). Full rules in § Dimension boundaries.
 
 Recommendation shape: "Replace `toBeTruthy` with `toEqual(<expected>)`" / "Catch `<specific-error>` not `Exception`" / "Replace `assert result` with `assert result == <expected>`" / "Catch `<SpecificError>`, not bare `except:` / `except Exception`".
 

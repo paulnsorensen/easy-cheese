@@ -54,6 +54,22 @@ This is a skills-only collection following the [Agent Skills spec](https://agent
 
 See `README.md` for the full workflow and the suggested skill ordering.
 
+## Durable memory
+
+This repo keeps a durable-knowledge wiki at `.hallouminate/wiki/`
+(git-tracked, corpus `repo:easy-cheese:wiki`), separate from the
+transient per-task scratch under `.cheese/` (gitignored). **Recommended
+default:** after a change lands on `main` that altered durable
+knowledge — architecture, protocols, conventions, or a "why this design
+not that one" decision — query the wiki and update it. Routine fixes and
+per-task output stay in `.cheese/`.
+
+This is a recommended default, not a hard gate: updating the wiki
+requires the [hallouminate](https://github.com/paulnsorensen/hallouminate)
+MCP server. When it is unavailable, skip the update — do not hand-edit
+the LanceDB-indexed tree. See `.hallouminate/wiki/wiki-conventions.md`
+for the durable-vs-transient boundary and the authoring loop.
+
 ## Development notes
 
 - Python validators in `.github/scripts/` allow only `pyyaml` and `pytest` as third-party deps — see `.github/instructions/python.instructions.md`.
