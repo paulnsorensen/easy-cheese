@@ -50,7 +50,7 @@ Per-dimension base-severity tables, location-sensitivity, fix-cost-now / fix-cos
 
 ## Flow
 
-1. Identify the diff, scope, and relevant spec or issue.
+1. Identify the diff, scope, and relevant spec or issue. **Mode check (one decision point):** if the scale threshold is met — `(diff > 15 files) OR (review context > ~25 KB) OR (caller graph crosses multiple subsystems)` — and `/age` is not itself a sub-agent, switch to `### Scale-triggered fan-out mode`; steps 2–4 (evidence-gather, per-dimension review, severity computation) are replaced by the fan-out path — both modes converge on steps 5–6.
 2. Gather evidence: diff, touched files, tests, callers/imports. If `.cheese/press/<slug>.md` exists, read it and include a `## Press findings` sub-section in the age report summarising unresolved items — `/cure` reads only `.cheese/age/<slug>.md` and cannot access the press report directly.
 3. Review every dimension; dimensions with no findings simply omit themselves.
 4. Compute severity per finding (base + location bump + compounding bump, capped at `blocker`). Group findings by severity (`## Blocker → ## High → ## Medium → ## Low`); within a severity group, order by file.
@@ -86,9 +86,30 @@ Spawn when any of these are true:
 - Caller / dependency graph expansion crosses multiple subsystems.
 - code-review-graph or `tilth_deps` output is needed for hotspot, bridge-node, or blast-radius framing.
 
-The sub-agent returns a digest: orientation paragraph, high-signal `path:line` citations, gap list. The parent owns the ten-dimension review, severity grading, and the `.cheese/age/<slug>.md` report. Do not spawn for small diffs, to outsource severity grading, or to outsource the final verdict.
+The sub-agent returns a digest: orientation paragraph, high-signal `path:line` citations, gap list. In single-parent mode (below threshold), the parent owns the ten-dimension review, severity grading, and the `.cheese/age/<slug>.md` report — do not spawn for small diffs, to outsource severity grading, or to outsource the final verdict. In fan-out mode, per-dimension severity is delegated to workers; the parent retains cross-dimension reconciliation, the final verdict, and the report — see `### Scale-triggered fan-out mode` below.
 
 Digest size, parent-vs-sub-agent split, and harness-agnostic sub-agent selection live in `references/sub-agent-gate.md` — single source of truth for the cross-cutting rules.
+
+### Scale-triggered fan-out mode
+
+Activates when **all** hold: the size threshold above is met AND `/age` is not itself a sub-agent (no `invoked-from:` marker). Below threshold, or when running as a sub-agent, the single-parent path applies unchanged.
+
+**Seam 1 — Predicate.** Fan out when `(diff > 15 files) OR (review context > ~25 KB) OR (caller graph crosses multiple subsystems)` — the threshold from `## Sub-agent context gate`, reused verbatim — AND `/age` is not itself a sub-agent.
+
+**Seam 2 — Shared context packet.** The orchestrator assembles the packet once and writes it to `.cheese/age/<slug>-packet.md` (transient — rebuilt every run, no cross-run cache). Each worker reads this file. Eight components are documented in `references/packet.md`. The existing review-context digester above is reused as the packet's orientation + citations block — not duplicated.
+
+**Seam 3 — Worker contract.** One worker per dimension. Each worker:
+- Reviews only its assigned dimension.
+- Computes **full per-finding severity** for that dimension (base + location bump + compounding bump).
+- Tags each finding with its dimension and an `also-relevant-to: [<dim>, ...]` field when cross-dimension overlap is suspected.
+- Returns its dimension's findings as full per-finding rows in the `SKILL.md § Output` finding format (`**[dim:sev]** path:line — claim` + `location / fix-cost-now / fix-cost-later` + `recommendation`). Not an orientation digest — the `§ Digest contract` size ceiling does not apply.
+- Does **not** dedup, apply boundary tiebreakers, reconcile severity across dimensions, or write the report.
+
+**Seam 4 — Orchestrator reconciliation.** After all workers return, apply the `## Dimension boundaries` table (`references/dimensions.md:319-340`) verbatim to any line meeting EITHER condition: (1) flagged by two or more workers at the same `file:line`; (2) tagged `also-relevant-to: [d]` by any worker — the orchestrator re-evaluates dimension `d` against that line and applies the tiebreaker (keep the higher-base finding / suppress / emit-both-with-cross-reference per the 15 rules). This consumes the `also-relevant-to` signal and provides the cross-dimension coverage single-parent gets for free. Lines neither flagged by ≥2 workers nor tagged `also-relevant-to` need no reconciliation. Group by severity. The parent owns the canonical artifact. After reconciliation, continue at step 5 (write + print the report path) and `## Handoff` exactly as the single-parent path does.
+
+**Seam 5 — Graph freshness.** The orchestrator calls `build_or_update_graph_tool` **once** before fan-out (per `## Preferred tools and fallbacks` above). The packet carries a "graph fresh as of this run" marker. Workers never call `build_or_update_graph_tool`, but they MAY issue read-only code-review-graph queries (e.g. `get_impact_radius_tool`, `get_review_context_tool`, `get_hub_nodes_tool`, `get_bridge_nodes_tool`) against the pre-built graph for impact and hotspot framing — the same evidence the single-parent path uses for large diffs.
+
+**Output mode-invariance (invariant).** The findings report (`.cheese/age/<slug>.md`) is identical in shape — same dedup rule, same severity grouping, same finding format — whether produced by the single-parent path or fan-out mode. Only the internal execution path differs. (Mirrors the inline-degrade invariant at `### Inline-degrade mode` below.)
 
 ## Output
 
@@ -236,7 +257,7 @@ Detection mechanism: scan the invoking prompt for an `invoked-from:` line — va
 - Output (the findings report + handoff slug) is identical between fan-out and inline-degrade modes — only the internal execution differs.
 - Honour the no-chain-forward directive as usual: write the slug and stop. Do not invoke `/cure` from the sub-agent — the orchestrator owns the chain.
 
-Inline-degrade is forced when the marker is present; there is no opt-out. Spawning a deeper sub-agent from inside a curd worker can exceed the harness's nesting limit and fail silently — the marker is the only honest signal that the parent has already consumed the available depth.
+Inline-degrade is forced when the marker is present; there is no opt-out. Even above the scale-triggered fan-out threshold, the marker takes precedence — fan-out is forbidden when `/age` runs as a sub-agent because the harness nesting depth is already consumed. Spawning a deeper sub-agent from inside a curd worker can exceed the harness's nesting limit and fail silently — the marker is the only honest signal that the parent has already consumed the available depth.
 
 ## Rules
 
