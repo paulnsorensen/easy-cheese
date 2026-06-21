@@ -196,7 +196,7 @@ After the report is on disk, age decides whether to *act* or *ask*. The default 
 
 ### Selection gate (`--safe`, or a reason to ask)
 
-Use the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md).
+Use the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md). Age's finding selection is the gate's *core* decision; the shared **Standard forward-step menu**'s tail (**Ship it**, **Checkpoint & stop**, **Stop**) rides after the selection options per that menu's tail rule.
 
 1. Render the numbered selection table per `../cure/references/selection.md` directly inline (one row per finding, grouped by severity); mark any sprawling/structural-fix row as *heavy*.
 2. Ask which findings to cure. Lead each option with the verb (what the user wants to *do* next); the underlying selection verb is the backing detail. Lead with the recommended composite, then present the same four severity-floor options below it, in the same most-inclusive-to-least order, so the gate is predictable across every run:
@@ -206,8 +206,10 @@ Use the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/han
    - **Fix high-severity and blockers** — equivalent to `all-high` (floor at high, includes blockers).
    - **Fix blockers only** *(strict; land only the must-fix blockers and defer the rest to a follow-up)* — equivalent to `all-blocker`.
 
-   Then offer the two non-floor options last:
+   Then offer the non-floor and standard-tail options last:
    - **Pick findings to fix** — accept a free-text reply using the verbs from `../cure/references/selection.md` (`1,3,5`, `all-blocker`, `all-medium`, `all-high`, `cheap`, `all`, `none`, `skip N`; comma-compose to union).
+   - **Ship it** — apply the recommended composite and run cure headless: `/cure <slug> --auto --open-pr --stake medium+` (the `medium+` floor *is* the recommended composite). Carries `--hard` when in scope.
+   - **Checkpoint & stop** — `/wheypoint`: write a resumable handoff and pause instead of curing now.
    - **Stop — leave the report for later** — equivalent to `none`.
 
    Present all four severity options on every run even when a severity band is empty (e.g. no blockers): a floor that resolves to an empty set is a valid, predictable no-op — do not drop or reorder options based on which bands happen to be populated. If the user selects a floor (or the recommended composite) that resolves to an empty set, treat the selection as `none`: report that no findings match and do not dispatch `/cure` with empty `resolved_ids` (the non-empty-selection contract in **Dispatch** still holds).
