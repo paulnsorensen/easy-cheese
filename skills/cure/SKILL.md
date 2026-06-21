@@ -106,20 +106,21 @@ After the cure report is rendered, cure decides whether to *push* or *ask*. The 
 - Announce the push in one line. If applied fixes touched logic outside a finding's hunk, exposed adjacent risk, or checks were skipped, add a one-line recommendation to re-run `/age --scope <touched-path>` before merge — but still push (the PR is the review surface).
 - If the cure was not clean (every selected fix reverted, a project-wide gate cannot go green, or a finding rests on a false premise), do not push — surface the blocker and stop.
 
-**`--safe` — ask via the shared handoff gate** in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md). Lead each option with the verb (what the user wants to *do* next); the skill command is the backing detail. Default options:
+**`--safe` — ask via the shared handoff gate** in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md), following its **Standard forward-step menu** (cure is the terminal gate: its core decision is push-vs-re-review, so **Ship it** is the open-or-update-PR option). Lead each option with the verb (what the user wants to *do* next); the skill command is the backing detail. Default options:
 
-- **Re-review the touched code** *(recommended when fixes were non-trivial)* — `/age --scope <touched-path>`, runs review through the proper skill. Propagates `--hard` when in scope.
-- **Open or update the PR** — `/gh`. When `--hard` is in scope, this option first dispatches `/hard-cheese <slug>` and proceeds to `/gh` only if the gate exits `0`.
+- **Re-review the touched code** *(recommended when applied fixes touched logic outside a finding's hunk)* — `/age --scope <touched-path>`, runs review through the proper skill. Propagates `--hard` when in scope.
+- **Ship it — open or update the PR** — `/gh` (opens a new PR with `--open-pr`, else pushes the already-open one). When `--hard` is in scope, this option first dispatches `/hard-cheese <slug>` and proceeds to `/gh` only if the gate exits `0`.
+- **Checkpoint & stop** — `/wheypoint`: write a resumable handoff and pause.
 - **Stop** — dispatch none; sit on the changes for now.
 
-Pre-select **Re-review the touched code** when any applied fix touched logic outside the original finding's hunk, when a corrective fix exposed adjacent risk, or when checks were skipped. Pre-select **Open or update the PR** when all selected findings applied cleanly and gates passed. Never dispatch before selection; after a non-stop selection, run the selected command immediately.
+Pre-select **Re-review the touched code** when any applied fix touched logic outside the original finding's hunk, when a corrective fix exposed adjacent risk, or when checks were skipped. Pre-select **Ship it — open or update the PR** when all selected findings applied cleanly and gates passed. Never dispatch before selection; after a non-stop selection, run the selected command immediately.
 
 ## --hard mode
 
 `/cure --hard` is the gate-firing path for the `/hard-cheese` metacognitive vibecheck. The flag propagates up the pipeline (`/cheese → /mold → /cook → /press → /age → /cure`); cure is the only step that actually fires the gate. The contract:
 
-- **Interactive `/cure --hard`:** the gate fires at the share-for-review boundary — the PR push. In the default (no `--safe`) path, fire `/hard-cheese <slug>` *before* the autonomous push and proceed only on exit `0`. Under `--safe`, fire it when the user selects the share-for-review option (the **Open or update the PR** label, which dispatches `/gh`). Either way, proceed only on exit `0`. If the gate exits non-zero (`FAILED` status — cap exhausted), surface the artifact path and abort the push; the user must improve their understanding before sharing for review.
-- **Not sharing for review** (no open PR and no `--open-pr`, or under `--safe` picking **Re-review the touched code** / **Stop**) does *not* fire the gate. Re-review and pausing do not put code in front of readers.
+- **Interactive `/cure --hard`:** the gate fires at the share-for-review boundary — the PR push. In the default (no `--safe`) path, fire `/hard-cheese <slug>` *before* the autonomous push and proceed only on exit `0`. Under `--safe`, fire it when the user selects the share-for-review option (the **Ship it — open or update the PR** label, which dispatches `/gh`). Either way, proceed only on exit `0`. If the gate exits non-zero (`FAILED` status — cap exhausted), surface the artifact path and abort the push; the user must improve their understanding before sharing for review.
+- **Not sharing for review** (no open PR and no `--open-pr`, or under `--safe` picking **Re-review the touched code** / **Checkpoint & stop** / **Stop**) does *not* fire the gate. Re-review and pausing do not put code in front of readers.
 - **Auto-mode puncture** — see the clause in `### Auto mode` below. The auto-mode puncture is the single sanctioned point at which `--hard` overrides `--auto`'s skip-handoff semantics.
 
 The gate's mechanism (SOLO-graded fresh-context judge, Socratic retry, fail-open on judge error) lives in `skills/hard-cheese/SKILL.md`. The full composition matrix lives in `skills/hard-cheese/references/composition.md`.
