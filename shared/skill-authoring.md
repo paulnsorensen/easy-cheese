@@ -117,9 +117,9 @@ Before a skill ships, verify:
   sub-references. Two levels is the maximum depth.
 - [ ] **Discipline skills have the Iron Law section.** Any skill that enforces
   a gate or a loop carries the three-part template above.
-- [ ] **Dual-listed.** The skill's directory appears in `.claude-plugin/
-  plugin.json` `skills` array. The CI check `tests/python/
-  test_plugin_manifest.py::test_claude_plugin_manifest_matches_top_level_skills`
+- [ ] **Dual-listed.** The skill's directory appears in the
+  `.claude-plugin/plugin.json` `skills` array. The CI check
+  `tests/python/test_plugin_manifest.py::test_claude_plugin_manifest_matches_top_level_skills`
   enforces this.
 
 ---
@@ -150,8 +150,8 @@ model already follows without being told.
 
 Matt Pocock's skills repo uses `disable-model-invocation: true` in the
 frontmatter of pure-prompt skills (skills that execute immediately without
-re-prompting the model). The Claude Code frontmatter validator (`validate_
-skills.py`) already allows this key.
+re-prompting the model). The Claude Code frontmatter validator
+(`.github/scripts/validate_skills.py`) already allows this key.
 
 **Status:** candidate-pending-harness-verification. Do not apply to any
 easy-cheese skill until the harness behavior is confirmed: what does the

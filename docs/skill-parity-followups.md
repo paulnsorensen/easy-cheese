@@ -24,8 +24,9 @@ All easy-cheese claims are baselined against the 18-skill manifest
 | CSO description rule, size budget, Iron Law / Red Flags / Rationalization template, authoring checklist, pressure-test gate, `disable-model-invocation` (documented as candidate) | PR #138 — `shared/skill-authoring.md` |
 | Rationalization-rebuttal tables applied to cook (TDD) and cure (fix-application) | PR #138 — `skills/cook/references/cook-discipline.md`, `skills/cure/references/cure-discipline.md` |
 
-The format brief (`.cheese/specs/skill-formats-brief.md`) is the source for the
-above; its conclusions are committed in PR #138.
+The format brief (`.cheese/specs/skill-formats-brief.md` — gitignored scratch,
+not durable) is the source for the above; its conclusions are committed durably
+in PR #138 as `shared/skill-authoring.md`.
 
 ---
 
@@ -66,7 +67,7 @@ source. Do not re-open without re-checking the cited lines.
 
 - "mold batches questions / lacks one-question cadence" — FALSE, `modes.md:46` mandates it.
 - "mold has no live terminology resolution" — FALSE, `modes.md:26` resolves and logs terms live (rescoped to the durability follow-up above).
-- "mold does not name the code-vs-intent contradiction hunt" — FALSE, `modes.md:75` defines `[CONFLICT <id>]`.
+- "mold does not name the code-vs-intent contradiction hunt" — FALSE, `modes.md:70` defines `[CONFLICT <id>]`.
 - "cook has no watch-it-fail proof" — OVERSTATED, observed-red is a required Cut report item (`cook/references/tdd-loop.md:13`).
 - "add a general anti-sycophancy layer" — REDUNDANT, `age/references/voice.md` already covers steelman / do-not-manufacture-counterpoints.
 - Worktree provenance/isolation recommendations — WRONG REPO, worktree/worktree-sweep are not easy-cheese skills (cheese-factory calls `/worktree-sweep` a host equivalent, `SKILL.md:434`).
