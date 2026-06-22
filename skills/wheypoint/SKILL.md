@@ -30,11 +30,27 @@ Prepend the standard resumable slug to the top of the file so `/cheese --continu
 ```markdown
 status: ok | halt: <one-line reason>
 next: mold | cook | press | age | cure | affinage | done
+mode: single | parallel
 artifact: <path-to-richer-report, or PR ref (PR#<n> / URL) when next: affinage, else none>
 <one-line orientation: where the session is and what is mid-flight>
 ```
 
-`next:` names the skill the cold reader should run, which is the machine-readable form of the suggested-skills section below. Use `done` only when the work is genuinely finished and the handoff is a record, not a baton. `/cheese --continue <slug>` scans `.cheese/notes/<slug>.md` and dispatches `next:` directly; `/cheese --continue <absolute-note-path>` reads that handoff file directly when the user is outside the original repo. When `next: affinage`, record the PR reference (`PR#<n>` or its URL) in `artifact:` so the resume dispatches `/affinage <pr>` explicitly rather than relying on branch auto-detection.
+`mode:` is optional for backwards compatibility; omitted mode means `mode: single`. In `mode: single`, `next:` names the skill the cold reader should run, which is the machine-readable form of the suggested-skills section below. Use `done` only when the work is genuinely finished and the handoff is a record, not a baton. `/cheese --continue <slug>` scans `.cheese/notes/<slug>.md` and dispatches `next:` directly; `/cheese --continue <absolute-note-path>` reads that handoff file directly when the user is outside the original repo. When `next: affinage`, record the PR reference (`PR#<n>` or its URL) in `artifact:` so the resume dispatches `/affinage <pr>` explicitly rather than relying on branch auto-detection.
+
+For multiple independent next moves, use `mode: parallel` and add a `tasks:` list immediately after the orientation line. Each task must carry its exact `command:`; commands may name different skills. Example:
+
+```markdown
+status: ok
+next: ultracook
+mode: parallel
+artifact: none
+KIP-76 and KIP-77 are ready to run as independent PR efforts.
+tasks:
+  - slug: kip-77-ai-test-server
+    command: /ultracook .cheese/specs/kip-77-ai-test-server.md
+  - slug: kip-76-ai-service-spin-up
+    command: /ultracook .cheese/specs/kip-76-ai-service-spin-up.md
+```
 
 ## Document
 
@@ -52,7 +68,7 @@ Follow the house style in [`../../shared/formatting.md`](../../shared/formatting
 
 ## Suggested skills
 
-Pick the next move from where the session actually is, name it as an easy-cheese skill with its argument, and write the same target into the slug's `next:` field. Suggest the *single* best next step, plus the step after it when the path is obvious. The map:
+Pick the next move from where the session actually is, name it as an easy-cheese skill with its argument, and write the same target into the slug's `next:` field. Suggest the *single* best next step, plus the step after it when the path is obvious. When the session has two or more independent tracks that can proceed without sharing branch state, write `mode: parallel` and put each exact skill invocation under `tasks:` instead of collapsing them into one sequential next step. The map:
 
 | Where the session is | Suggest | `next:` |
 | --- | --- | --- |

@@ -266,6 +266,36 @@ class TestCheeseContinueFlag:
         # handoff files — that's the resumability contract.
         assert ".cheese/" in body and "<slug>" in body
 
+    def test_parallel_mode_dispatches_multiple_tasks(self) -> None:
+        body = _skill("cheese")
+        body_lower = body.lower()
+        assert "mode: parallel" in body, (
+            "cheese --continue must document the parallel continuation mode"
+        )
+        assert "tasks:" in body, (
+            "parallel continuation must carry explicit task commands"
+        )
+        assert "same response" in body_lower or "same turn" in body_lower, (
+            "parallel continuation must dispatch every task concurrently"
+        )
+        assert "isolated agent" in body_lower or "one agent per" in body_lower, (
+            "parallel continuation must isolate each task in its own agent"
+        )
+
+
+class TestWheypointParallelHandoff:
+    def test_documents_parallel_continuation_schema(self) -> None:
+        body = _skill("wheypoint")
+        assert "mode: single" in body, (
+            "wheypoint must document the default single-dispatch mode"
+        )
+        assert "mode: parallel" in body, (
+            "wheypoint must document the parallel-dispatch mode"
+        )
+        assert "tasks:" in body, (
+            "wheypoint must document the task list for parallel handoffs"
+        )
+
 
 # ---------------------------------------------------------------------------
 # Wiring: install fallback list and README skill table
