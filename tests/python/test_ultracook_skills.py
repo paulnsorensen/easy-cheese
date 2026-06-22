@@ -282,6 +282,25 @@ class TestCheeseContinueFlag:
             "parallel continuation must isolate each task in its own agent"
         )
 
+    def test_parallel_write_tasks_require_checkout_isolation(self) -> None:
+        body = _skill("cheese")
+        body_lower = body.lower()
+        assert "worktree_strategy" in body, (
+            "parallel continuation must define how write tasks get separate checkouts"
+        )
+        assert "existing" in body_lower and "create" in body_lower and "harness" in body_lower, (
+            "parallel continuation must support existing, create, and harness isolation"
+        )
+        assert "distinct" in body_lower and "worktree" in body_lower, (
+            "parallel write tasks must require distinct worktrees"
+        )
+        assert "branch:" in body and "branch_from" in body, (
+            "parallel write tasks must carry branch and branch_from metadata"
+        )
+        assert "same checkout" in body_lower or "shared checkout" in body_lower, (
+            "cheese must explicitly refuse shared-checkout parallel writes"
+        )
+
 
 class TestWheypointParallelHandoff:
     def test_documents_parallel_continuation_schema(self) -> None:
@@ -294,6 +313,23 @@ class TestWheypointParallelHandoff:
         )
         assert "tasks:" in body, (
             "wheypoint must document the task list for parallel handoffs"
+        )
+
+    def test_documents_parallel_worktree_strategies(self) -> None:
+        body = _skill("wheypoint")
+        body_lower = body.lower()
+        assert "worktree_strategy" in body, (
+            "wheypoint must document portable worktree isolation strategy"
+        )
+        for strategy in ("existing", "create", "harness"):
+            assert strategy in body_lower, (
+                f"wheypoint must document `{strategy}` parallel isolation"
+            )
+        assert "worktree_root" in body, (
+            "created worktrees need a documented root directory"
+        )
+        assert "branch:" in body and "branch_from" in body, (
+            "parallel handoff examples must include branch metadata"
         )
 
 

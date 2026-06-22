@@ -29,7 +29,7 @@ Prepend the standard resumable slug to the top of the file so `/cheese --continu
 
 ```markdown
 status: ok | halt: <one-line reason>
-next: mold | cook | press | age | cure | affinage | done
+next: mold | cook | press | age | cure | affinage | tasks | done
 mode: single | parallel
 artifact: <path-to-richer-report, or PR ref (PR#<n> / URL) when next: affinage, else none>
 <one-line orientation: where the session is and what is mid-flight>
@@ -37,20 +37,43 @@ artifact: <path-to-richer-report, or PR ref (PR#<n> / URL) when next: affinage, 
 
 `mode:` is optional for backwards compatibility; omitted mode means `mode: single`. In `mode: single`, `next:` names the skill the cold reader should run, which is the machine-readable form of the suggested-skills section below. Use `done` only when the work is genuinely finished and the handoff is a record, not a baton. `/cheese --continue <slug>` scans `.cheese/notes/<slug>.md` and dispatches `next:` directly; `/cheese --continue <absolute-note-path>` reads that handoff file directly when the user is outside the original repo. When `next: affinage`, record the PR reference (`PR#<n>` or its URL) in `artifact:` so the resume dispatches `/affinage <pr>` explicitly rather than relying on branch auto-detection.
 
-For multiple independent next moves, use `mode: parallel` and add a `tasks:` list immediately after the orientation line. Each task must carry its exact `command:`; commands may name different skills. Example:
+For multiple independent next moves, use `mode: parallel`, set `next: tasks`, add a `parallel:` block, and add a `tasks:` list immediately after the orientation line. Each task must carry its exact `command:`; commands may name different skills. Parallel write tasks must never share a checkout. Choose one portable isolation strategy:
+
+| `worktree_strategy` | Use when | Required fields |
+| --- | --- | --- |
+| `existing` | The user already has durable bench checkouts | each write task has distinct `worktree:`, `branch:`, and `branch_from` |
+| `create` | No checkouts exist yet | `worktree_root`, plus each write task has `branch:` and `branch_from` |
+| `harness` | The host can create isolated threads/worktrees | each write task has `branch:` and `branch_from`; the host owns checkout creation |
+
+Example:
 
 ```markdown
 status: ok
-next: ultracook
+next: tasks
 mode: parallel
 artifact: none
 KIP-76 and KIP-77 are ready to run as independent PR efforts.
+parallel:
+  isolation: git-worktree
+  worktree_strategy: existing
 tasks:
   - slug: kip-77-ai-test-server
+    intent: ultracook
+    repo: /Users/marcus/Documents/multiplier
+    worktree: /Users/marcus/Documents/multiplier-01
+    branch: marcus/kip-77-ai-test-server
+    branch_from: origin/main
     command: /ultracook .cheese/specs/kip-77-ai-test-server.md
   - slug: kip-76-ai-service-spin-up
+    intent: ultracook
+    repo: /Users/marcus/Documents/multiplier
+    worktree: /Users/marcus/Documents/multiplier-02
+    branch: marcus/kip-76-ai-service-spin-up
+    branch_from: origin/main
     command: /ultracook .cheese/specs/kip-76-ai-service-spin-up.md
 ```
+
+For a generic setup without existing benches, use `worktree_strategy: create` and add `worktree_root: ../.cheese-worktrees`; `/cheese --continue` derives one checkout per task from the task slug.
 
 ## Document
 
@@ -68,7 +91,7 @@ Follow the house style in [`../../shared/formatting.md`](../../shared/formatting
 
 ## Suggested skills
 
-Pick the next move from where the session actually is, name it as an easy-cheese skill with its argument, and write the same target into the slug's `next:` field. Suggest the *single* best next step, plus the step after it when the path is obvious. When the session has two or more independent tracks that can proceed without sharing branch state, write `mode: parallel` and put each exact skill invocation under `tasks:` instead of collapsing them into one sequential next step. The map:
+Pick the next move from where the session actually is, name it as an easy-cheese skill with its argument, and write the same target into the slug's `next:` field. Suggest the *single* best next step, plus the step after it when the path is obvious. When the session has two or more independent tracks that can proceed without sharing branch state, write `mode: parallel`, set `next: tasks`, and put each exact skill invocation under `tasks:` instead of collapsing them into one sequential next step. The map:
 
 | Where the session is | Suggest | `next:` |
 | --- | --- | --- |
