@@ -35,7 +35,7 @@ Is it deep, multi-source, comparative, or "compare X vs Y / market analysis / li
 
 ## Context7 method
 
-Two-step flow. Skip the first step only when the user supplies an exact `/org/project` (or `/org/project/version`) ID.
+Two-step flow. Skip the first step (`resolve-library-id`) whenever an exact `/org/project` (or `/org/project/version`) ID is already known — supplied by the user, cached from a prior session, or pasted into the prompt — which saves ~7K tokens per skip. Put the ID straight into the `query-docs` call and Context7 skips the matching step.
 
 | Step | Tool | Args | Notes |
 | --- | --- | --- | --- |
@@ -46,20 +46,34 @@ Two-step flow. Skip the first step only when the user supplies an exact `/org/pr
 
 - **Always pass a `query`.** Both tools rerank against it. A library name alone returns generic noise.
 - **No `topic=` or `tokens=` parameters.** Modern Context7 reranks server-side (~3.3 K avg context tokens); the legacy `topic`/`tokens` knobs belong to the pre-rebrand `get-library-docs` and were removed. To narrow scope, write a richer `query` ("react hooks useState rules", "next.js 15 middleware auth").
-- **Hard cap: 3 Context7 calls per question.** Upstream rule. Beyond that, answer with the best result so far.
-- **Cache library IDs.** `/org/project` and `/org/project/version` are stable. Once resolved, reuse without re-resolving — except for IDs older than ~30 days, where versions may have retired.
+- **Soft cap: ~3 Context7 calls per question.** Injected by the MCP tool description ("Do not call this tool more than 3 times per question"), not a documented upstream policy — the observed post-reranking average is ~2.96 calls. Beyond ~3, answer with the best result so far.
+- **Cache library IDs within a session.** `/org/project` and `/org/project/version` are stable — once resolved, reuse without re-resolving. No expiry window is documented; handle 301 redirects (use the response's `redirectUrl`) and re-resolve per session to be safe.
 
 ### Error handling
 
 - `"Documentation not found or not finalized"` → re-call `resolve-library-id` once with an alternate name (full vs short, scoped vs unscoped). If still empty, surface UNAVAILABLE per `unavailable.md` — do not retry the same ID.
 - Multiple `resolve-library-id` matches → prefer the higher reputation / official org match; cite the chosen ID in the routing block.
 
+### When Context7 comes up empty
+
+If the library isn't indexed — or the question is about repo architecture, not API signatures — fall back in this order before generic web search (reach for whichever the harness actually has; the llms.txt path needs only WebFetch):
+
+1. **llms.txt fast-path.** If the vendor publishes one (Anthropic, Vercel, Cloudflare, Stripe all do), `WebFetch` their `/llms.txt` (index) or `/llms-full.txt` directly — more authoritative than any crawl of the same docs.
+2. **GitMCP** (`gitmcp.io`, free/OSS) — any public GitHub repo, zero pre-indexing, real-time; reads `llms.txt`/`llms-full.txt`/README first. Best for the long tail Context7 hasn't indexed.
+3. **DeepWiki MCP** (`mcp.deepwiki.com`, free/no-auth for public repos; `ask_question`) — whole-repo architecture and "how does this fit together" questions Context7 can't answer (it returns API snippets, not narrative).
+
 ### When Context7 is the wrong tool
 
 - Refactoring, business logic, debugging, code review, general programming concepts.
 - Application code or internal libraries with no public docs.
-- Niche packages outside Context7's index (~9-33 K libraries indexed; coverage is fixed, not on-demand).
+- Niche packages absent from Context7's index (~110 K libraries as of mid-2026; the index grows on-demand — submit a repo via the web UI or POST llms.txt / OpenAPI specs to `/api/v2/add/llmstxt` / `/api/v2/add/openapi`, private repos on paid plans — so absence is fixable, not permanent).
 - Mature, well-known libraries the model already covers reliably — value is marginal; skip to spare a routed call.
+
+### Cost and freshness
+
+- **Free tier is ~1,000 calls/month** (cut ~92% in Jan 2026 from ~6,000); Pro is $10/seat/month. High-frequency runs can drain the free tier — spend routed calls deliberately.
+- **Private repos** need Pro (+ ~$25 / 1M tokens for private parsing) or Enterprise.
+- **Freshness is tiered**: top-100 libraries refresh daily, top-1,000 ~every 15 days, top-5,000 ~every 30 days, the long tail up to ~45 days. For a just-released version the indexed docs can lag — cross-check the changelog before trusting them.
 
 Upstream reference (canonical):
 
@@ -75,8 +89,8 @@ The Tavily MCP exposes 5 tools at increasing cost and precision. Pick the lowest
 | Discover sources, snippets, scores; no URL yet | `tavily_search` | First reach for any factual / "what's the latest" question. Leave `include_raw_content=false`; pull bodies via `tavily_extract` instead. |
 | Have URL(s), need clean markdown | `tavily_extract` | After search, or when the user supplies links. Up to 20 URLs per call. Pass `query=` so chunks rerank against the question. Set `extract_depth=advanced` for tables, embedded content, LinkedIn, or other protected sites. |
 | Big site, don't know the right page | `tavily_map` | URL-only structure of a domain. Cheap. Pair with `tavily_extract` (Map-then-Extract) for surgical access to large docs sites. |
-| Many pages on a site section (e.g. all `/docs/auth/*`) | `tavily_crawl` | Most expensive. Start with `max_depth=1`, use `select_paths` and semantic `instructions` to keep results on-topic. |
-| Multi-source synthesis with citations (compare X vs Y, market report, lit review) | `tavily_research` | One call returns a cited report. 30-120s. Use `model=mini` for narrow scope, `pro` for multi-domain, `auto` if unsure. Rate limit: 20 req/min — fan out subqueries via `tavily_search`, not parallel research calls. |
+| Many pages on a site section (e.g. all `/docs/auth/*`) | `tavily_crawl` | Most expensive. Start with `max_depth=1`, use `select_paths` and semantic `instructions` to keep results on-topic. `extract_depth` applies here too: `basic` = 1 credit / 5 URLs, `advanced` = 2 / 5. |
+| Multi-source synthesis with citations (compare X vs Y, market report, lit review) | `tavily_research` | Returns a cited report — **async**: the call hands back a `request_id`, then poll `get_research(request_id)` (or stream) until `status=completed`. 30-120s. Use `model=mini` for narrow scope, `pro` for multi-domain, `auto` if unsure. Rate limit: 20 req/min — fan out subqueries via `tavily_search`, not parallel research calls. |
 
 ### Search depth (when calling `tavily_search`)
 
@@ -89,10 +103,13 @@ The Tavily MCP exposes 5 tools at increasing cost and precision. Pick the lowest
 
 ### Filters
 
-- **Time**: `time_range` (`day` / `week` / `month` / `year`) for "latest" questions. Or `start_date` / `end_date` for absolute windows.
+- **Time**: **set `time_range` whenever the question carries "latest" / "current" / "newest" or names a year** (`day` / `week` / `month` / `year`) — omitting it on a freshness-sensitive question is the single most common miss. Use `start_date` / `end_date` for absolute windows.
 - **Domain**: `include_domains=[...]` for trusted sources (vendor, arxiv.org, github.com); `exclude_domains=[...]` for noise (reddit.com, quora.com).
-- **Score**: post-filter response items by `score > 0.5` before extracting (the score is in the response, not a request param).
+- **Score**: post-filter response items before extracting (the score is in the response, not a request param). Keep `score > 0.5` as the floor for extraction candidates; tighten to `score > 0.7` when you only want high-confidence sources.
 - **Exact phrase**: `exact_match=true` when chasing a literal quote, error string, or API name.
+- **`chunks_per_source`** (1-3 on search; 1-5 on extract/crawl): how many reranked snippets come back per source at `advanced`/`fast` depth. `1` trims context, `3` maximises coverage — a direct context-budget lever.
+- **Avoid the `auto_parameters` cost trap**: `auto_parameters=true` lets Tavily auto-pick depth and may silently set `search_depth=advanced` (2 credits). Set `search_depth` explicitly when cost matters.
+- **Post-filter beyond score**: score is the cheap first cut; for precision-sensitive questions also drop results by URL/term regex or a quick LLM "does this cover X?" check.
 
 ### Composite patterns
 
@@ -114,6 +131,12 @@ Hand-orchestrate (search → score-filter → extract → synthesize) instead wh
 - The question is cross-source — Tavily plus Context7 plus codebase plus GitHub. `tavily_research` only sees public web; private signals require local synthesis.
 - You need fine-grained control over which URLs feed synthesis.
 - The user wants the raw evidence table, not a narrative report.
+
+### Running it: async + research-only filters
+
+`tavily_research` is **not a single blocking call**. The initial call hands back a `request_id`; poll `get_research(request_id)` until `status=completed` (`pending` → `processing` → `completed` / `failed`), or pass `stream=True` to consume events instead of polling. Budget for the 30-120s round-trip so a still-`pending` response isn't mistaken for the answer.
+
+Research-only filters (May 2026): `include_domains` / `exclude_domains` scope sources as on `tavily_search`, and `output_length` (`short` / `standard` / `long`) sizes the report. Set them on the initiating call.
 
 Upstream reference (canonical):
 
