@@ -73,7 +73,7 @@ def gate_id(checklist_label: str) -> str:
     return slug
 
 
-# The 10 coherence-checklist gates, verbatim from handshake.md's checklist (the
+# The 11 coherence-checklist gates, verbatim from handshake.md's checklist (the
 # text before each colon is the gate's name; gate_id() slugs it). Order matches
 # the prose so a diff between the two is legible.
 COHERENCE_GATES: tuple[str, ...] = (
@@ -82,6 +82,7 @@ COHERENCE_GATES: tuple[str, ...] = (
     "Chosen option grounded in codebase evidence",
     "Interface sketches: every public seam has a pseudocode signature",
     "Cross-module calls go through public interfaces, not internals",
+    "Identity nouns: each bound to a code referent or marked NEW ENTITY (an ALIAS must be resolved, not just noted)",
     "Validate cycles: all launched cycles judged",
     "Chosen option Grilled (≥1 stress-test entry per major branch)",
     "Open questions all marked [TBD] / [BLOCKED] / [?] (none silent)",
