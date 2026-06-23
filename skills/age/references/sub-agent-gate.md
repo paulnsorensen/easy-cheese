@@ -14,7 +14,7 @@ The sub-agent returns roughly 2 KB or less: structured summary, citations, gaps.
 
 ## What the parent never delegates
 
-- Severity grading, final verdicts, approval gates.
+- Severity grading, final verdicts, approval gates. **Exception (scope-limited):** a skill may delegate single-dimension grading to a per-dimension worker **iff** the parent retains final cross-dimension reconciliation and the verdict — the verdict and the cross-cutting grade stay central. This exception does not loosen the default for any other case.
 - Dialogue, contradictions, handshakes, user-facing decisions.
 - Writing the canonical artifact (report, spec, claim table) — the sub-agent supplies the digest; the parent writes the doc.
 

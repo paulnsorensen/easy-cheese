@@ -36,7 +36,7 @@ Beyond `cheez-*` there are press-specific tools:
 | Diff review | `delta` | plain `git diff` |
 | Affected execution flows + risk scoring | code-review-graph: `get_affected_flows_tool`, `get_impact_radius_tool` | manual flow tracing from callers |
 
-**Freshness:** before the first code-review-graph query in a run, call `build_or_update_graph_tool` (and `embed_graph_tool` if you'll use `semantic_search_nodes_tool` to find shared-concept tests under divergent names). See [`/cheez-search`](../cheez-search/SKILL.md#when-code-review-graph-beats-tilth-if-your-harness-has-it) for the full freshness contract and when semantic search beats tilth.
+**Freshness:** before the first code-review-graph query in a run, call `build_or_update_graph_tool`. See [`/cheez-search`](../cheez-search/SKILL.md#when-code-review-graph-beats-tilth-if-your-harness-has-it) for the full freshness contract and when semantic search beats tilth.
 
 If optional tools are missing, press a narrower surface and state the residual risk.
 
@@ -100,12 +100,14 @@ Next step:    /age <slug>                          (when ready for /age or follo
 
 **Pipeline:** culture → mold → cook → **[press]** → age → cure → ship
 
-After the press report is on disk, ask via the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md). Lead each option with the verb (what the user wants to *do* next); the skill command (with any in-scope `--hard` propagation) is the backing detail. Default options:
+After the press report is on disk, ask via the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md), following its **Standard forward-step menu**. Lead each option with the verb (what the user wants to *do* next); the skill command (with any in-scope `--hard` propagation) is the backing detail. Default options:
 
 - **Review the diff** *(recommended when readiness is `ready for /age` or `follow-up recommended`)* — `/age <slug>`. For `follow-up recommended`, the cooked contract is sound and every changed behaviour has a hardening test; documented follow-ups can be addressed after review.
+- **Ship it** — `/age <slug> --auto --open-pr`: run age → cure headless and open (or push) the PR at the end.
+- **Checkpoint & stop** — `/wheypoint`: write a resumable handoff and pause.
 - **Stop** — dispatch none; defer review (use this if you want to harden manually before /age, even though the contract is review-safe).
 
-Pre-select **Review the diff** when readiness is `ready for /age` or `follow-up recommended`. If the report is `blocked`, do not pre-select anything; the user decides whether to fix or escalate. After a non-stop selection, run the selected command immediately.
+Pre-select **Review the diff** when readiness is `ready for /age` or `follow-up recommended`. If the report is `blocked`, do not pre-select anything (and do not pre-select **Ship it**); the user decides whether to fix or escalate. After a non-stop selection, run the selected command immediately.
 
 ### Auto mode
 

@@ -89,13 +89,14 @@ artifact: <path-to-richer-report-if-any>
 
 **Pipeline:** culture → mold → **[cook]** → press → age → cure → ship
 
-After the package-ready report is printed and the handoff slug is on disk, ask via the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md). Lead each option with the verb (what the user wants to *do* next); the skill command (with any in-scope `--hard` propagation) is the backing detail. Default options:
+After the package-ready report is printed and the handoff slug is on disk, ask via the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md), following its **Standard forward-step menu**. Lead each option with the verb (what the user wants to *do* next); the skill command (with any in-scope `--hard` propagation) is the backing detail. Default options:
 
 - **Harden tests before review** *(recommended)* — `/press <slug>`.
-- **Review the diff now (skip the press pass)** — `/age <slug>`.
+- **Ship it** — `/press <slug> --auto --open-pr`: run press → age → cure headless and open (or push) the PR at the end.
+- **Checkpoint & stop** — `/wheypoint`: write a resumable handoff and pause.
 - **Stop** — dispatch none; leave further hardening for later.
 
-Pre-select **Harden tests before review** when the cooked diff added new behaviour or touched untested seams. The user may also chain: pressing then age then cure happens via each step's own handoff gate. Never dispatch before selection; after a non-stop selection, run the selected command immediately.
+Pre-select **Harden tests before review** when the cooked diff added new behaviour or touched untested seams. A user who wants to skip the press pass and review immediately can reply with `other: /age <slug>` (the gate-specific alternative, kept off the buttons per the shared menu's tail rule). The user may also chain manually: pressing then age then cure happens via each step's own handoff gate. Never dispatch before selection; after a non-stop selection, run the selected command immediately.
 
 When invoked with `--auto`, skip this gate entirely and proceed straight into the auto-mode chain (see `## Auto mode` below).
 
@@ -152,3 +153,9 @@ Auto mode is a propagated flag, not a separate skill — every downstream invoca
 - Stop and ask when implementation reveals a design decision the spec did not answer.
 - If the spec or fast-path request rests on a false premise, stop and surface the premise before writing code; do not work the wrong angle to honour the request literally.
 - Apply the shared voice kernel (lives at `skills/age/references/voice.md` in this repo): lead the package-ready report with the answer, name loaded assumptions in the contract, flag residual risk as `certain | speculating | don't know`.
+
+## Discipline
+
+Iron Law, Red Flags, and the TDD Rationalization table live in
+[`references/cook-discipline.md`](references/cook-discipline.md).
+See [`../../shared/skill-authoring.md`](../../shared/skill-authoring.md) for the template these follow.

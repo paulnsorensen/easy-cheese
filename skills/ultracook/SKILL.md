@@ -53,6 +53,16 @@ Every spawn uses the canonical `/<phase> <slug> --auto` form. Cook accepts a bar
 | 6 | `/cure <slug> --auto --stake medium+`     | `.cheese/cure/<slug>.md` (overwritten) |
 | 7 | `/age <slug> --auto`                      | `.cheese/age/<slug>.md` (final report) |
 
+### Optional: code-review-graph pre-build
+
+Before spawning phase 3 (first `/age`), if code-review-graph MCP is available, call `build_or_update_graph_tool` once from the orchestrator context. This deduplicates the per-sub-agent freshness calls: each age sub-agent would otherwise rebuild the graph on first use, causing redundant work across the three age spawns. If code-review-graph is absent, skip this step and continue — each age sub-agent degrades per `shared/optional-plugins.md`.
+
+```
+if build_or_update_graph_tool in available_tools:
+    build_or_update_graph_tool()   # warm the graph once; age sub-agents reuse it
+# then spawn phase 3
+```
+
 ### Cap enforcement
 
 The two-cure-pass cap is enforced by **chain length, not by age**. Each age sub-agent boots in fresh context and cannot count prior cure passes, so the contract cannot rely on age tracking the count. Instead:
@@ -80,7 +90,9 @@ Each phase spawns a **full peer** sub-agent — same model as the parent, full t
 
 Diminutive defaults (haiku model, restricted tools, `Explore`-style read-only workers) will choke phases that need to edit dozens of files or run real test suites.
 
-Concrete `Agent()` signature shape (harness-agnostic; adapt the keyword names to the host):
+The spawn call must satisfy the five invariants (fresh context, full-peer inheritance, no-chain-forward, returns control, writes handoff slug) regardless of harness. For the complete per-harness invocation examples — Claude Code `Agent()`, GitHub Copilot CLI fleets, OpenAI Codex subagents, and the evaluation checklist for new harnesses — see [`../cheese-factory/references/spawn-primitive-reference.md`](../cheese-factory/references/spawn-primitive-reference.md).
+
+Claude Code example (one harness; adapt keyword names on other hosts):
 
 ```
 Agent(

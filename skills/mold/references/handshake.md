@@ -29,6 +29,11 @@ Coherence self-check before curdle:
 
 If any box is unchecked, name it and propose the smallest move to fill it. The user can override with `curdle anyway`.
 
+These ten checklist items are the **gates** in mold's machine-readable gate model
+(`references/gate-graph.md`). A test asserts the checklist items here equal the
+model's gate nodes, so a gate cannot be silently dropped from this prose — edit
+the two together. Render the flow with `mold.pyz gate-graph`.
+
 ## Mandatory gates
 
 These are not soft suggestions — Curdle hard-blocks until they are addressed:

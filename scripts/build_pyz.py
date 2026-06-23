@@ -58,6 +58,7 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
     "mold": {
         "artifact-path": Shared("artifact_path.py"),
         "curd-count": "curd-count.py",
+        "gate-graph": "gate-graph.py",
     },
     "briesearch": {
         "artifact-path": Shared("artifact_path.py"),

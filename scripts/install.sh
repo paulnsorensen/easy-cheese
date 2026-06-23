@@ -69,7 +69,7 @@ Options:
                                 just, mergiraf, tilth
   --mcp <list>         Comma-separated MCP servers to register. Default:
                        tilth,context7. Choices: tilth, context7, tavily,
-                       code-review-graph, none
+                       code-review-graph, hallouminate, milknado, none
   --skip-mcp           Same as --mcp none.
   --skip-tools         Skip CLI tool installs (useful for MCP-only runs).
   --harness <selection> Harness to register skills + MCP servers with.
@@ -89,6 +89,8 @@ Environment:
   EC_TILTH  EC_CLAUDE  Override the tilth / claude binaries (used by tests).
   EC_CURSOR EC_CODEX   Override cursor / codex binaries for detection.
   EC_NPX               Override npx (used to launch context7 / tavily MCP).
+  EC_UVX               Override uvx (used to launch milknado MCP).
+  EC_HALLOUMINATE      Override hallouminate binary (used to launch hallouminate MCP).
   EC_UV     EC_PIPX    Override uv / pipx for code-review-graph install.
   EC_PIP    EC_CRG     Override pip / code-review-graph binaries.
   EC_SKILL_REF         Pin skill installs to a git tag or commit SHA
@@ -200,14 +202,15 @@ ec_install_tilth() {
 # Install every tool in the comma-separated list. tilth is routed through
 # ec_install_tilth; everything else goes through brew.
 ec_install_tools() {
-    local list="$1" tool
+    local list="$1" tool rc=0
     local IFS=,
     for tool in $list; do
         case "$tool" in
-            tilth) ec_install_tilth ;;
-            *)     ec_brew_install_if_missing "$tool" ;;
+            tilth) ec_install_tilth || rc=1 ;;
+            *)     ec_brew_install_if_missing "$tool" || rc=1 ;;
         esac
     done
+    return $rc
 }
 
 # Register a single MCP server with the chosen harness.
@@ -225,6 +228,12 @@ ec_install_mcp() {
             ;;
         code-review-graph)
             ec_install_mcp_crg "$harness"
+            ;;
+        hallouminate)
+            ec_install_mcp_hallouminate "$harness"
+            ;;
+        milknado)
+            ec_install_mcp_milknado "$harness"
             ;;
         none)
             ec_log "MCP: skipping (none selected)"
@@ -374,6 +383,54 @@ ec_install_mcp_crg() {
     fi
     ec_log "code-review-graph: registering with $harness"
     "$crg" install --platform "$harness"
+}
+
+ec_install_mcp_hallouminate() {
+    local harness="$1"
+    local claude="${EC_CLAUDE:-claude}"
+    local hallouminate="${EC_HALLOUMINATE:-hallouminate}"
+    if [[ "$harness" != "claude-code" ]]; then
+        ec_warn "hallouminate MCP: only claude-code is auto-registered; configure $harness manually."
+        return 0
+    fi
+    if ! ec_cmd_exists "$claude"; then
+        ec_warn "hallouminate MCP: claude CLI not found; install Claude Code first."
+        return 1
+    fi
+    if ! ec_cmd_exists "$hallouminate"; then
+        ec_warn "hallouminate MCP: hallouminate binary not found — install via 'cargo install hallouminate' or the release installer, then re-run with --mcp hallouminate"
+        return 0
+    fi
+    if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
+        ec_log "hallouminate MCP: would run '$claude mcp add hallouminate -- $hallouminate serve'"
+        return 0
+    fi
+    ec_log "hallouminate MCP: registering with claude-code"
+    "$claude" mcp add hallouminate -- "$hallouminate" serve
+}
+
+ec_install_mcp_milknado() {
+    local harness="$1"
+    local claude="${EC_CLAUDE:-claude}"
+    local uvx="${EC_UVX:-uvx}"
+    if [[ "$harness" != "claude-code" ]]; then
+        ec_warn "milknado MCP: only claude-code is auto-registered; configure $harness manually."
+        return 0
+    fi
+    if ! ec_cmd_exists "$claude"; then
+        ec_warn "milknado MCP: claude CLI not found; install Claude Code first."
+        return 1
+    fi
+    if ! ec_cmd_exists "$uvx"; then
+        ec_warn "milknado MCP: uvx not found — install uv from https://docs.astral.sh/uv and re-run with --mcp milknado"
+        return 0
+    fi
+    if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
+        ec_log "milknado MCP: would run '$claude mcp add milknado -- $uvx --from milknado milknado-mcp'"
+        return 0
+    fi
+    ec_log "milknado MCP: registering with claude-code"
+    "$claude" mcp add milknado -- "$uvx" --from milknado milknado-mcp
 }
 
 ec_install_mcp_list() {
@@ -596,7 +653,7 @@ ec_parse_args() {
     done
 
     ec_validate_selection "$EC_TOOLS" "$EC_KNOWN_TOOLS" || return 2
-    ec_validate_selection "$EC_MCP" "tilth context7 tavily code-review-graph none" || return 2
+    ec_validate_selection "$EC_MCP" "tilth context7 tavily code-review-graph hallouminate milknado none" || return 2
 }
 
 ec_main() {

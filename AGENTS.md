@@ -29,15 +29,20 @@ This is a skills-only collection following the [Agent Skills spec](https://agent
 | Skill | Purpose |
 |---|---|
 | `/cheese` | Unified entry — classifies input and routes to the right downstream skill |
+| `/briesearch` | External research router (Context7, Tavily, gh, local code) |
 | `/mold` | Iterative dialogue to converge a fuzzy idea into an approved spec |
 | `/culture` | Deep no-write exploration of a codebase or topic |
+| `/pasteurize` | Hard-bug diagnosis — feedback-loop-first investigation, regression test, minimal fix, then handoff to `/cook` |
 | `/cook` | TDD-disciplined implementation of an approved spec |
 | `/press` | Adversarial test hardening after `/cook` |
 | `/age` | Ten-dimension code review producing a severity-grouped findings report |
+| `/affinage` | Triages a PR's review comments and CI failures through the `/age` lens, routes fixes to `/cure`, posts replies |
 | `/cure` | Applies selected `/age` findings as focused fixes |
+| `/hard-cheese` | Metacognitive vibecheck gate before sharing for review (standalone or via `--hard` propagation) |
+| `/ultracook` | Autonomous fresh-context pipeline — `cook → press → age → cure → age → cure → age`, all `--auto`, one sub-agent per phase |
 | `/melt` | Resolves merge / rebase / cherry-pick conflicts via the structural-merge cascade |
-| `/briesearch` | External research router (Context7, Tavily, gh, local code) |
 | `/cheese-factory` | Large-feature orchestrator: decomposes an approved spec into seed + parallel curds + wiring, fans out per-curd `/cook → /press → /age → /cure`, runs post-merge review, ends in 1–N reviewable PRs |
+| `/wheypoint` | Checkpoints a mid-task conversation into a durable handoff at `.cheese/notes/<slug>.md`, resumable via `/cheese --continue` |
 
 ### Tool skills (lower-level primitives)
 
@@ -46,15 +51,30 @@ This is a skills-only collection following the [Agent Skills spec](https://agent
 | `/cheez-search` | AST-aware search via tilth MCP — replaces grep / rg / ripgrep |
 | `/cheez-read` | Smart-outlining file reader via tilth MCP — replaces cat / head / tail |
 | `/cheez-write` | Batched edit writer via tilth MCP — replaces inline Edit / Write |
-| `/ultracook` | Composite workflow chaining `/cook` → `/press` → `/age` → `/cure` |
 
 See `README.md` for the full workflow and the suggested skill ordering.
+
+## Durable memory
+
+This repo keeps a durable-knowledge wiki at `.hallouminate/wiki/`
+(git-tracked, corpus `repo:easy-cheese:wiki`), separate from the
+transient per-task scratch under `.cheese/` (gitignored). **Recommended
+default:** after a change lands on `main` that altered durable
+knowledge — architecture, protocols, conventions, or a "why this design
+not that one" decision — query the wiki and update it. Routine fixes and
+per-task output stay in `.cheese/`.
+
+This is a recommended default, not a hard gate: updating the wiki
+requires the [hallouminate](https://github.com/paulnsorensen/hallouminate)
+MCP server. When it is unavailable, skip the update — do not hand-edit
+the LanceDB-indexed tree. See `.hallouminate/wiki/wiki-conventions.md`
+for the durable-vs-transient boundary and the authoring loop.
 
 ## Development notes
 
 - Python validators in `.github/scripts/` allow only `pyyaml` and `pytest` as third-party deps — see `.github/instructions/python.instructions.md`.
 - Shell scripts and bats tests follow the rules in `.github/instructions/shell.instructions.md`.
-- `cheez-*` skills require [tilth MCP](https://github.com/paulnsorensen/tilth) and hard-fail without it. Every other skill stays portable and degrades to host-native tools.
+- `cheez-*` skills require [tilth MCP](https://github.com/paulnsorensen/tilth) and hard-fail without it. Every other skill stays portable and degrades to host-native tools. Optional integrations — hallouminate (repo-wiki grounding for `/mold` and `/age`) and milknado (mikado task-graph backend for `/cheese-factory`) — are wired in as optional plugins per `shared/optional-plugins.md`: they degrade gracefully when absent and never block a skill run.
 - SKILL.md files must pass `validate_skills.py` (YAML frontmatter validation).
 - Conventional Commits format for all commits and PR titles (enforced by `validate.yml` for PRs).
 - Cheese / Dune / Mad Max / LOTR / Princess Bride flavor is welcome in user-facing docs and `SKILL.md` files. Keep commit messages and YAML frontmatter neutral.

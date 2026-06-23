@@ -65,7 +65,7 @@ Content shared _across_ skills lives at top-level `shared/` (e.g. `shared/handof
 | `skills/pasteurize/SKILL.md` | `/pasteurize` | Diagnose hard bugs, flaky failures, and performance regressions with a feedback-loop-first investigation, then hand off into `/cook → /press → /age → /cure`. |
 | `skills/cook/SKILL.md` | `/cook` | Implement clear specs via cut → cook → taste-test with scoped edits and tests. |
 | `skills/press/SKILL.md` | `/press` | Harden cooked changes with coverage, assertion, and boundary checks. |
-| `skills/age/SKILL.md` | `/age` | Review diffs across nine staff-engineer dimensions and produce a severity-grouped findings report. |
+| `skills/age/SKILL.md` | `/age` | Review diffs across ten staff-engineer dimensions and produce a severity-grouped findings report. |
 | `skills/affinage/SKILL.md` | `/affinage` | Triage external PR claims — review comments and CI failures — through the `/age` lens, hand the chosen fixes to `/cure`, then post replies back on GitHub. |
 | `skills/cure/SKILL.md` | `/cure` | Fix user-selected findings, validate, and prepare the branch for shipping. |
 | `skills/hard-cheese/SKILL.md` | `/hard-cheese` (or `--hard` flag) | Metacognitive vibecheck gate before review — asks the author to explain the diff's causal logic, grades the explanation against the SOLO Taxonomy. Standalone or via `--hard` propagation through the pipeline. |
@@ -174,6 +174,8 @@ Workflow skills name preferred tools when they help, with fallbacks for portabil
 | Tavily (MCP) | Current web/vendor research | host web search or user-supplied sources |
 | code-review-graph (MCP) | Review impact radius, architecture framing, and embeddings-backed semantic / cross-repo search | import searches, caller searches, tests |
 | LSP / [Serena](https://github.com/oraios/serena) (MCP) | Type-aware xrefs (`find_referencing_symbols`, `find_implementations`), symbol-bounded edits (`rename_symbol`, `replace_symbol_body`, `safe_delete_symbol`), and LSP diagnostics — concrete tools for the abstract "if your harness has an LSP" sections in `cheez-*` skills | `sg`, `tilth_search`, targeted reads via tilth |
+| hallouminate (MCP) | Per-repo wiki for cross-session design rationale, ADR grounding, and `/mold` evidence | Skip wiki grounding; proceed with diff + code evidence only; cap at `speculating` when design rationale is central |
+| milknado (MCP) | Mikado task-graph backend for `/cheese-factory` curd prerequisite tracking | In-report curd decomposition in manifest YAML; no external task-graph backend needed |
 | `ripgrep` | Fast text search | `grep`, `find`, editor search |
 | `gh` | GitHub issues, PRs, checks, examples | local git commands or user-provided links/logs |
 | `delta` | Readable diffs | plain `git diff` |
@@ -609,3 +611,7 @@ The shared voice kernel at [`skills/age/references/voice.md`](skills/age/referen
 The `/pasteurize` skill — the six-phase diagnosis loop (feedback loop → reproduce → hypothesise → instrument → fix + regression test → cleanup) and the "build a feedback loop first" insight — adapts [Matt Pocock's `diagnose` skill](https://github.com/mattpocock/skills/blob/main/skills/engineering/diagnose/SKILL.md). Easy-cheese-specific adaptations (`cheez-*` tooling, handoff slug schema, `--auto` chain, `/cook` handoff for Phase 5) are layered on top.
 
 The `/wheypoint` skill — compacting a conversation into a handoff document (with a suggested-skills section, no-duplication of existing artifacts, and secret redaction) — adapts [Matt Pocock's `handoff` skill](https://github.com/mattpocock/skills/blob/main/skills/productivity/handoff/SKILL.md). Easy-cheese-specific adaptations: the handoff lands as a durable, resumable artifact at `.cheese/notes/<slug>.md` (rather than the OS temp directory) carrying the standard handoff slug, the suggested-skills section is a state-to-skill mapping over the cheese pipeline expressed as the slug's `next:` field plus named skills, and resumption runs through `/cheese --continue <slug>`.
+
+The Superpowers [`brainstorming`](https://github.com/ejfox/superpowers-mcp) skill — adapted into `/mold`'s design dialogue. Easy-cheese-specific adaptations: the agent-introduced-scope grep gate, shape-check blast-radius numbers, the two-key handshake (curdle gating on the user verb plus the agent's coherence self-check), and ADRs captured as a durable curdle by-product are ahead of the borrowed brainstorming flow.
+
+The [`grill-with-docs`](https://github.com/mattpocock/skills/blob/main/skills/engineering/grill-with-docs/SKILL.md) skill (Pocock) — adapted into `/mold`'s Grill phase with grounded, cited claims: every critical claim is verified via `cheez-search` / `briesearch` before seams are locked.

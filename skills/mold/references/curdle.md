@@ -104,6 +104,15 @@ parent_spec: <slug>
 - <optional caveat or pointer>
 ```
 
+## ADRs (durable by-product)
+
+After both handshake keys pass, write the session's non-obvious decisions as
+durable ADRs in the same atomic step as the spec. The spec is transient; the ADRs
+outlive it. The corpus is resolved **dynamically** — probe for the consumer's
+`repo:<their-repo>:wiki` hallouminate corpus and write there if present, else fall
+back to a tracked `docs/adr/<slug>-NNN.md`. Never hardcode a corpus name. Full
+resolution rule and ADR format in [`adr.md`](adr.md).
+
 ## Atomic write
 
 Stage to a temp directory under `${TMPDIR}` first, then move into place. Never leave partial files on a write failure.

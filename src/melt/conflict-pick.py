@@ -11,7 +11,7 @@ import re
 import sys
 from pathlib import Path
 
-from git_utils import run_git
+from git_utils import MARKER_BASE, MARKER_OURS, MARKER_SEP, MARKER_THEIRS, run_git
 
 
 def _resolve_conflict_block(
@@ -35,7 +35,7 @@ def resolve_hunks(content: str, strategy: str, grep_pattern: str | None = None) 
     conflict_text: list[str] = []
 
     for line in content.split("\n"):
-        if line.startswith("<<<<<<<"):
+        if line.startswith(MARKER_OURS):
             in_conflict = True
             current_section = "ours"
             ours_lines, theirs_lines = [], []
@@ -46,11 +46,11 @@ def resolve_hunks(content: str, strategy: str, grep_pattern: str | None = None) 
             continue
 
         conflict_text.append(line)
-        if line.startswith("|||||||"):
+        if line.startswith(MARKER_BASE):
             current_section = "base"
-        elif line.startswith("======="):
+        elif line.startswith(MARKER_SEP):
             current_section = "theirs"
-        elif line.startswith(">>>>>>>"):
+        elif line.startswith(MARKER_THEIRS):
             result.extend(
                 _resolve_conflict_block(
                     conflict_text, ours_lines, theirs_lines, strategy, grep_pattern
@@ -88,10 +88,10 @@ def main() -> int:
     args = _parse_args()
 
     if args.ours and args.theirs:
-        print("Error: Cannot use both --ours and --theirs")
+        print("Error: Cannot use both --ours and --theirs", file=sys.stderr)
         return 1
     if not args.ours and not args.theirs:
-        print("Error: Must specify --ours or --theirs")
+        print("Error: Must specify --ours or --theirs", file=sys.stderr)
         return 1
 
     strategy = "ours" if args.ours else "theirs"
@@ -99,7 +99,7 @@ def main() -> int:
     try:
         content = Path(args.file).read_text()
     except FileNotFoundError:
-        print(f"Error: File not found: {args.file}")
+        print(f"Error: File not found: {args.file}", file=sys.stderr)
         return 1
 
     if "<<<<<<" not in content:
