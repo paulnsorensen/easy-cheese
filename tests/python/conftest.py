@@ -53,6 +53,11 @@ def curd_count() -> ModuleType:
 
 
 @pytest.fixture(scope="session")
+def gate_graph() -> ModuleType:
+    return importlib.import_module("gate_graph")
+
+
+@pytest.fixture(scope="session")
 def pr_status() -> ModuleType:
     return importlib.import_module("pr_status")
 

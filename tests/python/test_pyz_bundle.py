@@ -36,7 +36,7 @@ SKILL_SUBCOMMANDS = {
         "validate_pr_plan",
     ],
     "affinage": ["pr-status"],
-    "mold": ["artifact-path", "curd-count"],
+    "mold": ["artifact-path", "curd-count", "gate-graph"],
     "briesearch": ["artifact-path", "ground-check"],
     "cook": ["artifact-path"],
 }

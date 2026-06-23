@@ -1,0 +1,13 @@
+{
+  "name": "easy-cheese",
+  "owner": {
+    "name": "Paul Sorensen"
+  },
+  "plugins": [
+    {
+      "name": "easy-cheese",
+      "source": "./",
+      "description": "Easy Cheese skill collection (dogfood: the repo's own working tree)"
+    }
+  ]
+}

@@ -23,6 +23,17 @@ release-preview:
     python3 scripts/stage_release.py --out .release-preview
     @echo "Staged release tree at .release-preview — inspect with: find .release-preview -type f"
 
+# One-time: register this repo as a local marketplace and install its plugin (skills load as easy-cheese:<name>)
+dogfood-setup:
+    claude plugin marketplace add ./
+    claude plugin install easy-cheese@easy-cheese --scope project
+    @echo "Installed. Open a session here and invoke e.g. /easy-cheese:cook — these are this repo's working-tree skills."
+
+# After editing a skill: re-sync the cached snapshot from the working tree, then /reload-plugins in your session
+dogfood-refresh:
+    claude plugin marketplace update easy-cheese
+    @echo "Marketplace re-synced. Run /reload-plugins in your active session to load the changes."
+
 # Lint shell scripts
 lint-sh:
     shellcheck scripts/install.sh
