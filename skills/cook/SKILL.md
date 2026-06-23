@@ -41,7 +41,7 @@ When the fast-path applies, derive a slug from the task (e.g. `tail-trailing-new
 1. **Contract** — confirm behaviour, non-goals, likely scope, quality gates. For standalone fast-path tasks, the contract is the user's request restated in one sentence.
 2. **Cut** — write failing tests for the changed behaviour. See `references/tdd-loop.md`.
 3. **Implement** — make the cut tests pass with the smallest production change.
-4. **Taste-test** — check spec drift, readability, and scope creep. Two-round cap; details in `references/tdd-loop.md`.
+4. **Taste-test** — check spec drift, readability, scope, plus three fresh-context lenses (production path, wired callers, locked-decision). When the cooked diff touches more than one file or adds public surface, dispatch the read-only `reviewer` phase-agent (fresh context that did not write the code; named with no call-site model, so its def's `model: opus` pin applies) instead of self-certifying inline — or fall back to the inline check when no such reviewer sub-agent is available; single-file no-public-surface fixes keep the inline check. A coder-nested `/cook` cannot fan out — it self-checks inline and defers the authoritative pass to the orchestrator. Two-round cap; details in `references/tdd-loop.md`.
 5. **Hand off** — produce the package-ready report (`references/package-report.md`), write the handoff slug (`## Handoff slug` below), and prompt the next step via the shared handoff gate (see `## Handoff` below). The default chain is `/press` → `/age` → `/cure`.
 
 Code search, reading, and editing all go through the `cheez-*` skills (`/cheez-search`, `/cheez-read`, `/cheez-write`) — see those skills for tool selection rules and out-of-scope fallbacks.
@@ -80,10 +80,11 @@ Write a minimum-shape handoff slug to `.cheese/cook/<slug>.md` so downstream pha
 status: ok | halt: <one-line reason>
 next: mold | cook | press | age | done
 artifact: <path-to-richer-report-if-any>
+taste_test: inline-pass | dispatched-pass | revised | deferred-to-orchestrator
 <one-line orientation: what cook changed>
 ```
 
-`status: ok` when cook finished cleanly. `status: halt: <reason>` when cook stopped per the package-report stop conditions (missing spec decision, blocked test, taste-test cap hit, quality gate fail outside scope). `next:` always names the next runnable phase if the human chooses to proceed: `press` for the standard chain, `age` if the user opts to skip press, `cook` when the cooked phase must be rerun after resolving a blocker, or `mold` when the spec itself needs another pass. Use `next: done` only for true terminal completion, never for a blocked-but-resumable or external-gate halt. The orientation line is a single factual sentence about what the diff does — not a summary of the report.
+`status: ok` when cook finished cleanly. `status: halt: <reason>` when cook stopped per the package-report stop conditions (missing spec decision, blocked test, taste-test cap hit, quality gate fail outside scope). `next:` always names the next runnable phase if the human chooses to proceed: `press` for the standard chain, `age` if the user opts to skip press, `cook` when the cooked phase must be rerun after resolving a blocker, or `mold` when the spec itself needs another pass. Use `next: done` only for true terminal completion, never for a blocked-but-resumable or external-gate halt. The orientation line is a single factual sentence about what the diff does — not a summary of the report. `taste_test:` records how the taste-test resolved — `inline-pass` (cheap inline check passed), `dispatched-pass` (fresh-context `reviewer` dispatch passed), `revised` (a corrective cook pass was applied), or `deferred-to-orchestrator` (coder-nested `/cook` could not fan out; the orchestrator owns the authoritative pass); omit the field when the cost gate did not warrant a taste-test.
 
 ## Handoff
 
