@@ -79,7 +79,7 @@ match count. A wide `**/*` over a monorepo can be ~10× slower than a
 constrained scope. Two-stage workflow:
 
 1. **List candidates** with `tilth_search` (definitions, imports, content
-   hits) or `tilth_list` (glob/path predicates) to get the file set.
+   hits) or `tilth_list` (glob patterns) to get the file set.
 2. **Run `sg`** with `--globs` or explicit paths bounded to that set.
 
 This pattern beats one giant wildcard scan and keeps the JSON output small

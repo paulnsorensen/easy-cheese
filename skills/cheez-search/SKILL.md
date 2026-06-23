@@ -20,7 +20,7 @@ Before the first call, verify tilth is reachable:
 2. Make a minimal probe call: `tilth_search(queries: [{query: "tilth"}])`. If the response is a JSON-RPC error or transport failure, stop and report `"tilth MCP server present but unhealthy: <error>"`.
 3. Any other failure (zero matches, malformed regex, etc.) is a **content** issue — proceed normally and report the result.
 
-**Note:** pass `root` (your absolute checkout directory) whenever `scope` or `paths` are relative — the server's cwd is frozen at startup and cannot resolve relative paths without an explicit `root`.
+**Note:** pass `root` (your absolute checkout directory) whenever `scope` is relative — the server's cwd is frozen at startup and cannot resolve relative paths without an explicit `root`.
 
 AST-aware code search via **tilth MCP** (`tilth_search`, `tilth_deps`).
 Tree-sitter finds where symbols are **defined** — not just where strings appear.
@@ -192,7 +192,7 @@ between one call and a long grep walk.
 
 | Goal | Tool | Example |
 |------|------|---------|
-| Find where a symbol is defined / used | `tilth_search` (default `kind: "symbol"`) | `tilth_search(queries: [{query: "handleAuth"}], scope: "src/")` |
+| Find where a symbol is defined / used | `tilth_search` (default `kind: "symbol"`) | `tilth_search(queries: [{query: "handleAuth"}], scope: "src/", root: "/checkout/root")` |
 | Find every call site of a function | `tilth_search(kind: "callers")` | `tilth_search(queries: [{query: "validateToken", kind: "callers"}])` |
 | Find literal strings, TODOs, error messages | `tilth_search(kind: "content")` | `tilth_search(queries: [{query: "error message", kind: "content"}])` |
 | Find lines matching a regex | `tilth_search(kind: "regex")` | `tilth_search(queries: [{query: "rate.?limit", kind: "regex"}])` |

@@ -71,7 +71,7 @@ Hash anchors are emitted automatically — copy `44:b2c` and `89:e1d` and pass t
 ### "List every TypeScript file under `src/handlers/`"
 
 ```
-tilth_list(glob: "*.ts", scope: "src/handlers/")
+tilth_list(patterns: ["*.ts"], scope: "src/handlers/")
 ```
 
 ```text
@@ -196,7 +196,7 @@ tilth_read(paths: ["src/auth.ts", "src/routes.ts", "src/middleware.ts"])
 
 ## Hash Anchors — The Edit Bridge
 
-When reading files in **edit mode**, tilth outputs **hash-anchored lines**:
+When you drill into a file (a line range, `#symbol`, or heading), tilth outputs **hash-anchored lines**:
 
 ```
 42:a3f|  let x = compute();
@@ -205,9 +205,7 @@ When reading files in **edit mode**, tilth outputs **hash-anchored lines**:
 
 The format is `<line>:<hash>|<content>`.
 
-> Plain reads use a `│` (U+2502) column separator. **Edit-mode reads** (the
-> ones required for cheez-write) use `:<hash>|` — note the ASCII pipe and
-> the colon. Anchors are only emitted when tilth is run in `--edit` mode.
+> Plain full-file reads use a `│` (U+2502) column separator. **Drilled reads** (a line range, `#symbol`, or heading — the ones required for cheez-write) use `:<hash>|` — note the ASCII pipe and the colon. Anchors are emitted automatically on these drilled reads.
 
 **Why this matters:**
 - These hashes uniquely identify the line content
@@ -227,7 +225,7 @@ The format is `<line>:<hash>|<content>`.
 Replaces `ls`, `find`, `pwd`, and the Glob tool.
 
 ```
-tilth_list(glob: "**/*.ts", scope: "src/")
+tilth_list(patterns: ["**/*.ts"], scope: "src/")
 ```
 
 **Output:**
@@ -242,16 +240,16 @@ Token estimates inform what to read in full vs outline.
 **Common patterns:**
 ```
 # All TypeScript files
-tilth_list(glob: "**/*.ts")
+tilth_list(patterns: ["**/*.ts"])
 
 # Test files only
-tilth_list(glob: "**/*.test.ts")
+tilth_list(patterns: ["**/*.test.ts"])
 
 # Specific directory
-tilth_list(glob: "*", scope: "src/handlers/")
+tilth_list(patterns: ["*"], scope: "src/handlers/")
 
 # Exclude patterns (negation in the same glob)
-tilth_list(glob: "!*_test.go", scope: ".")
+tilth_list(patterns: ["!*_test.go"], scope: ".")
 ```
 
 ---
@@ -316,7 +314,7 @@ tilth tracks reads within the current session:
 
 1. **List files with token estimates:**
    ```
-   tilth_list(glob: "*", scope: "src/handlers/")
+   tilth_list(patterns: ["*"], scope: "src/handlers/")
    ```
 
 2. **Read small files fully, outline large ones:**

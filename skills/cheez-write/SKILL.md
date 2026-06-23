@@ -31,7 +31,7 @@ rewriting whole files unless the size and change ratio justify it (see
 
 ### "Replace the body of `handleAuth` in `src/auth.ts`"
 
-Step 1 — read with edit mode to get anchors:
+Step 1 — read the line range to get anchors:
 
 ```
 tilth_read(paths: ["src/auth.ts#44-89"])
@@ -147,7 +147,7 @@ If no LSP is installed, or the rename touches a symbol the typechecker can't res
 
 ## Hash Anchor Format
 
-When you read a file with tilth_read in edit mode, lines have anchors:
+When you read a file with tilth_read (a line range, `#symbol`, or heading), lines have anchors:
 
 ```
 42:a3f|  let x = compute();
