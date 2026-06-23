@@ -27,8 +27,18 @@ Diagnose's parallel hypothesis ranking IS this cycle, parallelized.
 
 ## Budget
 
-- **Cap:** 2 `/briesearch` calls per mold session unless the user requests more.
-- Cycles backed by `cheez-search` evidence alone are unbudgeted — they do not count toward the cap.
+Validate cycles are **context-bounded, not capped** (ADR-003 of the mold-parity
+spec). Confidence-gathering is the goal; an arbitrary cap cuts it short.
+
+- **No hard cap.** Run as many `/briesearch` cycles as confidence needs. The
+  context-budget mechanic (`context-budget.md`) is the natural limiter — offload
+  deep evidence to a sub-agent and watch the window.
+- **Soft backstop of 10.** At the 10th launched cycle, ask once "still gathering —
+  continue?"; it is a check, not a stop, and the user can wave it through.
+- Cycles backed by `cheez-search` evidence alone are unbudgeted — they do not count
+  toward the backstop.
+
+The same context-bounded rule governs Prototype Cycles (`prototype-cycle.md`).
 
 ## When to skip
 

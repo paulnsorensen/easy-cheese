@@ -16,10 +16,10 @@ Do not use the user-invoked ceremony for free-form discussion with no artifact i
 ## Flow
 
 1. **Route** — pick a starting mode from the input shape (see `references/modes.md`) and announce it in one line. If the user's framing rests on a false premise or a loaded assumption, name it before routing.
-2. **Dialogue** — build shared understanding through the smallest useful question to the user, but contribute at maximum useful depth between questions (full options, named edge cases, concrete evidence — not gestural sketches). Ground every critical claim with `cheez-search`, `cheez-read`, or a Validate Cycle (`references/validate-cycle.md`). Track contradictions across turns; if turn N contradicts an earlier conclusion, flag and resolve it before continuing.
+2. **Dialogue** — build shared understanding through the smallest useful question to the user, but contribute at maximum useful depth between questions (full options, named edge cases, concrete evidence — not gestural sketches). Ground every critical claim with `cheez-search`, `cheez-read`, a Validate Cycle (`references/validate-cycle.md`), or — for an ungrillable design unknown only a running sketch can settle — a Prototype Cycle (`references/prototype-cycle.md`). Both cycles are sub-agent-spawnable mid-dialogue, in parallel, and are context-bounded (no hard cap; soft backstop of 10). Track contradictions across turns; if turn N contradicts an earlier conclusion, flag and resolve it before continuing.
 3. **Sketch** — for any feature touching >1 module or a new public interface, run the shape check (`references/shape-check.md`) on the touched symbols, then lock seams in pseudocode signatures before talking spec content. Default to full signatures, not hand-waving.
 4. **Two-key handshake** — both the user (explicit verb) and the agent (coherence self-check) must agree before extraction. See `references/handshake.md`.
-5. **Curdle** — resolve the durable spec path with `SPEC=$(python3 ${CLAUDE_SKILL_DIR}/scripts/mold.pyz artifact-path specs <slug>)`, then write the approved spec to `"$SPEC"` (and optional issues alongside). The resolver anchors specs at the per-project durable corpus (see `shared/formatting.md` § Corpus location); never hardcode a `.cheese/specs/` path. Format and slug rules in `references/curdle.md`.
+5. **Curdle** — resolve the durable spec path with `SPEC=$(python3 ${CLAUDE_SKILL_DIR}/scripts/mold.pyz artifact-path specs <slug>)`, then write the approved spec to `"$SPEC"` (and optional issues alongside). The resolver anchors specs at the per-project durable corpus (see `shared/formatting.md` § Corpus location); never hardcode a `.cheese/specs/` path. In the same atomic step, write the session's non-obvious decisions as durable ADRs — to the consumer repo's `repo:<their-repo>:wiki` hallouminate corpus when present (resolved dynamically, never hardcoded), else to a tracked `docs/adr/<slug>-NNN.md`. Format, slug, and ADR resolution rules in `references/curdle.md` and `references/adr.md`.
 6. **Hand off** — once the spec is on disk, run `python3 ${CLAUDE_SKILL_DIR}/scripts/mold.pyz curd-count "$SPEC" --blast-radius <low|medium|high>` to compute the recommended downstream skill (full procedure in `references/curd-count.md`). Omit `--blast-radius` when the shape-check verdict is `[?]` or shape-check was skipped — the script degrades to `/cook` for sub-threshold specs in that case. Then prompt the next step via the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md). Never dispatch before the user selects; after a non-stop selection, run the selected downstream skill immediately.
 
 ## Modes
@@ -92,15 +92,24 @@ Optional tools accelerate the work; missing tools do not block the dialogue. Whe
 
 ## Sub-agent context gate
 
-`/mold` keeps the dialogue, contradictions, approval state, and the two-key handshake in the parent context — those never delegate. Spawn a read-only grounding sub-agent only when validation would flood the conversation with raw evidence or graph output:
+`/mold` keeps the dialogue, contradictions, approval state, and the two-key handshake in the parent context — those never delegate. Offloading heavy work to a read-only sub-agent is the **default**, not an exception — it is the reliable lever for staying out of the model's degraded-attention band (`references/context-budget.md`). Spawn one whenever the work would flood the conversation with raw evidence or graph output:
 
 - External validation needs deep `/briesearch` evidence, three or more doc fetches, or two or more independent search angles.
 - Shape check touches more than 5 symbols, fans out across many modules, or requires large caller/dependency traversals.
 - Diagnose mode needs bulky logs, traces, or search output before a concise root-cause hypothesis can be formed.
+- A Prototype Cycle builds a throwaway to settle an ungrillable design unknown — the build always runs in a sub-agent worktree (`references/prototype-cycle.md`).
 
-The sub-agent returns a digest: a claim table, shape-check summary, or root-cause evidence summary with citations and confidence. The parent reads that digest, asks the user the smallest useful next question, and still owns the handshake. Do not spawn sub-agents for normal dialogue, the approval gate, or curdle/spec writing.
+The sub-agent returns a ≤2 KB digest: a claim table, shape-check summary, prototype answer, or root-cause evidence summary with citations and confidence. The parent reads that digest, asks the user the smallest useful next question, and still owns the handshake. Do not spawn sub-agents for normal dialogue, the approval gate, or curdle/spec writing.
 
 Digest size, parent-vs-sub-agent split, and harness-agnostic sub-agent selection live in the shared kernel at `skills/age/references/sub-agent-gate.md`.
+
+### Context budget
+
+The dialogue itself has a window budget. As the estimated context fills, nudge the user — advisory near ~120k tokens (prefer sub-agent offload, tighten questions), and suggest `/wheypoint` + resume-in-fresh-context near ~140k. The estimate is a heuristic nudge, not a hard gate; sub-agent offload above is the reliable lever. Full rule in `references/context-budget.md`.
+
+### Gate graph
+
+Mold's gate state machine is a single machine-readable model rendered two ways: `python3 ${CLAUDE_SKILL_DIR}/scripts/mold.pyz gate-graph --render dot|svg|png|mermaid`. `dot`/`mermaid` need no binary; `svg`/`png` use Graphviz `dot` when present and degrade to mermaid otherwise. The model's gate nodes are kept in lockstep with the `handshake.md` coherence checklist by a test, so a gate cannot be dropped from prose. Details in `references/gate-graph.md`.
 
 ## Approval gate
 

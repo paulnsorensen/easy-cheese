@@ -58,7 +58,12 @@ Diagnose is **diagnostic-only** — hand off to Shape ("what's the fix?") then C
 
 ## User knobs (free-form interrupts)
 
-`explore`, `ground`, `shape`, `sketch`, `grill`, `diagnose`, `validate <hypothesis>`, `curdle`, `pause`, `enough`. Honour these immediately.
+`explore`, `ground`, `shape`, `sketch`, `grill`, `diagnose`, `validate <hypothesis>`, `prototype <question>`, `curdle`, `pause`, `enough`. Honour these immediately.
+
+`prototype <question>` launches a Prototype Cycle (`prototype-cycle.md`): a
+throwaway built in a hermetic sub-agent worktree to settle an ungrillable design
+unknown, returning only the answer as a digest. The code is discarded; the answer
+is the keeper.
 
 ## Uncertainty markers
 
