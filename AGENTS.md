@@ -74,7 +74,7 @@ for the durable-vs-transient boundary and the authoring loop.
 
 - Python validators in `.github/scripts/` allow only `pyyaml` and `pytest` as third-party deps — see `.github/instructions/python.instructions.md`.
 - Shell scripts and bats tests follow the rules in `.github/instructions/shell.instructions.md`.
-- `cheez-*` skills require [tilth MCP](https://github.com/paulnsorensen/tilth) and hard-fail without it. Every other skill stays portable and degrades to host-native tools.
+- `cheez-*` skills require [tilth MCP](https://github.com/paulnsorensen/tilth) and hard-fail without it. Every other skill stays portable and degrades to host-native tools. Optional integrations — hallouminate (repo-wiki grounding for `/mold` and `/age`) and milknado (mikado task-graph backend for `/cheese-factory`) — are wired in as optional plugins per `shared/optional-plugins.md`: they degrade gracefully when absent and never block a skill run.
 - SKILL.md files must pass `validate_skills.py` (YAML frontmatter validation).
 - Conventional Commits format for all commits and PR titles (enforced by `validate.yml` for PRs).
 - Cheese / Dune / Mad Max / LOTR / Princess Bride flavor is welcome in user-facing docs and `SKILL.md` files. Keep commit messages and YAML frontmatter neutral.

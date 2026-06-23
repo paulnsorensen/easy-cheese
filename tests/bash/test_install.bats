@@ -516,6 +516,95 @@ STUB
     ! grep -q " install --platform " "$STUB_LOG" || false
 }
 
+# -- ec_install_mcp_hallouminate -----------------------------------------------
+
+@test "ec_install_mcp_hallouminate warns and skips for non-claude harness" {
+    run ec_install_mcp_hallouminate cursor
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"only claude-code is auto-registered"* ]]
+}
+
+@test "ec_install_mcp_hallouminate gracefully skips when hallouminate binary missing" {
+    make_stub claude
+    # EC_HALLOUMINATE points at a path that does not exist — detection should warn, not abort.
+    EC_CLAUDE="$STUB_BIN/claude" EC_HALLOUMINATE="$STUB_BIN/no-such-hallouminate" \
+        run ec_install_mcp_hallouminate claude-code
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"hallouminate binary not found"* ]]
+    ! grep -q "mcp add hallouminate" "$STUB_LOG"
+}
+
+@test "ec_install_mcp_hallouminate dry-run shows resolved claude and hallouminate paths" {
+    make_stub claude
+    make_stub hallouminate
+    EC_CLAUDE="$STUB_BIN/claude" EC_HALLOUMINATE="$STUB_BIN/hallouminate" EC_DRY_RUN=1 \
+        run ec_install_mcp_hallouminate claude-code
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"$STUB_BIN/claude mcp add hallouminate -- $STUB_BIN/hallouminate serve"* ]]
+}
+
+# -- ec_install_mcp_milknado ---------------------------------------------------
+
+@test "ec_install_mcp_milknado warns and skips for non-claude harness" {
+    run ec_install_mcp_milknado cursor
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"only claude-code is auto-registered"* ]]
+}
+
+@test "ec_install_mcp_milknado gracefully skips when uvx binary missing" {
+    make_stub claude
+    # EC_UVX points at a path that does not exist — detection should warn, not abort.
+    EC_CLAUDE="$STUB_BIN/claude" EC_UVX="$STUB_BIN/no-such-uvx" \
+        run ec_install_mcp_milknado claude-code
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"uvx not found"* ]]
+    ! grep -q "mcp add milknado" "$STUB_LOG"
+}
+
+@test "ec_install_mcp_milknado dry-run shows resolved claude and uvx paths" {
+    make_stub claude
+    make_stub uvx
+    EC_CLAUDE="$STUB_BIN/claude" EC_UVX="$STUB_BIN/uvx" EC_DRY_RUN=1 \
+        run ec_install_mcp_milknado claude-code
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"$STUB_BIN/claude mcp add milknado -- $STUB_BIN/uvx --from milknado milknado-mcp"* ]]
+}
+
+@test "ec_install_mcp_hallouminate real invocation logs correct argv" {
+    make_stub claude
+    make_stub hallouminate
+    EC_CLAUDE="$STUB_BIN/claude" EC_HALLOUMINATE="$STUB_BIN/hallouminate" \
+        run ec_install_mcp_hallouminate claude-code
+    [ "$status" -eq 0 ]
+    grep -q "^claude mcp add hallouminate -- $STUB_BIN/hallouminate serve$" "$STUB_LOG"
+}
+
+@test "ec_install_mcp_milknado real invocation logs correct argv" {
+    make_stub claude
+    make_stub uvx
+    EC_CLAUDE="$STUB_BIN/claude" EC_UVX="$STUB_BIN/uvx" \
+        run ec_install_mcp_milknado claude-code
+    [ "$status" -eq 0 ]
+    grep -q "^claude mcp add milknado -- $STUB_BIN/uvx --from milknado milknado-mcp$" "$STUB_LOG"
+}
+
+@test "ec_parse_args accepts --mcp hallouminate,milknado" {
+    ec_parse_args --mcp hallouminate,milknado
+    [[ "$EC_MCP" == "hallouminate,milknado" ]]
+}
+
+@test "ec_install_mcp_hallouminate fails when claude CLI missing" {
+    run ec_install_mcp_hallouminate claude-code
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"claude CLI not found"* ]]
+}
+
+@test "ec_install_mcp_milknado fails when claude CLI missing" {
+    run ec_install_mcp_milknado claude-code
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"claude CLI not found"* ]]
+}
+
 # -- ec_install_skills --------------------------------------------------------
 
 @test "ec_detect_harnesses finds installed main-line harness CLIs" {
