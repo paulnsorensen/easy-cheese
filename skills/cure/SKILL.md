@@ -49,6 +49,8 @@ Beyond `cheez-*` there are cure-specific tools:
 | CI and PR context | `gh` | local test output or user-provided logs |
 | Diffs | `delta` | plain `git diff` |
 | Conflict resolution | mergiraf | manual resolution with targeted tests |
+| Code navigation | `/cheez-search` `kind:symbol` then `kind:callers` | `tilth_search` direct |
+| Read before edit | `/cheez-read` ranged/outline (`paths: ["f#n-m"]`, `mode:stripped`) | DO NOT `cat`/`sed -n`/host Read on code paths |
 
 **Freshness:** before the first code-review-graph query in a run, call `build_or_update_graph_tool`. See [`/cheez-search`](../cheez-search/SKILL.md#when-code-review-graph-beats-tilth-if-your-harness-has-it) for the full freshness contract and when semantic search beats tilth.
 

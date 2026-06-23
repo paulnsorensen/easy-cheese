@@ -54,6 +54,8 @@ Code search, reading, and editing all go through the `cheez-*` skills (`/cheez-s
 | GitHub context | `gh` | local git history or user-provided links |
 | Merge assistance | mergiraf | manual conflict resolution with tests |
 | Task commands | `just`, package scripts | direct documented commands |
+| Code navigation | `/cheez-search` `kind:symbol` then `kind:callers` | `tilth_search` direct |
+| Read before edit | `/cheez-read` ranged/outline (`paths: ["f#n-m"]`, `mode:stripped`) | DO NOT `cat`/`sed -n`/host Read on code paths |
 
 When a preferred tool is unavailable, continue with the fallback and mention any loss of precision if it affects risk.
 

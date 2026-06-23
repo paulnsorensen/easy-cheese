@@ -181,7 +181,7 @@ If the chain stopped on a halt, replace "Next step" with the halt reason and the
 |-----------------------------------|-----------------------|-----------------------------------|
 | Spawning the per-phase worker     | `Agent()` / harness sub-agent primitive | none — without sub-agent spawn, the fresh-context property cannot be honoured |
 | Reading the handoff slug          | `cheez-read` / host file read | host file read                    |
-| Detecting existing handoffs       | host file glob / list | `cheez-search` `tilth_files` glob |
+| Detecting existing handoffs       | host file glob / list | `cheez-read` `tilth_list` glob     |
 
 If the host harness does not expose a sub-agent primitive at all, `/ultracook` is the wrong skill — recommend `/cook --auto` instead, which uses the same flag semantics in the parent's own context.
 
