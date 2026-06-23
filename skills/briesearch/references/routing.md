@@ -35,7 +35,7 @@ Is it deep, multi-source, comparative, or "compare X vs Y / market analysis / li
 
 ## Context7 method
 
-Two-step flow. Skip the first step (`resolve-library-id`) whenever an exact `/org/project` (or `/org/project/version`) ID is already known — supplied by the user, cached from a prior session, or pasted into the prompt — which saves ~7K tokens per skip. Put the ID straight into the `query-docs` call and Context7 skips the matching step.
+Two-step flow. Skip the first step (`resolve-library-id`) whenever an exact `/org/project` (or `/org/project/version`) ID is already known — supplied by the user or pasted into the prompt — which saves ~7K tokens per skip. Put the ID straight into the `query-docs` call and Context7 skips the matching step.
 
 | Step | Tool | Args | Notes |
 | --- | --- | --- | --- |
@@ -71,7 +71,7 @@ If the library isn't indexed — or the question is about repo architecture, not
 
 ### Cost and freshness
 
-- **Free tier is ~1,000 calls/month** (cut ~92% in Jan 2026 from ~6,000); Pro is $10/seat/month. High-frequency runs can drain the free tier — spend routed calls deliberately.
+- **Free tier is ~1,000 calls/month** (cut ~83% in Jan 2026 from ~6,000); Pro is $10/seat/month. High-frequency runs can drain the free tier — spend routed calls deliberately.
 - **Private repos** need Pro (+ ~$25 / 1M tokens for private parsing) or Enterprise.
 - **Freshness is tiered**: top-100 libraries refresh daily, top-1,000 ~every 15 days, top-5,000 ~every 30 days, the long tail up to ~45 days. For a just-released version the indexed docs can lag — cross-check the changelog before trusting them.
 
@@ -90,7 +90,7 @@ The Tavily MCP exposes 5 tools at increasing cost and precision. Pick the lowest
 | Have URL(s), need clean markdown | `tavily_extract` | After search, or when the user supplies links. Up to 20 URLs per call. Pass `query=` so chunks rerank against the question. Set `extract_depth=advanced` for tables, embedded content, LinkedIn, or other protected sites. |
 | Big site, don't know the right page | `tavily_map` | URL-only structure of a domain. Cheap. Pair with `tavily_extract` (Map-then-Extract) for surgical access to large docs sites. |
 | Many pages on a site section (e.g. all `/docs/auth/*`) | `tavily_crawl` | Most expensive. Start with `max_depth=1`, use `select_paths` and semantic `instructions` to keep results on-topic. `extract_depth` applies here too: `basic` = 1 credit / 5 URLs, `advanced` = 2 / 5. |
-| Multi-source synthesis with citations (compare X vs Y, market report, lit review) | `tavily_research` | Returns a cited report — **async**: the call hands back a `request_id`, then poll `get_research(request_id)` (or stream) until `status=completed`. 30-120s. Use `model=mini` for narrow scope, `pro` for multi-domain, `auto` if unsure. Rate limit: 20 req/min — fan out subqueries via `tavily_search`, not parallel research calls. |
+| Multi-source synthesis with citations (compare X vs Y, market report, lit review) | `tavily_research` | Blocking — one call returns the cited report directly (params: `input`, `model`). 30-120s. Use `model=mini` for narrow scope, `pro` for multi-domain, `auto` if unsure. Rate limit: 20 req/min — fan out subqueries via `tavily_search`, not parallel research calls. |
 
 ### Search depth (when calling `tavily_search`)
 
@@ -131,12 +131,6 @@ Hand-orchestrate (search → score-filter → extract → synthesize) instead wh
 - The question is cross-source — Tavily plus Context7 plus codebase plus GitHub. `tavily_research` only sees public web; private signals require local synthesis.
 - You need fine-grained control over which URLs feed synthesis.
 - The user wants the raw evidence table, not a narrative report.
-
-### Running it: async + research-only filters
-
-`tavily_research` is **not a single blocking call**. The initial call hands back a `request_id`; poll `get_research(request_id)` until `status=completed` (`pending` → `processing` → `completed` / `failed`), or pass `stream=True` to consume events instead of polling. Budget for the 30-120s round-trip so a still-`pending` response isn't mistaken for the answer.
-
-Research-only filters (May 2026): `include_domains` / `exclude_domains` scope sources as on `tavily_search`, and `output_length` (`short` / `standard` / `long`) sizes the report. Set them on the initiating call.
 
 Upstream reference (canonical):
 
