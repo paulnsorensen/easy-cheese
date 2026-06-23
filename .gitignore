@@ -7,6 +7,12 @@
 # Serena MCP project state
 .serena/
 
+# Claude Code machine-local worktree registry
+.claude/worktrees/
+
+# milknado optional-plugin runtime data (SQLite task graph)
+.milknado/
+
 # Python
 __pycache__/
 *.pyc
