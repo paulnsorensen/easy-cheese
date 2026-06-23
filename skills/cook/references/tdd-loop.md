@@ -28,7 +28,7 @@ Implement the smallest production change that turns the cut tests green.
 
 If cook reports partial or skipped work, **stop and resolve before taste-test**.
 
-## Taste-test — drift / readability / scope / simplify
+## Taste-test — drift, readability, scope, simplify, plus three fresh-context lenses
 
 After cook says "I completed all the changes", run a taste test before press. The taste-test is a **fresh-context review**: when the cooked diff is non-trivial it is dispatched to a read-only reviewer that did not write the code, because the writing context cannot reliably see its own drift. Small diffs keep the cheap inline check.
 
@@ -36,7 +36,7 @@ After cook says "I completed all the changes", run a taste test before press. Th
 
 **Who runs it.**
 
-- **Top-level `/cook`** (can fan out — it already forks `whey-drainer`): dispatch the `reviewer` phase-agent directly. Name the agent and pass **no call-site model** — its definition pins `model: opus` and is read-only (`disallowedTools: [Edit, Write, NotebookEdit, Agent]`), so the reviewer runs at ≥ the writer's tier, never the coder's `sonnet` pin. The dispatch is read-only and receives `{spec/contract, diff, cut-test list, any locked/user-approved decisions}`; it returns the per-lens verdict below, not a full `/age` report.
+- **Top-level `/cook`** (when the harness can fan out sub-agents): dispatch the `reviewer` phase-agent directly. Name the agent and pass **no call-site model** — its definition pins `model: opus` and is read-only (`disallowedTools: [Edit, Write, NotebookEdit, Agent]`), so the reviewer runs at ≥ the writer's tier, never the coder's `sonnet` pin. The dispatch is read-only and receives `{spec/contract, diff, cut-test list, any locked/user-approved decisions}`; it returns the per-lens verdict below, not a full `/age` report. If the named `reviewer` agent isn't available (e.g. a harness that installs only easy-cheese), fall back to the inline self-check — the same degrade as the coder-nested path below.
 - **Coder-nested `/cook`** (running inside the `coder` phase agent, which has `disallowedTools: [Agent]`): it **cannot** spawn a sub-agent. It runs the inline self-check and records `taste_test: deferred-to-orchestrator` in its handoff slug; the orchestrator that dispatched `coder` runs the authoritative fresh-context pass after the coder digest, before accepting the handoff. (The orchestrator side is the dotfiles phase-flow; until it lands, the coder-nested path degrades to the inline self-check.)
 
 **Lenses.** Inline or dispatched, the taste-test returns `pass | revise` per lens (`halt` for Locked-decision):
@@ -49,7 +49,7 @@ After cook says "I completed all the changes", run a taste test before press. Th
 | Simplify | Does the diff reuse what exists, stay clean, and avoid wasted work? | See sub-checks below; all three must pass. |
 | Production path | Does every spec acceptance criterion have a *production* path that exercises it? | The behaviour is reachable from real callers, not only from tests that manufacture the state. |
 | Wired callers | Does each new public function have a non-test caller? | A non-test caller exists, or the diff carries an explicit "wired in phase X" note. |
-| Locked decision | If the dispatch prompt carries a locked/user-approved decision, does the diff implement *that* decision? | The diff honours the locked decision, or the reviewer returns `halt` flagging the divergence. |
+| Locked-decision | If the dispatch prompt carries a locked/user-approved decision, does the diff implement *that* decision? | The diff honours the locked decision, or the reviewer returns `halt` flagging the divergence. |
 
 The last three lenses are the fresh-context additions — they encode the failures the inline taste-test historically passed: a missing production path, public functions with zero non-test callers, and a silently-substituted design decision. A `halt` from the Locked-decision lens stops the chain for a human decision; it is not a corrective-cook finding.
 
