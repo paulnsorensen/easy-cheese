@@ -136,6 +136,15 @@ def test_bundle_carries_only_its_own_skill(bundles: Path) -> None:
     assert not (affinage & {"git_utils.py", "manifest_io.py", "schema.py"})  # no shared needed
 
 
+def test_cheese_factory_bundle_contains_entity_modules(bundles: Path) -> None:
+    """curd.py and wiring.py are local library modules (not registered subcommands).
+    The local-sibling-bundling feature in build_pyz must stage them so that
+    validate_decomposition and validate_manifest can import them inside the .pyz."""
+    cf = set(zipfile.ZipFile(bundles / "cheese-factory.pyz").namelist())
+    assert "curd.py" in cf, f"curd.py missing from cheese-factory bundle; contents: {sorted(cf)}"
+    assert "wiring.py" in cf, f"wiring.py missing from cheese-factory bundle; contents: {sorted(cf)}"
+
+
 # Pinned env so the resolved corpus path is deterministic and does not depend on
 # the test host's git remote or real XDG dirs.
 _CORPUS_ENV = {"EASY_CHEESE_HOME": "/tmp/ec-corpus", "EASY_CHEESE_PROJECT": "demo-project"}
@@ -436,3 +445,16 @@ def test_no_orphan_committed_bundles():
     }
     expected = {f"skills/{skill}/scripts/{skill}.pyz" for skill in build_pyz.SKILLS}
     assert committed == expected
+
+
+def test_local_skill_modules_finds_libs_and_excludes_subcommands() -> None:
+    """build_pyz._local_skill_modules discovers local src/<skill>/ library modules a
+    registered script imports (curd/wiring), and EXCLUDES registered subcommands and
+    shared modules. Unit-locks the discovery the bundle-content test only covers
+    end-to-end — a regression that stopped excluding registered names or stopped
+    finding the siblings would fail here with a precise diff."""
+    local = build_pyz._local_skill_modules("cheese-factory")
+    assert local == {"curd", "wiring"}, local
+    assert "validate_decomposition" not in local  # registered subcommand, not a local lib
+    assert "validate_manifest" not in local
+    assert "schema" not in local  # shared module (shared/scripts), not src/cheese-factory

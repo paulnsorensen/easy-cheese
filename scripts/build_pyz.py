@@ -95,11 +95,35 @@ def _imported_top_names(path: Path) -> set[str]:
     return names
 
 
+def _local_skill_modules(skill: str) -> set[str]:
+    """Non-registered local src/<skill>/*.py modules transitively imported by the skill."""
+    skill_dir = SRC_ROOT / skill
+    registered = {_module_name(_filename(src)) for src in SKILLS[skill].values()}
+    frontier: set[str] = set()
+    for source in SKILLS[skill].values():
+        for name in _imported_top_names(_source_path(skill, source)):
+            if name not in registered and (skill_dir / f"{name}.py").exists():
+                frontier.add(name)
+    resolved: set[str] = set()
+    while frontier:
+        name = frontier.pop()
+        if name in resolved:
+            continue
+        resolved.add(name)
+        for imp in _imported_top_names(skill_dir / f"{name}.py"):
+            if imp not in registered and imp not in resolved and (skill_dir / f"{imp}.py").exists():
+                frontier.add(imp)
+    return resolved
+
+
 def needed_shared(skill: str) -> set[str]:
-    """Shared modules transitively imported by the skill's scripts."""
+    """Shared modules transitively imported by the skill's scripts and local modules."""
+    skill_dir = SRC_ROOT / skill
     frontier: set[str] = set()
     for source in SKILLS[skill].values():
         frontier |= _imported_top_names(_source_path(skill, source)) & SHARED_MODULES
+    for name in _local_skill_modules(skill):
+        frontier |= _imported_top_names(skill_dir / f"{name}.py") & SHARED_MODULES
     resolved: set[str] = set()
     while frontier:
         module = frontier.pop()
@@ -145,12 +169,16 @@ def build_bundle(skill: str, target: Path) -> Path:
     target.parent.mkdir(parents=True, exist_ok=True)
     files = SKILLS[skill]
     sub_to_module = {sub: _module_name(_filename(src)) for sub, src in files.items()}
+    skill_dir = SRC_ROOT / skill
+    local_mods = sorted(_local_skill_modules(skill))
     with tempfile.TemporaryDirectory() as td:
         stage = Path(td)
         for module in sorted(needed_shared(skill)):
             shutil.copy(SHARED_SCRIPTS / f"{module}.py", stage / f"{module}.py")
         for source in files.values():
             shutil.copy(_source_path(skill, source), stage / f"{_module_name(_filename(source))}.py")
+        for name in local_mods:
+            shutil.copy(skill_dir / f"{name}.py", stage / f"{name}.py")
         (stage / "__main__.py").write_text(_dispatcher_source(sub_to_module), encoding="utf-8")
         _write_zipapp(stage, target)
     return target
