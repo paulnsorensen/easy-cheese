@@ -248,6 +248,34 @@ class TestWiringDag:
         errors = wiring.graph_errors(w)  # type: ignore[arg-type]
         assert errors == [], f"expected clean wiring result, got: {errors}"
 
+    def test_graph_errors_non_string_id_does_not_crash(self, wiring: ModuleType) -> None:
+        # graph_errors must tolerate nodes with non-string ids without crashing.
+        # A node with id=5 and depends_on=[5] must not produce a TypeError — the
+        # function is the only validation path in the decomposition CLI.
+        w = [
+            {"id": 5, "type": "barrel_export", "file": "a.ts", "depends_on": [5]},  # type: ignore[list-item]
+        ]
+        result = wiring.graph_errors(w)
+        assert isinstance(result, list), "graph_errors must always return a list"
+        # Non-string id is silently excluded from the DAG — no crash, no spurious errors.
+        assert result == [], f"expected no errors for non-string id, got: {result}"
+
+    def test_graph_errors_non_list_depends_on_does_not_crash(self, wiring: ModuleType) -> None:
+        # graph_errors must not crash or emit bogus per-character errors when
+        # depends_on is a scalar (int or string) rather than a list.
+        w_int = [{"id": "W1", "type": "barrel_export", "file": "a.ts", "depends_on": 5}]
+        result_int = wiring.graph_errors(w_int)
+        assert isinstance(result_int, list), "graph_errors must always return a list"
+        assert result_int == [], f"scalar int depends_on must produce no errors, got: {result_int}"
+
+        # A string depends_on must NOT iterate characters and emit per-char errors.
+        w_str = [{"id": "W1", "type": "barrel_export", "file": "a.ts", "depends_on": "W1"}]
+        result_str = wiring.graph_errors(w_str)
+        assert isinstance(result_str, list), "graph_errors must always return a list"
+        assert not any(len(e) == 1 or "'W'" in e or "'1'" in e for e in result_str), (
+            f"string depends_on must not emit per-character errors, got: {result_str}"
+        )
+
 
 # ---------------------------------------------------------------------------
 # Minimum curd count: /cheese-factory requires 5+

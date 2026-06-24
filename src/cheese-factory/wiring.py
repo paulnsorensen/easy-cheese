@@ -28,13 +28,17 @@ def graph_errors(wiring: list) -> list[str]:
     ids = {w.get("id") for w in wiring_list if isinstance(w.get("id"), str)}
     errors: list[str] = []
 
+    def _string_deps(w: dict) -> list[str]:
+        deps = w.get("depends_on")
+        return [d for d in deps if isinstance(d, str)] if isinstance(deps, list) else []
+
     for w in wiring_list:
         wid = w.get("id", "?")
-        for dep in w.get("depends_on", []) or []:
+        for dep in _string_deps(w):
             if dep not in ids:
                 errors.append(f"wiring {wid}: depends_on references unknown id {dep!r}")
 
-    graph: dict[str, list[str]] = {w["id"]: list(w.get("depends_on", []) or []) for w in wiring_list if "id" in w}
+    graph: dict[str, list[str]] = {w["id"]: _string_deps(w) for w in wiring_list if isinstance(w.get("id"), str)}
     WHITE, GRAY, BLACK = 0, 1, 2
     color = {node: WHITE for node in graph}
 
