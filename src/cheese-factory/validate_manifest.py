@@ -8,10 +8,11 @@ behavioural decomposition checks to the decomposition validator.
 
 from __future__ import annotations
 
-import re
 import sys
 from typing import Any
 
+import curd  # noqa: E402
+import wiring  # noqa: E402
 from manifest_io import ManifestLoadError, read_mapping_arg_or_stdin  # noqa: E402
 from schema import non_empty_string, required_keys, string_list, type_name  # noqa: E402
 from validate_decomposition import validate_manifest as validate_decomposition  # noqa: E402
@@ -28,15 +29,6 @@ PHASES = {
     "pr_publish_complete",
 }
 SEED_STATUSES = {"pending", "completed", "failed"}
-WORK_STATUSES = {"pending", "running", "completed", "failed"}
-WIRING_TYPES = {
-    "barrel_export",
-    "di_registration",
-    "route_wiring",
-    "event_subscription",
-    "config_entry",
-}
-WIRING_ID_RE = re.compile(r"^W[0-9]+$")
 
 
 def _validate_seed(seed: object) -> list[str]:
@@ -64,58 +56,25 @@ def _validate_curds(curds: object) -> list[str]:
     if not isinstance(curds, list):
         return ["curds must be a list"]
     errors: list[str] = []
-    for index, curd in enumerate(curds, start=1):
+    for index, c in enumerate(curds, start=1):
         where = f"curds[{index}]"
-        if not isinstance(curd, dict):
-            errors.append(f"{where} must be an object, got {type_name(curd)}")
+        if not isinstance(c, dict):
+            errors.append(f"{where} must be an object, got {type_name(c)}")
             continue
-        errors.extend(
-            required_keys(
-                curd,
-                (
-                    "id",
-                    "behavior",
-                    "acceptance_criterion",
-                    "files",
-                    "test_target",
-                    "status",
-                    "retry_count",
-                ),
-                where,
-            )
-        )
-        if not isinstance(curd.get("id"), int) or curd.get("id", 0) < 1:
-            errors.append(f"{where}.id must be an integer >= 1")
-        for field in ("behavior", "acceptance_criterion", "test_target"):
-            errors.extend(non_empty_string(curd, field, where))
-        errors.extend(string_list(curd.get("files"), f"{where}.files", non_empty=True))
-        if curd.get("status") not in WORK_STATUSES:
-            errors.append(f"{where}.status must be one of pending|running|completed|failed")
-        retry_count = curd.get("retry_count")
-        if not isinstance(retry_count, int) or not 0 <= retry_count <= 1:
-            errors.append(f"{where}.retry_count must be 0 or 1")
+        errors.extend(curd.lifecycle_errors(c, where))
     return errors
 
 
-def _validate_wiring(wiring: object) -> list[str]:
-    if not isinstance(wiring, list):
+def _validate_wiring(wiring_list: object) -> list[str]:
+    if not isinstance(wiring_list, list):
         return ["wiring must be a list"]
     errors: list[str] = []
-    for index, item in enumerate(wiring, start=1):
+    for index, item in enumerate(wiring_list, start=1):
         where = f"wiring[{index}]"
         if not isinstance(item, dict):
             errors.append(f"{where} must be an object, got {type_name(item)}")
             continue
-        errors.extend(required_keys(item, ("id", "type", "file", "depends_on", "status"), where))
-        wid = item.get("id")
-        if not isinstance(wid, str) or not WIRING_ID_RE.match(wid):
-            errors.append(f"{where}.id must match W<number>")
-        if item.get("type") not in WIRING_TYPES:
-            errors.append(f"{where}.type must be a known wiring type")
-        errors.extend(non_empty_string(item, "file", where))
-        errors.extend(string_list(item.get("depends_on"), f"{where}.depends_on"))
-        if item.get("status") not in WORK_STATUSES:
-            errors.append(f"{where}.status must be one of pending|running|completed|failed")
+        errors.extend(wiring.lifecycle_errors(item, where))
     return errors
 
 

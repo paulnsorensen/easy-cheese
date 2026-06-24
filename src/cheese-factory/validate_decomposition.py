@@ -2,135 +2,16 @@
 """Validate a cheese-factory decomposition manifest. Exit 0 on success, 1 on errors (one per line on stderr)."""
 from __future__ import annotations
 
-import re
 import sys
-from collections.abc import Iterable
 
+import curd  # noqa: E402
+import wiring  # noqa: E402
 from manifest_io import ManifestLoadError, read_mapping_arg_or_stdin  # noqa: E402
 
+
 # ---------------------------------------------------------------------------
-# Pure validation functions — tested directly in tests/cheese-factory/python.
+# Pipeline-policy check (not an entity invariant)
 # ---------------------------------------------------------------------------
-
-
-# A behaviour sentence joining two distinct verbs with "and" usually means
-# the curd should be split. We flag the simple case: "<verb> X and <verb> Y"
-# where each verb is a present-tense action word. This is intentionally
-# permissive — "X and Y" (no second verb) is fine.
-_TWO_VERB_AND = re.compile(
-    r"\b(adds|extracts|renames|fixes|removes|updates|implements|creates|deletes|wires|registers|exposes|replaces)\b"
-    r".*?\band\b\s+"
-    r"\b(adds|extracts|renames|fixes|removes|updates|implements|creates|deletes|wires|registers|exposes|replaces)\b",
-    re.IGNORECASE,
-)
-
-
-def check_one_behaviour(curd: dict) -> str | None:
-    behavior = curd.get("behavior", "")
-    if not isinstance(behavior, str) or not behavior.strip():
-        return f"curd {curd.get('id', '?')}: missing or empty 'behavior'"
-    if _TWO_VERB_AND.search(behavior):
-        return (
-            f"curd {curd.get('id', '?')}: behaviour joins two verbs with 'and' "
-            f"({behavior!r}) — split into two curds"
-        )
-    return None
-
-
-def check_acceptance_criterion(curd: dict) -> str | None:
-    ac = curd.get("acceptance_criterion", "")
-    if not isinstance(ac, str) or not ac.strip():
-        return f"curd {curd.get('id', '?')}: missing or empty 'acceptance_criterion'"
-    return None
-
-
-def check_test_target(curd: dict) -> str | None:
-    tt = curd.get("test_target", "")
-    if not isinstance(tt, str) or not tt.strip():
-        return f"curd {curd.get('id', '?')}: missing or empty 'test_target'"
-    # Reject test targets that obviously run more than one focused test —
-    # multiple commands joined with && / ; / && or a wildcard suite path.
-    if "&&" in tt or ";" in tt or "||" in tt:
-        return (
-            f"curd {curd.get('id', '?')}: test_target chains multiple commands "
-            f"({tt!r}) — split the curd"
-        )
-    return None
-
-
-def check_file_disjointness(curds: Iterable[dict]) -> list[str]:
-    """Criterion 4: no file appears in two curds. HARD CONSTRAINT."""
-    errors: list[str] = []
-    file_to_curd: dict[str, int | str] = {}
-    for curd in curds:
-        # Non-dict entries are reported by validate_manifest's loop; skip
-        # here to avoid AttributeError on .get when the entry is None / str / int.
-        if not isinstance(curd, dict):
-            continue
-        curd_id = curd.get("id", "?")
-        files = curd.get("files", [])
-        if not isinstance(files, list) or not files:
-            errors.append(f"curd {curd_id}: missing or empty 'files'")
-            continue
-        for f in files:
-            if not isinstance(f, str):
-                errors.append(f"curd {curd_id}: non-string file entry: {f!r}")
-                continue
-            if f in file_to_curd:
-                errors.append(
-                    f"file {f!r} appears in curd {file_to_curd[f]} and curd {curd_id} — "
-                    f"curds must be file-disjoint (move shared content to seed or wiring)"
-                )
-            else:
-                file_to_curd[f] = curd_id
-    return errors
-
-
-def check_wiring_dag(wiring: Iterable[dict]) -> list[str]:
-    # Drop non-dict entries up front — the validator is a user-facing CLI and
-    # a stack trace on garbage input is a usability defect (mirrors the
-    # check_file_disjointness defense for curds[]).
-    wiring_list = [w for w in wiring if isinstance(w, dict)]
-    ids = {w.get("id") for w in wiring_list if isinstance(w.get("id"), str)}
-    errors: list[str] = []
-
-    # Unknown dependency references.
-    for w in wiring_list:
-        wid = w.get("id", "?")
-        for dep in w.get("depends_on", []) or []:
-            if dep not in ids:
-                errors.append(f"wiring {wid}: depends_on references unknown id {dep!r}")
-
-    # Cycle detection via DFS.
-    graph: dict[str, list[str]] = {w["id"]: list(w.get("depends_on", []) or []) for w in wiring_list if "id" in w}
-    WHITE, GRAY, BLACK = 0, 1, 2
-    color = {node: WHITE for node in graph}
-
-    def dfs(node: str, stack: list[str]) -> str | None:
-        color[node] = GRAY
-        stack.append(node)
-        for nxt in graph.get(node, []):
-            if nxt not in color:
-                continue
-            if color[nxt] == GRAY:
-                cycle = stack[stack.index(nxt):] + [nxt]
-                return " -> ".join(cycle)
-            if color[nxt] == WHITE:
-                cy = dfs(nxt, stack)
-                if cy:
-                    return cy
-        stack.pop()
-        color[node] = BLACK
-        return None
-
-    for node in list(graph):
-        if color[node] == WHITE:
-            cy = dfs(node, [])
-            if cy:
-                errors.append(f"wiring DAG has cycle: {cy}")
-                break  # one cycle report is enough; user fixes & re-runs
-
-    return errors
 
 
 def check_minimum_curd_count(curds: list[dict]) -> str | None:
@@ -153,22 +34,19 @@ def validate_manifest(manifest: dict) -> list[str]:
     if too_few:
         errors.append(too_few)
 
-    for curd in curds:
-        if not isinstance(curd, dict):
-            errors.append(f"non-dict curd entry: {curd!r}")
+    for c in curds:
+        if not isinstance(c, dict):
+            errors.append(f"non-dict curd entry: {c!r}")
             continue
-        for check in (check_one_behaviour, check_acceptance_criterion, check_test_target):
-            err = check(curd)
-            if err:
-                errors.append(err)
+        errors.extend(curd.behaviour_errors(c))
 
-    errors.extend(check_file_disjointness(curds))
+    errors.extend(curd.disjoint_files_errors(curds))
 
-    wiring = manifest.get("wiring", [])
-    if not isinstance(wiring, list):
+    wiring_list = manifest.get("wiring", [])
+    if not isinstance(wiring_list, list):
         errors.append("manifest.wiring must be a list")
     else:
-        errors.extend(check_wiring_dag(wiring))
+        errors.extend(wiring.graph_errors(wiring_list))
 
     return errors
 

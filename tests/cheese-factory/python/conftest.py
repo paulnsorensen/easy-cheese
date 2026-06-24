@@ -44,6 +44,16 @@ def validate_pr_plan() -> ModuleType:
 
 
 @pytest.fixture(scope="session")
+def curd() -> ModuleType:
+    return importlib.import_module("curd")
+
+
+@pytest.fixture(scope="session")
+def wiring() -> ModuleType:
+    return importlib.import_module("wiring")
+
+
+@pytest.fixture(scope="session")
 def cf_dir() -> Path:
     return CF_DIR
 
