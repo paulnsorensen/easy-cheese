@@ -711,19 +711,19 @@ class TestCheeseGatedRouting:
         body = _skill("cheese")
         body_lower = body.lower()
         # The clause must forbid auto-dispatch and the presumptive popup.
-        assert "dispatch nothing" in body_lower or "do not auto-dispatch" in body_lower or (
-            "not" in body_lower and "auto-dispatch" in body_lower
+        assert (
+            "dispatch nothing" in body_lower or "do not auto-dispatch" in body_lower
         ), "gated: branch must dispatch nothing until the user picks a direction"
 
 
 class TestWheypointReadonlyNextValues:
-    """Single-value `next:` must accept `briesearch | culture | explore`
+    """Single-value `next:` must accept `briesearch | culture`
     so 'just go research this' is expressible as a bare next:, and these
     auto-dispatch under status: ok (read-only, low-risk)."""
 
     def test_next_enum_lists_readonly_kickoffs(self) -> None:
         body = _skill("wheypoint")
-        for value in ("briesearch", "culture", "explore"):
+        for value in ("briesearch", "culture"):
             assert value in body, (
                 f"wheypoint next: enum must include the read-only kickoff `{value}`"
             )
@@ -732,18 +732,18 @@ class TestWheypointReadonlyNextValues:
         body = _skill("wheypoint")
         body_lower = body.lower()
         assert "read-only" in body_lower, (
-            "wheypoint must mark briesearch/culture/explore as read-only kickoffs"
+            "wheypoint must mark briesearch/culture as read-only kickoffs"
         )
 
 
 class TestCheeseReadonlyAutoDispatch:
-    """`/cheese --continue` must auto-dispatch `next: briesearch|culture|
-    explore` when `status: ok` — frictionless research kickoff, not gated."""
+    """`/cheese --continue` must auto-dispatch `next: briesearch|culture`
+    when `status: ok` — frictionless research kickoff, not gated."""
 
     def test_readonly_kickoff_branch_present(self) -> None:
         body = _skill("cheese")
         body_lower = body.lower()
-        for value in ("briesearch", "culture", "explore"):
+        for value in ("briesearch", "culture"):
             assert value in body, (
                 f"cheese --continue must route the read-only kickoff `{value}`"
             )
@@ -798,7 +798,7 @@ class TestCheeseHoldAndMissingNext:
             "cheese --continue must flag a missing next: with the exact message"
         )
         # It must refuse to guess or default to a phase.
-        assert "do not guess" in body_lower or "guess" in body_lower, (
+        assert "do not guess a next step" in body_lower, (
             "missing next: must be flagged, not guessed or defaulted"
         )
 
