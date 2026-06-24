@@ -6,7 +6,7 @@ Design notes: .cheese/notes/culture-culture.md
 
 ## Context
 
-`/culture` and `/wheypoint` were defined in opposition. Wheypoint's description and body explicitly excluded culture: "Do NOT use for design-only no-write reasoning notes (`/culture`)" (skills/wheypoint/SKILL.md:3,11). Culture wrote its own thin, opt-in notes slug whose `next:` value set (`mold|cook|ultracook|stop`, skills/culture/SKILL.md:62-67) had drifted behind wheypoint's richer contract, which already supports `next: culture`, `next: hold`, and `status: gated:` (skills/wheypoint/SKILL.md:32,43,48,51).
+`/culture` and `/wheypoint` were defined in opposition. Before this decision, wheypoint's description and body explicitly excluded culture — "Do NOT use for design-only no-write reasoning notes (`/culture`)" (`skills/wheypoint/SKILL.md`). Culture wrote its own thin, opt-in notes slug in `skills/culture/SKILL.md` whose `next:` value set (`mold|cook|ultracook|stop`) had drifted behind wheypoint's richer contract, which already supports `next: culture`, `next: hold`, and `status: gated:` (`skills/wheypoint/SKILL.md`).
 
 User-facing culture was being upgraded into a sustained domain-modeling partner (modeled on Matt Pocock's domain-modeling skill) whose payoff is a durable, resumable document, not just conversation. That reframes a culture session as legitimately checkpoint-worthy, which is exactly what wheypoint produces.
 
