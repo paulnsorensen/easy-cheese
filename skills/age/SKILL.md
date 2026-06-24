@@ -25,7 +25,7 @@ Accept:
 
 When called with a `<slug>`, resolve `.cheese/press/<slug>.md` (if present) for press context and review the current working diff. When called with a `<ref-or-range>`, review that range. Default to the current working diff when neither is supplied. If the base branch is unclear, ask or use the repository's documented default.
 
-`--auto` is the propagated autonomous-mode flag from `/cook --auto`. It changes the handoff (see `## Handoff`). Track the cure-pass count internally so the two-cure-pass cap can be enforced — increment after each `/cure --auto` returns. The full chain is `age → cure → age → cure → age → stop`: up to three `/age --auto` invocations and up to two `/cure --auto` passes. Once two cure passes have completed, the next `/age --auto` writes the final report and stops without invoking `/cure` again. (This in-session contract uses conversation memory to track passes — it works because `/cook --auto` runs every phase in the same context. When invoked from `/ultracook`, each phase boots in fresh context with no shared memory; see `### When invoked from /ultracook` below for the no-shared-memory variant.)
+`--auto` is the propagated autonomous-mode flag from `/cook --auto`. It changes the handoff (see `## Handoff` and `### Auto mode` for the cap rule and full chain). (When invoked from `/ultracook`, each phase boots in fresh context with no shared memory; see `### When invoked from /ultracook` below for the no-shared-memory variant.)
 
 `--hard` is the propagated metacognitive-gate flag from `/cook --hard` (or `/cheese --hard`). Age does not fire the gate; it only passes `--hard` forward to `/cure` at the handoff so the gate can fire at the share-for-review boundary. See `skills/hard-cheese/SKILL.md`.
 
@@ -50,7 +50,7 @@ Per-dimension base-severity tables, location-sensitivity, fix-cost-now / fix-cos
 
 ## Flow
 
-1. Identify the diff, scope, and relevant spec or issue. **Mode check (one decision point):** if the scale threshold is met — `(diff > 15 files) OR (review context > ~25 KB) OR (caller graph crosses multiple subsystems)` — and `/age` is not itself a sub-agent, switch to `### Scale-triggered fan-out mode`; steps 2–4 (evidence-gather, per-dimension review, severity computation) are replaced by the fan-out path — both modes converge on steps 5–6.
+1. Identify the diff, scope, and relevant spec or issue. **Mode check (one decision point):** if the **scale threshold** (defined in `## Sub-agent context gate` below) is met — and `/age` is not itself a sub-agent — switch to `### Scale-triggered fan-out mode`; steps 2–4 (evidence-gather, per-dimension review, severity computation) are replaced by the fan-out path — both modes converge on steps 5–6.
 2. Gather evidence: diff, touched files, tests, callers/imports. If `.cheese/press/<slug>.md` exists, read it and include a `## Press findings` sub-section in the age report summarising unresolved items — `/cure` reads only `.cheese/age/<slug>.md` and cannot access the press report directly.
 3. Review every dimension; dimensions with no findings simply omit themselves.
 4. Compute severity per finding (base + location bump + compounding bump, capped at `blocker`). Group findings by severity (`## Blocker → ## High → ## Medium → ## Low`); within a severity group, order by file.
@@ -82,22 +82,20 @@ Missing optional tools should not block review. State which evidence was unavail
 
 `/age` should fork a read-only review-context sub-agent when evidence gathering is likely to exceed the parent context, especially for `--comprehensive` reviews.
 
-Spawn when any of these are true:
+**Scale threshold** — spawn when any of these are true:
 
 - The diff spans more than 15 files.
 - Touched code or generated review context is larger than roughly 25 KB (about 5 K tokens of raw output the parent would not read line-by-line).
 - Caller / dependency graph expansion crosses multiple subsystems.
 - code-review-graph or `tilth_deps` output is needed for hotspot, bridge-node, or blast-radius framing.
 
-The sub-agent returns a digest: orientation paragraph, high-signal `path:line` citations, gap list. In single-parent mode (below threshold), the parent owns the ten-dimension review, severity grading, and the `.cheese/age/<slug>.md` report — do not spawn for small diffs, to outsource severity grading, or to outsource the final verdict. In fan-out mode, per-dimension severity is delegated to workers; the parent retains cross-dimension reconciliation, the final verdict, and the report — see `### Scale-triggered fan-out mode` below.
-
-Digest size, parent-vs-sub-agent split, and harness-agnostic sub-agent selection live in `references/sub-agent-gate.md` — single source of truth for the cross-cutting rules.
+For the digest contract, harness-agnostic selection rules, and what the parent never delegates, see `references/sub-agent-gate.md`.
 
 ### Scale-triggered fan-out mode
 
-Activates when **all** hold: the size threshold above is met AND `/age` is not itself a sub-agent (no `invoked-from:` marker). Below threshold, or when running as a sub-agent, the single-parent path applies unchanged.
+Activates when **all** hold: the **scale threshold** (above) is met AND `/age` is not itself a sub-agent (no `invoked-from:` marker). Below threshold, or when running as a sub-agent, the single-parent path applies unchanged.
 
-**Seam 1 — Predicate.** Fan out when `(diff > 15 files) OR (review context > ~25 KB) OR (caller graph crosses multiple subsystems)` — the threshold from `## Sub-agent context gate`, reused verbatim — AND `/age` is not itself a sub-agent.
+**Seam 1 — Predicate.** Fan out when the **scale threshold** (defined in `## Sub-agent context gate`) is met AND `/age` is not itself a sub-agent.
 
 **Seam 2 — Shared context packet.** The orchestrator assembles the packet once and writes it to `.cheese/age/<slug>-packet.md` (transient — rebuilt every run, no cross-run cache). Each worker reads this file. Eight components are documented in `references/packet.md`. The existing review-context digester above is reused as the packet's orientation + citations block — not duplicated.
 
@@ -112,7 +110,7 @@ Activates when **all** hold: the size threshold above is met AND `/age` is not i
 
 **Seam 5 — Graph freshness.** The orchestrator calls `build_or_update_graph_tool` **once** before fan-out (per `## Preferred tools and fallbacks` above). The packet carries a "graph fresh as of this run" marker. Workers never call `build_or_update_graph_tool`, but they MAY issue read-only code-review-graph queries (e.g. `get_impact_radius_tool`, `get_review_context_tool`, `get_hub_nodes_tool`, `get_bridge_nodes_tool`) against the pre-built graph for impact and hotspot framing — the same evidence the single-parent path uses for large diffs.
 
-**Output mode-invariance (invariant).** The findings report (`.cheese/age/<slug>.md`) is identical in shape — same dedup rule, same severity grouping, same finding format — whether produced by the single-parent path or fan-out mode. Only the internal execution path differs. (Mirrors the inline-degrade invariant at `### Inline-degrade mode` below.)
+**Output mode-invariance (invariant).** The findings report (`.cheese/age/<slug>.md`) is identical in shape — same dedup rule, same severity grouping, same finding format — whether produced by the single-parent path or fan-out mode. Only the internal execution path differs. This invariant also holds for inline-degrade mode (see `### Inline-degrade mode`).
 
 ## Output
 
@@ -170,7 +168,7 @@ Empty severity sections are omitted entirely. When ten or more `low` findings ex
 
 Suppressed lows feed the cure-selection table only when `--full` is passed.
 
-`status: ok` when the review completed. `status: halt: <reason>` when evidence was unreachable in a way that blocks honest review. `next: cure` when at least one finding meets the `medium+` floor (medium-or-above, or a cheap contained-fix low) and the chain has cure passes remaining; `next: done` when no finding meets the `medium+` floor or the two-cure-pass cap has been reached.
+`status: ok` when the review completed. `status: halt: <reason>` when evidence was unreachable in a way that blocks honest review. `next: cure` when at least one finding meets the **medium+ floor**; `next: done` when no finding meets it or the two-cure-pass cap has been reached.
 
 Then print:
 
@@ -241,15 +239,15 @@ When invoked with `--auto`:
 
 - Skip the handoff gate.
 - If two cure passes have already completed (cap reached), stop and surface the final report — do not invoke `/cure` again even if findings remain.
-- Otherwise, if any finding meets the `medium+` floor (medium-or-above, or a `Low` whose `fix-cost-now: contained`), invoke `/cure <slug> --auto --stake medium+` (forward `--open-pr` when it is in scope) and increment the cure-pass count when it returns.
-- If no finding meets the `medium+` floor (no medium-or-above and no cheap lows remain), stop the chain with a one-line "auto chain clean" note and the report path.
+- Otherwise, if any finding meets the **medium+ floor** — medium-or-above, or a `Low` whose `fix-cost-now: contained` (defined here as the `medium+` floor) — invoke `/cure <slug> --auto --stake medium+` (forward `--open-pr` when it is in scope) and increment the cure-pass count when it returns.
+- If no finding meets the **medium+ floor**, stop the chain with a one-line "auto chain clean" note and the report path.
 
 ### When invoked from /ultracook
 
 `/ultracook` spawns age as a fresh-context sub-agent and owns the chain itself. Honour the no-chain override:
 
 - Write `.cheese/age/<slug>.md` (with the handoff slug at the top) and stop. Do not invoke `/cure <slug> --auto --stake medium+` from inside the sub-agent.
-- Set `next:` from what you observe on this run, not from any guess about chain position. `next: cure` when at least one finding meets the `medium+` floor (medium-or-above, or a cheap contained-fix low); `next: done` when none do.
+- Set `next:` from what you observe on this run, not from any guess about chain position. `next: cure` when at least one finding meets the **medium+ floor**; `next: done` when none do.
 - The two-cure-pass cap is enforced by ultracook's fixed chain length, not by age's `next:` field. Fresh-context age cannot count prior cure passes anyway, so this is the only honest contract. The orchestrator uses `next: done` for early-stop signalling; the natural terminal stop is the chain table running out of entries.
 
 ### Inline-degrade mode (invoked from a sub-agent, e.g. /cheese-factory curd worker)
@@ -259,7 +257,7 @@ When `/age` detects it is running as a sub-agent (the parent passes the `invoked
 Detection mechanism: scan the invoking prompt for an `invoked-from:` line — values like `cheese-factory-curd`, `fromagerie-curd`, or any harness-specific marker the orchestrator passes in. When present, switch modes:
 
 - Run every dimension's review inline. Do not fork the read-only review-context sub-agent gate (`## Sub-agent context gate` above is skipped under inline-degrade).
-- Output (the findings report + handoff slug) is identical between fan-out and inline-degrade modes — only the internal execution differs.
+- Output shape is mode-invariant — same findings report and handoff slug format whether fan-out or inline-degrade; see **Output mode-invariance** in `### Scale-triggered fan-out mode` above.
 - Honour the no-chain-forward directive as usual: write the slug and stop. Do not invoke `/cure` from the sub-agent — the orchestrator owns the chain.
 
 Inline-degrade is forced when the marker is present; there is no opt-out. Even above the scale-triggered fan-out threshold, the marker takes precedence — fan-out is forbidden when `/age` runs as a sub-agent because the harness nesting depth is already consumed. Spawning a deeper sub-agent from inside a curd worker can exceed the harness's nesting limit and fail silently — the marker is the only honest signal that the parent has already consumed the available depth.

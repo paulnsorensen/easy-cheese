@@ -15,16 +15,7 @@ allowed-tools: mcp__tilth__tilth_edit, mcp__tilth__tilth_read, Bash
 
 ## Capability detection
 
-Before the first call, verify tilth's edit tool is reachable:
-
-1. Check that `mcp__tilth__tilth_edit` is in your tool list. If only `tilth_read` and `tilth_search` are present, tilth was installed without `--edit`. Stop and report `"tilth MCP server is loaded but edit mode is disabled — re-install with 'tilth install <host> --edit'."`
-2. The first edit call is a probe by definition — if it returns a JSON-RPC transport error (not a hash mismatch), stop and report `"tilth MCP server present but unhealthy: <error>"`.
-3. Hash mismatches, syntax errors in the new content, or anchor-not-found are **content** issues — recover via the protocol below, do not bail.
-
-Hash-anchored file editing via **tilth MCP** (`tilth_edit`).
-Use hash anchors from tilth_read to make precise, surgical edits. Avoid
-rewriting whole files unless the size and change ratio justify it (see
-"When full-file rewrite is acceptable" below).
+Before the first edit call, verify `mcp__tilth__tilth_edit` is in your tool list. If absent, stop: `"tilth MCP server is loaded but edit mode is disabled — re-install with 'tilth install <host> --edit'."` If the first call returns a JSON-RPC transport error (not a hash mismatch), stop: `"tilth MCP server present but unhealthy: <error>"`. Hash mismatches and anchor-not-found are **content** issues — see [Hash Mismatch Handling](#hash-mismatch-handling).
 
 ---
 
@@ -72,16 +63,7 @@ tilth_edit({
 
 ### "Hash mismatch — file changed under me"
 
-```
-Error: Hash mismatch at line 44
-Expected: b2c
-Found: f9a
-```
-
-Re-read the section, capture the new anchors, retry once. If it mismatches
-again, **stop** — see "Hash Mismatch Handling → Repeated mismatches" below
-(`tilth_edit` has no fuzzy / search-replace mode, so blind retries lose
-races, not win them).
+See [Hash Mismatch Handling](#hash-mismatch-handling) for recovery steps.
 
 ---
 
@@ -102,7 +84,7 @@ tilth_edit uses **hash anchors** — unique identifiers for each line — to:
 
 ## Scope: when tilth_edit, when not
 
-`tilth_edit` owns **block edits to tracked source code** — function bodies, signatures, imports, single-line tweaks, multi-edit batches, and cross-file specific changes. Hash anchors give concurrency safety; the read-edit protocol is mandatory for any code change that matters.
+`tilth_edit` owns **block edits to tracked source code** — function bodies, signatures, imports, single-line tweaks, multi-edit batches, and cross-file changes. Hash anchors are race-safe; the read-edit protocol is mandatory for any code change that matters.
 
 For everything else, prefer the right tool:
 
@@ -117,32 +99,9 @@ For everything else, prefer the right tool:
 
 If the question is "which tool for this specific source-code block edit?" → `tilth_edit`. If it's "rewrite this pattern everywhere" → `sg --rewrite` with the dry-run protocol.
 
-### When LSP rename beats tilth_edit (if your harness has one)
+### Routing to LSP rename or Serena
 
-**easy-cheese does not install LSP** — it is whatever language servers your harness already exposes. There is one editing operation where an available LSP materially outperforms `tilth_edit`: **type-aware rename** of a symbol across the project.
-
-| Edit | Use this instead | Why LSP wins |
-|------|------------------|--------------|
-| Rename a function / class / variable across all type-correct usages, including aliased re-exports and generic instantiations | `textDocument/rename` (or the harness's rename refactor) | Returns a typechecker-validated `WorkspaceEdit`; covers aliased imports without textual collisions, and skips coincidental name matches in unrelated scopes. `tilth_edit` would need a separate read-edit cycle per call site, and `sg --rewrite` matches on syntax not type identity (overshoots on shadowed names, undershoots on aliased re-exports) |
-
-For everything else — block edits, signature changes, body rewrites, hand-written codemods — `tilth_edit` (one-off) and `sg --rewrite` (cross-cutting) remain the right tools. LSP rename is narrowly the best fit for **identifier renames specifically**; nothing else in LSP's edit surface improves on the cheez-write protocol.
-
-If no LSP is installed, or the rename touches a symbol the typechecker can't resolve (broken code, generated bindings), fall back to `sg --rewrite` with the dry-run-first protocol — see "Structural codemods" below.
-
-### When Serena beats `tilth_edit` for symbol-bounded edits (if your harness has it)
-
-[Serena](https://github.com/oraios/serena) is an LSP-driven MCP that exposes symbol-bounded edits as named tools. When Serena is configured for the codebase (`.serena/project.yml` present) and the edit is symbol-shaped, the **calling workflow skill** should route directly to Serena rather than entering `/cheez-write` — same pattern as the abstract LSP rename above, with a broader edit surface:
-
-| Edit | Serena tool | When to prefer over `tilth_edit` |
-|------|-------------|----------------------------------|
-| Rename a symbol type-correctly across the project | `mcp__serena__rename_symbol` | The LSP rename case above — Serena gives it a concrete tool |
-| Replace a whole function / class body by name | `mcp__serena__replace_symbol_body` | Skips the "read for anchors → edit" round-trip when the boundary is a named symbol |
-| Insert before / after a named symbol (e.g. add a method to a class, or a function next to its sibling) | `mcp__serena__insert_before_symbol`, `mcp__serena__insert_after_symbol` | No anchor needed for a moving boundary |
-| Delete a symbol and check for orphaned references | `mcp__serena__safe_delete_symbol` | Validates xrefs before the cut — `tilth_edit` would happily strand callers |
-
-`/cheez-write` itself stays tilth-only — its `allowed-tools` frontmatter does not include `mcp__serena__*` and shouldn't. The routing decision happens in the workflow skill *before* it enters `/cheez-write`, preserving the hash-anchor concurrency floor.
-
-**Caveat — no hash-anchor concurrency safety.** Serena's edits rely on LSP and file mtime, not the content-hash check that makes `tilth_edit` race-safe. The workflow skill should route to Serena only when the file is quiescent (no parallel writers, no in-flight `/cook` or `/cure` on the same path). Route back into `/cheez-write` whenever concurrency safety dominates, the symbol isn't LSP-resolvable (broken or generated code), the edit is sub-symbol (one line inside a function), or Serena is unavailable. The cheez-write floor — `tilth_edit` for everything that touches code from inside this skill — still applies; Serena is a routing alternative the caller chooses, not an in-skill acceleration.
+Pre-entry routing decisions — when to prefer LSP rename or Serena symbol-bounded edits over `tilth_edit` — are in [`references/routing.md`](references/routing.md).
 
 ---
 
@@ -221,35 +180,6 @@ tilth_edit({
 
 ---
 
-## Replacing Entire Functions
-
-This is the most common use case. The pattern:
-
-1. **Read the function** (outline first if file is large):
-   ```
-   tilth_read(path: "src/auth.ts")
-   # See: [44-89]  export fn handleAuth(req, res, next)
-
-   tilth_read(path: "src/auth.ts", section: "44-89")
-   # Get hash anchors
-   ```
-
-2. **Note start/end anchors** from the hashlined output.
-
-3. **Replace the entire function body:**
-   ```json
-   tilth_edit({
-     "path": "src/auth.ts",
-     "edits": [{
-       "start": "44:b2c",
-       "end": "89:e1d",
-       "content": "<your new function implementation>"
-     }]
-   })
-   ```
-
----
-
 ## Hash Mismatch Handling
 
 If the file changed since you read it:
@@ -314,14 +244,14 @@ Check these locations and update if needed.
 
 ## Common Patterns
 
-| Goal | Pattern | Reference |
-|------|---------|-----------|
-| Replace one line | single anchor, new `content` | [edit-patterns.md#single-line-replacement](references/edit-patterns.md#single-line-replacement) |
-| Replace a range | `start` + `end` anchors | [edit-patterns.md#multi-line-range-replacement](references/edit-patterns.md#multi-line-range-replacement) |
-| Delete a block | range with `content: ""` | [edit-patterns.md#delete-a-block](references/edit-patterns.md#delete-a-block) |
-| Insert after a line | anchor on that line, prepend its content | [edit-patterns.md#insert-after-a-line](references/edit-patterns.md#insert-after-a-line) |
-| Multi-edit in one file | `edits: [...]` ordered bottom-up | [edit-patterns.md#multiple-edits-in-one-call](references/edit-patterns.md#multiple-edits-in-one-call) |
-| Cross-file change | one `tilth_edit` call per file | [edit-patterns.md#edits-across-multiple-files](references/edit-patterns.md#edits-across-multiple-files) |
+| Goal | Reference |
+|------|-----------|
+| Replace one line | [edit-patterns.md#single-line-replacement](references/edit-patterns.md#single-line-replacement) |
+| Replace a range | [edit-patterns.md#multi-line-range-replacement](references/edit-patterns.md#multi-line-range-replacement) |
+| Delete a block | [edit-patterns.md#delete-a-block](references/edit-patterns.md#delete-a-block) |
+| Insert after a line | [edit-patterns.md#insert-after-a-line](references/edit-patterns.md#insert-after-a-line) |
+| Multi-edit in one file | [edit-patterns.md#multiple-edits-in-one-call](references/edit-patterns.md#multiple-edits-in-one-call) |
+| Cross-file change | [edit-patterns.md#edits-across-multiple-files](references/edit-patterns.md#edits-across-multiple-files) |
 
 ---
 

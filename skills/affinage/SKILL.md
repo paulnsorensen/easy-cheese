@@ -47,7 +47,7 @@ Flags:
 4. **Fetch comments.**
    - Inline threads: `gh api repos/<owner>/<repo>/pulls/<pr>/comments`. This REST endpoint returns individual review comments without thread-level resolution state, so the skill cannot filter on `isResolved` from this surface; it skips comments whose `position` is `null` (the diff has moved past the anchored line) unless `--include-outdated`. For true unresolved-only filtering, switch to the GraphQL `pullRequest.reviewThreads { isResolved }` endpoint — documented as a future enhancement.
    - Review bodies: `gh api repos/<owner>/<repo>/pulls/<pr>/reviews`. Filter to non-empty bodies. Dedupe against inline comments via `pull_request_review_id`.
-5. **Skip already-replied threads.** A thread whose most recent comment is from the resolved GitHub handle (env `RESPOND_GH_HANDLE` → `gh api user --jq .login` → `git config user.name`) has already been responded to; skip it. The same resolved handle is rendered in the reply footer as `agent on behalf of <handle>`. This keeps re-runs idempotent and makes `RESPOND_GH_HANDLE` the explicit footer knob.
+5. **Skip already-replied threads.** A thread whose most recent comment is from the resolved GitHub handle (see §Rules) has already been responded to; skip it. The same resolved handle is rendered in the reply footer as `agent on behalf of <handle>`. This keeps re-runs idempotent and makes `RESPOND_GH_HANDLE` the explicit footer knob.
 6. **Grade through the age lens.** For each input (comment, CI/build failure, OR fresh `/age` finding):
    - Classify dimension from the **code + claim** (or check type + failure summary, for CI items). See `skills/age/references/dimensions.md` for the dimension rubric.
    - **Build failures count, not just test failures.** A failing check is a finding whether the failure is a compile error, a lint/type-check failure, or a failing test — grade the `build.status: failing` checks from `affinage.pyz pr-status` and route them to `/cure` exactly like test failures. Tag CI-sourced items `[from-check:<job>]`.
@@ -59,10 +59,7 @@ Flags:
      - `## Needs-investigation` when the claim is plausible but requires evidence outside the diff (e.g., downstream caller in another repo).
      - `## Reviewer-rejected` only when the claim is **wrong or ungrounded** (the code is already correct, the reviewer misread it, or there is no real improvement) OR is valid but **a lot of follow-up work** (`fix-cost-now: moderate`/`sprawling` or `fix-cost-later: structural` — a refactor or scope expansion beyond this PR). Reject the wrong ones; defer the expensive ones. Per `skills/age/references/voice.md`, a justified push-back costs more than a small valid fix.
 7. **Write report** to `.cheese/affinage/pr-<n>.md` with the four-line handoff slug at the top, then the age-format body plus the two extra sections. See `## Output` below.
-8. **Act or ask.** By default affinage acts — auto-applies the recommended set and posts the drafted replies — and asks only on a genuine reason (a sprawling/structural fix in the recommended set, conflicting findings) or under `--safe`. Branch on what graded out (full gate shapes in `## Handoff`):
-   - **At least one finding in a severity section (`Blocker` / `High` / `Medium` / `Low`).** Compute the recommended composite (`all-medium, cheap`). With no reason to ask and no `--safe`: announce the selection in one line, **first run step 9** to post any drafted push-backs / investigating notes (they don't depend on cure's outcome, so they must reach GitHub even if `/cure` later halts), then dispatch `/cure <slug>` with locked `handoff_context:` and post the cure-dependent replies (step 10) when `/cure` returns. On a reason to ask or `--safe`: render the cure-selection table inline using `/cure`'s verbs (`skills/cure/references/selection.md`), pre-select the recommended composite (flagging heavy rows), ask via `shared/handoff-gate.md`, then proceed as above for the chosen selection; on `none` / `Stop`, run step 9 for the drafted replies and exit with the report path. If the recommended set is empty (only heavy/expensive items graded into severity sections), treat it as the reply-only branch below.
-   - **No severity-section findings, but `Reviewer-rejected` or `Needs-investigation` has items.** Skip `/cure` dispatch entirely — there is nothing to apply. By default run step 9 to post all drafted replies (push-backs + investigating notes). Under `--safe`, render a small gate first that lets the user pick `post all`, `post pushbacks only`, `skip posting`, or per-finding choices. Exit with `status: ok / next: done`. This mirrors the documented auto-mode "no findings meet the floor" branch (see `### Auto mode`).
-   - **Nothing graded into any section.** Exit cleanly with the report path; there is nothing to post or cure.
+8. **Act or ask** — per §Handoff.
 9. **Post non-cure replies** (runs whenever grading produced these items, with or without `/cure`). Post via `python3 ${CLAUDE_SKILL_DIR}/scripts/affinage.pyz post-reply`:
    - **Reviewer-rejected items** → post the pre-drafted push-back text from the affinage report.
    - **Needs-investigation items** → post `"Human investigating — will follow up."`
@@ -93,7 +90,7 @@ When `affinage.pyz pr-status` reports `merge.mergeable: CONFLICTING` or `merge.s
 
 1. Materialise the conflicts locally: `gh pr checkout <pr>`, then `git merge origin/<base>`. (`gh pr checkout` neither opens nor updates the PR, so it does not breach the no-`/gh` rule.)
 2. Hand off to `/melt`. It first checks for squash-merge residue and stops with remedies if found — surface those verbatim and do not auto-apply.
-3. After `/melt` resolves cleanly, the resolution commit is owned by `/melt` / `/cure`. Pushing the merge follows `/cure`'s push contract (push to the already-open PR after a clean cure).
+3. After `/melt` resolves cleanly, the resolution commit is owned by `/melt` / `/cure`. Pushing the resolved merge follows `/cure`'s push contract (§Rules).
 
 - **Default and `--auto` mode**: run the checkout + `/melt` automatically before dispatching `/cure`, then re-run `affinage.pyz pr-status` to confirm `mergeable` cleared. If `/melt` cannot resolve (manual kdiff3 needed, or squash residue), write `status: halt: merge-conflicts-need-human` and stop.
 - **`--safe` mode**: gate the checkout + `/melt` behind the handoff prompt — offer "Resolve merge conflicts" alongside the cure-selection options.
@@ -191,7 +188,7 @@ Auto-fixing the recommended set via `/cure` and posting the drafted replies (or,
 
 Empty severity sections are omitted entirely. `## Needs-investigation` and `## Reviewer-rejected` are omitted when no items land there.
 
-`status: ok` when grading completed; `status: halt: <reason>` when `gh` or `pr-status.py` failed in a way that blocks honest grading. `next: cure` when at least one finding meets the `medium+` floor (medium-or-above, or a cheap contained-fix low); `next: done` when none do.
+`status: ok` when grading completed; `status: halt: <reason>` when `gh` or `pr-status.py` failed in a way that blocks honest grading. `next:` is set per §Handoff — `cure` when ≥1 finding meets the `medium+` floor; `done` otherwise.
 
 ## Handoff
 
@@ -222,7 +219,9 @@ Present all four severity options on every run even when a severity band is empt
 - **Skip posting** — leave the report for later; post nothing.
 - **Per-finding** — free-text pick of which drafts to post.
 
-On the selection (or the default post-all), post via Flow step 9 and exit with `status: ok / next: done`. This mirrors the documented auto-mode "no findings meet the floor" branch (see `### Auto mode`).
+On the selection (or the default post-all), post via Flow step 9 and exit with `status: ok / next: done` — see `### Auto mode` § "no findings meet the floor" for the auto path.
+
+**Slug `next:` values.** Write `next: cure` when at least one finding meets the `medium+` floor (medium-or-above, or a cheap contained-fix low). Write `next: done` when no severity-section finding exists or all meeting items are empty-selection after floor resolution.
 
 On a non-empty cure selection (auto-selected by default or chosen at the gate), immediately dispatch `/cure <slug> [--safe] [--open-pr] [--hard]` with locked context:
 
@@ -248,11 +247,11 @@ When invoked with `--auto --stake <floor>`:
 - After `/cure --auto` and its downstream `/age --scope --auto` chain settle, post replies for the originally graded items only. Do NOT re-grade for findings discovered by `/age --scope`.
 - Reviewer-rejected items: post the pre-drafted push-back.
 - Needs-investigation items: post the human-investigating reply.
-- `/affinage` does not invoke `/gh` itself. The PR push is owned by `/cure`'s terminal contract: the final cure pass pushes to the already-open PR (and, with `--open-pr`, may open a new one). Propagate `--open-pr` to `/cure --auto` when it is in scope.
+- `/affinage` does not invoke `/gh` itself — push contract is in §Rules.
 
 The whole cure chain (cure → `/age --scope --auto` → up to the two-cure-pass cap) must run in the parent affinage context so the post-cure reply step still has the original graded findings (slug, ids, `from-comment:<id>` tags, drafted push-back text) in memory. Same in-session-memory contract as `/age --auto`'s two-pass cap. Spawning the cure chain in a sub-agent silently breaks reply posting — do not.
 
-If no findings meet the floor, skip the `/cure` dispatch, post replies for `Reviewer-rejected` + `Needs-investigation` items only, and exit with `status: ok / next: done / "no findings meet <floor>"`.
+If no findings meet the floor, skip the `/cure` dispatch, post replies for `Reviewer-rejected` + `Needs-investigation` items only, and exit with `status: ok / next: done`.
 
 ### --hard mode
 
@@ -264,11 +263,11 @@ If no findings meet the floor, skip the `/cure` dispatch, post replies for `Revi
 - Prefer fixing over pushing back. A valid, grounded nit whose fix is contained (`fix-cost-now: contained` — a few lines or a localized refactor) goes to `/cure` as a `Low` finding tagged `[from-comment:<id>]`; do not draft a push-back for it. Reserve `## Reviewer-rejected` for claims that are wrong/ungrounded or whose fix is a lot of work (`moderate`/`sprawling`/`structural`). See `skills/age/references/voice.md`.
 - Never auto-apply fixes from `/affinage` itself. Code fixes go through `/cure`; merge conflicts go through `/melt`.
 - Fresh `/age` runs only on standalone invocations (no upstream `handoff_context`) and only when `--no-age` is absent. Chained runs never re-review the diff.
-- Merge conflicts are resolved through `/melt`, not by hand. `gh pr checkout` to materialise conflicts is allowed — it neither opens nor updates the PR. Pushing the resolved merge follows `/cure`'s push contract (push to the already-open PR after a clean cure); `--safe` re-gates it.
+- Merge conflicts are resolved through `/melt`, not by hand. `gh pr checkout` to materialise conflicts is allowed — it neither opens nor updates the PR. Pushing follows `/cure`'s push contract (see next rule).
+- `/affinage` never invokes `/gh` itself. The PR push happens inside `/cure` after a clean cure (push to the already-open PR by default; `--open-pr` opens a new one; `--safe` re-gates).
 - Every posted reply ends with the literal `agent on behalf of <handle>` attribution via `${CLAUDE_SKILL_DIR}/scripts/affinage.pyz post-reply`, where `<handle>` is resolved from `RESPOND_GH_HANDLE` → `gh api user --jq .login` → `git config user.name`. Never call `gh api` directly to post.
 - Idempotent re-runs: skip threads where the latest comment is from the resolved handle. The REST `/comments` endpoint does not expose thread resolution, so honest idempotency relies on the latest-comment-from-self heuristic; switch to GraphQL `reviewThreads` if cross-session resolution-state visibility becomes required.
 - CI-sourced findings get no reply (no reviewer to notify).
-- `/affinage` never invokes `/gh` itself. The PR push happens inside `/cure` after a clean cure (push to the already-open PR by default; `--open-pr` opens a new one; `--safe` re-gates).
 - Apply the shared voice kernel (`skills/age/references/voice.md`): name confidence as `certain | speculating | don't know`; agree when no findings warrant grading.
 
 ## References

@@ -35,8 +35,6 @@ Optional flag: `--open-pr` — at the terminal, open a *new* PR when none exists
 4. **Terminal push** — after the third age spawn (or any earlier non-halt stop), if an open PR exists for the branch, dispatch `/gh` to commit + push the chain's changes to it (Rule 11 — the existing PR is the authorization). Open a *new* PR only when `--open-pr` is in scope. A halt never pushes.
 5. **Final summary** — print a four-line summary: passes completed, total findings applied / deferred, the final age-report path, and whether the PR was pushed (or the next-step nudge "review the diff, then `/gh` when ready" if no PR existed and `--open-pr` was absent).
 
-`/ultracook` opens a *new* PR only with `--open-pr`; otherwise it pushes to an already-open PR at the terminal and never creates one.
-
 ## Phases and slug paths
 
 The chain is fixed: seven spawns. The orchestrator walks the table top-to-bottom and stops after the last entry.
@@ -79,44 +77,9 @@ The override travels in the spawn prompt as the explicit no-chain directive: `Do
 
 Each phase's SKILL.md `## Auto mode` section honours this directive — see `skills/<phase>/SKILL.md` `### When invoked from /ultracook` for the per-phase contract amendment. Without the directive, sub-agent #1 would run the entire pipeline inside its own context and the per-phase fresh-context property would not be delivered.
 
-## Sub-agent contract — inheritance, not diminution
+## Sub-agent contract
 
-Each phase spawns a **full peer** sub-agent — same model as the parent, full tool access, full MCP access, full skill access. These are not focused mini-assistants:
-
-- `/cook` writes code across the changed files.
-- `/press` runs the project's test suite and adds tests.
-- `/age` reviews ten dimensions over the diff.
-- `/cure` applies fixes via `cheez-write` and re-runs test gates.
-
-Diminutive defaults (haiku model, restricted tools, `Explore`-style read-only workers) will choke phases that need to edit dozens of files or run real test suites.
-
-The spawn call must satisfy the five invariants (fresh context, full-peer inheritance, no-chain-forward, returns control, writes handoff slug) regardless of harness. For the complete per-harness invocation examples — Claude Code `Agent()`, GitHub Copilot CLI fleets, OpenAI Codex subagents, and the evaluation checklist for new harnesses — see [`../cheese-factory/references/spawn-primitive-reference.md`](../cheese-factory/references/spawn-primitive-reference.md).
-
-Claude Code example (one harness; adapt keyword names on other hosts):
-
-```
-Agent(
-  subagent_type: "general-purpose",   # never specialised
-  # model: omit — inherits parent's model. Do not pass haiku/sonnet here.
-  prompt: "Run /<phase> <slug> --auto for THIS PHASE ONLY. Write
-           .cheese/<phase>/<slug>.md with the handoff schema and stop.
-           Do not chain forward to the next phase even though your
-           auto-mode contract documents that. The /ultracook orchestrator
-           is driving the chain. Edit through /cheez-write; if you fall back
-           to the host `Edit`/`Write` tool, `Read` the file first."
-)
-```
-
-The sub-agent's stdout is operator-visible but **not** the chaining contract. The orchestrator must read `.cheese/<phase>/<slug>.md` to decide what happens next; never infer success or `next:` from the sub-agent's last line. Asking the sub-agent to echo its status to stdout would tempt a future maintainer to wire stdout-driven chaining back in.
-
-Rules:
-
-- **Do not downgrade the model.** Omit the model parameter so the sub-agent inherits the parent's model. Never pass a smaller tier (haiku, lighter task workers) for ultracook phases.
-- **Do not narrow `subagent_type`.** Use `general-purpose` (or the harness equivalent that grants full tool access). Do not pass `Explore`, `lsp-probe`, or any other read-only / scoped worker type.
-- **Do not restrict tools or MCP access.** Each phase needs Bash, Edit, Write, Read, the `cheez-*` skills, and any MCP servers the parent has. Restricting them is the failure mode the contract exists to prevent.
-- **Do pass the slug.** The phase skill resolves its own paths from the slug; `/ultracook` does not pre-compute paths for the sub-agent.
-
-The contract is "inheritance, not diminution" because most sub-agent patterns in this ecosystem (Explore, lsp-probe, whey-drainer, ricotta-reducer) are deliberately scoped down for cheap focused queries. `/ultracook` does the opposite: it spawns workers that are full peers of the parent, doing major work in their own context window.
+Each phase spawns a **full peer** sub-agent — same model as the parent, full tool access, full MCP access, full skill access. For the complete five-invariant specification, per-harness invocation examples (Claude Code `Agent()`, GitHub Copilot CLI fleets, OpenAI Codex), and the harness-evaluation checklist, see [`../cheese-factory/references/spawn-primitive-reference.md`](../cheese-factory/references/spawn-primitive-reference.md).
 
 ## Handoff slug schema
 

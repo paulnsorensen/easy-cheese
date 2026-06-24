@@ -1,6 +1,6 @@
 ---
 name: culture
-description: Primarily the agent's internal-thinking skill — invoke it silently to model a problem, identify trade-offs, and decide what to do, BEFORE asking the user anything or dispatching another skill. Workflow skills call `/culture` as their step-1 reasoning pass; the agent does not surface the dialogue. Only treat this as a user-facing skill when the user has explicitly opted out of writes — phrases like "no writes", "just rubber-duck this", "let's only talk", "/culture". In the user-facing path it is a sustained domain-modeling partner that investigates deeply, defers convergence, and ends every session by writing a durable `/wheypoint` handoff so the work resumes later. Culture never writes to production code, never commits, never opens PRs. If the dialogue reveals real work, recommend `/mold` (fuzzy → spec) or `/cook` (clear ask → code) and stop. Before `/mold` or `/cook`.
+description: Primarily the agent's internal-thinking skill — invoke it silently to model a problem, identify trade-offs, and decide what to do, BEFORE asking the user anything or dispatching another skill. Workflow skills call `/culture` as their step-1 reasoning pass; the agent does not surface the dialogue. Only treat this as a user-facing skill when the user has explicitly opted out of writes — phrases like "no writes", "just rubber-duck this", "let's only talk", "/culture". Culture never writes to production code, never commits, never opens PRs. If the dialogue reveals real work, recommend `/mold` (fuzzy → spec) or `/cook` (clear ask → code) and stop. Before `/mold` or `/cook`.
 license: MIT
 ---
 
@@ -34,7 +34,7 @@ Default the model's own contribution to maximum useful depth — full pseudocode
 
 ## Preferred tools and fallbacks
 
-Code search and reading go through the `cheez-*` skills (`/cheez-search`, `/cheez-read`) — see those skills for tool selection rules. Blast-radius reads specifically use `cheez-search` callers (`kind: "callers"`) plus `tilth_deps` (read-only shape check); culture stops at the verdict and never drafts signatures.
+Code search and reading go through the `cheez-*` skills (`/cheez-search`, `/cheez-read`) — see those skills for tool selection rules. Blast-radius reads specifically use `cheez-search` callers (`kind: "callers"`) plus `tilth_deps` (read-only shape check).
 
 Beyond `cheez-*` there are culture-specific tools:
 
@@ -47,11 +47,7 @@ Missing optional tools should not interrupt the conversation. In internal mode k
 
 ## Output
 
-Return a short conversational summary:
-
-- Current understanding
-- Trade-offs or options
-- Open questions
+See Flow step 5 — compact summary and confidence-tagged open questions are defined there.
 
 ## Handoff slug
 
@@ -85,9 +81,8 @@ After a non-stop selection, run the selected downstream skill immediately with t
 
 ## Rules
 
-- No production-code writes, no commits, no PRs. The only sanctioned write is the end-of-session wheypoint, delegated to `/wheypoint`; user-facing sessions always write one, internal mode writes nothing.
+- No production-code writes, no commits, no PRs — see `## Invariant`. The only sanctioned write is the end-of-session wheypoint, delegated to `/wheypoint`.
 - Ask one useful question at a time when the user is exploring.
-- Prefer clarity over completeness.
 - Agree when agreement is warranted; do not manufacture counterpoints to seem balanced.
 - When external evidence raises an alternative ("X uses Y or Z"), name it as a trade-off in the dialogue and a candidate option — never silently recommend "add both" or "expose a knob". Design choices need explicit user adjudication, not agent inference from a citation.
 - Apply the shared voice kernel (lives at `skills/age/references/voice.md` in this repo): lead with the answer, flag confidence as `certain | speculating | don't know`, steelman, track contradictions across turns.

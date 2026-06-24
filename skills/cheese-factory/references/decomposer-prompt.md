@@ -37,8 +37,8 @@ share files.
 
 ## Validation
 
-The orchestrator will run `scripts/validate_manifest.py` on your output for required
-sections and field shapes, then `scripts/validate_decomposition.py` against the checks
+The orchestrator will run `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz validate_manifest` on your output for required
+sections and field shapes, then `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz validate_decomposition` against the checks
 below. Your output will be rejected on any failure:
 
 - **Behaviour overlap** — each curd describes one behaviour (criterion 1).
