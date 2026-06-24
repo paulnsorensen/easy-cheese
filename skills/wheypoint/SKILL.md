@@ -1,6 +1,6 @@
 ---
 name: wheypoint
-description: Mark a checkpoint in the current conversation — compact it into a durable handoff document so a fresh agent can resume the work without context loss. Use when the user wants to preserve session state for a later or parallel session — phrases like "hand this off", "write a handoff", "drop a wheypoint", "checkpoint this", "compact the conversation", "I'm running low on context", "save where we are for the next session", "prep a handoff for another agent", "/wheypoint". Writes `.cheese/notes/<slug>.md` with a resumable handoff slug, a state-mapped suggested-skills section, and redacted secrets, then points the user at `/cheese --continue <slug>`. Use even when the user just says "wrap up" or "I need to clear context" mid-task. Do NOT use for design-only no-write reasoning notes (`/culture`) or for per-phase pipeline handoffs — `/cook`, `/press`, `/age`, `/cure` already write their own slugs. Before `/cheese --continue`.
+description: Mark a checkpoint in the current conversation — compact it into a durable handoff document so a fresh agent can resume the work without context loss. Use when the user wants to preserve session state for a later or parallel session — phrases like "hand this off", "write a handoff", "drop a wheypoint", "checkpoint this", "compact the conversation", "I'm running low on context", "save where we are for the next session", "prep a handoff for another agent", "/wheypoint". Writes `.cheese/notes/<slug>.md` with a resumable handoff slug, a state-mapped suggested-skills section, and redacted secrets, then points the user at `/cheese --continue <slug>`. Use even when the user just says "wrap up" or "I need to clear context" mid-task. `/culture` invokes `/wheypoint` to write its end-of-session handoff. Do NOT use for per-phase pipeline handoffs — `/cook`, `/press`, `/age`, `/cure` already write their own slugs. Before `/cheese --continue`.
 license: MIT
 ---
 
@@ -8,7 +8,7 @@ license: MIT
 
 A wheypoint is a waypoint on the cheese's journey: a marked spot you can navigate back to. Use this skill when the conversation holds work-in-progress that a different agent (or a future you, in a fresh context) needs to continue. `/wheypoint` captures just enough state for a cold reader to resume, and nothing they could already read elsewhere.
 
-Do not use it for no-write design dialogue (`/culture`) or as a substitute for a phase skill's own handoff slug. `/cook`, `/press`, `/age`, and `/cure` write their slugs at clean phase boundaries; `/wheypoint` is for the messy mid-task moment when none of those apply and context is about to be lost.
+User-facing `/culture` sessions end by invoking `/wheypoint` to capture the modeling as a resumable handoff. Do not use it as a substitute for a phase skill's own handoff slug: `/cook`, `/press`, `/age`, and `/cure` write their slugs at clean phase boundaries. `/wheypoint` is for culture's end-of-session checkpoint and for the messy mid-task moment when no phase slug applies and context is about to be lost.
 
 ## Inputs
 

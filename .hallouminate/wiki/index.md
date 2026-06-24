@@ -13,10 +13,12 @@ git-tracking axis (`shared/formatting.md:103`).
 ## Topics
 
 <!-- HALLOUMINATE:INDEX-START -->
-- [architecture](./architecture.md) — skills-only collection, progressive disclosure, the cheese pipeline, portability design center.
-- [tooling](./tooling.md) — `just check`/`just ci`, validators, tilth/`cheez-*` hard-fail, `.pyz` bundles, CI workflows.
-- [wiki-conventions](./wiki-conventions.md) — how to author entries here, plus the durable-vs-transient boundary table.
-- [workflow-invariants](./workflow-invariants.md) — pipeline ordering, two-key handshake, handoff gates, `just check` single gate.
+- [adr/](./adr/index.md)
+- [architecture](./architecture.md) — Architecture of easy-cheese
+- [skill-parity-analysis](./skill-parity-analysis.md) — Skill-parity analysis
+- [tooling](./tooling.md) — Tooling
+- [wiki-conventions](./wiki-conventions.md) — Wiki conventions for easy-cheese
+- [workflow-invariants](./workflow-invariants.md) — Workflow invariants
 <!-- HALLOUMINATE:INDEX-END -->
 
 ## How to use this index
