@@ -28,12 +28,13 @@ Optional flag: `--open-pr` — at the terminal, open a *new* PR when none exists
 
 1. **Resolve slug** — derive `<slug>` from the input. If a spec path is given, the slug is the basename without `.md`; if a bare slug is given, confirm the spec exists at the durable path the spawned `/cook` resolves (`python3 ${CLAUDE_SKILL_DIR}/scripts/cook.pyz artifact-path specs <slug>`; see `shared/formatting.md` § Corpus location).
 2. **Guard against re-entry** — if any of `.cheese/{cook,press,age,cure}/<slug>.md` already exist, stop with a one-line list of the existing handoffs and tell the user to either run `/cheese --continue <slug>` to resume from the latest phase or `rm` the relevant files to start fresh. Never silently wipe.
-3. **Phase loop** — for each phase in `cook, press, age, cure, age, cure, age`, spawn a fresh sub-agent (see `## Sub-agent contract` below), wait for it to return, read `.cheese/<phase>/<slug>.md`, and decide:
+3. **Phase loop** — for each phase in `cook, press, age, cure, age, cure, age`, spawn a fresh sub-agent (see `## Sub-agent contract` below), wait for it in 60-second bounded intervals, read `.cheese/<phase>/<slug>.md` after the sub-agent returns, and decide:
    - `status:` starts with `halt` → surface the halt reason and stop.
    - `next:` is `done` and the phase is age → stop early with a clean summary (the diff is clean at the medium+ severity floor; cure has nothing to apply).
    - Otherwise → continue to the next phase.
-4. **Terminal push** — after the third age spawn (or any earlier non-halt stop), if an open PR exists for the branch, dispatch `/gh` to commit + push the chain's changes to it (Rule 11 — the existing PR is the authorization). Open a *new* PR only when `--open-pr` is in scope. A halt never pushes.
-5. **Final summary** — print a four-line summary: passes completed, total findings applied / deferred, the final age-report path, and whether the PR was pushed (or the next-step nudge "review the diff, then `/gh` when ready" if no PR existed and `--open-pr` was absent).
+4. **Watchdog recovery** — while a phase is still running, poll once every 60 seconds. Each poll checks whether the worker returned, whether `.cheese/<phase>/<slug>.md` exists, whether that file is a checkpoint (`checkpoint: true`) or final handoff, whether its `verification: running` line names an active long gate, and whether `git status --short` is dirty. The 15-minute budget is the first watchdog threshold, not an automatic kill. If the phase crosses that threshold with a dirty worktree or a checkpoint whose `verification: running` line is still present, send exactly one interrupt message: `Please finish the current gate or overwrite .cheese/<phase>/<slug>.md with status: halt: <reason>.` A successful response is either the worker returning or refreshing the handoff. If one more 60-second interval passes without either response, stop the chain, surface the dirty-file list and latest handoff path if present, and do not spawn the next phase.
+5. **Terminal push** — after the third age spawn (or any earlier non-halt stop), if an open PR exists for the branch, dispatch `/gh` to commit + push the chain's changes to it (Rule 11 — the existing PR is the authorization). Open a *new* PR only when `--open-pr` is in scope. A halt never pushes.
+6. **Final summary** — print a four-line summary: passes completed, total findings applied / deferred, the final age-report path, and whether the PR was pushed (or the next-step nudge "review the diff, then `/gh` when ready" if no PR existed and `--open-pr` was absent).
 
 `/ultracook` opens a *new* PR only with `--open-pr`; otherwise it pushes to an already-open PR at the terminal and never creates one.
 
@@ -100,6 +101,9 @@ Agent(
   # model: omit — inherits parent's model. Do not pass haiku/sonnet here.
   prompt: "Run /<phase> <slug> --auto for THIS PHASE ONLY. Write
            .cheese/<phase>/<slug>.md with the handoff schema and stop.
+           Before any verification command expected to run longer than two
+           minutes, write a checkpoint handoff with `checkpoint: true`
+           and `verification: running <command>`.
            Do not chain forward to the next phase even though your
            auto-mode contract documents that. The /ultracook orchestrator
            is driving the chain. Edit through /cheez-write; if you fall back
@@ -118,6 +122,21 @@ Rules:
 
 The contract is "inheritance, not diminution" because most sub-agent patterns in this ecosystem (Explore, lsp-probe, whey-drainer, ricotta-reducer) are deliberately scoped down for cheap focused queries. `/ultracook` does the opposite: it spawns workers that are full peers of the parent, doing major work in their own context window.
 
+## Checkpoint handoffs before long gates
+
+A phase worker must not leave the orchestrator with a dirty worktree and no resumable state while it runs slow verification. Before starting any verification command expected to run longer than two minutes, the worker writes or refreshes `.cheese/<phase>/<slug>.md` as a checkpoint handoff: the normal slug path, the normal schema, plus explicit checkpoint and verification fields.
+
+```markdown
+status: ok
+next: <next-phase>
+artifact: .cheese/<phase>/<slug>.md
+<one-line orientation: implementation is complete enough for this phase; verification is running>
+checkpoint: true
+verification: running `<command>`
+```
+
+`checkpoint: true` is the discriminator. It means the file is a recovery artifact, not permission for the orchestrator to advance early; `/ultracook` still waits for the sub-agent to return before moving to the next phase. A final handoff omits `checkpoint:` or writes `checkpoint: false`, and is only valid after the worker has finished the gate. If verification later fails, the worker overwrites the same slug with `status: halt: <failing gate>` and the failing command. If the worker wedges, the orchestrator surfaces the checkpoint path and dirty-file list instead of waiting indefinitely.
+
 ## Handoff slug schema
 
 Every phase writes its handoff slug to `.cheese/<phase>/<slug>.md` with the following minimum shape (prepended as frontmatter or inline at the top of richer reports such as age and press):
@@ -129,7 +148,7 @@ artifact: <path-to-richer-report-if-any>
 <one-line orientation: what this phase did>
 ```
 
-`status: ok` means the phase finished cleanly and `next` names the next phase the chain should run. `status: halt: <reason>` means the automatic `/ultracook` chain stops and surfaces the reason verbatim; for cook and press slugs, `next` still names the next runnable phase if a human later chooses to resume via `/cheese --continue <slug>` (age and cure halt slugs keep their finding-driven `next:` values — `cure | done` and `age | done` respectively). `next: done` is terminal: age writes it when the diff is clean at the medium+ severity floor (early-stop signal), and other phases use it only when no runnable resume phase exists. The two-cure-pass cap is enforced by chain length, not by `next: done` — see `### Cap enforcement` above.
+`status: ok` means the phase finished cleanly and `next` names the next phase the chain should run. `status: halt: <reason>` means the automatic `/ultracook` chain stops and surfaces the reason verbatim; for cook and press slugs, `next` still names the next runnable phase if a human later chooses to resume via `/cheese --continue <slug>` (age and cure halt slugs keep their finding-driven `next:` values — `cure | done` and `age | done` respectively). `next: done` is terminal: age writes it when the diff is clean at the medium+ severity floor (early-stop signal), and other phases use it only when no runnable resume phase exists. A handoff with `checkpoint: true` is the only exception to those advance semantics: its `status: ok` reports a recovery artifact, not permission for the orchestrator to advance. The two-cure-pass cap is enforced by chain length, not by `next: done` — see `### Cap enforcement` above.
 
 For phases that already write rich reports (`/age`, `/press`, `/cure` once extended, `/cook` once extended), the slug schema is prepended at the top of the same file — there is no second file. The schema is the contract; the body is whatever the phase normally writes.
 
