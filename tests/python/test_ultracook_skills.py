@@ -650,3 +650,306 @@ class TestMoldHighBlastIsHighOnly:
             "mold's standard handoff branch must explicitly include medium "
             "so the verdict routing is unambiguous"
         )
+
+
+# ---------------------------------------------------------------------------
+# wheypoint-next-contract-v2 — gated: status, research/think next: values,
+# next: hold, missing-next:-is-malformed, the inline next: list + order:,
+# and the derive-from-blockers authoring rule.
+#
+# The audit behind this spec found 17/69 slugs shipped a `next:` header that
+# contradicted their own body, all carrying `status: ok`. These tests lock
+# the five contract clauses that close that gap so a future edit cannot
+# silently drop one and reopen the misfire. They assert on the prose
+# contract in wheypoint (authoring schema) and cheese (--continue routing),
+# and keep two regression guards proving the additive changes did not break
+# the existing `status: ok` + pipeline `next:` path.
+# ---------------------------------------------------------------------------
+
+
+class TestWheypointGatedStatus:
+    """`status:` must gain a third value, `gated:`, distinct from `ok` and
+    `halt:`. It means work is fine but the next step is blocked on a human
+    decision — the value that produces the stop-and-ask-direction path the
+    audit found was missing."""
+
+    def test_status_enum_lists_gated(self) -> None:
+        body = _skill("wheypoint")
+        # The header schema line must show all three status values.
+        assert "status: ok | gated:" in body and "halt:" in body, (
+            "wheypoint status: enum must read `ok | gated: <...> | halt: <...>`"
+        )
+
+    def test_gated_means_decision_not_auto_dispatch(self) -> None:
+        body = _skill("wheypoint")
+        body_lower = body.lower()
+        assert "gated:" in body, "wheypoint must document the gated: status value"
+        # gated: is defined as a human-decision gate, not an auto-dispatch.
+        assert "decision" in body_lower, (
+            "gated: must be defined as a blocked-on-human-decision state"
+        )
+
+
+class TestCheeseGatedRouting:
+    """`/cheese --continue` must route `gated:` to an ask-direction prompt
+    (research / decide / build) and dispatch nothing until the user picks —
+    the explicit fix for the realized misfire (a binary design popup that
+    presumed `decide`)."""
+
+    def test_gated_branch_present(self) -> None:
+        body = _skill("cheese")
+        body_lower = body.lower()
+        assert "gated:" in body, (
+            "cheese --continue must document a gated: routing branch"
+        )
+        # The three directions the reader must offer.
+        assert "research" in body_lower and "decide" in body_lower and "build" in body_lower, (
+            "gated: branch must ask the user which direction: research / decide / build"
+        )
+
+    def test_gated_does_not_auto_dispatch(self) -> None:
+        body = _skill("cheese")
+        body_lower = body.lower()
+        # The clause must forbid auto-dispatch and the presumptive popup.
+        assert "dispatch nothing" in body_lower or "do not auto-dispatch" in body_lower or (
+            "not" in body_lower and "auto-dispatch" in body_lower
+        ), "gated: branch must dispatch nothing until the user picks a direction"
+
+
+class TestWheypointReadonlyNextValues:
+    """Single-value `next:` must accept `briesearch | culture | explore`
+    so 'just go research this' is expressible as a bare next:, and these
+    auto-dispatch under status: ok (read-only, low-risk)."""
+
+    def test_next_enum_lists_readonly_kickoffs(self) -> None:
+        body = _skill("wheypoint")
+        for value in ("briesearch", "culture", "explore"):
+            assert value in body, (
+                f"wheypoint next: enum must include the read-only kickoff `{value}`"
+            )
+
+    def test_readonly_values_documented_as_auto_dispatch(self) -> None:
+        body = _skill("wheypoint")
+        body_lower = body.lower()
+        assert "read-only" in body_lower, (
+            "wheypoint must mark briesearch/culture/explore as read-only kickoffs"
+        )
+
+
+class TestCheeseReadonlyAutoDispatch:
+    """`/cheese --continue` must auto-dispatch `next: briesearch|culture|
+    explore` when `status: ok` — frictionless research kickoff, not gated."""
+
+    def test_readonly_kickoff_branch_present(self) -> None:
+        body = _skill("cheese")
+        body_lower = body.lower()
+        for value in ("briesearch", "culture", "explore"):
+            assert value in body, (
+                f"cheese --continue must route the read-only kickoff `{value}`"
+            )
+        assert "auto-dispatch" in body_lower, (
+            "read-only kickoffs must auto-dispatch under status: ok"
+        )
+
+
+class TestWheypointHoldAndMissingNext:
+    """`next: hold` (restore orientation, wait, dispatch nothing) and the
+    rule that a missing `next:` is malformed — authors must declare intent
+    explicitly; `hold` is the value for 'no action'."""
+
+    def test_next_enum_lists_hold(self) -> None:
+        body = _skill("wheypoint")
+        assert "hold" in body, "wheypoint next: enum must include `hold`"
+
+    def test_hold_distinct_from_done(self) -> None:
+        body = _skill("wheypoint")
+        body_lower = body.lower()
+        # hold must be defined as wait-for-instruction, distinct from done.
+        assert "hold" in body and "done" in body_lower, (
+            "wheypoint must distinguish hold (wait) from done (finished)"
+        )
+
+    def test_missing_next_is_malformed(self) -> None:
+        body = _skill("wheypoint")
+        body_lower = body.lower()
+        assert "malformed" in body_lower, (
+            "wheypoint must state a missing next: is a malformed handoff"
+        )
+
+
+class TestCheeseHoldAndMissingNext:
+    """`/cheese --continue` must treat `next: hold` as terminal-surface
+    (orientation, no dispatch) and a missing `next:` as malformed (flag,
+    no guess, no defaulting to a phase)."""
+
+    def test_hold_is_surface_no_dispatch(self) -> None:
+        body = _skill("cheese")
+        body_lower = body.lower()
+        assert "hold" in body, "cheese --continue must route next: hold"
+        # hold surfaces orientation and stops without dispatching.
+        assert "without dispatching" in body_lower or "stop without dispatch" in body_lower or (
+            "hold" in body_lower and "wait" in body_lower
+        ), "next: hold must surface orientation and stop without dispatching"
+
+    def test_missing_next_flagged_not_guessed(self) -> None:
+        body = _skill("cheese")
+        body_lower = body.lower()
+        assert "malformed handoff: next: required" in body, (
+            "cheese --continue must flag a missing next: with the exact message"
+        )
+        # It must refuse to guess or default to a phase.
+        assert "do not guess" in body_lower or "guess" in body_lower, (
+            "missing next: must be flagged, not guessed or defaulted"
+        )
+
+
+class TestWheypointNextListForm:
+    """Multi-value `next:` list form with a required `order:` — kicks off
+    several read-only follow-ups from one handoff. Restricted to read-only
+    skills; parallel writes still need the heavy mode: parallel + tasks:."""
+
+    def test_list_form_documented(self) -> None:
+        body = _skill("wheypoint")
+        # The bracketed list shape and the required order: key.
+        assert "next: [" in body, (
+            "wheypoint must document the inline next: list form `next: [<skill> \"<arg>\", ...]`"
+        )
+        assert "order:" in body, "next: list form must document the order: key"
+        assert "order: parallel" in body and "order: sequential" in body, (
+            "next: list must document both parallel and sequential order"
+        )
+
+    def test_order_required_for_list(self) -> None:
+        body = _skill("wheypoint")
+        body_lower = body.lower()
+        assert "required" in body_lower and "order:" in body, (
+            "order: must be documented as required when next: is a list"
+        )
+
+    def test_list_restricted_to_readonly(self) -> None:
+        body = _skill("wheypoint")
+        body_lower = body.lower()
+        # The inline list must be restricted to read-only skills, with the
+        # heavy tasks: block named as the path for parallel writes.
+        assert "read-only" in body_lower, (
+            "wheypoint must restrict the inline next: list to read-only skills"
+        )
+        assert "tasks:" in body, (
+            "wheypoint must point parallel writes at the heavy mode: parallel + tasks: block"
+        )
+
+
+class TestCheeseNextListRouting:
+    """`/cheese --continue` must parse a `next:` list with required
+    `order:`, dispatch parallel (concurrent read agents) or sequential, and
+    reject non-read-only skills with a pointer to the heavy tasks: block."""
+
+    def test_list_branch_present(self) -> None:
+        body = _skill("cheese")
+        body_lower = body.lower()
+        assert "next:" in body and "list" in body_lower, (
+            "cheese --continue must document a next:-is-a-list branch"
+        )
+        assert "order:" in body, "list branch must parse the order: key"
+
+    def test_order_required_else_stop(self) -> None:
+        body = _skill("cheese")
+        body_lower = body.lower()
+        # order: missing -> stop and ask for a corrected handoff.
+        assert "order:" in body and "required" in body_lower, (
+            "list branch must treat order: as required"
+        )
+
+    def test_parallel_and_sequential_dispatch(self) -> None:
+        body = _skill("cheese")
+        body_lower = body.lower()
+        assert "order: parallel" in body and "order: sequential" in body, (
+            "list branch must handle both order: parallel and order: sequential"
+        )
+        # Parallel fans out concurrent read agents in the same turn.
+        assert "concurrent" in body_lower or "same turn" in body_lower, (
+            "order: parallel must dispatch concurrent read agents in the same turn"
+        )
+
+    def test_rejects_write_skills_in_inline_list(self) -> None:
+        body = _skill("cheese")
+        body_lower = body.lower()
+        # A write/pipeline skill in the inline list must be rejected and
+        # routed to the heavy tasks: block (which carries write isolation).
+        assert "reject" in body_lower, (
+            "inline list must reject write/pipeline skills"
+        )
+        assert "tasks:" in body, (
+            "rejection must point at the heavyweight mode: parallel + tasks: block"
+        )
+
+
+class TestWheypointDeriveNextFromBlockers:
+    """The root-cause authoring rule: read the body's Open-questions/blockers
+    section before writing the header, and derive next: from the blockers,
+    not optimism. An unresolved blocker means status: gated:, never ok + a
+    bare actionable next:. The Suggested-skills map must wire session states
+    to the new values."""
+
+    def test_derive_from_blockers_rule_present(self) -> None:
+        body = _skill("wheypoint")
+        body_lower = body.lower()
+        # Must instruct reading the blockers section before authoring next:.
+        assert "open questions and blockers" in body_lower or "blockers" in body_lower, (
+            "wheypoint must tell the author to read the Open-questions/blockers section"
+        )
+        # The derive-from-blockers-not-optimism rule.
+        assert "optimism" in body_lower or "derive" in body_lower, (
+            "wheypoint must state next: derives from blockers, not optimism"
+        )
+
+    def test_blocker_means_gated_not_ok(self) -> None:
+        body = _skill("wheypoint")
+        body_lower = body.lower()
+        # An unresolved blocker must force gated:, never ok + bare next:.
+        assert "gated:" in body and ("never" in body_lower), (
+            "wheypoint must state an unresolved blocker is gated:, never status: ok "
+            "plus a bare actionable next:"
+        )
+
+    @pytest.mark.parametrize(
+        "state_value",
+        [
+            "briesearch",  # research wanted
+            "gated:",      # decision pending
+            "hold",        # compacting / no action
+        ],
+    )
+    def test_suggested_skills_map_includes_new_values(self, state_value: str) -> None:
+        body = _skill("wheypoint")
+        assert state_value in body, (
+            f"wheypoint Suggested-skills map must wire a session state to `{state_value}`"
+        )
+
+
+class TestNextContractV2BackwardCompatible:
+    """Regression guards: the v2 changes are additive. An existing slug
+    (status: ok + a pipeline next:, no mode:) and an existing mode: parallel
+    + tasks: slug must both still route exactly as before."""
+
+    def test_status_ok_pipeline_phase_still_routes(self) -> None:
+        body = _skill("cheese")
+        # The original status: ok + pipeline-phase branch must survive,
+        # listing the canonical pipeline phases.
+        assert "status:" in body and "is `ok`" in body, (
+            "cheese --continue must keep the status: ok dispatch branch"
+        )
+        for phase in ("mold", "cook", "press", "age", "cure", "affinage"):
+            assert phase in body, (
+                f"status: ok pipeline branch must still name the `{phase}` phase"
+            )
+
+    def test_mode_parallel_tasks_still_documented(self) -> None:
+        body = _skill("cheese")
+        # The heavyweight write-isolation path must be untouched.
+        assert "mode: parallel" in body and "tasks:" in body, (
+            "the heavyweight mode: parallel + tasks: path must remain documented"
+        )
+        assert "worktree_strategy" in body, (
+            "parallel write-isolation strategy must remain documented"
+        )

@@ -28,14 +28,42 @@ Do not use it for no-write design dialogue (`/culture`) or as a substitute for a
 Prepend the standard resumable slug to the top of the file so `/cheese --continue` can route from it without reading the whole document:
 
 ```markdown
-status: ok | halt: <one-line reason>
-next: mold | cook | press | age | cure | affinage | tasks | done
+status: ok | gated: <one-line decision> | halt: <one-line reason>
+next: mold | cook | press | age | cure | affinage | briesearch | culture | explore | hold | tasks | done
 mode: single | parallel
 artifact: <path-to-richer-report, or PR ref (PR#<n> / URL) when next: affinage, else none>
 <one-line orientation: where the session is and what is mid-flight>
 ```
 
 `mode:` is optional for backwards compatibility; omitted mode means `mode: single`. In `mode: single`, `next:` names the skill the cold reader should run, which is the machine-readable form of the suggested-skills section below. Use `done` only when the work is genuinely finished and the handoff is a record, not a baton. `/cheese --continue <slug>` scans `.cheese/notes/<slug>.md` and dispatches `next:` directly; `/cheese --continue <absolute-note-path>` reads that handoff file directly when the user is outside the original repo. When `next: affinage`, record the PR reference (`PR#<n>` or its URL) in `artifact:` so the resume dispatches `/affinage <pr>` explicitly rather than relying on branch auto-detection.
+
+### `status:` values
+
+- **`ok`** — the next step is unblocked; `/cheese --continue` auto-dispatches `next:`.
+- **`gated: <one-line decision>`** — work is fine, but the next step is blocked on a human decision. Name the decision in one line. On `/cheese --continue`, the reader surfaces the decision plus the body's open-questions/blockers and asks which direction (research / decide / build); it dispatches nothing until the user picks. Never collapse a gate into a bare actionable `next:` with `status: ok` — that is the misfire this contract exists to stop.
+- **`halt: <one-line reason>`** — a blocker stopped the work mid-flight; surface the reason, then dispatch the runnable `next:` (unchanged).
+
+### `next:` values
+
+Single-value `next:` is one of the pipeline phases (`mold | cook | press | age | cure | affinage`), a read-only kickoff (`briesearch | culture | explore`), `hold`, `tasks` (with `mode: parallel`), or `done`.
+
+- **`briesearch | culture | explore`** — read-only, low-risk next moves. Under `status: ok`, `/cheese --continue` auto-dispatches them directly (frictionless research/think kickoff). A decision that needs a human belongs in `status: gated:`, not here.
+- **`hold`** — restore orientation and wait for instruction; dispatch nothing. For compacting or stringing context along when no action is implied. Distinct from `done` (work finished, record only).
+- **A missing `next:` is a malformed handoff.** `/cheese --continue` flags it (`malformed handoff: next: required`) rather than guessing or defaulting. Declare intent explicitly — `hold` is the value for "no action."
+
+### `next:` list form
+
+To kick off several read-only follow-ups from one handoff, `next:` may be a list with a required `order:`:
+
+```markdown
+next: [briesearch "slug1", briesearch "slug2", explore "slug3"]
+order: parallel | sequential
+```
+
+- Each item is `<skill> "<arg>"`. `order:` is **required** when `next:` is a list.
+- `order: parallel` — `/cheese --continue` fans out concurrent read agents, one per item, in the same turn.
+- `order: sequential` — items run in listed order.
+- The inline list is restricted to read-only skills (`briesearch | culture | explore`). Parallel *write* efforts still require the heavyweight `mode: parallel` + `tasks:` block with worktree/branch isolation below; sequential *pipeline* chaining stays the job of `--auto` / `/ultracook`.
 
 For multiple independent next moves, use `mode: parallel`, set `next: tasks`, add a `parallel:` block, and add a `tasks:` list immediately after the orientation line. Each task must carry its exact `command:`; commands may name different skills. Parallel write tasks must never share a checkout. Choose one portable isolation strategy:
 
@@ -91,11 +119,18 @@ Follow the house style in [`../../shared/formatting.md`](../../shared/formatting
 
 ## Suggested skills
 
-Pick the next move from where the session actually is, name it as an easy-cheese skill with its argument, and write the same target into the slug's `next:` field. Suggest the *single* best next step, plus the step after it when the path is obvious. When the session has two or more independent tracks that can proceed without sharing branch state, write `mode: parallel`, set `next: tasks`, and put each exact skill invocation under `tasks:` instead of collapsing them into one sequential next step. The map:
+**Read the body's "Open questions and blockers" section before you write the header.** Derive `next:` from the blockers, not from optimism. If any unresolved blocker gates the next step, set `status: gated:` with the decision on one line — never `status: ok` plus a bare actionable `next:`. This is the root-cause rule: a `next:` authored at checkpoint time that contradicts an open blocker is the misfire this contract exists to stop.
+
+Pick the next move from where the session actually is, name it as an easy-cheese skill with its argument, and write the same target into the slug's `next:` field. Suggest the *single* best next step, plus the step after it when the path is obvious. When the session has two or more independent tracks that can proceed without sharing branch state, write `mode: parallel`, set `next: tasks`, and put each exact skill invocation under `tasks:` instead of collapsing them into one sequential next step. For several read-only follow-ups, use the inline `next:` list with `order:` instead. The map:
 
 | Where the session is | Suggest | `next:` |
 | --- | --- | --- |
 | Fuzzy idea, no approved spec yet | `/mold` | `mold` |
+| Research wanted before deciding or building | `/briesearch <question>` | `briesearch` |
+| Wants to think a problem through, no writes | `/culture` | `culture` |
+| Needs the code/area explored first | `/explore <target>` | `explore` |
+| Next step blocked on a human decision | surface the decision, ask direction | `gated:` (set `status`) |
+| Compacting or stringing along, no action implied | restore orientation, wait | `hold` |
 | Approved spec, not yet implemented | `/cook <spec-path>` | `cook` |
 | Code written, not yet hardened or reviewed | `/press <slug>` then `/age` | `press` |
 | Implementation done, review wanted now | `/age <ref>` | `age` |
