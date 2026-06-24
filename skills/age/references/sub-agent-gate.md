@@ -21,7 +21,7 @@ The sub-agent returns roughly 2 KB or less: structured summary, citations, gaps.
 ## What the sub-agent owns
 
 - Bulk fetches, extracts, crawls, multi-source research.
-- Many-file reads, dependency / caller graph traversals.
+- Many-file reads, dependency / caller graph traversals. For code navigation, start with `kind:symbol` to find the definition, then `kind:callers` for call sites. Fall to `content`/`regex` only when you don't have a symbol name.
 - Anything yielding mostly raw bodies that the parent will not read line by line — about 5 K tokens of raw output is the industry rule of thumb for "fork it".
 
 ## Parallelism

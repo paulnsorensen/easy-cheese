@@ -17,8 +17,10 @@ allowed-tools: mcp__tilth__tilth_search, mcp__tilth__tilth_deps, Bash
 Before the first call, verify tilth is reachable:
 
 1. Check that `mcp__tilth__tilth_search` is in your tool list. If absent, stop and report `"tilth MCP server is not loaded — cannot proceed."`
-2. Make a minimal probe call: `tilth_search(query: "tilth", scope: ".")`. If the response is a JSON-RPC error or transport failure, stop and report `"tilth MCP server present but unhealthy: <error>"`.
+2. Make a minimal probe call: `tilth_search(queries: [{query: "tilth"}])`. If the response is a JSON-RPC error or transport failure, stop and report `"tilth MCP server present but unhealthy: <error>"`.
 3. Any other failure (zero matches, malformed regex, etc.) is a **content** issue — proceed normally and report the result.
+
+**Note:** pass `root` (your absolute checkout directory) whenever `scope` is relative — the server's cwd is frozen at startup and cannot resolve relative paths without an explicit `root`.
 
 AST-aware code search via **tilth MCP** (`tilth_search`, `tilth_deps`).
 Tree-sitter finds where symbols are **defined** — not just where strings appear.
@@ -31,7 +33,7 @@ Understand dependencies instead of blindly grepping.
 ### "Where is `handleAuth` defined?"
 
 ```
-tilth_search(query: "handleAuth", scope: "src/")
+tilth_search(queries: [{query: "handleAuth"}], scope: "src/", root: "/checkout/root")
 ```
 
 ```text
@@ -48,7 +50,7 @@ The `[definition]` tag answers the question; usages come along for free.
 ### "What calls `validateToken`?"
 
 ```
-tilth_search(query: "validateToken", kind: "callers", scope: ".")
+tilth_search(queries: [{query: "validateToken", kind: "callers"}], scope: ".", root: "/checkout/root")
 ```
 
 ```text
@@ -66,7 +68,7 @@ tilth_search(query: "validateToken", kind: "callers", scope: ".")
 ### "Find any TODO that mentions retries"
 
 ```
-tilth_search(query: "TODO.*retry", kind: "regex", scope: "src/")
+tilth_search(queries: [{query: "TODO.*retry", kind: "regex"}], scope: "src/", root: "/checkout/root")
 ```
 
 Use `kind: "regex"` for pattern matches across content; bound the scope to
@@ -183,15 +185,17 @@ If code-review-graph is unavailable, the cheez-search fallbacks are: name-shaped
 
 ## Choose your search kind
 
+For code navigation (where is X / what calls Y / blast radius): start with `kind:symbol` to find the definition, then `kind:callers` for call sites. Fall to `content`/`regex` only when you don't have a symbol name.
+
 All six rows below are first-class — picking the right one is the difference
 between one call and a long grep walk.
 
 | Goal | Tool | Example |
 |------|------|---------|
-| Find where a symbol is defined / used | `tilth_search` (default `kind: "symbol"`) | `tilth_search(query: "handleAuth", scope: "src/")` |
-| Find every call site of a function | `tilth_search(kind: "callers")` | `tilth_search(query: "validateToken", kind: "callers")` |
-| Find literal strings, TODOs, error messages | `tilth_search(kind: "content")` | `tilth_search(query: "TODO: fix", kind: "content")` |
-| Find lines matching a regex | `tilth_search(kind: "regex")` | `tilth_search(query: "rate.?limit", kind: "regex")` |
+| Find where a symbol is defined / used | `tilth_search` (default `kind: "symbol"`) | `tilth_search(queries: [{query: "handleAuth"}], scope: "src/", root: "/checkout/root")` |
+| Find every call site of a function | `tilth_search(kind: "callers")` | `tilth_search(queries: [{query: "validateToken", kind: "callers"}])` |
+| Find literal strings, TODOs, error messages | `tilth_search(kind: "content")` | `tilth_search(queries: [{query: "error message", kind: "content"}])` |
+| Find lines matching a regex | `tilth_search(kind: "regex")` | `tilth_search(queries: [{query: "rate.?limit", kind: "regex"}])` |
 | Match an AST shape (template with metavars) | `sg` (ast-grep, via Bash) | `sg --lang typescript -p 'JSON.parse(JSON.stringify($X))' --json src/` |
 | Module import / blast-radius graph | `tilth_deps` | `tilth_deps(path: "src/auth.ts")` |
 
@@ -207,7 +211,7 @@ Drop to `sg` only when the pattern needs structural metavariables (`$X`,
 
 **Basic symbol search:**
 ```
-tilth_search(query: "handleAuth", scope: "src/")
+tilth_search(queries: [{query: "handleAuth"}], scope: "src/", root: "/checkout/root")
 ```
 
 **Output:**
@@ -246,7 +250,7 @@ tilth_search(query: "handleAuth", scope: "src/")
 Trace across files in one call:
 
 ```
-tilth_search(query: "ServeHTTP, HandlersChain, Next", scope: ".")
+tilth_search(queries: [{query: "ServeHTTP, HandlersChain, Next"}], scope: ".", root: "/checkout/root")
 ```
 
 Each symbol gets its own result block. The expand budget is shared — at least
@@ -260,7 +264,7 @@ Find all places that call a specific function using structural tree-sitter
 matching (not text search):
 
 ```
-tilth_search(query: "isTrustedProxy", kind: "callers", scope: ".")
+tilth_search(queries: [{query: "isTrustedProxy", kind: "callers"}], scope: ".", root: "/checkout/root")
 ```
 
 **Why this beats grep:** only finds actual calls, not comments or string literals.
@@ -273,7 +277,7 @@ Shows the calling function context.
 Search for text that isn't a code symbol:
 
 ```
-tilth_search(query: "TODO: fix", kind: "content", scope: ".")
+tilth_search(queries: [{query: "TODO: fix", kind: "content"}], scope: ".", root: "/checkout/root")
 ```
 
 Use content search for: TODOs, FIXMEs, NOTEs, error messages, specific literal strings.
@@ -285,8 +289,8 @@ Use content search for: TODOs, FIXMEs, NOTEs, error messages, specific literal s
 For patterns that aren't a single literal:
 
 ```
-tilth_search(query: "rate.?limit", kind: "regex", scope: ".")
-tilth_search(query: "FIXME\\(.*?\\):", kind: "regex", scope: "src/")
+tilth_search(queries: [{query: "rate.?limit", kind: "regex"}], scope: ".", root: "/checkout/root")
+tilth_search(queries: [{query: "FIXME\\(.*?\\):", kind: "regex"}], scope: "src/", root: "/checkout/root")
 ```
 
 - Full regex syntax — alternation, character classes, lookarounds depending on the engine.
@@ -300,7 +304,7 @@ tilth_search(query: "FIXME\\(.*?\\):", kind: "regex", scope: "src/")
 tilth covers names and text. For *shapes* with metavariables (`$X`, `$$$BODY`)
 that tilth cannot express, drop to `sg` (ast-grep) via Bash. This is the
 **only** sanctioned shell escape from cheez-search. The same escape covers
-structural codemods via `sg --rewrite` (dry-run first; `tilth_edit` remains
+structural codemods via `sg --rewrite` (dry-run first; `tilth_write` remains
 the default for one-off block edits).
 
 For metavar pattern syntax, the language matrix, hard rules for safe `sg`
@@ -315,13 +319,13 @@ codemod dry-run protocol, see
 
 ```
 # Only Rust files
-tilth_search(query: "handleAuth", scope: ".", glob: "*.rs")
+tilth_search(queries: [{query: "handleAuth"}], scope: ".", glob: "*.rs", root: "/checkout/root")
 
 # Exclude test files
-tilth_search(query: "handleAuth", scope: ".", glob: "!*.test.ts")
+tilth_search(queries: [{query: "handleAuth"}], scope: ".", glob: "!*.test.ts", root: "/checkout/root")
 
 # Multiple extensions
-tilth_search(query: "handleAuth", scope: ".", glob: "*.{go,rs}")
+tilth_search(queries: [{query: "handleAuth"}], scope: ".", glob: "*.{go,rs}", root: "/checkout/root")
 ```
 
 ---
@@ -331,7 +335,7 @@ tilth_search(query: "handleAuth", scope: ".", glob: "*.{go,rs}")
 When editing a file, pass it as context to boost related results:
 
 ```
-tilth_search(query: "validateToken", scope: ".", context: "src/auth.ts")
+tilth_search(queries: [{query: "validateToken"}], scope: ".", context: "src/auth.ts", root: "/checkout/root")
 ```
 
 ---
@@ -340,13 +344,13 @@ tilth_search(query: "validateToken", scope: ".", context: "src/auth.ts")
 
 ```
 # Default: 2 expansions
-tilth_search(query: "handleAuth", scope: ".")
+tilth_search(queries: [{query: "handleAuth"}], scope: ".", root: "/checkout/root")
 
 # More detail
-tilth_search(query: "handleAuth", scope: ".", expand: 5)
+tilth_search(queries: [{query: "handleAuth"}], scope: ".", expand: 5, root: "/checkout/root")
 
 # Compact (outlines only)
-tilth_search(query: "handleAuth", scope: ".", expand: 0)
+tilth_search(queries: [{query: "handleAuth"}], scope: ".", expand: 0, root: "/checkout/root")
 ```
 
 ---
@@ -376,22 +380,22 @@ tilth tracks what you've already seen:
 
 ```
 # "Where is X defined?"
-tilth_search(query: "AuthManager", scope: ".")
+tilth_search(queries: [{query: "AuthManager"}], scope: ".", root: "/checkout/root")
 # Look for [definition] results
 
 # "What calls X?"
-tilth_search(query: "validateToken", kind: "callers", scope: ".")
+tilth_search(queries: [{query: "validateToken", kind: "callers"}], scope: ".", root: "/checkout/root")
 
 # "What does X call?"
-tilth_search(query: "handleAuth", scope: ".", expand: 1)
+tilth_search(queries: [{query: "handleAuth"}], scope: ".", expand: 1, root: "/checkout/root")
 # Check the ── calls ── footer
 
 # "Find all implementations of an interface"
-tilth_search(query: "UserRepository", scope: ".", kind: "symbol")
+tilth_search(queries: [{query: "UserRepository", kind: "symbol"}], scope: ".", root: "/checkout/root")
 # Implementations show as [impl] tags
 
 # "Search error messages"
-tilth_search(query: "invalid token format", kind: "content", scope: ".")
+tilth_search(queries: [{query: "invalid token format", kind: "content"}], scope: ".", root: "/checkout/root")
 
 # "What depends on this module?"
 tilth_deps(path: "src/auth/index.ts")
@@ -416,7 +420,7 @@ tilth_deps(path: "src/auth/index.ts")
 ## DO NOT
 
 - **DO NOT use grep / rg / ripgrep / ag / ack** — use `tilth_search`. `sg` (ast-grep) is the *only* sanctioned shell escape, and only for AST-shape patterns with metavariables tilth can't express.
-- **DO NOT use find / fd to locate files by name pattern** — use `tilth_files` (cheez-read). `find` for non-name predicates (size, mtime, perms) is fine outside code work, but redirect anything code-related back through `cheez-*`.
+- **DO NOT use find / fd to locate files by name pattern** — use `tilth_list` (cheez-read). `find` for non-name predicates (size, mtime, perms) is fine outside code work, but redirect anything code-related back through `cheez-*`.
 - **DO NOT use ast-grep (`sg`) for name-shaped or text queries** — that's `tilth_search` territory. `sg` is for structural patterns with metavars (`$X`, `$$$BODY`) only.
 - **DO NOT blind text search** — use a semantic `kind` (`symbol`, `callers`, `content`, `regex`) before reaching for `sg`.
 - **DO NOT re-read expanded results** — they're already shown.
