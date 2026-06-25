@@ -42,6 +42,7 @@ SKILL_SUBCOMMANDS = {
     "briesearch": ["artifact-path", "ground-check"],
     "cook": ["artifact-path"],
     "hard-cheese": ["append-attempt", "freshness-check"],
+    "pasteurize": ["debug-tag-sweep", "repro-rerun"],
     "common": [
         "slugify",
         "write_handoff_artifact",

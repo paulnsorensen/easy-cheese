@@ -71,6 +71,10 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
         "append-attempt": "append-attempt.py",
         "freshness-check": "freshness-check.py",
     },
+    "pasteurize": {
+        "debug-tag-sweep": "debug-tag-sweep.py",
+        "repro-rerun": "repro-rerun.py",
+    },
 }
 
 # The "common" bundle ships cross-cutting CLI entrypoints sourced from

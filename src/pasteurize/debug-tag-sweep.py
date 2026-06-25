@@ -19,6 +19,7 @@ from pathlib import Path
 import cli  # noqa: E402
 
 DEFAULT_TAGS = (
+    "[DEBUG-",
     "DEBUG:",
     "TEMP:",
     "TODO-pasteurize:",

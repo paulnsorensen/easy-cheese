@@ -49,13 +49,13 @@ Do not proceed to Phase 2 until the loop passes all four checks:
 
 ## Phase 2 — Reproduce
 
-Run the loop. Watch the bug appear.
+Run the repro loop N times and verify the failure is consistent:
 
-Confirm:
+```
+${CLAUDE_SKILL_DIR}/scripts/pasteurize.pyz repro-rerun --cmd "<repro-command>" --n 5
+```
 
-- [ ] The loop produces the failure mode the **user** described — not a different failure that happens to be nearby. Wrong bug = wrong fix.
-- [ ] The failure is reproducible across multiple runs (or, for non-deterministic bugs, reproducible at a high enough rate to debug against).
-- [ ] You have captured the exact symptom (error message, wrong output, slow timing) so later phases can verify the fix actually addresses it.
+Confirm the returned `reproduced: true` and check `failures` matches the expected failure mode. If `reproduced: false` at N=5, the bug is flaky — increase `--n` before proceeding.
 
 Do not proceed until you reproduce the bug.
 
@@ -109,7 +109,13 @@ Before writing the handoff slug, confirm:
 
 - [ ] Original repro no longer reproduces (re-run the Phase 1 loop).
 - [ ] Regression test passes (or absence of seam is documented in the slug).
-- [ ] All `[DEBUG-...]` instrumentation removed — run a `/cheez-search` content query for the prefix and verify zero hits.
+- [ ] All `[DEBUG-...]` instrumentation removed:
+
+  ```
+  ${CLAUDE_SKILL_DIR}/scripts/pasteurize.pyz debug-tag-sweep --root .
+  ```
+
+  Exit 0 = clean. Exit 1 = tags found (listed in output). Resolve before continuing.
 - [ ] Throwaway harnesses / prototypes deleted (or moved to a clearly-marked debug location and called out in the slug).
 - [ ] The confirmed hypothesis is captured in the slug so the commit message downstream can reference it.
 
@@ -195,3 +201,8 @@ In every early-stop case, write the halt slug and surface the report. Do not sil
 - Do not leave `[DEBUG-...]` tags in the tree — clean them before the handoff slug is written.
 - Do not claim "shipped". Pasteurize claims "cause named, regression green, fix in tree, ready for chain". The chain (cook → press → age → cure) claims shipped.
 - If the bug exposes an architectural gap (no correct regression-test seam), say so in the slug. Do not silently paper over it.
+
+## References
+
+- `${CLAUDE_SKILL_DIR}/scripts/pasteurize.pyz repro-rerun` — run the repro command N times and emit `{exit_code, reproduced, runs, failures}` (Phase 2).
+- `${CLAUDE_SKILL_DIR}/scripts/pasteurize.pyz debug-tag-sweep` — scan the tree for instrumentation tag prefixes and exit 1 if any survive (Phase 6 cleanup gate).
