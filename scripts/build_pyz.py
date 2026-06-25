@@ -91,8 +91,8 @@ COMMON_SUBCOMMANDS: dict[str, str] = {
     "paths_cli": "paths_cli.py",
     "handoff_cli": "handoff_cli.py",
 }
-# Wave 1: consumer skills receive common.pyz — cure added here, age added in Wave 1 age commit
-COMMON_CONSUMERS: frozenset[str] = frozenset({"cure"})
+# Wave 1: consumer skills receive common.pyz
+COMMON_CONSUMERS: frozenset[str] = frozenset({"cure", "age"})
 
 _CACHE: dict[str, Path] = {}
 
