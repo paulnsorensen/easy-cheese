@@ -239,13 +239,52 @@ class TestConcurrentWrites:
         for _ in range(3):
             with multiprocessing.Pool(processes=min(4, n_curds)) as pool:
                 results = pool.map(_worker, jobs)
-            # Atomic rename guarantees the file is always parseable, even if
-            # individual updates lost a race. Each worker's update is itself
-            # all-or-nothing — we never observe a half-written YAML doc.
+            # The advisory lock serialises all writes — no update should be lost
+            # and no writer should fail due to a race condition.
             data = yaml.safe_load(path.read_text(encoding="utf-8"))
             assert isinstance(data, dict)
             assert len(data["curds"]) == n_curds
             for rc, err in results:
-                assert rc in (0, 2), f"unexpected rc={rc} stderr={err!r}"
+                assert rc == 0, f"unexpected rc={rc} stderr={err!r}"
         # Final state still passes validation.
         assert _validate(path).returncode == 0
+
+    def test_all_distinct_updates_survive(self, tmp_path: Path) -> None:
+        """With N>=8 concurrent writers each targeting a DISTINCT curd id, every
+        update must appear in the final manifest (no lost writes). This is the
+        behavioral proof that the advisory lock wraps the full read-modify-write."""
+        n = 10
+        path = tmp_path / "manifest_big.yaml"
+        manifest = _manifest()
+        manifest["curds"] = [
+            {
+                "id": i + 1,
+                "behavior": f"Feature {i + 1}",
+                "acceptance_criterion": f"AC {i + 1}",
+                "files": [f"src/f{i}.ts"],
+                "test_target": f"pytest src/f{i}.ts",
+                "status": "pending",
+                "retry_count": 0,
+            }
+            for i in range(n)
+        ]
+        path.write_text(yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8")
+
+        # All jobs target distinct curd ids with the same manifest file — genuine
+        # concurrent contention with no serialisation at the test level.
+        jobs = [(str(path), i + 1) for i in range(n)]
+        with multiprocessing.Pool(processes=n) as pool:
+            results = pool.map(_worker, jobs)
+
+        # Every writer must have succeeded.
+        for rc, err in results:
+            assert rc == 0, f"rc={rc} stderr={err!r}"
+
+        # Every curd's update must be present in the final manifest.
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        assert _validate(path).returncode == 0
+        assert len(data["curds"]) == n
+        for curd in data["curds"]:
+            assert curd["status"] == "running", (
+                f"curd {curd['id']} status={curd['status']!r} — update was lost"
+            )

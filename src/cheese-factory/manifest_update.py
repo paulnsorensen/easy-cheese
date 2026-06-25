@@ -12,8 +12,10 @@ partial document. After the rename, the manifest is re-validated in-process
 via `validate_manifest.validate_run_manifest`; if it rejects the new file the
 original bytes are restored from an in-memory backup and the CLI exits 2 with
 the validator's error message.
-"""
 
+An advisory lock sidecar (`fcntl.flock` on POSIX, `msvcrt.locking` on
+Windows) serialises concurrent read-modify-write cycles so no update is lost.
+"""
 from __future__ import annotations
 
 import argparse
@@ -22,6 +24,11 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+try:
+    import fcntl  # POSIX advisory file locks
+except ImportError:  # pragma: no cover - exercised only on Windows
+    fcntl = None
+    import msvcrt
 
 import cli  # noqa: E402
 from manifest_io import ManifestLoadError, parse_mapping  # noqa: E402
@@ -39,6 +46,36 @@ PHASES = {
     "pr_publish_complete",
 }
 WORK_STATUSES = ("pending", "running", "completed", "failed")
+
+
+# Mirrors append-attempt.py's _lock helper.
+def _lock(fd: int, *, exclusive: bool) -> None:
+    """Acquire (exclusive=True) or release an advisory lock on fd, cross-platform."""
+    if fcntl is not None:
+        fcntl.flock(fd, fcntl.LOCK_EX if exclusive else fcntl.LOCK_UN)
+    else:  # pragma: no cover - Windows only
+        msvcrt.locking(fd, msvcrt.LK_LOCK if exclusive else msvcrt.LK_UNLCK, 1)
+
+
+# Mirrors append-attempt.py's _with_flock helper.
+def _with_flock(lock_path: Path, fn) -> None:
+    """Run fn() while holding an exclusive advisory lock on lock_path.
+
+    Uses POSIX ``fcntl.flock`` where available and falls back to
+    ``msvcrt.locking`` on Windows so the concurrency guard is not silently lost.
+    """
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    # O_CREAT so concurrent processes share the same lockfile inode. 0o600
+    # so the lockfile is not world-readable (CodeQL py/overly-permissive-file).
+    fd = os.open(str(lock_path), os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        _lock(fd, exclusive=True)
+        fn()
+    finally:
+        try:
+            _lock(fd, exclusive=False)
+        finally:
+            os.close(fd)
 
 
 def _load_manifest(path: Path) -> tuple[dict[str, Any], bytes]:
@@ -137,9 +174,14 @@ def cmd_set_phase(args: argparse.Namespace) -> None:
     if args.phase not in PHASES:
         raise cli.CliError(f"invalid phase {args.phase!r}; expected one of {sorted(PHASES)}")
     path = Path(args.manifest)
-    data, original = _load_manifest(path)
-    data["phase"] = args.phase
-    _commit(path, data, original)
+    lock = path.parent / ("." + path.name + ".lock")
+
+    def _body() -> None:
+        data, original = _load_manifest(path)
+        data["phase"] = args.phase
+        _commit(path, data, original)
+
+    _with_flock(lock, _body)
     cli.emit(f"phase set to {args.phase}")
 
 
@@ -157,12 +199,17 @@ def cmd_set_curd_status(args: argparse.Namespace) -> None:
     if args.status not in WORK_STATUSES:
         raise cli.CliError(f"invalid status {args.status!r}; expected one of {list(WORK_STATUSES)}")
     path = Path(args.manifest)
-    data, original = _load_manifest(path)
-    curd = _find_curd(data, args.curd)
-    curd["status"] = args.status
-    if args.commit_sha is not None:
-        curd["commit_sha"] = args.commit_sha
-    _commit(path, data, original)
+    lock = path.parent / ("." + path.name + ".lock")
+
+    def _body() -> None:
+        data, original = _load_manifest(path)
+        curd = _find_curd(data, args.curd)
+        curd["status"] = args.status
+        if args.commit_sha is not None:
+            curd["commit_sha"] = args.commit_sha
+        _commit(path, data, original)
+
+    _with_flock(lock, _body)
     cli.emit(f"curd {args.curd} status set to {args.status}")
 
 
@@ -180,12 +227,17 @@ def cmd_set_wiring_status(args: argparse.Namespace) -> None:
     if args.status not in WORK_STATUSES:
         raise cli.CliError(f"invalid status {args.status!r}; expected one of {list(WORK_STATUSES)}")
     path = Path(args.manifest)
-    data, original = _load_manifest(path)
-    wiring = _find_wiring(data, args.wiring)
-    wiring["status"] = args.status
-    if args.commit_sha is not None:
-        wiring["commit_sha"] = args.commit_sha
-    _commit(path, data, original)
+    lock = path.parent / ("." + path.name + ".lock")
+
+    def _body() -> None:
+        data, original = _load_manifest(path)
+        wiring = _find_wiring(data, args.wiring)
+        wiring["status"] = args.status
+        if args.commit_sha is not None:
+            wiring["commit_sha"] = args.commit_sha
+        _commit(path, data, original)
+
+    _with_flock(lock, _body)
     cli.emit(f"wiring {args.wiring} status set to {args.status}")
 
 
