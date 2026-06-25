@@ -131,7 +131,7 @@ For shapes with metavars (`$X`, `$$$BODY`) drop to `sg` via Bash -- the only san
 
 ## DO NOT and Scope Limits
 
-- **DO NOT use grep / rg / ripgrep / ag / ack / find / fd for code** -- use `tilth_search` (or `tilth_list` to find files by name). `find` for non-name predicates (size, mtime, perms) is fine outside code work. `sg` is the only sanctioned shell escape, and only for AST-shape metavar patterns.
+- **DO NOT use grep / rg / ripgrep / ag / ack / find / fd for code** -- use `tilth_search`; to find files by name, use `/cheez-read` (its `tilth_list`). `find` for non-name predicates (size, mtime, perms) is fine outside code work. `sg` is the only sanctioned shell escape, and only for AST-shape metavar patterns.
 - **DO NOT blind text search** -- pick a semantic `kind` (`symbol`, `callers`, `content`, `regex`) first.
 - **DO NOT re-read expanded results** -- they're already shown.
 - **DO NOT overuse expand** -- start with default, increase if needed.
