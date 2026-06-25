@@ -145,8 +145,9 @@ class TestBodyMentionsLoadBearingContracts:
         ):
             assert phase_name in skill_body, f"missing phase header: {phase_name}"
 
-    def test_five_decomposition_criteria_present(self, skill_body: str) -> None:
-        # Each of the five criteria must be named in the body.
+    def test_five_decomposition_criteria_present(self, skill_corpus: str) -> None:
+        # Each of the five criteria must be named somewhere in the skill corpus
+        # (SKILL.md body or a references/ doc — they live in decomposer-prompt.md).
         for criterion in (
             "One behaviour per curd",
             "One acceptance criterion",
@@ -154,7 +155,7 @@ class TestBodyMentionsLoadBearingContracts:
             "File-disjoint",
             "Commit-worthy alone",
         ):
-            assert criterion in skill_body, f"missing criterion: {criterion}"
+            assert criterion in skill_corpus, f"missing criterion: {criterion}"
 
     def test_five_spawn_invariants_present(self, skill_body: str) -> None:
         # The five spawn invariants are the harness-agnosticism contract.

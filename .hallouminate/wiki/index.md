@@ -13,8 +13,9 @@ git-tracking axis (`shared/formatting.md:103`).
 ## Topics
 
 <!-- HALLOUMINATE:INDEX-START -->
-- [adr/](./adr/index.md)
+- [adr/](./adr/index.md) — adr
 - [architecture](./architecture.md) — Architecture of easy-cheese
+- [cheese-factory-entities](./cheese-factory-entities.md) — Cheese-factory pipeline entities
 - [skill-parity-analysis](./skill-parity-analysis.md) — Skill-parity analysis
 - [tooling](./tooling.md) — Tooling
 - [wiki-conventions](./wiki-conventions.md) — Wiki conventions for easy-cheese

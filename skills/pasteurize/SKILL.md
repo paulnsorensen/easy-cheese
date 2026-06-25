@@ -10,24 +10,15 @@ A discipline for hard bugs. Skip phases only when explicitly justified.
 
 When exploring the codebase, use `/cheez-search` to orient and check `.cheese/specs/` for any spec or design notes that touch the failing seam.
 
-## Phase 1 — Build a feedback loop
+## Phase 1 — Feedback loop
 
 **This is the skill.** Everything else is mechanical. If you have a fast, deterministic, agent-runnable pass/fail signal for the bug, you will find the cause — bisection, hypothesis-testing, and instrumentation all just consume that signal. If you don't have one, no amount of staring at code will save you.
 
 Spend disproportionate effort here. **Be aggressive. Be creative. Refuse to give up.**
 
-### Ways to construct one — try them in roughly this order
+### Ways to construct one
 
-1. **Failing test** at whatever seam reaches the bug — unit, integration, e2e.
-2. **Curl / HTTP script** against a running dev server.
-3. **CLI invocation** with a fixture input, diffing stdout against a known-good snapshot.
-4. **Headless browser script** (Playwright / Puppeteer) — drives the UI, asserts on DOM/console/network.
-5. **Replay a captured trace.** Save a real network request / payload / event log to disk; replay it through the code path in isolation.
-6. **Throwaway harness.** Spin up a minimal subset of the system (one service, mocked deps) that exercises the bug code path with a single function call.
-7. **Property / fuzz loop.** If the bug is "sometimes wrong output", run 1000 random inputs and look for the failure mode.
-8. **Bisection harness.** If the bug appeared between two known states (commit, dataset, version), automate "boot at state X, check, repeat" so you can `git bisect run` it.
-9. **Differential loop.** Run the same input through old-version vs new-version (or two configs) and diff outputs.
-10. **HITL bash script.** Last resort. If a human must click, drive _them_ with a structured loop so output still feeds back to you.
+To pick a loop shape, see [`references/feedback-loops.md`](references/feedback-loops.md) for the ten-option ordered menu.
 
 Build the right feedback loop, and the bug is 90% fixed.
 
@@ -49,7 +40,12 @@ The goal is not a clean repro but a **higher reproduction rate**. Loop the trigg
 
 Stop and say so explicitly. List what you tried. Ask the user for: (a) access to whatever environment reproduces it, (b) a captured artifact (HAR file, log dump, core dump, screen recording with timestamps), or (c) permission to add temporary production instrumentation. Do **not** proceed to hypothesise without a loop. Write a `status: halt` handoff slug (see below) and stop.
 
-Do not proceed to Phase 2 until you have a loop you believe in.
+Do not proceed to Phase 2 until the loop passes all four checks:
+
+- [ ] **Deterministic** — runs the same way every time (or, for flaky bugs, reproduction rate >50% and rising).
+- [ ] **Agent-runnable** — a single command with no human in the loop.
+- [ ] **Asserts the user’s exact symptom** — the failure message / wrong output / timing the user reported, not a nearby failure.
+- [ ] **Fast** — under 30 seconds end-to-end (aim for under 5).
 
 ## Phase 2 — Reproduce
 
@@ -89,8 +85,6 @@ Tool preference:
 
 **Perf branch.** For performance regressions, logs are usually wrong. Instead: establish a baseline measurement (timing harness, `performance.now()`, profiler, query plan), then bisect. Measure first, fix second.
 
-Use `/cheez-write` for any instrumentation edits — never the host Edit / Write tools.
-
 ## Phase 5 — Fix + regression test
 
 Write the regression test **before the fix** — but only if there is a **correct seam** for it.
@@ -101,17 +95,15 @@ A correct seam is one where the test exercises the **real bug pattern** as it oc
 
 If a correct seam exists:
 
-1. Turn the minimised repro into a failing test at that seam — write it via `/cheez-write`.
+1. Turn the minimised repro into a failing test at that seam.
 2. Watch it fail.
-3. Apply the **smallest** production change that makes the test pass — also via `/cheez-write`. No scope creep, no "while I'm here" cleanup.
+3. Apply the **smallest** production change that makes the test pass. No scope creep, no "while I'm here" cleanup.
 4. Watch the test pass.
 5. Re-run the Phase 1 feedback loop against the original (un-minimised) scenario to confirm the symptom is gone, not just the test seam.
 
-All edits go through `/cheez-write` — never the host Edit / Write tools.
-
 Broader implementation (related cleanup, follow-on changes, anything beyond the minimal fix) is **not** pasteurize's job. Note it in the slug and let `/cook --auto` pick it up in Phase 6's handoff.
 
-## Phase 6 — Cleanup + hand off
+## Phase 6 — Cleanup
 
 Before writing the handoff slug, confirm:
 
@@ -165,7 +157,7 @@ follow_up: <architectural follow-up note, or "none">
 <one-line orientation: what pasteurize converged on>
 ```
 
-`status: ok` when the regression test is green, the original repro no longer reproduces, and cleanup is done. `status: halt: <reason>` when Phase 1 failed (cannot build a loop, missing environment access, missing artifact), or Phase 3 exhausted both hypothesis rounds without a confirmed cause. `next:` is `cook` for the standard chain, `mold` if the diagnosis itself recommends an architectural spec instead of a per-bug fix, or `done` if the bug was caused outside the repo and no follow-up is needed.
+`status: ok` when the regression test is green, the original repro no longer reproduces, and cleanup is done. `status: halt: <reason>` when any early-stop condition fires — see [Early-stop conditions](#early-stop-conditions) below. `next:` is `cook` for the standard chain, `mold` if the diagnosis itself recommends an architectural spec instead of a per-bug fix, or `done` if the bug was caused outside the repo and no follow-up is needed.
 
 ## Handoff
 
@@ -184,16 +176,9 @@ When invoked with `--auto`, skip this host-routed question entirely and invoke `
 
 ## Auto mode
 
-`--auto` is the autonomous-pipeline switch. Propagated from upstream skills (`/cheese` propagates `--auto` by default; under `--safe`, `--auto` becomes an explicit selection in the dispatch gate rather than the silent default) or invoked directly with `--auto`.
+`--auto` skips Phase 3's user-ranking gate, skips the Phase 6 handoff gate, and invokes `/cook <slug> --auto` directly. Phase 4–5 still run in full.
 
-What auto mode does:
-
-1. Phase 3's "show the user the ranked hypothesis list" gate is skipped — proceed with the model's ranking.
-2. Phase 4–5 still run in full; the auto signal does not loosen the discipline.
-3. After Phase 6 cleanup, invoke `/cook <slug> --auto` directly.
-4. From there, cook's own auto-mode contract takes over (press → age → cure cycle).
-
-Auto mode stops early when:
+### Early-stop conditions
 
 - Phase 1 fails (`status: halt` written, no loop achievable).
 - Phase 3 disproves all hypotheses across two rounds (cap at two Phase 3 rounds, then halt).

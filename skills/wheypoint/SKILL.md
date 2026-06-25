@@ -6,7 +6,7 @@ license: MIT
 
 # /wheypoint
 
-A wheypoint is a waypoint on the cheese's journey: a marked spot you can navigate back to. Use this skill when the conversation holds work-in-progress that a different agent (or a future you, in a fresh context) needs to continue. `/wheypoint` captures just enough state for a cold reader to resume, and nothing they could already read elsewhere.
+A wheypoint is a waypoint on the cheese's journey: a marked spot you can navigate back to. Use this skill when the conversation holds work-in-progress that a different agent (or a future you, in a fresh context) needs to continue. `/wheypoint` captures just enough state for a cold reader to resume.
 
 User-facing `/culture` sessions end by invoking `/wheypoint` to capture the modeling as a resumable handoff. Do not use it as a substitute for a phase skill's own handoff slug: `/cook`, `/press`, `/age`, and `/cure` write their slugs at clean phase boundaries. `/wheypoint` is for culture's end-of-session checkpoint and for the messy mid-task moment when no phase slug applies and context is about to be lost.
 
@@ -40,15 +40,22 @@ artifact: <path-to-richer-report, or PR ref (PR#<n> / URL) when next: affinage, 
 ### `status:` values
 
 - **`ok`** — the next step is unblocked; `/cheese --continue` auto-dispatches `next:`.
-- **`gated: <one-line decision>`** — work is fine, but the next step is blocked on a human decision. Name the decision in one line. On `/cheese --continue`, the reader surfaces the decision plus the body's open-questions/blockers and asks which direction (research / decide / build); it dispatches nothing until the user picks. Never collapse a gate into a bare actionable `next:` with `status: ok` — that is the misfire this contract exists to stop.
+- **`gated: <one-line decision>`** — work is fine, but the next step is blocked on a human decision. Name the decision in one line. On `/cheese --continue`, the reader surfaces the decision plus the body's open-questions/blockers and asks which direction (research / decide / build); it dispatches nothing until the user picks. Never collapse a gate into a bare actionable `next:` with `status: ok` — that is the misfire this contract exists to stop. Any open blocker in the body mandates `status: gated:`, not `status: ok`.
 - **`halt: <one-line reason>`** — a blocker stopped the work mid-flight; surface the reason, then dispatch the runnable `next:` (unchanged).
 
-### `next:` values
+### `next:` values and semantics
 
 Single-value `next:` is one of the pipeline phases (`mold | cook | press | age | cure | affinage`), a read-only kickoff (`briesearch | culture`), `hold`, `tasks` (with `mode: parallel`), or `done`.
 
+- **`mold`** — fuzzy idea, no approved spec yet; kick off domain modeling.
+- **`cook`** — approved spec ready; implement it. Also the resume value when `/cook` was interrupted mid-phase.
+- **`press`** — code written, not yet hardened or reviewed.
+- **`age`** — implementation done, review wanted now.
+- **`cure`** — review findings in hand, fixes not applied.
+- **`affinage`** — PR has review comments or failing CI. Record the PR reference in `artifact:` (`PR#<n>` or URL) so the resume dispatches `/affinage <pr>` explicitly.
 - **`briesearch | culture`** — read-only, low-risk next moves. Under `status: ok`, `/cheese --continue` auto-dispatches them directly (frictionless research/think kickoff), deriving any dispatch argument (e.g. `briesearch`'s question) from the orientation line. A decision that needs a human belongs in `status: gated:`, not here.
 - **`hold`** — restore orientation and wait for instruction; dispatch nothing. For compacting or stringing context along when no action is implied. Distinct from `done` (work finished, record only).
+- **`done`** — work genuinely finished; handoff is a record, not a baton. Use only for true terminal completion.
 - **A missing `next:` is a malformed handoff.** `/cheese --continue` flags it (`malformed handoff: next: required`) rather than guessing or defaulting. Declare intent explicitly — `hold` is the value for "no action."
 
 ### `next:` list form
@@ -119,7 +126,7 @@ Follow the house style in [`../../shared/formatting.md`](../../shared/formatting
 
 ## Suggested skills
 
-**Read the body's "Open questions and blockers" section before you write the header.** Derive `next:` from the blockers, not from optimism. If any unresolved blocker gates the next step, set `status: gated:` with the decision on one line — never `status: ok` plus a bare actionable `next:`. This is the root-cause rule: a `next:` authored at checkpoint time that contradicts an open blocker is the misfire this contract exists to stop.
+Derive `next:` and `status:` from the body's blockers, not from optimism. See `### status: values` for the gate rule: any open blocker mandates `status: gated:`, never `status: ok` with a bare actionable `next:`.
 
 Pick the next move from where the session actually is, name it as an easy-cheese skill with its argument, and write the same target into the slug's `next:` field. Suggest the *single* best next step, plus the step after it when the path is obvious. When the session has two or more independent tracks that can proceed without sharing branch state, write `mode: parallel`, set `next: tasks`, and put each exact skill invocation under `tasks:` instead of collapsing them into one sequential next step. For several read-only follow-ups, use the inline `next:` list with `order:` instead. The map:
 
@@ -135,7 +142,7 @@ Pick the next move from where the session actually is, name it as an easy-cheese
 | Implementation done, review wanted now | `/age <ref>` | `age` |
 | Review findings in hand, fixes not applied | `/cure <slug>` | `cure` |
 | PR has review comments or failing CI | `/affinage <pr>` | `affinage` |
-| Hard bug still un-diagnosed | `/pasteurize <input>` | `cook` |
+| Hard bug still un-diagnosed | surface the blocker; invoke `/pasteurize` once ready | — (set `status: gated:`) |
 | Work genuinely finished | record only, no baton | `done` |
 
 When the session sits mid-phase (e.g. `/cook` was interrupted), suggest re-entering that same phase with the slug. Tailor to the optional focus argument when the user gave one: it overrides the table if the next session is meant to do something other than advance the pipeline.

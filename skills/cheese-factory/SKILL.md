@@ -6,10 +6,6 @@ license: MIT
 
 # /cheese-factory
 
-Use this skill when an approved spec decomposes into 5+ file-disjoint behavioural curds and the user wants the whole implementation parallelised, reviewed per-curd, integrated, reviewed again at the seam, and shipped as 1–N reviewable PRs.
-
-Do not use it for single coherent feature work (`/cook` or `/ultracook`), fuzzy planning (`/mold`), review-only work (`/age`), or specs that decompose into fewer than 5 curds (`/ultracook`).
-
 `/cheese-factory` is the portable, harness-agnostic sibling of `/fromagerie`. Same decomposition pattern, same dual fan-out/fan-in, no bespoke agent files. Every sub-agent is a general-purpose full-peer worker driven by an in-prompt skill invocation.
 
 ## Inputs
@@ -52,17 +48,7 @@ The Phase 0 decomposer produces three artifact lists from the spec:
 
 ### The five criteria
 
-Every curd must satisfy all five. Token budgets are explicitly **not** a criterion — LLM agents cannot estimate their own token usage reliably, and the five behavioural criteria substitute. Curds remain bounded by their file scope, which is decomposer-controlled.
-
-| # | Criterion | Decomposer check |
-|---|---|---|
-| 1 | One behaviour per curd | Describable in a single declarative sentence ("adds X", "extracts Y", "renames Z", "fixes A"). If the description needs "and" between two distinct behaviours, split. |
-| 2 | One acceptance criterion | Maps to exactly one bullet in the spec's Acceptance Criteria / User Story list. Curds collectively cover every acceptance criterion 1:1. |
-| 3 | One test target | A single focused test command verifies this curd alone (e.g., `vitest run src/orders/order.test.ts`). If the curd needs N test commands, it's N curds. |
-| 4 | File-disjoint | No two curds list the same file. HARD CONSTRAINT. |
-| 5 | Commit-worthy alone | After this curd's commit, `just check` (or project equivalent) passes without sibling curds merged. Implied by 4 plus seed carrying any shared deps. |
-
-If criterion 4 cannot be satisfied because two curds genuinely share a file, the shared content belongs in seed (if foundational) or wiring (if integration). Curds never share files.
+Five behavioural criteria govern every curd — see `references/decomposer-prompt.md` § The five criteria for the full list and the "token budgets are NOT a criterion" rationale. Curds that fail criterion 4 (file-disjoint) move their shared content to seed or wiring.
 
 ### Manifest format
 
@@ -79,17 +65,7 @@ or JSON for backward compatibility, but YAML is the canonical format.
 
 ### Validation (Phase 0)
 
-The decomposer's output is validated by `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz validate_manifest` for required
-sections and field shapes, then by `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz validate_decomposition` against:
-
-- **Behaviour overlap** — each curd describes one behaviour (criterion 1).
-- **Spec coverage** — every acceptance criterion has exactly one curd (criterion 2).
-- **Test target check** — each curd has a focused test command (criterion 3).
-- **File disjointness** — no file appears in two curds (criterion 4).
-- **Wiring DAG check** — no cycles, no cross-branch overlap, barrel files included where curds create new slices.
-- **Seed minimality** — seed contains only files that 2+ curds depend on.
-
-If validation fails: re-run decomposer with violations highlighted. Max 2 retries before escalating to the user.
+See `references/decomposer-prompt.md` § Validation for the six checks run by `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz validate_manifest` and `validate_decomposition`. If validation fails: re-run decomposer with violations highlighted. Max 2 retries before escalating to the user.
 
 ## Phases
 
@@ -218,7 +194,7 @@ For failed wiring tasks: retry ONCE. If still failing, mark incomplete in manife
 
 ### Phase 5 — Final merge wiring
 
-Cherry-pick wiring commits onto the orchestrator branch.
+Cherry-pick the wiring commits onto the orchestrator branch.
 
 If conflicts arise here: STOP. Wiring conflicts mean the decomposer's DAG was wrong (wiring touched implementation territory, or two wiring tasks shared a file outside the DAG). Do not auto-resolve.
 
@@ -310,33 +286,7 @@ For each PR group in the plan:
 Manifest: .cheese/cheese-factory/<slug>/manifest.yaml
 ```
 
-## Orchestrator token discipline
-
-The orchestrator reads ONE thing: the spec. Everything else is delegated.
-
-**Must not**:
-
-- Read / grep / glob codebase files (decomposer + per-curd workers do that).
-- Run build / test commands (per-curd workers + post-merge sub-agents do that).
-- Read full sub-agent reports — work from handoff slug digests.
-
-**Should**:
-
-- Read the spec once at Phase 0.
-- Read per-phase handoff slugs (each ≤2KB).
-- Write manifest updates after each phase.
-- Decide chain progression based on slug `status` and `next` fields, never on sub-agent stdout.
-
 ## Compaction strategy
-
-Three seams where the orchestrator drops accumulated context.
-
-| Seam | After | DROP | KEEP |
-|---|---|---|---|
-| C1 | Phase 0 (gate approved) | Full spec text, permission manifest, decomposition reasoning | Slug, spec summary (≤2K), manifest path, quality gates |
-| C2 | Phase 2 (curds done) | Decomposer artifacts, curd dispatch prompts, curd return summaries | Slug, manifest path, quality gates, curd branch list |
-| C3 | Phase 5 (final merge done) | Wiring DAG, per-curd diffs, merger details | Slug, spec path, quality gates, changed files list, all commit SHAs |
-
 At each seam, write a self-summary to the manifest before dropping:
 
 ```json
@@ -421,6 +371,10 @@ If the manifest references commits that no longer exist (rebased, deleted), fail
 
 ## What the orchestrator never does
 
+**Does**: reads the spec once at Phase 0; reads per-phase handoff slugs (each ≤2KB); writes manifest updates after each phase; decides chain progression from slug `status` and `next` fields — never from sub-agent stdout.
+
+**Never**:
+
 - Read codebase files (sub-agents explore, orchestrator routes).
 - Run build / test commands (per-curd workers and post-merge sub-agents handle verification).
 - Write implementation code (cook agents and wiring agents implement; the orchestrator's only inline writes are the small seed items in Phase 1).
@@ -428,6 +382,7 @@ If the manifest references commits that no longer exist (rebased, deleted), fail
 - Retry more than once (curds and wiring get one retry, then mark failed).
 - Auto-resolve Phase 5 conflicts (wiring conflicts = decomposer error).
 - Estimate sub-agent token usage (decomposition uses behavioural criteria, not token counts).
+- Read full sub-agent reports — work from handoff slug digests only.
 
 ## Gotchas
 

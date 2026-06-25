@@ -6,9 +6,7 @@ license: MIT
 
 # /cheese
 
-Use this skill as the single front door to the easy-cheese workflow. Inspect whatever the user dropped in, classify it into an intent shape, announce the routing decision as a short three-line block (Intent / Reason / Target — see `## Output`), and dispatch immediately to the chosen skill. Cheese is autonomous by default — it picks the best target and runs it, only stopping to ask when `--safe` is passed or when the input is genuinely ambiguous.
-
-Do not use it once a downstream skill is already running, or when the user has already named the skill they want (`/mold ...`, `/cook ...`, `/age`, etc.) — pass straight through to that skill instead.
+Always emit a short three-line routing block (Intent / Reason / Target — see `## Output`) before dispatching.
 
 ## Inputs
 
@@ -35,7 +33,7 @@ If `$ARGUMENTS` is missing entirely and there is no recent context to lean on, a
 
 1. **Think first (silent).** Before announcing, model the problem internally per `skills/culture/SKILL.md` — restate the ask in one sentence, list the candidate targets, name the deciding signal. This is the agent's own reasoning, not a user-facing dialogue; the only output of this step is the classification decision that drives step 2.
 2. **Classify** — match `$ARGUMENTS` against the intent shapes in `references/classification.md`. Pick the highest-confidence shape; below the threshold, route to `clarify` (handled by the tier-3 escalation in step 4).
-3. **Clarity check (implementation intents only).** For `cook` and `mold` intents, run the cook fast-path check (`skills/cook/SKILL.md:30-35` — clear I/O, bounded scope, obvious verification). The result drives the three-tier escalation in `## Escalation` below. Non-implementation intents (`research`, `rubber-duck`, `debug`, `age`, `age-then-cure`, `cheese-factory`) skip the clarity check and route directly to their target skill.
+3. **Clarity check (implementation intents only).** For `cook` and `mold` intents, run cook's fast-path check (§ "Standalone fast-path" in `skills/cook/SKILL.md` — clear I/O, bounded scope, obvious verification). The result drives the three-tier escalation in `## Escalation` below. Non-implementation intents (`research`, `rubber-duck`, `debug`, `age`, `age-then-cure`, `cheese-factory`) skip the clarity check and route directly to their target skill.
 4. **Escalate (if needed).** Tier 1 dispatches the chosen target (writing a mini-spec via `/mold`'s agent-invoked mode when the dispatch is `/cook --auto` and no spec path was supplied). Tier 2 autonomously invokes `/culture` and/or `/briesearch` in internal mode, then re-runs the clarity check. Tier 3 blocks on a single targeted host-routed question and re-enters classification on the answer. See `## Escalation`.
 5. **Announce** — print a short three-line block (Intent / Reason / Target) per the format in `## Output`. Cite the signal that drove the routing decision.
 6. **Self-check** — run the coherence questions in `references/coherence-check.md`. If any fails, downgrade to `clarify` (tier 3) or `research`.
@@ -45,25 +43,11 @@ If `$ARGUMENTS` is missing entirely and there is no recent context to lean on, a
 
 ## Intent shapes
 
-| Intent | Trigger signals | Pre-step | Target skill |
-| --- | --- | --- | --- |
-| clarify | Empty input, single keyword, or critical ambiguity | host-routed question for the missing fact | re-enter `/cheese` once answered |
-| research | Library / API / vendor question, "what's the best…", comparison | — | `/briesearch` |
-| rubber-duck | User explicitly asks for discussion only — "no writes", "let's just talk", "rubber-duck this" — with no artifact intent | — | `/culture` |
-| mold | Feature description with fuzzy scope, multi-module idea, or stated need for a spec | optional `/briesearch` first if external evidence is missing | `/mold` → `/cook` |
-| cook | Spec path, focused fix with clear inputs/outputs/verification, single-file tweak | — | `/cook --auto` (default) — chains through `/press → /age → /cure` |
-| cheese-factory | Approved spec at `.cheese/specs/<slug>.md` with 5+ acceptance criteria / behavioural curds, or user phrases like "send through the factory", "parallelize", "many curds", "fan out" | — | `/cheese-factory` |
-| debug | Stack trace, failing test, reproduction steps, "why is X broken", visual bug + repro path | — | `/pasteurize --auto` (default) → `/cook --auto` |
-| age | PR reference, file path/glob review request, "is this safe to merge", "find bugs" | — | `/age` |
-| age-then-cure | Existing `.cheese/age/<slug>.md` plus a "fix the findings" instruction | — | `/age` (re-scope if needed) → `/cure` |
-
-`/culture` is otherwise an internal-use skill the agent invokes during step 1 of the flow to think through routing — it is not a default user-facing target. Only surface it when the user has explicitly opted out of writes for this session.
-
-The full classification table — including disambiguation rules, edge cases, and confidence cues — lives in `references/classification.md`.
+The full classification table — including all intent shapes, signals, disambiguation rules, and edge cases — lives in `references/classification.md`.
 
 ## Escalation
 
-For implementation intents (`cook` and `mold`), `/cheese` runs the cook fast-path check from `skills/cook/SKILL.md:30-35` (clear I/O, bounded scope, obvious verification) and escalates through three tiers based on the result:
+For implementation intents (`cook` and `mold`), `/cheese` runs cook's fast-path check (§ "Standalone fast-path" in `skills/cook/SKILL.md` — clear I/O, bounded scope, obvious verification) and escalates through three tiers based on the result:
 
 **Tier 1 — clear (all three checks pass).** Agent invokes `/mold`'s agent-invoked mini-spec mode (see `skills/mold/SKILL.md` § Agent-invoked mini-spec mode) to write `.cheese/specs/<slug>.md`, then dispatches `/cook --auto <spec-path>` in the same turn as the announce, where `<spec-path>` is the explicit mini-spec path returned by `/mold`. Do not collapse that path to a bare `<slug>`. No user interaction. When the input already names a spec path under `.cheese/specs/`, skip the mini-spec write and dispatch `/cook --auto` against the existing path directly.
 

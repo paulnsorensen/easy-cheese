@@ -81,7 +81,7 @@ attribution: |
   Scale. https://arxiv.org/abs/2602.20206
   Implementation reference:
   https://github.com/sreecharansankaranarayanan/vibecheck
-rubric: SOLO Taxonomy (1-5), pass threshold = 3 (Multistructural-or-higher; the paper labels this the 'Relational' pass condition)
+rubric: SOLO Taxonomy (1-5), pass threshold = 3
 divergence: fail-open on judge error (vibecheck fails closed)
 diff_base: <sha>
 diff_head: <short-sha>
@@ -157,7 +157,7 @@ Concretely, under `/cure --auto --hard --stake medium+`:
 - On FAILED (cap exhausted): chain exits non-zero with the artifact path; the user must improve their understanding before sharing.
 - On ERROR: chain exits `0` with a warning (the fail-open divergence).
 
-Non-TTY guard: if the gate detects it is running without a human (no interactive input is available), it fails closed and aborts. A vacuous "auto-pass" with no human in the loop would defeat the entire mechanism.
+Non-TTY guard: see `references/composition.md` `## Non-TTY guard`.
 
 `/cure --auto` alone (no `--hard`) is unchanged — the gate never fires. The single puncture point is documented in `references/composition.md` and in `skills/cure/SKILL.md`.
 
