@@ -220,3 +220,25 @@ class TestCli:
         assert result.returncode == 0
         assert "--phase-index" in result.stdout
         assert "--status" in result.stdout
+
+
+class TestNormalizationHardening:
+    """Press hardening: early-stop and halt comparisons normalise case and
+    surrounding whitespace via `.strip().lower()`. The exact-match tests above
+    stay green if that normalisation is dropped, so these lock it in — a real
+    `next:`/`status:` field parsed from a handoff slug can carry stray case or
+    spacing."""
+
+    @pytest.mark.parametrize("nxt", ["DONE", " done ", "Done"])
+    def test_age_next_done_normalised_stops_early(
+        self, phase_decision: ModuleType, nxt: str
+    ) -> None:
+        result = phase_decision.decide(2, "ok", nxt)
+        assert result["action"] == "stop_early"
+
+    @pytest.mark.parametrize("status", [" halt: boom ", "  HALT", "Halt: x"])
+    def test_halt_normalised_short_circuits(
+        self, phase_decision: ModuleType, status: str
+    ) -> None:
+        result = phase_decision.decide(2, status)
+        assert result["action"] == "halt"
