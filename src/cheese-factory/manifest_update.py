@@ -108,7 +108,21 @@ def _revalidate_or_restore(path: Path, original: bytes) -> None:
     except cli.CliError as exc:
         errors = [str(exc)]
     if errors:
-        path.write_bytes(original)
+        fd, tmp_name = tempfile.mkstemp(
+            prefix=path.name + ".restore.", suffix=".tmp", dir=str(path.parent)
+        )
+        tmp = Path(tmp_name)
+        try:
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(original)
+            os.replace(tmp, path)
+        except Exception:
+            if tmp.exists():
+                try:
+                    tmp.unlink()
+                except OSError:
+                    pass
+            raise
         raise cli.CliError(f"validation rejected update; restored original ({errors[-1]})")
 
 

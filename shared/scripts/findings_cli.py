@@ -20,7 +20,7 @@ def _load_findings(report_path: str) -> list:
     path = Path(report_path)
     if not path.is_file():
         raise cli.CliError(f"report not found: {report_path}")
-    return findings.parse_findings_report(path.read_text())
+    return findings.parse_findings_report(path.read_text(encoding="utf-8"))
 
 
 def _cmd_render_table(args: argparse.Namespace) -> None:

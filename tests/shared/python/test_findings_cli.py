@@ -114,6 +114,19 @@ class TestParseSelection:
         printed = [int(line) for line in result.stdout.splitlines() if line.strip()]
         assert printed == expected_ids
 
+    def test_all_high_ids_literal_pin(self, report_path: Path) -> None:
+        # SAMPLE_REPORT has blocker id=1, high id=2; all-high must return exactly [1, 2].
+        result = _run(
+            "parse-selection",
+            "--report",
+            str(report_path),
+            "--selection",
+            "all-high",
+            "--json",
+        )
+        assert result.returncode == 0, result.stderr
+        assert json.loads(result.stdout) == [1, 2]
+
     def test_json_mode_dumps_list(self, report_path: Path, findings_lib: ModuleType) -> None:
         result = _run(
             "parse-selection",

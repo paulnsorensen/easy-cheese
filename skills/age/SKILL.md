@@ -63,7 +63,12 @@ Per-dimension base-severity tables, location-sensitivity, fix-cost-now / fix-cos
 5. Write the report:
 
    ```
-   python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz write_handoff_artifact --phase age --slug <slug> --body "<report>"
+   report_file=$(mktemp)
+   # write the report markdown (everything below) to "$report_file", then:
+   python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz write_handoff_artifact \
+     --phase age --slug <slug> --status ok --next cure \
+     --artifact "" --orientation "<one-line orientation>" \
+     --body-file "$report_file"
    ```
 
    Then print the path.

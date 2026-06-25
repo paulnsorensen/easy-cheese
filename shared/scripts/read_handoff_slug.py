@@ -19,7 +19,7 @@ def _cmd(args: argparse.Namespace) -> None:
     if not artifact.is_file():
         raise cli.CliError(f"artifact not found: {artifact}")
     try:
-        slug = handoff.parse_handoff_slug(artifact.read_text())
+        slug = handoff.parse_handoff_slug(artifact.read_text(encoding="utf-8"))
     except handoff.HandoffParseError as exc:
         raise cli.CliError(f"malformed handoff preamble in {artifact}: {exc}") from exc
     cli.emit(

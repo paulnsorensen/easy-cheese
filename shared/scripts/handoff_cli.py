@@ -51,7 +51,7 @@ def _cmd_parse(args: argparse.Namespace) -> None:
     if not path.is_file():
         raise cli.CliError(f"file not found: {args.file}")
     try:
-        slug = handoff.parse_handoff_slug(path.read_text())
+        slug = handoff.parse_handoff_slug(path.read_text(encoding="utf-8"))
     except handoff.HandoffParseError as exc:
         raise cli.CliError(str(exc)) from exc
     cli.emit(

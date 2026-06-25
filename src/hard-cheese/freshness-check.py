@@ -29,8 +29,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-# Seed: cli helper at repo-root/shared/scripts/cli.py.
-import cli  # noqa: E402  (path-insert seed pattern)
+# cli is co-staged in the bundled .pyz alongside this module
+import cli
 
 STATES = ("previously_passed", "stale", "new")
 EXIT_FOR_STATE = {"previously_passed": 0, "stale": 2, "new": 3}

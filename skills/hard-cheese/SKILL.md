@@ -85,6 +85,7 @@ Arguments:
 Each file opens with a YAML frontmatter block that travels with the audit trail:
 
 ```yaml
+---
 slug: <slug>
 attribution: Sankaranarayanan 2026 / vibecheck
 rubric: SOLO Taxonomy (1-5), pass threshold = 3
@@ -93,6 +94,7 @@ diff_base: <sha>
 diff_head: <short-sha>
 status: PASS | FAIL | FAILED | LOGGED
 attempts: <n>
+---
 ```
 
 The attempt log uses a 6-column markdown table (written by `append-attempt`):

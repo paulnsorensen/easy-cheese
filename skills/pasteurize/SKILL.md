@@ -52,10 +52,10 @@ Do not proceed to Phase 2 until the loop passes all four checks:
 Run the repro loop N times and verify the failure is consistent:
 
 ```
-python3 ${CLAUDE_SKILL_DIR}/scripts/pasteurize.pyz repro-rerun --cmd "<repro-command>" --n 5
+python3 ${CLAUDE_SKILL_DIR}/scripts/pasteurize.pyz repro-rerun --cmd "<repro-command>" --runs 5
 ```
 
-Confirm the returned `reproduced: true` and check `failures` matches the expected failure mode. If `reproduced: false` at N=5, the bug is flaky — increase `--n` before proceeding.
+Confirm the returned `reproduced: true` and check `failures` matches the expected failure mode. If `reproduced: false` at N=5, the bug is flaky — increase `--runs` before proceeding.
 
 Do not proceed until you reproduce the bug.
 

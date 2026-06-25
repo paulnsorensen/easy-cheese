@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 
-import cli  # noqa: E402  # path inserted above
+import cli  # cli is co-staged in the bundled .pyz alongside this module
 from manifest_io import ManifestLoadError, parse_mapping  # noqa: E402
 
 
