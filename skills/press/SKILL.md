@@ -6,9 +6,7 @@ license: MIT
 
 # /press
 
-Use this skill after `/cook` has produced green implementation changes and before review or shipping.
-
-Do not use it to implement broad new behavior. Press may add or strengthen tests and make tiny corrective fixes only when a test exposes a clear defect in the cooked scope.
+Press may add or strengthen tests and make tiny corrective fixes only when a test exposes a clear defect in the cooked scope.
 
 ## --hard propagation
 
@@ -27,7 +25,7 @@ Do not use it to implement broad new behavior. Press may add or strengthen tests
 
 ## Preferred tools and fallbacks
 
-Code search, reading, and editing all go through the `cheez-*` skills (`/cheez-search`, `/cheez-read`, `/cheez-write`) — see those skills for tool selection rules. For coverage and test discovery, press uses `cheez-search` (callers via `kind: "callers"`) and `tilth_deps` (cheez-search owns the routing).
+Code search, reading, and editing all go through the `cheez-*` skills (`/cheez-search`, `/cheez-read`, `/cheez-write`) — see those skills for tool selection rules. For coverage and test discovery, press uses `cheez-search` (callers via `kind: "callers"`) and `tilth_deps`.
 
 Beyond `cheez-*` there are press-specific tools:
 
@@ -40,17 +38,9 @@ Beyond `cheez-*` there are press-specific tools:
 
 If optional tools are missing, press a narrower surface and state the residual risk.
 
-## Testing priority
-
-1. Spec compliance: promised behavior has executable coverage.
-2. Assertion strength: tests fail for wrong values, errors, or state.
-3. Boundary behavior: empty, missing, malformed, minimal, and maximum inputs.
-4. Integration seams: filesystem, subprocess, network, time, or dependency failure when in scope.
-5. Happy path regression: the primary user path still passes.
-
 ## Output
 
-Cross-cutting house style and citation form: [`../../shared/formatting.md`](../../shared/formatting.md). This section owns the press-report shape; formatting.md owns the voice rules and the footnote primitive.
+House style and citation form: [`../../shared/formatting.md`](../../shared/formatting.md). This section owns the press-report shape.
 
 Write to `.cheese/press/<slug>.md` with a minimum handoff slug at the top so `/ultracook` and `/cheese --continue` can chain without re-parsing the report. The full report shape:
 
@@ -86,7 +76,7 @@ artifact: <path-if-any>
 <blocked>:                  resolve blocking issues before proceeding
 ```
 
-`status: ok` maps to readiness `ready for /age` or `follow-up recommended` (both are review-safe — the cooked contract is sound and every changed behaviour has a hardening test). `status: halt: <reason>` maps to readiness `blocked` with the reason filled in. `next:` always names the next runnable phase if the human chooses to proceed: `age` when readiness is `ready for /age` or `follow-up recommended`, or `press` when blocking issues must be resolved and the hardening phase rerun. Use `next: done` only for true terminal completion, not for a blocked-but-resumable halt. `/ultracook` still stops automatically on any `status: halt`; `next:` is the resume hint for `/cheese --continue`.
+`status: ok` maps to readiness `ready for /age` or `follow-up recommended`; `status: halt: <reason>` maps to `blocked`. `next:` names the next runnable phase: `age` when review-safe, `press` when blocking issues must be resolved and the hardening phase rerun. Use `next: done` only for true terminal completion, not for a blocked-but-resumable halt. `/ultracook` still stops automatically on any `status: halt`; `next:` is the resume hint for `/cheese --continue`.
 
 Then print:
 
@@ -102,7 +92,7 @@ Next step:    /age <slug>                          (when ready for /age or follo
 
 After the press report is on disk, ask via the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md), following its **Standard forward-step menu**. Lead each option with the verb (what the user wants to *do* next); the skill command (with any in-scope `--hard` propagation) is the backing detail. Default options:
 
-- **Review the diff** *(recommended when readiness is `ready for /age` or `follow-up recommended`)* — `/age <slug>`. For `follow-up recommended`, the cooked contract is sound and every changed behaviour has a hardening test; documented follow-ups can be addressed after review.
+- **Review the diff** *(recommended when readiness is `ready for /age` or `follow-up recommended`)* — `/age <slug>`. For `follow-up recommended`, documented follow-ups can be addressed after review.
 - **Ship it** — `/age <slug> --auto --open-pr`: run age → cure headless and open (or push) the PR at the end.
 - **Checkpoint & stop** — `/wheypoint`: write a resumable handoff and pause.
 - **Stop** — dispatch none; defer review (use this if you want to harden manually before /age, even though the contract is review-safe).
@@ -114,8 +104,8 @@ Pre-select **Review the diff** when readiness is `ready for /age` or `follow-up 
 When invoked with `--auto` (propagated from `/cook --auto`):
 
 - Skip the handoff gate entirely.
-- If readiness is `ready for /age` or `follow-up recommended`, invoke `/age <slug> --auto` directly (forward `--open-pr` when it is in scope). Both states mean the cooked contract is sound and every changed behaviour has a hardening test; follow-ups are documented and review-safe.
-- If readiness is `blocked`, stop the auto chain and surface the press report to the user. `blocked` is reserved for cases where human judgement is genuinely required: a false premise on the cooked contract, an unfixable level-1/2 gap inside cooked scope, a changed behaviour press could not lock with a stable hardening test, or spinning wheels (three attempts at the same gap without green).
+- If readiness is `ready for /age` or `follow-up recommended`, invoke `/age <slug> --auto` directly (forward `--open-pr` when it is in scope).
+- If readiness is `blocked`, stop the auto chain and surface the press report to the user. `blocked` is reserved for: a false premise on the cooked contract, an unfixable level-1/2 gap in cooked scope, a changed behaviour press could not lock with a stable hardening test, or spinning wheels (three attempts at one gap without green).
 
 ### When invoked from /ultracook
 
@@ -125,7 +115,7 @@ When invoked with `--auto` (propagated from `/cook --auto`):
 
 - Do not weaken assertions.
 - Do not broaden implementation beyond the cooked contract.
-- **Every changed behaviour in the cooked diff leaves press with an executable hardening test that would fail if the change regressed.** Even on a 3-line off-by-one fix, press writes (or confirms cook wrote) a test like `test_off_by_one_at_boundary` that locks the fix in. If press cannot produce a stable hardening test for a changed behaviour (flaky seam, missing infrastructure, design decision required), readiness is `blocked` — never `ready for /age` or `follow-up recommended`.
+- **Every changed behaviour in the cooked diff leaves press with an executable hardening test that would fail if the change regressed.** If press cannot produce a stable hardening test for a changed behaviour (flaky seam, missing infrastructure, design decision required), readiness is `blocked` — never `ready for /age` or `follow-up recommended`.
 - **Cap iteration at three attempts per gap.** Count test-edit + run cycles. On the third failed cycle on the same gap, mark readiness `blocked` with reason `spinning: <gap-description>` and surface the report. Do not loop indefinitely.
 - Surface medium and high findings explicitly; summarize low findings.
 - If the cooked diff or spec rests on a false premise (the contract is wrong, or the test surface is solving the wrong problem), stop and surface the premise before adding tests; do not harden the wrong angle.

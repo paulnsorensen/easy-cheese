@@ -1,6 +1,6 @@
 # Coherence self-check
 
-Run these questions before dispatching the chosen target. If any answer is `no`, downgrade the routing decision (usually to `clarify` or `research`) instead of pre-selecting a target. Under `--safe` the downgrade lands in the dispatch gate; otherwise it lands in the announce block, and on the `clarify` path it replaces the dispatch with a single targeted host-routed question per `shared/handoff-gate.md`.
+Run these questions before dispatching. If any answer is `no`, downgrade the routing decision (usually to `clarify` or `research`) instead of pre-selecting a target. See ## Failure handling for where the downgrade lands.
 
 ## Pre-dispatch checklist
 
@@ -39,7 +39,3 @@ When the checklist trips:
 - Switch the announce block to name the failing check (e.g. "spec path `.cheese/specs/foo.md` does not exist on disk").
 - Replace the dispatch with a single clarifying host-routed question whose options resolve the failed check. Under `--safe` the gate already exists, so swap its options for the clarifying ones; without `--safe` the clarify path is the only sanctioned reason to ask the user at all.
 - Never pre-select a target the checklist downgraded.
-
-## Why this is separate
-
-Keeping the coherence check as a referenced list (rather than inlined into `SKILL.md`) makes it easy to extend without bloating the main skill body. Future invariants — for example a new skill with new prerequisites — only need an entry here.

@@ -103,7 +103,7 @@ The Tavily MCP exposes 5 tools at increasing cost and precision. Pick the lowest
 
 ### Filters
 
-- **Time**: **set `time_range` whenever the question carries "latest" / "current" / "newest" or names a year** (`day` / `week` / `month` / `year`) — omitting it on a freshness-sensitive question is the single most common miss. Use `start_date` / `end_date` for absolute windows.
+- **Time**: **set `time_range` whenever the question carries "latest" / "current" / "newest" or names a year** (`day` / `week` / `month` / `year`). Use `start_date` / `end_date` for absolute windows.
 - **Domain**: `include_domains=[...]` for trusted sources (vendor, arxiv.org, github.com); `exclude_domains=[...]` for noise (reddit.com, quora.com).
 - **Score**: post-filter response items before extracting (the score is in the response, not a request param). Keep `score > 0.5` as the floor for extraction candidates; tighten to `score > 0.7` when you only want high-confidence sources.
 - **Exact phrase**: `exact_match=true` when chasing a literal quote, error string, or API name.
@@ -164,7 +164,5 @@ SOURCE PRIORITY: vendor docs > release notes > repo precedent
 ```
 
 ## Hard rule
-
-If a source was committed in routing, spawn it. If it returns "unavailable", report that — do not silently drop a routed source because it later seems low-value.
 
 Make this mechanical, not honor-system. After gather, diff the emitted `ROUTING DECISION` against what actually ran: for each source marked `YES`, confirm a call executed and produced evidence, an `unavailable` result, or an empty result. Any committed source with no corresponding execution is **committed-but-skipped** — mark it explicitly in the report (a `Searched, empty` line if it ran dry, an UNAVAILABLE note per `unavailable.md` if it failed, or a flagged gap if it was simply not run) and apply the matching confidence cap from `synthesis.md`. A `YES` in the routing block with nothing to show for it is a reconciliation failure, not a silent drop.

@@ -1,6 +1,6 @@
 ---
 name: age
-description: Review a diff, PR, branch, or path across ten orthogonal dimensions (correctness, security, encapsulation, spec, complexity, deslop, assertions, NIH, efficiency, telemetry) and emit a severity-grouped findings report. Use when the user wants a code review — phrases like "review this", "/age", "is this safe to merge", "find bugs", "spot security issues", "check for slop", "review my PR", "look for problems", "what's wrong with this code". Report (`## Blocker / ## High / ## Medium / ## Low`) lands at `.cheese/age/<slug>.md`, each finding tagged by dimension. Use even when the user only asks for one dimension — the report scopes itself. Findings only — no fixes; after the report lands, age auto-applies the recommended set (mediums-and-above plus cheap lows) via `/cure`, gating only when a fix is sprawling/structural or findings conflict; `--safe` restores the selection gate. Supports `--auto` (propagated from `/cook --auto`) for the autonomous chain into `/cure`. After `/press` (optional); before `/cure`.
+description: Review a diff, PR, branch, or path across ten orthogonal dimensions (correctness, security, encapsulation, spec, complexity, deslop, assertions, NIH, efficiency, telemetry) and emit a severity-grouped findings report. Use when the user wants a code review — phrases like "review this", "/age", "is this safe to merge", "find bugs", "spot security issues", "check for slop", "review my PR", "what's wrong with this code". Report (`## Blocker / ## High / ## Medium / ## Low`) lands at `.cheese/age/<slug>.md`, each finding tagged by dimension. Use even when the user only asks for one dimension — the report scopes itself. Findings only — no fixes; after the report lands, age auto-applies the recommended set (mediums-and-above plus cheap lows) via `/cure`, gating only when a fix is sprawling/structural or findings conflict; `--safe` restores the selection gate. Supports `--auto` (propagated from `/cook --auto`) for the autonomous chain into `/cure`. After `/press` (optional); before `/cure`.
 license: MIT
 ---
 
@@ -25,7 +25,7 @@ Accept:
 
 When called with a `<slug>`, resolve `.cheese/press/<slug>.md` (if present) for press context and review the current working diff. When called with a `<ref-or-range>`, review that range. Default to the current working diff when neither is supplied. If the base branch is unclear, ask or use the repository's documented default.
 
-`--auto` is the propagated autonomous-mode flag from `/cook --auto`. It changes the handoff (see `## Handoff` and `### Auto mode` for the cap rule and full chain). (When invoked from `/ultracook`, each phase boots in fresh context with no shared memory; see `### When invoked from /ultracook` below for the no-shared-memory variant.)
+`--auto` is the propagated autonomous-mode flag from `/cook --auto`. It changes the handoff (see `## Handoff` and `### Auto mode` for the cap rule and full chain). See `### When invoked from /ultracook` for the no-shared-memory variant.
 
 `--hard` is the propagated metacognitive-gate flag from `/cook --hard` (or `/cheese --hard`). Age does not fire the gate; it only passes `--hard` forward to `/cure` at the handoff so the gate can fire at the share-for-review boundary. See `skills/hard-cheese/SKILL.md`.
 
@@ -55,7 +55,7 @@ Per-dimension base-severity tables, location-sensitivity, fix-cost-now / fix-cos
 3. Review every dimension; dimensions with no findings simply omit themselves.
 4. Compute severity per finding (base + location bump + compounding bump, capped at `blocker`). Group findings by severity (`## Blocker → ## High → ## Medium → ## Low`); within a severity group, order by file.
 5. Write the report to `.cheese/age/<slug>.md` and print the path.
-6. Hand off (see `## Handoff` below). By default age auto-selects the recommended fix set and dispatches `/cure` in the same turn, gating for a human decision only when there is a genuine reason (a sprawling/structural fix in the set, or conflicting findings) or when `--safe` is passed. Age never *applies* fixes itself — `/cure` owns application — it only owns the *selection* and the dispatch.
+6. Hand off (see `## Handoff` below).
 
 ## Preferred tools and fallbacks
 
@@ -76,8 +76,6 @@ Beyond `cheez-*` there are review-specific tools:
 
 **Optional MCPs:** code-review-graph, hallouminate, and milknado follow the detect-and-degrade contract in [`../../shared/optional-plugins.md`](../../shared/optional-plugins.md) — state absence once, fall back, reduce confidence only if evidence quality suffers, never block.
 
-Missing optional tools should not block review. State which evidence was unavailable and reduce confidence accordingly.
-
 ## Sub-agent context gate
 
 `/age` should fork a read-only review-context sub-agent when evidence gathering is likely to exceed the parent context, especially for `--comprehensive` reviews.
@@ -95,9 +93,7 @@ For the digest contract, harness-agnostic selection rules, and what the parent n
 
 Activates when **all** hold: the **scale threshold** (above) is met AND `/age` is not itself a sub-agent (no `invoked-from:` marker). Below threshold, or when running as a sub-agent, the single-parent path applies unchanged.
 
-**Seam 1 — Predicate.** Fan out when the **scale threshold** (defined in `## Sub-agent context gate`) is met AND `/age` is not itself a sub-agent.
-
-**Seam 2 — Shared context packet.** The orchestrator assembles the packet once and writes it to `.cheese/age/<slug>-packet.md` (transient — rebuilt every run, no cross-run cache). Each worker reads this file. Eight components are documented in `references/packet.md`. The existing review-context digester above is reused as the packet's orientation + citations block — not duplicated.
+**Seam 2 — Shared context packet.** The orchestrator assembles the packet once, writes it to `.cheese/age/<slug>-packet.md`, and each worker reads it. Eight components, and the reuse of the review-context digester as the orientation block, are documented in `references/packet.md`.
 
 **Seam 3 — Worker contract.** One worker per dimension. Each worker:
 - Reviews only its assigned dimension.
@@ -156,7 +152,7 @@ artifact: <path-to-press-report-or-prior-cure-if-any>
 <`certain` | `speculating` | `don't know`> — <one-line justification including which evidence sources were unavailable>
 
 ## Next step
-Auto-fixing the recommended set via `/cure` (or, on a reason to ask / `--safe`, the selection prompt rendered inline — pick findings to cure or `none` to stop).
+Auto-fixing the recommended set via `/cure` (or the selection prompt on a reason to ask / `--safe`).
 ```
 
 Empty severity sections are omitted entirely. When ten or more `low` findings exist, collapse the `## Low` section to a single line:
@@ -179,8 +175,6 @@ Age report: .cheese/age/<slug>.md
 ## Handoff
 
 **Pipeline:** culture → mold → cook → press → **[age]** → cure → ship
-
-After the report is on disk, age decides whether to *act* or *ask*. The default is to act: auto-select the recommended fix set and dispatch `/cure` in the same turn, no gate. The gate is reserved for the cases that genuinely need a human decision. Age never *applies* fixes — `/cure` owns application — it only owns the *selection*.
 
 **Compute the recommended set.** The recommended selection is the composite `all-medium, cheap` — floor at medium (blockers + high + medium) unioned with every `Low` whose `fix-cost-now: contained`. Expand it against the report into `resolved_ids`.
 
@@ -260,12 +254,12 @@ Detection mechanism: scan the invoking prompt for an `invoked-from:` line — va
 - Output shape is mode-invariant — same findings report and handoff slug format whether fan-out or inline-degrade; see **Output mode-invariance** in `### Scale-triggered fan-out mode` above.
 - Honour the no-chain-forward directive as usual: write the slug and stop. Do not invoke `/cure` from the sub-agent — the orchestrator owns the chain.
 
-Inline-degrade is forced when the marker is present; there is no opt-out. Even above the scale-triggered fan-out threshold, the marker takes precedence — fan-out is forbidden when `/age` runs as a sub-agent because the harness nesting depth is already consumed. Spawning a deeper sub-agent from inside a curd worker can exceed the harness's nesting limit and fail silently — the marker is the only honest signal that the parent has already consumed the available depth.
+Inline-degrade is forced when the marker is present (no opt-out); it takes precedence even above the fan-out threshold — fan-out is forbidden when `/age` runs as a sub-agent because the nesting depth is already consumed.
 
 ## Rules
 
 - Review is not a verdict; explain where to look and why.
-- Do not edit production files. Age never *applies* fixes — it owns the *selection* and dispatches `/cure`, which owns application.
+- Do not edit production files; `/cure` owns application.
 - Default to acting: auto-select the recommended set and dispatch `/cure` without a gate. Ask first only on a genuine reason (a sprawling/structural fix in the set, or conflicting findings) or under `--safe`. An empty recommended set is a clean stop, not a question.
 - Do not invent evidence. Cite files, diffs, commands, or unavailable-source notes.
 - Agree when the diff is fine. Do not manufacture findings to fill a dimension; an empty dimension is a valid outcome.

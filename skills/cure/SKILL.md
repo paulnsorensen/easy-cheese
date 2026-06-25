@@ -8,15 +8,13 @@ license: MIT
 
 Use this skill after `/age`, failed validation, or user-selected review findings need to be fixed and prepared for shipping.
 
-Do not use it to apply every suggestion automatically. The user chooses what to cure.
-
 ## Inputs
 
 Accept any of: a `/age` slug (`/cure <slug>` reads `.cheese/age/<slug>.md`), a pasted findings list, a CI failure summary, or a scoped instruction like "fix the high-severity age findings". `/age` may also hand off with a pre-locked selection by passing the chosen ids in a structured handoff context (see `references/selection.md#handoff-from-age` for the canonical format); when that context is present, skip rendering the selection list and go straight to apply.
 
 Age reports older than this severity-rubric revision lack the `severity`, `location`, `fix-cost-now`, and `fix-cost-later` sub-fields on each finding. Tolerate the older shape: when a finding has no `severity` field, infer it from the section header (`## High-stake findings` → `high`, `## Medium-stake findings` → `medium`); when `fix-cost-now` is absent, the `cheap` selection verb resolves to the empty set per `references/selection.md`. Never reject a report for missing sub-fields; record any inference in the cure report under `### Notes`.
 
-When `/age` or `/affinage` hands off a pre-locked selection, adopt it. When called bare without a pre-locked selection, the default selection is the recommended composite (`all-medium, cheap`) — apply it unless `--safe` is passed or a recommended fix is sprawling/structural or findings conflict, in which case render a numbered selection list per `references/selection.md` and ask what to apply.
+When `/age` or `/affinage` hands off a pre-locked selection, adopt it. When called bare without a pre-locked selection, apply the recommended composite (`all-medium, cheap`) per `references/selection.md`, which also defines the gate conditions.
 
 Optional flags:
 
@@ -24,7 +22,7 @@ Optional flags:
 - `--open-pr` — after a clean cure, allow cure to open a *new* PR when none exists. Without it cure only pushes to an already-open PR and otherwise leaves the remote untouched. Composes with both interactive and `--auto`.
 - `--auto` — autonomous mode (propagated from `/cook --auto`). Bypasses the user-selection step. Must be paired with `--stake <floor>` to set the inclusion threshold; `/cook --auto` always passes `--stake medium+`. See `references/selection.md` for the auto-selection rules and `## Auto mode` below for the pass-cap and revert behaviour.
 - `--stake <floor>` — used only with `--auto`. Severity floor: `blocker`, `high`, `medium+`, or `all`. Floor definitions and the `medium+` cheap-lows rule: `references/selection.md` § Auto-mode selection. Without `--auto` this flag is ignored.
-- `--hard` — propagated metacognitive-gate flag (from `/cook --hard` or `/cheese --hard`). Cure is the *only* pipeline skill that fires the gate: when `--hard` is in scope, invoke `/hard-cheese <slug>` *before* the PR push (the share-for-review boundary) and proceed only on exit `0` — whether the push is the autonomous default or the `--safe` gate's **Ship it — open or update the PR** option. Under `--auto --hard`, see `## --hard mode` and the auto-mode puncture clause below.
+- `--hard` — propagated metacognitive-gate flag (from `/cook --hard` or `/cheese --hard`). Cure is the only pipeline skill that fires the gate; see `## --hard mode` for the full contract.
 
 ## Flow
 
@@ -32,10 +30,10 @@ Optional flags:
 2. **Select** — adopt any pre-locked handoff from `/age`/`/affinage`; otherwise apply the recommended composite. See `references/selection.md` for the default rule, recognized verbs, and gate conditions.
 3. **Apply** — fix one logical group at a time via `cheez-read` (re-confirm anchor location) and `cheez-write` (apply).
 4. **Validate** — run the narrowest tests that prove each fix, then any relevant project-wide gates (lint, typecheck, build).
-5. **Taste-test (behavioural fixes only)** — if this cure applied a *behavioural* fix (touched production logic or public surface), run the fresh-context taste-test before the handoff slug: dispatch the read-only `reviewer` phase-agent (named, no call-site model — its def pins `model: opus`) over the cure diff with the same lenses cook uses, or fall back to the inline self-check when no such reviewer sub-agent is available. *Mechanical* fixes — formatting, comment, import, no-logic rename — skip this and keep the current flow. Pipe any `revise` into a bounded corrective pass; a Locked-decision `halt` stops for a human. (Mirrors cook's taste-test, which cure lacked before; a coder-nested cure cannot fan out and defers the authoritative pass to the orchestrator, as in cook.)
+5. **Taste-test (behavioural fixes only)** — if this cure applied a *behavioural* fix (touched production logic or public surface), run the fresh-context taste-test before the handoff slug: dispatch the read-only `reviewer` phase-agent (named, no call-site model — its def pins `model: opus`) over the cure diff with the same lenses cook uses, or fall back to the inline self-check when no such reviewer sub-agent is available. *Mechanical* fixes — formatting, comment, import, no-logic rename — skip this and keep the current flow. Pipe any `revise` into a bounded corrective pass; a Locked-decision `halt` stops for a human. (A coder-nested cure cannot fan out; it defers the authoritative pass to the orchestrator.)
 6. **Re-review hand-off** — recommend `/age --scope <touched-path>` so review runs through the proper skill rather than reimplementing it inline. `/cure` does not re-grade its own work. If the user picks re-age, the resulting report can feed a fresh `/cure` invocation.
 7. **Ship report** — what changed, checks run, deferred items, residual risks. Write the handoff slug at the top of `.cheese/cure/<slug>.md` (see `## Handoff slug` below) so the chain (and `/ultracook`) can read the outcome without re-parsing the full report.
-8. **Push / hand off** — on a **clean cure** (see Validation), push to the PR by default (see `## Handoff` below): if an open PR exists for the branch, dispatch `/gh` to commit + push to it; if none exists, open one only with `--open-pr`. Under `--safe`, ask via the shared handoff gate before touching the remote. If the cure was not clean, surface the blocker instead of pushing.
+8. **Push / hand off** — on a **clean cure**, push or hand off per `## Handoff` below.
 
 ## Preferred tools and fallbacks
 
@@ -62,7 +60,7 @@ Run the narrowest tests that prove the fix, then any relevant existing wider gat
 
 Applied requires its proving test green (Iron Law — see `references/cure-discipline.md`).
 
-**clean cure** — ≥1 fix applied, all gates green, no false-premise halt. The term is used throughout this file to describe the completion condition for push/halt decisions.
+**clean cure** — ≥1 fix applied, all gates green, no false-premise halt.
 
 ## Handoff slug
 
@@ -79,7 +77,7 @@ artifact: <path-if-any>
 
 ## Output
 
-Cross-cutting house style and citation form: [`../../shared/formatting.md`](../../shared/formatting.md). This section owns the cure-report shape; formatting.md owns the voice rules and the footnote primitive.
+Cross-cutting house style and citation form: [`../../shared/formatting.md`](../../shared/formatting.md).
 
 The cure report body lives below the handoff slug in the same file at `.cheese/cure/<slug>.md`:
 
@@ -141,7 +139,7 @@ When invoked with `--auto --stake <floor>`:
 - Apply findings one at a time. After each fix, run the narrowest test that proves it. If the fix breaks a previously-passing test or any project-wide gate, revert that single finding's edit and record it under `### Deferred` in the cure report with the test name and the failure summary. Continue with the remaining findings.
 - After all selected findings are processed, skip the handoff gate and invoke `/age --scope <touched-paths> --auto` (forward `--open-pr` when it is in scope) so the chain can re-review.
 - `/age --auto` enforces the two-pass cap. Cure does not need to track passes itself — it just keeps applying when invoked.
-- **Terminal PR push.** The PR push fires once, from the cure frame whose `/age --auto` child returned `next: done` (chain-clean or two-cure-pass cap reached) — the same terminal hook as the `--hard` puncture below. At that terminal, push to an already-open PR via `/gh` (Rule 11); open a new PR only when `--open-pr` is in scope. Mid-chain cure passes (age child returned `next: cure`) never push. A cook chain on a fresh branch with no PR and no `--open-pr` ends with the final age report and touches no remote, as before.
+- **Terminal PR push.** The PR push fires once, from the cure frame whose `/age --auto` child returned `next: done` (chain-clean or two-cure-pass cap reached). Push to an already-open PR via `/gh` (Rule 11); open a new PR only when `--open-pr` is in scope. Mid-chain cure passes (age child returned `next: cure`) never push. A cook chain on a fresh branch with no PR and no `--open-pr` ends with the final age report and touches no remote.
 - **Orchestrated sub-agent exception (no push).** When cure runs as a phase-only sub-agent of an orchestrator that owns publishing — `/ultracook` (see below) or a `/cheese-factory` curd worker (spawn prompt carries `invoked-from: cheese-factory-curd` / forbids `/gh` and chaining forward) — it never performs the terminal push, even at `next: done`. The orchestrator owns the remote (cheese-factory publishes in its Phase 7 via `/pr-stack` / `/gh`). Such a sub-agent applies its findings, writes its cure slug, and stops; touching the remote from inside a curd would violate the orchestrator contract.
 
 **`--auto --hard` puncture clause.** When `--hard` is also in scope, the chain pauses *once*, at the natural terminal point: after cure invokes `/age --auto` and the returned age slug shows `next: done` (chain-clean *or* two-cure-pass cap reached), invoke `/hard-cheese <slug>` *before returning to the caller*. This is the only sanctioned puncture of `--auto`'s skip-handoff semantics. Concretely:
@@ -177,4 +175,3 @@ In both cases the terminal PR push (above) is suppressed — the orchestrator, n
 
 Iron Law, Red Flags, and the fix-application Rationalization table live in
 [`references/cure-discipline.md`](references/cure-discipline.md).
-See [`../../shared/skill-authoring.md`](../../shared/skill-authoring.md) for the template these follow.

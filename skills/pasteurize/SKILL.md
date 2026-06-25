@@ -1,6 +1,6 @@
 ---
 name: pasteurize
-description: Hard-bug DIAGNOSIS + FIX. Builds a deterministic agent-runnable feedback loop, reproduces the failure, names the cause, writes a regression test, applies the minimal production fix. Use when the user reports a bug, flaky test, perf regression, or visible misbehaviour — phrases like "diagnose this", "debug this", "why is X broken", "/pasteurize", or a pasted stack trace / repro / "this looks wrong, investigate" with no stated cause. Pasteurize EDITS code (regression test + fix); culture does not. Runs the six-phase loop — feedback loop → reproduce → hypothesise → instrument → fix + regression test → cleanup — anchored on phase 1. Writes `.cheese/pasteurize/<slug>.md` and hands off to `/cook <slug> --auto` for the `/press → /age → /cure` chain; pasteurize's own `--auto` skips its handoff gate. Do NOT use for review-only diffs (`/age`), feature design (`/mold`), known-cause fixes (`/cook`), or when the user explicitly opted out of writes (`/culture`). After `/cheese` debug intent; before `/cook <slug> --auto`.
+description: Hard-bug DIAGNOSIS + FIX. Builds a deterministic agent-runnable feedback loop, reproduces the failure, names the cause, writes a regression test, applies the minimal production fix. Use when the user reports a bug, flaky test, perf regression, or visible misbehaviour — phrases like "diagnose this", "debug this", "why is X broken", "/pasteurize", or a pasted stack trace / repro / "this looks wrong, investigate" with no stated cause. Pasteurize EDITS code (regression test + fix); culture does not. Runs the six-phase loop — feedback loop → reproduce → hypothesise → instrument → fix + regression test → cleanup. Writes `.cheese/pasteurize/<slug>.md` and hands off to `/cook <slug> --auto` for the `/press → /age → /cure` chain; pasteurize's own `--auto` skips its handoff gate. Do NOT use for review-only diffs (`/age`), feature design (`/mold`), known-cause fixes (`/cook`), or when the user explicitly opted out of writes (`/culture`). After `/cheese` debug intent; before `/cook <slug> --auto`.
 license: MIT
 ---
 
@@ -14,13 +14,11 @@ When exploring the codebase, use `/cheez-search` to orient and check `.cheese/sp
 
 **This is the skill.** Everything else is mechanical. If you have a fast, deterministic, agent-runnable pass/fail signal for the bug, you will find the cause — bisection, hypothesis-testing, and instrumentation all just consume that signal. If you don't have one, no amount of staring at code will save you.
 
-Spend disproportionate effort here. **Be aggressive. Be creative. Refuse to give up.**
+Spend disproportionate effort here.
 
 ### Ways to construct one
 
 To pick a loop shape, see [`references/feedback-loops.md`](references/feedback-loops.md) for the ten-option ordered menu.
-
-Build the right feedback loop, and the bug is 90% fixed.
 
 ### Iterate on the loop itself
 
@@ -29,8 +27,6 @@ Treat the loop as a product. Once you have _a_ loop, ask:
 - Can I make it faster? (Cache setup, skip unrelated init, narrow the test scope.)
 - Can I make the signal sharper? (Assert on the specific symptom, not "didn't crash".)
 - Can I make it more deterministic? (Pin time, seed RNG, isolate filesystem, freeze network.)
-
-A 30-second flaky loop is barely better than no loop. A 2-second deterministic loop is a debugging superpower.
 
 ### Non-deterministic bugs
 
@@ -113,7 +109,7 @@ Before writing the handoff slug, confirm:
 - [ ] Throwaway harnesses / prototypes deleted (or moved to a clearly-marked debug location and called out in the slug).
 - [ ] The confirmed hypothesis is captured in the slug so the commit message downstream can reference it.
 
-**Then ask: what would have prevented this bug?** If the answer involves architectural change (no good test seam, tangled callers, hidden coupling), note it in the slug under an architectural-follow-up line. The chain still runs; the user can pick up the architectural work via `/mold` after the fix lands. Make the recommendation **after** the fix is in, not before — you have more information now than when you started.
+**Then ask: what would have prevented this bug?** If the answer involves architectural change (no good test seam, tangled callers, hidden coupling), note it in the slug under an architectural-follow-up line. The chain still runs; the user can pick up the architectural work via `/mold` after the fix lands. Make the recommendation **after** the fix is in, not before.
 
 Once the checklist is green and the slug is on disk, hand off to `/cook <slug> --auto` (default). Cook --auto picks up the post-fix state, runs its taste-test against the applied diff for spec drift / readability / scope creep, produces its package-ready report, and triggers the autonomous `/press → /age → /cure` chain. Pasteurize itself does not commit, open PRs, or drive the chain — cook owns that.
 
@@ -128,7 +124,7 @@ Once the checklist is green and the slug is on disk, hand off to `/cook <slug> -
 | GitHub context | `gh` | local git history or user-provided links |
 | External sanity check | `/briesearch` | clearly mark as an assumption |
 
-Missing optional tools should not interrupt diagnosis. Keep tool use proportional to the bug.
+Missing optional tools should not interrupt diagnosis.
 
 ## Output
 
@@ -189,9 +185,8 @@ In every early-stop case, write the halt slug and surface the report. Do not sil
 
 ## Rules
 
-- Do not skip Phase 1. The feedback loop is the skill; everything else is mechanical.
-- Do not hypothesise without a reproducing loop.
-- Phase 5 writes only the regression test and the **minimal** production change. Broader implementation — related cleanup, follow-on features, refactors the bug suggests — belongs in `/cook`, not pasteurize.
+- Do not skip Phase 1, and do not hypothesise without a reproducing loop.
+- Phase 5 writes only the regression test and the **minimal** production change; broader work belongs in `/cook`.
 - Do not leave `[DEBUG-...]` tags in the tree — clean them before the handoff slug is written.
 - Do not claim "shipped". Pasteurize claims "cause named, regression green, fix in tree, ready for chain". The chain (cook → press → age → cure) claims shipped.
 - If the bug exposes an architectural gap (no correct regression-test seam), say so in the slug. Do not silently paper over it.

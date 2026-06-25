@@ -1,14 +1,12 @@
 ---
 name: hard-cheese
-description: Metacognitive vibecheck gate before code is shared for review — make the author explain the diff's causal logic, graded by a fresh-context judge against the SOLO Taxonomy. Use when the user wants this gate — phrases like "/hard-cheese", "/cheese --hard", "gate this before I push", "vibecheck me", "make sure I understand this diff", "epistemic-debt check". Reads the working diff, asks the human author to explain it in their own words, spawns the judge sub-agent (pass ≥ Multistructural), and either accepts (PASS) or returns Socratic feedback for retry (FAIL, capped at `--socratic-cap N`). Writes the audit trail to `.cheese/hard/<slug>.md`. Use standalone before opening a PR, or as the propagated `--hard` flag on `/cook`, `/press`, `/age`, `/cure` so the gate fires at the share-for-review handoff. Do NOT use for code review (`/age`), test hardening (`/press`), or fix application (`/cure`) — those review the artifact; hard-cheese reviews the human's understanding of it.
+description: Metacognitive vibecheck gate before code is shared for review — make the author explain the diff's causal logic, graded by a fresh-context judge against the SOLO Taxonomy. Use when the user wants this gate — phrases like "/hard-cheese", "/cheese --hard", "gate this before I push", "vibecheck me", "make sure I understand this diff", "epistemic-debt check". Reads the working diff, asks the human author to explain it in their own words, spawns the judge sub-agent (pass ≥ Multistructural), and either accepts (PASS) or returns Socratic feedback for retry (FAIL, capped at `--socratic-cap N`). Writes the audit trail to `.cheese/hard/<slug>.md`. Use standalone before opening a PR, or as the propagated `--hard` flag on `/cook`, `/press`, `/age`, `/cure` so the gate fires at the share-for-review handoff. Do NOT use for code review (`/age`), test hardening (`/press`), or fix application (`/cure`).
 license: MIT
 ---
 
 # /hard-cheese
 
-Use this skill when the human author needs to demonstrate they understand the causal logic of a diff before it is shared for review or a pull request is opened. The gate exists to mitigate **epistemic debt** — the failure mode where AI-scaffolded code passes review, type-checks, and tests green while the author cannot explain it to a reviewer.
-
-Do not use it for code review (`/age` covers eight orthogonal review dimensions), for test hardening (`/press`), or for fix application (`/cure`). Those skills review the artifact. Hard-cheese reviews the human's understanding of the artifact — orthogonal axis.
+The gate mitigates **epistemic debt** — the failure mode where AI-scaffolded code passes review, type-checks, and tests green while the author cannot explain it to a reviewer.
 
 ## Inputs
 
@@ -47,11 +45,11 @@ Arguments:
 
    > Before this is shared for review, explain its causal logic in your own words. How does *<feature or fix>* work? Why does it produce the desired behavior? What state, control flow, or invariants does it rely on?
 
-   Render a diff summary alongside the prompt: files changed, key hunks. Cap the diff excerpt at roughly 80 lines so the user can still see what they are explaining without scrolling. The spec excerpt (if loaded) is shown above the diff summary.
+   Render a diff summary alongside the prompt: files changed, key hunks. Cap the diff excerpt at roughly 80 lines. The spec excerpt (if loaded) is shown above the diff summary.
 
-4. **Capture the user's explanation** as free text. No coaching, no autosuggest, no example answers — the explanation is the artifact under test.
+4. **Capture the user's explanation** as free text. No coaching, no example answers — the explanation is the artifact under test.
 
-5. **Spawn the judge sub-agent** in fresh context (same pattern `/ultracook` uses for adversarial review). Same-context self-judging is biased and not useful. The judge:
+5. **Spawn the judge sub-agent** in fresh context (same pattern `/ultracook` uses for adversarial review). The judge:
    - Reads `references/judge-prompt.md` as its system prompt.
    - Receives the diff summary, the spec excerpt (if any), and the user's explanation as context.
    - Returns a JSON object: `{score, level, pass, feedback, socratic_qs}`.
@@ -113,8 +111,6 @@ Attempts append; nothing is overwritten within a single invocation. If a re-invo
 
 ## Sub-agent contract — fresh peer, not diminutive
 
-The judge is a fresh-context full-peer sub-agent, the same pattern `/ultracook` uses. Rules:
-
 - **Fresh context, every invocation.** Same-context judging is biased toward "yes you understand it" because the model that helped write the code believes the code is good. The fresh context is the entire reason the judge means anything.
 - **`subagent_type: "general-purpose"`** with `references/judge-prompt.md` as the system prompt. Model inherits from the parent — do not pass `haiku` or any other tier downgrade.
 - **No tools needed for the judge.** It reads the prompt, diff summary, spec excerpt, and explanation, then returns JSON. No file access, no shell, no MCP — the judge is a graded read-only call.
@@ -123,8 +119,6 @@ The judge is a fresh-context full-peer sub-agent, the same pattern `/ultracook` 
 If the host harness has no sub-agent primitive, `/hard-cheese` is the wrong skill — the gate cannot run without a fresh judge. Recommend `/hard-cheese --no-judge` for users who still want the explanation captured as telemetry without the grading step.
 
 ## Attribution
-
-This skill implements the metacognitive-script mechanism described in:
 
 > Sankaranarayanan, S. (2026). *Mitigating 'Epistemic Debt' in Generative AI-Scaffolded Novice Programming using Metacognitive Scripts.* Proceedings of the 13th ACM Conference on Learning at Scale. <https://arxiv.org/abs/2602.20206>
 
@@ -142,7 +136,7 @@ Hard-cheese departs from vibecheck in exactly one place, and the divergence is c
 
 **Hard-cheese fails open on judge error.** If the fresh-context judge sub-agent crashes, times out, or returns malformed JSON, the gate writes an `ERROR` attempt, prints a clear warning, and exits `0` — the user is allowed to proceed.
 
-Rationale: judge invocation is per-PR-attempt and per-retry, and a strict fail-closed policy creates a worse experience under API hiccups than the epistemic-debt cost it averts. This is the only departure from the paper's mechanism. New divergences must be added to this section so each one stays legible.
+Rationale: judge invocation is per-PR-attempt and per-retry, and a strict fail-closed policy creates a worse experience under API hiccups than the epistemic-debt cost it averts. New divergences must be added here.
 
 ## Composition with `--auto`
 

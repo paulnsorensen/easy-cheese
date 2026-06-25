@@ -1,6 +1,6 @@
 ---
 name: culture
-description: Primarily the agent's internal-thinking skill — invoke it silently to model a problem, identify trade-offs, and decide what to do, BEFORE asking the user anything or dispatching another skill. Workflow skills call `/culture` as their step-1 reasoning pass; the agent does not surface the dialogue. Only treat this as a user-facing skill when the user has explicitly opted out of writes — phrases like "no writes", "just rubber-duck this", "let's only talk", "/culture". Culture never writes to production code, never commits, never opens PRs. If the dialogue reveals real work, recommend `/mold` (fuzzy → spec) or `/cook` (clear ask → code) and stop. Before `/mold` or `/cook`.
+description: Primarily the agent's internal-thinking skill — invoke it silently to model a problem, identify trade-offs, and decide what to do, BEFORE asking the user anything or dispatching another skill. Workflow skills call `/culture` as their step-1 reasoning pass; the agent does not surface the dialogue. Only treat this as a user-facing skill when the user has explicitly opted out of writes — phrases like "no writes", "just rubber-duck this", "let's only talk", "/culture". Culture never writes — no commits, no PRs. If the dialogue reveals real work, recommend `/mold` (fuzzy → spec) or `/cook` (clear ask → code) and stop. Before `/mold` or `/cook`.
 license: MIT
 ---
 
@@ -22,7 +22,7 @@ Do not use the user-facing mode when the user wants a written spec (`/mold`), im
 
 ## Flow
 
-Both modes share the same reasoning loop. The difference is what the agent does with the output: internal mode returns a single decision back to the calling skill; user-facing mode renders the dialogue and waits for the user.
+Both modes share this reasoning loop; the per-step difference is internal-returns-a-decision vs user-facing-renders-the-dialogue.
 
 1. Restate the question or tension in one sentence. If the question rests on a false premise or a loaded assumption, name it.
 2. Identify assumptions, constraints, and decision criteria.
@@ -30,7 +30,7 @@ Both modes share the same reasoning loop. The difference is what the agent does 
 4. Gather evidence to the depth the question needs. In internal mode keep it light — a quick shape check, no deep research — so the calling skill stays fast. In user-facing mode investigate as deeply as useful: dispatch the read-only `explorer` agent for code grounding and take back its digest, rather than dumping raw reads into the dialogue (where the `explorer` agent isn't available, e.g. a harness that installs only easy-cheese, ground directly via `/cheez-search` / `/cheez-read`).
 5. Decide the next move. In internal mode, return a single recommendation and stop. In user-facing mode you need not force convergence: render a compact summary and confidence-tagged open questions (`certain | speculating | don't know`), then either recommend a downstream skill or defer and carry the thread forward. End the session by writing the wheypoint (`## Handoff slug`), whose `next:` records where the modeling landed.
 
-Default the model's own contribution to maximum useful depth — full pseudocode signatures over hand-waving, named edge cases over "consider edge cases", concrete file:line evidence over vague pointers. Smallest-useful-question discipline applies only to what you ask the user, never to what you offer them.
+Default what you offer to maximum useful depth — full signatures, named edge cases, file:line evidence; smallest-useful-question discipline governs only what you ask the user, never the depth you offer.
 
 ## Preferred tools and fallbacks
 
@@ -47,13 +47,13 @@ Missing optional tools should not interrupt the conversation. In internal mode k
 
 ## Output
 
-See Flow step 5 — compact summary and confidence-tagged open questions are defined there.
+See Flow step 5.
 
 ## Handoff slug
 
-A user-facing session ends by writing a durable handoff, and this is not opt-in: **every** user-facing culture session produces a wheypoint at session end so the modeling is resumable. Invoke `/wheypoint <focus>` and let it own compaction, secret redaction, the state-mapped suggested-skills section, and the resumable slug. Culture does not maintain its own schema; the slug contract (`status` / `next` / `mode` / `artifact` and the `## Document` body) is defined in `skills/wheypoint/SKILL.md`, which is the single source of truth.
+**Every** user-facing session ends by writing a durable wheypoint, so the modeling is resumable. Invoke `/wheypoint <focus>` and let it own compaction, secret redaction, the state-mapped suggested-skills section, and the resumable slug. Culture does not maintain its own schema; the slug contract (`status` / `next` / `mode` / `artifact` and the `## Document` body) is defined in `skills/wheypoint/SKILL.md`, which is the single source of truth.
 
-Culture-relevant `next:` values: `culture` or `hold` to resume the modeling in a later session (defer convergence), `mold` (fuzzy idea, route to spec), `cook` (clear ask, route to implementation), or `done` when the thread is genuinely closed. When the next step is blocked on a human decision, set `status: gated:` rather than a `next:` value. The wheypoint is the **only** thing a culture session writes: no commits, no PRs, no production-code edits.
+Culture-relevant `next:` values: `culture` or `hold` to resume the modeling in a later session (defer convergence), `mold` (fuzzy idea, route to spec), `cook` (clear ask, route to implementation), or `done` when the thread is genuinely closed. When the next step is blocked on a human decision, set `status: gated:` rather than a `next:` value.
 
 ## Handoff
 
@@ -81,7 +81,7 @@ After a non-stop selection, run the selected downstream skill immediately with t
 
 ## Rules
 
-- No production-code writes, no commits, no PRs — see `## Invariant`. The only sanctioned write is the end-of-session wheypoint, delegated to `/wheypoint`; user-facing sessions always write one, internal mode writes nothing.
+- Writes nothing but the end-of-session wheypoint — see `## Invariant`.
 - Ask one useful question at a time when the user is exploring.
 - Agree when agreement is warranted; do not manufacture counterpoints to seem balanced.
 - When external evidence raises an alternative ("X uses Y or Z"), name it as a trade-off in the dialogue and a candidate option — never silently recommend "add both" or "expose a knob". Design choices need explicit user adjudication, not agent inference from a citation.

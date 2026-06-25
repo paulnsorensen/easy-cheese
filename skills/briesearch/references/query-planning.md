@@ -1,6 +1,6 @@
 # Query planning
 
-Run this before routing. The goal is to know what answer would close the question, not to get an answer immediately.
+Run this before routing.
 
 ## Five steps
 
@@ -16,7 +16,7 @@ Pulled from `tavily-best-practices/references/search.md`
 (<https://github.com/tavily-ai/skills/blob/main/skills/tavily-best-practices/references/search.md>):
 
 - **Keep queries under 400 characters.** Short query, not a long-form prompt.
-- **Don't compose one giant query — and don't serially refine a small one.** Break the question into the 2-5 subqueries from step 4 up front and fire them in **one** assistant turn (multiple tool calls in a single message). The common failure mode is sequential refinement — 6-10+ searches across as many turns, each tweaking the last — which serialises wall-time and burns context. Decompose first, fan out once, then re-search only the subqueries that came back thin.
+- **Don't compose one giant query — and don't serially refine a small one.** Break the question into the 2-5 subqueries from step 4 up front and fire them in **one** assistant turn (multiple tool calls in a single message). Decompose first, fan out once, then re-search only the subqueries that came back thin.
 - **Include constraints in the query**: company names, framework versions, geographies, year. Search engines reward concrete keywords.
 - **Pick the right depth**: `basic` for general lookups (default), `advanced` for precision-sensitive questions, `fast` when latency matters.
 - **Filter freshness at the API**, not after. When the question is freshness-sensitive ("latest" / "current" / a year), set `time_range` — the canonical rule (required-not-optional, plus `start_date`/`end_date` windows) lives in `routing.md` → Filters.
