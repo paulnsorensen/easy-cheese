@@ -89,7 +89,7 @@ Beyond `cheez-*` there are review-specific tools:
 | GitHub/PR context | `gh` | local git commands or user-provided PR data |
 | Merge/conflict awareness | mergiraf | manual conflict checks |
 
-**Freshness:** before the first code-review-graph query in a run, call `build_or_update_graph_tool`. The graph is persistent and goes stale between sessions. See [`/cheez-search`](../cheez-search/SKILL.md#when-code-review-graph-beats-tilth-if-your-harness-has-it) for the full freshness contract and when semantic search beats tilth — steel threads across renamed layers, concepts under divergent names, spec-vs-code vocabulary mismatch.
+**Freshness:** before the first code-review-graph query in a run, call `build_or_update_graph_tool`. The graph is persistent and goes stale between sessions. See [`/cheez-search`](../cheez-search/references/routing.md#when-code-review-graph-beats-tilth-if-your-harness-has-it) for the full freshness contract and when semantic search beats tilth — steel threads across renamed layers, concepts under divergent names, spec-vs-code vocabulary mismatch.
 
 **Optional MCPs:** code-review-graph, hallouminate, and milknado follow the detect-and-degrade contract in [`../../shared/optional-plugins.md`](../../shared/optional-plugins.md) — state absence once, fall back, reduce confidence only if evidence quality suffers, never block.
 

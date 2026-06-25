@@ -34,7 +34,7 @@ Beyond `cheez-*` there are press-specific tools:
 | Diff review | `delta` | plain `git diff` |
 | Affected execution flows + risk scoring | code-review-graph: `get_affected_flows_tool`, `get_impact_radius_tool` | manual flow tracing from callers |
 
-**Freshness:** before the first code-review-graph query in a run, call `build_or_update_graph_tool`. See [`/cheez-search`](../cheez-search/SKILL.md#when-code-review-graph-beats-tilth-if-your-harness-has-it) for the full freshness contract and when semantic search beats tilth.
+**Freshness:** before the first code-review-graph query in a run, call `build_or_update_graph_tool`. See [`/cheez-search`](../cheez-search/references/routing.md#when-code-review-graph-beats-tilth-if-your-harness-has-it) for the full freshness contract and when semantic search beats tilth.
 
 If optional tools are missing, press a narrower surface and state the residual risk.
 

@@ -85,7 +85,7 @@ The tilth MCP server is launched against **one repository** — whatever directo
 
 - Always fresh: no index, no rebuild — reads disk on demand.
 - Cannot reach files outside that one tree (sibling worktrees, `~/...`, system paths, dependency caches like `node_modules`, `.cargo/registry`, `site-packages`).
-- For multi-repo reads, the calling workflow skill must use host `Read` per file directly, or use code-review-graph's cross-repo tools — see cheez-search's [When code-review-graph beats tilth](../cheez-search/SKILL.md#when-code-review-graph-beats-tilth-if-your-harness-has-it) section.
+- For multi-repo reads, the calling workflow skill must use host `Read` per file directly, or use code-review-graph's cross-repo tools — see cheez-search's [When code-review-graph beats tilth](../cheez-search/references/routing.md#when-code-review-graph-beats-tilth-if-your-harness-has-it) section.
 
 For when another tool fits better than cheez-read, see [`references/routing.md`](references/routing.md).
 

@@ -54,7 +54,7 @@ Beyond `cheez-*` there are cure-specific tools:
 | Code navigation | `/cheez-search` `kind:symbol` then `kind:callers` | `tilth_search` direct |
 | Read before edit | `/cheez-read` ranged/outline (`paths: ["f#n-m"]`, `mode:stripped`) | DO NOT `cat`/`sed -n`/host Read on code paths |
 
-**Freshness:** before the first code-review-graph query in a run, call `build_or_update_graph_tool`. See [`/cheez-search`](../cheez-search/SKILL.md#when-code-review-graph-beats-tilth-if-your-harness-has-it) for the full freshness contract and when semantic search beats tilth.
+**Freshness:** before the first code-review-graph query in a run, call `build_or_update_graph_tool`. See [`/cheez-search`](../cheez-search/references/routing.md#when-code-review-graph-beats-tilth-if-your-harness-has-it) for the full freshness contract and when semantic search beats tilth.
 
 If a preferred tool is missing, continue with the fallback. If a missing tool prevents safe application, stop and explain the blocker.
 

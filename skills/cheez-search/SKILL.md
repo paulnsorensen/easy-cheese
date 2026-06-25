@@ -80,7 +80,7 @@ The tilth MCP server is launched against **one repository** — whatever directo
 
 - No startup wait, no rebuild step, no staleness — your last save is what tilth sees on the next call.
 - Cannot reach files outside that one tree (sibling worktrees, `~/...`, system paths, dependency caches like `node_modules` or `.cargo/registry`).
-- Cannot answer cross-repo questions in one call. For that, see *When code-review-graph beats tilth* below.
+- Cannot answer cross-repo questions in one call. For that, see [*When code-review-graph beats tilth*](references/routing.md#when-code-review-graph-beats-tilth-if-your-harness-has-it).
 
 ### When NOT to invoke `/cheez-search`
 
