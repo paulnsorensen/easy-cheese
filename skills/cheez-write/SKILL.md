@@ -142,43 +142,6 @@ JSON cookbook; this body sticks to the protocol.
 
 ---
 
-## The Read-Edit Protocol
-
-### Step 1: Read to Get Anchors
-
-```
-tilth_read(paths: ["src/auth.ts#44-89"])
-```
-
-Output:
-```
-44:b2c|export function handleAuth(req, res, next) {
-45:c3d|  const token = req.headers.authorization?.split(' ')[1];
-...
-88:d4e|  next();
-89:e1d|}
-```
-
-### Step 2: Note Your Anchors
-
-- **Start anchor:** `44:b2c` (first line of function)
-- **End anchor:** `89:e1d` (closing brace)
-
-### Step 3: Edit with Anchors
-
-```json
-tilth_write(files: [{
-  "path": "src/auth.ts",
-  "edits": [{
-    "start": "44:b2c",
-    "end": "89:e1d",
-    "content": "export function handleAuth(req, res, next) {\n  const token = extractToken(req);\n  if (!validateToken(token)) {\n    return res.status(401).json({ error: 'Invalid token' });\n  }\n  req.user = decodeToken(token);\n  next();\n}"
-  }]
-}])
-```
-
----
-
 ## Hash Mismatch Handling
 
 If the file changed since you read it:
@@ -226,18 +189,7 @@ retry could overwrite real work.
 
 ## Caller Updates After Signature Changes
 
-When you edit a function signature, tilth_write shows callers that may need updating:
-
-```
-Edit applied to src/auth.ts
-
-── callers that may need updates ──
-  src/routes/api.ts:34   router.use('/api/*', handleAuth)
-  src/routes/admin.ts:12 app.use(handleAuth)
-  src/middleware.ts:8    const wrapped = handleAuth(...)
-```
-
-Check these locations and update if needed.
+When you change a signature, `tilth_write` lists callers that may need updating in a `── callers that may need updates ──` footer — check and update them.
 
 ---
 
@@ -254,31 +206,6 @@ Check these locations and update if needed.
 
 ---
 
-## Large Files: Outline First
-
-For large files, tilth_read shows an outline, not hashlined content:
-
-```
-# src/giant.ts (2400 lines, ~32k tokens) [outline]
-
-[1-20]    imports
-[22-89]   interface Config
-[91-450]  class GiantHandler
-  [100-180]  fn process
-  [182-340]  fn validate
-```
-
-**To edit, drill into the specific section:**
-
-```
-tilth_read(paths: ["src/giant.ts#100-180"])
-# Now you get hashlined content for fn process
-```
-
-Then edit with those anchors.
-
----
-
 ## When full-file rewrite is acceptable
 
 Hash-anchored, surgical edits are the default. There is one exception:
@@ -288,10 +215,7 @@ Hash-anchored, surgical edits are the default. There is one exception:
 | **> 150 lines** | Never rewrite the whole file. Always hash-anchored. |
 | **≤ 150 lines** | Anchored single-edit preferred, but a full rewrite (delete-everything + insert) is acceptable when **≥ 80%** of the file is changing. Below that threshold, do the surgical edit. |
 
-The 150-line / 80% threshold is informed by 2026 industry data (Cursor's
-published numbers, can.ac analysis, the Morph benchmark) showing full-file
-rewrites tie or beat diff-style on small files. The threshold keeps the
-spirit conservative — large files always stay anchored.
+The 150-line / 80% threshold follows 2026 data (Cursor, can.ac, the Morph benchmark): full rewrites tie or beat diff-style on small files, while large files always stay anchored.
 
 When you do rewrite a small file in full, still use `tilth_write` (anchor on
 line 1, end-anchor on the last line). Do **not** drop to host `Write` —
@@ -301,37 +225,7 @@ that bypasses tilth's hash-mismatch safety.
 
 ## Structural codemods — `sg --rewrite` escape
 
-`tilth_write` excels at "replace this specific block in this specific file"
-with hash-anchor concurrency safety. It handles cross-cutting structural
-changes awkwardly: one file at a time, one read-for-anchors per location.
-For codemods — "rewrite every `JSON.parse(JSON.stringify($X))` to
-`structuredClone($X)`", "convert every `var $X = $Y` to `let $X = $Y`" —
-drop to `sg --rewrite` (ast-grep) via Bash. This is the **only** sanctioned
-shell escape from cheez-write.
-
-The two tools are **complementary, not redundant**:
-
-| Tool | Safety property | Best for |
-|------|------------------|----------|
-| `tilth_write` | Hash-anchor (concurrency) | Specific-block edits, signature changes |
-| `sg --rewrite` | Structural match (CST) | Cross-cutting codemods over N files |
-
-When the change repeats across many locations and the surrounding text
-varies, `sg --rewrite` captures the variable parts via metavars and templates
-them back into the rewrite — `tilth_write` cannot express that without N
-reads.
-
-For invocation rules (`--lang`, `--json`, no `--interactive`), pitfalls
-(CST-not-AST, metavar binding, lenient-by-default), and the **non-negotiable
-dry-run-first protocol** (search → clean tree → `-U` → diff → revert if too
-loose), see
-[`../cheez-search/references/sg-patterns.md`](../cheez-search/references/sg-patterns.md)
-— the "Structural codemods (`sg --rewrite`)" and "Pitfalls" sections in
-particular.
-
-`sg --rewrite` does not have hash-anchor safety. Treat each codemod as a
-single transactional change between two clean git states; never layer
-additional edits on top until the codemod is committed or reverted.
+`tilth_write` edits known blocks, one read-for-anchors per location. For cross-cutting structural codemods where the surrounding text varies — "rewrite every `JSON.parse(JSON.stringify($X))` to `structuredClone($X)`" — drop to `sg --rewrite` (ast-grep) via Bash, which templates the variable parts via metavars and is the **only** sanctioned shell escape from cheez-write. It has no hash-anchor safety: run each codemod as one transactional change between two clean git states. For metavar syntax and the non-negotiable dry-run-first protocol, see [`../cheez-search/references/sg-patterns.md`](../cheez-search/references/sg-patterns.md).
 
 ---
 
@@ -350,13 +244,4 @@ additional edits on top until the codemod is committed or reverted.
 - **DO NOT edit without reading** — you need the anchors.
 - **DO NOT use for reading** — use cheez-read.
 - **DO NOT use for searching** — use cheez-search.
-
----
-
-## What This Skill Doesn't Do
-
-- **Read files** — use cheez-read first to get anchors.
-- **Search code** — use cheez-search to find what to edit.
-- **Run tests after editing** — use test/build skills.
-- **Commit changes** — use git/gh skills.
-- **Review your edits** — use the `/age` skill.
+- **DO NOT run tests, commit, or review from this skill** — use the project's test/build, git/gh, and `/age` skills.

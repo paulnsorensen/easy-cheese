@@ -84,11 +84,6 @@ Traditional grep finds text matches. tilth_search finds **semantic matches**:
 Each match includes its surrounding file structure, so you know what you're
 looking at without a second read.
 
-**Why this matters:**
-- "handleAuth" appears 47 times, but it's DEFINED in one place
-- tilth shows the definition first, then usages ranked by relevance
-- You understand the code faster with fewer tool calls
-
 ---
 
 ## Scope: when tilth, when not
@@ -162,15 +157,6 @@ invocations (`--lang`, `--json`, no `--interactive`, path validation, scope
 filters), pitfalls (CST-not-AST, metavar binding, strict vs lenient), and the
 codemod dry-run protocol, see
 [`references/sg-patterns.md`](references/sg-patterns.md).
-
----
-
-## Session Deduplication
-
-tilth tracks what you've already seen:
-- Previously expanded definitions show `[shown earlier]`
-- Saves tokens when revisiting symbols
-- Forces you to reference your notes instead of re-reading
 
 ---
 
