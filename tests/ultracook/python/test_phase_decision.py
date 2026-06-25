@@ -1,8 +1,8 @@
 """Tests for skills/ultracook/scripts/phase_decision.py — phase-table router.
 
 Covers the 7-entry phase table, halt short-circuit, terminal stop, and the
-age-only early-stop signal. Loaded via importlib (no conftest) so the test
-stays self-contained under tests/ultracook/python/.
+age-only early-stop signal. The unit tests take the `phase_decision` module
+from the conftest fixture; the CLI tests invoke the built ultracook.pyz directly.
 """
 from __future__ import annotations
 
