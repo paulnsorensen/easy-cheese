@@ -67,6 +67,10 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
         "ground-check": "ground_check.py",
     },
     "cook": {"artifact-path": Shared("artifact_path.py")},
+    "hard-cheese": {
+        "append-attempt": "append-attempt.py",
+        "freshness-check": "freshness-check.py",
+    },
 }
 
 # The "common" bundle ships cross-cutting CLI entrypoints sourced from

@@ -41,6 +41,7 @@ SKILL_SUBCOMMANDS = {
     "mold": ["artifact-path", "curd-count", "gate-graph"],
     "briesearch": ["artifact-path", "ground-check"],
     "cook": ["artifact-path"],
+    "hard-cheese": ["append-attempt", "freshness-check"],
     "common": [
         "slugify",
         "write_handoff_artifact",
