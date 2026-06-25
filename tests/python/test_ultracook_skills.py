@@ -953,3 +953,23 @@ class TestNextContractV2BackwardCompatible:
         assert "worktree_strategy" in body, (
             "parallel write-isolation strategy must remain documented"
         )
+
+
+class TestUltracookDeterministicPhaseLoop:
+    """The phase loop must invoke the deterministic helpers — read_handoff_slug
+    for slug parsing and phase_decision for the next-action verdict — so the
+    orchestrator never judges phase transitions by eye."""
+
+    def test_read_handoff_slug_referenced(self) -> None:
+        body = _skill("ultracook")
+        assert "read_handoff_slug" in body, (
+            "ultracook must reference read_handoff_slug in the phase loop so "
+            "slug parsing is deterministic, not eyeballed"
+        )
+
+    def test_phase_decision_referenced(self) -> None:
+        body = _skill("ultracook")
+        assert "phase_decision" in body, (
+            "ultracook must reference phase_decision in the phase loop so "
+            "the next-action verdict is deterministic"
+        )

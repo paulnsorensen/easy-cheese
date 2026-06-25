@@ -75,6 +75,7 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
         "debug-tag-sweep": "debug-tag-sweep.py",
         "repro-rerun": "repro-rerun.py",
     },
+    "ultracook": {"phase_decision": "phase_decision.py"},
 }
 
 # The "common" bundle ships cross-cutting CLI entrypoints sourced from
@@ -92,7 +93,7 @@ COMMON_SUBCOMMANDS: dict[str, str] = {
     "handoff_cli": "handoff_cli.py",
 }
 # Wave 1: consumer skills receive common.pyz
-COMMON_CONSUMERS: frozenset[str] = frozenset({"cure", "age"})
+COMMON_CONSUMERS: frozenset[str] = frozenset({"cure", "age", "ultracook"})
 
 _CACHE: dict[str, Path] = {}
 
