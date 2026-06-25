@@ -110,6 +110,8 @@ For the digest contract, harness-agnostic selection rules, and what the parent n
 
 Activates when **all** hold: the **scale threshold** (above) is met AND `/age` is not itself a sub-agent (no `invoked-from:` marker). Below threshold, or when running as a sub-agent, the single-parent path applies unchanged.
 
+**Seam 1 — Predicate.** The activation gate above (scale threshold met AND `/age` not a sub-agent) is the fan-out predicate.
+
 **Seam 2 — Shared context packet.** The orchestrator assembles the packet once, writes it to `.cheese/age/<slug>-packet.md`, and each worker reads it. Eight components, and the reuse of the review-context digester as the orientation block, are documented in `references/packet.md`.
 
 **Seam 3 — Worker contract.** One worker per dimension. Each worker:
