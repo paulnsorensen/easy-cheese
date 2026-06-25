@@ -78,14 +78,7 @@ tilth_list(patterns: ["*.ts"], scope: "src/handlers/")
 
 ## Core Principle: Read Smart, Not More
 
-tilth decides what to show based on file size and structure:
-- **Small files** → full content with line numbers
-- **Large files** → structural outline with line ranges
-- **Binary/generated** → skipped with type indicator
-
-The outline threshold is ~6000 tokens. Files under it show in full; files over it get structural outlines. Use the `#n-m` line suffix (e.g. `paths: ["src/auth.ts#44-89"]`) or the `#symbol_name` suffix (e.g. `paths: ["src/auth.ts#handleAuth"]`) to get hash-anchored content for specific ranges or symbols. Use `mode:stripped` for a full-file plain-comment-stripped outline read when you need to survey a large file without hash anchors.
-
-This avoids wasting tokens on a giant lockfile or minified bundle.
+tilth auto-sizes: small files (< ~6000 tokens) return full, larger files return a structural outline, binary/generated files are skipped. Drill in with a `#n-m` line range, `#symbol_name`, or `mode:stripped` to pull hash-anchored content out of a large file.
 
 ---
 
@@ -102,52 +95,6 @@ The tilth MCP server is launched against **one repository** — whatever directo
 - For multi-repo reads, the calling workflow skill must use host `Read` per file directly, or use code-review-graph's cross-repo tools — see cheez-search's [When code-review-graph beats tilth](../cheez-search/SKILL.md#when-code-review-graph-beats-tilth-if-your-harness-has-it) section.
 
 For when another tool fits better than cheez-read, see [`references/routing.md`](references/routing.md).
-
----
-
-## MCP Tool Reference
-
-### tilth_read — Smart File Reading
-
-```
-tilth_read(paths: ["src/auth.ts"])
-```
-
-**Output for small files:**
-```
-# src/auth.ts (258 lines, ~3.4k tokens) [full]
-
-1 │ import express from 'express';
-2 │ import jwt from 'jsonwebtoken';
-...
-```
-
-**Output for large files (automatic outline):**
-```
-# src/auth.ts (1240 lines, ~16k tokens) [outline]
-
-[1-12]   imports: express(2), jsonwebtoken, @/config
-[14-22]  interface AuthConfig
-[24-42]  fn validateToken(token: string): Claims | null
-[44-89]  export fn handleAuth(req, res, next)
-[91-258] export class AuthManager
-  [99-130]  fn authenticate(credentials)
-  [132-180] fn authorize(user, resource)
-```
-
-**Drilling into sections:**
-```
-# Line range
-tilth_read(paths: ["src/auth.ts#44-89"])
-
-# Markdown heading
-tilth_read(paths: ["docs/guide.md### Installation"])
-```
-
-**Multiple files in one call:**
-```
-tilth_read(paths: ["src/auth.ts", "src/routes.ts", "src/middleware.ts"])
-```
 
 ---
 
@@ -216,15 +163,6 @@ Use **only** before refactoring (rename, signature change, removal). For
 output format and the file-vs-symbol distinction, see the shared reference
 in cheez-search:
 [`../cheez-search/references/tilth-deps.md`](../cheez-search/references/tilth-deps.md).
-
----
-
-## Session Memory (Deduplication)
-
-tilth tracks reads within the current session:
-- Re-reading the same section shows `[shown earlier]` instead of full content
-- This saves significant tokens over long sessions
-- Forces reuse of memorized anchors instead of re-reading
 
 ---
 
