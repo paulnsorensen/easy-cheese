@@ -294,7 +294,7 @@ Write `phase_summary` and `carry_forward` (shapes in `references/manifest-schema
 
 ## Spawn primitive contract (host-agnostic)
 
-The orchestrator never names a specific host primitive. Any primitive satisfying all five invariants is acceptable: (1) fresh context per spawn, (2) full-peer inheritance, (3) no chain-forward (passed in prompt), (4) returns control, (5) writes handoff slug. Host-by-host examples and the no-fan-out fallback (route to `/ultracook`) live in `references/spawn-primitive-reference.md`.
+The orchestrator never names a specific host primitive. Any primitive satisfying all five invariants is acceptable: (1) **Fresh context per spawn**, (2) **Full-peer inheritance**, (3) **No chain-forward** (passed in prompt), (4) **Returns control**, (5) **Writes handoff slug**. Host-by-host examples and the no-fan-out fallback (route to `/ultracook`) live in `references/spawn-primitive-reference.md`.
 
 ## Handoff slug schema
 
