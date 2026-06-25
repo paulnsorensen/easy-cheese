@@ -102,6 +102,21 @@ class TestRunManifestValidator:
         errors = validate_manifest.validate_run_manifest(manifest)
         assert any("manifest.pr_plan.groups must be a non-empty list" in error for error in errors)
 
+    def test_empty_behavior_reported_exactly_once(
+        self, validate_manifest: ModuleType
+    ) -> None:
+        # Acceptance #3: a run manifest with one curd whose behavior is empty
+        # must produce exactly ONE error mentioning that curd's behavior.
+        # Before the entity-module refactor, validate_manifest reported it twice:
+        # once via lifecycle's non_empty_string and once via validate_decomposition.
+        manifest = _manifest()
+        manifest["curds"][0]["behavior"] = ""
+        errors = validate_manifest.validate_run_manifest(manifest)
+        behavior_errors = [e for e in errors if "behavior" in e and "1" in e]
+        assert len(behavior_errors) == 1, (
+            f"expected exactly 1 behavior error, got {len(behavior_errors)}: {behavior_errors}"
+        )
+
 
 class TestPrPlanValidator:
     def test_valid_pr_plan_passes(self, validate_pr_plan: ModuleType) -> None:

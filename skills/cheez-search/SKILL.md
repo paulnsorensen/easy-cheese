@@ -15,8 +15,10 @@ allowed-tools: mcp__tilth__tilth_search, mcp__tilth__tilth_deps, Bash
 Before the first call, verify tilth is reachable:
 
 1. Check that `mcp__tilth__tilth_search` is in your tool list. If absent, stop and report `"tilth MCP server is not loaded — cannot proceed."`
-2. Make a minimal probe call: `tilth_search(query: "tilth", scope: ".")`. If the response is a JSON-RPC error or transport failure, stop and report `"tilth MCP server present but unhealthy: <error>"`.
+2. Make a minimal probe call: `tilth_search(queries: [{query: "tilth"}])`. If the response is a JSON-RPC error or transport failure, stop and report `"tilth MCP server present but unhealthy: <error>"`.
 3. Any other failure (zero matches, malformed regex, etc.) is a **content** issue — proceed normally and report the result.
+
+**Note:** pass `root` (your absolute checkout directory) whenever `scope` is relative — the server's cwd is frozen at startup and cannot resolve relative paths without an explicit `root`.
 
 AST-aware code search via **tilth MCP** (`tilth_search`, `tilth_deps`).
 Tree-sitter finds where symbols are **defined** — not just where strings appear.
@@ -29,7 +31,7 @@ Understand dependencies instead of blindly grepping.
 ### "Where is `handleAuth` defined?"
 
 ```
-tilth_search(query: "handleAuth", scope: "src/")
+tilth_search(queries: [{query: "handleAuth"}], scope: "src/", root: "/checkout/root")
 ```
 
 ```text
@@ -46,7 +48,7 @@ The `[definition]` tag answers the question; usages come along for free.
 ### "What calls `validateToken`?"
 
 ```
-tilth_search(query: "validateToken", kind: "callers", scope: ".")
+tilth_search(queries: [{query: "validateToken", kind: "callers"}], scope: ".", root: "/checkout/root")
 ```
 
 ```text
@@ -64,7 +66,7 @@ tilth_search(query: "validateToken", kind: "callers", scope: ".")
 ### "Find any TODO that mentions retries"
 
 ```
-tilth_search(query: "TODO.*retry", kind: "regex", scope: "src/")
+tilth_search(queries: [{query: "TODO.*retry", kind: "regex"}], scope: "src/", root: "/checkout/root")
 ```
 
 Use `kind: "regex"` for pattern matches across content; bound the scope to
@@ -122,15 +124,17 @@ Name-shaped queries stay in tilth. For type-grounded, concept-shaped, or cross-r
 
 ## Choose your search kind
 
+For code navigation (where is X / what calls Y / blast radius): start with `kind:symbol` to find the definition, then `kind:callers` for call sites. Fall to `content`/`regex` only when you don't have a symbol name.
+
 All six rows below are first-class — picking the right one is the difference
 between one call and a long grep walk.
 
 | Goal | Tool | Example |
 |------|------|---------|
-| Find where a symbol is defined / used | `tilth_search` (default `kind: "symbol"`) | `tilth_search(query: "handleAuth", scope: "src/")` |
-| Find every call site of a function | `tilth_search(kind: "callers")` | `tilth_search(query: "validateToken", kind: "callers")` |
-| Find literal strings, TODOs, error messages | `tilth_search(kind: "content")` | `tilth_search(query: "TODO: fix", kind: "content")` |
-| Find lines matching a regex | `tilth_search(kind: "regex")` | `tilth_search(query: "rate.?limit", kind: "regex")` |
+| Find where a symbol is defined / used | `tilth_search` (default `kind: "symbol"`) | `tilth_search(queries: [{query: "handleAuth"}], scope: "src/", root: "/checkout/root")` |
+| Find every call site of a function | `tilth_search(kind: "callers")` | `tilth_search(queries: [{query: "validateToken", kind: "callers"}])` |
+| Find literal strings, TODOs, error messages | `tilth_search(kind: "content")` | `tilth_search(queries: [{query: "error message", kind: "content"}])` |
+| Find lines matching a regex | `tilth_search(kind: "regex")` | `tilth_search(queries: [{query: "rate.?limit", kind: "regex"}])` |
 | Match an AST shape (template with metavars) | `sg` (ast-grep, via Bash) | `sg --lang typescript -p 'JSON.parse(JSON.stringify($X))' --json src/` |
 | Module import / blast-radius graph | `tilth_deps` | `tilth_deps(path: "src/auth.ts")` |
 

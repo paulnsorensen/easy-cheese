@@ -19,6 +19,7 @@ Coherence self-check before curdle:
 - [ ] Chosen option grounded in codebase evidence
 - [ ] Interface sketches: every public seam has a pseudocode signature
 - [ ] Cross-module calls go through public interfaces, not internals
+- [ ] Identity nouns: each bound to a code referent or marked NEW ENTITY (an ALIAS must be resolved, not just noted)
 - [ ] Validate cycles: all launched cycles judged
 - [ ] Chosen option Grilled (≥1 stress-test entry per major branch)
 - [ ] Open questions all marked [TBD] / [BLOCKED] / [?] (none silent)
@@ -42,7 +43,8 @@ These are not soft suggestions — Curdle hard-blocks until they are addressed:
 - **Sketch gate:** mandatory when the chosen option touches more than one module or introduces a new public interface. Skip only for trivial single-function changes (the agent must say so out loud).
 - **Grill gate:** mandatory for high-blast-radius decisions. The shape check (`shape-check.md`) ranks blast radius `low | medium | high` from a `cheez-search` callers query (`tilth_search kind: "callers"`) and `tilth_deps`. A `high` verdict — multi-module callers or more than five importers — makes Grill mandatory.
 - **Open hypotheses:** any Validate Cycle launched but unjudged blocks Curdle unless the user accepts it as `[TBD]`.
-- **Agent-introduced scope:** every distinguishing noun in the spec must trace to a user-typed mention or get per-term approval. Full procedure in § Agent-introduced scope below.
+- **Agent-introduced scope:** every distinguishing noun in the spec must trace to a user-typed mention or get per-term approval. Full procedure in § Agent-introduced scope below — Curdle is the single chokepoint, since downstream skills trust the resulting frontmatter and do not re-block.
+- **Entity-referent gate:** every identity/ownership-role noun (owner, run, session, claim-holder, coordinator, lease, tenant, …) must bind to a concrete code symbol with a citation or be marked `NEW ENTITY` with a design section. A search *hit* of a different referent is an **ALIAS**, not a pass — it must be resolved (rebind to the real entity, or design the intended one) before Curdle, not merely noted. Full procedure in § Entity-referent binding below — like its sibling, Curdle is the single chokepoint and downstream skills trust the resulting frontmatter.
 
 ## Agent-introduced scope
 
@@ -68,9 +70,38 @@ This gate exists because research sub-agents have historically over-synthesised:
 
 Curdle is the single chokepoint for this gate. Downstream skills (`/cook`, etc.) trust the spec frontmatter and do not re-block — record approved-but-flagged terms in spec frontmatter as `agent_introduced_scope: [<term>, …]` so the paper trail survives.
 
+## Entity-referent binding
+
+Before curdle, audit the draft for **identity/ownership-role nouns** — any noun the design treats as holding, owning, spanning, or claiming state or lifecycle (owner, run, session, claim-holder, coordinator, worker, lease, tenant, lock-holder, …). The trigger is the *role*, not a fixed word list: domain-specific identities are caught and plain value nouns (formats, algorithms, config knobs) are not flagged.
+
+The mechanism is symbol search (`cheez-search`), one query per identity noun. The gate is *not* "did search find something" — it is a three-way verdict on what search returns:
+
+| Search outcome | Verdict | Action |
+| --- | --- | --- |
+| Symbol whose shape matches the design's assumed role | **Bound** | record code referent + `file:line` citation |
+| Symbol of a different shape/referent (aliasing) | **ALIAS** | state the divergence; resolve by renaming to the real entity or designing the intended one |
+| No symbol | **NEW ENTITY** | add a spec section designing it |
+
+Procedure:
+
+1. Extract identity/ownership-role nouns from the spec's `Approach`, `Decisions`, and `Interface sketches` blocks.
+2. `cheez-search` each noun and classify it `Bound` / `ALIAS` / `NEW ENTITY` per the table above.
+3. Present the binding table inline in the draft — one row per identity-role noun:
+
+   ```
+   Entity-referent binding check:
+   | design noun | code referent | citation | divergence note |
+   | --- | --- | --- | --- |
+   | run | ALIAS — make_run_id (one dispatch) | — | code `run` is one dispatch, not a session; design assumed a session spanning siblings (a search *hit* of the wrong shape) — state the divergence, rebind to the real entity |
+   | session | NEW ENTITY | — | no symbol; the coordinator session the design needs must be designed |
+   ```
+
+4. **An unresolved binding hard-blocks curdle**, exactly as an unapproved `[AGENT-INTRODUCED]` noun does. A search *hit* is not resolution: if the design's usage diverges from the code's existing meaning of the same word, the aliasing must be stated and settled before extraction.
+
+This gate is the referent-level sibling of Agent-introduced scope — that gate asks *did the user type this noun*, this one asks *does the code have it, with the assumed shape*. A fully handshook spec once declared its goal-claims "owned by the run/session" while the code's `run` was a single task dispatch, not a coordinator session; the aliased noun survived to a re-age blocker and a cure-pass-2 design decision that belonged in mold. Curdle is the single chokepoint; downstream skills (`/cook`, etc.) trust the spec frontmatter and do not re-block — record bound and flagged nouns in frontmatter as `entity_referent_bindings: [{noun, verdict, referent, citation, note}, …]` (a list of binding records) so the referent and `file:line` citation the trail promises actually survive.
 ## Override semantics
 
-`curdle anyway` overrides the agent key for one extraction. It does not disable future gates. The agent records the override and the unchecked items in the spec frontmatter so the human reviewer can see them. `curdle anyway` does **not** waive the Agent-introduced-scope gate — each flagged term still needs explicit per-term approval, since silent inclusion is the failure mode the gate exists to catch, and downstream skills will not re-check.
+`curdle anyway` overrides the agent key for one extraction. It does not disable future gates. The agent records the override and the unchecked items in the spec frontmatter so the human reviewer can see them. `curdle anyway` does **not** waive the Agent-introduced-scope gate — each flagged term still needs explicit per-term approval, since silent inclusion is the failure mode the gate exists to catch, and downstream skills will not re-check. The same holds for the **Entity-referent gate**: an unbound or aliased identity noun still blocks extraction under `curdle anyway`, since downstream skills trust the frontmatter bindings and do not re-derive them.
 
 ## Why both keys
 

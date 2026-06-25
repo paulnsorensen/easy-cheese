@@ -3,19 +3,18 @@ name: cheez-write
 description: Edit code via hash-anchored tilth MCP edits — replaces sed / awk / perl -i / patch / tee / Edit / Write / shell redirects (`>`, `>>`). Use when the user asks to edit, replace, modify, update, change, delete, or insert code — phrases like "replace this function", "delete lines 44-89", "update validateToken", "change the implementation", "add this import", "fix this bug" (when fixing requires editing), or apply a cross-cutting structural change (codemod) like "rewrite every X to Y". Sanctions `sg --rewrite` (ast-grep) for structural codemods that span many files. Always read first via cheez-read to get hash anchors for anchored edits. Prefer surgical anchored edits over whole-file rewrites. If tilth MCP is unavailable, stop and report rather than fall back. Do NOT use for reading files (cheez-read first to get anchors), searching code (use cheez-search), or running tests/builds.
 license: MIT
 compatibility: Requires tilth MCP server. Optional ast-grep (`sg`) for structural codemods (`sg --rewrite`) that span many files.
-allowed-tools: mcp__tilth__tilth_edit, mcp__tilth__tilth_read, Bash
+allowed-tools: mcp__tilth__tilth_write, mcp__tilth__tilth_read, Bash
 ---
 
 # cheez-write
 
-> **Hard dependency**: If `mcp__tilth__tilth_edit` is unavailable, stop immediately and report
+> **Hard dependency**: If `mcp__tilth__tilth_write` is unavailable, stop immediately and report
 > "tilth MCP server is not loaded — cannot proceed." Do NOT fall back to `Edit`, `Write`,
-> or any host tool. Install via `tilth install <host> --edit` — the `--edit` flag is required
-> to expose `tilth_edit` (see README "Installing tilth MCP").
+> or any host tool. Install via `tilth install <host>` (see README "Installing tilth MCP").
 
 ## Capability detection
 
-Before the first edit call, verify `mcp__tilth__tilth_edit` is in your tool list. If absent, stop: `"tilth MCP server is loaded but edit mode is disabled — re-install with 'tilth install <host> --edit'."` If the first call returns a JSON-RPC transport error (not a hash mismatch), stop: `"tilth MCP server present but unhealthy: <error>"`. Hash mismatches and anchor-not-found are **content** issues — see [Hash Mismatch Handling](#hash-mismatch-handling).
+Before the first edit call, verify `mcp__tilth__tilth_write` is in your tool list. If absent, stop: `"tilth MCP server is loaded but edit mode is disabled — re-install with 'tilth install <host> --edit'."` If the first call returns a JSON-RPC transport error (not a hash mismatch), stop: `"tilth MCP server present but unhealthy: <error>"`. Hash mismatches and anchor-not-found are **content** issues — see [Hash Mismatch Handling](#hash-mismatch-handling).
 
 ---
 
@@ -23,24 +22,24 @@ Before the first edit call, verify `mcp__tilth__tilth_edit` is in your tool list
 
 ### "Replace the body of `handleAuth` in `src/auth.ts`"
 
-Step 1 — read with edit mode to get anchors:
+Step 1 — read the line range to get anchors:
 
 ```
-tilth_read(path: "src/auth.ts", section: "44-89", edit: true)
+tilth_read(paths: ["src/auth.ts#44-89"])
 # returns 44:b2c|... and 89:e1d|...
 ```
 
 Step 2 — apply with the captured anchors:
 
 ```json
-tilth_edit({
+tilth_write(files: [{
   "path": "src/auth.ts",
   "edits": [{
     "start": "44:b2c",
     "end":   "89:e1d",
     "content": "export function handleAuth(req, res, next) {\n  const token = extractToken(req);\n  if (!validateToken(token)) return res.status(401).end();\n  next();\n}"
   }]
-})
+}])
 ```
 
 Response confirms `Edit applied to src/auth.ts` and may list callers to
@@ -48,17 +47,17 @@ review.
 
 ### "Add an import without nuking the existing one on line 13"
 
-`tilth_edit` replaces — there is no native insert. Anchor on line 13 and put
+`tilth_write` replaces — there is no native insert. Anchor on line 13 and put
 the original line back at the top of `content`:
 
 ```json
-tilth_edit({
+tilth_write(files: [{
   "path": "src/auth.ts",
   "edits": [{
     "start": "13:abc",
     "content": "import { existingThing } from './existing';\nimport { newHelper } from './helpers';"
   }]
-})
+}])
 ```
 
 ### "Hash mismatch — file changed under me"
@@ -70,7 +69,7 @@ See [Hash Mismatch Handling](#hash-mismatch-handling) for recovery steps.
 ## Core Principle: Anchors, Not Rewrites
 
 Traditional AI editing rewrites entire files, wasting tokens and risking data loss.
-tilth_edit uses **hash anchors** — unique identifiers for each line — to:
+tilth_write uses **hash anchors** — unique identifiers for each line — to:
 - Make precise, surgical changes
 - Reject edits if the file changed (hash mismatch)
 - Show you exactly what changed
@@ -78,36 +77,36 @@ tilth_edit uses **hash anchors** — unique identifiers for each line — to:
 **The protocol:**
 1. Read the file section with `tilth_read` (cheez-read) → get hash anchors
 2. Note start/end anchors for the block you'll change
-3. Call `tilth_edit` with those anchors and new content
+3. Call `tilth_write` with those anchors and new content
 
 ---
 
-## Scope: when tilth_edit, when not
+## Scope: when tilth_write, when not
 
-`tilth_edit` owns **block edits to tracked source code** — function bodies, signatures, imports, single-line tweaks, multi-edit batches, and cross-file changes. Hash anchors are race-safe; the read-edit protocol is mandatory for any code change that matters.
+`tilth_write` owns **block edits to tracked source code** — function bodies, signatures, imports, single-line tweaks, multi-edit batches, and cross-file changes. Hash anchors are race-safe; the read-edit protocol is mandatory for any code change that matters.
 
 For everything else, prefer the right tool:
 
 | Change | Use this instead | Why |
 |--------|------------------|-----|
-| Cross-cutting structural codemod (`JSON.parse(JSON.stringify($X))` → `structuredClone($X)`) across N files | `sg --rewrite` (dry-run-first protocol) | tilth_edit needs N reads-for-anchors; codemods template the variable parts |
+| Cross-cutting structural codemod (`JSON.parse(JSON.stringify($X))` → `structuredClone($X)`) across N files | `sg --rewrite` (dry-run-first protocol) | tilth_write needs N reads-for-anchors; codemods template the variable parts |
 | Lockfile changes (`Cargo.lock`, `package-lock.json`, `uv.lock`, etc.) | the package manager (`cargo update`, `npm i`, `uv lock`) | Hand-editing lockfiles loses checksum integrity |
 | Generated / build artifacts (compiled JS, transpiled output, `*.pb.go`) | regenerate from source | Editing the artifact rots on the next build |
-| Brand-new files, no prior content | `tilth_edit` (anchor on line 1, end-anchor on the last line for a single-edit insert) | Stay on one path; the anchor cost is negligible for new files |
+| Brand-new files, no prior content | `tilth_write` (anchor on line 1, end-anchor on the last line for a single-edit insert) | Stay on one path; the anchor cost is negligible for new files |
 | Files outside the repo or inside dependency caches (`node_modules`, `.cargo/registry`) | don't edit them | Modifying dependencies is almost always a mistake — fix the source or upstream |
-| Binary files, images, PDFs | the producing tool | tilth_edit is text-only |
+| Binary files, images, PDFs | the producing tool | tilth_write is text-only |
 
-If the question is "which tool for this specific source-code block edit?" → `tilth_edit`. If it's "rewrite this pattern everywhere" → `sg --rewrite` with the dry-run protocol.
+If the question is "which tool for this specific source-code block edit?" → `tilth_write`. If it's "rewrite this pattern everywhere" → `sg --rewrite` with the dry-run protocol.
 
 ### Routing to LSP rename or Serena
 
-Pre-entry routing decisions — when to prefer LSP rename or Serena symbol-bounded edits over `tilth_edit` — are in [`references/routing.md`](references/routing.md).
+Pre-entry routing decisions — when to prefer LSP rename or Serena symbol-bounded edits over `tilth_write` — are in [`references/routing.md`](references/routing.md).
 
 ---
 
 ## Hash Anchor Format
 
-When you read a file with tilth_read in edit mode, lines have anchors:
+When you read a file with tilth_read (a line range, `#symbol`, or heading), lines have anchors:
 
 ```
 42:a3f|  let x = compute();
@@ -123,17 +122,17 @@ hashes change, and your edit is safely rejected.
 
 ## MCP Tool Reference
 
-### tilth_edit — Precise File Editing
+### tilth_write — Precise File Editing
 
 The minimal shape — single anchor, replacement content:
 
 ```json
-tilth_edit({
+tilth_write(files: [{
   "path": "src/auth.ts",
   "edits": [
     { "start": "42:a3f", "content": "  let x = recompute();" }
   ]
-})
+}])
 ```
 
 For range replacement, deletion, multi-edit, insert-after, cross-file
@@ -148,7 +147,7 @@ JSON cookbook; this body sticks to the protocol.
 ### Step 1: Read to Get Anchors
 
 ```
-tilth_read(path: "src/auth.ts", section: "44-89")
+tilth_read(paths: ["src/auth.ts#44-89"])
 ```
 
 Output:
@@ -168,14 +167,14 @@ Output:
 ### Step 3: Edit with Anchors
 
 ```json
-tilth_edit({
+tilth_write(files: [{
   "path": "src/auth.ts",
   "edits": [{
     "start": "44:b2c",
     "end": "89:e1d",
     "content": "export function handleAuth(req, res, next) {\n  const token = extractToken(req);\n  if (!validateToken(token)) {\n    return res.status(401).json({ error: 'Invalid token' });\n  }\n  req.user = decodeToken(token);\n  next();\n}"
   }]
-})
+}])
 ```
 
 ---
@@ -204,7 +203,7 @@ This is a **safety feature**, not a bug.
 ### Repeated mismatches → bail out, don't loop
 
 If you hit **two consecutive mismatches** on the same anchor, you're racing a
-concurrent writer. `tilth_edit` has no fuzzy / search-replace mode — there
+concurrent writer. `tilth_write` has no fuzzy / search-replace mode — there
 is no "ignore the hash, just match this string" option. A third retry will
 likely lose the same race.
 
@@ -227,7 +226,7 @@ retry could overwrite real work.
 
 ## Caller Updates After Signature Changes
 
-When you edit a function signature, tilth_edit shows callers that may need updating:
+When you edit a function signature, tilth_write shows callers that may need updating:
 
 ```
 Edit applied to src/auth.ts
@@ -272,7 +271,7 @@ For large files, tilth_read shows an outline, not hashlined content:
 **To edit, drill into the specific section:**
 
 ```
-tilth_read(path: "src/giant.ts", section: "100-180")
+tilth_read(paths: ["src/giant.ts#100-180"])
 # Now you get hashlined content for fn process
 ```
 
@@ -294,7 +293,7 @@ published numbers, can.ac analysis, the Morph benchmark) showing full-file
 rewrites tie or beat diff-style on small files. The threshold keeps the
 spirit conservative — large files always stay anchored.
 
-When you do rewrite a small file in full, still use `tilth_edit` (anchor on
+When you do rewrite a small file in full, still use `tilth_write` (anchor on
 line 1, end-anchor on the last line). Do **not** drop to host `Write` —
 that bypasses tilth's hash-mismatch safety.
 
@@ -302,7 +301,7 @@ that bypasses tilth's hash-mismatch safety.
 
 ## Structural codemods — `sg --rewrite` escape
 
-`tilth_edit` excels at "replace this specific block in this specific file"
+`tilth_write` excels at "replace this specific block in this specific file"
 with hash-anchor concurrency safety. It handles cross-cutting structural
 changes awkwardly: one file at a time, one read-for-anchors per location.
 For codemods — "rewrite every `JSON.parse(JSON.stringify($X))` to
@@ -314,12 +313,12 @@ The two tools are **complementary, not redundant**:
 
 | Tool | Safety property | Best for |
 |------|------------------|----------|
-| `tilth_edit` | Hash-anchor (concurrency) | Specific-block edits, signature changes |
+| `tilth_write` | Hash-anchor (concurrency) | Specific-block edits, signature changes |
 | `sg --rewrite` | Structural match (CST) | Cross-cutting codemods over N files |
 
 When the change repeats across many locations and the surrounding text
 varies, `sg --rewrite` captures the variable parts via metavars and templates
-them back into the rewrite — `tilth_edit` cannot express that without N
+them back into the rewrite — `tilth_write` cannot express that without N
 reads.
 
 For invocation rules (`--lang`, `--json`, no `--interactive`), pitfalls
@@ -343,10 +342,10 @@ additional edits on top until the codemod is committed or reverted.
 - **DO NOT guess hash values** — always read first to get current anchors.
 - **DO NOT ignore hash mismatches** — re-read and retry (see Hash Mismatch Handling).
 - **DO NOT use sed / awk / perl -i** to edit code — they bypass hash anchors and structural safety, and have no mismatch detection. `sg --rewrite` is the *only* sanctioned shell escape, and only for structural codemods that follow the dry-run-first protocol.
-- **DO NOT use `patch`** to apply diffs to code — `tilth_edit`'s anchored ranges are the safe equivalent.
-- **DO NOT use `tee` or shell redirects (`>`, `>>`)** to overwrite/append code files — both bypass anchors. Use `tilth_edit`.
-- **DO NOT use the host Edit/Write tool** — use `tilth_edit` (or `sg --rewrite` for structural codemods) exclusively for code.
-- **DO NOT use `sg --rewrite` for one-off block edits** — that's `tilth_edit` territory. The codemod escape is only for cross-cutting structural changes; using it on a single location wastes its strength and skips hash-anchor safety.
+- **DO NOT use `patch`** to apply diffs to code — `tilth_write`'s anchored ranges are the safe equivalent.
+- **DO NOT use `tee` or shell redirects (`>`, `>>`)** to overwrite/append code files — both bypass anchors. Use `tilth_write`.
+- **DO NOT use the host Edit/Write tool** — use `tilth_write` (or `sg --rewrite` for structural codemods) exclusively for code.
+- **DO NOT use `sg --rewrite` for one-off block edits** — that's `tilth_write` territory. The codemod escape is only for cross-cutting structural changes; using it on a single location wastes its strength and skips hash-anchor safety.
 - **DO NOT skip the dry-run-first protocol for `sg --rewrite`** — search-only first, clean working tree, then `-U`. Never combine search+rewrite blindly.
 - **DO NOT edit without reading** — you need the anchors.
 - **DO NOT use for reading** — use cheez-read.

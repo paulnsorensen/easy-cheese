@@ -1,8 +1,9 @@
-# `tilth_edit` JSON cookbook
+# `tilth_write` JSON cookbook
 
-Every edit follows the same shape: `{ path, edits: [...] }`. Each edit needs
-a `start` anchor; `end` is required only for range replacements. `content` is
-the new text (use `""` to delete).
+Every call is `tilth_write(files: [ … ])`; each entry in the `files` array has the
+shape `{ path, edits: [...] }` — the JSON blocks below show a single entry. Each
+edit needs a `start` anchor; `end` is required only for range replacements.
+`content` is the new text (use `""` to delete).
 
 ## Single-line replacement
 
@@ -15,8 +16,8 @@ the new text (use `""` to delete).
 }
 ```
 
-Replaces line 42 only. The hash `a3f` must match what `tilth_read` returned
-in edit mode.
+Replaces line 42 only. The hash `a3f` must match the `<line>:<hash>` prefix
+`tilth_read` returned for that line.
 
 ## Multi-line range replacement
 
@@ -66,22 +67,18 @@ earlier edits don't invalidate later anchors.
 
 ## Show diff in response
 
-```json
-{
-  "path": "src/auth.ts",
-  "diff": true,
-  "edits": [
-    { "start": "44:b2c", "end": "89:e1d", "content": "..." }
-  ]
-}
+```text
+tilth_write(files: [{ path: "src/auth.ts", edits: [{ start: "44:b2c", end: "89:e1d", content: "..." }] }], diff: true)
 ```
+
+`diff` is a top-level call argument (it diffs each file in the response), not a per-entry property.
 
 Useful when the change is non-trivial and you want to verify the diff before
 moving on.
 
 ## Insert "after" a line
 
-`tilth_edit` replaces the anchored line(s); there is no native insert. To
+`tilth_write` replaces the anchored line(s); there is no native insert. To
 insert after line 13, anchor on line 13 and prepend the original line content
 to your new content:
 
@@ -103,20 +100,24 @@ this — the original content goes back verbatim.
 
 ## Edits across multiple files
 
-`tilth_edit` is single-file. For multi-file changes, make one call per file:
+`tilth_write` is multi-file: batch every file into ONE call's `files` array
+(max 20). Never call `tilth_write` twice in a row.
 
 ```text
-tilth_edit({ path: "src/auth.ts",   edits: [...] })
-tilth_edit({ path: "src/routes.ts", edits: [...] })
+tilth_write(files: [
+  { path: "src/auth.ts",   edits: [...] },
+  { path: "src/routes.ts", edits: [...] },
+])
 ```
 
-There is no atomic cross-file edit. If the second call fails after the first
-succeeded, you have a partially applied change — read the second file and
-recover before moving on.
+Files are processed independently (best-effort): a failure on one does not block
+the others, and partial success still returns `isError: false` — scan the
+per-file results rather than the top-level status. There is no atomic cross-file
+edit, so on a partial failure read the unchanged file and recover before moving on.
 
 ## Caller-update notices
 
-When you change a function signature, `tilth_edit` may surface callers in
+When you change a function signature, `tilth_write` may surface callers in
 its response:
 
 ```text

@@ -27,7 +27,7 @@ Both modes share the same reasoning loop. The difference is what the agent does 
 1. Restate the question or tension in one sentence. If the question rests on a false premise or a loaded assumption, name it.
 2. Identify assumptions, constraints, and decision criteria.
 3. Explore trade-offs and likely blast radius. When the trade-off hinges on "what does this touch", run a read-only shape check on the candidate seam — a `cheez-search` callers query (`tilth_search kind: "callers"`) plus `tilth_deps` — and label each option `[low | medium | high blast radius]`. Procedure mirrors `../mold/references/shape-check.md`; culture stops at the verdict and never drafts signatures. Steelman the rejected option before settling on a recommendation.
-4. Gather evidence to the depth the question needs. In internal mode keep it light — a quick shape check, no deep research — so the calling skill stays fast. In user-facing mode investigate as deeply as useful: dispatch the read-only `explorer` agent for code grounding and take back its digest, rather than dumping raw reads into the dialogue.
+4. Gather evidence to the depth the question needs. In internal mode keep it light — a quick shape check, no deep research — so the calling skill stays fast. In user-facing mode investigate as deeply as useful: dispatch the read-only `explorer` agent for code grounding and take back its digest, rather than dumping raw reads into the dialogue (where the `explorer` agent isn't available, e.g. a harness that installs only easy-cheese, ground directly via `/cheez-search` / `/cheez-read`).
 5. Decide the next move. In internal mode, return a single recommendation and stop. In user-facing mode you need not force convergence: render a compact summary and confidence-tagged open questions (`certain | speculating | don't know`), then either recommend a downstream skill or defer and carry the thread forward. End the session by writing the wheypoint (`## Handoff slug`), whose `next:` records where the modeling landed.
 
 Default the model's own contribution to maximum useful depth — full pseudocode signatures over hand-waving, named edge cases over "consider edge cases", concrete file:line evidence over vague pointers. Smallest-useful-question discipline applies only to what you ask the user, never to what you offer them.
@@ -43,7 +43,7 @@ Beyond `cheez-*` there are culture-specific tools:
 | Visualizing diffs or examples | `delta` | plain `git diff` |
 | External sanity check | `/briesearch` | clearly mark as an assumption |
 
-Missing optional tools should not interrupt the conversation. In internal mode keep tool use light; it is a fast thinking pass. In user-facing mode tool use scales to the question — deep investigation via the `explorer` agent is expected when the modeling needs grounding.
+Missing optional tools should not interrupt the conversation. In internal mode keep tool use light; it is a fast thinking pass. In user-facing mode tool use scales to the question — deep investigation via the `explorer` agent (or, where it isn't available, `/cheez-search` / `/cheez-read` directly) is expected when the modeling needs grounding.
 
 ## Output
 
@@ -81,7 +81,7 @@ After a non-stop selection, run the selected downstream skill immediately with t
 
 ## Rules
 
-- No production-code writes, no commits, no PRs — see `## Invariant`. The only sanctioned write is the end-of-session wheypoint, delegated to `/wheypoint`.
+- No production-code writes, no commits, no PRs — see `## Invariant`. The only sanctioned write is the end-of-session wheypoint, delegated to `/wheypoint`; user-facing sessions always write one, internal mode writes nothing.
 - Ask one useful question at a time when the user is exploring.
 - Agree when agreement is warranted; do not manufacture counterpoints to seem balanced.
 - When external evidence raises an alternative ("X uses Y or Z"), name it as a trade-off in the dialogue and a candidate option — never silently recommend "add both" or "expose a knob". Design choices need explicit user adjudication, not agent inference from a citation.
