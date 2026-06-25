@@ -210,3 +210,4 @@ that bypasses tilth's hash-mismatch safety.
 - **DO NOT skip the dry-run-first protocol for `sg --rewrite`** — search-only first, clean working tree, then `-U`. Never combine search+rewrite blindly.
 - **DO NOT edit without reading** — you need the anchors.
 - **DO NOT run tests, commit, or review from this skill** — use the project's test/build, git/gh, and `/age` skills.
+- **DO NOT run tests, commit, or review from this skill** — use the project's test/build, git/gh, and `/age` skills.

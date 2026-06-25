@@ -145,7 +145,11 @@ For each seed item:
 
 Push to branch — curds branch from HEAD.
 
-Update manifest: `phase: seed_complete`, commit SHAs.
+Update manifest:
+
+```
+python3 ${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz manifest_update set-phase --manifest <path> --phase seed_complete
+```
 
 ### Phase 2 — Curds (fan-out)
 
@@ -177,7 +181,13 @@ After all curds merged: run quality gates. If failing, STOP and report — curds
 
 ### Phase 4 — Wiring (fan-out, sequential within wave)
 
-Read wiring DAG from manifest. Dispatch wiring tasks in topological order, sequentially within each wave (concurrent commits to the same working directory race on git's `index.lock`).
+Compute topological dispatch order from the wiring DAG:
+
+```
+python3 ${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz wiring_topo_sort --manifest <path>
+```
+
+Dispatch wiring tasks in the returned wave order, sequentially within each wave (concurrent commits to the same working directory race on git's `index.lock`).
 
 Each wiring worker is a general-purpose sub-agent with the prompt template at `references/wiring-prompt.md`.
 
@@ -366,7 +376,7 @@ If the manifest references commits that no longer exist (rebased, deleted), fail
 - `references/manifest-schema.json` — JSON Schema for the manifest.
 - `references/pr-plan-schema.json` — JSON Schema for the PR plan, `$ref`'d from `manifest-schema.json`.
 - `references/spawn-primitive-reference.md` — host-by-host invocation examples plus the five invariants.
-- `cheese-factory.pyz` subcommands (run via `${CLAUDE_SKILL_DIR}/scripts/`): `validate_manifest`, `validate_decomposition` (Phase 0), `validate_pr_plan`, `pr_plan_to_branches` (Phase 7).
+- `cheese-factory.pyz` subcommands (run via `${CLAUDE_SKILL_DIR}/scripts/`): `validate_manifest`, `validate_decomposition` (Phase 0), `validate_pr_plan`, `pr_plan_to_branches` (Phase 7), `manifest_update` (Phase 1/2/4 manifest writes), `wiring_topo_sort` (Phase 4 wave ordering).
 
 ## Rules
 
