@@ -53,6 +53,8 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
         "validate_decomposition": "validate_decomposition.py",
         "validate_manifest": "validate_manifest.py",
         "validate_pr_plan": "validate_pr_plan.py",
+        "manifest_update": "manifest_update.py",
+        "wiring_topo_sort": "wiring_topo_sort.py",
     },
     "affinage": {"pr-status": "pr-status.py", "post-reply": "post-reply.py"},
     "mold": {

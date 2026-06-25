@@ -34,6 +34,8 @@ SKILL_SUBCOMMANDS = {
         "validate_decomposition",
         "validate_manifest",
         "validate_pr_plan",
+        "manifest_update",
+        "wiring_topo_sort",
     ],
     "affinage": ["pr-status"],
     "mold": ["artifact-path", "curd-count", "gate-graph"],

@@ -154,7 +154,11 @@ For each seed item:
 
 Push to branch — curds branch from HEAD.
 
-Update manifest: `phase: seed_complete`, commit SHAs.
+Update manifest:
+
+```
+${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz manifest_update set-phase --manifest <path> --phase seed_complete
+```
 
 ### Phase 2 — Curds (fan-out)
 
@@ -186,7 +190,13 @@ After all curds merged: run quality gates. If failing, STOP and report — curds
 
 ### Phase 4 — Wiring (fan-out, sequential within wave)
 
-Read wiring DAG from manifest. Dispatch wiring tasks in topological order, sequentially within each wave (concurrent commits to the same working directory race on git's `index.lock`).
+Compute topological dispatch order from the wiring DAG:
+
+```
+${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz wiring_topo_sort --manifest <path>
+```
+
+Dispatch wiring tasks in the returned wave order, sequentially within each wave (concurrent commits to the same working directory race on git's `index.lock`).
 
 Each wiring worker is a general-purpose sub-agent with the prompt template at `references/wiring-prompt.md`.
 
@@ -405,6 +415,8 @@ If the manifest references commits that no longer exist (rebased, deleted), fail
 - `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz validate_decomposition` — Phase 0 semantic validation of decomposer output against the five criteria.
 - `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz validate_pr_plan` — Phase 7 validation of PR planner output before branch creation.
 - `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz pr_plan_to_branches` — converts `pr-plan.yaml` to branch-creation commands for Phase 7.
+- `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz manifest_update` — atomic field updates to the run manifest (Phase 1 phase transition, Phase 2/4 status updates).
+- `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz wiring_topo_sort` — Kahn topological sort of the wiring DAG into ready-at-once waves (Phase 4 dispatch order).
 
 ## Rules
 
