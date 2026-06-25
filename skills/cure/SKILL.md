@@ -29,7 +29,11 @@ Optional flags:
 ## Flow
 
 1. **Load** — read the findings (markdown, not JSON sidecars).
-2. **Select** — adopt any pre-locked handoff from `/age`/`/affinage`; otherwise apply the recommended composite. See `references/selection.md` for the default rule, recognized verbs, and gate conditions.
+2. **Select** — adopt any pre-locked handoff from `/age`/`/affinage`; otherwise apply the recommended composite. See `references/selection.md` for the default rule, recognized verbs, and gate conditions. To expand a user-supplied verb to finding ids:
+
+   ```
+   python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz findings_cli parse-selection --report <path> --selection "<verb>"
+   ```
 3. **Apply** — fix one logical group at a time via `cheez-read` (re-confirm anchor location) and `cheez-write` (apply).
 4. **Validate** — run the narrowest tests that prove each fix, then any relevant project-wide gates (lint, typecheck, build).
 5. **Taste-test (behavioural fixes only)** — if this cure applied a *behavioural* fix (touched production logic or public surface), run the fresh-context taste-test before the handoff slug: dispatch the read-only `reviewer` phase-agent (named, no call-site model — its def pins `model: opus`) over the cure diff with the same lenses cook uses, or fall back to the inline self-check when no such reviewer sub-agent is available. *Mechanical* fixes — formatting, comment, import, no-logic rename — skip this and keep the current flow. Pipe any `revise` into a bounded corrective pass; a Locked-decision `halt` stops for a human. (Mirrors cook's taste-test, which cure lacked before; a coder-nested cure cannot fan out and defers the authoritative pass to the orchestrator, as in cook.)
@@ -62,7 +66,13 @@ Run the narrowest tests that prove the fix, then any relevant existing wider gat
 
 Applied requires its proving test green (Iron Law — see `references/cure-discipline.md`).
 
-**clean cure** — ≥1 fix applied, all gates green, no false-premise halt. The term is used throughout this file to describe the completion condition for push/halt decisions.
+**clean cure** — ≥1 fix applied, all gates green, no false-premise halt. The term is used throughout this file to describe the completion condition for push/halt decisions. To map the post-cure gate booleans to a readiness verdict (agent judges the booleans; the CLI maps them):
+
+   ```
+   python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz gates_cli classify \
+     --press-status <label> \
+     [--hard-floor-met] [--has-open-level-1-or-2] [--has-open-level-3] [--has-open-level-4-or-5] [--any-spinning]
+   ```
 
 ## Handoff slug
 

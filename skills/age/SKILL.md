@@ -51,10 +51,27 @@ Per-dimension base-severity tables, location-sensitivity, fix-cost-now / fix-cos
 ## Flow
 
 1. Identify the diff, scope, and relevant spec or issue. **Mode check (one decision point):** if the **scale threshold** (defined in `## Sub-agent context gate` below) is met — and `/age` is not itself a sub-agent — switch to `### Scale-triggered fan-out mode`; steps 2–4 (evidence-gather, per-dimension review, severity computation) are replaced by the fan-out path — both modes converge on steps 5–6.
-2. Gather evidence: diff, touched files, tests, callers/imports. If `.cheese/press/<slug>.md` exists, read it and include a `## Press findings` sub-section in the age report summarising unresolved items — `/cure` reads only `.cheese/age/<slug>.md` and cannot access the press report directly.
+2. Gather evidence: diff, touched files, tests, callers/imports. If a press report exists for this slug, read it via:
+
+   ```
+   python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz read_handoff_slug --phase press --slug <slug>
+   ```
+
+   Include a `## Press findings` sub-section in the age report summarising unresolved items — `/cure` reads only `.cheese/age/<slug>.md` and cannot access the press report directly.
 3. Review every dimension; dimensions with no findings simply omit themselves.
 4. Compute severity per finding (base + location bump + compounding bump, capped at `blocker`). Group findings by severity (`## Blocker → ## High → ## Medium → ## Low`); within a severity group, order by file.
-5. Write the report to `.cheese/age/<slug>.md` and print the path.
+5. Write the report:
+
+   ```
+   report_file=$(mktemp)
+   # write the report markdown (everything below) to "$report_file", then:
+   python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz write_handoff_artifact \
+     --phase age --slug <slug> --status ok --next cure \
+     --artifact "" --orientation "<one-line orientation>" \
+     --body-file "$report_file"
+   ```
+
+   Then print the path.
 6. Hand off (see `## Handoff` below). By default age auto-selects the recommended fix set and dispatches `/cure` in the same turn, gating for a human decision only when there is a genuine reason (a sprawling/structural fix in the set, or conflicting findings) or when `--safe` is passed. Age never *applies* fixes itself — `/cure` owns application — it only owns the *selection* and the dispatch.
 
 ## Preferred tools and fallbacks
@@ -199,7 +216,13 @@ After the report is on disk, age decides whether to *act* or *ask*. The default 
 
 Use the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md). Age's finding selection is the gate's *core* decision; the shared **Standard forward-step menu**'s tail (**Ship it**, **Checkpoint & stop**, **Stop**) rides after the selection options per that menu's tail rule.
 
-1. Render the numbered selection table per `../cure/references/selection.md` directly inline (one row per finding, grouped by severity); mark any sprawling/structural-fix row as *heavy*.
+1. Render the numbered selection table:
+
+   ```
+   python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz findings_cli render-table --report .cheese/age/<slug>.md
+   ```
+
+   Mark any sprawling/structural-fix row as *heavy*.
 2. Ask which findings to cure. Lead each option with the verb (what the user wants to *do* next); the underlying selection verb is the backing detail. Lead with the recommended composite, then present the same four severity-floor options below it, in the same most-inclusive-to-least order, so the gate is predictable across every run:
    - **Fix mediums-and-above plus cheap lows** *(recommended)* — equivalent to `all-medium, cheap` (floor at medium — blockers + high + medium — unioned with every `Low` whose `fix-cost-now: contained`). The cheap lows are the small valid nits that are cheaper to fix than to defer; sprawling/structural lows are left out.
    - **Fix everything** — equivalent to `all` (every finding regardless of severity).
@@ -208,7 +231,11 @@ Use the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/han
    - **Fix blockers only** *(strict; land only the must-fix blockers and defer the rest to a follow-up)* — equivalent to `all-blocker`.
 
    Then offer the non-floor and standard-tail options last:
-   - **Pick findings to fix** — accept a free-text reply using the verbs from `../cure/references/selection.md` (`1,3,5`, `all-blocker`, `all-medium`, `all-high`, `cheap`, `all`, `none`, `skip N`; comma-compose to union).
+   - **Pick findings to fix** — accept a free-text reply using the verbs from `../cure/references/selection.md`; expand the verb to finding ids:
+
+     ```
+     python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz findings_cli parse-selection --report .cheese/age/<slug>.md --selection "<verb>"
+     ```
    - **Ship it** — apply the recommended composite and run cure headless: `/cure <slug> --auto --open-pr --stake medium+` (the `medium+` floor *is* the recommended composite). Carries `--hard` when in scope.
    - **Checkpoint & stop** — `/wheypoint`: write a resumable handoff and pause instead of curing now.
    - **Stop — leave the report for later** — equivalent to `none`.

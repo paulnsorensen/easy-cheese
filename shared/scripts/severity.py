@@ -17,7 +17,8 @@ CLI:
 from __future__ import annotations
 
 import argparse
-import sys
+
+import cli
 
 SEVERITY_LADDER: tuple[str, ...] = ("low", "medium", "high", "blocker")
 _SEV_INDEX = {sev: i for i, sev in enumerate(SEVERITY_LADDER)}
@@ -111,40 +112,36 @@ def bucket_fix_cost_now(*, file_count: int, module_count: int = 1) -> str:
     return FIX_COST_NOW[tier]
 
 
-def _cmd_compute(args: argparse.Namespace) -> int:
+def _cmd_compute(args: argparse.Namespace) -> None:
     try:
-        print(
-            compute_severity(
-                dimension=args.dimension,
-                base=args.base,
-                location=args.location,
-                fix_cost_later=args.fix_cost_later,
-            )
+        result = compute_severity(
+            dimension=args.dimension,
+            base=args.base,
+            location=args.location,
+            fix_cost_later=args.fix_cost_later,
         )
     except RubricError as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        return 2
-    return 0
+        raise cli.CliError(str(exc)) from exc
+    cli.emit(result)
 
 
-def _cmd_bucket(args: argparse.Namespace) -> int:
+def _cmd_bucket(args: argparse.Namespace) -> None:
     try:
-        print(bucket_fix_cost_now(file_count=args.files, module_count=args.modules))
+        result = bucket_fix_cost_now(file_count=args.files, module_count=args.modules)
     except RubricError as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        return 2
-    return 0
+        raise cli.CliError(str(exc)) from exc
+    cli.emit(result)
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Compute /age rubric severity and fix-cost buckets.")
+def _setup(parser: argparse.ArgumentParser) -> None:
+    parser.description = "Compute /age rubric severity and fix-cost buckets."
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     compute = sub.add_parser("compute", help="compute severity from rubric inputs")
-    compute.add_argument("--dimension", required=True, choices=sorted(DIMENSIONS))
-    compute.add_argument("--base", required=True, choices=SEVERITY_LADDER)
-    compute.add_argument("--location", required=True, choices=sorted(LOCATIONS))
-    compute.add_argument("--fix-cost-later", required=True, choices=sorted(FIX_COST_LATER))
+    compute.add_argument("--dimension", required=True)
+    compute.add_argument("--base", required=True)
+    compute.add_argument("--location", required=True)
+    compute.add_argument("--fix-cost-later", required=True)
     compute.set_defaults(func=_cmd_compute)
 
     bucket = sub.add_parser("bucket", help="bucket fix-cost-now from blast-radius counts")
@@ -152,9 +149,6 @@ def main(argv: list[str] | None = None) -> int:
     bucket.add_argument("--modules", type=int, default=1, help="distinct module count (default 1)")
     bucket.set_defaults(func=_cmd_bucket)
 
-    args = parser.parse_args(argv)
-    return args.func(args)
-
 
 if __name__ == "__main__":
-    sys.exit(main())
+    cli.run(_setup)
