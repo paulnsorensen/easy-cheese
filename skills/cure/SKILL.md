@@ -32,7 +32,7 @@ Optional flags:
 2. **Select** — adopt any pre-locked handoff from `/age`/`/affinage`; otherwise apply the recommended composite. See `references/selection.md` for the default rule, recognized verbs, and gate conditions. To expand a user-supplied verb to finding ids:
 
    ```
-   ${CLAUDE_SKILL_DIR}/scripts/common.pyz findings_cli parse-selection --report <path> --selection "<verb>"
+   python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz findings_cli parse-selection --report <path> --selection "<verb>"
    ```
 3. **Apply** — fix one logical group at a time via `cheez-read` (re-confirm anchor location) and `cheez-write` (apply).
 4. **Validate** — run the narrowest tests that prove each fix, then any relevant project-wide gates (lint, typecheck, build).
@@ -69,7 +69,7 @@ Applied requires its proving test green (Iron Law — see `references/cure-disci
 **clean cure** — ≥1 fix applied, all gates green, no false-premise halt. The term is used throughout this file to describe the completion condition for push/halt decisions. To map the post-cure gate booleans to a readiness verdict (agent judges the booleans; the CLI maps them):
 
    ```
-   ${CLAUDE_SKILL_DIR}/scripts/common.pyz gates_cli classify \
+   python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz gates_cli classify \
      --press-status <label> \
      [--hard-floor-met] [--has-open-level-1-or-2] [--has-open-level-3] [--has-open-level-4-or-5] [--any-spinning]
    ```

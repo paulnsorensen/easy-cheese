@@ -54,7 +54,7 @@ Per-dimension base-severity tables, location-sensitivity, fix-cost-now / fix-cos
 2. Gather evidence: diff, touched files, tests, callers/imports. If a press report exists for this slug, read it via:
 
    ```
-   ${CLAUDE_SKILL_DIR}/scripts/common.pyz read_handoff_slug --phase press --slug <slug>
+   python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz read_handoff_slug --phase press --slug <slug>
    ```
 
    Include a `## Press findings` sub-section in the age report summarising unresolved items — `/cure` reads only `.cheese/age/<slug>.md` and cannot access the press report directly.
@@ -63,7 +63,7 @@ Per-dimension base-severity tables, location-sensitivity, fix-cost-now / fix-cos
 5. Write the report:
 
    ```
-   ${CLAUDE_SKILL_DIR}/scripts/common.pyz write_handoff_artifact --phase age --slug <slug> --body "<report>"
+   python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz write_handoff_artifact --phase age --slug <slug> --body "<report>"
    ```
 
    Then print the path.
@@ -214,7 +214,7 @@ Use the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/han
 1. Render the numbered selection table:
 
    ```
-   ${CLAUDE_SKILL_DIR}/scripts/common.pyz findings_cli render-table --report .cheese/age/<slug>.md
+   python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz findings_cli render-table --report .cheese/age/<slug>.md
    ```
 
    Mark any sprawling/structural-fix row as *heavy*.
@@ -229,7 +229,7 @@ Use the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/han
    - **Pick findings to fix** — accept a free-text reply using the verbs from `../cure/references/selection.md`; expand the verb to finding ids:
 
      ```
-     ${CLAUDE_SKILL_DIR}/scripts/common.pyz findings_cli parse-selection --report .cheese/age/<slug>.md --selection "<verb>"
+     python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz findings_cli parse-selection --report .cheese/age/<slug>.md --selection "<verb>"
      ```
    - **Ship it** — apply the recommended composite and run cure headless: `/cure <slug> --auto --open-pr --stake medium+` (the `medium+` floor *is* the recommended composite). Carries `--hard` when in scope.
    - **Checkpoint & stop** — `/wheypoint`: write a resumable handoff and pause instead of curing now.

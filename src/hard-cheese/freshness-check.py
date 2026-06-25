@@ -35,17 +35,8 @@ import cli  # noqa: E402  (path-insert seed pattern)
 STATES = ("previously_passed", "stale", "new")
 EXIT_FOR_STATE = {"previously_passed": 0, "stale": 2, "new": 3}
 
-# Match "## Attempt N (PASS — ...)" headings followed (eventually) by a
-# `git: <sha>` line. The SKILL.md documents this shape.
-_ATTEMPT_HEAD_RE = re.compile(
-    r"^##\s+Attempt\s+\d+\s*\(\s*(?P<status>[A-Za-z]+)\b[^)]*\)\s*$",
-    re.MULTILINE,
-)
-_GIT_LINE_RE = re.compile(r"^git:\s*(?P<sha>\S+)\s*$", re.MULTILINE)
 
-# Fallback shape: a markdown table row like `| pass | 4 | <sha> | ... |`.
-# The seed names this as the if-undocumented shape; we honour both so the
-# script is robust to log-format drift.
+# Match a markdown table row like `| timestamp | head_sha | status | ... |`.
 _TABLE_ROW_RE = re.compile(r"^\s*\|(?P<cells>[^\n]+)\|\s*$", re.MULTILINE)
 
 
@@ -73,21 +64,6 @@ def git_head(cwd: Path | None = None) -> str:
 def _is_pass_status(token: str) -> bool:
     """Match a status cell that starts with 'pass' (covers PASS, passed, Pass)."""
     return token.strip().lower().startswith("pass")
-
-
-def _last_pass_sha_from_headings(body: str) -> str | None:
-    """Walk `## Attempt N (STATUS ...)` blocks; return the last PASS block's sha."""
-    matches = list(_ATTEMPT_HEAD_RE.finditer(body))
-    last_sha: str | None = None
-    for i, match in enumerate(matches):
-        if not _is_pass_status(match.group("status")):
-            continue
-        start = match.end()
-        end = matches[i + 1].start() if i + 1 < len(matches) else len(body)
-        git_match = _GIT_LINE_RE.search(body, start, end)
-        if git_match is not None:
-            last_sha = git_match.group("sha")
-    return last_sha
 
 
 def _last_pass_sha_from_table(body: str) -> str | None:
@@ -139,16 +115,13 @@ def _last_pass_sha_from_table(body: str) -> str | None:
 def last_pass_sha(log_path: Path) -> str | None:
     """Return the SHA recorded against the most recent passing attempt, or None.
 
-    Tries the SKILL.md heading shape first, then the markdown-table fallback.
-    Returns None when the log is missing, unreadable, or has no pass row.
+    Parses the markdown-table attempt log. Returns None when the log is
+    missing, unreadable, or has no pass row.
     """
     try:
         body = log_path.read_text(encoding="utf-8")
     except (FileNotFoundError, IsADirectoryError, PermissionError, UnicodeDecodeError, OSError):
         return None
-    sha = _last_pass_sha_from_headings(body)
-    if sha is not None:
-        return sha
     return _last_pass_sha_from_table(body)
 
 

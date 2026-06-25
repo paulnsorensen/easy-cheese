@@ -157,7 +157,7 @@ Push to branch — curds branch from HEAD.
 Update manifest:
 
 ```
-${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz manifest_update set-phase --manifest <path> --phase seed_complete
+python3 ${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz manifest_update set-phase --manifest <path> --phase seed_complete
 ```
 
 ### Phase 2 — Curds (fan-out)
@@ -193,7 +193,7 @@ After all curds merged: run quality gates. If failing, STOP and report — curds
 Compute topological dispatch order from the wiring DAG:
 
 ```
-${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz wiring_topo_sort --manifest <path>
+python3 ${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz wiring_topo_sort --manifest <path>
 ```
 
 Dispatch wiring tasks in the returned wave order, sequentially within each wave (concurrent commits to the same working directory race on git's `index.lock`).

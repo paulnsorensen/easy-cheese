@@ -68,16 +68,6 @@ def _write_log(repo: Path, slug: str, body: str) -> Path:
     return path
 
 
-def _heading_log(slug: str, sha: str, status: str = "PASS") -> str:
-    return (
-        f"---\nslug: {slug}\nstatus: {status}\nattempts: 1\n---\n\n"
-        f"## Attempt 1 ({status} — SOLO 4 Relational)\n"
-        f"git: {sha}\n\n"
-        f"> I get it.\n\n"
-        f"**Judge feedback**: solid.\n"
-    )
-
-
 def _table_log(slug: str, sha: str, status: str = "pass") -> str:
     """Canonical attempt-log table per skills/hard-cheese/scripts/append-attempt.py."""
     return (
@@ -142,13 +132,6 @@ class TestStateNew:
 
 
 class TestStatePreviouslyPassed:
-    def test_heading_log_matching_head(self, repo: Path) -> None:
-        head = _head(repo)
-        _write_log(repo, "feat-a", _heading_log("feat-a", head))
-        result = _run_cli(repo, "feat-a")
-        assert result.returncode == 0
-        assert result.stdout.strip() == "previously_passed"
-
     def test_table_log_matching_head(self, repo: Path) -> None:
         head = _head(repo)
         _write_log(repo, "feat-b", _table_log("feat-b", head))
@@ -159,38 +142,8 @@ class TestStatePreviouslyPassed:
             "diff_head": head,
         }
 
-    def test_picks_last_pass_when_multiple_attempts(self, repo: Path) -> None:
-        # Earlier PASS at a stale sha; later PASS at HEAD — the later wins.
-        head = _head(repo)
-        body = (
-            _heading_log("multi", "deadbeef" * 5).rstrip()
-            + "\n\n"
-            + "## Attempt 2 (PASS — SOLO 5 Extended Abstract)\n"
-            + f"git: {head}\n\n"
-            + "> better\n"
-        )
-        _write_log(repo, "multi", body)
-        result = _run_cli(repo, "multi")
-        assert result.returncode == 0
-        assert result.stdout.strip() == "previously_passed"
-
 
 class TestStateStale:
-    def test_head_moved_since_pass(self, repo: Path) -> None:
-        old_head = _head(repo)
-        _write_log(repo, "feat-c", _heading_log("feat-c", old_head))
-        # Add a new commit so HEAD moves.
-        (repo / "new.txt").write_text("more\n", encoding="utf-8")
-        _git(repo, "add", "new.txt")
-        _git(repo, "commit", "-q", "-m", "second")
-        new_head = _head(repo)
-        assert new_head != old_head
-
-        result = _run_cli(repo, "feat-c", "--json")
-        assert result.returncode == 2
-        payload = json.loads(result.stdout)
-        assert payload == {"state": "stale", "diff_head": new_head}
-
     def test_table_log_stale(self, repo: Path) -> None:
         _write_log(repo, "feat-d", _table_log("feat-d", "abc123" * 7))  # not current HEAD
         result = _run_cli(repo, "feat-d")
@@ -256,17 +209,6 @@ class TestAppendAttemptIntegration:
 
 
 class TestMalformedLog:
-    def test_no_pass_attempts_is_new(self, repo: Path) -> None:
-        # Only a FAIL attempt — no pass row exists, so we treat the slug as new.
-        body = (
-            "## Attempt 1 (FAIL — SOLO 1 Prestructural)\n"
-            f"git: {_head(repo)}\n\n> nope\n"
-        )
-        _write_log(repo, "only-fail", body)
-        result = _run_cli(repo, "only-fail")
-        assert result.returncode == 3
-        assert result.stdout.strip() == "new"
-
     def test_garbage_log_is_new(self, repo: Path) -> None:
         _write_log(repo, "garbage", "this is not a valid log at all\n")
         result = _run_cli(repo, "garbage")
@@ -276,17 +218,6 @@ class TestMalformedLog:
     def test_empty_log_is_new(self, repo: Path) -> None:
         _write_log(repo, "empty", "")
         result = _run_cli(repo, "empty")
-        assert result.returncode == 3
-        assert result.stdout.strip() == "new"
-
-    def test_pass_attempt_without_git_line_is_ignored(self, repo: Path) -> None:
-        body = (
-            "## Attempt 1 (PASS — SOLO 4 Relational)\n"
-            "> no git line follows\n"
-        )
-        _write_log(repo, "no-git-line", body)
-        result = _run_cli(repo, "no-git-line")
-        # No sha could be extracted → treat as new (still no actionable record).
         assert result.returncode == 3
         assert result.stdout.strip() == "new"
 
@@ -330,13 +261,6 @@ class TestPureHelpers:
     ) -> None:
         assert freshness_check.last_pass_sha(tmp_path / "missing.md") is None
 
-    def test_last_pass_sha_from_headings(
-        self, freshness_check: ModuleType, tmp_path: Path
-    ) -> None:
-        path = tmp_path / "log.md"
-        path.write_text(_heading_log("x", "cafebabe" * 5), encoding="utf-8")
-        assert freshness_check.last_pass_sha(path) == "cafebabe" * 5
-
     def test_last_pass_sha_from_table(
         self, freshness_check: ModuleType, tmp_path: Path
     ) -> None:
@@ -344,12 +268,3 @@ class TestPureHelpers:
         path.write_text(_table_log("x", "feedface" * 5), encoding="utf-8")
         assert freshness_check.last_pass_sha(path) == "feedface" * 5
 
-    def test_decide_uses_git_head(
-        self, freshness_check: ModuleType, repo: Path
-    ) -> None:
-        head = _head(repo)
-        _write_log(repo, "pure", _heading_log("pure", head))
-        result = freshness_check.decide(
-            "pure", cheese_root=repo / ".cheese", repo_root=repo
-        )
-        assert result == {"state": "previously_passed", "diff_head": head}

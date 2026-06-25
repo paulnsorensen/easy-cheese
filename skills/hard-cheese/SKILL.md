@@ -43,7 +43,7 @@ Arguments:
    Check freshness before launching the gate:
 
    ```
-   ${CLAUDE_SKILL_DIR}/scripts/hard-cheese.pyz freshness-check --slug <slug>
+   python3 ${CLAUDE_SKILL_DIR}/scripts/hard-cheese.pyz freshness-check --slug <slug>
    ```
 
    Exit 0 (`previously_passed`): print `"previously passed"` and exit `0`. Exit 2 (`stale`) or 3 (`new`): continue to step 3.
@@ -71,7 +71,7 @@ Arguments:
    Append the attempt row:
 
    ```
-   ${CLAUDE_SKILL_DIR}/scripts/hard-cheese.pyz append-attempt \
+   python3 ${CLAUDE_SKILL_DIR}/scripts/hard-cheese.pyz append-attempt \
      --slug <slug> --status <PASS|FAIL|ERROR> --score <n> \
      --feedback "<judge feedback>" --explanation "<user explanation>"
    ```

@@ -52,7 +52,7 @@ Do not proceed to Phase 2 until the loop passes all four checks:
 Run the repro loop N times and verify the failure is consistent:
 
 ```
-${CLAUDE_SKILL_DIR}/scripts/pasteurize.pyz repro-rerun --cmd "<repro-command>" --n 5
+python3 ${CLAUDE_SKILL_DIR}/scripts/pasteurize.pyz repro-rerun --cmd "<repro-command>" --n 5
 ```
 
 Confirm the returned `reproduced: true` and check `failures` matches the expected failure mode. If `reproduced: false` at N=5, the bug is flaky — increase `--n` before proceeding.
@@ -112,7 +112,7 @@ Before writing the handoff slug, confirm:
 - [ ] All `[DEBUG-...]` instrumentation removed:
 
   ```
-  ${CLAUDE_SKILL_DIR}/scripts/pasteurize.pyz debug-tag-sweep --root .
+  python3 ${CLAUDE_SKILL_DIR}/scripts/pasteurize.pyz debug-tag-sweep --root .
   ```
 
   Exit 0 = clean. Exit 1 = tags found (listed in output). Resolve before continuing.
