@@ -158,6 +158,7 @@ def _revalidate_or_restore(path: Path, original: bytes) -> None:
                 try:
                     tmp.unlink()
                 except OSError:
+                    # Best-effort cleanup only; don't mask the original failure.
                     pass
             raise
         raise cli.CliError(f"validation rejected update; restored original ({errors[-1]})")
