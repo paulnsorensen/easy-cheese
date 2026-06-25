@@ -78,7 +78,7 @@ tilth_list(patterns: ["*.ts"], scope: "src/handlers/")
 
 ## Core Principle: Read Smart, Not More
 
-tilth auto-sizes: small files (< ~6000 tokens) return full, larger files return a structural outline, binary/generated files are skipped. Drill in with a `#n-m` line range, `#symbol_name`, or `mode:stripped` to pull hash-anchored content out of a large file.
+tilth auto-sizes: small files (< ~6000 tokens) return full, larger files return a structural outline, binary/generated files are skipped. Drill in with a `#n-m` line range or `#symbol_name` to pull hash-anchored content out of a large file; use `mode:stripped` for an anchor-free whole-file survey.
 
 ---
 

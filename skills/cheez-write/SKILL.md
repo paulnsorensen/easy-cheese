@@ -225,7 +225,7 @@ that bypasses tilth's hash-mismatch safety.
 
 ## Structural codemods — `sg --rewrite` escape
 
-`tilth_write` is one-block-one-file. For cross-cutting structural codemods — "rewrite every `JSON.parse(JSON.stringify($X))` to `structuredClone($X)`" — drop to `sg --rewrite` (ast-grep) via Bash, the **only** sanctioned shell escape from cheez-write. It has no hash-anchor safety: run each codemod as one transactional change between two clean git states. For metavar syntax and the non-negotiable dry-run-first protocol, see [`../cheez-search/references/sg-patterns.md`](../cheez-search/references/sg-patterns.md).
+`tilth_write` edits known blocks, one read-for-anchors per location. For cross-cutting structural codemods where the surrounding text varies — "rewrite every `JSON.parse(JSON.stringify($X))` to `structuredClone($X)`" — drop to `sg --rewrite` (ast-grep) via Bash, which templates the variable parts via metavars and is the **only** sanctioned shell escape from cheez-write. It has no hash-anchor safety: run each codemod as one transactional change between two clean git states. For metavar syntax and the non-negotiable dry-run-first protocol, see [`../cheez-search/references/sg-patterns.md`](../cheez-search/references/sg-patterns.md).
 
 ---
 
