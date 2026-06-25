@@ -6,13 +6,13 @@ license: MIT
 
 # /wheypoint
 
-A wheypoint is a waypoint on the cheese's journey: a marked spot you can navigate back to. Use this skill when the conversation holds work-in-progress that a different agent (or a future you, in a fresh context) needs to continue. `/wheypoint` captures just enough state for a cold reader to resume.
+`/wheypoint` captures just enough state for a cold reader to resume.
 
-User-facing `/culture` sessions end by invoking `/wheypoint` to capture the modeling as a resumable handoff. Do not use it as a substitute for a phase skill's own handoff slug: `/cook`, `/press`, `/age`, and `/cure` write their slugs at clean phase boundaries. `/wheypoint` is for culture's end-of-session checkpoint and for the messy mid-task moment when no phase slug applies and context is about to be lost.
+`/wheypoint` is for culture's end-of-session checkpoint and for the messy mid-task moment when no phase slug applies and context is about to be lost.
 
 ## Inputs
 
-- The conversation so far. That is the primary input.
+- The conversation so far (the primary input).
 - Optional argument: a description of what the next session will focus on. When present, treat it as the lens and tailor the document to it. Drop state that does not serve that focus to a one-line pointer.
 
 ## Flow
@@ -53,7 +53,7 @@ Single-value `next:` is one of the pipeline phases (`mold | cook | press | age |
 - **`age`** — implementation done, review wanted now.
 - **`cure`** — review findings in hand, fixes not applied.
 - **`affinage`** — PR has review comments or failing CI. Record the PR reference in `artifact:` (`PR#<n>` or URL) so the resume dispatches `/affinage <pr>` explicitly.
-- **`briesearch | culture`** — read-only, low-risk next moves. Under `status: ok`, `/cheese --continue` auto-dispatches them directly (frictionless research/think kickoff), deriving any dispatch argument (e.g. `briesearch`'s question) from the orientation line. A decision that needs a human belongs in `status: gated:`, not here.
+- **`briesearch | culture`** — read-only, low-risk next moves. Under `status: ok`, `/cheese --continue` auto-dispatches them directly (frictionless research/think kickoff), deriving any dispatch argument (e.g. `briesearch`'s question) from the orientation line. A move that needs a human decision belongs in `status: gated:`.
 - **`hold`** — restore orientation and wait for instruction; dispatch nothing. For compacting or stringing context along when no action is implied. Distinct from `done` (work finished, record only).
 - **`done`** — work genuinely finished; handoff is a record, not a baton. Use only for true terminal completion.
 - **A missing `next:` is a malformed handoff.** `/cheese --continue` flags it (`malformed handoff: next: required`) rather than guessing or defaulting. Declare intent explicitly — `hold` is the value for "no action."
@@ -126,7 +126,7 @@ Follow the house style in [`../../shared/formatting.md`](../../shared/formatting
 
 ## Suggested skills
 
-Derive `next:` and `status:` from the body's blockers, not from optimism. See `### status: values` for the gate rule: any open blocker mandates `status: gated:`, never `status: ok` with a bare actionable `next:`.
+Derive `next:` and `status:` from the body's blockers, not from optimism. See `### status: values` for the gate rule.
 
 Pick the next move from where the session actually is, name it as an easy-cheese skill with its argument, and write the same target into the slug's `next:` field. Suggest the *single* best next step, plus the step after it when the path is obvious. When the session has two or more independent tracks that can proceed without sharing branch state, write `mode: parallel`, set `next: tasks`, and put each exact skill invocation under `tasks:` instead of collapsing them into one sequential next step. For several read-only follow-ups, use the inline `next:` list with `order:` instead. The map:
 

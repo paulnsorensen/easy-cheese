@@ -10,7 +10,7 @@ Use this skill when the user wants the whole `cook → press → age → cure �
 
 Do not use it for short focused changes (`/cook --auto` is cheaper and continuous), for fuzzy planning (`/mold`), or for review-only work (`/age`).
 
-`/ultracook` is the sub-agent-transport sibling of `/cook --auto`. Same seven spawns, same `--auto` semantics propagated end-to-end, same medium+ severity floor, same two-cure-pass cap. The only difference is that each phase runs inside its own freshly-spawned sub-agent, so the parent context never accumulates phase-internal reasoning and review is adversarial rather than continuous.
+`/ultracook` is the sub-agent-transport sibling of `/cook --auto`: same chain and `--auto` semantics, but each phase runs in its own freshly-spawned sub-agent, so the parent context never accumulates phase-internal reasoning.
 
 ## Inputs
 
@@ -22,12 +22,12 @@ Accept one of:
 
 `/ultracook` does not accept fuzzy or open-ended asks — those go to `/mold` first. The orchestrator assumes the contract is already locked.
 
-Optional flag: `--open-pr` — at the terminal, open a *new* PR when none exists (the default only pushes an already-open one). The orchestrator performs the terminal push itself; the phase-only cure sub-agents never push.
+Optional flag: `--open-pr` — at the terminal, open a *new* PR when none exists (the default only pushes an already-open one). The phase-only cure sub-agents never push.
 
 ## Flow
 
 1. **Resolve slug** — derive `<slug>` from the input. If a spec path is given, the slug is the basename without `.md`; if a bare slug is given, confirm the spec exists at the durable path the spawned `/cook` resolves (`python3 ${CLAUDE_SKILL_DIR}/scripts/cook.pyz artifact-path specs <slug>`; see `shared/formatting.md` § Corpus location).
-2. **Guard against re-entry** — if any of `.cheese/{cook,press,age,cure}/<slug>.md` already exist, stop with a one-line list of the existing handoffs and tell the user to either run `/cheese --continue <slug>` to resume from the latest phase or `rm` the relevant files to start fresh. Never silently wipe.
+2. **Guard against re-entry** — if any of `.cheese/{cook,press,age,cure}/<slug>.md` already exist, stop with a one-line list of the existing handoffs and tell the user to either run `/cheese --continue <slug>` to resume from the latest phase or `rm` the relevant files to start fresh.
 3. **Phase loop** — for each phase in `cook, press, age, cure, age, cure, age`, spawn a fresh sub-agent (see `## Sub-agent contract` below), wait for it to return, then read each phase's handoff slug and compute the next action deterministically:
    1. **Parse the slug** — `python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz read_handoff_slug --phase <phase> --slug <slug>` → JSON `{status, next, artifact, orientation, halt_reason}`. Do not infer success from the sub-agent's last line of stdout — read the file.
    2. **Compute the verdict** — `python3 ${CLAUDE_SKILL_DIR}/scripts/ultracook.pyz phase_decision --phase-index <i> --status <status> [--next <next>]` → JSON `{action, next_phase, exit_message}`. `<i>` is the **0-based** position in the chain (0 = cook, 1 = press, … 6 = the final age) — one less than the spawn `#` in the "Phases and slug paths" table below.
@@ -40,8 +40,6 @@ Optional flag: `--open-pr` — at the terminal, open a *new* PR when none exists
 5. **Final summary** — print a four-line summary: passes completed, total findings applied / deferred, the final age-report path, and whether the PR was pushed (or the next-step nudge "review the diff, then `/gh` when ready" if no PR existed and `--open-pr` was absent).
 
 ## Phases and slug paths
-
-The chain is fixed: seven spawns. The orchestrator walks the table top-to-bottom and stops after the last entry.
 
 Every spawn uses the canonical `/<phase> <slug> --auto` form. Cook accepts a bare slug per its Inputs section; the other phases already resolve their paths from the slug.
 
@@ -57,7 +55,7 @@ Every spawn uses the canonical `/<phase> <slug> --auto` form. Cook accepts a bar
 
 ### Optional: code-review-graph pre-build
 
-Before spawning phase 3 (first `/age`), if code-review-graph MCP is available, call `build_or_update_graph_tool` once from the orchestrator context. This deduplicates the per-sub-agent freshness calls: each age sub-agent would otherwise rebuild the graph on first use, causing redundant work across the three age spawns. If code-review-graph is absent, skip this step and continue — each age sub-agent degrades per `shared/optional-plugins.md`.
+Before spawning phase 3 (first `/age`), if code-review-graph MCP is available, call `build_or_update_graph_tool` once from the orchestrator context so the three age sub-agents reuse the warmed graph. If absent, skip — each age sub-agent degrades per `shared/optional-plugins.md`.
 
 ```
 if build_or_update_graph_tool in available_tools:
@@ -67,7 +65,7 @@ if build_or_update_graph_tool in available_tools:
 
 ### Cap enforcement
 
-The two-cure-pass cap is enforced by **chain length, not by age**. Each age sub-agent boots in fresh context and cannot count prior cure passes, so the contract cannot rely on age tracking the count. Instead:
+The two-cure-pass cap is enforced by **chain length, not by age** — age boots in fresh context and cannot count prior passes. So:
 
 - The chain table has exactly seven entries, with two cure spawns (#4 and #6) and three age spawns (#3, #5, #7). After spawn #7 completes, the orchestrator stops because the table is exhausted.
 - Each age spawn writes `next:` from what it observes on its own run: `next: cure` when at least one finding meets the `medium+` floor (medium-or-above, or a cheap contained-fix low), `next: done` when none do. The field is **informational** under ultracook — it drives early-stop (when an age reports clean), but it does not gate cap enforcement.
@@ -79,11 +77,11 @@ Each phase's existing `--auto` contract chains forward in-session — `/cook --a
 
 The override travels in the spawn prompt as the explicit no-chain directive: `Do not chain forward to the next phase even though your auto-mode contract documents that. Write your handoff slug and stop. The /ultracook orchestrator is driving the chain.`
 
-Each phase's SKILL.md `## Auto mode` section honours this directive — see `skills/<phase>/SKILL.md` `### When invoked from /ultracook` for the per-phase contract amendment. Without the directive, sub-agent #1 would run the entire pipeline inside its own context and the per-phase fresh-context property would not be delivered.
+Each phase's SKILL.md `## Auto mode` section honours this directive — see `skills/<phase>/SKILL.md` `### When invoked from /ultracook` for the per-phase contract amendment.
 
 ## Sub-agent contract
 
-Each phase spawns a **full peer** sub-agent — same model as the parent, full tool access, full MCP access, full skill access. For the complete five-invariant specification, per-harness invocation examples (Claude Code `Agent()`, GitHub Copilot CLI fleets, OpenAI Codex), and the harness-evaluation checklist, see [`../cheese-factory/references/spawn-primitive-reference.md`](../cheese-factory/references/spawn-primitive-reference.md).
+Each phase spawns a **full peer** sub-agent. For the five-invariant specification, per-harness invocation examples, and the harness-evaluation checklist, see [`../cheese-factory/references/spawn-primitive-reference.md`](../cheese-factory/references/spawn-primitive-reference.md).
 
 ## Handoff slug schema
 
@@ -96,23 +94,21 @@ artifact: <path-to-richer-report-if-any>
 <one-line orientation: what this phase did>
 ```
 
-`status: ok` means the phase finished cleanly and `next` names the next phase the chain should run. `status: halt: <reason>` means the automatic `/ultracook` chain stops and surfaces the reason verbatim; for cook and press slugs, `next` still names the next runnable phase if a human later chooses to resume via `/cheese --continue <slug>` (age and cure halt slugs keep their finding-driven `next:` values — `cure | done` and `age | done` respectively). `next: done` is terminal: age writes it when the diff is clean at the medium+ severity floor (early-stop signal), and other phases use it only when no runnable resume phase exists. The two-cure-pass cap is enforced by chain length, not by `next: done` — see `### Cap enforcement` above.
+`status: ok`: phase finished cleanly, `next` names the next phase. `status: halt: <reason>`: the chain stops and surfaces the reason verbatim; for cook and press slugs `next` still names the runnable resume phase for `/cheese --continue` (age and cure halt slugs keep their finding-driven `next:` values — `cure | done` and `age | done`). `next: done` is terminal — age writes it when the diff is clean at the medium+ floor (early-stop).
 
 For phases that already write rich reports (`/age`, `/press`, `/cure` once extended, `/cook` once extended), the slug schema is prepended at the top of the same file — there is no second file. The schema is the contract; the body is whatever the phase normally writes.
 
 ## When auto mode stops early
 
-`/ultracook` stops and surfaces the report when:
+Beyond the halt and age `next: done` cases in Flow step 3, one more early-stop case is an error, not a clean stop:
 
 - A phase's slug file is missing after the sub-agent returns (the sub-agent did not write its handoff — print "phase did not write handoff — check sub-agent logs").
-- A phase writes `status: halt: <reason>` (a quality gate failed, press came back `blocked`, cure could not apply any finding). Surface both the halt reason and the slug's `next:` value when it is not `done`, so the user can explicitly resume later with `/cheese --continue <slug>`.
-- An age phase writes `next: done` because the diff is clean at the medium+ severity floor (early-stop). Note: this only fires from age spawns; cure always writes `next: age` and cap-enforcement does not flow through `next: done` (the chain length handles that — see `### Cap enforcement` above).
 
 In every early-stop case, surface the slug file path so the user can read the full report. The natural terminal case (chain table exhausted after spawn #7) does not need an explicit early-stop signal — the orchestrator simply runs out of entries to spawn.
 
 ## Existing handoffs
 
-If any of `.cheese/{cook,press,age,cure}/<slug>.md` already exist when `/ultracook <slug>` is invoked, stop. Do not silently wipe — the user may be mid-pipeline. Scan all four phase paths and print only the ones that exist:
+When any `.cheese/{cook,press,age,cure}/<slug>.md` exist (per Flow step 2), scan all four paths and print only the ones present:
 
 ```
 Slug `<slug>` has existing handoffs:
@@ -123,8 +119,6 @@ Slug `<slug>` has existing handoffs:
 Use `/cheese --continue <slug>` to resume from the latest phase, or
 `rm` the listed files to start fresh.
 ```
-
-Removing the handoffs by hand is the only sanctioned reset path. The orchestrator does not accept a wipe flag — adding one would create a destructive default for what is intentionally a one-line `rm`.
 
 ## Output
 
@@ -142,7 +136,7 @@ If the chain stopped on a halt, replace "Next step" with the halt reason and the
 
 ## Preferred tools and fallbacks
 
-`/ultracook` is a thin orchestrator — it spawns sub-agents and reads the small handoff slug files they write. The preferred tools live inside each phase, not here. The orchestrator only needs:
+The orchestrator only needs:
 
 | Need                              | Prefer                | Fallback                          |
 |-----------------------------------|-----------------------|-----------------------------------|

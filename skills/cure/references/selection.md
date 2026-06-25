@@ -4,7 +4,7 @@ The default selection is the **recommended composite** (`all-medium, cheap`) —
 
 `/age` and `/affinage` are the preferred places to compute this selection — they pass it to `/cure` as a pre-locked handoff so the user sees the work happen, not a "whether to run /cure" prompt. When `/age` / `/affinage` hands off with a pre-locked selection, `/cure` adopts it and skips re-rendering the table; otherwise `/cure` computes the recommended composite itself, gating only on the reasons above.
 
-The `--auto --stake <floor>` flag pair (propagated from `/cook --auto`) substitutes a severity floor for the recommended composite and runs the headless chain. (`--stake` is a severity floor — the flag literal is preserved across callers, the underlying semantics is per-finding severity, not a dimension bucket.) See `## Auto-mode selection` at the bottom of this file.
+The `--auto --stake <floor>` flag pair (propagated from `/cook --auto`) substitutes a severity floor for the recommended composite and runs the headless chain. See `## Auto-mode selection` at the bottom of this file.
 
 ## Handoff from /age
 
@@ -93,8 +93,7 @@ When `/cure` is invoked with `--auto --stake <floor>`:
   - `all` — every finding regardless of severity.
 - **Cheap lows ride the `medium+` floor only.** There is no standalone `--stake cheap`. The `medium+` floor sweeps contained-fix lows automatically (above); the `blocker` and `high` floors do not (they are strict severity thresholds), and `all` already includes every low. To combine `cheap` with a different floor, invoke `/cure <slug>` interactively and type a composite verb like `all-blocker, cheap`.
 - **Order of application:** blocker first, then high, then medium, then — under the `medium+` floor — the cheap lows, in the order they appear in the age report. Within a severity band, group by file to minimise re-reads.
-- **Per-finding flow is the same as interactive:** `cheez-read` to re-confirm, `cheez-write` to apply, narrowest test to verify.
-- **On test breakage:** revert that single finding's edit, log it under the cure report's `### Deferred` section with the test name and one-line failure summary, and continue with the next finding. Do not stop the whole pass for one bad fix.
+- **Per-finding flow:** same as `## After selection`; on test breakage, revert that finding's edit, log it under `### Deferred` with the test name and one-line failure summary, and continue.
 - **On a finding that is no longer applicable** (file moved, code already fixed): record under `### Skipped` exactly as in interactive mode.
 - **After all selected findings are processed:** invoke `/age --scope <touched-paths> --auto` directly (no handoff gate). The pass-cap is enforced inside `/age --auto`, not here — cure keeps applying when called.
 

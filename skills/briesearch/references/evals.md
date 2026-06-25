@@ -51,4 +51,4 @@ For each completed /briesearch run, verify:
 
 ## How to run
 
-These evals are intentionally manual today. Convert to automated traces after the skill stabilises and we have ≥10 real /briesearch runs to compare against.
+These evals are intentionally manual today.

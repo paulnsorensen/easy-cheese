@@ -1,6 +1,6 @@
 ---
 name: cheez-read
-description: Read and list files via AST-aware tilth MCP — replaces cat / head / tail / less / more / bat / ls / tree / eza / find / fd / Read / Glob. Use when the user asks to read, view, show, open, or display a file or directory — phrases like "read src/auth.ts", "show me this file", "what's in this directory", "view lines 44-89", "look at the imports". Use even when the user says "cat", "less", "bat", "tree", "ls", "find", "fd", or "open the file" — never call host Read, Glob, or any shell file viewer / lister directly. If tilth MCP is unavailable, stop and report rather than fall back. Do NOT use for searching symbols or text (use cheez-search), editing code (use cheez-write), or git/gh operations.
+description: Read and list files via AST-aware tilth MCP — replaces cat / head / tail / less / more / bat / ls / tree / eza / find / fd / Read / Glob. Use when the user asks to read, view, show, open, or display a file or directory — phrases like "read src/auth.ts", "show me this file", "what's in this directory", "view lines 44-89", "look at the imports". Use even when the user names a shell viewer/lister or says "open the file" — never call host Read, Glob, or any shell file viewer / lister directly. If tilth MCP is unavailable, stop and report rather than fall back. Do NOT use for searching symbols or text (use cheez-search), editing code (use cheez-write), or git/gh operations.
 license: MIT
 compatibility: Requires tilth MCP server.
 allowed-tools: mcp__tilth__tilth_read, mcp__tilth__tilth_list, mcp__tilth__tilth_deps
@@ -8,20 +8,13 @@ allowed-tools: mcp__tilth__tilth_read, mcp__tilth__tilth_list, mcp__tilth__tilth
 
 # cheez-read
 
-> **Hard dependency**: If `mcp__tilth__tilth_read` is unavailable, stop immediately and report
-> "tilth MCP server is not loaded — cannot proceed." Do NOT fall back to `cat`, `Read`, `Glob`,
-> or any host tool. Install via `tilth install <host>` (see README "Installing tilth MCP").
-
 ## Capability detection
 
-Before the first call, verify tilth is reachable:
+Before the first call, verify tilth is reachable. If `mcp__tilth__tilth_read` is absent, install via `tilth install <host>` (see README "Installing tilth MCP").
 
 1. Check that `mcp__tilth__tilth_read` is available. If absent, stop and report `"tilth MCP server is not loaded — cannot proceed."`
 2. Make a minimal probe call: `tilth_read(paths: ["README.md#1-1"])`. If the response is a JSON-RPC error or transport failure, stop and report `"tilth MCP server present but unhealthy: <error>"`.
 3. Any other failure (file not found, bad section range, etc.) is a **content** issue — proceed normally and report the result.
-
-Smart code reading via **tilth MCP** (`tilth_read`, `tilth_list`, `tilth_deps`).
-tilth replaces cat/head/tail with AST-aware file reading that understands code structure.
 
 ---
 
@@ -78,7 +71,7 @@ tilth_list(patterns: ["*.ts"], scope: "src/handlers/")
 
 ## Core Principle: Read Smart, Not More
 
-tilth auto-sizes: small files (< ~6000 tokens) return full, larger files return a structural outline, binary/generated files are skipped. Drill in with a `#n-m` line range or `#symbol_name` to pull hash-anchored content out of a large file; use `mode:stripped` for an anchor-free whole-file survey.
+tilth auto-sizes: small files (< ~6000 tokens) return full, larger files an outline, binary/generated files are skipped.
 
 ---
 
@@ -90,32 +83,17 @@ tilth auto-sizes: small files (< ~6000 tokens) return full, larger files return 
 
 The tilth MCP server is launched against **one repository** — whatever directory the harness booted it in. There is no persistent index: tilth walks the working tree on demand, parses files with Tree-sitter, and respects `.gitignore`. Practical consequences:
 
-- No startup wait, no rebuild step, no staleness — the latest content on disk is what tilth reads.
+- Always fresh: no index, no rebuild — reads disk on demand.
 - Cannot reach files outside that one tree (sibling worktrees, `~/...`, system paths, dependency caches like `node_modules`, `.cargo/registry`, `site-packages`).
-- For multi-repo reads, the calling workflow skill must use host `Read` per file directly, or use code-review-graph's cross-repo tools — see cheez-search's [When code-review-graph beats tilth](../cheez-search/SKILL.md#when-code-review-graph-beats-tilth-if-your-harness-has-it) section.
+- For multi-repo reads, the calling workflow skill must use host `Read` per file directly, or use code-review-graph's cross-repo tools — see cheez-search's [When code-review-graph beats tilth](../cheez-search/references/routing.md#when-code-review-graph-beats-tilth-if-your-harness-has-it) section.
 
 For when another tool fits better than cheez-read, see [`references/routing.md`](references/routing.md).
 
 ---
 
-## Hash Anchors — The Edit Bridge
+## Hash anchors
 
-When you drill into a file (a line range, `#symbol`, or heading), tilth outputs **hash-anchored lines**:
-
-```
-42:a3f|  let x = compute();
-43:f1b|  return x;
-```
-
-The format is `<line>:<hash>|<content>`.
-
-> Plain full-file reads use a `│` (U+2502) column separator. **Drilled reads** (a line range, `#symbol`, or heading — the ones required for cheez-write) use `:<hash>|` — note the ASCII pipe and the colon. Anchors are emitted automatically on these drilled reads.
-
-**Why this matters:**
-- These hashes uniquely identify the line content
-- They're used by `tilth_write` (cheez-write) for precise edits
-- If the file changes, hashes won't match → edit is rejected safely
-- Reading before editing is mandatory to get current hashes
+Drilled reads (line range, `#symbol`, or heading) emit `<line>:<hash>|<content>` anchors; plain full-file reads use a `│` (U+2502) separator instead. Reading before editing is mandatory to get current hashes — copy the `<line>:<hash>` portion into cheez-write, where the hash uniquely identifies the line so a stale edit is rejected safely.
 
 ---
 
@@ -136,20 +114,7 @@ src/middleware.ts  (~1.8k tokens)
 
 Token estimates inform what to read in full vs outline.
 
-**Common patterns:**
-```
-# All TypeScript files
-tilth_list(patterns: ["**/*.ts"])
-
-# Test files only
-tilth_list(patterns: ["**/*.test.ts"])
-
-# Specific directory
-tilth_list(patterns: ["*"], scope: "src/handlers/")
-
-# Exclude patterns (negation in the same glob)
-tilth_list(patterns: ["!*_test.go"], scope: ".")
-```
+Negation works inline: `patterns: ["!*_test.go"]`.
 
 ---
 
@@ -172,8 +137,6 @@ in cheez-search:
 - **DO NOT use ls / tree / eza / find / fd to enumerate code files** — use `tilth_list`. Token estimates and `.gitignore` filtering only work through tilth.
 - **DO NOT use the host Read or Glob tools** on code paths — they bypass tilth's session deduplication and emit no anchors.
 - **DO NOT re-read files** shown earlier — reference the prior read.
-- **DO NOT use for searching** — use cheez-search.
-- **DO NOT use for editing** — use cheez-write.
 - **DO NOT use to run code or tests** — use the project's build/test skills.
 - **DO NOT use to commit** — use git/gh skills.
 - **DO NOT ignore hash anchors** — they are required for edits.

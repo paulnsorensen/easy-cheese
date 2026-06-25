@@ -1,6 +1,6 @@
 ---
 name: cheez-write
-description: Edit code via hash-anchored tilth MCP edits — replaces sed / awk / perl -i / patch / tee / Edit / Write / shell redirects (`>`, `>>`). Use when the user asks to edit, replace, modify, update, change, delete, or insert code — phrases like "replace this function", "delete lines 44-89", "update validateToken", "change the implementation", "add this import", "fix this bug" (when fixing requires editing), or apply a cross-cutting structural change (codemod) like "rewrite every X to Y". Sanctions `sg --rewrite` (ast-grep) for structural codemods that span many files. Always read first via cheez-read to get hash anchors for anchored edits. Prefer surgical anchored edits over whole-file rewrites. If tilth MCP is unavailable, stop and report rather than fall back. Do NOT use for reading files (cheez-read first to get anchors), searching code (use cheez-search), or running tests/builds.
+description: Edit code via hash-anchored tilth MCP edits — replaces sed / awk / perl -i / patch / tee / Edit / Write / shell redirects (`>`, `>>`). Use when the user asks to edit, replace, modify, update, change, delete, or insert code — phrases like "replace this function", "delete lines 44-89", "update validateToken", "add this import", "fix this bug" (when fixing requires editing), or apply a cross-cutting structural change (codemod) like "rewrite every X to Y". Sanctions `sg --rewrite` (ast-grep) for structural codemods that span many files. Always read first via cheez-read to get hash anchors for anchored edits. Prefer surgical anchored edits over whole-file rewrites. If tilth MCP is unavailable, stop and report rather than fall back. Do NOT use for reading files (cheez-read first to get anchors), searching code (use cheez-search), or running tests/builds.
 license: MIT
 compatibility: Requires tilth MCP server. Optional ast-grep (`sg`) for structural codemods (`sg --rewrite`) that span many files.
 allowed-tools: mcp__tilth__tilth_write, mcp__tilth__tilth_read, Bash
@@ -45,21 +45,6 @@ tilth_write(files: [{
 Response confirms `Edit applied to src/auth.ts` and may list callers to
 review.
 
-### "Add an import without nuking the existing one on line 13"
-
-`tilth_write` replaces — there is no native insert. Anchor on line 13 and put
-the original line back at the top of `content`:
-
-```json
-tilth_write(files: [{
-  "path": "src/auth.ts",
-  "edits": [{
-    "start": "13:abc",
-    "content": "import { existingThing } from './existing';\nimport { newHelper } from './helpers';"
-  }]
-}])
-```
-
 ### "Hash mismatch — file changed under me"
 
 See [Hash Mismatch Handling](#hash-mismatch-handling) for recovery steps.
@@ -68,11 +53,7 @@ See [Hash Mismatch Handling](#hash-mismatch-handling) for recovery steps.
 
 ## Core Principle: Anchors, Not Rewrites
 
-Traditional AI editing rewrites entire files, wasting tokens and risking data loss.
-tilth_write uses **hash anchors** — unique identifiers for each line — to:
-- Make precise, surgical changes
-- Reject edits if the file changed (hash mismatch)
-- Show you exactly what changed
+tilth_write uses **hash anchors** — a per-line content fingerprint — to make surgical edits and reject the write if the file changed.
 
 **The protocol:**
 1. Read the file section with `tilth_read` (cheez-read) → get hash anchors
@@ -96,8 +77,6 @@ For everything else, prefer the right tool:
 | Files outside the repo or inside dependency caches (`node_modules`, `.cargo/registry`) | don't edit them | Modifying dependencies is almost always a mistake — fix the source or upstream |
 | Binary files, images, PDFs | the producing tool | tilth_write is text-only |
 
-If the question is "which tool for this specific source-code block edit?" → `tilth_write`. If it's "rewrite this pattern everywhere" → `sg --rewrite` with the dry-run protocol.
-
 ### Routing to LSP rename or Serena
 
 Pre-entry routing decisions — when to prefer LSP rename or Serena symbol-bounded edits over `tilth_write` — are in [`references/routing.md`](references/routing.md).
@@ -114,9 +93,6 @@ When you read a file with tilth_read (a line range, `#symbol`, or heading), line
 ```
 
 Format: `<line>:<hash>|<content>` (ASCII pipe, no space).
-
-The hash is a short content fingerprint. If someone else edits the file,
-hashes change, and your edit is safely rejected.
 
 ---
 
@@ -137,8 +113,7 @@ tilth_write(files: [{
 
 For range replacement, deletion, multi-edit, insert-after, cross-file
 batches, and the `diff: true` response option, see
-[`references/edit-patterns.md`](references/edit-patterns.md). That file is the
-JSON cookbook; this body sticks to the protocol.
+[`references/edit-patterns.md`](references/edit-patterns.md).
 
 ---
 
@@ -161,8 +136,6 @@ Current content:
 2. Review the current content (someone else may have made changes).
 3. Edit with new anchors.
 
-This is a **safety feature**, not a bug.
-
 ### Repeated mismatches → bail out, don't loop
 
 If you hit **two consecutive mismatches** on the same anchor, you're racing a
@@ -181,15 +154,11 @@ The correct move is to bail and report:
 4. Stop. Let the orchestrator (or a human) decide whether to apply the change
    or escalate.
 
-This trades automation for safety — losing a race twice means whatever's
-writing the file is faster than your read-edit cycle, and a third blind
-retry could overwrite real work.
-
 ---
 
 ## Caller Updates After Signature Changes
 
-When you change a signature, `tilth_write` lists callers that may need updating in a `── callers that may need updates ──` footer — check and update them.
+When you change a signature, `tilth_write` surfaces callers that may need updating — see [edit-patterns.md#caller-update-notices](references/edit-patterns.md#caller-update-notices).
 
 ---
 
@@ -231,8 +200,6 @@ that bypasses tilth's hash-mismatch safety.
 
 ## DO NOT
 
-- **DO NOT rewrite files > 150 lines** — use hash anchors for surgical edits.
-- **DO NOT rewrite small files when the change is < 80%** — anchor the changed range only.
 - **DO NOT guess hash values** — always read first to get current anchors.
 - **DO NOT ignore hash mismatches** — re-read and retry (see Hash Mismatch Handling).
 - **DO NOT use sed / awk / perl -i** to edit code — they bypass hash anchors and structural safety, and have no mismatch detection. `sg --rewrite` is the *only* sanctioned shell escape, and only for structural codemods that follow the dry-run-first protocol.
@@ -242,6 +209,5 @@ that bypasses tilth's hash-mismatch safety.
 - **DO NOT use `sg --rewrite` for one-off block edits** — that's `tilth_write` territory. The codemod escape is only for cross-cutting structural changes; using it on a single location wastes its strength and skips hash-anchor safety.
 - **DO NOT skip the dry-run-first protocol for `sg --rewrite`** — search-only first, clean working tree, then `-U`. Never combine search+rewrite blindly.
 - **DO NOT edit without reading** — you need the anchors.
-- **DO NOT use for reading** — use cheez-read.
-- **DO NOT use for searching** — use cheez-search.
 - **DO NOT run tests, commit, or review from this skill** — use the project's test/build, git/gh, and `/age` skills.
+- **DO NOT use for reading or searching** — read with `/cheez-read`, search with `/cheez-search`.

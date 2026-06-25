@@ -161,23 +161,9 @@ tilth tracks what you've already seen:
 ## Common navigation workflow
 
 ```
-# "Where is X defined?"
-tilth_search(queries: [{query: "AuthManager"}], scope: ".", root: "/checkout/root")
-# Look for [definition] results
-
-# "What calls X?"
-tilth_search(queries: [{query: "validateToken", kind: "callers"}], scope: ".", root: "/checkout/root")
-
-# "What does X call?"
-tilth_search(queries: [{query: "handleAuth"}], scope: ".", expand: 1, root: "/checkout/root")
-# Check the -- calls -- footer
-
 # "Find all implementations of an interface"
 tilth_search(queries: [{query: "UserRepository", kind: "symbol"}], scope: ".", root: "/checkout/root")
 # Implementations show as [impl] tags
-
-# "Search error messages"
-tilth_search(queries: [{query: "invalid token format", kind: "content"}], scope: ".", root: "/checkout/root")
 
 # "What depends on this module?"
 tilth_deps(path: "src/auth/index.ts")

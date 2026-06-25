@@ -1,7 +1,6 @@
 # Routing out of tilth
 
-When the question is **name-shaped or text-shaped**, stay in `tilth_search`.
-When it is **type-grounded, concept-shaped, or cross-repo**, route out before entering cheez-search.
+Name-shaped or text-shaped -> stay in `tilth_search`. Type-grounded, concept-shaped, or cross-repo -> route out before entering cheez-search.
 
 ---
 

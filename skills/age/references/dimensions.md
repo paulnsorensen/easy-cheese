@@ -1,6 +1,6 @@
 # Review dimensions
 
-Each dimension has its own rubric. Apply each dimension to the scoped diff. A dimension with nothing to say simply omits itself from the report — do not pad with no-op observations.
+Each dimension has its own rubric.
 
 Dimensions answer **what kind of problem**. Severity answers **how bad this one is**. The two stay orthogonal.
 

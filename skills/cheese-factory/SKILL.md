@@ -6,8 +6,6 @@ license: MIT
 
 # /cheese-factory
 
-`/cheese-factory` is the portable, harness-agnostic sibling of `/fromagerie`. Same decomposition pattern, same dual fan-out/fan-in, no bespoke agent files. Every sub-agent is a general-purpose full-peer worker driven by an in-prompt skill invocation.
-
 ## Inputs
 
 Accept:
@@ -23,22 +21,15 @@ Accept:
 
 `/cheese-factory` does not accept fuzzy or open-ended asks — route those to `/mold` first. The orchestrator assumes the contract is locked.
 
-`--auto` is **implicit**. After Phase 0 gate approval, the chain runs autonomously with no per-step handoff questions. There is no interactive mode — the value of this skill is unattended parallel execution.
+`--auto` is **implicit**. After Phase 0 gate approval, the chain runs autonomously with no per-step handoff questions.
 
 ## When to use `/cheese-factory` vs alternatives
 
-| Skill | Use when |
-|---|---|
-| `/cook` | Single unambiguous task, no decomposition. |
-| `/ultracook` | Single coherent spec, high-blast-radius, sequential review pipeline. |
-| `/cheese-factory` | Spec decomposes into 5+ file-disjoint behavioural curds. |
-| `/fromagerie` | Same problem on Anthropic Claude Code with the bespoke agent files installed and a preference for specialised agent contracts. |
+Use `/cheese-factory` only when the spec decomposes into 5+ file-disjoint behavioural curds. Fewer curds → `/ultracook`; single unambiguous task → `/cook`; on Anthropic Claude Code with bespoke agent files installed → `/fromagerie`.
 
 ## Decomposition contract — curds of behaviour
 
-In cheese-factory terms, a curd is the smallest commit-worthy unit of behaviour:
-small enough to be worked independently, but intended to be pressed back into the
-whole feature.
+A curd is the smallest commit-worthy unit of behaviour.
 
 The Phase 0 decomposer produces three artifact lists from the spec:
 
@@ -75,7 +66,7 @@ Eight phases. The orchestrator walks them top-to-bottom and stops after the last
 |---|---|---|
 | 0 | Pre-compile | Read spec, decompose via heavy general-purpose sub-agent, validate against the five criteria, user gate |
 | 1 | Seed | Orchestrator inline edits via `/cheez-write` (or host edit tool if tilth MCP is unavailable), commit, push |
-| 2 | Curds (fan-out) | N parallel general-purpose spawns; each runs `/cook --auto → /press --auto → /age --auto` (inline-degrade) `→ /cure --auto --stake medium+` and commits |
+| 2 | Curds (fan-out) | N parallel general-purpose spawns; each runs the per-curd pipeline and commits |
 | 3 | Merge curds (fan-in) | Cherry-pick curd commits → orchestrator branch; `/melt` on conflicts |
 | 4 | Wiring (sequential within wave) | Integration files only; per-task general-purpose spawn with wiring-only prompt |
 | 5 | Final merge wiring | Wiring commits → orchestrator branch; conflicts here = halt (decomposer error) |
@@ -215,7 +206,7 @@ Keep: slug, spec path (for downstream skills), quality gates, list of all change
 
 ### Phase 6 — Post-merge review (ultracook-style fresh-context)
 
-By Phase 6 the orchestrator's context is heavy. Run the final review pipeline in fresh-context sub-agents to keep review reasoning adversarial and clean.
+Run the final review pipeline in fresh-context sub-agents.
 
 Three sequential spawns:
 
@@ -299,26 +290,11 @@ Manifest: .cheese/cheese-factory/<slug>/manifest.yaml
 ## Compaction strategy
 At each seam, write a self-summary to the manifest before dropping:
 
-```json
-{
-  "phase_summary": "<2-3 sentences: what happened, what succeeded/failed, what's next>",
-  "carry_forward": ["slug", "spec_summary", "manifest_path", "quality_gates"]
-}
-```
-
-On `--resume`, read `phase_summary` from the manifest. This is the only cross-seam continuity mechanism — do not rely on conversation history.
+Write `phase_summary` and `carry_forward` (shapes in `references/manifest-schema.json`) before dropping. On `--resume`, read `phase_summary` from the manifest — the only cross-seam continuity mechanism; do not rely on conversation history.
 
 ## Spawn primitive contract (host-agnostic)
 
-The orchestrator never names a specific host primitive. Any primitive that satisfies all five invariants below is acceptable. See `references/spawn-primitive-reference.md` for host-by-host examples.
-
-1. **Fresh context per spawn.** The sub-agent boots with no memory of prior phases.
-2. **Full-peer inheritance.** Same model as the parent, full tool access, full skill access, full MCP access. No diminutive workers.
-3. **No chain-forward.** The sub-agent runs only its phase and returns. The no-chain-forward directive is passed in the prompt.
-4. **Returns control.** The orchestrator regains control after each spawn so it can read the handoff slug.
-5. **Writes handoff slug.** Each spawn writes its result to `.cheese/<phase>/<slug>.md` per the schema. The orchestrator decides chain progression from the slug, never from stdout.
-
-If the host harness exposes no fan-out primitive at all, `/cheese-factory` is the wrong skill — recommend `/ultracook` for the same review semantics in the parent's own context.
+The orchestrator never names a specific host primitive. Any primitive satisfying all five invariants is acceptable: (1) **Fresh context per spawn**, (2) **Full-peer inheritance**, (3) **No chain-forward** (passed in prompt), (4) **Returns control**, (5) **Writes handoff slug**. Host-by-host examples and the no-fan-out fallback (route to `/ultracook`) live in `references/spawn-primitive-reference.md`.
 
 ## Handoff slug schema
 
@@ -344,26 +320,15 @@ For phases that already write rich reports (`/age`, `/press`, `/cure`), the sche
 
 If any gate fails: STOP, report, do not silently fix.
 
-## `--hard` propagation
-
-`/cheese-factory <spec> --hard`:
-
-- Passes `--hard` to per-curd `/cook --hard --auto` — each curd gets its own hard-cheese vibecheck at its `/cure` share-for-review boundary.
-- Passes `--hard` to Phase 6 `/cure --hard --auto --stake medium+` — the integration `/cure` runs the share-for-review vibecheck too.
-
-The orchestrator does not invoke `/hard-cheese` itself — it propagates the flag. See `skills/hard-cheese/SKILL.md`.
-
 ## `--resume <slug>`
 
-Read manifest at `.cheese/cheese-factory/<slug>/manifest.yaml`, find the latest phase marked complete, skip to the next phase. Report: `Resuming <slug> from phase <N>`.
-
-If the manifest references commits that no longer exist (rebased, deleted), fail fast and report — do not silently re-execute the phase.
+If the manifest references commits that no longer exist (rebased, deleted), fail fast — do not silently re-execute the phase. Otherwise continue from the phase after the latest one marked complete; report `Resuming <slug> from phase <N>`.
 
 ## Error recovery
 
 | Failure | Recovery |
 |---|---|
-| No spec argument | STOP. Report `cheese-factory requires an approved spec; run /mold first if you need to shape one`. Do not auto-dispatch — cross-skill handoffs stay user-visible. |
+| No spec argument | STOP. Report `cheese-factory requires an approved spec; run /mold first if you need to shape one`. |
 | Overlap / criterion violation in decomposer output | Re-run decomposer (max 2 retries) |
 | Seed gate failure | STOP, report — do not dispatch curds |
 | Curd fails | Retry once with error context, then mark failed |
@@ -411,12 +376,7 @@ If the manifest references commits that no longer exist (rebased, deleted), fail
 - `references/manifest-schema.json` — JSON Schema for the manifest.
 - `references/pr-plan-schema.json` — JSON Schema for the PR plan, `$ref`'d from `manifest-schema.json`.
 - `references/spawn-primitive-reference.md` — host-by-host invocation examples plus the five invariants.
-- `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz validate_manifest` — Phase 0 structural validation of required manifest sections and fields.
-- `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz validate_decomposition` — Phase 0 semantic validation of decomposer output against the five criteria.
-- `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz validate_pr_plan` — Phase 7 validation of PR planner output before branch creation.
-- `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz pr_plan_to_branches` — converts `pr-plan.yaml` to branch-creation commands for Phase 7.
-- `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz manifest_update` — atomic field updates to the run manifest (Phase 1 phase transition, Phase 2/4 status updates).
-- `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz wiring_topo_sort` — Kahn topological sort of the wiring DAG into ready-at-once waves (Phase 4 dispatch order).
+- `cheese-factory.pyz` subcommands (run via `${CLAUDE_SKILL_DIR}/scripts/`): `validate_manifest`, `validate_decomposition` (Phase 0), `validate_pr_plan`, `pr_plan_to_branches` (Phase 7), `manifest_update` (Phase 1/2/4 manifest writes), `wiring_topo_sort` (Phase 4 wave ordering).
 
 ## Rules
 

@@ -1,6 +1,6 @@
 ---
 name: mold
-description: Converge a fuzzy idea or half-formed feature into an approved spec through an iterative, grounded design dialogue. Use when the user has a fuzzy idea or design direction — phrases like "let's design X", "I'm thinking about Y", "what should the API for Z look like", "shape this into a spec", "I want to add a feature that…", "/mold". Runs an iterative dialogue (Explore / Ground / Shape / Sketch / Grill / Diagnose), grounds every critical claim with cheez-search or briesearch, locks public seams in pseudocode, and only writes a spec to `.cheese/specs/<slug>.md` after an explicit approval gate. Use even when the user is "just thinking out loud" if they want the dialogue to leave behind a written artifact — for pure no-write thinking, route to `/culture` instead. After `/culture` (optional); before `/cook`.
+description: Converge a fuzzy idea or half-formed feature into an approved spec through an iterative, grounded design dialogue. Use when the user has a fuzzy idea or design direction — phrases like "let's design X", "I'm thinking about Y", "what should the API for Z look like", "shape this into a spec", "I want to add a feature that…", "/mold". Runs an iterative dialogue (Explore / Ground / Shape / Sketch / Grill / Diagnose). Use even when the user is "just thinking out loud" if they want the dialogue to leave behind a written artifact — for pure no-write thinking, route to `/culture` instead. After `/culture` (optional); before `/cook`.
 license: MIT
 ---
 
@@ -17,7 +17,7 @@ Do not use the user-invoked ceremony for free-form discussion with no artifact i
 
 1. **Route** — pick a starting mode from the input shape (see `references/modes.md`) and announce it in one line. If the user's framing rests on a false premise or a loaded assumption, name it before routing.
 2. **Dialogue** — build shared understanding through the smallest useful question to the user, but contribute at maximum useful depth between questions (full options, named edge cases, concrete evidence — not gestural sketches). Ground every critical claim with `cheez-search`, `cheez-read`, a Validate Cycle (`references/validate-cycle.md`), or — for an ungrillable design unknown only a running sketch can settle — a Prototype Cycle (`references/prototype-cycle.md`). Both cycles are sub-agent-spawnable mid-dialogue, in parallel, and are context-bounded (no hard cap; soft backstop of 10). Track contradictions across turns; if turn N contradicts an earlier conclusion, flag and resolve it before continuing.
-3. **Sketch** — for any feature touching >1 module or a new public interface, run the shape check (`references/shape-check.md`) on the touched symbols, then lock seams in pseudocode signatures before talking spec content. Default to full signatures, not hand-waving. While the code is open, bind every identity/ownership-role noun to a code referent per `references/handshake.md` § Entity-referent binding — a search hit of a *different* referent is an alias, not a pass.
+3. **Sketch** — for any feature touching >1 module or a new public interface, run the shape check (`references/shape-check.md`) on the touched symbols, then lock seams in pseudocode signatures before talking spec content. While the code is open, bind every identity/ownership-role noun to a code referent per `references/handshake.md` § Entity-referent binding — a search hit of a *different* referent is an alias, not a pass.
 4. **Two-key handshake** — both the user (explicit verb) and the agent (coherence self-check) must agree before extraction. See `references/handshake.md`.
 5. **Curdle** — resolve the durable spec path with `SPEC=$(python3 ${CLAUDE_SKILL_DIR}/scripts/mold.pyz artifact-path specs <slug>)`, then write the approved spec to `"$SPEC"` (and optional issues alongside). The resolver anchors specs at the per-project durable corpus (see `shared/formatting.md` § Corpus location); never hardcode a `.cheese/specs/` path. In the same atomic step, write the session's non-obvious decisions as durable ADRs. Format, slug, and corpus-resolution rules in `references/curdle.md` and `references/adr.md`.
 6. **Hand off** — once the spec is on disk, run `python3 ${CLAUDE_SKILL_DIR}/scripts/mold.pyz curd-count "$SPEC" --blast-radius <low|medium|high>` to compute the recommended downstream skill (full procedure in `references/curd-count.md`). Then prompt the next step via the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md). Never dispatch before the user selects; after a non-stop selection, run the selected downstream skill immediately.
@@ -92,13 +92,9 @@ Optional tools accelerate the work; missing tools do not block the dialogue. Whe
 
 ## Sub-agent context gate
 
-`/mold` keeps the dialogue, contradictions, approval state, and the two-key handshake in the parent context — those never delegate. Offloading heavy work to a read-only sub-agent is the **default**, not an exception — it is the reliable lever for staying out of the model's degraded-attention band (`references/context-budget.md`). Spawn one whenever the work would flood the conversation with raw evidence or graph output:
+`/mold` keeps the dialogue, contradictions, approval state, and the two-key handshake in the parent context — those never delegate. Offloading heavy work to a read-only sub-agent is the **default** (`references/context-budget.md`). Spawn one whenever the work would flood the conversation with raw evidence or graph output:
 
 Triggers and digest constraints in `references/context-budget.md`.
-
-### Context budget
-
-Full rule in `references/context-budget.md`.
 
 ### Gate graph
 
@@ -108,16 +104,9 @@ Mold's gate state machine is a single machine-readable model rendered two ways: 
 
 Curdle requires the **two-key handshake**: an explicit user verb (e.g. `curdle`, `ship it`) and the agent's coherence self-check. The full checklist, mandatory gates, and override semantics live in `references/handshake.md` — do not duplicate them here.
 
-Before the handshake fires, also run the **agent-introduced-scope** check (`references/handshake.md` § Agent-introduced scope): list every distinguishing noun in Approach / Decisions / Interface sketches, grep the prior user turns for each, and flag any unmatched noun as `[AGENT-INTRODUCED]`. The user must explicitly approve each flagged item before extraction. See `references/handshake.md` § Agent-introduced scope for the full procedure and the single-chokepoint guarantee.
+Before the handshake fires, also run the **agent-introduced-scope** check — flag any noun in Approach / Decisions / Interface sketches the user did not type, and require explicit per-term approval before extraction. Full procedure and the single-chokepoint guarantee in `references/handshake.md` § Agent-introduced scope.
 
 If any gate is unmet, propose the smallest next question or evidence check. Write artifacts only after both keys pass.
-
-## Output paths
-
-Resolve durable artifact locations through the resolver, never hardcode them:
-
-- Spec: `python3 ${CLAUDE_SKILL_DIR}/scripts/mold.pyz artifact-path specs <slug>` (anchored at the per-project durable corpus — see `shared/formatting.md` § Corpus location).
-- Issues: stay repo-local at `.cheese/issues/<slug>-001.md`, `.cheese/issues/<slug>-002.md`, ... — `issues` is a transient phase, not a durable-corpus artifact.
 
 ## --hard
 
@@ -127,14 +116,7 @@ Resolve durable artifact locations through the resolver, never hardcode them:
 
 **Pipeline:** culture → **[mold]** → cook → press → age → cure → ship
 
-After Curdle writes the spec, run the curd-count script with the shape-check verdict to compute the recommended downstream skill — full procedure in [`references/curd-count.md`](references/curd-count.md):
-
-```bash
-SPEC=$(python3 ${CLAUDE_SKILL_DIR}/scripts/mold.pyz artifact-path specs <slug>)
-python3 ${CLAUDE_SKILL_DIR}/scripts/mold.pyz curd-count "$SPEC" --blast-radius <low|medium|high>
-```
-
-Omit `--blast-radius` when the shape-check verdict is `[?]` or skipped; the script accepts only `low|medium|high` and degrades to `/cook` for sub-threshold specs without the flag.
+After Curdle writes the spec, run the curd-count script (procedure and `--blast-radius` rules in [`references/curd-count.md`](references/curd-count.md)), then render the branch menu below and prompt via the shared handoff gate. Never pre-select an autonomous option.
 
 Read the JSON digest. Its `decomposable` field (true when `candidate_curds ≥ 5`) picks the option set rendered below; its `recommended_skill` field picks which option holds the *(recommended)* slot — subject to one user-confirmed override in the decomposable branch (see below). Then ask the user via the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md). Lead each option with the verb; the skill command (with the spec path and any in-scope `--hard` propagation) is the backing detail.
 

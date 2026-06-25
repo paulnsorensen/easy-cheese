@@ -1,7 +1,5 @@
 # Gap analysis
 
-After cook produces green changes, press identifies where the test surface is weak before review.
-
 ## What counts as a gap
 
 | Gap type | Symptom | Example |

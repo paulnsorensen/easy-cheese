@@ -37,8 +37,6 @@ Rules:
 - **Do not restrict tools or MCP access.** Each phase needs Bash, Edit, Write, Read, the `cheez-*` skills, and any MCP servers the parent has.
 - **Do pass the slug.** The phase skill resolves its own paths from the slug.
 
-The contract is "inheritance, not diminution" — most sub-agent patterns in this ecosystem (Explore, lsp-probe, whey-drainer, ricotta-reducer) are deliberately scoped down for cheap focused queries. `/cheese-factory` does the opposite: it spawns workers that are full peers of the parent.
-
 ## GitHub Copilot CLI — fleets
 
 [Copilot CLI fleets](https://docs.github.com/en/copilot/concepts/agents/copilot-cli/fleet) dispatch multiple agents from a single CLI invocation. Each agent boots in its own conversation context, satisfying invariant 1.

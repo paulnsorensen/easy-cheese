@@ -41,13 +41,7 @@ Do NOT run the full test suite.
 
 You are running as a sub-agent. The /age skill must run its ten dimensions
 INLINE within your own context — do not spawn sub-agents for parallel review.
-The nesting-depth limit in Claude Code (and equivalents in other harnesses)
-blocks level-2 nesting.
-
-Detection: invoke /age with the marker `invoked-from: cheese-factory-curd` in your
-prompt to /age. The skill reads it and switches modes. Output (the findings report
-+ handoff slug) is identical between fan-out and inline-degrade modes — only the
-internal execution differs.
+Detection: invoke /age with the marker `invoked-from: cheese-factory-curd` in your prompt to /age; the skill switches modes.
 
 ## Quality gate
 

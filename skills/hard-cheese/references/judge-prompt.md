@@ -78,7 +78,3 @@ Constraints:
 - `socratic_qs` is an array of 2–4 strings on FAIL, an empty array on PASS. Each question ends with a question mark.
 
 If the parent cannot parse the JSON, it treats the attempt as `ERROR` and applies the fail-open divergence — see `skills/hard-cheese/SKILL.md` `## Divergence from the paper`.
-
-## Why a separate judge
-
-Same-context judging — the model that wrote the code grading the human's understanding of the code — is biased toward leniency because the model already believes the code is good. The fresh-context spawn is the entire reason the gate carries weight. This is the same pattern `/ultracook` uses to keep review adversarial across pipeline phases.

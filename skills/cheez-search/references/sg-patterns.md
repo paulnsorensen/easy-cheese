@@ -16,9 +16,6 @@ the default for one-off block edits.
 - You want to apply the same structural change across many files in one pass
   (codemod) — see the dedicated section below.
 
-If the question is "where is `handleAuth` defined" or "what calls
-`validateToken`", stay in `tilth_search`. `sg` is for shape, not name.
-
 ## Pattern syntax
 
 ```bash

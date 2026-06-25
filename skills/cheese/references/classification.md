@@ -1,10 +1,10 @@
 # Classification reference
 
-Intent shapes for `/cheese`, with the signals that drive each one and the disambiguation rules that resolve ambiguity. Confidence stays qualitative (`low | medium | high`); only `medium` or better dispatches. `/cheese` dispatches the chosen target immediately; `--safe` is the only switch that gates dispatch behind a confirmation prompt.
+Intent shapes for `/cheese`, with the signals that drive each one and the disambiguation rules that resolve ambiguity.
 
 ## Clarity check (implementation intents)
 
-For `cook` and `mold` intents — and only these — classification feeds into cook's fast-path check (§ "Standalone fast-path" in `skills/cook/SKILL.md`: clear I/O, bounded scope, obvious verification). All three checks passing means tier 1: write a mini-spec via `/mold`'s agent-invoked mode and dispatch `/cook --auto`. Any check borderline means tier 2: invoke `/culture` and/or `/briesearch` internally, re-check. Still borderline means tier 3: a single targeted host-routed question. The full three-tier escalation lives in `skills/cheese/SKILL.md` § Escalation.
+For `cook` and `mold` intents only, classification feeds cook's fast-path check (§ "Standalone fast-path" in `skills/cook/SKILL.md`), which drives the three-tier escalation in `skills/cheese/SKILL.md` § Escalation.
 
 The `clarify` intent below is exclusively the tier-3 path; classify a request as `clarify` when the cook-fast-path check fails twice (input + post-tier-2-refined input) or when intent confidence stays below `medium` after the silent culture pass.
 

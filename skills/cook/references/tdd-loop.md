@@ -30,7 +30,7 @@ If cook reports partial or skipped work, **stop and resolve before taste-test**.
 
 ## Taste-test — drift, readability, scope, simplify, plus three fresh-context lenses
 
-After cook says "I completed all the changes", run a taste test before press. The taste-test is a **fresh-context review**: when the cooked diff is non-trivial it is dispatched to a read-only reviewer that did not write the code, because the writing context cannot reliably see its own drift. Small diffs keep the cheap inline check.
+After cook says "I completed all the changes", run a taste test before press. The taste-test is a **fresh-context review**: when the cooked diff is non-trivial it is dispatched to a read-only reviewer that did not write the code. Small diffs keep the cheap inline check.
 
 **Cost gate — where it runs.** Dispatch the fresh-context taste-test only when the cooked diff **touches more than one file OR adds public surface** (a new exported/public function, type, or CLI seam). Single-file, no-public-surface fixes keep the inline self-check — the dispatch is not worth its latency there.
 
@@ -69,10 +69,6 @@ worst:   implement → taste-test → implement → taste-test → implement (fi
 ```
 
 After the second taste test, allow only one final corrective cook pass. If that final pass cannot fully resolve the taste findings, **stop and report blocked** instead of continuing to press.
-
-## Why a cap
-
-Without it, the loop has no termination — every taste pass can find something to nudge. The cap forces a "ship or escalate" decision instead of infinite refinement.
 
 ## Self-evaluation before handoff
 

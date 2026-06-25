@@ -73,9 +73,6 @@ tilth_write(files: [{ path: "src/auth.ts", edits: [{ start: "44:b2c", end: "89:e
 
 `diff` is a top-level call argument (it diffs each file in the response), not a per-entry property.
 
-Useful when the change is non-trivial and you want to verify the diff before
-moving on.
-
 ## Insert "after" a line
 
 `tilth_write` replaces the anchored line(s); there is no native insert. To

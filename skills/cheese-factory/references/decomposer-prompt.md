@@ -41,12 +41,8 @@ The orchestrator will run `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz valida
 sections and field shapes, then `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz validate_decomposition` against the checks
 below. Your output will be rejected on any failure:
 
-- **Behaviour overlap** — each curd describes one behaviour (criterion 1).
-- **Spec coverage** — every acceptance criterion has exactly one curd (criterion 2).
-- **Test target check** — each curd has a focused test command (criterion 3).
-- **File disjointness** — no file appears in two curds (criterion 4).
-- **Wiring DAG check** — no cycles, no cross-branch overlap, barrel files included
-  where curds create new slices.
+- **Behaviour overlap**, **Spec coverage**, **Test target**, **File disjointness** — enforce criteria 1–4 above.
+- **Wiring DAG check** — no cycles, no cross-branch overlap, barrel files included where curds create new slices.
 - **Seed minimality** — seed contains only files that 2+ curds depend on.
 
 You get up to 2 retries if validation fails. After the third failed attempt, the
