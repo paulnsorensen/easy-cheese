@@ -10,7 +10,7 @@ allowed-tools: mcp__tilth__tilth_write, mcp__tilth__tilth_read, Bash
 
 > **Hard dependency**: If `mcp__tilth__tilth_write` is unavailable, stop immediately and report
 > "tilth MCP server is not loaded — cannot proceed." Do NOT fall back to `Edit`, `Write`,
-> or any host tool. Install via `tilth install <host>` (see README "Installing tilth MCP").
+> or any host tool. Install via `tilth install <host> --edit` — the `--edit` flag is required to expose `tilth_write` (see README "Installing tilth MCP").
 
 ## Capability detection
 

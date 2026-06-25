@@ -22,7 +22,7 @@ The bash-driven flows below cover the bulk of resolution. Drop into the `cheez-*
 
 | Stage | Tool | What it does | When it runs |
 | --- | --- | --- | --- |
-| 1 | `mergiraf` | Tree-sitter structural merge of base / ours / theirs. Independent additions merge cleanly even when text merge would conflict. Falls back to text merge on parse failure. | Automatically as a git merge driver, or via `melt.pyz batch-resolve`. |
+| 1 | `mergiraf` | Tree-sitter structural merge of base / ours / theirs. Independent additions merge cleanly even when text merge would conflict. Falls back to text merge on parse failure. | Automatically as a git merge driver, or via `python3 ${CLAUDE_SKILL_DIR}/scripts/melt.pyz batch-resolve`. |
 | 2 | `git rerere` | Replays a previously recorded human resolution for the same conflict signature. | After mergiraf, especially during long rebases where conflicts recur. |
 | 3 | `kdiff3` | Manual 3-way diff for what mergiraf and rerere could not resolve. | Launched via `git mergetool`. |
 
@@ -145,11 +145,11 @@ For ours/theirs picks, lockfiles, mergiraf debugging, and maintenance, see [refe
 
 | Script | Purpose | When |
 | --- | --- | --- |
-| `melt.pyz detect-squash-residue` | Detect that the branch was squash-merged and emit both the merge and reset+cherry-pick remedies | **Run first** — short-circuits the cascade |
-| `melt.pyz conflict-summary` | Structured summary with line numbers and context | After residue check |
-| `melt.pyz batch-resolve` | Run `mergiraf merge` over every conflicted file | Supported languages |
-| `melt.pyz conflict-pick` | Choose ours / theirs per hunk | Shell, SQL, formats mergiraf does not parse |
-| `melt.pyz lockfile-resolve` | Take one side and regenerate the lockfile | `Cargo.lock`, `package-lock.json`, etc. |
+| `python3 ${CLAUDE_SKILL_DIR}/scripts/melt.pyz detect-squash-residue` | Detect that the branch was squash-merged and emit both the merge and reset+cherry-pick remedies | **Run first** — short-circuits the cascade |
+| `python3 ${CLAUDE_SKILL_DIR}/scripts/melt.pyz conflict-summary` | Structured summary with line numbers and context | After residue check |
+| `python3 ${CLAUDE_SKILL_DIR}/scripts/melt.pyz batch-resolve` | Run `mergiraf merge` over every conflicted file | Supported languages |
+| `python3 ${CLAUDE_SKILL_DIR}/scripts/melt.pyz conflict-pick` | Choose ours / theirs per hunk | Shell, SQL, formats mergiraf does not parse |
+| `python3 ${CLAUDE_SKILL_DIR}/scripts/melt.pyz lockfile-resolve` | Take one side and regenerate the lockfile | `Cargo.lock`, `package-lock.json`, etc. |
 
 ## What this skill does NOT do
 
@@ -179,8 +179,8 @@ After resolution finishes, prompt the next step via the shared handoff gate in [
 
 ## Rules
 
-- Always run `melt.pyz detect-squash-residue` first; if positive, surface both remedies and stop the cascade.
-- Always run `melt.pyz conflict-summary` before deciding the cascade order.
+- Always run `python3 ${CLAUDE_SKILL_DIR}/scripts/melt.pyz detect-squash-residue` first; if positive, surface both remedies and stop the cascade.
+- Always run `python3 ${CLAUDE_SKILL_DIR}/scripts/melt.pyz conflict-summary` before deciding the cascade order.
 - Prefer structural resolution over manual edits when mergiraf supports the file type.
 - Never weaken or hand-edit a lockfile in place — regenerate from the manifest.
 - Flag unresolved files explicitly; do not claim a clean tree until `git status` agrees.

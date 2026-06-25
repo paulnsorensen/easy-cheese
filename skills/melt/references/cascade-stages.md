@@ -36,7 +36,7 @@ Supports `Cargo.lock`, `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`, `poet
 
 ## Step 6 — Debug mergiraf
 
-When mergiraf is not resolving something it should, start with the `--debug` single-file inspection described in step 2 of SKILL.md (`melt.pyz batch-resolve --debug <path>`). Also check:
+When mergiraf is not resolving something it should, start with the `--debug` single-file inspection described in step 2 of SKILL.md (`python3 ${CLAUDE_SKILL_DIR}/scripts/melt.pyz batch-resolve --debug <path>`). Also check:
 
 ```bash
 mergiraf languages | grep <extension>   # is the type registered?
