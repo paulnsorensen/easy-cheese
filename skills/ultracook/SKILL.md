@@ -75,7 +75,7 @@ The two-cure-pass cap is enforced by **chain length, not by age** — age boots 
 
 Each phase's existing `--auto` contract chains forward in-session — `/cook --auto` invokes `/press --auto`, which invokes `/age --auto`, etc. `/ultracook` overrides that behaviour: every spawn must run only its own phase, write the slug, and stop. The orchestrator owns the chain.
 
-The override travels in the spawn prompt as the explicit no-chain directive: `Do not chain forward to the next phase even though your auto-mode contract documents that. Write your handoff slug and stop. The /ultracook orchestrator is driving the chain.`
+The override travels in the spawn prompt as the explicit no-chain directive: `Do not chain forward to the next phase even though your auto-mode contract documents that. Write your handoff slug and stop. The /ultracook orchestrator is driving the chain. Run in the foreground — do not background yourself, spawn detached processes, or defer work to a later session. If you cannot complete the phase within your context window, write a partial slug with status: halt and stop; do not silently timeout.`
 
 Each phase's SKILL.md `## Auto mode` section honours this directive — see `skills/<phase>/SKILL.md` `### When invoked from /ultracook` for the per-phase contract amendment.
 
@@ -102,7 +102,7 @@ For phases that already write rich reports (`/age`, `/press`, `/cure` once exten
 
 Beyond the halt and age `next: done` cases in Flow step 3, one more early-stop case is an error, not a clean stop:
 
-- A phase's slug file is missing after the sub-agent returns (the sub-agent did not write its handoff — print "phase did not write handoff — check sub-agent logs").
+- A phase's slug file is missing after the sub-agent returns (the sub-agent did not write its handoff). Before surfacing this as a hard stop, attempt a **re-dispatch** with the foreground-only directive reinforced in the prompt. Cap re-dispatches at **2** per phase. After the second failed re-dispatch with no slug, print: `"<phase> did not write handoff after 2 re-dispatch attempts — check sub-agent logs"` and stop. Track the attempt count per phase in the orchestrator loop; reset to 0 when advancing to a new phase.
 
 In every early-stop case, surface the slug file path so the user can read the full report. The natural terminal case (chain table exhausted after spawn #7) does not need an explicit early-stop signal — the orchestrator simply runs out of entries to spawn.
 

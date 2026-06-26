@@ -26,7 +26,12 @@ Agent(
            .cheese/<phase>/<slug>.md with the handoff schema and stop.
            Do not chain forward to the next phase even though your
            auto-mode contract documents that. The /cheese-factory orchestrator
-           is driving the chain."
+           is driving the chain.
+           Run in the foreground — do not background yourself, spawn
+           detached processes, or defer work to a later session.
+           If you cannot complete the phase within your context window,
+           write a partial slug with status: halt and stop; do not
+           silently timeout."
 )
 ```
 
@@ -50,8 +55,7 @@ copilot fleet \
 
 Rules:
 
-- Each prompt in the prompt file must include the no-chain-forward directive.
-- `--return-on-completion` is mandatory; without it, control does not return to the orchestrator (invariant 4 fails).
+- Each prompt in the prompt file must include the no-chain-forward directive and the foreground-only directive (run in the foreground; do not background yourself or defer work; write a partial slug with status: halt if the context window is exhausted, do not silently timeout).
 - Fleet agents inherit the same model and tool scope as the parent session, satisfying invariant 2.
 - Each agent must write the handoff slug to `.cheese/cheese-factory/<slug>/curds/<id>.md` per the per-curd prompt template.
 
@@ -72,7 +76,7 @@ Rules:
 - `--type general-purpose` (or equivalent) — never pass a scoped worker type.
 - `--inherit-tools` — full-peer inheritance per invariant 2.
 - `--wait` — synchronous return so the orchestrator can read the handoff slug.
-- The prompt file must include the no-chain-forward directive.
+- The prompt file must include the no-chain-forward directive and the foreground-only directive (run in the foreground; do not background yourself or defer work; write a partial slug with status: halt if the context window is exhausted, do not silently timeout).
 
 ## Other / future harnesses
 
