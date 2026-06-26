@@ -201,7 +201,7 @@ When `--html` is passed, after writing `.cheese/age/<slug>.md`, also write a sta
 import os, tempfile, html as html_lib
 
 slug = "<slug>"  # same slug as the markdown report
-temp_dir = os.environ.get("TMPDIR") or tempfile.gettempdir()
+temp_dir = tempfile.gettempdir()
 html_path = os.path.join(temp_dir, f"age-{slug}.html")
 
 # findings_by_severity: dict mapping severity → list of finding dicts
@@ -218,9 +218,10 @@ for severity in ["blocker", "high", "medium", "low"]:
                     f"<td class='px-3 py-2 text-sm'>{html_lib.escape(finding['body'])}</td>"
                     "</tr>")
 
-mermaid_counts = ", ".join(
-    f"{sev}: {len(findings_by_severity.get(sev, []))}"
+pie_rows = "\n".join(
+    f'    "{sev}" : {len(findings_by_severity.get(sev, []))}'
     for sev in ["blocker", "high", "medium", "low"]
+    if findings_by_severity.get(sev)
 )
 
 html_content = f"""<!DOCTYPE html>
@@ -230,13 +231,13 @@ html_content = f"""<!DOCTYPE html>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Age Report &mdash; {html_lib.escape(slug)}</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 </head>
 <body class="bg-gray-50 p-6 font-sans">
   <h1 class="text-2xl font-bold mb-4">Age Report &mdash; {html_lib.escape(slug)}</h1>
   <div class="mermaid mb-6">
 pie title Findings by severity
-    {mermaid_counts}
+    {pie_rows}
   </div>
   <table class="w-full border-collapse bg-white shadow rounded">
     <thead class="bg-gray-200 text-left">
