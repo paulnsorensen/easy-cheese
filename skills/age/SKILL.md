@@ -15,8 +15,8 @@ Do not use it to apply fixes directly. Hand fix work to `/cure`, which owns appl
 Accept:
 
 ```text
-/age [<ref-or-range>] [--scope <path>] [--comprehensive] [--full] [--safe] [--open-pr] [--auto]
-/age <slug> [--full] [--safe] [--open-pr] [--auto]
+/age [<ref-or-range>] [--scope <path>] [--comprehensive] [--full] [--safe] [--open-pr] [--auto] [--html]
+/age <slug> [--full] [--safe] [--open-pr] [--auto] [--html]
 ```
 
 `--full` un-collapses the `## Low` section when 10 or more low-severity findings exist (the default report collapses them to a one-line summary). Suppressed lows feed the cure-selection table only when `--full` is passed.
@@ -28,6 +28,8 @@ When called with a `<slug>`, resolve `.cheese/press/<slug>.md` (if present) for 
 `--auto` is the propagated autonomous-mode flag from `/cook --auto`. It changes the handoff (see `## Handoff` and `### Auto mode` for the cap rule and full chain). See `### When invoked from /ultracook` for the no-shared-memory variant.
 
 `--hard` is the propagated metacognitive-gate flag from `/cook --hard` (or `/cheese --hard`). Age does not fire the gate; it only passes `--hard` forward to `/cure` at the handoff so the gate can fire at the share-for-review boundary. See `skills/hard-cheese/SKILL.md`.
+
+`--html` emits a static HTML findings report **in addition to** the standard `.cheese/age/<slug>.md` markdown report. The default markdown output is unchanged. The HTML file is written to the OS temp directory (`$TMPDIR` on macOS/Linux, `%TEMP%` on Windows) and named `age-<slug>.html`. Age prints the path alongside the markdown path when the flag is active. The report uses Tailwind CSS (CDN) for styling and Mermaid (CDN) for a severity-distribution diagram. It contains only the age findings — no server, no daemon, no file written into the repo.
 
 ## Review dimensions
 
@@ -190,6 +192,83 @@ Then print:
 ```
 Age report: .cheese/age/<slug>.md
 ```
+
+### HTML report (--html)
+
+When `--html` is passed, after writing `.cheese/age/<slug>.md`, also write a static HTML report:
+
+```python
+import os, tempfile, html as html_lib
+
+slug = "<slug>"  # same slug as the markdown report
+temp_dir = os.environ.get("TMPDIR") or tempfile.gettempdir()
+html_path = os.path.join(temp_dir, f"age-{slug}.html")
+
+# findings_by_severity: dict mapping severity → list of finding dicts
+# each finding dict: {"label": str, "location": str, "body": str}
+# built from the same data used for the markdown report
+
+rows = []
+for severity in ["blocker", "high", "medium", "low"]:
+    for finding in findings_by_severity.get(severity, []):
+        rows.append(f"<tr class='finding-{severity}'>"
+                    f"<td class='px-3 py-2 font-mono text-sm'>{html_lib.escape(severity)}</td>"
+                    f"<td class='px-3 py-2 font-mono text-sm'>{html_lib.escape(finding['label'])}</td>"
+                    f"<td class='px-3 py-2 text-sm'>{html_lib.escape(finding['location'])}</td>"
+                    f"<td class='px-3 py-2 text-sm'>{html_lib.escape(finding['body'])}</td>"
+                    "</tr>")
+
+mermaid_counts = ", ".join(
+    f"{sev}: {len(findings_by_severity.get(sev, []))}"
+    for sev in ["blocker", "high", "medium", "low"]
+)
+
+html_content = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Age Report &mdash; {html_lib.escape(slug)}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+</head>
+<body class="bg-gray-50 p-6 font-sans">
+  <h1 class="text-2xl font-bold mb-4">Age Report &mdash; {html_lib.escape(slug)}</h1>
+  <div class="mermaid mb-6">
+pie title Findings by severity
+    {mermaid_counts}
+  </div>
+  <table class="w-full border-collapse bg-white shadow rounded">
+    <thead class="bg-gray-200 text-left">
+      <tr>
+        <th class="px-3 py-2">Severity</th>
+        <th class="px-3 py-2">Label</th>
+        <th class="px-3 py-2">Location</th>
+        <th class="px-3 py-2">Finding</th>
+      </tr>
+    </thead>
+    <tbody>{''.join(rows)}</tbody>
+  </table>
+  <script>mermaid.initialize({{ startOnLoad: true }});</script>
+</body>
+</html>"""
+
+with open(html_path, "w", encoding="utf-8") as f:
+    f.write(html_content)
+```
+
+Then print the HTML path alongside the markdown path:
+
+```
+Age report:      .cheese/age/<slug>.md
+HTML report:     <html_path>
+```
+
+Constraints:
+- The markdown report is always written; `--html` is strictly additive.
+- The HTML file is written to the OS temp dir only — never into the repo or `.cheese/`.
+- No server or daemon is started.
+- Severity-row CSS classes (`finding-blocker`, `finding-high`, `finding-medium`, `finding-low`) are available for custom styling via browser devtools but carry no built-in colour overrides beyond Tailwind defaults.
 
 ## Handoff
 
