@@ -139,3 +139,11 @@ For shapes with metavars (`$X`, `$$$BODY`) drop to `sg` via Bash -- the only san
 - **Not for editing code** -- use cheez-write.
 - **Not for running tests** -- use test/build skills.
 - **Not for git operations** -- use git/gh skills.
+
+---
+
+## Discipline
+
+Iron Law, Red Flags, and the search Rationalization table live in
+[`references/cheez-search-discipline.md`](references/cheez-search-discipline.md).
+See [`../../shared/skill-authoring.md`](../../shared/skill-authoring.md) for the template these follow.

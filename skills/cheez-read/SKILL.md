@@ -140,3 +140,11 @@ in cheez-search:
 - **DO NOT use to run code or tests** — use the project's build/test skills.
 - **DO NOT use to commit** — use git/gh skills.
 - **DO NOT ignore hash anchors** — they are required for edits.
+
+---
+
+## Discipline
+
+Iron Law, Red Flags, and the read Rationalization table live in
+[`references/cheez-read-discipline.md`](references/cheez-read-discipline.md).
+See [`../../shared/skill-authoring.md`](../../shared/skill-authoring.md) for the template these follow.
