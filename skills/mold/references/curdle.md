@@ -60,6 +60,17 @@ entity_referent_bindings: []   # list of binding records {noun, verdict, referen
 ## Decisions
 - <one-line decision> — <one-line rationale>
 
+## Acceptance
+
+Write acceptance criteria in **EARS form** by default:
+```
+WHEN <trigger> THE SYSTEM SHALL <response>
+```
+If the trigger cannot be stated precisely (e.g. pure internal utilities with no external event), use prose with a `[prose-fallback]` marker.
+
+- WHEN <trigger> THE SYSTEM SHALL <response>
+- WHEN <trigger> THE SYSTEM SHALL <response>
+
 ## Interface sketches
 ```pseudocode
 <signatures, schemas, seams>
@@ -112,6 +123,54 @@ outlive it. The corpus is resolved **dynamically** — probe for the consumer's
 `repo:<their-repo>:wiki` hallouminate corpus and write there if present, else fall
 back to a tracked `docs/adr/<slug>-NNN.md`. Never hardcode a corpus name. Full
 resolution rule and ADR format in [`adr.md`](adr.md).
+
+## Durable glossary (by-product)
+
+Write resolved canonical terms to `.cheese/glossary/<slug>.md` in the same atomic step as the spec and ADRs. Downstream skills (`/cook`, `/age`, `/press`) read this file for naming consistency. The glossary is the output of the Ground phase's term resolution; it is not reconstructed from the spec.
+
+Format:
+```markdown
+# Glossary — <slug>
+
+| Term | Canonical meaning | Code referent (file:line or NEW ENTITY) |
+| --- | --- | --- |
+| <term> | <one-line definition> | <referent> |
+```
+
+Omit the file if no terms were resolved during Ground (no overloaded-term dialogue occurred).
+
+## Rejected-directions store (by-product)
+
+When the agent-introduced-scope audit or the two-key handshake explicitly **rejects** a direction (the user says "drop <term>", "not that approach", "make X a follow-up"), write the rejection to `.cheese/.out-of-scope/<slug>-NNN.md`.
+
+Format:
+```markdown
+# Rejected direction — <slug>-<NNN>
+
+## Direction
+<one-line description of what was rejected>
+
+## Rationale
+<why it was rejected, in 1–2 sentences>
+
+## Context
+Session: <slug>; rejected at: <handshake | scope-audit>
+```
+
+This store is consulted by `/cheese` before re-proposing a direction (see `skills/cheese/SKILL.md` § Rejected-directions check). Do not write to this store for normal out-of-scope bugs or follow-ups (those go to `.cheese/issues/`); write only for **direction-level** rejections (approaches, design knobs, named features the user explicitly declined).
+
+## Spec-verify pass (optional)
+
+Before the hand-off, if the skill `/spec-verify` is available in the harness, run it as an independent spec-review pass:
+
+```
+spec_verify_available=$(command -v spec-verify 2>/dev/null || echo '')
+if [ -n "$spec_verify_available" ]; then
+  /spec-verify "$SPEC"
+fi
+```
+
+If `/spec-verify` is absent, skip silently — this pass is optional and must not block curdle in environments where the skill is not bundled. Never hard-depend on it.
 
 ## Atomic write
 
