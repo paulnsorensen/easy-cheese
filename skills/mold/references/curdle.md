@@ -161,16 +161,9 @@ This store is consulted by `/cheese` before re-proposing a direction (see `skill
 
 ## Spec-verify pass (optional)
 
-Before the hand-off, if the skill `/spec-verify` is available in the harness, run it as an independent spec-review pass:
+Before the hand-off, if the `/spec-verify` skill is available in the harness, run it as an independent spec-review pass. If absent, skip silently and note once — this pass is optional and must not block curdle in environments where the skill is not bundled. Never hard-depend on it.
 
-```
-spec_verify_available=$(command -v spec-verify 2>/dev/null || echo '')
-if [ -n "$spec_verify_available" ]; then
-  /spec-verify "$SPEC"
-fi
-```
-
-If `/spec-verify` is absent, skip silently — this pass is optional and must not block curdle in environments where the skill is not bundled. Never hard-depend on it.
+Detection is instruction-level, not code: check whether `/spec-verify` appears in the agent's available toolset (the same pattern as `shared/optional-plugins.md` § Probe pattern). Do not use `command -v` or any shell probe — `/spec-verify` is a skill, not a `$PATH` executable.
 
 ## Atomic write
 

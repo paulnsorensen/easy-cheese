@@ -57,7 +57,7 @@ Per-dimension base-severity tables, location-sensitivity, fix-cost-now / fix-cos
    python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz read_handoff_slug --phase press --slug <slug>
    ```
 
-   Include a `## Press findings` sub-section in the age report summarising unresolved items — `/cure` reads only `.cheese/age/<slug>.md` and cannot access the press report directly.
+   Include a `## Press findings` sub-section in the age report summarising unresolved items — `/cure` reads only `.cheese/age/<slug>.md` and cannot access the press report directly. If `.cheese/glossary/<slug>.md` exists, read it now so naming drift against the resolved glossary can be flagged as a deslop finding.
 3. Review every dimension; dimensions with no findings simply omit themselves.
 4. Compute severity per finding (base + location bump + compounding bump, capped at `blocker`). Group findings by severity (`## Blocker → ## High → ## Medium → ## Low`); within a severity group, order by file.
 5. Write the report:
