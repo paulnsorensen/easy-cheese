@@ -171,7 +171,8 @@ def _scan_flags(argv: list[str]) -> tuple[str, str, str, str]:
             body = argv[i + 1] if i + 1 < len(argv) else ""
             i += 2
         elif arg in ("-h", "--help"):
-            raise _usage_error()
+            sys.stdout.write(_USAGE)
+            raise SystemExit(0)
         else:
             raise _die(f"unknown argument: {arg}")
 

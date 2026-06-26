@@ -242,3 +242,17 @@ def test_arg_validation_exit_codes(post_reply, argv, code):
     with pytest.raises(SystemExit) as exc:
         post_reply.main(argv)
     assert exc.value.code == code
+
+
+# --- help flag ------------------------------------------------------------
+
+
+@pytest.mark.parametrize("flag", ["-h", "--help"])
+def test_help_prints_usage_to_stdout_and_exits_0(post_reply, flag, capsys):
+    """--help / -h must write usage to stdout and exit 0 — it is not an error."""
+    with pytest.raises(SystemExit) as exc:
+        post_reply.main([flag])
+    assert exc.value.code == 0
+    captured = capsys.readouterr()
+    assert "Usage" in captured.out
+    assert captured.err == ""
