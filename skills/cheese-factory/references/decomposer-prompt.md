@@ -35,8 +35,31 @@ If criterion 4 cannot be satisfied because two curds genuinely share a file, the
 content belongs in `seed` (if foundational) or `wiring` (if integration). Curds never
 share files.
 
-## Validation
+## When NOT to parallelize (stop before decomposing)
 
+Before producing curds, check each of these against the spec:
+
+1. **Shared state across all behaviours.** If every behaviour requires the same mutable
+   global (DB schema, app singleton, global config struct), a change in one curd
+   breaks every sibling. Move the shared object to seed if possible; if it cannot be
+   isolated, the spec cannot be safely parallelized — return a single-curd manifest
+   with `notes: "route to /ultracook — shared mutable state cannot be isolated"`.
+2. **Sequential correctness dependency.** If behaviour B can only be verified after
+   behaviour A has landed (e.g., B calls A's new API that doesn't exist yet and can't
+   compile without it), they are not file-disjoint in practice. Check whether the
+   dependency belongs in seed; if not, flag the ordering constraint and keep curds
+   sequential by adding `depends_on` in `curds[]` (the orchestrator will serialize them).
+3. **Fewer than 5 independent behaviours.** If you cannot identify 5 file-disjoint curds,
+   return `notes: "route to /ultracook — fewer than 5 independent curds"` and stop.
+   The orchestrator will route accordingly.
+4. **Test target cannot be isolated.** If every acceptance criterion shares a single
+   integration test command that exercises all behaviours together, splitting into curds
+   gives no parallel safety. Flag this and route to /ultracook.
+
+If any of these applies, still produce a manifest scaffold with `curds: []` and populate
+`notes:` explaining the routing recommendation. Do NOT force an artificial decomposition.
+
+## Validation
 The orchestrator will run `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz validate_manifest` on your output for required
 sections and field shapes, then `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz validate_decomposition` against the checks
 below. Your output will be rejected on any failure:

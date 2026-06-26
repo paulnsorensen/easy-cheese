@@ -5,9 +5,17 @@ Loaded by `/cheese-factory` at Phase 2 (fan-out). Substitute `{N}`, `{slug}`, `{
 ```text
 You are executing curd #{N} for spec: {slug}
 
-## File Assignment (HARD CONSTRAINT)
+## File Scope (HARD CONSTRAINT)
 
-You may ONLY modify these files: {file_list}
+Your curd implements behaviour: **{behaviour}**
+
+You may ONLY modify files directly required by that behaviour. The intended file list is: {file_list}
+
+That list was produced at decomposition time and may be stale — if the codebase has moved since then,
+add or substitute files that the behaviour genuinely requires **and that no sibling curd owns**.
+Do NOT touch files outside your behaviour's scope, and do NOT touch files belonging to another curd.
+If you discover you need a file that is already claimed by a sibling curd, STOP and write
+`status: halt: file conflict — <file> already owned by curd <N>`.
 
 Exception: `pr-metadata.json` in your worktree root (you write that yourself).
 
