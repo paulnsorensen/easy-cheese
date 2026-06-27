@@ -16,6 +16,8 @@ these also exercise the bundled artifact, not just the source tree.
 from __future__ import annotations
 
 import re
+import subprocess
+import sys
 from pathlib import Path
 from types import ModuleType
 
@@ -24,6 +26,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 HANDSHAKE = REPO_ROOT / "skills" / "mold" / "references" / "handshake.md"
 MOLD_DOT = REPO_ROOT / "skills" / "mold" / "scripts" / "mold.dot"
+MOLD_PYZ = REPO_ROOT / "skills" / "mold" / "scripts" / "mold.pyz"
 MOLD_SRC_DIR = REPO_ROOT / "src" / "mold"
 
 
@@ -412,3 +415,95 @@ class TestCliDegradeToFile:
         # argparse choices guard the CLI surface before render() is ever called.
         with pytest.raises(SystemExit):
             gate_graph.main(["--render", "jpeg"])
+
+
+class TestNonGoalsGatePresence:
+    """The `non_goals_audit` gate is the RC4 fix (mold-ask-not-lean): it guards
+    the single most consequential lean — narrowing scope via `Non-goals`.
+
+    The existing gate-prose-sync tests compare prose vs model as *set-equality*
+    and *count-equality*. Both are blind to a coordinated removal: drop the
+    checklist item AND the model node together and the two sides still match
+    (N -> N-1 on each), so the RC4 gate could silently vanish with every existing
+    test still green. These positive, by-name assertions close that hole — they
+    fail if this specific gate is dropped from the model, the live `.dot` edge, or
+    the handshake checklist, regardless of whether prose was dropped in lockstep.
+    """
+
+    NON_GOALS_ID = "non-goals-audit"  # gate_id() slug of "Non-goals audit:"
+    NON_GOALS_DOT_ID = "non_goals_audit"  # _dot_id() form rendered in the .dot
+
+    def test_gate_node_exists_in_model_by_id(self, gate_graph: ModuleType) -> None:
+        gates = {n.id: n for n in gate_graph.GATE_MODEL.by_kind("gate")}
+        assert self.NON_GOALS_ID in gates, (
+            "the non-goals-audit (RC4) gate is missing from GATE_MODEL; set-equality "
+            "with prose stays green if the checklist item was dropped in lockstep, so "
+            "this by-name check is the only catcher"
+        )
+        node = gates[self.NON_GOALS_ID]
+        assert node.kind == "gate"
+        # Assert the gate's MEANING, not incidental wording (Rule 6): non-goals
+        # must trace to the user or be flagged agent-introduced. A reword that
+        # guts the [AGENT-INTRODUCED] escape hatch is a behavioural regression.
+        assert "Non-goals" in node.label
+        assert "[AGENT-INTRODUCED]" in node.label
+
+    def test_gate_renders_into_dot_with_edge_to_handshake(
+        self, gate_graph: ModuleType
+    ) -> None:
+        # Anchor on the LIVE render (to_dot()), not the committed mold.dot
+        # snapshot: a snapshot regenerated after a removal would match again, but
+        # the model itself losing the node cannot hide from to_dot().
+        dot = gate_graph.to_dot()
+        node_line = next(
+            (
+                line
+                for line in dot.splitlines()
+                if line.strip().startswith(f"{self.NON_GOALS_DOT_ID} [")
+            ),
+            None,
+        )
+        assert node_line is not None, f"{self.NON_GOALS_DOT_ID} node absent from to_dot()"
+        assert 'kind="gate"' in node_line
+        assert f"{self.NON_GOALS_DOT_ID} -> handshake;" in dot, (
+            "the non_goals_audit gate must feed the handshake like every other gate"
+        )
+
+    def test_checklist_carries_the_non_goals_item(self, gate_graph: ModuleType) -> None:
+        # The prose anchor for THIS gate specifically: some coherence-checklist
+        # label in handshake.md must slug to non-goals-audit.
+        body = HANDSHAKE.read_text(encoding="utf-8")
+        block = re.search(
+            r"```\nCoherence self-check before curdle:\n(.*?)```", body, re.DOTALL
+        )
+        assert block, "coherence self-check block not found in handshake.md"
+        labels = re.findall(r"^- \[ \] (.+?)\s*$", block.group(1), re.MULTILINE)
+        ids = {gate_graph.gate_id(label) for label in labels}
+        assert self.NON_GOALS_ID in ids, (
+            "handshake.md coherence checklist dropped the Non-goals audit gate item"
+        )
+
+
+class TestCommittedPyzFreshness:
+    """The `gate_graph` fixture imports a FRESH rebuild of src/mold/ (via
+    build_pyz.cached_bundle), and TestDotSnapshot compares mold.dot to that fresh
+    to_dot(). Neither exercises the COMMITTED skills/mold/scripts/mold.pyz — the
+    artifact the SKILL actually invokes (`mold.pyz gate-graph --render dot`). A src
+    edit that regenerates mold.dot but leaves the committed .pyz stale would pass
+    every other test. This closes the fourth-artifact freshness loop: the committed
+    bundle's own render must byte-match the committed snapshot."""
+
+    def test_committed_pyz_renders_byte_identical_to_dot(self) -> None:
+        assert MOLD_PYZ.exists(), f"missing committed bundle: {MOLD_PYZ}"
+        assert MOLD_DOT.exists(), f"missing committed snapshot: {MOLD_DOT}"
+        result = subprocess.run(
+            [sys.executable, str(MOLD_PYZ), "gate-graph", "--render", "dot"],
+            capture_output=True,
+            check=True,
+        )
+        assert result.stdout == MOLD_DOT.read_bytes(), (
+            "committed mold.pyz renders a .dot differing from committed mold.dot — "
+            "the bundle is stale; rebuild it from src/mold/ so all four lockstep "
+            "artifacts (handshake checklist, gate-graph.py, mold.dot, mold.pyz) "
+            "stay in sync"
+        )

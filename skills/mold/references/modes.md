@@ -9,9 +9,11 @@ Mold has no fixed entry point. Inspect the input shape and pick a starting mode.
 | Stack trace, "X is broken/slow/flaky" | Diagnose | error markers, `file:line` refs, symptom verbs |
 | File path, PR ref, existing spec under `.cheese/specs/` | Ground | concrete artifact exists; read it first |
 | Half-baked design doc with signatures or schemas | Sketch | already has interfaces; refine them |
-| "I want to add X" with concrete nouns | Shape | named the thing → jump to options |
-| "Should we do X? thinking about Y" | Grill | tentative plan exists → stress-test it |
+| "I want to add X" with concrete nouns | Bounds pass → Shape | run the bounds pass first (edges → goals/non-goals), then jump to options |
+| "Should we do X? thinking about Y" | Bounds pass → Grill | bounds pass first, then stress-test the tentative plan |
 | Vague noun, half-sentence, "thinking about" | Explore | no grounded artifact, no chosen direction |
+
+**Front-loaded bounds pass.** Every row above selects a *secondary* mode. Regardless of input shape, mold opens with the mandatory bounds pass (`SKILL.md` Flow step 1 — an Explore-style edges → goals/non-goals round plus the per-round decision ledger) *before* this table's mode runs. The concrete-ask rows ("I want to add X", "Should we do X") therefore no longer skip straight past asking: the bounds pass fires first, then Shape/Grill takes the refined scope.
 
 ## Mode definitions
 
@@ -31,7 +33,7 @@ Mold has no fixed entry point. Inspect the input shape and pick a starting mode.
 
 ### Shape — option generation
 
-**Job:** turn a grounded problem into 2+ candidate approaches with trade-offs. Always include **Do Nothing**. Recommend with one-line rationale. Validate Cycle any critical assumption behind a recommendation.
+**Job:** turn a grounded problem into 2+ candidate approaches with trade-offs. Always include **Do Nothing**. Present them as lettered options (`A/B/C/D`) for the user to pick — a consequential fork is theirs to choose, not yours to settle; give a one-line rationale per option, not a verdict. Validate Cycle any critical assumption behind an option.
 
 **Exit when:** an option is picked (→ Sketch) or none survive (→ Explore).
 
@@ -43,7 +45,7 @@ Mold has no fixed entry point. Inspect the input shape and pick a starting mode.
 
 ### Grill — adversarial clarification
 
-**Job:** stress-test the chosen approach plus sketched interfaces. **One question at a time**, paired with the agent's recommended answer (recommendation is non-optional). Traverse decision branches and contract corners. Pause for a Validate Cycle when an unverified assumption surfaces.
+**Job:** stress-test the chosen approach plus sketched interfaces. **One question at a time**, posed as lettered options (`A/B/C/D`) the user picks — a consequential fork is put up for decision, not resolved rhetorically; minor mechanical calls are made but logged `[AGENT-DECIDED]` with a one-line alternative the user can veto. Traverse decision branches and contract corners. Pause for a Validate Cycle when an unverified assumption surfaces.
 
 **Exit when:** every branch and contract corner is touched and agent confidence ≥ user confidence.
 

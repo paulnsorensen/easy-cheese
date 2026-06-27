@@ -59,6 +59,7 @@ entity_referent_bindings: []   # list of binding records {noun, verdict, referen
 
 ## Decisions
 - <one-line decision> — <one-line rationale>
+- _Minor decisions:_ <one line capturing the `[AGENT-DECIDED]` calls the user did not veto — the per-round ledger's minor tier; major decisions get full ADRs per `adr.md`>
 
 ## Interface sketches
 ```pseudocode

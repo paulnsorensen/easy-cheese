@@ -17,6 +17,16 @@ One ADR per decision a future reader would otherwise have to reverse-engineer:
 Do **not** write an ADR for a forced move with no alternative, or for a detail the
 spec body already states plainly.
 
+## Decision ledger
+
+Mold's per-round decision ledger (`Decided / Asking / [AGENT-DECIDED]`, see
+`../SKILL.md` § Rules) persists **here at curdle**: each `[AGENT-DECIDED]` call
+that had a real alternative the user could have vetoed earns an ADR — it is
+exactly the kind of decision a future reader would otherwise reverse-engineer.
+Minor calls with no surviving alternative ride the spec's one-line decision-log
+(`curdle.md` § Spec template) instead of a full ADR; the ledger keeps no separate
+file (ADR-004).
+
 ## Resolution — where ADRs land (portable, never hardcoded)
 
 Mold runs in arbitrary repos. The corpus is resolved **dynamically at curdle**,

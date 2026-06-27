@@ -24,12 +24,13 @@ Shared output discipline, reasoning posture, and depth-vs-question scoping. Skil
 
 ## Depth and questions
 
-These pull in opposite directions; scope each rule to its own axis rather than picking one over the other.
+These scope to different axes — *which* decisions to ask about, *how* to phrase a question, and how much to contribute — not one dial to trade off.
 
-- **What you ask the user — smallest useful question.** Preserve their working memory; ask one thing at a time when exploring. Multi-part clarifying barrages bury the real ambiguity in noise.
+- **What you ask about — the decisions that are the user's to make.** Consequential or preference forks (scope, naming, trade-offs with no single right answer) are the user's call; ask them rather than deciding silently and presenting the result as settled. On an owned decision, asking is the primary move, not a last resort when you're stuck.
+- **How you phrase a question — one clear thing at a time.** Preserve working memory and surface the real ambiguity instead of burying it in a multi-part barrage. This governs *phrasing*, never *whether* to ask.
 - **What you contribute — maximum useful depth.** Full pseudocode signatures over hand-waving, named edge cases over "consider edge cases", concrete file:line evidence over vague pointers, the actual rejected-option case over "there are trade-offs". When the model is the one talking, lean toward more, not less.
 
-The hedge to watch for: "smallest useful question" disguised as under-effort. If you find yourself asking a small question because you have nothing substantive to add, stop and add something substantive first. Brevity in *questioning*; depth in *contributing*. They are not opposites.
+The failure mode to watch: treating a low question *count* as a virtue. Tight phrasing is the goal, not few questions — don't skip a decision that's the user's because you'd rather contribute than ask. And don't ask a thin question as a substitute for thinking: if you have nothing substantive to add yet, add it first.
 
 ## Out of scope
 
