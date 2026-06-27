@@ -89,13 +89,13 @@ A correct seam is one where the test exercises the **real bug pattern** as it oc
 
 **If no correct seam exists, that itself is the finding.** Note it in the handoff slug as an architectural follow-up. The codebase is preventing the bug from being locked down. Skip the test write; do not paper over it. Phase 6's "what would have prevented this bug?" retrospective still applies.
 
-**Before writing the test, confirm the seam is correct:** verify that the test you're about to write targets the boundary where the bug actually occurs — the real call site, the real data path, the real failure mode. A test at the wrong seam (too shallow, wrong abstraction level, mocked-away side that hides the failure) will pass after the fix but won't catch a regression. If you discover the seam is wrong at this point, treat it as "no correct seam" and follow the halt path above.
+**Before writing the test, confirm the seam is correct:** verify that the test you're about to write targets the boundary where the bug actually occurs — the real call site, the real data path, the real failure mode. A test at the wrong seam (too shallow, wrong abstraction level, mocked-away side that hides the failure) will pass after the fix but won't catch a regression. If you discover the seam is wrong at this point, treat it as "no correct seam": write `status: halt: no correct regression-test seam` and route to `/mold`, per the halt path above.
 
 If a correct seam exists:
 
 1. Turn the minimised repro into a failing test at that seam.
 2. Watch it fail.
-3. Apply the **smallest** production change that makes the test pass. No scope creep, no "while I'm here" cleanup.
+3. Apply the **smallest** production change that makes the test pass. No scope creep, no "while I'm here" cleanup. If the test still fails, revert and retry — but cap the retries (see **After 3 failed fix attempts** below).
 4. Watch the test pass.
 5. Re-run the Phase 1 feedback loop against the original (un-minimised) scenario to confirm the symptom is gone, not just the test seam.
 
@@ -190,6 +190,7 @@ When invoked with `--auto`, skip this host-routed question entirely and invoke `
 - Phase 3 disproves all hypotheses across two rounds (cap at two Phase 3 rounds, then halt).
 - Phase 5's seam check finds no correct seam — write `status: halt: no correct regression-test seam` and route to `/mold` instead of `/cook`.
 - The fix breaks an unrelated test that pasteurize cannot reconcile within scope.
+- Phase 5's fix loop exhausts all hypotheses after 3 failed fix attempts — write `status: halt: fix attempts exhausted — architectural re-examination needed` and route to `/mold` instead of `/cook`.
 
 In every early-stop case, write the halt slug and surface the report. Do not silently downgrade to "best guess".
 
