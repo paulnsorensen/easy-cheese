@@ -45,6 +45,8 @@ These are not soft suggestions — Curdle hard-blocks until they are addressed:
 - **Grill gate:** mandatory for high-blast-radius decisions. The shape check (`shape-check.md`) ranks blast radius `low | medium | high` from a `cheez-search` callers query (`tilth_search kind: "callers"`) and `tilth_deps`. A `high` verdict — multi-module callers or more than five importers — makes Grill mandatory.
 - **Open hypotheses:** any Validate Cycle launched but unjudged blocks Curdle unless the user accepts it as `[TBD]`.
 - **Agent-introduced scope:** every distinguishing noun in the spec must trace to a user-typed mention or get per-term approval. Full procedure in § Agent-introduced scope below — Curdle is the single chokepoint, since downstream skills trust the resulting frontmatter and do not re-block.
+- **Entity-referent binding:** every identity noun binds to a code referent or is marked NEW ENTITY; an ALIAS must be resolved, not just noted. Full procedure in § Entity-referent binding below.
+- **Non-goals audit:** every `Non-goals` bullet traces to a user-stated out-of-scope item or is marked `[AGENT-INTRODUCED]`. Full procedure in § Non-goals audit below.
 
 These audits — agent-introduced scope, entity-referent binding, and the non-goals audit (below) — fire **inline, per dialogue round**, not only terminally at Curdle: each runs the moment new scope is proposed and is surfaced in that round's decision ledger, so a lean is caught when it happens rather than reverse-engineered at the end. Curdle re-runs all three as the terminal backstop and stays the single chokepoint downstream skills trust (RC3).
 

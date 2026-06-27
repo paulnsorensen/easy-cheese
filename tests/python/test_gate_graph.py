@@ -436,7 +436,7 @@ class TestNonGoalsGatePresence:
     def test_gate_node_exists_in_model_by_id(self, gate_graph: ModuleType) -> None:
         gates = {n.id: n for n in gate_graph.GATE_MODEL.by_kind("gate")}
         assert self.NON_GOALS_ID in gates, (
-            "the non_goals_audit (RC4) gate is missing from GATE_MODEL; set-equality "
+            "the non-goals-audit (RC4) gate is missing from GATE_MODEL; set-equality "
             "with prose stays green if the checklist item was dropped in lockstep, so "
             "this by-name check is the only catcher"
         )

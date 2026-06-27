@@ -4,15 +4,17 @@
 question* while contributing at *maximum useful depth*. On a strong model that
 sentence backfires — it licenses the agent to minimise asking and maximise its
 own confident output, i.e. to *lean* instead of *ask*. RC1 reworded both consumer
-skills so asking the user is primary (spec: mold-ask-not-lean § Goals RC1, and the
-quality gate "SKILL.md:19 / culture SKILL.md:33 no longer contain the phrase").
+skills so asking the user is primary (spec: mold-ask-not-lean § Goals RC1); the
+quality gate is that neither consumer SKILL body still carries the anti-pattern
+phrase.
 
 This guard fails if either half of the anti-pattern phrasing creeps back into the
 two files the spec scoped the reword to. The shared voice kernel
-(`skills/age/references/voice.md`) is deliberately NOT checked: it is the kernel
-that legitimately defines the smallest-question / maximum-depth axis distinction
-and was out of RC1's change scope. The regression guarded here is the *consumer*
-skills re-adopting the self-defeating sentence, not the kernel keeping its axis.
+(`skills/age/references/voice.md`) is deliberately NOT scanned — it is shared by
+every skill and sits outside this guard's consumer-skill scope (its own "Depth
+and questions" section was reworded in lockstep to make asking primary, so it
+carries no self-defeating sentence to catch). The regression guarded here is the
+*consumer* skills re-adopting that sentence.
 """
 
 from __future__ import annotations
@@ -30,6 +32,13 @@ SCOPED_FILES = (
 ANTIPATTERN = re.compile(r"maximum useful depth|smallest[ -]useful[ -]question", re.I)
 # RC1's positive intent: asking the user is the primary move.
 ASKING_PRIMARY = re.compile(r"ask(?:ing)? the user", re.I)
+# The move must also stay *affirmative* — the consequential fork is the user's to
+# decide. A bare "ask the user" can survive inside demoting prose (e.g. "don't
+# just ask the user, decide"); this ownership clause cannot, so requiring both
+# halves fails if a reword keeps the phrase while gutting asking-primacy.
+ASKING_OWNERSHIP = re.compile(
+    r"(?:fork|decision|choice)s?\b[^.\n]{0,80}\b(?:theirs|the user'?s|yours)\b", re.I
+)
 
 
 def test_scoped_files_exist() -> None:
@@ -74,12 +83,17 @@ def test_asking_primary_intent_present() -> None:
     # the reword's purpose can't be hollowed out. Matching the whole file would be
     # vacuous for culture — its `description:` frontmatter already says "asking
     # the user", independent of the body sentence RC1 reworded.
-    missing = [
-        str(p.relative_to(REPO_ROOT))
-        for p in SCOPED_FILES
-        if not ASKING_PRIMARY.search(_body_below_frontmatter(p))
-    ]
+    #
+    # Require BOTH the phrase AND an affirmative ownership clause (the fork is the
+    # user's to decide): the phrase alone can persist inside prose that demotes it,
+    # so the ownership half is what proves asking stayed *primary*.
+    missing = []
+    for p in SCOPED_FILES:
+        body = _body_below_frontmatter(p)
+        if not (ASKING_PRIMARY.search(body) and ASKING_OWNERSHIP.search(body)):
+            missing.append(str(p.relative_to(REPO_ROOT)))
     assert not missing, (
-        "RC1 asking-primary intent ('ask the user …') absent from the body of: "
-        + ", ".join(missing)
+        "RC1 asking-primary intent absent or demoted in the body of "
+        "(needs both 'ask the user' and an ownership clause naming the fork as "
+        "theirs to decide): " + ", ".join(missing)
     )

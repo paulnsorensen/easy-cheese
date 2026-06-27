@@ -54,7 +54,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/mold.pyz gate-graph --render dot \
 
 ## The non-goals gate
 
-One coherence gate is worth calling out on its own: `non_goals_audit` (rendered
+One coherence gate is worth calling out on its own: `non-goals-audit` (rendered
 `non_goals_audit` in the `.dot`; label *Non-goals audit: every bullet traces to a
 user-stated out-of-scope item or is marked [AGENT-INTRODUCED]*). Like every gate
 node it feeds the handshake and is kept in lockstep with the `handshake.md`
