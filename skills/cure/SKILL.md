@@ -180,6 +180,7 @@ In both cases the terminal PR push (above) is suppressed — the orchestrator, n
 - On a **clean cure**, push to an already-open PR by default (Rule 11 — the existing PR is the authorization). Open a *new* PR only with `--open-pr`. `--safe` re-gates the push. Never push when the cure was not clean.
 - If a selected finding rests on a false premise (the `/age` claim is wrong, or the diff already addresses it), stop and surface the premise before applying. Disagreeing with the report is allowed; silently working around it is not.
 - Apply the shared voice kernel (lives at `skills/age/references/voice.md` in this repo): lead the cure report with what was applied, flag residual risk as `certain | speculating | don't know`, agree when the diff is fine without manufacturing follow-ups.
+- **Verification before `status: ok`:** before writing `status: ok` in the handoff slug, (1) identify the gate command, (2) run it fresh in the same turn, (3) read the full output, (4) only then claim. Hedging words (`should`, `probably`, `I think`) are banned in completion claims — state what the gate output showed, not what you expect it to show.
 
 ## Discipline
 
