@@ -14,7 +14,7 @@ Press may add or strengthen tests and make tiny corrective fixes only when a tes
 
 ## Flow
 
-1. **Read** — load the spec or acceptance criteria and the cooked diff.
+1. **Read** — load the spec or acceptance criteria and the cooked diff. If `.cheese/glossary/<slug>.md` exists, read it for naming consistency when hardening tests.
 2. **Map** — for each changed behaviour, find the test(s) that cover it via `cheez-search`.
 3. **Gap analysis** — identify weak assertions, missing boundaries, and uncovered integration seams. See `references/gap-analysis.md` for what counts as a gap and the priority order.
 4. **Add focused tests** — observe red first when behaviour changes. Use `cheez-write` for precise edits.

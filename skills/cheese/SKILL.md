@@ -57,6 +57,16 @@ For `cook` and `mold` intents, `/cheese` runs cook's fast-path check (§ "Standa
 
 Non-implementation intents bypass the escalation entirely. Their target skills own their own internal escalation: `/pasteurize` has its Phase 1 feedback-loop check, `/briesearch` clarifies missing version/scope inline, `/age` and `/cure` work directly against the supplied diff or report.
 
+## Rejected-directions check
+
+Before dispatching any `mold` intent, scan `.cheese/.out-of-scope/` for rejection records whose `## Direction` section's one-line description substantially matches the incoming request. If a match is found:
+
+1. Surface the previously-rejected direction and its rationale in one line.
+2. Ask the user whether to proceed with the new request or take a different angle.
+3. Do not suppress or re-propose the rejected direction silently.
+
+This check is lightweight — a glob + keyword scan over `.cheese/.out-of-scope/*.md`. Skip silently when the directory does not exist. Non-`mold` intents skip this check.
+
 ## --continue
 
 `/cheese --continue <slug-or-note-path>` is the manual fresh-context resumption path. Use it after compacting the conversation, after `/ultracook` has stopped on a halt, or whenever the user wants to drive the pipeline by hand from a cleared context.

@@ -25,7 +25,7 @@ Mold has no fixed entry point. Inspect the input shape and pick a starting mode.
 
 ### Ground — anti-hallucination
 
-**Job:** anchor every claim to evidence — code, docs, prior research. When the user uses overloaded terms ("account", "session", "user"), pause and resolve with a canonical-term question. Resolved terms get logged in the state file.
+**Job:** anchor every claim to evidence — code, docs, prior research. When the user uses overloaded terms ("account", "session", "user"), pause and resolve with a canonical-term question. Terms resolved here are written to the session's durable glossary at `.cheese/glossary/<slug>.md` at the curdle atomic step (see `curdle.md` § Durable glossary), so downstream skills (`/cook`, `/age`, `/press`) can read them for naming consistency.
 
 **Invariant:** never say "I think the code does X" without a `cheez-search` call.
 
@@ -41,7 +41,11 @@ Mold has no fixed entry point. Inspect the input shape and pick a starting mode.
 
 **Job:** lock modules, responsibilities, I/O contracts, and seams in pseudocode signatures. Before drafting, when the change touches more than one module or introduces a new public interface, run the shape check (`shape-check.md`) — signatures, callers (via `cheez-search`, i.e. `tilth_search kind: "callers"`), and `tilth_deps` blast radius — on the touched symbols so new seams fit existing convention and the impact is bounded. Print the shape-check summary block before any pseudocode. Single-module, internals-only sketches may skip the gate; note "shape check skipped: single-module change" instead.
 
-**Exit when:** every public seam has a pseudocode signature; every cross-module call goes through public interfaces, not internals; shape-check verdict is recorded (or explicitly skipped per the gate above).
+**Acceptance notation (EARS):** for every public seam, emit acceptance criteria in EARS form: `WHEN <trigger> THE SYSTEM SHALL <response>`. If the trigger cannot be stated precisely (e.g. pure internal utilities), fall back to prose with a `[prose-fallback]` marker.
+
+**Concrete-seam rule:** when a seam is small enough to write completely (a function body that fits in roughly 20 lines), write the full implementation rather than pseudocode. Reserve abbreviated signatures only for seams where the body is genuinely too large or depends on design unknowns not yet resolved in the dialogue.
+
+**Exit when:** every public seam has a pseudocode signature or full implementation per the concrete-seam rule; every acceptance criterion is in EARS form (or marked `[prose-fallback]`); every cross-module call goes through public interfaces, not internals; shape-check verdict is recorded (or explicitly skipped per the gate above).
 
 ### Grill — adversarial clarification
 

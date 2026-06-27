@@ -68,7 +68,8 @@ Procedure:
    ```
 
 4. **The user must explicitly approve each row** before the handshake fires. Acceptable approvals: "yes keep <term>", "drop <term>", "make <term> a follow-up". Vague "looks good" is not approval.
-5. If any flagged term came from a research citation (briesearch sub-agent, fetched doc, MCP result), it cannot be silently promoted into a design knob — the citation is evidence, not a mandate. See `skills/briesearch/references/synthesis.md` § Alternatives are open questions.
+5. **When the user explicitly drops a direction** — an approach, design knob, or named feature they decline — write a rejection record to `.cheese/.out-of-scope/<slug>-NNN.md` (format in `curdle.md` § Rejected-directions store). This makes direction-level rejections durable so `/cheese` can consult them before re-proposing the same direction in a later session. Deferrals ("make <term> a follow-up") are not direction rejections — route those to `.cheese/issues/`, not the out-of-scope store.
+6. If any flagged term came from a research citation (briesearch sub-agent, fetched doc, MCP result), it cannot be silently promoted into a design knob — the citation is evidence, not a mandate. See `skills/briesearch/references/synthesis.md` § Alternatives are open questions.
 
 This gate exists because research sub-agents have historically over-synthesised: a Tavily snippet mentioning "X or Y" became a shipped `[setting].knob = "x" | "y"` flag, copied through curdle → cook without the user typing the distinguishing noun once. The grep heuristic catches that class of drift early.
 
