@@ -141,7 +141,7 @@ Omit the file if no terms were resolved during Ground (no overloaded-term dialog
 
 ## Rejected-directions store (by-product)
 
-When the agent-introduced-scope audit or the two-key handshake explicitly **rejects** a direction (the user says "drop <term>", "not that approach", "make X a follow-up"), write the rejection to `.cheese/.out-of-scope/<slug>-NNN.md`.
+When the agent-introduced-scope audit or the two-key handshake explicitly **rejects a direction** (the user says "drop <term>" for an approach or design knob, or "not that approach"), write the rejection to `.cheese/.out-of-scope/<slug>-NNN.md`. Deferrals ("make X a follow-up") are not direction rejections — route those to `.cheese/issues/`.
 
 Format:
 ```markdown
@@ -157,7 +157,7 @@ Format:
 Session: <slug>; rejected at: <handshake | scope-audit>
 ```
 
-This store is consulted by `/cheese` before re-proposing a direction (see `skills/cheese/SKILL.md` § Rejected-directions check). Do not write to this store for normal out-of-scope bugs or follow-ups (those go to `.cheese/issues/`); write only for **direction-level** rejections (approaches, design knobs, named features the user explicitly declined).
+This store is consulted by `/cheese` before re-proposing a direction (see `skills/cheese/SKILL.md` § Rejected-directions check). Do not write to this store for normal out-of-scope bugs or follow-ups (those go to `.cheese/issues/`); write only for **direction-level** rejections (approaches, design knobs, named features the user explicitly declined). Note: this store is dot-prefixed (`.out-of-scope`) while its sibling stores (`glossary/`, `issues/`, `specs/`) are not — any scan must target the dotted path explicitly; a bare `.cheese/*` glob will not match it.
 
 ## Spec-verify pass (optional)
 

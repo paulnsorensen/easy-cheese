@@ -23,7 +23,7 @@ Mold has no fixed entry point. Inspect the input shape and pick a starting mode.
 
 ### Ground — anti-hallucination
 
-**Job:** anchor every claim to evidence — code, docs, prior research. When the user uses overloaded terms ("account", "session", "user"), pause and resolve with a canonical-term question. Resolved terms are written to the session's durable glossary at `.cheese/glossary/<slug>.md` so downstream skills (`/cook`, `/age`, `/press`) can read them for naming consistency.
+**Job:** anchor every claim to evidence — code, docs, prior research. When the user uses overloaded terms ("account", "session", "user"), pause and resolve with a canonical-term question. Terms resolved here are written to the session's durable glossary at `.cheese/glossary/<slug>.md` at the curdle atomic step (see `curdle.md` § Durable glossary), so downstream skills (`/cook`, `/age`, `/press`) can read them for naming consistency.
 
 **Invariant:** never say "I think the code does X" without a `cheez-search` call.
 

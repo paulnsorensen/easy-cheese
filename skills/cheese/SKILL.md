@@ -59,7 +59,7 @@ Non-implementation intents bypass the escalation entirely. Their target skills o
 
 ## Rejected-directions check
 
-Before dispatching any `mold` intent, scan `.cheese/.out-of-scope/` for rejection records whose `Direction` line substantially matches the incoming request. If a match is found:
+Before dispatching any `mold` intent, scan `.cheese/.out-of-scope/` for rejection records whose `## Direction` section's one-line description substantially matches the incoming request. If a match is found:
 
 1. Surface the previously-rejected direction and its rationale in one line.
 2. Ask the user whether to proceed with the new request or take a different angle.
