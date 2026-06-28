@@ -80,7 +80,7 @@ The tilth MCP server is launched against **one repository** — whatever directo
 
 - No startup wait, no rebuild step, no staleness — your last save is what tilth sees on the next call.
 - Cannot reach files outside that one tree (sibling worktrees, `~/...`, system paths, dependency caches like `node_modules` or `.cargo/registry`).
-- Cannot answer cross-repo questions in one call. For that, see [*When code-review-graph beats tilth*](references/routing.md#when-code-review-graph-beats-tilth-if-your-harness-has-it).
+- Cannot answer cross-repo questions in one call; route those before entering cheez-search.
 
 ### When NOT to invoke `/cheez-search`
 
@@ -93,9 +93,9 @@ These questions are **out of scope** -- don't enter cheez-search for them; the t
 | Plain non-code text at scale (logs, build outputs, large CSVs) | host `Bash` with `rg`, `jq`, `awk`, `head`/`tail` from the calling workflow skill | Tree-sitter parsing wastes tokens here; format-specific tools win |
 | Files outside the repo (system paths, `~/Library`, `/etc`) | host `Grep` / `Bash` from the calling workflow skill | tilth is repo-scoped (see above) |
 
-### Route out before entering (type / concept / cross-repo)
+### Route out before entering (type-grounded)
 
-Name-shaped queries stay in tilth. For type-grounded, concept-shaped, or cross-repo questions, route out before entering cheez-search -- see [`references/routing.md`](references/routing.md) for LSP, Serena, and code-review-graph routing tables.
+Name-shaped queries stay in tilth. For type-grounded questions, route out before entering cheez-search -- see [`references/routing.md`](references/routing.md) for LSP and Serena routing tables.
 
 ---
 

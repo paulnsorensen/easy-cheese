@@ -85,15 +85,13 @@ Beyond `cheez-*` there are review-specific tools:
 | Need | Prefer | Fallback |
 | --- | --- | --- |
 | Diff inspection | `delta` | `git diff --unified=3` |
-| Risk-scored impact + curated review context | code-review-graph: `get_review_context_tool`, `get_impact_radius_tool`, `detect_changes_tool` | `tilth_deps` + manual scoping |
-| Architecture / hotspot framing for large diffs | code-review-graph: `get_architecture_overview_tool`, `get_hub_nodes_tool`, `get_bridge_nodes_tool` | skip and note in confidence |
+| Caller/dependency impact + curated review context | `tilth_deps` + `/cheez-search` `kind: "callers"` | manual scoping |
+| Architecture / hotspot framing for large diffs | changed-file map + caller/dependency evidence | skip and note in confidence |
 | Design rationale for encapsulation/spec dimensions (optional) | `mcp__hallouminate__list_corpora` / `mcp__hallouminate__ground` on `repo:<repo>:wiki` corpus — if available, ground design intent before grading encapsulation and spec findings | skip; proceed with diff + code evidence only; cap at `speculating` when rationale is the primary evidence |
 | GitHub/PR context | `gh` | local git commands or user-provided PR data |
 | Merge/conflict awareness | mergiraf | manual conflict checks |
 
-**Freshness:** before the first code-review-graph query in a run, call `build_or_update_graph_tool`. The graph is persistent and goes stale between sessions. See [`/cheez-search`](../cheez-search/references/routing.md#when-code-review-graph-beats-tilth-if-your-harness-has-it) for the full freshness contract and when semantic search beats tilth — steel threads across renamed layers, concepts under divergent names, spec-vs-code vocabulary mismatch.
-
-**Optional MCPs:** code-review-graph, hallouminate, and milknado follow the detect-and-degrade contract in [`../../shared/optional-plugins.md`](../../shared/optional-plugins.md) — state absence once, fall back, reduce confidence only if evidence quality suffers, never block.
+**Optional MCPs:** hallouminate and milknado follow the detect-and-degrade contract in [`../../shared/optional-plugins.md`](../../shared/optional-plugins.md) — state absence once, fall back, reduce confidence only if evidence quality suffers, never block.
 
 ## Sub-agent context gate
 
@@ -104,7 +102,7 @@ Beyond `cheez-*` there are review-specific tools:
 - The diff spans more than 15 files.
 - Touched code or generated review context is larger than roughly 25 KB (about 5 K tokens of raw output the parent would not read line-by-line).
 - Caller / dependency graph expansion crosses multiple subsystems.
-- code-review-graph or `tilth_deps` output is needed for hotspot, bridge-node, or blast-radius framing.
+- Caller/dependency evidence from `tilth_deps` or `/cheez-search` crosses multiple subsystems.
 
 For the digest contract, harness-agnostic selection rules, and what the parent never delegates, see `references/sub-agent-gate.md`.
 
@@ -125,7 +123,7 @@ Activates when **all** hold: the **scale threshold** (above) is met AND `/age` i
 
 **Seam 4 — Orchestrator reconciliation.** After all workers return, apply the `## Dimension boundaries` table (`references/dimensions.md:319-340`) verbatim to any line meeting EITHER condition: (1) flagged by two or more workers at the same `file:line`; (2) tagged `also-relevant-to: [d]` by any worker — the orchestrator re-evaluates dimension `d` against that line and applies the tiebreaker (keep the higher-base finding / suppress / emit-both-with-cross-reference per the 15 rules). This consumes the `also-relevant-to` signal and provides the cross-dimension coverage single-parent gets for free. Lines neither flagged by ≥2 workers nor tagged `also-relevant-to` need no reconciliation. Group by severity. The parent owns the canonical artifact. After reconciliation, continue at step 5 (write + print the report path) and `## Handoff` exactly as the single-parent path does.
 
-**Seam 5 — Graph freshness.** The orchestrator calls `build_or_update_graph_tool` **once** before fan-out (per `## Preferred tools and fallbacks` above). The packet carries a "graph fresh as of this run" marker. Workers never call `build_or_update_graph_tool`, but they MAY issue read-only code-review-graph queries (e.g. `get_impact_radius_tool`, `get_review_context_tool`, `get_hub_nodes_tool`, `get_bridge_nodes_tool`) against the pre-built graph for impact and hotspot framing — the same evidence the single-parent path uses for large diffs.
+**Seam 5 — Shared impact evidence.** The packet carries the caller/dependency notes assembled through `tilth_deps` and `/cheez-search`. Workers use that packet instead of rebuilding impact context independently.
 
 **Output mode-invariance (invariant).** The findings report (`.cheese/age/<slug>.md`) is identical in shape — same dedup rule, same severity grouping, same finding format — whether produced by the single-parent path or fan-out mode. Only the internal execution path differs. This invariant also holds for inline-degrade mode (see `### Inline-degrade mode`).
 

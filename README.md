@@ -158,7 +158,7 @@ before review.
 Easy-cheese is intentionally a small surface. What that means in practice:
 
 - **Skills only.** No agents, commands, eta templates, or compiled harness bundles. Each capability is a single `SKILL.md`.
-- **No repo-wide MCP requirement.** Workflow skills suggest tools (tilth, Context7, Tavily, code-review-graph) but have host-native fallbacks. The `cheez-*` tool skills are the exception: they require tilth MCP by design.
+- **No repo-wide MCP requirement.** Workflow skills suggest tools (tilth, Context7, Tavily) but have host-native fallbacks. The `cheez-*` tool skills are the exception: they require tilth MCP by design.
 - **One orchestrator skill, narrowly scoped.** `/ultracook` is the only orchestrator — it spawns full-peer sub-agents for the fixed `cook → press → age → cure → age → cure → age` chain on high-blast-radius specs. There is no large-feature decomposition, no PR-rescue convoy, no whole-repo NIH audit. Every other skill remains a single, scoped step a human can drive.
 - **No automatic re-age loop in `/cure`.** The skill describes the protocol; the human runs the next `/age` when ready.
 
@@ -172,7 +172,6 @@ Workflow skills name preferred tools when they help, with fallbacks for portabil
 | `sg` (ast-grep) | Structural pattern matching and codemods (`sg --rewrite`) with metavariables | `ripgrep`, `find`, targeted reads; `tilth_edit` for non-structural edits |
 | Context7 (MCP) | Library and API documentation | repo docs, package docs, vendor pages, web search |
 | Tavily (MCP) | Current web/vendor research | host web search or user-supplied sources |
-| code-review-graph (MCP) | Review impact radius, architecture framing, and embeddings-backed semantic / cross-repo search | import searches, caller searches, tests |
 | LSP / [Serena](https://github.com/oraios/serena) (MCP) | Type-aware xrefs (`find_referencing_symbols`, `find_implementations`), symbol-bounded edits (`rename_symbol`, `replace_symbol_body`, `safe_delete_symbol`), and LSP diagnostics — concrete tools for the abstract "if your harness has an LSP" sections in `cheez-*` skills | `sg`, `tilth_search`, targeted reads via tilth |
 | hallouminate (MCP) | Per-repo wiki for cross-session design rationale, ADR grounding, and `/mold` evidence | Skip wiki grounding; proceed with diff + code evidence only; cap at `speculating` when design rationale is central |
 | milknado (MCP) | Mikado task-graph backend for `/cheese-factory` curd prerequisite tracking | In-report curd decomposition in manifest YAML; no external task-graph backend needed |
@@ -416,34 +415,6 @@ TAVILY_API_KEY=your-key npx -y tavily-mcp
 ```
 
 Requires Node.js v18+.
-
-</details>
-
-<details>
-<summary><strong>code-review-graph</strong> — impact radius, architecture framing, semantic search for <code>/age</code>, <code>/press</code>, <code>/cure</code></summary>
-
-[code-review-graph](https://github.com/tirth8205/code-review-graph) builds a persistent call graph of your codebase with Tree-sitter, Louvain communities, betweenness-centrality, and optional vector embeddings. Used by `/age`, `/press`, and `/cure` for risk-scored impact (`get_impact_radius_tool`, `detect_changes_tool`), curated review context (`get_review_context_tool`, `get_minimal_context_tool`), affected flows (`get_affected_flows_tool`), architecture framing (`get_architecture_overview_tool`, `get_hub_nodes_tool`, `get_bridge_nodes_tool`), and cross-repo / semantic search (`cross_repo_search_tool`, `semantic_search_nodes_tool`). Tilth handles AST search, callers, and hash-anchored edits; code-review-graph covers the graph-algorithmic and cross-repo dimensions tilth does not.
-
-```sh
-# Install with the local sentence-transformers embeddings extra (Python 3.10+ required)
-pip install 'code-review-graph[embeddings]'   # or: pipx install 'code-review-graph[embeddings]'
-
-# Auto-detect and configure your harness
-code-review-graph install
-
-# Target a specific harness
-code-review-graph install --platform claude-code
-code-review-graph install --platform cursor
-code-review-graph install --platform codex
-
-# Build the graph for the current project (re-run after large changes)
-code-review-graph build
-
-# Compute embeddings for semantic_search_nodes_tool (one-time, then incremental)
-code-review-graph embed
-```
-
-The `[embeddings]` extra pulls in `sentence-transformers` so `semantic_search_nodes_tool` works out of the box with the default `all-MiniLM-L6-v2` model. Override with `CRG_EMBEDDING_MODEL=<model-id>`. Other embedding providers (Google Gemini, MiniMax, OpenAI-compatible endpoints) are also supported — see the upstream README for `[google-embeddings]` and the `CRG_OPENAI_*` env vars.
 
 </details>
 
