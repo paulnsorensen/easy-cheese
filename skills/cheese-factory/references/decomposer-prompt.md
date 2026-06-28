@@ -23,8 +23,9 @@ Every curd you produce must satisfy ALL FIVE criteria. Token budgets are NOT a c
 1. **One behaviour per curd.** Describable in a single declarative sentence ("adds X",
    "extracts Y", "renames Z", "fixes A"). If the description needs "and" between two
    distinct behaviours, split into two curds.
-2. **One acceptance criterion.** Maps to exactly one bullet in the spec's Acceptance
-   Criteria / User Story list. Curds collectively cover every acceptance criterion 1:1.
+2. **One acceptance criterion.** Maps to exactly one list item (bulleted or numbered) in
+   the spec's Acceptance Criteria / User Story list. Curds collectively cover every
+   acceptance criterion 1:1.
 3. **One test target.** A single focused test command verifies this curd alone. If the
    curd needs N test commands, it's N curds.
 4. **File-disjoint.** No two curds list the same file. HARD CONSTRAINT.
