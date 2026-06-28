@@ -47,14 +47,12 @@ Beyond `cheez-*` there are cure-specific tools:
 
 | Need | Prefer | Fallback |
 | --- | --- | --- |
-| Understanding findings | `/age` report plus code-review-graph: `get_minimal_context_tool`, `get_review_context_tool` | diff, touched files, tests |
+| Understanding findings | `/age` report plus touched diff/test context | diff, touched files, tests |
 | CI and PR context | `gh` | local test output or user-provided logs |
 | Diffs | `delta` | plain `git diff` |
 | Conflict resolution | mergiraf | manual resolution with targeted tests |
 | Code navigation | `/cheez-search` `kind:symbol` then `kind:callers` | `tilth_search` direct |
 | Read before edit | `/cheez-read` ranged/outline (`paths: ["f#n-m"]`, `mode:stripped`) | DO NOT `cat`/`sed -n`/host Read on code paths |
-
-**Freshness:** before the first code-review-graph query in a run, call `build_or_update_graph_tool`. See [`/cheez-search`](../cheez-search/references/routing.md#when-code-review-graph-beats-tilth-if-your-harness-has-it) for the full freshness contract and when semantic search beats tilth.
 
 If a preferred tool is missing, continue with the fallback. If a missing tool prevents safe application, stop and explain the blocker.
 

@@ -94,10 +94,9 @@ python3 shared/scripts/severity.py bucket --files <N> [--modules <M>]
 Source priority for the raw count:
 
 1. **`tilth_deps`** — primary. Returns the file set that would need to change.
-2. **CRG `get_impact_radius_tool`** — when code-review-graph is wired. Equivalent blast-radius output.
-3. **LSP `find-references` / `find-callers`** — fallback when neither tilth nor CRG is available.
+2. **LSP `find-references` / `find-callers`** — fallback when tilth is unavailable.
 
-**Worked recipe.** Given a finding at `path:line`, run `tilth_deps` on the *containing file*. Count the **distinct files** in the imported-by set as `--files` — use the `<N> dependents` header count, since the `Used by` list emits one entry per call site and several entries can map to one file (counting raw entries overcounts). Count the **distinct slice/module roots** among them as `--modules` — the directory immediately under `src/` (so `src/melt` and `src/affinage` are two modules, not the shared `src` parent). Then run `python3 shared/scripts/severity.py bucket --files <N> --modules <M>`. Falling back to CRG `get_impact_radius_tool` or LSP callers, count the same way (distinct touched files, distinct module dirs) so buckets stay comparable across tools.
+**Worked recipe.** Given a finding at `path:line`, run `tilth_deps` on the *containing file*. Count the **distinct files** in the imported-by set as `--files` — use the `<N> dependents` header count, since the `Used by` list emits one entry per call site and several entries can map to one file (counting raw entries overcounts). Count the **distinct slice/module roots** among them as `--modules` — the directory immediately under `src/` (so `src/melt` and `src/affinage` are two modules, not the shared `src` parent). Then run `python3 shared/scripts/severity.py bucket --files <N> --modules <M>`. Falling back to LSP callers, count the same way (distinct touched files, distinct module dirs) so buckets stay comparable across tools.
 
 Fix-cost-now is **reported, not bumped**. Severity decides what to fix; fix-cost-now explains effort and lets triage schedule.
 

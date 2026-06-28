@@ -90,7 +90,7 @@ count_skills() {
 }
 
 @test "ec_validate_selection accepts the special 'none' MCP token" {
-    run ec_validate_selection "none" "tilth context7 tavily code-review-graph none"
+    run ec_validate_selection "none" "tilth context7 tavily hallouminate milknado none"
     [ "$status" -eq 0 ]
 }
 
@@ -360,7 +360,7 @@ STUB
     grep -q "^tilth install claude-code --edit$" "$STUB_LOG"
 }
 
-# -- ec_install_mcp_context7 / tavily / crg ----------------------------------
+# -- ec_install_mcp_context7 / tavily ----------------------------------------
 
 @test "ec_install_mcp_context7 warns and skips for non-claude harness" {
     run ec_install_mcp_context7 cursor
@@ -423,98 +423,6 @@ STUB
     [[ "$output" == *"$STUB_BIN/claude mcp add tavily -- $STUB_BIN/npx -y tavily-mcp"* ]]
 }
 
-# -- ec_install_crg_cli -------------------------------------------------------
-
-@test "ec_install_crg_cli prefers uv over pipx and pip" {
-    make_stub uv
-    make_stub pipx
-    make_stub pip
-    EC_UV="$STUB_BIN/uv" EC_PIPX="$STUB_BIN/pipx" EC_PIP="$STUB_BIN/pip" \
-        EC_DRY_RUN=1 run ec_install_crg_cli
-    [ "$status" -eq 0 ]
-    [[ "$output" == *"uv tool install code-review-graph[embeddings]"* ]]
-    [[ "$output" != *"pipx install"* ]]
-    [[ "$output" != *"pip install"* ]]
-}
-
-@test "ec_install_crg_cli falls back to pipx when uv missing" {
-    make_stub pipx
-    make_stub pip
-    EC_PIPX="$STUB_BIN/pipx" EC_PIP="$STUB_BIN/pip" \
-        EC_DRY_RUN=1 run ec_install_crg_cli
-    [ "$status" -eq 0 ]
-    [[ "$output" == *"pipx install code-review-graph[embeddings]"* ]]
-    [[ "$output" != *"uv tool"* ]]
-}
-
-@test "ec_install_crg_cli falls back to 'pip install --user' last with a warning" {
-    make_stub pip
-    EC_PIP="$STUB_BIN/pip" EC_DRY_RUN=1 run ec_install_crg_cli
-    [ "$status" -eq 0 ]
-    [[ "$output" == *"falling back to 'pip install --user'"* ]]
-    [[ "$output" == *"pip install --user code-review-graph[embeddings]"* ]]
-}
-
-@test "ec_install_crg_cli fails clearly when uv, pipx, and pip are all missing" {
-    PATH="$STUB_BIN" run ec_install_crg_cli
-    [ "$status" -eq 1 ]
-    [[ "$output" == *"needs uv, pipx, or pip"* ]]
-}
-
-@test "ec_install_crg_cli invokes uv tool install with embeddings extra when not dry-run" {
-    make_stub uv
-    export EC_UV="$STUB_BIN/uv"
-    run ec_install_crg_cli
-    [ "$status" -eq 0 ]
-    grep -q "^uv tool install code-review-graph\[embeddings\]$" "$STUB_LOG"
-}
-
-@test "ec_install_crg_cli honors EC_CRG_SPEC override (bare CLI, no extras)" {
-    make_stub uv
-    EC_UV="$STUB_BIN/uv" EC_CRG_SPEC="code-review-graph" EC_DRY_RUN=1 \
-        run ec_install_crg_cli
-    [ "$status" -eq 0 ]
-    [[ "$output" == *"uv tool install code-review-graph"* ]]
-    [[ "$output" != *"code-review-graph[embeddings]"* ]]
-}
-
-# -- ec_install_mcp_crg -------------------------------------------------------
-
-@test "ec_install_mcp_crg installs CLI then registers when binary missing" {
-    make_stub uv
-    EC_UV="$STUB_BIN/uv" EC_CRG="$STUB_BIN/code-review-graph-not-real" \
-        EC_DRY_RUN=1 run ec_install_mcp_crg claude-code
-    [ "$status" -eq 0 ]
-    [[ "$output" == *"uv tool install code-review-graph[embeddings]"* ]]
-    [[ "$output" == *"install --platform claude-code"* ]]
-}
-
-@test "ec_install_mcp_crg invokes crg install for present binary" {
-    make_stub code-review-graph
-    export EC_CRG="$STUB_BIN/code-review-graph"
-    run ec_install_mcp_crg claude-code
-    [ "$status" -eq 0 ]
-    grep -q "^code-review-graph install --platform claude-code$" "$STUB_LOG"
-}
-
-@test "ec_install_mcp_crg fails with PATH hint when binary still missing after install" {
-    # Simulate the common 'pip install --user' case: pip succeeds but the
-    # binary lands in a directory that's not on PATH, so the post-install
-    # ec_cmd_exists check still fails.
-    make_stub pip
-    export EC_PIP="$STUB_BIN/pip"
-    # EC_CRG points at a path that will never exist on PATH.
-    export EC_CRG="$BATS_TEST_TMPDIR/nope/code-review-graph"
-    run ec_install_mcp_crg claude-code
-    [ "$status" -eq 1 ]
-    [[ "$output" == *"install succeeded but"* ]]
-    [[ "$output" == *"not on PATH"* ]]
-    [[ "$output" == *"pipx ensurepath"* ]]
-    # Crucially, the registration step must NOT fire when the binary is
-    # still missing — otherwise the user gets the generic shell error we're
-    # trying to replace with a targeted hint.
-    ! grep -q " install --platform " "$STUB_LOG" || false
-}
 
 # -- ec_install_mcp_hallouminate -----------------------------------------------
 

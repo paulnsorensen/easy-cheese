@@ -53,16 +53,6 @@ Every spawn uses the canonical `/<phase> <slug> --auto` form. Cook accepts a bar
 | 6 | `/cure <slug> --auto --stake medium+`     | `.cheese/cure/<slug>.md` (overwritten) |
 | 7 | `/age <slug> --auto`                      | `.cheese/age/<slug>.md` (final report) |
 
-### Optional: code-review-graph pre-build
-
-Before spawning phase 3 (first `/age`), if code-review-graph MCP is available, call `build_or_update_graph_tool` once from the orchestrator context so the three age sub-agents reuse the warmed graph. If absent, skip — each age sub-agent degrades per `shared/optional-plugins.md`.
-
-```
-if build_or_update_graph_tool in available_tools:
-    build_or_update_graph_tool()   # warm the graph once; age sub-agents reuse it
-# then spawn phase 3
-```
-
 ### Cap enforcement
 
 The two-cure-pass cap is enforced by **chain length, not by age** — age boots in fresh context and cannot count prior passes. So:
