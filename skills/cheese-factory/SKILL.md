@@ -81,7 +81,7 @@ If milknado MCP is available (`mcp__milknado__milknado_todo_add` in toolset), pe
 
 Read the spec from the argument (or, if `--resume <slug>`, read the manifest and skip to the next incomplete phase).
 
-Validate the spec has: (a) an enumerable acceptance criteria or user stories list — at least one bullet the decomposer can map 1:1 to a curd; and (b) quality gates — at least one runnable command. Heading names are not enforced; check for presence of the content. Fail fast if either is absent.
+Validate the input spec's **structure** (distinct from the five-criteria curd check the validator applies to the decomposer's *output* manifest). The spec must have: (a) an enumerable acceptance criteria or user stories list — at least one list item (bulleted or numbered) the decomposer can map 1:1 to a curd; and (b) quality gates — at least one runnable command. Heading names are not enforced; check for presence of the content. Fail fast if either is absent.
 
 **Hard worktree gate**: detect the host's worktree mechanism (Conductor, git worktrees, plain branches) and prompt if working on the default branch. Never skipped.
 
