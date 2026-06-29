@@ -9,14 +9,18 @@ the reliable one is sub-agent offload (ADR-003, Risks).
 ## Default: offload heavy work to sub-agents
 
 The sub-agent context gate (`SKILL.md` § Sub-agent context gate) is the **default**
-for heavy work, not an exception. Spawn a read-only sub-agent for:
+for heavy work, not an exception. Spawn a read-only sub-agent — name the typed
+phase-agent that fits the work, falling back to `general-purpose` where it isn't
+available (e.g. a harness that installs only easy-cheese):
 
-- **Reads / research:** deep `/briesearch` (3+ doc fetches or 2+ search angles).
+- **Reads / research:** deep `/briesearch` (3+ doc fetches or 2+ search angles) —
+  the `researcher` phase-agent.
 - **Shape check:** more than 5 symbols, wide module fan-out, large caller/dep
-  traversals.
+  traversals — the `explorer` phase-agent.
 - **Prototype Cycle:** the throwaway build always runs in a sub-agent
-  (`references/prototype-cycle.md`).
-- **Diagnose:** bulky logs/traces before a concise root-cause hypothesis.
+  (`references/prototype-cycle.md`) — the `explorer` phase-agent.
+- **Diagnose:** bulky logs/traces before a concise root-cause hypothesis — the
+  `explorer` phase-agent.
 
 The sub-agent returns a ≤2 KB digest; the raw evidence never enters the parent
 window. The parent keeps only the dialogue, contradictions, approval state, and
