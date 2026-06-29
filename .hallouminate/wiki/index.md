@@ -17,6 +17,7 @@ git-tracking axis (`shared/formatting.md:103`).
 - [architecture](./architecture.md) — Architecture of easy-cheese
 - [cheese-factory-entities](./cheese-factory-entities.md) — Cheese-factory pipeline entities
 - [skill-parity-analysis](./skill-parity-analysis.md) — Skill-parity analysis
+- [spec-workflow-comparison](./spec-workflow-comparison.md) — /mold vs Matt Pocock grill-with-docs vs Superpowers brainstorming vs spec.md, plus Spec Kit/Kiro/BMAD/Taskmaster/Agent OS/OpenSpec/Tessl.
 - [tooling](./tooling.md) — Tooling
 - [wiki-conventions](./wiki-conventions.md) — Wiki conventions for easy-cheese
 - [workflow-invariants](./workflow-invariants.md) — Workflow invariants
