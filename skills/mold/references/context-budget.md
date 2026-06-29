@@ -10,10 +10,11 @@ the reliable one is sub-agent offload (ADR-003, Risks).
 
 The sub-agent context gate (`SKILL.md` § Sub-agent context gate) is the **default**
 for heavy work, not an exception. Spawn a read-only sub-agent — name the typed
-phase-agent that fits the work, falling back to `general-purpose` where it isn't
-available (e.g. a harness that installs only easy-cheese):
+phase-agent that fits the work, falling back to the read-only built-in `Explore`
+agent (or an inline read) where it isn't available (e.g. a harness that installs
+only easy-cheese) — never `general-purpose`, which grants full write access:
 
-- **Reads / research:** deep `/briesearch` (3+ doc fetches or 2+ search angles) —
+- **Research:** deep `/briesearch` (3+ doc fetches or 2+ search angles) —
   the `researcher` phase-agent.
 - **Shape check:** more than 5 symbols, wide module fan-out, large caller/dep
   traversals — the `explorer` phase-agent.

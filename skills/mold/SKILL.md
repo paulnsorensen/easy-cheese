@@ -93,7 +93,7 @@ Optional tools accelerate the work; missing tools do not block the dialogue. Whe
 
 ## Sub-agent context gate
 
-`/mold` keeps the dialogue, contradictions, approval state, and the two-key handshake in the parent context — those never delegate. Offloading heavy work to a read-only sub-agent is the **default** (`references/context-budget.md`) — the `explorer` phase-agent for code reads and shape checks, the `researcher` phase-agent for deep `/briesearch`. Spawn one whenever the work would flood the conversation with raw evidence or graph output (if the named agent isn't available, e.g. a harness that installs only easy-cheese, fall back to `general-purpose`):
+`/mold` keeps the dialogue, contradictions, approval state, and the two-key handshake in the parent context — those never delegate. Offloading heavy work to a read-only sub-agent is the **default** (`references/context-budget.md`) — the `explorer` phase-agent for code reads and shape checks, the `researcher` phase-agent for deep `/briesearch`. Spawn one whenever the work would flood the conversation with raw evidence or graph output (if the named agent isn't available, e.g. a harness that installs only easy-cheese, fall back to the read-only built-in `Explore` agent — or an inline read — never `general-purpose`, which grants full write access):
 
 Triggers and digest constraints in `references/context-budget.md`.
 

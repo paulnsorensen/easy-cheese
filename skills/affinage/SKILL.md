@@ -89,7 +89,7 @@ When `affinage.pyz pr-status` reports `merge.mergeable: CONFLICTING` or `merge.s
 
 ## Sub-agent context gate
 
-`/affinage` keeps dialogue, selection, approval state, and reply posting in the parent context. Spawn a read-only grading sub-agent — the `reviewer` phase-agent — only when the parent context would balloon (if the named `reviewer` isn't available, e.g. a harness that installs only easy-cheese, fall back to `general-purpose`):
+`/affinage` keeps dialogue, selection, approval state, and reply posting in the parent context. Spawn a read-only grading sub-agent — the `reviewer` phase-agent — only when the parent context would balloon (if the named `reviewer` isn't available, e.g. a harness that installs only easy-cheese, fall back to the read-only built-in `Explore` agent or inline grading — never `general-purpose`, which grants full write access):
 
 - Total input count (comments + CI failures) exceeds 10.
 - Diff exceeds ~25 KB.
