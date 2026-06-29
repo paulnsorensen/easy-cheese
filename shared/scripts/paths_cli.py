@@ -50,6 +50,19 @@ def _cmd_existing(args: argparse.Namespace) -> None:
     cli.emit(items, limit=args.limit, full=args.full, json_mode=args.json_mode)
 
 
+def _cmd_resolve(args: argparse.Namespace) -> None:
+    err = paths.validate_slug(args.slug)
+    if err is not None:
+        raise cli.CliError(err)
+    try:
+        result = paths.resolve_slug(
+            args.slug, phase_hint=args.phase, repo_root=args.repo_root
+        )
+    except ValueError as exc:
+        raise cli.CliError(str(exc)) from exc
+    cli.emit(result, json_mode=True)
+
+
 def _setup(parser: argparse.ArgumentParser) -> None:
     sub = parser.add_subparsers(dest="cmd", required=True)
 
@@ -70,6 +83,22 @@ def _setup(parser: argparse.ArgumentParser) -> None:
     existing.add_argument("--root", default=".cheese", help="artifact root (default: .cheese)")
     existing.add_argument("--limit", type=int, default=None, help="cap list length")
     existing.set_defaults(func=_cmd_existing)
+
+    resolve = sub.add_parser(
+        "resolve",
+        help="resolve a slug to absolute artifact path(s) across all phases",
+    )
+    resolve.add_argument("--slug", required=True)
+    resolve.add_argument(
+        "--phase", default=None, help="restrict the search to this phase/aux token"
+    )
+    resolve.add_argument(
+        "--repo-root",
+        dest="repo_root",
+        default=None,
+        help="repo root for .cheese/ (default: git toplevel or cwd)",
+    )
+    resolve.set_defaults(func=_cmd_resolve)
 
 
 if __name__ == "__main__":

@@ -183,6 +183,44 @@ class TestExisting:
         assert result.returncode == 2
 
 
+class TestResolve:
+    def test_hit_emits_contract_keys(self, tmp_path: Path) -> None:
+        art = tmp_path / ".cheese" / "cook" / "demo.md"
+        art.parent.mkdir(parents=True)
+        art.write_text("body", encoding="utf-8")
+        result = _run("resolve", "--slug", "demo", "--repo-root", str(tmp_path))
+        assert result.returncode == 0, result.stderr
+        payload = json.loads(result.stdout)
+        assert payload["fallback_roots"] == []
+        assert payload["matches"] == [
+            {
+                "abs_path": str(art),
+                "phase": "cook",
+                "skill": "/cook",
+                "confidence": 1.0,
+            }
+        ]
+
+    def test_fallback_emits_searched_roots(self, tmp_path: Path) -> None:
+        result = _run("resolve", "--slug", "nowhere", "--repo-root", str(tmp_path))
+        assert result.returncode == 0, result.stderr
+        payload = json.loads(result.stdout)
+        assert payload["matches"] == []
+        assert str(tmp_path / ".cheese" / "cook") in payload["fallback_roots"]
+
+    def test_invalid_slug_exits_two(self, tmp_path: Path) -> None:
+        result = _run("resolve", "--slug", "Bad_Slug", "--repo-root", str(tmp_path))
+        assert result.returncode == 2
+        assert "ERROR:" in result.stderr
+
+    def test_unknown_phase_exits_two(self, tmp_path: Path) -> None:
+        result = _run(
+            "resolve", "--slug", "demo", "--phase", "bogus", "--repo-root", str(tmp_path)
+        )
+        assert result.returncode == 2
+        assert "ERROR: unknown phase 'bogus'" in result.stderr
+
+
 class TestModuleImport:
     def test_setup_callable_present(self, paths_cli_mod: ModuleType) -> None:
         # Sanity: the module exports the argparse setup hook cli.run consumes.
