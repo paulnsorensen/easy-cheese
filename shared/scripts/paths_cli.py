@@ -1,4 +1,4 @@
-"""CLI wrapper around shared/scripts/paths.py — slugify, validate, existing.
+"""CLI wrapper around shared/scripts/paths.py — slugify, validate, existing, resolve.
 
 Subcommands:
 
@@ -10,6 +10,9 @@ Subcommands:
 
     paths_cli.py existing --slug demo --phase age --json
     -> ["<root>/age/demo.md"]
+
+    paths_cli.py resolve --slug demo
+    -> {"matches": [...], "fallback_roots": [...]}
 
 Stdlib-only; delegates all rules to paths.py so the regex + phase list stay
 single-source.

@@ -65,8 +65,9 @@ PHASE_DIRS: dict[str, str] = {"hard": "hard-cheese"}
 _DIR_PHASES: dict[str, str] = {d: p for p, d in PHASE_DIRS.items()}
 
 # Aux registry: artifact owners that are NOT pipeline phases. `affinage` writes
-# `.cheese/affinage/pr-<n>.md` keyed by PR number (not a kebab slug) and has no
-# chain semantics, so it stays out of PHASES but the resolver still finds it.
+# `.cheese/affinage/pr-<n>.md` keyed by PR number (a valid kebab slug, but not a
+# user-chosen one) and has no pipeline semantics, so it stays out of PHASES but
+# the resolver still finds it.
 AUX_PHASES: frozenset[str] = frozenset({"affinage"})
 
 # Phase/aux token -> slash-command skill that owns it. Mostly identity
@@ -234,7 +235,11 @@ def default_root_for_phase(phase: str, *, project: str | None = None) -> Path:
 
 
 def artifact_path(phase: str, slug: str, *, root: Path | str | None = None) -> Path:
-    """Return ``<root>/<phase>/<slug>.md``. Validates phase + slug.
+    """Return ``<root>/<phase-dir>/<slug>.md``. Validates phase + slug.
+
+    The on-disk directory may differ from the phase token: ``phase_dir`` maps
+    ``hard`` to ``hard-cheese`` (see ``PHASE_DIRS``); every other phase maps to
+    itself.
 
     With ``root`` omitted, the root is resolved per phase via
     ``default_root_for_phase`` (durable phases → XDG corpus, rest → ``.cheese/``).
@@ -254,9 +259,11 @@ def artifact_path(phase: str, slug: str, *, root: Path | str | None = None) -> P
 
 
 def parse_artifact_path(path: Path | str) -> tuple[str, str]:
-    """Parse ``phase, slug`` from a canonical ``.cheese/<phase>/<slug>.md`` path.
+    """Parse ``phase, slug`` from a canonical ``.cheese/<phase-dir>/<slug>.md`` path.
 
-    Only the canonical ``.cheese/`` root is parsed.
+    Only the canonical ``.cheese/`` root is parsed. The accepted on-disk directory
+    may differ from the returned phase token: ``.cheese/hard-cheese/<slug>.md``
+    parses to phase ``hard`` (see ``_DIR_PHASES``).
     """
     p = Path(path)
     parts = p.parts
@@ -364,8 +371,9 @@ def resolve_slug(
     (confidence = difflib ratio), then a fallback listing the absolute phase-dir
     roots searched so the caller can grep them directly.
 
-    ``phase_hint``, when it names a known phase/aux token, restricts the search
-    to that one directory; otherwise every known token is searched.
+    ``phase_hint=None`` searches every known token. A ``phase_hint`` that names a
+    known phase/aux token restricts the search to that one directory; an unknown
+    hint raises ``ValueError``.
     """
     err = validate_slug(slug)
     if err is not None:
