@@ -50,9 +50,9 @@ and two-key handshake), [architecture](./architecture.md).
 
 ## Deep dive — Matt Pocock
 
-Public skill set: `github.com/mattpocock/skills`. End-to-end model is **7
-phases**: Idea → Research (`research.md`) → Prototype → Grill → PRD → Kanban (GH
-issues) → Execute → QA (<https://www.aihero.dev/my-7-phases-of-ai-development>).
+Public skill set: `github.com/mattpocock/skills`. End-to-end model is:
+Idea → Research (`research.md`) → Prototype → Grill → PRD → Kanban (GH issues) →
+Execute → QA (<https://www.aihero.dev/my-7-phases-of-ai-development>).
 
 Two mechanics worth stealing:
 
