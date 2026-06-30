@@ -28,12 +28,20 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from typing import TypedDict
 
 # cli is co-staged in the bundled .pyz alongside this module
 import cli
 
 STATES = ("previously_passed", "stale", "new")
 EXIT_FOR_STATE = {"previously_passed": 0, "stale": 2, "new": 3}
+MIN_PASSING_SCORE = 1
+MAX_PASSING_SCORE = 5
+
+
+class PassAttempt(TypedDict):
+    sha: str
+    score: int | None
 
 
 # Match a markdown table row like `| timestamp | head_sha | status | ... |`.
@@ -66,20 +74,29 @@ def _is_pass_status(token: str) -> bool:
     return token.strip().lower().startswith("pass")
 
 
-def _last_pass_sha_from_table(body: str) -> str | None:
-    """Walk attempt-log table rows; return last PASS row's recorded head sha.
+def _parse_score(token: str) -> int | None:
+    try:
+        return int(token.strip())
+    except ValueError:
+        return None
+
+
+def _last_pass_attempt_from_table(body: str) -> PassAttempt | None:
+    """Walk attempt-log table rows; return the last PASS row's sha and score.
 
     The writer in `append-attempt.py` produces the canonical schema
     `| timestamp | head_sha | status | score | feedback | explanation |`,
-    so the row's status cell is index 2 and the head_sha cell is index 1.
-    The parser reads the header row to locate the `status` and `head_sha`
+    so the row's status cell is index 2, the head_sha cell is index 1, and
+    the score cell is index 3. The parser reads the header row to locate
+    the `status`, `head_sha`, and `score`
     columns by name, so callers who later reorder the schema do not silently
     break the freshness check.
     """
     rows = list(_TABLE_ROW_RE.finditer(body))
     status_col: int | None = None
     sha_col: int | None = None
-    last_sha: str | None = None
+    score_col: int | None = None
+    last_attempt: PassAttempt | None = None
     for row in rows:
         cells = [c.strip() for c in row.group("cells").split("|")]
         # Strip the empty edge cells produced by leading/trailing pipes.
@@ -94,6 +111,7 @@ def _last_pass_sha_from_table(body: str) -> str | None:
             lowered = [c.lower() for c in cells]
             status_col = lowered.index("status")
             sha_col = lowered.index("head_sha") if "head_sha" in lowered else None
+            score_col = lowered.index("score") if "score" in lowered else None
             continue
         # Separator row (`| --- | --- | --- |`).
         if all(set(cell) <= {"-", ":"} and cell for cell in cells):
@@ -102,14 +120,22 @@ def _last_pass_sha_from_table(body: str) -> str | None:
         # when no header was seen, otherwise honour the discovered indices.
         s_col = status_col if status_col is not None else 0
         h_col = sha_col if sha_col is not None else 2
+        sc_col = score_col if score_col is not None else 1
         if s_col >= len(cells) or h_col >= len(cells):
             continue
         if not _is_pass_status(cells[s_col]):
             continue
         sha = cells[h_col]
         if sha and sha.lower() != "head_sha":
-            last_sha = sha
-    return last_sha
+            score = _parse_score(cells[sc_col]) if sc_col < len(cells) else None
+            last_attempt = {"sha": sha, "score": score}
+    return last_attempt
+
+
+def _last_pass_sha_from_table(body: str) -> str | None:
+    """Walk attempt-log table rows; return last PASS row's recorded head sha."""
+    attempt = _last_pass_attempt_from_table(body)
+    return attempt["sha"] if attempt else None
 
 
 def last_pass_sha(log_path: Path) -> str | None:
@@ -125,7 +151,22 @@ def last_pass_sha(log_path: Path) -> str | None:
     return _last_pass_sha_from_table(body)
 
 
-def decide(slug: str, *, cheese_root: Path, repo_root: Path | None = None) -> dict:
+def last_pass_attempt(log_path: Path) -> PassAttempt | None:
+    """Return the most recent passing attempt, or None when no parseable pass exists."""
+    try:
+        body = log_path.read_text(encoding="utf-8")
+    except (FileNotFoundError, IsADirectoryError, PermissionError, UnicodeDecodeError, OSError):
+        return None
+    return _last_pass_attempt_from_table(body)
+
+
+def decide(
+    slug: str,
+    *,
+    cheese_root: Path,
+    repo_root: Path | None = None,
+    passing_score: int = 3,
+) -> dict:
     """Compute {state, diff_head} for `slug`. Pure modulo git + filesystem.
 
     `append-attempt.py` writes the short (abbreviated) HEAD sha; `git rev-parse
@@ -134,10 +175,12 @@ def decide(slug: str, *, cheese_root: Path, repo_root: Path | None = None) -> di
     """
     diff_head = git_head(cwd=repo_root)
     log_path = cheese_root / "hard-cheese" / f"{slug}.md"
-    recorded = last_pass_sha(log_path)
-    if recorded is None:
+    attempt = last_pass_attempt(log_path)
+    if attempt is None:
         state = "new"
-    elif _sha_matches(recorded, diff_head):
+    elif attempt["score"] is None or attempt["score"] < passing_score:
+        state = "stale"
+    elif _sha_matches(attempt["sha"], diff_head):
         state = "previously_passed"
     else:
         state = "stale"
@@ -162,7 +205,12 @@ def _cmd_check(args: argparse.Namespace) -> None:
         raise cli.CliError("--slug must not be empty")
     cheese_root = Path(args.cheese_root) if args.cheese_root else Path(".cheese")
     repo_root = Path(args.repo_root) if args.repo_root else None
-    result = decide(slug, cheese_root=cheese_root, repo_root=repo_root)
+    result = decide(
+        slug,
+        cheese_root=cheese_root,
+        repo_root=repo_root,
+        passing_score=args.passing_score,
+    )
     if args.json_mode:
         cli.emit(result, json_mode=True)
     else:
@@ -170,9 +218,25 @@ def _cmd_check(args: argparse.Namespace) -> None:
     sys.exit(EXIT_FOR_STATE[result["state"]])
 
 
+def _passing_score(value: str) -> int:
+    try:
+        score = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("--passing-score must be an integer 1-5") from exc
+    if score < MIN_PASSING_SCORE or score > MAX_PASSING_SCORE:
+        raise argparse.ArgumentTypeError("--passing-score must be between 1 and 5")
+    return score
+
+
 def _setup(parser: argparse.ArgumentParser) -> None:
     parser.description = "Decide /hard-cheese freshness for <slug>."
     parser.add_argument("--slug", required=True, help="hard-cheese slug to check")
+    parser.add_argument(
+        "--passing-score",
+        type=_passing_score,
+        default=3,
+        help="minimum SOLO score that counts as a fresh pass (default: 3)",
+    )
     parser.add_argument(
         "--cheese-root",
         default=None,
