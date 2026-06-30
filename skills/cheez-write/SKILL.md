@@ -211,3 +211,11 @@ that bypasses tilth's hash-mismatch safety.
 - **DO NOT edit without reading** — you need the anchors.
 - **DO NOT run tests, commit, or review from this skill** — use the project's test/build, git/gh, and `/age` skills.
 - **DO NOT use for reading or searching** — read with `/cheez-read`, search with `/cheez-search`.
+
+---
+
+## Discipline
+
+Iron Law, Red Flags, and the write Rationalization table live in
+[`references/cheez-write-discipline.md`](references/cheez-write-discipline.md).
+See [`../../shared/skill-authoring.md`](../../shared/skill-authoring.md) for the template these follow.
