@@ -11,13 +11,14 @@ The gate mitigates **epistemic debt** — the failure mode where AI-scaffolded c
 ## Inputs
 
 ```text
-/hard-cheese [<slug>] [--socratic-cap N=3] [--no-judge]
+/hard-cheese [<slug>] [--socratic-cap N=3] [--passing-score N=3] [--no-judge]
 ```
 
 Arguments:
 
 - `<slug>` — optional. Identifies the artifact at `.cheese/hard-cheese/<slug>.md`. When omitted, fall back to the git short SHA of `HEAD`. An explicit slug always wins.
 - `--socratic-cap N` — max retry attempts before the gate marks the artifact `FAILED` and exits non-zero. Default `3`. Vibecheck does not cap; easy-cheese does to avoid infinite loops.
+- `--passing-score N` — minimum SOLO score that counts as PASS. Valid range `1..5`; default `3` (Multistructural-or-higher). A previous PASS below the requested threshold is treated as stale and must be re-judged.
 - `--no-judge` — log-only mode. Capture the user's explanation, write the artifact with `status: LOGGED`, skip the judge sub-agent spawn. Mirrors vibecheck's optional JSONL telemetry mode.
 
 ## Invocation modes
@@ -41,10 +42,11 @@ Arguments:
    Check freshness before launching the gate:
 
    ```
-   python3 ${CLAUDE_SKILL_DIR}/scripts/hard-cheese.pyz freshness-check --slug <slug>
+   python3 ${CLAUDE_SKILL_DIR}/scripts/hard-cheese.pyz freshness-check \
+     --slug <slug> --passing-score <n>
    ```
 
-   Exit 0 (`previously_passed`): print `"previously passed"` and exit `0`. Exit 2 (`stale`) or 3 (`new`): continue to step 3.
+   Exit 0 (`previously_passed`): print `"previously passed"` and exit `0`. Exit 2 (`stale`: HEAD moved or the last PASS score is below `--passing-score`) or 3 (`new`): continue to step 3.
 
 3. **Compose the vibecheck prompt** (faithful to Sankaranarayanan 2026, generalised to "share for review" so the gate stays implementation-agnostic):
 
@@ -56,7 +58,7 @@ Arguments:
 
 5. **Spawn the judge sub-agent** in fresh context (same pattern `/ultracook` uses for adversarial review). The judge:
    - Reads `references/judge-prompt.md` as its system prompt.
-   - Receives the diff summary, the spec excerpt (if any), and the user's explanation as context.
+   - Receives the passing score threshold, the diff summary, the spec excerpt (if any), and the user's explanation as context.
    - Returns a JSON object: `{score, level, pass, feedback, socratic_qs}`.
 
    See `references/judge-prompt.md` for the full system prompt and output shape.
@@ -64,7 +66,7 @@ Arguments:
    Skip this step when `--no-judge` is set: mark the attempt `status: LOGGED`, write the artifact, exit `0`.
 
 6. **On judge result:**
-   - `score >= 3` → PASS. `score < 3` → FAIL, render Socratic questions, loop to step 4 if `attempts < --socratic-cap`. Judge error → ERROR attempt, print warning, exit `0` (fail-open — see `## Divergence from the paper`).
+   - `score >= <passing-score>` → PASS. `score < <passing-score>` → FAIL, render Socratic questions, loop to step 4 if `attempts < --socratic-cap`. Judge error → ERROR attempt, print warning, exit `0` (fail-open — see `## Divergence from the paper`).
 
    Append the attempt row:
 
@@ -86,7 +88,8 @@ Each file opens with a YAML frontmatter block that travels with the audit trail:
 ---
 slug: <slug>
 attribution: Sankaranarayanan 2026 / vibecheck
-rubric: SOLO Taxonomy (1-5), pass threshold = 3
+rubric: SOLO Taxonomy (1-5), pass threshold = <passing-score>
+passing_score: <n>
 divergence: fail-open on judge error (vibecheck fails closed)
 diff_base: <sha>
 diff_head: <short-sha>
@@ -192,5 +195,5 @@ Followed by:
 
 - `references/judge-prompt.md` — SOLO Taxonomy rubric, judge sub-agent system prompt, JSON output shape.
 - `references/composition.md` — the full `--hard` / `--auto` matrix and the single puncture point.
-- `${CLAUDE_SKILL_DIR}/scripts/hard-cheese.pyz freshness-check` — checks whether a previous PASS is still fresh for the current HEAD (step 2).
+- `${CLAUDE_SKILL_DIR}/scripts/hard-cheese.pyz freshness-check` — checks whether a previous PASS is still fresh for the current HEAD and passing score (step 2).
 - `${CLAUDE_SKILL_DIR}/scripts/hard-cheese.pyz append-attempt` — atomically appends an attempt row to the audit trail (step 6).

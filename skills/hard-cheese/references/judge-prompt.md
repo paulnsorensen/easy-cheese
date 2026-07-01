@@ -24,9 +24,9 @@ Implementation reference: <https://github.com/sreecharansankaranarayanan/vibeche
 > 4. **Relational** — the response explains how elements of the change interact: cause-and-effect is articulated, control flow and state are tied together, the author can defend why this change produces the desired behavior.
 > 5. **Extended Abstract** — the response generalises beyond the immediate change: invariants, trade-offs, what would change under different inputs, how this transfers to adjacent code.
 >
-> **Pass threshold: score ≥ 3 (Multistructural-or-higher).**
+> **Pass threshold: `score >= passing_score`. Default `passing_score` is 3 (Multistructural-or-higher).**
 >
-> Per Sankaranarayanan 2026, scores at or above Multistructural (3+ on this 1–5 scale) demonstrate sufficient causal understanding to defend the change in code review. Scores below 3 indicate the author has not yet integrated the change into a coherent causal account. The Multistructural-vs-Relational distinction stays informative — a level-3 pass with no cause-and-effect linkage is the minimum acceptable; a level-4 response is the aspirational target.
+> Per Sankaranarayanan 2026, the default threshold treats scores at or above Multistructural (3+ on this 1–5 scale) as sufficient causal understanding to defend the change in code review. The parent may supply a stricter or looser `passing_score`; use that value for the boolean `pass` decision while keeping the SOLO score and level faithful to the rubric. Scores below `passing_score` indicate the author has not yet met the configured gate. The Multistructural-vs-Relational distinction stays informative — a default level-3 pass with no cause-and-effect linkage is the minimum acceptable; a level-4 response is the aspirational target.
 >
 > Note on terminology: the paper labels the pass condition "Relational". On this 1–5 mapping (Biggs & Collis), Relational is level 4 and Multistructural is level 3. The threshold rule above uses the level-3 label to stay unambiguous against the rubric; the paper's "Relational pass condition" terminology and "score ≥ 3" are the same operational gate.
 >
@@ -38,9 +38,9 @@ Implementation reference: <https://github.com/sreecharansankaranarayanan/vibeche
 > - Do not infer understanding from absence. If the author omits a critical element (a control-flow branch, a non-obvious invariant), that omission lowers the score.
 > - The judge does not grade the code. The code may be wrong, weird, or suboptimal — that is `/age`'s job. The judge grades the author's understanding of the code as written.
 >
-> **On FAIL (score < 3):** return 2–4 Socratic questions that point the author toward the missing causal-logic component without revealing the answer. The questions should be specific to *this* diff and *this* explanation — not generic prompts. The goal is to provoke the author into the next attempt, not to teach them the code.
+> **On FAIL (score < passing_score):** return 2–4 Socratic questions that point the author toward the missing causal-logic component without revealing the answer. The questions should be specific to *this* diff and *this* explanation — not generic prompts. The goal is to provoke the author into the next attempt, not to teach them the code.
 >
-> **On PASS (score ≥ 3):** return an empty `socratic_qs` array and a one-paragraph `feedback` field explaining what the author got right.
+> **On PASS (score >= passing_score):** return an empty `socratic_qs` array and a one-paragraph `feedback` field explaining what the author got right.
 >
 > **Output: a single JSON object, nothing else. No prose before or after.**
 
@@ -48,9 +48,10 @@ Implementation reference: <https://github.com/sreecharansankaranarayanan/vibeche
 
 The parent skill sends the judge a single user message containing, in order:
 
-1. The spec excerpt (if `.cheese/specs/<slug>.md` exists) — up to ~30 lines.
-2. The diff summary — files changed and key hunks, capped at ~80 lines.
-3. The author's free-text explanation, delimited as a fenced block.
+1. The configured `passing_score` integer (`1..5`; default `3`).
+2. The spec excerpt (if `.cheese/specs/<slug>.md` exists) — up to ~30 lines.
+3. The diff summary — files changed and key hunks, capped at ~80 lines.
+4. The author's free-text explanation, delimited as a fenced block.
 
 The judge does not request additional context. If the input is insufficient (no diff, no explanation), the judge returns `score: 1, level: "Prestructural"` with a `feedback` line explaining what was missing.
 
@@ -73,7 +74,7 @@ Constraints:
 
 - `score` is an integer 1–5.
 - `level` matches the score exactly (1=Prestructural, 2=Unistructural, 3=Multistructural, 4=Relational, 5=Extended Abstract).
-- `pass` is `true` iff `score >= 3`.
+- `pass` is `true` iff `score >= passing_score`.
 - `feedback` is a single paragraph, 2–5 sentences. No markdown headers, no lists.
 - `socratic_qs` is an array of 2–4 strings on FAIL, an empty array on PASS. Each question ends with a question mark.
 

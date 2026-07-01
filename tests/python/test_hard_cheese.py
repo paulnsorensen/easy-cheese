@@ -129,6 +129,17 @@ def test_no_judge_log_only_mode_in_skill(skill_body: str) -> None:
     assert "--no-judge" in skill_body
 
 
+def test_passing_score_flag_documented(skill_body: str) -> None:
+    assert "--passing-score" in skill_body
+    assert "passing score" in skill_body.lower()
+
+
+def test_judge_prompt_accepts_configurable_passing_score(judge_prompt: str) -> None:
+    text = judge_prompt.lower()
+    assert "passing_score" in text
+    assert "score >= passing_score" in text
+
+
 # ---------------------------------------------------------------------------
 # --hard propagation across the pipeline skills
 

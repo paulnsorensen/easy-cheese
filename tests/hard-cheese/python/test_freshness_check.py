@@ -68,13 +68,13 @@ def _write_log(repo: Path, slug: str, body: str) -> Path:
     return path
 
 
-def _table_log(slug: str, sha: str, status: str = "pass") -> str:
+def _table_log(slug: str, sha: str, status: str = "pass", score: str = "4") -> str:
     """Canonical attempt-log table per skills/hard-cheese/scripts/append-attempt.py."""
     return (
         f"# freshness log for {slug}\n\n"
         f"| timestamp | head_sha | status | score | feedback | explanation |\n"
         f"| --- | --- | --- | --- | --- | --- |\n"
-        f"| 2026-05-19T10:00:00+00:00 | {sha} | {status} | 4 | solid | I get it |\n"
+        f"| 2026-05-19T10:00:00+00:00 | {sha} | {status} | {score} | solid | I get it |\n"
     )
 
 
@@ -147,6 +147,13 @@ class TestStateStale:
     def test_table_log_stale(self, repo: Path) -> None:
         _write_log(repo, "feat-d", _table_log("feat-d", "abc123" * 7))  # not current HEAD
         result = _run_cli(repo, "feat-d")
+        assert result.returncode == 2
+        assert result.stdout.strip() == "stale"
+
+    def test_matching_head_below_requested_passing_score_is_stale(self, repo: Path) -> None:
+        head = _head(repo)
+        _write_log(repo, "strict", _table_log("strict", head, status="PASS", score="3"))
+        result = _run_cli(repo, "strict", "--passing-score", "4")
         assert result.returncode == 2
         assert result.stdout.strip() == "stale"
 
@@ -241,6 +248,11 @@ class TestArgHandling:
         assert result.returncode == 2
         assert "slug" in result.stderr.lower()
 
+    def test_passing_score_out_of_range_exits_2(self, repo: Path) -> None:
+        result = _run_cli(repo, "feat", "--passing-score", "6")
+        assert result.returncode == 2
+        assert "passing-score" in result.stderr
+
 
 # ---------- Pure-module unit coverage ------------------------------------ #
 
@@ -267,4 +279,3 @@ class TestPureHelpers:
         path = tmp_path / "log.md"
         path.write_text(_table_log("x", "feedface" * 5), encoding="utf-8")
         assert freshness_check.last_pass_sha(path) == "feedface" * 5
-
