@@ -144,3 +144,267 @@ class TestSlugFromRemote:
         self, paths: ModuleType, url: str, expected: str
     ) -> None:
         assert paths._slug_from_remote(url) == expected
+
+
+class TestHardDirReconciliation:
+    """`hard` token stays stable; on-disk dir is `hard-cheese`."""
+
+    def test_artifact_path_uses_hard_cheese_dir(self, paths: ModuleType) -> None:
+        assert paths.artifact_path("hard", "demo") == Path(".cheese/hard-cheese/demo.md")
+
+    def test_roundtrip_parse(self, paths: ModuleType) -> None:
+        path = paths.artifact_path("hard", "demo")
+        assert path == Path(".cheese/hard-cheese/demo.md")
+        assert paths.parse_artifact_path(path) == ("hard", "demo")
+
+    def test_existing_artifacts_finds_hard(
+        self, paths: ModuleType, tmp_path: Path
+    ) -> None:
+        target = tmp_path / "hard-cheese" / "demo.md"
+        target.parent.mkdir(parents=True)
+        target.write_text("x", encoding="utf-8")
+        found = paths.existing_artifacts("demo", root=tmp_path, phases=("hard",))
+        assert found == {"hard": target}
+
+
+class TestPhaseSkill:
+    @pytest.mark.parametrize(
+        ("phase", "skill"),
+        [
+            ("hard", "/hard-cheese"),
+            ("specs", "/mold"),
+            ("notes", "/wheypoint"),
+            ("research", "/briesearch"),
+            ("affinage", "/affinage"),
+            ("cook", "/cook"),
+            ("press", "/press"),
+        ],
+    )
+    def test_maps_phase_to_skill(
+        self, paths: ModuleType, phase: str, skill: str
+    ) -> None:
+        assert paths.phase_skill(phase) == skill
+
+
+class TestResolveSlug:
+    def test_tier1_exact_repo_local(
+        self, paths: ModuleType, tmp_path: Path
+    ) -> None:
+        art = tmp_path / ".cheese" / "cook" / "demo.md"
+        art.parent.mkdir(parents=True)
+        art.write_text("x", encoding="utf-8")
+        result = paths.resolve_slug("demo", repo_root=tmp_path)
+        assert result["fallback_roots"] == []
+        assert result["matches"] == [
+            {
+                "abs_path": str(art),
+                "phase": "cook",
+                "skill": "/cook",
+                "confidence": 1.0,
+            }
+        ]
+
+    def test_tier1_research_nested_xdg(
+        self, paths: ModuleType, tmp_path: Path, xdg_corpus: Path
+    ) -> None:
+        art = xdg_corpus / "research" / "foo" / "foo.md"
+        art.parent.mkdir(parents=True)
+        art.write_text("x", encoding="utf-8")
+        result = paths.resolve_slug("foo", repo_root=tmp_path)
+        assert result["matches"] == [
+            {
+                "abs_path": str(art),
+                "phase": "research",
+                "skill": "/briesearch",
+                "confidence": 1.0,
+            }
+        ]
+
+    def test_tier1_cheese_factory_manifest(
+        self, paths: ModuleType, tmp_path: Path
+    ) -> None:
+        art = tmp_path / ".cheese" / "cheese-factory" / "widget" / "manifest.yaml"
+        art.parent.mkdir(parents=True)
+        art.write_text("name: widget", encoding="utf-8")
+        result = paths.resolve_slug("widget", repo_root=tmp_path)
+        assert result["matches"] == [
+            {
+                "abs_path": str(art),
+                "phase": "cheese-factory",
+                "skill": "/cheese-factory",
+                "confidence": 1.0,
+            }
+        ]
+
+    def test_tier1_affinage_pr_key(
+        self, paths: ModuleType, tmp_path: Path
+    ) -> None:
+        art = tmp_path / ".cheese" / "affinage" / "pr-7.md"
+        art.parent.mkdir(parents=True)
+        art.write_text("x", encoding="utf-8")
+        result = paths.resolve_slug("pr-7", repo_root=tmp_path)
+        assert result["matches"] == [
+            {
+                "abs_path": str(art),
+                "phase": "affinage",
+                "skill": "/affinage",
+                "confidence": 1.0,
+            }
+        ]
+
+    def test_tier1_hard_found_under_hard_cheese(
+        self, paths: ModuleType, tmp_path: Path
+    ) -> None:
+        art = tmp_path / ".cheese" / "hard-cheese" / "demo.md"
+        art.parent.mkdir(parents=True)
+        art.write_text("x", encoding="utf-8")
+        result = paths.resolve_slug("demo", repo_root=tmp_path)
+        assert result["matches"] == [
+            {
+                "abs_path": str(art),
+                "phase": "hard",
+                "skill": "/hard-cheese",
+                "confidence": 1.0,
+            }
+        ]
+
+    def test_phase_hint_restricts_search(
+        self, paths: ModuleType, tmp_path: Path
+    ) -> None:
+        cook = tmp_path / ".cheese" / "cook" / "demo.md"
+        cook.parent.mkdir(parents=True)
+        cook.write_text("x", encoding="utf-8")
+        age = tmp_path / ".cheese" / "age" / "demo.md"
+        age.parent.mkdir(parents=True)
+        age.write_text("x", encoding="utf-8")
+        result = paths.resolve_slug("demo", phase_hint="age", repo_root=tmp_path)
+        assert [m["phase"] for m in result["matches"]] == ["age"]
+
+    def test_tier2_fuzzy(self, paths: ModuleType, tmp_path: Path) -> None:
+        art = tmp_path / ".cheese" / "cook" / "slug-resolver.md"
+        art.parent.mkdir(parents=True)
+        art.write_text("x", encoding="utf-8")
+        result = paths.resolve_slug("slug-resolvr", repo_root=tmp_path)
+        assert len(result["matches"]) == 1
+        match = result["matches"][0]
+        assert match["abs_path"] == str(art)
+        assert match["phase"] == "cook"
+        assert 0.6 <= match["confidence"] < 1.0
+        assert result["fallback_roots"] == []
+
+    def test_tier3_fallback_roots(
+        self, paths: ModuleType, tmp_path: Path
+    ) -> None:
+        result = paths.resolve_slug("nowhere", repo_root=tmp_path)
+        assert result["matches"] == []
+        cook_dir = str(tmp_path / ".cheese" / "cook")
+        affinage_dir = str(tmp_path / ".cheese" / "affinage")
+        assert cook_dir in result["fallback_roots"]
+        assert affinage_dir in result["fallback_roots"]
+        assert result["fallback_roots"] == sorted(result["fallback_roots"])
+
+    def test_rejects_bad_slug(self, paths: ModuleType) -> None:
+        with pytest.raises(ValueError, match="kebab-case"):
+            paths.resolve_slug("Bad_Slug")
+
+    def test_tier2_fuzzy_ranked_by_confidence_descending(
+        self, paths: ModuleType, tmp_path: Path
+    ) -> None:
+        # Two near-misses in one phase: the closer stem must come first.
+        cook = tmp_path / ".cheese" / "cook"
+        cook.mkdir(parents=True)
+        near = cook / "slug-resolvr.md"  # ratio 0.96
+        far = cook / "slug-resolxxx.md"  # ratio 0.769
+        near.write_text("x", encoding="utf-8")
+        far.write_text("x", encoding="utf-8")
+        matches = paths.resolve_slug("slug-resolver", repo_root=tmp_path)["matches"]
+        assert [m["abs_path"] for m in matches] == [str(near), str(far)]
+        assert matches[0]["confidence"] > matches[1]["confidence"]
+        assert matches[0]["confidence"] == 0.96
+
+    def test_tier2_below_cutoff_excluded(
+        self, paths: ModuleType, tmp_path: Path
+    ) -> None:
+        # ratio('abcde','abxyz') == 0.4 < 0.6 cutoff: not a match, fall to tier 3.
+        cook = tmp_path / ".cheese" / "cook"
+        cook.mkdir(parents=True)
+        (cook / "abxyz.md").write_text("x", encoding="utf-8")
+        result = paths.resolve_slug("abcde", repo_root=tmp_path)
+        assert result["matches"] == []
+        assert str(cook) in result["fallback_roots"]
+
+    def test_tier2_at_cutoff_is_inclusive(
+        self, paths: ModuleType, tmp_path: Path
+    ) -> None:
+        # ratio('payment','pay') == 0.6 exactly: cutoff is `>=`, so it matches.
+        cook = tmp_path / ".cheese" / "cook"
+        cook.mkdir(parents=True)
+        art = cook / "pay.md"
+        art.write_text("x", encoding="utf-8")
+        matches = paths.resolve_slug("payment", repo_root=tmp_path)["matches"]
+        assert [m["abs_path"] for m in matches] == [str(art)]
+        assert matches[0]["confidence"] == 0.6
+
+    def test_collision_same_slug_two_phases(
+        self, paths: ModuleType, tmp_path: Path
+    ) -> None:
+        # An exact slug present in two phases returns both, ordered by phase.
+        cook = tmp_path / ".cheese" / "cook" / "demo.md"
+        cook.parent.mkdir(parents=True)
+        cook.write_text("x", encoding="utf-8")
+        age = tmp_path / ".cheese" / "age" / "demo.md"
+        age.parent.mkdir(parents=True)
+        age.write_text("x", encoding="utf-8")
+        result = paths.resolve_slug("demo", repo_root=tmp_path)
+        assert [m["phase"] for m in result["matches"]] == ["age", "cook"]
+        assert {m["abs_path"] for m in result["matches"]} == {str(age), str(cook)}
+        assert all(m["confidence"] == 1.0 for m in result["matches"])
+
+    def test_phase_hint_miss_does_not_fall_through(
+        self, paths: ModuleType, tmp_path: Path
+    ) -> None:
+        # Slug lives in cook, but the hint names press: the search stays restricted
+        # to press, misses, and the fallback lists only the hinted root.
+        cook = tmp_path / ".cheese" / "cook" / "demo.md"
+        cook.parent.mkdir(parents=True)
+        cook.write_text("x", encoding="utf-8")
+        result = paths.resolve_slug("demo", phase_hint="press", repo_root=tmp_path)
+        assert result["matches"] == []
+        assert result["fallback_roots"] == [str(tmp_path / ".cheese" / "press")]
+
+    def test_unknown_phase_hint_raises(
+        self, paths: ModuleType, tmp_path: Path
+    ) -> None:
+        # Fail-fast: a typo/unknown hint raises rather than silently widening the
+        # search to every phase, matching the `existing`/`artifact_path` contracts.
+        cook = tmp_path / ".cheese" / "cook" / "demo.md"
+        cook.parent.mkdir(parents=True)
+        cook.write_text("x", encoding="utf-8")
+        with pytest.raises(ValueError, match=r"unknown phase 'bogus'"):
+            paths.resolve_slug("demo", phase_hint="bogus", repo_root=tmp_path)
+
+    def test_literal_hard_dir_is_not_resolved(
+        self, paths: ModuleType, tmp_path: Path
+    ) -> None:
+        # The `hard` token resolves to hard-cheese/ only; a literal .cheese/hard/
+        # artifact must NOT be found.
+        stray = tmp_path / ".cheese" / "hard" / "demo.md"
+        stray.parent.mkdir(parents=True)
+        stray.write_text("x", encoding="utf-8")
+        result = paths.resolve_slug("demo", repo_root=tmp_path)
+        assert result["matches"] == []
+        assert str(stray.parent) not in result["fallback_roots"]
+
+    def test_all_emitted_paths_are_absolute(
+        self, paths: ModuleType, tmp_path: Path, xdg_corpus: Path
+    ) -> None:
+        # Invariant across all three tiers: every path the resolver emits is absolute.
+        exact = tmp_path / ".cheese" / "cook" / "demo.md"
+        exact.parent.mkdir(parents=True)
+        exact.write_text("x", encoding="utf-8")
+        for slug in ("demo", "slug-resolvr", "nowhere"):
+            result = paths.resolve_slug(slug, repo_root=tmp_path)
+            for match in result["matches"]:
+                assert Path(match["abs_path"]).is_absolute(), (slug, match)
+            for root in result["fallback_roots"]:
+                assert Path(root).is_absolute(), (slug, root)
