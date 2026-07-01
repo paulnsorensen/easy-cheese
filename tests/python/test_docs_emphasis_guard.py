@@ -112,3 +112,33 @@ def test_detector_ignores_legit_bold_after_token():
 
 def test_detector_ignores_backticked_tokens():
     assert not _hazards("use `cheez-*` and `cheez-*` freely\n")
+
+
+def test_cheez_skills_accept_equivalent_native_backends():
+    docs = [
+        REPO_ROOT / "README.md",
+        REPO_ROOT / "skills/cheez-read/SKILL.md",
+        REPO_ROOT / "skills/cheez-search/SKILL.md",
+        REPO_ROOT / "skills/cheez-write/SKILL.md",
+    ]
+    combined = "\n".join(path.read_text(encoding="utf-8") for path in docs)
+
+    assert "equivalent native" in combined
+    assert "AST/LSP" in combined
+    assert "anchored" in combined
+    assert "Requires tilth MCP server" not in combined
+    assert (
+        "allowed-tools: mcp__tilth__tilth_search, mcp__tilth__tilth_deps, "
+        "Bash, AST Grep, LSP"
+    ) in combined
+    assert (
+        "allowed-tools: mcp__tilth__tilth_write, mcp__tilth__tilth_read, "
+        "Bash, Edit, AST Grep, LSP"
+    ) in combined
+
+
+def test_briesearch_codex_subagents_are_valid_fork_targets():
+    text = (REPO_ROOT / "skills/briesearch/SKILL.md").read_text(encoding="utf-8")
+
+    assert "Codex: built-in or custom subagents" in text
+    assert "e.g. Codex" not in text

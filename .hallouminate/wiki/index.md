@@ -16,6 +16,7 @@ git-tracking axis (`shared/formatting.md:103`).
 - [adr/](./adr/index.md) — adr
 - [architecture](./architecture.md) — Architecture of easy-cheese
 - [cheese-factory-entities](./cheese-factory-entities.md) — Cheese-factory pipeline entities
+- [harness-native-overlap](./harness-native-overlap.md) — Harness-native overlap
 - [skill-parity-analysis](./skill-parity-analysis.md) — Skill-parity analysis
 - [spec-workflow-comparison](./spec-workflow-comparison.md) — /mold vs Matt Pocock grill-with-docs vs Superpowers brainstorming vs spec.md, plus Spec Kit/Kiro/BMAD/Taskmaster/Agent OS/OpenSpec/Tessl.
 - [tooling](./tooling.md) — Tooling
