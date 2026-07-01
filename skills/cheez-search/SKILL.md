@@ -1,24 +1,25 @@
 ---
 name: cheez-search
-description: Search code via AST-aware tilth MCP -- finds symbols, definitions, callers, imports, and text, replacing shell search tools. Use when the user asks to find a symbol, definition, caller, import, or text pattern -- phrases like "where is X defined", "what calls Y", "find all usages of Z", "trace this function", "find the TODO comments", "search for this error string". Use ast-grep (`sg`) only for AST-shape patterns with metavariables tilth cannot express. Use even when the user says "grep", "rg", "ripgrep", "ag", "ack", "fd", or "find" -- never call host Grep, Glob, ripgrep, ast-grep, or any shell search directly. If tilth MCP is unavailable, stop and report rather than fall back. Do NOT use for reading whole files (use cheez-read), editing code (use cheez-write), or running tests/builds.
+description: Search code via an AST-aware backend -- tilth MCP by default, or harness-native `ast_grep`/`sg` plus LSP when available -- finding symbols, definitions, callers, imports, and text while replacing shell search tools. Use when the user asks to find a symbol, definition, caller, import, or text pattern -- phrases like "where is X defined", "what calls Y", "find all usages of Z", "trace this function", "find the TODO comments", "search for this error string". Use even when the user says "grep", "rg", "ripgrep", "ag", "ack", "fd", or "find". If no AST-aware backend is available, stop and report rather than falling back to plain text search. Do NOT use for reading whole files (use cheez-read), editing code (use cheez-write), or running tests/builds.
 license: MIT
-compatibility: Requires tilth MCP server. Optional ast-grep (`sg`) for structural metavariable patterns tilth cannot express.
-allowed-tools: mcp__tilth__tilth_search, mcp__tilth__tilth_deps, Bash
+compatibility: Prefers tilth MCP. Harness-native `ast_grep`/`sg` and LSP are acceptable when they satisfy the same symbol/caller/structural-search contract.
+allowed-tools: mcp__tilth__tilth_search, mcp__tilth__tilth_deps, Bash, AST Grep, LSP
 ---
 
 # cheez-search
 
-> **Hard dependency**: tilth MCP is required. Install via `tilth install <host>` (see README "Installing tilth MCP").
+> **Backend contract**: use an AST-aware code-search backend. Prefer tilth MCP because it returns symbols, callers, text matches, and dependency context in one repo-scoped surface. Native `ast_grep`/`sg` and LSP tools are acceptable when they answer the same semantic question more directly.
 
-## Capability detection
+## Backend detection
 
-Before the first call, verify tilth is reachable:
+Before the first call, choose the strongest available backend:
 
-1. Check that `mcp__tilth__tilth_search` is in your tool list. If absent, stop and report `"tilth MCP server is not loaded — cannot proceed."`
-2. Make a minimal probe call: `tilth_search(queries: [{query: "tilth"}])`. If the response is a JSON-RPC error or transport failure, stop and report `"tilth MCP server present but unhealthy: <error>"`.
-3. Any other failure (zero matches, bad regex) is a content issue - proceed.
+1. If `mcp__tilth__tilth_search` is in the tool list, make a minimal probe call: `tilth_search(queries: [{query: "tilth"}])`. If the response is a JSON-RPC error or transport failure, stop and report `"tilth MCP server present but unhealthy: <error>"` unless a native AST/LSP backend is available.
+2. For structural patterns with metavariables, use native `sg`/ast-grep directly when available; tilth content/regex search is the wrong abstraction for that shape.
+3. For type-grounded definitions, references, renames, and server-known refactors, use LSP when available; it follows shadowing, overloads, and re-exports better than text search.
+4. If no AST-aware or LSP backend exists, stop and report `"no AST-aware code search backend is available — cannot proceed."`
 
-**Note:** pass `root` (your absolute checkout directory) whenever `scope` is relative — the server's cwd is frozen at startup and cannot resolve relative paths without an explicit `root`.
+**Note:** pass `root` (your absolute checkout directory) whenever tilth `scope` is relative — the server's cwd is frozen at startup and cannot resolve relative paths without an explicit `root`.
 
 ---
 
@@ -70,17 +71,19 @@ keep the cost down.
 
 ---
 
-## Scope: when tilth, when not
+## Scope: when to use the code-search backend, when not
 
-`tilth_search` owns **code in tracked, parseable source files** (Rust, TypeScript/TSX/JS, Python, Go, Java, Scala, C/C++, Ruby, PHP, C#, Swift). Symbol-shaped queries, callers, content, and bounded regex inside the tree all stay here.
+`cheez-search` owns **code in tracked, parseable source files** (Rust, TypeScript/TSX/JS, Python, Go, Java, Scala, C/C++, Ruby, PHP, C#, Swift). Symbol-shaped queries, callers, content, bounded regex, AST-shape patterns, and type-grounded lookups stay in an AST/LSP backend.
 
 ### Scope and freshness
 
-The tilth MCP server is launched against **one repository** — whatever directory the harness booted it in. There is no persistent index: tilth walks the working tree on demand, parses files with Tree-sitter, and respects `.gitignore`. Practical consequences:
+Use the backend scoped to the active repository and fresh on disk. Tilth walks the working tree on demand and respects `.gitignore`; native `sg` and LSP qualify when they see the current checkout and answer the requested semantic shape.
 
-- No startup wait, no rebuild step, no staleness — your last save is what tilth sees on the next call.
-- Cannot reach files outside that one tree (sibling worktrees, `~/...`, system paths, dependency caches like `node_modules` or `.cargo/registry`).
-- Cannot answer cross-repo questions in one call; route those before entering cheez-search.
+Practical consequences:
+
+- No stale indexes: if a backend needs a refresh before it sees current files, refresh or choose a fresher backend.
+- Do not use repo-scoped backends for sibling worktrees, system paths, or dependency caches unless the backend explicitly supports that scope.
+- Route cross-repo questions before entering cheez-search.
 
 ### When NOT to invoke `/cheez-search`
 
@@ -131,7 +134,7 @@ For shapes with metavars (`$X`, `$$$BODY`) drop to `sg` via Bash -- the only san
 
 ## DO NOT and Scope Limits
 
-- **DO NOT use grep / rg / ripgrep / ag / ack / find / fd for code** -- use `tilth_search`; to find files by name, use `/cheez-read` (its `tilth_list`). `find` for non-name predicates (size, mtime, perms) is fine outside code work. `sg` is the only sanctioned shell escape, and only for AST-shape metavar patterns.
+- **DO NOT use grep / rg / ripgrep / ag / ack / find / fd for code** -- use an AST-aware backend. `sg` is allowed for AST-shape metavar patterns and codemods; LSP is preferred for type-grounded definitions, references, renames, and code actions. `find` for non-name predicates (size, mtime, perms) is fine outside code work.
 - **DO NOT blind text search** -- pick a semantic `kind` (`symbol`, `callers`, `content`, `regex`) first.
 - **DO NOT re-read expanded results** -- they're already shown.
 - **DO NOT overuse expand** -- start with default, increase if needed.
