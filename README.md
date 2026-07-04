@@ -76,52 +76,50 @@ Content shared _across_ skills lives at top-level `shared/` (e.g. `shared/handof
 
 ### Tool skills
 
-The workflow skills can delegate code search, reading, and editing to these MCP-backed skills when tilth is available:
+The workflow skills can delegate code search, reading, and editing to these backend-aware skills when tilth or an equivalent native source-code backend is available:
 
 | Skill path | Command | Purpose |
 | --- | --- | --- |
-| `skills/cheez-search/SKILL.md` | `/cheez-search` | AST-aware code/text/regex/caller search via tilth MCP. Replaces grep / rg / find. |
-| `skills/cheez-read/SKILL.md` | `/cheez-read` | Smart file/directory reading with hash anchors via tilth MCP. Replaces cat / head / tail / ls. |
-| `skills/cheez-write/SKILL.md` | `/cheez-write` | Hash-anchored, surgical edits via tilth MCP. Never rewrites whole files. |
+| `skills/cheez-search/SKILL.md` | `/cheez-search` | AST-aware code/text/regex/caller search via tilth MCP, harness-native AST search, or LSP. Replaces grep / rg / find. |
+| `skills/cheez-read/SKILL.md` | `/cheez-read` | Smart file/directory reading through a freshness-aware backend; tilth MCP is preferred because it emits hash anchors. Replaces cat / head / tail / ls. |
+| `skills/cheez-write/SKILL.md` | `/cheez-write` | Anchored, surgical edits through tilth MCP or an equivalent harness-native stale-snapshot edit tool. Never rewrites whole files blindly. |
 
-The `cheez-*` skills require tilth MCP and hard-fail when it is unavailable rather than fall back to host tools. Workflow skills remain portable by falling back directly to host-native tools when they are not using `cheez-*`.
+The `cheez-*` skills require an AST-aware source-code backend. Prefer tilth MCP; if the harness already exposes equivalent native tools (for example `ast_grep`/`sg`, LSP definitions/references/renames/code actions, and anchored edits), those tools satisfy the contract. If neither tilth nor equivalent native tooling is available, stop rather than fall back to plain text shell tools.
 
 #### cheez-* router protocol
 
 The three `cheez-*` skills are designed to chain. The standard sequence:
 
-1. **`/cheez-search`** — locate the symbol, caller, content match, or file. AST-aware; replaces grep/rg/find.
-2. **`/cheez-read`** — read the target file or section to capture hash anchors. Smart-outlines large files; replaces cat/head/tail/ls.
-3. **`/cheez-write`** — apply hash-anchored edits with the anchors from step 2. Surgical; rejects on hash mismatch.
+1. **`/cheez-search`** — locate the symbol, caller, content match, or file with tilth, AST search, or LSP.
+2. **`/cheez-read`** — read the target file or section with enough line/hash/snapshot context for a safe edit.
+3. **`/cheez-write`** — apply the change through tilth edit, LSP workspace edit, AST rewrite, or another stale-checking edit backend.
 
 Workflow skills (`/cook`, `/age`, `/cure`) call into this chain when they need code intelligence. A skill should never search-then-edit without reading in between — the read is what produces the anchors that make the edit safe.
 
 ##### Tool redirection map
 
-If you'd reach for one of these on a code task, route through `cheez-*` instead:
+If you'd reach for one of these on a code task, route through `cheez-*` or the harness-native equivalent that satisfies the same AST/LSP/anchored-edit contract:
 
 | If you'd run... | Use this skill | Why |
 | --- | --- | --- |
-| `grep`, `rg`, `ripgrep`, `ag`, `ack` | `/cheez-search` | AST-aware; ranks definitions over usages, filters comments/strings. |
-| `find`, `fd` (by name pattern, code work) | `/cheez-read` (`tilth_files`) | Token estimates and `.gitignore` filtering for free. |
-| `ast-grep` / `sg` (for name-shaped queries) | `/cheez-search` | `sg` is reserved for structural metavariable patterns tilth can't express. |
-| LSP "find references" / "find definition" (manual) | `/cheez-search` | Same answer, no IDE round-trip; falls through to LSP under the hood when needed. |
-| `cat`, `head`, `tail`, `less`, `more`, `bat` | `/cheez-read` | Hash anchors + outline-vs-full token budgeting. |
-| `ls`, `tree`, `eza` (code dirs) | `/cheez-read` (`tilth_files`) | Token estimates; respects `.gitignore`. |
-| `Read`, `Glob` (host tools, code paths) | `/cheez-read` | Bypasses session deduplication and emits no anchors. |
+| `grep`, `rg`, `ripgrep`, `ag`, `ack` | `/cheez-search` | AST-aware; ranks definitions over usages, filters comments/strings where the backend supports it. |
+| `find`, `fd` (by name pattern, code work) | `/cheez-read` | Token estimates and `.gitignore` filtering when the backend supports them. |
+| `ast-grep` / `sg` | `/cheez-search` | Use native `sg` directly only for structural metavariable patterns or codemods the search backend cannot express. |
+| LSP "find references" / "find definition" / rename / code action | `/cheez-search` or `/cheez-write` | LSP is the right backend for semantic definitions, references, renames, and server-known fixes. |
+| `cat`, `head`, `tail`, `less`, `more`, `bat` | `/cheez-read` | Prefer reads that carry anchors or enough structural context for the next edit. |
+| `ls`, `tree`, `eza` (code dirs) | `/cheez-read` | Token estimates; respects `.gitignore` where supported. |
+| `Read`, `Glob` (host tools, code paths) | `/cheez-read` | Use only when the host read/list tool is the native freshness-aware backend for the harness. |
 | `sed`, `awk`, `perl -i` | `/cheez-write` | No hash-mismatch safety; silent races on concurrent writes. |
 | `patch` (apply diff to code) | `/cheez-write` | Anchored range edits are the safe equivalent. |
 | `tee`, `>`, `>>` (overwrite/append code files) | `/cheez-write` | Same — no anchors, no mismatch detection. |
-| `Edit`, `Write` (host tools, code) | `/cheez-write` | `tilth_edit` is the only edit path with hash-anchor safety. |
-| `sg --rewrite` (codemod across N files) | `/cheez-write` | Sanctioned escape from cheez-write for structural codemods; `tilth_edit` stays the default for single-block edits. |
+| `Edit`, `Write` (host tools, code) | `/cheez-write` | Acceptable only when the harness edit tool is anchored and rejects stale snapshots. |
+| `sg --rewrite` (codemod across N files) | `/cheez-write` | Sanctioned escape from cheez-write for structural codemods; anchored edits stay the default for single-block edits. |
 
-Outside code work (e.g. `find -mtime`, `ls /tmp`, log inspection with `tail -f`, JSON munging with `jq`) the host tools are still the right call. The redirection rule is: **anything that touches source code goes through `cheez-*`**.
+Outside code work (e.g. `find -mtime`, `ls /tmp`, log inspection with `tail -f`, JSON munging with `jq`) the host tools are still the right call. The redirection rule is: **anything that touches source code needs an AST-aware search/read path and an anchored edit path.**
 
 #### Installing tilth MCP
 
-See [Installing MCP servers](#installing-mcp-servers) below — expand the tilth section for full instructions.
-
-If those tools don't show up after install, the `cheez-*` skills will hard-fail with "tilth MCP server is not loaded" instead of silently falling back to host tools.
+See [Installing MCP servers](#installing-mcp-servers) below — expand the tilth section for the preferred `cheez-*` backend. If tilth is unavailable, an equivalent native AST/LSP/anchored-edit backend satisfies the contract; if neither backend exists, the `cheez-*` skills stop instead of silently falling back to plain shell tools.
 
 ### Suggested flow
 
@@ -158,7 +156,7 @@ before review.
 Easy-cheese is intentionally a small surface. What that means in practice:
 
 - **Skills only.** No agents, commands, eta templates, or compiled harness bundles. Each capability is a single `SKILL.md`.
-- **No repo-wide MCP requirement.** Workflow skills suggest tools (tilth, Context7, Tavily) but have host-native fallbacks. The `cheez-*` tool skills are the exception: they require tilth MCP by design.
+- **No repo-wide MCP requirement.** Workflow skills suggest tools (tilth, Context7, Tavily) but have host-native fallbacks. The `cheez-*` tool skills require an AST-aware search/read path and stale-checking edit path; tilth MCP is the preferred implementation, not the only valid one.
 - **One orchestrator skill, narrowly scoped.** `/ultracook` is the only orchestrator — it spawns full-peer sub-agents for the fixed `cook → press → age → cure → age → cure → age` chain on high-blast-radius specs. There is no large-feature decomposition, no PR-rescue convoy, no whole-repo NIH audit. Every other skill remains a single, scoped step a human can drive.
 - **No automatic re-age loop in `/cure`.** The skill describes the protocol; the human runs the next `/age` when ready.
 
@@ -168,8 +166,8 @@ Workflow skills name preferred tools when they help, with fallbacks for portabil
 
 | Tool | Helps with | Fallback |
 | --- | --- | --- |
-| tilth (MCP) | AST-aware read/search/edit and dependency context | Required for cheez-\*; workflow skills can bypass cheez-\* and use host read/edit, `ripgrep`, patches |
-| `sg` (ast-grep) | Structural pattern matching and codemods (`sg --rewrite`) with metavariables | `ripgrep`, `find`, targeted reads; `tilth_edit` for non-structural edits |
+| tilth (MCP) | AST-aware read/search/edit and dependency context | Preferred for cheez-\*; native AST/LSP/anchored-edit tools may satisfy the same contract |
+| `sg` (ast-grep) | Structural pattern matching and codemods (`sg --rewrite`) with metavariables | LSP or tilth for symbol/caller questions; anchored edits for non-structural block changes |
 | Context7 (MCP) | Library and API documentation | repo docs, package docs, vendor pages, web search |
 | Tavily (MCP) | Current web/vendor research | host web search or user-supplied sources |
 | LSP / [Serena](https://github.com/oraios/serena) (MCP) | Type-aware xrefs (`find_referencing_symbols`, `find_implementations`), symbol-bounded edits (`rename_symbol`, `replace_symbol_body`, `safe_delete_symbol`), and LSP diagnostics — concrete tools for the abstract "if your harness has an LSP" sections in `cheez-*` skills | `sg`, `tilth_search`, targeted reads via tilth |
@@ -183,7 +181,7 @@ Workflow skills name preferred tools when they help, with fallbacks for portabil
 | `fd` | Fast file discovery | `find` |
 | `just` | Project task discovery | package scripts or documented commands |
 
-When a preferred tool is unavailable, workflow skills say so once, fall back, and lower confidence only if evidence quality suffers. The `cheez-*` skills stop instead because tilth is their compatibility requirement.
+When a preferred tool is unavailable, workflow skills say so once, fall back, and lower confidence only if evidence quality suffers. The `cheez-*` skills stop only when neither tilth nor an equivalent native backend can satisfy the semantic-search/read/anchored-edit contract.
 
 ## Install
 

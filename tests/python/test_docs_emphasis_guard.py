@@ -112,3 +112,24 @@ def test_detector_ignores_legit_bold_after_token():
 
 def test_detector_ignores_backticked_tokens():
     assert not _hazards("use `cheez-*` and `cheez-*` freely\n")
+
+
+def test_cheez_skills_accept_equivalent_native_backends_without_blind_shell_fallbacks():
+    docs = [
+        REPO_ROOT / "README.md",
+        REPO_ROOT / "AGENTS.md",
+        REPO_ROOT / ".hallouminate/wiki/tooling.md",
+        REPO_ROOT / "skills/cheez-read/SKILL.md",
+        REPO_ROOT / "skills/cheez-search/SKILL.md",
+        REPO_ROOT / "skills/cheez-write/SKILL.md",
+    ]
+    combined = "\n".join(path.read_text(encoding="utf-8") for path in docs)
+
+    assert "tilth MCP is the preferred implementation, not the only valid one" in combined
+    assert "semantic source-code backend, not tilth specifically" in combined
+    assert "Plain shell fallbacks still fail the contract" in combined
+    assert "mcp__tilth__tilth_files" in combined
+    assert "mcp__tilth__tilth_edit" in combined
+    assert "AST Grep, LSP" in combined
+    assert "Requires tilth MCP server" not in combined
+    assert "require tilth MCP by design" not in combined

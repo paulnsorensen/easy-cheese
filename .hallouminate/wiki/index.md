@@ -16,6 +16,7 @@ git-tracking axis (`shared/formatting.md:103`).
 - [adr/](./adr/index.md) — adr
 - [architecture](./architecture.md) — Architecture of easy-cheese
 - [cheese-factory-entities](./cheese-factory-entities.md) — Cheese-factory pipeline entities
+- [harness-native-overlap](./harness-native-overlap.md) — Harness-native overlap
 - [skill-parity-analysis](./skill-parity-analysis.md) — Skill-parity analysis
 - [tooling](./tooling.md) — Tooling
 - [wiki-conventions](./wiki-conventions.md) — Wiki conventions for easy-cheese
