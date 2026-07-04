@@ -1,6 +1,6 @@
 # `tilth_edit` JSON cookbook
 
-Every call is `tilth_edit({ "path": "...", "edits": [ ... ] })`; each edit needs a `start` anchor, `end` is required only for range replacements, and `content` is the new text (use `""` to delete). For cross-file batches, repeat this shape through the backend's batch form when available.
+Every edit needs a `start` anchor; `end` is required only for range replacements, and `content` is the new text (use `""` to delete). Read the active tilth docs or tool schema for exact call wrapping before copying these shapes.
 
 ## Single-line replacement
 
@@ -46,7 +46,7 @@ Replaces lines 44–89 inclusive. Both anchors must match.
 
 Empty `content` deletes the range.
 
-## Multiple edits in one call
+## Multiple edits in one file
 
 ```json
 {
@@ -58,9 +58,8 @@ Empty `content` deletes the range.
 }
 ```
 
-All edits in a single call apply atomically — either every anchor matches and
-all edits land, or none do. Order edits **bottom-up by line number** so that
-earlier edits don't invalidate later anchors.
+Keep related edits together when the backend supports it. If any anchor fails,
+re-read the file and recover before moving on.
 
 ## Show diff in response
 
@@ -94,16 +93,8 @@ this — the original content goes back verbatim.
 
 ## Edits across multiple files
 
-Batch related edits when the backend supports it, using one entry per file (max 20 for tilth-style batches):
-
-```text
-tilth_edit(files: [
-  { path: "src/auth.ts",   edits: [...] },
-  { path: "src/routes.ts", edits: [...] },
-], diff: true)
-```
-
-Scan per-file results. A backend may process files independently, so on a partial failure read the unchanged file and recover before moving on.
+Use the backend's batch form when it has one; otherwise edit one file at a time
+and verify each response before moving to the next file.
 
 ## Caller-update notices
 

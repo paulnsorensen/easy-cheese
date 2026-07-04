@@ -96,26 +96,16 @@ The three `cheez-*` skills are designed to chain. The standard sequence:
 
 Workflow skills (`/cook`, `/age`, `/cure`) call into this chain when they need code intelligence. A skill should never search-then-edit without reading in between — the read is what produces the anchors that make the edit safe.
 
-##### Tool redirection map
+##### Source-code tool routing
 
-If you'd reach for one of these on a code task, route through `cheez-*` or the harness-native equivalent that satisfies the same AST/LSP/anchored-edit contract:
+For source code, route by capability instead of command name:
 
-| If you'd run... | Use this skill | Why |
-| --- | --- | --- |
-| `grep`, `rg`, `ripgrep`, `ag`, `ack` | `/cheez-search` | AST-aware; ranks definitions over usages, filters comments/strings where the backend supports it. |
-| `find`, `fd` (by name pattern, code work) | `/cheez-read` | Token estimates and `.gitignore` filtering when the backend supports them. |
-| `ast-grep` / `sg` | `/cheez-search` | Use native `sg` directly only for structural metavariable patterns or codemods the search backend cannot express. |
-| LSP "find references" / "find definition" / rename / code action | `/cheez-search` or `/cheez-write` | LSP is the right backend for semantic definitions, references, renames, and server-known fixes. |
-| `cat`, `head`, `tail`, `less`, `more`, `bat` | `/cheez-read` | Prefer reads that carry anchors or enough structural context for the next edit. |
-| `ls`, `tree`, `eza` (code dirs) | `/cheez-read` | Token estimates; respects `.gitignore` where supported. |
-| `Read`, `Glob` (host tools, code paths) | `/cheez-read` | Use only when the host read/list tool is the native freshness-aware backend for the harness. |
-| `sed`, `awk`, `perl -i` | `/cheez-write` | No hash-mismatch safety; silent races on concurrent writes. |
-| `patch` (apply diff to code) | `/cheez-write` | Anchored range edits are the safe equivalent. |
-| `tee`, `>`, `>>` (overwrite/append code files) | `/cheez-write` | Same — no anchors, no mismatch detection. |
-| `Edit`, `Write` (host tools, code) | `/cheez-write` | Acceptable only when the harness edit tool is anchored and rejects stale snapshots. |
-| `sg --rewrite` (codemod across N files) | `/cheez-write` | Sanctioned escape from cheez-write for structural codemods; anchored edits stay the default for single-block edits. |
+- LSP wins for type-grounded definitions, references, renames, and code actions.
+- AST search / `sg` wins for syntax-shaped patterns and codemods.
+- tilth wins for broad source search/read/edit context, anchors, outlines, token estimates, and dependency context.
+- Anchored or stale-checking edits win for ordinary block/range changes.
 
-Outside code work (e.g. `find -mtime`, `ls /tmp`, log inspection with `tail -f`, JSON munging with `jq`) the host tools are still the right call. The redirection rule is: **anything that touches source code needs an AST-aware search/read path and an anchored edit path.**
+Plain shell search/view/edit is fallback evidence only; use it for non-code paths, logs, generated output, or when no semantic backend exists, and name the downgrade.
 
 #### Installing tilth MCP
 

@@ -120,21 +120,18 @@ def test_cheez_skills_accept_equivalent_native_backends_without_blind_shell_fall
         REPO_ROOT / "AGENTS.md",
         REPO_ROOT / ".github/copilot-instructions.md",
         REPO_ROOT / ".hallouminate/wiki/tooling.md",
-        REPO_ROOT / ".hallouminate/wiki/harness-native-overlap.md",
         REPO_ROOT / "skills/cheez-read/SKILL.md",
         REPO_ROOT / "skills/cheez-search/SKILL.md",
         REPO_ROOT / "skills/cheez-write/SKILL.md",
     ]
     combined = "\n".join(path.read_text(encoding="utf-8") for path in docs)
 
-    assert "cheez-* skills use the safest semantic backend available for source code" in combined
-    assert "`cheez-*` names backend shape, not a tilth-only runtime" in combined
-    assert "native AST search, LSP type-grounded navigation, bounded reads, anchored/stale-checking edits, and batch reads/writes when possible" in combined
-    assert "Batch adjacent reads/listings when possible" in combined
-    assert "Batch related lookups when one call can answer" in combined
-    assert "Prefer `tilth_edit` for anchored, stale-checking edits; Batch related edits when possible." in combined
-    assert "LSP wins for type-grounded definitions/references/renames/code actions" in combined
-    assert "AST search / `sg` wins for syntax shapes" in combined
+    assert "source-code backend contract" in combined
+    assert "prefer tilth when present" in combined
+    assert "LSP wins" in combined and "definitions" in combined and "code actions" in combined
+    assert "AST search / `sg` wins" in combined and "codemods" in combined
+    assert "tilth wins" in combined and "anchors" in combined
+    assert "Plain shell search/view/edit is fallback evidence only" in combined
     assert "mcp__tilth__tilth_files" in combined
     assert "mcp__tilth__tilth_edit" in combined
     assert "hard-fail without it" not in combined

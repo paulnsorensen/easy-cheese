@@ -1,6 +1,6 @@
 ---
 name: cheez-read
-description: Read and list code through the best fresh backend — tilth MCP when present, otherwise harness-native bounded read/list plus LSP for symbol-shaped reads. Replaces cat / head / tail / less / more / bat / ls / tree / eza / find / fd / Read / Glob. Use when the user asks to read, view, show, open, or display a source file or code directory. Prefer tilth calls (`tilth_read`, `tilth_files`, `tilth_deps`) because they provide outlines, token estimates, and edit anchors; otherwise use native read/glob/LSP tools that provide equivalent freshness and line/snapshot context. Batch adjacent reads/listings when possible. Plain shell viewers are weaker fallback evidence, not equivalent source-code reads. Do NOT use for searching symbols or text (use cheez-search), editing code (use cheez-write), or git operations.
+description: Read and list code through the best fresh backend. Prefer tilth for file/range reads, repo listings, outlines, token estimates, and edit anchors; use native bounded read/list tools or LSP when they provide equivalent freshness and context. Replaces shell viewers and directory listers for source code.
 license: MIT
 compatibility: Prefers tilth MCP. Harness-native read/list/LSP tools are acceptable when they provide fresh bounded content plus enough line or snapshot context for follow-up edits.
 allowed-tools: mcp__tilth__tilth_read, mcp__tilth__tilth_files, mcp__tilth__tilth_deps, Read, Glob, LSP

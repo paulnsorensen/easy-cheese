@@ -16,8 +16,7 @@ model *why* not just *what*, and whether bundled resources earn their keep.
   them, and reviewing the result. Workflow skills (`mold`, `culture`, `cook`,
   `press`, `age`, `cure`, `melt`, `cheese`, `briesearch`) plus tool skills
   (`cheez-search`, `cheez-read`, `cheez-write`).
-- **Isn't**: an agent framework, an orchestrator, or a mandatory-MCP runtime. The cheez-* skills use the safest semantic backend available for source code: prefer tilth when present; equivalent native LSP/AST/anchored/stale-checking backends also satisfy the contract.
-  Use LSP for type-grounded definitions/references/renames/code actions, `sg` for structural rewrites, batch reads/writes when possible, and treat blind shell search/view/edit as weaker fallback evidence instead of an equivalent source-code backend.
+- **Isn't**: an agent framework, an orchestrator, or a mandatory-MCP runtime. For `cheez-*`, prefer tilth when present; native LSP/AST/anchored-edit backends also satisfy the source-code backend contract.
 Keep this scope in mind — flag scope creep (intent classification baked into
 a workflow skill, multi-CLI fan-out inside a tool skill, implicit cross-skill
 invocation) at review time. Cross-skill handoffs belong in the README's

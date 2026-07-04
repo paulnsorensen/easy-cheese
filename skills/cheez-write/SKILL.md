@@ -1,6 +1,6 @@
 ---
 name: cheez-write
-description: Edit code through the safest available stale-checking backend. Prefer tilth MCP (`tilth_read` + `tilth_edit`) for anchored block edits; use LSP rename/code actions for type-grounded refactors; use harness-native anchored Edit for displayed line/snapshot ranges; use AST rewrite only for structural codemods. Replaces sed / awk / perl -i / patch / tee / shell redirects. Read first via cheez-read when the edit path needs anchors or displayed ranges. Prefer `tilth_edit` for anchored, stale-checking edits; Batch related edits when possible. If no stale-safe edit backend is available, use the narrowest native edit path and state the stale-write risk instead of doing blind text rewrites. Do NOT use for reading, searching, tests, builds, or git.
+description: Edit code through the safest stale-checking backend. Prefer tilth for anchored block/range edits, LSP for semantic workspace edits, native anchored edits for displayed snapshots, and AST rewrite/sg for structural codemods. Replaces blind shell rewrites for source code.
 license: MIT
 compatibility: Prefers tilth MCP with edit mode. Harness-native anchored edits, LSP workspace edits, and AST rewrites are acceptable when they match the requested edit shape and reject or bound stale writes.
 allowed-tools: mcp__tilth__tilth_edit, mcp__tilth__tilth_read, Bash, Edit, AST Grep, LSP
