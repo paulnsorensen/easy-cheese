@@ -95,7 +95,7 @@ Beyond `cheez-*` there are review-specific tools:
 
 ## Sub-agent context gate
 
-`/age` should fork a read-only review-context sub-agent when evidence gathering is likely to exceed the parent context, especially for `--comprehensive` reviews.
+`/age` should fork a read-only review-context sub-agent — the `explorer` phase-agent, which gathers diff / caller / dependency evidence and returns a digest without grading — when evidence gathering is likely to exceed the parent context, especially for `--comprehensive` reviews. If the named `explorer` agent isn't available (e.g. a harness that installs only easy-cheese), fall back to the read-only built-in `Explore` agent or an inline read — never `general-purpose`, which grants full write access.
 
 **Scale threshold** — spawn when any of these are true:
 
@@ -114,7 +114,7 @@ Activates when **all** hold: the **scale threshold** (above) is met AND `/age` i
 
 **Seam 2 — Shared context packet.** The orchestrator assembles the packet once, writes it to `.cheese/age/<slug>-packet.md`, and each worker reads it. Eight components, and the reuse of the review-context digester as the orientation block, are documented in `references/packet.md`.
 
-**Seam 3 — Worker contract.** One worker per dimension. Each worker:
+**Seam 3 — Worker contract.** One worker per dimension — dispatch the `reviewer` phase-agent scoped to a single dimension (if the named `reviewer` isn't available, e.g. a harness that installs only easy-cheese, fall back to the read-only built-in `Explore` agent or the single-parent path — never `general-purpose`, which grants full write access). Each worker:
 - Reviews only its assigned dimension.
 - Computes **full per-finding severity** for that dimension (base + location bump + compounding bump).
 - Tags each finding with its dimension and an `also-relevant-to: [<dim>, ...]` field when cross-dimension overlap is suspected.
