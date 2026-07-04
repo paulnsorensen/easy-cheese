@@ -209,6 +209,65 @@ class TestAtomicity:
         assert list(tmp_path.glob("*.tmp")) == []
 
 
+class TestCheckFiles:
+    def test_all_present_reports_clean(self, tmp_path: Path) -> None:
+        manifest = _manifest()
+        for curd in manifest["curds"]:
+            for f in curd["files"]:
+                target = tmp_path / f
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text("", encoding="utf-8")
+        path = tmp_path / "manifest.yaml"
+        path.write_text(yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8")
+        result = _run_cli("check-files", "--manifest", str(path), "--root", str(tmp_path))
+        assert result.returncode == 0, result.stderr
+        assert "all curd files present" in result.stdout
+
+    def test_missing_files_reported_per_curd_without_failing(self, tmp_path: Path) -> None:
+        path = _write_fixture(tmp_path)
+        # Fixture files are never created on disk, so every curd is "missing".
+        result = _run_cli("check-files", "--manifest", str(path), "--root", str(tmp_path))
+        assert result.returncode == 0, result.stderr
+        assert "curd 1" in result.stdout
+        assert "src/feature_0.ts" in result.stdout
+
+    def test_json_mode_reports_missing_per_curd_id(self, tmp_path: Path) -> None:
+        manifest = _manifest()
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "feature_0.ts").write_text("", encoding="utf-8")
+        path = tmp_path / "manifest.yaml"
+        path.write_text(yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8")
+        result = _run_cli("check-files", "--manifest", str(path), "--root", str(tmp_path), "--json")
+        assert result.returncode == 0, result.stderr
+        report = __import__("json").loads(result.stdout)
+        assert "1" not in report
+        assert report["2"] == ["src/feature_1.ts"]
+
+    def test_missing_manifest_exits_2(self, tmp_path: Path) -> None:
+        path = tmp_path / "does-not-exist.yaml"
+        result = _run_cli("check-files", "--manifest", str(path))
+        assert result.returncode == 2
+        assert "manifest not found" in result.stderr
+
+    def test_invalid_root_exits_2(self, tmp_path: Path) -> None:
+        path = _write_fixture(tmp_path)
+        missing_root = tmp_path / "no-such-dir"
+        result = _run_cli("check-files", "--manifest", str(path), "--root", str(missing_root))
+        assert result.returncode == 2
+        assert "root is not a directory" in result.stderr
+
+    def test_directory_where_file_expected_reported_missing(self, tmp_path: Path) -> None:
+        path = _write_fixture(tmp_path)
+        # Create a directory at a path where a curd expects a file: is_file()
+        # must report it missing, unlike the looser exists() check.
+        target = tmp_path / "src" / "feature_0.ts"
+        target.mkdir(parents=True)
+        result = _run_cli("check-files", "--manifest", str(path), "--root", str(tmp_path), "--json")
+        assert result.returncode == 0, result.stderr
+        report = __import__("json").loads(result.stdout)
+        assert report["1"] == ["src/feature_0.ts"]
+
+
 def _worker(args: tuple[str, int]) -> tuple[int, str]:
     manifest_path, curd_id = args
     result = subprocess.run(
