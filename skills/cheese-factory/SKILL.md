@@ -156,7 +156,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz manifest_update set-phase
 Before dispatch, re-validate the decomposer's file lists against the current working tree — time has passed since Phase 0, and seed may have moved paths:
 
 ```
-python3 ${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz manifest_update check-files --manifest <path>
+python3 ${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz manifest_update check-files --manifest <path> --root <repo-root> --json
 ```
 
 Missing files are informational, not a blocker — a curd may be creating a new file, or the decomposition path may be stale. Fold any reported misses into that curd's dispatch context so the worker (per `references/curd-prompt.md`'s file-scope guidance) knows the list may need adjusting.

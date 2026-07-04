@@ -253,6 +253,8 @@ def cmd_set_wiring_status(args: argparse.Namespace) -> None:
 def cmd_check_files(args: argparse.Namespace) -> None:
     path = Path(args.manifest)
     data, _ = _load_manifest(path)
+    if args.root and not Path(args.root).is_dir():
+        raise cli.CliError(f"root is not a directory: {args.root}")
     root = Path(args.root) if args.root else Path.cwd()
     curds = data.get("curds")
     if not isinstance(curds, list):
@@ -265,7 +267,7 @@ def cmd_check_files(args: argparse.Namespace) -> None:
         files = entry.get("files")
         if not isinstance(files, list):
             continue
-        missing = [f for f in files if isinstance(f, str) and not (root / f).exists()]
+        missing = [f for f in files if isinstance(f, str) and not (root / f).is_file()]
         if missing:
             stale[str(entry.get("id"))] = missing
 
@@ -273,10 +275,10 @@ def cmd_check_files(args: argparse.Namespace) -> None:
         cli.emit(stale, json_mode=True)
         return
     if not stale:
-        print("all curd files present in the working tree")
+        cli.emit("all curd files present in the working tree")
         return
     for curd_id, missing in stale.items():
-        print(
+        cli.emit(
             f"curd {curd_id}: not found in working tree — {', '.join(missing)} "
             "(may be new files the curd creates, or a stale decomposition path; "
             "pass this along as dispatch context)"

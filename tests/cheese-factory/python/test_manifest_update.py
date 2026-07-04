@@ -249,6 +249,24 @@ class TestCheckFiles:
         assert result.returncode == 2
         assert "manifest not found" in result.stderr
 
+    def test_invalid_root_exits_2(self, tmp_path: Path) -> None:
+        path = _write_fixture(tmp_path)
+        missing_root = tmp_path / "no-such-dir"
+        result = _run_cli("check-files", "--manifest", str(path), "--root", str(missing_root))
+        assert result.returncode == 2
+        assert "root is not a directory" in result.stderr
+
+    def test_directory_where_file_expected_reported_missing(self, tmp_path: Path) -> None:
+        path = _write_fixture(tmp_path)
+        # Create a directory at a path where a curd expects a file: is_file()
+        # must report it missing, unlike the looser exists() check.
+        target = tmp_path / "src" / "feature_0.ts"
+        target.mkdir(parents=True)
+        result = _run_cli("check-files", "--manifest", str(path), "--root", str(tmp_path), "--json")
+        assert result.returncode == 0, result.stderr
+        report = __import__("json").loads(result.stdout)
+        assert report["1"] == ["src/feature_0.ts"]
+
 
 def _worker(args: tuple[str, int]) -> tuple[int, str]:
     manifest_path, curd_id = args
