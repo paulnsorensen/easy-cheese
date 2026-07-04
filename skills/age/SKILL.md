@@ -215,7 +215,7 @@ for severity in ["blocker", "high", "medium", "low"]:
                     f"<td class='px-3 py-2 font-mono text-sm'>{html_lib.escape(severity)}</td>"
                     f"<td class='px-3 py-2 font-mono text-sm'>{html_lib.escape(finding['label'])}</td>"
                     f"<td class='px-3 py-2 text-sm'>{html_lib.escape(finding['location'])}</td>"
-                    f"<td class='px-3 py-2 text-sm'>{html_lib.escape(finding['body'])}</td>"
+                    f"<td class='px-3 py-2 text-sm whitespace-pre-wrap'>{html_lib.escape(finding['body'])}</td>"
                     "</tr>")
 
 pie_rows = "\n".join(
@@ -223,6 +223,18 @@ pie_rows = "\n".join(
     for sev in ["blocker", "high", "medium", "low"]
     if findings_by_severity.get(sev)
 )
+
+# Guard: an empty pie_rows produces an invalid Mermaid diagram (no slices).
+# Show a "No findings" note and omit the chart when there is nothing to plot.
+if pie_rows:
+    chart_html = (
+        '  <div class="mermaid mb-6">\n'
+        "pie title Findings by severity\n"
+        f"    {pie_rows}\n"
+        "  </div>"
+    )
+else:
+    chart_html = '  <p class="text-gray-500 mb-6">No findings.</p>'
 
 html_content = f"""<!DOCTYPE html>
 <html lang="en">
@@ -235,10 +247,7 @@ html_content = f"""<!DOCTYPE html>
 </head>
 <body class="bg-gray-50 p-6 font-sans">
   <h1 class="text-2xl font-bold mb-4">Age Report &mdash; {html_lib.escape(slug)}</h1>
-  <div class="mermaid mb-6">
-pie title Findings by severity
-    {pie_rows}
-  </div>
+{chart_html}
   <table class="w-full border-collapse bg-white shadow rounded">
     <thead class="bg-gray-200 text-left">
       <tr>
