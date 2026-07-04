@@ -8,11 +8,7 @@ exactly what tilth / `cheez-*` fills.** Native sub-agents, the Agent Skills
 spec, and MCP are now universal, so easy-cheese's portability bet holds and its
 optional-MCP nudges are redundant only where the host also covers them natively.
 
-Extends `tooling.md` ("tilth / cheez-* hard-fail vs optional MCP") with the
-cross-harness grounding behind it. Companion analysis to
-`skill-parity-analysis.md`.
-
-## Two findings
+Extends `tooling.md` ("cheez-* backend contract vs optional MCPs") with the cross-harness grounding behind it. Companion analysis to `skill-parity-analysis.md`.
 
 - **tilth is redundant only on omp.** No common harness except omp ships a
   native AST/structural tool or LSP-as-a-tool (see Table 2). So `cheez-*`/tilth

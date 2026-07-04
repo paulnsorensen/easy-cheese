@@ -118,18 +118,24 @@ def test_cheez_skills_accept_equivalent_native_backends_without_blind_shell_fall
     docs = [
         REPO_ROOT / "README.md",
         REPO_ROOT / "AGENTS.md",
+        REPO_ROOT / ".github/copilot-instructions.md",
         REPO_ROOT / ".hallouminate/wiki/tooling.md",
+        REPO_ROOT / ".hallouminate/wiki/harness-native-overlap.md",
         REPO_ROOT / "skills/cheez-read/SKILL.md",
         REPO_ROOT / "skills/cheez-search/SKILL.md",
         REPO_ROOT / "skills/cheez-write/SKILL.md",
     ]
     combined = "\n".join(path.read_text(encoding="utf-8") for path in docs)
 
-    assert "tilth MCP is the preferred implementation, not the only valid one" in combined
+    assert "cheez-* skills use the safest semantic backend available for source code" in combined
     assert "semantic source-code backend, not tilth specifically" in combined
-    assert "Plain shell fallbacks still fail the contract" in combined
+    assert "native AST search, LSP type-grounded navigation, bounded reads, anchored/stale-checking edits, and batch reads/writes when possible" in combined
+    assert "Batch adjacent reads/listings when possible" in combined
+    assert "Batch related lookups when one call can answer" in combined
+    assert "Prefer `tilth_write` for anchored, stale-checking edits; Batch related edits when possible." in combined
+    assert "use LSP for type-grounded definitions/references/renames/code actions" in combined
+    assert "Use `sg` only for AST shapes or structural codemods with metavariables" in combined
     assert "mcp__tilth__tilth_files" in combined
     assert "mcp__tilth__tilth_edit" in combined
-    assert "AST Grep, LSP" in combined
-    assert "Requires tilth MCP server" not in combined
-    assert "require tilth MCP by design" not in combined
+    assert "hard-fail without it" not in combined
+    assert "tilth MCP is the preferred implementation, not the only valid one" not in combined

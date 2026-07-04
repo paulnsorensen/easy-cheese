@@ -50,12 +50,10 @@ markdown clean by hand.
 
 `test_validate_skills.py` is the unittest suite covering those rules.
 
-## tilth / cheez-* backend contract vs optional MCP
+## `cheez-*` backend contract vs optional MCPs
 
-Tool dependency is asymmetric by design:
-
-- **`cheez-*` skills require a semantic source-code backend, not tilth specifically.**
-  Prefer tilth MCP because it supplies search/read/edit/dependency context in
+- **`cheez-*` needs a semantic source-code backend, not tilth specifically.** Prefer tilth when present; native AST search, LSP type-grounded navigation, bounded reads, anchored/stale-checking edits, and batch reads/writes when possible satisfy the same contract.
+- **Optional MCPs are separate.** Context7, Tavily, hallouminate, and milknado help workflow skills, but they do not change the source-code routing rule.
   one protocol, but native AST search, LSP, bounded reads, and anchored
   stale-checking edits satisfy the same contract (`skills/cheez-search/SKILL.md:3-20`,
   `skills/cheez-read/SKILL.md:3-17`, `skills/cheez-write/SKILL.md:3-21`,
