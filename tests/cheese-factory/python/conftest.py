@@ -44,6 +44,26 @@ def validate_pr_plan() -> ModuleType:
 
 
 @pytest.fixture(scope="session")
+def curd() -> ModuleType:
+    return importlib.import_module("curd")
+
+
+@pytest.fixture(scope="session")
+def wiring() -> ModuleType:
+    return importlib.import_module("wiring")
+
+
+@pytest.fixture(scope="session")
+def wiring_topo_sort() -> ModuleType:
+    return importlib.import_module("wiring_topo_sort")
+
+
+@pytest.fixture(scope="session")
+def manifest_update() -> ModuleType:
+    return importlib.import_module("manifest_update")
+
+
+@pytest.fixture(scope="session")
 def cf_dir() -> Path:
     return CF_DIR
 
@@ -61,3 +81,18 @@ def pr_plan_schema_path() -> Path:
 @pytest.fixture(scope="session")
 def skill_md_path() -> Path:
     return CF_DIR / "SKILL.md"
+
+
+@pytest.fixture(scope="session")
+def skill_corpus(skill_md_path: Path) -> str:
+    """SKILL.md plus every references/*.md doc — the skill's full authored surface.
+
+    Load-bearing contract phrases may live in the SKILL body or in a reference
+    file (progressive disclosure). String-shaped checks read the whole corpus so
+    a phrase that was *relocated* into a reference still counts as present, while
+    a genuinely *removed* phrase is still caught.
+    """
+    parts = [skill_md_path.read_text(encoding="utf-8")]
+    for ref in sorted(REFERENCES_DIR.glob("*.md")):
+        parts.append(ref.read_text(encoding="utf-8"))
+    return "\n".join(parts)

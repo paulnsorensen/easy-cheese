@@ -1,12 +1,10 @@
 ---
 name: cook
-description: Implement an approved spec or focused unambiguous task with a TDD-disciplined contract → cut → implement → taste-test → handoff loop, editing through cheez-write. Use when the user wants code written — phrases like "implement this", "build this feature", "write the code", "cook this spec", "make it work", "/cook .cheese/specs/<slug>.md", "fix this bug" (when the bug has a clear fix). Supports `--auto` for the autonomous chain through `/press → /age → /cure` (see `## Auto mode`). Use even when the user just says "go" or "ship it" if a spec or clear acceptance criteria is in scope. `/cook` runs standalone when the task is unambiguous (clear inputs, expected outputs, verifiable result) — a spec is helpful but not required. If the request is genuinely fuzzy, route to `/mold` first; if it needs no writes, route to `/culture`. After `/mold` (optional); before `/press` → `/age` → `/cure`.
+description: Implement an approved spec or focused unambiguous task with a TDD-disciplined contract → cut → implement → taste-test → handoff loop, editing through cheez-write. Use when the user wants code written — "implement this", "cook this spec", "/cook .cheese/specs/<slug>.md", or "fix this bug" when the fix is clear; also when the user just says "go" or "ship it" with a spec or clear acceptance criteria in scope. Supports `--auto` for the autonomous chain through `/press → /age → /cure` (see `## Auto mode`). Runs standalone on an unambiguous task — a spec helps but is not required. Route fuzzy requests to `/mold` first; no-write requests to `/culture`. After `/mold` (optional); before `/press` → `/age` → `/cure`.
 license: MIT
 ---
 
 # /cook
-
-Use this skill when the user has an approved spec, pasted requirements, a precise implementation request with acceptance criteria, or any unambiguous task that meets the standalone fast-path checks below.
 
 Do not use it for fuzzy planning (`/mold`), no-write discussion (`/culture`), or review-only work (`/age`).
 
@@ -38,13 +36,13 @@ When the fast-path applies, derive a slug from the task (e.g. `tail-trailing-new
 
 ## Flow
 
-1. **Contract** — confirm behaviour, non-goals, likely scope, quality gates. For standalone fast-path tasks, the contract is the user's request restated in one sentence.
+1. **Contract** — confirm behaviour, non-goals, likely scope, quality gates. For standalone fast-path tasks, the contract is the user's request restated in one sentence. If `.cheese/glossary/<slug>.md` exists, read it before implementation so naming follows the resolved canonical terms.
 2. **Cut** — write failing tests for the changed behaviour. See `references/tdd-loop.md`.
 3. **Implement** — make the cut tests pass with the smallest production change.
-4. **Taste-test** — check spec drift, readability, and scope creep. Two-round cap; details in `references/tdd-loop.md`.
+4. **Taste-test** — check spec drift, readability, scope, plus three fresh-context lenses (production path, wired callers, locked-decision). Dispatch the fresh-context `reviewer` for multi-file or public-surface diffs; keep the inline check otherwise. Two-round cap. Cost gate, reviewer-model pin, and the coder-nested degrade live in `references/tdd-loop.md`.
 5. **Hand off** — produce the package-ready report (`references/package-report.md`), write the handoff slug (`## Handoff slug` below), and prompt the next step via the shared handoff gate (see `## Handoff` below). The default chain is `/press` → `/age` → `/cure`.
 
-Code search, reading, and editing all go through the `cheez-*` skills (`/cheez-search`, `/cheez-read`, `/cheez-write`) — see those skills for tool selection rules and out-of-scope fallbacks.
+Edits go through `/cheez-write` (search and reads via the tools below).
 
 ## Preferred tools and fallbacks
 
@@ -54,16 +52,18 @@ Code search, reading, and editing all go through the `cheez-*` skills (`/cheez-s
 | GitHub context | `gh` | local git history or user-provided links |
 | Merge assistance | mergiraf | manual conflict resolution with tests |
 | Task commands | `just`, package scripts | direct documented commands |
+| Code navigation | `/cheez-search` `kind:symbol` then `kind:callers` | `tilth_search` direct |
+| Read before edit | `/cheez-read` ranged/outline (`paths: ["f#n-m"]`, `mode:stripped`) | DO NOT `cat`/`sed -n`/host Read on code paths |
 
-When a preferred tool is unavailable, continue with the fallback and mention any loss of precision if it affects risk.
+Falling back, mention any loss of precision that affects risk.
 
 ## Quality gates
 
-Use existing project commands only. Run the most relevant tests for the touched area, plus lint/type/build commands if the repository already defines them. Never remove, skip, or weaken unrelated tests to make the change pass.
+Run existing project commands only — the most relevant tests for the touched area, plus lint/type/build if defined. Never remove, skip, or weaken unrelated tests to make the change pass.
 
 ## Output
 
-Cross-cutting house style and citation form: [`../../shared/formatting.md`](../../shared/formatting.md). The authoritative cook-report shape lives in [`references/package-report.md`](references/package-report.md); the bullets below are a sketch of what that template requires.
+House style and citations: [`../../shared/formatting.md`](../../shared/formatting.md). Authoritative report shape: [`references/package-report.md`](references/package-report.md); the bullets below sketch it.
 
 Summarize:
 
@@ -80,22 +80,24 @@ Write a minimum-shape handoff slug to `.cheese/cook/<slug>.md` so downstream pha
 status: ok | halt: <one-line reason>
 next: mold | cook | press | age | done
 artifact: <path-to-richer-report-if-any>
+taste_test: inline-pass | dispatched-pass | revised | deferred-to-orchestrator
 <one-line orientation: what cook changed>
 ```
 
-`status: ok` when cook finished cleanly. `status: halt: <reason>` when cook stopped per the package-report stop conditions (missing spec decision, blocked test, taste-test cap hit, quality gate fail outside scope). `next:` always names the next runnable phase if the human chooses to proceed: `press` for the standard chain, `age` if the user opts to skip press, `cook` when the cooked phase must be rerun after resolving a blocker, or `mold` when the spec itself needs another pass. Use `next: done` only for true terminal completion, never for a blocked-but-resumable or external-gate halt. The orientation line is a single factual sentence about what the diff does — not a summary of the report.
+`next:` names the next runnable phase: `press` for the standard chain, `age` if the user skips press, `cook` to rerun after resolving a blocker, `mold` when the spec needs another pass. Use `next: done` only for true terminal completion, never for a blocked-but-resumable or external-gate halt; `halt:` reasons follow the package-report stop conditions. The orientation line is one factual sentence about what the diff does, not a report summary. Omit `taste_test:` when the cost gate did not warrant a taste-test.
 
 ## Handoff
 
 **Pipeline:** culture → mold → **[cook]** → press → age → cure → ship
 
-After the package-ready report is printed and the handoff slug is on disk, ask via the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md). Lead each option with the verb (what the user wants to *do* next); the skill command (with any in-scope `--hard` propagation) is the backing detail. Default options:
+After the package-ready report is printed and the handoff slug is on disk, ask via the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md), following its **Standard forward-step menu**. Lead each option with the verb (what the user wants to *do* next); the skill command (with any in-scope `--hard` propagation) is the backing detail. Default options:
 
 - **Harden tests before review** *(recommended)* — `/press <slug>`.
-- **Review the diff now (skip the press pass)** — `/age <slug>`.
+- **Ship it** — `/press <slug> --auto --open-pr`: run press → age → cure headless and open (or push) the PR at the end.
+- **Checkpoint & stop** — `/wheypoint`: write a resumable handoff and pause.
 - **Stop** — dispatch none; leave further hardening for later.
 
-Pre-select **Harden tests before review** when the cooked diff added new behaviour or touched untested seams. The user may also chain: pressing then age then cure happens via each step's own handoff gate. Never dispatch before selection; after a non-stop selection, run the selected command immediately.
+Pre-select **Harden tests before review** when the cooked diff added new behaviour or touched untested seams. A user who wants to skip the press pass and review immediately can reply with `other: /age <slug>` (the gate-specific alternative, kept off the buttons per the shared menu's tail rule). The user may also chain manually: pressing then age then cure happens via each step's own handoff gate. Never dispatch before selection; after a non-stop selection, run the selected command immediately.
 
 When invoked with `--auto`, skip this gate entirely and proceed straight into the auto-mode chain (see `## Auto mode` below).
 
@@ -142,8 +144,6 @@ Final age:      <path>
 Next step:      review the diff, then /gh when ready
 ```
 
-Auto mode is a propagated flag, not a separate skill — every downstream invocation passes `--auto` along so each step knows to skip its own handoff gate.
-
 ## Rules
 
 - Keep changes scoped to the accepted contract.
@@ -152,3 +152,10 @@ Auto mode is a propagated flag, not a separate skill — every downstream invoca
 - Stop and ask when implementation reveals a design decision the spec did not answer.
 - If the spec or fast-path request rests on a false premise, stop and surface the premise before writing code; do not work the wrong angle to honour the request literally.
 - Apply the shared voice kernel (lives at `skills/age/references/voice.md` in this repo): lead the package-ready report with the answer, name loaded assumptions in the contract, flag residual risk as `certain | speculating | don't know`.
+- **Verification before `status: ok`:** before writing `status: ok` in the handoff slug, (1) identify the gate command, (2) run it fresh in the same turn, (3) read the full output, (4) only then claim. Hedging words (`should`, `probably`, `I think`) are banned in completion claims — state what the gate output showed, not what you expect it to show.
+
+## Discipline
+
+Iron Law, Red Flags, and the TDD Rationalization table live in
+[`references/cook-discipline.md`](references/cook-discipline.md).
+See [`../../shared/skill-authoring.md`](../../shared/skill-authoring.md) for the template these follow.

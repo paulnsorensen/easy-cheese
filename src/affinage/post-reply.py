@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Post a reply to a GitHub PR thread or PR conversation with the mandatory
-"agent on behalf of;" attribution suffix appended.
+"agent on behalf of <handle>" attribution suffix appended.
 
 Used by /affinage. Single source of truth for the attribution suffix — never
 duplicate the literal phrase into callers.
@@ -14,7 +14,7 @@ Mode selection:
     --issue   Post a top-level PR conversation comment (used for review-body
               summary replies that have no anchored comment).
 
-Resolves <handle> in this order:
+Resolves <handle> for both idempotence detection and the footer in this order:
     1. RESPOND_GH_HANDLE env var.
     2. gh api user --jq .login (the authenticated gh user).
     3. git config user.name (final fallback).
@@ -28,11 +28,12 @@ import os
 import subprocess
 import sys
 
-# IMPORTANT: This is the attribution suffix's verbatim prefix. Do not
+# IMPORTANT: This is the attribution suffix's verbatim fixed text. Do not
 # paraphrase, do not change capitalization, do not change punctuation. The
-# single space between the semicolon and the handle is part of the spec —
-# see skills/affinage/SKILL.md, section "Rules".
-ATTRIBUTION_PREFIX = "agent on behalf of;"
+# handle is appended to the prefix with no terminal punctuation — see
+# skills/affinage/SKILL.md,
+# section "Rules".
+ATTRIBUTION_PREFIX = "agent on behalf of"
 
 # Horizontal-rule line that separates the reply from the attribution.
 ATTRIBUTION_SEPARATOR = "---"
@@ -170,7 +171,8 @@ def _scan_flags(argv: list[str]) -> tuple[str, str, str, str]:
             body = argv[i + 1] if i + 1 < len(argv) else ""
             i += 2
         elif arg in ("-h", "--help"):
-            raise _usage_error()
+            sys.stdout.write(_USAGE)
+            raise SystemExit(0)
         else:
             raise _die(f"unknown argument: {arg}")
 

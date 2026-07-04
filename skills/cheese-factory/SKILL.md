@@ -6,12 +6,6 @@ license: MIT
 
 # /cheese-factory
 
-Use this skill when an approved spec decomposes into 5+ file-disjoint behavioural curds and the user wants the whole implementation parallelised, reviewed per-curd, integrated, reviewed again at the seam, and shipped as 1–N reviewable PRs.
-
-Do not use it for single coherent feature work (`/cook` or `/ultracook`), fuzzy planning (`/mold`), review-only work (`/age`), or specs that decompose into fewer than 5 curds (`/ultracook`).
-
-`/cheese-factory` is the portable, harness-agnostic sibling of `/fromagerie`. Same decomposition pattern, same dual fan-out/fan-in, no bespoke agent files. Every sub-agent is a general-purpose full-peer worker driven by an in-prompt skill invocation.
-
 ## Inputs
 
 Accept:
@@ -27,22 +21,15 @@ Accept:
 
 `/cheese-factory` does not accept fuzzy or open-ended asks — route those to `/mold` first. The orchestrator assumes the contract is locked.
 
-`--auto` is **implicit**. After Phase 0 gate approval, the chain runs autonomously with no per-step handoff questions. There is no interactive mode — the value of this skill is unattended parallel execution.
+`--auto` is **implicit**. After Phase 0 gate approval, the chain runs autonomously with no per-step handoff questions.
 
 ## When to use `/cheese-factory` vs alternatives
 
-| Skill | Use when |
-|---|---|
-| `/cook` | Single unambiguous task, no decomposition. |
-| `/ultracook` | Single coherent spec, high-blast-radius, sequential review pipeline. |
-| `/cheese-factory` | Spec decomposes into 5+ file-disjoint behavioural curds. |
-| `/fromagerie` | Same problem on Anthropic Claude Code with the bespoke agent files installed and a preference for specialised agent contracts. |
+Use `/cheese-factory` only when the spec decomposes into 5+ file-disjoint behavioural curds. Fewer curds → `/ultracook`; single unambiguous task → `/cook`; on Anthropic Claude Code with bespoke agent files installed → `/fromagerie`.
 
 ## Decomposition contract — curds of behaviour
 
-In cheese-factory terms, a curd is the smallest commit-worthy unit of behaviour:
-small enough to be worked independently, but intended to be pressed back into the
-whole feature.
+A curd is the smallest commit-worthy unit of behaviour.
 
 The Phase 0 decomposer produces three artifact lists from the spec:
 
@@ -52,17 +39,7 @@ The Phase 0 decomposer produces three artifact lists from the spec:
 
 ### The five criteria
 
-Every curd must satisfy all five. Token budgets are explicitly **not** a criterion — LLM agents cannot estimate their own token usage reliably, and the five behavioural criteria substitute. Curds remain bounded by their file scope, which is decomposer-controlled.
-
-| # | Criterion | Decomposer check |
-|---|---|---|
-| 1 | One behaviour per curd | Describable in a single declarative sentence ("adds X", "extracts Y", "renames Z", "fixes A"). If the description needs "and" between two distinct behaviours, split. |
-| 2 | One acceptance criterion | Maps to exactly one bullet in the spec's Acceptance Criteria / User Story list. Curds collectively cover every acceptance criterion 1:1. |
-| 3 | One test target | A single focused test command verifies this curd alone (e.g., `vitest run src/orders/order.test.ts`). If the curd needs N test commands, it's N curds. |
-| 4 | File-disjoint | No two curds list the same file. HARD CONSTRAINT. |
-| 5 | Commit-worthy alone | After this curd's commit, `just check` (or project equivalent) passes without sibling curds merged. Implied by 4 plus seed carrying any shared deps. |
-
-If criterion 4 cannot be satisfied because two curds genuinely share a file, the shared content belongs in seed (if foundational) or wiring (if integration). Curds never share files.
+Five behavioural criteria govern every curd — see `references/decomposer-prompt.md` § The five criteria for the full list and the "token budgets are NOT a criterion" rationale. Curds that fail criterion 4 (file-disjoint) move their shared content to seed or wiring.
 
 ### Manifest format
 
@@ -79,17 +56,7 @@ or JSON for backward compatibility, but YAML is the canonical format.
 
 ### Validation (Phase 0)
 
-The decomposer's output is validated by `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz validate_manifest` for required
-sections and field shapes, then by `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz validate_decomposition` against:
-
-- **Behaviour overlap** — each curd describes one behaviour (criterion 1).
-- **Spec coverage** — every acceptance criterion has exactly one curd (criterion 2).
-- **Test target check** — each curd has a focused test command (criterion 3).
-- **File disjointness** — no file appears in two curds (criterion 4).
-- **Wiring DAG check** — no cycles, no cross-branch overlap, barrel files included where curds create new slices.
-- **Seed minimality** — seed contains only files that 2+ curds depend on.
-
-If validation fails: re-run decomposer with violations highlighted. Max 2 retries before escalating to the user.
+See `references/decomposer-prompt.md` § Validation for the six checks run by `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz validate_manifest` and `validate_decomposition`. If validation fails: re-run decomposer with violations highlighted. Max 2 retries before escalating to the user.
 
 ## Phases
 
@@ -99,18 +66,22 @@ Eight phases. The orchestrator walks them top-to-bottom and stops after the last
 |---|---|---|
 | 0 | Pre-compile | Read spec, decompose via heavy general-purpose sub-agent, validate against the five criteria, user gate |
 | 1 | Seed | Orchestrator inline edits via `/cheez-write` (or host edit tool if tilth MCP is unavailable), commit, push |
-| 2 | Curds (fan-out) | N parallel general-purpose spawns; each runs `/cook --auto → /press --auto → /age --auto` (inline-degrade) `→ /cure --auto --stake medium+` and commits |
+| 2 | Curds (fan-out) | N parallel general-purpose spawns; each runs the per-curd pipeline and commits |
 | 3 | Merge curds (fan-in) | Cherry-pick curd commits → orchestrator branch; `/melt` on conflicts |
 | 4 | Wiring (sequential within wave) | Integration files only; per-task general-purpose spawn with wiring-only prompt |
 | 5 | Final merge wiring | Wiring commits → orchestrator branch; conflicts here = halt (decomposer error) |
 | 6 | Post-merge review (fresh-context, ultracook-style) | Three sub-agent spawns: `/press --auto`, `/age --auto`, `/cure --auto --stake medium+`. Single pass. |
 | 7 | PR plan + publish | Heavy PR planner sub-agent decides layout, orchestrator delegates publish via skill discovery (`/pr-stack`, `/gh`, fallbacks) |
 
+### Optional: milknado curd-tracking backend
+
+If milknado MCP is available (`mcp__milknado__milknado_todo_add` in toolset), persist the curd list to the milknado task graph during Phase 0 decomposition. Use `mcp__milknado__milknado_todo_add` per curd and `mcp__milknado__milknado_graph_summary` to surface the tracked curds alongside the manifest. This provides cross-session tracking of curd status across the factory run. If milknado is absent, proceed with the in-report curd decomposition (manifest YAML at `.cheese/cheese-factory/<slug>/manifest.yaml`) — the decomposition itself is unchanged. See [`../../shared/optional-plugins.md`](../../shared/optional-plugins.md) for the detect-and-degrade contract.
+
 ### Phase 0 — Pre-compile
 
 Read the spec from the argument (or, if `--resume <slug>`, read the manifest and skip to the next incomplete phase).
 
-Validate the spec has: Executive Summary, Problem Statement, User Stories, Acceptance Criteria, Quality Gates. Fail fast if any is missing.
+Validate the input spec's **structure** (distinct from the five-criteria curd check the validator applies to the decomposer's *output* manifest). The spec must have: (a) an enumerable acceptance criteria or user stories list — at least one list item (bulleted or numbered) the decomposer can map 1:1 to a curd; and (b) quality gates — at least one runnable command. Heading names are not enforced; check for presence of the content. Fail fast if either is absent.
 
 **Hard worktree gate**: detect the host's worktree mechanism (Conductor, git worktrees, plain branches) and prompt if working on the default branch. Never skipped.
 
@@ -174,9 +145,21 @@ For each seed item:
 
 Push to branch — curds branch from HEAD.
 
-Update manifest: `phase: seed_complete`, commit SHAs.
+Update manifest:
+
+```
+python3 ${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz manifest_update set-phase --manifest <path> --phase seed_complete
+```
 
 ### Phase 2 — Curds (fan-out)
+
+Before dispatch, re-validate the decomposer's file lists against the current working tree — time has passed since Phase 0, and seed may have moved paths:
+
+```
+python3 ${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz manifest_update check-files --manifest <path> --root <repo-root> --json
+```
+
+Missing files are informational, not a blocker — a curd may be creating a new file, or the decomposition path may be stale. Fold any reported misses into that curd's dispatch context so the worker (per `references/curd-prompt.md`'s file-scope guidance) knows the list may need adjusting.
 
 Spawn ALL curd workers in a single message via the host's fan-out primitive. If more than 5 curds, dispatch in waves of 5.
 
@@ -206,7 +189,13 @@ After all curds merged: run quality gates. If failing, STOP and report — curds
 
 ### Phase 4 — Wiring (fan-out, sequential within wave)
 
-Read wiring DAG from manifest. Dispatch wiring tasks in topological order, sequentially within each wave (concurrent commits to the same working directory race on git's `index.lock`).
+Compute topological dispatch order from the wiring DAG:
+
+```
+python3 ${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz wiring_topo_sort --manifest <path>
+```
+
+Dispatch wiring tasks in the returned wave order, sequentially within each wave (concurrent commits to the same working directory race on git's `index.lock`).
 
 Each wiring worker is a general-purpose sub-agent with the prompt template at `references/wiring-prompt.md`.
 
@@ -214,7 +203,7 @@ For failed wiring tasks: retry ONCE. If still failing, mark incomplete in manife
 
 ### Phase 5 — Final merge wiring
 
-Cherry-pick wiring commits onto the orchestrator branch.
+Cherry-pick the wiring commits onto the orchestrator branch.
 
 If conflicts arise here: STOP. Wiring conflicts mean the decomposer's DAG was wrong (wiring touched implementation territory, or two wiring tasks shared a file outside the DAG). Do not auto-resolve.
 
@@ -225,7 +214,7 @@ Keep: slug, spec path (for downstream skills), quality gates, list of all change
 
 ### Phase 6 — Post-merge review (ultracook-style fresh-context)
 
-By Phase 6 the orchestrator's context is heavy. Run the final review pipeline in fresh-context sub-agents to keep review reasoning adversarial and clean.
+Run the final review pipeline in fresh-context sub-agents.
 
 Three sequential spawns:
 
@@ -306,55 +295,14 @@ For each PR group in the plan:
 Manifest: .cheese/cheese-factory/<slug>/manifest.yaml
 ```
 
-## Orchestrator token discipline
-
-The orchestrator reads ONE thing: the spec. Everything else is delegated.
-
-**Must not**:
-
-- Read / grep / glob codebase files (decomposer + per-curd workers do that).
-- Run build / test commands (per-curd workers + post-merge sub-agents do that).
-- Read full sub-agent reports — work from handoff slug digests.
-
-**Should**:
-
-- Read the spec once at Phase 0.
-- Read per-phase handoff slugs (each ≤2KB).
-- Write manifest updates after each phase.
-- Decide chain progression based on slug `status` and `next` fields, never on sub-agent stdout.
-
 ## Compaction strategy
-
-Three seams where the orchestrator drops accumulated context.
-
-| Seam | After | DROP | KEEP |
-|---|---|---|---|
-| C1 | Phase 0 (gate approved) | Full spec text, permission manifest, decomposition reasoning | Slug, spec summary (≤2K), manifest path, quality gates |
-| C2 | Phase 2 (curds done) | Decomposer artifacts, curd dispatch prompts, curd return summaries | Slug, manifest path, quality gates, curd branch list |
-| C3 | Phase 5 (final merge done) | Wiring DAG, per-curd diffs, merger details | Slug, spec path, quality gates, changed files list, all commit SHAs |
-
 At each seam, write a self-summary to the manifest before dropping:
 
-```json
-{
-  "phase_summary": "<2-3 sentences: what happened, what succeeded/failed, what's next>",
-  "carry_forward": ["slug", "spec_summary", "manifest_path", "quality_gates"]
-}
-```
-
-On `--resume`, read `phase_summary` from the manifest. This is the only cross-seam continuity mechanism — do not rely on conversation history.
+Write `phase_summary` and `carry_forward` (shapes in `references/manifest-schema.json`) before dropping. On `--resume`, read `phase_summary` from the manifest — the only cross-seam continuity mechanism; do not rely on conversation history.
 
 ## Spawn primitive contract (host-agnostic)
 
-The orchestrator never names a specific host primitive. Any primitive that satisfies all five invariants below is acceptable. See `references/spawn-primitive-reference.md` for host-by-host examples.
-
-1. **Fresh context per spawn.** The sub-agent boots with no memory of prior phases.
-2. **Full-peer inheritance.** Same model as the parent, full tool access, full skill access, full MCP access. No diminutive workers.
-3. **No chain-forward.** The sub-agent runs only its phase and returns. The no-chain-forward directive is passed in the prompt.
-4. **Returns control.** The orchestrator regains control after each spawn so it can read the handoff slug.
-5. **Writes handoff slug.** Each spawn writes its result to `.cheese/<phase>/<slug>.md` per the schema. The orchestrator decides chain progression from the slug, never from stdout.
-
-If the host harness exposes no fan-out primitive at all, `/cheese-factory` is the wrong skill — recommend `/ultracook` for the same review semantics in the parent's own context.
+The orchestrator never names a specific host primitive. Any primitive satisfying all five invariants is acceptable: (1) **Fresh context per spawn**, (2) **Full-peer inheritance**, (3) **No chain-forward** (passed in prompt), (4) **Returns control**, (5) **Writes handoff slug**. Host-by-host examples and the no-fan-out fallback (route to `/ultracook`) live in `references/spawn-primitive-reference.md`.
 
 ## Handoff slug schema
 
@@ -380,26 +328,15 @@ For phases that already write rich reports (`/age`, `/press`, `/cure`), the sche
 
 If any gate fails: STOP, report, do not silently fix.
 
-## `--hard` propagation
-
-`/cheese-factory <spec> --hard`:
-
-- Passes `--hard` to per-curd `/cook --hard --auto` — each curd gets its own hard-cheese vibecheck at its `/cure` share-for-review boundary.
-- Passes `--hard` to Phase 6 `/cure --hard --auto --stake medium+` — the integration `/cure` runs the share-for-review vibecheck too.
-
-The orchestrator does not invoke `/hard-cheese` itself — it propagates the flag. See `skills/hard-cheese/SKILL.md`.
-
 ## `--resume <slug>`
 
-Read manifest at `.cheese/cheese-factory/<slug>/manifest.yaml`, find the latest phase marked complete, skip to the next phase. Report: `Resuming <slug> from phase <N>`.
-
-If the manifest references commits that no longer exist (rebased, deleted), fail fast and report — do not silently re-execute the phase.
+If the manifest references commits that no longer exist (rebased, deleted), fail fast — do not silently re-execute the phase. Otherwise continue from the phase after the latest one marked complete; report `Resuming <slug> from phase <N>`.
 
 ## Error recovery
 
 | Failure | Recovery |
 |---|---|
-| No spec argument | STOP. Report `cheese-factory requires an approved spec; run /mold first if you need to shape one`. Do not auto-dispatch — cross-skill handoffs stay user-visible. |
+| No spec argument | STOP. Report `cheese-factory requires an approved spec; run /mold first if you need to shape one`. |
 | Overlap / criterion violation in decomposer output | Re-run decomposer (max 2 retries) |
 | Seed gate failure | STOP, report — do not dispatch curds |
 | Curd fails | Retry once with error context, then mark failed |
@@ -417,6 +354,10 @@ If the manifest references commits that no longer exist (rebased, deleted), fail
 
 ## What the orchestrator never does
 
+**Does**: reads the spec once at Phase 0; reads per-phase handoff slugs (each ≤2KB); writes manifest updates after each phase; decides chain progression from slug `status` and `next` fields — never from sub-agent stdout.
+
+**Never**:
+
 - Read codebase files (sub-agents explore, orchestrator routes).
 - Run build / test commands (per-curd workers and post-merge sub-agents handle verification).
 - Write implementation code (cook agents and wiring agents implement; the orchestrator's only inline writes are the small seed items in Phase 1).
@@ -424,6 +365,7 @@ If the manifest references commits that no longer exist (rebased, deleted), fail
 - Retry more than once (curds and wiring get one retry, then mark failed).
 - Auto-resolve Phase 5 conflicts (wiring conflicts = decomposer error).
 - Estimate sub-agent token usage (decomposition uses behavioural criteria, not token counts).
+- Read full sub-agent reports — work from handoff slug digests only.
 
 ## Gotchas
 
@@ -442,10 +384,7 @@ If the manifest references commits that no longer exist (rebased, deleted), fail
 - `references/manifest-schema.json` — JSON Schema for the manifest.
 - `references/pr-plan-schema.json` — JSON Schema for the PR plan, `$ref`'d from `manifest-schema.json`.
 - `references/spawn-primitive-reference.md` — host-by-host invocation examples plus the five invariants.
-- `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz validate_manifest` — Phase 0 structural validation of required manifest sections and fields.
-- `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz validate_decomposition` — Phase 0 semantic validation of decomposer output against the five criteria.
-- `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz validate_pr_plan` — Phase 7 validation of PR planner output before branch creation.
-- `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz pr_plan_to_branches` — converts `pr-plan.yaml` to branch-creation commands for Phase 7.
+- `cheese-factory.pyz` subcommands (run via `${CLAUDE_SKILL_DIR}/scripts/`): `validate_manifest`, `validate_decomposition` (Phase 0), `validate_pr_plan`, `pr_plan_to_branches` (Phase 7), `manifest_update` (Phase 1/2/4 manifest writes), `wiring_topo_sort` (Phase 4 wave ordering).
 
 ## Rules
 

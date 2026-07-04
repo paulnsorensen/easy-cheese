@@ -65,7 +65,7 @@ Content shared _across_ skills lives at top-level `shared/` (e.g. `shared/handof
 | `skills/pasteurize/SKILL.md` | `/pasteurize` | Diagnose hard bugs, flaky failures, and performance regressions with a feedback-loop-first investigation, then hand off into `/cook → /press → /age → /cure`. |
 | `skills/cook/SKILL.md` | `/cook` | Implement clear specs via cut → cook → taste-test with scoped edits and tests. |
 | `skills/press/SKILL.md` | `/press` | Harden cooked changes with coverage, assertion, and boundary checks. |
-| `skills/age/SKILL.md` | `/age` | Review diffs across nine staff-engineer dimensions and produce a severity-grouped findings report. |
+| `skills/age/SKILL.md` | `/age` | Review diffs across ten staff-engineer dimensions and produce a severity-grouped findings report. |
 | `skills/affinage/SKILL.md` | `/affinage` | Triage external PR claims — review comments and CI failures — through the `/age` lens, hand the chosen fixes to `/cure`, then post replies back on GitHub. |
 | `skills/cure/SKILL.md` | `/cure` | Fix user-selected findings, validate, and prepare the branch for shipping. |
 | `skills/hard-cheese/SKILL.md` | `/hard-cheese` (or `--hard` flag) | Metacognitive vibecheck gate before review — asks the author to explain the diff's causal logic, grades the explanation against the SOLO Taxonomy. Standalone or via `--hard` propagation through the pipeline. |
@@ -76,52 +76,40 @@ Content shared _across_ skills lives at top-level `shared/` (e.g. `shared/handof
 
 ### Tool skills
 
-The workflow skills can delegate code search, reading, and editing to these MCP-backed skills when tilth is available:
+The workflow skills can delegate code search, reading, and editing to these backend-aware skills when tilth or an equivalent native source-code backend is available:
 
 | Skill path | Command | Purpose |
 | --- | --- | --- |
-| `skills/cheez-search/SKILL.md` | `/cheez-search` | AST-aware code/text/regex/caller search via tilth MCP. Replaces grep / rg / find. |
-| `skills/cheez-read/SKILL.md` | `/cheez-read` | Smart file/directory reading with hash anchors via tilth MCP. Replaces cat / head / tail / ls. |
-| `skills/cheez-write/SKILL.md` | `/cheez-write` | Hash-anchored, surgical edits via tilth MCP. Never rewrites whole files. |
+| `skills/cheez-search/SKILL.md` | `/cheez-search` | AST-aware code/text/regex/caller search via tilth MCP, harness-native AST search, or LSP. Replaces grep / rg / find. |
+| `skills/cheez-read/SKILL.md` | `/cheez-read` | Smart file/directory reading through a freshness-aware backend; tilth MCP is preferred because it emits hash anchors. Replaces cat / head / tail / ls. |
+| `skills/cheez-write/SKILL.md` | `/cheez-write` | Anchored, surgical edits through tilth MCP or an equivalent harness-native stale-snapshot edit tool. Never rewrites whole files blindly. |
 
-The `cheez-*` skills require tilth MCP and hard-fail when it is unavailable rather than fall back to host tools. Workflow skills remain portable by falling back directly to host-native tools when they are not using `cheez-*`.
+The `cheez-*` skills tell the model which source-code backend to use when the harness has one. Prefer tilth MCP by name; use LSP for type-grounded definitions/references/renames/code actions, `ast_grep`/`sg` for structural patterns and codemods, and anchored/stale-checking edits for ordinary block changes. Plain text shell tools are fallback evidence only, not equivalent source-code backends.
 
 #### cheez-* router protocol
 
 The three `cheez-*` skills are designed to chain. The standard sequence:
 
-1. **`/cheez-search`** — locate the symbol, caller, content match, or file. AST-aware; replaces grep/rg/find.
-2. **`/cheez-read`** — read the target file or section to capture hash anchors. Smart-outlines large files; replaces cat/head/tail/ls.
-3. **`/cheez-write`** — apply hash-anchored edits with the anchors from step 2. Surgical; rejects on hash mismatch.
+1. **`/cheez-search`** — locate the symbol, caller, content match, or file with tilth, AST search, or LSP.
+2. **`/cheez-read`** — read the target file or section with enough line/hash/snapshot context for a safe edit.
+3. **`/cheez-write`** — apply the change through tilth edit, LSP workspace edit, AST rewrite, or another stale-checking edit backend.
 
 Workflow skills (`/cook`, `/age`, `/cure`) call into this chain when they need code intelligence. A skill should never search-then-edit without reading in between — the read is what produces the anchors that make the edit safe.
 
-##### Tool redirection map
+##### Source-code tool routing
 
-If you'd reach for one of these on a code task, route through `cheez-*` instead:
+For source code, route by capability instead of command name:
 
-| If you'd run... | Use this skill | Why |
-| --- | --- | --- |
-| `grep`, `rg`, `ripgrep`, `ag`, `ack` | `/cheez-search` | AST-aware; ranks definitions over usages, filters comments/strings. |
-| `find`, `fd` (by name pattern, code work) | `/cheez-read` (`tilth_files`) | Token estimates and `.gitignore` filtering for free. |
-| `ast-grep` / `sg` (for name-shaped queries) | `/cheez-search` | `sg` is reserved for structural metavariable patterns tilth can't express. |
-| LSP "find references" / "find definition" (manual) | `/cheez-search` | Same answer, no IDE round-trip; falls through to LSP under the hood when needed. |
-| `cat`, `head`, `tail`, `less`, `more`, `bat` | `/cheez-read` | Hash anchors + outline-vs-full token budgeting. |
-| `ls`, `tree`, `eza` (code dirs) | `/cheez-read` (`tilth_files`) | Token estimates; respects `.gitignore`. |
-| `Read`, `Glob` (host tools, code paths) | `/cheez-read` | Bypasses session deduplication and emits no anchors. |
-| `sed`, `awk`, `perl -i` | `/cheez-write` | No hash-mismatch safety; silent races on concurrent writes. |
-| `patch` (apply diff to code) | `/cheez-write` | Anchored range edits are the safe equivalent. |
-| `tee`, `>`, `>>` (overwrite/append code files) | `/cheez-write` | Same — no anchors, no mismatch detection. |
-| `Edit`, `Write` (host tools, code) | `/cheez-write` | `tilth_edit` is the only edit path with hash-anchor safety. |
-| `sg --rewrite` (codemod across N files) | `/cheez-write` | Sanctioned escape from cheez-write for structural codemods; `tilth_edit` stays the default for single-block edits. |
+- LSP wins for type-grounded definitions, references, renames, and code actions.
+- AST search / `sg` wins for syntax-shaped patterns and codemods.
+- tilth wins for broad source search/read/edit context, anchors, outlines, token estimates, and dependency context.
+- Anchored or stale-checking edits win for ordinary block/range changes.
 
-Outside code work (e.g. `find -mtime`, `ls /tmp`, log inspection with `tail -f`, JSON munging with `jq`) the host tools are still the right call. The redirection rule is: **anything that touches source code goes through `cheez-*`**.
+Plain shell search/view/edit is fallback evidence only; use it for non-code paths, logs, generated output, or when no semantic backend exists, and name the downgrade.
 
 #### Installing tilth MCP
 
-See [Installing MCP servers](#installing-mcp-servers) below — expand the tilth section for full instructions.
-
-If those tools don't show up after install, the `cheez-*` skills will hard-fail with "tilth MCP server is not loaded" instead of silently falling back to host tools.
+See [Installing MCP servers](#installing-mcp-servers) below — expand the tilth section for the preferred `cheez-*` backend. If tilth is unavailable, use equivalent native AST/LSP/anchored-edit tooling when the harness provides it; otherwise name the weaker fallback instead of pretending blind shell tools have the same safety.
 
 ### Suggested flow
 
@@ -158,7 +146,7 @@ before review.
 Easy-cheese is intentionally a small surface. What that means in practice:
 
 - **Skills only.** No agents, commands, eta templates, or compiled harness bundles. Each capability is a single `SKILL.md`.
-- **No repo-wide MCP requirement.** Workflow skills suggest tools (tilth, Context7, Tavily, code-review-graph) but have host-native fallbacks. The `cheez-*` tool skills are the exception: they require tilth MCP by design.
+- **No repo-wide MCP requirement.** Workflow skills suggest tools (tilth, Context7, Tavily) but have host-native fallbacks. The cheez-* tool skills require an AST-aware search/read path and stale-checking edit path; prefer tilth when present, but equivalent native AST/LSP/anchored-edit backends satisfy the contract.
 - **One orchestrator skill, narrowly scoped.** `/ultracook` is the only orchestrator — it spawns full-peer sub-agents for the fixed `cook → press → age → cure → age → cure → age` chain on high-blast-radius specs. There is no large-feature decomposition, no PR-rescue convoy, no whole-repo NIH audit. Every other skill remains a single, scoped step a human can drive.
 - **No automatic re-age loop in `/cure`.** The skill describes the protocol; the human runs the next `/age` when ready.
 
@@ -168,12 +156,13 @@ Workflow skills name preferred tools when they help, with fallbacks for portabil
 
 | Tool | Helps with | Fallback |
 | --- | --- | --- |
-| tilth (MCP) | AST-aware read/search/edit and dependency context | Required for cheez-\*; workflow skills can bypass cheez-\* and use host read/edit, `ripgrep`, patches |
-| `sg` (ast-grep) | Structural pattern matching and codemods (`sg --rewrite`) with metavariables | `ripgrep`, `find`, targeted reads; `tilth_edit` for non-structural edits |
+| tilth (MCP) | AST-aware read/search/edit and dependency context | Preferred for cheez-\*; native AST/LSP/anchored-edit tools may satisfy the same contract |
+| `sg` (ast-grep) | Structural pattern matching and codemods (`sg --rewrite`) with metavariables | LSP or tilth for symbol/caller questions; anchored edits for non-structural block changes |
 | Context7 (MCP) | Library and API documentation | repo docs, package docs, vendor pages, web search |
 | Tavily (MCP) | Current web/vendor research | host web search or user-supplied sources |
-| code-review-graph (MCP) | Review impact radius, architecture framing, and embeddings-backed semantic / cross-repo search | import searches, caller searches, tests |
 | LSP / [Serena](https://github.com/oraios/serena) (MCP) | Type-aware xrefs (`find_referencing_symbols`, `find_implementations`), symbol-bounded edits (`rename_symbol`, `replace_symbol_body`, `safe_delete_symbol`), and LSP diagnostics — concrete tools for the abstract "if your harness has an LSP" sections in `cheez-*` skills | `sg`, `tilth_search`, targeted reads via tilth |
+| hallouminate (MCP) | Per-repo wiki for cross-session design rationale, ADR grounding, and `/mold` evidence | Skip wiki grounding; proceed with diff + code evidence only; cap at `speculating` when design rationale is central |
+| milknado (MCP) | Mikado task-graph backend for `/cheese-factory` curd prerequisite tracking | In-report curd decomposition in manifest YAML; no external task-graph backend needed |
 | `ripgrep` | Fast text search | `grep`, `find`, editor search |
 | `gh` | GitHub issues, PRs, checks, examples | local git commands or user-provided links/logs |
 | `delta` | Readable diffs | plain `git diff` |
@@ -182,7 +171,7 @@ Workflow skills name preferred tools when they help, with fallbacks for portabil
 | `fd` | Fast file discovery | `find` |
 | `just` | Project task discovery | package scripts or documented commands |
 
-When a preferred tool is unavailable, workflow skills say so once, fall back, and lower confidence only if evidence quality suffers. The `cheez-*` skills stop instead because tilth is their compatibility requirement.
+When a preferred tool is unavailable, workflow skills say so once, fall back, and lower confidence only if evidence quality suffers. The `cheez-*` skills should teach the strongest available backend shape, not break on a missing MCP.
 
 ## Install
 
@@ -332,9 +321,9 @@ After registering, restart your harness and confirm these tools appear:
 
 - `mcp__tilth__tilth_search`
 - `mcp__tilth__tilth_read`
-- `mcp__tilth__tilth_files`
+- `mcp__tilth__tilth_list`
 - `mcp__tilth__tilth_deps`
-- `mcp__tilth__tilth_edit` (only with `--edit`)
+- `mcp__tilth__tilth_write` (only with `--edit`)
 
 </details>
 
@@ -414,34 +403,6 @@ TAVILY_API_KEY=your-key npx -y tavily-mcp
 ```
 
 Requires Node.js v18+.
-
-</details>
-
-<details>
-<summary><strong>code-review-graph</strong> — impact radius, architecture framing, semantic search for <code>/age</code>, <code>/press</code>, <code>/cure</code></summary>
-
-[code-review-graph](https://github.com/tirth8205/code-review-graph) builds a persistent call graph of your codebase with Tree-sitter, Louvain communities, betweenness-centrality, and optional vector embeddings. Used by `/age`, `/press`, and `/cure` for risk-scored impact (`get_impact_radius_tool`, `detect_changes_tool`), curated review context (`get_review_context_tool`, `get_minimal_context_tool`), affected flows (`get_affected_flows_tool`), architecture framing (`get_architecture_overview_tool`, `get_hub_nodes_tool`, `get_bridge_nodes_tool`), and cross-repo / semantic search (`cross_repo_search_tool`, `semantic_search_nodes_tool`). Tilth handles AST search, callers, and hash-anchored edits; code-review-graph covers the graph-algorithmic and cross-repo dimensions tilth does not.
-
-```sh
-# Install with the local sentence-transformers embeddings extra (Python 3.10+ required)
-pip install 'code-review-graph[embeddings]'   # or: pipx install 'code-review-graph[embeddings]'
-
-# Auto-detect and configure your harness
-code-review-graph install
-
-# Target a specific harness
-code-review-graph install --platform claude-code
-code-review-graph install --platform cursor
-code-review-graph install --platform codex
-
-# Build the graph for the current project (re-run after large changes)
-code-review-graph build
-
-# Compute embeddings for semantic_search_nodes_tool (one-time, then incremental)
-code-review-graph embed
-```
-
-The `[embeddings]` extra pulls in `sentence-transformers` so `semantic_search_nodes_tool` works out of the box with the default `all-MiniLM-L6-v2` model. Override with `CRG_EMBEDDING_MODEL=<model-id>`. Other embedding providers (Google Gemini, MiniMax, OpenAI-compatible endpoints) are also supported — see the upstream README for `[google-embeddings]` and the `CRG_OPENAI_*` env vars.
 
 </details>
 
@@ -609,3 +570,7 @@ The shared voice kernel at [`skills/age/references/voice.md`](skills/age/referen
 The `/pasteurize` skill — the six-phase diagnosis loop (feedback loop → reproduce → hypothesise → instrument → fix + regression test → cleanup) and the "build a feedback loop first" insight — adapts [Matt Pocock's `diagnose` skill](https://github.com/mattpocock/skills/blob/main/skills/engineering/diagnose/SKILL.md). Easy-cheese-specific adaptations (`cheez-*` tooling, handoff slug schema, `--auto` chain, `/cook` handoff for Phase 5) are layered on top.
 
 The `/wheypoint` skill — compacting a conversation into a handoff document (with a suggested-skills section, no-duplication of existing artifacts, and secret redaction) — adapts [Matt Pocock's `handoff` skill](https://github.com/mattpocock/skills/blob/main/skills/productivity/handoff/SKILL.md). Easy-cheese-specific adaptations: the handoff lands as a durable, resumable artifact at `.cheese/notes/<slug>.md` (rather than the OS temp directory) carrying the standard handoff slug, the suggested-skills section is a state-to-skill mapping over the cheese pipeline expressed as the slug's `next:` field plus named skills, and resumption runs through `/cheese --continue <slug>`.
+
+The Superpowers [`brainstorming`](https://github.com/ejfox/superpowers-mcp) skill — adapted into `/mold`'s design dialogue. Easy-cheese-specific adaptations: the agent-introduced-scope grep gate, shape-check blast-radius numbers, the two-key handshake (curdle gating on the user verb plus the agent's coherence self-check), and ADRs captured as a durable curdle by-product are ahead of the borrowed brainstorming flow.
+
+The [`grill-with-docs`](https://github.com/mattpocock/skills/blob/main/skills/engineering/grill-with-docs/SKILL.md) skill (Pocock) — adapted into `/mold`'s Grill phase with grounded, cited claims: every critical claim is verified via `cheez-search` / `briesearch` before seams are locked.

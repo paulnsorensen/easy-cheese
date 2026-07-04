@@ -4,7 +4,7 @@
 call to `JSON.parse(JSON.stringify(…))`", "any `for` loop with `time.Sleep` in
 its body" — drop to `sg` (ast-grep) via Bash. This is the **only** sanctioned
 shell escape from cheez-search. The same escape covers structural codemods
-via `sg --rewrite` (see "Structural codemods" below); `tilth_edit` remains
+via `sg --rewrite` (see "Structural codemods" below); `tilth_write` remains
 the default for one-off block edits.
 
 ## When `sg` is the right pick
@@ -15,9 +15,6 @@ the default for one-off block edits.
 - Tree-sitter symbol search would over-match because the *name* isn't fixed.
 - You want to apply the same structural change across many files in one pass
   (codemod) — see the dedicated section below.
-
-If the question is "where is `handleAuth` defined" or "what calls
-`validateToken`", stay in `tilth_search`. `sg` is for shape, not name.
 
 ## Pattern syntax
 
@@ -79,7 +76,7 @@ match count. A wide `**/*` over a monorepo can be ~10× slower than a
 constrained scope. Two-stage workflow:
 
 1. **List candidates** with `tilth_search` (definitions, imports, content
-   hits) or `tilth_files` (glob/path predicates) to get the file set.
+   hits) or `tilth_list` (glob patterns) to get the file set.
 2. **Run `sg`** with `--globs` or explicit paths bounded to that set.
 
 This pattern beats one giant wildcard scan and keeps the JSON output small
@@ -101,8 +98,8 @@ enough to inspect.
 ## Structural codemods (`sg --rewrite`)
 
 `sg --rewrite '<template>'` plus `-U` (update files in place) is the
-sanctioned codemod path. It complements `tilth_edit` rather than replacing
-it: tilth_edit excels at "replace this specific block in this specific file"
+sanctioned codemod path. It complements `tilth_write` rather than replacing
+it: tilth_write excels at "replace this specific block in this specific file"
 with hash-anchor concurrency safety; `sg --rewrite` excels at "rewrite every
 instance of this shape across the repo" with structural-match safety.
 

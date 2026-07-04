@@ -1,6 +1,6 @@
 ---
 name: affinage
-description: Triage a PR's review comments and failing CI (plus merge conflicts) through the /age lens, deciding which claims are worth acting on. Use when the user says "respond to PR comments", "handle review feedback", "affinage the PR", "/affinage <pr>", "fix the failing build", "resolve the conflicts and respond". Fetches inline + review-body comments via `gh` and CI failures via `affinage.pyz pr-status`, grades each through the ten age dimensions, and writes a report at `.cheese/affinage/pr-<n>.md`. Resolves merge conflicts via `/melt` and routes build/CI failures to fixes through `/cure`. When invoked standalone (no upstream `handoff_context`) it also runs `/age` over the PR diff and folds fresh findings in; when chained, it skips that pass. By default it auto-applies the recommended set via `/cure` and posts the drafted replies, gating only on sprawling/structural fixes or conflicts; `--safe` re-gates. Supports `--auto --stake <floor>`. Before `/cure`; parallel to `/age`.
+description: Triage a PR's review comments and failing CI (plus merge conflicts) through the /age lens, deciding which claims are worth acting on. Use when the user says "respond to PR comments", "handle review feedback", "affinage the PR", "/affinage <pr>", "fix the failing build", "resolve the conflicts and respond". Fetches inline + review-body comments via `gh` and CI failures via `affinage.pyz pr-status`, grades each through the ten age dimensions, and writes a report at `.cheese/affinage/pr-<n>.md`. Resolves merge conflicts via `/melt` and routes build/CI failures to fixes through `/cure`. Supports `--auto --stake <floor>`. Before `/cure`; parallel to `/age`.
 license: MIT
 ---
 
@@ -15,8 +15,6 @@ Use this skill when the user wants to act on external claims about a PR — revi
 
 See `## Fresh-window review` for the detection rule and `## Merge-conflict resolution` for the conflict path.
 
-The metaphor: an *affineur* evaluates each wheel of cheese by sight / smell / sound and decides its fate. Here the wheels are review comments, CI failures, and merge conflicts.
-
 ## Inputs
 
 ```text
@@ -29,7 +27,7 @@ Flags:
 
 - `--auto --stake <floor>` — autonomous mode. `<floor>` is `blocker`, `high`, `medium+`, or `all` (same semantics as `/cure`). Skips the selection gate, dispatches `/cure --auto --stake <floor>`, posts all replies without prompting.
 - `--safe` — re-introduce the gates the autonomous default skips: the cure-selection gate, the reply-only gate, and the merge-conflict confirmation. Use it when you want to choose before anything is fixed, replied to, or resolved.
-- `--open-pr` — propagate to `/cure` so a clean cure may open a *new* PR when none exists (otherwise `/cure` only pushes an already-open one). For an affinage run the PR almost always already exists, so this flag rarely matters here.
+- `--open-pr` — propagate to `/cure` so a clean cure may open a *new* PR when none exists (otherwise `/cure` only pushes an already-open one).
 - `--hard` — propagated metacognitive-gate flag. `/affinage` does not fire the gate; passes `--hard` forward to `/cure` at handoff.
 - `--full` — un-collapses `## Low` when ≥10 low-severity findings exist (mirrors `/age --full`).
 - `--include-outdated` — include outdated review threads. Default skips them.
@@ -40,14 +38,14 @@ Flags:
 1. **Resolve PR.** From `<pr-ref>` or `gh pr view --json number` on the current branch. Resolve `<owner>/<repo>` from the git remote.
 2. **Fetch PR status.** Call `python3 ${CLAUDE_SKILL_DIR}/scripts/affinage.pyz pr-status <pr>`. The script returns JSON with build status, per-check failure summaries (last ~10 lines of failed logs + parsed failed-test names), and merge state. Map the exit code:
    - **Exit 0** — proceed with grading.
-   - **Exit 3** (`logs-expired`) — the build is failing but every failing check's log was unfetchable (typically expired GitHub Actions logs past the retention window), so there is nothing to ground a CI finding on. Write `status: halt: pr-status-logs-expired` and stop with the hint: *"CI is failing but the logs have expired — rerun the failed jobs (`gh run rerun <run-id> --failed`, where `<run-id>` is the `/actions/runs/<id>/` segment of the failing check's `url`, or read it from `gh pr checks`) and re-invoke `/affinage`."* Affineurs often run a few days after a PR opens, so this is routine, not an edge case.
+   - **Exit 3** (`logs-expired`) — the build is failing but every failing check's log was unfetchable (typically expired GitHub Actions logs past the retention window), so there is nothing to ground a CI finding on. Write `status: halt: pr-status-logs-expired` and stop with the hint: *"CI is failing but the logs have expired — rerun the failed jobs (`gh run rerun <run-id> --failed`, where `<run-id>` is the `/actions/runs/<id>/` segment of the failing check's `url`, or read it from `gh pr checks`) and re-invoke `/affinage`."*
    - **Any other non-zero** (1 PR/gh API error, 2 missing gh binary) — write `status: halt: pr-status-unavailable` and stop.
    - **Merge conflicts.** If `merge.mergeable` is `CONFLICTING` or `merge.state` is `DIRTY`, the PR has unresolved conflicts. Resolve them before grading — see `## Merge-conflict resolution`.
 3. **Fresh-window review.** If this is a standalone run and `--no-age` was not passed, run `/age` over the PR diff before grading and treat each finding as an additional input. See `## Fresh-window review`.
 4. **Fetch comments.**
-   - Inline threads: `gh api repos/<owner>/<repo>/pulls/<pr>/comments`. This REST endpoint returns individual review comments without thread-level resolution state, so the skill cannot filter on `isResolved` from this surface; it skips comments whose `position` is `null` (the diff has moved past the anchored line) unless `--include-outdated`. For true unresolved-only filtering, switch to the GraphQL `pullRequest.reviewThreads { isResolved }` endpoint — documented as a future enhancement.
+   - Inline threads: `gh api repos/<owner>/<repo>/pulls/<pr>/comments`. This REST endpoint returns individual review comments without thread-level resolution state, so the skill cannot filter on `isResolved` from this surface; it skips comments whose `position` is `null` (the diff has moved past the anchored line) unless `--include-outdated`.
    - Review bodies: `gh api repos/<owner>/<repo>/pulls/<pr>/reviews`. Filter to non-empty bodies. Dedupe against inline comments via `pull_request_review_id`.
-5. **Skip already-replied threads.** A thread whose most recent comment is from the resolved GitHub handle (env `RESPOND_GH_HANDLE` → `gh api user --jq .login` → `git config user.name`) has already been responded to; skip it. This keeps re-runs idempotent.
+5. **Skip already-replied threads.** A thread whose most recent comment is from the resolved GitHub handle (see §Rules) has already been responded to; skip it. The same resolved handle is rendered in the reply footer as `agent on behalf of <handle>`.
 6. **Grade through the age lens.** For each input (comment, CI/build failure, OR fresh `/age` finding):
    - Classify dimension from the **code + claim** (or check type + failure summary, for CI items). See `skills/age/references/dimensions.md` for the dimension rubric.
    - **Build failures count, not just test failures.** A failing check is a finding whether the failure is a compile error, a lint/type-check failure, or a failing test — grade the `build.status: failing` checks from `affinage.pyz pr-status` and route them to `/cure` exactly like test failures. Tag CI-sourced items `[from-check:<job>]`.
@@ -57,30 +55,21 @@ Flags:
    - Bucket into:
      - Standard severity sections (`## Blocker / ## High / ## Medium / ## Low`) when the claim is grounded in the diff and its fix is **contained** (`fix-cost-now: contained` — roughly a few lines or a localized refactor). Every such item still maps to a dimension and carries a `[<dimension>:<severity>]` tag — a style or quality nit maps to `deslop` (e.g. `[deslop:low]`). The new rule is to route these grounded, contained-fix nits to `/cure` (usually as `Low`) instead of `## Reviewer-rejected`, keeping the `[from-comment:<id>]` tag so `/cure`'s reply still reaches the reviewer; a valid cheap nit is cheaper to fix than to argue, so do not push back on it.
      - `## Needs-investigation` when the claim is plausible but requires evidence outside the diff (e.g., downstream caller in another repo).
-     - `## Reviewer-rejected` only when the claim is **wrong or ungrounded** (the code is already correct, the reviewer misread it, or there is no real improvement) OR is valid but **a lot of follow-up work** (`fix-cost-now: moderate`/`sprawling` or `fix-cost-later: structural` — a refactor or scope expansion beyond this PR). Reject the wrong ones; defer the expensive ones. Per `skills/age/references/voice.md`, a justified push-back costs more than a small valid fix.
+     - `## Reviewer-rejected` only when the claim is **wrong or ungrounded** (the code is already correct, the reviewer misread it, or there is no real improvement) OR is valid but **a lot of follow-up work** (`fix-cost-now: moderate`/`sprawling` or `fix-cost-later: structural` — a refactor or scope expansion beyond this PR). Reject the wrong ones; defer the expensive ones.
 7. **Write report** to `.cheese/affinage/pr-<n>.md` with the four-line handoff slug at the top, then the age-format body plus the two extra sections. See `## Output` below.
-8. **Act or ask.** By default affinage acts — auto-applies the recommended set and posts the drafted replies — and asks only on a genuine reason (a sprawling/structural fix in the recommended set, conflicting findings) or under `--safe`. Branch on what graded out (full gate shapes in `## Handoff`):
-   - **At least one finding in a severity section (`Blocker` / `High` / `Medium` / `Low`).** Compute the recommended composite (`all-medium, cheap`). With no reason to ask and no `--safe`: announce the selection in one line, **first run step 9** to post any drafted push-backs / investigating notes (they don't depend on cure's outcome, so they must reach GitHub even if `/cure` later halts), then dispatch `/cure <slug>` with locked `handoff_context:` and post the cure-dependent replies (step 10) when `/cure` returns. On a reason to ask or `--safe`: render the cure-selection table inline using `/cure`'s verbs (`skills/cure/references/selection.md`), pre-select the recommended composite (flagging heavy rows), ask via `shared/handoff-gate.md`, then proceed as above for the chosen selection; on `none` / `Stop`, run step 9 for the drafted replies and exit with the report path. If the recommended set is empty (only heavy/expensive items graded into severity sections), treat it as the reply-only branch below.
-   - **No severity-section findings, but `Reviewer-rejected` or `Needs-investigation` has items.** Skip `/cure` dispatch entirely — there is nothing to apply. By default run step 9 to post all drafted replies (push-backs + investigating notes). Under `--safe`, render a small gate first that lets the user pick `post all`, `post pushbacks only`, `skip posting`, or per-finding choices. Exit with `status: ok / next: done`. This mirrors the documented auto-mode "no findings meet the floor" branch (see `### Auto mode`).
-   - **Nothing graded into any section.** Exit cleanly with the report path; there is nothing to post or cure.
+8. **Act or ask** — per §Handoff.
 9. **Post non-cure replies** (runs whenever grading produced these items, with or without `/cure`). Post via `python3 ${CLAUDE_SKILL_DIR}/scripts/affinage.pyz post-reply`:
    - **Reviewer-rejected items** → post the pre-drafted push-back text from the affinage report.
    - **Needs-investigation items** → post `"Human investigating — will follow up."`
    - **CI-sourced findings** (`from-check:<job>` tag) and **fresh-review findings** (`from-age:<dimension>` tag) → no reply (no reviewer to notify).
 
-   Decoupling this from `/cure` is deliberate: drafted push-backs and investigating notes must reach GitHub even when no severity-section finding exists and `/cure` never runs — otherwise the drafted reply is write-only, useful to the human reading the report but invisible to the reviewer waiting on GitHub.
 10. **Post-cure reply posting** (only when `/cure` ran). When `/cure` returns, read `.cheese/cure/pr-<n>.md`'s `### Applied` / `### Deferred` sections and post per-finding replies via `python3 ${CLAUDE_SKILL_DIR}/scripts/affinage.pyz post-reply`:
     - **Applied** (with `from-comment:<id>` tag) → `"Fixed — <applied summary>."`
     - **Deferred** (with `from-comment:<id>` tag) → `"Attempted fix reverted — <reason>."`
 
 ## Fresh-window review
 
-Detection — read the chain signal, not the flags:
-
-- **Standalone**: no upstream `handoff_context` is in scope (the user invoked `/affinage <pr>` directly). The PR diff has not been reviewed this session.
-- **Chained**: a `handoff_context` with `source_skill: /cook` or `/cure` is in scope. `/age` already reviewed this diff upstream.
-
-Behaviour:
+Detection: standalone = no upstream `handoff_context`; chained = a `handoff_context` with `source_skill: /cook` or `/cure`. Behaviour:
 
 - **Standalone** (and `--no-age` not passed): run `/age <pr-ref>` over the PR diff. Fold each returned finding into the affinage report's severity sections tagged `[from-age:<dimension>]`. They flow to `/cure` with every other selected finding and get **no** GitHub reply — there is no reviewer to notify, same as `[from-check:…]` items.
 - **Chained**, or `--no-age`: skip the pass. Re-running `/age` on an already-reviewed diff double-grades.
@@ -93,14 +82,14 @@ When `affinage.pyz pr-status` reports `merge.mergeable: CONFLICTING` or `merge.s
 
 1. Materialise the conflicts locally: `gh pr checkout <pr>`, then `git merge origin/<base>`. (`gh pr checkout` neither opens nor updates the PR, so it does not breach the no-`/gh` rule.)
 2. Hand off to `/melt`. It first checks for squash-merge residue and stops with remedies if found — surface those verbatim and do not auto-apply.
-3. After `/melt` resolves cleanly, the resolution commit is owned by `/melt` / `/cure`. Pushing the merge follows `/cure`'s push contract (push to the already-open PR after a clean cure).
+3. After `/melt` resolves cleanly, the resolution commit is owned by `/melt` / `/cure`. Pushing the resolved merge follows `/cure`'s push contract (§Rules).
 
 - **Default and `--auto` mode**: run the checkout + `/melt` automatically before dispatching `/cure`, then re-run `affinage.pyz pr-status` to confirm `mergeable` cleared. If `/melt` cannot resolve (manual kdiff3 needed, or squash residue), write `status: halt: merge-conflicts-need-human` and stop.
 - **`--safe` mode**: gate the checkout + `/melt` behind the handoff prompt — offer "Resolve merge conflicts" alongside the cure-selection options.
 
 ## Sub-agent context gate
 
-`/affinage` keeps dialogue, selection, approval state, and reply posting in the parent context. Spawn a read-only grading sub-agent only when the parent context would balloon:
+`/affinage` keeps dialogue, selection, approval state, and reply posting in the parent context. Spawn a read-only grading sub-agent — the `reviewer` phase-agent — only when the parent context would balloon (if the named `reviewer` isn't available, e.g. a harness that installs only easy-cheese, fall back to the read-only built-in `Explore` agent or inline grading — never `general-purpose`, which grants full write access):
 
 - Total input count (comments + CI failures) exceeds 10.
 - Diff exceeds ~25 KB.
@@ -118,7 +107,7 @@ Code search and reading go through `cheez-*` skills (`/cheez-search`, `/cheez-re
 | --- | --- | --- |
 | PR status (build + merge) | `${CLAUDE_SKILL_DIR}/scripts/affinage.pyz pr-status` | manual `gh pr checks` + `gh pr view` |
 | GitHub fetch | `gh api` | none (skill halts) |
-| Reply posting | `${CLAUDE_SKILL_DIR}/scripts/affinage.pyz post-reply` | none — direct `gh api` calls bypass the `agent on behalf of;` attribution |
+| Reply posting | `${CLAUDE_SKILL_DIR}/scripts/affinage.pyz post-reply` | none — direct `gh api` calls bypass the `agent on behalf of <handle>` attribution |
 | Diff inspection | `delta` | `git diff --unified=3` |
 
 ## Output
@@ -191,7 +180,7 @@ Auto-fixing the recommended set via `/cure` and posting the drafted replies (or,
 
 Empty severity sections are omitted entirely. `## Needs-investigation` and `## Reviewer-rejected` are omitted when no items land there.
 
-`status: ok` when grading completed; `status: halt: <reason>` when `gh` or `pr-status.py` failed in a way that blocks honest grading. `next: cure` when at least one finding meets the `medium+` floor (medium-or-above, or a cheap contained-fix low); `next: done` when none do.
+`status: ok` when grading completed; `status: halt: <reason>` when `gh` or `pr-status.py` failed in a way that blocks honest grading. `next:` is set per §Handoff — `cure` when ≥1 finding meets the `medium+` floor; `done` otherwise.
 
 ## Handoff
 
@@ -201,11 +190,11 @@ After the report lands, affinage acts by default and asks only on a genuine reas
 
 **When at least one severity-section finding exists (any severity, including `Low`)** — compute the recommended composite (`all-medium, cheap`). With no reason to ask and no `--safe`: announce the one-line selection, post the drafted non-cure replies (Flow step 9), dispatch `/cure` (below), and post the cure-dependent replies (step 10) on return. On a reason to ask or `--safe`: render the cure-selection table inline (per `skills/cure/references/selection.md`) and ask via `shared/handoff-gate.md`, pre-selecting the recommended composite and flagging heavy rows. Lead with the recommended composite, then present the four severity-floor options below it, in the same most-inclusive-to-least order, so the gate is predictable across every run:
 
-- **Fix mediums-and-above plus cheap lows** *(recommended)* — equivalent to `all-medium, cheap` (floor at medium — blockers + high + medium — unioned with every `Low` whose `fix-cost-now: contained`; the small valid nits cheaper to fix than to defer). Sprawling/structural lows are left out.
-- **Fix everything** — equivalent to `all` (every finding regardless of severity).
-- **Fix medium-severity and above** — equivalent to `all-medium` (floor at medium: blockers + high + medium — the severity-floor portion of the `medium+` auto-floor; add `cheap` to also union the contained-fix lows, i.e. the recommended composite above).
-- **Fix high-severity and blockers** — equivalent to `all-high`.
-- **Fix blockers only** *(strict)* — equivalent to `all-blocker`.
+- **Fix mediums-and-above plus cheap lows** *(recommended)* — `all-medium, cheap`. Sprawling/structural lows left out.
+- **Fix everything** — `all`.
+- **Fix medium-severity and above** — `all-medium`.
+- **Fix high-severity and blockers** — `all-high`.
+- **Fix blockers only** *(strict)* — `all-blocker`.
 
 Then offer the non-floor options last:
 
@@ -213,7 +202,7 @@ Then offer the non-floor options last:
 - **Resolve merge conflicts** *(offered only when the PR has conflicts)* — checkout + `/melt` per `## Merge-conflict resolution`, then re-render this gate.
 - **Stop — leave the report for later** — equivalent to `none`.
 
-Present all four severity options on every run even when a severity band is empty: a floor that resolves to an empty set is a valid, predictable no-op — do not drop or reorder options based on which bands happen to be populated. If the user selects a floor (or the recommended composite) that resolves to an empty set, treat the selection as `none`: report that no findings match and do not dispatch `/cure` with empty `resolved_ids` (the non-empty-selection dispatch rule below still holds).
+Present all four severity options on every run even when a band is empty — do not drop or reorder options based on which bands are populated. If a selected floor resolves to an empty set, treat it as `none`: report that no findings match and do not dispatch `/cure` with empty `resolved_ids`.
 
 **When no severity-section finding exists but `Reviewer-rejected` or `Needs-investigation` has items** — `/cure` has nothing to act on, so skip it. By default, post all drafted replies (Flow step 9) and exit. Under `--safe`, render a reply-only gate first:
 
@@ -222,7 +211,9 @@ Present all four severity options on every run even when a severity band is empt
 - **Skip posting** — leave the report for later; post nothing.
 - **Per-finding** — free-text pick of which drafts to post.
 
-On the selection (or the default post-all), post via Flow step 9 and exit with `status: ok / next: done`. This mirrors the documented auto-mode "no findings meet the floor" branch (see `### Auto mode`).
+On the selection (or the default post-all), post via Flow step 9 and exit with `status: ok / next: done` — see `### Auto mode` § "no findings meet the floor" for the auto path.
+
+**Slug `next:` values.** Write `next: cure` when at least one finding meets the `medium+` floor (medium-or-above, or a cheap contained-fix low). Write `next: done` when no severity-section finding exists or all meeting items are empty-selection after floor resolution.
 
 On a non-empty cure selection (auto-selected by default or chosen at the gate), immediately dispatch `/cure <slug> [--safe] [--open-pr] [--hard]` with locked context:
 
@@ -248,11 +239,11 @@ When invoked with `--auto --stake <floor>`:
 - After `/cure --auto` and its downstream `/age --scope --auto` chain settle, post replies for the originally graded items only. Do NOT re-grade for findings discovered by `/age --scope`.
 - Reviewer-rejected items: post the pre-drafted push-back.
 - Needs-investigation items: post the human-investigating reply.
-- `/affinage` does not invoke `/gh` itself. The PR push is owned by `/cure`'s terminal contract: the final cure pass pushes to the already-open PR (and, with `--open-pr`, may open a new one). Propagate `--open-pr` to `/cure --auto` when it is in scope.
+- `/affinage` does not invoke `/gh` itself — push contract is in §Rules.
 
-The whole cure chain (cure → `/age --scope --auto` → up to the two-cure-pass cap) must run in the parent affinage context so the post-cure reply step still has the original graded findings (slug, ids, `from-comment:<id>` tags, drafted push-back text) in memory. Same in-session-memory contract as `/age --auto`'s two-pass cap. Spawning the cure chain in a sub-agent silently breaks reply posting — do not.
+The whole cure chain (cure → `/age --scope --auto` → up to the two-cure-pass cap) must run in the parent affinage context so the post-cure reply step still has the original graded findings (slug, ids, `from-comment:<id>` tags, drafted push-back text) in memory. Spawning the cure chain in a sub-agent breaks reply posting — do not.
 
-If no findings meet the floor, skip the `/cure` dispatch, post replies for `Reviewer-rejected` + `Needs-investigation` items only, and exit with `status: ok / next: done / "no findings meet <floor>"`.
+If no findings meet the floor, skip the `/cure` dispatch, post replies for `Reviewer-rejected` + `Needs-investigation` items only, and exit with `status: ok / next: done`.
 
 ### --hard mode
 
@@ -264,11 +255,11 @@ If no findings meet the floor, skip the `/cure` dispatch, post replies for `Revi
 - Prefer fixing over pushing back. A valid, grounded nit whose fix is contained (`fix-cost-now: contained` — a few lines or a localized refactor) goes to `/cure` as a `Low` finding tagged `[from-comment:<id>]`; do not draft a push-back for it. Reserve `## Reviewer-rejected` for claims that are wrong/ungrounded or whose fix is a lot of work (`moderate`/`sprawling`/`structural`). See `skills/age/references/voice.md`.
 - Never auto-apply fixes from `/affinage` itself. Code fixes go through `/cure`; merge conflicts go through `/melt`.
 - Fresh `/age` runs only on standalone invocations (no upstream `handoff_context`) and only when `--no-age` is absent. Chained runs never re-review the diff.
-- Merge conflicts are resolved through `/melt`, not by hand. `gh pr checkout` to materialise conflicts is allowed — it neither opens nor updates the PR. Pushing the resolved merge follows `/cure`'s push contract (push to the already-open PR after a clean cure); `--safe` re-gates it.
-- Every posted reply ends with the literal `agent on behalf of;` attribution via `${CLAUDE_SKILL_DIR}/scripts/affinage.pyz post-reply`. Never call `gh api` directly to post.
+- Merge conflicts are resolved through `/melt`, not by hand. `gh pr checkout` to materialise conflicts is allowed — it neither opens nor updates the PR. Pushing follows `/cure`'s push contract (see next rule).
+- `/affinage` never invokes `/gh` itself. The PR push happens inside `/cure` after a clean cure (push to the already-open PR by default; `--open-pr` opens a new one; `--safe` re-gates).
+- Every posted reply ends with the literal `agent on behalf of <handle>` attribution via `${CLAUDE_SKILL_DIR}/scripts/affinage.pyz post-reply`, where `<handle>` is resolved from `RESPOND_GH_HANDLE` → `gh api user --jq .login` → `git config user.name`. Never call `gh api` directly to post.
 - Idempotent re-runs: skip threads where the latest comment is from the resolved handle. The REST `/comments` endpoint does not expose thread resolution, so honest idempotency relies on the latest-comment-from-self heuristic; switch to GraphQL `reviewThreads` if cross-session resolution-state visibility becomes required.
 - CI-sourced findings get no reply (no reviewer to notify).
-- `/affinage` never invokes `/gh` itself. The PR push happens inside `/cure` after a clean cure (push to the already-open PR by default; `--open-pr` opens a new one; `--safe` re-gates).
 - Apply the shared voice kernel (`skills/age/references/voice.md`): name confidence as `certain | speculating | don't know`; agree when no findings warrant grading.
 
 ## References
@@ -279,5 +270,5 @@ If no findings meet the floor, skip the `/cure` dispatch, post replies for `Revi
 - `skills/cure/references/selection.md` — selection verbs and composition.
 - `skills/melt/SKILL.md` — merge-conflict resolution cascade (mergiraf → rerere → kdiff3).
 - `shared/handoff-gate.md` — gate primitives.
-- `${CLAUDE_SKILL_DIR}/scripts/affinage.pyz post-reply` — reply posting with `agent on behalf of;` attribution.
+- `${CLAUDE_SKILL_DIR}/scripts/affinage.pyz post-reply` — reply posting with `agent on behalf of <handle>` attribution.
 - `${CLAUDE_SKILL_DIR}/scripts/affinage.pyz pr-status` — PR status fetcher.

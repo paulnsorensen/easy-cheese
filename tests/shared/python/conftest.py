@@ -42,3 +42,38 @@ def paths() -> ModuleType:
 @pytest.fixture(scope="session")
 def severity() -> ModuleType:
     return importlib.import_module("severity")
+
+
+@pytest.fixture(scope="session")
+def cli() -> ModuleType:
+    return importlib.import_module("cli")
+
+
+@pytest.fixture(scope="session")
+def handoff() -> ModuleType:
+    return importlib.import_module("handoff")
+
+
+@pytest.fixture(scope="session")
+def findings() -> ModuleType:
+    return importlib.import_module("findings")
+
+
+@pytest.fixture(scope="session")
+def gates() -> ModuleType:
+    return importlib.import_module("gates")
+
+
+@pytest.fixture(scope="session")
+def slugify_mod() -> ModuleType:
+    return importlib.import_module("slugify")
+
+
+@pytest.fixture(scope="session")
+def handoff_cli_mod() -> ModuleType:
+    return importlib.import_module("handoff_cli")
+
+
+@pytest.fixture(scope="session")
+def paths_cli_mod() -> ModuleType:
+    return importlib.import_module("paths_cli")

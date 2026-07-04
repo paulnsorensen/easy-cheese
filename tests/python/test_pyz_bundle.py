@@ -17,6 +17,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 BUILD = REPO_ROOT / "scripts" / "build_pyz.py"
 
 sys.path.insert(0, str(REPO_ROOT / "shared" / "scripts"))
+import build_pyz  # noqa: E402  bundle manifest — single source for the orphan check
 import paths  # noqa: E402  the path-math single source the shim must agree with
 
 SKILL_SUBCOMMANDS = {
@@ -33,11 +34,24 @@ SKILL_SUBCOMMANDS = {
         "validate_decomposition",
         "validate_manifest",
         "validate_pr_plan",
+        "manifest_update",
+        "wiring_topo_sort",
     ],
     "affinage": ["pr-status"],
-    "mold": ["artifact-path", "curd-count"],
+    "mold": ["artifact-path", "curd-count", "gate-graph"],
     "briesearch": ["artifact-path", "ground-check"],
     "cook": ["artifact-path"],
+    "hard-cheese": ["append-attempt", "freshness-check"],
+    "pasteurize": ["debug-tag-sweep", "repro-rerun"],
+    "common": [
+        "slugify",
+        "write_handoff_artifact",
+        "read_handoff_slug",
+        "findings_cli",
+        "gates_cli",
+        "paths_cli",
+        "handoff_cli",
+    ],
 }
 
 # Every skill that registers the durable-corpus resolver shim. One shared source
@@ -133,6 +147,15 @@ def test_bundle_carries_only_its_own_skill(bundles: Path) -> None:
     affinage = set(zipfile.ZipFile(bundles / "affinage.pyz").namelist())
     assert "pr_status.py" in affinage
     assert not (affinage & {"git_utils.py", "manifest_io.py", "schema.py"})  # no shared needed
+
+
+def test_cheese_factory_bundle_contains_entity_modules(bundles: Path) -> None:
+    """curd.py and wiring.py are local library modules (not registered subcommands).
+    The local-sibling-bundling feature in build_pyz must stage them so that
+    validate_decomposition and validate_manifest can import them inside the .pyz."""
+    cf = set(zipfile.ZipFile(bundles / "cheese-factory.pyz").namelist())
+    assert "curd.py" in cf, f"curd.py missing from cheese-factory bundle; contents: {sorted(cf)}"
+    assert "wiring.py" in cf, f"wiring.py missing from cheese-factory bundle; contents: {sorted(cf)}"
 
 
 # Pinned env so the resolved corpus path is deterministic and does not depend on
@@ -398,15 +421,58 @@ def test_bundle_build_is_byte_deterministic(tmp_path: Path) -> None:
         assert (first / f"{skill}.pyz").read_bytes() == (second / f"{skill}.pyz").read_bytes()
 
 
+def test_common_slugify_executes_end_to_end(bundles: Path, tmp_path: Path) -> None:
+    """slugify subcommand in common.pyz (slugify.py from-task) resolves imports and dispatches."""
+    result = _run(
+        bundles / "common.pyz",
+        "slugify",
+        "from-task",
+        "--task",
+        "Fix the off-by-one error",
+        "--json",
+    )
+    assert result.returncode == 0, result.stderr
+    import json
+    payload = json.loads(result.stdout)
+    assert payload["slug"] == "fix-off-by-one-error"
+
+
+def test_common_bundle_carries_clis_plus_libs_not_skill_scripts(bundles: Path) -> None:
+    """common.pyz contains shared CLI entrypoints and their shared deps (handoff,
+    paths, cli, etc.) but must NOT carry any skill-specific script."""
+    content = set(zipfile.ZipFile(bundles / "common.pyz").namelist())
+    # All COMMON_SUBCOMMANDS must be present as module files
+    for sub in ["slugify", "write_handoff_artifact", "read_handoff_slug",
+                "findings_cli", "gates_cli", "paths_cli", "handoff_cli"]:
+        assert f"{sub}.py" in content, f"{sub}.py missing from common.pyz"
+    # Skill scripts must not be present
+    assert "conflict_pick.py" not in content
+    assert "validate_manifest.py" not in content
+
+
+def test_unknown_skill_name_still_errors() -> None:
+    """build_pyz.py must exit non-zero for truly unknown skill names."""
+    result = subprocess.run(
+        [sys.executable, str(BUILD), "--out-dir", "/tmp", "no-such-skill"],
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode != 0
+    assert "no-such-skill" in result.stderr
+
+
 def _bundle_content(pyz: Path) -> dict[str, bytes]:
     with zipfile.ZipFile(pyz) as archive:
         return {name: archive.read(name) for name in archive.namelist()}
 
 
-@pytest.mark.parametrize("skill", list(SKILL_SUBCOMMANDS))
+@pytest.mark.parametrize("skill", [s for s in SKILL_SUBCOMMANDS if s != "common"])
 def test_committed_bundle_matches_source(bundles: Path, skill: str) -> None:
     """Every committed skills/<skill>/scripts/<skill>.pyz must byte-match a fresh
-    build of the current source, because CI gates PRs with the same rebuild+diff."""
+    build of the current source, because CI gates PRs with the same rebuild+diff.
+    common.pyz is excluded: it has no single canonical path (fanned out to each
+    consumer in Wave 1+, not stored in skills/common/)."""
     committed = REPO_ROOT / "skills" / skill / "scripts" / f"{skill}.pyz"
     fresh = bundles / f"{skill}.pyz"
     assert committed.exists(), f"committed bundle missing: {committed}"
@@ -423,3 +489,31 @@ def test_committed_bundle_matches_source(bundles: Path, skill: str) -> None:
         f"(changed={changed}, added={added}, removed={removed}). "
         f"Rebuild and commit it: python3 scripts/build_pyz.py"
     )
+
+
+def test_no_orphan_committed_bundles():
+    """A skill dropped from build_pyz.SKILLS must not leave a stale committed
+    .pyz behind — the build-pyz workflow only diffs bundles it rebuilds, so an
+    orphan would ship silently.
+    common.pyz is excluded: it fans out to consumer skills in Wave 1+ and has no
+    single committed path under skills/common/."""
+    committed = {
+        p.relative_to(REPO_ROOT).as_posix()
+        for p in REPO_ROOT.glob("skills/*/scripts/*.pyz")
+        if p.name != "common.pyz"
+    }
+    expected = {f"skills/{skill}/scripts/{skill}.pyz" for skill in build_pyz.SKILLS}
+    assert committed == expected
+
+
+def test_local_skill_modules_finds_libs_and_excludes_subcommands() -> None:
+    """build_pyz._local_skill_modules discovers local src/<skill>/ library modules a
+    registered script imports (curd/wiring), and EXCLUDES registered subcommands and
+    shared modules. Unit-locks the discovery the bundle-content test only covers
+    end-to-end — a regression that stopped excluding registered names or stopped
+    finding the siblings would fail here with a precise diff."""
+    local = build_pyz._local_skill_modules("cheese-factory")
+    assert local == {"curd", "wiring"}, local
+    assert "validate_decomposition" not in local  # registered subcommand, not a local lib
+    assert "validate_manifest" not in local
+    assert "schema" not in local  # shared module (shared/scripts), not src/cheese-factory

@@ -5,6 +5,25 @@
 # The script is sourced (the BASH_SOURCE != $0 guard skips main on source)
 # so each test can call individual functions with controlled stubs.
 
+# Build a hermetic essentials dir once per file: symlinks to the only
+# external commands the script and suite actually use. Resolved against
+# the original full PATH, which is still active here. env and bash are
+# allowlisted only to back the stubs' `#!/usr/bin/env bash` shebangs,
+# not direct use — don't prune them.
+setup_file() {
+    ESSENTIALS_BIN="$BATS_FILE_TMPDIR/essentials"
+    mkdir -p "$ESSENTIALS_BIN"
+    local cmd resolved
+    for cmd in bash cat chmod grep mkdir ln dirname basename sort tr uname env; do
+        resolved="$(command -v "$cmd")" || {
+            echo "setup_file: essential command not found: $cmd" >&2
+            return 1
+        }
+        ln -sf "$resolved" "$ESSENTIALS_BIN/$cmd"
+    done
+    export ESSENTIALS_BIN
+}
+
 setup() {
     REPO_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/../.." && pwd)"
     INSTALL_SH="$REPO_ROOT/scripts/install.sh"
@@ -14,9 +33,10 @@ setup() {
     : > "$STUB_LOG"
     export STUB_LOG
     PATH_ORIG="$PATH"
-    # Use a sparse PATH so the only commands available are real /usr/bin
-    # essentials plus whatever stubs each test adds.
-    PATH="$STUB_BIN:/usr/bin:/bin"
+    # Hermetic PATH: stubs first, then only the allowlisted essentials.
+    # No /usr/bin or /bin, so real host tools cannot satisfy the install
+    # script's command -v probes in absence-asserting tests.
+    PATH="$STUB_BIN:$ESSENTIALS_BIN"
     # shellcheck disable=SC1090
     source "$INSTALL_SH"
 }
@@ -70,7 +90,7 @@ count_skills() {
 }
 
 @test "ec_validate_selection accepts the special 'none' MCP token" {
-    run ec_validate_selection "none" "tilth context7 tavily code-review-graph none"
+    run ec_validate_selection "none" "tilth context7 tavily hallouminate milknado none"
     [ "$status" -eq 0 ]
 }
 
@@ -340,7 +360,7 @@ STUB
     grep -q "^tilth install claude-code --edit$" "$STUB_LOG"
 }
 
-# -- ec_install_mcp_context7 / tavily / crg ----------------------------------
+# -- ec_install_mcp_context7 / tavily ----------------------------------------
 
 @test "ec_install_mcp_context7 warns and skips for non-claude harness" {
     run ec_install_mcp_context7 cursor
@@ -403,97 +423,94 @@ STUB
     [[ "$output" == *"$STUB_BIN/claude mcp add tavily -- $STUB_BIN/npx -y tavily-mcp"* ]]
 }
 
-# -- ec_install_crg_cli -------------------------------------------------------
 
-@test "ec_install_crg_cli prefers uv over pipx and pip" {
-    make_stub uv
-    make_stub pipx
-    make_stub pip
-    EC_UV="$STUB_BIN/uv" EC_PIPX="$STUB_BIN/pipx" EC_PIP="$STUB_BIN/pip" \
-        EC_DRY_RUN=1 run ec_install_crg_cli
+# -- ec_install_mcp_hallouminate -----------------------------------------------
+
+@test "ec_install_mcp_hallouminate warns and skips for non-claude harness" {
+    run ec_install_mcp_hallouminate cursor
     [ "$status" -eq 0 ]
-    [[ "$output" == *"uv tool install code-review-graph[embeddings]"* ]]
-    [[ "$output" != *"pipx install"* ]]
-    [[ "$output" != *"pip install"* ]]
+    [[ "$output" == *"only claude-code is auto-registered"* ]]
 }
 
-@test "ec_install_crg_cli falls back to pipx when uv missing" {
-    make_stub pipx
-    make_stub pip
-    EC_PIPX="$STUB_BIN/pipx" EC_PIP="$STUB_BIN/pip" \
-        EC_DRY_RUN=1 run ec_install_crg_cli
+@test "ec_install_mcp_hallouminate gracefully skips when hallouminate binary missing" {
+    make_stub claude
+    # EC_HALLOUMINATE points at a path that does not exist — detection should warn, not abort.
+    EC_CLAUDE="$STUB_BIN/claude" EC_HALLOUMINATE="$STUB_BIN/no-such-hallouminate" \
+        run ec_install_mcp_hallouminate claude-code
     [ "$status" -eq 0 ]
-    [[ "$output" == *"pipx install code-review-graph[embeddings]"* ]]
-    [[ "$output" != *"uv tool"* ]]
+    [[ "$output" == *"hallouminate binary not found"* ]]
+    ! grep -q "mcp add hallouminate" "$STUB_LOG"
 }
 
-@test "ec_install_crg_cli falls back to 'pip install --user' last with a warning" {
-    make_stub pip
-    EC_PIP="$STUB_BIN/pip" EC_DRY_RUN=1 run ec_install_crg_cli
+@test "ec_install_mcp_hallouminate dry-run shows resolved claude and hallouminate paths" {
+    make_stub claude
+    make_stub hallouminate
+    EC_CLAUDE="$STUB_BIN/claude" EC_HALLOUMINATE="$STUB_BIN/hallouminate" EC_DRY_RUN=1 \
+        run ec_install_mcp_hallouminate claude-code
     [ "$status" -eq 0 ]
-    [[ "$output" == *"falling back to 'pip install --user'"* ]]
-    [[ "$output" == *"pip install --user code-review-graph[embeddings]"* ]]
+    [[ "$output" == *"$STUB_BIN/claude mcp add hallouminate -- $STUB_BIN/hallouminate serve"* ]]
 }
 
-@test "ec_install_crg_cli fails clearly when uv, pipx, and pip are all missing" {
-    PATH="$STUB_BIN" run ec_install_crg_cli
-    [ "$status" -eq 1 ]
-    [[ "$output" == *"needs uv, pipx, or pip"* ]]
-}
+# -- ec_install_mcp_milknado ---------------------------------------------------
 
-@test "ec_install_crg_cli invokes uv tool install with embeddings extra when not dry-run" {
-    make_stub uv
-    export EC_UV="$STUB_BIN/uv"
-    run ec_install_crg_cli
+@test "ec_install_mcp_milknado warns and skips for non-claude harness" {
+    run ec_install_mcp_milknado cursor
     [ "$status" -eq 0 ]
-    grep -q "^uv tool install code-review-graph\[embeddings\]$" "$STUB_LOG"
+    [[ "$output" == *"only claude-code is auto-registered"* ]]
 }
 
-@test "ec_install_crg_cli honors EC_CRG_SPEC override (bare CLI, no extras)" {
-    make_stub uv
-    EC_UV="$STUB_BIN/uv" EC_CRG_SPEC="code-review-graph" EC_DRY_RUN=1 \
-        run ec_install_crg_cli
+@test "ec_install_mcp_milknado gracefully skips when uvx binary missing" {
+    make_stub claude
+    # EC_UVX points at a path that does not exist — detection should warn, not abort.
+    EC_CLAUDE="$STUB_BIN/claude" EC_UVX="$STUB_BIN/no-such-uvx" \
+        run ec_install_mcp_milknado claude-code
     [ "$status" -eq 0 ]
-    [[ "$output" == *"uv tool install code-review-graph"* ]]
-    [[ "$output" != *"code-review-graph[embeddings]"* ]]
+    [[ "$output" == *"uvx not found"* ]]
+    ! grep -q "mcp add milknado" "$STUB_LOG"
 }
 
-# -- ec_install_mcp_crg -------------------------------------------------------
-
-@test "ec_install_mcp_crg installs CLI then registers when binary missing" {
-    make_stub uv
-    EC_UV="$STUB_BIN/uv" EC_CRG="$STUB_BIN/code-review-graph-not-real" \
-        EC_DRY_RUN=1 run ec_install_mcp_crg claude-code
+@test "ec_install_mcp_milknado dry-run shows resolved claude and uvx paths" {
+    make_stub claude
+    make_stub uvx
+    EC_CLAUDE="$STUB_BIN/claude" EC_UVX="$STUB_BIN/uvx" EC_DRY_RUN=1 \
+        run ec_install_mcp_milknado claude-code
     [ "$status" -eq 0 ]
-    [[ "$output" == *"uv tool install code-review-graph[embeddings]"* ]]
-    [[ "$output" == *"install --platform claude-code"* ]]
+    [[ "$output" == *"$STUB_BIN/claude mcp add milknado -- $STUB_BIN/uvx --from milknado milknado-mcp"* ]]
 }
 
-@test "ec_install_mcp_crg invokes crg install for present binary" {
-    make_stub code-review-graph
-    export EC_CRG="$STUB_BIN/code-review-graph"
-    run ec_install_mcp_crg claude-code
+@test "ec_install_mcp_hallouminate real invocation logs correct argv" {
+    make_stub claude
+    make_stub hallouminate
+    EC_CLAUDE="$STUB_BIN/claude" EC_HALLOUMINATE="$STUB_BIN/hallouminate" \
+        run ec_install_mcp_hallouminate claude-code
     [ "$status" -eq 0 ]
-    grep -q "^code-review-graph install --platform claude-code$" "$STUB_LOG"
+    grep -q "^claude mcp add hallouminate -- $STUB_BIN/hallouminate serve$" "$STUB_LOG"
 }
 
-@test "ec_install_mcp_crg fails with PATH hint when binary still missing after install" {
-    # Simulate the common 'pip install --user' case: pip succeeds but the
-    # binary lands in a directory that's not on PATH, so the post-install
-    # ec_cmd_exists check still fails.
-    make_stub pip
-    export EC_PIP="$STUB_BIN/pip"
-    # EC_CRG points at a path that will never exist on PATH.
-    export EC_CRG="$BATS_TEST_TMPDIR/nope/code-review-graph"
-    run ec_install_mcp_crg claude-code
-    [ "$status" -eq 1 ]
-    [[ "$output" == *"install succeeded but"* ]]
-    [[ "$output" == *"not on PATH"* ]]
-    [[ "$output" == *"pipx ensurepath"* ]]
-    # Crucially, the registration step must NOT fire when the binary is
-    # still missing — otherwise the user gets the generic shell error we're
-    # trying to replace with a targeted hint.
-    ! grep -q " install --platform " "$STUB_LOG" || false
+@test "ec_install_mcp_milknado real invocation logs correct argv" {
+    make_stub claude
+    make_stub uvx
+    EC_CLAUDE="$STUB_BIN/claude" EC_UVX="$STUB_BIN/uvx" \
+        run ec_install_mcp_milknado claude-code
+    [ "$status" -eq 0 ]
+    grep -q "^claude mcp add milknado -- $STUB_BIN/uvx --from milknado milknado-mcp$" "$STUB_LOG"
+}
+
+@test "ec_parse_args accepts --mcp hallouminate,milknado" {
+    ec_parse_args --mcp hallouminate,milknado
+    [[ "$EC_MCP" == "hallouminate,milknado" ]]
+}
+
+@test "ec_install_mcp_hallouminate fails when claude CLI missing" {
+    run ec_install_mcp_hallouminate claude-code
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"claude CLI not found"* ]]
+}
+
+@test "ec_install_mcp_milknado fails when claude CLI missing" {
+    run ec_install_mcp_milknado claude-code
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"claude CLI not found"* ]]
 }
 
 # -- ec_install_skills --------------------------------------------------------
@@ -850,4 +867,43 @@ STUB
     [ "$(grep -c '^gh skill install ' "$STUB_LOG")" -eq "$(count_skills)" ]
     # No brew calls should have happened.
     ! grep -q "^brew" "$STUB_LOG" || false
+}
+
+# -- EC_FALLBACK_SKILLS sync --------------------------------------------------
+
+@test "EC_FALLBACK_SKILLS matches the skills/ directories exactly" {
+    local expected actual d
+    expected="$(for d in "$REPO_ROOT"/skills/*/; do basename "$d"; done | LC_ALL=C sort)"
+    actual="$(tr ' ' '\n' <<<"$EC_FALLBACK_SKILLS" | LC_ALL=C sort)"
+    if [[ "$actual" != "$expected" ]]; then
+        echo "expected: $expected"
+        echo "actual:   $actual"
+        return 1
+    fi
+}
+
+# -- test harness hermeticity -------------------------------------------------
+
+@test "hermetic PATH: non-allowlisted host tools are unreachable" {
+    # sed and awk live in /usr/bin on both Linux and macOS but are not
+    # essentials; if setup()'s PATH regresses to include /usr/bin or /bin
+    # this goes red. type -P is a PATH-only lookup, so an env-exported
+    # shell function can't satisfy it.
+    run type -P sed
+    [ "$status" -ne 0 ]
+    run type -P awk
+    [ "$status" -ne 0 ]
+}
+
+@test "hermetic PATH: stubs shadow allowlisted essentials" {
+    # Both halves of precedence: the essential resolves from the allowlist
+    # dir before any stub exists, and the stub wins once dropped in. Goes
+    # red if $ESSENTIALS_BIN drops out of PATH or the ordering flips.
+    [[ "$(command -v uname)" == "$ESSENTIALS_BIN/uname" ]]
+    make_stub uname
+    [[ "$(command -v uname)" == "$STUB_BIN/uname" ]]
+}
+
+@test "hermetic PATH: allowlisted essentials resolve from the essentials dir" {
+    [[ "$(command -v grep)" == "$ESSENTIALS_BIN/grep" ]]
 }

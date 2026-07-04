@@ -1,6 +1,6 @@
 ---
 name: age
-description: Review a diff, PR, branch, or path across ten orthogonal dimensions (correctness, security, encapsulation, spec, complexity, deslop, assertions, NIH, efficiency, telemetry) and emit a severity-grouped findings report. Use when the user wants a code review — phrases like "review this", "/age", "is this safe to merge", "find bugs", "spot security issues", "check for slop", "review my PR", "look for problems", "what's wrong with this code". Report (`## Blocker / ## High / ## Medium / ## Low`) lands at `.cheese/age/<slug>.md`, each finding tagged by dimension. Use even when the user only asks for one dimension — the report scopes itself. Findings only — no fixes; after the report lands, age auto-applies the recommended set (mediums-and-above plus cheap lows) via `/cure`, gating only when a fix is sprawling/structural or findings conflict; `--safe` restores the selection gate. Supports `--auto` (propagated from `/cook --auto`) for the autonomous chain into `/cure`. After `/press` (optional); before `/cure`.
+description: Review a diff, PR, branch, or path across ten orthogonal dimensions (correctness, security, encapsulation, spec, complexity, deslop, assertions, NIH, efficiency, telemetry) and emit a severity-grouped findings report. Use when the user wants a code review — phrases like "review this", "/age", "is this safe to merge", "find bugs", "spot security issues", "check for slop", "review my PR", "what's wrong with this code". Report (`## Blocker / ## High / ## Medium / ## Low`) lands at `.cheese/age/<slug>.md`, each finding tagged by dimension. Use even when the user only asks for one dimension — the report scopes itself. Findings only — no fixes; after the report lands, age auto-applies the recommended set (mediums-and-above plus cheap lows) via `/cure`, gating only when a fix is sprawling/structural or findings conflict; `--safe` restores the selection gate. Supports `--auto` (propagated from `/cook --auto`) for the autonomous chain into `/cure`. After `/press` (optional); before `/cure`.
 license: MIT
 ---
 
@@ -25,7 +25,7 @@ Accept:
 
 When called with a `<slug>`, resolve `.cheese/press/<slug>.md` (if present) for press context and review the current working diff. When called with a `<ref-or-range>`, review that range. Default to the current working diff when neither is supplied. If the base branch is unclear, ask or use the repository's documented default.
 
-`--auto` is the propagated autonomous-mode flag from `/cook --auto`. It changes the handoff (see `## Handoff`). Track the cure-pass count internally so the two-cure-pass cap can be enforced — increment after each `/cure --auto` returns. The full chain is `age → cure → age → cure → age → stop`: up to three `/age --auto` invocations and up to two `/cure --auto` passes. Once two cure passes have completed, the next `/age --auto` writes the final report and stops without invoking `/cure` again. (This in-session contract uses conversation memory to track passes — it works because `/cook --auto` runs every phase in the same context. When invoked from `/ultracook`, each phase boots in fresh context with no shared memory; see `### When invoked from /ultracook` below for the no-shared-memory variant.)
+`--auto` is the propagated autonomous-mode flag from `/cook --auto`. It changes the handoff (see `## Handoff` and `### Auto mode` for the cap rule and full chain). See `### When invoked from /ultracook` for the no-shared-memory variant.
 
 `--hard` is the propagated metacognitive-gate flag from `/cook --hard` (or `/cheese --hard`). Age does not fire the gate; it only passes `--hard` forward to `/cure` at the handoff so the gate can fire at the share-for-review boundary. See `skills/hard-cheese/SKILL.md`.
 
@@ -50,12 +50,31 @@ Per-dimension base-severity tables, location-sensitivity, fix-cost-now / fix-cos
 
 ## Flow
 
-1. Identify the diff, scope, and relevant spec or issue.
-2. Gather evidence: diff, touched files, tests, callers/imports. If `.cheese/press/<slug>.md` exists, read it and include a `## Press findings` sub-section in the age report summarising unresolved items — `/cure` reads only `.cheese/age/<slug>.md` and cannot access the press report directly.
+1. Identify the diff, scope, and relevant spec or issue. **Mode check (one decision point):** if the **scale threshold** (defined in `## Sub-agent context gate` below) is met — and `/age` is not itself a sub-agent — switch to `### Scale-triggered fan-out mode`; steps 2–4 (evidence-gather, per-dimension review, severity computation) are replaced by the fan-out path — both modes converge on steps 5–6.
+2. Gather evidence: diff, touched files, tests, callers/imports. If a press report exists for this slug, read it via:
+
+   ```
+   python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz read_handoff_slug --phase press --slug <slug>
+   ```
+
+   Include a `## Press findings` sub-section in the age report summarising unresolved items — `/cure` reads only `.cheese/age/<slug>.md` and cannot access the press report directly.
+
+   Independently of any press report, if `.cheese/glossary/<slug>.md` exists, read it now so naming drift against the resolved glossary can be flagged as a deslop finding.
 3. Review every dimension; dimensions with no findings simply omit themselves.
 4. Compute severity per finding (base + location bump + compounding bump, capped at `blocker`). Group findings by severity (`## Blocker → ## High → ## Medium → ## Low`); within a severity group, order by file.
-5. Write the report to `.cheese/age/<slug>.md` and print the path.
-6. Hand off (see `## Handoff` below). By default age auto-selects the recommended fix set and dispatches `/cure` in the same turn, gating for a human decision only when there is a genuine reason (a sprawling/structural fix in the set, or conflicting findings) or when `--safe` is passed. Age never *applies* fixes itself — `/cure` owns application — it only owns the *selection* and the dispatch.
+5. Write the report:
+
+   ```
+   report_file=$(mktemp)
+   # write the report markdown (everything below) to "$report_file", then:
+   python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz write_handoff_artifact \
+     --phase age --slug <slug> --status ok --next cure \
+     --artifact "" --orientation "<one-line orientation>" \
+     --body-file "$report_file"
+   ```
+
+   Then print the path.
+6. Hand off (see `## Handoff` below).
 
 ## Preferred tools and fallbacks
 
@@ -66,29 +85,47 @@ Beyond `cheez-*` there are review-specific tools:
 | Need | Prefer | Fallback |
 | --- | --- | --- |
 | Diff inspection | `delta` | `git diff --unified=3` |
-| Risk-scored impact + curated review context | code-review-graph: `get_review_context_tool`, `get_impact_radius_tool`, `detect_changes_tool` | `tilth_deps` + manual scoping |
-| Architecture / hotspot framing for large diffs | code-review-graph: `get_architecture_overview_tool`, `get_hub_nodes_tool`, `get_bridge_nodes_tool` | skip and note in confidence |
+| Caller/dependency impact + curated review context | `tilth_deps` + `/cheez-search` `kind: "callers"` | manual scoping |
+| Architecture / hotspot framing for large diffs | changed-file map + caller/dependency evidence | skip and note in confidence |
+| Design rationale for encapsulation/spec dimensions (optional) | `mcp__hallouminate__list_corpora` / `mcp__hallouminate__ground` on `repo:<repo>:wiki` corpus — if available, ground design intent before grading encapsulation and spec findings | skip; proceed with diff + code evidence only; cap at `speculating` when rationale is the primary evidence |
 | GitHub/PR context | `gh` | local git commands or user-provided PR data |
 | Merge/conflict awareness | mergiraf | manual conflict checks |
 
-**Freshness:** before the first code-review-graph query in a run, call `build_or_update_graph_tool` (and `embed_graph_tool` if you'll use `semantic_search_nodes_tool`). The graph is persistent and goes stale between sessions. See [`/cheez-search`](../cheez-search/SKILL.md#when-code-review-graph-beats-tilth-if-your-harness-has-it) for the full freshness contract and when semantic search beats tilth — steel threads across renamed layers, concepts under divergent names, spec-vs-code vocabulary mismatch.
-
-Missing optional tools should not block review. State which evidence was unavailable and reduce confidence accordingly.
+**Optional MCPs:** hallouminate and milknado follow the detect-and-degrade contract in [`../../shared/optional-plugins.md`](../../shared/optional-plugins.md) — state absence once, fall back, reduce confidence only if evidence quality suffers, never block.
 
 ## Sub-agent context gate
 
-`/age` should fork a read-only review-context sub-agent when evidence gathering is likely to exceed the parent context, especially for `--comprehensive` reviews.
+`/age` should fork a read-only review-context sub-agent — the `explorer` phase-agent, which gathers diff / caller / dependency evidence and returns a digest without grading — when evidence gathering is likely to exceed the parent context, especially for `--comprehensive` reviews. If the named `explorer` agent isn't available (e.g. a harness that installs only easy-cheese), fall back to the read-only built-in `Explore` agent or an inline read — never `general-purpose`, which grants full write access.
 
-Spawn when any of these are true:
+**Scale threshold** — spawn when any of these are true:
 
 - The diff spans more than 15 files.
 - Touched code or generated review context is larger than roughly 25 KB (about 5 K tokens of raw output the parent would not read line-by-line).
 - Caller / dependency graph expansion crosses multiple subsystems.
-- code-review-graph or `tilth_deps` output is needed for hotspot, bridge-node, or blast-radius framing.
+- Caller/dependency evidence from `tilth_deps` or `/cheez-search` crosses multiple subsystems.
 
-The sub-agent returns a digest: orientation paragraph, high-signal `path:line` citations, gap list. The parent owns the ten-dimension review, severity grading, and the `.cheese/age/<slug>.md` report. Do not spawn for small diffs, to outsource severity grading, or to outsource the final verdict.
+For the digest contract, harness-agnostic selection rules, and what the parent never delegates, see `references/sub-agent-gate.md`.
 
-Digest size, parent-vs-sub-agent split, and harness-agnostic sub-agent selection live in `references/sub-agent-gate.md` — single source of truth for the cross-cutting rules.
+### Scale-triggered fan-out mode
+
+Activates when **all** hold: the **scale threshold** (above) is met AND `/age` is not itself a sub-agent (no `invoked-from:` marker). Below threshold, or when running as a sub-agent, the single-parent path applies unchanged.
+
+**Seam 1 — Predicate.** The activation gate above (scale threshold met AND `/age` not a sub-agent) is the fan-out predicate.
+
+**Seam 2 — Shared context packet.** The orchestrator assembles the packet once, writes it to `.cheese/age/<slug>-packet.md`, and each worker reads it. Eight components, and the reuse of the review-context digester as the orientation block, are documented in `references/packet.md`.
+
+**Seam 3 — Worker contract.** One worker per dimension — dispatch the `reviewer` phase-agent scoped to a single dimension (if the named `reviewer` isn't available, e.g. a harness that installs only easy-cheese, fall back to the read-only built-in `Explore` agent or the single-parent path — never `general-purpose`, which grants full write access). Each worker:
+- Reviews only its assigned dimension.
+- Computes **full per-finding severity** for that dimension (base + location bump + compounding bump).
+- Tags each finding with its dimension and an `also-relevant-to: [<dim>, ...]` field when cross-dimension overlap is suspected.
+- Returns its dimension's findings as full per-finding rows in the `SKILL.md § Output` finding format (`**[dim:sev]** path:line — claim` + `location / fix-cost-now / fix-cost-later` + `recommendation`). Not an orientation digest — the `§ Digest contract` size ceiling does not apply.
+- Does **not** dedup, apply boundary tiebreakers, reconcile severity across dimensions, or write the report.
+
+**Seam 4 — Orchestrator reconciliation.** After all workers return, apply the `## Dimension boundaries` table (`references/dimensions.md:319-340`) verbatim to any line meeting EITHER condition: (1) flagged by two or more workers at the same `file:line`; (2) tagged `also-relevant-to: [d]` by any worker — the orchestrator re-evaluates dimension `d` against that line and applies the tiebreaker (keep the higher-base finding / suppress / emit-both-with-cross-reference per the 15 rules). This consumes the `also-relevant-to` signal and provides the cross-dimension coverage single-parent gets for free. Lines neither flagged by ≥2 workers nor tagged `also-relevant-to` need no reconciliation. Group by severity. The parent owns the canonical artifact. After reconciliation, continue at step 5 (write + print the report path) and `## Handoff` exactly as the single-parent path does.
+
+**Seam 5 — Shared impact evidence.** The packet carries the caller/dependency notes assembled through `tilth_deps` and `/cheez-search`. Workers use that packet instead of rebuilding impact context independently.
+
+**Output mode-invariance (invariant).** The findings report (`.cheese/age/<slug>.md`) is identical in shape — same dedup rule, same severity grouping, same finding format — whether produced by the single-parent path or fan-out mode. Only the internal execution path differs. This invariant also holds for inline-degrade mode (see `### Inline-degrade mode`).
 
 ## Output
 
@@ -134,7 +171,7 @@ artifact: <path-to-press-report-or-prior-cure-if-any>
 <`certain` | `speculating` | `don't know`> — <one-line justification including which evidence sources were unavailable>
 
 ## Next step
-Auto-fixing the recommended set via `/cure` (or, on a reason to ask / `--safe`, the selection prompt rendered inline — pick findings to cure or `none` to stop).
+Auto-fixing the recommended set via `/cure` (or the selection prompt on a reason to ask / `--safe`).
 ```
 
 Empty severity sections are omitted entirely. When ten or more `low` findings exist, collapse the `## Low` section to a single line:
@@ -146,7 +183,7 @@ Empty severity sections are omitted entirely. When ten or more `low` findings ex
 
 Suppressed lows feed the cure-selection table only when `--full` is passed.
 
-`status: ok` when the review completed. `status: halt: <reason>` when evidence was unreachable in a way that blocks honest review. `next: cure` when at least one finding meets the `medium+` floor (medium-or-above, or a cheap contained-fix low) and the chain has cure passes remaining; `next: done` when no finding meets the `medium+` floor or the two-cure-pass cap has been reached.
+`status: ok` when the review completed. `status: halt: <reason>` when evidence was unreachable in a way that blocks honest review. `next: cure` when at least one finding meets the **medium+ floor**; `next: done` when no finding meets it or the two-cure-pass cap has been reached.
 
 Then print:
 
@@ -157,8 +194,6 @@ Age report: .cheese/age/<slug>.md
 ## Handoff
 
 **Pipeline:** culture → mold → cook → press → **[age]** → cure → ship
-
-After the report is on disk, age decides whether to *act* or *ask*. The default is to act: auto-select the recommended fix set and dispatch `/cure` in the same turn, no gate. The gate is reserved for the cases that genuinely need a human decision. Age never *applies* fixes — `/cure` owns application — it only owns the *selection*.
 
 **Compute the recommended set.** The recommended selection is the composite `all-medium, cheap` — floor at medium (blockers + high + medium) unioned with every `Low` whose `fix-cost-now: contained`. Expand it against the report into `resolved_ids`.
 
@@ -175,9 +210,15 @@ After the report is on disk, age decides whether to *act* or *ask*. The default 
 
 ### Selection gate (`--safe`, or a reason to ask)
 
-Use the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md).
+Use the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md). Age's finding selection is the gate's *core* decision; the shared **Standard forward-step menu**'s tail (**Ship it**, **Checkpoint & stop**, **Stop**) rides after the selection options per that menu's tail rule.
 
-1. Render the numbered selection table per `../cure/references/selection.md` directly inline (one row per finding, grouped by severity); mark any sprawling/structural-fix row as *heavy*.
+1. Render the numbered selection table:
+
+   ```
+   python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz findings_cli render-table --report .cheese/age/<slug>.md
+   ```
+
+   Mark any sprawling/structural-fix row as *heavy*.
 2. Ask which findings to cure. Lead each option with the verb (what the user wants to *do* next); the underlying selection verb is the backing detail. Lead with the recommended composite, then present the same four severity-floor options below it, in the same most-inclusive-to-least order, so the gate is predictable across every run:
    - **Fix mediums-and-above plus cheap lows** *(recommended)* — equivalent to `all-medium, cheap` (floor at medium — blockers + high + medium — unioned with every `Low` whose `fix-cost-now: contained`). The cheap lows are the small valid nits that are cheaper to fix than to defer; sprawling/structural lows are left out.
    - **Fix everything** — equivalent to `all` (every finding regardless of severity).
@@ -185,8 +226,14 @@ Use the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/han
    - **Fix high-severity and blockers** — equivalent to `all-high` (floor at high, includes blockers).
    - **Fix blockers only** *(strict; land only the must-fix blockers and defer the rest to a follow-up)* — equivalent to `all-blocker`.
 
-   Then offer the two non-floor options last:
-   - **Pick findings to fix** — accept a free-text reply using the verbs from `../cure/references/selection.md` (`1,3,5`, `all-blocker`, `all-medium`, `all-high`, `cheap`, `all`, `none`, `skip N`; comma-compose to union).
+   Then offer the non-floor and standard-tail options last:
+   - **Pick findings to fix** — accept a free-text reply using the verbs from `../cure/references/selection.md`; expand the verb to finding ids:
+
+     ```
+     python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz findings_cli parse-selection --report .cheese/age/<slug>.md --selection "<verb>"
+     ```
+   - **Ship it** — apply the recommended composite and run cure headless: `/cure <slug> --auto --open-pr --stake medium+` (the `medium+` floor *is* the recommended composite). Carries `--hard` when in scope.
+   - **Checkpoint & stop** — `/wheypoint`: write a resumable handoff and pause instead of curing now.
    - **Stop — leave the report for later** — equivalent to `none`.
 
    Present all four severity options on every run even when a severity band is empty (e.g. no blockers): a floor that resolves to an empty set is a valid, predictable no-op — do not drop or reorder options based on which bands happen to be populated. If the user selects a floor (or the recommended composite) that resolves to an empty set, treat the selection as `none`: report that no findings match and do not dispatch `/cure` with empty `resolved_ids` (the non-empty-selection contract in **Dispatch** still holds).
@@ -215,33 +262,33 @@ When invoked with `--auto`:
 
 - Skip the handoff gate.
 - If two cure passes have already completed (cap reached), stop and surface the final report — do not invoke `/cure` again even if findings remain.
-- Otherwise, if any finding meets the `medium+` floor (medium-or-above, or a `Low` whose `fix-cost-now: contained`), invoke `/cure <slug> --auto --stake medium+` (forward `--open-pr` when it is in scope) and increment the cure-pass count when it returns.
-- If no finding meets the `medium+` floor (no medium-or-above and no cheap lows remain), stop the chain with a one-line "auto chain clean" note and the report path.
+- Otherwise, if any finding meets the **medium+ floor** — medium-or-above, or a `Low` whose `fix-cost-now: contained` (defined here as the `medium+` floor) — invoke `/cure <slug> --auto --stake medium+` (forward `--open-pr` when it is in scope) and increment the cure-pass count when it returns.
+- If no finding meets the **medium+ floor**, stop the chain with a one-line "auto chain clean" note and the report path.
 
 ### When invoked from /ultracook
 
 `/ultracook` spawns age as a fresh-context sub-agent and owns the chain itself. Honour the no-chain override:
 
 - Write `.cheese/age/<slug>.md` (with the handoff slug at the top) and stop. Do not invoke `/cure <slug> --auto --stake medium+` from inside the sub-agent.
-- Set `next:` from what you observe on this run, not from any guess about chain position. `next: cure` when at least one finding meets the `medium+` floor (medium-or-above, or a cheap contained-fix low); `next: done` when none do.
+- Set `next:` from what you observe on this run, not from any guess about chain position. `next: cure` when at least one finding meets the **medium+ floor**; `next: done` when none do.
 - The two-cure-pass cap is enforced by ultracook's fixed chain length, not by age's `next:` field. Fresh-context age cannot count prior cure passes anyway, so this is the only honest contract. The orchestrator uses `next: done` for early-stop signalling; the natural terminal stop is the chain table running out of entries.
 
 ### Inline-degrade mode (invoked from a sub-agent, e.g. /cheese-factory curd worker)
 
-When `/age` detects it is running as a sub-agent (the parent passes the `invoked-from: cheese-factory-curd` marker or equivalent context line in the prompt), it runs its ten dimensions inline within its own context instead of spawning per-dimension sub-agents. This honours the host's nesting-depth limit (Claude Code allows 1 level of sub-agent nesting; equivalents in other harnesses are similar).
+When `/age` detects it is running as a sub-agent (the parent passes the `invoked-from: cheese-factory-curd` marker or equivalent context line in the prompt), it runs its ten dimensions inline within its own context instead of spawning per-dimension sub-agents. This honours the host's nesting-depth limit (harnesses cap sub-agent nesting depth, and the orchestrator's own spawn may already sit at that cap).
 
 Detection mechanism: scan the invoking prompt for an `invoked-from:` line — values like `cheese-factory-curd`, `fromagerie-curd`, or any harness-specific marker the orchestrator passes in. When present, switch modes:
 
 - Run every dimension's review inline. Do not fork the read-only review-context sub-agent gate (`## Sub-agent context gate` above is skipped under inline-degrade).
-- Output (the findings report + handoff slug) is identical between fan-out and inline-degrade modes — only the internal execution differs.
+- Output shape is mode-invariant — same findings report and handoff slug format whether fan-out or inline-degrade; see **Output mode-invariance** in `### Scale-triggered fan-out mode` above.
 - Honour the no-chain-forward directive as usual: write the slug and stop. Do not invoke `/cure` from the sub-agent — the orchestrator owns the chain.
 
-Inline-degrade is forced when the marker is present; there is no opt-out. Spawning a level-2 sub-agent from inside a curd worker would silently exceed the harness's nesting limit and fail — the marker is the only honest signal that the parent has already consumed level-1 depth.
+Inline-degrade is forced when the marker is present (no opt-out); it takes precedence even above the fan-out threshold — fan-out is forbidden when `/age` runs as a sub-agent because the nesting depth is already consumed.
 
 ## Rules
 
 - Review is not a verdict; explain where to look and why.
-- Do not edit production files. Age never *applies* fixes — it owns the *selection* and dispatches `/cure`, which owns application.
+- Do not edit production files; `/cure` owns application.
 - Default to acting: auto-select the recommended set and dispatch `/cure` without a gate. Ask first only on a genuine reason (a sprawling/structural fix in the set, or conflicting findings) or under `--safe`. An empty recommended set is a clean stop, not a question.
 - Do not invent evidence. Cite files, diffs, commands, or unavailable-source notes.
 - Agree when the diff is fine. Do not manufacture findings to fill a dimension; an empty dimension is a valid outcome.

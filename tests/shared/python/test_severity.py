@@ -240,6 +240,7 @@ class TestCli:
         assert result.stdout.strip() == "sprawling"
 
     def test_invalid_input_exits_nonzero(self) -> None:
+        # --fix-cost-later "explosive" is rejected by RubricError → cli.CliError → exit 2
         result = subprocess.run(
             [
                 sys.executable,
@@ -252,9 +253,34 @@ class TestCli:
                 "--location",
                 "contract",
                 "--fix-cost-later",
-                "explosive",  # argparse choices reject this
+                "explosive",
             ],
             capture_output=True,
             text=True,
         )
-        assert result.returncode != 0
+        assert result.returncode == 2
+        assert result.stderr.startswith("ERROR:")
+        assert "fix-cost-later" in result.stderr
+
+    def test_invalid_dimension_exits_two_with_error_prefix(self) -> None:
+        # --dimension "vibes" is not in DIMENSIONS; cli.CliError emits "ERROR: ..."
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(SEVERITY_CLI),
+                "compute",
+                "--dimension",
+                "vibes",
+                "--base",
+                "high",
+                "--location",
+                "contract",
+                "--fix-cost-later",
+                "contained",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 2
+        assert result.stderr.startswith("ERROR:")
+        assert "dimension" in result.stderr

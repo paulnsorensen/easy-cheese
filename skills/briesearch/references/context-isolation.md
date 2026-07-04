@@ -7,7 +7,7 @@ Adapted from Tavily's `tavily-dynamic-search` (Programmatic Tool Calling pattern
 
 ## Why this matters
 
-A single `tavily_search` with `include_raw_content=true` returns ~5-20 results × ~30-50 K chars each. That's 150K-1M characters of mostly boilerplate (nav, footer, cookies, ads). If it enters chat, reasoning quality degrades and downstream calls burn tokens reading garbage.
+A single `tavily_search` with `include_raw_content=true` returns ~5-20 results × ~30-50 K chars each. That's 150K-1M characters of mostly boilerplate (nav, footer, cookies, ads).
 
 The fix: raw bodies stay on disk. Only the curated evidence table reaches the caller. Preferring `tavily_extract` over raw WebFetch at the verify/extract step shrinks that on-disk volume further: its LLM-optimized clean content carries far less boilerplate per result than raw HTML, so `research/<slug>/raw/` stays smaller and sharper.
 
@@ -58,4 +58,4 @@ The durable corpus lives outside the repo checkout (default `~/.local/share/chee
 
 ## Don't mistake this for caching
 
-This is **scoped to a single research question**. The slug ties raw bodies to a specific question's report. Don't reuse another slug's `research/<other-slug>/raw/` for a different question — the relevance filter is question-specific.
+Don't reuse another slug's `research/<other-slug>/raw/` for a different question — the relevance filter is question-specific.

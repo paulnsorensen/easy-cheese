@@ -9,9 +9,11 @@ Mold has no fixed entry point. Inspect the input shape and pick a starting mode.
 | Stack trace, "X is broken/slow/flaky" | Diagnose | error markers, `file:line` refs, symptom verbs |
 | File path, PR ref, existing spec under `.cheese/specs/` | Ground | concrete artifact exists; read it first |
 | Half-baked design doc with signatures or schemas | Sketch | already has interfaces; refine them |
-| "I want to add X" with concrete nouns | Shape | named the thing → jump to options |
-| "Should we do X? thinking about Y" | Grill | tentative plan exists → stress-test it |
+| "I want to add X" with concrete nouns | Bounds pass → Shape | run the bounds pass first (edges → goals/non-goals), then jump to options |
+| "Should we do X? thinking about Y" | Bounds pass → Grill | bounds pass first, then stress-test the tentative plan |
 | Vague noun, half-sentence, "thinking about" | Explore | no grounded artifact, no chosen direction |
+
+**Front-loaded bounds pass.** Every row above selects a *secondary* mode. Regardless of input shape, mold opens with the mandatory bounds pass (`SKILL.md` Flow step 1 — an Explore-style edges → goals/non-goals round plus the per-round decision ledger) *before* this table's mode runs. The concrete-ask rows ("I want to add X", "Should we do X") therefore no longer skip straight past asking: the bounds pass fires first, then Shape/Grill takes the refined scope.
 
 ## Mode definitions
 
@@ -23,7 +25,7 @@ Mold has no fixed entry point. Inspect the input shape and pick a starting mode.
 
 ### Ground — anti-hallucination
 
-**Job:** anchor every claim to evidence — code, docs, prior research. When the user uses overloaded terms ("account", "session", "user"), pause and resolve with a canonical-term question. Resolved terms get logged in the state file.
+**Job:** anchor every claim to evidence — code, docs, prior research. When the user uses overloaded terms ("account", "session", "user"), pause and resolve with a canonical-term question. Terms resolved here are written to the session's durable glossary at `.cheese/glossary/<slug>.md` at the curdle atomic step (see `curdle.md` § Durable glossary), so downstream skills (`/cook`, `/age`, `/press`) can read them for naming consistency.
 
 **Invariant:** never say "I think the code does X" without a `cheez-search` call.
 
@@ -31,7 +33,7 @@ Mold has no fixed entry point. Inspect the input shape and pick a starting mode.
 
 ### Shape — option generation
 
-**Job:** turn a grounded problem into 2+ candidate approaches with trade-offs. Always include **Do Nothing**. Recommend with one-line rationale. Validate Cycle any critical assumption behind a recommendation.
+**Job:** turn a grounded problem into 2+ candidate approaches with trade-offs. Always include **Do Nothing**. Present them as lettered options (`A/B/C/D`) for the user to pick — a consequential fork is theirs to choose, not yours to settle; give a one-line rationale per option, not a verdict. Validate Cycle any critical assumption behind an option.
 
 **Exit when:** an option is picked (→ Sketch) or none survive (→ Explore).
 
@@ -39,11 +41,15 @@ Mold has no fixed entry point. Inspect the input shape and pick a starting mode.
 
 **Job:** lock modules, responsibilities, I/O contracts, and seams in pseudocode signatures. Before drafting, when the change touches more than one module or introduces a new public interface, run the shape check (`shape-check.md`) — signatures, callers (via `cheez-search`, i.e. `tilth_search kind: "callers"`), and `tilth_deps` blast radius — on the touched symbols so new seams fit existing convention and the impact is bounded. Print the shape-check summary block before any pseudocode. Single-module, internals-only sketches may skip the gate; note "shape check skipped: single-module change" instead.
 
-**Exit when:** every public seam has a pseudocode signature; every cross-module call goes through public interfaces, not internals; shape-check verdict is recorded (or explicitly skipped per the gate above).
+**Acceptance notation (EARS):** for every public seam, emit acceptance criteria in EARS form: `WHEN <trigger> THE SYSTEM SHALL <response>`. If the trigger cannot be stated precisely (e.g. pure internal utilities), fall back to prose with a `[prose-fallback]` marker.
+
+**Concrete-seam rule:** when a seam is small enough to write completely (a function body that fits in roughly 20 lines), write the full implementation rather than pseudocode. Reserve abbreviated signatures only for seams where the body is genuinely too large or depends on design unknowns not yet resolved in the dialogue.
+
+**Exit when:** every public seam has a pseudocode signature or full implementation per the concrete-seam rule; every acceptance criterion is in EARS form (or marked `[prose-fallback]`); every cross-module call goes through public interfaces, not internals; shape-check verdict is recorded (or explicitly skipped per the gate above).
 
 ### Grill — adversarial clarification
 
-**Job:** stress-test the chosen approach plus sketched interfaces. **One question at a time**, paired with the agent's recommended answer (recommendation is non-optional). Traverse decision branches and contract corners. Pause for a Validate Cycle when an unverified assumption surfaces.
+**Job:** stress-test the chosen approach plus sketched interfaces. **One question at a time**, posed as lettered options (`A/B/C/D`) the user picks — a consequential fork is put up for decision, not resolved rhetorically; minor mechanical calls are made but logged `[AGENT-DECIDED]` with a one-line alternative the user can veto. Traverse decision branches and contract corners. Pause for a Validate Cycle when an unverified assumption surfaces.
 
 **Exit when:** every branch and contract corner is touched and agent confidence ≥ user confidence.
 
@@ -58,7 +64,12 @@ Diagnose is **diagnostic-only** — hand off to Shape ("what's the fix?") then C
 
 ## User knobs (free-form interrupts)
 
-`explore`, `ground`, `shape`, `sketch`, `grill`, `diagnose`, `validate <hypothesis>`, `curdle`, `pause`, `enough`. Honour these immediately.
+`explore`, `ground`, `shape`, `sketch`, `grill`, `diagnose`, `validate <hypothesis>`, `prototype <question>`, `curdle`, `pause`, `enough`. Honour these immediately.
+
+`prototype <question>` launches a Prototype Cycle (`prototype-cycle.md`): a
+throwaway built in a hermetic sub-agent worktree to settle an ungrillable design
+unknown, returning only the answer as a digest. The code is discarded; the answer
+is the keeper.
 
 ## Uncertainty markers
 

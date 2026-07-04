@@ -39,7 +39,7 @@ Upstream skills (`cheese`, `mold`, `cook`, `press`, `age`) are pure pass-through
 
 `--hard` punctures `--auto` exactly once, at the end of `/cure --auto --hard`'s final pass. Everywhere else, `--auto`'s skip-handoff semantics apply: cook does not pause, press does not pause, age does not pause, the intermediate cure passes do not pause. Only the *terminal* moment — when the chain is about to exit and the user is about to share the code — triggers the gate.
 
-This is intentional. Vibecheck's faithful analogue is "before code is applied" — singular, not per-step. Punching gates into every phase of the auto chain would create fatigue and dilute the gate's signal.
+Vibecheck's faithful analogue is "before code is applied" — singular, not per-step.
 
 ## Non-TTY guard
 

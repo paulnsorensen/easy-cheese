@@ -14,14 +14,14 @@ The sub-agent returns roughly 2 KB or less: structured summary, citations, gaps.
 
 ## What the parent never delegates
 
-- Severity grading, final verdicts, approval gates.
+- Severity grading, final verdicts, approval gates. **Exception (scope-limited):** a skill may delegate single-dimension grading to a per-dimension worker **iff** the parent retains final cross-dimension reconciliation and the verdict — the verdict and the cross-cutting grade stay central. This exception does not loosen the default for any other case.
 - Dialogue, contradictions, handshakes, user-facing decisions.
 - Writing the canonical artifact (report, spec, claim table) — the sub-agent supplies the digest; the parent writes the doc.
 
 ## What the sub-agent owns
 
 - Bulk fetches, extracts, crawls, multi-source research.
-- Many-file reads, dependency / caller graph traversals.
+- Many-file reads, dependency / caller graph traversals. For code navigation, start with `kind:symbol` to find the definition, then `kind:callers` for call sites. Fall to `content`/`regex` only when you don't have a symbol name.
 - Anything yielding mostly raw bodies that the parent will not read line by line — about 5 K tokens of raw output is the industry rule of thumb for "fork it".
 
 ## Parallelism

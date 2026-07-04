@@ -10,6 +10,7 @@ slug accepted by one validator is accepted by all.
 
 from __future__ import annotations
 
+import difflib
 import functools
 import os
 import re
@@ -52,6 +53,43 @@ XDG_PHASES: frozenset[str] = frozenset({"specs", "research"})
 # the working directory so artifacts live with the branch being worked on.
 REPO_LOCAL_ROOT = Path(".cheese")
 
+# Phases of the cook → press → age → cure pipeline chain.
+CHAIN_PHASES: tuple[str, ...] = ("cook", "press", "age", "cure")
+
+# Phase token -> on-disk directory name, when the two diverge. The phase TOKEN
+# stays stable for every caller (artifact_path, parse, resolver); only the
+# directory under the root differs. `hard` writes to `.cheese/hard-cheese/`,
+# matching src/hard-cheese/append-attempt.py. Phases not listed map to
+# themselves.
+PHASE_DIRS: dict[str, str] = {"hard": "hard-cheese"}
+_DIR_PHASES: dict[str, str] = {d: p for p, d in PHASE_DIRS.items()}
+
+# Aux registry: artifact owners that are NOT pipeline phases. `affinage` writes
+# `.cheese/affinage/pr-<n>.md` keyed by PR number (a valid kebab slug, but not a
+# user-chosen one) and has no pipeline semantics, so it stays out of PHASES but
+# the resolver still finds it.
+AUX_PHASES: frozenset[str] = frozenset({"affinage"})
+
+# Phase/aux token -> slash-command skill that owns it. Mostly identity
+# (`/<phase>`); these are the exceptions.
+PHASE_SKILL: dict[str, str] = {
+    "hard": "/hard-cheese",
+    "specs": "/mold",
+    "notes": "/wheypoint",
+    "research": "/briesearch",
+    "affinage": "/affinage",
+}
+
+
+def phase_dir(phase: str) -> str:
+    """On-disk directory name for a phase token (identity unless in PHASE_DIRS)."""
+    return PHASE_DIRS.get(phase, phase)
+
+
+def phase_skill(phase: str) -> str:
+    """Slash-command skill that owns a phase/aux token (identity `/<phase>` default)."""
+    return PHASE_SKILL.get(phase, f"/{phase}")
+
 
 def validate_slug(slug: str) -> str | None:
     """Return an error string if invalid, else None."""
@@ -63,6 +101,20 @@ def validate_slug(slug: str) -> str | None:
             "no leading/trailing hyphen, no double hyphens"
         )
     return None
+
+
+_STOPWORDS = frozenset(
+    {"a", "an", "and", "the", "of", "for", "to", "in", "on", "with", "is"}
+)
+
+
+def slugify(text: str, *, max_words: int = 5) -> str:
+    """Best-effort kebab-slug from arbitrary text."""
+    lowered = re.sub(r"[^a-z0-9\s-]+", "", text.lower())
+    words = [w for w in lowered.split() if w and w not in _STOPWORDS]
+    slug = "-".join(words[:max_words])
+    slug = re.sub(r"-+", "-", slug).strip("-")
+    return slug[:64]
 
 
 def _xdg_dir(env_var: str, *default: str) -> Path:
@@ -183,7 +235,11 @@ def default_root_for_phase(phase: str, *, project: str | None = None) -> Path:
 
 
 def artifact_path(phase: str, slug: str, *, root: Path | str | None = None) -> Path:
-    """Return ``<root>/<phase>/<slug>.md``. Validates phase + slug.
+    """Return ``<root>/<phase-dir>/<slug>.md``. Validates phase + slug.
+
+    The on-disk directory may differ from the phase token: ``phase_dir`` maps
+    ``hard`` to ``hard-cheese`` (see ``PHASE_DIRS``); every other phase maps to
+    itself.
 
     With ``root`` omitted, the root is resolved per phase via
     ``default_root_for_phase`` (durable phases → XDG corpus, rest → ``.cheese/``).
@@ -199,4 +255,171 @@ def artifact_path(phase: str, slug: str, *, root: Path | str | None = None) -> P
     if err is not None:
         raise ValueError(err)
     base = Path(root) if root is not None else default_root_for_phase(phase)
-    return base / phase / f"{slug}.md"
+    return base / phase_dir(phase) / f"{slug}.md"
+
+
+def parse_artifact_path(path: Path | str) -> tuple[str, str]:
+    """Parse ``phase, slug`` from a canonical ``.cheese/<phase-dir>/<slug>.md`` path.
+
+    Only the canonical ``.cheese/`` root is parsed. The accepted on-disk directory
+    may differ from the returned phase token: ``.cheese/hard-cheese/<slug>.md``
+    parses to phase ``hard`` (see ``_DIR_PHASES``).
+    """
+    p = Path(path)
+    parts = p.parts
+    if len(parts) < 3 or parts[-3] != ".cheese":
+        raise ValueError(f"{path!r} is not under .cheese/<phase>/")
+    dir_name = parts[-2]
+    phase = _DIR_PHASES.get(dir_name, dir_name)
+    if phase not in PHASES:
+        raise ValueError(f"unknown phase {dir_name!r} in {path!r}")
+    if p.suffix != ".md":
+        raise ValueError(f"artifact must end in .md, got {p.suffix!r}")
+    slug = p.stem
+    err = validate_slug(slug)
+    if err is not None:
+        raise ValueError(err)
+    return phase, slug
+
+
+def existing_artifacts(
+    slug: str, *, root: Path | str = ".cheese", phases: tuple[str, ...] = CHAIN_PHASES
+) -> dict[str, Path]:
+    """Return ``{phase: path}`` for each chain-phase artifact present on disk."""
+    err = validate_slug(slug)
+    if err is not None:
+        raise ValueError(err)
+    found: dict[str, Path] = {}
+    for phase in phases:
+        candidate = Path(root) / phase_dir(phase) / f"{slug}.md"
+        if candidate.is_file():
+            found[phase] = candidate
+    return found
+
+
+def _git_toplevel() -> Path | None:
+    """Absolute git worktree root, or None outside a repo."""
+    try:
+        top = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if top.returncode == 0 and top.stdout.strip():
+        return Path(top.stdout.strip())
+    return None
+
+
+def _resolve_repo_root(repo_root: Path | str | None) -> Path:
+    """Absolute repo root: the given value, else git toplevel, else cwd."""
+    if repo_root is not None:
+        return Path(repo_root).resolve()
+    return (_git_toplevel() or Path.cwd()).resolve()
+
+
+def _phase_dirpath(phase: str, repo_root: Path) -> Path:
+    """Absolute artifact directory for a phase/aux token."""
+    base = project_corpus_root() if phase in XDG_PHASES else repo_root / ".cheese"
+    return base / phase_dir(phase)
+
+
+def _phase_entries(phase: str, repo_root: Path) -> list[tuple[str, Path]]:
+    """``(stem, abs_path)`` for every artifact present in a phase's directory.
+
+    The stem is the slug-shaped key used for exact and fuzzy matching. Honors
+    the irregular layouts: ``research/<slug>/<slug>.md`` (nested),
+    ``cheese-factory/<slug>/manifest.yaml`` (dir + manifest), and the flat
+    ``<dir>/<slug>.md`` everywhere else.
+    """
+    dirpath = _phase_dirpath(phase, repo_root)
+    if not dirpath.is_dir():
+        return []
+    entries: list[tuple[str, Path]] = []
+    if phase == "research":
+        for sub in dirpath.iterdir():
+            nested = sub / f"{sub.name}.md"
+            if sub.is_dir() and nested.is_file():
+                entries.append((sub.name, nested))
+        entries.extend((f.stem, f) for f in dirpath.glob("*.md"))
+    elif phase == "cheese-factory":
+        for sub in dirpath.iterdir():
+            manifest = sub / "manifest.yaml"
+            if sub.is_dir() and manifest.is_file():
+                entries.append((sub.name, manifest))
+        entries.extend((f.stem, f) for f in dirpath.glob("*.md"))
+    else:
+        entries.extend((f.stem, f) for f in dirpath.glob("*.md"))
+    return entries
+
+
+# Below this ratio a fuzzy stem match is noise, not a near-miss.
+_FUZZY_CUTOFF = 0.6
+
+
+def resolve_slug(
+    slug: str,
+    *,
+    phase_hint: str | None = None,
+    repo_root: Path | str | None = None,
+) -> dict:
+    """Resolve a slug to absolute artifact path(s) without relative-path guessing.
+
+    Three tiers: exact stem match (confidence 1.0), fuzzy stem match
+    (confidence = difflib ratio), then a fallback listing the absolute phase-dir
+    roots searched so the caller can grep them directly.
+
+    ``phase_hint=None`` searches every known token. A ``phase_hint`` that names a
+    known phase/aux token restricts the search to that one directory; an unknown
+    hint raises ``ValueError``.
+    """
+    err = validate_slug(slug)
+    if err is not None:
+        raise ValueError(err)
+    known = sorted(PHASES | AUX_PHASES)
+    if phase_hint is not None and phase_hint not in known:
+        raise ValueError(f"unknown phase {phase_hint!r}; expected one of {known}")
+    repo = _resolve_repo_root(repo_root)
+    phases = [phase_hint] if phase_hint is not None else known
+
+    exact: list[dict] = []
+    fuzzy_pool: list[tuple[str, Path, str]] = []
+    searched_roots: list[str] = []
+    for phase in phases:
+        searched_roots.append(str(_phase_dirpath(phase, repo)))
+        for stem, path in _phase_entries(phase, repo):
+            if stem == slug:
+                exact.append(
+                    {
+                        "abs_path": str(path),
+                        "phase": phase,
+                        "skill": phase_skill(phase),
+                        "confidence": 1.0,
+                    }
+                )
+            else:
+                fuzzy_pool.append((stem, path, phase))
+
+    if exact:
+        exact.sort(key=lambda m: (m["phase"], m["abs_path"]))
+        return {"matches": exact, "fallback_roots": []}
+
+    fuzzy: list[dict] = []
+    for stem, path, phase in fuzzy_pool:
+        ratio = difflib.SequenceMatcher(None, slug, stem).ratio()
+        if ratio >= _FUZZY_CUTOFF:
+            fuzzy.append(
+                {
+                    "abs_path": str(path),
+                    "phase": phase,
+                    "skill": phase_skill(phase),
+                    "confidence": round(ratio, 3),
+                }
+            )
+    if fuzzy:
+        fuzzy.sort(key=lambda m: (-m["confidence"], m["phase"], m["abs_path"]))
+        return {"matches": fuzzy, "fallback_roots": []}
+
+    return {"matches": [], "fallback_roots": sorted(set(searched_roots))}

@@ -1,6 +1,6 @@
 # Query planning
 
-Run this before routing. The goal is to know what answer would close the question, not to get an answer immediately.
+Run this before routing.
 
 ## Five steps
 
@@ -16,10 +16,10 @@ Pulled from `tavily-best-practices/references/search.md`
 (<https://github.com/tavily-ai/skills/blob/main/skills/tavily-best-practices/references/search.md>):
 
 - **Keep queries under 400 characters.** Short query, not a long-form prompt.
-- **Don't compose one giant query** — break it into the 2-5 subqueries from step 4 and run them in parallel. In the Claude Code harness, parallelism means a single assistant turn with multiple tool calls; sequential turns serialise.
+- **Don't compose one giant query — and don't serially refine a small one.** Break the question into the 2-5 subqueries from step 4 up front and fire them in **one** assistant turn (multiple tool calls in a single message). Decompose first, fan out once, then re-search only the subqueries that came back thin.
 - **Include constraints in the query**: company names, framework versions, geographies, year. Search engines reward concrete keywords.
 - **Pick the right depth**: `basic` for general lookups (default), `advanced` for precision-sensitive questions, `fast` when latency matters.
-- **Filter freshness at the API**, not after: `time_range="month"` for current facts, `start_date`/`end_date` for absolute windows.
+- **Filter freshness at the API**, not after. When the question is freshness-sensitive ("latest" / "current" / a year), set `time_range` — the canonical rule (required-not-optional, plus `start_date`/`end_date` windows) lives in `routing.md` → Filters.
 - **Filter authority at the API**: `include_domains=["arxiv.org","github.com","sec.gov"]` for trusted sources, `exclude_domains=["reddit.com","quora.com"]` for noise.
 - **Don't ask `tavily_search` for raw bodies.** Leave `include_raw_content=false`; pass the surviving URLs to `tavily_extract(query=…)` instead. Cheaper, lower noise, and aligns with `context-isolation.md`.
 

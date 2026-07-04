@@ -57,7 +57,7 @@ Skip verification only for: (a) inline file references (`file:line`), (b) the us
 | 3+ independent sources agree per claim | `certain` |
 | 2 independent sources agree per claim | `speculating` |
 | Sources disagree | `don't know` — and surface the disagreement |
-| Single source per claim | inherit that source's authority, cap at `speculating` unless authoritative (see lone-Context7 caveat above) |
+| Single source per claim | cap at `speculating` unless authoritative (see lone-Context7 caveat above) |
 
 **"Independent" means distinct origin, not distinct URL.** Before counting sources toward the cap, dedup by origin: collapse to one source any that share a root domain, or that quote/paraphrase the same upstream (three blogs reprinting one vendor post are one source, not three). Count only the surviving distinct origins. Criticality depends on the question. Context7 is critical for version-specific API claims, Tavily is critical for freshness-sensitive facts, Codebase is critical for local precedent questions, and GitHub is usually supporting evidence unless the user asked for real-world examples.
 
@@ -78,7 +78,7 @@ Before finalizing a deep report (`research/<slug>/<slug>.md`), run the mechanica
 
 ## Output shape
 
-Cross-cutting house style and citation form: [`shared/formatting.md`](../../../shared/formatting.md). This section owns the research-report shape; formatting.md owns the voice rules and the footnote primitive.
+Cross-cutting house style and citation form: [`shared/formatting.md`](../../../shared/formatting.md).
 
 Short form (always returned to the caller):
 

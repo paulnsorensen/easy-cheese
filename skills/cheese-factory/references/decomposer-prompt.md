@@ -23,8 +23,9 @@ Every curd you produce must satisfy ALL FIVE criteria. Token budgets are NOT a c
 1. **One behaviour per curd.** Describable in a single declarative sentence ("adds X",
    "extracts Y", "renames Z", "fixes A"). If the description needs "and" between two
    distinct behaviours, split into two curds.
-2. **One acceptance criterion.** Maps to exactly one bullet in the spec's Acceptance
-   Criteria / User Story list. Curds collectively cover every acceptance criterion 1:1.
+2. **One acceptance criterion.** Maps to exactly one list item (bulleted or numbered) in
+   the spec's Acceptance Criteria / User Story list. Curds collectively cover every
+   acceptance criterion 1:1.
 3. **One test target.** A single focused test command verifies this curd alone. If the
    curd needs N test commands, it's N curds.
 4. **File-disjoint.** No two curds list the same file. HARD CONSTRAINT.
@@ -35,18 +36,43 @@ If criterion 4 cannot be satisfied because two curds genuinely share a file, the
 content belongs in `seed` (if foundational) or `wiring` (if integration). Curds never
 share files.
 
-## Validation
+## When NOT to parallelize (stop before decomposing)
 
-The orchestrator will run `scripts/validate_manifest.py` on your output for required
-sections and field shapes, then `scripts/validate_decomposition.py` against the checks
+Before producing curds, check each of these against the spec:
+
+1. **Shared state across all behaviours.** If every behaviour requires the same mutable
+   global (DB schema, app singleton, global config struct), a change in one curd
+   breaks every sibling. Move the shared object to seed if possible; if it cannot be
+   isolated, the spec cannot be safely parallelized — return fewer than 5 curds (or
+   just the one relevant curd); validation will reject the manifest with a /ultracook
+   recommendation.
+2. **Sequential correctness dependency.** If behaviour B can only be verified after
+   behaviour A has landed (e.g., B calls A's new API that doesn't exist yet and can't
+   compile without it), they are not file-disjoint in practice. Check whether the
+   dependency belongs in seed; if not, the foundational files that behaviour depends on
+   belong in seed — and if they cannot be isolated, the spec cannot be safely
+   parallelized: return fewer than 5 curds; validation will reject the manifest with a
+   /ultracook recommendation.
+3. **Fewer than 5 independent behaviours.** If you cannot identify 5 file-disjoint curds,
+   return fewer than 5 curds and stop. The validator rejects any manifest with fewer than
+   5 curds, with a /ultracook recommendation in the error; the orchestrator re-runs you up
+   to twice with the violation highlighted, then escalates to the user. An honest short
+   manifest is the correct signal — do not pad to 5 to dodge the rejection.
+4. **Test target cannot be isolated.** If every acceptance criterion shares a single
+   integration test command that exercises all behaviours together, splitting into curds
+   gives no parallel safety. Return fewer than 5 curds; validation will reject the
+   manifest with a /ultracook recommendation.
+
+When any of these applies, return the curds you can honestly identify (fewer than 5).
+Do NOT force an artificial decomposition and do NOT pad curds to reach 5.
+
+## Validation
+The orchestrator will run `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz validate_manifest` on your output for required
+sections and field shapes, then `${CLAUDE_SKILL_DIR}/scripts/cheese-factory.pyz validate_decomposition` against the checks
 below. Your output will be rejected on any failure:
 
-- **Behaviour overlap** — each curd describes one behaviour (criterion 1).
-- **Spec coverage** — every acceptance criterion has exactly one curd (criterion 2).
-- **Test target check** — each curd has a focused test command (criterion 3).
-- **File disjointness** — no file appears in two curds (criterion 4).
-- **Wiring DAG check** — no cycles, no cross-branch overlap, barrel files included
-  where curds create new slices.
+- **Behaviour overlap**, **Spec coverage**, **Test target**, **File disjointness** — enforce criteria 1–4 above.
+- **Wiring DAG check** — no cycles, no cross-branch overlap, barrel files included where curds create new slices.
 - **Seed minimality** — seed contains only files that 2+ curds depend on.
 
 You get up to 2 retries if validation fails. After the third failed attempt, the

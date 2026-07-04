@@ -1,8 +1,6 @@
-# `tilth_edit` JSON cookbook
+# `tilth_write` JSON cookbook
 
-Every edit follows the same shape: `{ path, edits: [...] }`. Each edit needs
-a `start` anchor; `end` is required only for range replacements. `content` is
-the new text (use `""` to delete).
+Each block below is one file entry — wrap one or more in `tilth_write(files: [ … ])`. Every edit needs a `start` anchor; `end` is required only for range replacements, and `content` is the new text (use `""` to delete).
 
 ## Single-line replacement
 
@@ -15,8 +13,8 @@ the new text (use `""` to delete).
 }
 ```
 
-Replaces line 42 only. The hash `a3f` must match what `tilth_read` returned
-in edit mode.
+Replaces line 42 only. The hash `a3f` must match the `<line>:<hash>` prefix
+`tilth_read` returned for that line.
 
 ## Multi-line range replacement
 
@@ -48,7 +46,7 @@ Replaces lines 44–89 inclusive. Both anchors must match.
 
 Empty `content` deletes the range.
 
-## Multiple edits in one call
+## Multiple edits in one file
 
 ```json
 {
@@ -60,28 +58,20 @@ Empty `content` deletes the range.
 }
 ```
 
-All edits in a single call apply atomically — either every anchor matches and
-all edits land, or none do. Order edits **bottom-up by line number** so that
-earlier edits don't invalidate later anchors.
+Keep related edits together when the backend supports it. If any anchor fails,
+re-read the file and recover before moving on.
 
 ## Show diff in response
 
-```json
-{
-  "path": "src/auth.ts",
-  "diff": true,
-  "edits": [
-    { "start": "44:b2c", "end": "89:e1d", "content": "..." }
-  ]
-}
+```text
+tilth_write(files: [{ "path": "src/auth.ts", "edits": [{ "start": "44:b2c", "end": "89:e1d", "content": "..." }] }], diff: true)
 ```
 
-Useful when the change is non-trivial and you want to verify the diff before
-moving on.
+`diff` is a call option; if the backend exposes it only at batch scope, pass it there.
 
 ## Insert "after" a line
 
-`tilth_edit` replaces the anchored line(s); there is no native insert. To
+`tilth_write` replaces the anchored line(s); there is no native insert. To
 insert after line 13, anchor on line 13 and prepend the original line content
 to your new content:
 
@@ -103,20 +93,12 @@ this — the original content goes back verbatim.
 
 ## Edits across multiple files
 
-`tilth_edit` is single-file. For multi-file changes, make one call per file:
-
-```text
-tilth_edit({ path: "src/auth.ts",   edits: [...] })
-tilth_edit({ path: "src/routes.ts", edits: [...] })
-```
-
-There is no atomic cross-file edit. If the second call fails after the first
-succeeded, you have a partially applied change — read the second file and
-recover before moving on.
+Use the backend's batch form when it has one; otherwise edit one file at a time
+and verify each response before moving to the next file.
 
 ## Caller-update notices
 
-When you change a function signature, `tilth_edit` may surface callers in
+When you change a function signature, `tilth_write` may surface callers in
 its response:
 
 ```text

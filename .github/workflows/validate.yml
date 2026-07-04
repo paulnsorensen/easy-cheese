@@ -18,10 +18,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.12"
 
@@ -39,10 +39,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.12"
 
@@ -63,13 +63,13 @@ jobs:
     runs-on: macos-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Install bats and shellcheck
         run: brew install bats-core shellcheck
 
       - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.12"
 
@@ -101,36 +101,12 @@ jobs:
           EC_SKILL_REF: ${{ github.event.pull_request.head.sha || github.sha }}
         run: bash scripts/install.sh --skip-mcp
 
-      # Real install of the code-review-graph CLI. Sourcing the script and
-      # calling the function directly skips the MCP-registration step that
-      # needs a claude CLI on the runner, while still exercising the actual
-      # pip/pipx/uv install path. EC_CRG_SPEC overrides the default
-      # 'code-review-graph[embeddings]' spec so CI installs the bare CLI;
-      # the [embeddings] extra pulls sentence-transformers, which builds
-      # the tokenizers Rust crate from source on macOS arm64 and burns
-      # minutes per run. Catches cases where 'code-review-graph' stops
-      # being a valid PyPI target; does not catch breakage in the
-      # [embeddings] extra specifically.
-      - name: CRG install smoke test
-        env:
-          EC_CRG_SPEC: code-review-graph
-        run: |
-          set -euo pipefail
-          # shellcheck disable=SC1091
-          source scripts/install.sh
-          ec_install_crg_cli
-          # Cover every install-path bin location: pipx + uv tool install
-          # land in $HOME/.local/bin; pip --user lands under the Python
-          # user-base bin dir.
-          export PATH="$HOME/.local/bin:$(python3 -m site --user-base)/bin:$PATH"
-          code-review-graph --version
-
   lint:
     name: lint markdown, yaml, python
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: markdownlint
         uses: DavidAnson/markdownlint-cli2-action@ded1f9488f68a970bc66ea5619e13e9b52e601cd # v23.2.0
@@ -147,7 +123,7 @@ jobs:
           format: github
 
       - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.12"
 
