@@ -36,7 +36,7 @@ const AFFINAGE_SCHEMA = {
   type: 'object',
   additionalProperties: false,
   properties: {
-    pr: { type: 'number' },
+    pr: { type: 'integer' },
     title: { type: 'string' },
     intent: { type: 'string', description: 'one sentence: what the PR does' },
     filesTouched: { type: 'array', items: { type: 'string' } },
@@ -176,15 +176,15 @@ const perPR = await parallel(PRS.map((pr) => () =>
   })
 ))
 
-const ok = perPR.filter(Boolean)
-log(`Affinage complete: ${ok.length}/${PRS.length} returned. Building supersession map.`)
+const digests = perPR.filter(Boolean)
+log(`Affinage complete: ${digests.length}/${PRS.length} returned. Building supersession map.`)
 
 phase('Supersede')
 const supersession = await agent(
   `You are the cross-PR SUPERSESSION analyst for the current repo. Working dir is the repo root. The user is triaging these open PRs and wants to know which fold into / supersede which, and what value to extract before closing any. Produce a fold/supersession map with KEEP/CLOSE recommendations. RECOMMENDATIONS ONLY — do NOT close, edit, comment, or push anything. Do all work inline; no sub-agents.
 
 Per-PR affinage digests (from phase 1):
-${JSON.stringify(ok, null, 2)}
+${JSON.stringify(digests, null, 2)}
 
 For each PR confirm scope by reading \`gh pr view <n> --json title,body,files,headRefName,additions,deletions\` and skim \`gh pr diff <n>\` where overlap is suspected. Detect overlap by: PRs touching the same files, PRs in the same subsystem/theme, and PRs whose intents subsume one another. For each cluster decide relationship: independent | overlap (partial, both keepable) | supersedes (one obsoletes another). When one supersedes another, name the SPECIFIC unique value in the to-be-closed PR that must be ported first (files, tests, findings, doc sections) before closing it. List genuinely independent PRs separately.
 
@@ -192,4 +192,4 @@ Return the structured map.`,
   { label: 'supersede', phase: 'Supersede', schema: SUPERSEDE_SCHEMA, agentType: 'general-purpose' }
 )
 
-return { perPR: ok, supersession }
+return { perPR: digests, supersession }
