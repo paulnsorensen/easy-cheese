@@ -6,6 +6,7 @@ Three subcommands rewrite one field at a time:
     set-phase         --manifest <path> --phase <new-phase>
     set-curd-status   --manifest <path> --curd <id> --status <status> [--commit-sha <sha>]
     set-wiring-status --manifest <path> --wiring <id> --status <status> [--commit-sha <sha>]
+    check-files       --manifest <path> [--root <repo-root>]
 
 The file is rewritten via tmp-then-rename so a concurrent reader never sees a
 partial document. After the rename, the manifest is re-validated in-process
@@ -15,6 +16,13 @@ the validator's error message.
 
 An advisory lock sidecar (`fcntl.flock` on POSIX, `msvcrt.locking` on
 Windows) serialises concurrent read-modify-write cycles so no update is lost.
+
+`check-files` is read-only: it re-checks each curd's `files[]` against the
+working tree at dispatch time (Phase 2 fan-out), since the decomposer's file
+list may have gone stale between decomposition and dispatch. A missing path
+is informational, not an error — it may be a new file the curd will create,
+or a genuinely stale/renamed path — so the report is meant to travel with the
+dispatch context, not block it.
 """
 from __future__ import annotations
 
@@ -242,6 +250,39 @@ def cmd_set_wiring_status(args: argparse.Namespace) -> None:
     cli.emit(f"wiring {args.wiring} status set to {args.status}")
 
 
+def cmd_check_files(args: argparse.Namespace) -> None:
+    path = Path(args.manifest)
+    data, _ = _load_manifest(path)
+    root = Path(args.root) if args.root else Path.cwd()
+    curds = data.get("curds")
+    if not isinstance(curds, list):
+        raise cli.CliError("manifest has no curds list")
+
+    stale: dict[str, list[str]] = {}
+    for entry in curds:
+        if not isinstance(entry, dict):
+            continue
+        files = entry.get("files")
+        if not isinstance(files, list):
+            continue
+        missing = [f for f in files if isinstance(f, str) and not (root / f).exists()]
+        if missing:
+            stale[str(entry.get("id"))] = missing
+
+    if args.json_mode:
+        cli.emit(stale, json_mode=True)
+        return
+    if not stale:
+        print("all curd files present in the working tree")
+        return
+    for curd_id, missing in stale.items():
+        print(
+            f"curd {curd_id}: not found in working tree — {', '.join(missing)} "
+            "(may be new files the curd creates, or a stale decomposition path; "
+            "pass this along as dispatch context)"
+        )
+
+
 # ----- argparse wiring -----------------------------------------------------
 
 
@@ -266,6 +307,13 @@ def _setup(parser: argparse.ArgumentParser) -> None:
     sw.add_argument("--status", required=True)
     sw.add_argument("--commit-sha", default=None)
     sw.set_defaults(func=cmd_set_wiring_status)
+
+    scf = subs.add_parser(
+        "check-files", help="re-validate curd file lists against the working tree at dispatch time"
+    )
+    scf.add_argument("--manifest", required=True)
+    scf.add_argument("--root", default=None, help="repo root to resolve relative paths against (default: cwd)")
+    scf.set_defaults(func=cmd_check_files)
 
 
 if __name__ == "__main__":
