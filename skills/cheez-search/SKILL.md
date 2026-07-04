@@ -1,6 +1,6 @@
 ---
 name: cheez-search
-description: Search code through the most precise available backend. Prefer tilth MCP (`tilth_search`, `tilth_deps`) for symbols, callers, imports, text, and dependency context; use harness-native AST search (`ast_grep`/`sg`) for structural metavariable patterns and LSP for definitions, references, hover, rename planning, implementations, and code actions. Use when the user asks to find a symbol, caller, import, text pattern, or TODO. Use even when the user says grep, rg, ripgrep, ag, ack, fd, or find. Batch related lookups when one call can answer. If no AST-aware or LSP backend exists, stop instead of falling back to blind shell search. Do NOT use for whole-file reads (use cheez-read), edits (use cheez-write), or tests/builds.
+description: Search code through the most precise available backend. Prefer tilth MCP (`tilth_search`, `tilth_deps`) for symbols, callers, imports, text, and dependency context; use harness-native AST search (`ast_grep`/`sg`) for structural metavariable patterns and LSP for definitions, references, hover, rename planning, implementations, and code actions. Use when the user asks to find a symbol, caller, import, text pattern, or TODO. Use even when the user says grep, rg, ripgrep, ag, ack, fd, or find. Batch related lookups when one call can answer. If none of these backends exists, use the best native semantic tool available and state the reduced confidence instead of pretending blind shell search is equivalent. Do NOT use for whole-file reads (use cheez-read), edits (use cheez-write), or tests/builds.
 license: MIT
 compatibility: Prefers tilth MCP. Harness-native AST search and LSP are acceptable when they answer the requested symbol, caller, structural, or type-grounded question.
 allowed-tools: mcp__tilth__tilth_search, mcp__tilth__tilth_deps, Bash, AST Grep, LSP
@@ -12,12 +12,13 @@ allowed-tools: mcp__tilth__tilth_search, mcp__tilth__tilth_deps, Bash, AST Grep,
 
 ## Backend detection
 
-Use this order, stopping as soon as the question is answered:
+Pick the backend by question type:
 
-1. **LSP:** definitions, references, hover/type info, rename planning, implementations, and code actions.
-2. **AST search:** structural patterns with metavariables; Use `sg` only for AST shapes or structural codemods with metavariables.
-3. **tilth MCP:** `tilth_search` for symbols/callers/imports/content and `tilth_deps` for blast radius. Probe once with `tilth_search(queries: [{query: "tilth"}])`; a transport failure means use another semantic backend if one fits.
-4. **No semantic backend:** stop with `"no AST-aware code search backend is available — cannot proceed."`
+1. **LSP wins for type-grounded questions:** definitions through imports, references with shadowing/re-exports, hover/type info, implementations, rename planning, and server-known code actions.
+2. **AST search / `sg` wins for syntax shapes:** structural patterns with metavariables and repeated syntax-shaped codemods.
+3. **tilth MCP wins for broad source search:** symbols, callers, imports, content, bounded regex, and dependency/blast-radius context in one fresh repo scan.
+
+Do not present plain shell search as equivalent source-code evidence; use it only for non-code paths or data/log inspection.
 
 **Note:** pass `root` (your absolute checkout directory) whenever tilth `scope` is relative — the server's cwd is frozen at startup and cannot resolve relative paths without an explicit `root`.
 

@@ -1,9 +1,6 @@
-# `tilth_write` JSON cookbook
+# `tilth_edit` JSON cookbook
 
-Every call is `tilth_write(files: [ … ])`; each entry in the `files` array has the
-shape `{ path, edits: [...] }` — the JSON blocks below show a single entry. Each
-edit needs a `start` anchor; `end` is required only for range replacements.
-`content` is the new text (use `""` to delete).
+Every call is `tilth_edit({ "path": "...", "edits": [ ... ] })`; each edit needs a `start` anchor, `end` is required only for range replacements, and `content` is the new text (use `""` to delete). For cross-file batches, repeat this shape through the backend's batch form when available.
 
 ## Single-line replacement
 
@@ -68,14 +65,14 @@ earlier edits don't invalidate later anchors.
 ## Show diff in response
 
 ```text
-tilth_write(files: [{ path: "src/auth.ts", edits: [{ start: "44:b2c", end: "89:e1d", content: "..." }] }], diff: true)
+tilth_edit({ "path": "src/auth.ts", "edits": [{ "start": "44:b2c", "end": "89:e1d", "content": "..." }], "diff": true })
 ```
 
-`diff` is a top-level call argument (it diffs each file in the response), not a per-entry property.
+`diff` is a call option; if the backend exposes it only at batch scope, pass it there.
 
 ## Insert "after" a line
 
-`tilth_write` replaces the anchored line(s); there is no native insert. To
+`tilth_edit` replaces the anchored line(s); there is no native insert. To
 insert after line 13, anchor on line 13 and prepend the original line content
 to your new content:
 
@@ -97,24 +94,20 @@ this — the original content goes back verbatim.
 
 ## Edits across multiple files
 
-`tilth_write` is multi-file: batch every file into ONE call's `files` array
-(max 20). Never call `tilth_write` twice in a row.
+Batch related edits when the backend supports it, using one entry per file (max 20 for tilth-style batches):
 
 ```text
-tilth_write(files: [
+tilth_edit(files: [
   { path: "src/auth.ts",   edits: [...] },
   { path: "src/routes.ts", edits: [...] },
-])
+], diff: true)
 ```
 
-Files are processed independently (best-effort): a failure on one does not block
-the others, and partial success still returns `isError: false` — scan the
-per-file results rather than the top-level status. There is no atomic cross-file
-edit, so on a partial failure read the unchanged file and recover before moving on.
+Scan per-file results. A backend may process files independently, so on a partial failure read the unchanged file and recover before moving on.
 
 ## Caller-update notices
 
-When you change a function signature, `tilth_write` may surface callers in
+When you change a function signature, `tilth_edit` may surface callers in
 its response:
 
 ```text

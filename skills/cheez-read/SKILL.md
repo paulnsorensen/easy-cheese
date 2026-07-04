@@ -1,6 +1,6 @@
 ---
 name: cheez-read
-description: Read and list code through the best fresh backend — tilth MCP when present, otherwise harness-native bounded read/list plus LSP for symbol-shaped reads. Replaces cat / head / tail / less / more / bat / ls / tree / eza / find / fd / Read / Glob. Use when the user asks to read, view, show, open, or display a source file or code directory. Prefer tilth calls (`tilth_read`, `tilth_files`, `tilth_deps`) because they provide outlines, token estimates, and edit anchors; otherwise use native read/glob/LSP tools that provide equivalent freshness and line/snapshot context. Batch adjacent reads/listings when possible. If neither path exists, stop instead of using plain shell viewers. Do NOT use for searching symbols or text (use cheez-search), editing code (use cheez-write), or git operations.
+description: Read and list code through the best fresh backend — tilth MCP when present, otherwise harness-native bounded read/list plus LSP for symbol-shaped reads. Replaces cat / head / tail / less / more / bat / ls / tree / eza / find / fd / Read / Glob. Use when the user asks to read, view, show, open, or display a source file or code directory. Prefer tilth calls (`tilth_read`, `tilth_files`, `tilth_deps`) because they provide outlines, token estimates, and edit anchors; otherwise use native read/glob/LSP tools that provide equivalent freshness and line/snapshot context. Batch adjacent reads/listings when possible. Plain shell viewers are weaker fallback evidence, not equivalent source-code reads. Do NOT use for searching symbols or text (use cheez-search), editing code (use cheez-write), or git operations.
 license: MIT
 compatibility: Prefers tilth MCP. Harness-native read/list/LSP tools are acceptable when they provide fresh bounded content plus enough line or snapshot context for follow-up edits.
 allowed-tools: mcp__tilth__tilth_read, mcp__tilth__tilth_files, mcp__tilth__tilth_deps, Read, Glob, LSP
@@ -10,11 +10,13 @@ allowed-tools: mcp__tilth__tilth_read, mcp__tilth__tilth_files, mcp__tilth__tilt
 
 ## Backend detection
 
-Use the first available backend that answers the read without dumping unnecessary context:
+Pick the backend by read shape:
 
-1. **tilth MCP:** call `tilth_read` for files/ranges, `tilth_files` for repo-aware listings, and `tilth_deps` only before refactors. Probe once with `tilth_read(paths: ["README.md#1-1"])`; a transport failure means use a native backend if one satisfies this contract.
-2. **Native tools:** use bounded host read/list tools for exact files and ranges, and LSP for symbol tables, definitions, hover, or type-shaped reads.
-3. **No safe backend:** stop with `"no freshness-aware code read backend is available — cannot proceed."` Plain shell viewers (`cat`, `head`, `tail`, `ls`, `find`) do not satisfy the contract.
+1. **tilth MCP:** file/range reads, repo-aware listings, structural outlines, token estimates, and edit anchors (`tilth_read`, `tilth_files`, `tilth_deps` before refactors).
+2. **Native bounded read/list:** exact files, displayed ranges, directory listings, or snapshot-tag reads when the harness provides fresh content and line/snapshot context.
+3. **LSP:** symbol tables, definitions, hover, or type-shaped reads.
+
+Plain shell viewers (`cat`, `head`, `tail`, `ls`, `find`) are not source-code backends; use them only for non-code paths or data/log inspection.
 
 ---
 
@@ -64,7 +66,7 @@ Hash anchors are emitted automatically — copy `44:b2c` and `89:e1d` and pass t
 ### "List every TypeScript file under `src/handlers/`"
 
 ```
-tilth_list(patterns: ["*.ts"], scope: "src/handlers/")
+tilth_files(patterns: ["*.ts"], scope: "src/handlers/")
 ```
 
 ---

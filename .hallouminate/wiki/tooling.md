@@ -52,15 +52,10 @@ markdown clean by hand.
 
 ## `cheez-*` backend contract vs optional MCPs
 
-- **`cheez-*` needs a semantic source-code backend, not tilth specifically.** Prefer tilth when present; native AST search, LSP type-grounded navigation, bounded reads, anchored/stale-checking edits, and batch reads/writes when possible satisfy the same contract.
+- **`cheez-*` names backend shape, not a tilth-only runtime.** Prefer tilth when present; native AST search, LSP type-grounded navigation, bounded reads, anchored/stale-checking edits, and batch reads/writes when possible satisfy the same contract.
+- **Backend choice is conditional.** LSP wins for type-grounded definitions/references/renames/code actions; `sg` wins for structural metavariable patterns and codemods; tilth wins for broad source search/read/edit context in one fresh repo scan.
 - **Optional MCPs are separate.** Context7, Tavily, hallouminate, and milknado help workflow skills, but they do not change the source-code routing rule.
-  one protocol, but native AST search, LSP, bounded reads, and anchored
-  stale-checking edits satisfy the same contract (`skills/cheez-search/SKILL.md:3-20`,
-  `skills/cheez-read/SKILL.md:3-17`, `skills/cheez-write/SKILL.md:3-21`,
-  `AGENTS.md:77`).
-- **Plain shell fallbacks still fail the contract.** Do not degrade source-code
-  work to blind `grep`/`cat`/`sed`/`patch`; stop when neither tilth nor a
-  native semantic backend can answer safely.
+- **Plain shell fallbacks are weaker evidence.** Do not treat blind `grep`/`cat`/`sed`/`patch` as equivalent to AST/LSP/anchored source-code tooling; use them only when the task is outside source code or no semantic backend exists, and name the downgrade.
 - **Every other skill stays portable** and degrades to host-native tools.
   Workflow skills only *suggest* tilth, Context7, Tavily, and
   code-review-graph; there is no repo-wide MCP requirement

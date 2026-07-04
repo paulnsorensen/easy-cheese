@@ -84,7 +84,7 @@ The workflow skills can delegate code search, reading, and editing to these back
 | `skills/cheez-read/SKILL.md` | `/cheez-read` | Smart file/directory reading through a freshness-aware backend; tilth MCP is preferred because it emits hash anchors. Replaces cat / head / tail / ls. |
 | `skills/cheez-write/SKILL.md` | `/cheez-write` | Anchored, surgical edits through tilth MCP or an equivalent harness-native stale-snapshot edit tool. Never rewrites whole files blindly. |
 
-The `cheez-*` skills require an AST-aware source-code backend. Prefer tilth MCP; if the harness already exposes equivalent native tools (for example `ast_grep`/`sg`, LSP definitions/references/renames/code actions, and anchored edits), those tools satisfy the contract. If neither tilth nor equivalent native tooling is available, stop rather than fall back to plain text shell tools.
+The `cheez-*` skills tell the model which source-code backend to use when the harness has one. Prefer tilth MCP by name; use LSP for type-grounded definitions/references/renames/code actions, `ast_grep`/`sg` for structural patterns and codemods, and anchored/stale-checking edits for ordinary block changes. Plain text shell tools are fallback evidence only, not equivalent source-code backends.
 
 #### cheez-* router protocol
 
@@ -119,7 +119,7 @@ Outside code work (e.g. `find -mtime`, `ls /tmp`, log inspection with `tail -f`,
 
 #### Installing tilth MCP
 
-See [Installing MCP servers](#installing-mcp-servers) below — expand the tilth section for the preferred `cheez-*` backend. If tilth is unavailable, an equivalent native AST/LSP/anchored-edit backend satisfies the contract; if neither backend exists, the `cheez-*` skills stop instead of silently falling back to plain shell tools.
+See [Installing MCP servers](#installing-mcp-servers) below — expand the tilth section for the preferred `cheez-*` backend. If tilth is unavailable, use equivalent native AST/LSP/anchored-edit tooling when the harness provides it; otherwise name the weaker fallback instead of pretending blind shell tools have the same safety.
 
 ### Suggested flow
 
@@ -181,7 +181,7 @@ Workflow skills name preferred tools when they help, with fallbacks for portabil
 | `fd` | Fast file discovery | `find` |
 | `just` | Project task discovery | package scripts or documented commands |
 
-When a preferred tool is unavailable, workflow skills say so once, fall back, and lower confidence only if evidence quality suffers. The `cheez-*` skills stop only when neither tilth nor an equivalent native backend can satisfy the semantic-search/read/anchored-edit contract.
+When a preferred tool is unavailable, workflow skills say so once, fall back, and lower confidence only if evidence quality suffers. The `cheez-*` skills should teach the strongest available backend shape, not break on a missing MCP.
 
 ## Install
 

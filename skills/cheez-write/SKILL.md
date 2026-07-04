@@ -1,6 +1,6 @@
 ---
 name: cheez-write
-description: Edit code through the safest available stale-checking backend. Prefer tilth MCP (`tilth_read` + `tilth_edit`) for anchored block edits; use LSP rename/code actions for type-grounded refactors; use harness-native anchored Edit for displayed line/snapshot ranges; use AST rewrite only for structural codemods. Replaces sed / awk / perl -i / patch / tee / shell redirects. Always read first via cheez-read. Prefer `tilth_write` for anchored, stale-checking edits; Batch related edits when possible. If no stale-safe edit backend is available, stop instead of doing blind text rewrites. Do NOT use for reading, searching, tests, builds, or git.
+description: Edit code through the safest available stale-checking backend. Prefer tilth MCP (`tilth_read` + `tilth_edit`) for anchored block edits; use LSP rename/code actions for type-grounded refactors; use harness-native anchored Edit for displayed line/snapshot ranges; use AST rewrite only for structural codemods. Replaces sed / awk / perl -i / patch / tee / shell redirects. Read first via cheez-read when the edit path needs anchors or displayed ranges. Prefer `tilth_edit` for anchored, stale-checking edits; Batch related edits when possible. If no stale-safe edit backend is available, use the narrowest native edit path and state the stale-write risk instead of doing blind text rewrites. Do NOT use for reading, searching, tests, builds, or git.
 license: MIT
 compatibility: Prefers tilth MCP with edit mode. Harness-native anchored edits, LSP workspace edits, and AST rewrites are acceptable when they match the requested edit shape and reject or bound stale writes.
 allowed-tools: mcp__tilth__tilth_edit, mcp__tilth__tilth_read, Bash, Edit, AST Grep, LSP
@@ -12,13 +12,14 @@ allowed-tools: mcp__tilth__tilth_edit, mcp__tilth__tilth_read, Bash, Edit, AST G
 
 ## Backend detection
 
-Use this order, stopping as soon as the edit shape is covered:
+Pick the backend by edit shape:
 
-1. **LSP:** rename/code actions when the server can identify the symbol or fix.
-2. **AST rewrite:** structural codemods over repeated syntax shapes; dry-run first.
-3. **tilth MCP:** `tilth_read` to capture hashes, then `tilth_edit` for known blocks/ranges.
-4. **Native anchored edit:** displayed line/snapshot edits that reject stale ranges.
-5. **No safe backend:** stop with `"no anchored code edit backend is available — cannot proceed."` Sed, awk, patch, shell redirects, and blind writes do not satisfy the contract.
+1. **LSP wins for semantic workspace edits:** rename/code actions when the server can identify the symbol or fix.
+2. **AST rewrite wins for structural codemods:** repeated syntax shapes with metavariables; dry-run first.
+3. **tilth MCP wins for anchored block/range edits:** `tilth_read` captures hashes, then `tilth_edit` applies known blocks/ranges.
+4. **Native anchored edit wins for displayed snapshots:** line/snapshot edits that reject stale ranges.
+
+Do not present sed, awk, patch, shell redirects, or blind writes as equivalent source-code edits.
 
 Hash mismatches and anchor-not-found are **content** issues — see [Hash Mismatch Handling](#hash-mismatch-handling).
 

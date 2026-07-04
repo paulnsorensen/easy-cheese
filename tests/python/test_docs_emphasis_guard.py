@@ -102,7 +102,7 @@ def test_detector_flags_bold_collision():
 
 def test_detector_ignores_single_bare_token():
     # A lone cheez-* followed by whitespace stays literal in the render.
-    assert not _hazards("the cheez-* skills require tilth.\n")
+    assert not _hazards("the cheez-* skills prefer tilth.\n")
 
 
 def test_detector_ignores_legit_bold_after_token():
@@ -128,14 +128,14 @@ def test_cheez_skills_accept_equivalent_native_backends_without_blind_shell_fall
     combined = "\n".join(path.read_text(encoding="utf-8") for path in docs)
 
     assert "cheez-* skills use the safest semantic backend available for source code" in combined
-    assert "semantic source-code backend, not tilth specifically" in combined
+    assert "`cheez-*` names backend shape, not a tilth-only runtime" in combined
     assert "native AST search, LSP type-grounded navigation, bounded reads, anchored/stale-checking edits, and batch reads/writes when possible" in combined
     assert "Batch adjacent reads/listings when possible" in combined
     assert "Batch related lookups when one call can answer" in combined
-    assert "Prefer `tilth_write` for anchored, stale-checking edits; Batch related edits when possible." in combined
-    assert "use LSP for type-grounded definitions/references/renames/code actions" in combined
-    assert "Use `sg` only for AST shapes or structural codemods with metavariables" in combined
+    assert "Prefer `tilth_edit` for anchored, stale-checking edits; Batch related edits when possible." in combined
+    assert "LSP wins for type-grounded definitions/references/renames/code actions" in combined
+    assert "AST search / `sg` wins for syntax shapes" in combined
     assert "mcp__tilth__tilth_files" in combined
     assert "mcp__tilth__tilth_edit" in combined
     assert "hard-fail without it" not in combined
-    assert "tilth MCP is the preferred implementation, not the only valid one" not in combined
+    assert "stop instead of using plain shell viewers" not in combined
