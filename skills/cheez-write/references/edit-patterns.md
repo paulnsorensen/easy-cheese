@@ -1,9 +1,6 @@
 # `tilth_write` JSON cookbook
 
-Every call is `tilth_write(files: [ … ])`; each entry in the `files` array has the
-shape `{ path, edits: [...] }` — the JSON blocks below show a single entry. Each
-edit needs a `start` anchor; `end` is required only for range replacements.
-`content` is the new text (use `""` to delete).
+Each block below is one file entry — wrap one or more in `tilth_write(files: [ … ])`. Every edit needs a `start` anchor; `end` is required only for range replacements, and `content` is the new text (use `""` to delete).
 
 ## Single-line replacement
 
@@ -49,7 +46,7 @@ Replaces lines 44–89 inclusive. Both anchors must match.
 
 Empty `content` deletes the range.
 
-## Multiple edits in one call
+## Multiple edits in one file
 
 ```json
 {
@@ -61,17 +58,16 @@ Empty `content` deletes the range.
 }
 ```
 
-All edits in a single call apply atomically — either every anchor matches and
-all edits land, or none do. Order edits **bottom-up by line number** so that
-earlier edits don't invalidate later anchors.
+Keep related edits together when the backend supports it. If any anchor fails,
+re-read the file and recover before moving on.
 
 ## Show diff in response
 
 ```text
-tilth_write(files: [{ path: "src/auth.ts", edits: [{ start: "44:b2c", end: "89:e1d", content: "..." }] }], diff: true)
+tilth_write(files: [{ "path": "src/auth.ts", "edits": [{ "start": "44:b2c", "end": "89:e1d", "content": "..." }] }], diff: true)
 ```
 
-`diff` is a top-level call argument (it diffs each file in the response), not a per-entry property.
+`diff` is a call option; if the backend exposes it only at batch scope, pass it there.
 
 ## Insert "after" a line
 
@@ -97,20 +93,8 @@ this — the original content goes back verbatim.
 
 ## Edits across multiple files
 
-`tilth_write` is multi-file: batch every file into ONE call's `files` array
-(max 20). Never call `tilth_write` twice in a row.
-
-```text
-tilth_write(files: [
-  { path: "src/auth.ts",   edits: [...] },
-  { path: "src/routes.ts", edits: [...] },
-])
-```
-
-Files are processed independently (best-effort): a failure on one does not block
-the others, and partial success still returns `isError: false` — scan the
-per-file results rather than the top-level status. There is no atomic cross-file
-edit, so on a partial failure read the unchanged file and recover before moving on.
+Use the backend's batch form when it has one; otherwise edit one file at a time
+and verify each response before moving to the next file.
 
 ## Caller-update notices
 

@@ -102,7 +102,7 @@ def test_detector_flags_bold_collision():
 
 def test_detector_ignores_single_bare_token():
     # A lone cheez-* followed by whitespace stays literal in the render.
-    assert not _hazards("the cheez-* skills require tilth.\n")
+    assert not _hazards("the cheez-* skills prefer tilth.\n")
 
 
 def test_detector_ignores_legit_bold_after_token():
@@ -112,3 +112,32 @@ def test_detector_ignores_legit_bold_after_token():
 
 def test_detector_ignores_backticked_tokens():
     assert not _hazards("use `cheez-*` and `cheez-*` freely\n")
+
+
+def test_cheez_skills_accept_equivalent_native_backends_without_blind_shell_fallbacks():
+    docs = [
+        REPO_ROOT / "README.md",
+        REPO_ROOT / "AGENTS.md",
+        REPO_ROOT / ".github/copilot-instructions.md",
+        REPO_ROOT / ".hallouminate/wiki/tooling.md",
+        REPO_ROOT / "skills/cheez-read/SKILL.md",
+        REPO_ROOT / "skills/cheez-search/SKILL.md",
+        REPO_ROOT / "skills/cheez-write/SKILL.md",
+    ]
+    combined = "\n".join(path.read_text(encoding="utf-8") for path in docs)
+
+    # Shape contract: route by question/edit shape, with tilth as the example backend.
+    assert "source-code backend contract" in combined
+    assert "type-grounded" in combined and "LSP" in combined and "code actions" in combined
+    assert "sg" in combined and "codemods" in combined
+    assert "anchored" in combined and "anchors" in combined and "tilth" in combined
+    assert "fallback evidence only" in combined
+
+    # Live tilth tool identifiers must be documented (these are what the MCP exposes).
+    assert "mcp__tilth__tilth_write" in combined
+    assert "mcp__tilth__tilth_list" in combined
+
+    # Renamed-away identifiers must never reappear — the MCP does not expose them.
+    assert "tilth_edit" not in combined
+    assert "tilth_files" not in combined
+    assert "hard-fail without it" not in combined

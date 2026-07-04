@@ -50,21 +50,20 @@ markdown clean by hand.
 
 `test_validate_skills.py` is the unittest suite covering those rules.
 
-## tilth / cheez-* hard-fail vs optional MCP
+## `cheez-*` backend contract vs optional MCPs
 
-Tool dependency is asymmetric by design:
-
-- **`cheez-*` skills require tilth MCP and hard-fail without it.** They
-  refuse to fall back to `grep`/`cat`/`Edit`
-  (`skills/cheez-search/SKILL.md:3-5`, `AGENTS.md:73`).
+- **`cheez-*` names backend shape, not a tilth-only runtime.** Prefer tilth when present; native AST search, LSP type-grounded navigation, bounded reads, anchored/stale-checking edits, and batch reads/writes when possible satisfy the same contract.
+- **Backend choice is conditional.** LSP wins for type-grounded definitions/references/renames/code actions; `sg` wins for structural metavariable patterns and codemods; tilth wins for broad source search/read/edit context in one fresh repo scan.
+- **Optional MCPs are separate.** Context7, Tavily, hallouminate, and milknado help workflow skills, but they do not change the source-code routing rule.
+- **Plain shell fallbacks are weaker evidence.** Do not treat blind `grep`/`cat`/`sed`/`patch` as equivalent to AST/LSP/anchored source-code tooling; use them only when the task is outside source code or no semantic backend exists, and name the downgrade.
 - **Every other skill stays portable** and degrades to host-native tools.
   Workflow skills only *suggest* tilth, Context7, Tavily, and
   code-review-graph; there is no repo-wide MCP requirement
-  (`README.md:87,161`).
+  (`README.md:87,159`).
 
-The trade is intentional: the tool skills buy AST-grounded precision and
-announce the cost by refusing to run without it; the workflow skills stay
-universal.
+The trade is intentional: the tool skills buy AST/LSP/anchor-grounded precision
+and announce the cost by refusing blind shell fallbacks; the workflow skills
+stay universal.
 
 ## `.pyz` bundles
 
