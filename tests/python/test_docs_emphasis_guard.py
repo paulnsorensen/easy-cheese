@@ -126,13 +126,18 @@ def test_cheez_skills_accept_equivalent_native_backends_without_blind_shell_fall
     ]
     combined = "\n".join(path.read_text(encoding="utf-8") for path in docs)
 
+    # Shape contract: route by question/edit shape, with tilth as the example backend.
     assert "source-code backend contract" in combined
-    assert "prefer tilth when present" in combined
-    assert "LSP wins" in combined and "definitions" in combined and "code actions" in combined
-    assert "AST search / `sg` wins" in combined and "codemods" in combined
-    assert "tilth wins" in combined and "anchors" in combined
-    assert "Plain shell search/view/edit is fallback evidence only" in combined
-    assert "mcp__tilth__tilth_files" in combined
-    assert "mcp__tilth__tilth_edit" in combined
+    assert "type-grounded" in combined and "LSP" in combined and "code actions" in combined
+    assert "sg" in combined and "codemods" in combined
+    assert "anchored" in combined and "anchors" in combined and "tilth" in combined
+    assert "fallback evidence only" in combined
+
+    # Live tilth tool identifiers must be documented (these are what the MCP exposes).
+    assert "mcp__tilth__tilth_write" in combined
+    assert "mcp__tilth__tilth_list" in combined
+
+    # Renamed-away identifiers must never reappear — the MCP does not expose them.
+    assert "tilth_edit" not in combined
+    assert "tilth_files" not in combined
     assert "hard-fail without it" not in combined
-    assert "stop instead of using plain shell viewers" not in combined

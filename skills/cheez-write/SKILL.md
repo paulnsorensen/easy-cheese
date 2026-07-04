@@ -1,9 +1,9 @@
 ---
 name: cheez-write
-description: Edit code through the safest stale-checking backend. Prefer tilth for anchored block/range edits, LSP for semantic workspace edits, native anchored edits for displayed snapshots, and AST rewrite/sg for structural codemods. Replaces blind shell rewrites for source code.
+description: Edit code through the safest stale-checking backend — prefer tilth MCP hash-anchored block/range edits, LSP workspace edits for semantic renames/code actions, native anchored edits for displayed snapshots, `sg --rewrite` (ast-grep) for structural codemods. Use when the user asks to edit, replace, modify, update, change, delete, or insert code — phrases like "replace this function", "delete lines 44-89", "update validateToken", "add this import", "fix this bug" (when fixing requires editing), or apply a cross-cutting codemod like "rewrite every X to Y". Always read first via cheez-read to capture anchors; prefer surgical anchored edits over whole-file rewrites. Do NOT use for reading files (use cheez-read), searching code (use cheez-search), or running tests/builds.
 license: MIT
 compatibility: Prefers tilth MCP with edit mode. Harness-native anchored edits, LSP workspace edits, and AST rewrites are acceptable when they match the requested edit shape and reject or bound stale writes.
-allowed-tools: mcp__tilth__tilth_edit, mcp__tilth__tilth_read, Bash, Edit, AST Grep, LSP
+allowed-tools: mcp__tilth__tilth_write, mcp__tilth__tilth_read, Bash
 ---
 
 # cheez-write
@@ -16,7 +16,7 @@ Pick the backend by edit shape:
 
 1. **LSP wins for semantic workspace edits:** rename/code actions when the server can identify the symbol or fix.
 2. **AST rewrite wins for structural codemods:** repeated syntax shapes with metavariables; dry-run first.
-3. **tilth MCP wins for anchored block/range edits:** `tilth_read` captures hashes, then `tilth_edit` applies known blocks/ranges.
+3. **tilth MCP wins for anchored block/range edits:** `tilth_read` captures hashes, then `tilth_write` applies known blocks/ranges via `files: [...]`.
 4. **Native anchored edit wins for displayed snapshots:** line/snapshot edits that reject stale ranges.
 
 Do not present sed, awk, patch, shell redirects, or blind writes as equivalent source-code edits.
@@ -39,14 +39,14 @@ tilth_read(paths: ["src/auth.ts#44-89"])
 Step 2 — apply with the captured anchors:
 
 ```json
-tilth_edit({
+tilth_write(files: [{
   "path": "src/auth.ts",
   "edits": [{
     "start": "44:b2c",
     "end":   "89:e1d",
     "content": "export function handleAuth(req, res, next) {\n  const token = extractToken(req);\n  if (!validateToken(token)) return res.status(401).end();\n  next();\n}"
   }]
-})
+}])
 ```
 
 Response confirms `Edit applied to src/auth.ts` and may list callers to
@@ -87,11 +87,17 @@ For everything else, prefer the right tool:
 
 ---
 
+### Routing to LSP rename or Serena
+
+Pre-entry routing — when a workflow skill should prefer LSP rename or Serena symbol-bounded edits over `tilth_write` before entering cheez-write — lives in [`references/routing.md`](references/routing.md).
+
+---
+
 ## Anchor Format
 
 Use whatever anchor format the selected backend emits:
 
-- tilth: `<line>:<hash>|<content>`; pass `<line>:<hash>` into `tilth_edit`.
+- tilth: `<line>:<hash>|<content>`; pass `<line>:<hash>` into `tilth_write`.
 - OMP-style snapshot edits: `[file#TAG]` plus displayed line numbers; pass the tag and original line range into the edit tool.
 - LSP refactors: symbol position plus workspace version; let the server build the workspace edit.
 
@@ -101,17 +107,17 @@ Do not translate between anchor systems. Read with the same backend family that 
 
 ## MCP Tool Reference
 
-### tilth_edit — Precise File Editing
+### tilth_write — Precise File Editing
 
 The minimal shape — single anchor, replacement content:
 
 ```json
-tilth_edit({
+tilth_write(files: [{
   "path": "src/auth.ts",
   "edits": [
     { "start": "42:a3f", "content": "  let x = recompute();" }
   ]
-})
+}])
 ```
 
 For range replacement, deletion, multi-edit, insert-after, cross-file
@@ -142,7 +148,7 @@ Current content:
 ### Repeated mismatches → bail out, don't loop
 
 If you hit **two consecutive mismatches** on the same anchor, you're racing a
-concurrent writer. `tilth_edit` has no fuzzy / search-replace mode — there
+concurrent writer. `tilth_write` has no fuzzy / search-replace mode — there
 is no "ignore the hash, just match this string" option. A third retry will
 likely lose the same race.
 
@@ -173,7 +179,7 @@ When changing a signature, use LSP references or the edit backend's caller notic
 | Replace a range | [edit-patterns.md#multi-line-range-replacement](references/edit-patterns.md#multi-line-range-replacement) |
 | Delete a block | [edit-patterns.md#delete-a-block](references/edit-patterns.md#delete-a-block) |
 | Insert after a line | [edit-patterns.md#insert-after-a-line](references/edit-patterns.md#insert-after-a-line) |
-| Multi-edit in one file | [edit-patterns.md#multiple-edits-in-one-call](references/edit-patterns.md#multiple-edits-in-one-call) |
+| Multi-edit in one file | [edit-patterns.md#multiple-edits-in-one-file](references/edit-patterns.md#multiple-edits-in-one-file) |
 | Cross-file change | [edit-patterns.md#edits-across-multiple-files](references/edit-patterns.md#edits-across-multiple-files) |
 
 ---
@@ -206,7 +212,7 @@ Anchored edits own known blocks, one read-for-anchors per location. For cross-cu
 - **DO NOT use sed / awk / perl -i** to edit code — they bypass anchors and structural safety, and have no mismatch detection. `sg --rewrite` is the only sanctioned shell escape, and only for structural codemods that follow the dry-run-first protocol.
 - **DO NOT use `patch`** to apply diffs to code — anchored range edits are the safe equivalent.
 - **DO NOT use `tee` or shell redirects (`>`, `>>`)** to overwrite/append code files — both bypass anchors. Use an anchored edit backend.
-- **DO NOT use unanchored host Edit/Write tools** — use tilth_edit, harness-native anchored edits, or LSP workspace edits.
+- **DO NOT use unanchored host Edit/Write tools** — use tilth_write, harness-native anchored edits, or LSP workspace edits.
 - **DO NOT use `sg --rewrite` for one-off block edits** — use an anchored edit. The codemod escape is only for cross-cutting structural changes.
 - **DO NOT skip the dry-run-first protocol for `sg --rewrite`** — search-only first, clean working tree, then `-U`. Never combine search+rewrite blindly.
 - **DO NOT edit without reading** — anchors come from the read step.

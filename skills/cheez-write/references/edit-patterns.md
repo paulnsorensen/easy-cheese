@@ -1,6 +1,6 @@
-# `tilth_edit` JSON cookbook
+# `tilth_write` JSON cookbook
 
-Every edit needs a `start` anchor; `end` is required only for range replacements, and `content` is the new text (use `""` to delete). Read the active tilth docs or tool schema for exact call wrapping before copying these shapes.
+Each block below is one file entry — wrap one or more in `tilth_write(files: [ … ])`. Every edit needs a `start` anchor; `end` is required only for range replacements, and `content` is the new text (use `""` to delete).
 
 ## Single-line replacement
 
@@ -64,14 +64,14 @@ re-read the file and recover before moving on.
 ## Show diff in response
 
 ```text
-tilth_edit({ "path": "src/auth.ts", "edits": [{ "start": "44:b2c", "end": "89:e1d", "content": "..." }], "diff": true })
+tilth_write(files: [{ "path": "src/auth.ts", "edits": [{ "start": "44:b2c", "end": "89:e1d", "content": "..." }] }], diff: true)
 ```
 
 `diff` is a call option; if the backend exposes it only at batch scope, pass it there.
 
 ## Insert "after" a line
 
-`tilth_edit` replaces the anchored line(s); there is no native insert. To
+`tilth_write` replaces the anchored line(s); there is no native insert. To
 insert after line 13, anchor on line 13 and prepend the original line content
 to your new content:
 
@@ -98,7 +98,7 @@ and verify each response before moving to the next file.
 
 ## Caller-update notices
 
-When you change a function signature, `tilth_edit` may surface callers in
+When you change a function signature, `tilth_write` may surface callers in
 its response:
 
 ```text

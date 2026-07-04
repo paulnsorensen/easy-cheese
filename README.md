@@ -321,9 +321,9 @@ After registering, restart your harness and confirm these tools appear:
 
 - `mcp__tilth__tilth_search`
 - `mcp__tilth__tilth_read`
-- `mcp__tilth__tilth_files`
+- `mcp__tilth__tilth_list`
 - `mcp__tilth__tilth_deps`
-- `mcp__tilth__tilth_edit` (only with `--edit`)
+- `mcp__tilth__tilth_write` (only with `--edit`)
 
 </details>
 

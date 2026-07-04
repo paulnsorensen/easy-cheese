@@ -1,9 +1,9 @@
 ---
 name: cheez-read
-description: Read and list code through the best fresh backend. Prefer tilth for file/range reads, repo listings, outlines, token estimates, and edit anchors; use native bounded read/list tools or LSP when they provide equivalent freshness and context. Replaces shell viewers and directory listers for source code.
+description: Read and list code through the best fresh backend — prefer tilth MCP for file/range reads, repo listings, outlines, token estimates, and edit anchors; accept native bounded read/list tools or LSP when they match. Use when the user asks to read, view, show, open, or display a file or directory — phrases like "read src/auth.ts", "show me this file", "what's in this directory", "view lines 44-89", "look at the imports". Use even when the user names a shell viewer/lister or says "open the file" — never blind-shell a source file. Do NOT use for searching symbols or text (use cheez-search), editing code (use cheez-write), or git/gh operations.
 license: MIT
 compatibility: Prefers tilth MCP. Harness-native read/list/LSP tools are acceptable when they provide fresh bounded content plus enough line or snapshot context for follow-up edits.
-allowed-tools: mcp__tilth__tilth_read, mcp__tilth__tilth_files, mcp__tilth__tilth_deps, Read, Glob, LSP
+allowed-tools: mcp__tilth__tilth_read, mcp__tilth__tilth_list, mcp__tilth__tilth_deps
 ---
 
 # cheez-read
@@ -12,7 +12,7 @@ allowed-tools: mcp__tilth__tilth_read, mcp__tilth__tilth_files, mcp__tilth__tilt
 
 Pick the backend by read shape:
 
-1. **tilth MCP:** file/range reads, repo-aware listings, structural outlines, token estimates, and edit anchors (`tilth_read`, `tilth_files`, `tilth_deps` before refactors).
+1. **tilth MCP:** file/range reads, repo-aware listings, structural outlines, token estimates, and edit anchors (`tilth_read`, `tilth_list`, `tilth_deps` before refactors).
 2. **Native bounded read/list:** exact files, displayed ranges, directory listings, or snapshot-tag reads when the harness provides fresh content and line/snapshot context.
 3. **LSP:** symbol tables, definitions, hover, or type-shaped reads.
 
@@ -66,14 +66,14 @@ Hash anchors are emitted automatically — copy `44:b2c` and `89:e1d` and pass t
 ### "List every TypeScript file under `src/handlers/`"
 
 ```
-tilth_files(patterns: ["*.ts"], scope: "src/handlers/")
+tilth_list(patterns: ["*.ts"], scope: "src/handlers/")
 ```
 
 ---
 
 ## Core Principle: Read Smart, Not More
 
-tilth auto-sizes: small files (< ~6000 tokens) return full, larger files return a structural outline, binary/generated files are skipped. Drill into large files by line range or symbol, and use stripped/survey modes when the backend offers them before pulling anchored content.
+The read backend auto-sizes: small files (< ~6000 tokens) return full, larger files return a structural outline, binary/generated files are skipped (tilth does this on demand). Drill into large files by line range or symbol, and use stripped/survey modes when the backend offers them before pulling anchored content.
 
 ---
 
@@ -101,12 +101,12 @@ Drilled reads (line range, `#symbol`, or heading) emit `<line>:<hash>|<content>`
 
 ---
 
-## tilth_files — Directory Listing
+## Directory listing
 
-Replaces `ls`, `find`, `pwd`, and the Glob tool when tilth is the selected backend.
+List a directory through the repo-aware listing backend instead of `ls`, `find`, `pwd`, or Glob. With tilth:
 
 ```
-tilth_files(glob: "**/*.ts", scope: "src/")
+tilth_list(patterns: ["**/*.ts"], scope: "src/")
 ```
 
 **Output:**

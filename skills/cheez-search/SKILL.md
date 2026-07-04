@@ -1,9 +1,9 @@
 ---
 name: cheez-search
-description: Search code through the most precise semantic backend. Prefer tilth for broad symbol/caller/import/text/dependency context, LSP for type-grounded definitions/references/renames/code actions, and AST search/sg for syntax-shaped patterns and codemods. Replaces blind shell search for source code.
+description: Search code through the most precise semantic backend — prefer tilth MCP for symbol/caller/import/text/dependency context, LSP for type-grounded definitions/references/renames/code actions, AST search (`sg`) for syntax-shaped patterns and codemods. Use when the user asks to find a symbol, definition, caller, import, or text pattern — phrases like "where is X defined", "what calls Y", "find all usages of Z", "trace this function", "find the TODO comments", "search for this error string". Use even when the user says "grep", "rg", "ripgrep", "ag", "ack", "fd", or "find" — never blind-shell search source code. Do NOT use for reading whole files (use cheez-read), editing code (use cheez-write), or running tests/builds.
 license: MIT
 compatibility: Prefers tilth MCP. Harness-native AST search and LSP are acceptable when they answer the requested symbol, caller, structural, or type-grounded question.
-allowed-tools: mcp__tilth__tilth_search, mcp__tilth__tilth_deps, Bash, AST Grep, LSP
+allowed-tools: mcp__tilth__tilth_search, mcp__tilth__tilth_deps, Bash
 ---
 
 # cheez-search
