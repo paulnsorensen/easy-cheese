@@ -66,10 +66,10 @@ Each group:
 - `depends_on` — branches that must be merged before this PR.
 
 For `single`, emit exactly one group. For `orthogonal_flat`, emit one group per curd
-with `base: main` and empty `depends_on`. For stacks, the orchestrator uses
-`scripts/pr_plan_to_branches.py` to convert the plan to branch-creation commands.
-The orchestrator validates your output with `scripts/validate_pr_plan.py` before
-running the branch converter.
+with `base: main` and empty `depends_on`. For stacks, the orchestrator runs
+`${CLAUDE_SKILL_DIR}/scripts/ultracook.pyz pr_plan_to_branches` to convert the plan to
+branch-creation commands. The orchestrator validates your output with
+`${CLAUDE_SKILL_DIR}/scripts/ultracook.pyz validate_pr_plan` before running the branch converter.
 
 Keep the YAML in the JSON-compatible subset: mappings, lists, strings, numbers, and
 booleans only — no anchors, aliases, tags, or multi-document streams. The shape is

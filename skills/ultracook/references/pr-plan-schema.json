@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://easy-cheese.dev/schemas/ultracook-pr-plan.schema.json",
   "title": "Ultracook PR Plan",
-  "description": "Phase 7 PR-layout document written by /ultracook at .cheese/ultracook/<slug>/pr-plan.yaml. Consumed by scripts/pr_plan_to_branches.py to emit branch / cherry-pick / PR-create commands.",
+  "description": "Phase 7 PR-layout document written by /ultracook at .cheese/ultracook/<slug>/pr-plan.yaml. Consumed by the ultracook.pyz pr_plan_to_branches subcommand to emit branch / cherry-pick / PR-create commands.",
   "type": "object",
   "required": ["shape", "groups"],
   "properties": {

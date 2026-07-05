@@ -35,7 +35,10 @@ def graph_errors(wiring: list) -> list[str]:
     for w in wiring_list:
         wid = w.get("id", "?")
         for dep in _string_deps(w):
-            if dep not in ids:
+            # Only wiring-format ids (W<n>) must resolve within the wiring set.
+            # Deps outside it — typically curd ids — are legitimate and ignored,
+            # matching wiring_topo_sort.compute_waves.
+            if _WIRING_ID_RE.match(dep) and dep not in ids:
                 errors.append(f"wiring {wid}: depends_on references unknown id {dep!r}")
 
     graph: dict[str, list[str]] = {w["id"]: _string_deps(w) for w in wiring_list if isinstance(w.get("id"), str)}

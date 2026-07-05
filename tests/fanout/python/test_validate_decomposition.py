@@ -186,6 +186,15 @@ class TestWiringDag:
         errors = wiring.graph_errors(w)
         assert any("unknown id" in e for e in errors)
 
+    def test_curd_dependency_on_non_wiring_id_is_ignored(self, wiring: ModuleType) -> None:
+        # A wiring node may depend on a curd id (not W<n> format). compute_waves
+        # ignores deps outside the wiring set by design, so graph_errors must not
+        # reject them — only unresolved wiring-format ids are errors.
+        w = [
+            {"id": "W1", "type": "barrel_export", "file": "a.ts", "depends_on": ["curd-3", "C7"]},
+        ]
+        assert wiring.graph_errors(w) == []
+
     def test_self_loop_is_detected(self, wiring: ModuleType) -> None:
         # A node that lists itself in depends_on is a degenerate cycle.
         w = [

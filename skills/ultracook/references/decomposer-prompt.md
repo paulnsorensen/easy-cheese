@@ -14,7 +14,7 @@ Read the spec below and produce a decomposition into three artifact lists:
 3. `wiring[]` — integration tasks with topological dependencies (barrel exports,
    DI registrations, route wiring, event subscriptions, config entries).
 
-You must produce **at least 5 curds** or the orchestrator will route to /ultracook instead.
+Produce one curd per independent behaviour. Two or more file-disjoint curds fan out in parallel; a single curd runs in linear mode. Only an empty decomposition (zero curds) is rejected — there is no minimum-curd floor.
 
 ## The five criteria
 
@@ -43,28 +43,26 @@ Before producing curds, check each of these against the spec:
 1. **Shared state across all behaviours.** If every behaviour requires the same mutable
    global (DB schema, app singleton, global config struct), a change in one curd
    breaks every sibling. Move the shared object to seed if possible; if it cannot be
-   isolated, the spec cannot be safely parallelized — return fewer than 5 curds (or
-   just the one relevant curd); validation will reject the manifest with a /ultracook
-   recommendation.
+   isolated, the spec cannot be safely parallelized — return the single
+   relevant curd (or the few you can isolate); a sub-threshold decomposition is valid
+   and runs in linear mode.
 2. **Sequential correctness dependency.** If behaviour B can only be verified after
    behaviour A has landed (e.g., B calls A's new API that doesn't exist yet and can't
    compile without it), they are not file-disjoint in practice. Check whether the
    dependency belongs in seed; if not, the foundational files that behaviour depends on
    belong in seed — and if they cannot be isolated, the spec cannot be safely
-   parallelized: return fewer than 5 curds; validation will reject the manifest with a
-   /ultracook recommendation.
-3. **Fewer than 5 independent behaviours.** If you cannot identify 5 file-disjoint curds,
-   return fewer than 5 curds and stop. The validator rejects any manifest with fewer than
-   5 curds, with a /ultracook recommendation in the error; the orchestrator re-runs you up
-   to twice with the violation highlighted, then escalates to the user. An honest short
-   manifest is the correct signal — do not pad to 5 to dodge the rejection.
+   parallelized: return the curds you can isolate; a sub-threshold decomposition is
+   valid and runs in linear mode.
+3. **Only one independent behaviour.** If you cannot identify two file-disjoint curds,
+   return the single curd and stop. A one-curd decomposition is valid — it runs in
+   linear mode rather than fanning out; only a zero-curd manifest is rejected. A short
+   manifest is the correct signal — do not pad curds to reach the parallel threshold.
 4. **Test target cannot be isolated.** If every acceptance criterion shares a single
    integration test command that exercises all behaviours together, splitting into curds
-   gives no parallel safety. Return fewer than 5 curds; validation will reject the
-   manifest with a /ultracook recommendation.
+   gives no parallel safety. Return the single curd; it runs in linear mode.
 
-When any of these applies, return the curds you can honestly identify (fewer than 5).
-Do NOT force an artificial decomposition and do NOT pad curds to reach 5.
+When any of these applies, return the curds you can genuinely identify. Do NOT force an
+artificial decomposition and do NOT pad curds to reach the parallel threshold.
 
 ## Validation
 The orchestrator will run `${CLAUDE_SKILL_DIR}/scripts/ultracook.pyz validate_manifest` on your output for required
