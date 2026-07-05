@@ -1012,7 +1012,7 @@ class TestUltracookModeGate:
         assert "2 or more" in body_lower or "2+" in body, (
             "ultracook must state 2+ curds routes to parallel mode"
         )
-        assert "1" in body and "linear" in body_lower, (
+        assert "1-curd spec runs" in body and "linear mode" in body_lower, (
             "ultracook must state a 1-curd spec stays linear"
         )
 
