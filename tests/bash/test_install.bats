@@ -623,6 +623,24 @@ STUB
     grep -q "^gh api repos/paulnsorensen/easy-cheese/contents/skills " "$STUB_LOG"
 }
 
+@test "ec_discover_skills pins ref when EC_SKILL_REF is set" {
+    cat > "$STUB_BIN/gh" <<'STUB'
+#!/usr/bin/env bash
+echo "gh $*" >> "$STUB_LOG"
+if [[ "$1" == "api" ]]; then
+    printf 'alpha\nbeta\n'
+    exit 0
+fi
+exit 0
+STUB
+    chmod +x "$STUB_BIN/gh"
+    EC_SKILL_REF="abc123def" run ec_discover_skills "$STUB_BIN/gh"
+    [ "$status" -eq 0 ]
+    # Discovery must query the pinned ref so a skill removed on this branch
+    # (but still on the default branch) is not discovered then install-failed.
+    grep -q "^gh api repos/paulnsorensen/easy-cheese/contents/skills?ref=abc123def " "$STUB_LOG"
+}
+
 @test "ec_discover_skills returns empty when gh api fails" {
     cat > "$STUB_BIN/gh" <<'STUB'
 #!/usr/bin/env bash

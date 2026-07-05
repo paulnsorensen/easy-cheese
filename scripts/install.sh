@@ -441,7 +441,12 @@ ec_install_mcp_for_harnesses() {
 # caller falls back to EC_FALLBACK_SKILLS.
 ec_discover_skills() {
     local gh="$1"
-    "$gh" api "repos/${EC_SKILL_REPO}/contents/skills" \
+    local path="repos/${EC_SKILL_REPO}/contents/skills"
+    # Discovery must list skills at the SAME ref the install pins to (below),
+    # else a skill removed on this branch but still on the default branch is
+    # discovered and then fails to install at the pinned ref.
+    [[ -n "${EC_SKILL_REF:-}" ]] && path+="?ref=${EC_SKILL_REF}"
+    "$gh" api "$path" \
         --jq '.[] | select(.type == "dir") | .name' 2>/dev/null
 }
 
