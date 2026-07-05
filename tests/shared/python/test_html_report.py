@@ -9,6 +9,8 @@ would fail CI on every unrelated rebuild.
 from __future__ import annotations
 
 import importlib.util
+import os
+import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -112,6 +114,14 @@ class TestInline:
         assert "<em>" not in out
         assert "<strong>" not in out
 
+    def test_nul_token_collision_is_sanitized(self, hr: ModuleType) -> None:
+        # Link placeholders use NUL sentinels internally; source NUL bytes must not
+        # collide with that private token format or leak into HTML.
+        out = hr.render("before \x000\x00 after [x](https://example.com)", title="t")
+        assert "before �0� after" in out
+        assert "\x00" not in out
+        assert '<a href="https://example.com">x</a>' in out
+
     def test_link_url_special_chars_escaped(self, hr: ModuleType) -> None:
         # A URL carrying &, <, or " must be html-escaped inside the href so it cannot
         # break out of the attribute or inject markup.
@@ -190,3 +200,30 @@ class TestDocumentShape:
         assert "<style>" in out and "prefers-color-scheme" in out
         # Title is escaped in the document head.
         assert "<title>My &lt;Report&gt;</title>" in out
+
+
+class TestHtmlReportCli:
+    def test_rejects_windows_drive_designator_in_out_name(self, tmp_path: Path) -> None:
+        report = tmp_path / "report.md"
+        report.write_text("# Report\n", encoding="utf-8")
+        env = os.environ.copy()
+        env["PYTHONPATH"] = os.pathsep.join([str(SHARED_SCRIPTS), env.get("PYTHONPATH", "")])
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(SHARED_SCRIPTS / "html_report_cli.py"),
+                "--in",
+                str(report),
+                "--title",
+                "Report",
+                "--out-name",
+                "C:evil",
+            ],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+
+        assert result.returncode == 2
+        assert "rejects path traversal" in result.stderr

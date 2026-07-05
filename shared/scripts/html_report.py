@@ -290,6 +290,7 @@ def _inline(text: str) -> str:
     Code content is escaped once and never re-processed, so `` `**x**` `` inside a
     code span stays literal instead of turning into <strong>.
     """
+    text = text.replace("\x00", "\uFFFD")
     parts = []
     for idx, seg in enumerate(_CODE_SPAN.split(text)):
         if idx % 2 == 1:

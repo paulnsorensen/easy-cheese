@@ -9,8 +9,9 @@ offline, byte-deterministic themed HTML file in the OS temp dir.
 Reads ``--in`` (the source Markdown artifact), renders it via
 ``html_report.render``, and writes ``<tempdir>/<out-name>.html``. Emits the
 output path on stdout. ``--out-name`` is the filename stem only; path-traversal
-segments (``..`` / ``/`` / ``\\``) are rejected. Phase/slug-agnostic: path math
-and slug are the caller's concern, not this helper's.
+segments (``..`` / ``/`` / ``\\``) and Windows drive/path designators (``:``)
+are rejected. Phase/slug-agnostic: path math and slug are the caller's concern,
+not this helper's.
 """
 from __future__ import annotations
 
@@ -24,7 +25,7 @@ import html_report
 
 
 def _reject_traversal(field: str, value: str) -> None:
-    if ".." in value or "/" in value or "\\" in value:
+    if ".." in value or "/" in value or "\\" in value or ":" in value:
         raise cli.CliError(f"{field} rejects path traversal: {value!r}")
 
 
