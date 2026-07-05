@@ -102,6 +102,8 @@ Three shapes are written often enough to deserve a single owner each. The owner 
 
 **Corpus location.** Two roots hold artifacts. Durable, project-scoped knowledge — specs and research reports — anchors at a stable XDG path so it survives branch switches and clones and stays out of git: `$XDG_DATA_HOME/cheese/<project>/` (default `~/.local/share/cheese/<project>/`), where `<project>` matches the git repository (origin `owner/repo`, sanitized; falls back to the toplevel dir name). Transient pipeline handoffs — `cook`/`press`/`age`/`cure` reports, `notes`, `hard` — stay repo-local under `.cheese/` so they travel with the branch and surface in the PR. Override the base with `EASY_CHEESE_HOME` and the project key with `EASY_CHEESE_PROJECT`. The path math is owned by `shared/scripts/paths.py`: `artifact_path` builds flat-phase paths (specs, transient reports), and `project_corpus_root` gives the durable root that `/briesearch` composes the nested `research/<slug>/<slug>.md` report path under. This is the target layout: skills are being migrated onto these helpers, and per-skill docs that still name `.cheese/specs/<slug>.md` predate the durable/transient split and have not yet been updated.
 
+Portable host-capability wording for helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions lives in [`shared/harness-portability.md`](harness-portability.md).
+
 ### Spec
 
 A spec captures a design decision and its rationale before code is written.

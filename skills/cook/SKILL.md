@@ -13,7 +13,7 @@ Do not use it for fuzzy planning (`/mold`), no-write discussion (`/culture`), or
 Accept one of:
 
 - A spec path. When explicit, read it verbatim wherever it points.
-- A bare slug. Resolve it to the durable spec path with `SPEC=$(python3 ${CLAUDE_SKILL_DIR}/scripts/cook.pyz artifact-path specs <slug>)`, then read `"$SPEC"`. The resolver anchors specs at the per-project durable corpus (see `shared/formatting.md` § Corpus location); this is the form `/ultracook` uses when chaining.
+- A bare slug. Resolve it to the durable spec path with `SPEC=$(python3 shared/scripts/artifact_path.py specs <slug>)`, then read `"$SPEC"`. If you're on a host that only exposes the packaged helper, `python3 ${CLAUDE_SKILL_DIR}/scripts/cook.pyz artifact-path specs <slug>` is the fallback. The resolver anchors specs at the per-project durable corpus (see `shared/formatting.md` § Corpus location); this is the form `/ultracook` uses when chaining.
 - A pasted spec or issue.
 - A focused implementation request with acceptance criteria.
 - A clear, unambiguous task — single-file fix, named bug, well-scoped tweak — even without a spec.
@@ -43,6 +43,9 @@ When the fast-path applies, derive a slug from the task (e.g. `tail-trailing-new
 5. **Hand off** — produce the package-ready report (`references/package-report.md`), write the handoff slug (`## Handoff slug` below), and prompt the next step via the shared handoff gate (see `## Handoff` below). The default chain is `/press` → `/age` → `/cure`.
 
 Edits go through `/cheez-write` (search and reads via the tools below).
+
+Portability reference: [`../../shared/harness-portability.md`](../../shared/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
+The handoff blocks below are the portable contract; slash commands are host renderings, not the control model.
 
 ## Preferred tools and fallbacks
 

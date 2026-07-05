@@ -13,6 +13,9 @@ Use this skill when the user wants an approved high-blast-radius spec run forwar
 
 Do not use it for short focused changes (`/cook --auto` is cheaper and continuous), for fuzzy planning (`/mold`), or for review-only work (`/age`).
 
+Portability reference: [`../../shared/harness-portability.md`](../../shared/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
+The handoff blocks below are the portable contract; slash commands are host renderings, not the control model.
+
 ## Inputs
 
 Accept one of:
@@ -32,19 +35,21 @@ Optional flags:
 
 Before the phase loop runs, the decomposer picks the mode. This is the one authoritative gate; the `/mold` curd-count hint is advisory only.
 
-1. **Decompose** — spawn a full-peer decomposer sub-agent (`references/decomposer-prompt.md`) to produce `seed[]`, `curds[]`, and `wiring[]` from the spec, then validate with `python3 ${CLAUDE_SKILL_DIR}/scripts/ultracook.pyz validate_decomposition <manifest>`. Re-run on validation failure (max 2 retries).
-2. **Pick the mode** — `python3 ${CLAUDE_SKILL_DIR}/scripts/ultracook.pyz mode --count <curd-count>` → `linear | parallel`. The canonical `PARALLEL_THRESHOLD` (2) lives in the engine: a decomposition of **2 or more** curds routes to **parallel mode**; **1** curd stays **linear**. There is one threshold in the tree — the selector, `validate_decomposition`, and the mold hint all read it.
-3. **Probe the engine seam** — `python3 ${CLAUDE_SKILL_DIR}/scripts/ultracook.pyz milknado --tools "<available tool names>"` → `engine | tracker | none`. This decides how parallel mode runs curds (see `## Parallel mode`); linear mode ignores it.
+1. **Decompose** — spawn a full-peer decomposer sub-agent (`references/decomposer-prompt.md`) to produce `seed[]`, `curds[]`, and `wiring[]` from the spec, then validate with `python3 skills/ultracook/scripts/ultracook.pyz validate_decomposition <manifest>`. Re-run on validation failure (max 2 retries).
+2. **Pick the mode** — `python3 skills/ultracook/scripts/ultracook.pyz mode --count <curd-count>` → `linear | parallel`. The canonical `PARALLEL_THRESHOLD` (2) lives in the engine: a decomposition of **2 or more** curds routes to **parallel mode**; **1** curd stays **linear**. There is one threshold in the tree — the selector, `validate_decomposition`, and the mold hint all read it.
+3. **Probe the engine seam** — `python3 skills/ultracook/scripts/ultracook.pyz milknado --tools "<available tool names>"` → `engine | tracker | none`. This decides how parallel mode runs curds (see `## Parallel mode`); linear mode ignores it.
+
+If the host only exposes the packaged helper, `python3 ${CLAUDE_SKILL_DIR}/scripts/ultracook.pyz <subcommand> ...` is the fallback.
 
 A 1-curd spec runs `## Flow` (linear mode) unchanged. A 2+-curd spec runs `## Parallel mode`.
 
 ## Flow (linear mode)
 
-1. **Resolve slug** — derive `<slug>` from the input. If a spec path is given, the slug is the basename without `.md`; if a bare slug is given, confirm the spec exists at the durable path the spawned `/cook` resolves (`python3 ${CLAUDE_SKILL_DIR}/scripts/cook.pyz artifact-path specs <slug>`; see `shared/formatting.md` § Corpus location).
+1. **Resolve slug** — derive `<slug>` from the input. If a spec path is given, the slug is the basename without `.md`; if a bare slug is given, confirm the spec exists at the durable path the spawned `/cook` resolves (`python3 shared/scripts/artifact_path.py specs <slug>`; if the host only exposes the packaged helper, `python3 ${CLAUDE_SKILL_DIR}/scripts/cook.pyz artifact-path specs <slug>` is the fallback; see `shared/formatting.md` § Corpus location).
 2. **Guard against re-entry** — if any of `.cheese/{cook,press,age,cure}/<slug>.md` already exist, stop with a one-line list of the existing handoffs and tell the user to either run `/cheese --continue <slug>` to resume from the latest phase or `rm` the relevant files to start fresh.
 3. **Phase loop** — for each phase in `cook, press, age, cure, age, cure, age`, spawn a fresh sub-agent (see `## Sub-agent contract` below), wait for it to return, then read each phase's handoff slug and compute the next action deterministically:
-   1. **Parse the slug** — `python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz read_handoff_slug --phase <phase> --slug <slug>` → JSON `{status, next, artifact, orientation, halt_reason}`. Do not infer success from the sub-agent's last line of stdout — read the file.
-   2. **Compute the verdict** — `python3 ${CLAUDE_SKILL_DIR}/scripts/ultracook.pyz phase_decision --phase-index <i> --status <status> [--next <next>]` → JSON `{action, next_phase, exit_message}`. `<i>` is the **0-based** position in the chain (0 = cook, 1 = press, … 6 = the final age) — one less than the spawn `#` in the "Phases and slug paths" table below.
+   1. **Parse the slug** — `python3 shared/scripts/read_handoff_slug.py --phase <phase> --slug <slug>` → JSON `{status, next, artifact, orientation, halt_reason}`. Do not infer success from the sub-agent's last line of stdout — read the file.
+   2. **Compute the verdict** — `python3 skills/ultracook/scripts/ultracook.pyz phase_decision --phase-index <i> --status <status> [--next <next>]` → JSON `{action, next_phase, exit_message}` (if the host only exposes the packaged helper, `python3 ${CLAUDE_SKILL_DIR}/scripts/ultracook.pyz phase_decision ...` is the fallback). `<i>` is the **0-based** position in the chain (0 = cook, 1 = press, … 6 = the final age) — one less than the spawn `#` in the "Phases and slug paths" table below.
    3. **Act on the verdict**:
       - `action=halt` → surface the `exit_message` (which contains the halt reason verbatim) and stop. Never push on a halt.
       - `action=stop_early` → age reported `next: done`; the diff is clean at the medium+ severity floor. Stop early with a clean summary.
@@ -148,15 +153,17 @@ Reached when the decomposer produces **2 or more** curds (`mode → parallel`). 
 
 1. **Seed (inline).** The orchestrator writes the small shared types/interfaces `seed[]` names (the one place the orchestrator writes code), runs the project gates, and commits.
 
-   After the seed commit, advance the manifest: `python3 ${CLAUDE_SKILL_DIR}/scripts/ultracook.pyz manifest_update set-phase --manifest .cheese/ultracook/<slug>/manifest.yaml --phase seed_complete`.
-2. **Per-curd fan-out.** Spawn one full-peer sub-agent per curd (`references/curd-prompt.md`), each in its **own worktree**. Each curd runs the per-curd pipeline `cook → press → age → cure` — the `PARALLEL_CURD` phase table: `python3 ${CLAUDE_SKILL_DIR}/scripts/ultracook.pyz phase_decision --phase-index <i> --status <status> --table parallel-curd`. Inside a curd, `/age` runs **inline-degrade** (the spawn prompt carries `invoked-from: ultracook-curd`) because the curd worker already sits at the nesting-depth cap. Each curd commits on its worktree branch.
-   - **Worktree floor (no native primitive).** When the host lacks the native `Agent(isolation:"worktree")` primitive, the orchestrator first creates each curd's worktree with `python3 ${CLAUDE_SKILL_DIR}/scripts/ultracook.pyz worktree create --slug <id> --base <orchestrator-branch>` (returns `{path, branch}`), then spawns the sub-agent into that path; harvest (step 3) and teardown (step 4) proceed unchanged.
+   After the seed commit, advance the manifest: `python3 skills/ultracook/scripts/ultracook.pyz manifest_update set-phase --manifest .cheese/ultracook/<slug>/manifest.yaml --phase seed_complete`.
+2. **Per-curd fan-out.** Spawn one full-peer sub-agent per curd (`references/curd-prompt.md`), each in its **own worktree**. Each curd runs the per-curd pipeline `cook → press → age → cure` — the `PARALLEL_CURD` phase table: `python3 skills/ultracook/scripts/ultracook.pyz phase_decision --phase-index <i> --status <status> --table parallel-curd`. Inside a curd, `/age` runs **inline-degrade** (the spawn prompt carries `invoked-from: ultracook-curd`) because the curd worker already sits at the nesting-depth cap. Each curd commits on its worktree branch.
+   - **Worktree floor (no native primitive).** When the host lacks a native worktree-isolated sub-agent primitive, the orchestrator first creates each curd's worktree with `python3 skills/ultracook/scripts/ultracook.pyz worktree create --slug <id> --base <orchestrator-branch>` (returns `{path, branch}`), then spawns the sub-agent into that path; harvest (step 3) and teardown (step 4) proceed unchanged.
 
    As each curd dispatches, mark it running (`manifest_update set-curd-status --manifest <path> --curd <id> --status running`); as each returns, record the outcome (`--status completed --commit-sha <sha>`, or `--status failed`). After **all** curds return, `manifest_update set-phase --manifest <path> --phase curds_complete`.
-3. **Harvest (fan-in).** Cherry-pick each curd branch onto the orchestrator branch with `python3 ${CLAUDE_SKILL_DIR}/scripts/ultracook.pyz worktree harvest --branch <curd-branch> --onto <orchestrator-branch>`. The parent and sub-agent share one `.git` object store, so this needs **no `git fetch`**. On conflict, invoke `/melt`; if it cannot resolve, fall back to per-curd PRs.
+3. **Harvest (fan-in).** Cherry-pick each curd branch onto the orchestrator branch with `python3 skills/ultracook/scripts/ultracook.pyz worktree harvest --branch <curd-branch> --onto <orchestrator-branch>`. The parent and sub-agent share one `.git` object store, so this needs **no `git fetch`**. On conflict, invoke `/melt`; if it cannot resolve, fall back to per-curd PRs.
 
    After all curd branches are cherry-picked onto the orchestrator branch, `manifest_update set-phase --manifest <path> --phase merge_complete`.
-4. **Teardown.** After harvesting each curd, `python3 ${CLAUDE_SKILL_DIR}/scripts/ultracook.pyz worktree teardown --path <worktree-path> --branch <curd-branch>` removes the worktree and deletes its branch. The engine owns teardown — worktrees leak otherwise; a completed run leaves no `worktree-agent-*` branch or `.claude/worktrees/agent-*` dir.
+4. **Teardown.** After harvesting each curd, `python3 skills/ultracook/scripts/ultracook.pyz worktree teardown --path <worktree-path> --branch <curd-branch>` removes the worktree and deletes its branch. The engine owns teardown — worktrees leak otherwise; a completed run leaves no `worktree-agent-*` branch or `.claude/worktrees/agent-*` dir.
+
+If the host only exposes the packaged helper, `python3 ${CLAUDE_SKILL_DIR}/scripts/ultracook.pyz <subcommand> ...` is the fallback.
 5. **Wiring.** Dispatch the topo-sorted `wiring[]` integration tasks (`ultracook.pyz wiring_topo_sort`), sequentially within each wave.
 
    Mark each wiring row as it runs (`manifest_update set-wiring-status --manifest <path> --wiring <id> --status running|completed|failed [--commit-sha <sha>]`). After the last wave, `manifest_update set-phase --manifest <path> --phase wiring_complete`, then immediately `manifest_update set-phase --manifest <path> --phase final_merge_complete`: wiring commits land directly on the orchestrator branch in this flow (no distinct wiring-merge action — the retired cheese-factory's separate Phase 5 final-merge is folded in), so the two markers coincide.

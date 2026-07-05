@@ -141,3 +141,102 @@ def test_cheez_skills_accept_equivalent_native_backends_without_blind_shell_fall
     assert "tilth_edit" not in combined
     assert "tilth_files" not in combined
     assert "hard-fail without it" not in combined
+
+
+
+def test_harness_portability_reference_is_linked_from_workflow_docs():
+    docs = [
+        REPO_ROOT / "shared/formatting.md",
+        REPO_ROOT / "skills/cook/SKILL.md",
+        REPO_ROOT / "skills/press/SKILL.md",
+        REPO_ROOT / "skills/age/SKILL.md",
+        REPO_ROOT / "skills/cure/SKILL.md",
+        REPO_ROOT / "skills/ultracook/SKILL.md",
+        REPO_ROOT / "skills/mold/SKILL.md",
+        REPO_ROOT / "skills/cheese/SKILL.md",
+        REPO_ROOT / "skills/affinage/SKILL.md",
+        REPO_ROOT / "skills/hard-cheese/SKILL.md",
+        REPO_ROOT / "skills/pasteurize/SKILL.md",
+    ]
+
+    for path in docs:
+        text = path.read_text(encoding="utf-8")
+        assert "shared/harness-portability.md" in text, path
+        if path.name == "formatting.md":
+            assert "Portable host-capability wording" in text
+        else:
+            assert "slash commands are host renderings, not the control model" in text, path
+
+
+
+    portable_examples = {
+        REPO_ROOT / "skills/cook/SKILL.md": (
+            "shared/scripts/artifact_path.py",
+            "fallback",
+        ),
+        REPO_ROOT / "skills/age/SKILL.md": (
+            "shared/scripts/read_handoff_slug.py",
+            "shared/scripts/write_handoff_artifact.py",
+            "fallback",
+            "shared/scripts/html_report_cli.py",
+        ),
+        REPO_ROOT / "skills/ultracook/SKILL.md": (
+            "shared/scripts/artifact_path.py",
+            "shared/scripts/read_handoff_slug.py",
+            "python3 skills/ultracook/scripts/ultracook.pyz phase_decision",
+            "fallback",
+            "python3 skills/ultracook/scripts/ultracook.pyz validate_decomposition",
+            "python3 skills/ultracook/scripts/ultracook.pyz mode",
+            "python3 skills/ultracook/scripts/ultracook.pyz milknado",
+            "python3 skills/ultracook/scripts/ultracook.pyz worktree create",
+            "python3 skills/ultracook/scripts/ultracook.pyz worktree harvest",
+            "python3 skills/ultracook/scripts/ultracook.pyz worktree teardown",
+        ),
+        REPO_ROOT / "skills/affinage/SKILL.md": (
+            "python3 skills/affinage/scripts/affinage.pyz pr-status",
+            "python3 skills/affinage/scripts/affinage.pyz post-reply",
+        ),
+        REPO_ROOT / "skills/hard-cheese/SKILL.md": (
+            "python3 skills/hard-cheese/scripts/hard-cheese.pyz freshness-check",
+            "python3 skills/hard-cheese/scripts/hard-cheese.pyz append-attempt",
+        ),
+        REPO_ROOT / "skills/mold/SKILL.md": (
+            "python3 skills/mold/scripts/mold.pyz artifact-path",
+            "python3 skills/mold/scripts/mold.pyz gate-graph",
+        ),
+        REPO_ROOT / "skills/pasteurize/SKILL.md": (
+            "python3 skills/pasteurize/scripts/pasteurize.pyz repro-rerun",
+            "python3 skills/pasteurize/scripts/pasteurize.pyz debug-tag-sweep",
+        ),
+    }
+
+    for path, snippets in portable_examples.items():
+        text = path.read_text(encoding="utf-8")
+        for snippet in snippets:
+            assert snippet in text, path
+
+    for path in (
+        REPO_ROOT / "skills/affinage/SKILL.md",
+        REPO_ROOT / "skills/hard-cheese/SKILL.md",
+        REPO_ROOT / "skills/mold/SKILL.md",
+        REPO_ROOT / "skills/pasteurize/SKILL.md",
+    ):
+        assert "${CLAUDE_SKILL_DIR}/scripts/" not in path.read_text(encoding="utf-8"), path
+
+
+def test_harness_portability_reference_covers_the_portability_contract():
+    body = (REPO_ROOT / "shared/harness-portability.md").read_text(encoding="utf-8")
+
+    assert "Helper resolution" in body
+    assert "repo-local" in body and "bundled" in body and "environment variable" in body
+    assert "sub-agent dispatch" in body
+    assert "Anthropic Claude Code: `Agent(...)`" in body
+    assert "Codex: `multi_agent_v1.spawn_agent`" in body
+    assert "OMP: `task(...)`" in body
+    assert "OMP / Codex" not in body and "Codex-style" not in body
+    assert "GitHub operations" in body
+    assert "host GitHub primitive when the harness exposes one" in body
+    assert "`gh` CLI as the fallback transport" in body
+    assert "Handoff transitions" in body
+    assert "Slash commands are presentation, not the control model." in body
+    assert "status" in body and "next" in body and "artifact" in body and "explicit dispatch data" in body

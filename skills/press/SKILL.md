@@ -27,6 +27,9 @@ Press may add or strengthen tests and make tiny corrective fixes only when a tes
 
 Code search, reading, and editing all go through the `cheez-*` skills (`/cheez-search`, `/cheez-read`, `/cheez-write`) — see those skills for tool selection rules. For coverage and test discovery, press uses `cheez-search` (callers via `kind: "callers"`) and `tilth_deps`.
 
+Portability reference: [`../../shared/harness-portability.md`](../../shared/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
+The handoff blocks below are the portable contract; slash commands are host renderings, not the control model.
+
 Beyond `cheez-*` there are press-specific tools:
 
 | Need | Prefer | Fallback |

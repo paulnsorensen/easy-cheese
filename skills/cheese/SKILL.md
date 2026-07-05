@@ -39,6 +39,9 @@ If `$ARGUMENTS` is missing entirely and there is no recent context to lean on, a
 
 `/cheese` is a router, not a worker — it never edits files, runs tests, or opens PRs. The sole exception: it invokes `/mold`'s agent-invoked mini-spec mode in tier 1 when `/cook --auto` needs a spec first.
 
+Portability reference: [`../../shared/harness-portability.md`](../../shared/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
+The handoff blocks below are the portable contract; slash commands are host renderings, not the control model.
+
 ## Intent shapes
 
 The full classification table — including all intent shapes, signals, disambiguation rules, and edge cases — lives in `references/classification.md`.

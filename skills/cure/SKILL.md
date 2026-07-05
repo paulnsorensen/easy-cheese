@@ -24,14 +24,19 @@ Optional flags:
 - `--stake <floor>` — used only with `--auto`. Severity floor: `blocker`, `high`, `medium+`, or `all`. Floor definitions and the `medium+` cheap-lows rule: `references/selection.md` § Auto-mode selection. Without `--auto` this flag is ignored.
 - `--hard` — propagated metacognitive-gate flag (from `/cook --hard` or `/cheese --hard`). Cure is the only pipeline skill that fires the gate; see `## --hard mode` for the full contract.
 
+Portability reference: [`../../shared/harness-portability.md`](../../shared/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
+The handoff blocks below are the portable contract; slash commands are host renderings, not the control model.
+
 ## Flow
 
 1. **Load** — read the findings (markdown, not JSON sidecars).
 2. **Select** — adopt any pre-locked handoff from `/age`/`/affinage`; otherwise apply the recommended composite. See `references/selection.md` for the default rule, recognized verbs, and gate conditions. To expand a user-supplied verb to finding ids:
 
    ```
-   python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz findings_cli parse-selection --report <path> --selection "<verb>"
+   python3 shared/scripts/findings_cli.py parse-selection --report <path> --selection "<verb>"
    ```
+
+   If the host only ships the bundle, `python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz findings_cli parse-selection ...` is the fallback.
 3. **Apply** — fix one logical group at a time via `cheez-read` (re-confirm anchor location) and `cheez-write` (apply).
 4. **Validate** — run the narrowest tests that prove each fix, then any relevant project-wide gates (lint, typecheck, build).
 5. **Taste-test (behavioural fixes only)** — if this cure applied a *behavioural* fix (touched production logic or public surface), run the fresh-context taste-test before the handoff slug: dispatch the read-only `reviewer` phase-agent (named, no call-site model — its def pins `model: opus`) over the cure diff with the same lenses cook uses, or fall back to the inline self-check when no such reviewer sub-agent is available. *Mechanical* fixes — formatting, comment, import, no-logic rename — skip this and keep the current flow. Pipe any `revise` into a bounded corrective pass; a Locked-decision `halt` stops for a human. (A coder-nested cure cannot fan out; it defers the authoritative pass to the orchestrator.)
@@ -65,10 +70,12 @@ Applied requires its proving test green (Iron Law — see `references/cure-disci
 **clean cure** — ≥1 fix applied, all gates green, no false-premise halt. To map the post-cure gate booleans to a readiness verdict (agent judges the booleans; the CLI maps them):
 
    ```
-   python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz gates_cli classify \
+   python3 shared/scripts/gates_cli.py classify \
      --press-status <label> \
      [--hard-floor-met] [--has-open-level-1-or-2] [--has-open-level-3] [--has-open-level-4-or-5] [--any-spinning]
    ```
+
+   If the host only ships the bundle, `python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz gates_cli classify ...` is the fallback.
 
 ## Handoff slug
 

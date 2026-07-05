@@ -30,6 +30,9 @@ Arguments:
 
 `--hard` propagates through `/cheese → /mold → /cook → /press → /age → /cure`. Upstream skills only pass the flag along; `/cure` is the only skill that actually invokes `/hard-cheese`. See `references/composition.md` for the full matrix.
 
+Portability reference: [`../../shared/harness-portability.md`](../../shared/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
+The handoff blocks below are the portable contract; slash commands are host renderings, not the control model.
+
 ## Flow
 
 1. **Resolve scope.**
@@ -42,7 +45,7 @@ Arguments:
    Check freshness before launching the gate:
 
    ```
-   python3 ${CLAUDE_SKILL_DIR}/scripts/hard-cheese.pyz freshness-check \
+   python3 skills/hard-cheese/scripts/hard-cheese.pyz freshness-check \
      --slug <slug> --passing-score <n>
    ```
 
@@ -71,7 +74,7 @@ Arguments:
    Append the attempt row:
 
    ```
-   python3 ${CLAUDE_SKILL_DIR}/scripts/hard-cheese.pyz append-attempt \
+   python3 skills/hard-cheese/scripts/hard-cheese.pyz append-attempt \
      --slug <slug> --status <PASS|FAIL|ERROR> --score <n> \
      --feedback "<judge feedback>" --explanation "<user explanation>"
    ```
@@ -195,5 +198,5 @@ Followed by:
 
 - `references/judge-prompt.md` — SOLO Taxonomy rubric, judge sub-agent system prompt, JSON output shape.
 - `references/composition.md` — the full `--hard` / `--auto` matrix and the single puncture point.
-- `${CLAUDE_SKILL_DIR}/scripts/hard-cheese.pyz freshness-check` — checks whether a previous PASS is still fresh for the current HEAD and passing score (step 2).
-- `${CLAUDE_SKILL_DIR}/scripts/hard-cheese.pyz append-attempt` — atomically appends an attempt row to the audit trail (step 6).
+- `skills/hard-cheese/scripts/hard-cheese.pyz freshness-check` — checks whether a previous PASS is still fresh for the current HEAD and passing score (step 2).
+- `skills/hard-cheese/scripts/hard-cheese.pyz append-attempt` — atomically appends an attempt row to the audit trail (step 6).
