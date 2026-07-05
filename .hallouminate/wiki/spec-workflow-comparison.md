@@ -145,8 +145,8 @@ parallel design that `/mold` refined:
 What `/mold` **adds** that `spec.md` lacks: the two-key handshake
 (`skills/mold/references/handshake.md`), shape-check blast-radius numbers gating
 Grill (`skills/mold/references/shape-check.md`), the agent-introduced-scope grep
-gate, and a computed handoff (`curd-count` → `/cook` / `/ultracook` /
-`/cheese-factory`). What `spec.md` has that `/mold` softened: the explicit
+  gate, and a computed handoff (`curd-count` → `/cook` or `/ultracook`, linear
+  vs parallel mode). What `spec.md` has that `/mold` softened: the explicit
 ~800-word / 2-minute-read prose target and optional GitHub-issue emission.
 
 ## Where `/mold` is ahead — and what it could borrow

@@ -41,7 +41,7 @@ Skills that depend on `shared/scripts/` ship a pre-bundled `.pyz` so the
 shared helpers are self-contained at install time — invoked as
 `python3 ${CLAUDE_SKILL_DIR}/scripts/<skill>.pyz <subcommand>`
 (`skills/mold/SKILL.md:22`). Bundles exist for affinage, briesearch,
-cheese-factory, cook, melt, and mold; `build-pyz.yml` rebuilds them on
+cook, melt, mold, and ultracook; `build-pyz.yml` rebuilds them on
 every relevant push to `main`.
 
 ## The cheese pipeline
@@ -59,12 +59,14 @@ The workflow skills compose into one pipeline, ordered
 | `/press` | Adversarial test hardening |
 | `/age` | Ten-dimension review → severity-grouped findings |
 | `/cure` | Apply selected findings as focused fixes |
-| `/cheese-factory` | Fan an approved spec into parallel curds → PRs |
+| `/ultracook` | Pipeline a spec in fresh-context isolation; parallel mode fans file-disjoint curds → PRs |
 
 Lower-level **tool skills** sit beneath the pipeline: `/cheez-search`,
 `/cheez-read`, `/cheez-write` (tilth-backed primitives), plus the
 `/ultracook` composite that chains cook → press → age → cure
-non-interactively (`AGENTS.md:42-49`).
+non-interactively in fresh-context isolation; its parallel mode (formerly
+`/cheese-factory`) fans file-disjoint curds through the `src/fanout/` engine
+into reviewable PRs (`AGENTS.md:42-49`).
 
 ## Portability is the design center
 

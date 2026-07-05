@@ -61,7 +61,7 @@ Every finding carries these fields:
 | `cross-module` | Reaches into another module's internals (bypasses the public index/crust). |
 | `contract` | Crosses an ingress/egress boundary: slice's public `index` re-exports, HTTP/RPC handler signature, DB schema, language-FFI boundary, plugin extension point, published library API. |
 
-Language-agnostic note: in projects without an explicit public-index layer (flat scripts, no crust / `__init__` re-export surface, as in this repo's `src/melt`, `src/affinage`, `src/mold`, `src/cheese-factory`), treat a direct import of another file's internal function across a directory boundary as `cross-module`, and CLI `argv` / stdin ingress as `contract`.
+Language-agnostic note: in projects without an explicit public-index layer (flat scripts, no crust / `__init__` re-export surface, as in this repo's `src/melt`, `src/affinage`, `src/mold`, `src/fanout`), treat a direct import of another file's internal function across a directory boundary as `cross-module`, and CLI `argv` / stdin ingress as `contract`.
 
 ## Location sensitivity
 
