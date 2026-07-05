@@ -103,6 +103,35 @@ class TestInline:
         assert "<code>**x**</code>" in out
         assert "<strong>" not in out
 
+    def test_link_url_with_underscores_not_emphasized(self, hr: ModuleType) -> None:
+        # Report artifacts routinely link to underscored GitHub blob paths; running
+        # the italic pass over the URL would splice <em> into the href and silently
+        # point it at garbage. The href must survive verbatim.
+        out = hr.render("[test](https://github.com/o/repo/blob/main/test_html_report.py)", title="t")
+        assert '<a href="https://github.com/o/repo/blob/main/test_html_report.py">test</a>' in out
+        assert "<em>" not in out
+        assert "<strong>" not in out
+
+    def test_link_url_special_chars_escaped(self, hr: ModuleType) -> None:
+        # A URL carrying &, <, or " must be html-escaped inside the href so it cannot
+        # break out of the attribute or inject markup.
+        out = hr.render('[q](https://x/p?a=1&b=2_c="<z>")', title="t")
+        assert 'href="https://x/p?a=1&amp;b=2_c=&quot;&lt;z&gt;&quot;"' in out
+
+    def test_link_text_still_gets_inline_formatting(self, hr: ModuleType) -> None:
+        # The visible link text must still render inline emphasis while the URL is
+        # left untouched -- protecting the URL must not disable text formatting.
+        out = hr.render("[**bold** text](http://x/a_b)", title="t")
+        assert '<a href="http://x/a_b"><strong>bold</strong> text</a>' in out
+
+    def test_dangerous_scheme_rendered_as_plain_text(self, hr: ModuleType) -> None:
+        # Report bodies can quote untrusted content; a javascript: URL must never
+        # become a clickable href. It degrades to the visible link text.
+        out = hr.render("[x](javascript:alert(1))", title="t")
+        assert "javascript:" not in out
+        assert 'href="javascript' not in out
+        assert "<p>x)</p>" in out
+
 
 class TestEscaping:
     def test_prose_angle_and_amp_escaped(self, hr: ModuleType) -> None:

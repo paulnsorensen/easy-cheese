@@ -79,6 +79,9 @@ _BOLD = re.compile(r"\*\*(.+?)\*\*")
 _ITALIC_STAR = re.compile(r"\*([^*]+)\*")
 _ITALIC_UNDER = re.compile(r"_([^_]+)_")
 _LINK = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
+_LINK_TOKEN = re.compile("\x00(\\d+)\x00")
+_URL_SCHEME = re.compile(r"^([a-zA-Z][a-zA-Z0-9+.\-]*):")
+_ALLOWED_SCHEMES = {"http", "https", "mailto"}
 
 
 def render(markdown: str, *, title: str) -> str:
@@ -296,10 +299,40 @@ def _inline(text: str) -> str:
     return "".join(parts)
 
 
-def _inline_spans(seg: str) -> str:
-    s = html.escape(seg)
+def _emphasis(s: str) -> str:
+    s = html.escape(s)
     s = _BOLD.sub(r"<strong>\1</strong>", s)
     s = _ITALIC_STAR.sub(r"<em>\1</em>", s)
     s = _ITALIC_UNDER.sub(r"<em>\1</em>", s)
-    s = _LINK.sub(r'<a href="\2">\1</a>', s)
     return s
+
+
+def _url_is_safe(url: str) -> bool:
+    """Allow http/https/mailto and relative/scheme-relative URLs; reject javascript:, data:, etc."""
+    m = _URL_SCHEME.match(url.strip())
+    return m is None or m.group(1).lower() in _ALLOWED_SCHEMES
+
+
+def _render_link(anchor: str, url: str) -> str:
+    if _url_is_safe(url):
+        return f'<a href="{html.escape(url)}">{anchor}</a>'
+    return anchor
+
+
+def _inline_spans(seg: str) -> str:
+    """Tokenize links out before emphasis so a URL's underscores/asterisks are never
+    turned into <em>/<strong>; emphasis runs on link text and non-link text only.
+    """
+    links: list[tuple[str, str]] = []
+
+    def _stash(m: re.Match) -> str:
+        links.append((m.group(1), m.group(2)))
+        return f"\x00{len(links) - 1}\x00"
+
+    s = _emphasis(_LINK.sub(_stash, seg))
+
+    def _restore(m: re.Match) -> str:
+        text, url = links[int(m.group(1))]
+        return _render_link(_emphasis(text), url)
+
+    return _LINK_TOKEN.sub(_restore, s)
