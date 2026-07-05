@@ -1,4 +1,4 @@
-"""Tests for src/age/html-report.py — deterministic HTML rendering of /age reports.
+"""Tests for src/age/age-html-report.py — deterministic HTML rendering of /age reports.
 
 These are black-box tests for the future HTML report generator: the script should
 turn a markdown age report into a styled standalone HTML file, preserving the
@@ -13,7 +13,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-HTML_REPORT = REPO_ROOT / "src" / "age" / "html-report.py"
+HTML_REPORT = REPO_ROOT / "src" / "age" / "age-html-report.py"
 
 REPORT_WITH_FINDINGS = """\
 status: ok

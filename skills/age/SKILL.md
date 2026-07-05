@@ -32,7 +32,7 @@ When called with a `<slug>`, resolve `.cheese/press/<slug>.md` (if present) for 
 `--html` emits a static HTML copy **in addition to** the standard `.cheese/age/<slug>.md` markdown report. Write the markdown report first, then render it:
 
 ```bash
-python3 src/age/html-report.py \
+python3 src/age/age-html-report.py \
   --report .cheese/age/<slug>.md \
   --slug <slug>
 ```
@@ -213,7 +213,7 @@ Age report: .cheese/age/<slug>.md
 When `--html` is passed, render the already-written markdown report and print both paths:
 
 ```bash
-python3 src/age/html-report.py \
+python3 src/age/age-html-report.py \
   --report .cheese/age/<slug>.md \
   --slug <slug>
 ```

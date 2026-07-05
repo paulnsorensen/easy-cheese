@@ -537,6 +537,31 @@ def test_age_bundle_exposes_html_report_help(bundles: Path) -> None:
     assert "--out-dir" in help_text
 
 
+def test_age_bundle_html_report_runs_from_inside_bundle(bundles: Path, tmp_path: Path) -> None:
+    """Smoke-run html-report end-to-end so a module-name collision (the age
+    entrypoint shadowing the shared html_report renderer) can't hide behind a
+    --help-only check that never reaches render_document."""
+    age_pyz = bundles / "age.pyz"
+    assert age_pyz.exists(), f"age bundle missing: {age_pyz}"
+
+    report = tmp_path / "rep.md"
+    report.write_text(
+        "# Age report — demo\n\n## Blocker\n"
+        "- **[security:blocker]** `a.py:1` — token parsed without validation.\n\n"
+        "## Confidence\ncertain\n",
+        encoding="utf-8",
+    )
+    result = _run(
+        age_pyz, "html-report", "--report", str(report), "--slug", "demo", "--out-dir", str(tmp_path)
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    out_html = tmp_path / "age-demo.html"
+    assert out_html.is_file(), f"expected {out_html}; stdout={result.stdout!r}"
+    html = out_html.read_text(encoding="utf-8")
+    assert "token parsed without validation" in html
+    assert "Blocker" in html
+
+
 def test_age_bundle_carries_html_report_and_findings_imports(bundles: Path) -> None:
     """The bundle must stage the report generator plus its shared parser helper."""
     age_pyz = bundles / "age.pyz"

@@ -88,12 +88,10 @@ def _finding_blocks(text: str) -> list[tuple[str, str]]:
             severity_heading = _SEVERITY_HEADING_RE.match(stripped)
             current = severity_heading.group("severity").lower() if severity_heading else None
             continue
-        if raw.lstrip().startswith("- **["):
+        bullet = _BULLET_RE.match(raw)
+        if bullet:
             close()
-            severity = current
-            tag = _BULLET_RE.match(raw)
-            if tag and tag.group("sev"):
-                severity = tag.group("sev").lower()
+            severity = bullet.group("sev").lower() if bullet.group("sev") else current
             if severity is not None:  # a bullet before any heading/tag is unscoped — skip
                 pending = (severity, [raw])
             continue
@@ -137,6 +135,8 @@ def _cmd_html_report(args: argparse.Namespace) -> None:
     report = Path(args.report)
     if not report.is_file():
         raise cli.CliError(f"--report not found: {args.report}")
+    if any(sep in args.slug for sep in ("..", "/", "\\", ":")):
+        raise cli.CliError(f"--slug rejects path traversal: {args.slug!r}")
     out_dir = Path(args.out_dir) if args.out_dir else Path(tempfile.gettempdir())
     if not out_dir.is_dir():
         raise cli.CliError(f"--out-dir is not a directory: {out_dir}")

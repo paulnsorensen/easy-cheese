@@ -178,7 +178,7 @@ def test_harness_portability_reference_is_linked_from_workflow_docs():
             "shared/scripts/read_handoff_slug.py",
             "shared/scripts/write_handoff_artifact.py",
             "fallback",
-            "src/age/html-report.py",
+            "src/age/age-html-report.py",
         ),
         REPO_ROOT / "skills/ultracook/SKILL.md": (
             "shared/scripts/artifact_path.py",

@@ -59,7 +59,7 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
         "ground-check": "ground_check.py",
     },
     "cook": {"artifact-path": Shared("artifact_path.py")},
-    "age": {"html-report": "html-report.py"},
+    "age": {"html-report": "age-html-report.py"},
     "hard-cheese": {
         "append-attempt": "append-attempt.py",
         "freshness-check": "freshness-check.py",
