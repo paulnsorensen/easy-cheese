@@ -96,10 +96,11 @@ count_skills() {
 
 # -- ec_parse_args ------------------------------------------------------------
 
-@test "ec_parse_args defaults to all tools and tilth+context7" {
+@test "ec_parse_args defaults to all tools except tilth, and hallouminate MCP" {
     ec_parse_args
-    [[ "$EC_TOOLS" == *"gh"* && "$EC_TOOLS" == *"tilth"* ]]
-    [[ "$EC_MCP" == "tilth,context7" ]]
+    [[ "$EC_TOOLS" == *"gh"* ]]
+    [[ "$EC_TOOLS" != *"tilth"* ]]
+    [[ "$EC_MCP" == "hallouminate" ]]
     [[ "$EC_HARNESS" == "auto" ]]
     [[ "$EC_WITH_EDIT" == "1" ]]
     [[ "$EC_DRY_RUN" == "0" ]]
@@ -330,6 +331,64 @@ STUB
     [[ "$output" == *"rustup.rs"* ]]
 }
 
+# -- ec_install_hallouminate --------------------------------------------------
+
+@test "ec_install_hallouminate short-circuits when hallouminate already on PATH" {
+    make_stub hallouminate
+    EC_HALLOUMINATE="$STUB_BIN/hallouminate" run ec_install_hallouminate
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"already installed"* ]]
+}
+
+@test "ec_install_hallouminate dry-run prefers the prebuilt installer over cargo" {
+    make_stub curl
+    make_stub cargo
+    EC_HALLOUMINATE="$STUB_BIN/no-such-hallouminate" EC_CURL="$STUB_BIN/curl" \
+        EC_CARGO="$STUB_BIN/cargo" EC_DRY_RUN=1 run ec_install_hallouminate
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"prebuilt binary via the release installer"* ]]
+    [[ "$output" != *"cargo install hallouminate"* ]]
+}
+
+@test "ec_install_hallouminate dry-run falls back to cargo when curl missing" {
+    make_stub cargo
+    EC_HALLOUMINATE="$STUB_BIN/no-such-hallouminate" EC_CARGO="$STUB_BIN/cargo" \
+        EC_DRY_RUN=1 run ec_install_hallouminate
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"cargo install hallouminate --locked"* ]]
+    [[ "$output" == *"curl not found"* ]]
+}
+
+@test "ec_install_hallouminate fails clearly when neither curl nor cargo present" {
+    EC_HALLOUMINATE="$STUB_BIN/no-such-hallouminate" run ec_install_hallouminate
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"needs curl (prebuilt installer) or cargo"* ]]
+    [[ "$output" == *"rustup.rs"* ]]
+}
+
+# -- default + opt-in MCP wiring ----------------------------------------------
+
+@test "default MCP selection registers hallouminate" {
+    make_stub claude
+    make_stub hallouminate
+    ec_parse_args
+    EC_CLAUDE="$STUB_BIN/claude" EC_HALLOUMINATE="$STUB_BIN/hallouminate" EC_DRY_RUN=1 \
+        run ec_install_mcp_list "$EC_MCP" claude-code 1
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"mcp add hallouminate -- $STUB_BIN/hallouminate serve"* ]]
+    [[ "$output" != *"mcp add context7"* ]]
+}
+
+@test "--mcp tilth still installs and registers tilth" {
+    make_stub tilth
+    ec_parse_args --mcp tilth
+    [[ "$EC_MCP" == "tilth" ]]
+    EC_TILTH="$STUB_BIN/tilth" EC_DRY_RUN=1 \
+        run ec_install_mcp_list "$EC_MCP" claude-code 1
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"install claude-code --edit"* ]]
+}
+
 # -- ec_install_mcp_tilth -----------------------------------------------------
 
 @test "ec_install_mcp_tilth fails clearly when tilth CLI missing" {
@@ -432,13 +491,15 @@ STUB
     [[ "$output" == *"only claude-code is auto-registered"* ]]
 }
 
-@test "ec_install_mcp_hallouminate gracefully skips when hallouminate binary missing" {
+@test "ec_install_mcp_hallouminate skips registration when binary install fails" {
     make_stub claude
-    # EC_HALLOUMINATE points at a path that does not exist — detection should warn, not abort.
+    # No curl or cargo on the hermetic PATH, so the on-demand binary install
+    # cannot succeed; registration must warn and skip rather than register a
+    # missing binary.
     EC_CLAUDE="$STUB_BIN/claude" EC_HALLOUMINATE="$STUB_BIN/no-such-hallouminate" \
         run ec_install_mcp_hallouminate claude-code
     [ "$status" -eq 0 ]
-    [[ "$output" == *"hallouminate binary not found"* ]]
+    [[ "$output" == *"could not install the hallouminate binary"* ]]
     ! grep -q "mcp add hallouminate" "$STUB_LOG"
 }
 
@@ -797,29 +858,29 @@ STUB
     make_stub cargo
     make_stub gh
     make_stub claude
-    make_stub tilth
     ln -sf /bin/bash "$STUB_BIN/bash"
     PATH="$STUB_BIN" \
     EC_BREW=brew \
     EC_CARGO=cargo \
     EC_GH=gh \
     EC_CLAUDE=claude \
-    EC_TILTH=tilth \
         run ec_main --dry-run
     [ "$status" -eq 0 ]
     [[ "$output" == *"gh: already installed (gh on PATH)"* ]]
     [[ "$output" == *"would run 'brew install ripgrep'"* ]]
-    # tilth is detected on PATH and should never route through brew.
-    [[ "$output" == *"tilth: already installed (tilth on PATH)"* ]]
+    # tilth is opt-in now, so a default run never installs it via brew or cargo.
     [[ "$output" != *"brew install tilth"* ]]
-    [[ "$output" != *"paulnsorensen/tap/tilth"* ]]
+    [[ "$output" != *"cargo install tilth"* ]]
     # Skills install runs as part of the harness pick stage — one entry per
     # shipped skill, never the broken --all flag.
     [[ "$output" == *"gh skill install paulnsorensen/easy-cheese age --agent claude-code --scope user --force"* ]]
     [[ "$output" == *"gh skill install paulnsorensen/easy-cheese press --agent claude-code --scope user --force"* ]]
     [[ "$output" != *"--all"* ]]
-    [[ "$output" == *"install claude-code --edit"* ]]
-    [[ "$output" == *"@upstash/context7-mcp@latest"* ]]
+    # Default MCP is hallouminate; its binary is installed on demand (cargo
+    # fallback here, curl absent) then registered.
+    [[ "$output" == *"cargo install hallouminate --locked"* ]]
+    [[ "$output" == *"mcp add hallouminate"* ]]
+    [[ "$output" != *"@upstash/context7-mcp@latest"* ]]
     [[ "$output" == *"Done."* ]]
 }
 

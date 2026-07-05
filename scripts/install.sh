@@ -30,9 +30,13 @@ EC_SKILL_REPO="paulnsorensen/easy-cheese"
 # loosely in sync with skills/ but not load-bearing for happy-path runs.
 EC_FALLBACK_SKILLS="age affinage briesearch cheese cheese-factory cheez-read cheez-search cheez-write cook culture cure hard-cheese melt mold pasteurize press ultracook wheypoint"
 
-# Default selections.
-EC_DEFAULT_TOOLS="$EC_KNOWN_TOOLS"
-EC_DEFAULT_MCP="tilth context7"
+# Default selections. tilth is opt-in now that hallouminate is the default
+# MCP: it stays in EC_KNOWN_TOOLS (selectable via --tools) but is excluded
+# from the default tool set, so a default run installs it only when the user
+# asks for it. hallouminate is the default MCP; its binary is installed on
+# demand by ec_install_mcp_hallouminate.
+EC_DEFAULT_TOOLS="gh ripgrep fd jq ast-grep git-delta just mergiraf"
+EC_DEFAULT_MCP="hallouminate"
 
 # Map a brew formula name to the binary it installs (when they differ).
 ec_tool_binary() {
@@ -64,11 +68,12 @@ Usage:
   install.sh [options]
 
 Options:
-  --tools <list>       Comma-separated CLI tools to install. Default: all.
+  --tools <list>       Comma-separated CLI tools to install. Default: all
+                       except tilth (tilth is opt-in — add it explicitly).
                        Choices: gh, ripgrep, fd, jq, ast-grep, git-delta,
                                 just, mergiraf, tilth
   --mcp <list>         Comma-separated MCP servers to register. Default:
-                       tilth,context7. Choices: tilth, context7, tavily,
+                       hallouminate. Choices: tilth, context7, tavily,
                        hallouminate, milknado, none
   --skip-mcp           Same as --mcp none.
   --skip-tools         Skip CLI tool installs (useful for MCP-only runs).
@@ -91,6 +96,7 @@ Environment:
   EC_NPX               Override npx (used to launch context7 / tavily MCP).
   EC_UVX               Override uvx (used to launch milknado MCP).
   EC_HALLOUMINATE      Override hallouminate binary (used to launch hallouminate MCP).
+  EC_CURL              Override curl (used to fetch the hallouminate prebuilt installer).
   EC_SKILL_REF         Pin skill installs to a git tag or commit SHA
                        (passes --pin to 'gh skill install'). Used by CI
                        to test against the commit under review.
@@ -194,6 +200,46 @@ ec_install_tilth() {
 
     ec_err "tilth: needs cargo (Rust) or npm (Node 18+); neither was found."
     ec_err "Install Rust from https://rustup.rs or Node.js from https://nodejs.org and re-run."
+    return 1
+}
+
+# hallouminate has no Homebrew formula. Install the prebuilt binary via the
+# upstream release installer (no Rust toolchain needed on supported targets)
+# or fall back to 'cargo install hallouminate --locked' when curl is
+# unavailable. Errors out clearly if neither path is available.
+ec_install_hallouminate() {
+    local hallouminate="${EC_HALLOUMINATE:-hallouminate}"
+    local curl="${EC_CURL:-curl}"
+    local cargo="${EC_CARGO:-cargo}"
+
+    if ec_cmd_exists "$hallouminate"; then
+        ec_log "hallouminate: already installed (hallouminate on PATH)"
+        return 0
+    fi
+
+    if ec_cmd_exists "$curl"; then
+        if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
+            ec_log "hallouminate: would install the prebuilt binary via the release installer"
+            return 0
+        fi
+        ec_log "hallouminate: installing prebuilt binary via the release installer"
+        "$curl" --proto '=https' --tlsv1.2 -LsSf \
+            https://github.com/paulnsorensen/hallouminate/releases/latest/download/hallouminate-installer.sh | sh
+        return $?
+    fi
+
+    if ec_cmd_exists "$cargo"; then
+        if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
+            ec_log "hallouminate: would run '$cargo install hallouminate --locked' (curl not found)"
+            return 0
+        fi
+        ec_log "hallouminate: installing via 'cargo install hallouminate --locked' (curl not found)"
+        "$cargo" install hallouminate --locked
+        return $?
+    fi
+
+    ec_err "hallouminate: needs curl (prebuilt installer) or cargo (Rust); neither was found."
+    ec_err "Install curl, or Rust from https://rustup.rs, then re-run."
     return 1
 }
 
@@ -319,8 +365,11 @@ ec_install_mcp_hallouminate() {
         return 1
     fi
     if ! ec_cmd_exists "$hallouminate"; then
-        ec_warn "hallouminate MCP: hallouminate binary not found — install via 'cargo install hallouminate' or the release installer, then re-run with --mcp hallouminate"
-        return 0
+        ec_log "hallouminate MCP: hallouminate binary not found; installing it now"
+        ec_install_hallouminate || {
+            ec_warn "hallouminate MCP: could not install the hallouminate binary; skipping registration. Install it manually and re-run with --mcp hallouminate."
+            return 0
+        }
     fi
     if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
         ec_log "hallouminate MCP: would run '$claude mcp add hallouminate -- $hallouminate serve'"

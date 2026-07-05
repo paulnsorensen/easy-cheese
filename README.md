@@ -420,9 +420,9 @@ flow above; this script is the fast lane for the wider ecosystem.
 
 It does the following in one shot:
 
-1. Installs every CLI tool listed below — Homebrew for the eight brew-core formulas, plus `cargo install tilth` (or `npm install -g tilth` if Rust isn't available) for tilth, which has no Homebrew formula upstream.
+1. Installs the default CLI tools via Homebrew (the eight brew-core formulas). tilth is opt-in now — add it with `--tools` to install it via `cargo install tilth` (or `npm install -g tilth` if Rust isn't available), since it has no Homebrew formula upstream.
 2. Auto-detects installed Claude Code, Cursor, and Codex CLIs, then installs every easy-cheese skill into each detected harness at user scope as a convenience bootstrap.
-3. Registers the `tilth` and `context7` MCP servers with those harnesses where supported.
+3. Registers the `hallouminate` MCP server (the default) with those harnesses where supported, installing the hallouminate prebuilt binary on demand if it's missing. Select others (`tilth`, `context7`, `tavily`, `milknado`) with `--mcp`.
 
 Currently macOS only — it relies on Homebrew. Requires `gh` to be authenticated (`gh auth login`) before running.
 
