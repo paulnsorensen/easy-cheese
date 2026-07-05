@@ -96,11 +96,11 @@ count_skills() {
 
 # -- ec_parse_args ------------------------------------------------------------
 
-@test "ec_parse_args defaults to all tools including tilth, and tilth,context7 MCP" {
+@test "ec_parse_args defaults to all tools including tilth, and tilth,context7,hallouminate MCP" {
     ec_parse_args
     [[ "$EC_TOOLS" == *"gh"* ]]
     [[ "$EC_TOOLS" == *"tilth"* ]]
-    [[ "$EC_MCP" == "tilth,context7" ]]
+    [[ "$EC_MCP" == "tilth,context7,hallouminate" ]]
     [[ "$EC_HARNESS" == "auto" ]]
     [[ "$EC_WITH_EDIT" == "1" ]]
     [[ "$EC_DRY_RUN" == "0" ]]
@@ -333,7 +333,7 @@ STUB
 
 # -- default + opt-in MCP wiring ----------------------------------------------
 
-@test "default MCP selection registers tilth and context7, not hallouminate" {
+@test "default MCP selection registers tilth, context7, and hallouminate" {
     make_stub claude
     make_stub tilth
     make_stub npx
@@ -343,10 +343,10 @@ STUB
     [ "$status" -eq 0 ]
     [[ "$output" == *"install claude-code --edit"* ]]
     [[ "$output" == *"mcp add context7 --"* ]]
-    [[ "$output" != *"plugin install hallouminate"* ]]
+    [[ "$output" == *"plugin install hallouminate@hallouminate"* ]]
 }
 
-@test "--mcp hallouminate (opt-in) installs the hallouminate plugin" {
+@test "--mcp hallouminate installs the hallouminate plugin on claude-code" {
     make_stub claude
     ec_parse_args --mcp hallouminate
     [[ "$EC_MCP" == "hallouminate" ]]
@@ -462,10 +462,50 @@ STUB
 
 # -- ec_install_mcp_hallouminate -----------------------------------------------
 
-@test "ec_install_mcp_hallouminate warns and skips for non-claude harness" {
+@test "ec_install_mcp_hallouminate warns and returns 0 for a non-plugin harness" {
     run ec_install_mcp_hallouminate cursor
     [ "$status" -eq 0 ]
-    [[ "$output" == *"only claude-code is supported"* ]]
+    [[ "$output" == *"no plugin for cursor"* ]]
+    [[ "$output" == *"register the hallouminate MCP manually"* ]]
+}
+
+@test "ec_install_mcp_hallouminate codex dry-run shows the codex plugin marketplace add + add commands" {
+    make_stub codex
+    EC_CODEX="$STUB_BIN/codex" EC_DRY_RUN=1 \
+        run ec_install_mcp_hallouminate codex
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"$STUB_BIN/codex plugin marketplace add paulnsorensen/hallouminate"* ]]
+    [[ "$output" == *"$STUB_BIN/codex plugin add hallouminate@hallouminate"* ]]
+}
+
+@test "ec_install_mcp_hallouminate codex real invocation logs correct argv" {
+    make_stub codex
+    EC_CODEX="$STUB_BIN/codex" run ec_install_mcp_hallouminate codex
+    [ "$status" -eq 0 ]
+    grep -q "^codex plugin marketplace add paulnsorensen/hallouminate$" "$STUB_LOG"
+    grep -q "^codex plugin add hallouminate@hallouminate$" "$STUB_LOG"
+}
+
+@test "ec_install_mcp_hallouminate codex warns to restart when plugin add fails" {
+    # codex stub: marketplace add ok, plugin add fails (needs restart).
+    cat > "$STUB_BIN/codex" <<'STUB'
+#!/usr/bin/env bash
+echo "codex $*" >> "$STUB_LOG"
+case "$*" in
+    "plugin add"*) exit 1 ;;
+    *) exit 0 ;;
+esac
+STUB
+    chmod +x "$STUB_BIN/codex"
+    EC_CODEX="$STUB_BIN/codex" run ec_install_mcp_hallouminate codex
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"restart codex"* ]]
+}
+
+@test "ec_install_mcp_hallouminate codex fails when codex CLI missing" {
+    run ec_install_mcp_hallouminate codex
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"codex CLI not found"* ]]
 }
 
 @test "ec_install_mcp_hallouminate treats a failed marketplace add as non-fatal and still installs" {
@@ -863,10 +903,10 @@ STUB
     [[ "$output" == *"gh skill install paulnsorensen/easy-cheese age --agent claude-code --scope user --force"* ]]
     [[ "$output" == *"gh skill install paulnsorensen/easy-cheese press --agent claude-code --scope user --force"* ]]
     [[ "$output" != *"--all"* ]]
-    # Default MCP is tilth + context7; hallouminate is opt-in and not registered.
+    # Default MCP is tilth + context7 + hallouminate; hallouminate installs as a plugin.
     [[ "$output" == *"install claude-code --edit"* ]]
     [[ "$output" == *"@upstash/context7-mcp@latest"* ]]
-    [[ "$output" != *"plugin install hallouminate"* ]]
+    [[ "$output" == *"plugin install hallouminate@hallouminate"* ]]
     [[ "$output" != *"prebuilt binary via the release installer"* ]]
     [[ "$output" == *"Done."* ]]
 }

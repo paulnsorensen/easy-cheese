@@ -32,7 +32,7 @@ EC_FALLBACK_SKILLS="age affinage briesearch cheese cheese-factory cheez-read che
 
 # Default selections.
 EC_DEFAULT_TOOLS="$EC_KNOWN_TOOLS"
-EC_DEFAULT_MCP="tilth context7"
+EC_DEFAULT_MCP="tilth context7 hallouminate"
 
 # Map a brew formula name to the binary it installs (when they differ).
 ec_tool_binary() {
@@ -68,8 +68,8 @@ Options:
                        Choices: gh, ripgrep, fd, jq, ast-grep, git-delta,
                                 just, mergiraf, tilth
   --mcp <list>         Comma-separated MCP servers to register. Default:
-                       tilth,context7. Choices: tilth, context7, tavily,
-                       hallouminate, milknado, none
+                       tilth,context7,hallouminate. Choices: tilth, context7,
+                       tavily, hallouminate, milknado, none
   --skip-mcp           Same as --mcp none.
   --skip-tools         Skip CLI tool installs (useful for MCP-only runs).
   --harness <selection> Harness to register skills + MCP servers with.
@@ -303,34 +303,62 @@ ec_install_mcp_tavily() {
     ec_log "tavily MCP: registering with claude-code"
     "$claude" mcp add tavily -- "$npx" -y tavily-mcp
 }
-# hallouminate is installed as an opt-in Claude Code plugin. The plugin ships
-# its own .mcp.json (registering the hallouminate MCP server) and skills that
-# install/bootstrap the binary, so the whole lifecycle is delegated to the
-# plugin marketplace rather than a hand-rolled binary install.
+# hallouminate is installed as a plugin by default (not opt-in). The plugin
+# ships its own .mcp.json (registering the hallouminate MCP server) and skills
+# that install/bootstrap the binary, so the whole lifecycle is delegated to the
+# harness plugin marketplace rather than a hand-rolled binary install.
+# claude-code and codex install via their plugin marketplaces; any other harness
+# has no plugin and must register the MCP manually.
 ec_install_mcp_hallouminate() {
     local harness="$1"
     local claude="${EC_CLAUDE:-claude}"
-    if [[ "$harness" != "claude-code" ]]; then
-        ec_warn "hallouminate plugin: only claude-code is supported; configure $harness manually."
-        return 0
-    fi
-    if ! ec_cmd_exists "$claude"; then
-        ec_warn "hallouminate plugin: claude CLI not found; install Claude Code first."
-        return 1
-    fi
-    if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
-        ec_log "hallouminate plugin: would run '$claude plugin marketplace add paulnsorensen/hallouminate'"
-        ec_log "hallouminate plugin: would run '$claude plugin install hallouminate@hallouminate'"
-        return 0
-    fi
-    # marketplace add may exit non-zero when the marketplace is already
-    # registered on a re-run; that is non-fatal — the install below is what
-    # matters.
-    ec_log "hallouminate plugin: registering marketplace paulnsorensen/hallouminate"
-    "$claude" plugin marketplace add paulnsorensen/hallouminate || \
-        ec_warn "hallouminate plugin: marketplace add failed (already added?); continuing to install."
-    ec_log "hallouminate plugin: installing hallouminate@hallouminate"
-    "$claude" plugin install hallouminate@hallouminate
+    local codex="${EC_CODEX:-codex}"
+    case "$harness" in
+        claude-code)
+            if ! ec_cmd_exists "$claude"; then
+                ec_warn "hallouminate plugin: claude CLI not found; install Claude Code first."
+                return 1
+            fi
+            if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
+                ec_log "hallouminate plugin: would run '$claude plugin marketplace add paulnsorensen/hallouminate'"
+                ec_log "hallouminate plugin: would run '$claude plugin install hallouminate@hallouminate'"
+                return 0
+            fi
+            # marketplace add may exit non-zero when the marketplace is already
+            # registered on a re-run; that is non-fatal — the install below is
+            # what matters.
+            ec_log "hallouminate plugin: registering marketplace paulnsorensen/hallouminate"
+            "$claude" plugin marketplace add paulnsorensen/hallouminate || \
+                ec_warn "hallouminate plugin: marketplace add failed (already added?); continuing to install."
+            ec_log "hallouminate plugin: installing hallouminate@hallouminate"
+            "$claude" plugin install hallouminate@hallouminate
+            ;;
+        codex)
+            if ! ec_cmd_exists "$codex"; then
+                ec_warn "hallouminate plugin: codex CLI not found; install Codex first."
+                return 1
+            fi
+            if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
+                ec_log "hallouminate plugin: would run '$codex plugin marketplace add paulnsorensen/hallouminate'"
+                ec_log "hallouminate plugin: would run '$codex plugin add hallouminate@hallouminate'"
+                return 0
+            fi
+            ec_log "hallouminate plugin: registering marketplace paulnsorensen/hallouminate"
+            "$codex" plugin marketplace add paulnsorensen/hallouminate || \
+                ec_warn "hallouminate plugin: marketplace add failed (already added?); continuing to install."
+            ec_log "hallouminate plugin: installing hallouminate@hallouminate"
+            # Codex may need a restart between marketplace add and plugin add;
+            # if the add fails, tell the user to restart codex and re-run.
+            if ! "$codex" plugin add hallouminate@hallouminate; then
+                ec_warn "hallouminate plugin: 'codex plugin add' failed — codex may need a restart after the marketplace add; restart codex and re-run 'install.sh --mcp hallouminate'."
+                return 1
+            fi
+            ;;
+        *)
+            ec_warn "hallouminate plugin: no plugin for $harness — register the hallouminate MCP manually per https://github.com/paulnsorensen/hallouminate#per-harness-setup"
+            return 0
+            ;;
+    esac
 }
 
 ec_install_mcp_milknado() {

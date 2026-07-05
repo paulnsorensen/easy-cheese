@@ -422,7 +422,7 @@ It does the following in one shot:
 
 1. Installs every CLI tool listed below — Homebrew for the eight brew-core formulas, plus `cargo install tilth` (or `npm install -g tilth` if Rust isn't available) for tilth, which has no Homebrew formula upstream.
 2. Auto-detects installed Claude Code, Cursor, and Codex CLIs, then installs every easy-cheese skill into each detected harness at user scope as a convenience bootstrap.
-3. Registers the `tilth` and `context7` MCP servers with those harnesses where supported. hallouminate is available opt-in via `--mcp hallouminate`, which installs it as a Claude Code plugin (the plugin ships its own MCP server and bootstraps the binary). Other servers (`tavily`, `milknado`) are also selectable with `--mcp`.
+3. Registers the `tilth`, `context7`, and `hallouminate` MCP servers with those harnesses where supported. hallouminate is delivered as a plugin: on `claude-code` and `codex` the installer adds the `paulnsorensen/hallouminate` plugin marketplace and installs the plugin (which ships its own MCP server and bootstraps the binary); on other harnesses it warns and you register the MCP manually. Other servers (`tavily`, `milknado`) are also selectable with `--mcp`.
 
 Currently macOS only — it relies on Homebrew. Requires `gh` to be authenticated (`gh auth login`) before running.
 
