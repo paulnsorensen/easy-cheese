@@ -61,6 +61,7 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
         "artifact-path": Shared("artifact_path.py"),
         "curd-count": "curd-count.py",
         "gate-graph": "gate-graph.py",
+        "render_html": Shared("html_report_cli.py"),
     },
     "briesearch": {
         "artifact-path": Shared("artifact_path.py"),
@@ -91,6 +92,7 @@ COMMON_SUBCOMMANDS: dict[str, str] = {
     "gates_cli": "gates_cli.py",
     "paths_cli": "paths_cli.py",
     "handoff_cli": "handoff_cli.py",
+    "render_html": "html_report_cli.py",
 }
 # Wave 1: consumer skills receive common.pyz
 COMMON_CONSUMERS: frozenset[str] = frozenset({"cure", "age", "ultracook"})

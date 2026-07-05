@@ -38,7 +38,7 @@ SKILL_SUBCOMMANDS = {
         "wiring_topo_sort",
     ],
     "affinage": ["pr-status"],
-    "mold": ["artifact-path", "curd-count", "gate-graph"],
+    "mold": ["artifact-path", "curd-count", "gate-graph", "render_html"],
     "briesearch": ["artifact-path", "ground-check"],
     "cook": ["artifact-path"],
     "hard-cheese": ["append-attempt", "freshness-check"],
@@ -51,6 +51,7 @@ SKILL_SUBCOMMANDS = {
         "gates_cli",
         "paths_cli",
         "handoff_cli",
+        "render_html",
     ],
 }
 

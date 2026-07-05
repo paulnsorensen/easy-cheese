@@ -15,8 +15,8 @@ Do not use it to apply fixes directly. Hand fix work to `/cure`, which owns appl
 Accept:
 
 ```text
-/age [<ref-or-range>] [--scope <path>] [--comprehensive] [--full] [--safe] [--open-pr] [--auto]
-/age <slug> [--full] [--safe] [--open-pr] [--auto]
+/age [<ref-or-range>] [--scope <path>] [--comprehensive] [--full] [--safe] [--open-pr] [--auto] [--html]
+/age <slug> [--full] [--safe] [--open-pr] [--auto] [--html]
 ```
 
 `--full` un-collapses the `## Low` section when 10 or more low-severity findings exist (the default report collapses them to a one-line summary). Suppressed lows feed the cure-selection table only when `--full` is passed.
@@ -28,6 +28,17 @@ When called with a `<slug>`, resolve `.cheese/press/<slug>.md` (if present) for 
 `--auto` is the propagated autonomous-mode flag from `/cook --auto`. It changes the handoff (see `## Handoff` and `### Auto mode` for the cap rule and full chain). See `### When invoked from /ultracook` for the no-shared-memory variant.
 
 `--hard` is the propagated metacognitive-gate flag from `/cook --hard` (or `/cheese --hard`). Age does not fire the gate; it only passes `--hard` forward to `/cure` at the handoff so the gate can fire at the share-for-review boundary. See `skills/hard-cheese/SKILL.md`.
+
+`--html` emits a static HTML copy **in addition to** the standard `.cheese/age/<slug>.md` markdown report. Write the markdown report first, then call the shared renderer:
+
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz render_html \
+  --in .cheese/age/<slug>.md \
+  --title "Age Report — <slug>" \
+  --out-name age-<slug>
+```
+
+Print the returned temp-file path beside the markdown path. The renderer is stdlib-only, deterministic, and self-contained; do not inline or hand-roll per-skill HTML/CSS.
 
 ## Review dimensions
 
@@ -189,6 +200,20 @@ Then print:
 
 ```
 Age report: .cheese/age/<slug>.md
+```
+
+When `--html` is passed, render the already-written markdown report with the shared helper and print both paths:
+
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz render_html \
+  --in .cheese/age/<slug>.md \
+  --title "Age Report — <slug>" \
+  --out-name age-<slug>
+```
+
+```
+Age report:  .cheese/age/<slug>.md
+HTML report: <path printed by render_html>
 ```
 
 ## Handoff
