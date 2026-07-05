@@ -30,13 +30,9 @@ EC_SKILL_REPO="paulnsorensen/easy-cheese"
 # loosely in sync with skills/ but not load-bearing for happy-path runs.
 EC_FALLBACK_SKILLS="age affinage briesearch cheese cheese-factory cheez-read cheez-search cheez-write cook culture cure hard-cheese melt mold pasteurize press ultracook wheypoint"
 
-# Default selections. tilth is opt-in now that hallouminate is the default
-# MCP: it stays in EC_KNOWN_TOOLS (selectable via --tools) but is excluded
-# from the default tool set, so a default run installs it only when the user
-# asks for it. hallouminate is the default MCP; its binary is installed on
-# demand by ec_install_mcp_hallouminate.
-EC_DEFAULT_TOOLS="gh ripgrep fd jq ast-grep git-delta just mergiraf"
-EC_DEFAULT_MCP="hallouminate"
+# Default selections.
+EC_DEFAULT_TOOLS="$EC_KNOWN_TOOLS"
+EC_DEFAULT_MCP="tilth context7"
 
 # Map a brew formula name to the binary it installs (when they differ).
 ec_tool_binary() {
@@ -68,12 +64,11 @@ Usage:
   install.sh [options]
 
 Options:
-  --tools <list>       Comma-separated CLI tools to install. Default: all
-                       except tilth (tilth is opt-in — add it explicitly).
+  --tools <list>       Comma-separated CLI tools to install. Default: all.
                        Choices: gh, ripgrep, fd, jq, ast-grep, git-delta,
                                 just, mergiraf, tilth
   --mcp <list>         Comma-separated MCP servers to register. Default:
-                       hallouminate. Choices: tilth, context7, tavily,
+                       tilth,context7. Choices: tilth, context7, tavily,
                        hallouminate, milknado, none
   --skip-mcp           Same as --mcp none.
   --skip-tools         Skip CLI tool installs (useful for MCP-only runs).
@@ -95,11 +90,6 @@ Environment:
   EC_CURSOR EC_CODEX   Override cursor / codex binaries for detection.
   EC_NPX               Override npx (used to launch context7 / tavily MCP).
   EC_UVX               Override uvx (used to launch milknado MCP).
-  EC_HALLOUMINATE      Override hallouminate binary (used to launch hallouminate MCP).
-  EC_CURL              Override curl (used to fetch the hallouminate prebuilt installer).
-  EC_HALLOUMINATE_VERSION
-                       Pin the hallouminate binary release tag (e.g. v0.2.1)
-                       instead of resolving the newest v* tag from the API.
   EC_SKILL_REF         Pin skill installs to a git tag or commit SHA
                        (passes --pin to 'gh skill install'). Used by CI
                        to test against the commit under review.
@@ -203,69 +193,6 @@ ec_install_tilth() {
 
     ec_err "tilth: needs cargo (Rust) or npm (Node 18+); neither was found."
     ec_err "Install Rust from https://rustup.rs or Node.js from https://nodejs.org and re-run."
-    return 1
-}
-
-# Newest published binary release tag (v*, excluding the skills-* bundle
-# releases that share this repo). GitHub's /releases/latest points at whichever
-# release is newest by semver — including a skills bundle that carries no
-# installer asset — so resolve the binary tag explicitly from the releases API.
-# Emits nothing on failure; the caller falls back to a pinned known-good tag.
-ec_resolve_hallouminate_tag() {
-    local curl="${EC_CURL:-curl}"
-    "$curl" --proto '=https' --tlsv1.2 -LsS \
-        https://api.github.com/repos/paulnsorensen/hallouminate/releases 2>/dev/null \
-        | grep -oE '"tag_name"[[:space:]]*:[[:space:]]*"v[0-9][^"]*"' \
-        | grep -oE 'v[0-9][^"]*' \
-        | grep -m1 '.'
-}
-
-# hallouminate has no Homebrew formula. Install the prebuilt binary via the
-# upstream release installer (no Rust toolchain needed on supported targets)
-# or fall back to 'cargo install hallouminate --locked' when curl is
-# unavailable. Errors out clearly if neither path is available.
-ec_install_hallouminate() {
-    local hallouminate="${EC_HALLOUMINATE:-hallouminate}"
-    local curl="${EC_CURL:-curl}"
-    local cargo="${EC_CARGO:-cargo}"
-    local pinned="v0.2.1"
-
-    if ec_cmd_exists "$hallouminate"; then
-        ec_log "hallouminate: already installed (hallouminate on PATH)"
-        return 0
-    fi
-
-    if ec_cmd_exists "$curl"; then
-        local version="${EC_HALLOUMINATE_VERSION:-}"
-        if [[ -z "$version" ]]; then
-            version="$(ec_resolve_hallouminate_tag || true)"
-        fi
-        if [[ -z "$version" ]]; then
-            version="$pinned"
-            ec_log "hallouminate: could not resolve latest binary tag; using pinned $pinned"
-        fi
-        local url="https://github.com/paulnsorensen/hallouminate/releases/download/${version}/hallouminate-installer.sh"
-        if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
-            ec_log "hallouminate: would install the prebuilt binary via the release installer ($url)"
-            return 0
-        fi
-        ec_log "hallouminate: installing prebuilt binary via the release installer ($url)"
-        "$curl" --proto '=https' --tlsv1.2 -LsSf "$url" | sh
-        return $?
-    fi
-
-    if ec_cmd_exists "$cargo"; then
-        if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
-            ec_log "hallouminate: would run '$cargo install hallouminate --locked' (curl not found)"
-            return 0
-        fi
-        ec_log "hallouminate: installing via 'cargo install hallouminate --locked' (curl not found)"
-        "$cargo" install hallouminate --locked
-        return $?
-    fi
-
-    ec_err "hallouminate: needs curl (prebuilt installer) or cargo (Rust); neither was found."
-    ec_err "Install curl, or Rust from https://rustup.rs, then re-run."
     return 1
 }
 
@@ -376,33 +303,34 @@ ec_install_mcp_tavily() {
     ec_log "tavily MCP: registering with claude-code"
     "$claude" mcp add tavily -- "$npx" -y tavily-mcp
 }
-
-
+# hallouminate is installed as an opt-in Claude Code plugin. The plugin ships
+# its own .mcp.json (registering the hallouminate MCP server) and skills that
+# install/bootstrap the binary, so the whole lifecycle is delegated to the
+# plugin marketplace rather than a hand-rolled binary install.
 ec_install_mcp_hallouminate() {
     local harness="$1"
     local claude="${EC_CLAUDE:-claude}"
-    local hallouminate="${EC_HALLOUMINATE:-hallouminate}"
     if [[ "$harness" != "claude-code" ]]; then
-        ec_warn "hallouminate MCP: only claude-code is auto-registered; configure $harness manually."
+        ec_warn "hallouminate plugin: only claude-code is supported; configure $harness manually."
         return 0
     fi
     if ! ec_cmd_exists "$claude"; then
-        ec_warn "hallouminate MCP: claude CLI not found; install Claude Code first."
+        ec_warn "hallouminate plugin: claude CLI not found; install Claude Code first."
         return 1
     fi
-    if ! ec_cmd_exists "$hallouminate"; then
-        ec_log "hallouminate MCP: hallouminate binary not found; installing it now"
-        ec_install_hallouminate || {
-            ec_warn "hallouminate MCP: could not install the hallouminate binary; skipping registration. Install it manually and re-run with --mcp hallouminate."
-            return 0
-        }
-    fi
     if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
-        ec_log "hallouminate MCP: would run '$claude mcp add hallouminate -- $hallouminate serve'"
+        ec_log "hallouminate plugin: would run '$claude plugin marketplace add paulnsorensen/hallouminate'"
+        ec_log "hallouminate plugin: would run '$claude plugin install hallouminate@hallouminate'"
         return 0
     fi
-    ec_log "hallouminate MCP: registering with claude-code"
-    "$claude" mcp add hallouminate -- "$hallouminate" serve
+    # marketplace add may exit non-zero when the marketplace is already
+    # registered on a re-run; that is non-fatal — the install below is what
+    # matters.
+    ec_log "hallouminate plugin: registering marketplace paulnsorensen/hallouminate"
+    "$claude" plugin marketplace add paulnsorensen/hallouminate || \
+        ec_warn "hallouminate plugin: marketplace add failed (already added?); continuing to install."
+    ec_log "hallouminate plugin: installing hallouminate@hallouminate"
+    "$claude" plugin install hallouminate@hallouminate
 }
 
 ec_install_mcp_milknado() {

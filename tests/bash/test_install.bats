@@ -96,11 +96,11 @@ count_skills() {
 
 # -- ec_parse_args ------------------------------------------------------------
 
-@test "ec_parse_args defaults to all tools except tilth, and hallouminate MCP" {
+@test "ec_parse_args defaults to all tools including tilth, and tilth,context7 MCP" {
     ec_parse_args
     [[ "$EC_TOOLS" == *"gh"* ]]
-    [[ "$EC_TOOLS" != *"tilth"* ]]
-    [[ "$EC_MCP" == "hallouminate" ]]
+    [[ "$EC_TOOLS" == *"tilth"* ]]
+    [[ "$EC_MCP" == "tilth,context7" ]]
     [[ "$EC_HARNESS" == "auto" ]]
     [[ "$EC_WITH_EDIT" == "1" ]]
     [[ "$EC_DRY_RUN" == "0" ]]
@@ -331,85 +331,30 @@ STUB
     [[ "$output" == *"rustup.rs"* ]]
 }
 
-# -- ec_install_hallouminate --------------------------------------------------
-
-@test "ec_install_hallouminate short-circuits when hallouminate already on PATH" {
-    make_stub hallouminate
-    EC_HALLOUMINATE="$STUB_BIN/hallouminate" run ec_install_hallouminate
-    [ "$status" -eq 0 ]
-    [[ "$output" == *"already installed"* ]]
-}
-
-@test "ec_install_hallouminate dry-run prefers the prebuilt installer over cargo" {
-    make_stub curl
-    make_stub cargo
-    EC_HALLOUMINATE="$STUB_BIN/no-such-hallouminate" EC_CURL="$STUB_BIN/curl" \
-        EC_CARGO="$STUB_BIN/cargo" EC_DRY_RUN=1 run ec_install_hallouminate
-    [ "$status" -eq 0 ]
-    [[ "$output" == *"prebuilt binary via the release installer"* ]]
-    [[ "$output" != *"cargo install hallouminate"* ]]
-}
-
-@test "ec_install_hallouminate dry-run falls back to cargo when curl missing" {
-    make_stub cargo
-    EC_HALLOUMINATE="$STUB_BIN/no-such-hallouminate" EC_CARGO="$STUB_BIN/cargo" \
-        EC_DRY_RUN=1 run ec_install_hallouminate
-    [ "$status" -eq 0 ]
-    [[ "$output" == *"cargo install hallouminate --locked"* ]]
-    [[ "$output" == *"curl not found"* ]]
-}
-
-@test "ec_install_hallouminate fails clearly when neither curl nor cargo present" {
-    EC_HALLOUMINATE="$STUB_BIN/no-such-hallouminate" run ec_install_hallouminate
-    [ "$status" -eq 1 ]
-    [[ "$output" == *"needs curl (prebuilt installer) or cargo"* ]]
-    [[ "$output" == *"rustup.rs"* ]]
-}
-
-@test "ec_install_hallouminate curl branch resolves the newest v* tag, skipping skills-* releases" {
-    # curl stub: serves a releases-API payload (newest-first, with the
-    # installer-less skills bundle on top, exactly as /latest/ sees it) for
-    # the API call and nothing for the installer download. Records argv.
-    cat > "$STUB_BIN/curl" <<'STUB'
-#!/usr/bin/env bash
-echo "curl $*" >> "$STUB_LOG"
-for arg in "$@"; do
-    case "$arg" in
-        *api.github.com*)
-            cat <<'JSON'
-[
-  { "tag_name": "skills-v0.2.2" },
-  { "tag_name": "v0.2.1" },
-  { "tag_name": "v0.2.0" }
-]
-JSON
-            ;;
-    esac
-done
-STUB
-    chmod +x "$STUB_BIN/curl"
-    ln -sf /bin/bash "$STUB_BIN/sh"
-    EC_HALLOUMINATE="$STUB_BIN/no-such-hallouminate" EC_CURL="$STUB_BIN/curl" \
-        run ec_install_hallouminate
-    [ "$status" -eq 0 ]
-    # Resolved the newest binary tag, NOT the skills bundle /latest/ resolves to,
-    # and NOT the broken /releases/latest/download/ path.
-    grep -q "releases/download/v0.2.1/hallouminate-installer.sh" "$STUB_LOG"
-    ! grep -q "releases/latest/download" "$STUB_LOG"
-    ! grep -q "skills-v0.2.2/hallouminate-installer.sh" "$STUB_LOG"
-    [[ "$output" == *"releases/download/v0.2.1/hallouminate-installer.sh"* ]]
-}
 # -- default + opt-in MCP wiring ----------------------------------------------
 
-@test "default MCP selection registers hallouminate" {
+@test "default MCP selection registers tilth and context7, not hallouminate" {
     make_stub claude
-    make_stub hallouminate
+    make_stub tilth
+    make_stub npx
     ec_parse_args
-    EC_CLAUDE="$STUB_BIN/claude" EC_HALLOUMINATE="$STUB_BIN/hallouminate" EC_DRY_RUN=1 \
+    EC_CLAUDE="$STUB_BIN/claude" EC_TILTH="$STUB_BIN/tilth" EC_NPX="$STUB_BIN/npx" EC_DRY_RUN=1 \
         run ec_install_mcp_list "$EC_MCP" claude-code 1
     [ "$status" -eq 0 ]
-    [[ "$output" == *"mcp add hallouminate -- $STUB_BIN/hallouminate serve"* ]]
-    [[ "$output" != *"mcp add context7"* ]]
+    [[ "$output" == *"install claude-code --edit"* ]]
+    [[ "$output" == *"mcp add context7 --"* ]]
+    [[ "$output" != *"plugin install hallouminate"* ]]
+}
+
+@test "--mcp hallouminate (opt-in) installs the hallouminate plugin" {
+    make_stub claude
+    ec_parse_args --mcp hallouminate
+    [[ "$EC_MCP" == "hallouminate" ]]
+    EC_CLAUDE="$STUB_BIN/claude" EC_DRY_RUN=1 \
+        run ec_install_mcp_list "$EC_MCP" claude-code 1
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"$STUB_BIN/claude plugin marketplace add paulnsorensen/hallouminate"* ]]
+    [[ "$output" == *"$STUB_BIN/claude plugin install hallouminate@hallouminate"* ]]
 }
 
 @test "--mcp tilth still installs and registers tilth" {
@@ -515,34 +460,39 @@ STUB
     [[ "$output" == *"$STUB_BIN/claude mcp add tavily -- $STUB_BIN/npx -y tavily-mcp"* ]]
 }
 
-
 # -- ec_install_mcp_hallouminate -----------------------------------------------
 
 @test "ec_install_mcp_hallouminate warns and skips for non-claude harness" {
     run ec_install_mcp_hallouminate cursor
     [ "$status" -eq 0 ]
-    [[ "$output" == *"only claude-code is auto-registered"* ]]
+    [[ "$output" == *"only claude-code is supported"* ]]
 }
 
-@test "ec_install_mcp_hallouminate skips registration when binary install fails" {
-    make_stub claude
-    # No curl or cargo on the hermetic PATH, so the on-demand binary install
-    # cannot succeed; registration must warn and skip rather than register a
-    # missing binary.
-    EC_CLAUDE="$STUB_BIN/claude" EC_HALLOUMINATE="$STUB_BIN/no-such-hallouminate" \
-        run ec_install_mcp_hallouminate claude-code
+@test "ec_install_mcp_hallouminate treats a failed marketplace add as non-fatal and still installs" {
+    # claude stub exits non-zero for 'plugin marketplace add' (already added)
+    # but 0 otherwise; the install must still run.
+    cat > "$STUB_BIN/claude" <<'STUB'
+#!/usr/bin/env bash
+echo "claude $*" >> "$STUB_LOG"
+case "$*" in
+    "plugin marketplace add"*) exit 1 ;;
+    *) exit 0 ;;
+esac
+STUB
+    chmod +x "$STUB_BIN/claude"
+    EC_CLAUDE="$STUB_BIN/claude" run ec_install_mcp_hallouminate claude-code
     [ "$status" -eq 0 ]
-    [[ "$output" == *"could not install the hallouminate binary"* ]]
-    ! grep -q "mcp add hallouminate" "$STUB_LOG"
+    [[ "$output" == *"marketplace add failed"* ]]
+    grep -q "^claude plugin install hallouminate@hallouminate$" "$STUB_LOG"
 }
 
-@test "ec_install_mcp_hallouminate dry-run shows resolved claude and hallouminate paths" {
+@test "ec_install_mcp_hallouminate dry-run shows the plugin marketplace add + install commands" {
     make_stub claude
-    make_stub hallouminate
-    EC_CLAUDE="$STUB_BIN/claude" EC_HALLOUMINATE="$STUB_BIN/hallouminate" EC_DRY_RUN=1 \
+    EC_CLAUDE="$STUB_BIN/claude" EC_DRY_RUN=1 \
         run ec_install_mcp_hallouminate claude-code
     [ "$status" -eq 0 ]
-    [[ "$output" == *"$STUB_BIN/claude mcp add hallouminate -- $STUB_BIN/hallouminate serve"* ]]
+    [[ "$output" == *"$STUB_BIN/claude plugin marketplace add paulnsorensen/hallouminate"* ]]
+    [[ "$output" == *"$STUB_BIN/claude plugin install hallouminate@hallouminate"* ]]
 }
 
 # -- ec_install_mcp_milknado ---------------------------------------------------
@@ -574,11 +524,10 @@ STUB
 
 @test "ec_install_mcp_hallouminate real invocation logs correct argv" {
     make_stub claude
-    make_stub hallouminate
-    EC_CLAUDE="$STUB_BIN/claude" EC_HALLOUMINATE="$STUB_BIN/hallouminate" \
-        run ec_install_mcp_hallouminate claude-code
+    EC_CLAUDE="$STUB_BIN/claude" run ec_install_mcp_hallouminate claude-code
     [ "$status" -eq 0 ]
-    grep -q "^claude mcp add hallouminate -- $STUB_BIN/hallouminate serve$" "$STUB_LOG"
+    grep -q "^claude plugin marketplace add paulnsorensen/hallouminate$" "$STUB_LOG"
+    grep -q "^claude plugin install hallouminate@hallouminate$" "$STUB_LOG"
 }
 
 @test "ec_install_mcp_milknado real invocation logs correct argv" {
@@ -889,35 +838,36 @@ STUB
     chmod +x "$STUB_BIN/uname"
     make_stub brew
     make_stub cargo
-    make_stub curl
     make_stub gh
     make_stub claude
+    make_stub tilth
+    make_stub npx
     ln -sf /bin/bash "$STUB_BIN/bash"
     PATH="$STUB_BIN" \
     EC_BREW=brew \
     EC_CARGO=cargo \
     EC_GH=gh \
     EC_CLAUDE=claude \
+    EC_TILTH=tilth \
+    EC_NPX=npx \
         run ec_main --dry-run
     [ "$status" -eq 0 ]
     [[ "$output" == *"gh: already installed (gh on PATH)"* ]]
     [[ "$output" == *"would run 'brew install ripgrep'"* ]]
-    # tilth is opt-in now, so a default run never installs it via brew or cargo.
+    # tilth is a default tool again; it has no brew formula, so it is never
+    # installed via brew (here the stub is on PATH, so it reports as present).
     [[ "$output" != *"brew install tilth"* ]]
-    [[ "$output" != *"cargo install tilth"* ]]
+    [[ "$output" == *"tilth: already installed"* ]]
     # Skills install runs as part of the harness pick stage — one entry per
     # shipped skill, never the broken --all flag.
     [[ "$output" == *"gh skill install paulnsorensen/easy-cheese age --agent claude-code --scope user --force"* ]]
     [[ "$output" == *"gh skill install paulnsorensen/easy-cheese press --agent claude-code --scope user --force"* ]]
     [[ "$output" != *"--all"* ]]
-    # Default MCP is hallouminate; curl is present (the fresh-Mac default), so
-    # the prebuilt-installer branch runs — resolving the newest v* tag, or the
-    # pinned fallback when the API is unreachable (as here) — then registers.
-    [[ "$output" == *"prebuilt binary via the release installer"* ]]
-    [[ "$output" == *"releases/download/v0.2.1/hallouminate-installer.sh"* ]]
-    [[ "$output" != *"cargo install hallouminate"* ]]
-    [[ "$output" == *"mcp add hallouminate"* ]]
-    [[ "$output" != *"@upstash/context7-mcp@latest"* ]]
+    # Default MCP is tilth + context7; hallouminate is opt-in and not registered.
+    [[ "$output" == *"install claude-code --edit"* ]]
+    [[ "$output" == *"@upstash/context7-mcp@latest"* ]]
+    [[ "$output" != *"plugin install hallouminate"* ]]
+    [[ "$output" != *"prebuilt binary via the release installer"* ]]
     [[ "$output" == *"Done."* ]]
 }
 
