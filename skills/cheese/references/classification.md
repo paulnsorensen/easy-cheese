@@ -8,7 +8,7 @@ For `cook` and `mold` intents only, classification feeds cook's fast-path check 
 
 The `clarify` intent below is exclusively the tier-3 path; classify a request as `clarify` when the cook-fast-path check fails twice (input + post-tier-2-refined input) or when intent confidence stays below `medium` after the silent culture pass.
 
-Other intents (`research`, `rubber-duck`, `debug`, `age`, `age-then-cure`, `cheese-factory`) bypass the clarity check and dispatch directly to their target skill — each target owns its own escalation.
+Other intents (`research`, `rubber-duck`, `debug`, `age`, `age-then-cure`, `ultracook`) bypass the clarity check and dispatch directly to their target skill — each target owns its own escalation.
 
 ## Shape index
 
@@ -22,7 +22,7 @@ Other intents (`research`, `rubber-duck`, `debug`, `age`, `age-then-cure`, `chee
 | debug | — | `/pasteurize --auto` (default) → `/cook --auto` |
 | age | — | `/age` |
 | age-then-cure | — | `/age` → `/cure` |
-| cheese-factory | — | `/cheese-factory` |
+| ultracook | — | `/ultracook` |
 
 ## Signal table
 

@@ -1,14 +1,14 @@
-# Cheese-factory pipeline entities
+# Fan-out engine entities
 
-The `/cheese-factory` decomposition has two domain entities the validators
-check: the **Curd** and the **Wiring node**. Each is *one* entity that
-appears at two pipeline stages with a growing field set — and an approved
-deepening (2026-06-24) gives each a single validation home under
-`src/cheese-factory/` rather than splitting its rules across two files.
+The fan-out engine (`src/fanout/`, formerly `/cheese-factory`, now driven by
+`/ultracook`'s parallel mode) has two domain entities the validators check:
+the **Curd** and the **Wiring node**. Each is *one* entity that appears at two
+pipeline stages with a growing field set, and each has a single validation
+home under `src/fanout/` rather than splitting its rules across two files.
 
 ## The Curd
 
-A Curd is the unit of independent parallel work in `/cheese-factory` — one
+A Curd is the unit of independent parallel work in `/ultracook` parallel mode — one
 behaviour, file-disjoint from its siblings. It appears at two stages:
 
 - **Decomposition stage** — `{id, behavior, acceptance_criterion,
@@ -38,30 +38,23 @@ A Wiring node (`W<n>`) is the unit of cross-curd integration —
   known set, `file` present, `status` enum (`_validate_wiring`,
   `validate_manifest.py:100-119`).
 
-## One validation home per entity (approved, pending implementation)
+## One validation home per entity
 
-Today the rules are split across two files — behavioural/graph rules in
-`validate_decomposition.py`, structural/lifecycle rules in
-`validate_manifest.py` — so "what is a valid curd" has no single
-definition, and a run manifest validates each curd twice: an empty
-`behavior` is reported by both `validate_manifest.py:90` and
-`validate_decomposition.py:30`.
+Each entity has its own module under `src/fanout/`, so "what is a valid curd"
+has a single definition rather than being split across the two validators:
 
-The approved deepening
-(`.cheese/specs/cheese-factory-entity-validation.md`) gives each entity
-its own module:
+- `src/fanout/curd.py` — `behaviour_errors` (`curd.py:59`), `lifecycle_errors`
+  (`curd.py:69`), `disjoint_files_errors` (`curd.py:90`).
+- `src/fanout/wiring.py` — `graph_errors` (`wiring.py:25`), `lifecycle_errors`
+  (`wiring.py:72`).
 
-- `src/cheese-factory/curd.py` — `behaviour_errors`, `lifecycle_errors`,
-  `disjoint_files_errors`.
-- `src/cheese-factory/wiring.py` — `graph_errors`, `lifecycle_errors`.
-
-The always-on layer is named per entity, not forced symmetric: a Curd's
-is *content* (`behaviour_errors`), a Wiring node's is *graph*
-(`graph_errors`). The run-manifest-only rules sit in each module's
-`lifecycle_errors`. File-disjointness moves into `curd.py` as an entity
-invariant; the minimum-curd-count gate (`< 5 -> /ultracook`) stays in
-`validate_decomposition.py` because it is pipeline policy, not a fact
-about whether a curd is valid.
+The always-on layer is named per entity, not forced symmetric: a Curd's is
+*content* (`behaviour_errors`), a Wiring node's is *graph* (`graph_errors`).
+The run-manifest-only rules sit in each module's `lifecycle_errors`.
+File-disjointness lives in `curd.py` as an entity invariant; the parallel-
+eligibility gate (`len(curds) >= PARALLEL_THRESHOLD` routes to parallel mode;
+below it stays linear `/ultracook`) stays in `validate_decomposition.py`
+because it is pipeline policy, not a fact about whether a curd is valid.
 
 **The validators are deliberately NOT merged.** `validate_decomposition.py`
 and `validate_manifest.py` stay as leaf/composite validators that

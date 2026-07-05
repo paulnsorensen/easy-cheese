@@ -21,8 +21,8 @@ PR, or hand-off (`AGENTS.md:7`).
 
 The `test` recipe runs the validator self-test, `validate_skills.py`,
 the pytest suites (`tests/python`, `tests/shared/python`,
-`tests/cheese-factory/python`), and the bats suites
-(`tests/bash/test_install.bats`, the cheese-factory bats)
+`tests/fanout/python`), and the bats suites
+(`tests/bash/test_install.bats`, the fan-out bats)
 (`justfile:8-16`).
 
 Note the markdownlint globs are `skills/**/*.md` and `*.md`
@@ -71,7 +71,7 @@ Skills that consume `shared/scripts/` ship a pre-built `.pyz` so the
 shared helpers are self-contained at install time, invoked as
 `python3 ${CLAUDE_SKILL_DIR}/scripts/<skill>.pyz <subcommand>`
 (`skills/mold/SKILL.md:22`). Bundles exist for affinage, briesearch,
-cheese-factory, cook, melt, and mold. `just bundle` rebuilds them locally
+cook, melt, mold, and ultracook. `just bundle` rebuilds them locally
 (`scripts/build_pyz.py`); `build-pyz.yml` rebuilds and commits them on
 every relevant push to `main` (`justfile:18-19`).
 
