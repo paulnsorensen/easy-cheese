@@ -1,4 +1,4 @@
-"""Tests for cheese-factory manifest and PR-plan validators."""
+"""Tests for ultracook manifest and PR-plan validators."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ import yaml
 
 import build_pyz
 
-BUNDLE = build_pyz.cached_bundle("cheese-factory")
+BUNDLE = build_pyz.cached_bundle("ultracook")
 
 
 def _curds(n: int = 5) -> list[dict]:
@@ -57,7 +57,7 @@ def _pr_plan() -> dict:
         "shape": "single",
         "groups": [
             {
-                "branch": "cheese-factory/feature-name/pr-1",
+                "branch": "ultracook/feature-name/pr-1",
                 "title": "feat(feature): ship",
                 "base": "main",
                 "commits": ["abc1234"],
@@ -124,7 +124,7 @@ class TestPrPlanValidator:
 
     def test_single_shape_requires_one_group(self, validate_pr_plan: ModuleType) -> None:
         plan = _pr_plan()
-        plan["groups"].append({**plan["groups"][0], "branch": "cheese-factory/feature-name/pr-2"})
+        plan["groups"].append({**plan["groups"][0], "branch": "ultracook/feature-name/pr-2"})
         errors = validate_pr_plan.validate_pr_plan(plan)
         assert any("single shape must contain exactly one group" in error for error in errors)
 
@@ -150,6 +150,15 @@ class TestPrPlanValidator:
         plan["groups"][0]["commits"] = ["--abort"]
         errors = validate_pr_plan.validate_pr_plan(plan)
         assert any("must be a hex SHA" in error for error in errors)
+
+    def test_base_with_newline_rejected(self, validate_pr_plan: ModuleType) -> None:
+        # `base` is emitted raw into a `# comment` line by pr_plan_to_branches
+        # and piped to `bash -s`; a newline would escape the comment and run
+        # arbitrary shell. It must be charset-gated like `branch`.
+        plan = _pr_plan()
+        plan["groups"][0]["base"] = "main\nrm -rf /tmp/pwned"
+        errors = validate_pr_plan.validate_pr_plan(plan)
+        assert any("base contains characters unsafe for a git ref" in error for error in errors)
 
     def test_commit_rejects_non_hex_alphabetics(self, validate_pr_plan: ModuleType) -> None:
         plan = _pr_plan()

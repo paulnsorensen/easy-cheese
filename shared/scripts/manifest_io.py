@@ -1,4 +1,4 @@
-"""Shared YAML/JSON loading helpers for cheese-factory scripts."""
+"""Shared YAML/JSON loading helpers for fan-out engine scripts."""
 
 from __future__ import annotations
 

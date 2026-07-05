@@ -199,14 +199,14 @@ class TestPathDerivation:
         target = writer.write_artifact(
             slug="curd-7",
             status="ok",
-            next_skill="cheese-factory/skill-scripts/curds",
+            next_skill="ultracook/skill-scripts/curds",
             artifact="",
             orientation="curd 7 done",
             body=None,
             root=tmp_path,
         )
-        # Nested next paths should be honored (factory writes to subdirs).
-        assert target == tmp_path / ".cheese" / "cheese-factory" / "skill-scripts" / "curds" / "curd-7.md"
+        # Nested next paths should be honored (fan-out writes to subdirs).
+        assert target == tmp_path / ".cheese" / "ultracook" / "skill-scripts" / "curds" / "curd-7.md"
         assert target.is_file()
 
 

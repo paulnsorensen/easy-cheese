@@ -31,7 +31,7 @@ If `$ARGUMENTS` is missing entirely and there is no recent context to lean on, a
 
 1. **Think first (silent).** Model the problem internally per `skills/culture/SKILL.md` — restate the ask, list candidate targets, name the deciding signal. Output is the classification that drives step 2.
 2. **Classify** — match `$ARGUMENTS` against the intent shapes in `references/classification.md`. Pick the highest-confidence shape; below the threshold, route to `clarify` (handled by the tier-3 escalation in step 4).
-3. **Clarity check (implementation intents only).** For `cook` and `mold` intents, run cook's fast-path check (§ "Standalone fast-path" in `skills/cook/SKILL.md` — clear I/O, bounded scope, obvious verification). The result drives the three-tier escalation in `## Escalation` below. Non-implementation intents (`research`, `rubber-duck`, `debug`, `age`, `age-then-cure`, `cheese-factory`) skip the clarity check and route directly to their target skill.
+3. **Clarity check (implementation intents only).** For `cook` and `mold` intents, run cook's fast-path check (§ "Standalone fast-path" in `skills/cook/SKILL.md` — clear I/O, bounded scope, obvious verification). The result drives the three-tier escalation in `## Escalation` below. Non-implementation intents (`research`, `rubber-duck`, `debug`, `age`, `age-then-cure`, `ultracook`) skip the clarity check and route directly to their target skill.
 4. **Escalate (if needed).** Tier 1 dispatches the chosen target (writing a mini-spec via `/mold`'s agent-invoked mode when the dispatch is `/cook --auto` and no spec path was supplied). Tier 2 autonomously invokes `/culture` and/or `/briesearch` in internal mode, then re-runs the clarity check. Tier 3 blocks on a single targeted host-routed question and re-enters classification on the answer. See `## Escalation`.
 5. **Announce** — print a short three-line block (Intent / Reason / Target) per the format in `## Output`. Cite the signal that drove the routing decision.
 6. **Self-check** — run the coherence questions in `references/coherence-check.md`. If any fails, downgrade to `clarify` (tier 3) or `research`.
@@ -136,7 +136,7 @@ Default targets per intent:
 - **rubber-duck** — `/culture` (recommended). Only reached when the user explicitly opted out of writes. No auto variant.
 - **mold** — `/mold` (recommended). Safe-mode alternative: `/briesearch first` when external evidence is missing.
 - **cook** — default: `/cook --auto <slug-or-path>`. Safe-mode alternatives: `/cook <slug-or-path>` (no auto), `/mold first` if scope is borderline.
-- **cheese-factory** — `/cheese-factory <slug-or-path>` (recommended when the spec decomposes into 5+ curds). Safe-mode alternative: `/ultracook <slug-or-path>` (sequential pipeline).
+- **ultracook** — `/ultracook <slug-or-path>` (recommended for a high-blast or decomposable spec). The decomposer picks the mode: parallel curd fan-out when the spec decomposes into 2+ file-disjoint curds, else the linear 7-phase chain.
 - **debug** — default: `/pasteurize --auto <input>`. Safe-mode alternatives: `/pasteurize <input>` (no auto), `/culture` only when the user explicitly wants no-write diagnosis.
 - **age** — `/age <ref>` (recommended). Safe-mode alternative: `/age --scope <path>` when the user named a path glob.
 - **age-then-cure** — `/age <slug>` (recommended). Safe-mode alternative: `/cure <slug>` when a fresh report already exists.

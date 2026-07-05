@@ -152,42 +152,58 @@ class TestCountBullets:
 
 
 class TestRecommend:
-    def test_threshold_picks_cheese_factory(self, curd_count: ModuleType) -> None:
-        skill, rationale = curd_count._recommend(5, "high")
-        assert skill == "/cheese-factory"
-        assert "5" in rationale
-
-    def test_above_threshold_picks_cheese_factory(self, curd_count: ModuleType) -> None:
-        skill, _ = curd_count._recommend(12, "low")
-        assert skill == "/cheese-factory"
-
-    def test_below_threshold_high_blast_picks_ultracook(
+    def test_at_threshold_picks_parallel_ultracook(
         self, curd_count: ModuleType
     ) -> None:
-        skill, rationale = curd_count._recommend(4, "high")
+        # PARALLEL_THRESHOLD curds is parallel-eligible regardless of blast radius.
+        skill, mode, rationale = curd_count._recommend(
+            curd_count.PARALLEL_THRESHOLD, "low"
+        )
         assert skill == "/ultracook"
+        assert mode == "parallel"
+        assert str(curd_count.PARALLEL_THRESHOLD) in rationale
+
+    def test_above_threshold_picks_parallel_ultracook(
+        self, curd_count: ModuleType
+    ) -> None:
+        skill, mode, _ = curd_count._recommend(12, "low")
+        assert skill == "/ultracook"
+        assert mode == "parallel"
+
+    def test_one_curd_high_blast_picks_linear_ultracook(
+        self, curd_count: ModuleType
+    ) -> None:
+        skill, mode, rationale = curd_count._recommend(1, "high")
+        assert skill == "/ultracook"
+        assert mode == "linear"
         assert "high" in rationale
 
-    def test_below_threshold_medium_blast_picks_cook(
-        self, curd_count: ModuleType
-    ) -> None:
-        skill, _ = curd_count._recommend(3, "medium")
+    def test_one_curd_medium_blast_picks_cook(self, curd_count: ModuleType) -> None:
+        skill, mode, _ = curd_count._recommend(1, "medium")
         assert skill == "/cook"
+        assert mode is None
 
-    def test_below_threshold_low_blast_picks_cook(self, curd_count: ModuleType) -> None:
-        skill, _ = curd_count._recommend(1, "low")
+    def test_one_curd_low_blast_picks_cook(self, curd_count: ModuleType) -> None:
+        skill, mode, _ = curd_count._recommend(1, "low")
         assert skill == "/cook"
+        assert mode is None
 
-    def test_below_threshold_unknown_blast_picks_cook(
-        self, curd_count: ModuleType
-    ) -> None:
-        skill, rationale = curd_count._recommend(2, None)
+    def test_one_curd_unknown_blast_picks_cook(self, curd_count: ModuleType) -> None:
+        skill, _, rationale = curd_count._recommend(1, None)
         assert skill == "/cook"
         assert "unknown" in rationale
 
-    def test_blast_radius_case_insensitive(self, curd_count: ModuleType) -> None:
-        skill, _ = curd_count._recommend(3, "HIGH")
+    def test_zero_curds_high_blast_picks_linear_ultracook(
+        self, curd_count: ModuleType
+    ) -> None:
+        skill, mode, _ = curd_count._recommend(0, "high")
         assert skill == "/ultracook"
+        assert mode == "linear"
+
+    def test_blast_radius_case_insensitive(self, curd_count: ModuleType) -> None:
+        skill, mode, _ = curd_count._recommend(1, "HIGH")
+        assert skill == "/ultracook"
+        assert mode == "linear"
 
 
 class TestAnalyze:
@@ -196,14 +212,15 @@ class TestAnalyze:
         path.write_text(body)
         return path
 
-    def test_decomposable_spec_recommends_cheese_factory(
+    def test_decomposable_spec_recommends_parallel_ultracook(
         self, curd_count: ModuleType, tmp_path: Path
     ) -> None:
         spec = self._write(tmp_path, "big.md", SPEC_LARGE)
         digest = curd_count.analyze(spec, "high")
         assert digest["candidate_curds"] == 7
         assert digest["decomposable"] is True
-        assert digest["recommended_skill"] == "/cheese-factory"
+        assert digest["recommended_skill"] == "/ultracook"
+        assert digest["mode"] == "parallel"
 
     def test_small_spec_high_blast_recommends_ultracook(
         self, curd_count: ModuleType, tmp_path: Path
@@ -318,6 +335,7 @@ class TestAnalyze:
             "threshold",
             "decomposable",
             "recommended_skill",
+            "mode",
             "rationale",
             "notes",
         }
@@ -328,7 +346,7 @@ class TestAnalyze:
     ) -> None:
         spec = self._write(tmp_path, "small.md", SPEC_SMALL)
         digest = curd_count.analyze(spec, "low")
-        assert digest["threshold"] == curd_count.CURD_THRESHOLD
+        assert digest["threshold"] == curd_count.PARALLEL_THRESHOLD
 
     def test_notes_warn_about_independence(
         self, curd_count: ModuleType, tmp_path: Path

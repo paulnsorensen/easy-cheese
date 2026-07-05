@@ -1,7 +1,7 @@
-"""Unit tests for cheese-factory entity modules and validate_decomposition.py.
+"""Unit tests for fan-out engine entity modules and validate_decomposition.py.
 
 Each of the five decomposition criteria gets positive + negative coverage,
-plus DAG cycle detection and the minimum-curd-count gate.
+plus DAG cycle detection and the well-formedness curd-count check.
 
 Granular content / graph checks are exercised via the entity modules
 (curd.behaviour_errors, curd.disjoint_files_errors, wiring.graph_errors);
@@ -18,7 +18,7 @@ from types import ModuleType
 
 import build_pyz
 
-BUNDLE = build_pyz.cached_bundle("cheese-factory")
+BUNDLE = build_pyz.cached_bundle("ultracook")
 
 
 def _curds(n: int = 5) -> list[dict]:
@@ -186,6 +186,15 @@ class TestWiringDag:
         errors = wiring.graph_errors(w)
         assert any("unknown id" in e for e in errors)
 
+    def test_curd_dependency_on_non_wiring_id_is_ignored(self, wiring: ModuleType) -> None:
+        # A wiring node may depend on a curd id (not W<n> format). compute_waves
+        # ignores deps outside the wiring set by design, so graph_errors must not
+        # reject them — only unresolved wiring-format ids are errors.
+        w = [
+            {"id": "W1", "type": "barrel_export", "file": "a.ts", "depends_on": ["curd-3", "C7"]},
+        ]
+        assert wiring.graph_errors(w) == []
+
     def test_self_loop_is_detected(self, wiring: ModuleType) -> None:
         # A node that lists itself in depends_on is a degenerate cycle.
         w = [
@@ -278,21 +287,26 @@ class TestWiringDag:
 
 
 # ---------------------------------------------------------------------------
-# Minimum curd count: /cheese-factory requires 5+
+# Well-formedness: a decomposition needs at least one curd; fewer than
+# PARALLEL_THRESHOLD is valid (routes linear), only zero curds fails.
 # ---------------------------------------------------------------------------
 
 
-class TestMinimumCurdCount:
+class TestWellFormedCurdCount:
+    def test_one_curd_passes(self, validate_decomposition: ModuleType) -> None:
+        # A single curd is valid — it routes to linear /ultracook, not an error.
+        assert validate_decomposition.check_minimum_curd_count(_curds(1)) is None
+
+    def test_two_curds_passes(self, validate_decomposition: ModuleType) -> None:
+        assert validate_decomposition.check_minimum_curd_count(_curds(2)) is None
+
     def test_five_curds_passes(self, validate_decomposition: ModuleType) -> None:
         assert validate_decomposition.check_minimum_curd_count(_curds(5)) is None
 
-    def test_six_curds_passes(self, validate_decomposition: ModuleType) -> None:
-        assert validate_decomposition.check_minimum_curd_count(_curds(6)) is None
-
-    def test_four_curds_fails(self, validate_decomposition: ModuleType) -> None:
-        err = validate_decomposition.check_minimum_curd_count(_curds(4))
+    def test_zero_curds_fails(self, validate_decomposition: ModuleType) -> None:
+        err = validate_decomposition.check_minimum_curd_count([])
         assert err is not None
-        assert "ultracook" in err.lower(), "must mention the smaller-decomposition route"
+        assert "no curds" in err.lower() or "at least one" in err.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -309,8 +323,8 @@ class TestValidateManifestE2E:
     def test_invalid_manifest_collects_multiple_errors(
         self, validate_decomposition: ModuleType
     ) -> None:
-        # Build a manifest violating: minimum count + criterion 1 + criterion 3 + criterion 4.
-        curds = _curds(2)  # too few
+        # Build a manifest violating: criterion 1 + criterion 3 + criterion 4.
+        curds = _curds(2)
         curds[0]["behavior"] = "Adds X and removes Y"  # two verbs
         curds[0]["test_target"] = "pytest a && pytest b"  # chained
         curds[1]["files"] = curds[0]["files"][:1] + ["other.ts"]  # collision
@@ -376,15 +390,18 @@ class TestCLI:
         assert result.returncode == 0, result.stderr
 
     def test_exits_nonzero_on_invalid_manifest(self, tmp_path: Path) -> None:
+        # Two parallel-eligible curds sharing a file — a real disjointness fault.
+        curds = _curds(2)
+        curds[1]["files"] = curds[0]["files"][:1] + ["other.ts"]
         manifest_path = tmp_path / "manifest.yaml"
-        manifest_path.write_text(json.dumps(_manifest(curds=_curds(2))), encoding="utf-8")
+        manifest_path.write_text(json.dumps(_manifest(curds=curds)), encoding="utf-8")
         result = subprocess.run(
             [sys.executable, str(BUNDLE), "validate_decomposition", str(manifest_path)],
             capture_output=True,
             text=True,
         )
         assert result.returncode == 1
-        assert "ultracook" in result.stderr.lower()
+        assert "file-disjoint" in result.stderr or "appears in curd" in result.stderr
 
     def test_exits_nonzero_on_missing_file(self, tmp_path: Path) -> None:
         result = subprocess.run(
