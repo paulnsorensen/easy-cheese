@@ -23,7 +23,10 @@ Accept one of:
 
 `/ultracook` does not accept fuzzy or open-ended asks — those go to `/mold` first. The orchestrator assumes the contract is already locked.
 
-Optional flag: `--open-pr` — at the terminal, open a *new* PR when none exists (the default only pushes an already-open one). The phase-only cure sub-agents never push.
+Optional flags:
+
+- `--open-pr` — at the terminal, open a *new* PR when none exists (the default only pushes an already-open one). The phase-only cure sub-agents never push.
+- `--resume <slug>` — resume a crashed **parallel** run from its manifest at `.cheese/ultracook/<slug>/manifest.yaml`: read the latest completed phase and continue from the next incomplete one (see `## --resume <slug>`). Linear runs resume via `/cheese --continue <slug>` instead.
 
 ## Mode selection — the decomposer is the gate
 
@@ -144,13 +147,29 @@ Reached when the decomposer produces **2 or more** curds (`mode → parallel`). 
 ### Topology
 
 1. **Seed (inline).** The orchestrator writes the small shared types/interfaces `seed[]` names (the one place the orchestrator writes code), runs the project gates, and commits.
+
+   After the seed commit, advance the manifest: `python3 ${CLAUDE_SKILL_DIR}/scripts/ultracook.pyz manifest_update set-phase --manifest .cheese/ultracook/<slug>/manifest.yaml --phase seed_complete`.
 2. **Per-curd fan-out.** Spawn one full-peer sub-agent per curd (`references/curd-prompt.md`), each in its **own worktree**. Each curd runs the per-curd pipeline `cook → press → age → cure` — the `PARALLEL_CURD` phase table: `python3 ${CLAUDE_SKILL_DIR}/scripts/ultracook.pyz phase_decision --phase-index <i> --status <status> --table parallel-curd`. Inside a curd, `/age` runs **inline-degrade** (the spawn prompt carries `invoked-from: ultracook-curd`) because the curd worker already sits at the nesting-depth cap. Each curd commits on its worktree branch.
    - **Worktree floor (no native primitive).** When the host lacks the native `Agent(isolation:"worktree")` primitive, the orchestrator first creates each curd's worktree with `python3 ${CLAUDE_SKILL_DIR}/scripts/ultracook.pyz worktree create --slug <id> --base <orchestrator-branch>` (returns `{path, branch}`), then spawns the sub-agent into that path; harvest (step 3) and teardown (step 4) proceed unchanged.
+
+   As each curd dispatches, mark it running (`manifest_update set-curd-status --manifest <path> --curd <id> --status running`); as each returns, record the outcome (`--status completed --commit-sha <sha>`, or `--status failed`). After **all** curds return, `manifest_update set-phase --manifest <path> --phase curds_complete`.
 3. **Harvest (fan-in).** Cherry-pick each curd branch onto the orchestrator branch with `python3 ${CLAUDE_SKILL_DIR}/scripts/ultracook.pyz worktree harvest --branch <curd-branch> --onto <orchestrator-branch>`. The parent and sub-agent share one `.git` object store, so this needs **no `git fetch`**. On conflict, invoke `/melt`; if it cannot resolve, fall back to per-curd PRs.
+
+   After all curd branches are cherry-picked onto the orchestrator branch, `manifest_update set-phase --manifest <path> --phase merge_complete`.
 4. **Teardown.** After harvesting each curd, `python3 ${CLAUDE_SKILL_DIR}/scripts/ultracook.pyz worktree teardown --path <worktree-path> --branch <curd-branch>` removes the worktree and deletes its branch. The engine owns teardown — worktrees leak otherwise; a completed run leaves no `worktree-agent-*` branch or `.claude/worktrees/agent-*` dir.
 5. **Wiring.** Dispatch the topo-sorted `wiring[]` integration tasks (`ultracook.pyz wiring_topo_sort`), sequentially within each wave.
+
+   Mark each wiring row as it runs (`manifest_update set-wiring-status --manifest <path> --wiring <id> --status running|completed|failed [--commit-sha <sha>]`). After the last wave, `manifest_update set-phase --manifest <path> --phase wiring_complete`, then immediately `manifest_update set-phase --manifest <path> --phase final_merge_complete`: wiring commits land directly on the orchestrator branch in this flow (no distinct wiring-merge action — the retired cheese-factory's separate Phase 5 final-merge is folded in), so the two markers coincide.
 6. **Post-merge review (once).** Run exactly one `press → age → cure` over the merged diff — the `PARALLEL_POSTMERGE` table (`--table parallel-postmerge`). Single pass; the per-curd reviews already covered each slice.
+
+   When the post-merge cure returns clean, `manifest_update set-phase --manifest <path> --phase post_review_complete`.
 7. **PR plan + publish.** Plan the PR layout (`references/pr-planner-prompt.md`) and publish 1–N reviewable PRs via a discovered `/pr-stack` (or plain `gh`).
+
+   After the PRs are published, `manifest_update set-phase --manifest <path> --phase pr_publish_complete` (terminal).
+
+### Manifest advancement + resume continuity
+
+The per-run manifest at `.cheese/ultracook/<slug>/manifest.yaml` is advanced at every phase boundary via the `manifest_update` calls threaded through the topology above (`set-phase`, `set-curd-status`, `set-wiring-status` — all atomic writes that re-validate against `references/manifest-schema.json`). The `phase` field records the latest completed phase; per-curd and per-wiring `commit_sha`/`status` fields record what has already landed. At each boundary the orchestrator also refreshes `phase_summary` (a 2-3 sentence self-summary) and `carry_forward` directly in the manifest YAML — these two fields have no dedicated `manifest_update` subcommand, so after the in-place edit re-run `python3 ${CLAUDE_SKILL_DIR}/scripts/ultracook.pyz validate_manifest --manifest <path>` to keep the write schema-valid. A fresh `--resume` orchestrator then recovers cross-seam continuity from the manifest rather than from conversation history it does not have.
 
 ### milknado engine seam (probe-and-use)
 
@@ -169,6 +188,18 @@ The `milknado` probe from **Mode selection** decides how curds run:
 ### Output mode-invariance
 
 Parallel mode's final report and every handoff slug use the **same schema** as linear mode (`## Handoff slug schema`, `## Output`). The output is mode-invariant: a reader of the summary or a downstream `/cheese --continue` cannot tell which mode produced it. Only the topology differs.
+
+## --resume <slug>
+
+`--resume <slug>` is the sanctioned re-entry into a crashed **parallel** run. (Linear runs carry no manifest — resume those through `/cheese --continue <slug>`, which reads the per-phase handoff slugs.) It reads `.cheese/ultracook/<slug>/manifest.yaml` and continues from where the crash left off:
+
+1. **Load the manifest.** Read `.cheese/ultracook/<slug>/manifest.yaml`. If it is missing, fail fast with `"no manifest at .cheese/ultracook/<slug>/manifest.yaml — nothing to resume"`. Optionally re-check its shape with `python3 ${CLAUDE_SKILL_DIR}/scripts/ultracook.pyz validate_manifest --manifest <path>`.
+2. **Rebase guard — verify recorded commits still exist.** For every non-null `commit_sha` recorded on a completed seed item, curd, or wiring row, run `git cat-file -e <sha>` — the schema permits `commit_sha: null` on a `completed` row, so skip those rather than passing an empty SHA to `git cat-file`. If any recorded SHA is gone (a rebase or history rewrite dropped it), fail fast and name the missing SHA — resuming onto rewritten history would harvest the wrong tree. Do not auto-recover; this guard is orchestrator prose, not new engine code.
+3. **Confirm curd files still match (optional).** Run `python3 ${CLAUDE_SKILL_DIR}/scripts/ultracook.pyz manifest_update check-files --manifest <path> --root <repo-root>` to detect curd file lists that drifted since the crash; fold any misses into the resumed dispatch context (informational, not a blocker).
+4. **Restore continuity.** Read `phase_summary` and `carry_forward` from the manifest — the cross-seam continuity mechanism. A resumed orchestrator reasons from these, never from conversation history (a fresh spawn has none).
+5. **Pick up at the next incomplete phase.** Read the `phase` field — the latest completed phase, one of the ordered enum in `references/manifest-schema.json`: `gate_approved → seed_complete → curds_complete → merge_complete → wiring_complete → final_merge_complete → post_review_complete → pr_publish_complete`. Continue from the next incomplete phase in `## Parallel mode` § Topology, skipping every curd/wiring row already marked `completed`. Report `Resuming <slug> from phase <next-phase>`. If `phase` is already `pr_publish_complete`, the run is done — report and stop.
+
+**Guard interaction.** A bare re-run (no `--resume`) that finds an existing `.cheese/ultracook/<slug>/manifest.yaml` stops and tells the user to pass `--resume <slug>` to continue or `rm -r .cheese/ultracook/<slug>/` to start fresh — the same never-wipe posture linear mode applies to its handoff slugs (Flow step 2). `--resume <slug>` is the one sanctioned re-entry, and it never wipes.
 
 ## Preferred tools and fallbacks
 
