@@ -1,4 +1,4 @@
-"""Tests for cheese-factory wiring_topo_sort.py."""
+"""Tests for ultracook wiring_topo_sort.py."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ import yaml
 
 import build_pyz
 
-BUNDLE = build_pyz.cached_bundle("cheese-factory")
+BUNDLE = build_pyz.cached_bundle("ultracook")
 
 
 def _wiring(*entries: tuple[str, list[str]]) -> list[dict]:

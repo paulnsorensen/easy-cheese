@@ -69,8 +69,7 @@ Content shared _across_ skills lives at top-level `shared/` (e.g. `shared/handof
 | `skills/affinage/SKILL.md` | `/affinage` | Triage external PR claims — review comments and CI failures — through the `/age` lens, hand the chosen fixes to `/cure`, then post replies back on GitHub. |
 | `skills/cure/SKILL.md` | `/cure` | Fix user-selected findings, validate, and prepare the branch for shipping. |
 | `skills/hard-cheese/SKILL.md` | `/hard-cheese` (or `--hard` flag) | Metacognitive vibecheck gate before review — asks the author to explain the diff's causal logic, grades the explanation against the SOLO Taxonomy. Standalone or via `--hard` propagation through the pipeline. |
-| `skills/ultracook/SKILL.md` | `/ultracook` | Autonomous fresh-context pipeline (`cook → press → age → cure → age → cure → age`, all `--auto`). Each phase runs inside its own full-peer sub-agent so review stays adversarial and parent context never bloats. For high-blast-radius specs. |
-| `skills/cheese-factory/SKILL.md` | `/cheese-factory` | Large-feature orchestrator. Decomposes an approved spec into seed + parallel curds + wiring, fans out per-curd `/cook → /press → /age → /cure`, merges, runs a fresh-context post-merge review pass, and ends in 1–N reviewable PRs (single, orthogonal flat, stacked linear, or diamond-stacked). Portable, harness-agnostic sibling of `/fromagerie`. |
+| `skills/ultracook/SKILL.md` | `/ultracook` | Autonomous fresh-context pipeline for high-blast-radius specs. The decomposer picks the mode: a decomposable 2+-curd spec fans out into parallel curds (each running per-curd `cook → press → age → cure` in its own worktree, harvested back, then one post-merge review pass, ending in 1–N reviewable PRs); an indivisible spec runs the linear chain (`cook → press → age → cure → age → cure → age`, all `--auto`). Each phase runs inside its own full-peer sub-agent so review stays adversarial and parent context never bloats. |
 | `skills/melt/SKILL.md` | `/melt` | Resolve merge / rebase / cherry-pick conflicts via the structural cascade (mergiraf → rerere → kdiff3) with batch, pick-side, and lockfile helpers. |
 | `skills/wheypoint/SKILL.md` | `/wheypoint` | Mark a checkpoint: compact a mid-task conversation into a durable handoff document at `.cheese/notes/<slug>.md` (resumable slug + state-mapped suggested-skills + redacted secrets) so a fresh agent can resume via `/cheese --continue <slug>`. |
 
@@ -162,7 +161,7 @@ Workflow skills name preferred tools when they help, with fallbacks for portabil
 | Tavily (MCP) | Current web/vendor research | host web search or user-supplied sources |
 | LSP / [Serena](https://github.com/oraios/serena) (MCP) | Type-aware xrefs (`find_referencing_symbols`, `find_implementations`), symbol-bounded edits (`rename_symbol`, `replace_symbol_body`, `safe_delete_symbol`), and LSP diagnostics — concrete tools for the abstract "if your harness has an LSP" sections in `cheez-*` skills | `sg`, `tilth_search`, targeted reads via tilth |
 | hallouminate (MCP) | Per-repo wiki for cross-session design rationale, ADR grounding, and `/mold` evidence | Skip wiki grounding; proceed with diff + code evidence only; cap at `speculating` when design rationale is central |
-| milknado (MCP) | Mikado task-graph backend for `/cheese-factory` curd prerequisite tracking | In-report curd decomposition in manifest YAML; no external task-graph backend needed |
+| milknado (MCP) | Mikado task-graph backend for `/ultracook` parallel-mode curd prerequisite tracking | In-report curd decomposition in manifest YAML; no external task-graph backend needed |
 | `ripgrep` | Fast text search | `grep`, `find`, editor search |
 | `gh` | GitHub issues, PRs, checks, examples | local git commands or user-provided links/logs |
 | `delta` | Readable diffs | plain `git diff` |
@@ -221,7 +220,7 @@ gh skill install paulnsorensen/easy-cheese
 Install every current skill in one shot:
 
 ```sh
-for s in age affinage briesearch cheese cheese-factory cheez-read cheez-search cheez-write cook culture cure hard-cheese melt mold pasteurize press ultracook wheypoint; do
+for s in age affinage briesearch cheese cheez-read cheez-search cheez-write cook culture cure hard-cheese melt mold pasteurize press ultracook wheypoint; do
   gh skill install paulnsorensen/easy-cheese "$s"
 done
 ```

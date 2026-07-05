@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 #
-# Tests for src/cheese-factory/pr_plan_to_branches.py.
+# Tests for src/fanout/pr_plan_to_branches.py.
 #
 # Each shape (single, orthogonal_flat, stacked_linear, diamond_stack) gets
 # at least one test verifying:
@@ -13,9 +13,9 @@
 
 setup() {
     REPO_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/../../.." && pwd)"
-    SCRIPT="$REPO_ROOT/src/cheese-factory/pr_plan_to_branches.py"
+    SCRIPT="$REPO_ROOT/src/fanout/pr_plan_to_branches.py"
     # Bundles run self-contained; raw-source tests shim shared/ + sibling scripts.
-    export PYTHONPATH="$REPO_ROOT/shared/scripts:$REPO_ROOT/src/cheese-factory${PYTHONPATH:+:$PYTHONPATH}"
+    export PYTHONPATH="$REPO_ROOT/shared/scripts:$REPO_ROOT/src/fanout${PYTHONPATH:+:$PYTHONPATH}"
     PLAN_FILE="$BATS_TEST_TMPDIR/plan.yaml"
 }
 
@@ -24,7 +24,7 @@ write_single_plan() {
     cat > "$PLAN_FILE" <<'YAML'
 shape: single
 groups:
-  - branch: cheese-factory/foo/pr-1
+  - branch: ultracook/foo/pr-1
     title: "feat(foo): everything in one"
     body: Ships the whole feature in one PR.
     base: main
@@ -38,17 +38,17 @@ write_orthogonal_flat_plan() {
     cat > "$PLAN_FILE" <<'YAML'
 shape: orthogonal_flat
 groups:
-  - branch: cheese-factory/foo/pr-curd-1
+  - branch: ultracook/foo/pr-curd-1
     title: "feat(foo): curd one"
     body: ""
     base: main
     commits: [c1c1c1d]
-  - branch: cheese-factory/foo/pr-curd-2
+  - branch: ultracook/foo/pr-curd-2
     title: "feat(foo): curd two"
     body: ""
     base: main
     commits: [c2c2c2d]
-  - branch: cheese-factory/foo/pr-curd-3
+  - branch: ultracook/foo/pr-curd-3
     title: "feat(foo): curd three"
     body: ""
     base: main
@@ -60,20 +60,20 @@ write_stacked_linear_plan() {
     cat > "$PLAN_FILE" <<'YAML'
 shape: stacked_linear
 groups:
-  - branch: cheese-factory/foo/pr-1-seed
+  - branch: ultracook/foo/pr-1-seed
     title: "feat(foo): seed"
     body: ""
     base: main
     commits: [5eed011]
-  - branch: cheese-factory/foo/pr-2-curd
+  - branch: ultracook/foo/pr-2-curd
     title: "feat(foo): curd"
     body: ""
-    base: cheese-factory/foo/pr-1-seed
+    base: ultracook/foo/pr-1-seed
     commits: [a701a11]
-  - branch: cheese-factory/foo/pr-3-wire
+  - branch: ultracook/foo/pr-3-wire
     title: "feat(foo): wire"
     body: ""
-    base: cheese-factory/foo/pr-2-curd
+    base: ultracook/foo/pr-2-curd
     commits: [aaee011]
 YAML
 }
@@ -82,25 +82,25 @@ write_diamond_stack_plan() {
     cat > "$PLAN_FILE" <<'YAML'
 shape: diamond_stack
 groups:
-  - branch: cheese-factory/foo/pr-seed
+  - branch: ultracook/foo/pr-seed
     title: "feat(foo): seed"
     body: ""
     base: main
     commits: [5eed022]
-  - branch: cheese-factory/foo/pr-curd-1
+  - branch: ultracook/foo/pr-curd-1
     title: "feat(foo): curd one"
     body: ""
-    base: cheese-factory/foo/pr-seed
+    base: ultracook/foo/pr-seed
     commits: [a1a1a11]
-  - branch: cheese-factory/foo/pr-curd-2
+  - branch: ultracook/foo/pr-curd-2
     title: "feat(foo): curd two"
     body: ""
-    base: cheese-factory/foo/pr-seed
+    base: ultracook/foo/pr-seed
     commits: [a2a2a22]
-  - branch: cheese-factory/foo/pr-wire
+  - branch: ultracook/foo/pr-wire
     title: "feat(foo): wire"
     body: ""
-    base: cheese-factory/foo/pr-curd-2
+    base: ultracook/foo/pr-curd-2
     commits: [aaee022]
 YAML
 }
@@ -139,13 +139,13 @@ YAML
     [[ "$output" == *"set -euo pipefail"* ]]
     # gh pr create is guarded by gh pr view so a partial re-publish doesn't
     # hard-stop the plan on the first already-created PR.
-    [[ "$output" == *"gh pr view 'cheese-factory/foo/pr-1' --json number"* ]]
+    [[ "$output" == *"gh pr view 'ultracook/foo/pr-1' --json number"* ]]
     [[ "$output" == *">/dev/null 2>&1 || gh pr create"* ]]
-    [[ "$output" == *"git checkout -b 'cheese-factory/foo/pr-1' 'main'"* ]]
+    [[ "$output" == *"git checkout -b 'ultracook/foo/pr-1' 'main'"* ]]
     [[ "$output" == *"git cherry-pick 'aaa1111'"* ]]
     [[ "$output" == *"git cherry-pick 'bbb2222'"* ]]
-    [[ "$output" == *"git push -u origin 'cheese-factory/foo/pr-1'"* ]]
-    [[ "$output" == *"gh pr create --base 'main' --head 'cheese-factory/foo/pr-1'"* ]]
+    [[ "$output" == *"git push -u origin 'ultracook/foo/pr-1'"* ]]
+    [[ "$output" == *"gh pr create --base 'main' --head 'ultracook/foo/pr-1'"* ]]
     # Exactly one PR-create line.
     [ "$(printf '%s\n' "$output" | grep -c '|| gh pr create ')" -eq 1 ]
 }
@@ -159,7 +159,7 @@ YAML
   "shape": "single",
   "groups": [
     {
-      "branch": "cheese-factory/foo/pr-1",
+      "branch": "ultracook/foo/pr-1",
       "title": "feat(foo): everything in one",
       "body": "Ships the whole feature in one PR.",
       "base": "main",
@@ -204,8 +204,8 @@ JSON
     [ "$(printf '%s\n' "$output" | grep -c '|| gh pr create ')" -eq 3 ]
     # Only the first PR targets main; the next two target the previous branch.
     [ "$(printf '%s\n' "$output" | grep -c "|| gh pr create --base 'main'")" -eq 1 ]
-    [[ "$output" == *"--base 'cheese-factory/foo/pr-1-seed'"* ]]
-    [[ "$output" == *"--base 'cheese-factory/foo/pr-2-curd'"* ]]
+    [[ "$output" == *"--base 'ultracook/foo/pr-1-seed'"* ]]
+    [[ "$output" == *"--base 'ultracook/foo/pr-2-curd'"* ]]
 }
 
 # -- diamond_stack shape -----------------------------------------------------
@@ -217,7 +217,7 @@ JSON
     [[ "$output" == *"shape: diamond_stack"* ]]
     [ "$(printf '%s\n' "$output" | grep -c '|| gh pr create ')" -eq 4 ]
     # Two curd PRs share the seed branch as base.
-    [ "$(printf '%s\n' "$output" | grep -c "|| gh pr create --base 'cheese-factory/foo/pr-seed'")" -eq 2 ]
+    [ "$(printf '%s\n' "$output" | grep -c "|| gh pr create --base 'ultracook/foo/pr-seed'")" -eq 2 ]
 }
 
 # -- error handling ----------------------------------------------------------
@@ -269,7 +269,7 @@ YAML
     cat > "$PLAN_FILE" <<'YAML'
 shape: single
 groups:
-  - branch: cheese-factory/foo/pr-1
+  - branch: ultracook/foo/pr-1
     title: t
     body: ""
     base: main
@@ -319,7 +319,7 @@ SH
     cat > "$PLAN_FILE" <<'YAML'
 shape: single
 groups:
-  - branch: cheese-factory/foo/pr-1
+  - branch: ultracook/foo/pr-1
     title: "feat(foo): don't break the cart"
     body: "It's a fix."
     base: main
@@ -375,7 +375,7 @@ SH
   "shape": "single",
   "groups": [
     {
-      "branch": "cheese-factory/foo/pr-1",
+      "branch": "ultracook/foo/pr-1",
       "title": "feat(foo): ship",
       "body": "Line one with 'quoted' word.\nLine two.\nLine three with \"double\" too.",
       "base": "main",

@@ -4,7 +4,7 @@ Used by every workflow skill that writes a corpus artifact. Durable phases
 (``specs``, ``research``) anchor at a stable per-project XDG location; transient
 pipeline phases stay repo-local under ``.cheese/``. See ``default_root_for_phase``.
 
-The canonical slug pattern matches cheese-factory's manifest-schema.json so a
+The canonical slug pattern matches ultracook's manifest-schema.json so a
 slug accepted by one validator is accepted by all.
 """
 
@@ -17,14 +17,14 @@ import re
 import subprocess
 from pathlib import Path
 
-# Source of truth: skills/cheese-factory/references/manifest-schema.json.
+# Source of truth: skills/ultracook/references/manifest-schema.json.
 # Kebab-case, no leading/trailing hyphen, no double hyphens, 1-64 chars.
 # If manifest-schema.json changes (e.g., adding allowed characters), this regex
 # must be updated in lockstep — keep in sync via manual review.
 KEBAB_SLUG = re.compile(r"^(?!-)(?!.*--)[a-z0-9-]{1,64}(?<!-)$")
 
 # Phases that own a `.cheese/<phase>/<slug>.md` artifact tree. The set spans
-# phases owned by several orchestrators (`/cheese-factory`, `/pasteurize`,
+# phases owned by several orchestrators (`/ultracook`, `/pasteurize`,
 # `/research`) plus one-off notes/specs/hard artifacts.
 PHASES: frozenset[str] = frozenset(
     {
@@ -36,7 +36,7 @@ PHASES: frozenset[str] = frozenset(
         "notes",
         "hard",
         "research",
-        "cheese-factory",
+        "ultracook",
         "pasteurize",
     }
 )
@@ -331,7 +331,7 @@ def _phase_entries(phase: str, repo_root: Path) -> list[tuple[str, Path]]:
 
     The stem is the slug-shaped key used for exact and fuzzy matching. Honors
     the irregular layouts: ``research/<slug>/<slug>.md`` (nested),
-    ``cheese-factory/<slug>/manifest.yaml`` (dir + manifest), and the flat
+    ``ultracook/<slug>/manifest.yaml`` (dir + manifest), and the flat
     ``<dir>/<slug>.md`` everywhere else.
     """
     dirpath = _phase_dirpath(phase, repo_root)
@@ -344,7 +344,7 @@ def _phase_entries(phase: str, repo_root: Path) -> list[tuple[str, Path]]:
             if sub.is_dir() and nested.is_file():
                 entries.append((sub.name, nested))
         entries.extend((f.stem, f) for f in dirpath.glob("*.md"))
-    elif phase == "cheese-factory":
+    elif phase == "ultracook":
         for sub in dirpath.iterdir():
             manifest = sub / "manifest.yaml"
             if sub.is_dir() and manifest.is_file():

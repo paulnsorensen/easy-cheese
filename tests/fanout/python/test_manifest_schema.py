@@ -58,7 +58,7 @@ def example_manifest() -> dict:
                 "test_target": "vitest run src/orders/order.test.ts",
                 "status": "completed",
                 "worktree_path": "/path",
-                "branch": "cheese-factory/slug/curd-1",
+                "branch": "ultracook/slug/curd-1",
                 "commit_sha": "def456",
                 "retry_count": 0,
                 "error": None,
@@ -85,7 +85,7 @@ def example_manifest() -> dict:
             "shape": "diamond_stack",
             "groups": [
                 {
-                    "branch": "cheese-factory/slug/pr-1-seed",
+                    "branch": "ultracook/slug/pr-1-seed",
                     "title": "feat(orders): shared types",
                     "body": "Adds shared types.",
                     "base": "main",

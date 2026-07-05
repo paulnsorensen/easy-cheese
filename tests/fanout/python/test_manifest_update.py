@@ -1,4 +1,4 @@
-"""Tests for skills/cheese-factory/scripts/manifest_update.py."""
+"""Tests for skills/ultracook/scripts/manifest_update.py."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ import yaml
 
 import build_pyz
 
-BUNDLE = build_pyz.cached_bundle("cheese-factory")
+BUNDLE = build_pyz.cached_bundle("ultracook")
 
 
 def _curds(n: int = 5) -> list[dict]:

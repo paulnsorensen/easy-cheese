@@ -298,11 +298,11 @@ When invoked with `--auto`:
 - Set `next:` from what you observe on this run, not from any guess about chain position. `next: cure` when at least one finding meets the **medium+ floor**; `next: done` when none do.
 - The two-cure-pass cap is enforced by ultracook's fixed chain length, not by age's `next:` field. Fresh-context age cannot count prior cure passes anyway, so this is the only honest contract. The orchestrator uses `next: done` for early-stop signalling; the natural terminal stop is the chain table running out of entries.
 
-### Inline-degrade mode (invoked from a sub-agent, e.g. /cheese-factory curd worker)
+### Inline-degrade mode (invoked from a sub-agent, e.g. /ultracook parallel-mode curd worker)
 
-When `/age` detects it is running as a sub-agent (the parent passes the `invoked-from: cheese-factory-curd` marker or equivalent context line in the prompt), it runs its ten dimensions inline within its own context instead of spawning per-dimension sub-agents. This honours the host's nesting-depth limit (harnesses cap sub-agent nesting depth, and the orchestrator's own spawn may already sit at that cap).
+When `/age` detects it is running as a sub-agent (the parent passes the `invoked-from: ultracook-curd` marker or equivalent context line in the prompt), it runs its ten dimensions inline within its own context instead of spawning per-dimension sub-agents. This honours the host's nesting-depth limit (harnesses cap sub-agent nesting depth, and the orchestrator's own spawn may already sit at that cap).
 
-Detection mechanism: scan the invoking prompt for an `invoked-from:` line — values like `cheese-factory-curd`, `fromagerie-curd`, or any harness-specific marker the orchestrator passes in. When present, switch modes:
+Detection mechanism: scan the invoking prompt for an `invoked-from:` line — values like `ultracook-curd`, `fromagerie-curd`, or any harness-specific marker the orchestrator passes in. When present, switch modes:
 
 - Run every dimension's review inline. Do not fork the read-only review-context sub-agent gate (`## Sub-agent context gate` above is skipped under inline-degrade).
 - Output shape is mode-invariant — same findings report and handoff slug format whether fan-out or inline-degrade; see **Output mode-invariance** in `### Scale-triggered fan-out mode` above.

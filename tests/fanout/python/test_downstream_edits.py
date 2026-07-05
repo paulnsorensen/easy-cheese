@@ -1,8 +1,8 @@
-"""Lint tests for downstream SKILL.md edits required by the cheese-factory spec.
+"""Lint tests for downstream SKILL.md edits required by the ultracook retirement.
 
-The spec mandates small contract amendments to two existing skills:
+After folding /cheese-factory into /ultracook:
 - /age must document the inline-degrade mode for sub-agent invocation.
-- /cheese must list /cheese-factory as a routing target.
+- /cheese must route decomposable specs to /ultracook (parallel mode).
 
 These tests assert those clauses are present so silent removal surfaces in CI.
 """
@@ -43,11 +43,9 @@ class TestAgeInlineDegrade:
         assert "Inline-degrade mode" in age_body
 
     def test_marker_phrase_documented(self, age_body: str) -> None:
-        # The detection marker must be named so cheese-factory curd workers
+        # The detection marker must be named so ultracook curd workers
         # know what to pass.
-        assert "invoked-from: cheese-factory-curd" in age_body or (
-            "invoked-from:" in age_body and "cheese-factory" in age_body
-        )
+        assert "invoked-from: ultracook-curd" in age_body
 
     def test_nesting_limit_rationale_present(self, age_body: str) -> None:
         # The "why" must travel with the contract — level-2 nesting is the
@@ -61,30 +59,32 @@ class TestAgeInlineDegrade:
         assert "identical" in age_body.lower() or "same" in age_body.lower()
 
 
-class TestCheeseRoutesToCheeseFactory:
-    def test_intent_shapes_table_lists_cheese_factory(self, cheese_body: str) -> None:
+class TestCheeseRoutesToUltracook:
+    def test_intent_shapes_table_lists_ultracook(self, cheese_body: str) -> None:
         # Must appear in the routing table.
-        assert "cheese-factory" in cheese_body
+        assert "/ultracook" in cheese_body
 
-    def test_handoff_offers_cheese_factory(self, cheese_body: str) -> None:
-        # Default option set must include cheese-factory dispatch.
-        assert "/cheese-factory" in cheese_body
+    def test_handoff_offers_ultracook(self, cheese_body: str) -> None:
+        # Default option set must route decomposable specs to /ultracook.
+        assert "/ultracook" in cheese_body
+        assert "decomposable spec" in cheese_body
 
     def test_trigger_phrases_present(self, cheese_body: str) -> None:
         lowered = cheese_body.lower()
-        # At least one of the spec-named user phrases must be present.
+        # At least one ultracook-parallel phrase must be present.
         assert (
-            "5+" in lowered
+            "parallel curd" in lowered
+            or "2+" in lowered
             or "many curds" in lowered
             or "parallelize" in lowered
-            or "send through the factory" in lowered
+            or "decompos" in lowered
         )
 
 
 class TestSkillTableUpdates:
-    def test_readme_lists_cheese_factory(self, readme_body: str) -> None:
-        assert "skills/cheese-factory/SKILL.md" in readme_body
-        assert "/cheese-factory" in readme_body
+    def test_readme_lists_ultracook(self, readme_body: str) -> None:
+        assert "skills/ultracook/SKILL.md" in readme_body
+        assert "/ultracook" in readme_body
 
-    def test_agents_lists_cheese_factory(self, agents_body: str) -> None:
-        assert "/cheese-factory" in agents_body
+    def test_agents_lists_ultracook(self, agents_body: str) -> None:
+        assert "/ultracook" in agents_body

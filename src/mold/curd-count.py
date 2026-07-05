@@ -14,12 +14,14 @@ Decision rule (recommended slot only — `--auto` variants are user-opt-in
 alternatives surfaced by the Handoff menu, not picks the script makes):
 
   candidate_curds = goals_bullets   # distinct behaviours; NOT acceptance criteria
-  candidate_curds >= 5                   -> /cheese-factory
-  candidate_curds <  5 and blast == high -> /ultracook
-  candidate_curds <  5 (else)            -> /cook
+  candidate_curds >= PARALLEL_THRESHOLD          -> /ultracook (parallel mode)
+  candidate_curds <  PARALLEL_THRESHOLD, high    -> /ultracook (linear mode)
+  candidate_curds <  PARALLEL_THRESHOLD (else)   -> /cook
 
-The count is a signal, not a verdict — mold and the user must confirm
-file-disjointness (criterion 4) before dispatching /cheese-factory.
+`/ultracook` carries both modes now (the retired parallel-factory skill folded
+in); the count only picks which mode the hint suggests. The count is a signal,
+not a verdict — the decomposer stays authoritative and confirms file-disjointness
+(criterion 4) before parallel fan-out runs.
 """
 from __future__ import annotations
 
@@ -29,7 +31,7 @@ import re
 import sys
 from pathlib import Path
 
-CURD_THRESHOLD = 5
+from mode import PARALLEL_THRESHOLD
 
 HEADING_RE = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
 BULLET_RE = re.compile(r"^\s*[-*+]\s+\S", re.MULTILINE)
@@ -60,21 +62,30 @@ def _count_bullets(section: str | None) -> int:
     return sum(1 for _ in BULLET_RE.finditer(section))
 
 
-def _recommend(candidate_curds: int, blast_radius: str | None) -> tuple[str, str]:
-    if candidate_curds >= CURD_THRESHOLD:
+def _recommend(
+    candidate_curds: int, blast_radius: str | None
+) -> tuple[str, str | None, str]:
+    """Return (recommended_skill, ultracook_mode, rationale).
+
+    `ultracook_mode` is "parallel" or "linear" when the pick is /ultracook, else
+    None (a /cook pick has no ultracook mode)."""
+    if candidate_curds >= PARALLEL_THRESHOLD:
         return (
-            "/cheese-factory",
-            f"{candidate_curds} candidate curds >= {CURD_THRESHOLD} threshold",
+            "/ultracook",
+            "parallel",
+            f"{candidate_curds} candidate curds >= {PARALLEL_THRESHOLD} threshold; parallel fan-out",
         )
     radius = (blast_radius or "").lower()
     if radius == "high":
         return (
             "/ultracook",
-            f"{candidate_curds} candidate curds < {CURD_THRESHOLD}; blast radius high",
+            "linear",
+            f"{candidate_curds} candidate curds < {PARALLEL_THRESHOLD}; blast radius high; linear chain",
         )
     return (
         "/cook",
-        f"{candidate_curds} candidate curds < {CURD_THRESHOLD}; "
+        None,
+        f"{candidate_curds} candidate curds < {PARALLEL_THRESHOLD}; "
         f"blast radius {radius or 'unknown'}",
     )
 
@@ -101,7 +112,7 @@ def analyze(spec_path: Path, blast_radius: str | None) -> dict:
     decisions = _count_bullets(_extract_section(body, DECISIONS_HEADINGS))
 
     candidate_curds = goals
-    recommended, rationale = _recommend(candidate_curds, blast_radius)
+    recommended, mode, rationale = _recommend(candidate_curds, blast_radius)
 
     return {
         "spec_path": str(spec_path),
@@ -113,14 +124,15 @@ def analyze(spec_path: Path, blast_radius: str | None) -> dict:
             "quality_gates": quality_gates,
             "decisions": decisions,
         },
-        "threshold": CURD_THRESHOLD,
-        "decomposable": candidate_curds >= CURD_THRESHOLD,
+        "threshold": PARALLEL_THRESHOLD,
+        "decomposable": candidate_curds >= PARALLEL_THRESHOLD,
         "recommended_skill": recommended,
+        "mode": mode,
         "rationale": rationale,
         "notes": [
             "Count is a signal, not a verdict.",
             "candidate_curds = goals only; acceptance-criteria / quality-gate count does not drive it (issue #111).",
-            "Confirm curd independence (criterion 4: file-disjoint) before dispatching /cheese-factory.",
+            "Confirm curd independence (criterion 4: file-disjoint) before parallel /ultracook fan-out.",
         ],
     }
 

@@ -35,7 +35,7 @@ jobs:
         run: python3 .github/scripts/validate_skills.py
 
   test:
-    name: test melt + shared + cheese-factory scripts
+    name: test melt + shared + fan-out scripts
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -55,8 +55,8 @@ jobs:
       - name: Run shared script tests
         run: python3 -m pytest tests/shared/python -q
 
-      - name: Run cheese-factory script tests
-        run: python3 -m pytest tests/cheese-factory/python -q
+      - name: Run fan-out script tests
+        run: python3 -m pytest tests/fanout/python -q
 
   install-script:
     name: test install.sh (macOS)
@@ -82,8 +82,8 @@ jobs:
       - name: Run install.sh tests
         run: bats tests/bash/test_install.bats
 
-      - name: Run cheese-factory pr_plan_to_branches tests
-        run: bats tests/cheese-factory/bash/test_pr_plan_to_branches.bats
+      - name: Run fan-out pr_plan_to_branches tests
+        run: bats tests/fanout/bash/test_pr_plan_to_branches.bats
 
       # Real (un-stubbed) smoke test: actually resolve every brew formula,
       # exercise the cargo-or-npm tilth install path, and run the gh-skill

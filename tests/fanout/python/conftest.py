@@ -1,7 +1,8 @@
-"""Shared pytest config for cheese-factory tests.
+"""Shared pytest config for the fan-out engine tests (src/fanout/).
 
-Validators are imported from cheese-factory's built .pyz, and the CLI subprocess
-tests invoke that same bundle, so the suite verifies the bundled artifact.
+/ultracook drives the fan-out engine, so the engine modules are imported from
+ultracook's built .pyz, and the CLI subprocess tests invoke that same bundle —
+the suite verifies the bundled artifact.
 """
 
 from __future__ import annotations
@@ -14,12 +15,12 @@ from types import ModuleType
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-CF_DIR = REPO_ROOT / "skills" / "cheese-factory"
-REFERENCES_DIR = CF_DIR / "references"
+UC_DIR = REPO_ROOT / "skills" / "ultracook"
+REFERENCES_DIR = UC_DIR / "references"
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 import build_pyz  # noqa: E402
 
-_BUNDLE = build_pyz.cached_bundle("cheese-factory")
+_BUNDLE = build_pyz.cached_bundle("ultracook")
 sys.path.insert(0, str(_BUNDLE))
 
 
@@ -64,8 +65,33 @@ def manifest_update() -> ModuleType:
 
 
 @pytest.fixture(scope="session")
-def cf_dir() -> Path:
-    return CF_DIR
+def mode() -> ModuleType:
+    return importlib.import_module("mode")
+
+
+@pytest.fixture(scope="session")
+def worktree() -> ModuleType:
+    return importlib.import_module("worktree")
+
+
+@pytest.fixture(scope="session")
+def milknado() -> ModuleType:
+    return importlib.import_module("milknado")
+
+
+@pytest.fixture(scope="session")
+def phase_decision() -> ModuleType:
+    return importlib.import_module("phase_decision")
+
+
+@pytest.fixture(scope="session")
+def uc_dir() -> Path:
+    return UC_DIR
+
+
+@pytest.fixture(scope="session")
+def references_dir() -> Path:
+    return REFERENCES_DIR
 
 
 @pytest.fixture(scope="session")
@@ -76,23 +102,3 @@ def manifest_schema_path() -> Path:
 @pytest.fixture(scope="session")
 def pr_plan_schema_path() -> Path:
     return REFERENCES_DIR / "pr-plan-schema.json"
-
-
-@pytest.fixture(scope="session")
-def skill_md_path() -> Path:
-    return CF_DIR / "SKILL.md"
-
-
-@pytest.fixture(scope="session")
-def skill_corpus(skill_md_path: Path) -> str:
-    """SKILL.md plus every references/*.md doc — the skill's full authored surface.
-
-    Load-bearing contract phrases may live in the SKILL body or in a reference
-    file (progressive disclosure). String-shaped checks read the whole corpus so
-    a phrase that was *relocated* into a reference still counts as present, while
-    a genuinely *removed* phrase is still caught.
-    """
-    parts = [skill_md_path.read_text(encoding="utf-8")]
-    for ref in sorted(REFERENCES_DIR.glob("*.md")):
-        parts.append(ref.read_text(encoding="utf-8"))
-    return "\n".join(parts)
