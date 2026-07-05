@@ -37,6 +37,7 @@ SKILL_SUBCOMMANDS = {
         "manifest_update",
         "wiring_topo_sort",
     ],
+    "age": ["html-report"],
     "affinage": ["pr-status"],
     "mold": ["artifact-path", "curd-count", "gate-graph"],
     "briesearch": ["artifact-path", "ground-check"],
@@ -517,3 +518,25 @@ def test_local_skill_modules_finds_libs_and_excludes_subcommands() -> None:
     assert "validate_decomposition" not in local  # registered subcommand, not a local lib
     assert "validate_manifest" not in local
     assert "schema" not in local  # shared module (shared/scripts), not src/cheese-factory
+
+def test_age_bundle_exposes_html_report_help(bundles: Path) -> None:
+    """age.pyz should expose the new html-report subcommand and its CLI surface."""
+    age_pyz = bundles / "age.pyz"
+    assert age_pyz.exists(), f"age bundle missing: {age_pyz}"
+
+    result = _run(age_pyz, "html-report", "--help")
+    assert result.returncode == 0, result.stderr
+    help_text = result.stdout + result.stderr
+    assert "--report" in help_text
+    assert "--slug" in help_text
+    assert "--out-dir" in help_text
+
+
+def test_age_bundle_carries_html_report_and_findings_imports(bundles: Path) -> None:
+    """The bundle must stage the report generator plus its shared parser helper."""
+    age_pyz = bundles / "age.pyz"
+    assert age_pyz.exists(), f"age bundle missing: {age_pyz}"
+
+    content = set(zipfile.ZipFile(age_pyz).namelist())
+    assert "html_report.py" in content
+    assert "findings.py" in content

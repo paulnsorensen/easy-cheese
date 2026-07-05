@@ -58,6 +58,9 @@ _LOCATION_SUBFIELD_RE = re.compile(r"^\s+-\s*location:\s*(?P<value>.+?)\s*$", re
 _RECOMMENDATION_SUBFIELD_RE = re.compile(
     r"^\s+-\s*recommendation:\s*(?P<value>.+?)\s*$", re.IGNORECASE
 )
+_GENERIC_SUBFIELD_RE = re.compile(
+    r"^\s+-\s*(?P<key>[a-z][a-z-]*):\s*(?P<value>.+?)\s*$", re.IGNORECASE
+)
 
 # Middle-dot ( · ) or pipe (|) separator between key:value pairs on the
 # location line. Tolerates either since markdown render can vary.
@@ -82,23 +85,25 @@ def parse_findings_report(text: str) -> list[Finding]:
     under a bullet attach to that bullet."""
     current_severity: str | None = None
     findings: list[Finding] = []
-    pending: dict[str, str | None] | None = None  # accumulating sub-fields for the latest bullet
+    pending: dict[str, str | dict[str, str] | None] | None = None  # accumulating sub-fields for latest bullet
 
     def flush() -> None:
         nonlocal pending
         if pending is None:
             return
+        extra = pending.get("extra")
         findings.append(
             Finding(
                 id=len(findings) + 1,
-                severity=pending["severity"] or "low",
-                dimension=pending["dimension"] or "",
-                location=pending["location"] or "",
-                summary=(pending["summary"] or "").rstrip(". ") + ".",
-                location_tier=pending.get("location_tier"),
-                fix_cost_now=pending.get("fix_cost_now"),
-                fix_cost_later=pending.get("fix_cost_later"),
-                recommendation=pending.get("recommendation"),
+                severity=str(pending["severity"] or "low"),
+                dimension=str(pending["dimension"] or ""),
+                location=str(pending["location"] or ""),
+                summary=str(pending["summary"] or "").rstrip(". ") + ".",
+                location_tier=pending.get("location_tier") if isinstance(pending.get("location_tier"), str) else None,
+                fix_cost_now=pending.get("fix_cost_now") if isinstance(pending.get("fix_cost_now"), str) else None,
+                fix_cost_later=pending.get("fix_cost_later") if isinstance(pending.get("fix_cost_later"), str) else None,
+                recommendation=pending.get("recommendation") if isinstance(pending.get("recommendation"), str) else None,
+                extra=extra if isinstance(extra, dict) else {},
             )
         )
         pending = None
@@ -127,6 +132,8 @@ def parse_findings_report(text: str) -> list[Finding]:
                 "fix_cost_now": None,
                 "fix_cost_later": None,
                 "recommendation": None,
+                "extra": {},
+                "_last_field": "summary",
             }
             continue
 
@@ -141,11 +148,35 @@ def parse_findings_report(text: str) -> list[Finding]:
             pending["location_tier"] = parsed.get("location")
             pending["fix_cost_now"] = parsed.get("fix-cost-now")
             pending["fix_cost_later"] = parsed.get("fix-cost-later")
+            pending["_last_field"] = None
             continue
 
         rec_match = _RECOMMENDATION_SUBFIELD_RE.match(raw)
         if rec_match:
             pending["recommendation"] = rec_match.group("value").rstrip(". ") + "."
+            pending["_last_field"] = "recommendation"
+            continue
+
+        generic_match = _GENERIC_SUBFIELD_RE.match(raw)
+        if generic_match:
+            extra = pending.get("extra")
+            key = generic_match.group("key").lower()
+            if isinstance(extra, dict):
+                extra[key] = generic_match.group("value").rstrip(". ")
+                pending["_last_field"] = key
+            continue
+
+        if raw[:1].isspace() and raw.strip():
+            last_field = pending.get("_last_field")
+            continuation = raw.strip()
+            if last_field == "summary" and isinstance(pending.get("summary"), str):
+                pending["summary"] = f"{pending['summary']}\n{continuation}"
+            elif last_field == "recommendation" and isinstance(pending.get("recommendation"), str):
+                pending["recommendation"] = f"{pending['recommendation']}\n{continuation}"
+            elif isinstance(last_field, str):
+                extra = pending.get("extra")
+                if isinstance(extra, dict) and last_field in extra:
+                    extra[last_field] = f"{extra[last_field]}\n{continuation}"
             continue
 
     flush()

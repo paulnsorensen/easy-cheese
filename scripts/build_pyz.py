@@ -56,6 +56,7 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
         "manifest_update": "manifest_update.py",
         "wiring_topo_sort": "wiring_topo_sort.py",
     },
+    "age": {"html-report": "html-report.py"},
     "affinage": {"pr-status": "pr-status.py", "post-reply": "post-reply.py"},
     "mold": {
         "artifact-path": Shared("artifact_path.py"),

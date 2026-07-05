@@ -195,90 +195,29 @@ Age report: .cheese/age/<slug>.md
 
 ### HTML report (--html)
 
-When `--html` is passed, after writing `.cheese/age/<slug>.md`, also write a static HTML report:
+When `--html` is passed, keep the normal markdown flow exactly the same, then render a deterministic static HTML report from the markdown artifact:
 
-```python
-import os, tempfile, html as html_lib
-
-slug = "<slug>"  # same slug as the markdown report
-temp_dir = tempfile.gettempdir()
-html_path = os.path.join(temp_dir, f"age-{slug}.html")
-
-# findings_by_severity: dict mapping severity → list of finding dicts
-# each finding dict: {"label": str, "location": str, "body": str}
-# built from the same data used for the markdown report
-
-rows = []
-for severity in ["blocker", "high", "medium", "low"]:
-    for finding in findings_by_severity.get(severity, []):
-        rows.append(f"<tr class='finding-{severity}'>"
-                    f"<td class='px-3 py-2 font-mono text-sm'>{html_lib.escape(severity)}</td>"
-                    f"<td class='px-3 py-2 font-mono text-sm'>{html_lib.escape(finding['label'])}</td>"
-                    f"<td class='px-3 py-2 text-sm'>{html_lib.escape(finding['location'])}</td>"
-                    f"<td class='px-3 py-2 text-sm whitespace-pre-wrap'>{html_lib.escape(finding['body'])}</td>"
-                    "</tr>")
-
-pie_rows = "\n".join(
-    f'    "{sev}" : {len(findings_by_severity.get(sev, []))}'
-    for sev in ["blocker", "high", "medium", "low"]
-    if findings_by_severity.get(sev)
-)
-
-# Guard: an empty pie_rows produces an invalid Mermaid diagram (no slices).
-# Show a "No findings" note and omit the chart when there is nothing to plot.
-if pie_rows:
-    chart_html = (
-        '  <div class="mermaid mb-6">\n'
-        "pie title Findings by severity\n"
-        f"    {pie_rows}\n"
-        "  </div>"
-    )
-else:
-    chart_html = '  <p class="text-gray-500 mb-6">No findings.</p>'
-
-html_content = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Age Report &mdash; {html_lib.escape(slug)}</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
-</head>
-<body class="bg-gray-50 p-6 font-sans">
-  <h1 class="text-2xl font-bold mb-4">Age Report &mdash; {html_lib.escape(slug)}</h1>
-{chart_html}
-  <table class="w-full border-collapse bg-white shadow rounded">
-    <thead class="bg-gray-200 text-left">
-      <tr>
-        <th class="px-3 py-2">Severity</th>
-        <th class="px-3 py-2">Label</th>
-        <th class="px-3 py-2">Location</th>
-        <th class="px-3 py-2">Finding</th>
-      </tr>
-    </thead>
-    <tbody>{''.join(rows)}</tbody>
-  </table>
-  <script>mermaid.initialize({{ startOnLoad: true }});</script>
-</body>
-</html>"""
-
-with open(html_path, "w", encoding="utf-8") as f:
-    f.write(html_content)
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/age.pyz html-report \
+  --report .cheese/age/<slug>.md \
+  --slug <slug>
 ```
 
-Then print the HTML path alongside the markdown path:
+The script prints the generated HTML path. Print it alongside the markdown path:
 
 ```
 Age report:      .cheese/age/<slug>.md
 HTML report:     <html_path>
 ```
 
+The HTML renderer is deterministic and owns the presentation details so the LLM does not generate raw HTML/CSS. It parses the markdown findings report, groups violations by severity, renders severity badges, includes location/fix-cost/recommendation fields, preserves line breaks, escapes user-controlled text, emits a Mermaid severity-distribution diagram when findings exist, and emits a friendly "No findings" state when there is nothing to plot.
+
 Constraints:
-- The markdown report is always written; `--html` is strictly additive.
-- The HTML file is written to the OS temp dir only — never into the repo or `.cheese/`.
+- The markdown report is always written first; `--html` is strictly additive.
+- The HTML file is written to the OS temp dir by default and named `age-<slug>.html`; pass `--out-dir` only for tests or an explicit caller-provided destination.
 - No server or daemon is started.
-- Severity-row CSS classes (`finding-blocker`, `finding-high`, `finding-medium`, `finding-low`) are available for custom styling via browser devtools but carry no built-in colour overrides beyond Tailwind defaults.
+- No file is written into the repo or `.cheese/` except the existing markdown report.
+- Do not inline or hand-roll HTML in the skill body; use `age.pyz html-report` so styling, grouping, escaping, and Mermaid edge cases stay in one tested script.
 
 ## Handoff
 
