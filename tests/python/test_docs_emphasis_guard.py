@@ -155,7 +155,6 @@ def test_harness_portability_reference_is_linked_from_workflow_docs():
         REPO_ROOT / "skills/mold/SKILL.md",
         REPO_ROOT / "skills/cheese/SKILL.md",
         REPO_ROOT / "skills/affinage/SKILL.md",
-        REPO_ROOT / "skills/cheese-factory/SKILL.md",
         REPO_ROOT / "skills/hard-cheese/SKILL.md",
         REPO_ROOT / "skills/pasteurize/SKILL.md",
     ]
@@ -183,15 +182,12 @@ def test_harness_portability_reference_is_linked_from_workflow_docs():
         REPO_ROOT / "skills/ultracook/SKILL.md": (
             "shared/scripts/artifact_path.py",
             "shared/scripts/read_handoff_slug.py",
-            "src/ultracook/phase_decision.py",
+            "python3 skills/ultracook/scripts/ultracook.pyz phase_decision",
             "fallback",
         ),
         REPO_ROOT / "skills/affinage/SKILL.md": (
             "python3 skills/affinage/scripts/affinage.pyz pr-status",
             "python3 skills/affinage/scripts/affinage.pyz post-reply",
-        ),
-        REPO_ROOT / "skills/cheese-factory/SKILL.md": (
-            "python3 skills/cheese-factory/scripts/cheese-factory.pyz",
         ),
         REPO_ROOT / "skills/hard-cheese/SKILL.md": (
             "python3 skills/hard-cheese/scripts/hard-cheese.pyz freshness-check",
@@ -214,7 +210,6 @@ def test_harness_portability_reference_is_linked_from_workflow_docs():
 
     for path in (
         REPO_ROOT / "skills/affinage/SKILL.md",
-        REPO_ROOT / "skills/cheese-factory/SKILL.md",
         REPO_ROOT / "skills/hard-cheese/SKILL.md",
         REPO_ROOT / "skills/mold/SKILL.md",
         REPO_ROOT / "skills/pasteurize/SKILL.md",

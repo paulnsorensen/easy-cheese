@@ -22,4 +22,4 @@ Inline mappings in every skill would duplicate the same OMP/Claude host vocabula
 
 ## Source
 
-Spec: `/home/paul/.local/share/cheese/paulnsorensen-easy-cheese/specs/codex-omp-portability.md`.
+Spec: codex-omp-portability (durable specs corpus).

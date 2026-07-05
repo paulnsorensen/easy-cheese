@@ -248,9 +248,10 @@ Use the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/han
 1. Render the numbered selection table:
 
    ```
-   python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz findings_cli render-table --report .cheese/age/<slug>.md
+   python3 shared/scripts/findings_cli.py render-table --report .cheese/age/<slug>.md
    ```
 
+   If the host only ships the bundle, `python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz findings_cli render-table --report .cheese/age/<slug>.md` is the fallback.
    Mark any sprawling/structural-fix row as *heavy*.
 2. Ask which findings to cure. Lead each option with the verb (what the user wants to *do* next); the underlying selection verb is the backing detail. Lead with the recommended composite, then present the same four severity-floor options below it, in the same most-inclusive-to-least order, so the gate is predictable across every run:
    - **Fix mediums-and-above plus cheap lows** *(recommended)* — equivalent to `all-medium, cheap` (floor at medium — blockers + high + medium — unioned with every `Low` whose `fix-cost-now: contained`). The cheap lows are the small valid nits that are cheaper to fix than to defer; sprawling/structural lows are left out.
@@ -263,8 +264,10 @@ Use the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/han
    - **Pick findings to fix** — accept a free-text reply using the verbs from `../cure/references/selection.md`; expand the verb to finding ids:
 
      ```
-     python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz findings_cli parse-selection --report .cheese/age/<slug>.md --selection "<verb>"
+     python3 shared/scripts/findings_cli.py parse-selection --report .cheese/age/<slug>.md --selection "<verb>"
      ```
+
+     If the host only ships the bundle, `python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz findings_cli parse-selection ...` is the fallback.
    - **Ship it** — apply the recommended composite and run cure headless: `/cure <slug> --auto --open-pr --stake medium+` (the `medium+` floor *is* the recommended composite). Carries `--hard` when in scope.
    - **Checkpoint & stop** — `/wheypoint`: write a resumable handoff and pause instead of curing now.
    - **Stop — leave the report for later** — equivalent to `none`.
