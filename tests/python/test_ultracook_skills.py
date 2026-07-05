@@ -1164,3 +1164,79 @@ class TestUltracookOutputModeInvariance:
         assert "mode-invariant" in body_lower or "mode invariance" in body_lower, (
             "ultracook must state the output is mode-invariant across linear/parallel"
         )
+
+
+class TestUltracookResume:
+    """--resume brings ultracook up to spec with the retired cheese-factory:
+    the Inputs list advertises it, the Topology advances the manifest at every
+    phase boundary, and a dedicated section drives the resume flow."""
+
+    def test_inputs_list_resume_flag(self) -> None:
+        body = _skill("ultracook")
+        assert "`--resume <slug>`" in body, (
+            "Inputs must advertise the --resume <slug> flag"
+        )
+
+    def test_topology_advances_manifest_at_phase_boundaries(self) -> None:
+        body = _skill("ultracook")
+        # Every schema phase past the decomposer scaffold must be emitted by a
+        # manifest_update set-phase call threaded into the topology prose.
+        for phase in (
+            "seed_complete",
+            "curds_complete",
+            "merge_complete",
+            "wiring_complete",
+            "final_merge_complete",
+            "post_review_complete",
+            "pr_publish_complete",
+        ):
+            assert f"set-phase --manifest <path> --phase {phase}" in body or (
+                f"--phase {phase}" in body and "manifest_update set-phase" in body
+            ), f"topology must advance the manifest to {phase}"
+        assert "manifest_update set-curd-status" in body, (
+            "per-curd status must be recorded via set-curd-status"
+        )
+        assert "manifest_update set-wiring-status" in body, (
+            "per-wiring status must be recorded via set-wiring-status"
+        )
+
+    def test_resume_section_present(self) -> None:
+        body = _skill("ultracook")
+        assert "## --resume <slug>" in body, "a dedicated --resume section must exist"
+        assert "git cat-file -e" in body, (
+            "resume must verify recorded commit SHAs still exist (rebase guard)"
+        )
+        assert "phase_summary" in body and "carry_forward" in body, (
+            "resume must read phase_summary/carry_forward for cross-seam continuity"
+        )
+
+    def test_phase_strings_agree_across_writer_reader_and_schema(self) -> None:
+        # The whole point of --resume: a phase string written by the Topology
+        # writer prose must round-trip through the reader section and the
+        # schema enum. Drift in any one of the three (edit one place, forget
+        # the others) silently breaks resume and validate_skills won't catch it.
+        import json
+        import re
+
+        body = _skill("ultracook")
+        schema_path = SKILLS_DIR / "ultracook" / "references" / "manifest-schema.json"
+        schema_enum = json.loads(_read(schema_path))["properties"]["phase"]["enum"]
+
+        # Reader: the ordered arrow-joined enum inside the `## --resume` section.
+        resume_section = body.split("\n## --resume <slug>", 1)[1]
+        arrow_span = re.search(r"`([a-z_]+(?: → [a-z_]+)+)`", resume_section)
+        assert arrow_span, "resume section must list the ordered phase enum"
+        reader_enum = [p.strip() for p in arrow_span.group(1).split("→")]
+
+        # Writer: every `--phase <X>` the Topology prose (before the reader
+        # section) tells the orchestrator to set.
+        topology = body.split("\n## --resume <slug>", 1)[0]
+        writer_phases = set(re.findall(r"--phase ([a-z_]+)", topology))
+
+        assert reader_enum == schema_enum, (
+            "reader arrow-list must match the schema phase enum exactly (order + members)"
+        )
+        assert writer_phases == set(schema_enum) - {"gate_approved"}, (
+            "Topology must write every schema phase past the decomposer scaffold "
+            f"(gate_approved); writer={sorted(writer_phases)} schema={schema_enum}"
+        )

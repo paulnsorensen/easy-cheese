@@ -96,10 +96,11 @@ count_skills() {
 
 # -- ec_parse_args ------------------------------------------------------------
 
-@test "ec_parse_args defaults to all tools and tilth+context7" {
+@test "ec_parse_args defaults to all tools including tilth, and tilth,context7,hallouminate MCP" {
     ec_parse_args
-    [[ "$EC_TOOLS" == *"gh"* && "$EC_TOOLS" == *"tilth"* ]]
-    [[ "$EC_MCP" == "tilth,context7" ]]
+    [[ "$EC_TOOLS" == *"gh"* ]]
+    [[ "$EC_TOOLS" == *"tilth"* ]]
+    [[ "$EC_MCP" == "tilth,context7,hallouminate" ]]
     [[ "$EC_HARNESS" == "auto" ]]
     [[ "$EC_WITH_EDIT" == "1" ]]
     [[ "$EC_DRY_RUN" == "0" ]]
@@ -330,6 +331,42 @@ STUB
     [[ "$output" == *"rustup.rs"* ]]
 }
 
+# -- default + opt-in MCP wiring ----------------------------------------------
+
+@test "default MCP selection registers tilth, context7, and hallouminate" {
+    make_stub claude
+    make_stub tilth
+    make_stub npx
+    ec_parse_args
+    EC_CLAUDE="$STUB_BIN/claude" EC_TILTH="$STUB_BIN/tilth" EC_NPX="$STUB_BIN/npx" EC_DRY_RUN=1 \
+        run ec_install_mcp_list "$EC_MCP" claude-code 1
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"install claude-code --edit"* ]]
+    [[ "$output" == *"mcp add context7 --"* ]]
+    [[ "$output" == *"plugin install hallouminate@hallouminate"* ]]
+}
+
+@test "--mcp hallouminate installs the hallouminate plugin on claude-code" {
+    make_stub claude
+    ec_parse_args --mcp hallouminate
+    [[ "$EC_MCP" == "hallouminate" ]]
+    EC_CLAUDE="$STUB_BIN/claude" EC_DRY_RUN=1 \
+        run ec_install_mcp_list "$EC_MCP" claude-code 1
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"$STUB_BIN/claude plugin marketplace add paulnsorensen/hallouminate"* ]]
+    [[ "$output" == *"$STUB_BIN/claude plugin install hallouminate@hallouminate"* ]]
+}
+
+@test "--mcp tilth still installs and registers tilth" {
+    make_stub tilth
+    ec_parse_args --mcp tilth
+    [[ "$EC_MCP" == "tilth" ]]
+    EC_TILTH="$STUB_BIN/tilth" EC_DRY_RUN=1 \
+        run ec_install_mcp_list "$EC_MCP" claude-code 1
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"install claude-code --edit"* ]]
+}
+
 # -- ec_install_mcp_tilth -----------------------------------------------------
 
 @test "ec_install_mcp_tilth fails clearly when tilth CLI missing" {
@@ -423,32 +460,79 @@ STUB
     [[ "$output" == *"$STUB_BIN/claude mcp add tavily -- $STUB_BIN/npx -y tavily-mcp"* ]]
 }
 
-
 # -- ec_install_mcp_hallouminate -----------------------------------------------
 
-@test "ec_install_mcp_hallouminate warns and skips for non-claude harness" {
+@test "ec_install_mcp_hallouminate warns and returns 0 for a non-plugin harness" {
     run ec_install_mcp_hallouminate cursor
     [ "$status" -eq 0 ]
-    [[ "$output" == *"only claude-code is auto-registered"* ]]
+    [[ "$output" == *"no plugin for cursor"* ]]
+    [[ "$output" == *"register the hallouminate MCP manually"* ]]
 }
 
-@test "ec_install_mcp_hallouminate gracefully skips when hallouminate binary missing" {
-    make_stub claude
-    # EC_HALLOUMINATE points at a path that does not exist — detection should warn, not abort.
-    EC_CLAUDE="$STUB_BIN/claude" EC_HALLOUMINATE="$STUB_BIN/no-such-hallouminate" \
-        run ec_install_mcp_hallouminate claude-code
+@test "ec_install_mcp_hallouminate codex dry-run shows the codex plugin marketplace add + add commands" {
+    make_stub codex
+    EC_CODEX="$STUB_BIN/codex" EC_DRY_RUN=1 \
+        run ec_install_mcp_hallouminate codex
     [ "$status" -eq 0 ]
-    [[ "$output" == *"hallouminate binary not found"* ]]
-    ! grep -q "mcp add hallouminate" "$STUB_LOG"
+    [[ "$output" == *"$STUB_BIN/codex plugin marketplace add paulnsorensen/hallouminate"* ]]
+    [[ "$output" == *"$STUB_BIN/codex plugin add hallouminate@hallouminate"* ]]
 }
 
-@test "ec_install_mcp_hallouminate dry-run shows resolved claude and hallouminate paths" {
+@test "ec_install_mcp_hallouminate codex real invocation logs correct argv" {
+    make_stub codex
+    EC_CODEX="$STUB_BIN/codex" run ec_install_mcp_hallouminate codex
+    [ "$status" -eq 0 ]
+    grep -q "^codex plugin marketplace add paulnsorensen/hallouminate$" "$STUB_LOG"
+    grep -q "^codex plugin add hallouminate@hallouminate$" "$STUB_LOG"
+}
+
+@test "ec_install_mcp_hallouminate codex warns to restart when plugin add fails" {
+    # codex stub: marketplace add ok, plugin add fails (needs restart).
+    cat > "$STUB_BIN/codex" <<'STUB'
+#!/usr/bin/env bash
+echo "codex $*" >> "$STUB_LOG"
+case "$*" in
+    "plugin add"*) exit 1 ;;
+    *) exit 0 ;;
+esac
+STUB
+    chmod +x "$STUB_BIN/codex"
+    EC_CODEX="$STUB_BIN/codex" run ec_install_mcp_hallouminate codex
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"restart codex"* ]]
+}
+
+@test "ec_install_mcp_hallouminate codex fails when codex CLI missing" {
+    run ec_install_mcp_hallouminate codex
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"codex CLI not found"* ]]
+}
+
+@test "ec_install_mcp_hallouminate treats a failed marketplace add as non-fatal and still installs" {
+    # claude stub exits non-zero for 'plugin marketplace add' (already added)
+    # but 0 otherwise; the install must still run.
+    cat > "$STUB_BIN/claude" <<'STUB'
+#!/usr/bin/env bash
+echo "claude $*" >> "$STUB_LOG"
+case "$*" in
+    "plugin marketplace add"*) exit 1 ;;
+    *) exit 0 ;;
+esac
+STUB
+    chmod +x "$STUB_BIN/claude"
+    EC_CLAUDE="$STUB_BIN/claude" run ec_install_mcp_hallouminate claude-code
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"marketplace add failed"* ]]
+    grep -q "^claude plugin install hallouminate@hallouminate$" "$STUB_LOG"
+}
+
+@test "ec_install_mcp_hallouminate dry-run shows the plugin marketplace add + install commands" {
     make_stub claude
-    make_stub hallouminate
-    EC_CLAUDE="$STUB_BIN/claude" EC_HALLOUMINATE="$STUB_BIN/hallouminate" EC_DRY_RUN=1 \
+    EC_CLAUDE="$STUB_BIN/claude" EC_DRY_RUN=1 \
         run ec_install_mcp_hallouminate claude-code
     [ "$status" -eq 0 ]
-    [[ "$output" == *"$STUB_BIN/claude mcp add hallouminate -- $STUB_BIN/hallouminate serve"* ]]
+    [[ "$output" == *"$STUB_BIN/claude plugin marketplace add paulnsorensen/hallouminate"* ]]
+    [[ "$output" == *"$STUB_BIN/claude plugin install hallouminate@hallouminate"* ]]
 }
 
 # -- ec_install_mcp_milknado ---------------------------------------------------
@@ -480,11 +564,10 @@ STUB
 
 @test "ec_install_mcp_hallouminate real invocation logs correct argv" {
     make_stub claude
-    make_stub hallouminate
-    EC_CLAUDE="$STUB_BIN/claude" EC_HALLOUMINATE="$STUB_BIN/hallouminate" \
-        run ec_install_mcp_hallouminate claude-code
+    EC_CLAUDE="$STUB_BIN/claude" run ec_install_mcp_hallouminate claude-code
     [ "$status" -eq 0 ]
-    grep -q "^claude mcp add hallouminate -- $STUB_BIN/hallouminate serve$" "$STUB_LOG"
+    grep -q "^claude plugin marketplace add paulnsorensen/hallouminate$" "$STUB_LOG"
+    grep -q "^claude plugin install hallouminate@hallouminate$" "$STUB_LOG"
 }
 
 @test "ec_install_mcp_milknado real invocation logs correct argv" {
@@ -815,6 +898,7 @@ STUB
     make_stub gh
     make_stub claude
     make_stub tilth
+    make_stub npx
     ln -sf /bin/bash "$STUB_BIN/bash"
     PATH="$STUB_BIN" \
     EC_BREW=brew \
@@ -822,21 +906,25 @@ STUB
     EC_GH=gh \
     EC_CLAUDE=claude \
     EC_TILTH=tilth \
+    EC_NPX=npx \
         run ec_main --dry-run
     [ "$status" -eq 0 ]
     [[ "$output" == *"gh: already installed (gh on PATH)"* ]]
     [[ "$output" == *"would run 'brew install ripgrep'"* ]]
-    # tilth is detected on PATH and should never route through brew.
-    [[ "$output" == *"tilth: already installed (tilth on PATH)"* ]]
+    # tilth is a default tool again; it has no brew formula, so it is never
+    # installed via brew (here the stub is on PATH, so it reports as present).
     [[ "$output" != *"brew install tilth"* ]]
-    [[ "$output" != *"paulnsorensen/tap/tilth"* ]]
+    [[ "$output" == *"tilth: already installed"* ]]
     # Skills install runs as part of the harness pick stage — one entry per
     # shipped skill, never the broken --all flag.
     [[ "$output" == *"gh skill install paulnsorensen/easy-cheese age --agent claude-code --scope user --force"* ]]
     [[ "$output" == *"gh skill install paulnsorensen/easy-cheese press --agent claude-code --scope user --force"* ]]
     [[ "$output" != *"--all"* ]]
+    # Default MCP is tilth + context7 + hallouminate; hallouminate installs as a plugin.
     [[ "$output" == *"install claude-code --edit"* ]]
     [[ "$output" == *"@upstash/context7-mcp@latest"* ]]
+    [[ "$output" == *"plugin install hallouminate@hallouminate"* ]]
+    [[ "$output" != *"prebuilt binary via the release installer"* ]]
     [[ "$output" == *"Done."* ]]
 }
 

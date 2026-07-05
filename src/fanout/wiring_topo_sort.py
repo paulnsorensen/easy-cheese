@@ -9,6 +9,7 @@ can dispatch each wave in parallel.
 from __future__ import annotations
 
 import argparse
+import graphlib
 from pathlib import Path
 from typing import Any
 
@@ -36,22 +37,21 @@ def compute_waves(wiring: list[dict[str, Any]]) -> list[list[str]]:
     """
     if not wiring:
         return []
-    ids: list[str] = [str(item["id"]) for item in wiring]
-    id_set = set(ids)
-    deps: dict[str, set[str]] = {
-        str(item["id"]): {d for d in item.get("depends_on", []) if d in id_set and d != item["id"]}
-        for item in wiring
-    }
-    remaining = dict(deps)
+    id_set = {str(item["id"]) for item in wiring}
+    sorter: graphlib.TopologicalSorter[str] = graphlib.TopologicalSorter()
+    for item in wiring:
+        node = str(item["id"])
+        deps = {d for d in item.get("depends_on", []) if d in id_set and d != node}
+        sorter.add(node, *deps)
+    try:
+        sorter.prepare()
+    except graphlib.CycleError as exc:
+        cycle = sorted(set(exc.args[1]))
+        raise cli.CliError(f"cycle detected: {', '.join(cycle)}") from exc
     waves: list[list[str]] = []
-    while remaining:
-        ready = sorted(wid for wid, d in remaining.items() if not d)
-        if not ready:
-            cycle = sorted(remaining)
-            raise cli.CliError(f"cycle detected: {', '.join(cycle)}")
+    while ready := sorted(sorter.get_ready()):
         waves.append(ready)
-        ready_set = set(ready)
-        remaining = {wid: d - ready_set for wid, d in remaining.items() if wid not in ready_set}
+        sorter.done(*ready)
     return waves
 
 

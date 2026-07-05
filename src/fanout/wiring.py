@@ -7,6 +7,7 @@ Two layered functions:
 from __future__ import annotations
 
 import re
+import graphlib
 
 from schema import non_empty_string, required_keys, string_list  # noqa: E402
 
@@ -41,33 +42,15 @@ def graph_errors(wiring: list) -> list[str]:
             if _WIRING_ID_RE.match(dep) and dep not in ids:
                 errors.append(f"wiring {wid}: depends_on references unknown id {dep!r}")
 
-    graph: dict[str, list[str]] = {w["id"]: _string_deps(w) for w in wiring_list if isinstance(w.get("id"), str)}
-    WHITE, GRAY, BLACK = 0, 1, 2
-    color = {node: WHITE for node in graph}
-
-    def dfs(node: str, stack: list[str]) -> str | None:
-        color[node] = GRAY
-        stack.append(node)
-        for nxt in graph.get(node, []):
-            if nxt not in color:
-                continue
-            if color[nxt] == GRAY:
-                cycle = stack[stack.index(nxt):] + [nxt]
-                return " -> ".join(cycle)
-            if color[nxt] == WHITE:
-                cy = dfs(nxt, stack)
-                if cy:
-                    return cy
-        stack.pop()
-        color[node] = BLACK
-        return None
-
-    for node in list(graph):
-        if color[node] == WHITE:
-            cy = dfs(node, [])
-            if cy:
-                errors.append(f"wiring DAG has cycle: {cy}")
-                break  # one cycle report is enough; user fixes & re-runs
+    known: dict[str, list[str]] = {w["id"]: _string_deps(w) for w in wiring_list if isinstance(w.get("id"), str)}
+    sorter: graphlib.TopologicalSorter[str] = graphlib.TopologicalSorter()
+    for node, deps in known.items():
+        sorter.add(node, *(d for d in deps if d in ids))
+    try:
+        sorter.prepare()
+    except graphlib.CycleError as exc:
+        path = " -> ".join(str(node) for node in exc.args[1])
+        errors.append(f"wiring DAG has cycle: {path}")
 
     return errors
 
