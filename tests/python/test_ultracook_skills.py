@@ -973,3 +973,194 @@ class TestUltracookDeterministicPhaseLoop:
             "ultracook must reference phase_decision in the phase loop so "
             "the next-action verdict is deterministic"
         )
+
+
+# ---------------------------------------------------------------------------
+# merge-cheese-factory-into-ultracook — parallel mode contract
+#
+# /cheese-factory folded into /ultracook as a second mode. These lock the
+# parallel-mode contract clauses so a future edit cannot silently drop the
+# mode gate, the worktree lifecycle, the milknado parity, the #197 capability
+# gate, the #194 recovery paths, or the output mode-invariance invariant.
+# ---------------------------------------------------------------------------
+
+
+class TestUltracookModeGate:
+    """The decomposer is the authoritative mode gate; the single canonical
+    PARALLEL_THRESHOLD (2) picks linear vs parallel."""
+
+    def test_mode_selection_section_present(self) -> None:
+        body = _skill("ultracook")
+        assert "Mode selection" in body, (
+            "ultracook must document a mode-selection gate"
+        )
+        assert "decomposer" in body.lower(), "the decomposer is the mode gate"
+
+    def test_mode_selector_and_threshold_referenced(self) -> None:
+        body = _skill("ultracook")
+        assert "PARALLEL_THRESHOLD" in body, (
+            "ultracook must name the canonical PARALLEL_THRESHOLD constant"
+        )
+        # The mode subcommand picks linear|parallel deterministically.
+        assert "ultracook.pyz mode" in body or "pyz mode --count" in body, (
+            "ultracook must invoke the deterministic mode selector"
+        )
+
+    def test_two_or_more_curds_is_parallel(self) -> None:
+        body = _skill("ultracook")
+        body_lower = body.lower()
+        assert "2 or more" in body_lower or "2+" in body, (
+            "ultracook must state 2+ curds routes to parallel mode"
+        )
+        assert "1-curd spec runs" in body and "linear mode" in body_lower, (
+            "ultracook must state a 1-curd spec stays linear"
+        )
+
+
+class TestUltracookParallelTopology:
+    """Parallel mode is curd-light: per-curd cook/press/age/cure in a worktree,
+    then one post-merge press/age/cure over the merged diff (acceptance #2)."""
+
+    def test_parallel_mode_section_present(self) -> None:
+        body = _skill("ultracook")
+        assert "## Parallel mode" in body
+
+    def test_per_curd_pipeline_documented(self) -> None:
+        body = _skill("ultracook")
+        # Per-curd pipeline uses the parallel-curd phase table.
+        assert "parallel-curd" in body, (
+            "parallel mode must run each curd on the parallel-curd phase table"
+        )
+
+    def test_post_merge_single_pass_documented(self) -> None:
+        body = _skill("ultracook")
+        body_lower = body.lower()
+        assert "parallel-postmerge" in body, (
+            "parallel mode must run one post-merge pass on the parallel-postmerge table"
+        )
+        assert "post-merge" in body_lower or "merged diff" in body_lower
+
+
+class TestUltracookWorktreeLifecycle:
+    """The worktree helper harvests a curd branch with no fetch and tears the
+    worktree + branch down afterward — no leaks (acceptance #5)."""
+
+    def test_harvest_no_fetch(self) -> None:
+        body = _skill("ultracook")
+        body_lower = body.lower()
+        assert "worktree harvest" in body, "parallel mode must harvest curd branches"
+        assert "no `git fetch`" in body or "no git fetch" in body_lower or (
+            "shared" in body_lower and "object store" in body_lower
+        ), "harvest must state it needs no git fetch (shared object store)"
+
+    def test_teardown_leaves_no_leak(self) -> None:
+        body = _skill("ultracook")
+        body_lower = body.lower()
+        assert "worktree teardown" in body, "parallel mode must tear worktrees down"
+        assert "leak" in body_lower, (
+            "the teardown contract must state no worktree/branch leaks"
+        )
+        assert "worktree-agent-" in body or ".claude/worktrees/agent-" in body, (
+            "teardown must name the worktree/branch pattern that must not leak"
+        )
+
+
+class TestUltracookMilknadoSeam:
+    """milknado.probe() returns engine/tracker/none; parallel mode runs with
+    milknado absent (native fan-out), and the self-verify vs verify-until-green
+    parity is stated (acceptance #4)."""
+
+    def test_three_probe_roles_documented(self) -> None:
+        body = _skill("ultracook")
+        body_lower = body.lower()
+        assert "engine" in body_lower and "tracker" in body_lower, (
+            "the milknado seam must name the engine and tracker roles"
+        )
+        assert "ultracook.pyz milknado" in body, (
+            "ultracook must invoke the deterministic milknado probe"
+        )
+
+    def test_native_path_runs_without_milknado(self) -> None:
+        body = _skill("ultracook")
+        body_lower = body.lower()
+        assert "native fan-out" in body_lower, (
+            "parallel mode must document the native fan-out path when milknado is absent"
+        )
+
+    def test_parity_difference_stated(self) -> None:
+        body = _skill("ultracook")
+        body_lower = body.lower()
+        # The intentional parity difference must be explicit.
+        assert "self-verify" in body_lower, (
+            "native curds must be documented as self-verifying (gates in-worker)"
+        )
+        assert "verify-until-green" in body_lower, (
+            "milknado's verify-until-green must be named as the parity difference"
+        )
+
+
+class TestUltracookCapabilityGate:
+    """Sub-agent spawning is capability-gated (issue #197): a specialized
+    subagent_type with fresh context + full tools is permitted; only diminutive
+    workers are rejected (acceptance #6)."""
+
+    def test_capability_gate_documented(self) -> None:
+        body = _skill("ultracook")
+        body_lower = body.lower()
+        assert "#197" in body or "197" in body, (
+            "ultracook must cite issue #197 for the capability gate"
+        )
+        assert "capability" in body_lower, (
+            "the gate must be capability, not the subagent_type label"
+        )
+
+    def test_specialized_type_permitted_when_full_peer(self) -> None:
+        body = _skill("ultracook")
+        body_lower = body.lower()
+        # A specialized/typed subagent_type is acceptable when it is a full peer.
+        assert "specialized" in body_lower or "specialised" in body_lower or (
+            "typed" in body_lower
+        ), "a specialized subagent_type must be permitted when it is a full peer"
+        assert "diminutive" in body_lower or "downgrade" in body_lower, (
+            "only diminutive / downgraded workers may be rejected"
+        )
+
+
+class TestUltracookRecoveryPaths:
+    """Parallel mode surfaces a worker-exhaustion recovery path and an
+    aggregate-gate failure path (issue #194, acceptance #7)."""
+
+    def test_worker_exhaustion_recovery(self) -> None:
+        body = _skill("ultracook")
+        body_lower = body.lower()
+        assert "#194" in body or "194" in body, (
+            "ultracook must cite issue #194 for the recovery paths"
+        )
+        assert "exhaust" in body_lower and "retry" in body_lower, (
+            "parallel mode must document worker-exhaustion recovery (retry once)"
+        )
+
+    def test_aggregate_gate_failure_distinguishes_conflict_from_drift(self) -> None:
+        body = _skill("ultracook")
+        body_lower = body.lower()
+        assert "aggregate" in body_lower, (
+            "parallel mode must document the aggregate-gate failure path"
+        )
+        assert "cross-curd conflict" in body_lower or "cross-curd" in body_lower, (
+            "aggregate-gate handling must distinguish a real cross-curd conflict"
+        )
+        assert "drift" in body_lower, (
+            "aggregate-gate handling must distinguish harmless drift from a conflict"
+        )
+
+
+class TestUltracookOutputModeInvariance:
+    """Parallel mode's output uses the same schema as linear mode — a reader
+    cannot tell which mode produced the summary (mirrors /age's invariant)."""
+
+    def test_output_mode_invariance_stated(self) -> None:
+        body = _skill("ultracook")
+        body_lower = body.lower()
+        assert "mode-invariant" in body_lower or "mode invariance" in body_lower, (
+            "ultracook must state the output is mode-invariant across linear/parallel"
+        )
