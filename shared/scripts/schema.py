@@ -1,4 +1,4 @@
-"""Reusable shape-validation helpers for cheese-factory and other skill scripts.
+"""Reusable shape-validation helpers for the fan-out engine and other skill scripts.
 
 These helpers accumulate error strings rather than raising, so a single
 validation pass can report every problem at once. The error format is

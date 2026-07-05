@@ -48,8 +48,9 @@ measured against the actual repo, not merely deprioritized.
   `skills/age/references/voice.md` already covers steelman /
   do-not-manufacture-counterpoints.
 - Worktree provenance / isolation recommendations — **wrong repo**; worktree /
-  worktree-sweep are not easy-cheese skills (cheese-factory cites
-  `/worktree-sweep` as a host equivalent, `skills/cheese-factory/SKILL.md:438`).
+  worktree-sweep are not easy-cheese skills. (The parallel-mode fan-out that
+  once cited `/worktree-sweep` as a host equivalent now lives in `/ultracook`
+  parallel mode, formerly `/cheese-factory`.)
 - "caveman-style mid-dialogue compression for mold" — **low value**; at odds
   with mold's disambiguation purpose.
 

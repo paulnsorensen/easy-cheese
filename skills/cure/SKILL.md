@@ -148,7 +148,7 @@ When invoked with `--auto --stake <floor>`:
 - After all selected findings are processed, skip the handoff gate and invoke `/age --scope <touched-paths> --auto` (forward `--open-pr` when it is in scope) so the chain can re-review.
 - `/age --auto` enforces the two-pass cap. Cure does not need to track passes itself — it just keeps applying when invoked.
 - **Terminal PR push.** The PR push fires once, from the cure frame whose `/age --auto` child returned `next: done` (chain-clean or two-cure-pass cap reached). Push to an already-open PR via `/gh` (Rule 11); open a new PR only when `--open-pr` is in scope. Mid-chain cure passes (age child returned `next: cure`) never push. A cook chain on a fresh branch with no PR and no `--open-pr` ends with the final age report and touches no remote.
-- **Orchestrated sub-agent exception (no push).** When cure runs as a phase-only sub-agent of an orchestrator that owns publishing — `/ultracook` (see below) or a `/cheese-factory` curd worker (spawn prompt carries `invoked-from: cheese-factory-curd` / forbids `/gh` and chaining forward) — it never performs the terminal push, even at `next: done`. The orchestrator owns the remote (cheese-factory publishes in its Phase 7 via `/pr-stack` / `/gh`). Such a sub-agent applies its findings, writes its cure slug, and stops; touching the remote from inside a curd would violate the orchestrator contract.
+- **Orchestrated sub-agent exception (no push).** When cure runs as a phase-only sub-agent of an orchestrator that owns publishing — `/ultracook` linear mode (see below) or an `/ultracook` parallel-mode curd worker (spawn prompt carries `invoked-from: ultracook-curd` / forbids `/gh` and chaining forward) — it never performs the terminal push, even at `next: done`. The orchestrator owns the remote (parallel mode publishes in its post-merge PR phase via `/pr-stack` / `/gh`). Such a sub-agent applies its findings, writes its cure slug, and stops; touching the remote from inside a curd would violate the orchestrator contract.
 
 **`--auto --hard` puncture clause.** When `--hard` is also in scope, the chain pauses *once*, at the natural terminal point: after cure invokes `/age --auto` and the returned age slug shows `next: done` (chain-clean *or* two-cure-pass cap reached), invoke `/hard-cheese <slug>` *before returning to the caller*. This is the only sanctioned puncture of `--auto`'s skip-handoff semantics. Concretely:
 
@@ -161,12 +161,12 @@ When invoked with `--auto --stake <floor>`:
 
 If no findings meet the floor, write an empty cure report with `### Applied: (none — no findings meet <floor>)` and skip straight to the auto handoff with a one-line "auto chain clean" note.
 
-### When invoked from /ultracook or a /cheese-factory curd
+### When invoked from /ultracook (linear or a parallel-mode curd)
 
 When an orchestrator spawns cure as a phase-only sub-agent and owns the chain itself, honour the no-chain / no-push override:
 
-- **`/ultracook`** — the spawn prompt says "for THIS PHASE ONLY" and "do not chain forward to the next phase." Apply the auto-selected findings, write `.cheese/cure/<slug>.md` (handoff slug at the top, `next: age`), and stop. Do not invoke `/age --scope <touched-paths> --auto`. The orchestrator reads the cure slug and spawns the next age itself.
-- **`/cheese-factory` curd worker** — the spawn prompt carries `invoked-from: cheese-factory-curd` (or forbids `/gh` / PR-related skills). Apply the auto-selected findings, write the cure slug, and stop — no re-review chain and **no terminal PR push**. Publishing is owned by the factory's Phase 7 (`/pr-stack` / `/gh`); a curd must never touch the remote.
+- **`/ultracook` linear mode** — the spawn prompt says "for THIS PHASE ONLY" and "do not chain forward to the next phase." Apply the auto-selected findings, write `.cheese/cure/<slug>.md` (handoff slug at the top, `next: age`), and stop. Do not invoke `/age --scope <touched-paths> --auto`. The orchestrator reads the cure slug and spawns the next age itself.
+- **`/ultracook` parallel-mode curd worker** — the spawn prompt carries `invoked-from: ultracook-curd` (or forbids `/gh` / PR-related skills). Apply the auto-selected findings, write the cure slug, and stop — no re-review chain and **no terminal PR push**. Publishing is owned by parallel mode's post-merge PR phase (`/pr-stack` / `/gh`); a curd must never touch the remote.
 
 In both cases the terminal PR push (above) is suppressed — the orchestrator, not the sub-agent, owns the remote.
 

@@ -119,14 +119,13 @@ If any gate is unmet, propose the smallest next question or evidence check. Writ
 
 After Curdle writes the spec, run the curd-count script (procedure and `--blast-radius` rules in [`references/curd-count.md`](references/curd-count.md)), then render the branch menu below and prompt via the shared handoff gate. Never pre-select an autonomous option.
 
-Read the JSON digest. Its `decomposable` field (true when `candidate_curds ≥ 5`) picks the option set rendered below; its `recommended_skill` field picks which option holds the *(recommended)* slot — subject to one user-confirmed override in the decomposable branch (see below). Then ask the user via the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md). Lead each option with the verb; the skill command (with the spec path and any in-scope `--hard` propagation) is the backing detail.
+Read the JSON digest. Its `decomposable` field (true when `candidate_curds ≥ 2`, the `PARALLEL_THRESHOLD`) picks the option set rendered below; its `recommended_skill` field picks which option holds the *(recommended)* slot. Then ask the user via the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md). Lead each option with the verb; the skill command (with the spec path and any in-scope `--hard` propagation) is the backing detail.
 
-**Decomposable specs (`decomposable: true`, `candidate_curds ≥ 5`):**
+**Decomposable specs (`decomposable: true`, `candidate_curds ≥ 2`):**
 
-The spec splits into many independent slices, so the natural fit is fan-out parallelism with reviewable PRs. Before rendering the menu, confirm with the user that the candidate curds are file-disjoint (criterion 4) — the script counts signals, it does not verify independence. **If the user confirms any two candidate curds share a file, override the digest's `recommended_skill`**: shift the *(recommended)* marker from `/cheese-factory` to `/ultracook` for this menu. The option list itself is unchanged.
+The spec splits into independent slices, so `/ultracook`'s decomposer can fan them out in parallel with reviewable PRs. Before rendering the menu, confirm with the user that the candidate curds are file-disjoint (criterion 4) — the script counts signals, it does not verify independence. The dispatched skill is `/ultracook` either way: its decomposer routes 2+ file-disjoint curds to parallel mode and folds shared-file curds back into the linear chain, so the user's answer informs the decomposer rather than changing the command.
 
-- **Fan out into parallel curds with reviewable PRs** *(recommended when curds are file-disjoint)* — `/cheese-factory .cheese/specs/<slug>.md`. Spawns per-curd worker sub-agents; ends in 1–N reviewable PRs (published via a discovered `/pr-stack` skill when available, plain `gh` otherwise).
-- **Run the full pipeline in fresh-context isolation** *(recommended when curds share files)* — `/ultracook .cheese/specs/<slug>.md`. Autonomous chain with each phase blind to prior phases.
+- **Run the full pipeline (parallel fan-out when disjoint, else linear)** *(recommended)* — `/ultracook .cheese/specs/<slug>.md`. The decomposer picks parallel curd fan-out (per-curd worktrees → 1–N reviewable PRs, published via a discovered `/pr-stack` skill when available, plain `gh` otherwise) or the linear 7-phase chain; every phase runs in fresh-context isolation.
 - **Implement manually, one phase at a time** — `/cook .cheese/specs/<slug>.md`.
 - **Stop** — dispatch none; leave the spec for later.
 
@@ -146,7 +145,7 @@ The spec is large enough that per-phase context contamination becomes a real con
 - **Research more first** — `/briesearch`, gather more external evidence before implementing.
 - **Stop** — dispatch none; leave the spec for later.
 
-`/cook --auto` is omitted from the decomposable and high-blast-radius offer sets: with many parallel curds or a wide footprint, fan-out parallelism (`/cheese-factory`) or fresh-context isolation (`/ultracook`) is the actual motivation for going autonomous, and the in-session chain is the wrong transport. Never pre-select an autonomous option; the user must opt in. `medium` blast radius keeps the standard handoff because the in-session `/cook --auto` chain is still the right tool for that footprint — the fresh-context premium is only worth paying when the spec actually crosses module boundaries broadly enough to flip the verdict to `high`, or when the spec decomposes into 5+ independent curds.
+`/cook --auto` is omitted from the decomposable and high-blast-radius offer sets: with many parallel curds or a wide footprint, `/ultracook` (parallel fan-out or fresh-context linear chain) is the actual motivation for going autonomous, and the in-session chain is the wrong transport. Never pre-select an autonomous option; the user must opt in. `medium` blast radius keeps the standard handoff because the in-session `/cook --auto` chain is still the right tool for that footprint — the fresh-context premium is only worth paying when the spec actually crosses module boundaries broadly enough to flip the verdict to `high`, or when the spec decomposes into 2+ independent curds.
 
 ## Rules
 

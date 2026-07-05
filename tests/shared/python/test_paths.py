@@ -220,18 +220,18 @@ class TestResolveSlug:
             }
         ]
 
-    def test_tier1_cheese_factory_manifest(
+    def test_tier1_ultracook_manifest(
         self, paths: ModuleType, tmp_path: Path
     ) -> None:
-        art = tmp_path / ".cheese" / "cheese-factory" / "widget" / "manifest.yaml"
+        art = tmp_path / ".cheese" / "ultracook" / "widget" / "manifest.yaml"
         art.parent.mkdir(parents=True)
         art.write_text("name: widget", encoding="utf-8")
         result = paths.resolve_slug("widget", repo_root=tmp_path)
         assert result["matches"] == [
             {
                 "abs_path": str(art),
-                "phase": "cheese-factory",
-                "skill": "/cheese-factory",
+                "phase": "ultracook",
+                "skill": "/ultracook",
                 "confidence": 1.0,
             }
         ]

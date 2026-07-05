@@ -28,14 +28,18 @@ SKILL_SUBCOMMANDS = {
         "detect-squash-residue",
         "lockfile-resolve",
     ],
-    "cheese-factory": [
+    "ultracook": [
         "artifact-path",
-        "pr_plan_to_branches",
+        "phase_decision",
+        "mode",
+        "worktree",
+        "milknado",
         "validate_decomposition",
         "validate_manifest",
         "validate_pr_plan",
         "manifest_update",
         "wiring_topo_sort",
+        "pr_plan_to_branches",
     ],
     "affinage": ["pr-status"],
     "mold": ["artifact-path", "curd-count", "gate-graph"],
@@ -57,7 +61,7 @@ SKILL_SUBCOMMANDS = {
 # Every skill that registers the durable-corpus resolver shim. One shared source
 # (shared/scripts/artifact_path.py) backs them all; each must agree with
 # paths.artifact_path / paths.project_corpus_root.
-ARTIFACT_PATH_SKILLS = ("mold", "cheese-factory", "briesearch", "cook")
+ARTIFACT_PATH_SKILLS = ("mold", "ultracook", "briesearch", "cook")
 
 
 @pytest.fixture(scope="module")
@@ -121,11 +125,11 @@ def test_melt_subcommand_executes_with_forwarded_args(bundles: Path, tmp_path: P
     assert "<<<<<<<" not in result.stdout
 
 
-def test_cheese_factory_routing_is_subcommand_specific(bundles: Path, tmp_path: Path) -> None:
+def test_ultracook_routing_is_subcommand_specific(bundles: Path, tmp_path: Path) -> None:
     empty = tmp_path / "empty.json"
     empty.write_text("{}")
-    manifest = _run(bundles / "cheese-factory.pyz", "validate_manifest", str(empty))
-    pr_plan = _run(bundles / "cheese-factory.pyz", "validate_pr_plan", str(empty))
+    manifest = _run(bundles / "ultracook.pyz", "validate_manifest", str(empty))
+    pr_plan = _run(bundles / "ultracook.pyz", "validate_pr_plan", str(empty))
     assert manifest.returncode == 1
     assert pr_plan.returncode == 1
     assert "manifest.slug is required" in manifest.stderr
@@ -139,7 +143,7 @@ def test_bundle_carries_only_its_own_skill(bundles: Path) -> None:
     melt = set(zipfile.ZipFile(bundles / "melt.pyz").namelist())
     assert "conflict_pick.py" in melt
     assert "git_utils.py" in melt  # the one shared module melt imports
-    assert "validate_manifest.py" not in melt  # cheese-factory's script
+    assert "validate_manifest.py" not in melt  # ultracook's script
     assert "pr_status.py" not in melt  # affinage's script
     assert "manifest_io.py" not in melt  # shared module melt does not import
     assert "severity.py" not in melt  # shared module no bundled skill imports
@@ -149,13 +153,13 @@ def test_bundle_carries_only_its_own_skill(bundles: Path) -> None:
     assert not (affinage & {"git_utils.py", "manifest_io.py", "schema.py"})  # no shared needed
 
 
-def test_cheese_factory_bundle_contains_entity_modules(bundles: Path) -> None:
+def test_ultracook_bundle_contains_entity_modules(bundles: Path) -> None:
     """curd.py and wiring.py are local library modules (not registered subcommands).
     The local-sibling-bundling feature in build_pyz must stage them so that
     validate_decomposition and validate_manifest can import them inside the .pyz."""
-    cf = set(zipfile.ZipFile(bundles / "cheese-factory.pyz").namelist())
-    assert "curd.py" in cf, f"curd.py missing from cheese-factory bundle; contents: {sorted(cf)}"
-    assert "wiring.py" in cf, f"wiring.py missing from cheese-factory bundle; contents: {sorted(cf)}"
+    cf = set(zipfile.ZipFile(bundles / "ultracook.pyz").namelist())
+    assert "curd.py" in cf, f"curd.py missing from ultracook bundle; contents: {sorted(cf)}"
+    assert "wiring.py" in cf, f"wiring.py missing from ultracook bundle; contents: {sorted(cf)}"
 
 
 # Pinned env so the resolved corpus path is deterministic and does not depend on
@@ -512,8 +516,8 @@ def test_local_skill_modules_finds_libs_and_excludes_subcommands() -> None:
     shared modules. Unit-locks the discovery the bundle-content test only covers
     end-to-end — a regression that stopped excluding registered names or stopped
     finding the siblings would fail here with a precise diff."""
-    local = build_pyz._local_skill_modules("cheese-factory")
+    local = build_pyz._local_skill_modules("ultracook")
     assert local == {"curd", "wiring"}, local
     assert "validate_decomposition" not in local  # registered subcommand, not a local lib
     assert "validate_manifest" not in local
-    assert "schema" not in local  # shared module (shared/scripts), not src/cheese-factory
+    assert "schema" not in local  # shared module (shared/scripts), not src/fanout

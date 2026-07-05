@@ -679,7 +679,6 @@ STUB
     grep -q "^gh skill install paulnsorensen/easy-cheese age --agent claude-code --scope user --force$" "$STUB_LOG"
     grep -q "^gh skill install paulnsorensen/easy-cheese press --agent claude-code --scope user --force$" "$STUB_LOG"
     grep -q "^gh skill install paulnsorensen/easy-cheese ultracook --agent claude-code --scope user --force$" "$STUB_LOG"
-    grep -q "^gh skill install paulnsorensen/easy-cheese cheese-factory --agent claude-code --scope user --force$" "$STUB_LOG"
     [ "$(grep -c '^gh skill install ' "$STUB_LOG")" -eq "$(count_skills)" ]
 }
 

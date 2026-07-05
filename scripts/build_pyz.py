@@ -47,15 +47,6 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
         "detect-squash-residue": "detect-squash-residue.py",
         "lockfile-resolve": "lockfile-resolve.py",
     },
-    "cheese-factory": {
-        "artifact-path": Shared("artifact_path.py"),
-        "pr_plan_to_branches": "pr_plan_to_branches.py",
-        "validate_decomposition": "validate_decomposition.py",
-        "validate_manifest": "validate_manifest.py",
-        "validate_pr_plan": "validate_pr_plan.py",
-        "manifest_update": "manifest_update.py",
-        "wiring_topo_sort": "wiring_topo_sort.py",
-    },
     "affinage": {"pr-status": "pr-status.py", "post-reply": "post-reply.py"},
     "mold": {
         "artifact-path": Shared("artifact_path.py"),
@@ -75,8 +66,32 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
         "debug-tag-sweep": "debug-tag-sweep.py",
         "repro-rerun": "repro-rerun.py",
     },
-    "ultracook": {"phase_decision": "phase_decision.py"},
+    # /ultracook drives the fan-out engine (formerly /cheese-factory); its
+    # sources live in the mode-neutral src/fanout/ dir (see SRC_DIRS).
+    "ultracook": {
+        "artifact-path": Shared("artifact_path.py"),
+        "phase_decision": "phase_decision.py",
+        "mode": "mode.py",
+        "worktree": "worktree.py",
+        "milknado": "milknado.py",
+        "validate_decomposition": "validate_decomposition.py",
+        "validate_manifest": "validate_manifest.py",
+        "validate_pr_plan": "validate_pr_plan.py",
+        "manifest_update": "manifest_update.py",
+        "wiring_topo_sort": "wiring_topo_sort.py",
+        "pr_plan_to_branches": "pr_plan_to_branches.py",
+    },
 }
+
+# A skill whose scripts live in a src dir named differently from the skill.
+# /ultracook drives the neutral src/fanout/ engine rather than a src/ultracook/.
+SRC_DIRS: dict[str, str] = {"ultracook": "fanout"}
+
+# Cross-skill source modules a bundle needs beyond its own src dir, staged as
+# plain importable modules (not subcommands). mold/curd-count imports the
+# canonical PARALLEL_THRESHOLD from src/fanout/mode.py — one source file,
+# vendored into both the mold and ultracook bundles.
+EXTRA_MODULES: dict[str, list[tuple[str, str]]] = {"mold": [("fanout", "mode.py")]}
 
 # The "common" bundle ships cross-cutting CLI entrypoints sourced from
 # shared/scripts/ (not src/<skill>/). It has no skill dir of its own; instead a
@@ -100,6 +115,11 @@ _CACHE: dict[str, Path] = {}
 
 def _module_name(filename: str) -> str:
     return filename[:-3].replace("-", "_")
+
+
+def _src_dir(skill: str) -> Path:
+    """The src/ subdir a skill's scripts live in (usually the skill name)."""
+    return SRC_ROOT / SRC_DIRS.get(skill, skill)
 
 
 def _files(skill: str) -> dict[str, str | Shared]:
@@ -127,7 +147,7 @@ def _source_path(skill: str, source: str | Shared) -> Path:
     skill lives in src/<skill>/."""
     if isinstance(source, Shared) or skill == COMMON:
         return SHARED_SCRIPTS / _filename(source)
-    return SRC_ROOT / skill / source
+    return _src_dir(skill) / source
 
 
 def _imported_top_names(path: Path) -> set[str]:
@@ -145,7 +165,7 @@ def _local_skill_modules(skill: str) -> set[str]:
     """Non-registered local src/<skill>/*.py modules transitively imported by the skill."""
     if skill == COMMON:
         return set()
-    skill_dir = SRC_ROOT / skill
+    skill_dir = _src_dir(skill)
     registered = {_module_name(_filename(src)) for src in SKILLS[skill].values()}
     frontier: set[str] = set()
     for source in SKILLS[skill].values():
@@ -170,9 +190,11 @@ def needed_shared(skill: str) -> set[str]:
     for source in _files(skill).values():
         frontier |= _imported_top_names(_source_path(skill, source)) & SHARED_MODULES
     if skill != COMMON:
-        skill_dir = SRC_ROOT / skill
+        skill_dir = _src_dir(skill)
         for name in _local_skill_modules(skill):
             frontier |= _imported_top_names(skill_dir / f"{name}.py") & SHARED_MODULES
+    for src_subdir, filename in EXTRA_MODULES.get(skill, []):
+        frontier |= _imported_top_names(SRC_ROOT / src_subdir / filename) & SHARED_MODULES
     resolved: set[str] = set()
     while frontier:
         module = frontier.pop()
@@ -227,9 +249,11 @@ def build_bundle(skill: str, target: Path) -> Path:
         for source in files.values():
             shutil.copy(_source_path(skill, source), stage / f"{_module_name(_filename(source))}.py")
         if skill != COMMON:
-            skill_dir = SRC_ROOT / skill
+            skill_dir = _src_dir(skill)
             for name in sorted(_local_skill_modules(skill)):
                 shutil.copy(skill_dir / f"{name}.py", stage / f"{name}.py")
+        for src_subdir, filename in EXTRA_MODULES.get(skill, []):
+            shutil.copy(SRC_ROOT / src_subdir / filename, stage / filename)
         (stage / "__main__.py").write_text(_dispatcher_source(sub_to_module), encoding="utf-8")
         _write_zipapp(stage, target)
     return target

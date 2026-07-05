@@ -16,7 +16,7 @@ slug on non-research phases).
 
 Shared source: build_pyz.py registers this one file as the ``artifact-path``
 subcommand across the skills that need it (mold, briesearch, cook,
-cheese-factory) and auto-vendors ``paths`` alongside it.
+ultracook) and auto-vendors ``paths`` alongside it.
 """
 
 from __future__ import annotations

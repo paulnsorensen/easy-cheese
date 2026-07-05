@@ -1,20 +1,26 @@
 set dotenv-load := true
 
+# Keep pytest hermetic: only load plugins the suite declares, never whatever
+# third-party pytest plugins happen to be globally installed. Without this a
+# stray global plugin (e.g. pytest-httpx) can crash collection on a missing
+# transitive dep. CI installs a clean env so it is unaffected either way.
+export PYTEST_DISABLE_PLUGIN_AUTOLOAD := "1"
+
 # List all available commands
 @default:
     just --list
 
-# Run all tests (skill validators + melt + shared + cheese-factory suites + bash install tests + cheese-factory bats)
+# Run all tests (skill validators + melt + shared + fan-out suites + bash install tests + fan-out bats)
 test:
     python3 .github/scripts/test_validate_skills.py -v
     python3 .github/scripts/validate_skills.py
     python3 -m pytest tests/python -q
     python3 -m pytest tests/shared/python -q
-    python3 -m pytest tests/cheese-factory/python -q
+    python3 -m pytest tests/fanout/python -q
     python3 -m pytest tests/hard-cheese/python -q
     python3 -m pytest tests/pasteurize/python -q
     bats tests/bash/test_install.bats
-    bats tests/cheese-factory/bash/test_pr_plan_to_branches.bats
+    bats tests/fanout/bash/test_pr_plan_to_branches.bats
 
 # Build self-contained .pyz bundles for shared-consuming skills (CI rebuilds on every push to main)
 bundle:
