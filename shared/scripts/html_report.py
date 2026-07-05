@@ -84,11 +84,20 @@ _URL_SCHEME = re.compile(r"^([a-zA-Z][a-zA-Z0-9+.\-]*):")
 _ALLOWED_SCHEMES = {"http", "https", "mailto"}
 
 
-def render(markdown: str, *, title: str) -> str:
-    """Convert a closed-subset Markdown report into a complete HTML document."""
-    blocks, has_mermaid = _parse(markdown.split("\n"))
-    body = "\n".join(blocks)
-    scripts = _MERMAID_SCRIPTS if has_mermaid else ""
+def render_document(
+    body_html: str, *, title: str, extra_css: str = "", mermaid: bool = False
+) -> str:
+    """Wrap caller-supplied body HTML in the shared self-contained document shell.
+
+    The shell owns `<head>`, the base theme CSS, and the offline/deterministic
+    contract; the caller owns everything inside `<body>` and is responsible for
+    escaping its own content. `extra_css` is appended to the base theme so a
+    skill can style its own body markup; `mermaid` opts into the CDN mermaid
+    bootstrap. This is the seam a skill uses to render its own template (e.g.
+    /age's severity-grouped findings) without hand-rolling the document chrome.
+    """
+    css = _CSS if not extra_css else f"{_CSS}\n{extra_css}"
+    scripts = _MERMAID_SCRIPTS if mermaid else ""
     return (
         "<!DOCTYPE html>\n"
         '<html lang="en">\n'
@@ -96,14 +105,21 @@ def render(markdown: str, *, title: str) -> str:
         '<meta charset="utf-8">\n'
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
         f"<title>{html.escape(title)}</title>\n"
-        f"<style>\n{_CSS}\n</style>\n"
+        f"<style>\n{css}\n</style>\n"
         "</head>\n"
         "<body>\n"
-        f"{body}\n"
+        f"{body_html}\n"
         f"{scripts}"
         "</body>\n"
         "</html>\n"
     )
+
+
+def render(markdown: str, *, title: str) -> str:
+    """Convert a closed-subset Markdown report into a complete HTML document."""
+    blocks, has_mermaid = _parse(markdown.split("\n"))
+    body = "\n".join(blocks)
+    return render_document(body, title=title, mermaid=has_mermaid)
 
 
 def _parse(lines: list[str]) -> tuple[list[str], bool]:
