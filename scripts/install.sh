@@ -97,6 +97,9 @@ Environment:
   EC_UVX               Override uvx (used to launch milknado MCP).
   EC_HALLOUMINATE      Override hallouminate binary (used to launch hallouminate MCP).
   EC_CURL              Override curl (used to fetch the hallouminate prebuilt installer).
+  EC_HALLOUMINATE_VERSION
+                       Pin the hallouminate binary release tag (e.g. v0.2.1)
+                       instead of resolving the newest v* tag from the API.
   EC_SKILL_REF         Pin skill installs to a git tag or commit SHA
                        (passes --pin to 'gh skill install'). Used by CI
                        to test against the commit under review.
@@ -203,6 +206,20 @@ ec_install_tilth() {
     return 1
 }
 
+# Newest published binary release tag (v*, excluding the skills-* bundle
+# releases that share this repo). GitHub's /releases/latest points at whichever
+# release is newest by semver — including a skills bundle that carries no
+# installer asset — so resolve the binary tag explicitly from the releases API.
+# Emits nothing on failure; the caller falls back to a pinned known-good tag.
+ec_resolve_hallouminate_tag() {
+    local curl="${EC_CURL:-curl}"
+    "$curl" --proto '=https' --tlsv1.2 -LsS \
+        https://api.github.com/repos/paulnsorensen/hallouminate/releases 2>/dev/null \
+        | grep -oE '"tag_name"[[:space:]]*:[[:space:]]*"v[0-9][^"]*"' \
+        | grep -oE 'v[0-9][^"]*' \
+        | grep -m1 '.'
+}
+
 # hallouminate has no Homebrew formula. Install the prebuilt binary via the
 # upstream release installer (no Rust toolchain needed on supported targets)
 # or fall back to 'cargo install hallouminate --locked' when curl is
@@ -211,6 +228,7 @@ ec_install_hallouminate() {
     local hallouminate="${EC_HALLOUMINATE:-hallouminate}"
     local curl="${EC_CURL:-curl}"
     local cargo="${EC_CARGO:-cargo}"
+    local pinned="v0.2.1"
 
     if ec_cmd_exists "$hallouminate"; then
         ec_log "hallouminate: already installed (hallouminate on PATH)"
@@ -218,13 +236,21 @@ ec_install_hallouminate() {
     fi
 
     if ec_cmd_exists "$curl"; then
+        local version="${EC_HALLOUMINATE_VERSION:-}"
+        if [[ -z "$version" ]]; then
+            version="$(ec_resolve_hallouminate_tag || true)"
+        fi
+        if [[ -z "$version" ]]; then
+            version="$pinned"
+            ec_log "hallouminate: could not resolve latest binary tag; using pinned $pinned"
+        fi
+        local url="https://github.com/paulnsorensen/hallouminate/releases/download/${version}/hallouminate-installer.sh"
         if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
-            ec_log "hallouminate: would install the prebuilt binary via the release installer"
+            ec_log "hallouminate: would install the prebuilt binary via the release installer ($url)"
             return 0
         fi
-        ec_log "hallouminate: installing prebuilt binary via the release installer"
-        "$curl" --proto '=https' --tlsv1.2 -LsSf \
-            https://github.com/paulnsorensen/hallouminate/releases/latest/download/hallouminate-installer.sh | sh
+        ec_log "hallouminate: installing prebuilt binary via the release installer ($url)"
+        "$curl" --proto '=https' --tlsv1.2 -LsSf "$url" | sh
         return $?
     fi
 

@@ -366,6 +366,39 @@ STUB
     [[ "$output" == *"rustup.rs"* ]]
 }
 
+@test "ec_install_hallouminate curl branch resolves the newest v* tag, skipping skills-* releases" {
+    # curl stub: serves a releases-API payload (newest-first, with the
+    # installer-less skills bundle on top, exactly as /latest/ sees it) for
+    # the API call and nothing for the installer download. Records argv.
+    cat > "$STUB_BIN/curl" <<'STUB'
+#!/usr/bin/env bash
+echo "curl $*" >> "$STUB_LOG"
+for arg in "$@"; do
+    case "$arg" in
+        *api.github.com*)
+            cat <<'JSON'
+[
+  { "tag_name": "skills-v0.2.2" },
+  { "tag_name": "v0.2.1" },
+  { "tag_name": "v0.2.0" }
+]
+JSON
+            ;;
+    esac
+done
+STUB
+    chmod +x "$STUB_BIN/curl"
+    ln -sf /bin/bash "$STUB_BIN/sh"
+    EC_HALLOUMINATE="$STUB_BIN/no-such-hallouminate" EC_CURL="$STUB_BIN/curl" \
+        run ec_install_hallouminate
+    [ "$status" -eq 0 ]
+    # Resolved the newest binary tag, NOT the skills bundle /latest/ resolves to,
+    # and NOT the broken /releases/latest/download/ path.
+    grep -q "releases/download/v0.2.1/hallouminate-installer.sh" "$STUB_LOG"
+    ! grep -q "releases/latest/download" "$STUB_LOG"
+    ! grep -q "skills-v0.2.2/hallouminate-installer.sh" "$STUB_LOG"
+    [[ "$output" == *"releases/download/v0.2.1/hallouminate-installer.sh"* ]]
+}
 # -- default + opt-in MCP wiring ----------------------------------------------
 
 @test "default MCP selection registers hallouminate" {
@@ -856,6 +889,7 @@ STUB
     chmod +x "$STUB_BIN/uname"
     make_stub brew
     make_stub cargo
+    make_stub curl
     make_stub gh
     make_stub claude
     ln -sf /bin/bash "$STUB_BIN/bash"
@@ -876,9 +910,12 @@ STUB
     [[ "$output" == *"gh skill install paulnsorensen/easy-cheese age --agent claude-code --scope user --force"* ]]
     [[ "$output" == *"gh skill install paulnsorensen/easy-cheese press --agent claude-code --scope user --force"* ]]
     [[ "$output" != *"--all"* ]]
-    # Default MCP is hallouminate; its binary is installed on demand (cargo
-    # fallback here, curl absent) then registered.
-    [[ "$output" == *"cargo install hallouminate --locked"* ]]
+    # Default MCP is hallouminate; curl is present (the fresh-Mac default), so
+    # the prebuilt-installer branch runs — resolving the newest v* tag, or the
+    # pinned fallback when the API is unreachable (as here) — then registers.
+    [[ "$output" == *"prebuilt binary via the release installer"* ]]
+    [[ "$output" == *"releases/download/v0.2.1/hallouminate-installer.sh"* ]]
+    [[ "$output" != *"cargo install hallouminate"* ]]
     [[ "$output" == *"mcp add hallouminate"* ]]
     [[ "$output" != *"@upstash/context7-mcp@latest"* ]]
     [[ "$output" == *"Done."* ]]
