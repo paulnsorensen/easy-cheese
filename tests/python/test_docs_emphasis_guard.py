@@ -178,12 +178,19 @@ def test_harness_portability_reference_is_linked_from_workflow_docs():
             "shared/scripts/read_handoff_slug.py",
             "shared/scripts/write_handoff_artifact.py",
             "fallback",
+            "shared/scripts/html_report_cli.py",
         ),
         REPO_ROOT / "skills/ultracook/SKILL.md": (
             "shared/scripts/artifact_path.py",
             "shared/scripts/read_handoff_slug.py",
             "python3 skills/ultracook/scripts/ultracook.pyz phase_decision",
             "fallback",
+            "python3 skills/ultracook/scripts/ultracook.pyz validate_decomposition",
+            "python3 skills/ultracook/scripts/ultracook.pyz mode",
+            "python3 skills/ultracook/scripts/ultracook.pyz milknado",
+            "python3 skills/ultracook/scripts/ultracook.pyz worktree create",
+            "python3 skills/ultracook/scripts/ultracook.pyz worktree harvest",
+            "python3 skills/ultracook/scripts/ultracook.pyz worktree teardown",
         ),
         REPO_ROOT / "skills/affinage/SKILL.md": (
             "python3 skills/affinage/scripts/affinage.pyz pr-status",
@@ -223,7 +230,10 @@ def test_harness_portability_reference_covers_the_portability_contract():
     assert "Helper resolution" in body
     assert "repo-local" in body and "bundled" in body and "environment variable" in body
     assert "sub-agent dispatch" in body
-    assert "Agent(...)" in body and "task(...)" in body
+    assert "Anthropic Claude Code: `Agent(...)`" in body
+    assert "Codex: `multi_agent_v1.spawn_agent`" in body
+    assert "OMP: `task(...)`" in body
+    assert "OMP / Codex" not in body and "Codex-style" not in body
     assert "GitHub operations" in body
     assert "host GitHub primitive when the harness exposes one" in body
     assert "`gh` CLI as the fallback transport" in body

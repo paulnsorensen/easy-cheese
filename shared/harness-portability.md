@@ -29,7 +29,8 @@ Name the semantic contract first:
 Then show the host-specific syntax as an example:
 
 - Anthropic Claude Code: `Agent(...)`
-- OMP / Codex-style harnesses: `task(...)`
+- Codex: `multi_agent_v1.spawn_agent` or the host's exposed sub-agent primitive
+- OMP: `task(...)`
 
 ## GitHub operations
 

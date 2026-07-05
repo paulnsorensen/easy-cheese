@@ -60,24 +60,26 @@ Rules:
 - Fleet agents inherit the same model and tool scope as the parent session, satisfying invariant 2.
 - Each agent must write the handoff slug to `.cheese/ultracook/<slug>/curds/<id>.md` per the per-curd prompt template.
 
-## OpenAI Codex — subagents
+## OpenAI Codex — `multi_agent_v1.spawn_agent`
 
-[Codex subagents](https://developers.openai.com/codex/subagents) are spawned via the `codex subagent` command or the `subagent` tool.
+In Codex API sessions, use the exposed multi-agent tool rather than OMP's `task(...)` shorthand:
 
-```sh
-codex subagent \
-  --type general-purpose \
-  --prompt-file .cheese/ultracook/<slug>/curd-<id>.txt \
-  --inherit-tools \
-  --wait
+```text
+multi_agent_v1.spawn_agent(
+  agent_type: "generalist",  # or a typed full-peer equivalent — gate on capability, not the label
+  message: "Run /<phase> <slug> --auto for THIS PHASE ONLY. Write
+           .cheese/<phase>/<slug>.md with the handoff schema and stop.
+           Do not chain forward to the next phase even though your
+           auto-mode contract documents that. Run in the foreground..."
+)
 ```
 
 Rules:
 
-- `--type general-purpose` (or a typed full-peer equivalent — gate on capability per invariant 2, issue #197). Reject only scoped read-only worker types that lack a phase's tools.
-- `--inherit-tools` — full-peer inheritance per invariant 2.
-- `--wait` — synchronous return so the orchestrator can read the handoff slug.
-- The prompt file must include the no-chain-forward directive and the foreground-only directive (run in the foreground; do not background yourself or defer work; write a partial slug with `status: halt: <reason>` if the context window is exhausted, do not silently timeout).
+- Omit model overrides unless the user explicitly requests one; the spawn should inherit the parent model where the host supports it.
+- Pick an `agent_type` that satisfies invariant 2. Reject scoped read-only workers that lack a phase's tools.
+- Wait for the returned agent before reading the handoff slug; fire-and-forget dispatch fails invariant 4.
+- The prompt must include the no-chain-forward directive and the foreground-only directive (run in the foreground; do not background yourself or defer work; write a partial slug with `status: halt: <reason>` if the context window is exhausted, do not silently timeout).
 
 ## Other / future harnesses
 

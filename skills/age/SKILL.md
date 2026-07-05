@@ -32,13 +32,14 @@ When called with a `<slug>`, resolve `.cheese/press/<slug>.md` (if present) for 
 `--html` emits a static HTML copy **in addition to** the standard `.cheese/age/<slug>.md` markdown report. Write the markdown report first, then call the shared renderer:
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz render_html \
+python3 shared/scripts/html_report_cli.py \\
   --in .cheese/age/<slug>.md \
   --title "Age Report — <slug>" \
   --out-name age-<slug>
 ```
 
 Print the returned temp-file path beside the markdown path. The renderer is stdlib-only, deterministic, and self-contained; do not inline or hand-roll per-skill HTML/CSS.
+If the host only ships the bundle, `python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz render_html ...` is the fallback.
 
 Portability reference: [`../../shared/harness-portability.md`](../../shared/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
 The handoff blocks below are the portable contract; slash commands are host renderings, not the control model.
@@ -213,11 +214,13 @@ Age report: .cheese/age/<slug>.md
 When `--html` is passed, render the already-written markdown report with the shared helper and print both paths:
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz render_html \
+python3 shared/scripts/html_report_cli.py \\
   --in .cheese/age/<slug>.md \
   --title "Age Report — <slug>" \
   --out-name age-<slug>
 ```
+
+If the host only ships the bundle, `python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz render_html ...` is the fallback.
 
 ```
 Age report:  .cheese/age/<slug>.md
