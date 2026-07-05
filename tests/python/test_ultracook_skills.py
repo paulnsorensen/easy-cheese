@@ -1164,3 +1164,48 @@ class TestUltracookOutputModeInvariance:
         assert "mode-invariant" in body_lower or "mode invariance" in body_lower, (
             "ultracook must state the output is mode-invariant across linear/parallel"
         )
+
+
+class TestUltracookResume:
+    """--resume brings ultracook up to spec with the retired cheese-factory:
+    the Inputs list advertises it, the Topology advances the manifest at every
+    phase boundary, and a dedicated section drives the resume flow."""
+
+    def test_inputs_list_resume_flag(self) -> None:
+        body = _skill("ultracook")
+        assert "`--resume <slug>`" in body, (
+            "Inputs must advertise the --resume <slug> flag"
+        )
+
+    def test_topology_advances_manifest_at_phase_boundaries(self) -> None:
+        body = _skill("ultracook")
+        # Every schema phase past the decomposer scaffold must be emitted by a
+        # manifest_update set-phase call threaded into the topology prose.
+        for phase in (
+            "seed_complete",
+            "curds_complete",
+            "merge_complete",
+            "wiring_complete",
+            "final_merge_complete",
+            "post_review_complete",
+            "pr_publish_complete",
+        ):
+            assert f"set-phase --manifest <path> --phase {phase}" in body or (
+                f"--phase {phase}" in body and "manifest_update set-phase" in body
+            ), f"topology must advance the manifest to {phase}"
+        assert "manifest_update set-curd-status" in body, (
+            "per-curd status must be recorded via set-curd-status"
+        )
+        assert "manifest_update set-wiring-status" in body, (
+            "per-wiring status must be recorded via set-wiring-status"
+        )
+
+    def test_resume_section_present(self) -> None:
+        body = _skill("ultracook")
+        assert "## --resume <slug>" in body, "a dedicated --resume section must exist"
+        assert "git cat-file -e" in body, (
+            "resume must verify recorded commit SHAs still exist (rebase guard)"
+        )
+        assert "phase_summary" in body and "carry_forward" in body, (
+            "resume must read phase_summary/carry_forward for cross-seam continuity"
+        )
