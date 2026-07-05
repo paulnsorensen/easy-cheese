@@ -29,17 +29,16 @@ When called with a `<slug>`, resolve `.cheese/press/<slug>.md` (if present) for 
 
 `--hard` is the propagated metacognitive-gate flag from `/cook --hard` (or `/cheese --hard`). Age does not fire the gate; it only passes `--hard` forward to `/cure` at the handoff so the gate can fire at the share-for-review boundary. See `skills/hard-cheese/SKILL.md`.
 
-`--html` emits a static HTML copy **in addition to** the standard `.cheese/age/<slug>.md` markdown report. Write the markdown report first, then call the shared renderer:
+`--html` emits a static HTML copy **in addition to** the standard `.cheese/age/<slug>.md` markdown report. Write the markdown report first, then render it:
 
 ```bash
-python3 shared/scripts/html_report_cli.py \\
-  --in .cheese/age/<slug>.md \
-  --title "Age Report — <slug>" \
-  --out-name age-<slug>
+python3 src/age/age-html-report.py \
+  --report .cheese/age/<slug>.md \
+  --slug <slug>
 ```
 
-Print the returned temp-file path beside the markdown path. The renderer is stdlib-only, deterministic, and self-contained; do not inline or hand-roll per-skill HTML/CSS.
-If the host only ships the bundle, `python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz render_html ...` is the fallback.
+Print the returned temp-file path beside the markdown path. `html-report` groups the findings by severity into age's own badge template and wraps them in the shared document shell (`shared/scripts/html_report.render_document`); the output is stdlib-only, offline, and deterministic — no CDN, no JavaScript. Do not inline or hand-roll the document chrome. Pass `--out-dir <dir>` to write somewhere other than the OS temp dir.
+If the host only ships the bundle, `python3 ${CLAUDE_SKILL_DIR}/scripts/age.pyz html-report --report .cheese/age/<slug>.md --slug <slug>` is the fallback.
 
 Portability reference: [`../../shared/harness-portability.md`](../../shared/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
 The handoff blocks below are the portable contract; slash commands are host renderings, not the control model.
@@ -211,20 +210,19 @@ Then print:
 Age report: .cheese/age/<slug>.md
 ```
 
-When `--html` is passed, render the already-written markdown report with the shared helper and print both paths:
+When `--html` is passed, render the already-written markdown report and print both paths:
 
 ```bash
-python3 shared/scripts/html_report_cli.py \\
-  --in .cheese/age/<slug>.md \
-  --title "Age Report — <slug>" \
-  --out-name age-<slug>
+python3 src/age/age-html-report.py \
+  --report .cheese/age/<slug>.md \
+  --slug <slug>
 ```
 
-If the host only ships the bundle, `python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz render_html ...` is the fallback.
+If the host only ships the bundle, `python3 ${CLAUDE_SKILL_DIR}/scripts/age.pyz html-report --report .cheese/age/<slug>.md --slug <slug>` is the fallback.
 
 ```
 Age report:  .cheese/age/<slug>.md
-HTML report: <path printed by render_html>
+HTML report: <path printed by html-report>
 ```
 
 ## Handoff

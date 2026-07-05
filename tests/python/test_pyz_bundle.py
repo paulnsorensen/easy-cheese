@@ -45,6 +45,7 @@ SKILL_SUBCOMMANDS = {
     "mold": ["artifact-path", "curd-count", "gate-graph", "render_html"],
     "briesearch": ["artifact-path", "ground-check"],
     "cook": ["artifact-path"],
+    "age": ["html-report"],
     "hard-cheese": ["append-attempt", "freshness-check"],
     "pasteurize": ["debug-tag-sweep", "repro-rerun"],
     "common": [
@@ -522,3 +523,50 @@ def test_local_skill_modules_finds_libs_and_excludes_subcommands() -> None:
     assert "validate_decomposition" not in local  # registered subcommand, not a local lib
     assert "validate_manifest" not in local
     assert "schema" not in local  # shared module (shared/scripts), not src/fanout
+
+def test_age_bundle_exposes_html_report_help(bundles: Path) -> None:
+    """age.pyz should expose the new html-report subcommand and its CLI surface."""
+    age_pyz = bundles / "age.pyz"
+    assert age_pyz.exists(), f"age bundle missing: {age_pyz}"
+
+    result = _run(age_pyz, "html-report", "--help")
+    assert result.returncode == 0, result.stderr
+    help_text = result.stdout + result.stderr
+    assert "--report" in help_text
+    assert "--slug" in help_text
+    assert "--out-dir" in help_text
+
+
+def test_age_bundle_html_report_runs_from_inside_bundle(bundles: Path, tmp_path: Path) -> None:
+    """Smoke-run html-report end-to-end so a module-name collision (the age
+    entrypoint shadowing the shared html_report renderer) can't hide behind a
+    --help-only check that never reaches render_document."""
+    age_pyz = bundles / "age.pyz"
+    assert age_pyz.exists(), f"age bundle missing: {age_pyz}"
+
+    report = tmp_path / "rep.md"
+    report.write_text(
+        "# Age report — demo\n\n## Blocker\n"
+        "- **[security:blocker]** `a.py:1` — token parsed without validation.\n\n"
+        "## Confidence\ncertain\n",
+        encoding="utf-8",
+    )
+    result = _run(
+        age_pyz, "html-report", "--report", str(report), "--slug", "demo", "--out-dir", str(tmp_path)
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    out_html = tmp_path / "age-demo.html"
+    assert out_html.is_file(), f"expected {out_html}; stdout={result.stdout!r}"
+    html = out_html.read_text(encoding="utf-8")
+    assert "token parsed without validation" in html
+    assert "Blocker" in html
+
+
+def test_age_bundle_carries_html_report_and_findings_imports(bundles: Path) -> None:
+    """The bundle must stage the report generator plus its shared parser helper."""
+    age_pyz = bundles / "age.pyz"
+    assert age_pyz.exists(), f"age bundle missing: {age_pyz}"
+
+    content = set(zipfile.ZipFile(age_pyz).namelist())
+    assert "html_report.py" in content
+    assert "findings.py" in content
