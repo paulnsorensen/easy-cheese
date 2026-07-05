@@ -40,6 +40,9 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz render_html \
 
 Print the returned temp-file path beside the markdown path. The renderer is stdlib-only, deterministic, and self-contained; do not inline or hand-roll per-skill HTML/CSS.
 
+Portability reference: [`../../shared/harness-portability.md`](../../shared/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
+The handoff blocks below are the portable contract; slash commands are host renderings, not the control model.
+
 ## Review dimensions
 
 Dimensions answer **what kind of problem**. Severity (`blocker / high / medium / low`) is per-finding, computed from base + location + compounding modifiers (see `references/dimensions.md` § Severity computation).
@@ -65,9 +68,10 @@ Per-dimension base-severity tables, location-sensitivity, fix-cost-now / fix-cos
 2. Gather evidence: diff, touched files, tests, callers/imports. If a press report exists for this slug, read it via:
 
    ```
-   python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz read_handoff_slug --phase press --slug <slug>
+   python3 shared/scripts/read_handoff_slug.py --phase press --slug <slug>
    ```
 
+   If the host only ships the bundle, `python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz read_handoff_slug --phase press --slug <slug>` is the fallback.
    Include a `## Press findings` sub-section in the age report summarising unresolved items — `/cure` reads only `.cheese/age/<slug>.md` and cannot access the press report directly.
 
    Independently of any press report, if `.cheese/glossary/<slug>.md` exists, read it now so naming drift against the resolved glossary can be flagged as a deslop finding.
@@ -78,12 +82,16 @@ Per-dimension base-severity tables, location-sensitivity, fix-cost-now / fix-cos
    ```
    report_file=$(mktemp)
    # write the report markdown (everything below) to "$report_file", then:
-   python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz write_handoff_artifact \
+   python3 shared/scripts/write_handoff_artifact.py \
      --phase age --slug <slug> --status ok --next cure \
      --artifact "" --orientation "<one-line orientation>" \
      --body-file "$report_file"
    ```
 
+   If the host only ships the bundle, `python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz write_handoff_artifact \
+     --phase age --slug <slug> --status ok --next cure \
+     --artifact "" --orientation "<one-line orientation>" \
+     --body-file "$report_file"` is the fallback.
    Then print the path.
 6. Hand off (see `## Handoff` below).
 

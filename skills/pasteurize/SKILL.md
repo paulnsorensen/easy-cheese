@@ -10,6 +10,9 @@ A discipline for hard bugs. Skip phases only when explicitly justified.
 
 When exploring the codebase, use `/cheez-search` to orient and check `.cheese/specs/` for any spec or design notes that touch the failing seam.
 
+Portability reference: [`../../shared/harness-portability.md`](../../shared/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
+The handoff blocks below are the portable contract; slash commands are host renderings, not the control model.
+
 ## Phase 1 — Feedback loop
 
 **This is the skill.** Everything else is mechanical. If you have a fast, deterministic, agent-runnable pass/fail signal for the bug, you will find the cause — bisection, hypothesis-testing, and instrumentation all just consume that signal. If you don't have one, no amount of staring at code will save you.
@@ -48,7 +51,7 @@ Do not proceed to Phase 2 until the loop passes all four checks:
 Run the repro loop N times and verify the failure is consistent:
 
 ```
-python3 ${CLAUDE_SKILL_DIR}/scripts/pasteurize.pyz repro-rerun --cmd "<repro-command>" --runs 5
+python3 skills/pasteurize/scripts/pasteurize.pyz repro-rerun --cmd "<repro-command>" --runs 5
 ```
 
 Confirm the returned `reproduced: true` and check `failures` matches the expected failure mode. If `reproduced: false` at N=5, the bug is flaky — increase `--runs` before proceeding.
@@ -112,7 +115,7 @@ Before writing the handoff slug, confirm:
 - [ ] All `[DEBUG-...]` instrumentation removed:
 
   ```
-  python3 ${CLAUDE_SKILL_DIR}/scripts/pasteurize.pyz debug-tag-sweep --root .
+  python3 skills/pasteurize/scripts/pasteurize.pyz debug-tag-sweep --root .
   ```
 
   Exit 0 = clean. Exit 1 = tags found (listed in output). Resolve before continuing.
@@ -204,5 +207,5 @@ In every early-stop case, write the halt slug and surface the report. Do not sil
 
 ## References
 
-- `${CLAUDE_SKILL_DIR}/scripts/pasteurize.pyz repro-rerun` — run the repro command N times and emit `{exit_code, reproduced, runs, failures}` (Phase 2).
-- `${CLAUDE_SKILL_DIR}/scripts/pasteurize.pyz debug-tag-sweep` — scan the tree for instrumentation tag prefixes and exit 1 if any survive (Phase 6 cleanup gate).
+- `skills/pasteurize/scripts/pasteurize.pyz repro-rerun` — run the repro command N times and emit `{exit_code, reproduced, runs, failures}` (Phase 2).
+- `skills/pasteurize/scripts/pasteurize.pyz debug-tag-sweep` — scan the tree for instrumentation tag prefixes and exit 1 if any survive (Phase 6 cleanup gate).
