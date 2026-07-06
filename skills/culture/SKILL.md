@@ -26,7 +26,7 @@ Both modes share this reasoning loop; the per-step difference is internal-return
 
 1. Restate the question or tension in one sentence. If the question rests on a false premise or a loaded assumption, name it.
 2. Identify assumptions, constraints, and decision criteria.
-3. Explore trade-offs and likely blast radius. When the trade-off hinges on "what does this touch", run a read-only shape check on the candidate seam — a `cheez-search` callers query (`tilth_search kind: "callers"`) plus `tilth_deps` — and label each option `[low | medium | high blast radius]`. Procedure mirrors `../mold/references/shape-check.md`; culture stops at the verdict and never drafts signatures. Steelman the rejected option before settling on a recommendation.
+3. Explore trade-offs and likely blast radius. When the trade-off hinges on "what does this touch", run a read-only shape check on the candidate seam — a `cheez-search` callers query plus dependency/blast-radius context from the selected semantic backend — and label each option `[low | medium | high blast radius]`. Procedure mirrors `../mold/references/shape-check.md`; culture stops at the verdict and never drafts signatures. Steelman the rejected option before settling on a recommendation.
 4. Gather evidence to the depth the question needs. In internal mode keep it light — a quick shape check, no deep research — so the calling skill stays fast. In user-facing mode investigate as deeply as useful: dispatch the read-only `explorer` agent for code grounding and take back its digest, rather than dumping raw reads into the dialogue (where the `explorer` agent isn't available, e.g. a harness that installs only easy-cheese, ground directly via `/cheez-search` / `/cheez-read`).
 5. Decide the next move. In internal mode, return a single recommendation and stop. In user-facing mode you need not force convergence: render a compact summary and confidence-tagged open questions (`certain | speculating | don't know`), then either recommend a downstream skill or defer and carry the thread forward. End the session by writing the wheypoint (`## Handoff slug`), whose `next:` records where the modeling landed.
 
@@ -34,7 +34,7 @@ Asking the user is the point: every consequential fork is theirs to decide, surf
 
 ## Preferred tools and fallbacks
 
-Code search and reading go through the `cheez-*` skills (`/cheez-search`, `/cheez-read`) — see those skills for tool selection rules. Blast-radius reads specifically use `cheez-search` callers (`kind: "callers"`) plus `tilth_deps` (read-only shape check).
+Code search and reading go through the `cheez-*` skills (`/cheez-search`, `/cheez-read`) — see those skills for tool selection rules. Blast-radius reads use `cheez-search` callers (`kind: "callers"`) plus a read-only dependency/shape check when the backend offers one.
 
 Beyond `cheez-*` there are culture-specific tools:
 

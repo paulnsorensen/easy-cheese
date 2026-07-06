@@ -47,9 +47,9 @@ This is a skills-only collection following the [Agent Skills spec](https://agent
 
 | Skill | Purpose |
 |---|---|
-| `/cheez-search` | AST-aware search via tilth MCP — replaces grep / rg / ripgrep |
-| `/cheez-read` | Smart-outlining file reader via tilth MCP — replaces cat / head / tail |
-| `/cheez-write` | Batched edit writer via tilth MCP — replaces inline Edit / Write |
+| `/cheez-search` | AST/LSP-aware source search via tilth MCP or an equivalent semantic backend — replaces blind grep / rg / ripgrep |
+| `/cheez-read` | Fresh bounded file/directory reader via tilth MCP or equivalent native snapshot/list backend — replaces blind cat / head / tail |
+| `/cheez-write` | Stale-safe anchored edit writer via tilth MCP, LSP workspace edits, AST rewrites, or equivalent native snapshot edits — replaces blind inline Edit / Write |
 
 See `README.md` for the full workflow and the suggested skill ordering.
 

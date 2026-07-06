@@ -1,6 +1,6 @@
 # Optional plugins — detect-and-degrade contract
 
-Two optional MCP servers extend the skill stack beyond the default tilth + Context7 baseline; they share one contract: probe at skill entry, use when present, degrade to a documented fallback when absent. **Never block on absence.**
+Optional MCP servers can extend the skill stack beyond host-native backends; they share one contract: probe at skill entry, use when present, degrade to a documented fallback when absent. **Never block on absence.**
 
 This document is the single source of truth for the contract. Every skill that references an optional plugin points here rather than duplicating the wording.
 

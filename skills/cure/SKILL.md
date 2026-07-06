@@ -56,8 +56,8 @@ Beyond `cheez-*` there are cure-specific tools:
 | CI and PR context | `gh` | local test output or user-provided logs |
 | Diffs | `delta` | plain `git diff` |
 | Conflict resolution | mergiraf | manual resolution with targeted tests |
-| Code navigation | `/cheez-search` `kind:symbol` then `kind:callers` | `tilth_search` direct |
-| Read before edit | `/cheez-read` ranged/outline (`paths: ["f#n-m"]`, `mode:stripped`) | DO NOT `cat`/`sed -n`/host Read on code paths |
+| Code navigation | `/cheez-search` `kind:symbol` then `kind:callers` | LSP, native AST search, or another semantic backend that answers the same question |
+| Read before edit | `/cheez-read` ranged/outline (`paths: ["f#n-m"]`, `mode:stripped`) | Native bounded read with snapshot/line anchors, or LSP symbol read when it supplies a stale-safe edit path |
 
 If a preferred tool is missing, continue with the fallback. If a missing tool prevents safe application, stop and explain the blocker.
 
