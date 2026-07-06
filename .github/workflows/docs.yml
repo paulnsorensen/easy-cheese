@@ -64,6 +64,9 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install Python docs dependencies
+        run: python -m pip install PyYAML
+
       - name: Set up pnpm
         uses: pnpm/action-setup@7088e561eb65bb68695d245aa206f005ef30921d # v4.1.0
         with:
