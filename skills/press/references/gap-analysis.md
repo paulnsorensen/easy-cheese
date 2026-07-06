@@ -16,7 +16,7 @@ For each function or module touched by the cooked diff:
 
 1. Find existing tests via `cheez-search`:
    ```
-   tilth_search(query: "<changed-symbol>", kind: "callers", scope: "**/*.test.*")
+   tilth_search(queries: [{query: "<changed-symbol>", kind: "callers"}], scope: "**/*.test.*")
    ```
 2. Read the test bodies to verify they actually exercise the new behaviour, not just the symbol's existence.
 3. List any spec bullet without a corresponding test.
