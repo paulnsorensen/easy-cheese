@@ -99,7 +99,7 @@ These questions are **out of scope** -- don't enter cheez-search for them; the t
 
 ### Route out before entering (type-grounded)
 
-Name-shaped queries stay in tilth. For type-grounded questions, route out before entering cheez-search -- see [`references/routing.md`](references/routing.md) for LSP and Serena routing tables.
+Name-shaped queries stay in the semantic search backend chosen for this run (tilth, native AST search, or an equivalent indexed source-search path). For type-grounded questions, route out before entering cheez-search -- see [`references/routing.md`](references/routing.md) for LSP and Serena routing tables.
 
 ---
 
@@ -107,18 +107,18 @@ Name-shaped queries stay in tilth. For type-grounded questions, route out before
 
 For code navigation (where is X / what calls Y / blast radius): start with `kind:symbol` to find the definition, then `kind:callers` for call sites. Fall to `content`/`regex` only when you don't have a symbol name.
 
-| Goal | Tool | Example |
-|------|------|---------|
-| Find where a symbol is defined / used | `tilth_search` (symbol kind) | `tilth_search(queries: [{query: "handleAuth", kind: "symbol"}], scope: "src/", root: "/checkout/root")` |
-| Find every call site of a function | `tilth_search` (callers kind) | `tilth_search(queries: [{query: "validateToken", kind: "callers"}])` |
-| Find literal strings, TODOs, error messages | `tilth_search` (content kind) | `tilth_search(queries: [{query: "error message", kind: "content"}])` |
-| Find lines matching a regex | `tilth_search` (regex kind) | `tilth_search(queries: [{query: "rate.?limit", kind: "regex"}])` |
+| Goal | Example backend | Example |
+|------|-----------------|---------|
+| Find where a symbol is defined / used | `tilth_search` symbol kind, native AST symbol search, or LSP definition when type-grounded | `tilth_search(queries: [{query: "handleAuth", kind: "symbol"}], scope: "src/", root: "/checkout/root")` |
+| Find every call site of a function | `tilth_search` callers kind, native AST caller search, or LSP references when type-grounded | `tilth_search(queries: [{query: "validateToken", kind: "callers"}])` |
+| Find literal strings, TODOs, error messages | content search in the semantic backend | `tilth_search(queries: [{query: "error message", kind: "content"}])` |
+| Find lines matching a regex | bounded regex search in the semantic backend | `tilth_search(queries: [{query: "rate.?limit", kind: "regex"}])` |
 | Match an AST shape (template with metavars) | `sg` (ast-grep, via Bash) | `sg --lang typescript -p 'JSON.parse(JSON.stringify($X))' --json src/` |
-| Module import / blast-radius graph | `tilth_deps` | `tilth_deps(path: "src/auth.ts")` |
+| Module import / blast-radius graph | `tilth_deps`, LSP references/import graph, or equivalent dependency context | `tilth_deps(path: "src/auth.ts")` |
 
-**Rule of thumb:** stay in tilth for anything name-shaped or text-shaped.
+**Rule of thumb:** stay in a semantic source-search backend for name-shaped or text-shaped queries.
 Drop to `sg` only when the pattern needs structural metavariables (`$X`,
-`$$$BODY`) that tilth can't express.
+`$$$BODY`) that the selected backend can't express.
 
 ---
 

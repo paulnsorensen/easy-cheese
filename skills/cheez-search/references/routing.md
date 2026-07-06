@@ -1,6 +1,6 @@
-# Routing out of tilth
+# Routing among search backends
 
-Name-shaped or text-shaped -> stay in `tilth_search`. Type-grounded -> route to LSP/Serena before entering cheez-search. Cross-repo questions are outside cheez-search's single-repo scope.
+Name-shaped or text-shaped queries stay in the chosen semantic source-search backend: tilth when available, otherwise native AST/source search that preserves code context. Type-grounded questions route to LSP/Serena before entering cheez-search. Cross-repo questions are outside cheez-search's single-repo scope.
 
 ---
 
@@ -16,7 +16,7 @@ Name-shaped or text-shaped -> stay in `tilth_search`. Type-grounded -> route to 
 | "Where is the *type* (not the value) of X declared?" | `textDocument/typeDefinition` | Resolves through type aliases and generics |
 | "Are there type errors in this file?" | `textDocument/diagnostic` / pull-diagnostic | Only LSP runs the language server's typechecker |
 
-If no LSP is installed for the language, or the file is in a broken / incomplete state where the server cannot resolve, fall back to tilth -- `tilth_search` still finds the symbol by name even when no semantic resolution is possible. tilth also wins on speed at scale, polyglot queries (one call across Rust + TS + Python), error-tolerant parses, and content / regex queries that LSP does not index.
+If no LSP is installed for the language, or the file is in a broken / incomplete state where the server cannot resolve, fall back to the selected semantic source-search backend. Tilth remains the preferred broad backend when present because it handles speed at scale, polyglot queries, error-tolerant parses, and content / regex queries that LSP does not index.
 
 ---
 
@@ -31,6 +31,6 @@ If no LSP is installed for the language, or the file is in a broken / incomplete
 | "Where is the declaration of X (following imports)?" | `mcp__serena__find_declaration` | Walks the import graph; tilth returns every definition with that name |
 | "Find symbol X across the project, semantically" | `mcp__serena__find_symbol` | LSP-indexed; pair with `mcp__serena__get_symbols_overview` for a file's symbol table |
 
-`/cheez-search` itself stays tilth-only -- the `allowed-tools` frontmatter does not (and should not) include `mcp__serena__*`. The routing decision happens in the workflow skill *before* it enters `/cheez-search`, matching the redirection-map pattern above. If Serena is unavailable, `.serena/project.yml` is missing, or the symbol isn't LSP-resolvable (broken or generated code), the workflow skill enters `/cheez-search` and uses `tilth_search` -- note "Serena unavailable" in evidence so confidence calibration reflects that the xref wasn't type-validated. tilth also remains the right call for polyglot one-call queries, content / regex search, and any case where speed at scale matters more than type fidelity.
+`/cheez-search` is not tilth-only. Its invariant is semantic source-code evidence: use LSP/Serena for type-grounded questions, `sg` for syntax-shaped patterns, tilth for broad source search when available, or a harness-native AST/source-search backend when it answers the same symbol/caller/text question. Note the backend in evidence when it affects confidence.
 
 ---

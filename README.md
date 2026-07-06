@@ -296,9 +296,9 @@ Each `SKILL.md` must have YAML frontmatter with at least `name` and `description
 The `cheez-*` tool skills and several workflow skills benefit from MCP servers. Install the ones you need.
 
 <details>
-<summary><strong>tilth</strong> (required for `cheez-*` skills) — AST-aware code search, smart reading, hash-anchored edits</summary>
+<summary><strong>tilth</strong> (preferred for `cheez-*` skills) — AST-aware code search, smart reading, hash-anchored edits</summary>
 
-[tilth](https://github.com/jahala/tilth) provides AST-aware code search, smart file reading, and hash-anchored edits. Required by `/cheez-search`, `/cheez-read`, and `/cheez-write`.
+[tilth](https://github.com/jahala/tilth) provides AST-aware code search, smart file reading, and hash-anchored edits. It is the preferred backend for `/cheez-search`, `/cheez-read`, and `/cheez-write`; equivalent native AST/LSP/anchored-edit backends satisfy the same contract when Tilth is unavailable.
 
 ```sh
 # Install tilth CLI — pick one (no Homebrew formula upstream)

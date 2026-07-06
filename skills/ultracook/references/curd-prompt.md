@@ -77,7 +77,7 @@ branch. Set `next: done` if you halted.
 - Run the full test suite (test_target only).
 - Push or create PRs (the orchestrator handles that).
 - Modify any file not in your file list.
-- Call the host `Edit`/`Write` tool on a file you haven't `Read` this turn — prefer /cheez-write (it reads first); use host edit only as a fallback when tilth is unavailable.
+- Call an unanchored host `Edit`/`Write` tool on a file you haven't read this turn — prefer /cheez-write; use a harness-native snapshot/anchored edit fallback only when the selected backend preserves stale-write safety.
 - Invoke /pr-stack, /gh, or any PR-related skill.
 - Chain forward (the orchestrator owns the chain).
 - Retry on failure — write the halt and return; the orchestrator decides retry policy.

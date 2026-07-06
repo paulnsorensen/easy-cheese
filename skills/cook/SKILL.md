@@ -55,8 +55,8 @@ The handoff blocks below are the portable contract; slash commands are host rend
 | GitHub context | `gh` | local git history or user-provided links |
 | Merge assistance | mergiraf | manual conflict resolution with tests |
 | Task commands | `just`, package scripts | direct documented commands |
-| Code navigation | `/cheez-search` `kind:symbol` then `kind:callers` | `tilth_search` direct |
-| Read before edit | `/cheez-read` ranged/outline (`paths: ["f#n-m"]`, `mode:stripped`) | DO NOT `cat`/`sed -n`/host Read on code paths |
+| Code navigation | `/cheez-search` `kind:symbol` then `kind:callers` | LSP, native AST search, or another semantic backend that answers the same question |
+| Read before edit | `/cheez-read` ranged/outline (`paths: ["f#n-m"]`, `mode:stripped`) | Native bounded read with snapshot/line anchors, or LSP symbol read when it supplies a stale-safe edit path |
 
 Falling back, mention any loss of precision that affects risk.
 

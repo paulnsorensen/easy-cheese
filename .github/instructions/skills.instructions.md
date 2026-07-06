@@ -63,12 +63,8 @@ Spend your review budget on the things linters cannot see.
 - Workflow skills (`mold`, `cook`, `press`, `age`, `cure`, `melt`, etc.)
   cover one phase of the lifecycle each. Adding a second phase is a new
   skill, not a new section.
-- Tool skills (`cheez-*`) wrap one tilth-MCP capability each. Don't fold
-  search and read into the same skill — the chain depends on them being
-  independently invokable.
-- Only the `cheez-*` skills require an MCP server (tilth). Every other skill
-  must degrade cleanly to host-native tools when MCPs are unavailable; do
-  not introduce new mandatory-MCP dependencies in workflow skills.
+- Tool skills (`cheez-*`) wrap source-code search/read/edit capabilities, not a mandatory MCP server. Keep search, read, and write independently invokable.
+- `cheez-*` should prefer tilth when present, but equivalent native AST/LSP/anchored-edit backends satisfy the contract. Every workflow skill must degrade cleanly to host-native tools when MCPs are unavailable; do not introduce new mandatory-MCP dependencies.
 - Skills do not invoke other skills programmatically. Documented handoffs
   (e.g., `/age` → `/cure`, `/cook` → `/press` → `/age`) belong in the
   README's "Suggested flow" or as explicit user-visible prompts in the
