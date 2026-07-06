@@ -27,6 +27,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ github.event.workflow_run.id }}
-        run: |
+        run: |-
           echo "docs run $RUN_ID failed (attempt ${{ github.event.workflow_run.run_attempt }}) — re-running failed jobs"
           gh run rerun "$RUN_ID" --failed --repo "$GITHUB_REPOSITORY"

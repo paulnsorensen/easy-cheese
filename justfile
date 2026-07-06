@@ -61,15 +61,14 @@ check: lint-md-fix lint-yaml-fix lint-yaml lint-py-fix lint-sh test docs-build
 # CI-mode verification (no autofixes)
 ci: lint-md lint-yaml lint-sh test docs-build
 
-# Install docs build dependencies into a local venv
+# Install docs build dependencies
 docs-install:
-    python3 -m venv .venv
-    .venv/bin/python -m pip install -r docs/requirements.txt
+    corepack pnpm install --frozen-lockfile
 
-# Build the docs site (output: site/)
+# Build the docs site (output: dist/)
 docs-build: docs-install
-    .venv/bin/mkdocs build --strict
+    corepack pnpm run docs:build
 
-# Serve docs locally on http://localhost:8000 with live reload
+# Serve docs locally on http://localhost:4321 with live reload
 docs-serve: docs-install
-    .venv/bin/mkdocs serve
+    corepack pnpm run docs:dev

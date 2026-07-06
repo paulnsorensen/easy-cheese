@@ -21,6 +21,7 @@
 __pycache__/
 *.pyc
 .venv/
+node_modules/
 
 # OS / editor
 .DS_Store
@@ -28,9 +29,13 @@ __pycache__/
 .idea/
 .vscode/
 
-# MkDocs build output
-site/
-.cache/
+# Starlight build output and generated docs
+dist/
+.astro/
+src/sidebar.mjs
+src/content/docs/**
+!src/content/docs/
+!src/content/docs/index.md
 
 # `just release-preview` staging output (hidden so validate_skills.py skips it)
 .release-preview/

@@ -1,8 +1,8 @@
 r"""Guard against bare ``cheez-*`` wildcard tokens corrupting Markdown emphasis.
 
-``scripts/gen_docs.py`` mirrors these sources verbatim into the MkDocs site. A
+``scripts/gen_docs.py`` mirrors these sources into the Starlight docs site. A
 bare ``cheez-*`` in prose has its ``*`` parsed as an emphasis delimiter by
-Python-Markdown: two in one paragraph italicise the span between them, and one
+Markdown renderers: two in one paragraph italicise the span between them, and one
 immediately before a ``**`` close (``cheez-***``) leaks the ``*`` out of the
 bold. Both render wrong on the docs site (confirmed by building it). The fix is
 to wrap the token in inline code (```` `cheez-*` ````) or escape it
@@ -26,19 +26,19 @@ COLLISION = "cheez-***"
 
 
 def _rendered_markdown() -> list[Path]:
-    """Every markdown source the MkDocs site renders.
+    """Every markdown source the Starlight site renders or mirrors.
 
     Covers both what gen_docs.py mirrors verbatim (root docs, SKILL.md bodies,
-    references, shared contracts) and the hand-authored ``docs/*.md`` pages that
-    mkdocs renders directly — a bare ``cheez-*`` corrupts emphasis in either.
+    references, shared contracts) and the hand-authored Starlight homepage — a
+    bare ``cheez-*`` corrupts emphasis in either.
     """
     files = [
         REPO_ROOT / "README.md",
         REPO_ROOT / "CONTRIBUTING.md",
         REPO_ROOT / "SECURITY.md",
         REPO_ROOT / "CODE_OF_CONDUCT.md",
+        REPO_ROOT / "src" / "content" / "docs" / "index.md",
     ]
-    files += sorted((REPO_ROOT / "docs").glob("*.md"))
     files += sorted((REPO_ROOT / "skills").glob("*/SKILL.md"))
     files += sorted((REPO_ROOT / "skills").glob("*/references/*.md"))
     files += sorted((REPO_ROOT / "shared").glob("*.md"))
