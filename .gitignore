@@ -10,6 +10,10 @@
 # Claude Code machine-local worktree registry
 .claude/worktrees/
 
+# Coding-agent scratch dirs
+.agents/
+.claude/skills/
+
 # milknado optional-plugin runtime data (SQLite task graph)
 .milknado/
 
