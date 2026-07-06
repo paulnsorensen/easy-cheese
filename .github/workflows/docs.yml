@@ -65,7 +65,7 @@ jobs:
           python-version: "3.12"
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@4fe8674f344d65cf7384fc21ba97c2b05fd8df75 # v4.1.0
+        uses: pnpm/action-setup@7088e561eb65bb68695d245aa206f005ef30921d # v4.1.0
         with:
           version: 10
           run_install: false
