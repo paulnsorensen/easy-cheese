@@ -4,15 +4,15 @@ Name-shaped or text-shaped queries stay in the chosen semantic source-search bac
 
 ---
 
-## When LSP beats tilth (if your harness has one)
+## When LSP beats name/text search (if your harness has one)
 
-**easy-cheese does not install LSP** -- it is whatever language servers your harness already exposes (Claude Code LSP plugins, Zed / VS Code language servers, etc.). When an LSP is reachable for the file's language and the question is **type-grounded**, prefer the LSP method over tilth. Tree-sitter sees syntax, not types -- it cannot disambiguate `var x = GetValue()` (keyword or type?) or pick between two `pop` functions imported from different modules. LSP runs the actual language server and resolves these.
+**easy-cheese does not install LSP** -- it is whatever language servers your harness already exposes (Claude Code LSP plugins, Zed / VS Code language servers, etc.). When an LSP is reachable for the file's language and the question is **type-grounded**, prefer the LSP method over name/text search. Tree-sitter sees syntax, not types -- it cannot disambiguate `var x = GetValue()` (keyword or type?) or pick between two `pop` functions imported from different modules. LSP runs the actual language server and resolves these.
 
 | Question | LSP method (when available) | Why LSP wins |
 |----------|-----------------------------|---------------|
-| "What's the resolved return type / generic instantiation of X?" | `textDocument/hover` | tilth sees syntax, not types -- hover returns the resolved signature |
-| "Who implements interface / trait / abstract class Y?" | `textDocument/implementation` | Honors aliased imports, generics, and re-exports; tilth's name match misses these |
-| "Where is this exact symbol used, accounting for shadowing and module scope?" | `textDocument/references` | Scope-respecting; tilth's callers query is name-shaped |
+| "What's the resolved return type / generic instantiation of X?" | `textDocument/hover` | name/text search sees syntax, not types -- hover returns the resolved signature |
+| "Who implements interface / trait / abstract class Y?" | `textDocument/implementation` | Honors aliased imports, generics, and re-exports; a name match misses these |
+| "Where is this exact symbol used, accounting for shadowing and module scope?" | `textDocument/references` | Scope-respecting; a callers query is name-shaped |
 | "Where is the *type* (not the value) of X declared?" | `textDocument/typeDefinition` | Resolves through type aliases and generics |
 | "Are there type errors in this file?" | `textDocument/diagnostic` / pull-diagnostic | Only LSP runs the language server's typechecker |
 

@@ -2,7 +2,7 @@
 
 Loaded by `/ultracook` at Phase 2 (fan-out). Substitute `{N}`, `{slug}`, `{file_list}`, `{behaviour}`, `{acceptance_criterion}`, `{test_target}`, `{spec_summary}`, and `{hard_flag}` before dispatch.
 
-```text
+````text
 You are executing curd #{N} for spec: {slug}
 
 ## File Scope (HARD CONSTRAINT)
@@ -81,7 +81,7 @@ branch. Set `next: done` if you halted.
 - Invoke /pr-stack, /gh, or any PR-related skill.
 - Chain forward (the orchestrator owns the chain).
 - Retry on failure — write the halt and return; the orchestrator decides retry policy.
-```
+````
 
 ## Variant: `--hard` propagation
 

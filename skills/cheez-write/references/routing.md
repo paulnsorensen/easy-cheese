@@ -1,7 +1,6 @@
 # Pre-entry routing: semantic and symbol-bounded edits
 
-These decisions happen in the **calling workflow skill** before entering `/cheez-write`.
-Once inside cheez-write, choose the stale-safe backend that matches the edit shape: tilth hash anchors, LSP workspace edits, Serena symbol edits, harness-native snapshot edits, or a dry-run-first AST codemod.
+The **calling workflow skill** selects the stale-safe backend before entering `/cheez-write`, matching it to the edit shape: tilth hash anchors, LSP workspace edits, Serena symbol edits, harness-native snapshot edits, or a dry-run-first AST codemod.
 
 ## When LSP rename beats line/range edits
 

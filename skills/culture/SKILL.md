@@ -34,7 +34,7 @@ Asking the user is the point: every consequential fork is theirs to decide, surf
 
 ## Preferred tools and fallbacks
 
-Code search and reading go through the `cheez-*` skills (`/cheez-search`, `/cheez-read`) — see those skills for tool selection rules. Blast-radius reads specifically use `cheez-search` callers (`kind: "callers"`) plus `tilth_deps` (read-only shape check).
+Code search and reading go through the `cheez-*` skills (`/cheez-search`, `/cheez-read`) — see those skills for tool selection rules. Blast-radius reads use `cheez-search` callers (`kind: "callers"`) plus a read-only dependency/shape check when the backend offers one.
 
 Beyond `cheez-*` there are culture-specific tools:
 
