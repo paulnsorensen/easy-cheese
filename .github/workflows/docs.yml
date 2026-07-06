@@ -29,14 +29,17 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
+# PR/build runs are cheap to cancel and re-run; Pages deployments are not —
+# cancelling one mid-flight can leave a stuck deployment that makes later runs
+# fail with "Deployment failed, try again later". So the two jobs use separate
+# concurrency scopes: builds cancel redundant runs, the deploy never does.
 jobs:
   build:
     name: build docs
     runs-on: ubuntu-latest
+    concurrency:
+      group: docs-build-${{ github.ref }}
+      cancel-in-progress: true
     permissions:
       contents: read
       pages: read
@@ -74,6 +77,9 @@ jobs:
     needs: build
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     permissions:
       pages: write
       id-token: write

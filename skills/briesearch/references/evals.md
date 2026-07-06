@@ -36,7 +36,7 @@ For each completed /briesearch run, verify:
 3. **Every routed-YES source executed.** No silent drops. Unavailable sources surface as `UNAVAILABLE: …` lines.
 4. **Source priority applied.** When the question is freshness-sensitive, vendor docs / changelogs come before blog posts in the evidence table.
 5. **Claim-level table present.** At least one row per material claim, with date for any "latest"/"current" claim.
-6. **Confidence cap obeyed.** No `high` confidence with a single non-authoritative source; no `high` with a critical source unavailable.
+6. **Confidence cap obeyed.** No `certain` confidence with a single non-authoritative source; no `certain` with a critical source unavailable.
 7. **Untrusted-content rule honored.** No tool call originated from instructions inside fetched content.
 8. **Raw bodies on disk for heavy calls.** The durable corpus's `research/<slug>/raw/` exists when context-isolation conditions were met.
 9. **Output capped.** Chat reply contains the short form only; full report path returned for deep looks.

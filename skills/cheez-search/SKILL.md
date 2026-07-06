@@ -109,10 +109,10 @@ For code navigation (where is X / what calls Y / blast radius): start with `kind
 
 | Goal | Tool | Example |
 |------|------|---------|
-| Find where a symbol is defined / used | `tilth_search` (default `kind: "symbol"`) | `tilth_search(queries: [{query: "handleAuth"}], scope: "src/", root: "/checkout/root")` |
-| Find every call site of a function | `tilth_search(kind: "callers")` | `tilth_search(queries: [{query: "validateToken", kind: "callers"}])` |
-| Find literal strings, TODOs, error messages | `tilth_search(kind: "content")` | `tilth_search(queries: [{query: "error message", kind: "content"}])` |
-| Find lines matching a regex | `tilth_search(kind: "regex")` | `tilth_search(queries: [{query: "rate.?limit", kind: "regex"}])` |
+| Find where a symbol is defined / used | `tilth_search` (symbol kind) | `tilth_search(queries: [{query: "handleAuth", kind: "symbol"}], scope: "src/", root: "/checkout/root")` |
+| Find every call site of a function | `tilth_search` (callers kind) | `tilth_search(queries: [{query: "validateToken", kind: "callers"}])` |
+| Find literal strings, TODOs, error messages | `tilth_search` (content kind) | `tilth_search(queries: [{query: "error message", kind: "content"}])` |
+| Find lines matching a regex | `tilth_search` (regex kind) | `tilth_search(queries: [{query: "rate.?limit", kind: "regex"}])` |
 | Match an AST shape (template with metavars) | `sg` (ast-grep, via Bash) | `sg --lang typescript -p 'JSON.parse(JSON.stringify($X))' --json src/` |
 | Module import / blast-radius graph | `tilth_deps` | `tilth_deps(path: "src/auth.ts")` |
 
