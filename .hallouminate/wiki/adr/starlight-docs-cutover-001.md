@@ -23,4 +23,4 @@ A compatibility layer would leave two documentation contracts alive and make sta
 
 ## Source
 
-Spec: `/home/paul/.local/share/cheese/paulnsorensen-easy-cheese/specs/starlight-docs-cutover.md`.
+Spec: `specs/starlight-docs-cutover.md` in the project's durable cheese corpus.
