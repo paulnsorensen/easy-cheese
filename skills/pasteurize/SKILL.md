@@ -130,9 +130,9 @@ Once the checklist is green and the slug is on disk, hand off to `/cook <slug> -
 
 | Need | Prefer | Fallback |
 | --- | --- | --- |
-| Code search / blast radius | `/cheez-search` (tilth MCP) | flag the gap; do not fall back to host `grep` |
-| Reading code | `/cheez-read` (tilth MCP) | flag the gap; do not fall back to host `cat`/`Read` |
-| Editing instrumentation | `/cheez-write` (tilth MCP) | flag the gap; do not fall back to host `Edit`/`Write` |
+| Code search / blast radius | `/cheez-search` (tilth MCP) | LSP, native AST search, or another semantic backend that answers the same question |
+| Reading code | `/cheez-read` (tilth MCP) | Native bounded read with snapshot/line anchors, or LSP symbol read when it supplies a stale-safe edit path |
+| Editing instrumentation | `/cheez-write` (tilth MCP) | Native anchored-edit backend with stale-write detection, or LSP-driven edit when it preserves the same safety |
 | Diff visualization | `delta` | plain `git diff` |
 | GitHub context | `gh` | local git history or user-provided links |
 | External sanity check | `/briesearch` | clearly mark as an assumption |
