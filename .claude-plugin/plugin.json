@@ -1,0 +1,22 @@
+{
+  "name": "easy-cheese",
+  "skills": [
+    "./skills/age",
+    "./skills/affinage",
+    "./skills/briesearch",
+    "./skills/cheese",
+    "./skills/cheez-read",
+    "./skills/cheez-search",
+    "./skills/cheez-write",
+    "./skills/cook",
+    "./skills/culture",
+    "./skills/cure",
+    "./skills/hard-cheese",
+    "./skills/melt",
+    "./skills/mold",
+    "./skills/pasteurize",
+    "./skills/press",
+    "./skills/ultracook",
+    "./skills/wheypoint"
+  ]
+}
