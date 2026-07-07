@@ -1,13 +1,13 @@
 ---
 name: cheez-write
-description: Edit code through the safest stale-checking backend — prefer code-intelligence backends (tilth MCP hash-anchored edits, LSP workspace edits, `sg --rewrite` for structural codemods); fall back to native anchored edits only when no code-intel backend matches. Use when the user asks to edit, replace, modify, update, change, delete, or insert code — phrases like "replace this function", "delete lines 44-89", "update validateToken", "add this import", "fix this bug" (when fixing requires editing), or apply a cross-cutting codemod like "rewrite every X to Y". Do NOT use for reading files (use cheez-read), searching code (use cheez-search), or running tests/builds.
+description: Edit code through the safest stale-checking backend — prefer code-intelligence backends (tilth MCP tag-anchored edits, LSP workspace edits, `sg --rewrite` for structural codemods); fall back to native anchored edits only when no code-intel backend matches. Use when the user asks to edit, replace, modify, update, change, delete, or insert code — phrases like "replace this function", "delete lines 44-89", "update validateToken", "add this import", "fix this bug" (when fixing requires editing), or apply a cross-cutting codemod like "rewrite every X to Y". Do NOT use for reading files (use cheez-read), searching code (use cheez-search), or running tests/builds.
 license: MIT
 compatibility: Prefers code-intelligence backends — tilth MCP edit mode, LSP workspace edits, AST rewrites. Harness-native anchored edits are acceptable fallbacks when they match the requested edit shape and reject or bound stale writes.
 ---
 
 # cheez-write
 
-> **Backend contract**: use a stale-safe edit backend. The backend must anchor the current file state (tilth hash, snapshot tag, or LSP workspace edit) or be a deliberate AST codemod over a clean tree.
+> **Backend contract**: use a stale-safe edit backend. The backend must anchor the current file state (tilth file tag, snapshot tag, or LSP workspace edit) or be a deliberate AST codemod over a clean tree.
 
 ## Backend detection
 
@@ -15,12 +15,12 @@ Pick the backend by edit shape, preferring code-intelligence backends (LSP, AST 
 
 1. **LSP wins for semantic workspace edits:** rename/code actions when the server can identify the symbol or fix.
 2. **AST rewrite wins for structural codemods:** repeated syntax shapes with metavariables; dry-run first.
-3. **tilth MCP wins for anchored block/range edits:** `tilth_read` captures hashes, then `tilth_write` applies known blocks/ranges via `files: [...]`.
+3. **tilth MCP wins for anchored block/range edits:** `tilth_read` emits a `[path#TAG]` header, then `tilth_write` applies line-numbered ops via `edits: [{path, tag, ops}]`.
 4. **Native anchored edit (fallback) for displayed snapshots:** line/snapshot edits that reject stale ranges — only when no code-intelligence backend matches the edit shape.
 
 Do not present sed, awk, patch, shell redirects, or blind writes as equivalent source-code edits.
 
-Hash mismatches and anchor-not-found are **content** issues — see [Hash Mismatch Handling](#hash-mismatch-handling).
+Stale tags and rejected sections are **content** issues — see [Stale Tag Handling](#stale-tag-handling).
 
 ---
 
@@ -28,42 +28,43 @@ Hash mismatches and anchor-not-found are **content** issues — see [Hash Mismat
 
 ### "Replace the body of `handleAuth` in `src/auth.ts`"
 
-Step 1 — read the line range to get anchors:
+Step 1 — read the line range to capture the file tag:
 
 ```
 tilth_read(paths: ["src/auth.ts#44-89"])
-# returns 44:b2c|... and 89:e1d|...
+# returns a [src/auth.ts#b2c4] header, then numbered lines 44:... to 89:...
 ```
 
-Step 2 — apply with the captured anchors:
+Step 2 — apply ops against those line numbers, quoting the tag verbatim:
 
 ```json
-tilth_write(files: [{
+tilth_write(edits: [{
   "path": "src/auth.ts",
-  "edits": [{
-    "start": "44:b2c",
-    "end":   "89:e1d",
+  "tag": "b2c4",
+  "ops": [{
+    "op": "replace",
+    "start": 44,
+    "end": 89,
     "content": "export function handleAuth(req, res, next) {\n  const token = extractToken(req);\n  if (!validateToken(token)) return res.status(401).end();\n  next();\n}"
   }]
 }])
 ```
 
-Response confirms `Edit applied to src/auth.ts` and may list callers to
-review.
+The response reports per `## src/auth.ts` and may list callers to review.
 
-### "Hash mismatch — file changed under me"
+### "Stale tag — file changed under me"
 
-See [Hash Mismatch Handling](#hash-mismatch-handling) for recovery steps.
+See [Stale Tag Handling](#stale-tag-handling) for recovery steps.
 
 ---
 
 ## Core Principle: Anchors, Not Rewrites
 
-The edit backend must identify the current file state — tilth hash anchors, harness snapshot tags, or LSP workspace edits — and reject the write if the file changed.
+The edit backend must identify the current file state — tilth file tags, harness snapshot tags, or LSP workspace edits — and bound or reject the write if the file changed.
 
 **The protocol:**
-1. Read the file section with cheez-read → get current anchors or snapshot ids
-2. Note start/end anchors for the block you'll change
+1. Read the file section with cheez-read → get the current `[path#TAG]` header or snapshot id
+2. Note the line numbers of the block you'll change
 3. Apply the edit through the anchored backend
 
 ---
@@ -80,7 +81,7 @@ For everything else, prefer the right tool:
 | Semantic rename or server-known refactor | LSP rename/code action | LSP follows scope, overloads, re-exports, and imports |
 | Lockfile changes (`Cargo.lock`, `package-lock.json`, `uv.lock`, etc.) | the package manager (`cargo update`, `npm i`, `uv lock`) | Hand-editing lockfiles loses checksum integrity |
 | Generated / build artifacts (compiled JS, transpiled output, `*.pb.go`) | regenerate from source | Editing the artifact rots on the next build |
-| Brand-new files, no prior content | anchored create/write backend | Stay stale-safe even when creating files |
+| Brand-new files, no prior content | anchored create/write backend (tilth: a `tilth_write` section with `tag` omitted) | Stay stale-safe even when creating files |
 | Files outside the repo or inside dependency caches (`node_modules`, `.cargo/registry`) | don't edit them | Modifying dependencies is almost always a mistake — fix the source or upstream |
 | Binary files, images, PDFs | the producing tool | code edit backends are text-only |
 
@@ -96,7 +97,7 @@ Pre-entry routing — when a workflow skill should prefer LSP rename or Serena s
 
 Use whatever anchor format the selected backend emits:
 
-- tilth: `<line>:<hash>|<content>`; pass `<line>:<hash>` into `tilth_write`.
+- tilth: a `[path#TAG]` header above `N:content` numbered lines; copy the 4-hex TAG into `tilth_write`'s `tag` and reference those line numbers in `ops`. Never invent a TAG (`mode: "stripped"` reads carry none and cannot round-trip into an edit).
 - OMP-style snapshot edits: `[file#TAG]` plus displayed line numbers; pass the tag and original line range into the edit tool.
 - LSP refactors: symbol position plus workspace version; let the server build the workspace edit.
 
@@ -108,57 +109,57 @@ Do not translate between anchor systems. Read with the same backend family that 
 
 ### tilth_write — Precise File Editing
 
-The minimal shape — single anchor, replacement content:
+The minimal shape — one file section, one op:
 
 ```json
-tilth_write(files: [{
+tilth_write(edits: [{
   "path": "src/auth.ts",
-  "edits": [
-    { "start": "42:a3f", "content": "  let x = recompute();" }
+  "tag": "a3f9",
+  "ops": [
+    { "op": "replace", "start": 42, "end": 42, "content": "  let x = recompute();" }
   ]
 }])
 ```
 
-For range replacement, deletion, multi-edit, insert-after, cross-file
-batches, and the `diff: true` response option, see
+`edits` is a JSON array of `{path, tag?, ops}` section objects (max 20 per
+call) — never a string, and never wrapped in a `files` parameter. Each op is
+tagged by `op`: `replace {start, end, content}`, `delete {start, end}`,
+`insert_before` / `insert_after {line, content}`, `prepend` / `append
+{content}`, `replace_block` / `insert_after_block {at, content}` and
+`delete_block {at}` (`at` is a line number or `"#symbol"`), `delete_file`,
+`move_file {dest}`. Omit `tag` only to seed a brand-new file.
+
+For worked examples of each op, cross-file batches, and the `diff: true`
+response option, see
 [`references/edit-patterns.md`](references/edit-patterns.md).
 
 ---
 
-## Hash Mismatch Handling
+## Stale Tag Handling
 
-If the file changed since you read it:
-
-```
-Error: Hash mismatch at line 44
-Expected: b2c
-Found: f9a
-
-Current content:
-44:f9a|export async function handleAuth(req, res, next) {
-...
-```
+The TAG binds your ops to the content you read. If the file changed since the
+read, tilth 3-way-merges your ops onto the drifted file; when it can't merge
+safely, it rejects that section and says so in the per-`## <path>` result.
 
 **Recovery:**
-1. Read the section again → get new anchors.
+1. Read the section again → get the current `[path#TAG]` and content.
 2. Review the current content (someone else may have made changes).
-3. Edit with new anchors.
+3. Re-apply the ops against the fresh line numbers with the new tag.
 
-### Repeated mismatches → bail out, don't loop
+### Repeated rejections → bail out, don't loop
 
-If you hit **two consecutive mismatches** on the same anchor, you're racing a
-concurrent writer. `tilth_write` has no fuzzy / search-replace mode — there
-is no "ignore the hash, just match this string" option. A third retry will
-likely lose the same race.
+If you hit **two consecutive rejections** on the same file, you're racing a
+concurrent writer. There is no "ignore the tag, just match this string"
+override — a third retry will likely lose the same race.
 
 The correct move is to bail and report:
 
 1. Read the latest section one final time and capture the current content.
 2. Prepare the new content as a unified diff or full block, but **do not
    apply** it.
-3. Report `"hash-anchor race on <path>:<line>; current content and proposed
-   replacement attached. Retry once the file is quiescent or apply manually."`
-   along with the captured anchors and proposed content.
+3. Report `"tag race on <path>; current content and proposed replacement
+   attached. Retry once the file is quiescent or apply manually."` along
+   with the captured tag and proposed content.
 4. Stop. Let the orchestrator (or a human) decide whether to apply the change
    or escalate.
 
@@ -177,7 +178,8 @@ When changing a signature, use LSP references or the edit backend's caller notic
 | Replace one line | [edit-patterns.md#single-line-replacement](references/edit-patterns.md#single-line-replacement) |
 | Replace a range | [edit-patterns.md#multi-line-range-replacement](references/edit-patterns.md#multi-line-range-replacement) |
 | Delete a block | [edit-patterns.md#delete-a-block](references/edit-patterns.md#delete-a-block) |
-| Insert after a line | [edit-patterns.md#insert-after-a-line](references/edit-patterns.md#insert-after-a-line) |
+| Insert before / after a line | [edit-patterns.md#insert-before-or-after-a-line](references/edit-patterns.md#insert-before-or-after-a-line) |
+| Replace / delete a whole symbol | [edit-patterns.md#symbol-anchored-block-ops](references/edit-patterns.md#symbol-anchored-block-ops) |
 | Multi-edit in one file | [edit-patterns.md#multiple-edits-in-one-file](references/edit-patterns.md#multiple-edits-in-one-file) |
 | Cross-file change | [edit-patterns.md#edits-across-multiple-files](references/edit-patterns.md#edits-across-multiple-files) |
 
@@ -206,8 +208,8 @@ Anchored edits own known blocks, one read-for-anchors per location. For cross-cu
 
 ## DO NOT
 
-- **DO NOT guess anchors** — always read first to get current anchors or snapshot ids.
-- **DO NOT ignore stale-anchor failures** — re-read and retry (see Hash Mismatch Handling).
+- **DO NOT invent tags** — always read first and copy the `[path#TAG]` header verbatim.
+- **DO NOT ignore rejected sections** — re-read and retry (see Stale Tag Handling).
 - **DO NOT use sed / awk / perl -i** to edit code — they bypass anchors and structural safety, and have no mismatch detection. `sg --rewrite` is the only sanctioned shell escape — see `## Structural codemods — sg --rewrite escape`.
 - **DO NOT use `patch`** to apply diffs to code — anchored range edits are the safe equivalent.
 - **DO NOT use `tee` or shell redirects (`>`, `>>`)** to overwrite/append code files — both bypass anchors. Use an anchored edit backend.

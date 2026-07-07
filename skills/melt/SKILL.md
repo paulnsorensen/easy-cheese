@@ -14,7 +14,7 @@ For per-file inspection or manual edits, delegate to the `cheez-*` skills:
 
 - **`/cheez-search`** — locate conflict markers or related symbols across the tree.
 - **`/cheez-read`** — inspect conflicted files, view conflict hunks, list directory contents.
-- **`/cheez-write`** — apply hash-anchored resolutions when bash flows are not enough.
+- **`/cheez-write`** — apply tag-anchored resolutions when bash flows are not enough.
 
 ## Cascade
 

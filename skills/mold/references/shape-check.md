@@ -17,8 +17,8 @@ Run all three. Cheap when the answers are small; the cost of skipping is silent 
 
 | Question | Tool | Call |
 | --- | --- | --- |
-| Current signature? Sibling signatures? Downstream callees (`── calls ──` footer)? | `cheez-search` | `tilth_search(query: "<symbol>", kind: "symbol", expand: 2, scope: "<module>")` |
-| Who calls this? (upstream) | `cheez-search` | `tilth_search(query: "<symbol>", kind: "callers", scope: ".")` |
+| Current signature? Sibling signatures? Downstream callees (`── calls ──` footer)? | `cheez-search` | `tilth_search(queries: [{query: "<symbol>", kind: "symbol"}], expand: 2, scope: "<module>")` |
+| Who calls this? (upstream) | `cheez-search` | `tilth_search(queries: [{query: "<symbol>", kind: "callers"}])` |
 | What's the import / blast radius? | `cheez-search` | `tilth_deps(path: "<file>")` |
 
 The first call does double duty — its `── calls ──` footer is the cheap callee read; do not issue a separate query for it.

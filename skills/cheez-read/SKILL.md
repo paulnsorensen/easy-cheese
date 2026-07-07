@@ -45,7 +45,7 @@ The `#symbol_name` suffix resolves to the symbol's line range. Use this when you
 tilth_read(paths: ["src/auth.ts"], mode: "stripped")
 ```
 
-`mode:stripped` returns the whole file with plain comments and debug logs removed — useful for surveying structure without hash anchors before deciding what to read in full.
+`mode:stripped` returns the whole file with plain comments and debug logs removed — useful for surveying structure before deciding what to read in full. Stripped reads carry no edit tag and cannot round-trip into `tilth_write`.
 
 ### "Read lines 44-89 of `src/auth.ts` to get edit anchors"
 
@@ -54,13 +54,14 @@ tilth_read(paths: ["src/auth.ts#44-89"])
 ```
 
 ```text
-44:b2c|export function handleAuth(req, res, next) {
-45:c3d|  const token = req.headers.authorization?.split(' ')[1];
+[src/auth.ts#b2c4]
+44:export function handleAuth(req, res, next) {
+45:  const token = req.headers.authorization?.split(' ')[1];
 ...
-89:e1d|}
+89:}
 ```
 
-Hash anchors are emitted automatically — copy `44:b2c` and `89:e1d` and pass them to cheez-write.
+The `[path#TAG]` header binds the numbered lines to the file's current content — copy `b2c4` into cheez-write's `tag` and reference lines 44–89 in its ops.
 
 ### "List every TypeScript file under `src/handlers/`"
 
@@ -94,9 +95,9 @@ For when another tool fits better than cheez-read, see [`references/routing.md`]
 
 ---
 
-## Hash anchors
+## Edit tags
 
-Drilled reads (line range, `#symbol`, or heading) emit `<line>:<hash>|<content>` anchors; plain full-file reads use a `│` (U+2502) separator instead. Reading before editing is mandatory to get current hashes — copy the `<line>:<hash>` portion into cheez-write, where the hash uniquely identifies the line so a stale edit is rejected safely.
+Reads emit a `[path#TAG]` header above `N:content` numbered lines. Reading before editing is mandatory to get the current tag — copy the 4-hex TAG verbatim into cheez-write's `tag`, which binds the edit to the content you read: a drifted write is 3-way-merged or rejected safely, never applied blind. Never invent a tag.
 
 ---
 
@@ -140,4 +141,4 @@ in cheez-search:
 - **DO NOT re-read files** shown earlier — reference the prior read.
 - **DO NOT use to run code or tests** — use the project's build/test skills.
 - **DO NOT use to commit** — use git/gh skills.
-- **DO NOT ignore hash anchors** — they are required for edits.
+- **DO NOT ignore the `[path#TAG]` header** — the tag is required for edits.

@@ -20,7 +20,7 @@ Pick the backend by question type:
 
 Do not present plain shell search as equivalent source-code evidence; use it only for non-code paths or data/log inspection.
 
-**Note:** pass `root` (your absolute checkout directory) whenever tilth `scope` is relative — the server's cwd is frozen at startup and cannot resolve relative paths without an explicit `root`.
+**Note:** every tilth tool takes `cwd` — your absolute checkout directory (the server's own cwd is frozen at startup). In Claude Code a hook injects `cwd` automatically; do not set it. On harnesses without the hook, pass `cwd` explicitly so relative paths and scopes resolve. There is no `root` parameter.
 
 ---
 
@@ -29,7 +29,7 @@ Do not present plain shell search as equivalent source-code evidence; use it onl
 ### "Where is `handleAuth` defined?"
 
 ```
-tilth_search(queries: [{query: "handleAuth"}], scope: "src/", root: "/checkout/root")
+tilth_search(queries: [{query: "handleAuth"}], scope: "src/")
 ```
 
 ```text
@@ -46,7 +46,7 @@ The `[definition]` tag answers the question; usages come along for free.
 ### "What calls `validateToken`?"
 
 ```
-tilth_search(queries: [{query: "validateToken", kind: "callers"}], scope: ".", root: "/checkout/root")
+tilth_search(queries: [{query: "validateToken", kind: "callers"}])
 ```
 
 ```text
@@ -64,7 +64,7 @@ tilth_search(queries: [{query: "validateToken", kind: "callers"}], scope: ".", r
 ### "Find any TODO that mentions retries"
 
 ```
-tilth_search(queries: [{query: "TODO.*retry", kind: "regex"}], scope: "src/", root: "/checkout/root")
+tilth_search(queries: [{query: "TODO.*retry", kind: "regex"}], scope: "src/")
 ```
 
 Use `kind: "regex"` for pattern matches across content; bound the scope to
@@ -109,7 +109,7 @@ For code navigation (where is X / what calls Y / blast radius): start with `kind
 
 | Goal | Example backend | Example |
 |------|-----------------|---------|
-| Find where a symbol is defined / used | `tilth_search` symbol kind, native AST symbol search, or LSP definition when type-grounded | `tilth_search(queries: [{query: "handleAuth", kind: "symbol"}], scope: "src/", root: "/checkout/root")` |
+| Find where a symbol is defined / used | `tilth_search` symbol kind, native AST symbol search, or LSP definition when type-grounded | `tilth_search(queries: [{query: "handleAuth", kind: "symbol"}], scope: "src/")` |
 | Find every call site of a function | `tilth_search` callers kind, native AST caller search, or LSP references when type-grounded | `tilth_search(queries: [{query: "validateToken", kind: "callers"}])` |
 | Find literal strings, TODOs, error messages | content search in the semantic backend | `tilth_search(queries: [{query: "error message", kind: "content"}])` |
 | Find lines matching a regex | bounded regex search in the semantic backend | `tilth_search(queries: [{query: "rate.?limit", kind: "regex"}])` |

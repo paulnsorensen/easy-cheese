@@ -3,13 +3,18 @@
 Detailed invocation shapes, output format, and per-kind parameter reference.
 For which kind to pick, see the **Choose your search kind** table in `SKILL.md`.
 
+All examples omit `cwd`: every tilth tool requires it (your absolute checkout
+directory), but the Claude Code hook injects it automatically — set it only on
+harnesses without the hook. There is no `root` parameter. Omit `scope` to
+search the whole checkout; pass it only to narrow to a subdirectory.
+
 ---
 
 ## tilth_search - Symbol and Content Search
 
 **Basic symbol search:**
 ```
-tilth_search(queries: [{query: "handleAuth"}], scope: "src/", root: "/checkout/root")
+tilth_search(queries: [{query: "handleAuth"}], scope: "src/")
 ```
 
 **Output:**
@@ -48,7 +53,7 @@ tilth_search(queries: [{query: "handleAuth"}], scope: "src/", root: "/checkout/r
 Trace across files in one call:
 
 ```
-tilth_search(queries: [{query: "ServeHTTP, HandlersChain, Next"}], scope: ".", root: "/checkout/root")
+tilth_search(queries: [{query: "ServeHTTP, HandlersChain, Next"}])
 ```
 
 Each symbol gets its own result block. The expand budget is shared - at least
@@ -62,7 +67,7 @@ Find all places that call a specific function using structural tree-sitter
 matching (not text search):
 
 ```
-tilth_search(queries: [{query: "isTrustedProxy", kind: "callers"}], scope: ".", root: "/checkout/root")
+tilth_search(queries: [{query: "isTrustedProxy", kind: "callers"}])
 ```
 
 **Why this beats grep:** only finds actual calls, not comments or string literals.
@@ -75,7 +80,7 @@ Shows the calling function context.
 Search for text that isn't a code symbol:
 
 ```
-tilth_search(queries: [{query: "error: retry limit exceeded", kind: "content"}], scope: ".", root: "/checkout/root")
+tilth_search(queries: [{query: "error: retry limit exceeded", kind: "content"}])
 ```
 
 Use content search for code-comment annotations, error messages, and specific
@@ -88,7 +93,7 @@ literal strings — any text that isn't a code symbol.
 For patterns that aren't a single literal:
 
 ```
-tilth_search(queries: [{query: "rate.?limit", kind: "regex"}], scope: ".", root: "/checkout/root")
+tilth_search(queries: [{query: "rate.?limit", kind: "regex"}])
 ```
 
 - Full regex syntax -- alternation, character classes, lookarounds depending on the engine.
@@ -101,13 +106,13 @@ tilth_search(queries: [{query: "rate.?limit", kind: "regex"}], scope: ".", root:
 
 ```
 # Only Rust files
-tilth_search(queries: [{query: "handleAuth"}], scope: ".", glob: "*.rs", root: "/checkout/root")
+tilth_search(queries: [{query: "handleAuth"}], glob: "*.rs")
 
 # Exclude test files
-tilth_search(queries: [{query: "handleAuth"}], scope: ".", glob: "!*.test.ts", root: "/checkout/root")
+tilth_search(queries: [{query: "handleAuth"}], glob: "!*.test.ts")
 
 # Multiple extensions
-tilth_search(queries: [{query: "handleAuth"}], scope: ".", glob: "*.{go,rs}", root: "/checkout/root")
+tilth_search(queries: [{query: "handleAuth"}], glob: "*.{go,rs}")
 ```
 
 ---
@@ -117,7 +122,7 @@ tilth_search(queries: [{query: "handleAuth"}], scope: ".", glob: "*.{go,rs}", ro
 When editing a file, pass it as context to boost related results:
 
 ```
-tilth_search(queries: [{query: "validateToken"}], scope: ".", context: "src/auth.ts", root: "/checkout/root")
+tilth_search(queries: [{query: "validateToken"}], context: "src/auth.ts")
 ```
 
 ---
@@ -126,13 +131,13 @@ tilth_search(queries: [{query: "validateToken"}], scope: ".", context: "src/auth
 
 ```
 # Default: 2 expansions
-tilth_search(queries: [{query: "handleAuth"}], scope: ".", root: "/checkout/root")
+tilth_search(queries: [{query: "handleAuth"}])
 
 # More detail
-tilth_search(queries: [{query: "handleAuth"}], scope: ".", expand: 5, root: "/checkout/root")
+tilth_search(queries: [{query: "handleAuth"}], expand: 5)
 
 # Compact (outlines only)
-tilth_search(queries: [{query: "handleAuth"}], scope: ".", expand: 0, root: "/checkout/root")
+tilth_search(queries: [{query: "handleAuth"}], expand: 0)
 ```
 
 ---
@@ -162,7 +167,7 @@ tilth tracks what you've already seen:
 
 ```
 # "Find all implementations of an interface"
-tilth_search(queries: [{query: "UserRepository", kind: "symbol"}], scope: ".", root: "/checkout/root")
+tilth_search(queries: [{query: "UserRepository", kind: "symbol"}])
 # Implementations show as [impl] tags
 
 # "What depends on this module?"

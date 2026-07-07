@@ -14,7 +14,7 @@ Inside `/cheez-read`, the contract is backend-aware rather than tilth-only: use 
 | Files outside the repo (system paths, sibling worktrees, `~/...`) | host `Read` from the calling workflow skill | tilth is repo-scoped (see above) |
 | Dependency source (`node_modules`, `.cargo/registry`, `site-packages`, vendor caches) | LSP `textDocument/definition` from the calling workflow skill if a server is reachable; otherwise don't read by hand | Reading dependency source by hand is almost always wrong; the LSP resolves the right module version |
 
-If the file is code in this repo, **always enter cheez-read first** so it can choose a freshness-aware backend. Prefer tilth when hash anchors are available; otherwise use the harness-native snapshot/read path when it preserves stale-write safety for the next edit.
+If the file is code in this repo, **always enter cheez-read first** so it can choose a freshness-aware backend. Prefer tilth when edit tags are available; otherwise use the harness-native snapshot/read path when it preserves stale-write safety for the next edit.
 
 ## When LSP beats broad read backends (if the harness has one)
 
@@ -27,7 +27,7 @@ LSP availability: easy-cheese does not install LSP — it's whatever language se
 | Open the file declaring the *type* of a value | `textDocument/typeDefinition` | Walks through type aliases and generics |
 | Browse symbols across the whole project, semantically ranked | `workspace/symbol` | LSP indexes the project's type graph; syntax/read backends parse the tree |
 
-If no LSP is installed for the language, or the file is in a broken / incomplete state where the server cannot resolve, use the selected freshness-aware read backend. Tilth remains preferred when present because it provides outline reading, hash-anchored prep for edits, polyglot directory listings, and `.gitignore`-aware token estimates in one backend.
+If no LSP is installed for the language, or the file is in a broken / incomplete state where the server cannot resolve, use the selected freshness-aware read backend. Tilth remains preferred when present because it provides outline reading, tag-anchored prep for edits, polyglot directory listings, and `.gitignore`-aware token estimates in one backend.
 
 ## When Serena beats broad read backends for symbol-table reads (if your harness has it)
 

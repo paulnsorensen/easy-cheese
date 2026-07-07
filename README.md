@@ -80,7 +80,7 @@ The workflow skills can delegate code search, reading, and editing to these back
 | Skill path | Command | Purpose |
 | --- | --- | --- |
 | `skills/cheez-search/SKILL.md` | `/cheez-search` | AST-aware code/text/regex/caller search via tilth MCP, harness-native AST search, or LSP. Replaces grep / rg / find. |
-| `skills/cheez-read/SKILL.md` | `/cheez-read` | Smart file/directory reading through a freshness-aware backend; tilth MCP is preferred because it emits hash anchors. Replaces cat / head / tail / ls. |
+| `skills/cheez-read/SKILL.md` | `/cheez-read` | Smart file/directory reading through a freshness-aware backend; tilth MCP is preferred because it emits stale-write-safe edit tags. Replaces cat / head / tail / ls. |
 | `skills/cheez-write/SKILL.md` | `/cheez-write` | Anchored, surgical edits through tilth MCP or an equivalent harness-native stale-snapshot edit tool. Never rewrites whole files blindly. |
 
 The `cheez-*` skills tell the model which source-code backend to use when the harness has one. Prefer tilth MCP by name; use LSP for type-grounded definitions/references/renames/code actions, `ast_grep`/`sg` for structural patterns and codemods, and anchored/stale-checking edits for ordinary block changes. Plain text shell tools are fallback evidence only, not equivalent source-code backends.
@@ -296,9 +296,9 @@ Each `SKILL.md` must have YAML frontmatter with at least `name` and `description
 The `cheez-*` tool skills and several workflow skills benefit from MCP servers. Install the ones you need.
 
 <details>
-<summary><strong>tilth</strong> (preferred for `cheez-*` skills) — AST-aware code search, smart reading, hash-anchored edits</summary>
+<summary><strong>tilth</strong> (preferred for `cheez-*` skills) — AST-aware code search, smart reading, tag-anchored edits</summary>
 
-[tilth](https://github.com/jahala/tilth) provides AST-aware code search, smart file reading, and hash-anchored edits. It is the preferred backend for `/cheez-search`, `/cheez-read`, and `/cheez-write`; equivalent native AST/LSP/anchored-edit backends satisfy the same contract when Tilth is unavailable.
+[tilth](https://github.com/jahala/tilth) provides AST-aware code search, smart file reading, and tag-anchored edits. It is the preferred backend for `/cheez-search`, `/cheez-read`, and `/cheez-write`; equivalent native AST/LSP/anchored-edit backends satisfy the same contract when Tilth is unavailable.
 
 ```sh
 # Install tilth CLI — pick one (no Homebrew formula upstream)

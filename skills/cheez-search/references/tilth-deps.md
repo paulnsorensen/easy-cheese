@@ -51,7 +51,7 @@ this one.
 - `tilth_deps` is path-scoped, not symbol-scoped. It tells you which files
   import the target file, not which functions inside those files use a
   specific export. For that, follow up with
-  `tilth_search(query: "<symbol>", kind: "callers")`.
+  `tilth_search(queries: [{query: "<symbol>", kind: "callers"}])`.
 - External dependencies are listed without versions. If you need version
   context, check the lockfile or `package.json` / `Cargo.toml` separately.
 - Generated, vendored, or `.gitignore`d files may not appear — tilth indexes

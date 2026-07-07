@@ -1,6 +1,6 @@
 # Pre-entry routing: semantic and symbol-bounded edits
 
-The **calling workflow skill** selects the stale-safe backend before entering `/cheez-write`, matching it to the edit shape: tilth hash anchors, LSP workspace edits, Serena symbol edits, harness-native snapshot edits, or a dry-run-first AST codemod.
+The **calling workflow skill** selects the stale-safe backend before entering `/cheez-write`, matching it to the edit shape: tilth tag-anchored edits, LSP workspace edits, Serena symbol edits, harness-native snapshot edits, or a dry-run-first AST codemod.
 
 ## When LSP rename beats line/range edits
 
@@ -27,4 +27,4 @@ Serena ([oraios/serena](https://github.com/oraios/serena)) is an LSP-driven MCP 
 
 `/cheez-write` is not tilth-only. Its invariant is stale safety: the chosen backend must anchor the current file state, be typechecker-owned, or be a bounded AST codemod run after a dry run.
 
-**Caveat — no race-safe hash anchors.** Serena's edits rely on LSP and file mtime, not the content-hash check that makes tilth hash anchors race-safe. The workflow skill should route to Serena only when the file is quiescent (no parallel writers, no in-flight `/cook` or `/cure` on the same path). Use a hash/snapshot anchored edit whenever concurrency safety dominates, the symbol isn't LSP-resolvable (broken or generated code), or the edit is sub-symbol (one line inside a function).
+**Caveat — no race-safe edit tags.** Serena's edits rely on LSP and file mtime, not the content-bound file tag that lets tilth detect drift and 3-way-merge or reject a racing write. The workflow skill should route to Serena only when the file is quiescent (no parallel writers, no in-flight `/cook` or `/cure` on the same path). Use a tag/snapshot anchored edit whenever concurrency safety dominates, the symbol isn't LSP-resolvable (broken or generated code), or the edit is sub-symbol (one line inside a function).
