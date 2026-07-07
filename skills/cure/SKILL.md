@@ -1,6 +1,6 @@
 ---
 name: cure
-description: Apply fixes from an /age report, finding list, or CI failure, then run the project's test/lint/build gates and, on a clean cure, push to the PR. Use when the user wants the selected items resolved — phrases like "fix these findings", "/cure <slug>", "address the high-severity items", "act on the age report", "fix the failing CI", "apply the cleanup". Adopts a locked selection from `/age` or `/affinage`; called bare it applies the recommended set unless `--safe`. After a clean cure it pushes to an already-open PR (Rule 11); `--open-pr` opens a new PR when none exists; `--safe` re-gates selection and push. Supports `--auto --stake <floor>` (from `/cook --auto`; `--stake` is a severity floor — `blocker`, `high`, `medium+`, or `all`). Use even when the user just says "fix it" if a review report or finding list is in scope. After `/age`; loops back to `/age --scope <touched-path>` or pushes to ship.
+description: Apply fixes from an /age report, finding list, or CI failure, then run the project's test/lint/build gates and, on a clean cure, push to the PR. Use when the user wants the selected items resolved — phrases like "fix these findings", "/cure <slug>", "address the high-severity items", "act on the age report", "fix the failing CI", "apply the cleanup". Use even when the user just says "fix it" if a review report or finding list is in scope. Do NOT use for review (route to /age) or test authoring (route to /press).
 license: MIT
 ---
 

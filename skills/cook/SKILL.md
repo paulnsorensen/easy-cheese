@@ -1,6 +1,6 @@
 ---
 name: cook
-description: Implement an approved spec or focused unambiguous task with a TDD-disciplined contract → cut → implement → taste-test → handoff loop, editing through cheez-write. Use when the user wants code written — "implement this", "cook this spec", "/cook .cheese/specs/<slug>.md", or "fix this bug" when the fix is clear; also when the user just says "go" or "ship it" with a spec or clear acceptance criteria in scope. Supports `--auto` for the autonomous chain through `/press → /age → /cure` (see `## Auto mode`). Runs standalone on an unambiguous task — a spec helps but is not required. Route fuzzy requests to `/mold` first; no-write requests to `/culture`. After `/mold` (optional); before `/press` → `/age` → `/cure`.
+description: Implement an approved spec or focused unambiguous task, editing through cheez-write. Use when the user wants code written — "implement this", "cook this spec", "/cook .cheese/specs/<slug>.md", or "fix this bug" when the fix is clear; also when the user just says "go" or "ship it" with a spec or clear acceptance criteria in scope. Runs standalone on an unambiguous task — a spec helps but is not required. Do not use it for fuzzy planning (`/mold`), no-write discussion (`/culture`), or review-only work (`/age`).
 license: MIT
 ---
 

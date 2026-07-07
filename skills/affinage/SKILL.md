@@ -1,6 +1,6 @@
 ---
 name: affinage
-description: Triage a PR's review comments and failing CI (plus merge conflicts) through the /age lens, deciding which claims are worth acting on. Use when the user says "respond to PR comments", "handle review feedback", "affinage the PR", "/affinage <pr>", "fix the failing build", "resolve the conflicts and respond". Fetches inline + review-body comments via `gh` and CI failures via `affinage.pyz pr-status`, grades each through the ten age dimensions, and writes a report at `.cheese/affinage/pr-<n>.md`. Resolves merge conflicts via `/melt` and routes build/CI failures to fixes through `/cure`. Supports `--auto --stake <floor>`. Before `/cure`; parallel to `/age`.
+description: Triage a PR's review comments and failing CI (plus merge conflicts) through the /age lens, deciding which claims are worth acting on. Use when the user says "respond to PR comments", "handle review feedback", "affinage the PR", "/affinage <pr>", "fix the failing build", "resolve the conflicts and respond". Do NOT use for a bare diff with no PR (route to /age).
 license: MIT
 ---
 

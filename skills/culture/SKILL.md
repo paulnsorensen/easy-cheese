@@ -1,6 +1,6 @@
 ---
 name: culture
-description: Primarily the agent's internal-thinking skill — invoke it silently to model a problem, identify trade-offs, and decide what to do, BEFORE asking the user anything or dispatching another skill. Workflow skills call `/culture` as their step-1 reasoning pass; the agent does not surface the dialogue. Only treat this as a user-facing skill when the user has explicitly opted out of writes — phrases like "no writes", "just rubber-duck this", "let's only talk", "/culture". Culture writes no production code and no commits — only a user-facing session ends with an end-of-session wheypoint; internal mode writes nothing. If the dialogue reveals real work, recommend `/mold` (fuzzy → spec) or `/cook` (clear ask → code) and stop. Before `/mold` or `/cook`.
+description: Primarily the agent's internal-thinking skill — invoke it silently to model a problem, identify trade-offs, and decide what to do, BEFORE asking the user anything or dispatching another skill. Only treat this as a user-facing skill when the user has explicitly opted out of writes — phrases like "no writes", "just rubber-duck this", "let's only talk", "/culture".
 license: MIT
 ---
 

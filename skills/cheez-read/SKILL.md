@@ -1,6 +1,6 @@
 ---
 name: cheez-read
-description: Read and list code through the best fresh backend — prefer tilth MCP for file/range reads, repo listings, outlines, token estimates, and edit anchors; accept native bounded read/list tools or LSP when they match. Use when the user asks to read, view, show, open, or display a file or directory — phrases like "read src/auth.ts", "show me this file", "what's in this directory", "view lines 44-89", "look at the imports". Use even when the user names a shell viewer/lister or says "open the file" — never blind-shell a source file. Do NOT use for searching symbols or text (use cheez-search), editing code (use cheez-write), or git/gh operations.
+description: Read and list code through the best fresh backend — prefer tilth MCP; accept native bounded read/list tools or LSP when they match. Use when the user asks to read, view, show, open, or display a file or directory — phrases like "read src/auth.ts", "show me this file", "what's in this directory", "view lines 44-89", "look at the imports". Use even when the user names a shell viewer/lister or says "open the file" — never blind-shell a source file. Do NOT use for searching symbols or text (use cheez-search), editing code (use cheez-write), or git/gh operations.
 license: MIT
 compatibility: Prefers tilth MCP. Harness-native read/list/LSP tools are acceptable when they provide fresh bounded content plus enough line or snapshot context for follow-up edits.
 allowed-tools: mcp__tilth__tilth_read, mcp__tilth__tilth_list, mcp__tilth__tilth_deps
