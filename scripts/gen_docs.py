@@ -140,12 +140,15 @@ def write_doc(
 ) -> GeneratedPage:
     target = CONTENT_ROOT / relative_doc_path
     target.parent.mkdir(parents=True, exist_ok=True)
+    # Starlight renders the frontmatter title as the page H1; a literal leading
+    # `# …` in the body would show the heading twice.
+    body = re.sub(r"^#\s[^\n]*\n+", "", content.lstrip(), count=1)
     target.write_text(
         starlight_frontmatter(
             title=title,
             description=description,
             edit_url=_source_edit_url(source_rel),
-        ) + content.lstrip(),
+        ) + body,
         encoding="utf-8",
     )
     slug = _strip_md_suffix(relative_doc_path.removesuffix("/index.md"))
@@ -306,7 +309,6 @@ def emit_skill_page(skill_dir: Path) -> GeneratedPage | None:
     page_path = f"skills/{name}.md"
 
     header = (
-        f"# `/{name}`\n\n"
         f":::note[Skill metadata]\n"
         f"- **License:** {license_id}\n"
         f"- **Source:** [`{src_rel}`]({REPO_URL}/blob/main/{src_rel})\n"
@@ -357,8 +359,6 @@ def emit_skill_page(skill_dir: Path) -> GeneratedPage | None:
 
 def emit_skills_index(skills: list[GeneratedPage]) -> GeneratedPage:
     lines = [
-        "# Skills",
-        "",
         "Every skill in easy-cheese. Each one is independently invocable — type `/<name>` or describe what you want in plain English and Claude Code will route to the right one.",
         "",
         "| Skill | When to use |",
@@ -439,7 +439,7 @@ def emit_install_page() -> GeneratedPage | None:
 
     return write_doc(
         "install.md",
-        "# Install\n\n" + body,
+        body,
         title="Install",
         description="Install easy-cheese skills, MCP servers, and CLI tools.",
         source_rel="README.md",
@@ -451,12 +451,11 @@ def emit_root_passthrough(filename: str, dest_slug: str, title: str) -> Generate
     if not src.exists():
         return None
     text = _read_text(src)
-    text = re.sub(r"^#\s+.*\n", "", text, count=1)
     text = apply_link_rewrite(text, rewrite_root_passthrough_link)
     text = convert_mkdocs_admonitions(text)
     return write_doc(
         f"{dest_slug}.md",
-        f"# {title}\n\n" + text,
+        text,
         title=title,
         source_rel=filename,
     )

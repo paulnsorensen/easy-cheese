@@ -1,10 +1,24 @@
 ---
-title: easy-cheese
+title: 🧀 easy-cheese
 description: Harness-agnostic Agent Skills — the cheese-making pipeline for code review, implementation, refactoring, and PR rescue.
 editUrl: https://github.com/paulnsorensen/easy-cheese/edit/main/src/content/docs/index.md
+template: splash
+hero:
+  title: 🧀 easy-cheese
+  tagline: Harness-agnostic Agent Skills that age raw curds into shippable wheels of code — code review, implementation, refactoring, and PR rescue, all one slash command away.
+  image:
+    file: ../../assets/hero.svg
+    alt: easy-cheese logo
+  actions:
+    - text: Get started
+      link: install/
+      icon: right-arrow
+      variant: primary
+    - text: View on GitHub
+      link: https://github.com/paulnsorensen/easy-cheese
+      icon: external
+      variant: minimal
 ---
-
-# 🧀 easy-cheese
 
 A set of harness-agnostic [Agent Skills](https://agentskills.io) — the cheese-making pipeline for code review, implementation, refactoring, and PR rescue.
 
