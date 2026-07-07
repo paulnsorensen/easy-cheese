@@ -14,25 +14,51 @@
   --sl-color-gray-1: #fef3c7;
   --sl-color-gray-2: #fde68a;
   --sl-color-gray-3: #d6a955;
-  --sl-color-gray-4: #9a6b2f;
+  --sl-color-gray-4: #ae8132;
   --sl-color-gray-5: #5f3d1d;
   --sl-color-gray-6: #332013;
   --sl-color-black: #1c1209;
+  /* aside tokens: note=blue (cool cream-blue), tip=purple (golden cheese),
+     caution=orange (wax amber), danger=red (red wax) */
+  --sl-color-blue-low: #1e313e;
+  --sl-color-blue: #4d97cb;
+  --sl-color-blue-high: #c9e4f8;
+  --sl-color-purple-low: #4f4117;
+  --sl-color-purple: #eebd2b;
+  --sl-color-purple-high: #fcf1c5;
+  --sl-color-orange-low: #4f2d17;
+  --sl-color-orange: #ee792b;
+  --sl-color-orange-high: #fbd9bb;
+  --sl-color-red-low: #4a1c20;
+  --sl-color-red: #d92635;
+  --sl-color-red-high: #f9c7cb;
 }
 
 :root[data-theme="light"] {
   --sl-color-accent-low: #ffedd5;
   --sl-color-accent: #b45309;
   --sl-color-accent-high: #7c2d12;
-  --sl-color-white: #ffffff;
+  --sl-color-white: var(--cheese-ink);
   --sl-color-gray-1: #2b1a0b;
   --sl-color-gray-2: #4a2d13;
   --sl-color-gray-3: #80521f;
-  --sl-color-gray-4: #b07c32;
+  --sl-color-gray-4: #9b6127;
   --sl-color-gray-5: #f3d38a;
   --sl-color-gray-6: #fff1c2;
   --sl-color-gray-7: #fff8dc;
   --sl-color-black: #fffdf5;
+  --sl-color-blue-low: #d7e8f4;
+  --sl-color-blue: #276b9b;
+  --sl-color-blue-high: #114569;
+  --sl-color-purple-low: #f6ebcb;
+  --sl-color-purple: #a37814;
+  --sl-color-purple-high: #66440a;
+  --sl-color-orange-low: #f6dccb;
+  --sl-color-orange: #a34d14;
+  --sl-color-orange-high: #662c0a;
+  --sl-color-red-low: #f4d7da;
+  --sl-color-red: #a0222c;
+  --sl-color-red-high: #6d0d15;
 }
 
 body {
@@ -94,8 +120,29 @@ h3,
   background: rgba(245, 158, 11, 0.08);
 }
 
-.sl-markdown-content .starlight-aside {
-  border-color: rgba(245, 158, 11, 0.55);
+.starlight-aside__icon {
+  display: none;
+}
+
+.starlight-aside__title::before {
+  font-size: 1.1em;
+  line-height: 1;
+}
+
+.starlight-aside--note .starlight-aside__title::before {
+  content: "\1FAD5";
+}
+
+.starlight-aside--tip .starlight-aside__title::before {
+  content: "\1F9C0";
+}
+
+.starlight-aside--caution .starlight-aside__title::before {
+  content: "\26A0\FE0F";
+}
+
+.starlight-aside--danger .starlight-aside__title::before {
+  content: "\2620\FE0F";
 }
 
 .hero img,
@@ -109,7 +156,7 @@ h3,
   }
 
   .site-title:hover img {
-    transform: rotate(-4deg) scale(1.04);
+    transform: rotate(-8deg) scale(1.05);
   }
 }
 
@@ -121,4 +168,19 @@ h3,
 .mermaid .node polygon,
 .mermaid .node circle {
   stroke: var(--cheese-rind) !important;
+}
+
+
+footer .meta {
+  font-variant-caps: small-caps;
+  letter-spacing: 0.03em;
+}
+
+.sl-markdown-content a:hover {
+  color: var(--sl-color-accent-high);
+}
+
+.sidebar a[aria-current="page"] {
+  color: var(--sl-color-accent-high);
+  font-weight: 600;
 }
