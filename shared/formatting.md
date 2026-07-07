@@ -2,7 +2,7 @@
 
 Use this reference for any artifact a skill writes to `.cheese/` — specs, findings reports (`/age`, `/cure`, `/press`, `/cook`), and research reports (`/briesearch`). The house style and citation rules are shared; the three canonical shapes are listed at the bottom and cross-referenced to the skill that owns each one.
 
-The citation primitive is the standard markdown `[^name]` footnote, which renders natively in GitHub and the easy-cheese mkdocs site (the `footnotes` extension is enabled in `mkdocs.yml`).
+The citation primitive is the standard markdown `[^name]` footnote, which renders natively in GitHub and the easy-cheese Starlight docs site.
 
 ## Reader model
 
@@ -13,7 +13,7 @@ Consequences for prose:
 - In-scope code addresses (`path/to/file.ts:42`, `path/to/file.ts:42-50`) stay inline. They are locations, not citations.
 - Out-of-scope evidence (external docs, RFCs, blog posts, vendor pages, commits, PRs, prior `.cheese/` reports, GitHub blob URLs that justify a claim) goes in footnotes. See [Citations](#citations).
 - Internal shorthand (a skill name, a cheese term, an acronym) gets expanded on first use or earns a Glossary entry when the report is long enough to need one.
-- People are referenced as "a review comment on [PR 42](URL)," not as bare first names.
+- People are referenced as "a review comment on [PR 42](https://github.com/example/repo/pull/42)," not as bare first names.
 
 Test: hand the report to a teammate who has never opened the diff. They can follow every claim and click through to the code when they want to verify. If a sentence reads only to someone who has memorised the diff, it is not finished.
 
@@ -50,7 +50,7 @@ These rules bind every section, every artifact. The succinctness pass catches vi
   | blast radius (outside incident context) | affected scope, reach, impact |
 
 - **Calibrated tags sit on the claim, not at sentence boundaries.** Use `` `<certain>` ``, `` `<speculating>` ``, or `` `<don't know>` `` inline next to the specific assertion. Never as a blanket disclaimer at the top of a section. Never in front of a fragment. Adjacent claims with different calibrations split into two sentences, each carrying its own tag. The three tokens are exact label values: write them verbatim, never as synonyms.
-- **Diagrams over prose.** Prefer Mermaid flowcharts and sequence diagrams for control-flow, data-flow, and integration shapes. Mermaid renders in GitHub and in the mkdocs site.
+- **Diagrams over prose.** Prefer Mermaid flowcharts and sequence diagrams for control-flow, data-flow, and integration shapes. Mermaid renders in GitHub and in the Starlight docs site.
 - **No semicolons in Mermaid.** Newlines are the convention and render more reliably. One statement per line, no trailing `;`. This includes node definitions, edges, and class assignments.
 - **Pseudocode for algorithms, signatures for data shapes.** Pseudocode is clearest when the point is the algorithm; real signatures (typed function declarations, schemas) are clearest when the point is the data shape. One form per idea; the same content does not appear in two.
 - **Cite, don't restate.** Link prior `.cheese/` reports, specs, and PRs rather than summarising them, unless the summary is genuinely shorter than the link target. Use the footnote form below.
@@ -60,7 +60,7 @@ These rules bind every section, every artifact. The succinctness pass catches vi
 
 The citation primitive is the standard markdown footnote: `[^1]` (or any kebab-case name like `[^retry-rfc]`), with the definition at the bottom of the artifact under a `## References` heading.
 
-GitHub, the mkdocs site, and pandoc all render this form as a superscript marker with a back-link to the reference list.
+GitHub, the Starlight docs site, and pandoc all render this form as a superscript marker with a back-link to the reference list.
 
 ### When to use a footnote vs inline
 

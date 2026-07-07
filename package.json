@@ -1,0 +1,20 @@
+{
+  "name": "easy-cheese-docs",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.13.1",
+  "scripts": {
+    "docs:generate": "python3 scripts/gen_docs.py",
+    "docs:dev": "python3 scripts/gen_docs.py && astro dev",
+    "docs:build": "python3 scripts/gen_docs.py && astro build",
+    "docs:preview": "astro preview"
+  },
+  "devDependencies": {
+    "@astrojs/starlight": "^0.41.3",
+    "astro": "^7.0.6",
+    "astro-mermaid": "^2.1.0",
+    "mermaid": "^11.6.0",
+    "typescript": "^5.8.3"
+  }
+}

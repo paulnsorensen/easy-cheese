@@ -14,5 +14,6 @@ rules:
 ignore: |-
   .cheese/
   .context/
-  mkdocs.yml
-  site/
+  node_modules/
+  dist/
+  .astro/
