@@ -50,6 +50,7 @@ Every finding carries these fields:
 | `location` | `class / module / cross-module / contract` | reviewer-classified |
 | `fix-cost-now` | `contained / moderate / sprawling` | bucketed from blast-radius count |
 | `fix-cost-later` | `contained / spreading / structural` | reviewer-classified |
+| `confidence` | `certain / speculating` | reviewer-assigned per the voice-kernel scale (`voice.md`); `don't know` findings are never emitted |
 | `recommendation` | one-line action | reviewer |
 
 ## Location classification
