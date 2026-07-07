@@ -18,7 +18,7 @@ Do not use the user-facing mode when the user wants a written spec (`/mold`), im
 
 ## Invariant
 
-`/culture` does not write production code, commit changes, open PRs, or mutate project state. In **user-facing mode** it ends every session by writing a durable handoff, delegated to `/wheypoint` (see `## Handoff slug`); that wheypoint is written at session end only, never during the dialogue. In **internal mode** it writes nothing at all. If a user-facing conversation reveals that something should be built, route to `/mold` or `/cook` after the wheypoint is written. In internal mode, just return the decision and let the calling skill act.
+`/culture` writes no production code and does not commit changes, open PRs, or mutate project state. In **user-facing mode** it ends every session by writing a durable handoff, delegated to `/wheypoint` (see `## Handoff slug`); that wheypoint is written at session end only, never during the dialogue. In **internal mode** it writes nothing at all. If a user-facing conversation reveals that something should be built, route to `/mold` or `/cook` after the wheypoint is written. In internal mode, just return the decision and let the calling skill act.
 
 ## Flow
 
