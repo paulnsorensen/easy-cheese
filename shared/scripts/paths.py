@@ -25,7 +25,7 @@ KEBAB_SLUG = re.compile(r"^(?!-)(?!.*--)[a-z0-9-]{1,64}(?<!-)$")
 
 # Phases that own a `.cheese/<phase>/<slug>.md` artifact tree. The set spans
 # phases owned by several orchestrators (`/ultracook`, `/pasteurize`,
-# `/research`) plus one-off notes/specs/hard artifacts.
+# `/research`) plus one-off notes/specs artifacts.
 PHASES: frozenset[str] = frozenset(
     {
         "cook",
@@ -34,7 +34,6 @@ PHASES: frozenset[str] = frozenset(
         "cure",
         "specs",
         "notes",
-        "hard",
         "research",
         "ultracook",
         "pasteurize",
@@ -45,8 +44,8 @@ PHASES: frozenset[str] = frozenset(
 # home outside any single checkout: a spec or research report stays useful
 # across branches and clones and shouldn't ride along in git. They anchor at the
 # per-project XDG corpus. Every other phase is transient pipeline handoff state
-# (cook/press/age/cure reports, notes, hard explanations) and stays repo-local
-# under .cheese/ where it travels with the branch and surfaces in the PR.
+# (cook/press/age/cure reports, notes) and stays repo-local under .cheese/
+# where it travels with the branch and surfaces in the PR.
 XDG_PHASES: frozenset[str] = frozenset({"specs", "research"})
 
 # Repo-local root for transient phases. Relative on purpose: it resolves against
@@ -58,10 +57,9 @@ CHAIN_PHASES: tuple[str, ...] = ("cook", "press", "age", "cure")
 
 # Phase token -> on-disk directory name, when the two diverge. The phase TOKEN
 # stays stable for every caller (artifact_path, parse, resolver); only the
-# directory under the root differs. `hard` writes to `.cheese/hard-cheese/`,
-# matching src/hard-cheese/append-attempt.py. Phases not listed map to
-# themselves.
-PHASE_DIRS: dict[str, str] = {"hard": "hard-cheese"}
+# directory under the root differs. Currently empty — every phase maps to
+# itself (the retired `hard` phase was the one divergent entry).
+PHASE_DIRS: dict[str, str] = {}
 _DIR_PHASES: dict[str, str] = {d: p for p, d in PHASE_DIRS.items()}
 
 # Aux registry: artifact owners that are NOT pipeline phases. `affinage` writes
@@ -73,7 +71,6 @@ AUX_PHASES: frozenset[str] = frozenset({"affinage"})
 # Phase/aux token -> slash-command skill that owns it. Mostly identity
 # (`/<phase>`); these are the exceptions.
 PHASE_SKILL: dict[str, str] = {
-    "hard": "/hard-cheese",
     "specs": "/mold",
     "notes": "/wheypoint",
     "research": "/briesearch",
@@ -237,9 +234,8 @@ def default_root_for_phase(phase: str, *, project: str | None = None) -> Path:
 def artifact_path(phase: str, slug: str, *, root: Path | str | None = None) -> Path:
     """Return ``<root>/<phase-dir>/<slug>.md``. Validates phase + slug.
 
-    The on-disk directory may differ from the phase token: ``phase_dir`` maps
-    ``hard`` to ``hard-cheese`` (see ``PHASE_DIRS``); every other phase maps to
-    itself.
+    The on-disk directory may differ from the phase token via ``PHASE_DIRS``
+    (currently empty — every phase maps to itself).
 
     With ``root`` omitted, the root is resolved per phase via
     ``default_root_for_phase`` (durable phases → XDG corpus, rest → ``.cheese/``).
@@ -262,8 +258,8 @@ def parse_artifact_path(path: Path | str) -> tuple[str, str]:
     """Parse ``phase, slug`` from a canonical ``.cheese/<phase-dir>/<slug>.md`` path.
 
     Only the canonical ``.cheese/`` root is parsed. The accepted on-disk directory
-    may differ from the returned phase token: ``.cheese/hard-cheese/<slug>.md``
-    parses to phase ``hard`` (see ``_DIR_PHASES``).
+    may differ from the returned phase token via ``_DIR_PHASES`` (currently empty —
+    every directory maps to itself).
     """
     p = Path(path)
     parts = p.parts

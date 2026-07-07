@@ -68,7 +68,6 @@ Content shared _across_ skills lives at top-level `shared/` (e.g. `shared/handof
 | `skills/age/SKILL.md` | `/age` | Review diffs across ten staff-engineer dimensions and produce a severity-grouped findings report. |
 | `skills/affinage/SKILL.md` | `/affinage` | Triage external PR claims — review comments and CI failures — through the `/age` lens, hand the chosen fixes to `/cure`, then post replies back on GitHub. |
 | `skills/cure/SKILL.md` | `/cure` | Fix user-selected findings, validate, and prepare the branch for shipping. |
-| `skills/hard-cheese/SKILL.md` | `/hard-cheese` (or `--hard` flag) | Metacognitive vibecheck gate before review — asks the author to explain the diff's causal logic, grades the explanation against the SOLO Taxonomy. Standalone or via `--hard` propagation through the pipeline. |
 | `skills/ultracook/SKILL.md` | `/ultracook` | Autonomous fresh-context pipeline for high-blast-radius specs. The decomposer picks the mode: a decomposable 2+-curd spec fans out into parallel curds (each running per-curd `cook → press → age → cure` in its own worktree, harvested back, then one post-merge review pass, ending in 1–N reviewable PRs); an indivisible spec runs the linear chain (`cook → press → age → cure → age → cure → age`, all `--auto`). Each phase runs inside its own full-peer sub-agent so review stays adversarial and parent context never bloats. |
 | `skills/melt/SKILL.md` | `/melt` | Resolve merge / rebase / cherry-pick conflicts via the structural cascade (mergiraf → rerere → kdiff3) with batch, pick-side, and lockfile helpers. |
 | `skills/wheypoint/SKILL.md` | `/wheypoint` | Mark a checkpoint: compact a mid-task conversation into a durable handoff document at `.cheese/notes/<slug>.md` (resumable slug + state-mapped suggested-skills + redacted secrets) so a fresh agent can resume via `/cheese --continue <slug>`. |
@@ -136,9 +135,7 @@ back in front of dispatch and surfaces non-auto variants as alternatives. Skip
 `/cheese` entirely when you already know the destination — a hard bug can go
 straight to `/pasteurize`, a known-scope fix can go to `/cook`, and an
 explicit no-writes design discussion goes to `/culture`. `/melt` cuts in
-whenever a merge step blocks `/cook` or `/cure`. Append `--hard` to any
-pipeline step to insert `/hard-cheese` as a metacognitive vibecheck gate
-before review.
+whenever a merge step blocks `/cook` or `/cure`.
 
 ## Scope
 
@@ -220,7 +217,7 @@ gh skill install paulnsorensen/easy-cheese
 Install every current skill in one shot:
 
 ```sh
-for s in age affinage briesearch cheese cheez-read cheez-search cheez-write cook culture cure hard-cheese melt mold pasteurize press ultracook wheypoint; do
+for s in age affinage briesearch cheese cheez-read cheez-search cheez-write cook culture cure melt mold pasteurize press ultracook wheypoint; do
   gh skill install paulnsorensen/easy-cheese "$s"
 done
 ```

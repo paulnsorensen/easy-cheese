@@ -17,7 +17,7 @@ import re
 from dataclasses import dataclass
 
 # Flag propagation rules — see shared/handoff-gate.md § Flag propagation.
-ALWAYS_PROPAGATE: frozenset[str] = frozenset({"--hard"})
+ALWAYS_PROPAGATE: frozenset[str] = frozenset()
 CHAIN_ONLY: frozenset[str] = frozenset({"--auto"})
 
 
@@ -117,7 +117,7 @@ _DISPATCH_RE = re.compile(r"^/(?P<skill>[a-z][a-z-]*)\b\s*(?P<args>.*)$")
 
 
 def parse_skill_dispatch(dispatch: str) -> tuple[str, list[str]]:
-    """Split '/age <slug> --hard' into ('age', ['<slug>', '--hard'])."""
+    """Split '/age <slug> --safe' into ('age', ['<slug>', '--safe'])."""
     match = _DISPATCH_RE.match(dispatch.strip())
     if not match:
         raise ValueError(f"not a skill dispatch: {dispatch!r}")

@@ -18,7 +18,7 @@ See `## Fresh-window review` for the detection rule and `## Merge-conflict resol
 ## Inputs
 
 ```text
-/affinage [<pr-ref>] [--auto --stake <floor>] [--safe] [--open-pr] [--hard] [--full] [--include-outdated]
+/affinage [<pr-ref>] [--auto --stake <floor>] [--safe] [--open-pr] [--full] [--include-outdated]
 ```
 
 `<pr-ref>` accepts a PR number, a full GitHub PR URL, or nothing (auto-detect via `gh pr view --json number` on the current branch).
@@ -28,7 +28,6 @@ Flags:
 - `--auto --stake <floor>` — autonomous mode. `<floor>` is `blocker`, `high`, `medium+`, or `all` (same semantics as `/cure`). Skips the selection gate, dispatches `/cure --auto --stake <floor>`, posts all replies without prompting.
 - `--safe` — re-introduce the gates the autonomous default skips: the cure-selection gate, the reply-only gate, and the merge-conflict confirmation. Use it when you want to choose before anything is fixed, replied to, or resolved.
 - `--open-pr` — propagate to `/cure` so a clean cure may open a *new* PR when none exists (otherwise `/cure` only pushes an already-open one).
-- `--hard` — propagated metacognitive-gate flag. `/affinage` does not fire the gate; passes `--hard` forward to `/cure` at handoff.
 - `--full` — un-collapses `## Low` when ≥10 low-severity findings exist (mirrors `/age --full`).
 - `--include-outdated` — include outdated review threads. Default skips them.
 - `--no-age` — skip the standalone fresh `/age` pass. No effect when chained (the pass is already skipped). Use when you only want to triage existing comments, CI failures, and conflicts.
@@ -218,7 +217,7 @@ On the selection (or the default post-all), post via Flow step 9 and exit with `
 
 **Slug `next:` values.** Write `next: cure` when at least one finding meets the `medium+` floor (medium-or-above, or a cheap contained-fix low). Write `next: done` when no severity-section finding exists or all meeting items are empty-selection after floor resolution.
 
-On a non-empty cure selection (auto-selected by default or chosen at the gate), immediately dispatch `/cure <slug> [--safe] [--open-pr] [--hard]` with locked context:
+On a non-empty cure selection (auto-selected by default or chosen at the gate), immediately dispatch `/cure <slug> [--safe] [--open-pr]` with locked context:
 
 ```yaml
 handoff_context:
@@ -228,7 +227,7 @@ handoff_context:
   resolved_ids: [<expanded ids>]
 ```
 
-`/cure` re-confirms cited ids and goes straight to apply. Propagate `--safe`, `--open-pr`, and `--hard` to `/cure` when in scope. `/affinage` resumes when `/cure` returns to post replies.
+`/cure` re-confirms cited ids and goes straight to apply. Propagate `--safe` and `--open-pr` to `/cure` when in scope. `/affinage` resumes when `/cure` returns to post replies.
 
 ### Auto mode
 
@@ -247,10 +246,6 @@ When invoked with `--auto --stake <floor>`:
 The whole cure chain (cure → `/age --scope --auto` → up to the two-cure-pass cap) must run in the parent affinage context so the post-cure reply step still has the original graded findings (slug, ids, `from-comment:<id>` tags, drafted push-back text) in memory. Spawning the cure chain in a sub-agent breaks reply posting — do not.
 
 If no findings meet the floor, skip the `/cure` dispatch, post replies for `Reviewer-rejected` + `Needs-investigation` items only, and exit with `status: ok / next: done`.
-
-### --hard mode
-
-`/affinage` does not fire the `/hard-cheese` gate. It propagates `--hard` forward to `/cure` so the gate can fire at the share-for-review boundary inside `/cure --hard`. See `skills/cure/SKILL.md` `--hard mode`.
 
 ## Rules
 

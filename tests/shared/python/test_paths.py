@@ -146,32 +146,10 @@ class TestSlugFromRemote:
         assert paths._slug_from_remote(url) == expected
 
 
-class TestHardDirReconciliation:
-    """`hard` token stays stable; on-disk dir is `hard-cheese`."""
-
-    def test_artifact_path_uses_hard_cheese_dir(self, paths: ModuleType) -> None:
-        assert paths.artifact_path("hard", "demo") == Path(".cheese/hard-cheese/demo.md")
-
-    def test_roundtrip_parse(self, paths: ModuleType) -> None:
-        path = paths.artifact_path("hard", "demo")
-        assert path == Path(".cheese/hard-cheese/demo.md")
-        assert paths.parse_artifact_path(path) == ("hard", "demo")
-
-    def test_existing_artifacts_finds_hard(
-        self, paths: ModuleType, tmp_path: Path
-    ) -> None:
-        target = tmp_path / "hard-cheese" / "demo.md"
-        target.parent.mkdir(parents=True)
-        target.write_text("x", encoding="utf-8")
-        found = paths.existing_artifacts("demo", root=tmp_path, phases=("hard",))
-        assert found == {"hard": target}
-
-
 class TestPhaseSkill:
     @pytest.mark.parametrize(
         ("phase", "skill"),
         [
-            ("hard", "/hard-cheese"),
             ("specs", "/mold"),
             ("notes", "/wheypoint"),
             ("research", "/briesearch"),
@@ -248,22 +226,6 @@ class TestResolveSlug:
                 "abs_path": str(art),
                 "phase": "affinage",
                 "skill": "/affinage",
-                "confidence": 1.0,
-            }
-        ]
-
-    def test_tier1_hard_found_under_hard_cheese(
-        self, paths: ModuleType, tmp_path: Path
-    ) -> None:
-        art = tmp_path / ".cheese" / "hard-cheese" / "demo.md"
-        art.parent.mkdir(parents=True)
-        art.write_text("x", encoding="utf-8")
-        result = paths.resolve_slug("demo", repo_root=tmp_path)
-        assert result["matches"] == [
-            {
-                "abs_path": str(art),
-                "phase": "hard",
-                "skill": "/hard-cheese",
                 "confidence": 1.0,
             }
         ]
@@ -382,18 +344,6 @@ class TestResolveSlug:
         cook.write_text("x", encoding="utf-8")
         with pytest.raises(ValueError, match=r"unknown phase 'bogus'"):
             paths.resolve_slug("demo", phase_hint="bogus", repo_root=tmp_path)
-
-    def test_literal_hard_dir_is_not_resolved(
-        self, paths: ModuleType, tmp_path: Path
-    ) -> None:
-        # The `hard` token resolves to hard-cheese/ only; a literal .cheese/hard/
-        # artifact must NOT be found.
-        stray = tmp_path / ".cheese" / "hard" / "demo.md"
-        stray.parent.mkdir(parents=True)
-        stray.write_text("x", encoding="utf-8")
-        result = paths.resolve_slug("demo", repo_root=tmp_path)
-        assert result["matches"] == []
-        assert str(stray.parent) not in result["fallback_roots"]
 
     def test_all_emitted_paths_are_absolute(
         self, paths: ModuleType, tmp_path: Path, xdg_corpus: Path
