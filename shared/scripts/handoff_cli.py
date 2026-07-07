@@ -8,7 +8,7 @@ shell out for the canonical preamble logic without re-implementing it.
         --orientation "Reviewed the retry path."
 
     python3 shared/scripts/handoff_cli.py parse --file .cheese/age/demo.md
-    python3 shared/scripts/handoff_cli.py dispatch "/age demo --safe"
+    python3 shared/scripts/handoff_cli.py dispatch "/age demo --hard"
 """
 
 from __future__ import annotations
@@ -89,7 +89,7 @@ def _setup(parser: argparse.ArgumentParser) -> None:
     parse.set_defaults(func=_cmd_parse)
 
     dispatch = sub.add_parser("dispatch", help="split a '/skill arg --flag' command")
-    dispatch.add_argument("command", help="full dispatch string, e.g. '/age slug --safe'")
+    dispatch.add_argument("command", help="full dispatch string, e.g. '/age slug --hard'")
     dispatch.set_defaults(func=_cmd_dispatch)
 
 

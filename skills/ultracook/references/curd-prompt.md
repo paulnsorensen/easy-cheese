@@ -1,6 +1,6 @@
 # Per-curd worker prompt template
 
-Loaded by `/ultracook` at Phase 2 (fan-out). Substitute `{N}`, `{slug}`, `{file_list}`, `{behaviour}`, `{acceptance_criterion}`, `{test_target}`, and `{spec_summary}` before dispatch.
+Loaded by `/ultracook` at Phase 2 (fan-out). Substitute `{N}`, `{slug}`, `{file_list}`, `{behaviour}`, `{acceptance_criterion}`, `{test_target}`, `{spec_summary}`, and `{hard_flag}` before dispatch.
 
 ````text
 You are executing curd #{N} for spec: {slug}
@@ -39,10 +39,10 @@ Do NOT run the full test suite.
 
 ## Workflow (single inline pass per skill)
 
-1. /cook --auto                              — implement the behaviour against the acceptance criterion
+1. /cook --auto {hard_flag}                  — implement the behaviour against the acceptance criterion
 2. /press --auto                             — adversarial test hardening (single pass)
 3. /age --auto                               — ten-dimension review of YOUR diff only, inline-degrade
-4. /cure --auto --stake medium+              — fix every medium-or-above finding + cheap (contained-fix) lows
+4. /cure --auto --stake medium+ {hard_flag}  — fix every medium-or-above finding + cheap (contained-fix) lows
 5. /commit (or git commit direct)            — single commit with conventional message
 6. Write pr-metadata.json: {{title, body}} for the slicer to pick up later
 
@@ -82,3 +82,7 @@ branch. Set `next: done` if you halted.
 - Chain forward (the orchestrator owns the chain).
 - Retry on failure — write the halt and return; the orchestrator decides retry policy.
 ````
+
+## Variant: `--hard` propagation
+
+When `/ultracook` was invoked with `--hard`, substitute `{hard_flag}` with `--hard`. Otherwise substitute with the empty string. The flag flows through `/cook --hard --auto` and `/cure --hard --auto --stake medium+`. The curd worker does not invoke `/hard-cheese` directly; the gate fires inside `/cure`'s share-for-review handoff per `skills/hard-cheese/SKILL.md`.

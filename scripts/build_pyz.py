@@ -60,6 +60,10 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
     },
     "cook": {"artifact-path": Shared("artifact_path.py")},
     "age": {"html-report": "age-html-report.py"},
+    "hard-cheese": {
+        "append-attempt": "append-attempt.py",
+        "freshness-check": "freshness-check.py",
+    },
     "pasteurize": {
         "debug-tag-sweep": "debug-tag-sweep.py",
         "repro-rerun": "repro-rerun.py",

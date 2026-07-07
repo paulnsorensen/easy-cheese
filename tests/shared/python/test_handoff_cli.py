@@ -159,10 +159,10 @@ class TestParse:
 
 class TestDispatch:
     def test_extracts_skill_and_args(self) -> None:
-        result = _run("dispatch", "/age slug --safe")
+        result = _run("dispatch", "/age slug --hard")
         assert result.returncode == 0, result.stderr
         payload = json.loads(result.stdout)
-        assert payload == {"skill": "age", "args": ["slug", "--safe"]}
+        assert payload == {"skill": "age", "args": ["slug", "--hard"]}
 
     def test_bare_skill(self) -> None:
         result = _run("dispatch", "/cure")

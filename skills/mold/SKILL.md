@@ -112,13 +112,17 @@ Before the handshake fires, also run the **agent-introduced-scope** check — fl
 
 If any gate is unmet, propose the smallest next question or evidence check. Write artifacts only after both keys pass.
 
+## --hard
+
+`/mold --hard` propagates `--hard` through to `/cook` at handoff (any of the cook-flavoured options below carries the flag forward). Mold itself runs no gate — the metacognitive vibecheck fires later, at `/cure`'s share-for-review boundary. See `skills/hard-cheese/SKILL.md` and `skills/hard-cheese/references/composition.md`.
+
 ## Handoff
 
 **Pipeline:** culture → **[mold]** → cook → press → age → cure → ship
 
 After Curdle writes the spec, run the curd-count script (procedure and `--blast-radius` rules in [`references/curd-count.md`](references/curd-count.md)), then render the branch menu below and prompt via the shared handoff gate. Never pre-select an autonomous option.
 
-Read the JSON digest. Its `decomposable` field (true when `candidate_curds ≥ 2`, the `PARALLEL_THRESHOLD`) picks the option set rendered below; its `recommended_skill` field picks which option holds the *(recommended)* slot. Then ask the user via the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md). Lead each option with the verb; the skill command (with the spec path) is the backing detail.
+Read the JSON digest. Its `decomposable` field (true when `candidate_curds ≥ 2`, the `PARALLEL_THRESHOLD`) picks the option set rendered below; its `recommended_skill` field picks which option holds the *(recommended)* slot. Then ask the user via the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md). Lead each option with the verb; the skill command (with the spec path and any in-scope `--hard` propagation) is the backing detail.
 
 **Decomposable specs (`decomposable: true`, `candidate_curds ≥ 2`):**
 

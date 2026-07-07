@@ -23,6 +23,7 @@ Optional flags:
 - `--safe` — gate dispatch behind a confirmation prompt. Propagates downstream, re-introducing the per-skill gates the autonomous default skips (`/age` / `/affinage` cure-selection, `/cure`'s PR push).
 - `--open-pr` — propagate to `/cure` so a clean cure may open a *new* PR when none exists (the default only pushes an already-open one). Useful when routing a fresh branch through the pipeline and you want the PR created at the end.
 - `--continue <slug-or-note-path>` — resume an in-flight pipeline from a handoff slug, or from an explicit `.cheese/.../<slug>.md` note path when outside the original repo. See `## --continue` below.
+- `--hard` — inject the `/hard-cheese` metacognitive gate before code is shared for review. The flag propagates to whichever target the router dispatches and fires at `/cure`'s share-for-review handoff (or end of `/cure`'s final auto pass under `--auto --hard`). See `skills/hard-cheese/SKILL.md`.
 
 If `$ARGUMENTS` is missing entirely and there is no recent context to lean on, ask one clarifying question through the host routing guide in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md) before classifying.
 

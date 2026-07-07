@@ -17,6 +17,7 @@ test:
     python3 -m pytest tests/python -q
     python3 -m pytest tests/shared/python -q
     python3 -m pytest tests/fanout/python -q
+    python3 -m pytest tests/hard-cheese/python -q
     python3 -m pytest tests/pasteurize/python -q
     bats tests/bash/test_install.bats
     bats tests/fanout/bash/test_pr_plan_to_branches.bats

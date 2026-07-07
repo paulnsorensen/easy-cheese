@@ -46,6 +46,7 @@ SKILL_SUBCOMMANDS = {
     "briesearch": ["artifact-path", "ground-check"],
     "cook": ["artifact-path"],
     "age": ["html-report"],
+    "hard-cheese": ["append-attempt", "freshness-check"],
     "pasteurize": ["debug-tag-sweep", "repro-rerun"],
     "common": [
         "slugify",

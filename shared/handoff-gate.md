@@ -43,7 +43,7 @@ Every option must include:
 
 - **Label** — the user-facing choice.
 - Exactly one of:
-  - **Dispatch** — the exact command for a skill transition (`/press <slug>`, `/age <slug>`, …), including slug/path/scope and any propagated flags.
+  - **Dispatch** — the exact command for a skill transition (`/press <slug>`, `/age <slug> --hard`, …), including slug/path/scope and propagated flags such as `--hard`.
   - **Continue** — a short identifier for an in-skill action the current skill knows how to execute (e.g. `ask-for-decomposition-change`, `re-run-decomposer`, `write-manifest-then-seed`).
   - `dispatch: none` — terminal options (Stop, Pause, Compact) that return a final status and do not start another skill.
 - **Context** — any prose or structured payload the action needs but that is not part of the command line.
@@ -121,7 +121,7 @@ Keep payloads short and factual. If a payload would exceed a compact screenful, 
 
 ## Flag propagation
 
-Propagate `--auto` inside documented auto-mode chains and inside `/cheese`'s autonomous-by-default dispatch path (see `skills/cheese/SKILL.md` § Escalation — tier-1 and tier-2 dispatches pre-select the auto variant and run it without a gate unless `--safe` is set).
+Propagate `--hard` through every runnable downstream option while the flag is in scope. Propagate `--auto` inside documented auto-mode chains and inside `/cheese`'s autonomous-by-default dispatch path (see `skills/cheese/SKILL.md` § Escalation — tier-1 and tier-2 dispatches pre-select the auto variant and run it without a gate unless `--safe` is set).
 
 Propagate `--safe` and `--open-pr` through every runnable downstream option while in scope. `--safe` re-introduces the gates that the autonomous default skips — the `/age` / `/affinage` cure-selection and `/cure`'s PR push. It only has meaning for skills that *have* such a gate to re-introduce: `/age`, `/affinage`, and `/cure`. It does **not** turn a `--auto` chain interactive (the two flags are opposites) — `/cook --auto` and `/press --auto` have no selection or push gate of their own, so they neither declare nor forward `--safe`; a `/cheese --safe` route that dispatches a `--auto` variant gates only `/cheese`'s own dispatch decision, then runs the chain headless. `--open-pr` rides all the way to the terminal `/cure`, authorizing a clean cure to open a *new* PR when none exists (the default only pushes an already-open one); inside the `--auto` chain it is threaded through each invocation (`/cook → /press → /age → /cure`).
 
@@ -136,6 +136,6 @@ The forward command and its label vary per gate. Simple gates share one four-opt
 - **Checkpoint & stop** — `/wheypoint`: write a resumable handoff slug and pause, so a fresh context can resume via `/cheese --continue <slug>`.
 - **Stop** — dispatch none; leave the pipeline paused with no checkpoint.
 
-The four-option cap is why **Ship it** bundles `--auto` and `--open-pr` rather than offering them separately — `--open-pr` only acts at the terminal cure, so a standalone open-pr option at an upstream gate would not do anything until the chain reaches cure; it rides the headless chain instead.
+Propagate any in-scope `--hard` onto both runnable options (vanilla and **Ship it**). The four-option cap is why **Ship it** bundles `--auto` and `--open-pr` rather than offering them separately — `--open-pr` only acts at the terminal cure, so a standalone open-pr option at an upstream gate would not do anything until the chain reaches cure; it rides the headless chain instead.
 
 When a gate carries a richer *core* decision (e.g. `/age`'s finding selection, or `/cure`'s push-vs-re-review), render that decision's options first, then append **Ship it**, **Checkpoint & stop**, and **Stop** as the standard tail. A gate-specific alternative that does not fit the four buttons (e.g. cook's "skip press, review now") stays as prose plus the free-form `Other` path rather than displacing a standard option.

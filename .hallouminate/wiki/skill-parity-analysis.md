@@ -61,9 +61,7 @@ test; the agent-introduced-scope audit; the hard-fail-over-silent-degrade
 invariant; dual-transport orchestration (`cook --auto` vs `ultracook`); melt
 squash-residue detection; the runtime context-budget mechanic; durable ADRs to
 a dynamically-probed hallouminate corpus; the per-phase handoff-slug system;
-the ten-dimension age review engine. (The hard-cheese SOLO epistemic-debt gate
-was on this list until its 2026-07 retirement for zero demand — see
-[zero-use-skills-resolution-001](adr/zero-use-skills-resolution-001.md).)
+the hard-cheese SOLO epistemic-debt gate; the ten-dimension age review engine.
 
 ## Provenance
 
