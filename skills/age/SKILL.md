@@ -137,7 +137,7 @@ Activates when **all** hold: the **scale threshold** (above) is met AND `/age` i
 - Reviews only its assigned dimension.
 - Computes **full per-finding severity** for that dimension (base + location bump + compounding bump).
 - Tags each finding with its dimension and an `also-relevant-to: [<dim>, ...]` field when cross-dimension overlap is suspected.
-- Returns its dimension's findings as full per-finding rows in the `SKILL.md § Output` finding format (`**[dim:sev]** path:line — claim` + `location / fix-cost-now / fix-cost-later` + `recommendation`). Not an orientation digest — the `§ Digest contract` size ceiling does not apply.
+- Returns its dimension's findings as full per-finding rows in the `SKILL.md § Output` finding format (`**[dim:sev]** path:line — claim` + `location / fix-cost-now / fix-cost-later / confidence` + `recommendation`). Not an orientation digest — the `§ Digest contract` size ceiling does not apply.
 - Does **not** dedup, apply boundary tiebreakers, reconcile severity across dimensions, or write the report.
 
 **Seam 4 — Orchestrator reconciliation.** After all workers return, apply the `## Dimension boundaries` table (`references/dimensions.md:319-340`) verbatim to any line meeting EITHER condition: (1) flagged by two or more workers at the same `file:line`; (2) tagged `also-relevant-to: [d]` by any worker — the orchestrator re-evaluates dimension `d` against that line and applies the tiebreaker (keep the higher-base finding / suppress / emit-both-with-cross-reference per the 15 rules). This consumes the `also-relevant-to` signal and provides the cross-dimension coverage single-parent gets for free. Lines neither flagged by ≥2 workers nor tagged `also-relevant-to` need no reconciliation. Group by severity. The parent owns the canonical artifact. After reconciliation, continue at step 5 (write + print the report path) and `## Handoff` exactly as the single-parent path does.
@@ -168,22 +168,22 @@ artifact: <path-to-press-report-or-prior-cure-if-any>
 
 ## Blocker
 - **[encapsulation:blocker]** `src/users/index.ts:42` — `index` re-exports `SqlPgUser` (infra ORM type) across slice boundary. 3 consumer slices already import it.
-  - location: contract · fix-cost-now: sprawling · fix-cost-later: structural
+  - location: contract · fix-cost-now: sprawling · fix-cost-later: structural · confidence: certain
   - recommendation: define `User` in the slice's public types, map at the boundary, deprecate the leaked export.
 
 ## High
 - **[security:high]** `src/api/admin/users.ts:55` — admin route accepts user-supplied filter without validation.
-  - location: contract · fix-cost-now: contained · fix-cost-later: contained
+  - location: contract · fix-cost-now: contained · fix-cost-later: contained · confidence: certain
   - recommendation: validate against `AdminFilter` schema at boundary.
 
 ## Medium
 - **[complexity:medium]** `src/utils/format.ts:200-240` — 60-line function, 5 params.
-  - location: module · fix-cost-now: contained · fix-cost-later: contained
+  - location: module · fix-cost-now: contained · fix-cost-later: contained · confidence: speculating
   - recommendation: extract `formatHeader` / `formatBody`.
 
 ## Low
 - **[deslop:low]** `src/utils/format.ts:18` — variable `data` shadows outer `data`.
-  - location: class · fix-cost-now: contained · fix-cost-later: contained
+  - location: class · fix-cost-now: contained · fix-cost-later: contained · confidence: certain
   - recommendation: rename to `lineItems`.
 
 ## Confidence
@@ -199,6 +199,8 @@ Empty severity sections are omitted entirely. When ten or more `low` findings ex
 ## Low
 *N low-severity findings suppressed.* Re-run with `--full` (or `/age --full`) to see them.
 ```
+
+Per-finding `confidence:` uses the voice-kernel scale (`references/voice.md` § Reasoning posture): `certain` — the defect is verified by direct evidence (diff/code read, command output); `speculating` — inferred from indirect signal. A `don't know` grading never ships as a finding row — gather the missing evidence or drop the claim.
 
 Suppressed lows feed the cure-selection table only when `--full` is passed.
 
@@ -329,7 +331,7 @@ Inline-degrade is forced when the marker is present (no opt-out); it takes prece
 - Default to acting: auto-select the recommended set and dispatch `/cure` without a gate. Ask first only on a genuine reason (a sprawling/structural fix in the set, or conflicting findings) or under `--safe`. An empty recommended set is a clean stop, not a question.
 - Do not invent evidence. Cite files, diffs, commands, or unavailable-source notes.
 - Agree when the diff is fine. Do not manufacture findings to fill a dimension; an empty dimension is a valid outcome.
-- Keep confidence qualitative (`certain | speculating | don't know`); never emit a numeric score.
+- Keep confidence qualitative (`certain | speculating | don't know`); never emit a numeric score. This covers both the report-level `## Confidence` line and the per-finding `confidence:` label.
 - Findings carry location + recommendation. Do not write JSON sidecars or hash-anchored fix payloads — `/cure` reads the markdown directly.
 - Apply `references/voice.md` (output discipline, reasoning posture, confidence vocabulary).
 

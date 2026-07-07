@@ -5,7 +5,7 @@ skills/age/SKILL.md § Output). A finding bullet looks like:
 
     ## Blocker
     - **[encapsulation:blocker]** `src/users/index.ts:42` — what is wrong
-      - location: contract · fix-cost-now: sprawling · fix-cost-later: structural
+      - location: contract · fix-cost-now: sprawling · fix-cost-later: structural · confidence: certain
       - recommendation: do X then Y
 
 The script ships with the skill — there is no separate "legacy" format
@@ -32,6 +32,7 @@ class Finding:
     location_tier: str | None = None  # class | module | cross-module | contract
     fix_cost_now: str | None = None  # contained | moderate | sprawling
     fix_cost_later: str | None = None  # contained | spreading | structural
+    confidence: str | None = None  # certain | speculating ("don't know" findings are never emitted)
     recommendation: str | None = None
     extra: dict[str, str] = field(default_factory=dict)
 
@@ -66,7 +67,7 @@ _KEY_VALUE_RE = re.compile(r"^(?P<key>[a-z][a-z-]*):\s*(?P<value>.+?)$", re.IGNO
 
 
 def _parse_location_sub_line(raw: str) -> dict[str, str]:
-    """Split a `location: X · fix-cost-now: Y · fix-cost-later: Z` line into a dict."""
+    """Split a `location: X · fix-cost-now: Y · fix-cost-later: Z · confidence: W` line (the trailing `· confidence: <label>` is optional) into a dict."""
     pieces = _SUBFIELD_SPLIT_RE.split(raw.strip())
     parsed: dict[str, str] = {}
     for piece in pieces:
@@ -98,6 +99,7 @@ def parse_findings_report(text: str) -> list[Finding]:
                 location_tier=pending.get("location_tier"),
                 fix_cost_now=pending.get("fix_cost_now"),
                 fix_cost_later=pending.get("fix_cost_later"),
+                confidence=pending.get("confidence"),
                 recommendation=pending.get("recommendation"),
             )
         )
@@ -126,7 +128,7 @@ def parse_findings_report(text: str) -> list[Finding]:
                 "location_tier": None,
                 "fix_cost_now": None,
                 "fix_cost_later": None,
-                "recommendation": None,
+                "confidence": None,
             }
             continue
 
@@ -141,6 +143,7 @@ def parse_findings_report(text: str) -> list[Finding]:
             pending["location_tier"] = parsed.get("location")
             pending["fix_cost_now"] = parsed.get("fix-cost-now")
             pending["fix_cost_later"] = parsed.get("fix-cost-later")
+            pending["confidence"] = parsed.get("confidence")
             continue
 
         rec_match = _RECOMMENDATION_SUBFIELD_RE.match(raw)
@@ -158,13 +161,13 @@ def group_by_severity(findings: list[Finding]) -> list[Finding]:
 
 
 def render_selection_table(findings: list[Finding]) -> str:
-    """Render the | # | severity | dim | location | summary | table for /cure."""
+    """Render the | # | severity | confidence | dim | location | summary | table for /cure."""
     header = (
-        "| # | severity | dim           | location                  | summary |\n"
-        "|---|----------|---------------|---------------------------|---------|"
+        "| # | severity | confidence  | dim           | location                  | summary |\n"
+        "|---|----------|-------------|---------------|---------------------------|---------|"
     )
     rows = [
-        f"| {f.id} | {f.severity:8s} | {f.dimension:13s} | {f.location:25s} | {f.summary} |"
+        f"| {f.id} | {f.severity:8s} | {(f.confidence or ''):11s} | {f.dimension:13s} | {f.location:25s} | {f.summary} |"
         for f in group_by_severity(findings)
     ]
     return "\n".join([header, *rows])
