@@ -39,7 +39,7 @@ Before the phase loop runs, the decomposer picks the mode. This is the one autho
 2. **Pick the mode** — `python3 skills/ultracook/scripts/ultracook.pyz mode --count <curd-count>` → `linear | parallel`. The canonical `PARALLEL_THRESHOLD` (2) lives in the engine: a decomposition of **2 or more** curds routes to **parallel mode**; **1** curd stays **linear**. There is one threshold in the tree — the selector, `validate_decomposition`, and the mold hint all read it.
 3. **Probe the engine seam** — `python3 skills/ultracook/scripts/ultracook.pyz milknado --tools "<available tool names>"` → `engine | tracker | none`. This decides how parallel mode runs curds (see `## Parallel mode`); linear mode ignores it.
 
-If the host only exposes the packaged helper, `python3 ${CLAUDE_SKILL_DIR}/scripts/ultracook.pyz <subcommand> ...` is the fallback.
+Helper resolution — including the `${CLAUDE_SKILL_DIR}` packaged-helper fallback — follows [`../../shared/harness-portability.md`](../../shared/harness-portability.md) § Helper resolution.
 
 A 1-curd spec runs `## Flow` (linear mode) unchanged. A 2+-curd spec runs `## Parallel mode`.
 
@@ -163,7 +163,7 @@ Reached when the decomposer produces **2 or more** curds (`mode → parallel`). 
    After all curd branches are cherry-picked onto the orchestrator branch, `manifest_update set-phase --manifest <path> --phase merge_complete`.
 4. **Teardown.** After harvesting each curd, `python3 skills/ultracook/scripts/ultracook.pyz worktree teardown --path <worktree-path> --branch <curd-branch>` removes the worktree and deletes its branch. The engine owns teardown — worktrees leak otherwise; a completed run leaves no `worktree-agent-*` branch or `.claude/worktrees/agent-*` dir.
 
-If the host only exposes the packaged helper, `python3 ${CLAUDE_SKILL_DIR}/scripts/ultracook.pyz <subcommand> ...` is the fallback.
+Helper resolution — including the `${CLAUDE_SKILL_DIR}` packaged-helper fallback — follows [`../../shared/harness-portability.md`](../../shared/harness-portability.md) § Helper resolution.
 5. **Wiring.** Dispatch the topo-sorted `wiring[]` integration tasks (`ultracook.pyz wiring_topo_sort`), sequentially within each wave.
 
    Mark each wiring row as it runs (`manifest_update set-wiring-status --manifest <path> --wiring <id> --status running|completed|failed [--commit-sha <sha>]`). After the last wave, `manifest_update set-phase --manifest <path> --phase wiring_complete`, then immediately `manifest_update set-phase --manifest <path> --phase final_merge_complete`: wiring commits land directly on the orchestrator branch in this flow (no distinct wiring-merge action — the retired cheese-factory's separate Phase 5 final-merge is folded in), so the two markers coincide.

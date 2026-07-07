@@ -92,7 +92,7 @@ A correct seam is one where the test exercises the **real bug pattern** as it oc
 
 **If no correct seam exists, that itself is the finding.** Note it in the handoff slug as an architectural follow-up. The codebase is preventing the bug from being locked down. Skip the test write; do not paper over it. Phase 6's "what would have prevented this bug?" retrospective still applies.
 
-**Before writing the test, confirm the seam is correct:** verify that the test you're about to write targets the boundary where the bug actually occurs — the real call site, the real data path, the real failure mode. A test at the wrong seam (too shallow, wrong abstraction level, mocked-away side that hides the failure) will pass after the fix but won't catch a regression. If you discover the seam is wrong at this point, treat it as "no correct seam": write `status: halt: no correct regression-test seam` and route to `/mold`, per the halt path above.
+**Before writing the test, confirm the seam is correct:** verify that the test you're about to write targets the boundary where the bug actually occurs — the real call site, the real data path, the real failure mode. A test at the wrong seam (too shallow, wrong abstraction level, mocked-away side that hides the failure) will pass after the fix but won't catch a regression. If you discover the seam is wrong at this point, treat it as "no correct seam": write the no-correct-seam halt string from [Early-stop conditions](#early-stop-conditions) and route to `/mold`, per the halt path above.
 
 If a correct seam exists:
 
@@ -102,7 +102,7 @@ If a correct seam exists:
 4. Watch the test pass.
 5. Re-run the Phase 1 feedback loop against the original (un-minimised) scenario to confirm the symptom is gone, not just the test seam.
 
-**After 3 failed fix attempts** (3 cycles of "apply change → watch test → revert because test still fails"), stop attempting fixes and re-question the approach: is the hypothesis from Phase 3 actually correct? Is the seam exposing the right failure? Is the bug at a different layer than assumed? Step back to Phase 3 and generate a fresh ranked hypothesis list — do NOT attempt a 4th blind fix. If the re-questioning produces a new hypothesis, restart from Phase 4. If all hypotheses are exhausted, write `status: halt: fix attempts exhausted — architectural re-examination needed` and route to `/mold`.
+**After 3 failed fix attempts** (3 cycles of "apply change → watch test → revert because test still fails"), stop attempting fixes and re-question the approach: is the hypothesis from Phase 3 actually correct? Is the seam exposing the right failure? Is the bug at a different layer than assumed? Step back to Phase 3 and generate a fresh ranked hypothesis list — do NOT attempt a 4th blind fix. If the re-questioning produces a new hypothesis, restart from Phase 4. If all hypotheses are exhausted, write the fix-attempts-exhausted halt string from [Early-stop conditions](#early-stop-conditions) and route to `/mold`.
 
 Broader implementation (related cleanup, follow-on changes, anything beyond the minimal fix) is **not** pasteurize's job. Note it in the slug and let `/cook --auto` pick it up in Phase 6's handoff.
 
@@ -181,7 +181,7 @@ After the report is printed and the handoff slug is on disk, ask through the hos
 
 Pre-select **Validate and chain forward** when `status: ok`. The chain default is `--auto` because pasteurize already wrote and verified the fix; the work left for cook → press → age → cure is mechanical validation, not new authoring. Never auto-invoke; the user must still select.
 
-When invoked with `--auto`, skip this host-routed question entirely and invoke `/cook <slug> --auto` directly.
+When invoked with `--auto`, skip this host-routed question entirely and chain forward per [Auto mode](#auto-mode).
 
 ## Auto mode
 

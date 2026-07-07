@@ -193,11 +193,7 @@ After the report lands, affinage acts by default and asks only on a genuine reas
 
 **When at least one severity-section finding exists (any severity, including `Low`)** — compute the recommended composite (`all-medium, cheap`). With no reason to ask and no `--safe`: announce the one-line selection, post the drafted non-cure replies (Flow step 9), dispatch `/cure` (below), and post the cure-dependent replies (step 10) on return. On a reason to ask or `--safe`: render the cure-selection table inline (per `skills/cure/references/selection.md`) and ask via `shared/handoff-gate.md`, pre-selecting the recommended composite and flagging heavy rows. Lead with the recommended composite, then present the four severity-floor options below it, in the same most-inclusive-to-least order, so the gate is predictable across every run:
 
-- **Fix mediums-and-above plus cheap lows** *(recommended)* — `all-medium, cheap`. Sprawling/structural lows left out.
-- **Fix everything** — `all`.
-- **Fix medium-severity and above** — `all-medium`.
-- **Fix high-severity and blockers** — `all-high`.
-- **Fix blockers only** *(strict)* — `all-blocker`.
+- The five severity-floor options (recommended `all-medium, cheap`, then `all`, `all-medium`, `all-high`, `all-blocker`) are exactly age's — see [`../age/SKILL.md`](../age/SKILL.md) § Selection gate for their labels and semantics.
 
 Then offer the non-floor options last:
 
@@ -205,7 +201,7 @@ Then offer the non-floor options last:
 - **Resolve merge conflicts** *(offered only when the PR has conflicts)* — checkout + `/melt` per `## Merge-conflict resolution`, then re-render this gate.
 - **Stop — leave the report for later** — equivalent to `none`.
 
-Present all four severity options on every run even when a band is empty — do not drop or reorder options based on which bands are populated. If a selected floor resolves to an empty set, treat it as `none`: report that no findings match and do not dispatch `/cure` with empty `resolved_ids`.
+The "present all four severity options on every run, empty-set-resolves-to-`none`" rule is age's — see [`../age/SKILL.md`](../age/SKILL.md) § Selection gate.
 
 **When no severity-section finding exists but `Reviewer-rejected` or `Needs-investigation` has items** — `/cure` has nothing to act on, so skip it. By default, post all drafted replies (Flow step 9) and exit. Under `--safe`, render a reply-only gate first:
 

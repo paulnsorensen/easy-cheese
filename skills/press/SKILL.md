@@ -106,7 +106,7 @@ When invoked with `--auto` (propagated from `/cook --auto`):
 
 - Skip the handoff gate entirely.
 - If readiness is `ready for /age` or `follow-up recommended`, invoke `/age <slug> --auto` directly (forward `--open-pr` when it is in scope).
-- If readiness is `blocked`, stop the auto chain and surface the press report to the user. `blocked` is reserved for: a false premise on the cooked contract, an unfixable level-1/2 gap in cooked scope, a changed behaviour press could not lock with a stable hardening test, or spinning wheels (three attempts at one gap without green).
+- If readiness is `blocked`, stop the auto chain and surface the press report to the user. Blocked criteria: defined once in [`references/gap-analysis.md`](references/gap-analysis.md).
 
 ### When invoked from /ultracook
 

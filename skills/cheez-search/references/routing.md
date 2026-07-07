@@ -6,7 +6,7 @@ Name-shaped or text-shaped queries stay in the chosen semantic source-search bac
 
 ## When LSP beats name/text search (if your harness has one)
 
-**easy-cheese does not install LSP** -- it is whatever language servers your harness already exposes (Claude Code LSP plugins, Zed / VS Code language servers, etc.). When an LSP is reachable for the file's language and the question is **type-grounded**, prefer the LSP method over name/text search. Tree-sitter sees syntax, not types -- it cannot disambiguate `var x = GetValue()` (keyword or type?) or pick between two `pop` functions imported from different modules. LSP runs the actual language server and resolves these.
+LSP availability -- see [`../../../shared/semantic-backends.md`](../../../shared/semantic-backends.md). When an LSP is reachable for the file's language and the question is **type-grounded**, prefer the LSP method over name/text search. Tree-sitter sees syntax, not types -- it cannot disambiguate `var x = GetValue()` (keyword or type?) or pick between two `pop` functions imported from different modules. LSP runs the actual language server and resolves these.
 
 | Question | LSP method (when available) | Why LSP wins |
 |----------|-----------------------------|---------------|
@@ -22,7 +22,7 @@ If no LSP is installed for the language, or the file is in a broken / incomplete
 
 ## When Serena beats tilth (if your harness has it)
 
-[Serena](https://github.com/oraios/serena) is an LSP-driven MCP that exposes the LSP queries above as named tools. When Serena is configured for the codebase (`.serena/project.yml` present) and the question is type-grounded, the **calling workflow skill** should route directly to Serena rather than entering `/cheez-search` -- same semantics as the abstract LSP methods above, with concrete tool names:
+Serena as a backend -- see [`../../../shared/semantic-backends.md`](../../../shared/semantic-backends.md). When Serena is configured and the question is type-grounded, the **calling workflow skill** should route directly to Serena rather than entering `/cheez-search` -- same semantics as the abstract LSP methods above, with concrete tool names:
 
 | Question | Serena tool | Why it beats tilth |
 |----------|-------------|--------------------|
