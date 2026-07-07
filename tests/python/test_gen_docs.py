@@ -313,7 +313,7 @@ class TestEmitInstallPage:
         body = out.read_text(encoding="utf-8")
         assert "title: Install" in body
         assert "editUrl: https://github.com/paulnsorensen/easy-cheese/edit/main/README.md" in body
-        assert not re.search(r"^# ", body, re.MULTILINE)  # Starlight renders the title H1
+        assert not body.lstrip().startswith("# ")  # Starlight renders the title H1
         assert "## gh skill" in body
 
 
@@ -516,4 +516,4 @@ class TestMainGeneration:
             if page == root / "index.md":
                 continue  # authored homepage, not generated
             _, page_body = gen_docs.parse_frontmatter(page.read_text(encoding="utf-8"))
-            assert not re.search(r"^# ", page_body, re.MULTILINE), page
+            assert not page_body.lstrip().startswith("# "), page

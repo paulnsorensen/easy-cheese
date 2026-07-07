@@ -451,7 +451,6 @@ def emit_root_passthrough(filename: str, dest_slug: str, title: str) -> Generate
     if not src.exists():
         return None
     text = _read_text(src)
-    text = re.sub(r"^#\s+.*\n", "", text, count=1)
     text = apply_link_rewrite(text, rewrite_root_passthrough_link)
     text = convert_mkdocs_admonitions(text)
     return write_doc(
