@@ -218,6 +218,20 @@ class TestParseFrontmatter:
         assert meta == {}
 
 
+class TestWriteDoc:
+    def test_drops_leading_h1_duplicating_starlight_title(self, gen_docs, isolated_docs):
+        gen_docs.write_doc("page.md", "# Page title\n\nBody.\n", title="Page title")
+        text = (isolated_docs / "src" / "content" / "docs" / "page.md").read_text(encoding="utf-8")
+        _, body = gen_docs.parse_frontmatter(text)
+        assert body.lstrip() == "Body.\n"
+
+    def test_keeps_non_leading_headings(self, gen_docs, isolated_docs):
+        gen_docs.write_doc("page.md", "Intro.\n\n## Section\n", title="T")
+        text = (isolated_docs / "src" / "content" / "docs" / "page.md").read_text(encoding="utf-8")
+        _, body = gen_docs.parse_frontmatter(text)
+        assert body.lstrip() == "Intro.\n\n## Section\n"
+
+
 class TestExtractH2Section:
     def test_basic_extraction(self, gen_docs):
         text = "## A\nbody-a\n\n## B\nbody-b\n"
@@ -299,7 +313,7 @@ class TestEmitInstallPage:
         body = out.read_text(encoding="utf-8")
         assert "title: Install" in body
         assert "editUrl: https://github.com/paulnsorensen/easy-cheese/edit/main/README.md" in body
-        assert "# Install" in body
+        assert not re.search(r"^# ", body, re.MULTILINE)  # Starlight renders the title H1
         assert "## gh skill" in body
 
 
@@ -352,7 +366,9 @@ class TestEmitSharedPages:
         assert entries == [gen_docs.GeneratedPage("Handoff gate", "shared/handoff-gate", "shared/handoff-gate.md")]
         out = isolated_docs / "src" / "content" / "docs" / "shared" / "handoff-gate.md"
         assert out.read_text(encoding="utf-8").startswith("---\ntitle: Handoff gate\neditUrl:")
-        assert "# Handoff gate\n\nSee [portability](../harness-portability/).\n" in out.read_text(encoding="utf-8")
+        text = out.read_text(encoding="utf-8")
+        assert "# Handoff gate" not in text  # Starlight renders the title H1
+        assert "See [portability](../harness-portability/).\n" in text
 
     def test_falls_back_to_slug_when_no_h1(self, gen_docs, isolated_docs):
         shared = isolated_docs / "shared"
@@ -496,3 +512,8 @@ class TestMainGeneration:
         assert not (root / "SUMMARY.md").exists()
         generated_markdown = "\n".join(p.read_text(encoding="utf-8") for p in root.rglob("*.md"))
         assert not re.search(r"\]\((?!https?://|mailto:|#)[^)]+\.md(?:#[^)]*)?\)", generated_markdown)
+        for page in root.rglob("*.md"):
+            if page == root / "index.md":
+                continue  # authored homepage, not generated
+            _, page_body = gen_docs.parse_frontmatter(page.read_text(encoding="utf-8"))
+            assert not re.search(r"^# ", page_body, re.MULTILINE), page
