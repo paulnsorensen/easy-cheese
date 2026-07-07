@@ -326,8 +326,8 @@ def emit_skill_page(skill_dir: Path) -> GeneratedPage | None:
         for ref in sorted(p for p in refs_dir.iterdir() if p.is_file()):
             ref_rel = ref.relative_to(REPO_ROOT).as_posix()
             if ref.suffix.lower() != ".md":
-                # Non-Markdown references cannot be rendered by Starlight. Keep a
-                # source link on the parent page instead of copying invalid docs content.
+                # Non-Markdown references aren't rendered by Starlight; skip them.
+                # The parent page links to the skill's own SKILL.md source.
                 continue
 
             out = f"skills/{name}/references/{ref.name}"
@@ -496,6 +496,7 @@ def emit_sidebar(
     skills: list[GeneratedPage],
     shared: list[GeneratedPage],
     project: list[GeneratedPage],
+    install: GeneratedPage | None,
 ) -> None:
     skill_items: list[dict] = [{"label": "Skills index", "slug": "skills"}]
     for skill in skills:
@@ -513,8 +514,11 @@ def emit_sidebar(
         else:
             skill_items.append(_sidebar_link(skill))
 
+    start_items = [{"label": "Home", "slug": ""}]
+    if install:
+        start_items.append({"label": "Install", "slug": "install"})
     sidebar = [
-        {"label": "Start", "items": [{"label": "Home", "slug": ""}, {"label": "Install", "slug": "install"}]},
+        {"label": "Start", "items": start_items},
         {"label": "Skills", "items": skill_items},
     ]
     if shared:
@@ -568,7 +572,7 @@ def main() -> None:
         if page := emit_root_passthrough(filename, dest_slug, title):
             project.append(page)
 
-    emit_sidebar(skills, shared, project if install else project)
+    emit_sidebar(skills, shared, project, install)
 
 
 if __name__ == "__main__":

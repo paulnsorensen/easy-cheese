@@ -64,6 +64,7 @@ ci: lint-md lint-yaml lint-sh test docs-build
 # Install docs build dependencies
 docs-install:
     corepack pnpm install --frozen-lockfile
+    pip install --no-cache-dir pyyaml==6.0.2
 
 # Build the docs site (output: dist/)
 docs-build: docs-install
