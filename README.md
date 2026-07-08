@@ -176,32 +176,24 @@ When a preferred tool is unavailable, workflow skills say so once, fall back, an
 
 ### skills.sh (recommended)
 
-Install with the [skills.sh](https://skills.sh) installer:
+Install every skill with the [skills.sh](https://skills.sh) installer. The
+skills form one pipeline (`/cheese → /mold → /cook → /press → /age → /cure`),
+so install them together rather than cherry-picking:
 
 ```sh
-npx skills@latest add paulnsorensen/easy-cheese
+npx skills@latest add paulnsorensen/easy-cheese --all
 ```
 
-Install all currently published skills in this repo's manifest without prompts:
+`--all` is shorthand for `--skill "*" --agent "*" -y`: every published skill,
+into every detected agent, no prompts. It uses project-level scope (recorded
+under `.agents/skills/`), so run it from the repo you want easy-cheese
+recorded in.
+
+For a user-wide install available across every repo, add `--global`:
 
 ```sh
-npx skills@latest add paulnsorensen/easy-cheese --skill "*" -y
+npx skills@latest add paulnsorensen/easy-cheese --all --global
 ```
-
-Without `--global`, the skills CLI uses project-level scope. Run those
-commands from the repo where you want easy-cheese recorded under
-`.agents/skills/`. The `-y` flag only skips confirmation prompts; it does not
-make a project install global.
-
-For a user-wide Codex install that is available across repos, pass the Codex
-agent and global scope explicitly:
-
-```sh
-npx skills@latest add paulnsorensen/easy-cheese --skill "*" --agent codex --global -y
-```
-
-The installer reads this repo's published skill manifest, lets you pick the
-skills you want, and installs them into the coding agents you select.
 
 After install, start with `/cheese` if you're not sure which wheel to cut into
 first, or jump straight to a specific skill like `/cook`, `/age`, or
