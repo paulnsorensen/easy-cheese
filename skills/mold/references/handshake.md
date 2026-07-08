@@ -31,7 +31,7 @@ Coherence self-check before curdle:
 If any box is unchecked, name it and propose the smallest move to fill it. The user can override with `curdle anyway`.
 
 These twelve checklist items are the **gates** in mold's machine-readable gate model
-(`references/gate-graph.md`). A test asserts the checklist items here equal the
+(`gate-graph.md`). A test asserts the checklist items here equal the
 model's gate nodes, so a gate cannot be silently dropped from this prose — edit
 the two together. Render the flow with `mold.pyz gate-graph`.
 
@@ -85,7 +85,7 @@ Procedure:
 2. **Any bullet with no such user statement is agent-introduced.** Mark it `[AGENT-INTRODUCED]` inline and present it for decision — the user must explicitly keep, drop, or reword it. A vague "looks good" is not approval.
 3. Record approved-but-flagged non-goals in the same `agent_introduced_scope` frontmatter list, so the paper trail survives downstream.
 
-This audit is the `Non-goals audit` coherence gate — the `non_goals_audit` node in the gate model (`references/gate-graph.md`). It fires **inline per round** as non-goals are proposed and again at Curdle as the terminal backstop, which hard-blocks extraction until every bullet traces to the user or is approved `[AGENT-INTRODUCED]`.
+This audit is the `Non-goals audit` coherence gate — the `non_goals_audit` node in the gate model (`gate-graph.md`). It fires **inline per round** as non-goals are proposed and again at Curdle as the terminal backstop, which hard-blocks extraction until every bullet traces to the user or is approved `[AGENT-INTRODUCED]`.
 
 ## Entity-referent binding
 

@@ -4,7 +4,7 @@ The **calling workflow skill** selects the stale-safe backend before entering `/
 
 ## When LSP rename beats line/range edits
 
-**easy-cheese does not install LSP** — it is whatever language servers your harness already exposes. There is one editing operation where an available LSP materially outperforms line/range edits: **type-aware rename** of a symbol across the project.
+LSP availability: easy-cheese does not install LSP — it's whatever language servers the harness exposes. There is one editing operation where an available LSP materially outperforms line/range edits: **type-aware rename** of a symbol across the project.
 
 | Edit | Use this instead | Why LSP wins |
 |------|------------------|---------------|
@@ -16,7 +16,7 @@ If no LSP is installed, or the rename touches a symbol the typechecker can't res
 
 ## When Serena beats line/range edits for symbol-bounded edits
 
-[Serena](https://github.com/oraios/serena) is an LSP-driven MCP that exposes symbol-bounded edits as named tools. When Serena is configured for the codebase (`.serena/project.yml` present) and the edit is symbol-shaped, the **calling workflow skill** may route directly to Serena rather than using a line/range edit:
+Serena ([oraios/serena](https://github.com/oraios/serena)) is an LSP-driven MCP that exposes symbol-bounded edits as named tools; when it is configured (`.serena/project.yml` present) and the edit is symbol-shaped, the **calling workflow skill** may route directly to Serena rather than using a line/range edit:
 
 | Edit | Serena tool | When to prefer over line/range edits |
 |------|-------------|----------------------------------|

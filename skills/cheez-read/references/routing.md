@@ -18,7 +18,7 @@ If the file is code in this repo, **always enter cheez-read first** so it can ch
 
 ## When LSP beats broad read backends (if the harness has one)
 
-**easy-cheese does not install LSP** — it is whatever language servers the harness already exposes. When an LSP is reachable for the file's language and the navigation question is type-grounded, prefer the LSP method:
+LSP availability: easy-cheese does not install LSP — it's whatever language servers the harness exposes. When an LSP is reachable for the file's language and the navigation question is type-grounded, prefer the LSP method:
 
 | Goal | LSP method (when available) | Why LSP wins |
 |------|------------------------------|--------------|
@@ -31,7 +31,7 @@ If no LSP is installed for the language, or the file is in a broken / incomplete
 
 ## When Serena beats broad read backends for symbol-table reads (if your harness has it)
 
-[Serena](https://github.com/oraios/serena) is an LSP-driven MCP. When Serena is configured for the codebase (`.serena/project.yml` present) and the read is symbol-shaped, the **calling workflow skill** should route directly to Serena rather than entering `/cheez-read`:
+Serena ([oraios/serena](https://github.com/oraios/serena)) is an LSP-driven MCP exposing LSP queries as named tools. When Serena is configured (`.serena/project.yml` present) and the read is symbol-shaped, the **calling workflow skill** should route directly to Serena rather than entering `/cheez-read`:
 
 | Goal | Serena tool | Why |
 |------|-------------|-----|

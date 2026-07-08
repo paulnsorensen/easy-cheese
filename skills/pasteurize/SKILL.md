@@ -10,7 +10,7 @@ A discipline for hard bugs. Skip phases only when explicitly justified.
 
 When exploring the codebase, use `/cheez-search` to orient and check `.cheese/specs/` for any spec or design notes that touch the failing seam.
 
-Portability reference: [`../../shared/harness-portability.md`](../../shared/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
+Portability reference: [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
 The handoff blocks below are the portable contract; slash commands are host renderings, not the control model.
 
 ## Phase 1 — Feedback loop
@@ -68,7 +68,7 @@ Each hypothesis must be **falsifiable**: state the prediction it makes.
 
 If you cannot state the prediction, the hypothesis is a vibe — discard or sharpen it.
 
-**Show the ranked list to the user through the host routing guide in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md) before testing.** They often have domain knowledge that re-ranks instantly ("we just deployed a change to #3"), or know hypotheses they've already ruled out. Cheap checkpoint, big time saver. Don't block on it — proceed with your ranking if the user is AFK or running `--auto`.
+**Show the ranked list to the user through the host routing guide in [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md) before testing.** They often have domain knowledge that re-ranks instantly ("we just deployed a change to #3"), or know hypotheses they've already ruled out. Cheap checkpoint, big time saver. Don't block on it — proceed with your ranking if the user is AFK or running `--auto`.
 
 ## Phase 4 — Instrument
 
@@ -92,7 +92,7 @@ A correct seam is one where the test exercises the **real bug pattern** as it oc
 
 **If no correct seam exists, that itself is the finding.** Note it in the handoff slug as an architectural follow-up. The codebase is preventing the bug from being locked down. Skip the test write; do not paper over it. Phase 6's "what would have prevented this bug?" retrospective still applies.
 
-**Before writing the test, confirm the seam is correct:** verify that the test you're about to write targets the boundary where the bug actually occurs — the real call site, the real data path, the real failure mode. A test at the wrong seam (too shallow, wrong abstraction level, mocked-away side that hides the failure) will pass after the fix but won't catch a regression. If you discover the seam is wrong at this point, treat it as "no correct seam": write `status: halt: no correct regression-test seam` and route to `/mold`, per the halt path above.
+**Before writing the test, confirm the seam is correct:** verify that the test you're about to write targets the boundary where the bug actually occurs — the real call site, the real data path, the real failure mode. A test at the wrong seam (too shallow, wrong abstraction level, mocked-away side that hides the failure) will pass after the fix but won't catch a regression. If you discover the seam is wrong at this point, treat it as "no correct seam": write the no-correct-seam halt string from [Early-stop conditions](#early-stop-conditions) and route to `/mold`, per the halt path above.
 
 If a correct seam exists:
 
@@ -102,7 +102,7 @@ If a correct seam exists:
 4. Watch the test pass.
 5. Re-run the Phase 1 feedback loop against the original (un-minimised) scenario to confirm the symptom is gone, not just the test seam.
 
-**After 3 failed fix attempts** (3 cycles of "apply change → watch test → revert because test still fails"), stop attempting fixes and re-question the approach: is the hypothesis from Phase 3 actually correct? Is the seam exposing the right failure? Is the bug at a different layer than assumed? Step back to Phase 3 and generate a fresh ranked hypothesis list — do NOT attempt a 4th blind fix. If the re-questioning produces a new hypothesis, restart from Phase 4. If all hypotheses are exhausted, write `status: halt: fix attempts exhausted — architectural re-examination needed` and route to `/mold`.
+**After 3 failed fix attempts** (3 cycles of "apply change → watch test → revert because test still fails"), stop attempting fixes and re-question the approach: is the hypothesis from Phase 3 actually correct? Is the seam exposing the right failure? Is the bug at a different layer than assumed? Step back to Phase 3 and generate a fresh ranked hypothesis list — do NOT attempt a 4th blind fix. If the re-questioning produces a new hypothesis, restart from Phase 4. If all hypotheses are exhausted, write the fix-attempts-exhausted halt string from [Early-stop conditions](#early-stop-conditions) and route to `/mold`.
 
 Broader implementation (related cleanup, follow-on changes, anything beyond the minimal fix) is **not** pasteurize's job. Note it in the slug and let `/cook --auto` pick it up in Phase 6's handoff.
 
@@ -172,7 +172,7 @@ follow_up: <architectural follow-up note, or "none">
 
 **Pipeline:** cheese (debug) → **[pasteurize]** → cook --auto → press → age → cure → ship
 
-After the report is printed and the handoff slug is on disk, ask through the host routing guide in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md) which downstream to run. Lead each option with the verb (what the user wants to _do_ next):
+After the report is printed and the handoff slug is on disk, ask through the host routing guide in [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md) which downstream to run. Lead each option with the verb (what the user wants to _do_ next):
 
 - **Validate and chain forward** _(recommended when `status: ok`)_ — `/cook <slug> --auto`.
 - **Validate without auto chain** — `/cook <slug>` (cook runs taste-test, then the user picks each subsequent step).
@@ -181,7 +181,7 @@ After the report is printed and the handoff slug is on disk, ask through the hos
 
 Pre-select **Validate and chain forward** when `status: ok`. The chain default is `--auto` because pasteurize already wrote and verified the fix; the work left for cook → press → age → cure is mechanical validation, not new authoring. Never auto-invoke; the user must still select.
 
-When invoked with `--auto`, skip this host-routed question entirely and invoke `/cook <slug> --auto` directly.
+When invoked with `--auto`, skip this host-routed question entirely and chain forward per [Auto mode](#auto-mode).
 
 ## Auto mode
 

@@ -27,7 +27,7 @@ Press may add or strengthen tests and make tiny corrective fixes only when a tes
 
 Code search, reading, and editing all go through the `cheez-*` skills (`/cheez-search`, `/cheez-read`, `/cheez-write`) — see those skills for tool selection rules. For coverage and test discovery, press uses `cheez-search` (callers via `kind: "callers"`) and `tilth_deps`.
 
-Portability reference: [`../../shared/harness-portability.md`](../../shared/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
+Portability reference: [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
 The handoff blocks below are the portable contract; slash commands are host renderings, not the control model.
 
 Beyond `cheez-*` there are press-specific tools:
@@ -41,7 +41,7 @@ If optional tools are missing, press a narrower surface and state the residual r
 
 ## Output
 
-House style and citation form: [`../../shared/formatting.md`](../../shared/formatting.md). This section owns the press-report shape.
+House style and citation form: [`../cheese/references/formatting.md`](../cheese/references/formatting.md). This section owns the press-report shape.
 
 Write to `.cheese/press/<slug>.md` with a minimum handoff slug at the top so `/ultracook` and `/cheese --continue` can chain without re-parsing the report. The full report shape:
 
@@ -91,7 +91,7 @@ Next step:    /age <slug>                          (when ready for /age or follo
 
 **Pipeline:** culture → mold → cook → **[press]** → age → cure → ship
 
-After the press report is on disk, ask via the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md), following its **Standard forward-step menu**. Lead each option with the verb (what the user wants to *do* next); the skill command (with any in-scope `--hard` propagation) is the backing detail. Default options:
+After the press report is on disk, ask via the shared handoff gate in [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md), following its **Standard forward-step menu**. Lead each option with the verb (what the user wants to *do* next); the skill command (with any in-scope `--hard` propagation) is the backing detail. Default options:
 
 - **Review the diff** *(recommended when readiness is `ready for /age` or `follow-up recommended`)* — `/age <slug>`. For `follow-up recommended`, documented follow-ups can be addressed after review.
 - **Ship it** — `/age <slug> --auto --open-pr`: run age → cure headless and open (or push) the PR at the end.
@@ -106,7 +106,7 @@ When invoked with `--auto` (propagated from `/cook --auto`):
 
 - Skip the handoff gate entirely.
 - If readiness is `ready for /age` or `follow-up recommended`, invoke `/age <slug> --auto` directly (forward `--open-pr` when it is in scope).
-- If readiness is `blocked`, stop the auto chain and surface the press report to the user. `blocked` is reserved for: a false premise on the cooked contract, an unfixable level-1/2 gap in cooked scope, a changed behaviour press could not lock with a stable hardening test, or spinning wheels (three attempts at one gap without green).
+- If readiness is `blocked`, stop the auto chain and surface the press report to the user. Blocked criteria: defined once in [`references/gap-analysis.md`](references/gap-analysis.md).
 
 ### When invoked from /ultracook
 
@@ -120,4 +120,4 @@ When invoked with `--auto` (propagated from `/cook --auto`):
 - **Cap iteration at three attempts per gap.** Count test-edit + run cycles. On the third failed cycle on the same gap, mark readiness `blocked` with reason `spinning: <gap-description>` and surface the report. Do not loop indefinitely.
 - Surface medium and high findings explicitly; summarize low findings.
 - If the cooked diff or spec rests on a false premise (the contract is wrong, or the test surface is solving the wrong problem), stop and surface the premise before adding tests; do not harden the wrong angle.
-- Apply the shared voice kernel (lives at `skills/age/references/voice.md` in this repo): lead the press report with the readiness verdict, flag residual risk as `certain | speculating | don't know`, agree when coverage is already sufficient without manufacturing tests.
+- Apply the shared voice kernel (lives at `../age/references/voice.md`): lead the press report with the readiness verdict, flag residual risk as `certain | speculating | don't know`, agree when coverage is already sufficient without manufacturing tests.

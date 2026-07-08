@@ -16,7 +16,7 @@ culture → mold → cook → press → age → cure → ship
 - **culture** — no-write thinking; never edits code, never the gate.
 - **mold** — converges a fuzzy idea into an approved spec at the durable
   XDG corpus path (`$XDG_DATA_HOME/cheese/<project>/specs/<slug>.md`,
-  resolved by `shared/scripts/paths.py`; `shared/formatting.md:103`).
+  resolved by `shared/scripts/paths.py`; `skills/cheese/references/formatting.md:103`).
 - **cook** — TDD-disciplined implementation of that spec.
 - **press** — adversarial test hardening of the cooked diff.
 - **age** — ten-dimension review producing a findings report.
@@ -56,13 +56,13 @@ already-clear task (`skills/mold/SKILL.md:12,46`).
 ## Handoff gates between phases
 
 Phases never dispatch the next phase silently. Each ends at a handoff
-gate defined by `shared/handoff-gate.md`: a `handoff_gate:` block naming
+gate defined by `skills/cheese/references/handoff-gate.md`: a `handoff_gate:` block naming
 the `source_skill`, a `recommended` option, and an `options` list, each
 option carrying a `label` plus a `dispatch` / `continue` / `dispatch:
-none` action (`shared/handoff-gate.md:18-40`). Context for the next phase
-rides alongside as `handoff_context:` (`shared/handoff-gate.md:69-85`).
+none` action (`skills/cheese/references/handoff-gate.md:18-40`). Context for the next phase
+rides alongside as `handoff_context:` (`skills/cheese/references/handoff-gate.md:69-85`).
 A gate prevents silent dispatch; it does **not** mean the agent halts
-after the user chooses (`shared/handoff-gate.md:7`).
+after the user chooses (`skills/cheese/references/handoff-gate.md:7`).
 
 `--auto` propagates through the chain to skip these gates for autonomous
 runs. `/ultracook` runs the chain
@@ -88,7 +88,7 @@ corpus (`$XDG_DATA_HOME/cheese/<project>/`, owned by
 `shared/scripts/paths.py`). Only per-task pipeline output (`/cook` `/age`
 `/press` `/cure` reports, notes, hard, handoffs) is transient, gitignored
 under `.cheese/` (`.gitignore:2`). Durability is not the git-tracking
-axis (`shared/formatting.md:103`) — see
+axis (`skills/cheese/references/formatting.md:103`) — see
 [wiki-conventions](./wiki-conventions.md) for the full classification
 rule. This invariant exists so later integration seams cannot dump
 transient noise into durable memory.

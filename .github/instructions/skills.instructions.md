@@ -71,7 +71,7 @@ Spend your review budget on the things linters cannot see.
   skill body — never as silent auto-dispatch.
 - No intent classification, no automatic routing inside a skill body except
   in `/cheese`, where routing **is** the skill's purpose and dispatch is
-  gated through the host routing guide in `shared/handoff-gate.md`.
+  gated through the host routing guide in `skills/cheese/references/handoff-gate.md`.
 
 ## Quick triage prompt for review comments
 

@@ -50,7 +50,7 @@ skills/
 
 Each `SKILL.md` is self-contained markdown with YAML frontmatter. There are no nested sub-skills; deeper material lives in `references/<topic>.md` so the harness can load it progressively.
 
-Content shared _across_ skills lives at top-level `shared/` (e.g. `shared/handoff-gate.md`), sibling to `skills/` rather than inside any one skill's `references/`. Skills reference it by relative path (`../../shared/<file>.md`). The top-level location keeps it out of skill auto-discovery and signals that it's a cross-cutting contract, not a private detail of any single skill.
+Content shared _across_ skills lives in the always-installed `cheese` skill's `references/` directory (e.g. `skills/cheese/references/handoff-gate.md`), so both installers ship it as part of `cheese`. Skills reference it by sibling-relative path (`../cheese/references/<file>.md` from a `SKILL.md`, `../../cheese/references/<file>.md` from a `references/*.md`) — a form that resolves identically in the repo tree and any installed skills directory.
 
 ## Skills
 

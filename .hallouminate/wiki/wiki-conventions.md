@@ -12,7 +12,7 @@ here.
 
 Before writing anything, decide which lane the fact belongs in — and
 note that **durability is not the same axis as git-tracking**. There are
-three lanes, two of which live outside git (`shared/formatting.md:103`):
+three lanes, two of which live outside git (`skills/cheese/references/formatting.md:103`):
 
 | Where | Git | Lifecycle | Use for |
 |---|---|---|---|
@@ -33,7 +33,7 @@ per-task pipeline output is *transient*, and it stays repo-local under
 
 > **Migration note.** Some skill docs still name `.cheese/specs/<slug>.md`.
 > That path predates the durable/transient split and is being moved onto
-> the `paths.py` helpers (`shared/formatting.md:103`); treat the XDG
+> the `paths.py` helpers (`skills/cheese/references/formatting.md:103`); treat the XDG
 > corpus as the home for specs.
 
 Classify in two steps:

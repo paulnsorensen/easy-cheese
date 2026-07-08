@@ -1,6 +1,6 @@
 """Handoff slug preamble: parse, render, and validate the four-line block.
 
-Schema (see shared/formatting.md § Required preamble):
+Schema (see skills/cheese/references/formatting.md § Required preamble):
 
     status: ok | halt: <one-line reason>
     next: <skill-name> | done
@@ -16,7 +16,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-# Flag propagation rules — see shared/handoff-gate.md § Flag propagation.
+# Flag propagation rules — see skills/cheese/references/handoff-gate.md § Flag propagation.
 ALWAYS_PROPAGATE: frozenset[str] = frozenset({"--hard"})
 CHAIN_ONLY: frozenset[str] = frozenset({"--auto"})
 

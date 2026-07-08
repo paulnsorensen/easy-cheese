@@ -33,7 +33,7 @@ Flags:
 - `--include-outdated` — include outdated review threads. Default skips them.
 - `--no-age` — skip the standalone fresh `/age` pass. No effect when chained (the pass is already skipped). Use when you only want to triage existing comments, CI failures, and conflicts.
 
-Portability reference: [`../../shared/harness-portability.md`](../../shared/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
+Portability reference: [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
 The handoff blocks below are the portable contract; slash commands are host renderings, not the control model.
 
 ## Flow
@@ -50,7 +50,7 @@ The handoff blocks below are the portable contract; slash commands are host rend
    - Review bodies: `gh api repos/<owner>/<repo>/pulls/<pr>/reviews`. Filter to non-empty bodies. Dedupe against inline comments via `pull_request_review_id`.
 5. **Skip already-replied threads.** A thread whose most recent comment is from the resolved GitHub handle (see §Rules) has already been responded to; skip it. The same resolved handle is rendered in the reply footer as `agent on behalf of <handle>`.
 6. **Grade through the age lens.** For each input (comment, CI/build failure, OR fresh `/age` finding):
-   - Classify dimension from the **code + claim** (or check type + failure summary, for CI items). See `skills/age/references/dimensions.md` for the dimension rubric.
+   - Classify dimension from the **code + claim** (or check type + failure summary, for CI items). See `../age/references/dimensions.md` for the dimension rubric.
    - **Build failures count, not just test failures.** A failing check is a finding whether the failure is a compile error, a lint/type-check failure, or a failing test — grade the `build.status: failing` checks from `affinage.pyz pr-status` and route them to `/cure` exactly like test failures. Tag CI-sourced items `[from-check:<job>]`.
    - **Fresh `/age` findings** (standalone runs) arrive already dimension-classified and severity-scored; fold them into the buckets below tagged `[from-age:<dimension>]`. Dedupe against comment-sourced items echoing the same defect — keep the comment-sourced one (it carries a reviewer to reply to).
    - Compute severity from base + location + compounding modifiers (same rubric as `/age`).
@@ -100,7 +100,7 @@ When `affinage.pyz pr-status` reports `merge.mergeable: CONFLICTING` or `merge.s
 
 The sub-agent returns a digest: graded findings table with dimension, severity, confidence, grounded-evidence cite, and pre-drafted push-back text for any `Reviewer-rejected` items. The parent owns the report write, selection gate, `/cure` dispatch, and reply posting.
 
-Digest size, parent-vs-sub-agent split, and harness-agnostic sub-agent selection live in `skills/age/references/sub-agent-gate.md`.
+Digest size, parent-vs-sub-agent split, and harness-agnostic sub-agent selection live in `../age/references/sub-agent-gate.md`.
 
 ## Preferred tools and fallbacks
 
@@ -183,7 +183,7 @@ Auto-fixing the recommended set via `/cure` and posting the drafted replies (or,
 
 Empty severity sections are omitted entirely. `## Needs-investigation` and `## Reviewer-rejected` are omitted when no items land there.
 
-Per-finding `confidence:` uses the voice-kernel scale (`skills/age/references/voice.md` § Reasoning posture): `certain` — the defect is verified by direct evidence (diff/code read, command output); `speculating` — inferred from indirect signal. A `don't know` grading never ships as a severity row — route it to `## Needs-investigation`.
+Per-finding `confidence:` uses the voice-kernel scale (`../age/references/voice.md` § Reasoning posture): `certain` — the defect is verified by direct evidence (diff/code read, command output); `speculating` — inferred from indirect signal. A `don't know` grading never ships as a severity row — route it to `## Needs-investigation`.
 
 `status: ok` when grading completed; `status: halt: <reason>` when `gh` or `pr-status.py` failed in a way that blocks honest grading. `next:` is set per §Handoff — `cure` when ≥1 finding meets the `medium+` floor; `done` otherwise.
 
@@ -193,13 +193,9 @@ Per-finding `confidence:` uses the voice-kernel scale (`skills/age/references/vo
 
 After the report lands, affinage acts by default and asks only on a genuine reason (a sprawling/structural fix in the recommended set, conflicting findings) or under `--safe` (Flow step 8). What it acts on depends on whether any severity-section finding exists.
 
-**When at least one severity-section finding exists (any severity, including `Low`)** — compute the recommended composite (`all-medium, cheap`). With no reason to ask and no `--safe`: announce the one-line selection, post the drafted non-cure replies (Flow step 9), dispatch `/cure` (below), and post the cure-dependent replies (step 10) on return. On a reason to ask or `--safe`: render the cure-selection table inline (per `skills/cure/references/selection.md`) and ask via `shared/handoff-gate.md`, pre-selecting the recommended composite and flagging heavy rows. Lead with the recommended composite, then present the four severity-floor options below it, in the same most-inclusive-to-least order, so the gate is predictable across every run:
+**When at least one severity-section finding exists (any severity, including `Low`)** — compute the recommended composite (`all-medium, cheap`). With no reason to ask and no `--safe`: announce the one-line selection, post the drafted non-cure replies (Flow step 9), dispatch `/cure` (below), and post the cure-dependent replies (step 10) on return. On a reason to ask or `--safe`: render the cure-selection table inline (per `../cure/references/selection.md`) and ask via `../cheese/references/handoff-gate.md`, pre-selecting the recommended composite and flagging heavy rows. Lead with the recommended composite, then present the four severity-floor options below it, in the same most-inclusive-to-least order, so the gate is predictable across every run:
 
-- **Fix mediums-and-above plus cheap lows** *(recommended)* — `all-medium, cheap`. Sprawling/structural lows left out.
-- **Fix everything** — `all`.
-- **Fix medium-severity and above** — `all-medium`.
-- **Fix high-severity and blockers** — `all-high`.
-- **Fix blockers only** *(strict)* — `all-blocker`.
+- The five severity-floor options (recommended `all-medium, cheap`, then `all`, `all-medium`, `all-high`, `all-blocker`) are exactly age's — see [`../age/SKILL.md`](../age/SKILL.md) § Selection gate for their labels and semantics.
 
 Then offer the non-floor options last:
 
@@ -207,7 +203,7 @@ Then offer the non-floor options last:
 - **Resolve merge conflicts** *(offered only when the PR has conflicts)* — checkout + `/melt` per `## Merge-conflict resolution`, then re-render this gate.
 - **Stop — leave the report for later** — equivalent to `none`.
 
-Present all four severity options on every run even when a band is empty — do not drop or reorder options based on which bands are populated. If a selected floor resolves to an empty set, treat it as `none`: report that no findings match and do not dispatch `/cure` with empty `resolved_ids`.
+The "present all four severity options on every run, empty-set-resolves-to-`none`" rule is age's — see [`../age/SKILL.md`](../age/SKILL.md) § Selection gate.
 
 **When no severity-section finding exists but `Reviewer-rejected` or `Needs-investigation` has items** — `/cure` has nothing to act on, so skip it. By default, post all drafted replies (Flow step 9) and exit. Under `--safe`, render a reply-only gate first:
 
@@ -257,7 +253,7 @@ If no findings meet the floor, skip the `/cure` dispatch, post replies for `Revi
 ## Rules
 
 - Grading is code-grounded, not reviewer-asserted. `CHANGES_REQUESTED` is metadata, not a severity bump.
-- Prefer fixing over pushing back. A valid, grounded nit whose fix is contained (`fix-cost-now: contained` — a few lines or a localized refactor) goes to `/cure` as a `Low` finding tagged `[from-comment:<id>]`; do not draft a push-back for it. Reserve `## Reviewer-rejected` for claims that are wrong/ungrounded or whose fix is a lot of work (`moderate`/`sprawling`/`structural`). See `skills/age/references/voice.md`.
+- Prefer fixing over pushing back. A valid, grounded nit whose fix is contained (`fix-cost-now: contained` — a few lines or a localized refactor) goes to `/cure` as a `Low` finding tagged `[from-comment:<id>]`; do not draft a push-back for it. Reserve `## Reviewer-rejected` for claims that are wrong/ungrounded or whose fix is a lot of work (`moderate`/`sprawling`/`structural`). See `../age/references/voice.md`.
 - Never auto-apply fixes from `/affinage` itself. Code fixes go through `/cure`; merge conflicts go through `/melt`.
 - Fresh `/age` runs only on standalone invocations (no upstream `handoff_context`) and only when `--no-age` is absent. Chained runs never re-review the diff.
 - Merge conflicts are resolved through `/melt`, not by hand. `gh pr checkout` to materialise conflicts is allowed — it neither opens nor updates the PR. Pushing follows `/cure`'s push contract (see next rule).
@@ -265,15 +261,15 @@ If no findings meet the floor, skip the `/cure` dispatch, post replies for `Revi
 - Every posted reply ends with the literal `agent on behalf of <handle>` attribution via `skills/affinage/scripts/affinage.pyz post-reply`, where `<handle>` is resolved from `RESPOND_GH_HANDLE` → `gh api user --jq .login` → `git config user.name`. Never call `gh api` directly to post.
 - Idempotent re-runs: skip threads where the latest comment is from the resolved handle. The REST `/comments` endpoint does not expose thread resolution, so honest idempotency relies on the latest-comment-from-self heuristic; switch to GraphQL `reviewThreads` if cross-session resolution-state visibility becomes required.
 - CI-sourced findings get no reply (no reviewer to notify).
-- Apply the shared voice kernel (`skills/age/references/voice.md`): name confidence as `certain | speculating | don't know`; agree when no findings warrant grading.
+- Apply the shared voice kernel (`../age/references/voice.md`): name confidence as `certain | speculating | don't know`; agree when no findings warrant grading.
 
 ## References
 
 - `skills/age/SKILL.md` — review pipeline, dimensions, sub-agent gate, report shape.
-- `skills/age/references/dimensions.md` — per-dimension rubrics and severity computation.
+- `../age/references/dimensions.md` — per-dimension rubrics and severity computation.
 - `skills/cure/SKILL.md` — apply pipeline, `--auto --stake` floors, handoff context shape.
-- `skills/cure/references/selection.md` — selection verbs and composition.
+- `../cure/references/selection.md` — selection verbs and composition.
 - `skills/melt/SKILL.md` — merge-conflict resolution cascade (mergiraf → rerere → kdiff3).
-- `shared/handoff-gate.md` — gate primitives.
+- `../cheese/references/handoff-gate.md` — gate primitives.
 - `python3 skills/affinage/scripts/affinage.pyz post-reply` — reply posting with `agent on behalf of <handle>` attribution.
 - `python3 skills/affinage/scripts/affinage.pyz pr-status` — PR status fetcher.

@@ -166,7 +166,7 @@ For ours/theirs picks, lockfiles, mergiraf debugging, and maintenance, see [refe
 
 ## Handoff
 
-After resolution finishes, prompt the next step via the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md). Include the detected interrupted operation and upstream invocation in the context packet before asking. Default options:
+After resolution finishes, prompt the next step via the shared handoff gate in [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md). Include the detected interrupted operation and upstream invocation in the context packet before asking. Default options:
 
 - **Resume** — dispatch the exact continuation command for the current operation (`git merge --continue`, `git rebase --continue`, or `git cherry-pick --continue`). If the triggering skill invocation is known, return to that skill with the original context after the git operation succeeds; otherwise stop with the resumed git status.
 - **Re-run gates** — dispatch the upstream skill invocation that originally surfaced the conflict so its quality gates run on the merged state.

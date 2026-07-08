@@ -40,7 +40,7 @@ python3 src/age/age-html-report.py \
 Print the returned temp-file path beside the markdown path. `html-report` groups the findings by severity into age's own badge template and wraps them in the shared document shell (`shared/scripts/html_report.render_document`); the output is stdlib-only, offline, and deterministic — no CDN, no JavaScript. Do not inline or hand-roll the document chrome. Pass `--out-dir <dir>` to write somewhere other than the OS temp dir.
 If the host only ships the bundle, `python3 ${CLAUDE_SKILL_DIR}/scripts/age.pyz html-report --report .cheese/age/<slug>.md --slug <slug>` is the fallback.
 
-Portability reference: [`../../shared/harness-portability.md`](../../shared/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
+Portability reference: [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
 The handoff blocks below are the portable contract; slash commands are host renderings, not the control model.
 
 ## Review dimensions
@@ -110,7 +110,7 @@ Beyond `cheez-*` there are review-specific tools:
 | GitHub/PR context | `gh` | local git commands or user-provided PR data |
 | Merge/conflict awareness | mergiraf | manual conflict checks |
 
-**Optional MCPs:** hallouminate and milknado follow the detect-and-degrade contract in [`../../shared/optional-plugins.md`](../../shared/optional-plugins.md) — state absence once, fall back, reduce confidence only if evidence quality suffers, never block.
+**Optional MCPs:** hallouminate and milknado follow the detect-and-degrade contract in [`../cheese/references/optional-plugins.md`](../cheese/references/optional-plugins.md) — state absence once, fall back, reduce confidence only if evidence quality suffers, never block.
 
 ## Sub-agent context gate
 
@@ -148,7 +148,7 @@ Activates when **all** hold: the **scale threshold** (above) is met AND `/age` i
 
 ## Output
 
-Cross-cutting house style and citation form: [`../../shared/formatting.md`](../../shared/formatting.md). This section owns the findings-report shape; formatting.md owns the voice rules and the footnote primitive.
+Cross-cutting house style and citation form: [`../cheese/references/formatting.md`](../cheese/references/formatting.md). This section owns the findings-report shape; formatting.md owns the voice rules and the footnote primitive.
 
 Write to `.cheese/age/<slug>.md` with a minimum handoff slug at the top so `/ultracook` and `/cheese --continue` can chain without re-parsing the report:
 
@@ -212,15 +212,7 @@ Then print:
 Age report: .cheese/age/<slug>.md
 ```
 
-When `--html` is passed, render the already-written markdown report and print both paths:
-
-```bash
-python3 src/age/age-html-report.py \
-  --report .cheese/age/<slug>.md \
-  --slug <slug>
-```
-
-If the host only ships the bundle, `python3 ${CLAUDE_SKILL_DIR}/scripts/age.pyz html-report --report .cheese/age/<slug>.md --slug <slug>` is the fallback.
+When `--html` is passed, render the HTML report — the render command and bundle fallback live with the `--html` flag under `## Inputs` — and print both paths:
 
 ```
 Age report:  .cheese/age/<slug>.md
@@ -246,7 +238,7 @@ HTML report: <path printed by html-report>
 
 ### Selection gate (`--safe`, or a reason to ask)
 
-Use the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md). Age's finding selection is the gate's *core* decision; the shared **Standard forward-step menu**'s tail (**Ship it**, **Checkpoint & stop**, **Stop**) rides after the selection options per that menu's tail rule.
+Use the shared handoff gate in [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md). Age's finding selection is the gate's *core* decision; the shared **Standard forward-step menu**'s tail (**Ship it**, **Checkpoint & stop**, **Stop**) rides after the selection options per that menu's tail rule.
 
 1. Render the numbered selection table:
 
@@ -257,9 +249,9 @@ Use the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/han
    If the host only ships the bundle, `python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz findings_cli render-table --report .cheese/age/<slug>.md` is the fallback.
    Mark any sprawling/structural-fix row as *heavy*.
 2. Ask which findings to cure. Lead each option with the verb (what the user wants to *do* next); the underlying selection verb is the backing detail. Lead with the recommended composite, then present the same four severity-floor options below it, in the same most-inclusive-to-least order, so the gate is predictable across every run:
-   - **Fix mediums-and-above plus cheap lows** *(recommended)* — equivalent to `all-medium, cheap` (floor at medium — blockers + high + medium — unioned with every `Low` whose `fix-cost-now: contained`). The cheap lows are the small valid nits that are cheaper to fix than to defer; sprawling/structural lows are left out.
+   - **Fix mediums-and-above plus cheap lows** *(recommended)* — equivalent to `all-medium, cheap` (the composite floor defined at **Compute the recommended set** under `## Handoff`). The cheap lows are the small valid nits that are cheaper to fix than to defer; sprawling/structural lows are left out.
    - **Fix everything** — equivalent to `all` (every finding regardless of severity).
-   - **Fix medium-severity and above** — equivalent to `all-medium` (floor at medium: blockers + high + medium — the severity-floor portion of the `medium+` auto-floor; add `cheap` to also union the contained-fix lows, i.e. the recommended composite above).
+   - **Fix medium-severity and above** — equivalent to `all-medium` (the medium severity-floor from **Compute the recommended set** under `## Handoff`, without the cheap-lows union; add `cheap` to also union the contained-fix lows, i.e. the recommended composite above).
    - **Fix high-severity and blockers** — equivalent to `all-high` (floor at high, includes blockers).
    - **Fix blockers only** *(strict; land only the must-fix blockers and defer the rest to a follow-up)* — equivalent to `all-blocker`.
 
@@ -271,7 +263,7 @@ Use the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/han
      ```
 
      If the host only ships the bundle, `python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz findings_cli parse-selection ...` is the fallback.
-   - **Ship it** — apply the recommended composite and run cure headless: `/cure <slug> --auto --open-pr --stake medium+` (the `medium+` floor *is* the recommended composite). Carries `--hard` when in scope.
+   - **Ship it** — apply the recommended composite and run cure headless: `/cure <slug> --auto --open-pr --stake medium+` (the `medium+` floor *is* the recommended composite from **Compute the recommended set** under `## Handoff`). Carries `--hard` when in scope.
    - **Checkpoint & stop** — `/wheypoint`: write a resumable handoff and pause instead of curing now.
    - **Stop — leave the report for later** — equivalent to `none`.
 
@@ -301,7 +293,7 @@ When invoked with `--auto`:
 
 - Skip the handoff gate.
 - If two cure passes have already completed (cap reached), stop and surface the final report — do not invoke `/cure` again even if findings remain.
-- Otherwise, if any finding meets the **medium+ floor** — medium-or-above, or a `Low` whose `fix-cost-now: contained` (defined here as the `medium+` floor) — invoke `/cure <slug> --auto --stake medium+` (forward `--open-pr` when it is in scope) and increment the cure-pass count when it returns.
+- Otherwise, if any finding meets the **medium+ floor** (the composite floor defined at **Compute the recommended set** under `## Handoff`) — invoke `/cure <slug> --auto --stake medium+` (forward `--open-pr` when it is in scope) and increment the cure-pass count when it returns.
 - If no finding meets the **medium+ floor**, stop the chain with a one-line "auto chain clean" note and the report path.
 
 ### When invoked from /ultracook

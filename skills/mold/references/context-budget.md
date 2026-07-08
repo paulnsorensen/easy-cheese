@@ -19,7 +19,7 @@ only easy-cheese) — never `general-purpose`, which grants full write access:
 - **Shape check:** more than 5 symbols, wide module fan-out, large caller/dep
   traversals — the `explorer` phase-agent.
 - **Prototype Cycle:** the throwaway build always runs in a sub-agent
-  (`references/prototype-cycle.md`) — the `explorer` phase-agent.
+  (`prototype-cycle.md`) — the `explorer` phase-agent.
 - **Diagnose:** bulky logs/traces before a concise root-cause hypothesis — the
   `explorer` phase-agent.
 

@@ -76,7 +76,7 @@ For everything else, prefer the right tool:
 
 | Change | Use this instead | Why |
 |--------|------------------|-----|
-| Cross-cutting structural codemod (`JSON.parse(JSON.stringify($X))` → `structuredClone($X)`) across N files | `sg --rewrite` (dry-run-first protocol) | Codemods template the variable parts; anchored edits are better for known blocks |
+| Cross-cutting structural codemod (`JSON.parse(JSON.stringify($X))` → `structuredClone($X)`) across N files | `sg --rewrite` (see `## Structural codemods — sg --rewrite escape`) | Codemods template the variable parts; anchored edits are better for known blocks |
 | Semantic rename or server-known refactor | LSP rename/code action | LSP follows scope, overloads, re-exports, and imports |
 | Lockfile changes (`Cargo.lock`, `package-lock.json`, `uv.lock`, etc.) | the package manager (`cargo update`, `npm i`, `uv lock`) | Hand-editing lockfiles loses checksum integrity |
 | Generated / build artifacts (compiled JS, transpiled output, `*.pb.go`) | regenerate from source | Editing the artifact rots on the next build |
@@ -208,12 +208,12 @@ Anchored edits own known blocks, one read-for-anchors per location. For cross-cu
 
 - **DO NOT guess anchors** — always read first to get current anchors or snapshot ids.
 - **DO NOT ignore stale-anchor failures** — re-read and retry (see Hash Mismatch Handling).
-- **DO NOT use sed / awk / perl -i** to edit code — they bypass anchors and structural safety, and have no mismatch detection. `sg --rewrite` is the only sanctioned shell escape, and only for structural codemods that follow the dry-run-first protocol.
+- **DO NOT use sed / awk / perl -i** to edit code — they bypass anchors and structural safety, and have no mismatch detection. `sg --rewrite` is the only sanctioned shell escape — see `## Structural codemods — sg --rewrite escape`.
 - **DO NOT use `patch`** to apply diffs to code — anchored range edits are the safe equivalent.
 - **DO NOT use `tee` or shell redirects (`>`, `>>`)** to overwrite/append code files — both bypass anchors. Use an anchored edit backend.
 - **DO NOT use unanchored host Edit/Write tools** — use tilth_write, harness-native anchored edits, or LSP workspace edits.
-- **DO NOT use `sg --rewrite` for one-off block edits** — use an anchored edit. The codemod escape is only for cross-cutting structural changes.
-- **DO NOT skip the dry-run-first protocol for `sg --rewrite`** — search-only first, clean working tree, then `-U`. Never combine search+rewrite blindly.
+- **DO NOT use `sg --rewrite` for one-off block edits** — use an anchored edit. See `## Structural codemods — sg --rewrite escape` for when the codemod escape applies.
+- **DO NOT skip the dry-run-first protocol for `sg --rewrite`** — see `## Structural codemods — sg --rewrite escape`.
 - **DO NOT edit without reading** — anchors come from the read step.
 - **DO NOT run tests, commit, or review from this skill** — use the project's test/build, git/gh, and `/age` skills.
 - **DO NOT use for reading or searching** — read with `/cheez-read`, search with `/cheez-search`.

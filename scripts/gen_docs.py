@@ -14,7 +14,6 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SKILLS_DIR = REPO_ROOT / "skills"
-SHARED_DIR = REPO_ROOT / "shared"
 CONTENT_ROOT = REPO_ROOT / "src" / "content" / "docs"
 SIDEBAR_PATH = REPO_ROOT / "src" / "sidebar.mjs"
 REPO_URL = "https://github.com/paulnsorensen/easy-cheese"
@@ -193,12 +192,6 @@ def rewrite_skill_link(url: str, skill_name: str) -> str:
     m = re.match(r"^\.\./\.\./([A-Z_]+\.md)$", path)
     if m and m.group(1) in ROOT_DOC_MAP:
         return f"../../{ROOT_DOC_MAP[m.group(1)]}{anchor}"
-
-    # Cross-cutting contracts in top-level shared/ (e.g. ../../shared/handoff-gate.md).
-    m = re.match(r"^\.\./\.\./shared/(.+\.md)$", path)
-    if m:
-        return f"../../shared/{_route_path_for_md(m.group(1))}{anchor}"
-
     if path == "../../LICENSE":
         return LICENSE_URL
 
@@ -227,11 +220,6 @@ def rewrite_ref_link(url: str, skill_name: str) -> str:
     m = re.match(r"^\.\./\.\./\.\./([A-Z_]+\.md)$", path)
     if m and m.group(1) in ROOT_DOC_MAP:
         return f"../../../../{ROOT_DOC_MAP[m.group(1)]}{anchor}"
-
-    m = re.match(r"^\.\./\.\./\.\./shared/(.+\.md)$", path)
-    if m:
-        return f"../../../../shared/{_route_path_for_md(m.group(1))}{anchor}"
-
     if path == "../../../LICENSE":
         return LICENSE_URL
 
@@ -256,29 +244,6 @@ def rewrite_root_passthrough_link(url: str) -> str:
     m = re.match(r"^skills/([^/]+)/references/(.+\.md)$", stripped)
     if m:
         return f"../skills/{m.group(1)}/references/{_route_path_for_md(m.group(2))}{anchor}"
-
-    m = re.match(r"^shared/(.+\.md)$", stripped)
-    if m:
-        return f"../shared/{_route_path_for_md(m.group(1))}{anchor}"
-    return url
-
-
-def rewrite_shared_link(url: str) -> str:
-    if _is_external(url):
-        return url
-    path, anchor = _split_anchor(url)
-    stripped = path[2:] if path.startswith("./") else path
-
-    if re.match(r"^[^/]+\.md$", stripped):
-        return f"../{_route_path_for_md(stripped)}{anchor}"
-
-    m = re.match(r"^\.\./([A-Z_]+\.md)$", path)
-    if m and m.group(1) in ROOT_DOC_MAP:
-        return f"../../{ROOT_DOC_MAP[m.group(1)]}{anchor}"
-
-    m = re.match(r"^\.\./skills/([^/]+)/SKILL\.md$", path)
-    if m:
-        return f"../../skills/{m.group(1)}/{anchor}"
 
     return url
 
@@ -461,22 +426,6 @@ def emit_root_passthrough(filename: str, dest_slug: str, title: str) -> Generate
     )
 
 
-def emit_shared_pages() -> list[GeneratedPage]:
-    if not SHARED_DIR.is_dir():
-        return []
-
-    entries: list[GeneratedPage] = []
-    for src in sorted(p for p in SHARED_DIR.iterdir() if p.is_file() and p.suffix == ".md"):
-        src_rel = src.relative_to(REPO_ROOT).as_posix()
-        out = f"shared/{src.name}"
-        text = src.read_text(encoding="utf-8")
-        text = apply_link_rewrite(text, rewrite_shared_link)
-        text = convert_mkdocs_admonitions(text)
-        title = _first_h1(text) or src.stem.replace("-", " ").capitalize()
-        entries.append(write_doc(out, text, title=title, source_rel=src_rel))
-    return entries
-
-
 def _first_h1(text: str) -> str:
     for line in text.splitlines():
         if line.startswith("# "):
@@ -493,7 +442,6 @@ def _sidebar_link(page: GeneratedPage, label: str | None = None) -> dict[str, st
 
 def emit_sidebar(
     skills: list[GeneratedPage],
-    shared: list[GeneratedPage],
     project: list[GeneratedPage],
     install: GeneratedPage | None,
 ) -> None:
@@ -520,8 +468,6 @@ def emit_sidebar(
         {"label": "Start", "items": start_items},
         {"label": "Skills", "items": skill_items},
     ]
-    if shared:
-        sidebar.append({"label": "Shared contracts", "items": [_sidebar_link(page) for page in shared]})
     if project:
         sidebar.append({"label": "Project", "items": [_sidebar_link(page) for page in project]})
 
@@ -559,7 +505,6 @@ def main() -> None:
 
     emit_skills_index(skills)
     install = emit_install_page()
-    shared = emit_shared_pages()
 
     project: list[GeneratedPage] = []
     for filename, dest_slug, title in (
@@ -571,7 +516,7 @@ def main() -> None:
         if page := emit_root_passthrough(filename, dest_slug, title):
             project.append(page)
 
-    emit_sidebar(skills, shared, project, install)
+    emit_sidebar(skills, project, install)
 
 
 if __name__ == "__main__":

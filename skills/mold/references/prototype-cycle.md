@@ -22,7 +22,7 @@ Plan:
     build a throwaway (may try several variations)
   digest ← { question, answer, snippet?, confidence }   # <=2 KB; no code dumped
   discard the worktree                      # the answer is the keeper, never the code
-  log state.prototype_cycles[] ; optionally emit an ADR (references/adr.md)
+  log state.prototype_cycles[] ; optionally emit an ADR (adr.md)
 ```
 
 **1 cycle == 1 design question resolved**, not 1 per variation. The sub-agent may
@@ -31,7 +31,7 @@ try several throwaways internally; that is still one cycle.
 ## What the sub-agent returns
 
 A digest, never a code dump (sub-agent split + digest size live in the shared
-kernel at `skills/age/references/sub-agent-gate.md`):
+kernel at `../../age/references/sub-agent-gate.md`):
 
 | Field | Content |
 | --- | --- |
@@ -56,7 +56,7 @@ matters, it lives in the digest `snippet`.
 
 Prototype cycles are **context-bounded, not capped** (ADR-003). Run as many as
 confidence needs; the 120k/140k context-budget mechanic
-(`references/context-budget.md`) is the natural limiter. A **soft backstop of 10**
+(`context-budget.md`) is the natural limiter. A **soft backstop of 10**
 prompts a single "still gathering — continue?" check; it is not a hard stop and
 the user can wave it through.
 

@@ -13,7 +13,7 @@ Do not use it for fuzzy planning (`/mold`), no-write discussion (`/culture`), or
 Accept one of:
 
 - A spec path. When explicit, read it verbatim wherever it points.
-- A bare slug. Resolve it to the durable spec path with `SPEC=$(python3 shared/scripts/artifact_path.py specs <slug>)`, then read `"$SPEC"`. If you're on a host that only exposes the packaged helper, `python3 ${CLAUDE_SKILL_DIR}/scripts/cook.pyz artifact-path specs <slug>` is the fallback. The resolver anchors specs at the per-project durable corpus (see `shared/formatting.md` § Corpus location); this is the form `/ultracook` uses when chaining.
+- A bare slug. Resolve it to the durable spec path with `SPEC=$(python3 shared/scripts/artifact_path.py specs <slug>)`, then read `"$SPEC"`. If you're on a host that only exposes the packaged helper, `python3 ${CLAUDE_SKILL_DIR}/scripts/cook.pyz artifact-path specs <slug>` is the fallback. The resolver anchors specs at the per-project durable corpus (see `../cheese/references/formatting.md` § Corpus location); this is the form `/ultracook` uses when chaining.
 - A pasted spec or issue.
 - A focused implementation request with acceptance criteria.
 - A clear, unambiguous task — single-file fix, named bug, well-scoped tweak — even without a spec.
@@ -21,7 +21,7 @@ Accept one of:
 Optional flags:
 
 - `--auto` — autonomous mode. Skip every handoff gate, propagate the flag through `/press → /age → /cure`, and fix every medium-or-above finding plus cheap (contained-fix) lows across up to two cure passes. See `## Auto mode` below.
-- `--hard` — propagate the `/hard-cheese` metacognitive gate flag through `/press → /age → /cure`. Cook does not fire the gate itself; it only passes the flag along. The gate fires at `/cure`'s share-for-review handoff or, under `--auto --hard`, at the end of cure's final auto pass. See `skills/hard-cheese/SKILL.md` and `skills/hard-cheese/references/composition.md`.
+- `--hard` — propagate the `/hard-cheese` metacognitive gate flag through `/press → /age → /cure`. Cook does not fire the gate itself; it only passes the flag along. The gate fires at `/cure`'s share-for-review handoff or, under `--auto --hard`, at the end of cure's final auto pass. See `skills/hard-cheese/SKILL.md` and `../hard-cheese/references/composition.md`.
 - `--open-pr` — propagate to `/cure` so the chain's terminal cure pass may open a *new* PR when none exists. Without it the chain only pushes to an already-open PR (Rule 11) and otherwise leaves the remote untouched.
 
 ### Standalone fast-path
@@ -44,7 +44,7 @@ When the fast-path applies, derive a slug from the task (e.g. `tail-trailing-new
 
 Edits go through `/cheez-write` (search and reads via the tools below).
 
-Portability reference: [`../../shared/harness-portability.md`](../../shared/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
+Portability reference: [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
 The handoff blocks below are the portable contract; slash commands are host renderings, not the control model.
 
 ## Preferred tools and fallbacks
@@ -66,7 +66,7 @@ Run existing project commands only — the most relevant tests for the touched a
 
 ## Output
 
-House style and citations: [`../../shared/formatting.md`](../../shared/formatting.md). Authoritative report shape: [`references/package-report.md`](references/package-report.md); the bullets below sketch it.
+House style and citations: [`../cheese/references/formatting.md`](../cheese/references/formatting.md). Authoritative report shape: [`references/package-report.md`](references/package-report.md); the bullets below sketch it.
 
 Summarize:
 
@@ -93,7 +93,7 @@ taste_test: inline-pass | dispatched-pass | revised | deferred-to-orchestrator
 
 **Pipeline:** culture → mold → **[cook]** → press → age → cure → ship
 
-After the package-ready report is printed and the handoff slug is on disk, ask via the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md), following its **Standard forward-step menu**. Lead each option with the verb (what the user wants to *do* next); the skill command (with any in-scope `--hard` propagation) is the backing detail. Default options:
+After the package-ready report is printed and the handoff slug is on disk, ask via the shared handoff gate in [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md), following its **Standard forward-step menu**. Lead each option with the verb (what the user wants to *do* next); the skill command (with any in-scope `--hard` propagation) is the backing detail. Default options:
 
 - **Harden tests before review** *(recommended)* — `/press <slug>`.
 - **Ship it** — `/press <slug> --auto --open-pr`: run press → age → cure headless and open (or push) the PR at the end.
@@ -111,7 +111,7 @@ When invoked with `--auto`, skip this gate entirely and proceed straight into th
 ### What auto mode does
 
 1. After cook's package-ready report, invoke `/press <slug> --auto` (append `--open-pr` when it is in scope so the terminal cure can open the PR).
-2. `/press --auto` runs its hardening pass and, if readiness is `ready for /age` or `follow-up recommended`, invokes `/age <slug> --auto`. Both states mean the cooked contract is sound and every changed behaviour has a hardening test; documented follow-ups are review-safe. Only `blocked` stops auto — false premise, unfixable level-1/2 gap, a changed behaviour with no stable hardening test, or spinning wheels (three attempts at one gap without green).
+2. `/press --auto` runs its hardening pass and, if readiness is `ready for /age` or `follow-up recommended`, invokes `/age <slug> --auto`. Both states mean the cooked contract is sound and every changed behaviour has a hardening test; documented follow-ups are review-safe. Only `blocked` stops auto — blocked criteria: defined once in [`../press/references/gap-analysis.md`](../press/references/gap-analysis.md).
 3. `/age <slug> --auto` writes the report and invokes `/cure <slug> --auto --stake medium+`.
 4. `/cure --auto --stake medium+` bypasses the selection gate, applies every finding of `blocker`, `high`, or `medium` severity plus every cheap (contained-fix) `Low`, then invokes `/age --scope <touched-paths> --auto` for verification.
 5. The age → cure cycle is capped at **two cure passes total**. Pass 1 fixes the initial findings. Pass 2 fixes anything the re-age surfaces. After pass 2 the chain stops with a final summary, regardless of whether new findings remain.
@@ -120,7 +120,7 @@ When invoked with `--auto`, skip this gate entirely and proceed straight into th
 ### When auto mode stops early
 
 - A quality gate (test, lint, type, build) fails and the failure cannot be attributed to a single revertible finding.
-- `/press` returns `blocked` (false premise, unfixable level-1/2 gap, missing hardening test, or spinning wheels at three attempts).
+- `/press` returns `blocked` (blocked criteria: [`../press/references/gap-analysis.md`](../press/references/gap-analysis.md)).
 - A cure pass cannot apply any finding (every selected fix breaks tests on revert-or-keep evaluation).
 - Two cure passes complete (success path).
 
@@ -154,11 +154,11 @@ Next step:      review the diff, then /gh when ready
 - Do not invent architecture already rejected by the spec.
 - Stop and ask when implementation reveals a design decision the spec did not answer.
 - If the spec or fast-path request rests on a false premise, stop and surface the premise before writing code; do not work the wrong angle to honour the request literally.
-- Apply the shared voice kernel (lives at `skills/age/references/voice.md` in this repo): lead the package-ready report with the answer, name loaded assumptions in the contract, flag residual risk as `certain | speculating | don't know`.
+- Apply the shared voice kernel (lives at `../age/references/voice.md`): lead the package-ready report with the answer, name loaded assumptions in the contract, flag residual risk as `certain | speculating | don't know`.
 - **Verification before `status: ok`:** before writing `status: ok` in the handoff slug, (1) identify the gate command, (2) run it fresh in the same turn, (3) read the full output, (4) only then claim. Hedging words (`should`, `probably`, `I think`) are banned in completion claims — state what the gate output showed, not what you expect it to show.
 
 ## Discipline
 
 Iron Law, Red Flags, and the TDD Rationalization table live in
 [`references/cook-discipline.md`](references/cook-discipline.md).
-See [`../../shared/skill-authoring.md`](../../shared/skill-authoring.md) for the template these follow.
+See [`../cheese/references/skill-authoring.md`](../cheese/references/skill-authoring.md) for the template these follow.

@@ -26,7 +26,7 @@ Skip it for triage searches (snippets only, ≤10 results) and single-URL extrac
 ## The recipe
 
 1. **Generate a slug.** 4-6 kebab-case words derived from the question. Same slug as `synthesis.md` uses for the report.
-2. **Resolve the durable corpus root.** `ROOT=$(python3 ${CLAUDE_SKILL_DIR}/scripts/briesearch.pyz artifact-path research <slug>)` — the per-project durable corpus (see `shared/formatting.md` § Corpus location). All paths below are composed under `"$ROOT/research/<slug>/"`.
+2. **Resolve the durable corpus root.** `ROOT=$(python3 ${CLAUDE_SKILL_DIR}/scripts/briesearch.pyz artifact-path research <slug>)` — the per-project durable corpus (see `../../cheese/references/formatting.md` § Corpus location). All paths below are composed under `"$ROOT/research/<slug>/"`.
 3. **Run the heavy call from a forked sub-agent**, not from the main context. The sub-agent receives the routing block and `$ROOT`, and writes raw bodies to `"$ROOT/research/<slug>/raw/"`.
 4. **Persist raw bodies as files.** One file per result/URL:
 

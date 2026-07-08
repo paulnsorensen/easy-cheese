@@ -26,7 +26,7 @@ Optional flags:
 - `--continue <slug-or-note-path>` — resume an in-flight pipeline from a handoff slug, or from an explicit `.cheese/.../<slug>.md` note path when outside the original repo. See `## --continue` below.
 - `--hard` — inject the `/hard-cheese` metacognitive gate before code is shared for review. The flag propagates to whichever target the router dispatches and fires at `/cure`'s share-for-review handoff (or end of `/cure`'s final auto pass under `--auto --hard`). See `skills/hard-cheese/SKILL.md`.
 
-If `$ARGUMENTS` is missing entirely and there is no recent context to lean on, ask one clarifying question through the host routing guide in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md) before classifying.
+If `$ARGUMENTS` is missing entirely and there is no recent context to lean on, ask one clarifying question through the host routing guide in [`references/handoff-gate.md`](references/handoff-gate.md) before classifying.
 
 ## Flow
 
@@ -36,11 +36,11 @@ If `$ARGUMENTS` is missing entirely and there is no recent context to lean on, a
 4. **Escalate (if needed).** Tier 1 dispatches the chosen target (writing a mini-spec via `/mold`'s agent-invoked mode when the dispatch is `/cook --auto` and no spec path was supplied). Tier 2 autonomously invokes `/culture` and/or `/briesearch` in internal mode, then re-runs the clarity check. Tier 3 blocks on a single targeted host-routed question and re-enters classification on the answer. See `## Escalation`.
 5. **Announce** — print a short three-line block (Intent / Reason / Target) per the format in `## Output`. Cite the signal that drove the routing decision.
 6. **Self-check** — run the coherence questions in `references/coherence-check.md`. If any fails, downgrade to `clarify` (tier 3) or `research`.
-7. **Dispatch** — without `--safe`, run the chosen skill immediately with its exact dispatch command and context packet, in the same turn as the announce. With `--safe`, issue a handoff gate per [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md) (recommended target pre-selected, at least one alternative, `Stop`) and wait for the user's selection before dispatching.
+7. **Dispatch** — without `--safe`, run the chosen skill immediately with its exact dispatch command and context packet, in the same turn as the announce. With `--safe`, issue a handoff gate per [`references/handoff-gate.md`](references/handoff-gate.md) (recommended target pre-selected, at least one alternative, `Stop`) and wait for the user's selection before dispatching.
 
 `/cheese` is a router, not a worker — it never edits files, runs tests, or opens PRs; the frontmatter `allowed-tools` grant (read, search, dispatch — no write tools) backs this. The sole exception: it invokes `/mold`'s agent-invoked mini-spec mode in tier 1 when `/cook --auto` needs a spec first — that write happens inside `/mold`'s own skill scope, under `/mold`'s tool grants, not the router's.
 
-Portability reference: [`../../shared/harness-portability.md`](../../shared/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
+Portability reference: [`references/harness-portability.md`](references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
 The handoff blocks below are the portable contract; slash commands are host renderings, not the control model.
 
 ## Intent shapes
@@ -92,7 +92,7 @@ Flow:
    - **When `next:` is missing entirely** — flag the handoff as malformed (`malformed handoff: next: required`) and stop. Do not guess a next step or default to a phase; `hold` is the author's value for "no action."
    - **When `next:` is terminal** (`done` from a phase or culture-notes slug) — report the terminal state and stop. If `status:` starts with `halt`, call it a non-resumable halt (per cook/press's slug contract a resumable halt carries a runnable `next:`, so `halt` + `next: done` can only mean non-resumable); otherwise call it pipeline completion. The terminal value surfaces state to the user, not a runnable command; never construct `/done <slug>`.
 
-Under `--safe`, gate the resumption through the handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md); otherwise run the named phase immediately with the slug. The slug files are the resumability contract: they tell the router where the pipeline is and how to move it forward.
+Under `--safe`, gate the resumption through the handoff gate in [`references/handoff-gate.md`](references/handoff-gate.md); otherwise run the named phase immediately with the slug. The slug files are the resumability contract: they tell the router where the pipeline is and how to move it forward.
 
 `--continue` does *not* propagate `--auto` — dispatch `/<next> <slug>` in its default interactive mode even with no `--safe`. The user can append `--auto` explicitly (`/cheese --continue <slug> --auto`) to opt back in.
 
@@ -100,7 +100,7 @@ Under `--safe`, gate the resumption through the handoff gate in [`../../shared/h
 
 Treat classification confidence qualitatively (`low | medium | high`). Threshold for direct routing is `medium` or better. Below that, route to tier 3 (`clarify`):
 
-- Ask exactly one question through the host routing guide in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md).
+- Ask exactly one question through the host routing guide in [`references/handoff-gate.md`](references/handoff-gate.md).
 - Offer the two most-likely targets as alternatives plus `Stop`.
 - Re-enter `/cheese` with the answer.
 
@@ -115,7 +115,7 @@ Beyond `cheez-*` there are router-specific tools:
 | Need | Prefer | Fallback |
 | --- | --- | --- |
 | PR / issue context | `gh` | the URL or numbers the user provided |
-| Confirming routing target with the user (only under `--safe` or `clarify`) | host-routed structured question per [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md) | a numbered list with explicit dispatch commands |
+| Confirming routing target with the user (only under `--safe` or `clarify`) | host-routed structured question per [`references/handoff-gate.md`](references/handoff-gate.md) | a numbered list with explicit dispatch commands |
 
 `/cheese` keeps tool use light. Treat anything heavier than a single-file read or one search call as a sign the work belongs in the downstream skill, not in the router.
 
@@ -155,4 +155,4 @@ Pre-select only the highest-confidence target. Without `--safe`, surface the tar
 
 - `references/classification.md` — intent shapes, signals, disambiguation rules.
 - `references/coherence-check.md` — pre-dispatch self-checks that downgrade misroutes.
-- [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md) — Codex-safe post-selection dispatch contract (shared across workflow skills).
+- [`references/handoff-gate.md`](references/handoff-gate.md) — Codex-safe post-selection dispatch contract (shared across workflow skills).

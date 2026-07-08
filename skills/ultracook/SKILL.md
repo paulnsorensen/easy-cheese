@@ -13,7 +13,7 @@ Use this skill when the user wants an approved high-blast-radius spec run forwar
 
 Do not use it for short focused changes (`/cook --auto` is cheaper and continuous), for fuzzy planning (`/mold`), or for review-only work (`/age`).
 
-Portability reference: [`../../shared/harness-portability.md`](../../shared/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
+Portability reference: [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
 The handoff blocks below are the portable contract; slash commands are host renderings, not the control model.
 
 ## Inputs
@@ -21,7 +21,7 @@ The handoff blocks below are the portable contract; slash commands are host rend
 Accept one of:
 
 - A spec path. When explicit, it points wherever the user wrote the spec.
-- A bare slug whose spec lives in the per-project durable corpus (see `shared/formatting.md` § Corpus location).
+- A bare slug whose spec lives in the per-project durable corpus (see `../cheese/references/formatting.md` § Corpus location).
 - A pasted spec, with a slug supplied alongside.
 
 `/ultracook` does not accept fuzzy or open-ended asks — those go to `/mold` first. The orchestrator assumes the contract is already locked.
@@ -39,13 +39,13 @@ Before the phase loop runs, the decomposer picks the mode. This is the one autho
 2. **Pick the mode** — `python3 skills/ultracook/scripts/ultracook.pyz mode --count <curd-count>` → `linear | parallel`. The canonical `PARALLEL_THRESHOLD` (2) lives in the engine: a decomposition of **2 or more** curds routes to **parallel mode**; **1** curd stays **linear**. There is one threshold in the tree — the selector, `validate_decomposition`, and the mold hint all read it.
 3. **Probe the engine seam** — `python3 skills/ultracook/scripts/ultracook.pyz milknado --tools "<available tool names>"` → `engine | tracker | none`. This decides how parallel mode runs curds (see `## Parallel mode`); linear mode ignores it.
 
-If the host only exposes the packaged helper, `python3 ${CLAUDE_SKILL_DIR}/scripts/ultracook.pyz <subcommand> ...` is the fallback.
+Helper resolution — including the `${CLAUDE_SKILL_DIR}` packaged-helper fallback — follows [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md) § Helper resolution.
 
 A 1-curd spec runs `## Flow` (linear mode) unchanged. A 2+-curd spec runs `## Parallel mode`.
 
 ## Flow (linear mode)
 
-1. **Resolve slug** — derive `<slug>` from the input. If a spec path is given, the slug is the basename without `.md`; if a bare slug is given, confirm the spec exists at the durable path the spawned `/cook` resolves (`python3 shared/scripts/artifact_path.py specs <slug>`; if the host only exposes the packaged helper, `python3 ${CLAUDE_SKILL_DIR}/scripts/cook.pyz artifact-path specs <slug>` is the fallback; see `shared/formatting.md` § Corpus location).
+1. **Resolve slug** — derive `<slug>` from the input. If a spec path is given, the slug is the basename without `.md`; if a bare slug is given, confirm the spec exists at the durable path the spawned `/cook` resolves (`python3 shared/scripts/artifact_path.py specs <slug>`; if the host only exposes the packaged helper, `python3 ${CLAUDE_SKILL_DIR}/scripts/cook.pyz artifact-path specs <slug>` is the fallback; see `../cheese/references/formatting.md` § Corpus location).
 2. **Guard against re-entry** — if any of `.cheese/{cook,press,age,cure}/<slug>.md` already exist, stop with a one-line list of the existing handoffs and tell the user to either run `/cheese --continue <slug>` to resume from the latest phase or `rm` the relevant files to start fresh.
 3. **Phase loop** — for each phase in `cook, press, age, cure, age, cure, age`, spawn a fresh sub-agent (see `## Sub-agent contract` below), wait for it to return, then read each phase's handoff slug and compute the next action deterministically:
    1. **Parse the slug** — `python3 shared/scripts/read_handoff_slug.py --phase <phase> --slug <slug>` → JSON `{status, next, artifact, orientation, halt_reason}`. Do not infer success from the sub-agent's last line of stdout — read the file.
@@ -163,7 +163,7 @@ Reached when the decomposer produces **2 or more** curds (`mode → parallel`). 
    After all curd branches are cherry-picked onto the orchestrator branch, `manifest_update set-phase --manifest <path> --phase merge_complete`.
 4. **Teardown.** After harvesting each curd, `python3 skills/ultracook/scripts/ultracook.pyz worktree teardown --path <worktree-path> --branch <curd-branch>` removes the worktree and deletes its branch. The engine owns teardown — worktrees leak otherwise; a completed run leaves no `worktree-agent-*` branch or `.claude/worktrees/agent-*` dir.
 
-If the host only exposes the packaged helper, `python3 ${CLAUDE_SKILL_DIR}/scripts/ultracook.pyz <subcommand> ...` is the fallback.
+Helper resolution — including the `${CLAUDE_SKILL_DIR}` packaged-helper fallback — follows [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md) § Helper resolution.
 5. **Wiring.** Dispatch the topo-sorted `wiring[]` integration tasks (`ultracook.pyz wiring_topo_sort`), sequentially within each wave.
 
    Mark each wiring row as it runs (`manifest_update set-wiring-status --manifest <path> --wiring <id> --status running|completed|failed [--commit-sha <sha>]`). After the last wave, `manifest_update set-phase --manifest <path> --phase wiring_complete`, then immediately `manifest_update set-phase --manifest <path> --phase final_merge_complete`: wiring commits land directly on the orchestrator branch in this flow (no distinct wiring-merge action — the retired cheese-factory's separate Phase 5 final-merge is folded in), so the two markers coincide.
@@ -185,7 +185,7 @@ The `milknado` probe from **Mode selection** decides how curds run:
 - **`engine`** (`milknado_todo_claim` + `milknado_node_verify` present) — milknado owns the DAG, per-node worktrees, and **verify-until-green**; the orchestrator spawns the agent per claimed node and lets milknado re-run the gates until they pass.
 - **`tracker` / `none`** — **native fan-out**: the orchestrator owns worktrees (via the `worktree` helper), and **curds self-verify by running the project gates in-worker**. Parallel mode runs to completion with milknado entirely absent.
 
-**This parity difference is intentional and load-bearing:** native curds self-verify (gates run once, in-worker), while milknado, when present, does verify-until-green (re-runs gates until they pass). See [`../../shared/optional-plugins.md`](../../shared/optional-plugins.md) for the detect-and-degrade contract; announce the absence once and proceed.
+**This parity difference is intentional and load-bearing:** native curds self-verify (gates run once, in-worker), while milknado, when present, does verify-until-green (re-runs gates until they pass). See [`../cheese/references/optional-plugins.md`](../cheese/references/optional-plugins.md) for the detect-and-degrade contract; announce the absence once and proceed.
 
 ### Recovery paths (issue #194)
 
@@ -229,4 +229,4 @@ If the host harness does not expose a sub-agent primitive at all, `/ultracook` i
 - In parallel mode, own worktree teardown: no `worktree-agent-*` branch or `.claude/worktrees/agent-*` dir may leak after a completed run. State the milknado parity difference (native self-verify vs milknado verify-until-green) when it applies.
 - At the terminal, push to an already-open PR via `/gh` (Rule 11); create a *new* PR only with `--open-pr`. Never push on a halt.
 - Never wipe existing handoffs. Stop and tell the user to use `/cheese --continue` or `rm` by hand.
-- Apply the shared voice kernel (lives at `skills/age/references/voice.md` in this repo): lead the final summary with what happened, flag residual risk as `certain | speculating | don't know`, do not manufacture follow-ups.
+- Apply the shared voice kernel (lives at `../age/references/voice.md`): lead the final summary with what happened, flag residual risk as `certain | speculating | don't know`, do not manufacture follow-ups.

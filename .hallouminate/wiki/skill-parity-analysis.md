@@ -22,7 +22,7 @@ distinctive leads with no benchmark match.
 
 - **Format slice → PR #138**: CSO descriptions, the Iron Law / Red Flags /
   Rationalization-table template, the authoring checklist, and the
-  pressure-test gate (`shared/skill-authoring.md`), plus cook/cure discipline
+  pressure-test gate (`skills/cheese/references/skill-authoring.md`), plus cook/cure discipline
   reference docs.
 - **Open follow-ups → issues #151–#164**: mold glossary durability (#151),
   extend rationalization tables (#152), verification-before-completion (#153),

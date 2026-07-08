@@ -41,7 +41,6 @@ def _rendered_markdown() -> list[Path]:
     ]
     files += sorted((REPO_ROOT / "skills").glob("*/SKILL.md"))
     files += sorted((REPO_ROOT / "skills").glob("*/references/*.md"))
-    files += sorted((REPO_ROOT / "shared").glob("*.md"))
     return [f for f in files if f.exists()]
 
 
@@ -146,7 +145,7 @@ def test_cheez_skills_accept_equivalent_native_backends_without_blind_shell_fall
 
 def test_harness_portability_reference_is_linked_from_workflow_docs():
     docs = [
-        REPO_ROOT / "shared/formatting.md",
+        REPO_ROOT / "skills/cheese/references/formatting.md",
         REPO_ROOT / "skills/cook/SKILL.md",
         REPO_ROOT / "skills/press/SKILL.md",
         REPO_ROOT / "skills/age/SKILL.md",
@@ -161,10 +160,14 @@ def test_harness_portability_reference_is_linked_from_workflow_docs():
 
     for path in docs:
         text = path.read_text(encoding="utf-8")
-        assert "shared/harness-portability.md" in text, path
         if path.name == "formatting.md":
+            assert "harness-portability.md" in text
             assert "Portable host-capability wording" in text
+        elif path == REPO_ROOT / "skills/cheese/SKILL.md":
+            assert "references/harness-portability.md" in text, path
+            assert "slash commands are host renderings, not the control model" in text, path
         else:
+            assert "cheese/references/harness-portability.md" in text, path
             assert "slash commands are host renderings, not the control model" in text, path
 
 
@@ -225,7 +228,7 @@ def test_harness_portability_reference_is_linked_from_workflow_docs():
 
 
 def test_harness_portability_reference_covers_the_portability_contract():
-    body = (REPO_ROOT / "shared/harness-portability.md").read_text(encoding="utf-8")
+    body = (REPO_ROOT / "skills/cheese/references/harness-portability.md").read_text(encoding="utf-8")
 
     assert "Helper resolution" in body
     assert "repo-local" in body and "bundled" in body and "environment variable" in body

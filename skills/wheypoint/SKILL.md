@@ -48,11 +48,7 @@ artifact: <path-to-richer-report, or PR ref (PR#<n> / URL) when next: affinage, 
 
 Single-value `next:` is one of the pipeline phases (`mold | cook | press | age | cure | affinage`), a read-only kickoff (`briesearch | culture`), `hold`, `tasks` (with `mode: parallel`), or `done`.
 
-- **`mold`** — fuzzy idea, no approved spec yet; kick off domain modeling.
-- **`cook`** — approved spec ready; implement it. Also the resume value when `/cook` was interrupted mid-phase.
-- **`press`** — code written, not yet hardened or reviewed.
-- **`age`** — implementation done, review wanted now.
-- **`cure`** — review findings in hand, fixes not applied.
+- **`mold` / `cook` / `press` / `age` / `cure`** — the pipeline phases. Which one fits the session state (and the mid-phase resume case, e.g. `/cook` interrupted) is defined by the `## Suggested skills` mapping table below, which owns these semantics.
 - **`affinage`** — PR has review comments or failing CI. Record the PR reference in `artifact:` (`PR#<n>` or URL) so the resume dispatches `/affinage <pr>` explicitly.
 - **`briesearch | culture`** — read-only, low-risk next moves. Under `status: ok`, `/cheese --continue` auto-dispatches them directly (frictionless research/think kickoff), deriving any dispatch argument (e.g. `briesearch`'s question) from the orientation line. A move that needs a human decision belongs in `status: gated:`.
 - **`hold`** — restore orientation and wait for instruction; dispatch nothing. For compacting or stringing context along when no action is implied. Distinct from `done` (work finished, record only).
@@ -123,7 +119,7 @@ After the slug, write a `## Document` section. Open with the answer; keep every 
 - **Suggested skills.** The concrete next moves. See `## Suggested skills` for the state-to-skill mapping.
 - **Environment.** Branch, dirty files, anything non-obvious about the working state. Redacted.
 
-Follow the house style in [`../../shared/formatting.md`](../../shared/formatting.md): no em-dashes, complete sentences in prose, no throat-clearing, calibrated tags on the claim.
+Follow the house style in [`../cheese/references/formatting.md`](../cheese/references/formatting.md): no em-dashes, complete sentences in prose, no throat-clearing, calibrated tags on the claim.
 
 ## Suggested skills
 
