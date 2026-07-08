@@ -229,7 +229,9 @@ Recommendation shape: "Extract `<sub-function>`" / "Inline `<one-call helper>`" 
 
 ### deslop
 
-Look for: dead code, AI tells (generic catches, useless docstrings, "// TODO: implement"), duplicated logic, copy-paste-with-variation, vague names.
+Look for: dead code, AI tells (generic catches, useless docstrings, "// TODO: implement", placeholder/apology comments like "// in a real implementation"), duplicated logic, copy-paste-over-reuse, vague or container-typed names (`user_data_dictionary`), convention blindness (reimplementing an existing repo utility from scratch), fake modularity (single-function utils file, God class spread thin), lint-suppression band-aids (`# noqa` / `@ts-ignore` / `#[allow(...)]` / `//nolint`) masking the real fix, phantom edge-case handling for inputs nobody can name, cargo-cult boilerplate, over-abstraction for one consumer, test bloat (shallow near-duplicate tests), partial shell strict mode (`set -e` without `-uo pipefail`).
+
+Per-language pattern catalogs with lint-rule mappings live in `deslop-rust.md` / `deslop-typescript.md` / `deslop-python.md` / `deslop-shell.md` / `deslop-go.md` (same directory).
 
 | Base | Trigger |
 | --- | --- |
@@ -243,7 +245,7 @@ Boundaries: correctness (AI-residue claim to deslop, silent-failure to correctne
 
 No default `blocker` row.
 
-Recommendation shape: "Delete dead branch at <line>" / "Reuse `<existing-helper>`" / "Extract shared `<helper>` from the two near-duplicate blocks" / "Rename `data` to `<noun>`".
+Recommendation shape: "Delete dead branch at <line>" / "Reuse `<existing-helper>`" / "Extract shared `<helper>` from the two near-duplicate blocks" / "Rename `data` to `<noun>`" / "Remove `<allow/noqa/ts-ignore>` and fix the underlying `<lint-rule>`" / "Delete the placeholder comment at <line> and implement the real branch".
 
 ### assertions
 
