@@ -97,7 +97,7 @@ For when another tool fits better than cheez-read, see [`references/routing.md`]
 
 ## Edit tags
 
-Reads emit a `[path#TAG]` header above `N:content` numbered lines. Reading before editing is mandatory to get the current tag — copy the 4-hex TAG verbatim into cheez-write's `tag`, which binds the edit to the content you read: a drifted write is 3-way-merged or rejected safely, never applied blind. Never invent a tag.
+Edit-mode (non-stripped) reads emit a `[path#TAG]` header above `N:content` numbered lines; stripped reads carry no tag header and cannot round-trip into a write. Reading before editing is mandatory to get the current tag — copy the 4-hex TAG verbatim into cheez-write's `tag`, which binds the edit to the content you read: a drifted write is 3-way-merged or rejected safely, never applied blind. Never invent a tag.
 
 ---
 

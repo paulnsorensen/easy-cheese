@@ -112,7 +112,7 @@ rejected, re-read the file and recover before moving on.
 { "path": "src/new-module.ts", "ops": [ { "op": "append", "content": "export const x = 1;\n" } ] }
 ```
 
-Omitting `tag` seeds a brand-new file. `{ "op": "move_file", "dest": "src/renamed.ts" }`
+Omitting `tag` seeds a brand-new file; `move_file` / `delete_file` on an *existing* file keep the file's `tag` (omit it only to seed a new file). `{ "op": "move_file", "dest": "src/renamed.ts" }`
 moves the section's file; `{ "op": "delete_file" }` removes it.
 
 ## Show diff in response
