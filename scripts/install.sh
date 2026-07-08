@@ -15,8 +15,9 @@
 # file so sourcing (e.g. from the bats suite) does not mutate the caller's
 # shell options.
 
-# All known CLI tools. tilth is included but installed via cargo/npm (not
-# brew — upstream jahala/tilth does not ship a Homebrew formula).
+# All known CLI tools. tilth is included but installed via npm from the
+# @paulnsorensen/tilth-nightly package (not brew — tilth has no Homebrew
+# formula upstream).
 EC_KNOWN_TOOLS="gh ripgrep fd jq ast-grep git-delta just mergiraf tilth"
 
 # Repository the installer pulls skills from. Centralized so discovery and
@@ -85,7 +86,7 @@ Options:
 
 Environment:
   EC_BREW   EC_GH      Override the brew / gh binaries (used by tests).
-  EC_CARGO  EC_NPM     Override the cargo / npm binaries used to install tilth.
+  EC_NPM               Override the npm binary used to install tilth.
   EC_TILTH  EC_CLAUDE  Override the tilth / claude binaries (used by tests).
   EC_CURSOR EC_CODEX   Override cursor / codex binaries for detection.
   EC_NPX               Override npx (used to launch context7 / tavily MCP).
@@ -159,11 +160,10 @@ ec_brew_install_if_missing() {
     ec_brew install "$tool"
 }
 
-# tilth has no Homebrew formula. Install via cargo (preferred — native
-# binary) or fall back to 'npm install -g tilth' (jahala/tilth ships a
-# proper bin entry on npm). Errors out clearly if neither is available.
+# tilth has no Homebrew formula. Install via npm from the
+# @paulnsorensen/tilth-nightly package (ships a proper `tilth` bin entry).
+# Errors out clearly if npm is unavailable.
 ec_install_tilth() {
-    local cargo="${EC_CARGO:-cargo}"
     local npm="${EC_NPM:-npm}"
 
     if ec_cmd_exists tilth; then
@@ -171,28 +171,18 @@ ec_install_tilth() {
         return 0
     fi
 
-    if ec_cmd_exists "$cargo"; then
-        if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
-            ec_log "tilth: would run '$cargo install tilth'"
-            return 0
-        fi
-        ec_log "tilth: installing via 'cargo install tilth'"
-        "$cargo" install tilth
-        return $?
-    fi
-
     if ec_cmd_exists "$npm"; then
         if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
-            ec_log "tilth: would run '$npm install -g tilth' (cargo not found)"
+            ec_log "tilth: would run '$npm install -g @paulnsorensen/tilth-nightly@latest'"
             return 0
         fi
-        ec_log "tilth: installing via 'npm install -g tilth' (cargo not found)"
-        "$npm" install -g tilth
+        ec_log "tilth: installing via '$npm install -g @paulnsorensen/tilth-nightly@latest'"
+        "$npm" install -g @paulnsorensen/tilth-nightly@latest
         return $?
     fi
 
-    ec_err "tilth: needs cargo (Rust) or npm (Node 18+); neither was found."
-    ec_err "Install Rust from https://rustup.rs or Node.js from https://nodejs.org and re-run."
+    ec_err "tilth: needs npm (Node 18+), which was not found."
+    ec_err "Install Node.js from https://nodejs.org and re-run."
     return 1
 }
 

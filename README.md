@@ -298,14 +298,13 @@ The `cheez-*` tool skills and several workflow skills benefit from MCP servers. 
 <details>
 <summary><strong>tilth</strong> (preferred for `cheez-*` skills) — AST-aware code search, smart reading, tag-anchored edits</summary>
 
-[tilth](https://github.com/jahala/tilth) provides AST-aware code search, smart file reading, and tag-anchored edits. It is the preferred backend for `/cheez-search`, `/cheez-read`, and `/cheez-write`; equivalent native AST/LSP/anchored-edit backends satisfy the same contract when Tilth is unavailable.
+[tilth](https://www.npmjs.com/package/@paulnsorensen/tilth-nightly) provides AST-aware code search, smart file reading, and tag-anchored edits. It is the preferred backend for `/cheez-search`, `/cheez-read`, and `/cheez-write`; equivalent native AST/LSP/anchored-edit backends satisfy the same contract when Tilth is unavailable.
 
 ```sh
-# Install tilth CLI — pick one (no Homebrew formula upstream)
-cargo install tilth        # via Cargo (Rust) — preferred, native binary
-npm install -g tilth       # via npm (Node 18+) — no Rust toolchain needed
-# or run via npx — no global install needed (Node.js v18+):
-#   npx -y tilth install claude-code --edit
+# Install tilth CLI via npm (Node.js v18+) — no Homebrew formula upstream
+npm install -g @paulnsorensen/tilth-nightly@latest
+# or run via npx — no global install needed:
+#   npx -y @paulnsorensen/tilth-nightly@latest install claude-code --edit
 
 # Register as an MCP server — include --edit only if you plan to use cheez-write
 tilth install claude-code --edit   # Claude Code
@@ -419,7 +418,7 @@ flow above; this script is the fast lane for the wider ecosystem.
 
 It does the following in one shot:
 
-1. Installs every CLI tool listed below — Homebrew for the eight brew-core formulas, plus `cargo install tilth` (or `npm install -g tilth` if Rust isn't available) for tilth, which has no Homebrew formula upstream.
+1. Installs every CLI tool listed below — Homebrew for the eight brew-core formulas, plus `npm install -g @paulnsorensen/tilth-nightly@latest` for tilth, which has no Homebrew formula upstream.
 2. Auto-detects installed Claude Code, Cursor, and Codex CLIs, then installs every easy-cheese skill into each detected harness at user scope as a convenience bootstrap.
 3. Registers the `tilth`, `context7`, and `hallouminate` MCP servers with those harnesses where supported. hallouminate is delivered as a plugin: on `claude-code` and `codex` the installer adds the `paulnsorensen/hallouminate` plugin marketplace and installs the plugin (which ships its own MCP server and bootstraps the binary); on other harnesses it warns and you register the MCP manually. Other servers (`tavily`, `milknado`) are also selectable with `--mcp`.
 

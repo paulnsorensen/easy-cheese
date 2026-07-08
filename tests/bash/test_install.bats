@@ -273,10 +273,10 @@ STUB
 }
 
 @test "ec_install_tools routes tilth through ec_install_tilth, not brew" {
-    make_stub cargo
-    EC_CARGO="$STUB_BIN/cargo" EC_DRY_RUN=1 run ec_install_tools "tilth"
+    make_stub npm
+    EC_NPM="$STUB_BIN/npm" EC_DRY_RUN=1 run ec_install_tools "tilth"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"cargo install tilth"* ]]
+    [[ "$output" == *"npm install -g @paulnsorensen/tilth-nightly@latest"* ]]
     [[ "$output" != *"brew install tilth"* ]]
 }
 
@@ -289,46 +289,27 @@ STUB
     [[ "$output" == *"already installed"* ]]
 }
 
-@test "ec_install_tilth dry-run prefers cargo when both cargo and npm exist" {
-    make_stub cargo
-    make_stub npm
-    EC_CARGO="$STUB_BIN/cargo" EC_NPM="$STUB_BIN/npm" EC_DRY_RUN=1 \
-        run ec_install_tilth
-    [ "$status" -eq 0 ]
-    [[ "$output" == *"would run"* ]]
-    [[ "$output" == *"cargo install tilth"* ]]
-    [[ "$output" != *"npm install -g tilth"* ]]
-}
-
-@test "ec_install_tilth invokes cargo when not dry-run" {
-    make_stub cargo
-    export EC_CARGO="$STUB_BIN/cargo"
-    run ec_install_tilth
-    [ "$status" -eq 0 ]
-    grep -q "^cargo install tilth$" "$STUB_LOG"
-}
-
-@test "ec_install_tilth falls back to npm install -g when cargo missing" {
+@test "ec_install_tilth dry-run installs via the npm nightly package" {
     make_stub npm
     EC_NPM="$STUB_BIN/npm" EC_DRY_RUN=1 run ec_install_tilth
     [ "$status" -eq 0 ]
-    [[ "$output" == *"npm install -g tilth"* ]]
-    [[ "$output" == *"cargo not found"* ]]
+    [[ "$output" == *"would run"* ]]
+    [[ "$output" == *"npm install -g @paulnsorensen/tilth-nightly@latest"* ]]
 }
 
-@test "ec_install_tilth invokes npm install -g when cargo missing" {
+@test "ec_install_tilth invokes npm install -g when not dry-run" {
     make_stub npm
     export EC_NPM="$STUB_BIN/npm"
     run ec_install_tilth
     [ "$status" -eq 0 ]
-    grep -q "^npm install -g tilth$" "$STUB_LOG"
+    grep -q "^npm install -g @paulnsorensen/tilth-nightly@latest$" "$STUB_LOG"
 }
 
-@test "ec_install_tilth fails clearly when neither cargo nor npm present" {
+@test "ec_install_tilth fails clearly when npm is not present" {
     run ec_install_tilth
     [ "$status" -eq 1 ]
-    [[ "$output" == *"needs cargo (Rust) or npm"* ]]
-    [[ "$output" == *"rustup.rs"* ]]
+    [[ "$output" == *"needs npm (Node 18+)"* ]]
+    [[ "$output" == *"nodejs.org"* ]]
 }
 
 # -- default + opt-in MCP wiring ----------------------------------------------
@@ -894,7 +875,6 @@ echo Darwin
 STUB
     chmod +x "$STUB_BIN/uname"
     make_stub brew
-    make_stub cargo
     make_stub gh
     make_stub claude
     make_stub tilth
@@ -902,7 +882,6 @@ STUB
     ln -sf /bin/bash "$STUB_BIN/bash"
     PATH="$STUB_BIN" \
     EC_BREW=brew \
-    EC_CARGO=cargo \
     EC_GH=gh \
     EC_CLAUDE=claude \
     EC_TILTH=tilth \
