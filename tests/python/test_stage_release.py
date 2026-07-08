@@ -6,7 +6,6 @@ These are the invariants that, when violated silently, shipped the empty v0.5.1.
 
 from __future__ import annotations
 
-import re
 import sys
 import zipfile
 from pathlib import Path
