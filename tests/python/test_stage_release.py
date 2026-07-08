@@ -73,55 +73,59 @@ def test_verify_rejects_missing_bundle(tmp_path: Path) -> None:
         stage_release._verify(fake)
 
 
-# Any `shared/<...>` reference in shipped markdown, with leading `../` segments.
-# Broader than the stager's vendoring regex on purpose: the reachability test
-# must also catch a non-`.md`, non-`scripts/` shared ref that was never vendored.
-_ANY_SHARED_REF = re.compile(r"(?:\.\./)*shared/([A-Za-z0-9._/-]+)")
+_MD_LINK_RE = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
+_BACKTICK_RE = re.compile(r"`([^`]+)`")
+_PROSE_REF_RE = re.compile(r"^(?:\.\./)+[\w./-]+\.md(?:#[\w-]+)?$|^references/[\w./-]+\.md(?:#[\w-]+)?$")
 
 
-def test_shared_doc_refs_resolve_in_staged_tree(staged: Path) -> None:
-    """The issue's core requirement: an installed skill must reach every path
-    its SKILL.md (or references/) invokes. Every `shared/…` reference in shipped
-    markdown — excluding `shared/scripts/*` (bundled into the .pyz) — must
-    resolve to a real file inside that skill's own directory, with no link
-    escaping the skill dir."""
-    skills = staged / "skills"
+def _relative_md_refs(text: str) -> list[str]:
+    """Every relative markdown-link target and backticked relative-path prose
+    ref in ``text``, with any `#fragment` (and ` § heading` prose suffix)
+    stripped."""
+    refs: list[str] = []
+    for match in _MD_LINK_RE.finditer(text):
+        target = match.group(1)
+        if target.startswith(("http://", "https://", "mailto:", "#")):
+            continue
+        path = target.split("#", 1)[0]
+        if path.endswith(".md"):
+            refs.append(path)
+    for match in _BACKTICK_RE.finditer(text):
+        candidate = match.group(1).split(" § ", 1)[0]
+        if _PROSE_REF_RE.match(candidate):
+            refs.append(candidate.split("#", 1)[0])
+    return refs
+
+
+def test_relative_refs_resolve_in_staged_tree(staged: Path) -> None:
+    """The sibling-skills-ship-wholesale layout means every relative markdown
+    ref under skills/**/*.md must resolve from its own file's directory, with
+    zero vendoring machinery required."""
     problems: list[str] = []
-    for md in sorted(skills.rglob("*.md")):
-        skill_root = (skills / md.relative_to(skills).parts[0]).resolve()
-        for match in _ANY_SHARED_REF.finditer(md.read_text(encoding="utf-8")):
-            ref, sub = match.group(0), match.group(1)
-            if sub.startswith("scripts/"):
-                continue  # Python helpers ride the .pyz, not the file tree.
-            target = (md.parent / ref).resolve()
-            rel = md.relative_to(staged)
-            if not target.is_file():
-                problems.append(f"{rel} -> {ref} (missing)")
-            elif skill_root != target and skill_root not in target.parents:
-                problems.append(f"{rel} -> {ref} (escapes {skill_root.name}/)")
-    assert not problems, "unresolved shared/ refs in staged tree:\n" + "\n".join(problems)
+    for md in sorted((staged / "skills").rglob("*.md")):
+        for ref in _relative_md_refs(md.read_text(encoding="utf-8")):
+            if not (md.parent / ref).resolve().is_file():
+                problems.append(f"{md.relative_to(staged)} -> {ref}")
+    assert not problems, "unresolved refs in staged tree:\n" + "\n".join(problems)
 
 
-def test_vendor_missing_shared_doc_fails_loud(tmp_path: Path) -> None:
-    """If a SKILL.md cites a shared/<name>.md that does not exist under shared/,
-    vendoring must fail loud at stage time rather than silently ship a skill
-    whose reference dangles post-install."""
-    tree = tmp_path / "tree"
-    skill = tree / "skills" / "ghost"
-    skill.mkdir(parents=True)
-    (skill / "SKILL.md").write_text(
-        "See [the gate](../../shared/does-not-exist.md).\n", encoding="utf-8"
-    )
-    with pytest.raises(SystemExit, match="no such file exists under shared/"):
-        stage_release._vendor_shared_assets(tree)
+_MOVED_DOC_NAMES = (
+    "formatting",
+    "handoff-gate",
+    "harness-portability",
+    "optional-plugins",
+    "skill-authoring",
+)
 
 
-def test_referenced_shared_docs_are_vendored(staged: Path) -> None:
-    """A skill that cites shared/handoff-gate.md / shared/formatting.md must get
-    a vendored copy beside it, and its SKILL.md must point at the skill-local
-    path (no surviving `../../shared/` escape)."""
-    cook_skill = staged / "skills" / "cook"
-    skill_md = (cook_skill / "SKILL.md").read_text(encoding="utf-8")
-    assert "shared/formatting.md" in skill_md  # still references it
-    assert "../../shared/formatting.md" not in skill_md  # but rewritten
-    assert (cook_skill / "shared" / "formatting.md").is_file()
+def test_moved_cheese_kernel_docs_ship_with_zero_vendoring(staged: Path) -> None:
+    """The five shared docs move with the wholesale skills/ copy — no dedicated
+    vendoring step exists or is needed. Locks the ship location explicitly so a
+    future denylist/exclude change to stage_release can't silently drop them
+    while test_relative_refs_resolve_in_staged_tree stays green (that test only
+    checks refs among files that DO ship, not that these specific docs shipped
+    at all)."""
+    refs_dir = staged / "skills" / "cheese" / "references"
+    for name in _MOVED_DOC_NAMES:
+        assert (refs_dir / f"{name}.md").is_file(), f"{name}.md missing from staged skills/cheese/references/"
+    assert not (staged / "shared").exists()

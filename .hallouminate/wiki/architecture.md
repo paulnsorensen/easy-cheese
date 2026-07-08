@@ -32,10 +32,11 @@ from the body rather than inlining it (`skills/mold/SKILL.md:21`).
 
 The pattern is deliberate context economy: the agent reads `SKILL.md`
 first, then descends into `references/<topic>.md` only for the step it
-is on. Cross-cutting material that many skills share lives at the
-top-level `shared/` directory (`shared/handoff-gate.md`,
-`shared/formatting.md`) and is referenced by relative path
-`../../shared/<file>.md` (`README.md:53`).
+always-installed `cheese` skill's `references/` directory
+(`skills/cheese/references/handoff-gate.md`, `skills/cheese/references/formatting.md`) and
+is referenced by sibling-relative path (`../cheese/references/<file>.md`
+from a `SKILL.md`, `../../cheese/references/<file>.md` from a
+`references/*.md`) (`README.md:53`).
 
 Skills that depend on `shared/scripts/` ship a pre-bundled `.pyz` so the
 shared helpers are self-contained at install time — invoked as
@@ -89,7 +90,7 @@ survives the task that produced it and is worth committing into the tree
 reports are durable too but anchor at the out-of-git XDG project corpus,
 and transient per-task output stays gitignored under `.cheese/`.
 Durability is not the same axis as git-tracking
-(`shared/formatting.md:103`); see [wiki-conventions](./wiki-conventions.md)
+(`skills/cheese/references/formatting.md:103`); see [wiki-conventions](./wiki-conventions.md)
 for the classification rule and
 [workflow-invariants](./workflow-invariants.md) for where it sits among
 the other pipeline invariants.

@@ -4,7 +4,7 @@ Curdle is the terminal state of mold. It runs only after the two-key handshake (
 
 ## Artifact types
 
-Resolve the spec path with `SPEC=$(python3 ${CLAUDE_SKILL_DIR}/scripts/mold.pyz artifact-path specs <slug>)` — it anchors at the per-project durable corpus (see `shared/formatting.md` § Corpus location). Issues stay repo-local: write them as `.cheese/issues/<slug>-NNN.md`.
+Resolve the spec path with `SPEC=$(python3 ${CLAUDE_SKILL_DIR}/scripts/mold.pyz artifact-path specs <slug>)` — it anchors at the per-project durable corpus (see `../../cheese/references/formatting.md` § Corpus location). Issues stay repo-local: write them as `.cheese/issues/<slug>-NNN.md`.
 
 | Type | When | Path |
 | --- | --- | --- |
@@ -30,7 +30,7 @@ A spec is the rich container; absorbs problem framing, requirements, approach, d
 
 ## Spec template
 
-Cross-cutting house style and citation form: [`shared/formatting.md`](../../../shared/formatting.md). This section owns the spec shape; formatting.md owns the voice rules and the footnote primitive.
+Cross-cutting house style and citation form: [`formatting.md`](../../cheese/references/formatting.md). This section owns the spec shape; formatting.md owns the voice rules and the footnote primitive.
 
 ```markdown
 ---
@@ -91,7 +91,7 @@ If the trigger cannot be stated precisely (e.g. pure internal utilities with no 
 <failing test, curl, replay command, etc.>
 
 ## References
-<one footnote definition per cited source; include only when out-of-scope evidence was cited above per `shared/formatting.md` § Citations>
+<one footnote definition per cited source; include only when out-of-scope evidence was cited above per `../../cheese/references/formatting.md` § Citations>
 ```
 
 ## Issue template
@@ -164,7 +164,7 @@ This store is consulted by `/cheese` before re-proposing a direction (see `skill
 
 Before the hand-off, if the `/spec-verify` skill is available in the harness, run it as an independent spec-review pass. If absent, skip silently and note once — this pass is optional and must not block curdle in environments where the skill is not bundled. Never hard-depend on it.
 
-Detection is instruction-level, not code: check whether `/spec-verify` appears in the agent's available toolset (the same pattern as `shared/optional-plugins.md` § Probe pattern). Do not use `command -v` or any shell probe — `/spec-verify` is a skill, not a `$PATH` executable.
+Detection is instruction-level, not code: check whether `/spec-verify` appears in the agent's available toolset (the same pattern as `../../cheese/references/optional-plugins.md` § Probe pattern). Do not use `command -v` or any shell probe — `/spec-verify` is a skill, not a `$PATH` executable.
 
 ## Atomic write
 

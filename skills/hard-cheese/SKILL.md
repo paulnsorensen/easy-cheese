@@ -30,7 +30,7 @@ Arguments:
 
 `--hard` propagates through `/cheese → /mold → /cook → /press → /age → /cure`. Upstream skills only pass the flag along; `/cure` is the only skill that actually invokes `/hard-cheese`. See `references/composition.md` for the full matrix.
 
-Portability reference: [`../../shared/harness-portability.md`](../../shared/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
+Portability reference: [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
 The handoff blocks below are the portable contract; slash commands are host renderings, not the control model.
 
 ## Flow
@@ -192,7 +192,7 @@ Followed by:
 - Do not skip the freshness check. Re-invoking after HEAD has moved must trigger a fresh attempt sequence — prior comprehension is stale once the code changes.
 - Do not silently drop ERROR attempts. The fail-open divergence requires that every judge failure is recorded in the artifact and surfaced to the user as a warning.
 - Do not invoke `/gh` or any specific PR-creation tool. The gate's contract is "before code is shared for review" — implementation-agnostic.
-- Apply the shared voice kernel (lives at `skills/age/references/voice.md` in this repo): say what the gate result was, flag residual risk as `certain | speculating | don't know`, do not soften FAILED into "almost passing".
+- Apply the shared voice kernel (lives at `../age/references/voice.md`): say what the gate result was, flag residual risk as `certain | speculating | don't know`, do not soften FAILED into "almost passing".
 
 ## References
 

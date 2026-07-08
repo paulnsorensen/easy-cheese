@@ -8,7 +8,7 @@ remembering across sessions: architecture, protocols, conventions, and
 rest: durable specs and research reports live out of git at the XDG
 project corpus (`$XDG_DATA_HOME/cheese/<project>/`), and transient
 per-task scratch stays gitignored under `.cheese/`. Durability is not the
-git-tracking axis (`shared/formatting.md:103`).
+git-tracking axis (`skills/cheese/references/formatting.md:103`).
 
 ## Topics
 

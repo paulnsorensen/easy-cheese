@@ -8,7 +8,7 @@
   "properties": {
     "slug": {
       "type": "string",
-      "description": "Kebab-case identifier shared with the durable-corpus spec (resolve via the artifact-path subcommand; see shared/formatting.md Corpus location).",
+      "description": "Kebab-case identifier shared with the durable-corpus spec (resolve via the artifact-path subcommand; see ../../cheese/references/formatting.md Corpus location).",
       "pattern": "^(?!-)(?!.*--)[a-z0-9-]{1,64}(?<!-)$"
     },
     "spec_path": {

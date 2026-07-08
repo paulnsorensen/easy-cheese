@@ -118,7 +118,7 @@ After the slug, write a `## Document` section. Open with the answer; keep every 
 - **Suggested skills.** The concrete next moves. See `## Suggested skills` for the state-to-skill mapping.
 - **Environment.** Branch, dirty files, anything non-obvious about the working state. Redacted.
 
-Follow the house style in [`../../shared/formatting.md`](../../shared/formatting.md): no em-dashes, complete sentences in prose, no throat-clearing, calibrated tags on the claim.
+Follow the house style in [`../cheese/references/formatting.md`](../cheese/references/formatting.md): no em-dashes, complete sentences in prose, no throat-clearing, calibrated tags on the claim.
 
 ## Suggested skills
 

@@ -14,8 +14,6 @@ neither this script nor its test mutates the repo's working copy.
 from __future__ import annotations
 
 import argparse
-import os
-import re
 import shutil
 import sys
 from pathlib import Path
@@ -24,13 +22,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import build_pyz  # noqa: E402  (sibling module in scripts/)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SHARED_DIR = REPO_ROOT / "shared"
-
-# A reference to a markdown asset under repo-root shared/, with any number of
-# leading `../` segments. The char class excludes `/`, so `shared/scripts/x.py`
-# (Python, already bundled into the .pyz) never matches — only flat
-# `shared/<name>.md` docs do.
-_SHARED_MD_REF = re.compile(r"(?:\.\./)*shared/([A-Za-z0-9._-]+\.md)")
 
 # Allowlist, not denylist: new dev scaffolding added to the repo stays out of
 # releases by default. `skills` ships wholesale (post-build); metadata files
@@ -63,64 +54,6 @@ def _guard_out(out: Path) -> None:
         raise SystemExit(f"stage_release: refusing to wipe {resolved} (repo root or ancestor)")
 
 
-def _skill_markdown(skill_dir: Path) -> list[Path]:
-    """The authored markdown a skill ships: SKILL.md + every references/*.md."""
-    files = [skill_dir / "SKILL.md"]
-    refs = skill_dir / "references"
-    if refs.is_dir():
-        files.extend(sorted(refs.glob("*.md")))
-    return [f for f in files if f.is_file()]
-
-
-def _rewrite_shared_refs(path: Path, skill_dir: Path) -> None:
-    """Rewrite every `(../)*shared/<name>.md` reference in ``path`` to a path
-    relative to ``path`` itself, pointing at the skill-local vendored copy at
-    ``skill_dir/shared/<name>.md``. Works for SKILL.md (-> `shared/x.md`),
-    references/*.md (-> `../shared/x.md`), and the vendored docs themselves
-    (-> `x.md`)."""
-    text = path.read_text(encoding="utf-8")
-
-    def repl(match: re.Match[str]) -> str:
-        target = skill_dir / "shared" / match.group(1)
-        return Path(os.path.relpath(target, path.parent)).as_posix()
-
-    rewritten = _SHARED_MD_REF.sub(repl, text)
-    if rewritten != text:
-        path.write_text(rewritten, encoding="utf-8")
-
-
-def _vendor_shared_assets(out: Path) -> None:
-    """Make each skill's repo-root `shared/*.md` references resolve post-install.
-
-    `gh skill install` ships only `skills/<name>/`, so repo-root `shared/` docs
-    a SKILL.md cites (handoff-gate.md, formatting.md) vanish on install. Copy
-    each referenced doc into `skills/<name>/shared/` and rewrite the references
-    to skill-relative paths. Python `shared/scripts/*.py` is excluded — it is
-    already vendored into the .pyz by build_pyz."""
-    skills_root = out / "skills"
-    for skill_dir in sorted(p for p in skills_root.iterdir() if p.is_dir()):
-        authored = _skill_markdown(skill_dir)
-        needed: set[str] = set()
-        for md in authored:
-            needed.update(_SHARED_MD_REF.findall(md.read_text(encoding="utf-8")))
-        if not needed:
-            continue
-        vendor_dir = skill_dir / "shared"
-        vendor_dir.mkdir(exist_ok=True)
-        for name in sorted(needed):
-            src = SHARED_DIR / name
-            if not src.is_file():
-                raise SystemExit(
-                    f"stage_release: {skill_dir.name} references shared/{name} "
-                    "but no such file exists under shared/"
-                )
-            shutil.copy2(src, vendor_dir / name)
-        # Rewrite both the authored prose and the vendored docs (a vendored doc
-        # may cross-reference a sibling shared doc that now sits beside it).
-        for md in authored + [vendor_dir / n for n in sorted(needed)]:
-            _rewrite_shared_refs(md, skill_dir)
-
-
 def stage(out: Path) -> Path:
     """Build the release tree at ``out`` (wiped first). Returns ``out``."""
     _guard_out(out)
@@ -138,10 +71,6 @@ def stage(out: Path) -> Path:
     for skill in build_pyz.SKILLS:
         target = out / "skills" / skill / "scripts" / f"{skill}.pyz"
         build_pyz.build_bundle(skill, target)
-
-    # Vendor referenced shared/*.md docs into each skill so their references
-    # resolve post-install (repo-root shared/ is never shipped).
-    _vendor_shared_assets(out)
 
     _verify(out)
     return out

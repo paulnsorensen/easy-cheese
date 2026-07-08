@@ -10,7 +10,7 @@ A discipline for hard bugs. Skip phases only when explicitly justified.
 
 When exploring the codebase, use `/cheez-search` to orient and check `.cheese/specs/` for any spec or design notes that touch the failing seam.
 
-Portability reference: [`../../shared/harness-portability.md`](../../shared/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
+Portability reference: [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
 The handoff blocks below are the portable contract; slash commands are host renderings, not the control model.
 
 ## Phase 1 — Feedback loop
@@ -68,7 +68,7 @@ Each hypothesis must be **falsifiable**: state the prediction it makes.
 
 If you cannot state the prediction, the hypothesis is a vibe — discard or sharpen it.
 
-**Show the ranked list to the user through the host routing guide in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md) before testing.** They often have domain knowledge that re-ranks instantly ("we just deployed a change to #3"), or know hypotheses they've already ruled out. Cheap checkpoint, big time saver. Don't block on it — proceed with your ranking if the user is AFK or running `--auto`.
+**Show the ranked list to the user through the host routing guide in [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md) before testing.** They often have domain knowledge that re-ranks instantly ("we just deployed a change to #3"), or know hypotheses they've already ruled out. Cheap checkpoint, big time saver. Don't block on it — proceed with your ranking if the user is AFK or running `--auto`.
 
 ## Phase 4 — Instrument
 
@@ -172,7 +172,7 @@ follow_up: <architectural follow-up note, or "none">
 
 **Pipeline:** cheese (debug) → **[pasteurize]** → cook --auto → press → age → cure → ship
 
-After the report is printed and the handoff slug is on disk, ask through the host routing guide in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md) which downstream to run. Lead each option with the verb (what the user wants to _do_ next):
+After the report is printed and the handoff slug is on disk, ask through the host routing guide in [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md) which downstream to run. Lead each option with the verb (what the user wants to _do_ next):
 
 - **Validate and chain forward** _(recommended when `status: ok`)_ — `/cook <slug> --auto`.
 - **Validate without auto chain** — `/cook <slug>` (cook runs taste-test, then the user picks each subsequent step).

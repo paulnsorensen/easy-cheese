@@ -12,7 +12,7 @@ toolset:
 - ``None``    — no milknado tools: native fan-out, and curds self-verify by
   running the project gates in-worker.
 
-Detection is instruction-level per ``shared/optional-plugins.md`` — the agent
+Detection is instruction-level per ``skills/cheese/references/optional-plugins.md`` — the agent
 knows its own toolset; this helper only classifies a list of tool names into a
 role. The list is passed in (or read from the ``EC_MCP_TOOLS`` env var); when it
 is absent the probe returns ``None`` and parallel mode degrades to native

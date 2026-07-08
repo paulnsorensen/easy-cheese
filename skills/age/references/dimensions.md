@@ -202,7 +202,7 @@ Look for: behaviour in the spec but not in the diff, behaviour in the diff but n
 
 Inherited shape: a requirement dropped in an earlier commit that the current diff neither restores nor violates outright. Compare against the spec, not only the diff.
 
-Spec resolution: locate the spec before grading. Search order: the durable spec corpus via `python3 shared/scripts/paths.py artifact_path specs <slug>` (or `mold.pyz artifact-path specs <slug>`), falling back to the legacy literal `.cheese/specs/<slug>.md` only when the resolver is unavailable (see `shared/formatting.md` § Corpus location; never hardcode `.cheese/specs/`); then unresolved items in `.cheese/press/<slug>.md`, then the PR body or linked issue (`gh pr view`), then a commit-message ticket ref. If none resolves, record "no spec located; searched [list]" and grade spec findings `don't know` rather than clean.
+Spec resolution: locate the spec before grading. Search order: the durable spec corpus via `python3 shared/scripts/paths.py artifact_path specs <slug>` (or `mold.pyz artifact-path specs <slug>`), falling back to the legacy literal `.cheese/specs/<slug>.md` only when the resolver is unavailable (see `../../cheese/references/formatting.md` § Corpus location; never hardcode `.cheese/specs/`); then unresolved items in `.cheese/press/<slug>.md`, then the PR body or linked issue (`gh pr view`), then a commit-message ticket ref. If none resolves, record "no spec located; searched [list]" and grade spec findings `don't know` rather than clean.
 
 Boundaries: correctness (contract commitment to spec, runtime risk to correctness; emit both). Full rules in § Dimension boundaries.
 

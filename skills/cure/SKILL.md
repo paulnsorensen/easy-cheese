@@ -24,7 +24,7 @@ Optional flags:
 - `--stake <floor>` — used only with `--auto`. Severity floor: `blocker`, `high`, `medium+`, or `all`. Floor definitions and the `medium+` cheap-lows rule: `references/selection.md` § Auto-mode selection. Without `--auto` this flag is ignored.
 - `--hard` — propagated metacognitive-gate flag (from `/cook --hard` or `/cheese --hard`). Cure is the only pipeline skill that fires the gate; see `## --hard mode` for the full contract.
 
-Portability reference: [`../../shared/harness-portability.md`](../../shared/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
+Portability reference: [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
 The handoff blocks below are the portable contract; slash commands are host renderings, not the control model.
 
 ## Flow
@@ -92,7 +92,7 @@ artifact: <path-if-any>
 
 ## Output
 
-Cross-cutting house style and citation form: [`../../shared/formatting.md`](../../shared/formatting.md).
+Cross-cutting house style and citation form: [`../cheese/references/formatting.md`](../cheese/references/formatting.md).
 
 The cure report body lives below the handoff slug in the same file at `.cheese/cure/<slug>.md`:
 
@@ -126,7 +126,7 @@ After the cure report is rendered, cure decides whether to *push* or *ask*. The 
 - Announce the push in one line. If applied fixes touched logic outside a finding's hunk, exposed adjacent risk, or checks were skipped, add a one-line recommendation to re-run `/age --scope <touched-path>` before merge — but still push (the PR is the review surface).
 - If the cure was not clean (see **clean cure** under Validation), do not push — surface the blocker and stop.
 
-**`--safe` — ask via the shared handoff gate** in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md), following its **Standard forward-step menu** (cure is the terminal gate: its core decision is push-vs-re-review, so **Ship it** is the open-or-update-PR option). Lead each option with the verb (what the user wants to *do* next); the skill command is the backing detail. Default options:
+**`--safe` — ask via the shared handoff gate** in [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md), following its **Standard forward-step menu** (cure is the terminal gate: its core decision is push-vs-re-review, so **Ship it** is the open-or-update-PR option). Lead each option with the verb (what the user wants to *do* next); the skill command is the backing detail. Default options:
 
 - **Re-review the touched code** *(recommended when applied fixes touched logic outside a finding's hunk)* — `/age --scope <touched-path>`, runs review through the proper skill. Propagates `--hard` when in scope.
 - **Ship it — open or update the PR** — `/gh` (opens a new PR with `--open-pr`, else pushes the already-open one). When `--hard` is in scope, this option first dispatches `/hard-cheese <slug>` and proceeds to `/gh` only if the gate exits `0`.
@@ -143,7 +143,7 @@ Pre-select **Re-review the touched code** when any applied fix touched logic out
 - **Not sharing for review** (no open PR and no `--open-pr`, or under `--safe` picking **Re-review the touched code** / **Checkpoint & stop** / **Stop**) does *not* fire the gate. Re-review and pausing do not put code in front of readers.
 - **Auto-mode puncture** — see the clause in `### Auto mode` below. The auto-mode puncture is the single sanctioned point at which `--hard` overrides `--auto`'s skip-handoff semantics.
 
-The gate's mechanism (SOLO-graded fresh-context judge, Socratic retry, fail-open on judge error) lives in `skills/hard-cheese/SKILL.md`. The full composition matrix lives in `skills/hard-cheese/references/composition.md`.
+The gate's mechanism (SOLO-graded fresh-context judge, Socratic retry, fail-open on judge error) lives in `skills/hard-cheese/SKILL.md`. The full composition matrix lives in `../hard-cheese/references/composition.md`.
 
 ### Auto mode
 
@@ -184,7 +184,7 @@ In both cases the terminal PR push (above) is suppressed — the orchestrator, n
 - Do not hide failed or skipped checks. In auto mode, reverted findings go under `### Deferred`, never silently dropped.
 - Push contract — when cure pushes, Rule 11 authorization, `--open-pr`, `--safe` re-gate, and never pushing on an unclean cure: see `## Handoff`.
 - If a selected finding rests on a false premise (the `/age` claim is wrong, or the diff already addresses it), stop and surface the premise before applying. Disagreeing with the report is allowed; silently working around it is not.
-- Apply the shared voice kernel (lives at `skills/age/references/voice.md` in this repo): lead the cure report with what was applied, flag residual risk as `certain | speculating | don't know`, agree when the diff is fine without manufacturing follow-ups.
+- Apply the shared voice kernel (lives at `../age/references/voice.md`): lead the cure report with what was applied, flag residual risk as `certain | speculating | don't know`, agree when the diff is fine without manufacturing follow-ups.
 - **Verification before `status: ok`:** before writing `status: ok` in the handoff slug, (1) identify the gate command, (2) run it fresh in the same turn, (3) read the full output, (4) only then claim. Hedging words (`should`, `probably`, `I think`) are banned in completion claims — state what the gate output showed, not what you expect it to show.
 
 ## Discipline

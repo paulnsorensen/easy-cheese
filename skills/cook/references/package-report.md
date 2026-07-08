@@ -2,7 +2,7 @@
 
 Before opening a PR or handing off to `/age`, cook produces a package-ready report.
 
-Cross-cutting house style and citation form: [`shared/formatting.md`](../../../shared/formatting.md). This file owns the package-report shape; formatting.md owns the voice rules and the footnote primitive.
+Cross-cutting house style and citation form: [`formatting.md`](../../cheese/references/formatting.md). This file owns the package-report shape; formatting.md owns the voice rules and the footnote primitive.
 
 ## Output shape
 

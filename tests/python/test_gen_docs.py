@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import re
+import shutil
 from pathlib import Path
 from types import ModuleType
 
@@ -29,7 +30,6 @@ def gen_docs() -> ModuleType:
 def isolated_docs(gen_docs, tmp_path, monkeypatch):
     monkeypatch.setattr(gen_docs, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(gen_docs, "SKILLS_DIR", tmp_path / "skills")
-    monkeypatch.setattr(gen_docs, "SHARED_DIR", tmp_path / "shared")
     monkeypatch.setattr(gen_docs, "CONTENT_ROOT", tmp_path / "src" / "content" / "docs")
     monkeypatch.setattr(gen_docs, "SIDEBAR_PATH", tmp_path / "src" / "sidebar.mjs")
     return tmp_path
@@ -70,12 +70,6 @@ class TestRewriteSkillLink:
 
     def test_unknown_path_is_untouched(self, gen_docs):
         assert gen_docs.rewrite_skill_link("../../some/other/file.md", "cook") == "../../some/other/file.md"
-
-    def test_shared_contract_link_climbs_to_root_shared_route(self, gen_docs):
-        assert gen_docs.rewrite_skill_link("../../shared/handoff-gate.md", "age") == "../../shared/handoff-gate/"
-
-    def test_shared_contract_link_preserves_anchor(self, gen_docs):
-        assert gen_docs.rewrite_skill_link("../../shared/handoff-gate.md#vocabulary", "age") == "../../shared/handoff-gate/#vocabulary"
 
 
 class TestRewriteRefLink:
@@ -123,27 +117,12 @@ class TestRewriteRootPassthroughLink:
     def test_skill_reference(self, gen_docs):
         assert gen_docs.rewrite_root_passthrough_link("skills/age/references/voice.md") == "../skills/age/references/voice/"
 
-    def test_shared_reference(self, gen_docs):
-        assert gen_docs.rewrite_root_passthrough_link("shared/formatting.md") == "../shared/formatting/"
+    def test_shared_path_untouched(self, gen_docs):
+        # shared/*.md docs moved to skills/cheese/references/; no rewrite branch remains.
+        assert gen_docs.rewrite_root_passthrough_link("shared/scripts/handoff.py") == "shared/scripts/handoff.py"
 
     def test_unknown_path_untouched(self, gen_docs):
         assert gen_docs.rewrite_root_passthrough_link("skills/cook/SKILL.md") == "../skills/cook/"
-
-
-class TestRewriteSharedLink:
-    def test_external_pass_through(self, gen_docs):
-        for url in ("https://example.com", "mailto:x@y.z", "#anchor"):
-            assert gen_docs.rewrite_shared_link(url) == url
-
-    def test_sibling_shared_doc(self, gen_docs):
-        assert gen_docs.rewrite_shared_link("harness-portability.md") == "../harness-portability/"
-        assert gen_docs.rewrite_shared_link("./harness-portability.md#tools") == "../harness-portability/#tools"
-
-    def test_root_doc(self, gen_docs):
-        assert gen_docs.rewrite_shared_link("../README.md") == "../../readme/"
-
-    def test_skill_doc(self, gen_docs):
-        assert gen_docs.rewrite_shared_link("../skills/cook/SKILL.md#flow") == "../../skills/cook/#flow"
 
 
 class TestApplyLinkRewrite:
@@ -348,60 +327,6 @@ class TestEmitSkillPage:
         assert "Back to [skill](../../)." in ref_out.read_text(encoding="utf-8")
 
 
-class TestEmitSharedPages:
-    def test_missing_dir_returns_empty(self, gen_docs, isolated_docs):
-        assert gen_docs.emit_shared_pages() == []
-
-    def test_empty_dir_returns_empty(self, gen_docs, isolated_docs):
-        (isolated_docs / "shared").mkdir()
-        assert gen_docs.emit_shared_pages() == []
-
-    def test_emits_markdown_with_frontmatter_and_uses_h1_as_title(self, gen_docs, isolated_docs):
-        shared = isolated_docs / "shared"
-        shared.mkdir()
-        (shared / "handoff-gate.md").write_text("# Handoff gate\n\nSee [portability](harness-portability.md).\n", encoding="utf-8")
-
-        entries = gen_docs.emit_shared_pages()
-
-        assert entries == [gen_docs.GeneratedPage("Handoff gate", "shared/handoff-gate", "shared/handoff-gate.md")]
-        out = isolated_docs / "src" / "content" / "docs" / "shared" / "handoff-gate.md"
-        assert out.read_text(encoding="utf-8").startswith("---\ntitle: Handoff gate\neditUrl:")
-        text = out.read_text(encoding="utf-8")
-        assert "# Handoff gate" not in text  # Starlight renders the title H1
-        assert "See [portability](../harness-portability/).\n" in text
-
-    def test_falls_back_to_slug_when_no_h1(self, gen_docs, isolated_docs):
-        shared = isolated_docs / "shared"
-        shared.mkdir()
-        (shared / "no-h1.md").write_text("just body, no heading\n", encoding="utf-8")
-
-        entries = gen_docs.emit_shared_pages()
-
-        assert entries == [gen_docs.GeneratedPage("No h1", "shared/no-h1", "shared/no-h1.md")]
-
-    def test_skips_non_markdown_files(self, gen_docs, isolated_docs):
-        shared = isolated_docs / "shared"
-        shared.mkdir()
-        (shared / "handoff-gate.md").write_text("# Gate\n", encoding="utf-8")
-        (shared / "schema.json").write_text("{}", encoding="utf-8")
-        (shared / "notes.txt").write_text("ignore me", encoding="utf-8")
-
-        entries = gen_docs.emit_shared_pages()
-
-        assert [entry.slug for entry in entries] == ["shared/handoff-gate"]
-        assert sorted(p.name for p in (isolated_docs / "src" / "content" / "docs" / "shared").iterdir()) == ["handoff-gate.md"]
-
-    def test_multiple_files_sorted(self, gen_docs, isolated_docs):
-        shared = isolated_docs / "shared"
-        shared.mkdir()
-        (shared / "zebra.md").write_text("# Zebra\n", encoding="utf-8")
-        (shared / "alpha.md").write_text("# Alpha\n", encoding="utf-8")
-
-        entries = gen_docs.emit_shared_pages()
-
-        assert [entry.slug for entry in entries] == ["shared/alpha", "shared/zebra"]
-
-
 class TestEmitSidebar:
     def test_writes_sidebar_module_with_nested_refs(self, gen_docs, isolated_docs):
         skill = gen_docs.GeneratedPage(
@@ -410,11 +335,10 @@ class TestEmitSidebar:
             "skills/age/SKILL.md",
             [gen_docs.GeneratedPage("Voice", "skills/age/references/voice", "skills/age/references/voice.md")],
         )
-        shared = gen_docs.GeneratedPage("Formatting", "shared/formatting", "shared/formatting.md")
         project = gen_docs.GeneratedPage("README", "readme", "README.md")
         install = gen_docs.GeneratedPage("Install", "install", "README.md")
 
-        gen_docs.emit_sidebar([skill], [shared], [project], install)
+        gen_docs.emit_sidebar([skill], [project], install)
 
         out = (isolated_docs / "src" / "sidebar.mjs").read_text(encoding="utf-8")
         assert out.startswith("// Generated by scripts/gen_docs.py")
@@ -422,16 +346,14 @@ class TestEmitSidebar:
         assert '"label": "Skills"' in out
         assert '"slug": "skills/age"' in out
         assert '"slug": "skills/age/references/voice"' in out
-        assert '"label": "Shared contracts"' in out
         assert '"label": "Install"' in out
         assert "SUMMARY.md" not in out
 
     def test_omits_install_link_when_no_install_page(self, gen_docs, isolated_docs):
         skill = gen_docs.GeneratedPage("/age", "skills/age", "skills/age/SKILL.md")
-        shared = gen_docs.GeneratedPage("Formatting", "shared/formatting", "shared/formatting.md")
         project = gen_docs.GeneratedPage("README", "readme", "README.md")
 
-        gen_docs.emit_sidebar([skill], [shared], [project], None)
+        gen_docs.emit_sidebar([skill], [project], None)
 
         out = (isolated_docs / "src" / "sidebar.mjs").read_text(encoding="utf-8")
         assert '"label": "Install"' not in out
@@ -493,9 +415,7 @@ class TestMainGeneration:
             encoding="utf-8",
         )
         (skill_dir / "voice.md").write_text("# Voice\n\nReference.\n", encoding="utf-8")
-        shared = isolated_docs / "shared"
-        shared.mkdir()
-        (shared / "formatting.md").write_text("# Formatting\n\nSee [portability](harness-portability.md).\n", encoding="utf-8")
+        (skill_dir / "formatting.md").write_text("# Formatting\n\nShared house style.\n", encoding="utf-8")
 
         gen_docs.main()
 
@@ -505,7 +425,8 @@ class TestMainGeneration:
         assert (root / "skills" / "index.md").exists()
         assert (root / "skills" / "age.md").exists()
         assert (root / "skills" / "age" / "references" / "voice.md").exists()
-        assert (root / "shared" / "formatting.md").exists()
+        assert (root / "skills" / "age" / "references" / "formatting.md").exists()
+        assert not (root / "shared").exists()
         assert (root / "readme.md").exists()
         assert (root / "contributing.md").exists()
         assert (isolated_docs / "src" / "sidebar.mjs").exists()
@@ -517,3 +438,46 @@ class TestMainGeneration:
                 continue  # authored homepage, not generated
             _, page_body = gen_docs.parse_frontmatter(page.read_text(encoding="utf-8"))
             assert not page_body.lstrip().startswith("# "), page
+
+
+class TestMainGenerationRealCheeseKernelDocs:
+    """Integration-shaped check: the five real shared docs that moved to
+    skills/cheese/references/ in the cheese-kernel-shared-refs change must
+    actually render under cheese's Starlight pages, and no src/content/docs/shared/
+    section may reappear. Copies the real repo files into the isolated tmp
+    tree rather than a synthetic fixture, so a doc that's dropped or renamed
+    in skills/cheese/references/ fails this test even if the synthetic
+    TestMainGeneration fixture above still passes."""
+
+    MOVED_DOC_NAMES = (
+        "formatting",
+        "handoff-gate",
+        "harness-portability",
+        "optional-plugins",
+        "skill-authoring",
+    )
+
+    def test_moved_docs_render_under_cheese_pages_no_shared_dir(self, gen_docs, isolated_docs):
+        real_cheese_dir = REPO_ROOT / "skills" / "cheese"
+        real_refs_dir = real_cheese_dir / "references"
+        for name in self.MOVED_DOC_NAMES:
+            assert (real_refs_dir / f"{name}.md").is_file(), (
+                f"expected {name}.md in the real skills/cheese/references/ — "
+                "has the cheese-kernel-shared-refs move regressed?"
+            )
+
+        cheese_dir = isolated_docs / "skills" / "cheese"
+        cheese_dir.mkdir(parents=True)
+        shutil.copy(real_cheese_dir / "SKILL.md", cheese_dir / "SKILL.md")
+        refs_dir = cheese_dir / "references"
+        refs_dir.mkdir()
+        for name in self.MOVED_DOC_NAMES:
+            shutil.copy(real_refs_dir / f"{name}.md", refs_dir / f"{name}.md")
+
+        gen_docs.main()
+
+        root = isolated_docs / "src" / "content" / "docs"
+        for name in self.MOVED_DOC_NAMES:
+            out = root / "skills" / "cheese" / "references" / f"{name}.md"
+            assert out.is_file(), f"{name}.md did not render under skills/cheese/references/"
+        assert not (root / "shared").exists()

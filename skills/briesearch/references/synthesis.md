@@ -12,7 +12,7 @@ One row per material claim, not per source. A single source can support multiple
 | <one-line claim> | <quote or file:line>[^source-1] | vendor docs / paper / changelog / repo / GitHub / blog | <date checked or "live"> | `certain` / `speculating` / `don't know` | <if any> |
 ```
 
-The Evidence column uses footnote markers (`[^source-1]`, `[^source-2]`, …); the absolute URLs and fetch dates live in a `## References` block at the bottom of the report per [`shared/formatting.md`](../../../shared/formatting.md) § Citations. Inline `file:line` references stay raw — they are locations, not citations.
+The Evidence column uses footnote markers (`[^source-1]`, `[^source-2]`, …); the absolute URLs and fetch dates live in a `## References` block at the bottom of the report per [`../../cheese/references/formatting.md`](../../cheese/references/formatting.md) § Citations. Inline `file:line` references stay raw — they are locations, not citations.
 
 Rules:
 
@@ -78,7 +78,7 @@ Before finalizing a deep report (`research/<slug>/<slug>.md`), run the mechanica
 
 ## Output shape
 
-Cross-cutting house style and citation form: [`shared/formatting.md`](../../../shared/formatting.md).
+Cross-cutting house style and citation form: [`../../cheese/references/formatting.md`](../../cheese/references/formatting.md).
 
 Short form (always returned to the caller):
 
@@ -110,6 +110,6 @@ Short form (always returned to the caller):
 
 Long form (when the question warranted a deep look):
 
-- Resolve the durable corpus root with `ROOT=$(python3 ${CLAUDE_SKILL_DIR}/scripts/briesearch.pyz artifact-path research <slug>)` (slug is 4-6 kebab-case words), then write the full report to `"$ROOT/research/<slug>/<slug>.md"`. The root is the per-project durable corpus (see `shared/formatting.md` § Corpus location); briesearch owns the nested `research/<slug>/` layout composed under it.
+- Resolve the durable corpus root with `ROOT=$(python3 ${CLAUDE_SKILL_DIR}/scripts/briesearch.pyz artifact-path research <slug>)` (slug is 4-6 kebab-case words), then write the full report to `"$ROOT/research/<slug>/<slug>.md"`. The root is the per-project durable corpus (see `../../cheese/references/formatting.md` § Corpus location); briesearch owns the nested `research/<slug>/` layout composed under it.
 - Include the full claim table, raw bodies referenced from `"$ROOT/research/<slug>/raw/"` (see `context-isolation.md`), and the verification log.
 - In the chat reply: a one-paragraph summary, the report path, and the confidence line. Do not paste the full report inline — the user will see only the last collapsed message by default.

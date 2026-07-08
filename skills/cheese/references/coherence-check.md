@@ -24,7 +24,7 @@ Run these questions before dispatching. If any answer is `no`, downgrade the rou
    - When in doubt, surface the contradiction in the announce block — and, under `--safe`, in the dispatch gate.
 
 5. **Does the chosen target's invariants hold?**
-   - `/culture` cannot write — only route here as a user-facing target when the user explicitly opted out of writes (see `references/classification.md` § rubber-duck). For everything else, culture is the agent's silent internal-thinking pass.
+   - `/culture` cannot write — only route here as a user-facing target when the user explicitly opted out of writes (see `classification.md` § rubber-duck). For everything else, culture is the agent's silent internal-thinking pass.
    - `/cook` needs the standalone fast-path checks to all pass — if one is borderline, route to `/mold` instead.
    - `/age` needs a diff to look at — if there is no branch divergence and no path scope, `clarify` first.
    - `/cure` needs a finding list — if no `.cheese/age/<slug>.md` and no pasted findings, route to `/age` first.

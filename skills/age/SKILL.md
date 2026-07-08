@@ -40,7 +40,7 @@ python3 src/age/age-html-report.py \
 Print the returned temp-file path beside the markdown path. `html-report` groups the findings by severity into age's own badge template and wraps them in the shared document shell (`shared/scripts/html_report.render_document`); the output is stdlib-only, offline, and deterministic — no CDN, no JavaScript. Do not inline or hand-roll the document chrome. Pass `--out-dir <dir>` to write somewhere other than the OS temp dir.
 If the host only ships the bundle, `python3 ${CLAUDE_SKILL_DIR}/scripts/age.pyz html-report --report .cheese/age/<slug>.md --slug <slug>` is the fallback.
 
-Portability reference: [`../../shared/harness-portability.md`](../../shared/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
+Portability reference: [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
 The handoff blocks below are the portable contract; slash commands are host renderings, not the control model.
 
 ## Review dimensions
@@ -110,7 +110,7 @@ Beyond `cheez-*` there are review-specific tools:
 | GitHub/PR context | `gh` | local git commands or user-provided PR data |
 | Merge/conflict awareness | mergiraf | manual conflict checks |
 
-**Optional MCPs:** hallouminate and milknado follow the detect-and-degrade contract in [`../../shared/optional-plugins.md`](../../shared/optional-plugins.md) — state absence once, fall back, reduce confidence only if evidence quality suffers, never block.
+**Optional MCPs:** hallouminate and milknado follow the detect-and-degrade contract in [`../cheese/references/optional-plugins.md`](../cheese/references/optional-plugins.md) — state absence once, fall back, reduce confidence only if evidence quality suffers, never block.
 
 ## Sub-agent context gate
 
@@ -148,7 +148,7 @@ Activates when **all** hold: the **scale threshold** (above) is met AND `/age` i
 
 ## Output
 
-Cross-cutting house style and citation form: [`../../shared/formatting.md`](../../shared/formatting.md). This section owns the findings-report shape; formatting.md owns the voice rules and the footnote primitive.
+Cross-cutting house style and citation form: [`../cheese/references/formatting.md`](../cheese/references/formatting.md). This section owns the findings-report shape; formatting.md owns the voice rules and the footnote primitive.
 
 Write to `.cheese/age/<slug>.md` with a minimum handoff slug at the top so `/ultracook` and `/cheese --continue` can chain without re-parsing the report:
 
@@ -236,7 +236,7 @@ HTML report: <path printed by html-report>
 
 ### Selection gate (`--safe`, or a reason to ask)
 
-Use the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md). Age's finding selection is the gate's *core* decision; the shared **Standard forward-step menu**'s tail (**Ship it**, **Checkpoint & stop**, **Stop**) rides after the selection options per that menu's tail rule.
+Use the shared handoff gate in [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md). Age's finding selection is the gate's *core* decision; the shared **Standard forward-step menu**'s tail (**Ship it**, **Checkpoint & stop**, **Stop**) rides after the selection options per that menu's tail rule.
 
 1. Render the numbered selection table:
 

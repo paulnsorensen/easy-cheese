@@ -59,7 +59,7 @@ Culture-relevant `next:` values: `culture` or `hold` to resume the modeling in a
 
 **Pipeline:** **[culture]** → mold → cook → press → age → cure → ship
 
-At session end, write the durable wheypoint first (invoke `/wheypoint`), then — when the conversation reveals real work — ask via the shared handoff gate in [`../../shared/handoff-gate.md`](../../shared/handoff-gate.md). Lead each option with the verb (what the user wants to *do* next); the skill command is the backing detail. Before asking, render a compact context packet so the downstream skill can dispatch without losing the discussion:
+At session end, write the durable wheypoint first (invoke `/wheypoint`), then — when the conversation reveals real work — ask via the shared handoff gate in [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md). Lead each option with the verb (what the user wants to *do* next); the skill command is the backing detail. Before asking, render a compact context packet so the downstream skill can dispatch without losing the discussion:
 
 ```yaml
 handoff_context:
@@ -85,4 +85,4 @@ After a non-stop selection, run the selected downstream skill immediately with t
 - Ask the user the decisions that shape the work — one consequential fork at a time when they're exploring — rather than settling them yourself.
 - Agree when agreement is warranted; do not manufacture counterpoints to seem balanced.
 - When external evidence raises an alternative ("X uses Y or Z"), name it as a trade-off in the dialogue and a candidate option — never silently recommend "add both" or "expose a knob". Design choices need explicit user adjudication, not agent inference from a citation.
-- Apply the shared voice kernel (lives at `skills/age/references/voice.md` in this repo): lead with the answer, flag confidence as `certain | speculating | don't know`, steelman, track contradictions across turns.
+- Apply the shared voice kernel (lives at `../age/references/voice.md`): lead with the answer, flag confidence as `certain | speculating | don't know`, steelman, track contradictions across turns.
