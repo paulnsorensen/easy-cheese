@@ -24,7 +24,7 @@ HTML report smoke test
 ## Medium
 - **[complexity:medium]** `src/medium.ts:3` — Medium summary with <em>markup</em> & ampersand.
   second line stays visible.
-  - location: module · fix-cost-now: moderate · fix-cost-later: spreading
+  - location: module · fix-cost-now: moderate · fix-cost-later: spreading · confidence: speculating
   - recommendation: First line with <script>alert(1)</script>
     second line with & and <angle>.
 
@@ -154,6 +154,7 @@ class TestAgeHtmlReport:
         assert "&lt;strong&gt;unsafe&lt;/strong&gt;" in html
         assert "&lt;em&gt;markup&lt;/em&gt;" in html
         assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
+        assert "confidence: speculating" in html
         assert "&lt;angle&gt;" in html
         assert "<script>" not in html
         assert "<strong>unsafe</strong>" not in html

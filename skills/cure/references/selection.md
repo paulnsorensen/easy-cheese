@@ -27,12 +27,12 @@ There is no CLI flag (`--select` is not a supported syntax). The selection trave
 When invoked with a slug, load `.cheese/age/<slug>.md` and render a numbered table grouped by severity (`blocker` first, then `high → medium → low`):
 
 ```text
-| # | severity | dim           | location                  | summary |
-|---|----------|---------------|---------------------------|---------|
-| 1 | blocker  | encapsulation | src/users/index.ts:42     | `index` re-exports `SqlPgUser` across slice boundary. |
-| 2 | high     | security      | src/handler.ts:108        | Unvalidated path joined into fs.read. |
-| 3 | medium   | complexity    | src/util.ts:200-240       | Function is 41 lines and 4 levels nested. |
-| 4 | low      | deslop        | src/old.ts:55-60          | Unused export `_helper`. |
+| # | severity | confidence  | dim           | location                  | summary |
+|---|----------|-------------|---------------|---------------------------|---------|
+| 1 | blocker  | certain     | encapsulation | src/users/index.ts:42     | `index` re-exports `SqlPgUser` across slice boundary. |
+| 2 | high     | certain     | security      | src/handler.ts:108        | Unvalidated path joined into fs.read. |
+| 3 | medium   | speculating | complexity    | src/util.ts:200-240       | Function is 41 lines and 4 levels nested. |
+| 4 | low      | certain     | deslop        | src/old.ts:55-60          | Unused export `_helper`. |
 ```
 
 If no slug is supplied, accept any of: a pasted findings list, a `.cheese/age/` path, a CI failure summary, or "fix the high-severity age findings" — and re-render as the same table.

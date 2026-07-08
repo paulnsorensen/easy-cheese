@@ -1,6 +1,6 @@
 ---
 name: press
-description: Harden the test surface after `/cook` — map changed behavior to tests, find weak assertions and missing boundaries, and add focused hardening tests. Use when the user wants the tests strengthened before review or shipping — phrases like "press the changes", "harden this", "check coverage", "strengthen the tests", "are the tests good enough", "press before /age", "/press". Reads the spec + cooked diff, writes a press report to `.cheese/press/<slug>.md`, and prompts `/age` next. Supports `--auto` (propagated from `/cook --auto`) to skip its handoff and chain straight into `/age --auto` when readiness is `ready for /age` or `follow-up recommended`; only `blocked` halts the auto chain. Use even when the user wants to "tighten things up" before review. Do NOT use to add broad new behavior — only corrective fixes that hardening tests force. After `/cook`; before `/age` → `/cure`.
+description: Harden the test surface after `/cook` — map changed behavior to tests, find weak assertions and missing boundaries, and add focused hardening tests. Use when the user wants the tests strengthened before review or shipping — phrases like "press the changes", "harden this", "check coverage", "strengthen the tests", "are the tests good enough", "press before /age", "/press". Use even when the user wants to "tighten things up" before review. Do NOT use to add broad new behavior — only corrective fixes that hardening tests force.
 license: MIT
 ---
 

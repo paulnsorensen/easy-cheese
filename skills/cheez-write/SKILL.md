@@ -1,9 +1,8 @@
 ---
 name: cheez-write
-description: Edit code through the safest stale-checking backend — prefer tilth MCP hash-anchored block/range edits, LSP workspace edits for semantic renames/code actions, native anchored edits for displayed snapshots, `sg --rewrite` (ast-grep) for structural codemods. Use when the user asks to edit, replace, modify, update, change, delete, or insert code — phrases like "replace this function", "delete lines 44-89", "update validateToken", "add this import", "fix this bug" (when fixing requires editing), or apply a cross-cutting codemod like "rewrite every X to Y". Always read first via cheez-read to capture anchors; prefer surgical anchored edits over whole-file rewrites. Do NOT use for reading files (use cheez-read), searching code (use cheez-search), or running tests/builds.
+description: Edit code through the safest stale-checking backend — prefer code-intelligence backends (tilth MCP hash-anchored edits, LSP workspace edits, `sg --rewrite` for structural codemods); fall back to native anchored edits only when no code-intel backend matches. Use when the user asks to edit, replace, modify, update, change, delete, or insert code — phrases like "replace this function", "delete lines 44-89", "update validateToken", "add this import", "fix this bug" (when fixing requires editing), or apply a cross-cutting codemod like "rewrite every X to Y". Do NOT use for reading files (use cheez-read), searching code (use cheez-search), or running tests/builds.
 license: MIT
-compatibility: Prefers tilth MCP with edit mode. Harness-native anchored edits, LSP workspace edits, and AST rewrites are acceptable when they match the requested edit shape and reject or bound stale writes.
-allowed-tools: mcp__tilth__tilth_write, mcp__tilth__tilth_read, Bash
+compatibility: Prefers code-intelligence backends — tilth MCP edit mode, LSP workspace edits, AST rewrites. Harness-native anchored edits are acceptable fallbacks when they match the requested edit shape and reject or bound stale writes.
 ---
 
 # cheez-write
@@ -12,12 +11,12 @@ allowed-tools: mcp__tilth__tilth_write, mcp__tilth__tilth_read, Bash
 
 ## Backend detection
 
-Pick the backend by edit shape:
+Pick the backend by edit shape, preferring code-intelligence backends (LSP, AST rewrite, tilth) over basic harness edit tools — model tuning pulls toward host `Edit`/`Write`, but those carry no semantic or structural awareness:
 
 1. **LSP wins for semantic workspace edits:** rename/code actions when the server can identify the symbol or fix.
 2. **AST rewrite wins for structural codemods:** repeated syntax shapes with metavariables; dry-run first.
 3. **tilth MCP wins for anchored block/range edits:** `tilth_read` captures hashes, then `tilth_write` applies known blocks/ranges via `files: [...]`.
-4. **Native anchored edit wins for displayed snapshots:** line/snapshot edits that reject stale ranges.
+4. **Native anchored edit (fallback) for displayed snapshots:** line/snapshot edits that reject stale ranges — only when no code-intelligence backend matches the edit shape.
 
 Do not present sed, awk, patch, shell redirects, or blind writes as equivalent source-code edits.
 

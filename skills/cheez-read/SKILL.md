@@ -1,20 +1,19 @@
 ---
 name: cheez-read
-description: Read and list code through the best fresh backend — prefer tilth MCP for file/range reads, repo listings, outlines, token estimates, and edit anchors; accept native bounded read/list tools or LSP when they match. Use when the user asks to read, view, show, open, or display a file or directory — phrases like "read src/auth.ts", "show me this file", "what's in this directory", "view lines 44-89", "look at the imports". Use even when the user names a shell viewer/lister or says "open the file" — never blind-shell a source file. Do NOT use for searching symbols or text (use cheez-search), editing code (use cheez-write), or git/gh operations.
+description: Read and list code through the best fresh backend — prefer code-intelligence backends (tilth MCP; LSP for symbol- or type-shaped reads); fall back to native bounded read/list tools only when no code-intel backend covers the shape. Use when the user asks to read, view, show, open, or display a file or directory — phrases like "read src/auth.ts", "show me this file", "what's in this directory", "view lines 44-89", "look at the imports". Use even when the user names a shell viewer/lister or says "open the file" — never blind-shell a source file. Do NOT use for searching symbols or text (use cheez-search), editing code (use cheez-write), or git/gh operations.
 license: MIT
-compatibility: Prefers tilth MCP. Harness-native read/list/LSP tools are acceptable when they provide fresh bounded content plus enough line or snapshot context for follow-up edits.
-allowed-tools: mcp__tilth__tilth_read, mcp__tilth__tilth_list, mcp__tilth__tilth_deps
+compatibility: Prefers code-intelligence backends — tilth MCP first, LSP for symbol/type reads. Harness-native bounded read/list tools are acceptable fallbacks when they provide fresh bounded content plus enough line or snapshot context for follow-up edits.
 ---
 
 # cheez-read
 
 ## Backend detection
 
-Pick the backend by read shape:
+Pick the backend by read shape, preferring code-intelligence backends over basic harness tools — model tuning pulls toward host `Read`/`Glob`, but tilth and LSP return structure (outlines, anchors, symbol tables, token budgets) that plain reads cannot:
 
 1. **tilth MCP:** file/range reads, repo-aware listings, structural outlines, token estimates, and edit anchors (`tilth_read`, `tilth_list`, `tilth_deps` before refactors).
-2. **Native bounded read/list:** exact files, displayed ranges, directory listings, or snapshot-tag reads when the harness provides fresh content and line/snapshot context.
-3. **LSP:** symbol tables, definitions, hover, or type-shaped reads.
+2. **LSP:** symbol tables, definitions, hover, or type-shaped reads.
+3. **Native bounded read/list (fallback):** exact files, displayed ranges, directory listings, or snapshot-tag reads — only when no code-intelligence backend covers the shape and the harness provides fresh content and line/snapshot context.
 
 Plain shell viewers (`cat`, `head`, `tail`, `ls`, `find`) are not source-code backends; use them only for non-code paths or data/log inspection.
 

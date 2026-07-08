@@ -1,6 +1,6 @@
 ---
 name: briesearch
-description: Research questions external to the codebase across library docs (Context7), the web (Tavily), local code (cheez-search), and GitHub examples (gh), then synthesize with explicit confidence. Use whenever the user asks to research, look up, compare, or investigate something — phrases like "research X", "look up the API for Y", "compare libraries", "what does the doc say about Z", "find examples of how to do W", "is this library maintained", or "before I implement, what's the right approach". Use even when the user only mentions a library name without saying "research" — when in doubt, briesearch first.
+description: Research questions external to the codebase across library docs (Context7), the web (Tavily), local code (cheez-search), and GitHub examples (gh), then synthesize with explicit confidence. Use whenever the user asks to research, look up, compare, or investigate something — phrases like "research X", "look up the API for Y", "compare libraries", "what does the doc say about Z", "find examples of how to do W", "is this library maintained", or "before I implement, what's the right approach". Use even when the user only mentions a library name without saying "research". Do NOT use for a single obvious file lookup or when the user already has enough evidence.
 license: MIT
 ---
 

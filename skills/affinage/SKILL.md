@@ -1,6 +1,6 @@
 ---
 name: affinage
-description: Triage a PR's review comments and failing CI (plus merge conflicts) through the /age lens, deciding which claims are worth acting on. Use when the user says "respond to PR comments", "handle review feedback", "affinage the PR", "/affinage <pr>", "fix the failing build", "resolve the conflicts and respond". Fetches inline + review-body comments via `gh` and CI failures via `affinage.pyz pr-status`, grades each through the ten age dimensions, and writes a report at `.cheese/affinage/pr-<n>.md`. Resolves merge conflicts via `/melt` and routes build/CI failures to fixes through `/cure`. Supports `--auto --stake <floor>`. Before `/cure`; parallel to `/age`.
+description: Triage a PR's review comments and failing CI (plus merge conflicts) through the /age lens, deciding which claims are worth acting on. Use when the user says "respond to PR comments", "handle review feedback", "affinage the PR", "/affinage <pr>", "fix the failing build", "resolve the conflicts and respond". Do NOT use for a bare diff with no PR (route to /age).
 license: MIT
 ---
 
@@ -98,7 +98,7 @@ When `affinage.pyz pr-status` reports `merge.mergeable: CONFLICTING` or `merge.s
 - Diff exceeds ~25 KB.
 - Threads span more than 5 files.
 
-The sub-agent returns a digest: graded findings table with dimension, severity, grounded-evidence cite, and pre-drafted push-back text for any `Reviewer-rejected` items. The parent owns the report write, selection gate, `/cure` dispatch, and reply posting.
+The sub-agent returns a digest: graded findings table with dimension, severity, confidence, grounded-evidence cite, and pre-drafted push-back text for any `Reviewer-rejected` items. The parent owns the report write, selection gate, `/cure` dispatch, and reply posting.
 
 Digest size, parent-vs-sub-agent split, and harness-agnostic sub-agent selection live in `../age/references/sub-agent-gate.md`.
 
@@ -136,17 +136,17 @@ artifact: <path-to-prior-cure-or-press-report-if-any>
 
 ## Blocker
 - **[from-comment:<id>] [security:blocker]** alice on `src/auth.ts:42` — token parsed without validation.
-  - location: contract · fix-cost-now: contained · fix-cost-later: structural
+  - location: contract · fix-cost-now: contained · fix-cost-later: structural · confidence: certain
   - reviewer-asserted: changes-requested
   - recommendation: validate `authorization` header; reject with 401 on missing.
 - **[from-check:test-suite] [correctness:blocker]** CI job `test-suite` — 3 tests failing in `tests/auth.test.ts`.
-  - location: contract · fix-cost-now: contained · fix-cost-later: structural
+  - location: contract · fix-cost-now: contained · fix-cost-later: structural · confidence: certain
   - recommendation: re-run after fixing the missing null check.
 - **[from-check:build] [correctness:blocker]** CI job `build` — `tsc` fails: `src/auth.ts:42: 'token' is possibly undefined`.
-  - location: contract · fix-cost-now: contained · fix-cost-later: structural
+  - location: contract · fix-cost-now: contained · fix-cost-later: structural · confidence: certain
   - recommendation: narrow `token` before use; build is red until this compiles.
 - **[from-age:efficiency] [efficiency:high]** fresh review — `src/api/users.ts:88` re-fetches the user inside the loop body.
-  - location: hot path · fix-cost-now: contained · fix-cost-later: contained
+  - location: hot path · fix-cost-now: contained · fix-cost-later: contained · confidence: speculating
   - recommendation: hoist the fetch above the loop.
 
 ## High
@@ -157,7 +157,7 @@ artifact: <path-to-prior-cure-or-press-report-if-any>
 
 ## Low
 - **[from-comment:<id>] [deslop:low]** copilot on `src/utils/format.ts:18` — rename `data` to `lineItems` for clarity.
-  - location: class · fix-cost-now: contained · fix-cost-later: contained
+  - location: class · fix-cost-now: contained · fix-cost-later: contained · confidence: certain
   - recommendation: rename `data` → `lineItems`. Valid cheap nit — fixed via `/cure`, not pushed back.
 ... (same shape; collapsible per --full rules)
 
@@ -182,6 +182,8 @@ Auto-fixing the recommended set via `/cure` and posting the drafted replies (or,
 ```
 
 Empty severity sections are omitted entirely. `## Needs-investigation` and `## Reviewer-rejected` are omitted when no items land there.
+
+Per-finding `confidence:` uses the voice-kernel scale (`skills/age/references/voice.md` § Reasoning posture): `certain` — the defect is verified by direct evidence (diff/code read, command output); `speculating` — inferred from indirect signal. A `don't know` grading never ships as a severity row — route it to `## Needs-investigation`.
 
 `status: ok` when grading completed; `status: halt: <reason>` when `gh` or `pr-status.py` failed in a way that blocks honest grading. `next:` is set per §Handoff — `cure` when ≥1 finding meets the `medium+` floor; `done` otherwise.
 

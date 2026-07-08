@@ -1,6 +1,6 @@
 ---
 name: hard-cheese
-description: Metacognitive vibecheck gate before code is shared for review — make the author explain the diff's causal logic, graded by a fresh-context judge against the SOLO Taxonomy. Use when the user wants this gate — phrases like "/hard-cheese", "/cheese --hard", "gate this before I push", "vibecheck me", "make sure I understand this diff", "epistemic-debt check". Reads the working diff, asks the human author to explain it in their own words, spawns the judge sub-agent (pass ≥ Multistructural), and either accepts (PASS) or returns Socratic feedback for retry (FAIL, capped at `--socratic-cap N`). Writes the audit trail to `.cheese/hard-cheese/<slug>.md`. Use standalone before opening a PR, or as the `--hard` flag propagated through `/cook`, `/press`, `/age` to `/cure` — the sole pipeline step where the gate actually fires, at the share-for-review handoff. Do NOT use for code review (`/age`), test hardening (`/press`), or fix application (`/cure`).
+description: Metacognitive vibecheck gate before code is shared for review — make the author explain the diff's causal logic, graded by a fresh-context judge against the SOLO Taxonomy. Use when the user wants this gate — phrases like "/hard-cheese", "/cheese --hard", "gate this before I push", "vibecheck me", "make sure I understand this diff", "epistemic-debt check". Use standalone before opening a PR, or as the `--hard` flag propagated through the pipeline. Do NOT use for code review (`/age`), test hardening (`/press`), or fix application (`/cure`).
 license: MIT
 ---
 
@@ -115,7 +115,7 @@ Attempts append; nothing is overwritten within a single invocation. If a re-invo
 ## Sub-agent contract — fresh peer, not diminutive
 
 - **Fresh context, every invocation.** Same-context judging is biased toward "yes you understand it" because the model that helped write the code believes the code is good. The fresh context is the entire reason the judge means anything.
-- **`subagent_type: "general-purpose"`** with `references/judge-prompt.md` as the system prompt. Model inherits from the parent — do not pass `haiku` or any other tier downgrade.
+- **Judge sub-agent type: no-tool or read-only — never `general-purpose`, which grants full write access the judge must not have** (e.g. the read-only built-in `Explore` agent; harness-agnostic selection lives in `skills/age/references/sub-agent-gate.md`). `references/judge-prompt.md` is the system prompt. Model inherits from the parent — do not pass `haiku` or any other tier downgrade.
 - **No tools needed for the judge.** It reads the prompt, diff summary, spec excerpt, and explanation, then returns JSON. No file access, no shell, no MCP — the judge is a graded read-only call.
 - **JSON output is parsed.** If parsing fails, the attempt is logged as `ERROR` and the gate fails open (see `## Divergence from the paper`).
 
