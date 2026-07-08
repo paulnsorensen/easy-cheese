@@ -1,6 +1,6 @@
 ---
 name: ultracook
-description: Pipeline one approved high-blast-radius spec through fresh-context sub-agents in one of two modes the decomposer picks — linear (`cook → press → age → cure → age → cure → age`, all `--auto`) for an indivisible spec, or parallel (independent behavioural curds each cooked, pressed, aged, and cured in its own worktree, then harvested for one post-merge review pass) ending in 1–N reviewable PRs. Use when the user has such a spec — phrases like "/ultracook .cheese/specs/<slug>.md", "ultracook this", "run the full pipeline in isolation", "parallelize this spec", "fan out the implementation", "many curds", "send it through the cave", "pipeline with no contamination". Spawns full-peer general-purpose sub-agents that invoke each phase skill with `--auto`, each reasoning in fresh context blind to prior phases and inheriting the parent's model and tools — `/cook --auto`'s autonomous chain in isolation. After `/mold`; the decomposer is the mode gate.
+description: Pipeline one approved high-blast-radius spec through fresh-context sub-agents in one of two modes the decomposer picks. Use when the user has such a spec — phrases like "/ultracook .cheese/specs/<slug>.md", "ultracook this", "run the full pipeline in isolation", "parallelize this spec", "fan out the implementation", "many curds", "send it through the cave", "pipeline with no contamination". Do NOT use for short focused changes, fuzzy planning, or review-only work.
 license: MIT
 ---
 

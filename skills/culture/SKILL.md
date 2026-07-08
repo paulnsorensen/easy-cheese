@@ -1,6 +1,6 @@
 ---
 name: culture
-description: Primarily the agent's internal-thinking skill — invoke it silently to model a problem, identify trade-offs, and decide what to do, BEFORE asking the user anything or dispatching another skill. Workflow skills call `/culture` as their step-1 reasoning pass; the agent does not surface the dialogue. Only treat this as a user-facing skill when the user has explicitly opted out of writes — phrases like "no writes", "just rubber-duck this", "let's only talk", "/culture". Culture writes no production code and no commits — only a user-facing session ends with an end-of-session wheypoint; internal mode writes nothing. If the dialogue reveals real work, recommend `/mold` (fuzzy → spec) or `/cook` (clear ask → code) and stop. Before `/mold` or `/cook`.
+description: Primarily the agent's internal-thinking skill — invoke it silently to model a problem, identify trade-offs, and decide what to do, BEFORE asking the user anything or dispatching another skill. Only treat this as a user-facing skill when the user has explicitly opted out of writes — phrases like "no writes", "just rubber-duck this", "let's only talk", "/culture". Do NOT use for shaping a written spec (`/mold`) or writing code (`/cook`) — if the dialogue reveals real work, route there.
 license: MIT
 ---
 
@@ -18,7 +18,7 @@ Do not use the user-facing mode when the user wants a written spec (`/mold`), im
 
 ## Invariant
 
-`/culture` does not write production code, commit changes, open PRs, or mutate project state. In **user-facing mode** it ends every session by writing a durable handoff, delegated to `/wheypoint` (see `## Handoff slug`); that wheypoint is written at session end only, never during the dialogue. In **internal mode** it writes nothing at all. If a user-facing conversation reveals that something should be built, route to `/mold` or `/cook` after the wheypoint is written. In internal mode, just return the decision and let the calling skill act.
+`/culture` writes no production code and does not commit changes, open PRs, or mutate project state. In **user-facing mode** it ends every session by writing a durable handoff, delegated to `/wheypoint` (see `## Handoff slug`); that wheypoint is written at session end only, never during the dialogue. In **internal mode** it writes nothing at all. If a user-facing conversation reveals that something should be built, route to `/mold` or `/cook` after the wheypoint is written. In internal mode, just return the decision and let the calling skill act.
 
 ## Flow
 

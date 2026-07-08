@@ -1,6 +1,6 @@
 ---
 name: cheese
-description: Route any dropped-in input — idea, spec path, file path, PR or issue, stack trace, bug report, or bare `/cheese` — to the right workflow skill and dispatch it immediately. Use as the unified entry point — phrases include "/cheese", "what should I do with this", "help me get started", "route this", or any opening message that does not already name a downstream skill. Classifies the input into an intent shape, announces the target and reason in a short three-line block (Intent / Reason / Target), then runs the chosen skill with the exact command and context packet. Add `--safe` to gate dispatch behind a confirmation prompt; otherwise cheese decides and acts. Before any other workflow skill.
+description: Route any dropped-in input — idea, spec path, file path, PR or issue, stack trace, bug report, or bare `/cheese` — to the right workflow skill. Use as the unified entry point — phrases include "/cheese", "what should I do with this", "help me get started", "route this", or any opening message that does not already name a downstream skill.
 license: MIT
 allowed-tools: Skill, Task, Agent, AskUserQuestion, Read, Glob, mcp__tilth__tilth_read, mcp__tilth__tilth_search, mcp__tilth__tilth_list, Bash(gh pr view:*), Bash(gh issue view:*)
 ---
