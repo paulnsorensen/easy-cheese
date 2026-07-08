@@ -12,12 +12,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from ref_extraction import relative_md_refs
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SKILLS_ROOT = REPO_ROOT / "skills"
-
-_MD_LINK_RE = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
-_BACKTICK_RE = re.compile(r"`([^`]+)`")
-_PROSE_REF_RE = re.compile(r"^(?:\.\./)+[\w./-]+\.md(?:#[\w-]+)?$|^references/[\w./-]+\.md(?:#[\w-]+)?$")
 
 # The six docs that used to live at repo-root shared/*.md before the
 # cheese-kernel-shared-refs move; semantic-backends was inlined and deleted
@@ -61,23 +59,6 @@ def _skill_json_files() -> list[Path]:
     return sorted(SKILLS_ROOT.rglob("*.json"))
 
 
-def _relative_md_refs(text: str) -> list[str]:
-    """Every relative markdown-link target and backticked relative-path prose
-    ref in ``text``, with any `#fragment` (and ` § heading` prose suffix)
-    stripped."""
-    refs: list[str] = []
-    for match in _MD_LINK_RE.finditer(text):
-        target = match.group(1)
-        if target.startswith(("http://", "https://", "mailto:", "#")):
-            continue
-        path = target.split("#", 1)[0]
-        if path.endswith(".md"):
-            refs.append(path)
-    for match in _BACKTICK_RE.finditer(text):
-        candidate = match.group(1).split(" § ", 1)[0]
-        if _PROSE_REF_RE.match(candidate):
-            refs.append(candidate.split("#", 1)[0])
-    return refs
 
 
 def test_relative_refs_resolve_in_skills_tree() -> None:
@@ -86,7 +67,7 @@ def test_relative_refs_resolve_in_skills_tree() -> None:
     repo-root fallback to catch a dangling ref."""
     problems: list[str] = []
     for md in _skill_markdown_files():
-        for ref in _relative_md_refs(md.read_text(encoding="utf-8")):
+        for ref in relative_md_refs(md.read_text(encoding="utf-8")):
             if not (md.parent / ref).resolve().is_file():
                 problems.append(f"{md.relative_to(REPO_ROOT)} -> {ref}")
     assert not problems, "unresolved refs in skills/:\n" + "\n".join(problems)

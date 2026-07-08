@@ -115,7 +115,7 @@ Attempts append; nothing is overwritten within a single invocation. If a re-invo
 ## Sub-agent contract — fresh peer, not diminutive
 
 - **Fresh context, every invocation.** Same-context judging is biased toward "yes you understand it" because the model that helped write the code believes the code is good. The fresh context is the entire reason the judge means anything.
-- **Judge sub-agent type: no-tool or read-only — never `general-purpose`, which grants full write access the judge must not have** (e.g. the read-only built-in `Explore` agent; harness-agnostic selection lives in `skills/age/references/sub-agent-gate.md`). `references/judge-prompt.md` is the system prompt. Model inherits from the parent — do not pass `haiku` or any other tier downgrade.
+- **Judge sub-agent type: no-tool or read-only — never `general-purpose`, which grants full write access the judge must not have** (e.g. the read-only built-in `Explore` agent; harness-agnostic selection lives in `../age/references/sub-agent-gate.md`). `references/judge-prompt.md` is the system prompt. Model inherits from the parent — do not pass `haiku` or any other tier downgrade.
 - **No tools needed for the judge.** It reads the prompt, diff summary, spec excerpt, and explanation, then returns JSON. No file access, no shell, no MCP — the judge is a graded read-only call.
 - **JSON output is parsed.** If parsing fails, the attempt is logged as `ERROR` and the gate fails open (see `## Divergence from the paper`).
 

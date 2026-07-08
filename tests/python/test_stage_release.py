@@ -18,6 +18,7 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 import build_pyz  # noqa: E402
 import stage_release  # noqa: E402
+from ref_extraction import relative_md_refs  # noqa: E402
 
 
 @pytest.fixture(scope="module")
@@ -73,28 +74,6 @@ def test_verify_rejects_missing_bundle(tmp_path: Path) -> None:
         stage_release._verify(fake)
 
 
-_MD_LINK_RE = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
-_BACKTICK_RE = re.compile(r"`([^`]+)`")
-_PROSE_REF_RE = re.compile(r"^(?:\.\./)+[\w./-]+\.md(?:#[\w-]+)?$|^references/[\w./-]+\.md(?:#[\w-]+)?$")
-
-
-def _relative_md_refs(text: str) -> list[str]:
-    """Every relative markdown-link target and backticked relative-path prose
-    ref in ``text``, with any `#fragment` (and ` § heading` prose suffix)
-    stripped."""
-    refs: list[str] = []
-    for match in _MD_LINK_RE.finditer(text):
-        target = match.group(1)
-        if target.startswith(("http://", "https://", "mailto:", "#")):
-            continue
-        path = target.split("#", 1)[0]
-        if path.endswith(".md"):
-            refs.append(path)
-    for match in _BACKTICK_RE.finditer(text):
-        candidate = match.group(1).split(" § ", 1)[0]
-        if _PROSE_REF_RE.match(candidate):
-            refs.append(candidate.split("#", 1)[0])
-    return refs
 
 
 def test_relative_refs_resolve_in_staged_tree(staged: Path) -> None:
@@ -103,7 +82,7 @@ def test_relative_refs_resolve_in_staged_tree(staged: Path) -> None:
     zero vendoring machinery required."""
     problems: list[str] = []
     for md in sorted((staged / "skills").rglob("*.md")):
-        for ref in _relative_md_refs(md.read_text(encoding="utf-8")):
+        for ref in relative_md_refs(md.read_text(encoding="utf-8")):
             if not (md.parent / ref).resolve().is_file():
                 problems.append(f"{md.relative_to(staged)} -> {ref}")
     assert not problems, "unresolved refs in staged tree:\n" + "\n".join(problems)
