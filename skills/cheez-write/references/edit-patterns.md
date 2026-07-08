@@ -1,100 +1,135 @@
 # `tilth_write` JSON cookbook
 
-Each block below is one file entry — wrap one or more in `tilth_write(files: [ … ])`. Every edit needs a `start` anchor; `end` is required only for range replacements, and `content` is the new text (use `""` to delete).
+Each block below is one section object — wrap one or more in
+`tilth_write(edits: [ … ])` (max 20 sections per call). A section is
+`{path, tag, ops}`: `path` names the file, `tag` is the 4-hex tag copied
+verbatim from the `[path#TAG]` header of a `tilth_read`, and `ops` is an
+array of op objects, each tagged by `op`. Line numbers (`start`, `end`,
+`line`, numeric `at`) are the 1-based `N:` prefixes from that same read.
+Omit `tag` only to seed a brand-new file.
 
 ## Single-line replacement
 
 ```json
 {
   "path": "src/auth.ts",
-  "edits": [
-    { "start": "42:a3f", "content": "  let x = recompute();" }
+  "tag": "a3f9",
+  "ops": [
+    { "op": "replace", "start": 42, "end": 42, "content": "  let x = recompute();" }
   ]
 }
 ```
 
-Replaces line 42 only. The hash `a3f` must match the `<line>:<hash>` prefix
-`tilth_read` returned for that line.
+Replaces line 42 only. The tag binds the line numbers to the content you
+read; if the file drifted, tilth 3-way-merges or rejects the section.
 
 ## Multi-line range replacement
 
 ```json
 {
   "path": "src/auth.ts",
-  "edits": [
+  "tag": "b2c4",
+  "ops": [
     {
-      "start": "44:b2c",
-      "end": "89:e1d",
+      "op": "replace",
+      "start": 44,
+      "end": 89,
       "content": "export function handleAuth(req, res, next) {\n  const token = extractToken(req);\n  if (!token) return res.status(401).end();\n  next();\n}"
     }
   ]
 }
 ```
 
-Replaces lines 44–89 inclusive. Both anchors must match.
+Replaces lines 44–89 inclusive.
 
 ## Delete a block
 
 ```json
 {
   "path": "src/auth.ts",
-  "edits": [
-    { "start": "44:b2c", "end": "89:e1d", "content": "" }
+  "tag": "b2c4",
+  "ops": [
+    { "op": "delete", "start": 44, "end": 89 }
   ]
 }
 ```
 
-Empty `content` deletes the range.
+`delete` takes no `content`. To remove a whole named symbol instead, use
+`{ "op": "delete_block", "at": "#handleAuth" }`.
+
+## Insert before or after a line
+
+```json
+{
+  "path": "src/auth.ts",
+  "tag": "a1b7",
+  "ops": [
+    { "op": "insert_after", "line": 13, "content": "import { newHelper } from './helpers';" }
+  ]
+}
+```
+
+`insert_before` / `insert_after` are native ops — do not rewrite the anchor
+line to fake an insert. `prepend` / `append` (`{content}` only) cover the
+file head and tail.
+
+## Symbol-anchored block ops
+
+```json
+{
+  "path": "src/auth.ts",
+  "tag": "b2c4",
+  "ops": [
+    { "op": "replace_block", "at": "#handleAuth", "content": "export function handleAuth(req, res, next) {\n  // …\n}" }
+  ]
+}
+```
+
+`replace_block`, `insert_after_block` (`{at, content}`), and `delete_block`
+(`{at}`) take `at` as a line number or a `"#symbol"` string — use them when
+the edit boundary is a whole function or class.
 
 ## Multiple edits in one file
 
 ```json
 {
   "path": "src/auth.ts",
-  "edits": [
-    { "start": "12:a1b", "content": "import { newHelper } from './helpers';" },
-    { "start": "44:b2c", "end": "89:e1d", "content": "// replaced function\n..." }
+  "tag": "b2c4",
+  "ops": [
+    { "op": "replace", "start": 12, "end": 12, "content": "import { newHelper } from './helpers';" },
+    { "op": "replace", "start": 44, "end": 89, "content": "// replaced function\n..." }
   ]
 }
 ```
 
-Keep related edits together when the backend supports it. If any anchor fails,
-re-read the file and recover before moving on.
+All ops in a section reference the line numbers from the same read — do not
+adjust later ops for earlier insertions or deletions. If the section is
+rejected, re-read the file and recover before moving on.
+
+## Create, move, delete files
+
+```json
+{ "path": "src/new-module.ts", "ops": [ { "op": "append", "content": "export const x = 1;\n" } ] }
+```
+
+Omitting `tag` seeds a brand-new file; `move_file` / `delete_file` on an *existing* file keep the file's `tag` (omit it only to seed a new file). `{ "op": "move_file", "dest": "src/renamed.ts" }`
+moves the section's file; `{ "op": "delete_file" }` removes it.
 
 ## Show diff in response
 
 ```text
-tilth_write(files: [{ "path": "src/auth.ts", "edits": [{ "start": "44:b2c", "end": "89:e1d", "content": "..." }] }], diff: true)
+tilth_write(edits: [{ "path": "src/auth.ts", "tag": "b2c4", "ops": [{ "op": "replace", "start": 44, "end": 89, "content": "..." }] }], diff: true)
 ```
 
-`diff` is a call option; if the backend exposes it only at batch scope, pass it there.
-
-## Insert "after" a line
-
-`tilth_write` replaces the anchored line(s); there is no native insert. To
-insert after line 13, anchor on line 13 and prepend the original line content
-to your new content:
-
-```json
-{
-  "path": "src/auth.ts",
-  "edits": [
-    {
-      "start": "13:abc",
-      "content": "import { existingThing } from './existing';\nimport { newHelper } from './helpers';"
-    }
-  ]
-}
-```
-
-The first line of `content` reproduces line 13 (`import { existingThing }
-…`); the second is the actual insertion. Read line 13 carefully before doing
-this — the original content goes back verbatim.
+`diff: true` is a call-level option: the response includes a compact
+before/after diff per section.
 
 ## Edits across multiple files
 
-Use the backend's batch form when it has one; otherwise edit one file at a time
-and verify each response before moving to the next file.
+Pass one `{path, tag, ops}` section per file in a single `edits` array (max
+20). Sections are independent and best-effort — a rejected section does not
+roll back the others — so check the per-`## <path>` results and re-read any
+rejected file before retrying.
 
 ## Caller-update notices
 

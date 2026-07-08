@@ -86,7 +86,7 @@ jobs:
         run: bats tests/fanout/bash/test_pr_plan_to_branches.bats
 
       # Real (un-stubbed) smoke test: actually resolve every brew formula,
-      # exercise the cargo-or-npm tilth install path, and run the gh-skill
+      # exercise the npm tilth install path, and run the gh-skill
       # install on a fresh macos-latest runner. Catches "phantom formula"
       # / "tap doesn't exist" / "this skill doesn't publish" bugs that the
       # bats suite (which stubs everything) cannot. --skip-mcp avoids

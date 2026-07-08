@@ -80,7 +80,7 @@ The workflow skills can delegate code search, reading, and editing to these back
 | Skill path | Command | Purpose |
 | --- | --- | --- |
 | `skills/cheez-search/SKILL.md` | `/cheez-search` | AST-aware code/text/regex/caller search via tilth MCP, harness-native AST search, or LSP. Replaces grep / rg / find. |
-| `skills/cheez-read/SKILL.md` | `/cheez-read` | Smart file/directory reading through a freshness-aware backend; tilth MCP is preferred because it emits hash anchors. Replaces cat / head / tail / ls. |
+| `skills/cheez-read/SKILL.md` | `/cheez-read` | Smart file/directory reading through a freshness-aware backend; tilth MCP is preferred because it emits stale-write-safe edit tags. Replaces cat / head / tail / ls. |
 | `skills/cheez-write/SKILL.md` | `/cheez-write` | Anchored, surgical edits through tilth MCP or an equivalent harness-native stale-snapshot edit tool. Never rewrites whole files blindly. |
 
 The `cheez-*` skills tell the model which source-code backend to use when the harness has one. Prefer tilth MCP by name; use LSP for type-grounded definitions/references/renames/code actions, `ast_grep`/`sg` for structural patterns and codemods, and anchored/stale-checking edits for ordinary block changes. Plain text shell tools are fallback evidence only, not equivalent source-code backends.
@@ -176,32 +176,24 @@ When a preferred tool is unavailable, workflow skills say so once, fall back, an
 
 ### skills.sh (recommended)
 
-Install with the [skills.sh](https://skills.sh) installer:
+Install every skill with the [skills.sh](https://skills.sh) installer. The
+skills form one pipeline (`/cheese → /mold → /cook → /press → /age → /cure`),
+so install them together rather than cherry-picking:
 
 ```sh
-npx skills@latest add paulnsorensen/easy-cheese
+npx skills@latest add paulnsorensen/easy-cheese --all --global
 ```
 
-Install all currently published skills in this repo's manifest without prompts:
+`--all` is shorthand for `--skill "*" --agent "*" -y`: every published skill,
+into every detected agent, no prompts. `--global` installs them user-wide, so
+they are available across every repo.
+
+To scope the install to just the current repo instead (recorded under
+`.agents/skills/`), drop `--global` and run it from that repo:
 
 ```sh
-npx skills@latest add paulnsorensen/easy-cheese --skill "*" -y
+npx skills@latest add paulnsorensen/easy-cheese --all
 ```
-
-Without `--global`, the skills CLI uses project-level scope. Run those
-commands from the repo where you want easy-cheese recorded under
-`.agents/skills/`. The `-y` flag only skips confirmation prompts; it does not
-make a project install global.
-
-For a user-wide Codex install that is available across repos, pass the Codex
-agent and global scope explicitly:
-
-```sh
-npx skills@latest add paulnsorensen/easy-cheese --skill "*" --agent codex --global -y
-```
-
-The installer reads this repo's published skill manifest, lets you pick the
-skills you want, and installs them into the coding agents you select.
 
 After install, start with `/cheese` if you're not sure which wheel to cut into
 first, or jump straight to a specific skill like `/cook`, `/age`, or
@@ -296,16 +288,15 @@ Each `SKILL.md` must have YAML frontmatter with at least `name` and `description
 The `cheez-*` tool skills and several workflow skills benefit from MCP servers. Install the ones you need.
 
 <details>
-<summary><strong>tilth</strong> (preferred for `cheez-*` skills) — AST-aware code search, smart reading, hash-anchored edits</summary>
+<summary><strong>tilth</strong> (preferred for `cheez-*` skills) — AST-aware code search, smart reading, tag-anchored edits</summary>
 
-[tilth](https://github.com/jahala/tilth) provides AST-aware code search, smart file reading, and hash-anchored edits. It is the preferred backend for `/cheez-search`, `/cheez-read`, and `/cheez-write`; equivalent native AST/LSP/anchored-edit backends satisfy the same contract when Tilth is unavailable.
+[tilth](https://www.npmjs.com/package/@paulnsorensen/tilth-nightly) provides AST-aware code search, smart file reading, and tag-anchored edits. It is the preferred backend for `/cheez-search`, `/cheez-read`, and `/cheez-write`; equivalent native AST/LSP/anchored-edit backends satisfy the same contract when Tilth is unavailable.
 
 ```sh
-# Install tilth CLI — pick one (no Homebrew formula upstream)
-cargo install tilth        # via Cargo (Rust) — preferred, native binary
-npm install -g tilth       # via npm (Node 18+) — no Rust toolchain needed
-# or run via npx — no global install needed (Node.js v18+):
-#   npx -y tilth install claude-code --edit
+# Install tilth CLI via npm (Node.js v18+) — no Homebrew formula upstream
+npm install -g @paulnsorensen/tilth-nightly@latest
+# or run via npx — no global install needed:
+#   npx -y @paulnsorensen/tilth-nightly@latest install claude-code --edit
 
 # Register as an MCP server — include --edit only if you plan to use cheez-write
 tilth install claude-code --edit   # Claude Code
@@ -419,7 +410,7 @@ flow above; this script is the fast lane for the wider ecosystem.
 
 It does the following in one shot:
 
-1. Installs every CLI tool listed below — Homebrew for the eight brew-core formulas, plus `cargo install tilth` (or `npm install -g tilth` if Rust isn't available) for tilth, which has no Homebrew formula upstream.
+1. Installs every CLI tool listed below — Homebrew for the eight brew-core formulas, plus `npm install -g @paulnsorensen/tilth-nightly@latest` for tilth, which has no Homebrew formula upstream.
 2. Auto-detects installed Claude Code, Cursor, and Codex CLIs, then installs every easy-cheese skill into each detected harness at user scope as a convenience bootstrap.
 3. Registers the `tilth`, `context7`, and `hallouminate` MCP servers with those harnesses where supported. hallouminate is delivered as a plugin: on `claude-code` and `codex` the installer adds the `paulnsorensen/hallouminate` plugin marketplace and installs the plugin (which ships its own MCP server and bootstraps the binary); on other harnesses it warns and you register the MCP manually. Other servers (`tavily`, `milknado`) are also selectable with `--mcp`.
 

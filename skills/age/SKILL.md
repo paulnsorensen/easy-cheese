@@ -324,7 +324,7 @@ Inline-degrade is forced when the marker is present (no opt-out); it takes prece
 - Do not invent evidence. Cite files, diffs, commands, or unavailable-source notes.
 - Agree when the diff is fine. Do not manufacture findings to fill a dimension; an empty dimension is a valid outcome.
 - Keep confidence qualitative (`certain | speculating | don't know`); never emit a numeric score. This covers both the report-level `## Confidence` line and the per-finding `confidence:` label.
-- Findings carry location + recommendation. Do not write JSON sidecars or hash-anchored fix payloads — `/cure` reads the markdown directly.
+- Findings carry location + recommendation. Do not write JSON sidecars or tag-anchored fix payloads — `/cure` reads the markdown directly.
 - Apply `references/voice.md` (output discipline, reasoning posture, confidence vocabulary).
 
 ## References
