@@ -303,7 +303,16 @@ HEADING_RE = re.compile(r"^(#{1,5})(\s)", re.MULTILINE)
 
 
 def _bump_headings(text: str) -> str:
-    return HEADING_RE.sub(lambda m: "#" + m.group(1) + m.group(2), text)
+    """Demote markdown headings one level, leaving fenced code blocks untouched."""
+    lines = text.split("\n")
+    in_fence = False
+    for i, line in enumerate(lines):
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+            continue
+        if not in_fence:
+            lines[i] = HEADING_RE.sub(lambda m: "#" + m.group(1) + m.group(2), line)
+    return "\n".join(lines)
 
 
 def fold_references(skill_name: str, refs_dir: Path) -> tuple[str, dict[str, str]]:

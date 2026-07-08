@@ -379,6 +379,28 @@ class TestFoldReferences:
         assert "Intro text." in folded
         assert titles == {"gate": "Quality gates"}
 
+    def test_bump_leaves_fenced_code_blocks_untouched(self, gen_docs, isolated_docs):
+        """Regression: _bump_headings once regexed the whole body, so fenced
+        code lines starting with `# ` (shell comments, markdown examples) were
+        demoted too, corrupting copied snippets in the rendered page."""
+        refs_dir = isolated_docs / "skills" / "cook" / "references"
+        refs_dir.mkdir(parents=True)
+        (refs_dir / "fenced.md").write_text(
+            "# Fenced doc\n\n## Real heading\n\n"
+            "```bash\n# a shell comment\n## not a heading either\n```\n\n"
+            "### After fence\n",
+            encoding="utf-8",
+        )
+
+        folded, _ = gen_docs.fold_references("cook", refs_dir)
+
+        assert "### Real heading" in folded
+        assert "#### After fence" in folded
+        assert "# a shell comment" in folded
+        assert "## a shell comment" not in folded
+        assert "## not a heading either" in folded
+        assert "### not a heading either" not in folded
+
     def test_title_precedence_falls_back_to_first_h1_then_stem(self, gen_docs, isolated_docs):
         refs_dir = isolated_docs / "skills" / "cook" / "references"
         refs_dir.mkdir(parents=True)
@@ -614,8 +636,18 @@ class TestMainGenerationRealCheeseKernelDocs:
         assert not (root / "shared").exists()
         cheese_body = (root / "skills" / "cheese.md").read_text(encoding="utf-8")
         for name in self.MOVED_DOC_NAMES:
-            heading = re.compile(r"^## .+\n", re.MULTILINE)
-            assert heading.search(cheese_body), "expected at least one folded ## section"
+            meta, ref_body = gen_docs.parse_frontmatter(
+                (real_refs_dir / f"{name}.md").read_text(encoding="utf-8")
+            )
+            title = (
+                meta.get("title")
+                or gen_docs._first_h1(ref_body)
+                or name.replace("-", " ").capitalize()
+            )
+            heading = re.compile(rf"^## {re.escape(title)}\s*$", re.MULTILINE)
+            assert heading.search(cheese_body), (
+                f"expected folded section '## {title}' for {name}.md in the cheese page"
+            )
         assert cheese_body.count("## ") >= len(self.MOVED_DOC_NAMES)
 
 
