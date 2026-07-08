@@ -181,18 +181,18 @@ skills form one pipeline (`/cheese → /mold → /cook → /press → /age → /
 so install them together rather than cherry-picking:
 
 ```sh
-npx skills@latest add paulnsorensen/easy-cheese --all
+npx skills@latest add paulnsorensen/easy-cheese --all --global
 ```
 
 `--all` is shorthand for `--skill "*" --agent "*" -y`: every published skill,
-into every detected agent, no prompts. It uses project-level scope (recorded
-under `.agents/skills/`), so run it from the repo you want easy-cheese
-recorded in.
+into every detected agent, no prompts. `--global` installs them user-wide, so
+they are available across every repo.
 
-For a user-wide install available across every repo, add `--global`:
+To scope the install to just the current repo instead (recorded under
+`.agents/skills/`), drop `--global` and run it from that repo:
 
 ```sh
-npx skills@latest add paulnsorensen/easy-cheese --all --global
+npx skills@latest add paulnsorensen/easy-cheese --all
 ```
 
 After install, start with `/cheese` if you're not sure which wheel to cut into
