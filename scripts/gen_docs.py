@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 import shutil
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Callable
@@ -41,7 +41,6 @@ class GeneratedPage:
     title: str
     slug: str
     source_rel: str | None
-    refs: list["GeneratedPage"] = field(default_factory=list)
 
 
 def parse_frontmatter(text: str) -> tuple[dict, str]:
@@ -92,11 +91,6 @@ def _read_text(path: Path) -> str:
 
 def _strip_md_suffix(path: str) -> str:
     return path[:-3] if path.endswith(".md") else path
-
-
-def _route_path_for_md(path: str) -> str:
-    route = _strip_md_suffix(path)
-    return f"{route}/" if route else ""
 
 
 def _doc_path_for_slug(slug: str) -> str:
@@ -173,21 +167,60 @@ def convert_mkdocs_admonitions(markdown: str) -> str:
     return ADMONITION_RE.sub(repl, markdown)
 
 
+# github-slugger (the slugger Starlight's markdown renderer uses to assign
+# heading ids) applied to this repo's heading titles: lowercase, drop every
+# char that is not a word char / hyphen / space, then turn each space into a
+# hyphen. It KEEPS underscores and does NOT collapse repeated separators, which
+# is what github-slugger does on these ASCII titles (e.g. "tilth_write JSON
+# cookbook" -> "tilth_write-json-cookbook"; "Cascade stages \u2014 branch-specific
+# steps" -> "cascade-stages--branch-specific-steps"). Verified byte-for-byte
+# against the installed github-slugger over every real heading title
+# (tests/python/test_gen_docs.py::TestHeadingSlug pins the golden cases).
+_HEADING_SLUG_STRIP_RE = re.compile(r"[^\w\- ]", re.UNICODE)
+
+
+def _heading_slug(text: str) -> str:
+    return _HEADING_SLUG_STRIP_RE.sub("", text.lower()).replace(" ", "-")
+
+
+def _ref_title(skill_name: str, ref_stem: str) -> str:
+    return _ref_title_cached(str(SKILLS_DIR), skill_name, ref_stem)
+
+
+@lru_cache(maxsize=None)
+def _ref_title_cached(skills_dir: str, skill_name: str, ref_stem: str) -> str:
+    ref_path = Path(skills_dir) / skill_name / "references" / f"{ref_stem}.md"
+    try:
+        text = ref_path.read_text(encoding="utf-8")
+    except OSError:
+        return _heading_slug(ref_stem.replace("-", " "))
+    meta, body = parse_frontmatter(text)
+    title = meta.get("title") or _first_h1(body) or ref_stem.replace("-", " ").capitalize()
+    return _heading_slug(title)
+
+
+_ref_title.cache_clear = _ref_title_cached.cache_clear
+
+
 def rewrite_skill_link(url: str, skill_name: str) -> str:
     if _is_external(url):
         return url
     path, anchor = _split_anchor(url)
 
-    if path.startswith("references/"):
-        return f"{_route_path_for_md(path)}{anchor}"
+    m = re.match(r"^references/(.+)\.md$", path)
+    if m:
+        return anchor if anchor else f"#{_ref_title(skill_name, m.group(1))}"
 
     m = re.match(r"^\.\./([^/]+)/SKILL\.md$", path)
     if m:
         return f"../{m.group(1)}/{anchor}"
 
-    m = re.match(r"^\.\./([^/]+)/references/(.+\.md)$", path)
+    m = re.match(r"^\.\./([^/]+)/references/(.+)\.md$", path)
     if m:
-        return f"../{m.group(1)}/references/{_route_path_for_md(m.group(2))}{anchor}"
+        other_skill, stem = m.group(1), m.group(2)
+        if anchor:
+            return f"../{other_skill}/{anchor}"
+        return f"../{other_skill}/#{_ref_title(other_skill, stem)}"
 
     m = re.match(r"^\.\./\.\./([A-Z_]+\.md)$", path)
     if m and m.group(1) in ROOT_DOC_MAP:
@@ -203,23 +236,26 @@ def rewrite_ref_link(url: str, skill_name: str) -> str:
         return url
     path, anchor = _split_anchor(url)
 
-
-    if re.match(r"^[^/]+\.md$", path):
-        return f"../{_route_path_for_md(path)}{anchor}"
+    m = re.match(r"^([^/]+)\.md$", path)
+    if m:
+        return anchor if anchor else f"#{_ref_title(skill_name, m.group(1))}"
     if path == "../SKILL.md":
-        return f"../../{anchor}"
+        return anchor if anchor else "#"
 
     m = re.match(r"^\.\./\.\./([^/]+)/SKILL\.md$", path)
     if m:
-        return f"../../../{m.group(1)}/{anchor}"
+        return f"../{m.group(1)}/{anchor}"
 
-    m = re.match(r"^\.\./\.\./([^/]+)/references/(.+\.md)$", path)
+    m = re.match(r"^\.\./\.\./([^/]+)/references/(.+)\.md$", path)
     if m:
-        return f"../../../{m.group(1)}/references/{_route_path_for_md(m.group(2))}{anchor}"
+        other_skill, stem = m.group(1), m.group(2)
+        if anchor:
+            return f"../{other_skill}/{anchor}"
+        return f"../{other_skill}/#{_ref_title(other_skill, stem)}"
 
     m = re.match(r"^\.\./\.\./\.\./([A-Z_]+\.md)$", path)
     if m and m.group(1) in ROOT_DOC_MAP:
-        return f"../../../../{ROOT_DOC_MAP[m.group(1)]}{anchor}"
+        return f"../../{ROOT_DOC_MAP[m.group(1)]}{anchor}"
     if path == "../../../LICENSE":
         return LICENSE_URL
 
@@ -241,9 +277,12 @@ def rewrite_root_passthrough_link(url: str) -> str:
     if m:
         return f"../skills/{m.group(1)}/{anchor}"
 
-    m = re.match(r"^skills/([^/]+)/references/(.+\.md)$", stripped)
+    m = re.match(r"^skills/([^/]+)/references/(.+)\.md$", stripped)
     if m:
-        return f"../skills/{m.group(1)}/references/{_route_path_for_md(m.group(2))}{anchor}"
+        other_skill, stem = m.group(1), m.group(2)
+        if anchor:
+            return f"../skills/{other_skill}/{anchor}"
+        return f"../skills/{other_skill}/#{_ref_title(other_skill, stem)}"
 
     return url
 
@@ -258,6 +297,35 @@ def apply_link_rewrite(text: str, rewriter: Callable[[str], str]) -> str:
         return f"[{label}]({rewriter(url)}{title})"
 
     return LINK_RE.sub(repl, NESTED_IMAGE_LINK_RE.sub(image_repl, text))
+
+
+HEADING_RE = re.compile(r"^(#{1,5})(\s)", re.MULTILINE)
+
+
+def _bump_headings(text: str) -> str:
+    return HEADING_RE.sub(lambda m: "#" + m.group(1) + m.group(2), text)
+
+
+def fold_references(skill_name: str, refs_dir: Path) -> tuple[str, dict[str, str]]:
+    titles: dict[str, str] = {}
+    sections: list[str] = []
+    if not refs_dir.is_dir():
+        return "", titles
+
+    for ref in sorted(p for p in refs_dir.iterdir() if p.is_file()):
+        if ref.suffix.lower() != ".md":
+            continue
+        stem = ref.stem
+        meta, body = parse_frontmatter(ref.read_text(encoding="utf-8"))
+        body = apply_link_rewrite(body, lambda url: rewrite_ref_link(url, skill_name))
+        body = convert_mkdocs_admonitions(body)
+        title = meta.get("title") or _first_h1(body) or stem.replace("-", " ").capitalize()
+        titles[stem] = title
+        body = re.sub(r"^#\s[^\n]*\n+", "", body.lstrip(), count=1)
+        body = _bump_headings(body)
+        sections.append(f"## {title}\n\n{body.rstrip()}\n")
+
+    return "\n\n".join(sections), titles
 
 
 def emit_skill_page(skill_dir: Path) -> GeneratedPage | None:
@@ -288,38 +356,17 @@ def emit_skill_page(skill_dir: Path) -> GeneratedPage | None:
     body = convert_mkdocs_admonitions(body)
 
     refs_dir = skill_dir / "references"
-    refs: list[GeneratedPage] = []
-    if refs_dir.is_dir():
-        for ref in sorted(p for p in refs_dir.iterdir() if p.is_file()):
-            ref_rel = ref.relative_to(REPO_ROOT).as_posix()
-            if ref.suffix.lower() != ".md":
-                # Non-Markdown references aren't rendered by Starlight; skip them.
-                # The parent page links to the skill's own SKILL.md source.
-                continue
-
-            out = f"skills/{name}/references/{ref.name}"
-            ref_text = ref.read_text(encoding="utf-8")
-            ref_meta, ref_body = parse_frontmatter(ref_text)
-            ref_body = apply_link_rewrite(ref_body, lambda url: rewrite_ref_link(url, name))
-            ref_body = convert_mkdocs_admonitions(ref_body)
-            title = ref_meta.get("title") or _first_h1(ref_body) or ref.stem.replace("-", " ").capitalize()
-            ref_page = write_doc(
-                out,
-                ref_body,
-                title=title,
-                description=ref_meta.get("description"),
-                source_rel=ref_rel,
-            )
-            refs.append(ref_page)
+    folded, _ = fold_references(name, refs_dir)
+    full_body = body.rstrip() + "\n\n" + folded if folded else body
 
     page = write_doc(
         page_path,
-        header + body,
+        header + full_body,
         title=f"/{name}",
         description=first_sentence(description),
         source_rel=src_rel,
     )
-    return GeneratedPage(page.title, page.slug, page.source_rel, refs)
+    return GeneratedPage(page.title, page.slug, page.source_rel)
 
 
 def emit_skills_index(skills: list[GeneratedPage]) -> GeneratedPage:
@@ -433,10 +480,10 @@ def _first_h1(text: str) -> str:
     return ""
 
 
-def _sidebar_link(page: GeneratedPage, label: str | None = None) -> dict[str, str]:
+def _sidebar_link(page: GeneratedPage) -> dict[str, str]:
     item = {"slug": page.slug}
-    if label or page.title:
-        item["label"] = label or page.title
+    if page.title:
+        item["label"] = page.title
     return item
 
 
@@ -447,19 +494,7 @@ def emit_sidebar(
 ) -> None:
     skill_items: list[dict] = [{"label": "Skills index", "slug": "skills"}]
     for skill in skills:
-        if skill.refs:
-            skill_items.append(
-                {
-                    "label": skill.title,
-                    "items": [
-                        _sidebar_link(skill, "Overview"),
-                        *[_sidebar_link(ref) for ref in skill.refs],
-                    ],
-                    "collapsed": True,
-                }
-            )
-        else:
-            skill_items.append(_sidebar_link(skill))
+        skill_items.append(_sidebar_link(skill))
 
     start_items = [{"label": "Home", "slug": ""}]
     if install:
@@ -492,7 +527,7 @@ def clean_generated_docs() -> None:
             child.unlink()
     if SIDEBAR_PATH.exists():
         SIDEBAR_PATH.unlink()
-
+    _ref_title.cache_clear()
 
 def main() -> None:
     clean_generated_docs()

@@ -24,6 +24,9 @@ export default defineConfig({
         alt: 'easy-cheese',
       },
       sidebar,
+      components: {
+        Sidebar: './src/components/Sidebar.astro',
+      },
       customCss: ['./src/styles/cheese.css'],
       social: [
         {
