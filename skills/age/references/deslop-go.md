@@ -1,6 +1,6 @@
 # Go De-slop Catalog
 
-Per-language evidence for the `age` `deslop` dimension. Each pattern is a Go-specific AI tell to look for during review. Use alongside `dimensions.md`'s `deslop` rubric — this is the "Look for" detail, not a separate severity scale.
+Per-language evidence for the `age` `deslop` dimension. Each pattern is a Go-specific AI tell to look for during review; most map to a staticcheck or golangci-lint rule, giving a citable rule name to attach to a finding. Use alongside `dimensions.md`'s `deslop` rubric — this is the "Look for" detail, not a separate severity scale.
 
 ## 1. Error string conventions
 
@@ -18,6 +18,8 @@ return errors.New("user not found")
 
 The `%w` verb wraps the error so callers can use `errors.Is`/`errors.As`.
 Use `%v` only when you intentionally want to break the error chain.
+
+Lint: staticcheck `ST1005` (error-string capitalization/punctuation); `errorlint` for `%w`/`%v` wrapping.
 
 ## 2. Named returns with bare `return`
 
@@ -45,6 +47,8 @@ func getUser(id int) (*User, error) {
 ```
 
 Named returns are acceptable only in `defer` recovery patterns.
+
+Lint: `nakedret`; revive `bare-return`.
 
 ## 3. `context.TODO()` permanently
 
@@ -107,6 +111,8 @@ go func(ctx context.Context) {
 }(ctx)
 ```
 
+Lint: `go.uber.org/goleak` catches leaked goroutines at test time.
+
 ## 6. `fmt.Sprintf` for string concatenation in loops
 
 O(n²) string building.
@@ -126,6 +132,8 @@ for _, s := range items {
 result := b.String()
 ```
 
+Lint: `perfsprint`.
+
 ## 7. Stuttering package names
 
 ```go
@@ -139,6 +147,8 @@ package user
 type Service struct{}
 type Model struct{}
 ```
+
+Lint: revive `exported` ("type name will be used as `user.UserService` by other packages").
 
 ## 8. `init()` for non-trivial setup
 
@@ -160,3 +170,13 @@ func NewDB(dsn string) (*sql.DB, error) {
     return sql.Open("postgres", dsn)
 }
 ```
+
+Lint: `gochecknoinits` flags any `init()` function.
+
+## Sources
+
+- staticcheck docs (staticcheck.dev/docs/checks) — the `ST1005` error-string check
+- Go wiki, Code Review Comments (go.dev/wiki/CodeReviewComments) — error strings, naked returns, package-name stutter, contexts
+- Uber Go Style Guide (github.com/uber-go/guide) — goroutine lifetimes, `init()` avoidance
+- golangci-lint linters index (golangci-lint.run/usage/linters) — `nakedret`, `perfsprint`, `gochecknoinits`, revive rules
+- go.uber.org/goleak — test-time goroutine-leak detection

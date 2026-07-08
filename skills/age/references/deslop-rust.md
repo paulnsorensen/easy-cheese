@@ -442,10 +442,10 @@ Clippy groups lints into categories. Use these groupings as a heuristic when jud
 |----------|-----------|---------|-----------------|
 | **restriction** | "Don't do this" | `unwrap_used`, `panic`, `todo`, `print_stdout` | 🔴 Almost never |
 | **correctness** | "This is likely wrong" | Most logic bugs | 🔴 Almost never |
-| **complexity** | "This is confusing" | `too_many_arguments`, `cognitive_complexity` | 🟡 With justification |
+| **complexity** | "This is confusing" | `too_many_arguments`, `type_complexity` | 🟡 With justification |
 | **perf** | "This is slow" | `clone_on_copy`, `inefficient_to_string` | 🟡 Document why |
 | **style** | "Use X instead" | `let_and_return`, `wildcard_imports` | 🟡 Preference |
-| **pedantic** | "Extra strict" | `cast_possible_truncation`, `missing_docs` | 🟢 Usually OK |
+| **pedantic** | "Extra strict" | `cast_possible_truncation`, `module_name_repetitions` | 🟢 Usually OK |
 
 **Rule:** Never suppress `restriction` lints casually. `Pedantic` lints are opt-in,
 so suppressing them is more defensible. `Complexity` lints need justification.

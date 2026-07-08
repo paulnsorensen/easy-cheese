@@ -207,7 +207,7 @@ await Promise.all(items.map(i => process(i)));
 void saveUser(user);
 ```
 
-Lint: `@typescript-eslint/no-floating-promises`, `no-misused-promises`.
+Lint: `@typescript-eslint/no-floating-promises`, `@typescript-eslint/no-misused-promises`.
 
 ## 13. `enum` where a union suffices
 
@@ -250,7 +250,7 @@ try {
 ```
 
 Lint: `@typescript-eslint/only-throw-error`,
-`use-unknown-in-catch-callback-variable`.
+`@typescript-eslint/use-unknown-in-catch-callback-variable`.
 
 ## 15. `useEffect` for derived state (React)
 

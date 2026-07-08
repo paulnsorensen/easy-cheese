@@ -337,5 +337,5 @@ Inline-degrade is forced when the marker is present (no opt-out); it takes prece
 
 - `references/dimensions.md` — per-dimension rubrics and recommendation shapes.
 - `references/voice.md` — shared output discipline, reasoning posture, and confidence vocabulary.
-- `references/deslop-rust.md` / `deslop-typescript.md` / `deslop-python.md` / `deslop-shell.md` / `deslop-go.md` — per-language `deslop` pattern catalogs with lint-rule mappings and citations.
+- `references/deslop-rust.md` / `references/deslop-typescript.md` / `references/deslop-python.md` / `references/deslop-shell.md` / `references/deslop-go.md` — per-language `deslop` pattern catalogs with lint-rule mappings and citations.
 - `references/sub-agent-gate.md` — shared sub-agent kernel: digest contract, harness-agnostic selection, what the parent never delegates.
