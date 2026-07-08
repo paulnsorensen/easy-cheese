@@ -24,25 +24,25 @@ next: cure
 ## Blocker
 
 - **[encapsulation:blocker]** `src/users/index.ts:42` — `index` re-exports `SqlPgUser` across slice boundary.
-  - location: contract · fix-cost-now: sprawling · fix-cost-later: structural
+  - location: contract · fix-cost-now: sprawling · fix-cost-later: structural · confidence: certain
   - recommendation: define `User` in the slice's public types, map at the boundary.
 
 ## High
 
 - **[security:high]** `src/handler.ts:108` — Unvalidated path joined into fs.read.
-  - location: contract · fix-cost-now: contained · fix-cost-later: contained
+  - location: contract · fix-cost-now: contained · fix-cost-later: contained · confidence: certain
   - recommendation: add allowlist check before joining.
 
 ## Medium
 
 - **[complexity:medium]** `src/util.ts:200-240` — Function is 41 lines and 4 levels nested.
-  - location: module · fix-cost-now: contained · fix-cost-later: spreading
+  - location: module · fix-cost-now: contained · fix-cost-later: spreading · confidence: speculating
   - recommendation: extract helpers.
 
 ## Low
 
 - **[deslop:low]** `src/old.ts:55-60` — Unused export `_helper`.
-  - location: class · fix-cost-now: contained · fix-cost-later: contained
+  - location: class · fix-cost-now: contained · fix-cost-later: contained · confidence: certain
   - recommendation: remove the export.
 """
 
@@ -96,6 +96,13 @@ class TestRenderTable:
             findings_lib.parse_findings_report(SAMPLE_REPORT)
         )
         assert decoded == expected
+
+    def test_confidence_column_and_values(self, report_path: Path, findings_lib: ModuleType) -> None:
+        result = _run("render-table", "--report", str(report_path))
+        assert result.returncode == 0, result.stderr
+        assert "confidence" in result.stdout
+        assert "certain" in result.stdout
+        assert "speculating" in result.stdout
 
 
 class TestParseSelection:
@@ -181,6 +188,28 @@ class TestMissingFile:
         )
         assert result.returncode == 2
         assert "report not found" in result.stderr
+
+
+class TestConfidenceParsing:
+    def test_findings_expose_confidence(self, findings_lib: ModuleType) -> None:
+        findings = findings_lib.parse_findings_report(SAMPLE_REPORT)
+        by_id = {f.id: f for f in findings}
+        assert by_id[1].confidence == "certain"
+        assert by_id[3].confidence == "speculating"
+
+    def test_missing_confidence_parses_as_none(self, findings_lib: ModuleType) -> None:
+        report = """\
+## Blocker
+
+- **[encapsulation:blocker]** `src/x.ts:1` — missing confidence label.
+  - location: contract · fix-cost-now: contained · fix-cost-later: contained
+  - recommendation: fix it.
+"""
+        findings = findings_lib.parse_findings_report(report)
+        assert len(findings) == 1
+        assert findings[0].confidence is None
+        rendered = findings_lib.render_selection_table(findings)
+        assert "encapsulation" in rendered
 
 
 class TestArgparseFailures:
