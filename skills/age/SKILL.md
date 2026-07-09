@@ -25,7 +25,7 @@ Accept:
 
 When called with a `<slug>`, resolve `.cheese/press/<slug>.md` (if present) for press context and review the current working diff. When called with a `<ref-or-range>`, review that range. Default to the current working diff when neither is supplied. If the base branch is unclear, ask or use the repository's documented default.
 
-`--auto` is the propagated autonomous-mode flag from `/cook --auto`. It changes the handoff (see `## Handoff` and `### Auto mode` for the cap rule and full chain). See `### When invoked from /ultracook` for the no-shared-memory variant.
+`--auto` is the propagated autonomous-mode flag from `/cook --auto`. It changes the handoff (see `## Handoff` and `## Auto mode` for the cap rule and full chain). See `### When invoked from /ultracook` for the no-shared-memory variant.
 
 `--hard` is the propagated metacognitive-gate flag from `/cook --hard` (or `/cheese --hard`). Age does not fire the gate; it only passes `--hard` forward to `/cure` at the handoff so the gate can fire at the share-for-review boundary. See `skills/hard-cheese/SKILL.md`.
 
@@ -285,9 +285,9 @@ handoff_context:
 
 On `none` / `Stop` (only reachable via the gate), exit cleanly with the report path.
 
-`--auto` substitutes a severity-floor selection and its own chain — see `### Auto mode` below.
+`--auto` substitutes a severity-floor selection and its own chain — see `## Auto mode` below.
 
-### Auto mode
+## Auto mode
 
 When invoked with `--auto`:
 

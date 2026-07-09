@@ -3,10 +3,10 @@
 Detailed invocation shapes, output format, and per-kind parameter reference.
 For which kind to pick, see the **Choose your search kind** table in `SKILL.md`.
 
-All examples omit `cwd`: every tilth tool requires it (your absolute checkout
-directory), but the Claude Code hook injects it automatically — set it only on
-harnesses without the hook. There is no `root` parameter. Omit `scope` to
-search the whole checkout; pass it only to narrow to a subdirectory.
+All examples omit `root`: every tilth tool anchors relative paths and `scope`
+against it (your absolute checkout directory) and refuses a relative path
+without it — the examples' relative `scope` values assume it is set. Omit
+`scope` to search the whole checkout; pass it only to narrow to a subdirectory.
 
 ---
 
@@ -19,11 +19,11 @@ tilth_search(queries: [{query: "handleAuth"}], scope: "src/")
 
 **Output:**
 ```
-# Search: "handleAuth" in src/ - 6 matches (2 definitions, 4 usages)
+# Search: "handleAuth" in src/ — 6 matches (2 definitions, 4 usages)
 
 ## src/auth.ts:44-89 [definition]
   [24-42]  fn validateToken(token: string)
--> [44-89]  export fn handleAuth(req, res, next)
+→ [44-89]  export fn handleAuth(req, res, next)
   [91-120] fn refreshSession(req, res)
 
   44 | export function handleAuth(req, res, next) {
@@ -37,7 +37,7 @@ tilth_search(queries: [{query: "handleAuth"}], scope: "src/")
   refreshSession  src/auth.ts:91-120  fn refreshSession(req, res)
 
 ## src/routes/api.ts:34 [usage]
--> [34]   router.use('/api/protected/*', handleAuth);
+→ [34]   router.use('/api/protected/*', handleAuth);
 ```
 
 **Key features:**

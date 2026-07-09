@@ -290,15 +290,15 @@ def test_attribution_uniform_across_artifacts() -> None:
 
 def test_cure_auto_puncture_clause_lives_in_auto_section() -> None:
     """Placement matters: the auto-puncture clause must live inside cure's
-    `### Auto mode` section, not as a free-floating paragraph elsewhere.
+    `## Auto mode` section, not as a free-floating paragraph elsewhere.
     A future reader looking at auto mode must see it without searching.
     """
     cure = (SKILLS / "cure" / "SKILL.md").read_text(encoding="utf-8")
-    auto_idx = cure.find("### Auto mode")
-    assert auto_idx >= 0, "cure must have an `### Auto mode` section"
+    auto_idx = cure.find("\n## Auto mode\n")
+    assert auto_idx >= 0, "cure must have an `## Auto mode` section"
     rules_idx = cure.find("## Rules", auto_idx)
     auto_section = cure[auto_idx:rules_idx if rules_idx >= 0 else len(cure)]
-    assert "--hard" in auto_section, "--hard puncture clause must live inside `### Auto mode`"
+    assert "--hard" in auto_section, "--hard puncture clause must live inside `## Auto mode`"
     assert "puncture" in auto_section.lower()
 
 

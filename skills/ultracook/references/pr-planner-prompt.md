@@ -2,7 +2,7 @@
 
 Loaded by `/ultracook` at Phase 7. Substitute `{slug}`, `{manifest_path}`, `{merged_diff_path}`, and `{spec_summary}` before dispatch.
 
-```text
+````text
 You are the PR planner sub-agent for /ultracook spec: {slug}
 
 ## Your job
@@ -84,4 +84,4 @@ defined by `references/pr-plan-schema.json`.
 Write `pr-plan.yaml` and return a one-paragraph rationale naming the chosen shape and
 why. The orchestrator reads the rationale to confirm the layout looks sensible before
 delegating publish.
-```
+````

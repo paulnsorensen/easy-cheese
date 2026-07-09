@@ -212,7 +212,7 @@ The "present all four severity options on every run, empty-set-resolves-to-`none
 - **Skip posting** — leave the report for later; post nothing.
 - **Per-finding** — free-text pick of which drafts to post.
 
-On the selection (or the default post-all), post via Flow step 9 and exit with `status: ok / next: done` — see `### Auto mode` § "no findings meet the floor" for the auto path.
+On the selection (or the default post-all), post via Flow step 9 and exit with `status: ok / next: done` — see `## Auto mode` § "no findings meet the floor" for the auto path.
 
 **Slug `next:` values.** Write `next: cure` when at least one finding meets the `medium+` floor (medium-or-above, or a cheap contained-fix low). Write `next: done` when no severity-section finding exists or all meeting items are empty-selection after floor resolution.
 
@@ -228,7 +228,7 @@ handoff_context:
 
 `/cure` re-confirms cited ids and goes straight to apply. Propagate `--safe`, `--open-pr`, and `--hard` to `/cure` when in scope. `/affinage` resumes when `/cure` returns to post replies.
 
-### Auto mode
+## Auto mode
 
 When invoked with `--auto --stake <floor>`:
 
@@ -246,7 +246,7 @@ The whole cure chain (cure → `/age --scope --auto` → up to the two-cure-pass
 
 If no findings meet the floor, skip the `/cure` dispatch, post replies for `Reviewer-rejected` + `Needs-investigation` items only, and exit with `status: ok / next: done`.
 
-### --hard mode
+## --hard mode
 
 `/affinage` does not fire the `/hard-cheese` gate. It propagates `--hard` forward to `/cure` so the gate can fire at the share-for-review boundary inside `/cure --hard`. See `skills/cure/SKILL.md` `--hard mode`.
 

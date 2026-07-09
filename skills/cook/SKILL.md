@@ -132,7 +132,7 @@ In every early-stop case, surface the report from the failing skill and tell the
 
 ### Failure handling inside cure
 
-See `skills/cure/SKILL.md` `### Auto mode` for cure's per-finding revert/defer behaviour. Cook does not duplicate the contract — cure owns it.
+See `skills/cure/SKILL.md` `## Auto mode` for cure's per-finding revert/defer behaviour. Cook does not duplicate the contract — cure owns it.
 
 ### Final report
 

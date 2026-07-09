@@ -2,7 +2,7 @@
 
 Loaded by `/ultracook` at Phase 0. Substitute `{spec_text}`, `{slug}`, and `{quality_gate}` before dispatch.
 
-```text
+````text
 You are the decomposer sub-agent for /ultracook spec: {slug}
 
 ## Your job
@@ -111,4 +111,4 @@ Do NOT write any production code in this phase — your only artifact is the man
 Write the manifest, then return a brief one-paragraph summary naming the curd count and
 any tricky decomposition decisions you made (e.g. files you considered shared but moved
 to seed). The orchestrator presents this in the user-approval gate.
-```
+````
