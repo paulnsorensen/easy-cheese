@@ -388,12 +388,23 @@ class TestWheypointProvenance:
         # parse and silently consume a wrong orientation.
         lines = _skill("wheypoint").splitlines()
         orient_i = next(
-            i for i, ln in enumerate(lines)
-            if ln.lstrip().startswith("<one-line orientation")
+            (
+                i
+                for i, ln in enumerate(lines)
+                if ln.lstrip().startswith("<one-line orientation")
+            ),
+            None,
         )
-        artifact_i = max(
+        assert orient_i is not None, (
+            "wheypoint schema must keep the `<one-line orientation` placeholder"
+        )
+        artifact_positions = [
             i for i, ln in enumerate(lines[:orient_i]) if ln.startswith("artifact:")
+        ]
+        assert artifact_positions, (
+            "wheypoint schema must document `artifact:` above the orientation line"
         )
+        artifact_i = max(artifact_positions)
         for key in self.PROVENANCE_KEYS:
             positions = [i for i, ln in enumerate(lines) if ln.startswith(key)]
             assert any(artifact_i < i < orient_i for i in positions), (
