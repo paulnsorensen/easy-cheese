@@ -15,6 +15,14 @@ allowed-tools: Read, Glob, mcp__tilth__tilth_read, mcp__tilth__tilth_list, Write
 
 - The conversation so far (the primary input).
 - Optional argument: a description of what the next session will focus on. When present, treat it as the lens and tailor the document to it. Drop state that does not serve that focus to a one-line pointer.
+- Optional verb `--join <slugA> <slugB>`: merge two existing handoff notes into one. Reads both notes from `.cheese/notes/` and writes a single merged note whose `parents:` lists both slugs.
+- Optional verb `--split`: fork the current thread into two resumable tracks. Writes two child notes, each with `parents: [<current-slug>]` and a distinct slug.
+
+```text
+/wheypoint                     -> one note with session/git/created auto-filled
+/wheypoint --join A B          -> one merged note, parents: [A, B]
+/wheypoint --split             -> two child notes, each parents: [<current>]
+```
 
 ## Flow
 
@@ -23,6 +31,25 @@ allowed-tools: Read, Glob, mcp__tilth__tilth_read, mcp__tilth__tilth_list, Write
 3. **Write the handoff document** to `.cheese/notes/<slug>.md` with the slug header (`## Handoff slug`) and body (`## Document`) below. When a focus argument was given, apply it as the lens throughout: emphasise state and decisions that serve the focus, and compress everything else to a one-line pointer.
 4. **Redact** secrets on the way out (`## Redaction`).
 5. **Point at resumption.** End by telling the user how to resume with `/cheese --continue <slug>` from the original repo, and include an absolute clickable path to the handoff note so the user can find it from any working directory.
+
+### `--join <slugA> <slugB>`
+
+Merge two interrupted threads into one resumable note.
+
+1. Read both source notes from `.cheese/notes/<slugA>.md` and `.cheese/notes/<slugB>.md`.
+2. Derive a merged slug that names the joined effort.
+3. Write ONE note to `.cheese/notes/<merged-slug>.md` with `parents: [<slugA>, <slugB>]` and the usual auto-filled provenance (`session:` / `git:` / `created:` from the live session).
+4. In `## Document`, consolidate both sources' Goal / State / Key decisions by **reference**, not re-paste (per `## Do not duplicate`): point at each source note by path and capture only the merged picture and any conflicts to reconcile.
+5. Point at resumption as in the default flow.
+
+### `--split`
+
+Fork the current thread into two parallel tracks.
+
+1. Take the current thread's slug as the parent (derive it as in step 1 of the default flow).
+2. Choose two distinct child slugs, one per track.
+3. Write TWO notes, `.cheese/notes/<child-a>.md` and `.cheese/notes/<child-b>.md`, each with `parents: [<current-slug>]`, its own auto-filled provenance, and a `## Document` scoped to that track's slice of the work.
+4. Point at resumption for each child so both tracks can be resumed independently.
 
 ## Handoff slug
 
@@ -33,10 +60,27 @@ status: ok | gated: <one-line decision> | halt: <one-line reason>
 next: mold | cook | press | age | cure | affinage | briesearch | culture | hold | tasks | done
 mode: single | parallel
 artifact: <path-to-richer-report, or PR ref (PR#<n> / URL) when next: affinage, else none>
+session: <harness>:<session-id>      # optional; auto-filled provenance
+git: <branch>@<short-sha>            # optional; auto-filled provenance
+created: <UTC ISO-8601>              # optional; auto-filled provenance
+parents: [<slug>, ...]               # optional; lineage (join => 2+, split-child => 1)
 <one-line orientation: where the session is and what is mid-flight>
 ```
 
 `mode:` is optional for backwards compatibility; omitted mode means `mode: single`. In `mode: single`, `next:` names the skill the cold reader should run, which is the machine-readable form of the suggested-skills section below. Use `done` only when the work is genuinely finished and the handoff is a record, not a baton. `/cheese --continue <slug>` scans `.cheese/notes/<slug>.md` and dispatches `next:` directly; `/cheese --continue <absolute-note-path>` reads that handoff file directly when the user is outside the original repo. When `next: affinage`, record the PR reference (`PR#<n>` or its URL) in `artifact:` so the resume dispatches `/affinage <pr>` explicitly rather than relying on branch auto-detection.
+
+### Provenance fields
+
+Four optional provenance fields sit between `artifact:` and the orientation line. Auto-fill each one from the live session; never take a user-supplied value. All four are optional and additive: a note carrying none of them is valid, and every consumer treats a pre-provenance note (none of these keys) as valid. Placement rule: the orientation line stays the first non-key line, so it must follow whichever of these fields are present.
+
+- **`session: <harness>:<session-id>`** — the current session's harness and id, read from the per-harness source map:
+  - **claude** — the newest `*.jsonl` in the encoded-cwd projects dir (`~/.claude/projects/<encoded-cwd>/`); its basename (minus `.jsonl`) is the session id.
+  - **codex** — the `payload.cwd` field in the rollout meta line of the active rollout log.
+  - **opencode** — the matching row in the `session` table.
+  - When the harness is unknown or no log is accessible, omit the field. `<speculative>` the newest-mtime claude heuristic can bind the wrong `*.jsonl` when several live sessions share one cwd; the field is optional so a wrong bind is hand-correctable.
+- **`git: <branch>@<short-sha>`** — the branch and short commit at capture time: the branch from `git status` and the short sha from `git log -1 --format=%h` (the `Bash(git status:*)` and `Bash(git log:*)` grants cover the reads). Omit outside a git repo.
+- **`created: <UTC ISO-8601>`** — the capture timestamp in UTC ISO-8601 (e.g. `2026-07-09T14:32:00Z`).
+- **`parents: [<slug>, ...]`** — lineage. Empty or absent for a fresh single-thread note. `--join` sets two or more source slugs; each `--split` child sets exactly the current slug.
 
 ### `status:` values
 
