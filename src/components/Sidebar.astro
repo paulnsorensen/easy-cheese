@@ -1,0 +1,14 @@
+---
+import Default from '@astrojs/starlight/components/Sidebar.astro';
+import { injectToc } from './sidebar-toc.mjs';
+
+// Mutation path is active: Default reads Astro.locals.starlightRoute.sidebar
+// internally, so splicing the h2 group in before rendering <Default />
+// propagates through the stock SidebarPersister/SidebarSublist chain.
+const { starlightRoute } = Astro.locals;
+const { sidebar, toc } = starlightRoute;
+
+starlightRoute.sidebar = injectToc(sidebar, toc?.items, (entry) => entry.isCurrent);
+---
+
+<Default />
