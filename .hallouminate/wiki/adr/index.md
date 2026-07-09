@@ -9,4 +9,5 @@
 - [skill-docs-single-page-001](./skill-docs-single-page-001.md) — ADR-001: Fold skill references into one docs page instead of separate sub-pages  [status: accepted]
 - [skill-docs-single-page-002](./skill-docs-single-page-002.md) — ADR-002: Left-nav heading TOC is h2-only, via a custom Starlight Sidebar override  [status: accepted]
 - [starlight-docs-cutover-001](./starlight-docs-cutover-001.md) — ADR: Starlight docs cutover
+- [wheypoint-provenance-schema-001](./wheypoint-provenance-schema-001.md) — ADR: wheypoint provenance as additive header fields with join/split verbs
 <!-- HALLOUMINATE:INDEX-END -->
