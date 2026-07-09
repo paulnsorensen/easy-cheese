@@ -334,6 +334,108 @@ class TestWheypointParallelHandoff:
 
 
 # ---------------------------------------------------------------------------
+# session-convergence-wheypoint — provenance header fields + join/split verbs.
+#
+# The four optional provenance fields (session/git/created/parents) are
+# additive and backward-compatible: a pre-provenance note stays valid, and the
+# orientation line stays the FIRST non-key line so /cheese --continue's
+# key-based parse is unaffected (spec acceptance #4/#5). These lock the
+# placement + optionality invariant and the join/split lineage cardinality
+# (acceptance #2/#3) against a silent reorder or a dropped contract clause.
+# ---------------------------------------------------------------------------
+
+
+def _handoff_schema_fence() -> list[str]:
+    """Return the canonical ordered field list — the header-schema block under
+    `## Handoff slug`, from its `status: ok | gated:` line through the
+    orientation placeholder — as its individual lines. Sliced by anchor rather
+    than by fence so it is insensitive to the surrounding code-fence syntax."""
+    lines = _skill("wheypoint").splitlines()
+    start = next(
+        (i for i, ln in enumerate(lines) if ln.startswith("status: ok | gated:")),
+        None,
+    )
+    if start is None:
+        raise AssertionError("wheypoint must carry the `status: ok | gated:` header schema")
+    end = next(
+        (
+            i
+            for i, ln in enumerate(lines[start:], start)
+            if ln.lstrip().startswith("<one-line orientation")
+        ),
+        None,
+    )
+    if end is None:
+        raise AssertionError("wheypoint header schema must end with the orientation line")
+    return lines[start : end + 1]
+
+
+class TestWheypointProvenance:
+    PROVENANCE_KEYS = ("session:", "git:", "created:", "parents:")
+
+    def test_schema_lists_all_provenance_fields(self) -> None:
+        fence = "\n".join(_handoff_schema_fence())
+        for key in self.PROVENANCE_KEYS:
+            assert key in fence, (
+                f"wheypoint header schema must document the provenance field `{key}`"
+            )
+
+    def test_provenance_fields_sit_between_artifact_and_orientation(self) -> None:
+        # The backward-compat linchpin: orientation stays the first non-key
+        # line, so every provenance field must appear after `artifact:` and
+        # before the orientation placeholder. A reorder pushing a provenance
+        # key below orientation would break /cheese --continue's key-based
+        # parse and silently consume a wrong orientation.
+        lines = _skill("wheypoint").splitlines()
+        orient_i = next(
+            i for i, ln in enumerate(lines)
+            if ln.lstrip().startswith("<one-line orientation")
+        )
+        artifact_i = max(
+            i for i, ln in enumerate(lines[:orient_i]) if ln.startswith("artifact:")
+        )
+        for key in self.PROVENANCE_KEYS:
+            positions = [i for i, ln in enumerate(lines) if ln.startswith(key)]
+            assert any(artifact_i < i < orient_i for i in positions), (
+                f"provenance field `{key}` must sit between artifact: and the "
+                f"orientation line (orientation stays the first non-key line)"
+            )
+
+    def test_provenance_documented_optional_and_backward_compatible(self) -> None:
+        body = _skill("wheypoint").lower()
+        # Scope the optionality check to the `### Provenance fields` block so
+        # it cannot be satisfied by an unrelated "optional" elsewhere in the
+        # file (the word appears many times outside the provenance section).
+        start = body.find("### provenance fields")
+        assert start != -1, "wheypoint must carry a `### Provenance fields` section"
+        end = body.find("\n### ", start + 1)
+        section = body[start:end] if end != -1 else body[start:]
+        assert "optional" in section, (
+            "provenance fields must be documented as optional in the "
+            "`### Provenance fields` section"
+        )
+        assert "pre-provenance" in body, (
+            "wheypoint must state pre-provenance notes (none of the new keys) stay valid"
+        )
+
+
+class TestWheypointJoinSplitVerbs:
+    def test_join_documented_with_both_parent_slugs(self) -> None:
+        body = _skill("wheypoint")
+        assert "--join" in body, "wheypoint must document the --join verb"
+        assert "parents: [<slugA>, <slugB>]" in body or "parents: [A, B]" in body, (
+            "--join must write one note whose parents lists both source slugs"
+        )
+
+    def test_split_documented_with_current_slug_as_parent(self) -> None:
+        body = _skill("wheypoint")
+        assert "--split" in body, "wheypoint must document the --split verb"
+        assert (
+            "parents: [<current-slug>]" in body or "parents: [<current>]" in body
+        ), "--split children must each be parented on the current slug"
+
+
+# ---------------------------------------------------------------------------
 # Wiring: install fallback list and README skill table
 # ---------------------------------------------------------------------------
 
