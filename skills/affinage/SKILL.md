@@ -63,7 +63,7 @@ The handoff blocks below are the portable contract; slash commands are host rend
 8. **Act or ask** — per §Handoff.
 9. **Draft non-cure replies, then gate before posting** (runs whenever grading produced these items, with or without `/cure`). **Never post blind** — posting requires the reply-approval gate (§Handoff) by default, or `--auto`. Draft each reply, then post approved ones via `python3 skills/affinage/scripts/affinage.pyz post-reply`:
    - **Reviewer-rejected items** → the pre-drafted push-back text from the affinage report.
-   - **Needs-investigation items** → do NOT post a bare acknowledgement. The reply must (a) name the specific evidence that would settle the claim — the regression test, throwaway prototype, or out-of-diff file to read — and (b) state that a follow-up will report the result. Before posting, **offer to run that investigation now**: a regression test via `/pasteurize`, or a grounded spike/prototype via `/brie-ground`. If run, post a reply carrying the actual outcome; if the user declines, post the explicit `"Needs <named test/prototype> to confirm — will follow up with the result."` note — never a blind "investigating".
+   - **Needs-investigation items** → do NOT post a bare acknowledgement. The reply must (a) name the specific evidence that would settle the claim — the regression test, throwaway prototype, or out-of-diff file to read — and (b) state that a follow-up will report the result. Before posting, **offer to run that investigation now**: a regression test via `/pasteurize`, or explore the out-of-diff evidence via `/briesearch`. If run, post a reply carrying the actual outcome; if the user declines, post the explicit `"Needs <named test/exploration> to confirm — will follow up with the result."` note — never a blind "investigating".
    - **CI-sourced findings** (`from-check:<job>` tag) and **fresh-review findings** (`from-age:<dimension>` tag) → no reply (no reviewer to notify).
 
 10. **Post-cure reply posting** (only when `/cure` ran). When `/cure` returns, read `.cheese/cure/pr-<n>.md`'s `### Applied` / `### Deferred` sections and post per-finding replies via `python3 skills/affinage/scripts/affinage.pyz post-reply`:
@@ -210,7 +210,7 @@ The "present all four severity options on every run, empty-set-resolves-to-`none
 **Reply-approval gate** — the single gate both Handoff branches use before any `post-reply` call:
 
 - **Post pushbacks only** *(recommended)* — post `Reviewer-rejected` drafts; hold `Needs-investigation` items for investigation.
-- **Investigate now, then post** — for each `Needs-investigation` item, run the follow-up test/prototype (`/pasteurize` for a regression test, `/brie-ground` for a grounded spike), then post a reply carrying the actual result.
+- **Investigate now, then post** — for each `Needs-investigation` item, run the follow-up investigation (`/pasteurize` for a regression test, `/briesearch` to explore the out-of-diff evidence), then post a reply carrying the actual result.
 - **Post all** — post every drafted push-back and the explicit `Needs-investigation` follow-up notes (naming the needed evidence) without running the investigation first.
 - **Skip posting** — leave the report for later; post nothing.
 - **Per-finding** — free-text pick of which drafts to post or investigate.
@@ -258,7 +258,7 @@ If no findings meet the floor, skip the `/cure` dispatch, post replies for `Revi
 - Grading is code-grounded, not reviewer-asserted. `CHANGES_REQUESTED` is metadata, not a severity bump.
 - Prefer fixing over pushing back. A valid, grounded nit whose fix is contained (`fix-cost-now: contained` — a few lines or a localized refactor) goes to `/cure` as a `Low` finding tagged `[from-comment:<id>]`; do not draft a push-back for it. Reserve `## Reviewer-rejected` for claims that are wrong/ungrounded or whose fix is a lot of work (`moderate`/`sprawling`/`structural`). See `../age/references/voice.md`.
 - Never auto-apply fixes from `/affinage` itself. Code fixes go through `/cure`; merge conflicts go through `/melt`.
-- Never post a GitHub reply without approval. Reply posting is gated by default (§Handoff reply-approval gate); only `--auto` posts autonomously. A `Needs-investigation` reply must name the follow-up test or prototype and offer to run it (`/pasteurize` or `/brie-ground`) before posting — never a blind acknowledgement.
+- Never post a GitHub reply without approval. Reply posting is gated by default (§Handoff reply-approval gate); only `--auto` posts autonomously. A `Needs-investigation` reply must name the follow-up test or exploration and offer to run it (`/pasteurize` or `/briesearch`) before posting — never a blind acknowledgement.
 - Fresh `/age` runs only on standalone invocations (no upstream `handoff_context`) and only when `--no-age` is absent. Chained runs never re-review the diff.
 - Merge conflicts are resolved through `/melt`, not by hand. `gh pr checkout` to materialise conflicts is allowed — it neither opens nor updates the PR. Pushing follows `/cure`'s push contract (see next rule).
 - `/affinage` never invokes `/gh` itself. The PR push happens inside `/cure` after a clean cure (push to the already-open PR by default; `--open-pr` opens a new one; `--safe` re-gates).
