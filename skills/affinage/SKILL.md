@@ -26,7 +26,7 @@ See `## Fresh-window review` for the detection rule and `## Merge-conflict resol
 Flags:
 
 - `--auto --stake <floor>` — autonomous mode. `<floor>` is `blocker`, `high`, `medium+`, or `all` (same semantics as `/cure`). Skips the selection gate, dispatches `/cure --auto --stake <floor>`, posts all replies without prompting.
-- `--safe` — re-introduce the gates the autonomous default skips: the cure-selection gate, the reply-only gate, and the merge-conflict confirmation. Use it when you want to choose before anything is fixed, replied to, or resolved.
+- `--safe` — also gate the cure-selection and merge-conflict-resolution steps (which otherwise run autonomously by default). Reply posting is **gated by default regardless of this flag** — only `--auto` posts without prompting. Use `--safe` when you also want to choose before anything is fixed or a conflict is resolved.
 - `--open-pr` — propagate to `/cure` so a clean cure may open a *new* PR when none exists (otherwise `/cure` only pushes an already-open one).
 - `--hard` — propagated metacognitive-gate flag. `/affinage` does not fire the gate; passes `--hard` forward to `/cure` at handoff.
 - `--full` — un-collapses `## Low` when ≥10 low-severity findings exist (mirrors `/age --full`).
@@ -61,9 +61,9 @@ The handoff blocks below are the portable contract; slash commands are host rend
      - `## Reviewer-rejected` only when the claim is **wrong or ungrounded** (the code is already correct, the reviewer misread it, or there is no real improvement) OR is valid but **a lot of follow-up work** (`fix-cost-now: moderate`/`sprawling` or `fix-cost-later: structural` — a refactor or scope expansion beyond this PR). Reject the wrong ones; defer the expensive ones.
 7. **Write report** to `.cheese/affinage/pr-<n>.md` with the four-line handoff slug at the top, then the age-format body plus the two extra sections. See `## Output` below.
 8. **Act or ask** — per §Handoff.
-9. **Post non-cure replies** (runs whenever grading produced these items, with or without `/cure`). Post via `python3 skills/affinage/scripts/affinage.pyz post-reply`:
-   - **Reviewer-rejected items** → post the pre-drafted push-back text from the affinage report.
-   - **Needs-investigation items** → post `"Human investigating — will follow up."`
+9. **Draft non-cure replies, then gate before posting** (runs whenever grading produced these items, with or without `/cure`). **Never post blind** — posting requires the reply-approval gate (§Handoff) by default, or `--auto`. Draft each reply, then post approved ones via `python3 skills/affinage/scripts/affinage.pyz post-reply`:
+   - **Reviewer-rejected items** → the pre-drafted push-back text from the affinage report.
+   - **Needs-investigation items** → do NOT post a bare acknowledgement. The reply must (a) name the specific evidence that would settle the claim — the regression test, throwaway prototype, or out-of-diff file to read — and (b) state that a follow-up will report the result. Before posting, **offer to run that investigation now**: a regression test via `/pasteurize`, or explore the out-of-diff evidence via `/briesearch`. If run, post a reply carrying the actual outcome; if the user declines, post the explicit `"Needs <named test/exploration> to confirm — will follow up with the result."` note — never a blind "investigating".
    - **CI-sourced findings** (`from-check:<job>` tag) and **fresh-review findings** (`from-age:<dimension>` tag) → no reply (no reviewer to notify).
 
 10. **Post-cure reply posting** (only when `/cure` ran). When `/cure` returns, read `.cheese/cure/pr-<n>.md`'s `### Applied` / `### Deferred` sections and post per-finding replies via `python3 skills/affinage/scripts/affinage.pyz post-reply`:
@@ -178,7 +178,7 @@ artifact: <path-to-prior-cure-or-press-report-if-any>
 <certain | speculating | don't know> — <one-line justification>
 
 ## Next step
-Auto-fixing the recommended set via `/cure` and posting the drafted replies (or, on a reason to ask / `--safe`, the selection prompt rendered inline — pick findings to cure or `none` to stop).
+Auto-fixing the recommended set via `/cure`; drafted replies are held for the reply-approval gate before posting (`--auto` posts directly). On a reason to ask / `--safe`, the cure-selection prompt renders inline — pick findings to cure or `none` to stop.
 ```
 
 Empty severity sections are omitted entirely. `## Needs-investigation` and `## Reviewer-rejected` are omitted when no items land there.
@@ -193,7 +193,7 @@ Per-finding `confidence:` uses the voice-kernel scale (`../age/references/voice.
 
 After the report lands, affinage acts by default and asks only on a genuine reason (a sprawling/structural fix in the recommended set, conflicting findings) or under `--safe` (Flow step 8). What it acts on depends on whether any severity-section finding exists.
 
-**When at least one severity-section finding exists (any severity, including `Low`)** — compute the recommended composite (`all-medium, cheap`). With no reason to ask and no `--safe`: announce the one-line selection, post the drafted non-cure replies (Flow step 9), dispatch `/cure` (below), and post the cure-dependent replies (step 10) on return. On a reason to ask or `--safe`: render the cure-selection table inline (per `../cure/references/selection.md`) and ask via `../cheese/references/handoff-gate.md`, pre-selecting the recommended composite and flagging heavy rows. Lead with the recommended composite, then present the four severity-floor options below it, in the same most-inclusive-to-least order, so the gate is predictable across every run:
+**When at least one severity-section finding exists (any severity, including `Low`)** — compute the recommended composite (`all-medium, cheap`). With no reason to ask and no `--safe`: announce the one-line selection, dispatch `/cure` (below), then render the **reply-approval gate** before posting the non-cure replies (Flow step 9) and the cure-dependent replies (step 10) — never post blind. `--auto` posts without the gate (§Auto mode). On a reason to ask or `--safe`: render the cure-selection table inline (per `../cure/references/selection.md`) and ask via `../cheese/references/handoff-gate.md`, pre-selecting the recommended composite and flagging heavy rows. Lead with the recommended composite, then present the four severity-floor options below it, in the same most-inclusive-to-least order, so the gate is predictable across every run:
 
 - The five severity-floor options (recommended `all-medium, cheap`, then `all`, `all-medium`, `all-high`, `all-blocker`) are exactly age's — see [`../age/SKILL.md`](../age/SKILL.md) § Selection gate for their labels and semantics.
 
@@ -205,14 +205,17 @@ Then offer the non-floor options last:
 
 The "present all four severity options on every run, empty-set-resolves-to-`none`" rule is age's — see [`../age/SKILL.md`](../age/SKILL.md) § Selection gate.
 
-**When no severity-section finding exists but `Reviewer-rejected` or `Needs-investigation` has items** — `/cure` has nothing to act on, so skip it. By default, post all drafted replies (Flow step 9) and exit. Under `--safe`, render a reply-only gate first:
+**When no severity-section finding exists but `Reviewer-rejected` or `Needs-investigation` has items** — `/cure` has nothing to act on, so skip it. Posting is gated by default; render the **reply-approval gate** (below) and post nothing until the user chooses. Only `--auto` posts without this gate.
 
-- **Post all** *(recommended)* — post every drafted push-back and human-investigating note.
-- **Post pushbacks only** — post `Reviewer-rejected` drafts; skip `Needs-investigation` notices.
+**Reply-approval gate** — the single gate both Handoff branches use before any `post-reply` call:
+
+- **Post pushbacks only** *(recommended)* — post `Reviewer-rejected` drafts; hold `Needs-investigation` items for investigation.
+- **Investigate now, then post** — for each `Needs-investigation` item, run the follow-up investigation (`/pasteurize` for a regression test, `/briesearch` to explore the out-of-diff evidence), then post a reply carrying the actual result.
+- **Post all** — post every drafted push-back and the explicit `Needs-investigation` follow-up notes (naming the needed evidence) without running the investigation first.
 - **Skip posting** — leave the report for later; post nothing.
-- **Per-finding** — free-text pick of which drafts to post.
+- **Per-finding** — free-text pick of which drafts to post or investigate.
 
-On the selection (or the default post-all), post via Flow step 9 and exit with `status: ok / next: done` — see `## Auto mode` § "no findings meet the floor" for the auto path.
+After the selection, post the approved replies via Flow step 9 and exit with `status: ok / next: done` — see `## Auto mode` § "no findings meet the floor" for the auto path.
 
 **Slug `next:` values.** Write `next: cure` when at least one finding meets the `medium+` floor (medium-or-above, or a cheap contained-fix low). Write `next: done` when no severity-section finding exists or all meeting items are empty-selection after floor resolution.
 
@@ -239,7 +242,7 @@ When invoked with `--auto --stake <floor>`:
 - Dispatch `/cure --auto --stake <floor>`.
 - After `/cure --auto` and its downstream `/age --scope --auto` chain settle, post replies for the originally graded items only. Do NOT re-grade for findings discovered by `/age --scope`.
 - Reviewer-rejected items: post the pre-drafted push-back.
-- Needs-investigation items: post the human-investigating reply.
+- Needs-investigation items: post the explicit follow-up note naming the evidence that would settle the claim (`"Needs <named test/prototype> to confirm — will follow up with the result."`). Auto mode does not pause to run the spike; it posts the honest follow-up note, never a blind acknowledgement.
 - `/affinage` does not invoke `/gh` itself — push contract is in §Rules.
 
 The whole cure chain (cure → `/age --scope --auto` → up to the two-cure-pass cap) must run in the parent affinage context so the post-cure reply step still has the original graded findings (slug, ids, `from-comment:<id>` tags, drafted push-back text) in memory. Spawning the cure chain in a sub-agent breaks reply posting — do not.
@@ -255,6 +258,7 @@ If no findings meet the floor, skip the `/cure` dispatch, post replies for `Revi
 - Grading is code-grounded, not reviewer-asserted. `CHANGES_REQUESTED` is metadata, not a severity bump.
 - Prefer fixing over pushing back. A valid, grounded nit whose fix is contained (`fix-cost-now: contained` — a few lines or a localized refactor) goes to `/cure` as a `Low` finding tagged `[from-comment:<id>]`; do not draft a push-back for it. Reserve `## Reviewer-rejected` for claims that are wrong/ungrounded or whose fix is a lot of work (`moderate`/`sprawling`/`structural`). See `../age/references/voice.md`.
 - Never auto-apply fixes from `/affinage` itself. Code fixes go through `/cure`; merge conflicts go through `/melt`.
+- Never post a GitHub reply without approval. Reply posting is gated by default (§Handoff reply-approval gate); only `--auto` posts autonomously. A `Needs-investigation` reply must name the follow-up test or exploration and offer to run it (`/pasteurize` or `/briesearch`) before posting — never a blind acknowledgement.
 - Fresh `/age` runs only on standalone invocations (no upstream `handoff_context`) and only when `--no-age` is absent. Chained runs never re-review the diff.
 - Merge conflicts are resolved through `/melt`, not by hand. `gh pr checkout` to materialise conflicts is allowed — it neither opens nor updates the PR. Pushing follows `/cure`'s push contract (see next rule).
 - `/affinage` never invokes `/gh` itself. The PR push happens inside `/cure` after a clean cure (push to the already-open PR by default; `--open-pr` opens a new one; `--safe` re-gates).
