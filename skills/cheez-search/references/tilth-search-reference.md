@@ -3,10 +3,10 @@
 Detailed invocation shapes, output format, and per-kind parameter reference.
 For which kind to pick, see the **Choose your search kind** table in `SKILL.md`.
 
-All examples omit `root`: every tilth tool anchors relative paths and `scope`
-against it (your absolute checkout directory) and refuses a relative path
-without it — the examples' relative `scope` values assume it is set. Omit
-`scope` to search the whole checkout; pass it only to narrow to a subdirectory.
+All examples omit `cwd`: every tilth tool requires it (your absolute checkout
+directory), but the Claude Code hook injects it automatically — set it only on
+harnesses without the hook. There is no `root` parameter. Omit `scope` to
+search the whole checkout; pass it only to narrow to a subdirectory.
 
 ---
 
