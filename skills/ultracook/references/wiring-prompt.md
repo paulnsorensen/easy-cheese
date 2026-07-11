@@ -2,7 +2,7 @@
 
 Loaded by `/ultracook` at Phase 4. Substitute `{id}`, `{slug}`, `{type}`, `{file}`, `{description}`, and `{spec_summary}` before dispatch.
 
-```text
+````text
 You are performing integration wiring task: {id} for spec {slug}
 
 ## Task
@@ -50,4 +50,4 @@ artifact: <path-to-richer-report-if-any>
 - Push or create PRs (the orchestrator handles that).
 - Chain forward (the orchestrator owns the chain).
 - Retry on failure — write the halt and return; the orchestrator decides retry policy.
-```
+````

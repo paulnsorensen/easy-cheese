@@ -12,3 +12,5 @@
 [[repository]]
 name = "easy-cheese"
 path = "."
+corpus_paths = ["skills"]
+corpus_globs = ["**/*.md"]

@@ -21,7 +21,7 @@ Press may add or strengthen tests and make tiny corrective fixes only when a tes
 5. **Corrective fixes** — only for defects the hardening tests expose. No new behaviour.
 6. **Run checks** — narrowest useful tests, then relevant wider gates already in the project.
 7. **Report** — write `.cheese/press/<slug>.md` (slug carried from `/cook`, or derived from branch/task) and print the path. Mark readiness: `ready for /age`, `follow-up recommended`, or `blocked`.
-8. **Hand off** — in manual mode, prompt the next step via the shared handoff gate (see `## Handoff` below); in `--auto` mode, chain forward per `### Auto mode`.
+8. **Hand off** — in manual mode, prompt the next step via the shared handoff gate (see `## Handoff` below); in `--auto` mode, chain forward per `## Auto mode`.
 
 ## Preferred tools and fallbacks
 
@@ -100,7 +100,7 @@ After the press report is on disk, ask via the shared handoff gate in [`../chees
 
 Pre-select **Review the diff** when readiness is `ready for /age` or `follow-up recommended`. If the report is `blocked`, do not pre-select anything (and do not pre-select **Ship it**); the user decides whether to fix or escalate. After a non-stop selection, run the selected command immediately.
 
-### Auto mode
+## Auto mode
 
 When invoked with `--auto` (propagated from `/cook --auto`):
 

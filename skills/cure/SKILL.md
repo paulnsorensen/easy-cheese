@@ -141,11 +141,11 @@ Pre-select **Re-review the touched code** when any applied fix touched logic out
 
 - **Interactive `/cure --hard`:** the gate fires at the share-for-review boundary — the PR push. In the default (no `--safe`) path, fire `/hard-cheese <slug>` *before* the autonomous push and proceed only on exit `0`. Under `--safe`, fire it when the user selects the share-for-review option (the **Ship it — open or update the PR** label, which dispatches `/gh`). Either way, proceed only on exit `0`. If the gate exits non-zero (`FAILED` status — cap exhausted), surface the artifact path and abort the push; the user must improve their understanding before sharing for review.
 - **Not sharing for review** (no open PR and no `--open-pr`, or under `--safe` picking **Re-review the touched code** / **Checkpoint & stop** / **Stop**) does *not* fire the gate. Re-review and pausing do not put code in front of readers.
-- **Auto-mode puncture** — see the clause in `### Auto mode` below. The auto-mode puncture is the single sanctioned point at which `--hard` overrides `--auto`'s skip-handoff semantics.
+- **Auto-mode puncture** — see the clause in `## Auto mode` below. The auto-mode puncture is the single sanctioned point at which `--hard` overrides `--auto`'s skip-handoff semantics.
 
 The gate's mechanism (SOLO-graded fresh-context judge, Socratic retry, fail-open on judge error) lives in `skills/hard-cheese/SKILL.md`. The full composition matrix lives in `../hard-cheese/references/composition.md`.
 
-### Auto mode
+## Auto mode
 
 When invoked with `--auto --stake <floor>`:
 

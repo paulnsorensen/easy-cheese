@@ -31,7 +31,7 @@ If no LSP is installed for the language, or the file is in a broken / incomplete
 
 ## When Serena beats broad read backends for symbol-table reads (if your harness has it)
 
-Serena ([oraios/serena](https://github.com/oraios/serena)) is an LSP-driven MCP exposing LSP queries as named tools. When Serena is configured (`.serena/project.yml` present) and the read is symbol-shaped, the **calling workflow skill** should route directly to Serena rather than entering `/cheez-read`:
+Serena ([oraios/serena](https://github.com/oraios/serena)) is an LSP-driven MCP exposing LSP queries as named tools. When Serena is configured (`.serena/project.yml` present) and the read is symbol-shaped, the **calling workflow skill** should route directly to Serena rather than entering `/cheez-read` (*should*, not *may*: a symbol-shaped read via LSP is strictly cheaper and risk-free, unlike the edit case in cheez-write's routing):
 
 | Goal | Serena tool | Why |
 |------|-------------|-----|

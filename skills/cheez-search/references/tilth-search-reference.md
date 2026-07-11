@@ -19,11 +19,11 @@ tilth_search(queries: [{query: "handleAuth"}], scope: "src/")
 
 **Output:**
 ```
-# Search: "handleAuth" in src/ - 6 matches (2 definitions, 4 usages)
+# Search: "handleAuth" in src/ — 6 matches (2 definitions, 4 usages)
 
 ## src/auth.ts:44-89 [definition]
   [24-42]  fn validateToken(token: string)
--> [44-89]  export fn handleAuth(req, res, next)
+→ [44-89]  export fn handleAuth(req, res, next)
   [91-120] fn refreshSession(req, res)
 
   44 | export function handleAuth(req, res, next) {
@@ -37,7 +37,7 @@ tilth_search(queries: [{query: "handleAuth"}], scope: "src/")
   refreshSession  src/auth.ts:91-120  fn refreshSession(req, res)
 
 ## src/routes/api.ts:34 [usage]
--> [34]   router.use('/api/protected/*', handleAuth);
+→ [34]   router.use('/api/protected/*', handleAuth);
 ```
 
 **Key features:**
