@@ -1,4 +1,4 @@
-"""CLI wrapper around shared/scripts/paths.py — slugify, validate, existing, resolve.
+"""CLI wrapper around shared/scripts/paths.py — slugify, validate, existing, resolve, list.
 
 Subcommands:
 
@@ -11,8 +11,14 @@ Subcommands:
     paths_cli.py existing --slug demo --phase age --json
     -> ["<root>/age/demo.md"]
 
+    paths_cli.py existing --slug demo --phase specs --json
+    -> ["<xdg-corpus>/specs/demo.md"]   (durable phases route to the XDG corpus)
+
     paths_cli.py resolve --slug demo
     -> {"matches": [...], "fallback_roots": [...]}
+
+    paths_cli.py list --phase specs --json
+    -> [{"slug": "demo", "path": "<xdg-corpus>/specs/demo.md"}, ...]
 
 Stdlib-only; delegates all rules to paths.py so the regex + phase list stay
 single-source.
@@ -53,6 +59,21 @@ def _cmd_existing(args: argparse.Namespace) -> None:
     cli.emit(items, limit=args.limit, full=args.full, json_mode=args.json_mode)
 
 
+def _cmd_list(args: argparse.Namespace) -> None:
+    if args.phase not in paths.PHASES:
+        raise cli.CliError(
+            f"unknown phase {args.phase!r}; expected one of {sorted(paths.PHASES)}"
+        )
+    try:
+        entries = paths.list_artifacts(args.phase, repo_root=args.repo_root)
+    except ValueError as exc:
+        raise cli.CliError(str(exc)) from exc
+    if args.json_mode:
+        cli.emit(entries, json_mode=True)
+    else:
+        cli.emit([e["slug"] for e in entries], limit=args.limit, full=args.full)
+
+
 def _cmd_resolve(args: argparse.Namespace) -> None:
     err = paths.validate_slug(args.slug)
     if err is not None:
@@ -83,7 +104,11 @@ def _setup(parser: argparse.ArgumentParser) -> None:
     )
     existing.add_argument("--slug", required=True)
     existing.add_argument("--phase", required=True, help=f"one of {sorted(paths.PHASES)}")
-    existing.add_argument("--root", default=".cheese", help="artifact root (default: .cheese)")
+    existing.add_argument(
+        "--root",
+        default=None,
+        help="artifact root override (default: phase-appropriate -- XDG corpus for durable phases, .cheese/ otherwise)",
+    )
     existing.add_argument("--limit", type=int, default=None, help="cap list length")
     existing.set_defaults(func=_cmd_existing)
 
@@ -102,6 +127,20 @@ def _setup(parser: argparse.ArgumentParser) -> None:
         help="repo root for .cheese/ (default: git toplevel or cwd)",
     )
     resolve.set_defaults(func=_cmd_resolve)
+
+    list_cmd = sub.add_parser(
+        "list",
+        help="enumerate slugs (and paths) for a phase's artifacts on disk",
+    )
+    list_cmd.add_argument("--phase", required=True, help=f"one of {sorted(paths.PHASES)}")
+    list_cmd.add_argument(
+        "--repo-root",
+        dest="repo_root",
+        default=None,
+        help="repo root for .cheese/ (default: git toplevel or cwd)",
+    )
+    list_cmd.add_argument("--limit", type=int, default=None, help="cap list length")
+    list_cmd.set_defaults(func=_cmd_list)
 
 
 if __name__ == "__main__":

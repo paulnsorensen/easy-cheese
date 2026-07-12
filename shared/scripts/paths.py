@@ -283,15 +283,22 @@ def parse_artifact_path(path: Path | str) -> tuple[str, str]:
 
 
 def existing_artifacts(
-    slug: str, *, root: Path | str = ".cheese", phases: tuple[str, ...] = CHAIN_PHASES
+    slug: str, *, root: Path | str | None = None, phases: tuple[str, ...] = CHAIN_PHASES
 ) -> dict[str, Path]:
-    """Return ``{phase: path}`` for each chain-phase artifact present on disk."""
+    """Return ``{phase: path}`` for each phase's artifact present on disk.
+
+    With ``root`` omitted, each phase routes through ``default_root_for_phase``
+    (durable phases -> the XDG corpus, everything else -> ``.cheese/``), matching
+    ``resolve_slug``/``artifact_path``. Pass ``root`` to pin every phase to that
+    one location instead (e.g. a pytest ``tmp_path``), overriding the routing.
+    """
     err = validate_slug(slug)
     if err is not None:
         raise ValueError(err)
     found: dict[str, Path] = {}
     for phase in phases:
-        candidate = Path(root) / phase_dir(phase) / f"{slug}.md"
+        base = Path(root) if root is not None else default_root_for_phase(phase)
+        candidate = base / phase_dir(phase) / f"{slug}.md"
         if candidate.is_file():
             found[phase] = candidate
     return found
@@ -423,3 +430,17 @@ def resolve_slug(
         return {"matches": fuzzy, "fallback_roots": []}
 
     return {"matches": [], "fallback_roots": sorted(set(searched_roots))}
+
+
+def list_artifacts(phase: str, *, repo_root: Path | str | None = None) -> list[dict[str, str]]:
+    """Return ``[{"slug": stem, "path": abs_path}, ...]`` for a phase's artifacts.
+
+    Reuses ``_phase_entries``/``_phase_dirpath`` (also driving ``resolve_slug``) so
+    durable phases (specs, research) list from the XDG corpus and transient phases
+    list from ``.cheese/`` -- one routing source, not a second copy of it.
+    """
+    if phase not in PHASES:
+        raise ValueError(f"unknown phase {phase!r}; expected one of {sorted(PHASES)}")
+    repo = _resolve_repo_root(repo_root)
+    entries = sorted(_phase_entries(phase, repo), key=lambda e: (e[0], str(e[1])))
+    return [{"slug": stem, "path": str(path)} for stem, path in entries]
