@@ -226,7 +226,7 @@ gh skill install paulnsorensen/easy-cheese cook
 Pin to a specific release tag or commit SHA for reproducibility:
 
 ```sh
-gh skill install paulnsorensen/easy-cheese cook@v1.2.0
+gh skill install paulnsorensen/easy-cheese cook@v0.10.1
 gh skill install paulnsorensen/easy-cheese cook@abc123def
 ```
 

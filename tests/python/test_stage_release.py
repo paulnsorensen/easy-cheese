@@ -107,3 +107,19 @@ def test_moved_cheese_kernel_docs_ship_with_zero_vendoring(staged: Path) -> None
     for name in _MOVED_DOC_NAMES:
         assert (refs_dir / f"{name}.md").is_file(), f"{name}.md missing from staged skills/cheese/references/"
     assert not (staged / "shared").exists()
+
+
+def test_release_workflow_validates_staged_tree_after_transformations() -> None:
+    workflow = (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    stage = workflow.index("python3 scripts/stage_release.py")
+    validate = workflow.index("gh skill publish --dry-run")
+    publish = workflow.index("git init -q")
+
+    assert stage < validate < publish
+    assert "working-directory: ${{ runner.temp }}/release" in workflow[stage:validate]
+
+
+def test_release_workflow_pins_checkout_to_v6_0_2() -> None:
+    workflow = (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+
+    assert "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2" in workflow

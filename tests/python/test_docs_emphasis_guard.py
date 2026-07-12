@@ -14,6 +14,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 FENCE_RE = re.compile(r"```.*?```", re.S)
@@ -234,7 +236,9 @@ def test_harness_portability_reference_covers_the_portability_contract():
     assert "repo-local" in body and "bundled" in body and "environment variable" in body
     assert "sub-agent dispatch" in body
     assert "Anthropic Claude Code: `Agent(...)`" in body
-    assert "Codex: `multi_agent_v1.spawn_agent`" in body
+    assert "Codex: host-exposed sub-agent capability" in body
+    assert "`collaboration.spawn_agent`" in body
+    assert "multi_agent_v1.spawn_agent" not in body
     assert "OMP: `task(...)`" in body
     assert "OMP / Codex" not in body and "Codex-style" not in body
     assert "GitHub operations" in body
@@ -243,3 +247,110 @@ def test_harness_portability_reference_covers_the_portability_contract():
     assert "Handoff transitions" in body
     assert "Slash commands are presentation, not the control model." in body
     assert "status" in body and "next" in body and "artifact" in body and "explicit dispatch data" in body
+
+
+def test_question_routing_is_native_first_and_lossless():
+    portability = (REPO_ROOT / "skills/cheese/references/harness-portability.md").read_text(
+        encoding="utf-8"
+    )
+    gate = (REPO_ROOT / "skills/cheese/references/handoff-gate.md").read_text(encoding="utf-8")
+
+    # Native structured controls stay first-class on both primary harnesses.
+    assert "Claude Code: `AskUserQuestion`" in portability
+    assert "Codex: `request_user_input`" in portability
+    assert "active collaboration mode permits it" in portability
+    assert "richest callable structured question primitive" in portability
+
+    # Routing discovers the callable primitive and its live advertised capacities.
+    for body in (portability, gate):
+        assert "callable" in body
+        assert "advertised question and option capacities" in body
+    assert "active tool list and current collaboration mode both allow it" in gate
+    assert "capacities advertised by that callable primitive" in gate
+
+    # A four-option gate is conditional on the active schema, never a Codex-wide limit.
+    for body in (portability, gate):
+        assert "If an active" in body
+        assert "2-3 explicit choices" in body
+        assert "four-option" in body
+        assert "2-3 explicit-choice limit" not in body
+
+    # Every rendering preserves the semantic decision without dropping fidelity.
+    assert "faithfully encode the complete decision" in portability
+    assert "limits cannot represent every action" in portability
+    assert "lossless numbered-text fallback" in portability
+    assert "Never merge, hide, or drop actions" in portability
+    for required in (
+        "recommended choice",
+        "every option's effect or tradeoff",
+        "free-form `Other`",
+        "immediate execution",
+    ):
+        assert required in portability
+    assert "faithfully encode every option" in gate
+    assert "Never merge or drop actions" in gate
+    assert "fallback must enumerate every option" in gate
+    assert "free-form `Other` path" in gate
+    assert "execute that in-skill action immediately" in gate
+    assert "immediately enter that skill" in gate
+
+
+@pytest.mark.parametrize(
+    "skill",
+    (
+        "affinage",
+        "age",
+        "cheese",
+        "cook",
+        "culture",
+        "cure",
+        "melt",
+        "mold",
+        "pasteurize",
+        "press",
+    ),
+)
+def test_core_workflow_question_sites_reference_shared_handoff_gate(skill: str):
+    body = (REPO_ROOT / f"skills/{skill}/SKILL.md").read_text(encoding="utf-8")
+
+    assert "handoff-gate.md" in body
+
+
+def test_core_cheese_questions_use_the_shared_handoff_gate():
+    cheese = (REPO_ROOT / "skills/cheese/SKILL.md").read_text(encoding="utf-8")
+
+    assert "ask one clarifying question through the host routing guide" in cheese
+    assert "references/handoff-gate.md" in cheese
+    assert "Tier 3 blocks on a single targeted host-routed question" in cheese
+    assert "With `--safe`, issue a handoff gate" in cheese
+    assert "cross-harness post-selection dispatch contract" in cheese
+    assert "Codex-safe" not in cheese
+
+
+def test_wheypoint_git_provenance_is_capability_based_and_optional():
+    body = (REPO_ROOT / "skills/wheypoint/SKILL.md").read_text(encoding="utf-8")
+
+    assert "callable, read-only git inspection capability" in body
+    assert "git status --short --branch" in body
+    assert "git rev-parse --short HEAD" in body
+    assert "branch and short commit" in body
+    assert "Omit the field when git inspection is unavailable" in body
+    assert "Bash(git" not in body
+    assert "grant" not in body.lower()
+
+
+def test_router_and_wheypoint_do_not_assume_claude_native_tools():
+    for relative in ("skills/cheese/SKILL.md", "skills/wheypoint/SKILL.md"):
+        frontmatter = (REPO_ROOT / relative).read_text(encoding="utf-8").split("---", 2)[1]
+        for claude_tool in ("AskUserQuestion", "Read", "Glob", "Task", "Agent"):
+            assert claude_tool not in frontmatter, f"{relative} assumes {claude_tool}"
+
+
+def test_ultracook_spawn_reference_requires_fresh_context_or_halts():
+    body = (REPO_ROOT / "skills/ultracook/references/spawn-primitive-reference.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'fork_turns: "none"' in body
+    assert "halt `/ultracook` and recommend `/cook --auto`" in body
+    assert "same context) instead" not in body

@@ -2,7 +2,6 @@
 name: cheese
 description: Route any dropped-in input — idea, spec path, file path, PR or issue, stack trace, bug report, or bare `/cheese` — to the right workflow skill. Use as the unified entry point — phrases include "/cheese", "what should I do with this", "help me get started", "route this", or any opening message that does not already name a downstream skill.
 license: MIT
-allowed-tools: Skill, Task, Agent, AskUserQuestion, Read, Glob, mcp__tilth__tilth_read, mcp__tilth__tilth_search, mcp__tilth__tilth_list, Bash(gh pr view:*), Bash(gh issue view:*)
 ---
 
 # /cheese
@@ -38,7 +37,7 @@ If `$ARGUMENTS` is missing entirely and there is no recent context to lean on, a
 6. **Self-check** — run the coherence questions in `references/coherence-check.md`. If any fails, downgrade to `clarify` (tier 3) or `research`.
 7. **Dispatch** — without `--safe`, run the chosen skill immediately with its exact dispatch command and context packet, in the same turn as the announce. With `--safe`, issue a handoff gate per [`references/handoff-gate.md`](references/handoff-gate.md) (recommended target pre-selected, at least one alternative, `Stop`) and wait for the user's selection before dispatching.
 
-`/cheese` is a router, not a worker — it never edits files, runs tests, or opens PRs; the frontmatter `allowed-tools` grant (read, search, dispatch — no write tools) backs this. The sole exception: it invokes `/mold`'s agent-invoked mini-spec mode in tier 1 when `/cook --auto` needs a spec first — that write happens inside `/mold`'s own skill scope, under `/mold`'s tool grants, not the router's.
+`/cheese` is a router, not a worker: it never edits files, runs tests, or opens PRs. Use only the host's read, search, and dispatch capabilities. The sole exception is invoking `/mold`'s agent-invoked mini-spec mode in tier 1 when `/cook --auto` needs a spec first; that write happens inside `/mold`'s own capability scope, not the router's.
 
 Portability reference: [`references/harness-portability.md`](references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
 The handoff blocks below are the portable contract; slash commands are host renderings, not the control model.
@@ -155,4 +154,4 @@ Pre-select only the highest-confidence target. Without `--safe`, surface the tar
 
 - `references/classification.md` — intent shapes, signals, disambiguation rules.
 - `references/coherence-check.md` — pre-dispatch self-checks that downgrade misroutes.
-- [`references/handoff-gate.md`](references/handoff-gate.md) — Codex-safe post-selection dispatch contract (shared across workflow skills).
+- [`references/handoff-gate.md`](references/handoff-gate.md) — cross-harness post-selection dispatch contract (shared across workflow skills).
