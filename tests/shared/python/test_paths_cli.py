@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 import importlib.util
 import json
 import subprocess
@@ -29,11 +31,12 @@ def paths_cli_mod() -> ModuleType:
     return module
 
 
-def _run(*args: str) -> subprocess.CompletedProcess[str]:
+def _run(*args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, str(PATHS_CLI), *args],
         capture_output=True,
         text=True,
+        env=env,
     )
 
 
@@ -180,6 +183,100 @@ class TestExisting:
 
     def test_missing_required_args_exits_two(self) -> None:
         result = _run("existing")
+        assert result.returncode == 2
+
+    def test_finds_durable_spec_without_explicit_root(self, tmp_path: Path) -> None:
+        # Regression for #249: default routing must reach the XDG durable corpus
+        # for durable phases (specs), not just ".cheese/" like transient phases.
+        home = tmp_path / "corpus-home"
+        spec = home / "owner-repo" / "specs" / "demo.md"
+        spec.parent.mkdir(parents=True)
+        spec.write_text("body", encoding="utf-8")
+        env = dict(os.environ)
+        env["EASY_CHEESE_HOME"] = str(home)
+        env["EASY_CHEESE_PROJECT"] = "owner-repo"
+
+        result = _run("existing", "--slug", "demo", "--phase", "specs", "--json", env=env)
+        assert result.returncode == 0, result.stderr
+        assert json.loads(result.stdout) == [str(spec)]
+
+    def test_explicit_root_still_overrides_durable_routing(self, tmp_path: Path) -> None:
+        # An explicit --root pins the lookup there even for a durable phase,
+        # preserving the override contract callers rely on.
+        home = tmp_path / "corpus-home"
+        corpus_spec = home / "owner-repo" / "specs" / "demo.md"
+        corpus_spec.parent.mkdir(parents=True)
+        corpus_spec.write_text("body", encoding="utf-8")
+        override_root = tmp_path / "custom-root"
+        override_spec = override_root / "specs" / "demo.md"
+        override_spec.parent.mkdir(parents=True)
+        override_spec.write_text("body", encoding="utf-8")
+        env = dict(os.environ)
+        env["EASY_CHEESE_HOME"] = str(home)
+        env["EASY_CHEESE_PROJECT"] = "owner-repo"
+
+        result = _run(
+            "existing",
+            "--slug",
+            "demo",
+            "--phase",
+            "specs",
+            "--root",
+            str(override_root),
+            "--json",
+            env=env,
+        )
+        assert result.returncode == 0, result.stderr
+        # Only the explicit-root path is returned, never the XDG corpus one.
+        assert json.loads(result.stdout) == [str(override_spec)]
+
+
+class TestList:
+    def test_durable_phase_returns_xdg_corpus_slugs(self, tmp_path: Path) -> None:
+        # Durable phases (specs) list from the XDG corpus, not .cheese/.
+        home = tmp_path / "corpus-home"
+        spec = home / "owner-repo" / "specs" / "demo.md"
+        spec.parent.mkdir(parents=True)
+        spec.write_text("body", encoding="utf-8")
+        env = dict(os.environ)
+        env["EASY_CHEESE_HOME"] = str(home)
+        env["EASY_CHEESE_PROJECT"] = "owner-repo"
+
+        result = _run("list", "--phase", "specs", "--json", env=env)
+        assert result.returncode == 0, result.stderr
+        assert json.loads(result.stdout) == [{"slug": "demo", "path": str(spec)}]
+
+    def test_transient_phase_anchors_under_dot_cheese(self, tmp_path: Path) -> None:
+        art = tmp_path / ".cheese" / "cook" / "demo.md"
+        art.parent.mkdir(parents=True)
+        art.write_text("body", encoding="utf-8")
+
+        result = _run("list", "--phase", "cook", "--repo-root", str(tmp_path), "--json")
+        assert result.returncode == 0, result.stderr
+        assert json.loads(result.stdout) == [{"slug": "demo", "path": str(art)}]
+
+    def test_plain_mode_emits_slugs_only(self, tmp_path: Path) -> None:
+        art = tmp_path / ".cheese" / "cook" / "demo.md"
+        art.parent.mkdir(parents=True)
+        art.write_text("body", encoding="utf-8")
+
+        result = _run("list", "--phase", "cook", "--repo-root", str(tmp_path))
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.strip() == "demo"
+
+    def test_empty_when_missing(self, tmp_path: Path) -> None:
+        result = _run("list", "--phase", "cook", "--repo-root", str(tmp_path), "--json")
+        assert result.returncode == 0
+        assert json.loads(result.stdout) == []
+
+    def test_unknown_phase_errors(self, tmp_path: Path) -> None:
+        result = _run("list", "--phase", "bogus", "--repo-root", str(tmp_path))
+        assert result.returncode == 2
+        assert "ERROR:" in result.stderr
+        assert "unknown phase" in result.stderr
+
+    def test_missing_required_args_exits_two(self) -> None:
+        result = _run("list")
         assert result.returncode == 2
 
 
