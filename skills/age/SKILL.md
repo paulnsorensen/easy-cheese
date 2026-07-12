@@ -81,7 +81,7 @@ Per-dimension base-severity tables, location-sensitivity, fix-cost-now / fix-cos
    ```
 
    If the host only ships the bundle, `python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz read_handoff_slug --phase cook --slug <slug>` is the fallback.
-   When a cook artifact exists but no press artifact does, the diff was never hardened. Do not block the review — proceed — but record `press: skipped` in the report (see `## Output`) and print the one-line warning at handoff.
+   When a cook artifact exists but no press artifact does, the diff was never hardened. Do not block the review — proceed — but record `press: skipped` in the report (see `## Output`) and print the one-line warning at handoff. A missing cook artifact is also non-fatal (an `artifact not found` result just means a non-pipeline diff): skip the marker and the warning and continue the review.
 
    Independently of any press report, if `.cheese/glossary/<slug>.md` exists, read it now so naming drift against the resolved glossary can be flagged as a deslop finding.
 3. Review every dimension; dimensions with no findings simply omit themselves.
@@ -166,9 +166,10 @@ status: ok | halt: <one-line reason>
 next: cure | done
 artifact: <path-to-press-report-or-prior-cure-if-any>
 <one-line orientation: what the diff does>
+
 press: skipped
 
-<!-- omit the `press: skipped` line entirely when a press report exists for this slug or no cook artifact does -->
+<!-- `press: skipped` is the first body line after the blank separator — the handoff slug stays exactly four physical lines. Omit it entirely when a press report exists for this slug or no cook artifact does. -->
 
 # Age Report — <slug>
 
@@ -176,7 +177,7 @@ press: skipped
 <one or two factual sentences about what the diff does>
 
 ## Press findings
-<omit this section when `.cheese/press/<slug>.md` does not exist. When it does, summarise unresolved press items in one or two bullets so `/cure` (which never reads the press report directly) sees them. When it does not exist but `.cheese/cook/<slug>.md` does, omit this section but add `press: skipped` after the orientation line in the header (see below) instead.>
+<omit this section when `.cheese/press/<slug>.md` does not exist. When it does, summarise unresolved press items in one or two bullets so `/cure` (which never reads the press report directly) sees them. When it does not exist but `.cheese/cook/<slug>.md` does, omit this section but add `press: skipped` as the first body line after the handoff slug (see above) instead.>
 
 ## Blocker
 - **[encapsulation:blocker]** `src/users/index.ts:42` — `index` re-exports `SqlPgUser` (infra ORM type) across slice boundary. 3 consumer slices already import it.
