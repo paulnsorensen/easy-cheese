@@ -71,6 +71,7 @@ Content shared _across_ skills lives in the always-installed `cheese` skill's `r
 | `skills/hard-cheese/SKILL.md` | `/hard-cheese` (or `--hard` flag) | Metacognitive vibecheck gate before review — asks the author to explain the diff's causal logic, grades the explanation against the SOLO Taxonomy. Standalone or via `--hard` propagation through the pipeline. |
 | `skills/ultracook/SKILL.md` | `/ultracook` | Autonomous fresh-context pipeline for high-blast-radius specs. The decomposer picks the mode: a decomposable 2+-curd spec fans out into parallel curds (each running per-curd `cook → press → age → cure` in its own worktree, harvested back, then one post-merge review pass, ending in 1–N reviewable PRs); an indivisible spec runs the linear chain (`cook → press → age → cure → age → cure → age`, all `--auto`). Each phase runs inside its own full-peer sub-agent so review stays adversarial and parent context never bloats. |
 | `skills/melt/SKILL.md` | `/melt` | Resolve merge / rebase / cherry-pick conflicts via the structural cascade (mergiraf → rerere → kdiff3) with batch, pick-side, and lockfile helpers. |
+| `skills/pr-stack/SKILL.md` | `/pr-stack` | Manage stacked PRs with whichever stacking tool is installed — Graphite (`gt`), git-town, or `gh stack` — detected per repo and driven via its per-tool reference. |
 | `skills/wheypoint/SKILL.md` | `/wheypoint` | Mark a checkpoint: compact a mid-task conversation into a durable handoff document at `.cheese/notes/<slug>.md` (resumable slug + state-mapped suggested-skills + redacted secrets) so a fresh agent can resume via `/cheese --continue <slug>`. |
 
 ### Tool skills
@@ -212,7 +213,7 @@ gh skill install paulnsorensen/easy-cheese
 Install every current skill in one shot:
 
 ```sh
-for s in age affinage briesearch cheese cheez-read cheez-search cheez-write cook culture cure hard-cheese melt mold pasteurize press ultracook wheypoint; do
+for s in age affinage briesearch cheese cheez-read cheez-search cheez-write cook culture cure hard-cheese melt mold pasteurize pr-stack press ultracook wheypoint; do
   gh skill install paulnsorensen/easy-cheese "$s"
 done
 ```
