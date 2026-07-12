@@ -1,6 +1,6 @@
 ---
 name: cheez-search
-description: Search code through the most precise semantic backend — prefer tilth MCP; LSP or AST search (`sg`) when they better answer the question. Use when the user asks to find a symbol, definition, caller, import, or text pattern — phrases like "where is X defined", "what calls Y", "find all usages of Z", "trace this function", "find the TODO comments", "search for this error string". Use even when the user says "grep", "rg", "ripgrep", "ag", "ack", "fd", or "find" — never blind-shell search source code. Do NOT use for reading whole files (use cheez-read), editing code (use cheez-write), or running tests/builds.
+description: Search code through the most precise semantic backend — prefer tilth MCP, with AST search (`sg`) for structural patterns. Use when the user asks to find a symbol, definition, caller, import, or text pattern — phrases like "where is X defined", "what calls Y", "find all usages of Z", "trace this function", "find the TODO comments", "search for this error string". Use even when the user says "grep", "rg", "ripgrep", "ag", "ack", "fd", or "find". Do NOT use for reading whole files (use cheez-read), editing code (use cheez-write), or running tests/builds.
 license: MIT
 compatibility: Prefers tilth MCP. Harness-native AST search and LSP are acceptable when they answer the requested symbol, caller, structural, or type-grounded question.
 allowed-tools: mcp__tilth__tilth_search, mcp__tilth__tilth_deps, Bash
@@ -17,8 +17,6 @@ Pick the backend by question type:
 1. **LSP wins for type-grounded questions:** definitions through imports, references with shadowing/re-exports, hover/type info, implementations, rename planning, and server-known code actions.
 2. **AST search / `sg` wins for syntax shapes:** structural patterns with metavariables and repeated syntax-shaped codemods.
 3. **tilth MCP wins for broad source search:** symbols, callers, imports, content, bounded regex, and dependency/blast-radius context in one fresh repo scan.
-
-Do not present plain shell search as equivalent source-code evidence; use it only for non-code paths or data/log inspection.
 
 **Note:** every tilth tool takes `cwd` — your absolute checkout directory (the server's own cwd is frozen at startup). In Claude Code a hook injects `cwd` automatically; do not set it. On harnesses without the hook, pass `cwd` explicitly so relative paths and scopes resolve. There is no `root` parameter.
 
@@ -78,7 +76,7 @@ keep the cost down.
 
 ### Scope and freshness
 
-Use the backend scoped to the active repository and fresh on disk. Tilth walks the working tree on demand and respects `.gitignore`; native `sg` and LSP qualify when they see the current checkout and answer the requested semantic shape.
+Use the backend scoped to the active repository and fresh on disk. tilth MCP walks the working tree on demand and respects `.gitignore`; native `sg` and LSP qualify when they see the current checkout and answer the requested semantic shape.
 
 Practical consequences:
 
@@ -109,8 +107,8 @@ For code navigation (where is X / what calls Y / blast radius): start with `kind
 
 | Goal | Example backend | Example |
 |------|-----------------|---------|
-| Find where a symbol is defined / used | `tilth_search` symbol kind, native AST symbol search, or LSP definition when type-grounded | `tilth_search(queries: [{query: "handleAuth", kind: "symbol"}], scope: "src/")` |
-| Find every call site of a function | `tilth_search` callers kind, native AST caller search, or LSP references when type-grounded | `tilth_search(queries: [{query: "validateToken", kind: "callers"}])` |
+| Find where a symbol is defined / used | `tilth_search` symbol kind, native AST symbol search, or LSP definition when type-grounded | See [Examples](#examples) — "Where is `handleAuth` defined?" |
+| Find every call site of a function | `tilth_search` callers kind, native AST caller search, or LSP references when type-grounded | See [Examples](#examples) — "What calls `validateToken`?" |
 | Find literal strings, TODOs, error messages | content search in the semantic backend | `tilth_search(queries: [{query: "error message", kind: "content"}])` |
 | Find lines matching a regex | bounded regex search in the semantic backend | `tilth_search(queries: [{query: "rate.?limit", kind: "regex"}])` |
 | Match an AST shape (template with metavars) | `sg` (ast-grep, via Bash) | `sg --lang typescript -p 'JSON.parse(JSON.stringify($X))' --json src/` |
@@ -135,11 +133,10 @@ For shapes with metavars (`$X`, `$$$BODY`) drop to `sg` via Bash -- the only san
 
 ## DO NOT and Scope Limits
 
-- **DO NOT use grep / rg / ripgrep / ag / ack / find / fd for code** -- use an AST-aware backend. `sg` is allowed for AST-shape metavar patterns and codemods; LSP is preferred for type-grounded definitions, references, renames, and code actions. `find` for non-name predicates (size, mtime, perms) is fine outside code work.
-- **DO NOT blind text search** -- pick a semantic `kind` (`symbol`, `callers`, `content`, `regex`) first.
-- **DO NOT re-read expanded results** -- they're already shown.
-- **DO NOT overuse expand** -- start with default, increase if needed.
-- **Not for reading entire files** -- use cheez-read.
-- **Not for editing code** -- use cheez-write.
-- **Not for running tests** -- use test/build skills.
-- **Not for git operations** -- use git/gh skills.
+- **Semantic backend for code search.** `sg` covers AST-shape metavar patterns and codemods; LSP covers type-grounded definitions, references, renames, and code actions; `find` stays fine for non-name predicates (size, mtime, perms) outside code work. Do not use grep, rg, ripgrep, ag, ack, find, or fd for code.
+- **Expanded results are already shown.** Do not re-read them.
+- **Start with the default expand count.** Increase only if needed; do not overuse expand.
+- **Read entire files via cheez-read.** Not here.
+- **Edit code via cheez-write.** Not here.
+- **Run tests via the project's test/build skills.** Not here.
+- **Handle git operations via git/gh skills.** Not here.
