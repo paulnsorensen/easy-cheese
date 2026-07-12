@@ -54,13 +54,14 @@ Every option must include:
 ## Host routing guide
 
 The `handoff_gate:` block is the semantic source of truth. After building it,
-choose the richest question mechanism the current harness actually exposes;
-never name a host tool in the transcript unless it is callable in that session.
+choose the richest question mechanism the current harness actually exposes **and
+that can faithfully encode every option**; never name a host tool in the
+transcript unless it is callable in that session.
 
 | Harness | Prefer | Notes |
 | --- | --- | --- |
 | Claude Code | `AskUserQuestion` | Supports `questions[]` with `question`, short `header`, `options[]`, and optional `multiSelect`; hooks can fill `answers` via `updatedInput`. Source: [Claude Code hooks reference](https://docs.anthropic.com/en/docs/claude-code/hooks#askuserquestion). |
-| Codex / OpenAI app-server | `request_user_input` / `tool/requestUserInput` when exposed | OpenAI's app server documents `tool/requestUserInput` for 1-3 short questions and free-form `isOther` options. In Codex CLI, use `request_user_input` only when the active tool list and current collaboration mode both allow it; otherwise fall back to numbered text. Source: [Codex app-server reference](https://developers.openai.com/codex/app-server). |
+| Codex / OpenAI app-server | `request_user_input` / `tool/requestUserInput` when exposed and lossless | In Codex CLI, use `request_user_input` only when the active tool list and current collaboration mode both allow it **and the full gate fits its 2-3 explicit-choice limit**. A standard four-option forward-step menu does not fit: render every action with the numbered fallback (or a lossless hybrid where the fourth action remains an explicit numbered choice). Never merge or drop actions to make the tool call fit. Source: [Codex app-server reference](https://developers.openai.com/codex/app-server). |
 | Conductor | Underlying agent primitive | Conductor runs Claude Code or Codex sessions; route to that agent's question primitive. Conductor Plan Mode exists for both, but Conductor is not a separate question API. Source: [Conductor agent modes](https://conductor.build/docs/concepts/agent-modes). |
 | OpenCode | `question` tool | The built-in `question` tool asks during execution with header, question text, options, and custom answers; ensure `permission.question` is not denied. Source: [OpenCode tools](https://opencode.ai/docs/tools#question). |
 | GitHub Copilot CLI | `ask_user` tool | Copilot CLI lists `ask_user` as "Ask the user a question" and `--no-ask-user` disables it. Use it when available; otherwise numbered text. Source: [Copilot CLI command reference](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-command-reference). |
@@ -79,6 +80,8 @@ Recommended: <label> — <why>
 1. <label> — <effect/tradeoff>
 2. <label> — <effect/tradeoff>
 3. <label> — <effect/tradeoff>
+4. <label> — <effect/tradeoff, when present>
+... <continue until every handoff_gate option is explicit>
 Other: reply with `other: <short answer>`
 ```
 
@@ -89,6 +92,8 @@ as option 1 in this fallback.
 Keep gates small: one decision by default, at most three questions when the
 host primitive explicitly supports batching. Include a free-form `Other` path
 when the host supports it; otherwise spell out the `other:` fallback in text.
+
+The fallback must enumerate every option in `handoff_gate.options`; its list is not capped at three. Host option limits select the rendering mechanism—they never shrink the decision.
 
 ## After the answer arrives
 

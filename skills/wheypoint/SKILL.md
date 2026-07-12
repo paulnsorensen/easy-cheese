@@ -2,7 +2,6 @@
 name: wheypoint
 description: Mark a checkpoint in the current conversation — compact it into a durable handoff document so a fresh agent can resume the work without context loss. Use when the user wants to preserve session state for a later or parallel session — phrases like "hand this off", "write a handoff", "drop a wheypoint", "checkpoint this", "compact the conversation", "I'm running low on context", "save where we are for the next session", "prep a handoff for another agent", "/wheypoint". Use even when the user just says "wrap up" or "I need to clear context" mid-task. Do NOT use for per-phase pipeline handoffs — those belong to `/cook`, `/press`, `/age`, and `/cure`.
 license: MIT
-allowed-tools: Read, Glob, mcp__tilth__tilth_read, mcp__tilth__tilth_list, Write(.cheese/notes/**), Bash(git status:*), Bash(git log:*), Bash(git diff:*)
 ---
 
 # /wheypoint
@@ -204,7 +203,7 @@ Strip anything sensitive before writing: API keys, tokens, passwords, connection
 
 ## Handoff
 
-The handoff document is the only thing `/wheypoint` writes. No commits, no PRs, no production-code edits — enforced by the frontmatter `allowed-tools` grant: read-only inspection plus `Write` scoped to `.cheese/notes/**`. End by surfacing the slug's orientation line, a normal Markdown link to the note, and repo-root-aware resumption commands. Keep the note link outside fenced code so it is clickable. The link line should match this shape: `Wheypoint dropped: [.cheese/notes/<slug>.md](<absolute-note-path>)`.
+The handoff document is the only thing `/wheypoint` writes. No commits, PRs, or production-code edits. Use the host's read-only inspection capabilities plus a write capability scoped to `.cheese/notes/**`. End by showing the slug's orientation line, a normal Markdown link to the note, and repo-root-aware resumption commands. Keep the note link outside fenced code so it is clickable. The link line should match this shape: `Wheypoint dropped: [.cheese/notes/<slug>.md](<absolute-note-path>)`.
 
 Resume from original repo:
 

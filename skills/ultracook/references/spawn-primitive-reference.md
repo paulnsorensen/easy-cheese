@@ -12,7 +12,7 @@ A spawn primitive is acceptable iff it satisfies all five:
 4. **Returns control.** The orchestrator regains control after each spawn so it can read the handoff slug. Fire-and-forget primitives do not satisfy this invariant.
 5. **Writes handoff slug.** Each spawn writes its result to `.cheese/<phase>/<slug>.md` per the schema. The orchestrator decides chain progression from the slug, never from stdout.
 
-If the host harness exposes no fan-out primitive at all, parallel mode is unavailable — fall back to `/ultracook`'s linear chain (or `/cook --auto`) in the parent's own context, which needs no fan-out primitive.
+If the host harness exposes no spawn primitive that satisfies all five invariants, halt `/ultracook` and recommend `/cook --auto`. Running in the parent's context explicitly drops `/ultracook`'s fresh-context guarantee.
 
 ## Anthropic Claude Code — `Agent()` / `/batch`
 
@@ -60,13 +60,14 @@ Rules:
 - Fleet agents inherit the same model and tool scope as the parent session, satisfying invariant 2.
 - Each agent must write the handoff slug to `.cheese/ultracook/<slug>/curds/<id>.md` per the per-curd prompt template.
 
-## OpenAI Codex — `multi_agent_v1.spawn_agent`
+## OpenAI Codex: host-exposed sub-agent capability
 
-In Codex API sessions, use the exposed multi-agent tool rather than OMP's `task(...)` shorthand:
+In Codex sessions, use the host's exposed spawn capability rather than assuming a versioned tool name. For example, a host may expose `collaboration.spawn_agent`:
 
 ```text
-multi_agent_v1.spawn_agent(
-  agent_type: "generalist",  # or a typed full-peer equivalent — gate on capability, not the label
+collaboration.spawn_agent(
+  task_name: "<phase>-<slug>",
+  fork_turns: "none",
   message: "Run /<phase> <slug> --auto for THIS PHASE ONLY. Write
            .cheese/<phase>/<slug>.md with the handoff schema and stop.
            Do not chain forward to the next phase even though your
@@ -77,7 +78,8 @@ multi_agent_v1.spawn_agent(
 Rules:
 
 - Omit model overrides unless the user explicitly requests one; the spawn should inherit the parent model where the host supports it.
-- Pick an `agent_type` that satisfies invariant 2. Reject scoped read-only workers that lack a phase's tools.
+- Request the host's no-context mode (`fork_turns: "none"` in this example); inheriting conversation turns violates invariant 1.
+- Choose a full-peer, write-capable worker that satisfies invariant 2. Reject scoped read-only workers that lack a phase's tools.
 - Wait for the returned agent before reading the handoff slug; fire-and-forget dispatch fails invariant 4.
 - The prompt must include the no-chain-forward directive and the foreground-only directive (run in the foreground; do not background yourself or defer work; write a partial slug with `status: halt: <reason>` if the context window is exhausted, do not silently timeout).
 
@@ -91,4 +93,4 @@ Any primitive that satisfies the five invariants is acceptable. When evaluating 
 4. Confirm control returns synchronously (invariant 4).
 5. Confirm the sub-agent can write files inside `.cheese/` (invariant 5).
 
-If any invariant fails, document the limitation in the host capabilities section of the manifest and route to `/ultracook` (sequential, same context) instead.
+If any invariant fails, halt `/ultracook` and recommend `/cook --auto`, explicitly noting that it runs in the parent's context and does not provide `/ultracook`'s fresh-context guarantee.
