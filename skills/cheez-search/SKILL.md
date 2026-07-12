@@ -133,7 +133,7 @@ For shapes with metavars (`$X`, `$$$BODY`) drop to `sg` via Bash -- the only san
 
 ## DO NOT and Scope Limits
 
-- **Semantic backend for code search.** `sg` covers AST-shape metavar patterns and codemods; LSP covers type-grounded definitions, references, renames, and code actions; `find` stays fine for non-name predicates (size, mtime, perms) outside code work. Do not use grep, rg, ripgrep, ag, ack, find, or fd for code.
+- **Semantic backend for code search.** `sg` covers AST-shape metavar patterns and codemods; LSP covers type-grounded definitions and references (renames and code actions are edits — route them to cheez-write); `find` stays fine for non-name predicates (size, mtime, perms) outside code work. Do not use grep, rg, ripgrep, ag, ack, find, or fd for code.
 - **Expanded results are already shown.** Do not re-read them.
 - **Start with the default expand count.** Increase only if needed; do not overuse expand.
 - **Read entire files via cheez-read.** Not here.
