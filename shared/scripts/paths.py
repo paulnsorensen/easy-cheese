@@ -287,10 +287,11 @@ def existing_artifacts(
 ) -> dict[str, Path]:
     """Return ``{phase: path}`` for each phase's artifact present on disk.
 
-    With ``root`` omitted, each phase routes through ``default_root_for_phase``
-    (durable phases -> the XDG corpus, everything else -> ``.cheese/``), matching
-    ``resolve_slug``/``artifact_path``. Pass ``root`` to pin every phase to that
-    one location instead (e.g. a pytest ``tmp_path``), overriding the routing.
+    With ``root`` omitted, each phase routes through ``default_root_for_phase``:
+    durable phases -> the XDG corpus (matching ``resolve_slug``/``artifact_path``),
+    everything else -> the cwd-relative ``.cheese/`` (unlike ``resolve_slug``,
+    which anchors its ``.cheese/`` at the git toplevel). Pass ``root`` to pin
+    every phase to one location instead (e.g. a pytest ``tmp_path``).
     """
     err = validate_slug(slug)
     if err is not None:

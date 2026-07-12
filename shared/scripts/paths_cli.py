@@ -69,7 +69,8 @@ def _cmd_list(args: argparse.Namespace) -> None:
     except ValueError as exc:
         raise cli.CliError(str(exc)) from exc
     if args.json_mode:
-        cli.emit(entries, json_mode=True)
+        shown = entries if (args.full or args.limit is None) else entries[: args.limit]
+        cli.emit(shown, json_mode=True)
     else:
         cli.emit([e["slug"] for e in entries], limit=args.limit, full=args.full)
 

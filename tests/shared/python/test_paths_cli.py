@@ -255,6 +255,28 @@ class TestList:
         assert result.returncode == 0, result.stderr
         assert json.loads(result.stdout) == [{"slug": "demo", "path": str(art)}]
 
+    def test_json_mode_honors_limit(self, tmp_path: Path) -> None:
+        # --limit must cap JSON output too, not only plain mode; --full
+        # overrides it. Programmatic callers rely on --json + --limit.
+        for name in ("alpha", "bravo", "charlie"):
+            art = tmp_path / ".cheese" / "cook" / f"{name}.md"
+            art.parent.mkdir(parents=True, exist_ok=True)
+            art.write_text("body", encoding="utf-8")
+
+        capped = _run(
+            "list", "--phase", "cook", "--repo-root", str(tmp_path),
+            "--json", "--limit", "2",
+        )
+        assert capped.returncode == 0, capped.stderr
+        assert len(json.loads(capped.stdout)) == 2
+
+        full = _run(
+            "list", "--phase", "cook", "--repo-root", str(tmp_path),
+            "--json", "--limit", "2", "--full",
+        )
+        assert full.returncode == 0, full.stderr
+        assert len(json.loads(full.stdout)) == 3
+
     def test_plain_mode_emits_slugs_only(self, tmp_path: Path) -> None:
         art = tmp_path / ".cheese" / "cook" / "demo.md"
         art.parent.mkdir(parents=True)
