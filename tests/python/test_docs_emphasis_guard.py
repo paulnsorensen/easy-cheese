@@ -14,6 +14,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 FENCE_RE = re.compile(r"```.*?```", re.S)
@@ -253,28 +255,65 @@ def test_question_routing_is_native_first_and_lossless():
     )
     gate = (REPO_ROOT / "skills/cheese/references/handoff-gate.md").read_text(encoding="utf-8")
 
+    # Native structured controls stay first-class on both primary harnesses.
     assert "Claude Code: `AskUserQuestion`" in portability
     assert "Codex: `request_user_input`" in portability
     assert "active collaboration mode permits it" in portability
     assert "richest callable structured question primitive" in portability
+
+    # Routing discovers the callable primitive and its live advertised capacities.
+    for body in (portability, gate):
+        assert "callable" in body
+        assert "advertised question and option capacities" in body
+    assert "active tool list and current collaboration mode both allow it" in gate
+    assert "capacities advertised by that callable primitive" in gate
+
+    # A four-option gate is conditional on the active schema, never a Codex-wide limit.
+    for body in (portability, gate):
+        assert "If an active" in body
+        assert "2-3 explicit choices" in body
+        assert "four-option" in body
+        assert "2-3 explicit-choice limit" not in body
+
+    # Every rendering preserves the semantic decision without dropping fidelity.
     assert "faithfully encode the complete decision" in portability
-    assert "2-3 explicit-choice limit" in portability
     assert "limits cannot represent every action" in portability
     assert "lossless numbered-text fallback" in portability
     assert "Never merge, hide, or drop actions" in portability
-    for required in ("recommended choice", "every option's effect or tradeoff", "free-form `Other`", "immediate execution"):
+    for required in (
+        "recommended choice",
+        "every option's effect or tradeoff",
+        "free-form `Other`",
+        "immediate execution",
+    ):
         assert required in portability
-
-    assert "richest question mechanism" in gate
     assert "faithfully encode every option" in gate
-    assert "active tool list and current collaboration mode both allow it" in gate
-    assert "2-3 explicit-choice limit" in gate
-    assert "standard four-option forward-step menu does not fit" in gate.lower()
     assert "Never merge or drop actions" in gate
     assert "fallback must enumerate every option" in gate
     assert "free-form `Other` path" in gate
     assert "execute that in-skill action immediately" in gate
     assert "immediately enter that skill" in gate
+
+
+@pytest.mark.parametrize(
+    "skill",
+    (
+        "affinage",
+        "age",
+        "cheese",
+        "cook",
+        "culture",
+        "cure",
+        "melt",
+        "mold",
+        "pasteurize",
+        "press",
+    ),
+)
+def test_core_workflow_question_sites_reference_shared_handoff_gate(skill: str):
+    body = (REPO_ROOT / f"skills/{skill}/SKILL.md").read_text(encoding="utf-8")
+
+    assert "handoff-gate.md" in body
 
 
 def test_core_cheese_questions_use_the_shared_handoff_gate():
@@ -286,6 +325,18 @@ def test_core_cheese_questions_use_the_shared_handoff_gate():
     assert "With `--safe`, issue a handoff gate" in cheese
     assert "cross-harness post-selection dispatch contract" in cheese
     assert "Codex-safe" not in cheese
+
+
+def test_wheypoint_git_provenance_is_capability_based_and_optional():
+    body = (REPO_ROOT / "skills/wheypoint/SKILL.md").read_text(encoding="utf-8")
+
+    assert "callable, read-only git inspection capability" in body
+    assert "git status --short --branch" in body
+    assert "git rev-parse --short HEAD" in body
+    assert "branch and short commit" in body
+    assert "Omit the field when git inspection is unavailable" in body
+    assert "Bash(git" not in body
+    assert "grant" not in body.lower()
 
 
 def test_router_and_wheypoint_do_not_assume_claude_native_tools():

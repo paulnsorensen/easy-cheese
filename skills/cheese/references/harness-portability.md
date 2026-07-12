@@ -18,12 +18,12 @@ Use the host primitive that preserves bounded context. When the host offers mult
 
 ## User interaction
 
-Build the semantic question or handoff record first, following the shared [`handoff-gate.md`](handoff-gate.md) contract. Then use the richest callable structured question primitive that can faithfully encode the complete decision:
+Build the semantic question or handoff record first, following the shared [`handoff-gate.md`](handoff-gate.md) contract. Then use the richest callable structured question primitive that can faithfully encode the complete decision. Discover callability and the active primitive's advertised question and option capacities at runtime instead of assuming a harness-wide limit:
 
 - Claude Code: `AskUserQuestion`.
-- Codex: `request_user_input` when it is exposed, the active collaboration mode permits it, and the complete gate fits its 2-3 explicit-choice limit.
+- Codex: `request_user_input` when it is exposed, the active collaboration mode permits it, and the complete gate fits the capacities advertised by that callable primitive.
 - Other harnesses: an equivalent structured question primitive with enough option capacity for every action.
-- When no structured primitive is callable **or its limits cannot represent every action**: use the lossless numbered-text fallback from the handoff gate. A hybrid is valid only if every omitted button remains an explicit, equally actionable numbered choice alongside the structured prompt.
+- When no structured primitive is callable **or its limits cannot represent every action**: use the lossless numbered-text fallback from the handoff gate. If an active primitive advertises only 2-3 explicit choices, a four-option gate is one case that requires the fallback or a hybrid. A hybrid is valid only if every omitted button remains an explicit, equally actionable numbered choice alongside the structured prompt.
 
 This is a native-first priority order, not a lowest-common-denominator rule. Never merge, hide, or drop actions to fit a host primitive. Preserve the recommended choice, every option's effect or tradeoff, a free-form `Other` path, and immediate execution of the selected non-stop action across every rendering. Degrade only as far as the active harness requires.
 

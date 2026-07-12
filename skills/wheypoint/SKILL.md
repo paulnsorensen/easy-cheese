@@ -77,7 +77,7 @@ Four optional provenance fields sit between `artifact:` and the orientation line
   - **codex** — the `payload.cwd` field in the rollout meta line of the active rollout log.
   - **opencode** — the matching row in the `session` table.
   - When the harness is unknown or no log is accessible, omit the field. `<speculative>` the newest-mtime claude heuristic can bind the wrong `*.jsonl` when several live sessions share one cwd; the field is optional so a wrong bind is hand-correctable.
-- **`git: <branch>@<short-sha>`** — the branch and short commit at capture time: the branch from `git status` and the short sha from `git log -1 --format=%h` (the `Bash(git status:*)` and `Bash(git log:*)` grants cover the reads). Omit outside a git repo.
+- **`git: <branch>@<short-sha>`** — the branch and short commit at capture time. Use any callable, read-only git inspection capability the active harness exposes. CLI transports may run `git status --short --branch` for the branch and `git rev-parse --short HEAD` for the short SHA. Omit the field when git inspection is unavailable, outside a git repository, or either value cannot be determined.
 - **`created: <UTC ISO-8601>`** — the capture timestamp in UTC ISO-8601 (e.g. `2026-07-09T14:32:00Z`).
 - **`parents: [<slug>, ...]`** — lineage. Empty or absent for a fresh single-thread note. `--join` sets two or more source slugs; each `--split` child sets exactly the current slug.
 
