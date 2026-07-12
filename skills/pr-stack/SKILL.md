@@ -14,8 +14,9 @@ description: >
   "the bottom PR merged, what now", "clean up after a stack merge", or
   invokes /pr-stack. If none is available, stop and tell the
   user — never fall back to ad-hoc `git push` chains. Do NOT use for
-  staging or committing — hand off to /commit. Do NOT use for PR review
-  traffic, comments, or CI checks — hand off to /gh.
+  staging or committing — hand off to a discovered /commit skill (plain
+  `git commit` otherwise). Do NOT use for PR review traffic, comments, or
+  CI checks — hand off to a discovered /gh skill (plain `gh` otherwise).
 ---
 
 # pr-stack
@@ -197,8 +198,11 @@ to memory — all three CLIs drift between versions.
 - **Don't `git push` a single branch in a stack.** Use the tool's submit /
   push command — bare push skips the parent-target wiring and leaves the
   rest of the stack stale.
-- **Stage explicitly.** All three tools follow the staged set the way
-  `git commit` does. Stage by name; avoid `git add -A`.
+- **Stage deliberately.** All three tools follow the staged set the way
+  `git commit` does. Stage by name by default; the per-tool stage-all
+  flags shown in the references (`gt … -a`/`-am`, `gh stack add -Am`) are
+  fine when you mean to stage every tracked change. Avoid blind
+  `git add -A` outside that deliberate case.
 - **One concern per branch.** That's the whole point of stacking — keep each
   PR reviewable in isolation.
 - **After a rebase conflict, use the tool's `continue` / `abort`**, never

@@ -307,7 +307,7 @@ gt submit --stack
 
 ```bash
 gt sync
-# if conflicts: resolve files, `gt add .`, `gt continue`
+# if conflicts: resolve files, `git add .`, `gt continue`
 gt submit --stack
 ```
 

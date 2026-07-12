@@ -46,7 +46,7 @@ Run these in order:
 1. Extension installed locally:
 
    ```bash
-   gh extension list | grep -q '^github/gh-stack\b'
+   gh extension list 2>/dev/null | awk -F '\t' '$2 == "github/gh-stack"' | grep -q .
    ```
 
    (or `gh stack --help` exits 0 — same signal, slower.)
