@@ -446,6 +446,36 @@ class TestWheypointJoinSplitVerbs:
         ), "--split children must each be parented on the current slug"
 
 
+class TestWheypointQueueVerb:
+    def test_queue_documented_with_stable_path(self) -> None:
+        body = _skill("wheypoint")
+        assert "--queue" in body, "wheypoint must document the --queue verb"
+        assert ".cheese/notes/queue.md" in body, (
+            "--queue must target the stable session-spanning path, "
+            "not a per-session slug file"
+        )
+
+    def test_queue_upserts_instead_of_appending(self) -> None:
+        body = _skill("wheypoint")
+        assert "upsert" in body.lower(), (
+            "--queue must upsert by task slug so repeat calls update the "
+            "existing entry instead of appending duplicates"
+        )
+
+
+class TestCheeseQueueContinue:
+    def test_continue_resolves_queue_literal_without_auto_dispatch(self) -> None:
+        body = _skill("cheese")
+        assert ".cheese/notes/queue.md" in body, (
+            "/cheese --continue queue must resolve the literal argument to "
+            "the persistent queue path"
+        )
+        assert "never auto-dispatch" in body, (
+            "the queue is a flat list of independent tasks, not a "
+            "single-phase handoff — resume must ask, not auto-dispatch"
+        )
+
+
 # ---------------------------------------------------------------------------
 # Wiring: install fallback list and README skill table
 # ---------------------------------------------------------------------------
