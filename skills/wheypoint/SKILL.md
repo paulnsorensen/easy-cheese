@@ -1,6 +1,6 @@
 ---
 name: wheypoint
-description: Mark a checkpoint in the current conversation — compact it into a durable handoff document so a fresh agent can resume the work without context loss. Use when the user wants to preserve session state for a later or parallel session — phrases like "hand this off", "write a handoff", "drop a wheypoint", "checkpoint this", "compact the conversation", "I'm running low on context", "save where we are for the next session", "prep a handoff for another agent", "/wheypoint". Use even when the user just says "wrap up" or "I need to clear context" mid-task. Do NOT use for per-phase pipeline handoffs — those belong to `/cook`, `/press`, `/age`, and `/cure`.
+description: Mark a checkpoint in the current conversation — compact it into a durable handoff document so a fresh agent can resume the work without context loss. Use when the user wants to preserve session state for a later or parallel session — phrases like "hand this off", "write a handoff", "drop a wheypoint", "checkpoint this", "compact the conversation", "I'm running low on context", "save where we are for the next session", "prep a handoff for another agent", "/wheypoint". Use even when the user just says "wrap up" or "I need to clear context" mid-task. Use `--queue` when the user wants a task tracked for later without a full handoff — phrases like "queue this task", "add this to the queue", "track this for later". Do NOT use for per-phase pipeline handoffs — those belong to `/cook`, `/press`, `/age`, and `/cure`.
 license: MIT
 ---
 
@@ -68,8 +68,8 @@ Unlike the default flow and `--join`/`--split`, `--queue` writes to a single sta
    ## <task-slug>
    task: <one-line description of the task>
    status: open | in-progress | blocked | done
-   next: <the next concrete step>
-   owner: <owning skill, e.g. /cook, /mold, /cure>
+   next: <runnable skill invocation with its expected argument, e.g. `/cook .cheese/specs/<slug>.md` — or one concrete manual action when no skill applies>
+   owner: <owning skill name, no leading slash, e.g. cook, mold, cure>
    updated: <UTC ISO-8601>
    ```
 5. `--queue` never writes a `## Document` section — it is a running list of entries, not a handoff document (see `## Do not duplicate`). Point at richer state (a spec, a PR, another handoff slug) from `next:` rather than re-pasting it there.
@@ -227,7 +227,7 @@ Strip anything sensitive before writing: API keys, tokens, passwords, connection
 
 ## Handoff
 
-The handoff document is the only thing `/wheypoint` writes. No commits, PRs, or production-code edits. Use the host's read-only inspection capabilities plus a write capability scoped to `.cheese/notes/**`. End by showing the slug's orientation line, a normal Markdown link to the note, and repo-root-aware resumption commands. Keep the note link outside fenced code so it is clickable. The link line should match this shape: `Wheypoint dropped: [.cheese/notes/<slug>.md](<absolute-note-path>)`. `--queue` writes under the same scoped write capability, to the stable path `.cheese/notes/queue.md`.
+In the default checkpoint mode the handoff document is the only thing `/wheypoint` writes; in `--queue` mode it is the queue file instead. Either way: no commits, PRs, or production-code edits. Use the host's read-only inspection capabilities plus a write capability scoped to `.cheese/notes/**`. End by showing the slug's orientation line, a normal Markdown link to the note, and repo-root-aware resumption commands. Keep the note link outside fenced code so it is clickable. The link line should match this shape: `Wheypoint dropped: [.cheese/notes/<slug>.md](<absolute-note-path>)`. `--queue` writes under the same scoped write capability, to the stable path `.cheese/notes/queue.md`.
 
 Resume from original repo:
 
