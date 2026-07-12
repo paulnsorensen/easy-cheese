@@ -74,6 +74,15 @@ Per-dimension base-severity tables, location-sensitivity, fix-cost-now / fix-cos
    If the host only ships the bundle, `python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz read_handoff_slug --phase press --slug <slug>` is the fallback.
    Include a `## Press findings` sub-section in the age report summarising unresolved items — `/cure` reads only `.cheese/age/<slug>.md` and cannot access the press report directly.
 
+   If no press report exists for this slug, check for a cook handoff or report (`.cheese/cook/<slug>.md`):
+
+   ```
+   python3 shared/scripts/read_handoff_slug.py --phase cook --slug <slug>
+   ```
+
+   If the host only ships the bundle, `python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz read_handoff_slug --phase cook --slug <slug>` is the fallback.
+   When a cook artifact exists but no press artifact does, the diff was never hardened. Do not block the review — proceed — but record `press: skipped` in the report (see `## Output`) and print the one-line warning at handoff.
+
    Independently of any press report, if `.cheese/glossary/<slug>.md` exists, read it now so naming drift against the resolved glossary can be flagged as a deslop finding.
 3. Review every dimension; dimensions with no findings simply omit themselves.
 4. Compute severity per finding (base + location bump + compounding bump, capped at `blocker`). Group findings by severity (`## Blocker → ## High → ## Medium → ## Low`); within a severity group, order by file.
@@ -157,6 +166,9 @@ status: ok | halt: <one-line reason>
 next: cure | done
 artifact: <path-to-press-report-or-prior-cure-if-any>
 <one-line orientation: what the diff does>
+press: skipped
+
+<!-- omit the `press: skipped` line entirely when a press report exists for this slug or no cook artifact does -->
 
 # Age Report — <slug>
 
@@ -164,7 +176,7 @@ artifact: <path-to-press-report-or-prior-cure-if-any>
 <one or two factual sentences about what the diff does>
 
 ## Press findings
-<omit this section when `.cheese/press/<slug>.md` does not exist. When it does, summarise unresolved press items in one or two bullets so `/cure` (which never reads the press report directly) sees them.>
+<omit this section when `.cheese/press/<slug>.md` does not exist. When it does, summarise unresolved press items in one or two bullets so `/cure` (which never reads the press report directly) sees them. When it does not exist but `.cheese/cook/<slug>.md` does, omit this section but add `press: skipped` after the orientation line in the header (see below) instead.>
 
 ## Blocker
 - **[encapsulation:blocker]** `src/users/index.ts:42` — `index` re-exports `SqlPgUser` (infra ORM type) across slice boundary. 3 consumer slices already import it.
@@ -190,6 +202,7 @@ artifact: <path-to-press-report-or-prior-cure-if-any>
 <`certain` | `speculating` | `don't know`> — <one-line justification including which evidence sources were unavailable>
 
 ## Next step
+<when press was skipped, lead with>: Hardening was skipped for this diff — run `/press <slug>` before curing, or continue reviewing as-is.
 Auto-fixing the recommended set via `/cure` (or the selection prompt on a reason to ask / `--safe`).
 ```
 
@@ -210,6 +223,12 @@ Then print:
 
 ```
 Age report: .cheese/age/<slug>.md
+```
+
+When `press: skipped` is set, also print a one-line warning:
+
+```
+Warning: no /press report for <slug> — hardening was skipped. Run /press <slug> first, or continue with /cure.
 ```
 
 When `--html` is passed, render the HTML report — the render command and bundle fallback live with the `--html` flag under `## Inputs` — and print both paths:
