@@ -133,12 +133,34 @@ Format:
 ```markdown
 # Glossary — <slug>
 
-| Term | Canonical meaning | Code referent (file:line or NEW ENTITY) |
-| --- | --- | --- |
-| <term> | <one-line definition> | <referent> |
+| Term | Canonical meaning | Code referent (file:line or NEW ENTITY) | Avoid |
+| --- | --- | --- | --- |
+| <term> | <one-line definition> | <referent> | <losing synonym, …> |
 ```
 
-Omit the file if no terms were resolved during Ground (no overloaded-term dialogue occurred).
+The `Avoid` column records the losing synonyms the Ground phase rejected in favour of the canonical term (comma-separated, or `—` when none). Omit the file if no terms were resolved during Ground (no overloaded-term dialogue occurred).
+
+## Domain model (cumulative by-product)
+
+In the same atomic step as the spec, ADRs, and per-slug glossary, merge the session's resolved terms — **with their Avoid synonyms** — into the project-level domain model resolved via `domain_model_target()` (`shared/scripts/paths.py`). Unlike the per-slug glossary (a branch-local handoff), the domain model is cumulative cross-session memory: it builds the project's ubiquitous language across every session. Context-specific terms only; general programming concepts never enter.
+
+Merge, don't overwrite:
+- **New term** — append an entry.
+- **Changed term** (definition, referent, or Avoid set differs) — update that entry in place.
+
+Entry format:
+```markdown
+**<Term>** — <definition>.
+_Avoid_: <syn1>, <syn2>
+_Code_: <file:line (or NEW ENTITY)>
+```
+Omit the `_Avoid_` line when no synonyms were rejected.
+
+**Lazy context-map split.** A single bounded context lives as one `domain-model.md` at the store root. When a **second** bounded context crystallises, split lazily into:
+- `domain-model/index.md` — the context map: the bounded contexts and their relationships (Pocock CONTEXT-MAP shape).
+- `domain-model/<context>.md` — one page per bounded context, each holding that context's entries.
+
+Do not pre-split for a single context. This layout is identical across all three stores `domain_model_target()` may resolve to (wiki, `docs/`, XDG corpus).
 
 ## Rejected-directions store (by-product)
 

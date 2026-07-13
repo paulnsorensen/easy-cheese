@@ -186,6 +186,211 @@ class TestPhaseSkill:
         assert paths.phase_skill(phase) == skill
 
 
+class TestDomainModelTarget:
+    """`domain_model_target()` — read-probe cascade then create precedence.
+
+    Focus: acceptance criterion #3, the create-path resolution. WHY the create
+    branch must be gated: an existing model at any store must be returned as-is,
+    never forked into a fresh store, or the ubiquitous language fragments.
+    """
+
+    def test_create_uses_docs_when_tracked_docs_dir_exists(
+        self, paths: ModuleType, tmp_path: Path, xdg_corpus: Path
+    ) -> None:
+        # No model anywhere yet, but a tracked docs/ dir exists: create there.
+        (tmp_path / "docs").mkdir()
+        backend, location = paths.domain_model_target(repo_root=tmp_path)
+        assert backend == "file"
+        assert location == tmp_path / "docs" / "domain-model.md"
+
+    def test_create_uses_xdg_when_no_docs_dir(
+        self, paths: ModuleType, tmp_path: Path, xdg_corpus: Path
+    ) -> None:
+        # No docs/ dir: the first write lands in the XDG durable corpus.
+        backend, location = paths.domain_model_target(repo_root=tmp_path)
+        assert backend == "file"
+        assert location == xdg_corpus / "domain-model.md"
+
+    def test_existing_docs_model_wins_over_create(
+        self, paths: ModuleType, tmp_path: Path, xdg_corpus: Path
+    ) -> None:
+        # An existing docs model is returned verbatim; the create branch must
+        # NOT fire and must not fork a second store under the XDG corpus.
+        model = tmp_path / "docs" / "domain-model.md"
+        model.parent.mkdir()
+        model.write_text("**Term** — x.\n", encoding="utf-8")
+        assert paths.domain_model_target(repo_root=tmp_path) == ("file", model)
+
+    def test_existing_xdg_model_wins_over_docs_create(
+        self, paths: ModuleType, tmp_path: Path, xdg_corpus: Path
+    ) -> None:
+        # A docs/ dir exists (create would pick it) but a model already lives in
+        # the XDG corpus: the existing model wins, no new docs/ model is forged.
+        (tmp_path / "docs").mkdir()
+        model = xdg_corpus / "domain-model.md"
+        model.parent.mkdir(parents=True)
+        model.write_text("**Term** — x.\n", encoding="utf-8")
+        assert paths.domain_model_target(repo_root=tmp_path) == ("file", model)
+
+    def test_existing_split_directory_is_returned(
+        self, paths: ModuleType, tmp_path: Path, xdg_corpus: Path
+    ) -> None:
+        # The second bounded context splits the store into a domain-model/ dir.
+        # The probe must recognise that layout and return the directory, not
+        # create a fresh single-file model beside it.
+        split = tmp_path / "docs" / "domain-model"
+        (split).mkdir(parents=True)
+        (split / "index.md").write_text("# contexts\n", encoding="utf-8")
+        assert paths.domain_model_target(repo_root=tmp_path) == ("file", split)
+
+    def test_single_file_wins_over_split_dir_in_same_store(
+        self, paths: ModuleType, tmp_path: Path, xdg_corpus: Path
+    ) -> None:
+        # Migration debt: both layouts somehow coexist in the same store. Per
+        # the single->split lazy-migration order documented on
+        # `_existing_domain_model`, the file must win — a mutation that probes
+        # the split dir first would silently orphan the single-file model.
+        docs = tmp_path / "docs"
+        docs.mkdir()
+        single = docs / "domain-model.md"
+        single.write_text("**Term** — x.\n", encoding="utf-8")
+        split = docs / "domain-model"
+        split.mkdir()
+        (split / "index.md").write_text("# contexts\n", encoding="utf-8")
+        assert paths.domain_model_target(repo_root=tmp_path) == ("file", single)
+
+    def test_docs_store_precedes_xdg_store_on_read(
+        self, paths: ModuleType, tmp_path: Path, xdg_corpus: Path
+    ) -> None:
+        # Both file stores hold a model: docs/ (tier 2) wins over XDG (tier 3).
+        docs_model = tmp_path / "docs" / "domain-model.md"
+        docs_model.parent.mkdir()
+        docs_model.write_text("**A** — x.\n", encoding="utf-8")
+        xdg_model = xdg_corpus / "domain-model.md"
+        xdg_model.parent.mkdir(parents=True)
+        xdg_model.write_text("**B** — y.\n", encoding="utf-8")
+        assert paths.domain_model_target(repo_root=tmp_path) == ("file", docs_model)
+
+    def test_wiki_probe_wins_when_corpus_listed_and_has_model_confirmed(
+        self, paths: ModuleType, tmp_path: Path, xdg_corpus: Path
+    ) -> None:
+        # A reachable probe listing the repo's wiki corpus, confirmed via
+        # wiki_has_model, routes to hallouminate before the file-store
+        # read-probe even runs -- a confirmed wiki model wins over an existing
+        # docs/ model too.
+        docs_model = tmp_path / "docs" / "domain-model.md"
+        docs_model.parent.mkdir()
+        docs_model.write_text("**Term** — x.\n", encoding="utf-8")
+        corpus = "repo:easy-cheese:wiki"
+        backend, location = paths.domain_model_target(
+            repo_root=tmp_path,
+            list_corpora=lambda: ["repo:other:notes", corpus],
+            wiki_has_model=lambda c: True,
+        )
+        assert (backend, location) == ("hallouminate", corpus)
+
+    def test_wiki_corpus_shape_matched_regardless_of_repo_root_name(
+        self, paths: ModuleType, tmp_path: Path, xdg_corpus: Path
+    ) -> None:
+        # Shape-match like grounding.md:18 (first `repo:*:wiki`), never a name
+        # reconstructed from repo_root.name -- a worktree/clone checkout dir
+        # (tmp_path here plays "baghdad") need not match the corpus's embedded
+        # repo name ("easy-cheese") for the corpus to resolve.
+        corpus = "repo:easy-cheese:wiki"
+        backend, location = paths.domain_model_target(
+            repo_root=tmp_path,
+            list_corpora=lambda: [corpus],
+        )
+        assert (backend, location) == ("hallouminate", corpus)
+
+    def test_existing_file_model_wins_over_wiki_corpus_with_no_model(
+        self, paths: ModuleType, tmp_path: Path, xdg_corpus: Path
+    ) -> None:
+        # The wiki corpus is listed but wiki_has_model confirms it holds no
+        # domain-model document yet: the pre-existing docs/ file model wins,
+        # instead of being silently orphaned in favour of an empty wiki corpus.
+        docs_model = tmp_path / "docs" / "domain-model.md"
+        docs_model.parent.mkdir()
+        docs_model.write_text("**Term** — x.\n", encoding="utf-8")
+        corpus = "repo:easy-cheese:wiki"
+        backend, location = paths.domain_model_target(
+            repo_root=tmp_path,
+            list_corpora=lambda: [corpus],
+            wiki_has_model=lambda c: False,
+        )
+        assert (backend, location) == ("file", docs_model)
+
+    def test_existing_file_model_wins_when_wiki_has_model_hook_absent(
+        self, paths: ModuleType, tmp_path: Path, xdg_corpus: Path
+    ) -> None:
+        # No wiki_has_model hook injected: "cannot confirm a wiki model"
+        # degrades to the file-store read-probe rather than assuming a model
+        # exists, so the existing docs/ model still wins.
+        docs_model = tmp_path / "docs" / "domain-model.md"
+        docs_model.parent.mkdir()
+        docs_model.write_text("**Term** — x.\n", encoding="utf-8")
+        corpus = "repo:easy-cheese:wiki"
+        backend, location = paths.domain_model_target(
+            repo_root=tmp_path,
+            list_corpora=lambda: [corpus],
+        )
+        assert (backend, location) == ("file", docs_model)
+
+    def test_wiki_still_wins_create_precedence_when_has_model_unconfirmed(
+        self, paths: ModuleType, tmp_path: Path, xdg_corpus: Path
+    ) -> None:
+        # No model exists anywhere and wiki_has_model can't confirm: the wiki
+        # still wins CREATE precedence (top of the list) even though it lost
+        # the read-probe race -- an unconfirmed wiki is not a confirmed-absent
+        # one.
+        (tmp_path / "docs").mkdir()
+        corpus = "repo:easy-cheese:wiki"
+        backend, location = paths.domain_model_target(
+            repo_root=tmp_path,
+            list_corpora=lambda: [corpus],
+        )
+        assert (backend, location) == ("hallouminate", corpus)
+
+    def test_wiki_has_model_hook_raising_degrades_like_absent(
+        self, paths: ModuleType, tmp_path: Path, xdg_corpus: Path
+    ) -> None:
+        # A raising wiki_has_model must not block resolution: same "cannot
+        # confirm" degrade as an absent hook.
+        def boom(corpus: str) -> bool:
+            raise RuntimeError("wiki probe unreachable")
+
+        docs_model = tmp_path / "docs" / "domain-model.md"
+        docs_model.parent.mkdir()
+        docs_model.write_text("**Term** — x.\n", encoding="utf-8")
+        corpus = "repo:easy-cheese:wiki"
+        backend, location = paths.domain_model_target(
+            repo_root=tmp_path,
+            list_corpora=lambda: [corpus],
+            wiki_has_model=boom,
+        )
+        assert (backend, location) == ("file", docs_model)
+
+    def test_unreachable_probe_degrades_to_file_stores(
+        self, paths: ModuleType, tmp_path: Path, xdg_corpus: Path
+    ) -> None:
+        # A probe that raises must not block resolution: degrade to the files.
+        def boom() -> list[str]:
+            raise RuntimeError("hallouminate unreachable")
+
+        (tmp_path / "docs").mkdir()
+        backend, location = paths.domain_model_target(
+            repo_root=tmp_path, list_corpora=boom
+        )
+        assert (backend, location) == ("file", tmp_path / "docs" / "domain-model.md")
+
+    def test_none_probe_skips_wiki_leg(
+        self, paths: ModuleType, tmp_path: Path, xdg_corpus: Path
+    ) -> None:
+        # The default: no probe injected → wiki leg skipped, file stores only.
+        backend, _ = paths.domain_model_target(repo_root=tmp_path)
+        assert backend == "file"
+
+
 class TestResolveSlug:
     def test_tier1_exact_repo_local(
         self, paths: ModuleType, tmp_path: Path
