@@ -80,7 +80,7 @@ Act on the score, do not guess:
 1. **One clear match (high confidence)** — surface the spec path in one line and dispatch against it (`/cook --auto .cheese/specs/<slug>.md`) instead of writing a duplicate.
 2. **Multiple plausible matches, or a weak best match** — under `--safe`, present the candidates in the handoff gate for the user to pick; without `--safe`, fall back to minting a fresh mini-spec rather than risk dispatching against the wrong spec.
 
-Skip silently when `.cheese/specs/` is empty or absent, and when the user already named a spec path there (the path is authoritative). Consider a small Python helper for the scoring step — stdlib `difflib.get_close_matches` over the slug/title list gives deterministic ranking with zero dependencies and keeps this check consistent with the rejected-directions scan.
+Skip silently when `.cheese/specs/` is empty or absent, and when the user already named a spec path there (the path is authoritative). A dedicated Python scoring helper (stdlib `difflib.get_close_matches` over the slug/title list) would give deterministic ranking with zero dependencies and keep this check consistent with the rejected-directions scan — tracked in issue #267.
 
 ## --continue
 
