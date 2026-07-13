@@ -17,6 +17,7 @@ import re
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
+from typing import NamedTuple
 
 # Source of truth: skills/ultracook/references/manifest-schema.json.
 # Kebab-case, no leading/trailing hyphen, no double hyphens, 1-64 chars.
@@ -470,24 +471,62 @@ def _existing_domain_model(store_root: Path) -> Path | None:
     return None
 
 
-def _wiki_corpus(
-    repo_root: Path, list_corpora: Callable[[], list[str]] | None
-) -> str | None:
-    """The consumer's ``repo:<their-repo>:wiki`` corpus name, or None.
+class WikiProbe(NamedTuple):
+    """Result of probing for the consumer's hallouminate wiki corpus.
 
-    Dynamic on purpose: the corpus name comes from the live ``list_corpora``
-    probe keyed to the repo under work — never a hardcoded literal. An absent or
-    unreachable probe (``None`` or one that raises) degrades to the file stores,
-    matching the ADR probe contract (skills/mold/references/adr.md).
+    ``reachable`` distinguishes "the probe ran and the corpus simply isn't
+    listed" (``reachable=True, corpus=None``) from "the probe couldn't be
+    consulted at all" (``reachable=False``) — no injected hook, or one that
+    raised. Collapsing those two into the same ``None`` would make it
+    impossible for a caller to "degrade to 'not loaded' and say so"
+    (skills/mold/references/modes.md) versus silently treating an empty wiki
+    as equivalent to an unreachable one.
+    """
+
+    corpus: str | None
+    reachable: bool
+
+
+def _wiki_corpus(list_corpora: Callable[[], list[str]] | None) -> WikiProbe:
+    """Shape-match the consumer's ``repo:*:wiki`` corpus, or report unreachable.
+
+    Matches by *shape* — the first listed corpus starting with ``repo:`` and
+    ending with ``:wiki`` — exactly like the Ground-phase probe
+    (skills/mold/references/grounding.md): ``first(c for c in corpora if
+    c.startswith("repo:") and c.endswith(":wiki"))``. Never reconstructed from
+    ``repo_root.name``, which drifts from the corpus name whenever the checkout
+    directory doesn't match the repo (worktrees, clones under a different
+    dirname). An absent or unreachable probe (``None`` or one that raises)
+    degrades to the file stores, matching the ADR probe contract
+    (skills/mold/references/adr.md).
     """
     if list_corpora is None:
-        return None
+        return WikiProbe(corpus=None, reachable=False)
     try:
         corpora = list_corpora()
     except Exception:
+        return WikiProbe(corpus=None, reachable=False)
+    wiki = next(
+        (c for c in corpora if c.startswith("repo:") and c.endswith(":wiki")), None
+    )
+    return WikiProbe(corpus=wiki, reachable=True)
+
+
+def _wiki_has_model(
+    wiki_has_model: Callable[[str], bool] | None, corpus: str
+) -> bool | None:
+    """Whether a domain-model document already exists in ``corpus``.
+
+    Three-valued: ``True``/``False`` when ``wiki_has_model`` confirms one way
+    or the other, ``None`` when the hook is absent or raises — "cannot
+    confirm", not "confirmed absent".
+    """
+    if wiki_has_model is None:
         return None
-    wanted = f"repo:{repo_root.name}:wiki"
-    return wanted if wanted in corpora else None
+    try:
+        return bool(wiki_has_model(corpus))
+    except Exception:
+        return None
 
 
 def domain_model_target(
@@ -495,31 +534,46 @@ def domain_model_target(
     repo_root: Path | str | None = None,
     project: str | None = None,
     list_corpora: Callable[[], list[str]] | None = None,
+    wiki_has_model: Callable[[str], bool] | None = None,
 ) -> tuple[str, str | Path]:
     """Resolve where the project domain model lives: ``(backend, location)``.
 
     Mirrors the ADR resolver (skills/mold/references/adr.md): an existing model
     always wins, so the full read-probe cascade runs before any create decision:
 
-    1. the consumer's ``repo:<their-repo>:wiki`` hallouminate corpus, when the
-       ``list_corpora`` probe is reachable and lists it (``("hallouminate", name)``);
+    1. the consumer's ``repo:*:wiki`` hallouminate corpus, shape-matched from
+       the ``list_corpora`` probe (skills/mold/references/grounding.md) —
+       returned only when ``wiki_has_model`` also confirms a domain-model
+       document already exists there (``("hallouminate", name)``);
     2. a tracked ``docs/domain-model*`` file store;
     3. ``<project_corpus_root()>/domain-model*`` — the XDG durable corpus.
 
-    When no model exists at any store, the first write is created by precedence:
-    the wiki when the probe found it, else ``docs/domain-model.md`` when a tracked
+    A wiki corpus that is merely *listed* does not win the read-probe on its
+    own — ``list_corpora`` can only confirm the corpus exists, not that a
+    model document lives in it, so an existing file-store model always wins
+    over an empty wiki corpus. When ``wiki_has_model`` is absent or raises,
+    that degrades to "cannot confirm a wiki model": the read-probe falls
+    through to the file stores, but the wiki still wins for *create* below
+    when its corpus is present — an unconfirmed wiki is not the same as a
+    confirmed-absent one.
+
+    When no model exists at any store, the first write is created by
+    precedence: the wiki when its corpus was found (regardless of
+    ``wiki_has_model``), else ``docs/domain-model.md`` when a tracked
     ``docs/`` directory exists, else ``<project_corpus_root()>/domain-model.md``.
 
-    ``list_corpora`` is an injected hook (the harness passes hallouminate's own
-    ``list_corpora``); when None or raising it degrades to the file stores. The
-    wiki corpus name is derived from the probe, never hardcoded.
+    ``list_corpora`` and ``wiki_has_model`` are injected hooks (the harness
+    passes hallouminate's own probes); when either is ``None`` or raises, that
+    leg degrades gracefully rather than blocking resolution. The wiki corpus
+    name is shape-matched from the probe's listing, never hardcoded or
+    reconstructed from ``repo_root.name``.
     """
     repo = _resolve_repo_root(repo_root)
     docs_root = repo / "docs"
     xdg_root = project_corpus_root(project)
 
-    wiki = _wiki_corpus(repo, list_corpora)
-    if wiki is not None:
+    wiki = _wiki_corpus(list_corpora).corpus
+    if wiki is not None and _wiki_has_model(wiki_has_model, wiki) is True:
         return ("hallouminate", wiki)
 
     # Read-probe the file stores in full: an existing model wins over a create.
@@ -528,6 +582,8 @@ def domain_model_target(
         if existing is not None:
             return ("file", existing)
 
-    # Create (first write): tracked docs/ if present, else the XDG durable corpus.
+    # Create (first write): wiki corpus if present, else tracked docs/, else XDG.
+    if wiki is not None:
+        return ("hallouminate", wiki)
     create_root = docs_root if docs_root.is_dir() else xdg_root
     return ("file", create_root / f"{DOMAIN_MODEL_STEM}.md")
