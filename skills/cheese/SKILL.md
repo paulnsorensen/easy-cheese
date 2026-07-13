@@ -73,13 +73,14 @@ This check is lightweight — a glob + keyword scan over `.cheese/.out-of-scope/
 
 ## Spec-discovery check
 
-Before minting a new mini-spec for a tier-1 `cook` or `mold` dispatch, scan `.cheese/specs/*.md` for an existing spec whose slug or title substantially matches the incoming request. This mirrors the rejected-directions scan — a lightweight glob + keyword match through `cheez-search`, not an interactive picker. If a match is found:
+Before minting a new mini-spec for a tier-1 `cook` or `mold` dispatch, look for an existing spec that already covers the request. Glob `.cheese/specs/*.md` and score each candidate on a lightweight keyword match against its slug, title, and first heading — a plain filename glob plus a text scan (host `rg` / read), not `cheez-search`, which is scoped to tracked source files and skips Markdown specs. This mirrors the rejected-directions scan and stays headless, so it runs on the autonomous path and across harnesses.
 
-1. Surface the existing spec path in one line.
-2. Prefer dispatching against it (`/cook --auto .cheese/specs/<slug>.md`) over writing a duplicate mini-spec.
-3. Under `--safe`, offer the existing spec as the pre-selected target with "write a fresh spec" as the alternative.
+Act on the score, do not guess:
 
-Skip silently when `.cheese/specs/` is empty or absent. Ranking stays keyword-based and headless — no `fzf`, no interactive fuzzy-finder — so the check works on the autonomous path and across harnesses. When the user already named a spec path under `.cheese/specs/`, skip this scan entirely (the path is authoritative).
+1. **One clear match (high confidence)** — surface the spec path in one line and dispatch against it (`/cook --auto .cheese/specs/<slug>.md`) instead of writing a duplicate.
+2. **Multiple plausible matches, or a weak best match** — under `--safe`, present the candidates in the handoff gate for the user to pick; without `--safe`, fall back to minting a fresh mini-spec rather than risk dispatching against the wrong spec.
+
+Skip silently when `.cheese/specs/` is empty or absent, and when the user already named a spec path there (the path is authoritative). Consider a small Python helper for the scoring step — stdlib `difflib.get_close_matches` over the slug/title list gives deterministic ranking with zero dependencies and keeps this check consistent with the rejected-directions scan.
 
 ## --continue
 
