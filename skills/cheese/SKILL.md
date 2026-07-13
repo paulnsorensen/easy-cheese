@@ -50,7 +50,7 @@ The full classification table — including all intent shapes, signals, disambig
 
 For `cook` and `mold` intents, `/cheese` runs cook's fast-path check (§ "Standalone fast-path" in `skills/cook/SKILL.md`) and escalates through three tiers:
 
-**Tier 1 — clear (all three checks pass).** Agent invokes `/mold`'s agent-invoked mini-spec mode (see `skills/mold/SKILL.md` § Agent-invoked mini-spec mode) to write `.cheese/specs/<slug>.md`, then dispatches `/cook --auto <spec-path>` in the same turn as the announce, where `<spec-path>` is the explicit mini-spec path returned by `/mold`. Do not collapse that path to a bare `<slug>`. No user interaction. When the input already names a spec path under `.cheese/specs/`, skip the mini-spec write and dispatch `/cook --auto` against the existing path directly.
+**Tier 1 — clear (all three checks pass).** First run the `## Spec-discovery check` — if an existing spec in `.cheese/specs/` substantially matches the request, dispatch `/cook --auto` against it and skip the mini-spec write. Otherwise the agent invokes `/mold`'s agent-invoked mini-spec mode (see `skills/mold/SKILL.md` § Agent-invoked mini-spec mode) to write `.cheese/specs/<slug>.md`, then dispatches `/cook --auto <spec-path>` in the same turn as the announce, where `<spec-path>` is the explicit mini-spec path returned by `/mold`. Do not collapse that path to a bare `<slug>`. No user interaction. When the input already names a spec path under `.cheese/specs/`, skip both the discovery scan and the mini-spec write and dispatch `/cook --auto` against the existing path directly.
 
 **Tier 2 — borderline (any check fails or is uncertain).** Agent autonomously invokes `/culture` (internal thinking) and/or `/briesearch` (internal research), in any order, to fill the missing context. After the internal pass, re-run the cook fast-path check on the refined understanding. If all three checks now pass, drop into tier 1 (the mini-spec records the culture / briesearch synthesis under `## Provenance`). Otherwise tier 3.
 
@@ -69,6 +69,17 @@ Before dispatching any `mold` intent, scan `.cheese/.out-of-scope/` for rejectio
 3. Do not suppress or re-propose the rejected direction silently.
 
 This check is lightweight — a glob + keyword scan over `.cheese/.out-of-scope/*.md`. Skip silently when the directory does not exist. Non-`mold` intents skip this check.
+
+## Spec-discovery check
+
+Before minting a new mini-spec for a tier-1 `cook` or `mold` dispatch, look for an existing spec that already covers the request. Glob `.cheese/specs/*.md` and score each candidate on a lightweight keyword match against its slug, title, and first heading — a plain filename glob plus a text scan (host `rg` / read), not `cheez-search`, which is scoped to tracked source files and skips Markdown specs. This mirrors the rejected-directions scan and stays headless, so it runs on the autonomous path and across harnesses.
+
+Act on the score, do not guess:
+
+1. **One clear match (high confidence)** — surface the spec path in one line and dispatch against it (`/cook --auto .cheese/specs/<slug>.md`) instead of writing a duplicate.
+2. **Multiple plausible matches, or a weak best match** — under `--safe`, present the candidates in the handoff gate for the user to pick; without `--safe`, fall back to minting a fresh mini-spec rather than risk dispatching against the wrong spec.
+
+Skip silently when `.cheese/specs/` is empty or absent, and when the user already named a spec path there (the path is authoritative). A dedicated Python scoring helper (stdlib `difflib.get_close_matches` over the slug/title list) would give deterministic ranking with zero dependencies and keep this check consistent with the rejected-directions scan — tracked in issue #267.
 
 ## --continue
 

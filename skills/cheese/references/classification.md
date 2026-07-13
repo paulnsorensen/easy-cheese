@@ -90,6 +90,8 @@ Clear, scoped implementation request meeting the standalone fast-path checks.
 
 When two of the three fast-path checks are clear but the third is borderline, downgrade to `mold`.
 
+Before minting a fresh mini-spec for a tier-1 `cook`/`mold` dispatch, the router runs the `## Spec-discovery check` in `skills/cheese/SKILL.md` — a keyword glob over `.cheese/specs/*.md` that reuses an existing matching spec instead of writing a duplicate.
+
 ### debug (`/pasteurize --auto` → `/cook --auto`)
 
 Symptom-driven work where the cause has not been confirmed yet and a code-level fix is expected.
