@@ -243,6 +243,22 @@ class TestDomainModelTarget:
         (split / "index.md").write_text("# contexts\n", encoding="utf-8")
         assert paths.domain_model_target(repo_root=tmp_path) == ("file", split)
 
+    def test_single_file_wins_over_split_dir_in_same_store(
+        self, paths: ModuleType, tmp_path: Path, xdg_corpus: Path
+    ) -> None:
+        # Migration debt: both layouts somehow coexist in the same store. Per
+        # the single->split lazy-migration order documented on
+        # `_existing_domain_model`, the file must win — a mutation that probes
+        # the split dir first would silently orphan the single-file model.
+        docs = tmp_path / "docs"
+        docs.mkdir()
+        single = docs / "domain-model.md"
+        single.write_text("**Term** — x.\n", encoding="utf-8")
+        split = docs / "domain-model"
+        split.mkdir()
+        (split / "index.md").write_text("# contexts\n", encoding="utf-8")
+        assert paths.domain_model_target(repo_root=tmp_path) == ("file", single)
+
     def test_docs_store_precedes_xdg_store_on_read(
         self, paths: ModuleType, tmp_path: Path, xdg_corpus: Path
     ) -> None:
