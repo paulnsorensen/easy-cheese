@@ -15,6 +15,7 @@ import functools
 import os
 import re
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
 # Source of truth: skills/ultracook/references/manifest-schema.json.
@@ -445,3 +446,88 @@ def list_artifacts(phase: str, *, repo_root: Path | str | None = None) -> list[d
     repo = _resolve_repo_root(repo_root)
     entries = sorted(_phase_entries(phase, repo), key=lambda e: (e[0], str(e[1])))
     return [{"slug": stem, "path": str(path)} for stem, path in entries]
+
+
+# The project domain model's file stem. A single bounded context lives in
+# `<stem>.md`; at the second context the store splits into a `<stem>/` directory
+# (index.md + one page per context). Both layouts share this stem.
+DOMAIN_MODEL_STEM = "domain-model"
+
+
+def _existing_domain_model(store_root: Path) -> Path | None:
+    """The domain model already in a file store, or None.
+
+    Matches both layouts: the single-context `<store>/domain-model.md` file and
+    the multi-context `<store>/domain-model/` directory. The file wins when both
+    somehow exist, mirroring the single→split lazy-migration order.
+    """
+    single = store_root / f"{DOMAIN_MODEL_STEM}.md"
+    if single.is_file():
+        return single
+    split = store_root / DOMAIN_MODEL_STEM
+    if split.is_dir():
+        return split
+    return None
+
+
+def _wiki_corpus(
+    repo_root: Path, list_corpora: Callable[[], list[str]] | None
+) -> str | None:
+    """The consumer's ``repo:<their-repo>:wiki`` corpus name, or None.
+
+    Dynamic on purpose: the corpus name comes from the live ``list_corpora``
+    probe keyed to the repo under work — never a hardcoded literal. An absent or
+    unreachable probe (``None`` or one that raises) degrades to the file stores,
+    matching the ADR probe contract (skills/mold/references/adr.md).
+    """
+    if list_corpora is None:
+        return None
+    try:
+        corpora = list_corpora()
+    except Exception:
+        return None
+    wanted = f"repo:{repo_root.name}:wiki"
+    return wanted if wanted in corpora else None
+
+
+def domain_model_target(
+    *,
+    repo_root: Path | str | None = None,
+    project: str | None = None,
+    list_corpora: Callable[[], list[str]] | None = None,
+) -> tuple[str, str | Path]:
+    """Resolve where the project domain model lives: ``(backend, location)``.
+
+    Mirrors the ADR resolver (skills/mold/references/adr.md): an existing model
+    always wins, so the full read-probe cascade runs before any create decision:
+
+    1. the consumer's ``repo:<their-repo>:wiki`` hallouminate corpus, when the
+       ``list_corpora`` probe is reachable and lists it (``("hallouminate", name)``);
+    2. a tracked ``docs/domain-model*`` file store;
+    3. ``<project_corpus_root()>/domain-model*`` — the XDG durable corpus.
+
+    When no model exists at any store, the first write is created by precedence:
+    the wiki when the probe found it, else ``docs/domain-model.md`` when a tracked
+    ``docs/`` directory exists, else ``<project_corpus_root()>/domain-model.md``.
+
+    ``list_corpora`` is an injected hook (the harness passes hallouminate's own
+    ``list_corpora``); when None or raising it degrades to the file stores. The
+    wiki corpus name is derived from the probe, never hardcoded.
+    """
+    repo = _resolve_repo_root(repo_root)
+    docs_root = repo / "docs"
+    xdg_root = project_corpus_root(project)
+
+    wiki = _wiki_corpus(repo, list_corpora)
+    if wiki is not None:
+        return ("hallouminate", wiki)
+
+    # Read-probe the file stores in full: an existing model wins over a create.
+    for store_root in (docs_root, xdg_root):
+        existing = _existing_domain_model(store_root)
+        if existing is not None:
+            return ("file", existing)
+
+    # Create (first write): tracked docs/ if present, else the XDG durable corpus.
+    create_root = docs_root if docs_root.is_dir() else xdg_root
+    return ("file", create_root / f"{DOMAIN_MODEL_STEM}.md")
