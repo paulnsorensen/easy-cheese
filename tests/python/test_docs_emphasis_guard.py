@@ -250,49 +250,100 @@ def test_harness_portability_reference_covers_the_portability_contract():
 
 
 def test_question_routing_is_native_first_and_lossless():
+    questions = (REPO_ROOT / "skills/cheese/references/ask-user-question.md").read_text(
+        encoding="utf-8"
+    )
     portability = (REPO_ROOT / "skills/cheese/references/harness-portability.md").read_text(
         encoding="utf-8"
     )
     gate = (REPO_ROOT / "skills/cheese/references/handoff-gate.md").read_text(encoding="utf-8")
 
-    # Native structured controls stay first-class on both primary harnesses.
-    assert "Claude Code: `AskUserQuestion`" in portability
-    assert "Codex: `request_user_input`" in portability
-    assert "active collaboration mode permits it" in portability
-    assert "richest callable structured question primitive" in portability
+    # Ownership stays explicit: generic transport lives in one shared reference.
+    assert "ask-user-question.md" in portability
+    assert "handoff-gate.md" in portability
+    assert "ask-user-question.md" in gate
+    assert "AskUserQuestion" not in portability
+    assert "| Claude Code |" not in gate
 
-    # Routing discovers the callable primitive and its live advertised capacities.
-    for body in (portability, gate):
-        assert "callable" in body
-        assert "advertised question and option capacities" in body
-    assert "active tool list and current collaboration mode both allow it" in gate
-    assert "capacities advertised by that callable primitive" in gate
+    # Handoff records project losslessly into the generic question schema.
+    for required in (
+        "source_skill: /cook",
+        "**Source skill**",
+        "id: post-cook-next-step",
+        "prompt: What should happen next?",
+        "recommended: harden-tests",
+        "multi: false",
+        "description: Strengthen regression coverage before review.",
+    ):
+        assert required in gate
+    assert "question.id = handoff_gate.id" in gate
+    assert "question.options = handoff_gate.options" in gate
+    assert "keyed by option id" in gate
 
-    # A four-option gate is conditional on the active schema, never a Codex-wide limit.
-    for body in (portability, gate):
-        assert "If an active" in body
-        assert "2-3 explicit choices" in body
-        assert "four-option" in body
-        assert "2-3 explicit-choice limit" not in body
+    # Four standard semantic options are a menu design, never a transport cap.
+    assert "four options by design, not a host or button cap" in gate
+    assert "every gate-specific alternative" in gate
+    assert "four-option cap" not in gate
+    assert "stays as prose plus the free-form `Other` path" not in gate
 
-    # Every rendering preserves the semantic decision without dropping fidelity.
-    assert "faithfully encode the complete decision" in portability
-    assert "limits cannot represent every action" in portability
-    assert "lossless numbered-text fallback" in portability
-    assert "Never merge, hide, or drop actions" in portability
+    # Runtime discovery uses the richest lossless callable primitive.
+    assert "richest callable structured question primitive" in questions
+    assert "advertised question and option capacities" in questions
+    assert "Runtime capability detection always wins over the wrapper or provider name." in questions
+    assert "selected underlying agent or provider" in questions
+
+    # Codex capacities are live, mode-aware, and never shrink four-option decisions.
+    assert "active tool list and current collaboration mode both allow it" in questions
+    assert "capacities advertised by that callable primitive" in questions
+    assert "If an active" in questions
+    assert "2-3 explicit choices" in questions
+    assert "four-option" in questions
+    assert "2-3 explicit-choice limit" not in questions
+
+    # Every rendering preserves the complete semantic question.
+    assert "Never merge, hide, or drop options" in questions
+    assert "fallback must enumerate every option" in questions
     for required in (
         "recommended choice",
         "every option's effect or tradeoff",
         "free-form `Other`",
-        "immediate execution",
+        "recommended option's description",
+        "omit the `Recommended:` line",
+        "displayed 1-based ordinal",
     ):
-        assert required in portability
-    assert "faithfully encode every option" in gate
-    assert "Never merge or drop actions" in gate
-    assert "fallback must enumerate every option" in gate
-    assert "free-form `Other` path" in gate
-    assert "execute that in-skill action immediately" in gate
-    assert "immediately enter that skill" in gate
+        assert required in questions
+
+    # Every named harness keeps an explicit, capability-driven route.
+    for harness in (
+        "Claude Code",
+        "Codex / OpenAI app-server",
+        "Conductor",
+        "OpenCode",
+        "Pi",
+        "OMP / Oh My Pi",
+        "Emdash / Em Dash",
+        "Cursor CLI / ACP",
+    ):
+        assert f"| {harness} |" in questions
+
+    # Pi needs a loaded extension; OMP owns a distinct interactive built-in.
+    assert "visibly loaded and callable extension tool" in questions
+    assert "`ctx.hasUI`" in questions
+    assert "Markdown skill cannot call `ctx.ui` directly" in questions
+    assert "interactive-only built-in" in questions
+    assert "`id`, `question`, and `options[]`" in questions
+    assert "`Other` is automatic" in questions
+
+    # Emdash is a provider host, not another universal question schema.
+    assert "does not define one universal question API" in questions
+    assert "selected provider's advertised primitive" in questions
+
+    # Generic batching, defaults, and answer normalization stay with transport.
+    assert "Ask one decision by default" in questions
+    assert "at most three related questions" in questions
+    assert "Never auto-resolve a blocking approval" in questions
+    assert "Normalize the answer" in questions
+    assert "If the answer is ambiguous" in questions
 
 
 @pytest.mark.parametrize(
@@ -314,6 +365,13 @@ def test_core_workflow_question_sites_reference_shared_handoff_gate(skill: str):
     body = (REPO_ROOT / f"skills/{skill}/SKILL.md").read_text(encoding="utf-8")
 
     assert "handoff-gate.md" in body
+
+
+def test_briesearch_clarifying_questions_reference_shared_question_transport():
+    body = (REPO_ROOT / "skills/briesearch/SKILL.md").read_text(encoding="utf-8")
+
+    assert "ask-user-question.md" in body
+    assert "handoff-gate.md" not in body
 
 
 def test_core_cheese_questions_use_the_shared_handoff_gate():

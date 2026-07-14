@@ -15,7 +15,7 @@ Not for a single obvious file lookup or when the user already has enough evidenc
 
 ## Inputs
 
-Accept the whole user prompt as the research question. If version, framework, repo scope, or decision criteria are missing and would change the source plan, ask one clarifying question; otherwise proceed with stated assumptions.
+Accept the whole user prompt as the research question. If version, framework, repo scope, or decision criteria are missing and would change the source plan, ask one clarifying question through the shared transport in [`../cheese/references/ask-user-question.md`](../cheese/references/ask-user-question.md); otherwise proceed with stated assumptions.
 
 ## Flow
 
