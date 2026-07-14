@@ -267,6 +267,8 @@ def test_question_routing_is_native_first_and_lossless():
 
     # Handoff records project losslessly into the generic question schema.
     for required in (
+        "source_skill: /cook",
+        "**Source skill**",
         "id: post-cook-next-step",
         "prompt: What should happen next?",
         "recommended: harden-tests",
@@ -305,6 +307,9 @@ def test_question_routing_is_native_first_and_lossless():
         "recommended choice",
         "every option's effect or tradeoff",
         "free-form `Other`",
+        "recommended option's description",
+        "omit the `Recommended:` line",
+        "displayed 1-based ordinal",
     ):
         assert required in questions
 

@@ -56,7 +56,7 @@ This is native-first, not lowest-common-denominator behavior. Never merge, hide,
 
 ```markdown
 Question: <one short question>
-Recommended: <label> — <why>
+Recommended: <label> — <recommended option's description>
 
 1. <label> — <effect/tradeoff>
 2. <label> — <effect/tradeoff>
@@ -66,8 +66,10 @@ Recommended: <label> — <why>
 Other: reply with `other: <short answer>`
 ```
 
-A fallback must enumerate every option; its list is not capped at three. Use
-the label identified by `question.recommended`; do not assume it is option 1.
+A fallback must enumerate every option; its list is not capped at three. When
+`question.recommended` names an option, render its label and description on the
+`Recommended:` line; do not assume it is option 1. When
+`question.recommended` is `none`, omit the `Recommended:` line.
 A hybrid is lossless only when every action omitted from the structured control
 remains an explicit, equally actionable numbered choice.
 
@@ -82,8 +84,9 @@ remains an explicit, equally actionable numbered choice.
 
 ## Normalize the answer
 
-1. Normalize the answer to an option `id`, an unambiguous option label, or a
-   free-form `other:` value.
+1. Map a displayed 1-based ordinal to the corresponding option `id`. Otherwise,
+   normalize an option `id`, an unambiguous option label, or a free-form
+   `other:` value.
 2. Preserve multiple selections only when `multi: true`.
 3. If the answer is ambiguous, ask one clarifying question through this same
    transport; do not guess.

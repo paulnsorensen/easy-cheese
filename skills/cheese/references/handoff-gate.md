@@ -52,6 +52,7 @@ handoff_gate:
 
 Every gate must include:
 
+- **Source skill** — the calling workflow skill that owns the gate.
 - **ID** — a stable question identifier.
 - **Prompt** — one short question.
 - **Recommended** — one option ID, or `none`.
