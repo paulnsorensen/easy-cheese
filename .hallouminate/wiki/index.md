@@ -14,6 +14,7 @@ and "why this design not that one" rationale.
 - [tooling](./tooling.md) — `just check`/`just ci`, validators, tilth/`cheez-*` hard-fail, `.pyz` bundles, CI workflows.
 - [wiki-conventions](./wiki-conventions.md) — how to author entries here, plus the durable-vs-transient boundary table.
 - [workflow-invariants](./workflow-invariants.md) — pipeline ordering, two-key handshake, handoff gates, `just check` single gate.
+- [spec-workflow-comparison](./spec-workflow-comparison.md) — /mold vs Matt Pocock grill-with-docs vs Superpowers brainstorming vs spec.md, plus Spec Kit/Kiro/BMAD/Taskmaster/Agent OS/OpenSpec/Tessl.
 <!-- HALLOUMINATE:INDEX-END -->
 
 ## How to use this index
