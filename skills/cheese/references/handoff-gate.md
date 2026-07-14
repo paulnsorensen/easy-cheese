@@ -16,95 +16,95 @@ A handoff gate prevents silent dispatch. It does not mean the agent stops after 
 
 ## Gate shape
 
-Before asking, render each option as a structured record. The host UI may show this as buttons, a structured question, or a numbered list, but the semantics must be stable. The top-level key is `handoff_gate:` to distinguish it from per-option context payloads (`handoff_context:` — see below):
+Before asking, build a structured gate record. The top-level key is
+`handoff_gate:` to distinguish it from per-option context payloads
+(`handoff_context:` — see below):
 
 ```yaml
 handoff_gate:
-  source_skill: /<current-skill>
-  recommended: <label-or-none>
+  source_skill: /cook
+  id: post-cook-next-step
+  prompt: What should happen next?
+  recommended: harden-tests
+  multi: false
   options:
-    - label: Run /press <slug>
+    - id: harden-tests
+      label: Harden tests before review
+      description: Strengthen regression coverage before review.
       dispatch: /press <slug>
       context:
         slug: <slug>
         source_report: .cheese/cook/<slug>.md
         flags: []
-    - label: Modify decomposition
+    - id: modify-decomposition
+      label: Modify decomposition
+      description: Revise the current decomposition before continuing.
       continue: ask-for-decomposition-change
       context:
         scope: current-skill
-    - label: Stop
+    - id: stop
+      label: Stop
+      description: Leave the pipeline paused without starting another skill.
       dispatch: none
       context:
         reason: leave pipeline paused
 ```
 
-Every option must include:
+Every gate must include:
 
-- **Label** — the user-facing choice.
-- Exactly one of:
-  - **Dispatch** — the exact command for a skill transition (`/press <slug>`, `/age <slug> --hard`, …), including slug/path/scope and propagated flags such as `--hard`.
-  - **Continue** — a short identifier for an in-skill action the current skill knows how to execute (e.g. `ask-for-decomposition-change`, `re-run-decomposer`, `write-manifest-then-seed`).
-  - `dispatch: none` — terminal options (Stop, Pause, Compact) that return a final status and do not start another skill.
-- **Context** — any prose or structured payload the action needs but that is not part of the command line.
-- **On select** — execute the dispatch or continue action immediately after the user selects it.
+- **ID** — a stable question identifier.
+- **Prompt** — one short question.
+- **Recommended** — one option ID, or `none`.
+- **Multi** — whether multiple option IDs may be selected.
+- **Options** — each with a stable **ID**, user-facing **label**, and
+  **description** of its effect or tradeoff.
+- Exactly one action per option:
+  - **Dispatch** — the exact command for a skill transition
+    (`/press <slug>`, `/age <slug> --hard`, …), including slug/path/scope and
+    propagated flags such as `--hard`.
+  - **Continue** — a short identifier for an in-skill action the current skill
+    knows how to execute (e.g. `ask-for-decomposition-change`,
+    `re-run-decomposer`, `write-manifest-then-seed`).
+  - `dispatch: none` — a terminal option (Stop, Pause, Compact) that returns a
+    final status and does not start another skill.
+- **Context** — any payload the action needs that is not part of the command.
+- **On select** — execute the action immediately after the user selects it.
 
-`dispatch: none` is for *terminal* options only. Options that keep the current skill running must use `continue:`, not `dispatch: none`, so the gate reader can tell "stop" apart from "do something else in this skill".
+`dispatch: none` is for terminal options only. Options that keep the current
+skill running use `continue:`, so the gate reader can distinguish stopping from
+continuing within the current skill.
 
-## Host routing guide
+## Render the gate
 
-The `handoff_gate:` block is the semantic source of truth. After building it,
-choose the richest question mechanism the current harness actually exposes **and
-that can faithfully encode every option**. Inspect the active primitive's
-advertised question and option capacities rather than assuming limits from a
-particular harness version; never name a host tool in the transcript unless it
-is callable in that session.
+Project the generic question fields without renaming or inventing values:
 
-| Harness | Prefer | Notes |
-| --- | --- | --- |
-| Claude Code | `AskUserQuestion` | Supports `questions[]` with `question`, short `header`, `options[]`, and optional `multiSelect`; hooks can fill `answers` via `updatedInput`. Source: [Claude Code hooks reference](https://docs.anthropic.com/en/docs/claude-code/hooks#askuserquestion). |
-| Codex / OpenAI app-server | `request_user_input` / `tool/requestUserInput` when exposed and lossless | In Codex CLI, use `request_user_input` only when the active tool list and current collaboration mode both allow it **and the full gate fits the capacities advertised by that callable primitive**. If an active schema advertises only 2-3 explicit choices, a standard four-option forward-step menu does not fit: render every action with the numbered fallback (or a lossless hybrid where the fourth action remains an explicit numbered choice). Never merge or drop actions to make the tool call fit. Source: [Codex app-server reference](https://developers.openai.com/codex/app-server). |
-| Conductor | Underlying agent primitive | Conductor runs Claude Code or Codex sessions; route to that agent's question primitive. Conductor Plan Mode exists for both, but Conductor is not a separate question API. Source: [Conductor agent modes](https://conductor.build/docs/concepts/agent-modes). |
-| OpenCode | `question` tool | The built-in `question` tool asks during execution with header, question text, options, and custom answers; ensure `permission.question` is not denied. Source: [OpenCode tools](https://opencode.ai/docs/tools#question). |
-| GitHub Copilot CLI | `ask_user` tool | Copilot CLI lists `ask_user` as "Ask the user a question" and `--no-ask-user` disables it. Use it when available; otherwise numbered text. Source: [Copilot CLI command reference](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-command-reference). |
-| Gemini CLI | `ask_user` tool | Google codelab output lists `Ask User (ask_user)` in `/tools`; use it when present. Source: [Gemini CLI codelab](https://codelabs.developers.google.com/gemini-cli-hands-on). |
-| Cursor CLI / ACP | `cursor/ask_question` when exposed | Cursor ACP documents `cursor/ask_question` as a blocking extension method; use it only inside hosts that expose that ACP method. Source: [Cursor ACP docs](https://cursor.com/docs/cli/acp#cursor-extension-methods). |
-| Windsurf Cascade | Plan-mode interactive questions when in Plan Mode | Cascade Plan Mode can ask clarifying questions and present multiple options with an interactive interface. Outside that mode, fall back to numbered text unless a host tool is exposed. Source: [Cascade modes](https://docs.windsurf.com/windsurf/cascade/modes). |
-| MCP server flows | `elicitation/create` | Use only when an MCP server is requesting user input through a client that supports elicitation. It is not a general assistant-to-user question primitive. Source: [MCP elicitation](https://modelcontextprotocol.io/specification/latest/client/elicitation). |
-| Aider and unknown harnesses | Numbered text | If no structured primitive is visible, ask a plain numbered question and wait for the next user reply. |
-
-### Portable fallback format
-
-```markdown
-Question: <one short question>
-Recommended: <label> — <why>
-
-1. <label> — <effect/tradeoff>
-2. <label> — <effect/tradeoff>
-3. <label> — <effect/tradeoff>
-4. <label> — <effect/tradeoff, when present>
-... <continue until every handoff_gate option is explicit>
-Other: reply with `other: <short answer>`
+```text
+question.id = handoff_gate.id
+question.prompt = handoff_gate.prompt
+question.recommended = handoff_gate.recommended
+question.multi = handoff_gate.multi
+question.options = handoff_gate.options map { id, label, description }
 ```
 
-Use the option label from `handoff_gate.recommended`; do not assume the
-recommended option is numbered `1` unless you deliberately rendered that label
-as option 1 in this fallback.
-
-Keep gates small: one decision by default, at most three questions when the
-host primitive explicitly supports batching. Include a free-form `Other` path
-when the host supports it; otherwise spell out the `other:` fallback in text.
-
-The fallback must enumerate every option in `handoff_gate.options`; its list is not capped at three. Host option limits select the rendering mechanism—they never shrink the decision.
+Retain `source_skill`, `dispatch`, `continue`, and `context` in the gate,
+keyed by option id. After the shared
+[`ask-user-question.md`](ask-user-question.md) transport returns normalized
+option IDs, resolve those IDs against the original gate record. This projection
+preserves every question field and every action field; host capabilities only
+change presentation.
 
 ## After the answer arrives
 
-1. Normalize the answer to one option label or recognized free-text verb.
-2. If the answer is ambiguous, ask one clarifying question; do not guess.
-3. If the selected option has `dispatch: none`, stop with the relevant artifact path or pause status.
-4. If the selected option has a `continue:` identifier, execute that in-skill action immediately.
-5. If the selected option has a `dispatch:` command, immediately enter that skill with the exact command and context packet.
-6. Do not re-run `/cheese` classification unless the selected option explicitly says to do so.
+1. Normalize the answer through
+   [`ask-user-question.md`](ask-user-question.md).
+2. If the selected option has `dispatch: none`, stop with the relevant artifact
+   path or pause status.
+3. If the selected option has a `continue:` identifier, execute that in-skill
+   action immediately.
+4. If the selected option has a `dispatch:` command, immediately enter that
+   skill with the exact command and context packet.
+5. Do not re-run `/cheese` classification unless the selected option explicitly
+   says to do so.
 
 ## Context payloads
 
@@ -136,13 +136,24 @@ Outside those autonomous paths, interactive gates must not add `--auto` unless t
 
 ## Standard forward-step menu
 
-The forward command and its label vary per gate. Simple gates share one four-option shape — a forward step plus the standard tail (**Ship it**, **Checkpoint & stop**, **Stop**); gates with a richer *core* decision render that decision's options first, then append the same tail (see below):
+The forward command and its label vary per gate. A simple menu contains four options by design, not a host or button cap: one forward step plus the standard
+tail (**Ship it**, **Checkpoint & stop**, **Stop**). Gates with a richer *core*
+decision render that decision's options first, then append the same tail:
 
-- **\<forward verb\>** *(recommended)* — the plain forward command: one phase, interactive downstream (e.g. `/press <slug>`).
-- **Ship it** — the forward command plus `--auto --open-pr`: run the rest of the pipeline headless and open (or push) the PR at the terminal cure (e.g. `/press <slug> --auto --open-pr`).
-- **Checkpoint & stop** — `/wheypoint`: write a resumable handoff slug and pause, so a fresh context can resume via `/cheese --continue <slug>`.
-- **Stop** — dispatch none; leave the pipeline paused with no checkpoint.
+- **\<forward verb\>** *(recommended)* — the plain forward command: one phase,
+  interactive downstream (e.g. `/press <slug>`).
+- **Ship it** — the forward command plus `--auto --open-pr`: run the rest of the
+  pipeline headless and open (or push) the PR at the terminal cure (e.g.
+  `/press <slug> --auto --open-pr`).
+- **Checkpoint & stop** — `/wheypoint`: write a resumable handoff slug and pause,
+  so a fresh context can resume via `/cheese --continue <slug>`.
+- **Stop** — `dispatch: none`; leave the pipeline paused with no checkpoint.
 
-Propagate any in-scope `--hard` onto both runnable options (vanilla and **Ship it**). The four-option cap is why **Ship it** bundles `--auto` and `--open-pr` rather than offering them separately — `--open-pr` only acts at the terminal cure, so a standalone open-pr option at an upstream gate would not do anything until the chain reaches cure; it rides the headless chain instead.
+Propagate any in-scope `--hard` onto both runnable standard options. **Ship it**
+bundles `--auto` and `--open-pr` because `--open-pr` acts only when the chain
+reaches terminal cure; the bundling is unrelated to host option capacity.
 
-When a gate carries a richer *core* decision (e.g. `/age`'s finding selection, or `/cure`'s push-vs-re-review), render that decision's options first, then append **Ship it**, **Checkpoint & stop**, and **Stop** as the standard tail. A gate-specific alternative that does not fit the four buttons (e.g. cook's "skip press, review now") stays as prose plus the free-form `Other` path rather than displacing a standard option.
+When a gate carries a richer *core* decision, keep every gate-specific alternative as an explicit `handoff_gate.options` record, then append the
+standard tail. The shared question transport decides whether to use structured
+controls or the numbered fallback; no alternative is demoted to prose or
+`Other`.
