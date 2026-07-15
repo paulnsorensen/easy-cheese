@@ -85,7 +85,7 @@ When `affinage.pyz pr-status` reports `merge.mergeable: CONFLICTING` or `merge.s
 
 1. Materialise the conflicts locally: `gh pr checkout <pr>`, then `git merge origin/<base>`. (`gh pr checkout` neither opens nor updates the PR, so it does not breach the no-`/gh` rule.)
 2. Hand off to `/melt`. It first checks for squash-merge residue and stops with remedies if found — surface those verbatim and do not auto-apply.
-3. After `/melt` resolves cleanly, the resolution commit is owned by `/melt` / `/cure`. Pushing the resolved merge follows `/cure`'s push contract (§Rules).
+3. After `/melt` resolves cleanly, the resolution commit is owned by `/melt` / `/cure`. `/plate` owns the verified commit and existing-PR update transaction.
 
 - **Default and `--auto` mode**: run the checkout + `/melt` automatically before dispatching `/cure`, then re-run `affinage.pyz pr-status` to confirm `mergeable` cleared. If `/melt` cannot resolve (manual kdiff3 needed, or squash residue), write `status: halt: merge-conflicts-need-human` and stop.
 - **`--safe` mode**: gate the checkout + `/melt` behind the handoff prompt — offer "Resolve merge conflicts" alongside the cure-selection options.
@@ -189,7 +189,7 @@ Per-finding `confidence:` uses the voice-kernel scale (`../age/references/voice.
 
 ## Handoff
 
-**Pipeline:** culture → mold → cook → press → age → cure → ship · `/affinage` is parallel to `/age` and feeds the same `/cure`.
+**Pipeline:** culture → mold → cook → press → age → cure → plate · `/affinage` is parallel to `/age` and feeds `/cure`.
 
 After the report lands, affinage acts by default and asks only on a genuine reason (a sprawling/structural fix in the recommended set, conflicting findings) or under `--safe` (Flow step 8). What it acts on depends on whether any severity-section finding exists.
 
@@ -243,7 +243,7 @@ When invoked with `--auto --stake <floor>`:
 - After `/cure --auto` and its downstream `/age --scope --auto` chain settle, post replies for the originally graded items only. Do NOT re-grade for findings discovered by `/age --scope`.
 - Reviewer-rejected items: post the pre-drafted push-back.
 - Needs-investigation items: post the explicit follow-up note naming the evidence that would settle the claim (`"Needs <named test/prototype> to confirm — will follow up with the result."`). Auto mode does not pause to run the spike; it posts the honest follow-up note, never a blind acknowledgement.
-- `/affinage` does not invoke `/gh` itself — push contract is in §Rules.
+- `/affinage` does not invoke `/plate` itself — publication remains in `/cure`'s terminal handoff.
 
 The whole cure chain (cure → `/age --scope --auto` → up to the two-cure-pass cap) must run in the parent affinage context so the post-cure reply step still has the original graded findings (slug, ids, `from-comment:<id>` tags, drafted push-back text) in memory. Spawning the cure chain in a sub-agent breaks reply posting — do not.
 
@@ -251,7 +251,7 @@ If no findings meet the floor, skip the `/cure` dispatch, post replies for `Revi
 
 ## --hard mode
 
-`/affinage` does not fire the `/hard-cheese` gate. It propagates `--hard` forward to `/cure` so the gate can fire at the share-for-review boundary inside `/cure --hard`. See `skills/cure/SKILL.md` `--hard mode`.
+`/affinage` passes `--hard` through `/cure` to terminal `/plate`, which fires `/hard-cheese` after verifying the final artifact state.
 
 ## Rules
 
@@ -260,8 +260,8 @@ If no findings meet the floor, skip the `/cure` dispatch, post replies for `Revi
 - Never auto-apply fixes from `/affinage` itself. Code fixes go through `/cure`; merge conflicts go through `/melt`.
 - Never post a GitHub reply without approval. Reply posting is gated by default (§Handoff reply-approval gate); only `--auto` posts autonomously. A `Needs-investigation` reply must name the follow-up test or exploration and offer to run it (`/pasteurize` or `/briesearch`) before posting — never a blind acknowledgement.
 - Fresh `/age` runs only on standalone invocations (no upstream `handoff_context`) and only when `--no-age` is absent. Chained runs never re-review the diff.
-- Merge conflicts are resolved through `/melt`, not by hand. `gh pr checkout` to materialise conflicts is allowed — it neither opens nor updates the PR. Pushing follows `/cure`'s push contract (see next rule).
-- `/affinage` never invokes `/gh` itself. The PR push happens inside `/cure` after a clean cure (push to the already-open PR by default; `--open-pr` opens a new one; `--safe` re-gates).
+- Merge conflicts are resolved through `/melt`, not by hand. `gh pr checkout` to materialise conflicts is allowed — it neither opens nor updates the PR. After resolution, `/plate` owns the verified commit and push.
+- `/affinage` never invokes `/plate` itself. After a clean cure, `/cure` dispatches `/plate` to update the existing PR or, with `--open-pr`, apply its explicit-choice and review-shape policy before publishing a new PR.
 - Every posted reply ends with the literal `agent on behalf of <handle>` attribution via `skills/affinage/scripts/affinage.pyz post-reply`, where `<handle>` is resolved from `RESPOND_GH_HANDLE` → `gh api user --jq .login` → `git config user.name`. Never call `gh api` directly to post.
 - Idempotent re-runs: skip threads where the latest comment is from the resolved handle. The REST `/comments` endpoint does not expose thread resolution, so honest idempotency relies on the latest-comment-from-self heuristic; switch to GraphQL `reviewThreads` if cross-session resolution-state visibility becomes required.
 - CI-sourced findings get no reply (no reviewer to notify).

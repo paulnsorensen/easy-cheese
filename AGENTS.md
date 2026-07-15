@@ -38,6 +38,7 @@ This is a skills-only collection following the [Agent Skills spec](https://agent
 | `/age` | Ten-dimension code review producing a severity-grouped findings report |
 | `/affinage` | Triages a PR's review comments and CI failures through the `/age` lens, routes fixes to `/cure`, posts replies |
 | `/cure` | Applies selected `/age` findings as focused fixes |
+| `/plate` | Final durable-artifact gate, safe commit transaction, and ordinary-or-stacked PR publication |
 | `/hard-cheese` | Metacognitive vibecheck gate before sharing for review (standalone or via `--hard` propagation) |
 | `/ultracook` | Autonomous fresh-context pipeline for high-blast-radius specs, one sub-agent per phase. The decomposer picks the mode: a decomposable 2+-curd spec fans out into parallel curds (per-curd `cook → press → age → cure` in its own worktree, harvested back, one post-merge review pass, ending in 1–N reviewable PRs); an indivisible spec runs the linear chain `cook → press → age → cure → age → cure → age`, all `--auto` |
 | `/melt` | Resolves merge / rebase / cherry-pick conflicts via the structural-merge cascade |

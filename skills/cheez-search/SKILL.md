@@ -94,6 +94,7 @@ These questions are **out of scope** -- don't enter cheez-search for them; the t
 | External library docs ("how does React's `useEffect` work?") | `/briesearch` (Context7) | Not your code; live vendor docs |
 | Plain non-code text at scale (logs, build outputs, large CSVs) | host `Bash` with `rg`, `jq`, `awk`, `head`/`tail` from the calling workflow skill | Tree-sitter parsing wastes tokens here; format-specific tools win |
 | Files outside the repo (system paths, `~/Library`, `/etc`) | host `Grep` / `Bash` from the calling workflow skill | cheez-search is repo-scoped (see above) |
+| Commit, push, ordinary PR, or stacked PR mutation | `/plate` | Publication is not code search |
 
 ### Route out before entering (type-grounded)
 

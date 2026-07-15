@@ -1,6 +1,6 @@
 ---
 name: cure
-description: Apply fixes from an /age report, finding list, or CI failure, then run the project's test/lint/build gates and, on a clean cure, push to the PR. Use when the user wants the selected items resolved — phrases like "fix these findings", "/cure <slug>", "address the high-severity items", "act on the age report", "fix the failing CI", "apply the cleanup". Use even when the user just says "fix it" if a review report or finding list is in scope. Do NOT use for review (route to /age) or test authoring (route to /press).
+description: Apply fixes from an /age report, finding list, or CI failure, then run the project's test/lint/build gates and hand a clean cure to /plate for commit/publication. Use when the user wants selected findings resolved. Do NOT use for review (route to /age), test authoring (route to /press), or direct publication (route to /plate).
 license: MIT
 ---
 
@@ -18,11 +18,11 @@ When `/age` or `/affinage` hands off a pre-locked selection, adopt it. When call
 
 Optional flags:
 
-- `--safe` — re-introduce the selection gate (when called bare) and the PR-push gate. Without it, cure applies the recommended set; with it, cure asks before applying. Push contract (the PR-push gate — when cure pushes vs asks): see `## Handoff`.
-- `--open-pr` — after a clean cure, allow cure to open a *new* PR when none exists (full push contract: see `## Handoff`). Composes with both interactive and `--auto`.
+- `--safe` — re-introduce the selection and terminal publication handoff gates.
+- `--open-pr` — after a clean cure, allow terminal `/plate` publication when no PR exists.
 - `--auto` — autonomous mode (propagated from `/cook --auto`). Bypasses the user-selection step. Must be paired with `--stake <floor>` to set the inclusion threshold; `/cook --auto` always passes `--stake medium+`. See `references/selection.md` for the auto-selection rules and `## Auto mode` below for the pass-cap and revert behaviour.
 - `--stake <floor>` — used only with `--auto`. Severity floor: `blocker`, `high`, `medium+`, or `all`. Floor definitions and the `medium+` cheap-lows rule: `references/selection.md` § Auto-mode selection. Without `--auto` this flag is ignored.
-- `--hard` — propagated metacognitive-gate flag (from `/cook --hard` or `/cheese --hard`). Cure is the only pipeline skill that fires the gate; see `## --hard mode` for the full contract.
+- `--hard` — propagate the metacognitive-gate flag to terminal `/plate`; see `## --hard mode`.
 
 Portability reference: [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
 The handoff blocks below are the portable contract; slash commands are host renderings, not the control model.
@@ -43,7 +43,7 @@ The handoff blocks below are the portable contract; slash commands are host rend
 6. **Domain-model correction (diff-touched terms only)** — after the cook's fixes land, correct the project domain model (ubiquitous language) for terms **touched by the cook's diff** (bounded — diff-touched terms only, never a free rewrite). Resolve the store with `domain_model_target()` (`shared/scripts/paths.py`, read-probe cascade wiki → docs → XDG; an existing model always wins). For a diff-touched entry whose definition or `_Code_:` referent no longer matches the code, update it and write a one-line change note per edit (entry format: `**Term** — definition.` / `_Avoid_: syn1, syn2` / `_Code_: file:line (or NEW ENTITY)`). **HARD rule — flag, don't reverse:** if a correction would REVERSE a mold-decided canonical term (replace the term mold made authoritative, or contradict its definition), do not rewrite — flag it to the user (the term, mold's decision, the conflict) and leave the entry unchanged. mold DECIDES canonical terms at curdle; cure only APPLIES BOUNDED corrections and never overrules the authoritative writer.
 7. **Re-review hand-off** — recommend `/age --scope <touched-path>` so review runs through the proper skill rather than reimplementing it inline. `/cure` does not re-grade its own work. If the user picks re-age, the resulting report can feed a fresh `/cure` invocation.
 8. **Ship report** — what changed, checks run, deferred items, residual risks. Write the handoff slug at the top of `.cheese/cure/<slug>.md` (see `## Handoff slug` below) so the chain (and `/ultracook`) can read the outcome without re-parsing the full report.
-9. **Push / hand off** — on a **clean cure**, push or hand off per `## Handoff` below.
+9. **Plate / hand off** — on a clean cure, dispatch `/plate` per `## Handoff`.
 
 ## Preferred tools and fallbacks
 
@@ -111,40 +111,33 @@ The cure report body lives below the handoff slug in the same file at `.cheese/c
 
 ### Re-review
 - Remaining risk:
-- Suggested next step: `/age --scope <touched-path>` to verify the fixes, or `/gh` to ship.
+- Suggested next step: `/age --scope <touched-path>` to verify the fixes, or `/plate` to commit/publish.
 ```
 
 ## Handoff
 
-**Pipeline:** culture → mold → cook → press → age → **[cure]** → ship
+**Pipeline:** culture → mold → cook → press → age → **[cure]** → plate
 
-After the cure report is rendered, cure decides whether to *push* or *ask*. The default is to push: on a **clean cure** (see Validation) carry the work to the PR without a gate. `--safe` re-introduces the handoff gate below.
+After the cure report is rendered, cure decides whether to dispatch `/plate` or ask. On a **clean cure** (see Validation), the default carries work to an already-open PR without another gate. `--safe` re-introduces the handoff gate.
 
-**Default (no `--safe`) — push to the PR:**
+**Default (no `--safe`) — plate the work:**
 
-- Detect an open PR for the branch (`gh pr view`). If one exists, dispatch `/gh` to commit + push the cure's changes to it — no gate. Rule 11 authorizes pushing to an already-open PR ("the existing PR is the authorization"). When `--hard` is in scope, fire `/hard-cheese <slug>` *before* the push (the share-for-review boundary) and proceed only on exit `0`.
-- If no open PR exists: with `--open-pr`, dispatch `/gh` to open a new PR (same `--hard` gate first); without `--open-pr`, leave the remote untouched and finish with the ship report plus a one-line note (`no open PR — pass --open-pr or run /gh to open one`).
-- Announce the push in one line. If applied fixes touched logic outside a finding's hunk, exposed adjacent risk, or checks were skipped, add a one-line recommendation to re-run `/age --scope <touched-path>` before merge — but still push (the PR is the review surface).
-- If the cure was not clean (see **clean cure** under Validation), do not push — surface the blocker and stop.
+- Detect an open PR with `gh pr view`. If one exists, dispatch `/plate` to run its final writing gate, validation, named-file commit, topology-aware update, and publication. Rule 11 authorizes the update. Propagate `--hard`; `/plate` gives `/hard-cheese` the final artifact state before publishing.
+- If no open PR exists: with `--open-pr`, dispatch `/plate [--hard]`; explicit topology choices and obviously cohesive work proceed without asking, while stack-sized or ambiguous work asks before commit or branch-layout mutation. Without `--open-pr`, leave the remote untouched and finish with `no open PR — pass --open-pr or run /plate`.
+- If the cure was not clean, do not dispatch `/plate`; mention the blocker and stop.
 
-**`--safe` — ask via the shared handoff gate** in [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md), following its **Standard forward-step menu** (cure is the terminal gate: its core decision is push-vs-re-review, so **Ship it** is the open-or-update-PR option). Lead each option with the verb (what the user wants to *do* next); the skill command is the backing detail. Default options:
+**`--safe` — ask via the shared handoff gate** in [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md). Default options:
 
-- **Re-review the touched code** *(recommended when applied fixes touched logic outside a finding's hunk)* — `/age --scope <touched-path>`, runs review through the proper skill. Propagates `--hard` when in scope.
-- **Ship it — open or update the PR** — `/gh` (opens a new PR with `--open-pr`, else pushes the already-open one). When `--hard` is in scope, this option first dispatches `/hard-cheese <slug>` and proceeds to `/gh` only if the gate exits `0`.
-- **Checkpoint & stop** — `/wheypoint`: write a resumable handoff and pause.
-- **Stop** — dispatch none; sit on the changes for now.
+- **Re-review the touched code** *(recommended when fixes escaped the finding hunk)* — `/age --scope <touched-path>`.
+- **Plate it — commit and open or update the PR** — `/plate [--hard]`.
+- **Checkpoint & stop** — `/wheypoint`.
+- **Stop** — dispatch none.
 
-Pre-select **Re-review the touched code** when any applied fix touched logic outside the original finding's hunk, when a corrective fix exposed adjacent risk, or when checks were skipped. Pre-select **Ship it — open or update the PR** when all selected findings applied cleanly and gates passed. Never dispatch before selection; after a non-stop selection, run the selected command immediately.
+Pre-select **Plate it** only when all selected findings applied cleanly and gates passed. Never dispatch before selection; run the selected command immediately.
 
 ## --hard mode
 
-`/cure --hard` is the gate-firing path for the `/hard-cheese` metacognitive vibecheck. The flag propagates up the pipeline (`/cheese → /mold → /cook → /press → /age → /cure`); cure is the only step that actually fires the gate. The contract:
-
-- **Interactive `/cure --hard`:** the gate fires at the share-for-review boundary — the PR push. In the default (no `--safe`) path, fire `/hard-cheese <slug>` *before* the autonomous push and proceed only on exit `0`. Under `--safe`, fire it when the user selects the share-for-review option (the **Ship it — open or update the PR** label, which dispatches `/gh`). Either way, proceed only on exit `0`. If the gate exits non-zero (`FAILED` status — cap exhausted), surface the artifact path and abort the push; the user must improve their understanding before sharing for review.
-- **Not sharing for review** (no open PR and no `--open-pr`, or under `--safe` picking **Re-review the touched code** / **Checkpoint & stop** / **Stop**) does *not* fire the gate. Re-review and pausing do not put code in front of readers.
-- **Auto-mode puncture** — see the clause in `## Auto mode` below. The auto-mode puncture is the single sanctioned point at which `--hard` overrides `--auto`'s skip-handoff semantics.
-
-The gate's mechanism (SOLO-graded fresh-context judge, Socratic retry, fail-open on judge error) lives in `skills/hard-cheese/SKILL.md`. The full composition matrix lives in `../hard-cheese/references/composition.md`.
+`/cure --hard` propagates `--hard` to `/plate` at the share-for-review boundary. `/plate` first completes and verifies every durable write, then gives `/hard-cheese` that final artifact inventory and proceeds only on pass. Re-review, checkpoint, and stop choices do not fire the gate. The mechanism lives in `skills/hard-cheese/SKILL.md`; composition details live in `../hard-cheese/references/composition.md`.
 
 ## Auto mode
 
@@ -155,17 +148,10 @@ When invoked with `--auto --stake <floor>`:
 - Apply findings one at a time. After each fix, run the narrowest test that proves it. If the fix breaks a previously-passing test or any project-wide gate, revert that single finding's edit and record it under `### Deferred` in the cure report with the test name and the failure summary. Continue with the remaining findings.
 - After all selected findings are processed, skip the handoff gate and invoke `/age --scope <touched-paths> --auto` (forward `--open-pr` when it is in scope) so the chain can re-review.
 - `/age --auto` enforces the two-pass cap. Cure does not need to track passes itself — it just keeps applying when invoked.
-- **Terminal PR push.** The PR push fires once, from the cure frame whose `/age --auto` child returned `next: done` (chain-clean or two-cure-pass cap reached); the push itself follows the push contract in `## Handoff`. Mid-chain cure passes (age child returned `next: cure`) never push.
-- **Orchestrated sub-agent exception (no push).** When cure runs as a phase-only sub-agent of an orchestrator that owns publishing — `/ultracook` linear mode (see below) or an `/ultracook` parallel-mode curd worker (spawn prompt carries `invoked-from: ultracook-curd` / forbids `/gh` and chaining forward) — it never performs the terminal push, even at `next: done`. The orchestrator owns the remote (parallel mode publishes in its post-merge PR phase via `/pr-stack` / `/gh`). Such a sub-agent applies its findings, writes its cure slug, and stops; touching the remote from inside a curd would violate the orchestrator contract.
+- **Terminal publication.** When the age child returns `next: done`, dispatch `/plate` once. It updates an existing PR automatically or, with `--open-pr`, applies the explicit-choice and review-shape policy before committing a new PR layout.
+- **Orchestrated sub-agent exception.** A phase-only `/ultracook` cure never invokes `/plate`; the orchestrator owns commit and publication.
 
-**`--auto --hard` puncture clause.** When `--hard` is also in scope, the chain pauses *once*, at the natural terminal point: after cure invokes `/age --auto` and the returned age slug shows `next: done` (chain-clean *or* two-cure-pass cap reached), invoke `/hard-cheese <slug>` *before returning to the caller*. This is the only sanctioned puncture of `--auto`'s skip-handoff semantics. Concretely:
-
-- The trigger is **age's `next: done`** read from the age slug cure just invoked, not cure's own slug-writing step. Cure cannot tell on its own which pass is final (the cap is enforced inside `/age --auto`, the chain-clean signal is also issued by age) — reading age's handoff is the only honest signal.
-- The puncture fires from the cure frame whose age-child returned `next: done`. That is cure pass 1 if findings cleared early, cure pass 2 if the cap is reached. Never between passes — punching the gate into every cure call would defeat its signal.
-- On `PASS`: perform the terminal PR push (per the push contract in `## Handoff`), then exit with `"gate passed → pushed for review"` (or `"gate passed → no open PR"` when nothing was pushed).
-- On `FAILED`: chain exits non-zero with the artifact path; do **not** push.
-- On `ERROR`: chain exits `0` with a warning (the fail-open divergence documented in `skills/hard-cheese/SKILL.md`).
-- A non-TTY environment aborts with `"--hard requires an interactive TTY; remove --hard or run interactively"` — the puncture requires a human in the loop.
+**`--auto --hard` puncture clause.** When age returns `next: done`, dispatch `/plate --hard` rather than firing `/hard-cheese` directly. `/plate`'s final writing gate makes the completed artifact inventory visible to the metacognitive check. A failed hard gate halts publication; a non-TTY environment reports that `--hard` needs an interactive TTY.
 
 If no findings meet the floor, write an empty cure report with `### Applied: (none — no findings meet <floor>)` and skip straight to the auto handoff with a one-line "auto chain clean" note.
 
@@ -174,16 +160,16 @@ If no findings meet the floor, write an empty cure report with `### Applied: (no
 When an orchestrator spawns cure as a phase-only sub-agent and owns the chain itself, honour the no-chain / no-push override:
 
 - **`/ultracook` linear mode** — the spawn prompt says "for THIS PHASE ONLY" and "do not chain forward to the next phase." Apply the auto-selected findings, write `.cheese/cure/<slug>.md` (handoff slug at the top, `next: age`), and stop. Do not invoke `/age --scope <touched-paths> --auto`. The orchestrator reads the cure slug and spawns the next age itself.
-- **`/ultracook` parallel-mode curd worker** — the spawn prompt carries `invoked-from: ultracook-curd` (or forbids `/gh` / PR-related skills). Apply the auto-selected findings, write the cure slug, and stop — no re-review chain and **no terminal PR push**. Publishing is owned by parallel mode's post-merge PR phase (`/pr-stack` / `/gh`); a curd must never touch the remote.
+- **`/ultracook` parallel-mode curd worker** — apply findings, write the cure slug, and stop. Do not invoke `/plate` or touch the remote; parallel mode owns final commit and publication.
 
-In both cases the terminal PR push (above) is suppressed — the orchestrator, not the sub-agent, owns the remote.
+In both cases terminal `/plate` dispatch is suppressed — the orchestrator owns it.
 
 ## Rules
 
 - Default to the recommended composite (`all-medium, cheap`), or the selection `/age` / `/affinage` locked in. `--safe` re-introduces the selection gate. A finding resting on a false premise, or a sprawling/structural fix, still pauses for a decision regardless of mode.
 - Keep fixes scoped to selected (or auto-selected) findings.
 - Do not hide failed or skipped checks. In auto mode, reverted findings go under `### Deferred`, never silently dropped.
-- Push contract — when cure pushes, Rule 11 authorization, `--open-pr`, `--safe` re-gate, and never pushing on an unclean cure: see `## Handoff`.
+- Publication contract — existing PR authorization, `--open-pr`, `--safe`, and never publishing an unclean cure: see `## Handoff`.
 - If a selected finding rests on a false premise (the `/age` claim is wrong, or the diff already addresses it), stop and surface the premise before applying. Disagreeing with the report is allowed; silently working around it is not.
 - Apply the shared voice kernel (lives at `../age/references/voice.md`): lead the cure report with what was applied, flag residual risk as `certain | speculating | don't know`, agree when the diff is fine without manufacturing follow-ups.
 - **Verification before `status: ok`:** before writing `status: ok` in the handoff slug, (1) identify the gate command, (2) run it fresh in the same turn, (3) read the full output, (4) only then claim. Hedging words (`should`, `probably`, `I think`) are banned in completion claims — state what the gate output showed, not what you expect it to show.

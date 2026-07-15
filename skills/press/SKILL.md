@@ -89,16 +89,16 @@ Next step:    /age <slug>                          (when ready for /age or follo
 
 ## Handoff
 
-**Pipeline:** culture → mold → cook → **[press]** → age → cure → ship
+**Pipeline:** culture → mold → cook → **[press]** → age → cure → plate
 
 After the press report is on disk, ask via the shared handoff gate in [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md), following its **Standard forward-step menu**. Lead each option with the verb (what the user wants to *do* next); the skill command (with any in-scope `--hard` propagation) is the backing detail. Default options:
 
 - **Review the diff** *(recommended when readiness is `ready for /age` or `follow-up recommended`)* — `/age <slug>`. For `follow-up recommended`, documented follow-ups can be addressed after review.
-- **Ship it** — `/age <slug> --auto --open-pr`: run age → cure headless and open (or push) the PR at the end.
+- **Plate it** — `/age <slug> --auto --open-pr`: run age → cure, then `/plate` resolves topology and publishes.
 - **Checkpoint & stop** — `/wheypoint`: write a resumable handoff and pause.
 - **Stop** — dispatch none; defer review (use this if you want to harden manually before /age, even though the contract is review-safe).
 
-Pre-select **Review the diff** when readiness is `ready for /age` or `follow-up recommended`. If the report is `blocked`, do not pre-select anything (and do not pre-select **Ship it**); the user decides whether to fix or escalate. After a non-stop selection, run the selected command immediately.
+Pre-select **Review the diff** when ready. If blocked, do not pre-select **Plate it**. Run a non-stop selection immediately.
 
 ## Auto mode
 

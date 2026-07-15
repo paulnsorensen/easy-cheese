@@ -43,7 +43,7 @@ Do NOT run the full test suite.
 2. /press --auto                             — adversarial test hardening (single pass)
 3. /age --auto                               — ten-dimension review of YOUR diff only, inline-degrade
 4. /cure --auto --stake medium+ {hard_flag}  — fix every medium-or-above finding + cheap (contained-fix) lows
-5. /commit (or git commit direct)            — single commit with conventional message
+5. /plate (commit-only mode)                   — single Conventional Commit; no publish or layout question
 6. Write pr-metadata.json: {{title, body}} for the slicer to pick up later
 
 ## /age inline-degrade contract
@@ -78,11 +78,11 @@ branch. Set `next: done` if you halted.
 - Push or create PRs (the orchestrator handles that).
 - Modify any file not in your file list.
 - Call an unanchored host `Edit`/`Write` tool on a file you haven't read this turn — prefer /cheez-write; use a harness-native snapshot/anchored edit fallback only when the selected backend preserves stale-write safety.
-- Invoke /pr-stack, /gh, or any PR-related skill.
+- Invoke /plate in publication mode, /gh, or any PR-related operation.
 - Chain forward (the orchestrator owns the chain).
 - Retry on failure — write the halt and return; the orchestrator decides retry policy.
 ````
 
 ## Variant: `--hard` propagation
 
-When `/ultracook` was invoked with `--hard`, substitute `{hard_flag}` with `--hard`. Otherwise substitute with the empty string. The flag flows through `/cook --hard --auto` and `/cure --hard --auto --stake medium+`. The curd worker does not invoke `/hard-cheese` directly; the gate fires inside `/cure`'s share-for-review handoff per `skills/hard-cheese/SKILL.md`.
+When `/ultracook` has `--hard`, propagate it through the review chain. Curd workers use `/plate` only in commit-only mode, so they never fire `/hard-cheese`; the orchestrator's terminal `/plate --hard` owns that gate after final artifacts are verified.
