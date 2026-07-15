@@ -3,7 +3,7 @@
 **Status:** accepted (2026-07-14)
 
 The pipeline captures rationale only at design/fix time — curdle (design-time ADRs + model)
-and `cure` step 6 (diff-touched domain-model correction, no ADRs — `cure/SKILL.md:43`).
+and `cure` step 6 (diff-touched domain-model correction, no ADRs — `skills/cure/SKILL.md:43`).
 Implementation-time learnings (constraints found in `/cook`, findings from `/age`) are never
 written back after the PR opens. A post-PR write-back needs a writer; two candidates were
 compared plus inlining.

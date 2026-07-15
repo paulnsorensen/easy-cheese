@@ -10,7 +10,7 @@ end-of-dialogue MCP write actually reliable in a prose-driven skill.
 
 ## Decision
 
-Enforce with a three-part stack: a **terminal gate node** (`durable-writes-verified`) added
+Enforce with a three-part stack: a **pre-handshake commitment gate** (`durable-writes`) added
 to mold's gate model and the handshake coherence checklist — kept in lockstep by the
 existing test (`handshake.md:33`) so it can't be dropped from the skill; a **write → read-back
 verify** step (re-read the wiki page via `ground`/`read_markdown`, or re-read the file) that
