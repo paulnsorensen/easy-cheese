@@ -125,6 +125,7 @@ After the cure report is rendered, cure decides whether to *push* or *ask*. The 
 - Detect an open PR for the branch (`gh pr view`). If one exists, dispatch `/gh` to commit + push the cure's changes to it — no gate. Rule 11 authorizes pushing to an already-open PR ("the existing PR is the authorization"). When `--hard` is in scope, fire `/hard-cheese <slug>` *before* the push (the share-for-review boundary) and proceed only on exit `0`.
 - If no open PR exists: with `--open-pr`, dispatch `/gh` to open a new PR (same `--hard` gate first); without `--open-pr`, leave the remote untouched and finish with the ship report plus a one-line note (`no open PR — pass --open-pr or run /gh to open one`).
 - Announce the push in one line. If applied fixes touched logic outside a finding's hunk, exposed adjacent risk, or checks were skipped, add a one-line recommendation to re-run `/age --scope <touched-path>` before merge — but still push (the PR is the review surface).
+- After the push lands, run the **§ Post-PR learnings write-back** below.
 - If the cure was not clean (see **clean cure** under Validation), do not push — surface the blocker and stop.
 
 **`--safe` — ask via the shared handoff gate** in [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md), following its **Standard forward-step menu** (cure is the terminal gate: its core decision is push-vs-re-review, so **Ship it** is the open-or-update-PR option). Lead each option with the verb (what the user wants to *do* next); the skill command is the backing detail. Default options:
@@ -135,6 +136,17 @@ After the cure report is rendered, cure decides whether to *push* or *ask*. The 
 - **Stop** — dispatch none; sit on the changes for now.
 
 Pre-select **Re-review the touched code** when any applied fix touched logic outside the original finding's hunk, when a corrective fix exposed adjacent risk, or when checks were skipped. Pre-select **Ship it — open or update the PR** when all selected findings applied cleanly and gates passed. Never dispatch before selection; after a non-stop selection, run the selected command immediately.
+
+### Post-PR learnings write-back
+
+After any path that **opens or pushes a PR** — the default push, an `--open-pr` new PR, the `--safe` **Ship it** selection, or the auto-mode terminal push — record the session's *implementation-time* learnings to the wiki. This is the second wiki write moment; curdle owns the design-time write, this owns what only surfaces while building: constraints discovered in `/cook`, `/age` findings that changed the design, and any domain terms the diff introduced or redefined.
+
+- **Writer — `/wiki-ingest`, detect-and-degrade.** When the hallouminate plugin is available, dispatch `/wiki-ingest` with the new ADRs + domain-model deltas; its dedup/route/merge/contradiction handling ensures only rationale *new since curdle* lands (say "new since curdle" in the dispatch so it does not re-add design-time ADRs). When hallouminate is absent, write `docs/adr/<slug>-NNN.md` + the domain-model file fallback and emit a **loud one-line note** that the write-back went to files, not the wiki — never a silent degrade. Detection and the degrade contract: [`../cheese/references/optional-plugins.md`](../cheese/references/optional-plugins.md).
+- **Every PR-opening path.** Fires from manual `cook→cure`, `--auto`, and `ultracook` alike — wherever cure performs the terminal push.
+- **Orchestrated sub-agent exception.** A phase-only cure sub-agent that does not push (the `/ultracook` no-push cases below) does **not** write back; the orchestrator that owns publishing owns the write-back at its publish phase.
+- **Nothing to record** — no new ADR-worthy decision and no domain-model delta — skip with a one-line "no post-PR learnings" note. Do not manufacture an entry.
+
+`[TBD]` The write-back trigger lives at this cure/ship boundary today; when a dedicated commit/PR skill exists, move the trigger onto it so PR-opening and learnings-capture are wired at one seam (see the `post-pr-wiki-writeback` wiki page).
 
 ## --hard mode
 
@@ -155,7 +167,7 @@ When invoked with `--auto --stake <floor>`:
 - Apply findings one at a time. After each fix, run the narrowest test that proves it. If the fix breaks a previously-passing test or any project-wide gate, revert that single finding's edit and record it under `### Deferred` in the cure report with the test name and the failure summary. Continue with the remaining findings.
 - After all selected findings are processed, skip the handoff gate and invoke `/age --scope <touched-paths> --auto` (forward `--open-pr` when it is in scope) so the chain can re-review.
 - `/age --auto` enforces the two-pass cap. Cure does not need to track passes itself — it just keeps applying when invoked.
-- **Terminal PR push.** The PR push fires once, from the cure frame whose `/age --auto` child returned `next: done` (chain-clean or two-cure-pass cap reached); the push itself follows the push contract in `## Handoff`. Mid-chain cure passes (age child returned `next: cure`) never push.
+- **Terminal PR push.** The PR push fires once, from the cure frame whose `/age --auto` child returned `next: done` (chain-clean or two-cure-pass cap reached); the push itself follows the push contract in `## Handoff`, including the **§ Post-PR learnings write-back** after the push lands. Mid-chain cure passes (age child returned `next: cure`) never push.
 - **Orchestrated sub-agent exception (no push).** When cure runs as a phase-only sub-agent of an orchestrator that owns publishing — `/ultracook` linear mode (see below) or an `/ultracook` parallel-mode curd worker (spawn prompt carries `invoked-from: ultracook-curd` / forbids `/gh` and chaining forward) — it never performs the terminal push, even at `next: done`. The orchestrator owns the remote (parallel mode publishes in its post-merge PR phase via `/pr-stack` / `/gh`). Such a sub-agent applies its findings, writes its cure slug, and stops; touching the remote from inside a curd would violate the orchestrator contract.
 
 **`--auto --hard` puncture clause.** When `--hard` is also in scope, the chain pauses *once*, at the natural terminal point: after cure invokes `/age --auto` and the returned age slug shows `next: done` (chain-clean *or* two-cure-pass cap reached), invoke `/hard-cheese <slug>` *before returning to the caller*. This is the only sanctioned puncture of `--auto`'s skip-handoff semantics. Concretely:
