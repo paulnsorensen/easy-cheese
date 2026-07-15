@@ -23,6 +23,12 @@ curdle output naming each target + backend, so a skip is visible to the author.
 - **Stop/SubagentStop hook that greps for a completion marker** — rejected for now: it would
   fire deterministically, but it is harness-specific (Claude vs Codex vs opencode) and
   brittle. Flagged as a possible v2, not built.
+- **Post-curdle terminal `durable-writes-verified` node** — rejected *during implementation*
+  (this was the constraint that settled Option A over B): mold's lockstep test enforces only
+  `kind="gate"` nodes against the handshake checklist, so a terminal node would carry no
+  lockstep protection — defeating the enforcement this ADR exists to add. Reframing the gate
+  as a pre-handshake *commitment* (`durable-writes`) fits the existing four-artifact lockstep
+  (`gate-graph.py` / `handshake.md` / `mold.dot` / `mold.pyz`) with no test-structure change.
 
 ## Consequences
 
