@@ -94,12 +94,14 @@ Per-dimension base-severity tables, location-sensitivity, fix-cost-now / fix-cos
    python3 shared/scripts/write_handoff_artifact.py \
      --phase age --slug <slug> --status ok --next cure \
      --artifact "" --orientation "<one-line orientation>" \
+     --durable-flags "<none | one line per flag>" \
      --body-file "$report_file"
    ```
 
    If the host only ships the bundle, `python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz write_handoff_artifact \
      --phase age --slug <slug> --status ok --next cure \
      --artifact "" --orientation "<one-line orientation>" \
+     --durable-flags "<none | one line per flag>" \
      --body-file "$report_file"` is the fallback.
    Then print the path.
 6. Hand off (see `## Handoff` below).
@@ -115,7 +117,7 @@ Beyond `cheez-*` there are review-specific tools:
 | Diff inspection | `delta` | `git diff --unified=3` |
 | Caller/dependency impact + curated review context | `tilth_deps` + `/cheez-search` `kind: "callers"` | manual scoping |
 | Architecture / hotspot framing for large diffs | changed-file map + caller/dependency evidence | skip and note in confidence |
-| Design rationale for encapsulation/spec dimensions (optional) | `mcp__hallouminate__list_corpora` / `mcp__hallouminate__ground` on `repo:<repo>:wiki` corpus — if available, ground design intent before grading encapsulation and spec findings | skip; proceed with diff + code evidence only; cap at `speculating` when rationale is the primary evidence |
+| Design rationale for encapsulation/spec dimensions (optional) | `mcp__hallouminate__list_corpora` / `mcp__hallouminate__ground` on `repo:<repo>:wiki` corpus — if available, derive the query from the diff and the spec or issue in scope, ground design intent before grading encapsulation and spec findings, and render the consulted pages in the report's `## Wiki context` section so the pages that informed the review are visible | skip; omit `## Wiki context`; proceed with diff + code evidence only; cap at `speculating` when rationale is the primary evidence |
 | GitHub/PR context | `gh` | local git commands or user-provided PR data |
 | Merge/conflict awareness | mergiraf | manual conflict checks |
 
@@ -165,11 +167,12 @@ Write to `.cheese/age/<slug>.md` with a minimum handoff slug at the top so `/ult
 status: ok | halt: <one-line reason>
 next: cure | done
 artifact: <path-to-press-report-or-prior-cure-if-any>
+durable_flags: none | <one line per flag: what durable knowledge changed -> target wiki page>
 <one-line orientation: what the diff does>
 
 press: skipped
 
-<!-- `press: skipped` is the first body line after the blank separator — the handoff slug stays exactly four physical lines. Omit it entirely when a press report exists for this slug or no cook artifact does. -->
+<!-- `press: skipped` is the first body line after the blank separator — the handoff slug stays exactly five physical lines. Omit it entirely when a press report exists for this slug or no cook artifact does. -->
 
 # Age Report — <slug>
 
@@ -178,6 +181,9 @@ press: skipped
 
 ## Press findings
 <omit this section when `.cheese/press/<slug>.md` does not exist. When it does, summarise unresolved press items in one or two bullets so `/cure` (which never reads the press report directly) sees them. When it does not exist but `.cheese/cook/<slug>.md` does, omit this section but add `press: skipped` as the first body line after the handoff slug (see above) instead.>
+
+## Wiki context
+<omit this section when hallouminate is absent or grounding returned no hits. When wiki pages informed the review context, list one bullet per consulted page — `<wiki page path>:<line>` — <one-line why it informed the review> — so the user can see, and challenge, what grounded the review.>
 
 ## Blocker
 - **[encapsulation:blocker]** `src/users/index.ts:42` — `index` re-exports `SqlPgUser` (infra ORM type) across slice boundary. 3 consumer slices already import it.
@@ -218,7 +224,7 @@ Per-finding `confidence:` uses the voice-kernel scale (`references/voice.md` § 
 
 Suppressed lows feed the cure-selection table only when `--full` is passed.
 
-`status: ok` when the review completed. `status: halt: <reason>` when evidence was unreachable in a way that blocks honest review. `next: cure` when at least one finding meets the **medium+ floor**; `next: done` when no finding meets it or the two-cure-pass cap has been reached.
+`status: ok` when the review completed. `status: halt: <reason>` when evidence was unreachable in a way that blocks honest review. `next: cure` when at least one finding meets the **medium+ floor**; `next: done` when no finding meets it or the two-cure-pass cap has been reached. `durable_flags:` is the same conservative durable-change gate as cook's: recorded at report delivery, default `none`; a finding that changed the design (an architecture, protocol, convention, or rationale delta) earns one flag line (`<what changed> -> <target wiki page>`); routine findings record `durable_flags: none`. Age records flags only — it stays read-only and never writes the wiki; the publish-boundary writer (cure/plate/affinage) reads upstream flags as its write-back candidate list.
 
 Then print:
 

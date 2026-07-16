@@ -215,6 +215,17 @@ Detection is instruction-level, not code: check whether `/spec-verify` appears i
 
 Stage to a temp directory under `${TMPDIR}` first, then move into place. Never leave partial files on a write failure.
 
+### Write → read-back → completion record
+
+This is the runtime home of the **Durable writes** coherence gate (`handshake.md` § Agent key). The gate locks the commitment before the handshake; this step honours it. For each durable write — every ADR and the domain-model merge — run:
+
+1. **Resolve** the target dynamically — the ADR resolution procedure in [`adr.md`](adr.md) § Resolution, the `domain_model_target()` function (`shared/scripts/paths.py`) for the model. Both yield `(backend, location)`.
+2. **Write** to that target: `add_markdown` when the backend is `hallouminate`, a staged file write when it is `file`.
+3. **Read back** and confirm the entry landed: `ground` / `read_markdown` for the wiki backend, a re-read of the file for the file backend. A write that cannot be read back is a failure — fail loud, do not claim the write.
+4. **Record** it in the curdle completion record printed to the user: one line per durable write naming `<artifact> → <location> (<backend>)`.
+
+**Loud fallback.** When hallouminate is unavailable and the resolver degrades to a file backend (`docs/adr/…`, `docs/domain-model*`, or the XDG corpus), say so in one visible line — never let a write silently go to files when the author expected the wiki. Absent-plugin degrade contract: [`../../cheese/references/optional-plugins.md`](../../cheese/references/optional-plugins.md).
+
 ## Hand-off
 
 Do not render this hand-off until phase-two publication attempts and the mechanical `Deferred follow-ups` reconciliation are complete.

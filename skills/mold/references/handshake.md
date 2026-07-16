@@ -26,11 +26,14 @@ Coherence self-check before curdle:
 - [ ] Open questions all marked [TBD] / [BLOCKED] / [?] (none silent)
 - [ ] Quality gates specified (≥1 runnable command)
 - [ ] Reproduction loop captured if Diagnose ran (or [BLOCKED] if no loop is possible)
+- [ ] Durable writes: ADR + domain-model targets resolved and the write, read-back, and completion-record protocol committed for the atomic step (or loud fallback noted)
 ```
 
 If any box is unchecked, name it and propose the smallest move to fill it. The user can override with `curdle anyway`.
 
-These twelve checklist items are the **gates** in mold's machine-readable gate model
+The last box — **Durable writes** — is a *commitment* checked before the handshake, not a claim the write already happened: it asserts the ADR + domain-model targets are resolved and the write → read-back → completion-record protocol is locked in for the atomic-write step (`curdle.md` § Atomic write). The read-back verify and the visible completion record fire *during* that step, and the hallouminate-absent fallback is noted loud, never silent.
+
+These thirteen checklist items are the **gates** in mold's machine-readable gate model
 (`gate-graph.md`). A test asserts the checklist items here equal the
 model's gate nodes, so a gate cannot be silently dropped from this prose — edit
 the two together. Render the flow with `mold.pyz gate-graph`.

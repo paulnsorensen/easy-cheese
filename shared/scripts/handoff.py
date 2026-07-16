@@ -1,11 +1,16 @@
-"""Handoff slug preamble: parse, render, and validate the four-line block.
+"""Handoff slug preamble: parse, render, and validate the preamble block.
 
 Schema (see skills/cheese/references/formatting.md § Required preamble):
 
     status: ok | halt: <one-line reason>
     next: <skill-name> | done
     artifact: <path-to-prior-report-if-any>
+    taste_test: <verdict>                     (optional keyed line)
+    durable_flags: none | <flag lines>        (optional keyed line)
     <one-line orientation: what changed or what was reviewed>
+
+The keyed lines between `artifact:` and the orientation are optional: a
+plain four-line preamble parses identically, with both fields None.
 
 The block sits at the top of every findings report so downstream skills
 (`/ultracook`, `/cheese --continue`) can chain without re-parsing the body.
@@ -28,6 +33,8 @@ class HandoffSlug:
     next_skill: str  # bare skill name (no leading slash) or "done"
     artifact: str | None
     orientation: str
+    taste_test: str | None = None
+    durable_flags: str | None = None
 
     def is_halt(self) -> bool:
         return self.status == "halt"
@@ -36,6 +43,8 @@ class HandoffSlug:
 _STATUS_RE = re.compile(r"^status:\s*(?P<rest>.+?)\s*$")
 _NEXT_RE = re.compile(r"^next:\s*(?P<value>\S.*?)\s*$")
 _ARTIFACT_RE = re.compile(r"^artifact:\s*(?P<value>.*?)\s*$")
+# Optional keyed lines allowed between `artifact:` and the orientation.
+_OPTIONAL_KEY_RE = re.compile(r"^(?P<key>taste_test|durable_flags):\s*(?P<value>.*?)\s*$")
 
 
 class HandoffParseError(ValueError):
@@ -58,10 +67,11 @@ def _parse_status(line: str) -> tuple[str, str | None]:
 
 
 def parse_handoff_slug(text: str) -> HandoffSlug:
-    """Parse the four-line preamble from the top of an artifact body.
+    """Parse the preamble from the top of an artifact body.
 
-    The preamble is strictly the first four *physical* lines: status, next,
-    artifact (value may be empty), orientation. Treating blank lines as
+    The preamble is strictly the first *physical* lines: status, next,
+    artifact (value may be empty), zero or more optional keyed lines
+    (`taste_test:`, `durable_flags:`), orientation. Treating blank lines as
     skippable would let a missing orientation silently consume the first
     body line (e.g. a `# Press Report` heading) as the orientation.
     """
@@ -82,7 +92,24 @@ def parse_handoff_slug(text: str) -> HandoffSlug:
         raise HandoffParseError(f"expected 'artifact:' line, got {raw_lines[2]!r}")
     artifact_value = artifact_match.group("value") or None
 
-    orientation = raw_lines[3].strip()
+    optional: dict[str, str] = {}
+    index = 3
+    while index < len(raw_lines):
+        keyed_match = _OPTIONAL_KEY_RE.match(raw_lines[index])
+        if not keyed_match:
+            break
+        key = keyed_match.group("key")
+        value = keyed_match.group("value")
+        if key in optional:
+            raise HandoffParseError(f"duplicate '{key}:' line in handoff preamble")
+        if not value:
+            raise HandoffParseError(f"'{key}:' line requires a value")
+        optional[key] = value
+        index += 1
+
+    if index >= len(raw_lines):
+        raise HandoffParseError("orientation line missing after keyed preamble lines")
+    orientation = raw_lines[index].strip()
     if not orientation:
         raise HandoffParseError("orientation line must be non-empty")
 
@@ -92,11 +119,13 @@ def parse_handoff_slug(text: str) -> HandoffSlug:
         next_skill=next_skill,
         artifact=artifact_value,
         orientation=orientation,
+        taste_test=optional.get("taste_test"),
+        durable_flags=optional.get("durable_flags"),
     )
 
 
 def render_handoff_slug(slug: HandoffSlug) -> str:
-    """Render a HandoffSlug back to its canonical four-line preamble."""
+    """Render a HandoffSlug back to its canonical preamble."""
     if slug.status == "halt":
         if not slug.halt_reason:
             raise ValueError("halt status requires halt_reason")
@@ -105,10 +134,13 @@ def render_handoff_slug(slug: HandoffSlug) -> str:
         status_line = "status: ok"
     else:
         raise ValueError(f"unknown status {slug.status!r}")
-    artifact_line = f"artifact: {slug.artifact or ''}"
-    return "\n".join(
-        [status_line, f"next: {slug.next_skill}", artifact_line, slug.orientation]
-    )
+    lines = [status_line, f"next: {slug.next_skill}", f"artifact: {slug.artifact or ''}"]
+    if slug.taste_test is not None:
+        lines.append(f"taste_test: {slug.taste_test}")
+    if slug.durable_flags is not None:
+        lines.append(f"durable_flags: {slug.durable_flags}")
+    lines.append(slug.orientation)
+    return "\n".join(lines)
 
 
 # ----- skill dispatch + flag propagation -----------------------------------

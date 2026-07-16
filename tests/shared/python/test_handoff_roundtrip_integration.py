@@ -143,6 +143,8 @@ class TestWriterToReaderRoundTrip:
             "artifact": ".cheese/cook/cook-to-press.md",
             "orientation": "implemented widget",
             "halt_reason": None,
+            "taste_test": None,
+            "durable_flags": None,
         }
 
     def test_halt_status_survives_cli_roundtrip(self, tmp_path: Path) -> None:

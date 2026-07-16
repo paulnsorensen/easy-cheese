@@ -19,6 +19,7 @@ digraph mold_gates {
   open_questions_all_marked_tbd_blocked_none_silent [label="Open questions all marked [TBD] / [BLOCKED] / [?] (none silent)", kind="gate"];
   quality_gates_specified_1_runnable_command [label="Quality gates specified (≥1 runnable command)", kind="gate"];
   reproduction_loop_captured_if_diagnose_ran_or_blocked_if_no_loop_is_possible [label="Reproduction loop captured if Diagnose ran (or [BLOCKED] if no loop is possible)", kind="gate"];
+  durable_writes [label="Durable writes: ADR + domain-model targets resolved and the write, read-back, and completion-record protocol committed for the atomic step (or loud fallback noted)", kind="gate"];
   handshake [label="Two-key handshake", kind="handshake"];
   curdle [label="Curdle (extract spec)", kind="terminal"];
   explore -> ground;
@@ -38,6 +39,7 @@ digraph mold_gates {
   open_questions_all_marked_tbd_blocked_none_silent -> handshake;
   quality_gates_specified_1_runnable_command -> handshake;
   reproduction_loop_captured_if_diagnose_ran_or_blocked_if_no_loop_is_possible -> handshake;
+  durable_writes -> handshake;
   grill -> handshake;
   handshake -> curdle [label="both keys"];
 }

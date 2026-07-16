@@ -1,6 +1,7 @@
-"""Read the 4-line handoff preamble from a .cheese/<phase>/<slug>.md artifact.
+"""Read the handoff preamble from a .cheese/<phase>/<slug>.md artifact.
 
-Emits JSON with keys: status, next, artifact, orientation, halt_reason.
+Emits JSON with keys: status, next, artifact, orientation, halt_reason,
+taste_test, durable_flags.
 
     python3 shared/scripts/read_handoff_slug.py --phase age --slug foo
     -> {"status": "ok", "next": "cure", ...}
@@ -29,6 +30,8 @@ def _cmd(args: argparse.Namespace) -> None:
             "artifact": slug.artifact,
             "orientation": slug.orientation,
             "halt_reason": slug.halt_reason,
+            "taste_test": slug.taste_test,
+            "durable_flags": slug.durable_flags,
         },
         json_mode=True,
     )

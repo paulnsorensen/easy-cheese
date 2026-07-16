@@ -16,6 +16,7 @@ git-tracking axis (`skills/cheese/references/formatting.md:103`).
 - [adr/](./adr/index.md) — adr
 - [architecture](./architecture.md) — Architecture of easy-cheese
 - [fanout-engine-entities](./fanout-engine-entities.md) — Fan-out engine entities
+- [post-pr-wiki-writeback](./post-pr-wiki-writeback.md) — Post-PR wiki write-back — plan and followups
 - [skill-parity-analysis](./skill-parity-analysis.md) — Skill-parity analysis
 - [spec-workflow-comparison](./spec-workflow-comparison.md) — Spec / brainstorm-to-spec workflow comparison
 - [tooling](./tooling.md) — Tooling

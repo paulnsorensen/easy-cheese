@@ -61,6 +61,8 @@ class TestPreambleRoundTrip:
         assert slug.next_skill == "age"
         assert slug.artifact == ".cheese/press/my-task.md"
         assert slug.orientation == "implemented widget"
+        assert slug.taste_test is None
+        assert slug.durable_flags is None
 
     def test_halt_status_round_trips(
         self, writer: ModuleType, handoff_mod: ModuleType, tmp_path: Path
@@ -111,6 +113,119 @@ class TestRerunOverwrite:
         target = writer.write_artifact(orientation="second pass", **common)
         assert "second pass" in target.read_text(encoding="utf-8")
         assert "first pass" not in target.read_text(encoding="utf-8")
+
+
+class TestOptionalKeyedLines:
+    """Regression tests: optional taste_test:/durable_flags: preamble lines.
+
+    The prose slug schemas (skills/cook/SKILL.md, skills/age/SKILL.md) place
+    these keyed lines between `artifact:` and the orientation; the parser
+    must consume them instead of swallowing them as the orientation, while
+    plain four-line slugs keep parsing identically.
+    """
+
+    def test_four_line_slug_back_compat(self, handoff_mod: ModuleType) -> None:
+        slug = handoff_mod.parse_handoff_slug(
+            "status: ok\n"
+            "next: cure\n"
+            "artifact: .cheese/press/demo.md\n"
+            "reviewed the retry path\n"
+        )
+        assert slug.orientation == "reviewed the retry path"
+        assert slug.taste_test is None
+        assert slug.durable_flags is None
+
+    def test_durable_flags_keyed_line(self, handoff_mod: ModuleType) -> None:
+        # The age-slug shape: durable_flags between artifact and orientation.
+        slug = handoff_mod.parse_handoff_slug(
+            "status: ok\n"
+            "next: cure\n"
+            "artifact: .cheese/press/demo.md\n"
+            "durable_flags: none\n"
+            "reviewed the retry path\n"
+        )
+        assert slug.durable_flags == "none"
+        # The keyed line must not be swallowed as the orientation.
+        assert slug.orientation == "reviewed the retry path"
+
+    def test_taste_test_and_durable_flags(self, handoff_mod: ModuleType) -> None:
+        # The cook-slug shape: both keyed lines before the orientation.
+        slug = handoff_mod.parse_handoff_slug(
+            "status: ok\n"
+            "next: press\n"
+            "artifact:\n"
+            "taste_test: inline-pass\n"
+            "durable_flags: keyed-line parsing added -> handoff-contract\n"
+            "cook implemented widget\n"
+        )
+        assert slug.taste_test == "inline-pass"
+        assert slug.durable_flags == "keyed-line parsing added -> handoff-contract"
+        assert slug.orientation == "cook implemented widget"
+
+    def test_render_parse_roundtrip_with_keyed_lines(self, handoff_mod: ModuleType) -> None:
+        original = handoff_mod.HandoffSlug(
+            status="ok",
+            halt_reason=None,
+            next_skill="cure",
+            artifact=".cheese/age/demo.md",
+            orientation="reviewed widget",
+            taste_test="dispatched-pass",
+            durable_flags="none",
+        )
+        rendered = handoff_mod.render_handoff_slug(original)
+        assert handoff_mod.parse_handoff_slug(rendered) == original
+
+    def test_duplicate_keyed_line_fails_loud(self, handoff_mod: ModuleType) -> None:
+        text = (
+            "status: ok\nnext: cure\nartifact:\n"
+            "durable_flags: none\ndurable_flags: none\norient\n"
+        )
+        with pytest.raises(handoff_mod.HandoffParseError, match="duplicate 'durable_flags:'"):
+            handoff_mod.parse_handoff_slug(text)
+
+    def test_keyed_line_without_value_fails_loud(self, handoff_mod: ModuleType) -> None:
+        text = "status: ok\nnext: cure\nartifact:\ndurable_flags:\norient\n"
+        with pytest.raises(handoff_mod.HandoffParseError, match="requires a value"):
+            handoff_mod.parse_handoff_slug(text)
+
+    def test_writer_emits_durable_flags(
+        self, writer: ModuleType, handoff_mod: ModuleType, tmp_path: Path
+    ) -> None:
+        target = writer.write_artifact(
+            slug="flagged",
+            status="ok",
+            next_skill="cure",
+            artifact="",
+            orientation="reviewed widget",
+            body=None,
+            root=tmp_path,
+            phase="age",
+            durable_flags="keyed-line contract -> handoff-contract",
+        )
+        slug = handoff_mod.parse_handoff_slug(target.read_text(encoding="utf-8"))
+        assert slug.durable_flags == "keyed-line contract -> handoff-contract"
+        assert slug.orientation == "reviewed widget"
+
+    def test_writer_cli_flags_roundtrip(
+        self, handoff_mod: ModuleType, tmp_path: Path
+    ) -> None:
+        # Locks the argparse dest wiring (--taste-test/--durable-flags).
+        result = subprocess.run(
+            [
+                sys.executable, str(WRITER_CLI),
+                "--slug", "cli-flagged", "--status", "ok", "--phase", "age",
+                "--next", "cure", "--artifact", "", "--orientation", "demo",
+                "--taste-test", "inline-pass", "--durable-flags", "none",
+            ],
+            capture_output=True,
+            text=True,
+            cwd=tmp_path,
+        )
+        assert result.returncode == 0, result.stderr
+        target = tmp_path / ".cheese" / "age" / "cli-flagged.md"
+        slug = handoff_mod.parse_handoff_slug(target.read_text(encoding="utf-8"))
+        assert slug.taste_test == "inline-pass"
+        assert slug.durable_flags == "none"
 
 
 class TestBodyFile:

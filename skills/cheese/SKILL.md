@@ -33,9 +33,10 @@ If `$ARGUMENTS` is missing entirely and there is no recent context to lean on, a
 2. **Classify** — match `$ARGUMENTS` against the intent shapes in `references/classification.md`. Pick the highest-confidence shape; below the threshold, route to `clarify` (handled by the tier-3 escalation in step 4).
 3. **Clarity check (implementation intents only).** Run cook's fast-path check for `cook` and `mold`. Direct `plate` intents bypass it.
 4. **Escalate (if needed).** Tier 1 dispatches the chosen target (writing a mini-spec via `/mold`'s agent-invoked mode when the dispatch is `/cook --auto` and no spec path was supplied). Tier 2 autonomously invokes `/culture` and/or `/briesearch` in internal mode, then re-runs the clarity check. Tier 3 blocks on a single targeted host-routed question and re-enters classification on the answer. See `## Escalation`.
-5. **Announce** — print a short three-line block (Intent / Reason / Target) per the format in `## Output`. Cite the signal that drove the routing decision.
-6. **Self-check** — run the coherence questions in `references/coherence-check.md`. If any fails, downgrade to `clarify` (tier 3) or `research`.
-7. **Dispatch** — without `--safe`, run the chosen skill immediately with its exact dispatch command and context packet, in the same turn as the announce. With `--safe`, issue a handoff gate per [`references/handoff-gate.md`](references/handoff-gate.md) (recommended target pre-selected, at least one alternative, `Stop`) and wait for the user's selection before dispatching.
+5. **Wiki grounding (when hallouminate is present).** Derive a search query from the dropped-in input, ground it against the wiki corpus — at most one `mcp__hallouminate__ground` call, corpus resolved via `list_corpora` (probe shape: `skills/mold/references/grounding.md`) — and fold the top hits into the dispatch packet as `handoff_context.wiki_hits` (`[{page, line, why}]`; see [`references/handoff-gate.md`](references/handoff-gate.md) § Context payloads). When hallouminate is absent or no wiki corpus exists, skip and degrade per [`references/optional-plugins.md`](references/optional-plugins.md).
+6. **Announce** — print a short block (Intent / Reason / Target, plus wiki hits when present) per the format in `## Output`. Cite the signal that drove the routing decision.
+7. **Self-check** — run the coherence questions in `references/coherence-check.md`. If any fails, downgrade to `clarify` (tier 3) or `research`.
+8. **Dispatch** — without `--safe`, run the chosen skill immediately with its exact dispatch command and context packet, in the same turn as the announce. With `--safe`, issue a handoff gate per [`references/handoff-gate.md`](references/handoff-gate.md) (recommended target pre-selected, at least one alternative, `Stop`) and wait for the user's selection before dispatching.
 
 `/cheese` is a router, not a worker: it never edits files, runs tests, or opens PRs. Use only the host's read, search, and dispatch capabilities. The sole exception is invoking `/mold`'s agent-invoked mini-spec mode in tier 1 when `/cook --auto` needs a spec first; that write happens inside `/mold`'s own capability scope, not the router's.
 
@@ -127,7 +128,7 @@ Beyond `cheez-*` there are router-specific tools:
 | PR / issue context | `gh` | the URL or numbers the user provided |
 | Confirming routing target with the user (only under `--safe` or `clarify`) | host-routed structured question per [`references/handoff-gate.md`](references/handoff-gate.md) | a numbered list with explicit dispatch commands |
 
-`/cheese` keeps tool use light. Treat anything heavier than a single-file read or one search call as a sign the work belongs in the downstream skill, not in the router.
+`/cheese` keeps tool use light. Beyond the single wiki-grounding probe in `## Flow`, treat anything heavier than a single-file read or one search call as a sign the work belongs in the downstream skill, not in the router.
 
 ## Output
 
@@ -136,6 +137,7 @@ Always emit, in order:
 1. **Detected intent** — one line, e.g. `Intent: cook (clear single-file fix)`.
 2. **Reason** — one line citing the signal (`reason: spec path .cheese/specs/foo.md`).
 3. **Target** — the chosen skill, e.g. `Target: /cook .cheese/specs/foo.md`.
+4. **Wiki hits** — when `handoff_context.wiki_hits` is non-empty, one line per hit: `wiki: <page>:<line> — <why>` — always rendered before dispatch so the user sees what memory informed the routing and can challenge stale hits. Omit the section when hallouminate is absent.
 
 Then dispatch in the same turn (or, under `--safe`, via the handoff gate). If `clarify` is chosen, replace the dispatch with the single clarifying question.
 

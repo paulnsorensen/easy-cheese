@@ -126,6 +126,7 @@ When the run was chained from `/affinage` (`handoff_context.source_skill: /affin
 
 - Detect an open PR with `gh pr view`. If one exists, dispatch `/plate` to run its final writing gate, validation, named-file commit, topology-aware update, and publication. Rule 11 authorizes the update. Propagate `--hard`; `/plate` gives `/hard-cheese` the final artifact state before publishing.
 - If no open PR exists: with `--open-pr`, dispatch `/plate [--hard]`; explicit topology choices and obviously cohesive work proceed without asking, while stack-sized or ambiguous work asks before commit or branch-layout mutation. Without `--open-pr`, leave the remote untouched and finish with `no open PR — pass --open-pr or run /plate`.
+- After `/plate`'s publication lands, run the **§ Post-PR learnings write-back** below.
 - If the cure was not clean, do not dispatch `/plate`; mention the blocker and stop.
 
 **`--safe` — ask via the shared handoff gate** in [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md). Default options:
@@ -136,6 +137,18 @@ When the run was chained from `/affinage` (`handoff_context.source_skill: /affin
 - **Stop** — dispatch none.
 
 Pre-select **Plate it** only when all selected findings applied cleanly and gates passed. Never dispatch before selection; run the selected command immediately.
+
+### Post-PR learnings write-back
+
+After any path that **publishes to a PR** — the default `/plate` dispatch, an `--open-pr` new PR, the `--safe` **Plate it** selection, or the auto-mode terminal publication — record the session's *implementation-time* learnings to the wiki. This is the second wiki write moment; curdle owns the design-time write, this owns what only surfaces while building: constraints discovered in `/cook`, `/age` findings that changed the design, and any domain terms the diff introduced or redefined.
+
+- **Candidates — upstream `durable_flags` + new-since-curdle ADRs.** Read `durable_flags:` from the upstream `/cook` and `/age` handoff slugs (`.cheese/cook/<slug>.md`, `.cheese/age/<slug>.md`); every non-`none` line is a write-back candidate alongside the new ADRs + domain-model deltas. Upstream phases record flags only — cure/plate/affinage remain the only wiki writers.
+- **Writer — `/wiki-ingest`, detect-and-degrade.** When the hallouminate plugin is available, dispatch `/wiki-ingest` with the candidate list above; its dedup/route/merge/contradiction handling ensures only rationale *new since curdle* lands (say "new since curdle" in the dispatch so it does not re-add design-time ADRs). When hallouminate is absent, write `docs/adr/<slug>-NNN.md` + the domain-model file fallback and emit a **loud one-line note** that the write-back went to files, not the wiki — never a silent degrade. Detection and the degrade contract: [`../cheese/references/optional-plugins.md`](../cheese/references/optional-plugins.md).
+- **Every publication path.** Fires from the frame that dispatched terminal `/plate` — manual `cook→cure` and `--auto` alike — after publication lands.
+- **Publication-owner exception.** When cure does not own terminal `/plate` — the `/ultracook` no-publish cases below, or the `/affinage` chain where affinage owns terminal `/plate` — cure does **not** write back; the skill that owns the `/plate` dispatch owns the write-back at its publish boundary.
+- **Nothing to record** — all upstream `durable_flags` are `none` (or absent), no new ADR-worthy decision, and no domain-model delta — skip with a one-line "no post-PR learnings" note. Do not manufacture an entry.
+
+`[TBD]` The write-back trigger lives at this cure boundary today; `/plate` (the dedicated commit/PR skill) now exists, so the deferred follow-up is to move the trigger onto `/plate` so publication and learnings-capture are wired at one seam (see the `post-pr-wiki-writeback` wiki page). Upstream `durable_flags` feed whichever skill owns this single publish-boundary write, so if the trigger moves to `/plate`, flag consumption moves with it.
 
 ## --hard mode
 
@@ -150,7 +163,7 @@ When invoked with `--auto --stake <floor>`:
 - Apply findings one at a time. After each fix, run the narrowest test that proves it. If the fix breaks a previously-passing test or any project-wide gate, revert that single finding's edit and record it under `### Deferred` in the cure report with the test name and the failure summary. Continue with the remaining findings.
 - After all selected findings are processed, skip the handoff gate and invoke `/age --scope <touched-paths> --auto` (forward `--open-pr` when it is in scope) so the chain can re-review.
 - `/age --auto` enforces the two-pass cap. Cure does not need to track passes itself — it just keeps applying when invoked.
-- **Terminal publication.** When the age child returns `next: done`, dispatch `/plate` once. It updates an existing PR automatically or, with `--open-pr`, applies the explicit-choice and review-shape policy before committing a new PR layout.
+- **Terminal publication.** When the age child returns `next: done`, dispatch `/plate` once. It updates an existing PR automatically or, with `--open-pr`, applies the explicit-choice and review-shape policy before committing a new PR layout. After the publication lands, run the **§ Post-PR learnings write-back** in `## Handoff`.
 - **Orchestrated sub-agent exception.** A phase-only `/ultracook` cure never invokes `/plate`; the orchestrator owns commit and publication.
 - **`/affinage` chain exception.** When `handoff_context.source_skill` is `/affinage`, suppress this terminal `/plate` — affinage posts its GitHub replies (final writes) and then owns terminal `/plate`.
 
