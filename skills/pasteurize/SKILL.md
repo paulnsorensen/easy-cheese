@@ -170,7 +170,7 @@ follow_up: <architectural follow-up note, or "none">
 
 ## Handoff
 
-**Pipeline:** cheese (debug) → **[pasteurize]** → cook --auto → press → age → cure → ship
+**Pipeline:** cheese (debug) → **[pasteurize]** → cook --auto → press → age → cure → plate
 
 After the report is printed and the handoff slug is on disk, ask through the host routing guide in [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md) which downstream to run. Lead each option with the verb (what the user wants to _do_ next):
 

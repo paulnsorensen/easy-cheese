@@ -48,7 +48,7 @@ every relevant push to `main`.
 ## The cheese pipeline
 
 The workflow skills compose into one pipeline, ordered
-**culture → mold → cook → press → age → cure → ship**
+**culture → mold → cook → press → age → cure → plate**
 (`skills/mold/SKILL.md:125`, `skills/cook/SKILL.md:90`):
 
 | Skill | Role in the pipeline |
@@ -60,6 +60,7 @@ The workflow skills compose into one pipeline, ordered
 | `/press` | Adversarial test hardening |
 | `/age` | Ten-dimension review → severity-grouped findings |
 | `/cure` | Apply selected findings as focused fixes |
+| `/plate` | Write and verify final artifacts, validate, commit, and publish one PR or a stack |
 | `/ultracook` | Pipeline a spec in fresh-context isolation; parallel mode fans file-disjoint curds → PRs |
 
 Lower-level **tool skills** sit beneath the pipeline: `/cheez-search`,

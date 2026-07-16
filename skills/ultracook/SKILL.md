@@ -28,7 +28,7 @@ Accept one of:
 
 Optional flags:
 
-- `--open-pr` — at the terminal, open a *new* PR when none exists (the default only pushes an already-open one). The phase-only cure sub-agents never push.
+- `--open-pr` — allow publication when no PR exists. Linear mode resolves topology at terminal before its first commit. Parallel mode runs `/plate` topology preflight before seed, curd, or wiring commits: an explicit choice wins, obviously cohesive work persists `single` without asking, and a stack recommendation or ambiguous shape asks once. Phase-only cure sub-agents never publish.
 - `--resume <slug>` — resume a crashed **parallel** run from its manifest at `.cheese/ultracook/<slug>/manifest.yaml`: read the latest completed phase and continue from the next incomplete one (see `## --resume <slug>`). Linear runs resume via `/cheese --continue <slug>` instead.
 
 ## Mode selection — the decomposer is the gate
@@ -38,6 +38,7 @@ Before the phase loop runs, the decomposer picks the mode. This is the one autho
 1. **Decompose** — spawn a full-peer decomposer sub-agent (`references/decomposer-prompt.md`) to produce `seed[]`, `curds[]`, and `wiring[]` from the spec, then validate with `python3 skills/ultracook/scripts/ultracook.pyz validate_decomposition <manifest>`. Re-run on validation failure (max 2 retries).
 2. **Pick the mode** — `python3 skills/ultracook/scripts/ultracook.pyz mode --count <curd-count>` → `linear | parallel`. The canonical `PARALLEL_THRESHOLD` (2) lives in the engine: a decomposition of **2 or more** curds routes to **parallel mode**; **1** curd stays **linear**. There is one threshold in the tree — the selector, `validate_decomposition`, and the mold hint all read it.
 3. **Probe the engine seam** — `python3 skills/ultracook/scripts/ultracook.pyz milknado --tools "<available tool names>"` → `engine | tracker | none`. This decides how parallel mode runs curds (see `## Parallel mode`); linear mode ignores it.
+4. **Publication topology preflight** — when the selected mode is `parallel`, `--open-pr` is present, and no PR exists, dispatch `/plate` in topology-preflight mode against `.cheese/ultracook/<slug>/manifest.yaml` **before Phase 1 seed or any worker commit**. Apply `/plate`'s review-shape policy: preserve an explicit user choice, persist `single` without asking for one cohesive review unit, or ask once when stacked is recommended or shape is ambiguous. Read back `plate_layout: single | stacked` and re-run `validate_manifest`. Existing PRs preserve detected topology; runs without `--open-pr` do not preflight because their workers remain commit-only.
 
 Helper resolution — including the `${CLAUDE_SKILL_DIR}` packaged-helper fallback — follows [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md) § Helper resolution.
 
@@ -53,10 +54,10 @@ A 1-curd spec runs `## Flow` (linear mode) unchanged. A 2+-curd spec runs `## Pa
    3. **Act on the verdict**:
       - `action=halt` → surface the `exit_message` (which contains the halt reason verbatim) and stop. Never push on a halt.
       - `action=stop_early` → age reported `next: done`; the diff is clean at the medium+ severity floor. Stop early with a clean summary.
-      - `action=stop` → chain table exhausted after the terminal age spawn. Proceed to the terminal push.
-      - `action=spawn` → spawn `next_phase` and continue the loop.
-4. **Terminal push** — after the third age spawn (or any earlier non-halt stop), if an open PR exists for the branch, dispatch `/gh` to commit + push the chain's changes to it (Rule 11 — the existing PR is the authorization). Open a *new* PR only when `--open-pr` is in scope. A halt never pushes.
-5. **Final summary** — print a four-line summary: passes completed, total findings applied / deferred, the final age-report path, and whether the PR was pushed (or the next-step nudge "review the diff, then `/gh` when ready" if no PR existed and `--open-pr` was absent).
+      - `action=stop` → chain table exhausted after terminal age. Proceed to `/plate`.
+      - `action=spawn` → spawn `next_phase` and continue.
+4. **Terminal plate** — after the final non-halt stop, dispatch `/plate` for an existing PR. With `--open-pr`, dispatch `/plate` for a new PR; before its first commit it honors an explicit choice, proceeds with an obviously cohesive single PR, or asks when stacked is recommended or shape is ambiguous. A halt never commits or publishes.
+5. **Final summary** — report phases, findings, final age path, and `/plate` outcome (or `review the diff, then /plate when ready`).
 
 ## Phases and slug paths
 
@@ -140,7 +141,7 @@ Ultracook summary — <slug>
 Passes completed: <list of phase names that ran>
 Findings:         <fixed count> applied, <count> deferred (cure-report path)
 Final age:        .cheese/age/<slug>.md
-Next step:        review the diff, then /gh when ready
+Next step:        review the diff, then /plate when ready
 ```
 
 If the chain stopped on a halt, replace "Next step" with the halt reason and the path of the phase that surfaced it.
@@ -151,7 +152,7 @@ Reached when the decomposer produces **2 or more** curds (`mode → parallel`). 
 
 ### Topology
 
-1. **Seed (inline).** The orchestrator writes the small shared types/interfaces `seed[]` names (the one place the orchestrator writes code), runs the project gates, and commits.
+1. **Seed (inline).** The orchestrator writes shared types/interfaces, runs project gates, then invokes `/plate` in commit-only mode.
 
    After the seed commit, advance the manifest: `python3 skills/ultracook/scripts/ultracook.pyz manifest_update set-phase --manifest .cheese/ultracook/<slug>/manifest.yaml --phase seed_complete`.
 2. **Per-curd fan-out.** Spawn one full-peer sub-agent per curd (`references/curd-prompt.md`), each in its **own worktree**. Each curd runs the per-curd pipeline `cook → press → age → cure` — the `PARALLEL_CURD` phase table: `python3 skills/ultracook/scripts/ultracook.pyz phase_decision --phase-index <i> --status <status> --table parallel-curd`. Inside a curd, `/age` runs **inline-degrade** (the spawn prompt carries `invoked-from: ultracook-curd`) because the curd worker already sits at the nesting-depth cap. Each curd commits on its worktree branch.
@@ -170,9 +171,9 @@ Helper resolution — including the `${CLAUDE_SKILL_DIR}` packaged-helper fallba
 6. **Post-merge review (once).** Run exactly one `press → age → cure` over the merged diff — the `PARALLEL_POSTMERGE` table (`--table parallel-postmerge`). Single pass; the per-curd reviews already covered each slice.
 
    When the post-merge cure returns clean, `manifest_update set-phase --manifest <path> --phase post_review_complete`.
-7. **PR plan + publish.** Plan the PR layout (`references/pr-planner-prompt.md`) and publish 1–N reviewable PRs via a discovered `/pr-stack` (or plain `gh`).
+7. **PR plan + plate.** Plan the layout (`references/pr-planner-prompt.md`) using the authoritative `manifest.plate_layout` and copy that value into `pr-plan.yaml`. The plan may document why the decomposition supports a stack, but it cannot override an explicit or previously verified choice. Then dispatch `/plate`; it inventories and verifies all durable artifacts, verifies the manifest and plan selections agree, and reuses the preflight resolution — do not ask twice. It publishes through the ordinary or detected stack-provider path.
 
-   After the PRs are published, `manifest_update set-phase --manifest <path> --phase pr_publish_complete` (terminal).
+   After `/plate` verifies publication, run `manifest_update set-phase --manifest <path> --phase pr_publish_complete` (terminal).
 
 ### Manifest advancement + resume continuity
 
@@ -201,6 +202,7 @@ Parallel mode's final report and every handoff slug use the **same schema** as l
 `--resume <slug>` is the sanctioned re-entry into a crashed **parallel** run. (Linear runs carry no manifest — resume those through `/cheese --continue <slug>`, which reads the per-phase handoff slugs.) It reads `.cheese/ultracook/<slug>/manifest.yaml` and continues from where the crash left off:
 
 1. **Load the manifest.** Read `.cheese/ultracook/<slug>/manifest.yaml`. If it is missing, fail fast with `"no manifest at .cheese/ultracook/<slug>/manifest.yaml — nothing to resume"`. Optionally re-check its shape with `python3 ${CLAUDE_SKILL_DIR}/scripts/ultracook.pyz validate_manifest <path>`.
+   For `--open-pr` with no existing PR, also read `plate_layout`. If the phase is still `gate_approved` and the value is absent, run `/plate` topology preflight under the same explicit-choice/cohesive-single/stack-recommendation policy and persist the resolution before continuing. If any commit-bearing phase is already complete and the value is absent, halt: the before-commit resolution cannot be reconstructed retroactively. A recorded value is authoritative at terminal publication.
 2. **Rebase guard — verify recorded commits still exist.** For every non-null `commit_sha` recorded on a completed seed item, curd, or wiring row, run `git cat-file -e <sha>` — the schema permits `commit_sha: null` on a `completed` row, so skip those rather than passing an empty SHA to `git cat-file`. If any recorded SHA is gone (a rebase or history rewrite dropped it), fail fast and name the missing SHA — resuming onto rewritten history would harvest the wrong tree. Do not auto-recover; this guard is orchestrator prose, not new engine code.
 3. **Confirm curd files still match (optional).** Run `python3 ${CLAUDE_SKILL_DIR}/scripts/ultracook.pyz manifest_update check-files --manifest <path> --root <repo-root>` to detect curd file lists that drifted since the crash; fold any misses into the resumed dispatch context (informational, not a blocker).
 4. **Restore continuity.** Read `phase_summary` and `carry_forward` from the manifest — the cross-seam continuity mechanism. A resumed orchestrator reasons from these, never from conversation history (a fresh spawn has none).
@@ -227,6 +229,6 @@ If the host harness does not expose a sub-agent primitive at all, `/ultracook` i
 - Read each phase's handoff slug after the sub-agent returns. Do not infer success from the sub-agent's last line — read the file.
 - Surface halts verbatim. Do not paraphrase, do not soften, do not "retry" a halted phase silently.
 - In parallel mode, own worktree teardown: no `worktree-agent-*` branch or `.claude/worktrees/agent-*` dir may leak after a completed run. State the milknado parity difference (native self-verify vs milknado verify-until-green) when it applies.
-- At the terminal, push to an already-open PR via `/gh` (Rule 11); create a *new* PR only with `--open-pr`. Never push on a halt.
+- At the terminal, dispatch `/plate` for an existing PR (Rule 11). For a new PR, `--open-pr` is required: linear mode resolves topology before its first commit; parallel mode must have a verified `plate_layout` recorded before any seed, curd, or wiring commit. Explicit choices are authoritative, cohesive singles do not ask, stack recommendations and ambiguous shapes ask once, and no halt may commit or publish.
 - Never wipe existing handoffs. Stop and tell the user to use `/cheese --continue` or `rm` by hand.
 - Apply the shared voice kernel (lives at `../age/references/voice.md`): lead the final summary with what happened, flag residual risk as `certain | speculating | don't know`, do not manufacture follow-ups.

@@ -26,9 +26,9 @@ Arguments:
 | Mode | How it fires | Where the gate sits |
 | --- | --- | --- |
 | **standalone** | User runs `/hard-cheese <slug>` directly before opening a pull request. | Outside the pipeline. No upstream skill required. |
-| **propagated** | `/cure` invokes `/hard-cheese <slug>` when `--hard` is in scope and the user selects the share-for-review option at cure's handoff (or, under `--auto --hard`, at the end of cure's final auto pass). | At the `cure → share for review` boundary — the moment code escapes the local machine. |
+| **propagated** | `/plate --hard` invokes `/hard-cheese <slug>` after its final writing gate and before publication. | At the verified-artifacts → share-for-review boundary. |
 
-`--hard` propagates through `/cheese → /mold → /cook → /press → /age → /cure`. Upstream skills only pass the flag along; `/cure` is the only skill that actually invokes `/hard-cheese`. See `references/composition.md` for the full matrix.
+`--hard` propagates through `/cheese → /mold → /cook → /press → /age → /cure → /plate`. Upstream skills pass the flag; `/plate` is the only pipeline skill that invokes `/hard-cheese`.
 
 Portability reference: [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
 The handoff blocks below are the portable contract; slash commands are host renderings, not the control model.
@@ -55,7 +55,7 @@ The handoff blocks below are the portable contract; slash commands are host rend
 
    > Before this is shared for review, explain its causal logic in your own words. How does *<feature or fix>* work? Why does it produce the desired behavior? What state, control flow, or invariants does it rely on?
 
-   Render a diff summary alongside the prompt: files changed, key hunks. Cap the diff excerpt at roughly 80 lines. The spec excerpt (if loaded) is shown above the diff summary.
+   Render a diff summary alongside the prompt. When invoked by `/plate`, also render `/plate`'s final artifact inventory and `{target, backend, verified}` rows so the explanation covers the exact state about to be shared.
 
 4. **Capture the user's explanation** as free text. No coaching, no example answers — the explanation is the artifact under test.
 
@@ -143,20 +143,9 @@ Rationale: judge invocation is per-PR-attempt and per-retry, and a strict fail-c
 
 ## Composition with `--auto`
 
-`--hard` and `--auto` may coexist. The gate is the **only** point at which `--hard` punctures `--auto`. Everywhere else, auto's skip-handoff semantics apply.
+`--hard` and `--auto` may coexist. The gate punctures auto exactly once inside terminal `/plate --hard`, after `/plate` verifies final artifacts and before publication. The user responds, then PASS permits publication, FAILED halts, and ERROR follows the documented fail-open behavior.
 
-Concretely, under `/cure --auto --hard --stake medium+`:
-
-- The pipeline runs auto through `cook → press → age → cure` per `--auto`'s normal contract.
-- At the end of cure's final auto pass, the chain pauses and `/hard-cheese <slug>` fires once.
-- The user must respond to the vibecheck prompt. The judge grades.
-- On PASS: chain exits with `"gate passed → ready to share for review"`.
-- On FAILED (cap exhausted): chain exits non-zero with the artifact path; the user must improve their understanding before sharing.
-- On ERROR: chain exits `0` with a warning (the fail-open divergence).
-
-Non-TTY guard: see `references/composition.md` `## Non-TTY guard`.
-
-`/cure --auto` alone (no `--hard`) is unchanged — the gate never fires. The single puncture point is documented in `references/composition.md` and in `skills/cure/SKILL.md`.
+Commit-only `/plate --hard` does not fire because nothing is shared. For a new PR under auto, `/plate` honors explicit topology, infers an obviously cohesive single, and asks when stacked is recommended or shape is ambiguous. Non-TTY behavior lives in `references/composition.md`.
 
 ## Output
 

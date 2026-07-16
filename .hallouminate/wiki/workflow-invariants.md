@@ -10,7 +10,7 @@ The canonical order is fixed
 (`skills/mold/SKILL.md:125`, `skills/cook/SKILL.md:90`):
 
 ```text
-culture → mold → cook → press → age → cure → ship
+culture → mold → cook → press → age → cure → plate
 ```
 
 - **culture** — no-write thinking; never edits code, never the gate.
@@ -21,7 +21,7 @@ culture → mold → cook → press → age → cure → ship
 - **press** — adversarial test hardening of the cooked diff.
 - **age** — ten-dimension review producing a findings report.
 - **cure** — applies the selected findings as focused fixes.
-- **ship** — push / open PR once `just check` is green.
+- **plate** — write and verify final artifacts, run `just check`, commit, then publish an ordinary PR or stack.
 
 Skipping forward is allowed (e.g. cook → age, skipping press) but the
 relative order never inverts: you do not cure before age, or press before
@@ -68,6 +68,31 @@ after the user chooses (`skills/cheese/references/handoff-gate.md:7`).
 runs. `/ultracook` runs the chain
 `cook → press → age → cure → age → cure → age` (all `--auto`), capped at
 **two cure passes** (`skills/cook/SKILL.md:132`).
+
+
+## Plate is the final writing gate
+
+`/plate` is the only phase that owns the complete transition from finished local work
+to reviewable remote work.[^plate-flow] Before `just check`, staging, commit, or PR
+publication, it inventories every promised artifact and implementation-time durable fact,
+writes each required target through hallouminate or the tracked fallback, reads it back,
+and records `{target, backend, verified}`.[^plate-writes] A required write that cannot be
+verified stops publication.
+
+For every new PR, an explicit topology choice is authoritative. Otherwise `/plate`
+selects a single PR without asking only for one cohesive review unit; it recommends a
+stack and asks when the work has independently reviewable ordered layers, and asks when
+review shape is genuinely ambiguous. The policy uses cohesion and stable layer
+boundaries, not line or file counts. Parallel `/ultracook --open-pr` runs that policy
+before seed or worker commits, records `plate_layout` in its manifest and PR plan, and
+reuses the resolution at terminal publication. A supplied plan cannot override an
+explicit choice. Existing PR updates preserve detected topology. A stack runs the write,
+validation, named-stage, commit, and verification transaction once per layer before
+whole-chain submission; shared durable writes belong on the bottom/common branch or an
+explicit wiring branch.
+
+[^plate-flow]: skills/plate/SKILL.md:33-147
+[^plate-writes]: skills/plate/references/durable-writes.md:1-40
 
 ## `just check` is the single quality gate
 
