@@ -94,12 +94,14 @@ Per-dimension base-severity tables, location-sensitivity, fix-cost-now / fix-cos
    python3 shared/scripts/write_handoff_artifact.py \
      --phase age --slug <slug> --status ok --next cure \
      --artifact "" --orientation "<one-line orientation>" \
+     --durable-flags "<none | one line per flag>" \
      --body-file "$report_file"
    ```
 
    If the host only ships the bundle, `python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz write_handoff_artifact \
      --phase age --slug <slug> --status ok --next cure \
      --artifact "" --orientation "<one-line orientation>" \
+     --durable-flags "<none | one line per flag>" \
      --body-file "$report_file"` is the fallback.
    Then print the path.
 6. Hand off (see `## Handoff` below).
