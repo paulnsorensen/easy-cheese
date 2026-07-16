@@ -117,6 +117,8 @@ handoff_context:
   source_report: .cheese/age/<slug>.md
   selection: "1,3,5"
   resolved_ids: [1, 3, 5]
+  wiki_hits:
+    - {page: .hallouminate/wiki/adr/foo-001.md, line: 12, why: "prior decision on X"}
 ```
 
 Examples of when to attach a `handoff_context:` block:
@@ -124,6 +126,9 @@ Examples of when to attach a `handoff_context:` block:
 - `/age -> /cure` selection ids travel as context, not as a `--select` flag.
 - `/culture -> /cook` carries the compact contract that emerged from discussion.
 - `/melt -> upstream skill` carries the interrupted operation and original skill invocation.
+- `/cheese -> <target>` carries `wiki_hits` grounded from the wiki corpus at routing time.
+
+`wiki_hits` is the query-time wiki retrieval key — a list of `{page, line, why}` entries grounded from the `repo:<repo>:wiki` corpus when hallouminate is present (probe and degrade contract: [`optional-plugins.md`](optional-plugins.md)). The attaching skill always renders the hits to the user at dispatch so memory use is visible and stale hits can be challenged; when hallouminate is absent, omit the key.
 
 Keep payloads short and factual. If a payload would exceed a compact screenful, write or reference a `.cheese/.../<slug>.md` handoff artifact and pass the path instead.
 
