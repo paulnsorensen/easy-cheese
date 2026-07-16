@@ -119,7 +119,7 @@ def test_release_workflow_validates_staged_tree_after_transformations() -> None:
     assert "working-directory: ${{ runner.temp }}/release" in workflow[stage:validate]
 
 
-def test_release_workflow_pins_checkout_to_v6_0_2() -> None:
+def test_release_workflow_pins_checkout_to_v7_0_0() -> None:
     workflow = (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
 
-    assert "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2" in workflow
+    assert "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0" in workflow
