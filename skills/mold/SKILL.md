@@ -96,7 +96,7 @@ Beyond `cheez-*` there are mold-specific tools:
 | Need | Prefer | Fallback |
 | --- | --- | --- |
 | External validation | `/briesearch` with Context7/Tavily | user-provided docs, repo docs, or note as unverified |
-| Wiki grounding (Ground phase) | `mcp__hallouminate__list_corpora` + `mcp__hallouminate__ground` on `repo:<repo>:wiki` — see `references/grounding.md` | skip; proceed with code evidence only; cap at `speculating` when design rationale is central |
+| Wiki grounding (Ground entry + decision points in any mode) | `mcp__hallouminate__list_corpora` + `mcp__hallouminate__ground` on `repo:<repo>:wiki` — see `references/grounding.md` | skip; proceed with code evidence only; cap at `speculating` when design rationale is central |
 
 Optional tools accelerate the work; missing tools do not block the dialogue. When evidence is unavailable, mark the affected claim `[?]` until settled.
 
