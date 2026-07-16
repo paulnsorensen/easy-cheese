@@ -36,8 +36,10 @@ never hardcoded — there is no `easy-cheese:wiki` baked into a runtime path.
 ```pseudocode
 adr_target():
   # 1. Probe for a hallouminate wiki at the CONSUMER's root repo.
+  #    Shape-match the corpus, never exact-match a placeholder — the repo name is
+  #    dynamic (matches grounding.md and paths.py's domain_model_target()).
   corpus = first(c for c in hallouminate.list_corpora()
-                 if c == "repo:<their-repo>:wiki")        # dynamic; their repo, not ours
+                 if c.startswith("repo:") and c.endswith(":wiki"))   # dynamic; their repo, not ours
   if corpus:
     return ("hallouminate", corpus)        # searchable, cross-session
   # 2. Fall back to a tracked file path everywhere else.
@@ -45,10 +47,12 @@ adr_target():
 ```
 
 - **hallouminate present:** write each ADR into the consumer's
-  `repo:<their-repo>:wiki` corpus via `add_markdown`. The repo name comes from
-  `list_corpora`, never a literal — that is the portability invariant.
-- **hallouminate absent:** write `docs/adr/<slug>-NNN.md` (tracked), and
-  recommend installing hallouminate so future rationale becomes searchable.
+  `repo:<their-repo>:wiki` corpus via `add_markdown`. The corpus is shape-matched
+  from `list_corpora`, never a literal — that is the portability invariant.
+- **hallouminate absent:** write `docs/adr/<slug>-NNN.md` (tracked), emit a **loud
+  one-line note** that the ADR went to a file rather than the wiki (never a silent
+  degrade — see `curdle.md` § Atomic write), and recommend installing hallouminate
+  so future rationale becomes searchable.
 - **probe shape varies by harness** `[?]`: if `list_corpora` is unreachable, fall
   back to the tracked file path and say so — never block curdle on the probe.
 

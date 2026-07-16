@@ -71,7 +71,7 @@ The handoff blocks below are the portable contract; slash commands are host rend
     - **Applied** (with `from-comment:<id>` tag) → `"Fixed — <applied summary>."`
     - **Deferred** (with `from-comment:<id>` tag) → `"Attempted fix reverted — <reason>."`
 
-11. **Plate** — the final writes above (steps 9–10) must land before publication. Once every approved reply is posted, and only when the cure applied ≥1 fix (there is something to publish), dispatch terminal `/plate [--open-pr] [--hard] [--safe]` to commit and publish cure's fixes to the PR. `/affinage` owns this dispatch; publication lands after all replies. Skip it when no fix was applied — there is nothing to plate.
+11. **Plate** — the final writes above (steps 9–10) must land before publication. Once every approved reply is posted, and only when the cure applied ≥1 fix (there is something to publish), dispatch terminal `/plate [--open-pr] [--hard] [--safe]` to commit and publish cure's fixes to the PR. `/affinage` owns this dispatch; publication lands after all replies. After publication lands, run the **§ Post-PR learnings write-back** (`../cure/SKILL.md` § Handoff) — affinage owns terminal `/plate`, so it owns the write-back the chained `/cure` suppressed. Skip plate and write-back when no fix was applied — there is nothing to publish.
 
 ## Fresh-window review
 

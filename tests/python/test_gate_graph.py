@@ -484,6 +484,67 @@ class TestNonGoalsGatePresence:
         )
 
 
+class TestDurableWritesGatePresence:
+    """The `durable-writes` gate (post-pr-wiki-writeback ADR-001) makes curdle's
+    ADR + domain-model writes a first-class, lockstep-enforced coherence gate
+    rather than prose an overloaded curdle can silently skip.
+
+    Like the non-goals gate, set-equality + count-equality between prose and model
+    are blind to a coordinated removal (drop the checklist item AND the node
+    together, N -> N-1 on both sides, still green). These positive by-name and
+    by-meaning assertions are the only catcher if this specific gate vanishes.
+    """
+
+    DURABLE_ID = "durable-writes"  # gate_id() slug of "Durable writes:"
+    DURABLE_DOT_ID = "durable_writes"  # _dot_id() form rendered in the .dot
+
+    def test_gate_node_exists_in_model_by_id(self, gate_graph: ModuleType) -> None:
+        gates = {n.id: n for n in gate_graph.GATE_MODEL.by_kind("gate")}
+        assert self.DURABLE_ID in gates, (
+            "the durable-writes (ADR-001) gate is missing from GATE_MODEL; set-equality "
+            "with prose stays green if the checklist item was dropped in lockstep, so "
+            "this by-name check is the only catcher"
+        )
+        node = gates[self.DURABLE_ID]
+        assert node.kind == "gate"
+        # Assert the gate's MEANING, not incidental wording (Rule 6): the enforcement
+        # is write -> read-back -> completion-record, degrading loud. A reword that
+        # guts the read-back or the loud fallback is a behavioural regression.
+        assert "read-back" in node.label
+        assert "completion-record" in node.label
+        assert "fallback" in node.label
+
+    def test_gate_renders_into_dot_with_edge_to_handshake(
+        self, gate_graph: ModuleType
+    ) -> None:
+        dot = gate_graph.to_dot()
+        node_line = next(
+            (
+                line
+                for line in dot.splitlines()
+                if line.strip().startswith(f"{self.DURABLE_DOT_ID} [")
+            ),
+            None,
+        )
+        assert node_line is not None, f"{self.DURABLE_DOT_ID} node absent from to_dot()"
+        assert 'kind="gate"' in node_line
+        assert f"{self.DURABLE_DOT_ID} -> handshake;" in dot, (
+            "the durable_writes gate must feed the handshake like every other gate"
+        )
+
+    def test_checklist_carries_the_durable_writes_item(self, gate_graph: ModuleType) -> None:
+        body = HANDSHAKE.read_text(encoding="utf-8")
+        block = re.search(
+            r"```\nCoherence self-check before curdle:\n(.*?)```", body, re.DOTALL
+        )
+        assert block, "coherence self-check block not found in handshake.md"
+        labels = re.findall(r"^- \[ \] (.+?)\s*$", block.group(1), re.MULTILINE)
+        ids = {gate_graph.gate_id(label) for label in labels}
+        assert self.DURABLE_ID in ids, (
+            "handshake.md coherence checklist dropped the Durable writes gate item"
+        )
+
+
 class TestCommittedPyzFreshness:
     """The `gate_graph` fixture imports a FRESH rebuild of src/mold/ (via
     build_pyz.cached_bundle), and TestDotSnapshot compares mold.dot to that fresh
