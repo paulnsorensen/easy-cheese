@@ -1,4 +1,4 @@
-"""Write a handoff artifact (4-line preamble + optional body) atomically.
+"""Write a handoff artifact (handoff preamble + optional body) atomically.
 
 CLI:
 
@@ -8,8 +8,9 @@ CLI:
         --orientation "press hardened X" \\
         [--body-file path/to/body.md]
 
-Writes ``.cheese/<phase>/<slug>.md`` containing the canonical four-line
-preamble (status / next / artifact / orientation) followed by an optional
+Writes ``.cheese/<phase>/<slug>.md`` containing the canonical preamble
+(status / next / artifact / optional ``taste_test:`` and ``durable_flags:``
+keyed lines / orientation) followed by an optional
 body separated by a blank line. The write is atomic: contents land in a tmp
 file inside the target directory and are then ``os.replace``'d into place
 (atomic overwrite on POSIX and Windows alike), so readers never observe a
@@ -33,8 +34,16 @@ import cli
 import handoff
 
 
-def _render_preamble(*, status: str, next_skill: str, artifact: str, orientation: str) -> str:
-    """Render the 4-line preamble via handoff.render_handoff_slug (single SSOT)."""
+def _render_preamble(
+    *,
+    status: str,
+    next_skill: str,
+    artifact: str,
+    orientation: str,
+    taste_test: str | None = None,
+    durable_flags: str | None = None,
+) -> str:
+    """Render the preamble via handoff.render_handoff_slug (single SSOT)."""
     # Parse status into (status_kind, halt_reason).
     if status.startswith("halt:"):
         halt_reason = status[len("halt:"):].strip()
@@ -49,6 +58,8 @@ def _render_preamble(*, status: str, next_skill: str, artifact: str, orientation
         next_skill=next_skill,
         artifact=artifact or None,
         orientation=orientation,
+        taste_test=taste_test,
+        durable_flags=durable_flags,
     )
     return handoff.render_handoff_slug(slug)
 
@@ -75,6 +86,8 @@ def write_artifact(
     body: str | None,
     root: Path,
     phase: str | None = None,
+    taste_test: str | None = None,
+    durable_flags: str | None = None,
 ) -> Path:
     """Write the artifact atomically; return the final path.
 
@@ -102,7 +115,12 @@ def write_artifact(
     target_dir.mkdir(parents=True, exist_ok=True)
 
     preamble = _render_preamble(
-        status=status, next_skill=next_skill, artifact=artifact, orientation=orientation
+        status=status,
+        next_skill=next_skill,
+        artifact=artifact,
+        orientation=orientation,
+        taste_test=taste_test,
+        durable_flags=durable_flags,
     )
     contents = _build_contents(preamble=preamble, body=body)
 
@@ -142,6 +160,8 @@ def _cmd_write(args: argparse.Namespace) -> None:
         body=body,
         root=root,
         phase=args.phase,
+        taste_test=args.taste_test,
+        durable_flags=args.durable_flags,
     )
     cli.emit(str(target))
 
@@ -152,6 +172,16 @@ def _setup(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--next", required=True, help="next skill name or 'done'")
     parser.add_argument("--artifact", required=True, help="path to prior artifact (may be empty)")
     parser.add_argument("--orientation", required=True, help="one-line orientation")
+    parser.add_argument(
+        "--taste-test",
+        default=None,
+        help="optional taste_test: keyed preamble line (omitted when absent)",
+    )
+    parser.add_argument(
+        "--durable-flags",
+        default=None,
+        help="optional durable_flags: keyed preamble line (omitted when absent)",
+    )
     parser.add_argument("--body-file", default=None, help="optional path to body content")
     parser.add_argument(
         "--phase",

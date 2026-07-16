@@ -122,6 +122,8 @@ class TestParse:
             "next_skill": "press",
             "artifact": ".cheese/cook/demo.md",
             "orientation": "Cooked the retry path.",
+            "taste_test": None,
+            "durable_flags": None,
         }
 
     def test_round_trip_through_render(self, tmp_path: Path) -> None:
