@@ -124,7 +124,7 @@ If any gate is unmet, propose the smallest next question or evidence check. Writ
 
 ## Handoff
 
-**Pipeline:** culture → **[mold]** → cook → press → age → cure → ship
+**Pipeline:** culture → **[mold]** → cook → press → age → cure → plate
 
 After Curdle completes phase-two publication attempts and mechanical reconciliation of `Deferred follow-ups` into the durable spec, run the curd-count script (procedure and `--blast-radius` rules in [`references/curd-count.md`](references/curd-count.md)), then render the branch menu below and prompt via the shared handoff gate. Never pre-select an autonomous option.
 
@@ -134,7 +134,7 @@ Read the JSON digest. Its `decomposable` field (true when `candidate_curds ≥ 2
 
 The spec splits into independent slices, so `/ultracook`'s decomposer can fan them out in parallel with reviewable PRs. Before rendering the menu, confirm with the user that the candidate curds are file-disjoint (criterion 4) — the script counts signals, it does not verify independence. The dispatched skill is `/ultracook` either way: its decomposer routes 2+ file-disjoint curds to parallel mode and folds shared-file curds back into the linear chain, so the user's answer informs the decomposer rather than changing the command.
 
-- **Run the full pipeline (parallel fan-out when disjoint, else linear)** *(recommended)* — `/ultracook <spec-path>`. The decomposer picks parallel curd fan-out (per-curd worktrees → 1–N reviewable PRs, published via a discovered `/pr-stack` skill when available, plain `gh` otherwise) or the linear 7-phase chain; every phase runs in fresh-context isolation.
+- **Run the full pipeline (parallel fan-out when disjoint, else linear)** *(recommended)* — `/ultracook <spec-path>`. The decomposer picks parallel curd fan-out or the linear chain; `/plate` performs the final artifact-writing gate, resolves topology from the explicit choice and review shape, and publishes the ordinary or stacked layout.
 - **Implement manually, one phase at a time** — `/cook <spec-path>`.
 - **Stop** — dispatch none; leave the spec for later.
 
@@ -150,7 +150,7 @@ The spec is large enough that per-phase context contamination becomes a real con
 **Non-decomposable, low- or medium-blast-radius specs (`decomposable: false`, verdict `low` or `medium`):**
 
 - **Implement the spec** *(recommended)* — `/cook <spec-path>`.
-- **Implement and auto-review** — `/cook --auto <spec-path>`, chains straight through `/press → /age → /cure` autonomously, fixing every medium-or-above finding plus cheap (contained-fix) lows across up to two cure passes. Stops at the final cure pass; opening or updating the PR stays a manual step. Offer when acceptance criteria are explicit *and* the user has signalled they want the pipeline to run forward without per-step approval. In the user-invoked ceremony, this option follows the no-pre-select-autonomous rule stated above — auto mode is opt-in here because the user has stayed in the loop through the whole dialogue and the gate is the natural place to confirm autonomy. The agent-invoked mini-spec mode bypasses this gate entirely (no handoff prompt is rendered); `/cheese` dispatches `/cook --auto` directly from tier 1.
+- **Implement and auto-review** — `/cook --auto <spec-path>`, chains through `/press → /age → /cure`. Opening or updating a PR remains a `/plate` step; a new PR follows its explicit-choice and review-shape policy.
 - **Research more first** — `/briesearch`, gather more external evidence before implementing.
 - **Stop** — dispatch none; leave the spec for later.
 

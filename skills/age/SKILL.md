@@ -21,13 +21,13 @@ Accept:
 
 `--full` un-collapses the `## Low` section when 10 or more low-severity findings exist (the default report collapses them to a one-line summary). Suppressed lows feed the cure-selection table only when `--full` is passed.
 
-`--safe` re-introduces the cure-selection gate that the autonomous default skips (see `## Handoff`). Use it when you want to choose findings before anything is fixed. `--open-pr` propagates to `/cure` so a clean cure may open a *new* PR when none exists (otherwise `/cure` only pushes an already-open one); see `skills/cure/SKILL.md`. Both flags propagate forward to `/cure` at the handoff.
+`--safe` re-introduces cure selection. `--open-pr` propagates through `/cure` to terminal `/plate`; a new PR follows `/plate`'s explicit-choice and review-shape policy.
 
 When called with a `<slug>`, resolve `.cheese/press/<slug>.md` (if present) for press context and review the current working diff. When called with a `<ref-or-range>`, review that range. Default to the current working diff when neither is supplied. If the base branch is unclear, ask or use the repository's documented default.
 
 `--auto` is the propagated autonomous-mode flag from `/cook --auto`. It changes the handoff (see `## Handoff` and `## Auto mode` for the cap rule and full chain). See `### When invoked from /ultracook` for the no-shared-memory variant.
 
-`--hard` is the propagated metacognitive-gate flag from `/cook --hard` (or `/cheese --hard`). Age does not fire the gate; it only passes `--hard` forward to `/cure` at the handoff so the gate can fire at the share-for-review boundary. See `skills/hard-cheese/SKILL.md`.
+`--hard` propagates through `/cure` to `/plate`. Age never fires the gate; `/plate` gives `/hard-cheese` the final verified artifact state before publication.
 
 `--html` emits a static HTML copy **in addition to** the standard `.cheese/age/<slug>.md` markdown report. Write the markdown report first, then render it:
 
@@ -241,7 +241,7 @@ HTML report: <path printed by html-report>
 
 ## Handoff
 
-**Pipeline:** culture → mold → cook → press → **[age]** → cure → ship
+**Pipeline:** culture → mold → cook → press → **[age]** → cure → plate
 
 **Compute the recommended set.** The recommended selection is the composite `all-medium, cheap` — floor at medium (blockers + high + medium) unioned with every `Low` whose `fix-cost-now: contained`. Expand it against the report into `resolved_ids`.
 
@@ -258,7 +258,7 @@ HTML report: <path printed by html-report>
 
 ### Selection gate (`--safe`, or a reason to ask)
 
-Use the shared handoff gate in [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md). Age's finding selection is the gate's *core* decision; the shared **Standard forward-step menu**'s tail (**Ship it**, **Checkpoint & stop**, **Stop**) rides after the selection options per that menu's tail rule.
+Use the shared handoff gate in [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md). Age's finding selection is the core decision; the tail (**Plate it**, **Checkpoint & stop**, **Stop**) follows.
 
 1. Render the numbered selection table:
 
@@ -283,7 +283,7 @@ Use the shared handoff gate in [`../cheese/references/handoff-gate.md`](../chees
      ```
 
      If the host only ships the bundle, `python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz findings_cli parse-selection ...` is the fallback.
-   - **Ship it** — apply the recommended composite and run cure headless: `/cure <slug> --auto --open-pr --stake medium+` (the `medium+` floor *is* the recommended composite from **Compute the recommended set** under `## Handoff`). Carries `--hard` when in scope.
+   - **Plate it** — apply the recommended composite via `/cure <slug> --auto --open-pr --stake medium+`; terminal `/plate` resolves topology and publishes. Carry `--hard`.
    - **Checkpoint & stop** — `/wheypoint`: write a resumable handoff and pause instead of curing now.
    - **Stop — leave the report for later** — equivalent to `none`.
 

@@ -16,7 +16,7 @@ Description: {description}
 - Touch ONLY the named file.
 - 20 tool calls max — this is a small task.
 - No business logic — integration only.
-- Commit your change via /commit (or git commit) before returning.
+- Commit your change via `/plate` commit-only mode before returning.
 
 ## Spec summary
 
@@ -29,7 +29,7 @@ Description: {description}
    unavailable).
 3. Run the project's quality gate command — STOP and write
    `status: halt: quality gate failed` if it fails.
-4. Commit via /commit (or `git commit -m "<conventional message>"`).
+4. Commit via `/plate` commit-only mode.
 5. Write the handoff slug.
 
 ## Handoff slug

@@ -131,28 +131,20 @@ Keep payloads short and factual. If a payload would exceed a compact screenful, 
 
 Propagate `--hard` through every runnable downstream option while the flag is in scope. Propagate `--auto` inside documented auto-mode chains and inside `/cheese`'s autonomous-by-default dispatch path (see `skills/cheese/SKILL.md` § Escalation — tier-1 and tier-2 dispatches pre-select the auto variant and run it without a gate unless `--safe` is set).
 
-Propagate `--safe` and `--open-pr` through every runnable downstream option while in scope. `--safe` re-introduces the gates that the autonomous default skips — the `/age` / `/affinage` cure-selection and `/cure`'s PR push. It only has meaning for skills that *have* such a gate to re-introduce: `/age`, `/affinage`, and `/cure`. It does **not** turn a `--auto` chain interactive (the two flags are opposites) — `/cook --auto` and `/press --auto` have no selection or push gate of their own, so they neither declare nor forward `--safe`; a `/cheese --safe` route that dispatches a `--auto` variant gates only `/cheese`'s own dispatch decision, then runs the chain headless. `--open-pr` rides all the way to the terminal `/cure`, authorizing a clean cure to open a *new* PR when none exists (the default only pushes an already-open one); inside the `--auto` chain it is threaded through each invocation (`/cook → /press → /age → /cure`).
+Propagate `--safe`, `--open-pr`, and `--hard` through runnable implementation options. `--open-pr` reaches terminal `/plate`; it authorizes new-PR publication but does not override an explicit topology choice or waive a question required by `/plate`'s review-shape policy. `--hard` is consumed by `/plate` after its final artifact-writing gate.
 
 Outside those autonomous paths, interactive gates must not add `--auto` unless the option explicitly says `--auto` and the user selected it. Inside them, the auto variant is the pre-selected recommended target by design — `--safe` is the user's opt-out to a gated flow, where the auto variant remains pre-selected but dispatch waits for confirmation.
 
 ## Standard forward-step menu
 
-The forward command and its label vary per gate. A simple menu contains four options by design, not a host or button cap: one forward step plus the standard
-tail (**Ship it**, **Checkpoint & stop**, **Stop**). Gates with a richer *core*
-decision render that decision's options first, then append the same tail:
+The forward command and label vary per gate. A simple menu contains four options by design, not a host or button cap: one forward step plus the standard tail (**Plate it**, **Checkpoint & stop**, **Stop**).
 
-- **\<forward verb\>** *(recommended)* — the plain forward command: one phase,
-  interactive downstream (e.g. `/press <slug>`).
-- **Ship it** — the forward command plus `--auto --open-pr`: run the rest of the
-  pipeline headless and open (or push) the PR at the terminal cure (e.g.
-  `/press <slug> --auto --open-pr`).
-- **Checkpoint & stop** — `/wheypoint`: write a resumable handoff slug and pause,
-  so a fresh context can resume via `/cheese --continue <slug>`.
-- **Stop** — `dispatch: none`; leave the pipeline paused with no checkpoint.
+- **<forward verb>** *(recommended)* — one interactive downstream phase.
+- **Plate it** — run the remaining pipeline headless, then dispatch `/plate`; a new PR follows its explicit-choice and review-shape policy.
+- **Checkpoint & stop** — `/wheypoint`.
+- **Stop** — `dispatch: none`.
 
-Propagate any in-scope `--hard` onto both runnable standard options. **Ship it**
-bundles `--auto` and `--open-pr` because `--open-pr` acts only when the chain
-reaches terminal cure; the bundling is unrelated to host option capacity.
+Propagate in-scope `--hard` and `--open-pr`. `/plate`, not an upstream auto chain, owns final durable writes, commit, topology resolution, any required question, and publication.
 
 When a gate carries a richer *core* decision, keep every gate-specific alternative as an explicit `handoff_gate.options` record, then append the
 standard tail. The shared question transport decides whether to use structured

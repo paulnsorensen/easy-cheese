@@ -10,6 +10,7 @@
 - [mold-follow-up-routing-002](./mold-follow-up-routing-002.md) — ADR: route follow-ups per deliverable unit instead of choosing one backlog
 - [mold-follow-up-routing-003](./mold-follow-up-routing-003.md) — ADR: publish follow-ups after the local Curdle write
 - [mold-follow-up-routing-004](./mold-follow-up-routing-004.md) — ADR: external follow-up publication uses deterministic identity
+- [plate-publication-boundary-001](./plate-publication-boundary-001.md) — ADR: plate owns the commit-to-PR publication boundary
 - [skill-docs-single-page-001](./skill-docs-single-page-001.md) — ADR-001: Fold skill references into one docs page instead of separate sub-pages  [status: accepted]
 - [skill-docs-single-page-002](./skill-docs-single-page-002.md) — ADR-002: Left-nav heading TOC is h2-only, via a custom Starlight Sidebar override  [status: accepted]
 - [starlight-docs-cutover-001](./starlight-docs-cutover-001.md) — ADR: Starlight docs cutover
