@@ -13,6 +13,7 @@ export PYTEST_DISABLE_PLUGIN_AUTOLOAD := "1"
 # Run all tests (skill validators + melt + shared + fan-out suites + bash install tests + fan-out bats + JS)
 test:
     python3 .github/scripts/test_validate_skills.py -v
+    python3 .github/scripts/test_validate_wiki.py
     python3 .github/scripts/validate_skills.py
     python3 .github/scripts/validate_wiki.py
     python3 -m pytest tests/python -q
