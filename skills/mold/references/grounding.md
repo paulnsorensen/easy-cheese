@@ -30,7 +30,7 @@ ground_wiki(topic):
 
 ## When to probe
 
-Probe at **Ground** phase entry and, in the other Dialogue modes, at any decision point — before generating the next question — when any of these are true:
+Probe at **Ground** phase entry and, in the other Modes (Shape/Sketch/Grill), at any decision point — before generating the next question — when any of these are true:
 
 - The dialogue is about to decide a consequential fork whose options could have prior rationale (e.g. "why not X").
 - The next question to the user is one the wiki may already answer (a settled decision, an ADR, a recorded convention).

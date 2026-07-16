@@ -42,6 +42,7 @@ Beyond `cheez-*` there are culture-specific tools:
 | --- | --- | --- |
 | Visualizing diffs or examples | `delta` | plain `git diff` |
 | External sanity check | `/briesearch` | clearly mark as an assumption |
+| Wiki grounding (evidence step, ≤1 `ground` in internal mode) | `mcp__hallouminate__list_corpora` + `mcp__hallouminate__ground` on `repo:<repo>:wiki` — see [`../cheese/references/optional-plugins.md`](../cheese/references/optional-plugins.md) | skip; note the absence once; cap at `speculating` when design rationale is central |
 
 Missing optional tools should not interrupt the conversation. In internal mode keep tool use light; it is a fast thinking pass. In user-facing mode tool use scales to the question — deep investigation via the `explorer` agent (or, where it isn't available, `/cheez-search` / `/cheez-read` directly) is expected when the modeling needs grounding.
 
