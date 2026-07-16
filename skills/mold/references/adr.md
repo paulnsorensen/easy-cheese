@@ -1,9 +1,10 @@
 # ADRs — durable design rationale
 
 Mold records the non-obvious decisions of a session as Architecture Decision
-Records (ADRs). The spec is transient; the ADRs are **durable** — they outlive
-the spec and stay searchable cross-session (ADR-002). Write them at curdle, after
-the two-key handshake, alongside the spec write.
+Records (ADRs). The approved spec and its ADRs are **durable** project records:
+the spec keeps the implementation contract, while ADRs preserve the rationale a
+future session would otherwise re-derive. Write them at Curdle, after the two-key
+handshake, in phase one's local atomic write.
 
 ## What earns an ADR
 
@@ -55,6 +56,10 @@ adr_target():
 - **probe shape varies by harness** `[?]`: if `list_corpora` is unreachable, fall
   back to the tracked file path and say so — never block curdle on the probe.
 
+The spec path follows the separate artifact resolver contract and remains in its
+durable project corpus; ADR target resolution does not make the approved spec
+transient.
+
 ## ADR format
 
 Mirror the spec's own `## ADRs` section shape (this very spec uses it):
@@ -72,7 +77,7 @@ prefix the page slug the same way so the series stays grouped.
 
 ## Timing
 
-ADRs are a curdle by-product. They are written **after** both handshake keys pass,
-in the same atomic step as the spec — never before approval, never as a substitute
-for the spec's own `## Decisions` line (the ADR is the long form; the Decisions
-bullet is the index entry).
+ADRs are a phase-one Curdle by-product. Write them **after** both handshake keys
+pass, in the same local atomic step as the durable spec and before any external
+follow-up publication. They never substitute for the spec's own `## Decisions`
+line: the ADR is the long form; the Decisions bullet is the index entry.

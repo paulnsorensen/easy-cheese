@@ -1,6 +1,6 @@
 # PR planner sub-agent prompt template
 
-Loaded by `/ultracook` at Phase 7. Substitute `{slug}`, `{manifest_path}`, `{merged_diff_path}`, and `{spec_summary}` before dispatch.
+Loaded by `/ultracook` at Phase 7. Substitute `{slug}`, `{manifest_path}`, `{merged_diff_path}`, `{plate_layout}`, and `{spec_summary}` before dispatch.
 
 ````text
 You are the PR planner sub-agent for /ultracook spec: {slug}
@@ -10,6 +10,7 @@ You are the PR planner sub-agent for /ultracook spec: {slug}
 Read the manifest at {manifest_path}, the merged diff at {merged_diff_path}, and the
 spec summary below. Emit a PR layout plan to
 `.cheese/ultracook/{slug}/pr-plan.yaml`.
+`/plate` resolved topology before parallel-mode commits. The persisted, authoritative resolution is `{plate_layout}`. Copy it exactly into the plan. The plan may explain why the decomposition supports a stack, but it must not change or re-ask an explicit or previously verified choice.
 
 ## Layout shapes
 
@@ -17,24 +18,27 @@ Choose ONE of the four shapes based on the dependency structure:
 
 | Shape | When | PR layout |
 |---|---|---|
-| `single` | Small total diff, tightly coupled, no seed | All commits in one PR |
-| `orthogonal_flat` | Curds touch disjoint slices, no seed/wiring coupling | N PRs each branching from main |
-| `stacked_linear` | Linear dependencies seed → curds → wiring | gt/gh stack |
-| `diamond_stack` | Seed and wiring exist; curds independent of each other | seed PR (base) → N parallel curd PRs → wiring PR |
+| `single` | The persisted choice is single; all groups form one cohesive review unit | All commits in one PR |
+| `orthogonal_flat` | The persisted choice is stacked; curds are independently reviewable with no ordering dependency | N PRs each branching from main |
+| `stacked_linear` | The persisted choice is stacked; reviewable layers have linear dependencies | provider selected by `/plate` |
+| `diamond_stack` | The persisted choice is stacked; a shared base and final wiring surround independent curds | seed PR (base) → N parallel curd PRs → wiring PR |
 
-Heuristics (in priority order):
+Review-shape criteria, in priority order:
 
-1. If `manifest.seed.items` is empty AND `manifest.wiring` is empty AND total diff <
-   ~400 lines, choose `single`.
-2. If `manifest.seed.items` is empty AND `manifest.wiring` is empty AND curds touch
-   disjoint slices, choose `orthogonal_flat`.
-3. If seed or wiring exists AND curds have no inter-curd dependencies, choose
-   `diamond_stack`.
-4. Otherwise choose `stacked_linear`.
+1. If `{plate_layout}` is `single`, emit one `single` group. The persisted
+   choice is authoritative even when the decomposition could support a stack.
+2. For `stacked`, identify layers with a named purpose, their own validation,
+   and a stable boundary that lets each layer be reviewed independently.
+3. Use `orthogonal_flat` only when curds have no ordering dependency. Use
+   `diamond_stack` when a shared base and final wiring surround independent
+   curds. Otherwise use `stacked_linear`.
+4. Do not use line-count or file-count thresholds. If the plan cannot name
+   honest review boundaries, report the conflict instead of manufacturing them.
 
 ## Output: pr-plan.yaml
 
 ```yaml
+plate_layout: single | stacked
 shape: single | orthogonal_flat | stacked_linear | diamond_stack
 groups:
   - branch: ultracook/{slug}/pr-1-seed
@@ -54,6 +58,11 @@ groups:
     depends_on:
       - ultracook/{slug}/pr-1-seed
 ```
+
+`plate_layout` must equal `{plate_layout}` from the manifest. For `single`, emit
+exactly one `single` group. For `stacked`, emit an ordered multi-PR shape and
+explicit commit/file boundaries; place shared durable writes in the
+bottom/common group or an explicit wiring group.
 
 Each group:
 
@@ -81,7 +90,5 @@ defined by `references/pr-plan-schema.json`.
 
 ## Return
 
-Write `pr-plan.yaml` and return a one-paragraph rationale naming the chosen shape and
-why. The orchestrator reads the rationale to confirm the layout looks sensible before
-delegating publish.
+Write `pr-plan.yaml` and return a one-paragraph rationale. The orchestrator passes it to `/plate` with the matching persisted resolution; `/plate` verifies the values agree and does not ask twice.
 ````

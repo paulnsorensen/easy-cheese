@@ -140,5 +140,5 @@ in cheez-search:
 - **DO NOT use plain host Read or Glob on code paths** unless they are the harness's native freshness-aware backend; otherwise they bypass anchors and structural context.
 - **DO NOT re-read files** shown earlier — reference the prior read.
 - **DO NOT use to run code or tests** — use the project's build/test skills.
-- **DO NOT use to commit** — use git/gh skills.
+- **DO NOT use to commit or publish** — use `/plate`.
 - **DO NOT ignore the `[path#TAG]` header** — the tag is required for edits.

@@ -217,5 +217,5 @@ Anchored edits own known blocks, one read-for-anchors per location. For cross-cu
 - **DO NOT use `sg --rewrite` for one-off block edits** — use an anchored edit. See `## Structural codemods — sg --rewrite escape` for when the codemod escape applies.
 - **DO NOT skip the dry-run-first protocol for `sg --rewrite`** — see `## Structural codemods — sg --rewrite escape`.
 - **DO NOT edit without reading** — anchors come from the read step.
-- **DO NOT run tests, commit, or review from this skill** — use the project's test/build, git/gh, and `/age` skills.
+- **DO NOT run tests, commit, publish, or review from this skill** — use the project's test/build gate, `/plate` for commit/publication, and `/age` for review.
 - **DO NOT use for reading or searching** — read with `/cheez-read`, search with `/cheez-search`.

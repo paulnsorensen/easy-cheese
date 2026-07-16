@@ -21,8 +21,8 @@ Accept one of:
 Optional flags:
 
 - `--auto` — autonomous mode. Skip every handoff gate, propagate the flag through `/press → /age → /cure`, and fix every medium-or-above finding plus cheap (contained-fix) lows across up to two cure passes. See `## Auto mode` below.
-- `--hard` — propagate the `/hard-cheese` metacognitive gate flag through `/press → /age → /cure`. Cook does not fire the gate itself; it only passes the flag along. The gate fires at `/cure`'s share-for-review handoff or, under `--auto --hard`, at the end of cure's final auto pass. See `skills/hard-cheese/SKILL.md` and `../hard-cheese/references/composition.md`.
-- `--open-pr` — propagate to `/cure` so the chain's terminal cure pass may open a *new* PR when none exists. Without it the chain only pushes to an already-open PR (Rule 11) and otherwise leaves the remote untouched.
+- `--hard` — propagate through `/press → /age → /cure → /plate`; `/plate` fires `/hard-cheese` only after its final artifact-writing gate.
+- `--open-pr` — propagate to terminal `/plate`. A new PR follows `/plate`'s explicit-choice and review-shape policy.
 
 ### Standalone fast-path
 
@@ -91,12 +91,12 @@ taste_test: inline-pass | dispatched-pass | revised | deferred-to-orchestrator
 
 ## Handoff
 
-**Pipeline:** culture → mold → **[cook]** → press → age → cure → ship
+**Pipeline:** culture → mold → **[cook]** → press → age → cure → plate
 
 After the package-ready report is printed and the handoff slug is on disk, ask via the shared handoff gate in [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md), following its **Standard forward-step menu**. Lead each option with the verb (what the user wants to *do* next); the skill command (with any in-scope `--hard` propagation) is the backing detail. Default options:
 
 - **Harden tests before review** *(recommended)* — `/press <slug>`.
-- **Ship it** — `/press <slug> --auto --open-pr`: run press → age → cure headless and open (or push) the PR at the end.
+- **Plate it** — `/press <slug> --auto --open-pr`: run the remaining review chain, then `/plate` resolves topology and publishes.
 - **Checkpoint & stop** — `/wheypoint`: write a resumable handoff and pause.
 - **Stop** — dispatch none; leave further hardening for later.
 
@@ -110,12 +110,12 @@ When invoked with `--auto`, skip this gate entirely and proceed straight into th
 
 ### What auto mode does
 
-1. After cook's package-ready report, invoke `/press <slug> --auto` (append `--open-pr` when it is in scope so the terminal cure can open the PR).
+1. After the package-ready report, invoke `/press <slug> --auto`; append `--open-pr` so terminal `/plate` may publish a new PR.
 2. `/press --auto` runs its hardening pass and, if readiness is `ready for /age` or `follow-up recommended`, invokes `/age <slug> --auto`. Both states mean the cooked contract is sound and every changed behaviour has a hardening test; documented follow-ups are review-safe. Only `blocked` stops auto — blocked criteria: defined once in [`../press/references/gap-analysis.md`](../press/references/gap-analysis.md).
 3. `/age <slug> --auto` writes the report and invokes `/cure <slug> --auto --stake medium+`.
 4. `/cure --auto --stake medium+` bypasses the selection gate, applies every finding of `blocker`, `high`, or `medium` severity plus every cheap (contained-fix) `Low`, then invokes `/age --scope <touched-paths> --auto` for verification.
 5. The age → cure cycle is capped at **two cure passes total**. Pass 1 fixes the initial findings. Pass 2 fixes anything the re-age surfaces. After pass 2 the chain stops with a final summary, regardless of whether new findings remain.
-6. `/cook` itself never invokes `/gh`. At the chain's terminal, `/cure`'s push contract takes over: the final cure pass pushes to an already-open PR (Rule 11), and opens a *new* PR only when `--open-pr` is in scope. A fresh branch with no PR and no `--open-pr` ends with the final age report and touches no remote, as before.
+6. `/cook` itself never invokes `/plate`. At the chain terminal, `/cure` dispatches `/plate` for an existing PR, and for a new PR only when `--open-pr` is in scope. `/plate` honors explicit topology, selects an obviously cohesive single without asking, and asks before mutation when stacked is recommended or shape is ambiguous, including under auto.
 
 ### When auto mode stops early
 
@@ -144,7 +144,7 @@ Passes:        <1|2>
 Findings fixed: <count by severity>
 Deferred:       <count, with cure-report path>
 Final age:      <path>
-Next step:      review the diff, then /gh when ready
+Next step:      review the diff, then /plate when ready
 ```
 
 ## Rules

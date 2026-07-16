@@ -4,8 +4,13 @@
   "title": "Ultracook PR Plan",
   "description": "Phase 7 PR-layout document written by /ultracook at .cheese/ultracook/<slug>/pr-plan.yaml. Consumed by the ultracook.pyz pr_plan_to_branches subcommand to emit branch / cherry-pick / PR-create commands.",
   "type": "object",
-  "required": ["shape", "groups"],
+  "required": ["plate_layout", "shape", "groups"],
   "properties": {
+    "plate_layout": {
+      "type": "string",
+      "enum": ["single", "stacked"],
+      "description": "Copy of the authoritative manifest topology resolution; a plan cannot override an explicit or previously verified choice."
+    },
     "shape": {
       "type": "string",
       "enum": ["single", "orthogonal_flat", "stacked_linear", "diamond_stack"],

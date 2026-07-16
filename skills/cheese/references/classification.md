@@ -23,6 +23,7 @@ Other intents (`research`, `rubber-duck`, `debug`, `age`, `age-then-cure`, `ultr
 | age | — | `/age` |
 | age-then-cure | — | `/age` → `/cure` |
 | ultracook | — | `/ultracook` |
+| plate | — | `/plate` |
 
 ## Signal table
 
@@ -131,11 +132,15 @@ Review request that explicitly asks for fixes too.
 
 If a fresh `.cheese/age/<slug>.md` already exists and the user only wants fixes, target `/cure <slug>` directly without re-running `/age`.
 
+### plate (`/plate`)
+
+Use for staging and committing, opening or updating an ordinary PR, or creating, syncing, or submitting a PR stack. A direct new-PR request routes here; `/plate` owns the explicit-choice and review-shape topology policy.
+
 ## Disambiguation rules
 
 When two intents are plausible, apply in order:
 
-1. **Explicit verb wins.** "Review" → `age`. "Fix" → `cook` or `cure`. "Design" → `mold`. "Think through with no writes" → `culture`; "think through" alone is just the agent's internal reasoning before dispatching to `mold` or `cook`.
+1. **Explicit verb wins.** "Review" → `age`. "Fix" → `cook` or `cure`. "Design" → `mold`. "Commit", "publish", or "stack PRs" → `plate`.
 2. **Strongest signal wins.** A spec path beats free text. A stack trace beats a feature description. A PR URL beats a path glob.
 3. **Smallest committed scope wins.** Prefer `cook` over `mold` when the fast-path checks pass. Only prefer `culture` over `mold` when the user has explicitly opted out of writes.
 4. **If still tied, clarify.** Ask one question; do not guess.
@@ -145,7 +150,7 @@ When two intents are plausible, apply in order:
 | Cue | Effect on confidence |
 | --- | --- |
 | Path / slug / PR URL resolves cleanly | +1 step (toward `high`) |
-| User uses an explicit cheese verb (`mold`, `cook`, `age`, `cure`, `culture`, `briesearch`) | +1 step |
+| User uses an explicit cheese verb (`mold`, `cook`, `age`, `cure`, `culture`, `briesearch`, `plate`) | +1 step |
 | Two competing signals of similar strength | -1 step |
 | Referenced artifact does not exist on disk | downgrade to `clarify` |
 | Recent context contradicts the new signal | -1 step, lean on the question pattern in `coherence-check.md` |
@@ -162,5 +167,7 @@ When two intents are plausible, apply in order:
 | `what's the best rate limiter library for fastify` | research | external library question |
 | `help me think about splitting orders into a sub-slice — don't write anything yet` | rubber-duck | explicit no-writes opt-out |
 | `help me think about splitting orders into a sub-slice` | mold | fuzzy multi-module idea; agent thinks via `/culture` internally, then routes to `/mold` |
+| `commit this but do not push` | plate | commit-only transaction |
+| `open a PR` | plate | publication request; plate resolves topology from explicit choice and review shape |
 | `/cheese` | clarify | empty input; ask what they want |
 | `make the cli help flag respect NO_COLOR` | cook | scoped, single-flag, verifiable |

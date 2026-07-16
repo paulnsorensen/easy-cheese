@@ -9,7 +9,7 @@ Resolve the spec path with `SPEC=$(python3 ${CLAUDE_SKILL_DIR}/scripts/mold.pyz 
 | Type | When | Path |
 | --- | --- | --- |
 | **Spec** | Any meaningful design discussion | `$SPEC` (resolver output) |
-| **Spec + Issues** | Side-channel actionables surfaced (out-of-scope bugs, follow-ups) | spec at `$SPEC`; issues at `.cheese/issues/<slug>-001.md`, `-002.md`, … |
+| **Spec + Issues** | Accepted follow-ups whose disposition calls for local recovery or tracker payload | spec at `$SPEC`; issues at `.cheese/issues/<slug>-001.md`, `-002.md`, … |
 | **Issues only** | Pure standalone bug tickets, no design | `.cheese/issues/<slug>-001.md`, … |
 
 A spec is the rich container; absorbs problem framing, requirements, approach, decisions, interface sketches, risks, gates. An issue is a separate, GitHub-flavoured item the user can paste into a tracker.
@@ -53,6 +53,12 @@ entity_referent_bindings: []   # list of binding records {noun, verdict, referen
 
 ## Non-goals
 - <bullet>
+
+## Deferred follow-ups
+- **<deterministic follow-up ID>** — <summary>
+  - Destination: <github_issue | roadmap_goal | local_draft>
+  - State: <prepared | linked | created>
+  - Reference: <local draft path | URL | durable roadmap reference>
 
 ## Approach
 <chosen option summary>
@@ -116,14 +122,31 @@ parent_spec: <slug>
 - <optional caveat or pointer>
 ```
 
+## Two-phase Curdle for accepted follow-ups
+
+Accepted follow-ups use a local-first two-phase Curdle. Each receives a deterministic follow-up ID composed from the spec slug and its one-based ordinal, for example `mold-follow-up-routing-F001`.
+
+### Phase one — local write-ahead state
+
+Preserve every existing Curdle by-product: the spec, ADRs, glossary, domain model, and any rejected-direction records. Add a local issue draft for each accepted follow-up that needs recoverable tracker payload, then persist its ID, destination, `prepared` state, and draft reference in `Deferred follow-ups` before any external call.
+
+`$SPEC` is the authoritative store for prepared follow-up state because the resolver anchors it in the durable project corpus. Local issue drafts are auxiliary publication payloads, not the authoritative record. Stage and move this complete local set under the existing atomic-write rule before phase two begins.
+
+### Phase two — external publication and reconciliation
+
+Only units whose approved action is **create/link now** and whose destination is external enter phase two. A local issue draft destination completes as `prepared` in phase one:
+
+- For GitHub Issues, use the host GitHub capability first and `gh` as the portable fallback. Discover repository labels and issue forms instead of assuming them.
+- For roadmap goals, run the owned `/wiki-roadmap` workflow when that skill and its required capability are available. New roadmap creation and extension remain owned by that workflow.
+- Put the deterministic follow-up ID in every published item. On every retry, search the exact deterministic follow-up ID before creation; when an exact match exists, link it and SHALL NOT create a duplicate.
+- A reused external item becomes `linked`; a newly published item becomes `created`. Reconcile that state and the final URL or durable roadmap reference into `Deferred follow-ups`.
+- When a capability is unavailable or publication fails, retain the recovery draft, keep the follow-up prepared, report the failed action and retry path, and continue without blocking the approved spec.
+
+Finish roadmap publication and all mechanical spec reconciliation before the implementation handoff. Reconciliation records the already-approved result; it does not reopen the design.
+
 ## ADRs (durable by-product)
 
-After both handshake keys pass, write the session's non-obvious decisions as
-durable ADRs in the same atomic step as the spec. The spec is transient; the ADRs
-outlive it. The corpus is resolved **dynamically** — probe for the consumer's
-`repo:<their-repo>:wiki` hallouminate corpus and write there if present, else fall
-back to a tracked `docs/adr/<slug>-NNN.md`. Never hardcode a corpus name. Full
-resolution rule and ADR format in [`adr.md`](adr.md).
+After both handshake keys pass, write the session's non-obvious decisions as durable ADRs in phase one's local atomic write with the durable spec. Both remain in the durable project corpus: the spec is the approved implementation contract, while ADRs preserve the rationale behind it. The corpus is resolved **dynamically** — probe for the consumer's `repo:<their-repo>:wiki` hallouminate corpus and write there if present, else fall back to a tracked `docs/adr/<slug>-NNN.md`. Never hardcode a corpus name. Full resolution rule and ADR format in [`adr.md`](adr.md).
 
 ## Durable glossary (by-product)
 
@@ -164,7 +187,7 @@ Do not pre-split for a single context. This layout is identical across all three
 
 ## Rejected-directions store (by-product)
 
-When the agent-introduced-scope audit or the two-key handshake explicitly **rejects a direction** (the user says "drop <term>" for an approach or design knob, or "not that approach"), write the rejection to `.cheese/.out-of-scope/<slug>-NNN.md`. Deferrals ("make X a follow-up") are not direction rejections — route those to `.cheese/issues/`.
+When the agent-introduced-scope audit or the two-key handshake explicitly **rejects a direction** (the user says "drop <term>" for an approach or design knob, or "not that approach"), write the rejection to `.cheese/.out-of-scope/<slug>-NNN.md`. An explicit deferral becomes a follow-up candidate; a rejected direction is not a follow-up candidate.
 
 Format:
 ```markdown
@@ -180,7 +203,7 @@ Format:
 Session: <slug>; rejected at: <handshake | scope-audit>
 ```
 
-This store is consulted by `/cheese` before re-proposing a direction (see `skills/cheese/SKILL.md` § Rejected-directions check). Do not write to this store for normal out-of-scope bugs or follow-ups (those go to `.cheese/issues/`); write only for **direction-level** rejections (approaches, design knobs, named features the user explicitly declined). Note: this store is dot-prefixed (`.out-of-scope`) while its sibling stores (`glossary/`, `issues/`, `specs/`) are not — any scan must target the dotted path explicitly; a bare `.cheese/*` glob will not match it.
+This store is consulted by `/cheese` before re-proposing a direction (see `skills/cheese/SKILL.md` § Rejected-directions check). Do not write ordinary scope boundaries or accepted follow-ups here: non-goal-only dispositions create no artifact, while accepted follow-ups use `Deferred follow-ups` plus any auxiliary `.cheese/issues/` recovery draft. Write only direction-level rejections (approaches, design knobs, named features the user explicitly declined). Note: this store is dot-prefixed (`.out-of-scope`) while its sibling stores (`glossary/`, `issues/`, `specs/`) are not — any scan must target the dotted path explicitly; a bare `.cheese/*` glob will not match it.
 
 ## Spec-verify pass (optional)
 
@@ -205,9 +228,10 @@ This is the runtime home of the **Durable writes** coherence gate (`handshake.md
 
 ## Hand-off
 
+Do not render this hand-off until phase-two publication attempts and the mechanical `Deferred follow-ups` reconciliation are complete.
 After writing, suggest the next step inline. **Never auto-invoke.**
 
 | Artifact | Suggested next step |
 | --- | --- |
-| Spec | `/cook .cheese/specs/<slug>.md` |
+| Spec | `/cook <spec-path>` |
 | Issues | Paste each into your tracker, or `gh issue create --body-file <path>` |

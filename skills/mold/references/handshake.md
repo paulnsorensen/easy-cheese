@@ -70,8 +70,8 @@ Procedure:
    | <noun> | <agent/sub-agent/citation> | <section> |
    ```
 
-4. **The user must explicitly approve each row** before the handshake fires. Acceptable approvals: "yes keep <term>", "drop <term>", "make <term> a follow-up". Vague "looks good" is not approval.
-5. **When the user explicitly drops a direction** — an approach, design knob, or named feature they decline — write a rejection record to `.cheese/.out-of-scope/<slug>-NNN.md` (format in `curdle.md` § Rejected-directions store). This makes direction-level rejections durable so `/cheese` can consult them before re-proposing the same direction in a later session. Deferrals ("make <term> a follow-up") are not direction rejections — route those to `.cheese/issues/`, not the out-of-scope store.
+4. **The user must explicitly approve each row** before the handshake fires. Acceptable approvals: "yes keep <term>", "drop <term>", "make <term> a follow-up". Vague "looks good" is not approval. "Make <term> a follow-up" records a candidate for the disposition batch; it does not immediately create an issue or other artifact.
+5. **When the user explicitly drops a direction** — an approach, design knob, or named feature they decline — write a rejection record to `.cheese/.out-of-scope/<slug>-NNN.md` (format in `curdle.md` § Rejected-directions store). A rejected direction is not a follow-up candidate. Explicit deferrals enter the follow-up candidate set instead.
 6. If any flagged term came from a research citation (briesearch sub-agent, fetched doc, MCP result), it cannot be silently promoted into a design knob — the citation is evidence, not a mandate. See `skills/briesearch/references/synthesis.md` § Alternatives are open questions.
 
 This gate exists because research sub-agents have historically over-synthesised: a Tavily snippet mentioning "X or Y" became a shipped `[setting].knob = "x" | "y"` flag, copied through curdle → cook without the user typing the distinguishing noun once. The grep heuristic catches that class of drift early.
@@ -87,8 +87,25 @@ Procedure:
 1. For each `Non-goals` bullet, grep the prior user turns (the user's typed messages) for the user putting that item out of scope — a "don't bother with X", "leave Y alone", an explicit deferral.
 2. **Any bullet with no such user statement is agent-introduced.** Mark it `[AGENT-INTRODUCED]` inline and present it for decision — the user must explicitly keep, drop, or reword it. A vague "looks good" is not approval.
 3. Record approved-but-flagged non-goals in the same `agent_introduced_scope` frontmatter list, so the paper trail survives downstream.
+4. Add every audited non-goal to the follow-up candidate set, including approved `[AGENT-INTRODUCED]` bullets. Candidate status preserves the scope boundary without accepting future work.
 
 This audit is the `Non-goals audit` coherence gate — the `non_goals_audit` node in the gate model (`gate-graph.md`). It fires **inline per round** as non-goals are proposed and again at Curdle as the terminal backstop, which hard-blocks extraction until every bullet traces to the user or is approved `[AGENT-INTRODUCED]`.
+
+## Follow-up disposition (inside the non-goals audit)
+
+Before the two-key handshake can pass, dispose of every follow-up candidate in one batch. This extends the existing `Non-goals audit` gate; it does not add or rename a gate.
+
+1. Group related candidates into independently deliverable units. Propose grouping or splitting rather than assuming it, and obtain user approval.
+2. When discovery is available, search GitHub Issues and hallouminate roadmap goals for related work. Present each semantic match as a possible reuse, never as an equivalence; the user approves any reuse.
+3. Recommend one destination per unit:
+   - **non-goal only** — retain the scope boundary and create no follow-up artifact;
+   - **GitHub Issue** — discrete, independently actionable work;
+   - **roadmap goal** — coordinated, milestone-scale, or dependency-linked work;
+   - **local issue draft** — publication is not desired or available.
+4. The user approves the destination. For every accepted destination except non-goal only, ask the user to choose the action: **create/link now** or **leave prepared**. A non-goal-only unit has no action choice.
+5. Record accepted units for Curdle. Rejected design directions stay in the rejected-directions store and do not enter this batch.
+
+The user approves grouping, splitting, semantic-match reuse, destination, and any applicable action; Mold settles none silently. When no candidates exist, omit the disposition batch and preserve the current handshake and Curdle flow.
 
 ## Entity-referent binding
 

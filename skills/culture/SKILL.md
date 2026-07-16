@@ -57,7 +57,7 @@ Culture-relevant `next:` values: `culture` or `hold` to resume the modeling in a
 
 ## Handoff
 
-**Pipeline:** **[culture]** → mold → cook → press → age → cure → ship
+**Pipeline:** **[culture]** → mold → cook → press → age → cure → plate
 
 At session end, write the durable wheypoint first (invoke `/wheypoint`), then — when the conversation reveals real work — ask via the shared handoff gate in [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md). Lead each option with the verb (what the user wants to *do* next); the skill command is the backing detail. Before asking, render a compact context packet so the downstream skill can dispatch without losing the discussion:
 

@@ -20,11 +20,17 @@ Do not use the user-invoked ceremony for free-form discussion with no artifact i
 3. **Dialogue** — build shared understanding by asking the user the decisions that shape the design: every consequential fork is theirs to pick, surfaced as a choice, not settled for them. Contribute full depth (options, named edge cases, concrete evidence — not gestural sketches) to inform each question, never to replace asking it. Ground every critical claim with `cheez-search`, `cheez-read`, a Validate Cycle (`references/validate-cycle.md`), or — for an ungrillable design unknown only a running sketch can settle — a Prototype Cycle (`references/prototype-cycle.md`). Both cycles are sub-agent-spawnable mid-dialogue, in parallel, and are context-bounded (no hard cap; soft backstop of 10). Track contradictions across turns; if turn N contradicts an earlier conclusion, flag and resolve it before continuing. After 3 consecutive fork questions, or whenever the user asks "what forks are left?", render the decision map (see `## Rules` § Decision map) before continuing.
 4. **Sketch** — for any feature touching >1 module or a new public interface, run the shape check (`references/shape-check.md`) on the touched symbols, then lock seams in pseudocode signatures before talking spec content. While the code is open, bind every identity/ownership-role noun to a code referent per `references/handshake.md` § Entity-referent binding — a search hit of a *different* referent is an alias, not a pass.
 5. **Two-key handshake** — both the user (explicit verb) and the agent (coherence self-check) must agree before extraction. See `references/handshake.md`.
-6. **Curdle** — resolve the durable spec path with `SPEC=$(python3 shared/scripts/artifact_path.py specs <slug>)`, then write the approved spec to `"$SPEC"` (and optional issues alongside). If you're on a host that only exposes the packaged helper, `python3 skills/mold/scripts/mold.pyz artifact-path specs <slug>` is the fallback. The resolver anchors specs at the per-project durable corpus (see `../cheese/references/formatting.md` § Corpus location); never hardcode a `.cheese/specs/` path. In the same atomic step, write the session's non-obvious decisions as durable ADRs. Format, slug, and corpus-resolution rules in `references/curdle.md` and `references/adr.md`.
-7. **Hand off** — once the spec is on disk, run `python3 skills/mold/scripts/mold.pyz curd-count "$SPEC" --blast-radius <low|medium|high>` to compute the recommended downstream skill (full procedure in `references/curd-count.md`). Then prompt the next step via the shared handoff gate in [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md). Never dispatch before the user selects; after a non-stop selection, run the selected downstream skill immediately.
+6. **Curdle** — resolve the durable spec path with `SPEC=$(python3 shared/scripts/artifact_path.py specs <slug>)`. Phase one writes all local artifacts and write-ahead prepared state: write the approved spec to `"$SPEC"`, any local issue drafts, and the session's non-obvious decisions as durable ADRs before any external call. If you're on a host that only exposes the packaged helper, `python3 skills/mold/scripts/mold.pyz artifact-path specs <slug>` is the fallback. The resolver anchors specs at the per-project durable corpus (see `../cheese/references/formatting.md` § Corpus location); never hardcode a repo-local spec path. After phase one is durable, phase two publishes approved follow-ups, retains prepared recovery state when an external capability is unavailable or publication fails, and reconciles their state and references into the durable spec. Format, slug, publication, reconciliation, and corpus-resolution rules live in `references/curdle.md` and `references/adr.md`.
+7. **Count and hand off** — only after phase-two publication attempts and reconciliation finish, run `python3 skills/mold/scripts/mold.pyz curd-count "$SPEC" --blast-radius <low|medium|high>` to compute the recommended downstream skill (full procedure in `references/curd-count.md`). Then prompt the next step via the shared handoff gate in [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md). Never dispatch before the user selects; after a non-stop selection, run the selected downstream skill immediately.
 
 Portability reference: [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
 The handoff blocks below are the portable contract; slash commands are host renderings, not the control model.
+
+## Follow-up candidates
+
+Every non-goal and explicit dialogue deferral enters the current session's follow-up candidate set. Record it within `Decided` as `[FOLLOW-UP?]` with its summary, source, and rationale. A candidate is dialogue state only: collecting one does not create an artifact or accept a future commitment.
+
+When candidates exist, complete the pre-Curdle disposition batch in `references/handshake.md` before the two-key handshake can pass. When none exist, omit the batch and preserve the current Curdle flow. After both keys pass, Curdle writes local artifacts first, publishes approved follow-ups, reconciles their state and references into the durable spec, and only then renders the implementation handoff.
 
 ## Modes
 
@@ -44,8 +50,8 @@ Full mode definitions, exit criteria, and user knobs in `references/modes.md`.
 `/cheese`'s tier-1 escalation calls into `/mold` to produce a spec without a user-facing dialogue. The cook fast-path checks have already passed at the call site, so the input is unambiguous by construction — there is nothing left to ground, no trade-offs to grill. The mode skips the Flow above entirely:
 
 1. **Derive slug** from the user's ask (kebab-case noun-phrase, ≤ 4 words).
-2. **Write `.cheese/specs/<slug>.md`** with the mini-spec schema below. Resolve the path via `python3 shared/scripts/artifact_path.py specs <slug>`; if you're on a host that only exposes the packaged helper, `python3 skills/mold/scripts/mold.pyz artifact-path specs <slug>` is the fallback. Never hardcode a `.cheese/specs/` path — the resolver anchors it at the durable corpus, matching the Curdle step.
-3. **Return the explicit spec path** to `/cheese` so it can dispatch `/cook --auto <spec-path>` (the full `.cheese/specs/<slug>.md` form, not a bare `<slug>`).
+2. **Write the resolver-owned `<spec-path>`** with the mini-spec schema below. Resolve it via `python3 shared/scripts/artifact_path.py specs <slug>`; if you're on a host that only exposes the packaged helper, `python3 skills/mold/scripts/mold.pyz artifact-path specs <slug>` is the fallback. Never hardcode a repo-local spec path: the resolver anchors it at the durable corpus, matching the Curdle step.
+3. **Return the resolved spec path** to `/cheese` so it can dispatch `/cook --auto <spec-path>` (the full path printed by the resolver, not a bare `<slug>`).
 
 The two-key handshake does not fire in this mode. The agent-introduced-scope check still runs implicitly: every distinguishing noun in the mini-spec must come from the user's input or from the tier-2 `/culture` / `/briesearch` synthesis recorded in `## Provenance`. Anything else is a silent agent addition and is forbidden — the mini-spec records only what the user asked for, not what the agent thinks they might have meant.
 
@@ -118,9 +124,9 @@ If any gate is unmet, propose the smallest next question or evidence check. Writ
 
 ## Handoff
 
-**Pipeline:** culture → **[mold]** → cook → press → age → cure → ship
+**Pipeline:** culture → **[mold]** → cook → press → age → cure → plate
 
-After Curdle writes the spec, run the curd-count script (procedure and `--blast-radius` rules in [`references/curd-count.md`](references/curd-count.md)), then render the branch menu below and prompt via the shared handoff gate. Never pre-select an autonomous option.
+After Curdle completes phase-two publication attempts and mechanical reconciliation of `Deferred follow-ups` into the durable spec, run the curd-count script (procedure and `--blast-radius` rules in [`references/curd-count.md`](references/curd-count.md)), then render the branch menu below and prompt via the shared handoff gate. Never pre-select an autonomous option.
 
 Read the JSON digest. Its `decomposable` field (true when `candidate_curds ≥ 2`, the `PARALLEL_THRESHOLD`) picks the option set rendered below; its `recommended_skill` field picks which option holds the *(recommended)* slot. Then ask the user via the shared handoff gate in [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md). Lead each option with the verb; the skill command (with the spec path and any in-scope `--hard` propagation) is the backing detail.
 
@@ -128,23 +134,23 @@ Read the JSON digest. Its `decomposable` field (true when `candidate_curds ≥ 2
 
 The spec splits into independent slices, so `/ultracook`'s decomposer can fan them out in parallel with reviewable PRs. Before rendering the menu, confirm with the user that the candidate curds are file-disjoint (criterion 4) — the script counts signals, it does not verify independence. The dispatched skill is `/ultracook` either way: its decomposer routes 2+ file-disjoint curds to parallel mode and folds shared-file curds back into the linear chain, so the user's answer informs the decomposer rather than changing the command.
 
-- **Run the full pipeline (parallel fan-out when disjoint, else linear)** *(recommended)* — `/ultracook .cheese/specs/<slug>.md`. The decomposer picks parallel curd fan-out (per-curd worktrees → 1–N reviewable PRs, published via a discovered `/pr-stack` skill when available, plain `gh` otherwise) or the linear 7-phase chain; every phase runs in fresh-context isolation.
-- **Implement manually, one phase at a time** — `/cook .cheese/specs/<slug>.md`.
+- **Run the full pipeline (parallel fan-out when disjoint, else linear)** *(recommended)* — `/ultracook <spec-path>`. The decomposer picks parallel curd fan-out or the linear chain; `/plate` performs the final artifact-writing gate, resolves topology from the explicit choice and review shape, and publishes the ordinary or stacked layout.
+- **Implement manually, one phase at a time** — `/cook <spec-path>`.
 - **Stop** — dispatch none; leave the spec for later.
 
 **Non-decomposable, high-blast-radius specs (`decomposable: false`, verdict `high` only):**
 
 The spec is large enough that per-phase context contamination becomes a real concern: review reasoning softens when the same window contains the cook reasoning, and the parent context bloats across phases. Offer the fresh-context orchestrator and the manual compaction path:
 
-- **Run the full pipeline in fresh-context isolation** *(recommended)* — `/ultracook .cheese/specs/<slug>.md`, autonomous chain (`cook → press → age → cure → age → cure → age`, all `--auto`) with each phase running inside its own sub-agent, blind to prior phases.
-- **Implement manually, one phase at a time** — `/cook .cheese/specs/<slug>.md`.
-- **Compact and resume by hand** — dispatch none; clear context, then dispatch `/cook .cheese/specs/<slug>.md` or `/ultracook .cheese/specs/<slug>.md` directly. (`/cheese --continue` scans phase handoff slugs only — fresh specs don't surface there until cook lands a slug — so dispatching the explicit command is the resumption path here.)
+- **Run the full pipeline in fresh-context isolation** *(recommended)* — `/ultracook <spec-path>`, autonomous chain (`cook → press → age → cure → age → cure → age`, all `--auto`) with each phase running inside its own sub-agent, blind to prior phases.
+- **Implement manually, one phase at a time** — `/cook <spec-path>`.
+- **Compact and resume by hand** — dispatch none; clear context, then dispatch `/cook <spec-path>` or `/ultracook <spec-path>` directly. (`/cheese --continue` scans phase handoff slugs only — fresh specs don't surface there until cook lands a slug — so dispatching the explicit command is the resumption path here.)
 - **Stop** — dispatch none; leave the spec for later.
 
 **Non-decomposable, low- or medium-blast-radius specs (`decomposable: false`, verdict `low` or `medium`):**
 
-- **Implement the spec** *(recommended)* — `/cook .cheese/specs/<slug>.md`.
-- **Implement and auto-review** — `/cook --auto .cheese/specs/<slug>.md`, chains straight through `/press → /age → /cure` autonomously, fixing every medium-or-above finding plus cheap (contained-fix) lows across up to two cure passes. Stops at the final cure pass; opening or updating the PR stays a manual step. Offer when acceptance criteria are explicit *and* the user has signalled they want the pipeline to run forward without per-step approval. In the user-invoked ceremony, this option follows the no-pre-select-autonomous rule stated above — auto mode is opt-in here because the user has stayed in the loop through the whole dialogue and the gate is the natural place to confirm autonomy. The agent-invoked mini-spec mode bypasses this gate entirely (no handoff prompt is rendered); `/cheese` dispatches `/cook --auto` directly from tier 1.
+- **Implement the spec** *(recommended)* — `/cook <spec-path>`.
+- **Implement and auto-review** — `/cook --auto <spec-path>`, chains through `/press → /age → /cure`. Opening or updating a PR remains a `/plate` step; a new PR follows its explicit-choice and review-shape policy.
 - **Research more first** — `/briesearch`, gather more external evidence before implementing.
 - **Stop** — dispatch none; leave the spec for later.
 

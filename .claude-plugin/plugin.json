@@ -15,6 +15,7 @@
     "./skills/melt",
     "./skills/mold",
     "./skills/pasteurize",
+    "./skills/plate",
     "./skills/press",
     "./skills/ultracook",
     "./skills/wheypoint"

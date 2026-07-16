@@ -71,7 +71,7 @@ mold rule.
 
 ```json
 {
-  "spec_path": ".cheese/specs/<slug>.md",
+  "spec_path": "<resolver-owned durable spec path for <slug>>",
   "slug": "<slug>",
   "blast_radius": "high",
   "candidate_curds": 7,
