@@ -7,4 +7,4 @@
 - **Alternatives:** Send the whole batch to one destination, always create new items, reuse matches silently, or make the user structure every artifact. These choices either lose destination semantics, create duplicates, risk false equivalence, or discard useful agent assistance.
 - **Consequences:** Follow-ups land where their execution shape fits, and existing work can be reused without silent conflation. Discovery capabilities remain optional, and /wiki-roadmap retains roadmap authorship.
 
-[^1]: skills/mold/references/handshake.md:95-105; skills/mold/references/curdle.md:127-145; /Users/paul/.local/share/cheese/paulnsorensen-easy-cheese/specs/mold-follow-up-routing.md:96-111
+[^1]: skills/mold/references/handshake.md:95-105; skills/mold/references/curdle.md:127-145; ~/.local/share/cheese/paulnsorensen-easy-cheese/specs/mold-follow-up-routing.md:96-111

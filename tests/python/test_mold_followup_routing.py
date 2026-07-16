@@ -10,6 +10,8 @@ MOLD = REPO_ROOT / "skills" / "mold" / "SKILL.md"
 HANDSHAKE = REPO_ROOT / "skills" / "mold" / "references" / "handshake.md"
 CURDLE = REPO_ROOT / "skills" / "mold" / "references" / "curdle.md"
 ADR = REPO_ROOT / "skills" / "mold" / "references" / "adr.md"
+MODES = REPO_ROOT / "skills" / "mold" / "references" / "modes.md"
+CURD_COUNT = REPO_ROOT / "skills" / "mold" / "references" / "curd-count.md"
 SCOPED_DOCS = (MOLD, HANDSHAKE, CURDLE, ADR)
 
 
@@ -209,7 +211,7 @@ def test_mold_handoff_waits_for_followup_reconciliation() -> None:
 def test_mold_never_hardcodes_transient_spec_paths() -> None:
     offenders = [
         str(path.relative_to(REPO_ROOT))
-        for path in (MOLD, CURDLE)
+        for path in (MOLD, CURDLE, MODES, CURD_COUNT)
         if ".cheese/specs/" in _text(path)
     ]
     assert not offenders, (

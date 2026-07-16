@@ -7,4 +7,4 @@
 - **Alternatives:** Publish externally first, omit external references from the spec, reconcile in a later session, or begin implementation in parallel. These choices weaken recoverability, auditability, or workflow ordering.
 - **Consequences:** The durable spec survives service failure and remains the audit source. Publication is not atomic across local and external systems, so failures retain a prepared draft and an explicit recovery action.
 
-[^1]: skills/mold/references/curdle.md:129-145; /Users/paul/.local/share/cheese/paulnsorensen-easy-cheese/specs/mold-follow-up-routing.md:113-123
+[^1]: skills/mold/references/curdle.md:129-145; ~/.local/share/cheese/paulnsorensen-easy-cheese/specs/mold-follow-up-routing.md:113-123

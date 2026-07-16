@@ -7,7 +7,7 @@ Mold has no fixed entry point. Inspect the input shape and pick a starting mode.
 | Input shape | Start mode | Heuristic |
 | --- | --- | --- |
 | Stack trace, "X is broken/slow/flaky" | Diagnose | error markers, `file:line` refs, symptom verbs |
-| File path, PR ref, existing spec under `.cheese/specs/` | Ground | concrete artifact exists; read it first |
+| File path, PR ref, existing spec in the durable spec corpus (resolver-owned; see `SKILL.md` Curdle) | Ground | concrete artifact exists; read it first |
 | Half-baked design doc with signatures or schemas | Sketch | already has interfaces; refine them |
 | "I want to add X" with concrete nouns | Bounds pass → Shape | run the bounds pass first (edges → goals/non-goals), then jump to options |
 | "Should we do X? thinking about Y" | Bounds pass → Grill | bounds pass first, then stress-test the tentative plan |

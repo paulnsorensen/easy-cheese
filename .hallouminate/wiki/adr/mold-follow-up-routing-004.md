@@ -7,4 +7,4 @@
 - **Alternatives:** Rely on semantic-match search, accept best-effort recovery, or publish externally before local Curdle. Semantic similarity does not prove identity; best effort permits duplicates; external-first ordering risks dangling items.
 - **Consequences:** A retry can link the already-created item instead of duplicating it. Publishers must preserve the ID in destination content and support exact-ID discovery or fall back to prepared state.
 
-[^1]: /Users/paul/.local/share/cheese/paulnsorensen-easy-cheese/specs/mold-follow-up-routing.md:116-129,143-160
+[^1]: ~/.local/share/cheese/paulnsorensen-easy-cheese/specs/mold-follow-up-routing.md:116-129,143-160
