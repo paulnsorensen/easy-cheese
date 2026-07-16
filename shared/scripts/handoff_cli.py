@@ -39,6 +39,8 @@ def _cmd_render(args: argparse.Namespace) -> None:
         next_skill=args.next_skill.lstrip("/"),
         artifact=args.artifact or None,
         orientation=args.orientation,
+        taste_test=args.taste_test,
+        durable_flags=args.durable_flags,
     )
     try:
         print(handoff.render_handoff_slug(slug))
@@ -61,6 +63,8 @@ def _cmd_parse(args: argparse.Namespace) -> None:
             "next_skill": slug.next_skill,
             "artifact": slug.artifact,
             "orientation": slug.orientation,
+            "taste_test": slug.taste_test,
+            "durable_flags": slug.durable_flags,
         }
     )
 
@@ -82,6 +86,8 @@ def _setup(parser: argparse.ArgumentParser) -> None:
     render.add_argument("--next", dest="next_skill", required=True, help="next skill name (or 'done')")
     render.add_argument("--artifact", default="", help="path to prior report; empty if none")
     render.add_argument("--orientation", required=True, help="one-line orientation")
+    render.add_argument("--taste-test", default=None, help="optional taste_test: keyed line")
+    render.add_argument("--durable-flags", default=None, help="optional durable_flags: keyed line")
     render.set_defaults(func=_cmd_render)
 
     parse = sub.add_parser("parse", help="parse a handoff preamble from a file")

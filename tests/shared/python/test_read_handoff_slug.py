@@ -40,15 +40,41 @@ def test_happy_path_parse(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
 
     payload = json.loads(result.stdout)
-    assert set(payload.keys()) == {"status", "next", "artifact", "orientation", "halt_reason"}
+    assert set(payload.keys()) == {
+        "status", "next", "artifact", "orientation", "halt_reason",
+        "taste_test", "durable_flags",
+    }
     assert payload == {
         "status": "ok",
         "next": "cure",
         "artifact": ".cheese/age/foo.md",
         "orientation": "high-stake encapsulation leak in cli.py",
         "halt_reason": None,
+        "taste_test": None,
+        "durable_flags": None,
     }
 
+
+
+def test_durable_flags_keyed_line_surfaces_in_json(tmp_path: Path) -> None:
+    # cure consumes upstream durable_flags via this helper read path; the
+    # keyed line must land in the JSON, not corrupt the orientation.
+    body = (
+        "status: ok\n"
+        "next: cure\n"
+        "artifact: .cheese/press/flagged.md\n"
+        "durable_flags: parser contract changed -> handoff-contract\n"
+        "reviewed the widget\n"
+    )
+    _write_artifact(tmp_path, "age", "flagged", body)
+
+    result = _run(tmp_path, "--phase", "age", "--slug", "flagged")
+    assert result.returncode == 0, result.stderr
+
+    payload = json.loads(result.stdout)
+    assert payload["durable_flags"] == "parser contract changed -> handoff-contract"
+    assert payload["orientation"] == "reviewed the widget"
+    assert payload["taste_test"] is None
 
 def test_halt_status_extracts_reason(tmp_path: Path) -> None:
     body = (
