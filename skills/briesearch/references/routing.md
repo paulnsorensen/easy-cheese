@@ -14,6 +14,9 @@ Is it a factual / current / vendor / "what or who or when" question?
 Is it "how should I…" or a best-practice question?
   YES → Tavily advanced  (+ Context7 when a named library is in scope)
 
+Is it about a past decision or rationale in this repo?
+  YES → Wiki  (hallouminate `ground`)
+
 Is it about patterns in this repo?
   YES → Codebase  (cheez-search + cheez-read)
 
@@ -31,6 +34,7 @@ Is it deep, multi-source, comparative, or "compare X vs Y / market analysis / li
 | Context7 (MCP) | Library APIs, config, migration notes for indexed open-source dependencies | Tools: `resolve-library-id` (`libraryName` + `query`) → `query-docs` (`libraryId` + `query`). Both require a `query`. See "Context7 method" below. |
 | Tavily (MCP) | Current facts, technical articles, vendor docs, best practices, deep multi-source synthesis | Use the method matrix to pick the right rung. |
 | Codebase | Local conventions, existing usage, constraints | Use `cheez-search` and `cheez-read`. |
+| Wiki (hallouminate MCP) | Past decisions, rationale, ADRs, conventions recorded in the repo wiki | Tool: `ground` against the repo's wiki corpus. Optional — when hallouminate is absent, degrade per `../../cheese/references/optional-plugins.md`: skip, note once, cap confidence. |
 | GitHub | Real-world OSS usage patterns | `gh` CLI or harness GitHub integration. Treat as supporting evidence unless the user asked for OSS precedent. |
 
 ## Context7 method

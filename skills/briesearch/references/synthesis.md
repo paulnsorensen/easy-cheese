@@ -59,7 +59,7 @@ Skip verification only for: (a) inline file references (`file:line`), (b) the us
 | Sources disagree | `don't know` — and surface the disagreement |
 | Single source per claim | cap at `speculating` unless authoritative (see lone-Context7 caveat above) |
 
-**"Independent" means distinct origin, not distinct URL.** Before counting sources toward the cap, dedup by origin: collapse to one source any that share a root domain, or that quote/paraphrase the same upstream (three blogs reprinting one vendor post are one source, not three). Count only the surviving distinct origins. Criticality depends on the question. Context7 is critical for version-specific API claims, Tavily is critical for freshness-sensitive facts, Codebase is critical for local precedent questions, and GitHub is usually supporting evidence unless the user asked for real-world examples.
+**"Independent" means distinct origin, not distinct URL.** Before counting sources toward the cap, dedup by origin: collapse to one source any that share a root domain, or that quote/paraphrase the same upstream (three blogs reprinting one vendor post are one source, not three). Count only the surviving distinct origins. Criticality depends on the question. Context7 is critical for version-specific API claims, Tavily is critical for freshness-sensitive facts, Codebase is critical for local precedent questions, the wiki is critical for prior-decision/rationale questions (when hallouminate is absent, degrade per `../../cheese/references/optional-plugins.md` — skip, note once, cap at `speculating`), and GitHub is usually supporting evidence unless the user asked for real-world examples.
 
 ## Absence and negative claims
 
