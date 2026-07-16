@@ -84,10 +84,13 @@ status: ok | halt: <one-line reason>
 next: mold | cook | press | age | done
 artifact: <path-to-richer-report-if-any>
 taste_test: inline-pass | dispatched-pass | revised | deferred-to-orchestrator
+durable_flags: none | <one line per flag: what durable knowledge changed -> target wiki page>
 <one-line orientation: what cook changed>
 ```
 
 `next:` names the next runnable phase: `press` for the standard chain, `age` if the user skips press, `cook` to rerun after resolving a blocker, `mold` when the spec needs another pass. Use `next: done` only for true terminal completion, never for a blocked-but-resumable or external-gate halt; `halt:` reasons follow the package-report stop conditions. The orientation line is one factual sentence about what the diff does, not a report summary. Omit `taste_test:` when the cost gate did not warrant a taste-test.
+
+`durable_flags:` is a conservative durable-change gate. Default `none`; add one line per architecture, protocol, convention, or rationale delta the diff introduced (`<what changed> -> <target wiki page>`). Mechanical and test-only changes always record `durable_flags: none`. Cook records flags only — it never writes the wiki; the publish-boundary writer (cure/plate/affinage) reads upstream flags as its write-back candidate list.
 
 ## Handoff
 
