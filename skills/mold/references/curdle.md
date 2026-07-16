@@ -219,7 +219,7 @@ Stage to a temp directory under `${TMPDIR}` first, then move into place. Never l
 
 This is the runtime home of the **Durable writes** coherence gate (`handshake.md` § Agent key). The gate locks the commitment before the handshake; this step honours it. For each durable write — every ADR and the domain-model merge — run:
 
-1. **Resolve** the target dynamically — the ADR resolution procedure in [`adr.md`](adr.md) § Resolution for ADRs, the `domain_model_target()` function (`shared/scripts/paths.py`) for the model. Both yield `(backend, location)`.
+1. **Resolve** the target dynamically — the ADR resolution procedure in [`adr.md`](adr.md) § Resolution, the `domain_model_target()` function (`shared/scripts/paths.py`) for the model. Both yield `(backend, location)`.
 2. **Write** to that target: `add_markdown` when the backend is `hallouminate`, a staged file write when it is `file`.
 3. **Read back** and confirm the entry landed: `ground` / `read_markdown` for the wiki backend, a re-read of the file for the file backend. A write that cannot be read back is a failure — fail loud, do not claim the write.
 4. **Record** it in the curdle completion record printed to the user: one line per durable write naming `<artifact> → <location> (<backend>)`.

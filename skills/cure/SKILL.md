@@ -124,10 +124,9 @@ When the run was chained from `/affinage` (`handoff_context.source_skill: /affin
 
 **Default (no `--safe`) — plate the work:**
 
-
 - Detect an open PR with `gh pr view`. If one exists, dispatch `/plate` to run its final writing gate, validation, named-file commit, topology-aware update, and publication. Rule 11 authorizes the update. Propagate `--hard`; `/plate` gives `/hard-cheese` the final artifact state before publishing.
 - If no open PR exists: with `--open-pr`, dispatch `/plate [--hard]`; explicit topology choices and obviously cohesive work proceed without asking, while stack-sized or ambiguous work asks before commit or branch-layout mutation. Without `--open-pr`, leave the remote untouched and finish with `no open PR — pass --open-pr or run /plate`.
-- After the push lands, run the **§ Post-PR learnings write-back** below.
+- After `/plate`'s publication lands, run the **§ Post-PR learnings write-back** below.
 - If the cure was not clean, do not dispatch `/plate`; mention the blocker and stop.
 
 **`--safe` — ask via the shared handoff gate** in [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md). Default options:
@@ -141,14 +140,14 @@ Pre-select **Plate it** only when all selected findings applied cleanly and gate
 
 ### Post-PR learnings write-back
 
-After any path that **opens or pushes a PR** — the default push, an `--open-pr` new PR, the `--safe` **Ship it** selection, or the auto-mode terminal push — record the session's *implementation-time* learnings to the wiki. This is the second wiki write moment; curdle owns the design-time write, this owns what only surfaces while building: constraints discovered in `/cook`, `/age` findings that changed the design, and any domain terms the diff introduced or redefined.
+After any path that **publishes to a PR** — the default `/plate` dispatch, an `--open-pr` new PR, the `--safe` **Plate it** selection, or the auto-mode terminal publication — record the session's *implementation-time* learnings to the wiki. This is the second wiki write moment; curdle owns the design-time write, this owns what only surfaces while building: constraints discovered in `/cook`, `/age` findings that changed the design, and any domain terms the diff introduced or redefined.
 
 - **Writer — `/wiki-ingest`, detect-and-degrade.** When the hallouminate plugin is available, dispatch `/wiki-ingest` with the new ADRs + domain-model deltas; its dedup/route/merge/contradiction handling ensures only rationale *new since curdle* lands (say "new since curdle" in the dispatch so it does not re-add design-time ADRs). When hallouminate is absent, write `docs/adr/<slug>-NNN.md` + the domain-model file fallback and emit a **loud one-line note** that the write-back went to files, not the wiki — never a silent degrade. Detection and the degrade contract: [`../cheese/references/optional-plugins.md`](../cheese/references/optional-plugins.md).
-- **Every PR-opening path.** Fires from manual `cook→cure`, `--auto`, and `ultracook` alike — wherever cure performs the terminal push.
-- **Orchestrated sub-agent exception.** A phase-only cure sub-agent that does not push (the `/ultracook` no-push cases below) does **not** write back; the orchestrator that owns publishing owns the write-back at its publish phase.
+- **Every publication path.** Fires from the frame that dispatched terminal `/plate` — manual `cook→cure` and `--auto` alike — after publication lands.
+- **Publication-owner exception.** When cure does not own terminal `/plate` — the `/ultracook` no-publish cases below, or the `/affinage` chain where affinage owns terminal `/plate` — cure does **not** write back; the skill that owns the `/plate` dispatch owns the write-back at its publish boundary.
 - **Nothing to record** — no new ADR-worthy decision and no domain-model delta — skip with a one-line "no post-PR learnings" note. Do not manufacture an entry.
 
-`[TBD]` The write-back trigger lives at this cure/ship boundary today; when a dedicated commit/PR skill exists, move the trigger onto it so PR-opening and learnings-capture are wired at one seam (see the `post-pr-wiki-writeback` wiki page).
+`[TBD]` The write-back trigger lives at this cure boundary today; `/plate` (the dedicated commit/PR skill) now exists, so the deferred follow-up is to move the trigger onto `/plate` so publication and learnings-capture are wired at one seam (see the `post-pr-wiki-writeback` wiki page).
 
 ## --hard mode
 
