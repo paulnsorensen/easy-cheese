@@ -120,6 +120,8 @@ The cure report body lives below the handoff slug in the same file at `.cheese/c
 
 After the cure report is rendered, cure decides whether to dispatch `/plate` or ask. On a **clean cure** (see Validation), the default carries work to an already-open PR without another gate. `--safe` re-introduces the handoff gate.
 
+When the run was chained from `/affinage` (`handoff_context.source_skill: /affinage`), cure **never** dispatches `/plate` — it applies its fixes, runs the auto-mode `/age --scope` loop where applicable, and returns so `/affinage` can post its GitHub replies (final writes) before owning terminal `/plate`.
+
 **Default (no `--safe`) — plate the work:**
 
 - Detect an open PR with `gh pr view`. If one exists, dispatch `/plate` to run its final writing gate, validation, named-file commit, topology-aware update, and publication. Rule 11 authorizes the update. Propagate `--hard`; `/plate` gives `/hard-cheese` the final artifact state before publishing.
@@ -150,6 +152,7 @@ When invoked with `--auto --stake <floor>`:
 - `/age --auto` enforces the two-pass cap. Cure does not need to track passes itself — it just keeps applying when invoked.
 - **Terminal publication.** When the age child returns `next: done`, dispatch `/plate` once. It updates an existing PR automatically or, with `--open-pr`, applies the explicit-choice and review-shape policy before committing a new PR layout.
 - **Orchestrated sub-agent exception.** A phase-only `/ultracook` cure never invokes `/plate`; the orchestrator owns commit and publication.
+- **`/affinage` chain exception.** When `handoff_context.source_skill` is `/affinage`, suppress this terminal `/plate` — affinage posts its GitHub replies (final writes) and then owns terminal `/plate`.
 
 **`--auto --hard` puncture clause.** When age returns `next: done`, dispatch `/plate --hard` rather than firing `/hard-cheese` directly. `/plate`'s final writing gate makes the completed artifact inventory visible to the metacognitive check. A failed hard gate halts publication; a non-TTY environment reports that `--hard` needs an interactive TTY.
 
