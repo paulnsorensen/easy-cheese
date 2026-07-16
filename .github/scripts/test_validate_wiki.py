@@ -50,6 +50,11 @@ class ValidateWikiTest(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
 
+    def _write_bytes(self, rel: str, content: bytes) -> None:
+        path = self.tmpdir / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+
     def _write_valid_wiki(self) -> None:
         self._write(f"{WIKI}/index.md", ROOT_INDEX)
         self._write(f"{WIKI}/topic-one.md", "# Topic one\n\nbody\n")
@@ -227,6 +232,24 @@ class ValidateWikiTest(unittest.TestCase):
         self.assertIn("not a single '# ' H1", err)
         self.assertIn("decision-002.md: page is not listed", err)
         self.assertIn("FAIL: 2 error(s)", err)
+
+    def test_non_utf8_page_reported_as_error(self) -> None:
+        # A non-UTF-8 page must join the ERROR: report, not traceback.
+        self._write_valid_wiki()
+        self._write_bytes(f"{WIKI}/topic-one.md", b"\xff\xfe# Topic one\n")
+        rc, _, err = self._run()
+        self.assertEqual(rc, 1)
+        self.assertIn(f"ERROR: {WIKI}/topic-one.md: page is not valid UTF-8", err)
+        self.assertIn("FAIL: 1 error(s)", err)
+
+    def test_non_utf8_index_reported_as_error(self) -> None:
+        # A non-UTF-8 index must not traceback in the entry check either.
+        self._write_valid_wiki()
+        self._write_bytes(f"{WIKI}/adr/index.md", b"\xff\xfe# adr\n")
+        rc, _, err = self._run()
+        self.assertEqual(rc, 1)
+        self.assertIn(f"ERROR: {WIKI}/adr/index.md: page is not valid UTF-8", err)
+        self.assertIn("cannot check index entries", err)
 
 
 if __name__ == "__main__":

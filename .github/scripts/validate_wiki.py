@@ -40,8 +40,13 @@ def validate_page(path: Path) -> list[str]:
             f"(1-64 chars, lowercase a-z 0-9, no leading/trailing/consecutive hyphens)"
         )
 
+    try:
+        text = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        errors.append(f"{path}: page is not valid UTF-8 ({exc.reason} at byte {exc.start})")
+        return errors
     first_line = next(
-        (line for line in path.read_text(encoding="utf-8").splitlines() if line.strip()),
+        (line for line in text.splitlines() if line.strip()),
         None,
     )
     if first_line is None:
@@ -60,7 +65,12 @@ def index_link_targets(index: Path) -> tuple[list[Path] | None, list[str]]:
     Targets are None only when the markers themselves are missing or out of
     order; a dangling entry is reported but does not stop target collection.
     """
-    lines = index.read_text(encoding="utf-8").splitlines()
+    try:
+        lines = index.read_text(encoding="utf-8").splitlines()
+    except UnicodeDecodeError:
+        # validate_page already reported the encoding error for this file;
+        # entry checks cannot run without decodable content.
+        return None, [f"{index}: index is not valid UTF-8; cannot check index entries"]
     try:
         start = lines.index(INDEX_START)
         end = lines.index(INDEX_END)
