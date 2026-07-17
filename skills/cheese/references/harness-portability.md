@@ -24,9 +24,10 @@ handoffs first build the semantic record defined by
 [`handoff-gate.md`](handoff-gate.md), then render that record through
 `ask-user-question.md`.
 
-The question reference owns capability detection, host mappings, lossless
-fallbacks, batching, defaults, and answer normalization. Keep those details out
-of workflow skills and this portability overview.
+The question reference owns capability detection, lossless fallbacks, batching,
+defaults, and answer normalization. Per-harness tool names live in its
+maintainer sources appendix, not in any runtime path. Keep those details out of
+workflow skills and this portability overview.
 
 ## Sub-agent dispatch
 

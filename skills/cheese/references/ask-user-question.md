@@ -23,34 +23,45 @@ The record is the source of truth. A host rendering may change presentation, but
 
 ## Capability-first rendering
 
-Use the richest callable structured question primitive that can faithfully
-encode the complete decision. Discover callability and the active primitive's
-advertised question and option capacities at runtime instead of assuming a
-harness-wide limit. Never name a host tool in the transcript unless it is
-callable in that session.
+One rule: use the richest callable structured question primitive visible in
+your active tool list that can faithfully encode the complete decision;
+otherwise use the portable fallback below. The active tool list is the runtime
+authority for what exists and what it can hold — read the active primitive's
+advertised question and option capacities from its schema instead of assuming a
+harness-wide limit, and never consult a harness lookup table to learn a tool's
+name. Never name a host tool in the transcript unless it is callable in that
+session.
 
 Wrapper and orchestrator hosts such as Conductor and Emdash / Em Dash route to
 the selected underlying agent or provider rather than inventing a common
 question schema. Runtime capability detection always wins over the wrapper or provider name. If the expected provider primitive is absent, denied, headless,
 or too small for the complete decision, use the lossless fallback.
 
-| Harness | Prefer | Notes |
-| --- | --- | --- |
-| Claude Code | `AskUserQuestion` | Supports `questions[]` with `question`, short `header`, `options[]`, and optional `multiSelect`; hooks can fill `answers` via `updatedInput`. Source: [Claude Code hooks reference](https://docs.anthropic.com/en/docs/claude-code/hooks#askuserquestion). |
-| Codex / OpenAI app-server | `request_user_input` / `tool/requestUserInput` when exposed and lossless | In Codex CLI, use `request_user_input` only when the active tool list and current collaboration mode both allow it **and the full question fits the capacities advertised by that callable primitive**. If an active schema advertises only 2-3 explicit choices, a four-option decision does not fit: render every option with the numbered fallback, or use a lossless hybrid where every omitted button remains an explicit numbered choice. Never merge or drop options to make the tool call fit. Source: [Codex app-server reference](https://developers.openai.com/codex/app-server). |
-| Conductor | Underlying agent primitive | Conductor runs Claude Code or Codex sessions; route to the selected underlying agent's currently callable question primitive. Conductor Plan Mode exists for both, but Conductor is not a separate question API. Source: [Conductor agent modes](https://conductor.build/docs/concepts/agent-modes). |
-| OpenCode | `question` tool | The built-in `question` tool asks during execution with header, question text, options, and custom answers; ensure `permission.question` is not denied. Source: [OpenCode tools](https://opencode.ai/docs/tools#question). |
-| Pi | Visibly loaded extension question tool | Pi has no built-in model-callable question tool. Use a visibly loaded and callable extension tool only when its UI is available (`ctx.hasUI`); a Markdown skill cannot call `ctx.ui` directly. JSON/print or another headless mode must use numbered text. Sources: [Pi extensions](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/extensions.md), [question extension example](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/examples/extensions/question.ts). |
-| OMP / Oh My Pi | `ask` interactive-only built-in | Each `questions[]` item carries `id`, `question`, and `options[]`, with optional `header`, `multi`, and zero-based `recommended`; `Other` is automatic. Use it only when callable in an interactive session and the complete question fits. Do not use a timeout that can auto-select a blocking approval or state-changing choice. Sources: [OMP ask reference](https://github.com/can1357/oh-my-pi/blob/main/docs/tools/ask.md), [OMP ask schema](https://github.com/can1357/oh-my-pi/blob/main/packages/coding-agent/src/tools/ask.ts). |
-| Emdash / Em Dash | Selected provider primitive | Emdash runs provider CLIs through PTY and can host ACP providers; it does not define one universal question API. Route through the selected provider's advertised primitive when callable and lossless, otherwise use numbered text. Sources: [Emdash docs](https://emdash.ai/docs), [provider integrations](https://github.com/generalaction/emdash/blob/main/agents/integrations/providers.md). |
-| GitHub Copilot CLI | `ask_user` tool | Copilot CLI lists `ask_user` as "Ask the user a question" and `--no-ask-user` disables it. Use it when available; otherwise numbered text. Source: [Copilot CLI command reference](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-command-reference). |
-| Gemini CLI | `ask_user` tool | Google codelab output lists `Ask User (ask_user)` in `/tools`; use it when present. Source: [Gemini CLI codelab](https://codelabs.developers.google.com/gemini-cli-hands-on). |
-| Cursor CLI / ACP | `cursor/ask_question` when exposed | Cursor ACP documents `cursor/ask_question` as a blocking extension method; use it only inside hosts that expose that ACP method. Source: [Cursor ACP docs](https://cursor.com/docs/cli/acp#cursor-extension-methods). |
-| Windsurf Cascade | Plan-mode interactive questions when in Plan Mode | Cascade Plan Mode can ask clarifying questions and present multiple options with an interactive interface. Outside that mode, use numbered text unless a host tool is exposed. Source: [Cascade modes](https://docs.windsurf.com/windsurf/cascade/modes). |
-| MCP server flows | `elicitation/create` | Use only when an MCP server is requesting user input through a client that supports elicitation. It is not a general assistant-to-user question primitive. Source: [MCP elicitation](https://modelcontextprotocol.io/specification/latest/client/elicitation). |
-| Aider and unknown harnesses | Numbered text | If no structured primitive is visible, ask a plain numbered question and wait for the next user reply. |
+Caveats that capability detection alone cannot infer:
+
+- **Capacity-limited schemas.** If an active schema advertises only 2-3
+  explicit choices, a four-option decision does not fit: render every option
+  with the numbered fallback, or use a lossless hybrid where every omitted
+  button remains an explicit numbered choice. Never merge or drop options to
+  make the tool call fit.
+- **Mode-gated tools.** Use a question tool only when the active tool list and
+  current collaboration mode both allow it (Codex `request_user_input` is the
+  known case).
+- **Headless modes.** JSON/print or another non-interactive mode must use
+  numbered text even when a question tool is nominally loaded.
+- **Auto-select timeouts.** Do not use a timeout that can auto-select a
+  blocking approval or state-changing choice (OMP `ask` exposes one).
+- **MCP elicitation.** `elicitation/create` is only for an MCP server
+  requesting user input through a client that supports elicitation; it is not
+  a general assistant-to-user question primitive.
 
 This is native-first, not lowest-common-denominator behavior. Never merge, hide, or drop options to fit a host primitive.
+
+Per-harness tool names and doc citations are maintainer evidence, not runtime
+instructions — they live in
+[`ask-user-question-sources.md`](ask-user-question-sources.md). Do not read
+that appendix to answer a question; the active tool list already shows what is
+callable.
 
 ## Portable fallback
 

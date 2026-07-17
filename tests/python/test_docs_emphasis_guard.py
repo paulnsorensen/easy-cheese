@@ -253,6 +253,9 @@ def test_question_routing_is_native_first_and_lossless():
     questions = (REPO_ROOT / "skills/cheese/references/ask-user-question.md").read_text(
         encoding="utf-8"
     )
+    sources = (
+        REPO_ROOT / "skills/cheese/references/ask-user-question-sources.md"
+    ).read_text(encoding="utf-8")
     portability = (REPO_ROOT / "skills/cheese/references/harness-portability.md").read_text(
         encoding="utf-8"
     )
@@ -286,23 +289,41 @@ def test_question_routing_is_native_first_and_lossless():
     assert "four-option cap" not in gate
     assert "stays as prose plus the free-form `Other` path" not in gate
 
-    # Runtime discovery uses the richest lossless callable primitive.
-    assert "richest callable structured question primitive" in questions
-    assert "advertised question and option capacities" in questions
-    assert "Runtime capability detection always wins over the wrapper or provider name." in questions
-    assert "selected underlying agent or provider" in questions
+    # Hard-wrapped prose compares on flattened whitespace.
+    questions_flat = " ".join(questions.split())
+    sources_flat = " ".join(sources.split())
 
-    # Codex capacities are live, mode-aware, and never shrink four-option decisions.
-    assert "active tool list and current collaboration mode both allow it" in questions
-    assert "capacities advertised by that callable primitive" in questions
-    assert "If an active" in questions
-    assert "2-3 explicit choices" in questions
-    assert "four-option" in questions
-    assert "2-3 explicit-choice limit" not in questions
+    # Runtime discovery reads the active tool list, never a lookup table.
+    assert "richest callable structured question primitive" in questions_flat
+    assert "visible in your active tool list" in questions_flat
+    assert "never consult a harness lookup table" in questions_flat
+    assert "advertised question and option capacities" in questions_flat
+    assert "Runtime capability detection always wins over the wrapper or provider name." in questions_flat
+    assert "selected underlying agent or provider" in questions_flat
+
+    # The runtime doc carries no per-harness case statement.
+    assert "| Claude Code |" not in questions
+    assert "| --- |" not in questions
+    assert "AskUserQuestion" not in questions
+    assert "maintainer evidence, not runtime instructions" in questions_flat
+    assert "ask-user-question-sources.md" in questions
+    assert "Do not read that appendix to answer a question" in questions_flat
+
+    # Behavioral caveats capability detection cannot infer stay in the runtime doc.
+    assert "Caveats that capability detection alone cannot infer" in questions_flat
+    assert "active tool list and current collaboration mode both allow it" in questions_flat
+    assert "If an active" in questions_flat
+    assert "2-3 explicit choices" in questions_flat
+    assert "four-option" in questions_flat
+    assert "2-3 explicit-choice limit" not in questions_flat
+    assert "Codex `request_user_input` is the known case" in questions_flat
+    assert "JSON/print or another non-interactive mode must use numbered text" in questions_flat
+    assert "auto-select a blocking approval or state-changing choice" in questions_flat
+    assert "not a general assistant-to-user question primitive" in questions_flat
 
     # Every rendering preserves the complete semantic question.
-    assert "Never merge, hide, or drop options" in questions
-    assert "fallback must enumerate every option" in questions
+    assert "Never merge, hide, or drop options" in questions_flat
+    assert "fallback must enumerate every option" in questions_flat
     for required in (
         "recommended choice",
         "every option's effect or tradeoff",
@@ -311,9 +332,11 @@ def test_question_routing_is_native_first_and_lossless():
         "omit the `Recommended:` line",
         "displayed 1-based ordinal",
     ):
-        assert required in questions
+        assert required in questions_flat
 
-    # Every named harness keeps an explicit, capability-driven route.
+    # Per-harness citations live in the maintainer appendix, off the runtime path.
+    assert "Maintainer appendix" in sources
+    assert "Agents do not read this file at runtime" in sources_flat
     for harness in (
         "Claude Code",
         "Codex / OpenAI app-server",
@@ -324,19 +347,23 @@ def test_question_routing_is_native_first_and_lossless():
         "Emdash / Em Dash",
         "Cursor CLI / ACP",
     ):
-        assert f"| {harness} |" in questions
+        assert f"| {harness} |" in sources
 
     # Pi needs a loaded extension; OMP owns a distinct interactive built-in.
-    assert "visibly loaded and callable extension tool" in questions
-    assert "`ctx.hasUI`" in questions
-    assert "Markdown skill cannot call `ctx.ui` directly" in questions
-    assert "interactive-only built-in" in questions
-    assert "`id`, `question`, and `options[]`" in questions
-    assert "`Other` is automatic" in questions
+    assert "visibly loaded and callable extension tool" in sources
+    assert "`ctx.hasUI`" in sources
+    assert "Markdown skill cannot call `ctx.ui` directly" in sources
+    assert "interactive-only built-in" in sources
+    assert "`id`, `question`, and `options[]`" in sources
+    assert "`Other` is automatic" in sources
 
     # Emdash is a provider host, not another universal question schema.
-    assert "does not define one universal question API" in questions
-    assert "selected provider's advertised primitive" in questions
+    assert "does not define one universal question API" in sources
+    assert "selected provider's advertised primitive" in sources
+
+    # Nothing routes an agent to the appendix at runtime.
+    assert "ask-user-question-sources.md" not in portability
+    assert "ask-user-question-sources.md" not in gate
 
     # Generic batching, defaults, and answer normalization stay with transport.
     assert "Ask one decision by default" in questions
