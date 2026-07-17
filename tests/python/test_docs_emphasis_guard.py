@@ -298,7 +298,7 @@ def test_question_routing_is_native_first_and_lossless():
     assert "visible in your active tool list" in questions_flat
     assert "never consult a harness lookup table" in questions_flat
     assert "advertised question and option capacities" in questions_flat
-    assert "Runtime capability detection always wins over the wrapper or provider name." in questions
+    assert "Runtime capability detection always wins over the wrapper or provider name." in questions_flat
     assert "selected underlying agent or provider" in questions_flat
 
     # The runtime doc carries no per-harness case statement.
@@ -310,18 +310,20 @@ def test_question_routing_is_native_first_and_lossless():
     assert "Do not read that appendix to answer a question" in questions_flat
 
     # Behavioral caveats capability detection cannot infer stay in the runtime doc.
-    assert "Caveats that capability detection alone cannot infer" in questions
+    assert "Caveats that capability detection alone cannot infer" in questions_flat
     assert "active tool list and current collaboration mode both allow it" in questions_flat
-    assert "If an active" in questions
+    assert "If an active" in questions_flat
     assert "2-3 explicit choices" in questions_flat
-    assert "four-option" in questions
+    assert "four-option" in questions_flat
     assert "2-3 explicit-choice limit" not in questions_flat
+    assert "Codex `request_user_input` is the known case" in questions_flat
+    assert "JSON/print or another non-interactive mode must use numbered text" in questions_flat
     assert "auto-select a blocking approval or state-changing choice" in questions_flat
     assert "not a general assistant-to-user question primitive" in questions_flat
 
     # Every rendering preserves the complete semantic question.
-    assert "Never merge, hide, or drop options" in questions
-    assert "fallback must enumerate every option" in questions
+    assert "Never merge, hide, or drop options" in questions_flat
+    assert "fallback must enumerate every option" in questions_flat
     for required in (
         "recommended choice",
         "every option's effect or tradeoff",
@@ -330,7 +332,7 @@ def test_question_routing_is_native_first_and_lossless():
         "omit the `Recommended:` line",
         "displayed 1-based ordinal",
     ):
-        assert required in questions
+        assert required in questions_flat
 
     # Per-harness citations live in the maintainer appendix, off the runtime path.
     assert "Maintainer appendix" in sources
