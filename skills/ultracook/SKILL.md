@@ -37,7 +37,7 @@ Before the phase loop runs, the decomposer picks the mode. This is the one autho
 
 1. **Decompose** — spawn a full-peer decomposer sub-agent (`references/decomposer-prompt.md`) to produce `seed[]`, `curds[]`, and `wiring[]` from the spec, then validate with `python3 skills/ultracook/scripts/ultracook.pyz validate_decomposition <manifest>`. Re-run on validation failure (max 2 retries).
 2. **Pick the mode** — `python3 skills/ultracook/scripts/ultracook.pyz mode --count <curd-count>` → `linear | parallel`. The canonical `PARALLEL_THRESHOLD` (2) lives in the engine: a decomposition of **2 or more** curds routes to **parallel mode**; **1** curd stays **linear**. There is one threshold in the tree — the selector, `validate_decomposition`, and the mold hint all read it.
-3. **Probe the engine seam** — `python3 skills/ultracook/scripts/ultracook.pyz milknado --tools "<available tool names>"` → `engine | tracker | none`. This decides how parallel mode runs curds (see `## Parallel mode`); linear mode ignores it.
+3. **Probe the engine seam** — `python3 skills/ultracook/scripts/ultracook.pyz milknado --tools "<available tool names>"` → `engine | tracker | none`. This decides how parallel mode runs curds (see `## Parallel mode`); linear mode ignores it. When milknado resolves to `tracker` or `none`, parallel mode probes one seam further — the curd-flock workflow seam (Claude-only: `Workflow` tool present AND a deployed `curd-flock` workflow) — before falling back to native fan-out. Full probe order: milknado engine → curd-flock workflow → native fan-out; see `### curd-flock workflow seam (probe-and-use)` under `## Parallel mode`.
 
 If the host only exposes the packaged helper, `python3 ${CLAUDE_SKILL_DIR}/scripts/ultracook.pyz <subcommand> ...` is the fallback.
 
@@ -186,6 +186,19 @@ The `milknado` probe from **Mode selection** decides how curds run:
 - **`tracker` / `none`** — **native fan-out**: the orchestrator owns worktrees (via the `worktree` helper), and **curds self-verify by running the project gates in-worker**. Parallel mode runs to completion with milknado entirely absent.
 
 **This parity difference is intentional and load-bearing:** native curds self-verify (gates run once, in-worker), while milknado, when present, does verify-until-green (re-runs gates until they pass). See [`../../shared/optional-plugins.md`](../../shared/optional-plugins.md) for the detect-and-degrade contract; announce the absence once and proceed.
+
+### curd-flock workflow seam (probe-and-use)
+
+When the milknado probe from **Mode selection** resolves to `tracker` or `none`, parallel mode probes one seam further before falling back to native fan-out. Full order: **milknado engine → curd-flock workflow → native fan-out**.
+
+- **Available** (Claude Code, the `Workflow` tool present, and a deployed `curd-flock` workflow) — one `Workflow {name: 'curd-flock', args: {tasks: curds, wiring, run: <slug>}}` call subsumes topology steps 2–7 (per-curd fan-out through PR plan + publish). The orchestrator still runs step 1 (Seed) inline, then imports the workflow's returned report into the manifest — curd statuses, commit shas, and phase markers through `pr_publish_complete` — rather than re-deriving them.
+- **Absent** (not Claude Code, no `Workflow` tool, or no deployed `curd-flock` workflow) — **native fan-out**: fall through to topology steps 2–7 unchanged.
+
+**Skill-instructed dispatch satisfies the opt-in rule.** `/ultracook` instructing the `Workflow` call satisfies the tool's opt-in gate; no separate user opt-in is required beyond invoking `/ultracook` itself.
+
+Same detect-and-degrade contract as the milknado seam above: see [`../../shared/optional-plugins.md`](../../shared/optional-plugins.md); announce the absence once and proceed to native fan-out.
+
+Output mode-invariance holds regardless of which seam ran — see `### Output mode-invariance` below.
 
 ### Recovery paths (issue #194)
 
