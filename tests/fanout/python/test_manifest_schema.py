@@ -72,6 +72,7 @@ def example_manifest() -> dict:
                 "behavior": "Implement order entity",
                 "acceptance_criterion": "Spec §3.1",
                 "files": ["src/orders/order.ts", "src/orders/order.test.ts"],
+                "weight": 2,
                 "test_target": "vitest run src/orders/order.test.ts",
                 "status": "completed",
                 "worktree_path": "/path",
