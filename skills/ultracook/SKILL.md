@@ -183,7 +183,7 @@ The per-run manifest at `.cheese/ultracook/<slug>/manifest.yaml` is advanced at 
 The `milknado` probe from **Mode selection** decides how curds run:
 
 - **`engine`** (`milknado_todo_claim` + `milknado_node_verify` present) — milknado owns the DAG, per-node worktrees, and **verify-until-green**; the orchestrator spawns the agent per claimed node and lets milknado re-run the gates until they pass.
-- **`tracker` / `none`** — **native fan-out**: the orchestrator owns worktrees (via the `worktree` helper), and **curds self-verify by running the project gates in-worker**. Parallel mode runs to completion with milknado entirely absent.
+- **`tracker` / `none`** — **native fan-out**: the orchestrator owns worktrees (via the `worktree` helper), and **curds self-verify by running the project gates in-worker**. Parallel mode runs to completion with milknado entirely absent — but first routes through the curd-flock seam below, then native fan-out.
 
 **This parity difference is intentional and load-bearing:** native curds self-verify (gates run once, in-worker), while milknado, when present, does verify-until-green (re-runs gates until they pass). See [`../../shared/optional-plugins.md`](../../shared/optional-plugins.md) for the detect-and-degrade contract; announce the absence once and proceed.
 
@@ -191,8 +191,10 @@ The `milknado` probe from **Mode selection** decides how curds run:
 
 When the milknado probe from **Mode selection** resolves to `tracker` or `none`, parallel mode probes one seam further before falling back to native fan-out. Full order: **milknado engine → curd-flock workflow → native fan-out**.
 
-- **Available** (Claude Code, the `Workflow` tool present, and a deployed `curd-flock` workflow) — one `Workflow {name: 'curd-flock', args: {tasks: curds, wiring, run: <slug>}}` call subsumes topology steps 2–7 (per-curd fan-out through PR plan + publish). The orchestrator still runs step 1 (Seed) inline, then imports the workflow's returned report into the manifest — curd statuses, commit shas, and phase markers through `pr_publish_complete` — rather than re-deriving them.
-- **Absent** (not Claude Code, no `Workflow` tool, or no deployed `curd-flock` workflow) — **native fan-out**: fall through to topology steps 2–7 unchanged.
+- **Available** (Claude Code, the `Workflow` tool present) — one `Workflow {name: 'curd-flock', args}` call subsumes topology steps 2–7 (per-curd fan-out through PR plan + publish); the orchestrator still runs step 1 (Seed) inline, then imports the returned report into the manifest rather than re-deriving it. **Adapter** (curd-flock's args stay generic; the skill owns the transform): curd `{id, behavior, acceptance_criterion, files}` → task `{slug: 'curd-<id>', brief: behavior + '\n\nAcceptance: ' + acceptance_criterion, files}`; wiring `{id: 'W<n>', type, file, depends_on}` → `{id: lowercased 'w<n>', brief: type + ' — ' + file, after: depends_on mapped the same way}`; `run:` = the ultracook run slug. Import back: report `tasks[]` → manifest `curds[]` by stripping the `curd-` prefix; report `wiring[]` → manifest `wiring[]` by uppercasing the id back; plate `prs[]` + phase markers advance the manifest through `pr_publish_complete`.
+- **Absent** (not Claude Code, no `Workflow` tool, or workflow-not-found on the attempt) — **native fan-out**: fall through to topology steps 2–7 unchanged.
+
+**Detection is attempt-based, not probed.** No registry check exists for a deployed `curd-flock` workflow; the orchestrator just makes the `Workflow` call and treats tool-absent or workflow-not-found as "Absent" above.
 
 **Skill-instructed dispatch satisfies the opt-in rule.** `/ultracook` instructing the `Workflow` call satisfies the tool's opt-in gate; no separate user opt-in is required beyond invoking `/ultracook` itself.
 
