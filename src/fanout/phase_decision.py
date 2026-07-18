@@ -83,33 +83,26 @@ def decide(
             "exit_message": f"{current_phase} (phase {phase_index}) halted: {status.strip()}",
         }
 
-    # A terminal review is publishable only when it positively reports done.
-    # Missing/next=cure means findings remain and publication must halt.
+    # The terminal entry of every table is the final review; it is publishable
+    # only when it positively reports done. Missing/next=cure means findings
+    # remain and publication must halt.
     if next_phase is None:
-        if current_phase == "age":
-            if (next_field or "").strip().lower() == "done":
-                return {
-                    "action": "stop",
-                    "next_phase": None,
-                    "exit_message": (
-                        f"chain complete after final age (phase {phase_index}); "
-                        "review reported next=done"
-                    ),
-                }
+        if (next_field or "").strip().lower() == "done":
             return {
-                "action": "halt",
+                "action": "stop",
                 "next_phase": None,
                 "exit_message": (
-                    f"final age (phase {phase_index}) is not publishable: "
-                    f"next={(next_field or 'missing').strip()}"
+                    f"chain complete after final {current_phase} (phase {phase_index}); "
+                    "review reported next=done"
                 ),
             }
-        # Generic terminal for non-age tables. All three shipped tables end
-        # in age, so no shipped path reaches this branch today.
         return {
-            "action": "stop",
+            "action": "halt",
             "next_phase": None,
-            "exit_message": f"chain complete after final {current_phase} (phase {phase_index})",
+            "exit_message": (
+                f"final {current_phase} (phase {phase_index}) is not publishable: "
+                f"next={(next_field or 'missing').strip()}"
+            ),
         }
 
     # Linear mode may stop on an early clean age. Parallel tables must execute

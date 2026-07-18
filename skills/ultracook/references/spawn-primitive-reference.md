@@ -18,7 +18,7 @@ Missing required tools, write capability, fresh context, or worktree isolation h
 
 | Work | Preferred type | Permission/isolation | Minimum power | Effort |
 | --- | --- | --- | --- | --- |
-| Decompose | planner, then general | read-only except manifest; fresh context | powerful | high |
+| Decompose | planner, then general | write (manifest only); fresh context | powerful | high |
 | Cook, press, cure, seed, wiring | coder | write; isolated worktree | default | high |
 | Every age pass | reviewer | read-only; fresh context | powerful | high |
 | Harvest and plate | parent | parent repository state | powerful | high |

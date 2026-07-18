@@ -240,7 +240,7 @@ Resolve every phase through [`../cheese/references/agent-resolution.md`](../chee
 
 | Work | Preferred types | Permissions/isolation | Minimum power | Effort | Fallback |
 | --- | --- | --- | --- | --- | --- |
-| Decompose the spec | planner, general | read-only except manifest, fresh-context | powerful | high | compatible planner, then general |
+| Decompose the spec | planner, general | write (manifest only), fresh-context | powerful | high | compatible planner, then general |
 | Cook, press, cure, seed, or wiring | coder | write, isolated-worktree | default | high | compatible coder, then general |
 | Every age pass | reviewer | read-only, fresh-context | powerful | high | compatible reviewer, then general |
 | Harvest and plate | parent | parent-owned repository state | powerful | high | no fallback; halt |
