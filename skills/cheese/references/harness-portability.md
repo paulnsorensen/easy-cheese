@@ -35,7 +35,7 @@ Name the semantic contract first:
 
 - fresh context or same context
 - read-only or write-capable
-- full peer or diminished worker
+- minimum power (`cheap | default | powerful`) and whether the selection is `degraded`
 - synchronous return or fire-and-forget
 - phase-only or may chain
 

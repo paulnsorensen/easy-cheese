@@ -104,6 +104,8 @@ def decide(
                     f"next={(next_field or 'missing').strip()}"
                 ),
             }
+        # Generic terminal for non-age tables. All three shipped tables end
+        # in age, so no shipped path reaches this branch today.
         return {
             "action": "stop",
             "next_phase": None,

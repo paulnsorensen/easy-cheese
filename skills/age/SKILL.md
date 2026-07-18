@@ -139,7 +139,7 @@ For the digest contract, harness-agnostic selection rules, and what the parent n
 
 ### Scale-triggered fan-out mode
 
-Activates when **all** hold: the **scale threshold** (above) is met AND `/age` is not itself a sub-agent (no `invoked-from:` marker). Below threshold, or when running as a sub-agent, the single-parent path applies unchanged.
+Activates when **all** hold: the **scale threshold** (above) is met AND `/age` is not itself running as a dispatched sub-agent — ultracook-dispatched reviewers run inline by agent type, and a sub-agent cannot spawn sub-agents. Below threshold, or when running as a sub-agent, the single-parent path applies unchanged.
 
 **Seam 1 — Predicate.** The activation gate above (scale threshold met AND `/age` not a sub-agent) is the fan-out predicate.
 
