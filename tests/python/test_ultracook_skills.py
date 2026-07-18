@@ -1,10 +1,9 @@
 """Documentation-lint tests for the ultracook orchestrator and the SKILL.md
 changes the ultracook spec requires across the phase chain.
 
-These tests treat each `SKILL.md` as a contract document: they assert that the
-load-bearing phrases — handoff-slug schema, the "inheritance, not diminution"
-sub-agent contract, the `--continue` flag on `/cheese`, and so on — are
-actually written down in the skills that need them.
+These tests treat each `SKILL.md` as a contract document: they assert that
+handoff schemas, typed phase-agent routing, the `--continue` flag on
+`/cheese`, and related orchestration clauses stay written down.
 
 They are intentionally string-shaped rather than parser-shaped: the goal is to
 catch silent removal of contract clauses, not to model the full SKILL grammar.
@@ -113,24 +112,18 @@ class TestUltracookPhaseChain:
         )
 
 
-class TestUltracookInheritanceContract:
-    def test_calls_out_full_peer_inheritance(self) -> None:
-        body = _skill("ultracook")
-        assert "inherit" in body.lower(), (
-            "Sub-agent contract must spell out inheritance, not diminution."
-        )
-        assert "not diminut" in body.lower() or "full peer" in body.lower()
+class TestUltracookTypedAgentContract:
+    def test_assigns_specialists_by_phase(self) -> None:
+        body = _skill("ultracook").lower()
+        for role in ("planner", "coder", "reviewer"):
+            assert role in body
+        assert "harvest" in body and "parent" in body
+        assert "plate" in body and "parent" in body
 
-    def test_pins_general_purpose_subagent(self) -> None:
+    def test_uses_shared_resolver(self) -> None:
         body = _skill("ultracook")
-        assert "general-purpose" in body, (
-            "Sub-agents must spawn as general-purpose, not specialized workers."
-        )
-
-    def test_forbids_model_downgrade(self) -> None:
-        body = _skill("ultracook")
-        # The contract bans haiku / scoped tools / restricted MCPs explicitly.
-        assert "do not downgrade" in body.lower() or "never downgrade" in body.lower()
+        assert "../cheese/references/agent-resolution.md" in body
+        assert "minimum power" in body.lower()
 
 
 class TestUltracookHandoffSchema:
@@ -1093,8 +1086,8 @@ class TestUltracookDeterministicPhaseLoop:
 #
 # /cheese-factory folded into /ultracook as a second mode. These lock the
 # parallel-mode contract clauses so a future edit cannot silently drop the
-# mode gate, the worktree lifecycle, the milknado parity, the #197 capability
-# gate, the #194 recovery paths, or the output mode-invariance invariant.
+# mode gate, typed agent resolution, worktree lifecycle, milknado parity,
+# recovery paths, terminal age gate, or resolution provenance.
 # ---------------------------------------------------------------------------
 
 
@@ -1131,8 +1124,8 @@ class TestUltracookModeGate:
 
 
 class TestUltracookParallelTopology:
-    """Parallel mode is curd-light: per-curd cook/press/age/cure in a worktree,
-    then one post-merge press/age/cure over the merged diff (acceptance #2)."""
+    """Parallel mode uses typed fresh-context phase agents in one curd worktree,
+    then repeats review and final age over the merged diff."""
 
     def test_parallel_mode_section_present(self) -> None:
         body = _skill("ultracook")
@@ -1145,12 +1138,13 @@ class TestUltracookParallelTopology:
             "parallel mode must run each curd on the parallel-curd phase table"
         )
 
-    def test_post_merge_single_pass_documented(self) -> None:
+    def test_post_merge_final_age_documented(self) -> None:
         body = _skill("ultracook")
         body_lower = body.lower()
         assert "parallel-postmerge" in body, (
-            "parallel mode must run one post-merge pass on the parallel-postmerge table"
+            "parallel mode must use the parallel-postmerge table"
         )
+        assert "reviewer(final age)" in body_lower
         assert "post-merge" in body_lower or "merged diff" in body_lower
 
 
@@ -1212,31 +1206,26 @@ class TestUltracookMilknadoSeam:
         )
 
 
-class TestUltracookCapabilityGate:
-    """Sub-agent spawning is capability-gated (issue #197): a specialized
-    subagent_type with fresh context + full tools is permitted; only diminutive
-    workers are rejected (acceptance #6)."""
+class TestUltracookAgentResolution:
+    """Ultracook resolves typed roles through the shared minimum-power protocol."""
 
-    def test_capability_gate_documented(self) -> None:
-        body = _skill("ultracook")
-        body_lower = body.lower()
-        assert "#197" in body or "197" in body, (
-            "ultracook must cite issue #197 for the capability gate"
-        )
-        assert "capability" in body_lower, (
-            "the gate must be capability, not the subagent_type label"
-        )
+    def test_shared_resolution_protocol_documented(self) -> None:
+        body = _skill("ultracook").lower()
+        assert "agent-resolution.md" in body
+        assert "minimum capable power" in body
+        assert "agent_resolution" in body
 
-    def test_specialized_type_permitted_when_full_peer(self) -> None:
-        body = _skill("ultracook")
-        body_lower = body.lower()
-        # A specialized/typed subagent_type is acceptable when it is a full peer.
-        assert "specialized" in body_lower or "specialised" in body_lower or (
-            "typed" in body_lower
-        ), "a specialized subagent_type must be permitted when it is a full peer"
-        assert "diminutive" in body_lower or "downgrade" in body_lower, (
-            "only diminutive / downgraded workers may be rejected"
-        )
+    def test_typed_phase_roles_documented(self) -> None:
+        body = _skill("ultracook").lower()
+        assert "planner/general" in body
+        assert "coder(cook)" in body
+        assert "reviewer(age)" in body
+        assert "parent ownership for harvest and plate" in body
+
+    def test_terminal_age_gate_documented(self) -> None:
+        body = _skill("ultracook").lower()
+        assert "publishable only with `next: done`" in body
+        assert "`next: cure` or missing `next` halts" in body
 
 
 class TestUltracookRecoveryPaths:
@@ -1267,16 +1256,14 @@ class TestUltracookRecoveryPaths:
         )
 
 
-class TestUltracookOutputModeInvariance:
-    """Parallel mode's output uses the same schema as linear mode — a reader
-    cannot tell which mode produced the summary (mirrors /age's invariant)."""
+class TestUltracookOutputContract:
+    """Behavioural output stays stable while resolution provenance exposes topology."""
 
-    def test_output_mode_invariance_stated(self) -> None:
-        body = _skill("ultracook")
-        body_lower = body.lower()
-        assert "mode-invariant" in body_lower or "mode invariance" in body_lower, (
-            "ultracook must state the output is mode-invariant across linear/parallel"
-        )
+    def test_output_contract_accounts_for_resolution_provenance(self) -> None:
+        body = _skill("ultracook").lower()
+        assert "behavioral output" in body
+        assert "resolution provenance" in body
+        assert "topology" in body
 
 
 class TestUltracookResume:

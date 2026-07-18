@@ -70,7 +70,7 @@ Content shared _across_ skills lives in the always-installed `cheese` skill's `r
 | `skills/cure/SKILL.md` | `/cure` | Fix user-selected findings, validate, and prepare the branch for shipping. |
 | `skills/plate/SKILL.md` | `/plate` | Final writing, validation, commit, and ordinary-or-stacked PR publication gate. Explicit topology choices win; obvious cohesive work opens as one PR, while stack recommendations and ambiguous shapes ask before mutation. |
 | `skills/hard-cheese/SKILL.md` | `/hard-cheese` (or `--hard` flag) | Metacognitive vibecheck gate before review — asks the author to explain the diff's causal logic, grades the explanation against the SOLO Taxonomy. Standalone or via `--hard` propagation through the pipeline. |
-| `skills/ultracook/SKILL.md` | `/ultracook` | Autonomous fresh-context pipeline for high-blast-radius specs. The decomposer picks the mode: a decomposable 2+-curd spec fans out into parallel curds (each running per-curd `cook → press → age → cure` in its own worktree, harvested back, then one post-merge review pass, ending in 1–N reviewable PRs); an indivisible spec runs the linear chain (`cook → press → age → cure → age → cure → age`, all `--auto`). Each phase runs inside its own full-peer sub-agent so review stays adversarial and parent context never bloats. |
+| `skills/ultracook/SKILL.md` | `/ultracook` | Autonomous fresh-context pipeline for high-blast-radius specs. Typed phase agents run each curd as sequential same-worktree spawns: coder (`cook`) → coder (`press`) → reviewer (`age`) → coder (`cure`) → reviewer (final `age`), followed by parent-owned commit-only `/plate`. Post-merge uses `press → age → cure → age`; an indivisible spec keeps the seven-phase linear chain. |
 | `skills/melt/SKILL.md` | `/melt` | Resolve merge / rebase / cherry-pick conflicts via the structural cascade (mergiraf → rerere → kdiff3) with batch, pick-side, and lockfile helpers. |
 | `skills/wheypoint/SKILL.md` | `/wheypoint` | Mark a checkpoint: compact a mid-task conversation into a durable handoff document at `.cheese/notes/<slug>.md` (resumable slug + state-mapped suggested-skills + redacted secrets) so a fresh agent can resume via `/cheese --continue <slug>`. |
 
@@ -83,6 +83,8 @@ The workflow skills can delegate code search, reading, and editing to these back
 | `skills/cheez-search/SKILL.md` | `/cheez-search` | AST-aware code/text/regex/caller search via tilth MCP, harness-native AST search, or LSP. Replaces grep / rg / find. |
 | `skills/cheez-read/SKILL.md` | `/cheez-read` | Smart file/directory reading through a freshness-aware backend; tilth MCP is preferred because it emits stale-write-safe edit tags. Replaces cat / head / tail / ls. |
 | `skills/cheez-write/SKILL.md` | `/cheez-write` | Anchored, surgical edits through tilth MCP or an equivalent harness-native stale-snapshot edit tool. Never rewrites whole files blindly. |
+
+Dispatching skills resolve agent type, power, permissions, isolation, and fallback through the shared [`agent-resolution.md`](skills/cheese/references/agent-resolution.md) contract.
 
 The `cheez-*` skills tell the model which source-code backend to use when the harness has one. Prefer tilth MCP by name; use LSP for type-grounded definitions/references/renames/code actions, `ast_grep`/`sg` for structural patterns and codemods, and anchored/stale-checking edits for ordinary block changes. Plain text shell tools are fallback evidence only, not equivalent source-code backends.
 
@@ -147,7 +149,7 @@ Easy-cheese is intentionally a small surface. What that means in practice:
 
 - **Skills only.** No agents, commands, eta templates, or compiled harness bundles. Each capability is a single `SKILL.md`.
 - **No repo-wide MCP requirement.** Workflow skills suggest tools (tilth, Context7, Tavily) but have host-native fallbacks. The cheez-* tool skills require an AST-aware search/read path and stale-checking edit path; prefer tilth when present, but equivalent native AST/LSP/anchored-edit backends satisfy the contract.
-- **One orchestrator skill, narrowly scoped.** `/ultracook` is the only orchestrator — it spawns full-peer sub-agents for the fixed `cook → press → age → cure → age → cure → age` chain on high-blast-radius specs. There is no large-feature decomposition, no PR-rescue convoy, no whole-repo NIH audit. Every other skill remains a single, scoped step a human can drive.
+- **One orchestrator skill, narrowly scoped.** `/ultracook` is the only orchestrator. It resolves planner/coder/reviewer phase agents by capability and minimum power; harvest and `/plate` remain parent-owned. Parallel curds use sequential same-worktree phase spawns and a terminal reviewer pass before publication.
 - **No automatic re-age loop in `/cure`.** The skill describes the protocol; the human runs the next `/age` when ready.
 
 ## Optional tools

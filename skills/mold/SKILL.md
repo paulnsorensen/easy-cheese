@@ -2,6 +2,7 @@
 name: mold
 description: Converge a fuzzy idea or half-formed feature into an approved spec through an iterative, grounded design dialogue. Use when the user has a fuzzy idea or design direction — phrases like "let's design X", "I'm thinking about Y", "what should the API for Z look like", "shape this into a spec", "what would it take to build/set up X", "I want to add a feature that…", "/mold". Use even when the user is "just thinking out loud" if they want the dialogue to leave behind a written artifact. Do NOT use for free-form discussion with no artifact intent (`/culture`), direct implementation (`/cook`), or research-only questions (`/briesearch`).
 license: MIT
+metadata: {dispatches-agents: true}
 ---
 
 # /mold
@@ -166,3 +167,14 @@ The spec is large enough that per-phase context contamination becomes a real con
 - Do not write production files before the approval gate.
 - Do not silently settle uncertain claims.
 - Apply the shared voice kernel (lives at `../age/references/voice.md`): correct false premises, flag confidence as `certain | speculating | don't know` on each critical claim, steelman before dismissing, and ask the user the decisions that shape the design — contributing full depth to inform each question, never to replace asking it.
+
+## Agent resolution
+
+Resolve exploration and research delegates through [`../cheese/references/agent-resolution.md`](../cheese/references/agent-resolution.md).
+
+| Work | Preferred types | Permissions/isolation | Minimum power | Effort | Fallback |
+| --- | --- | --- | --- | --- | --- |
+| Explore the codebase | explorer | read-only, fresh-context | default | medium | compatible explorer, then general |
+| Research external constraints | researcher | read-only, fresh-context | default | medium | compatible researcher, then general |
+
+The canonical mold spec or mini-spec carries the shared `agent_resolution` block.

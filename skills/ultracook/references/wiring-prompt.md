@@ -1,9 +1,12 @@
 # Per-wiring task worker prompt template
 
-Loaded by `/ultracook` at Phase 4. Substitute `{id}`, `{slug}`, `{type}`, `{file}`, `{description}`, and `{spec_summary}` before dispatch.
+Loaded by `/ultracook` at Phase 4. Substitute `{id}`, `{slug}`, `{type}`, `{file}`, `{description}`, `{spec_summary}`, and `{agent_resolution}` before dispatch.
 
 ````text
 You are performing integration wiring task: {id} for spec {slug}
+
+Resolved role: coder
+Agent resolution: {agent_resolution}
 
 ## Task
 
@@ -41,6 +44,7 @@ status: ok | halt: <one-line reason>
 next: merge | done
 artifact: <path-to-richer-report-if-any>
 <one-line orientation: what this wiring task did>
+agent_resolution: {agent_resolution}
 ```
 
 ## Do NOT

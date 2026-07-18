@@ -2,6 +2,7 @@
 name: hard-cheese
 description: Metacognitive vibecheck gate before code is shared for review — make the author explain the diff's causal logic, graded by a fresh-context judge against the SOLO Taxonomy. Use when the user wants this gate — phrases like "/hard-cheese", "/cheese --hard", "gate this before I push", "vibecheck me", "make sure I understand this diff", "epistemic-debt check". Use standalone before opening a PR, or as the `--hard` flag propagated through the pipeline. Do NOT use for code review (`/age`), test hardening (`/press`), or fix application (`/cure`).
 license: MIT
+metadata: {dispatches-agents: true}
 ---
 
 # /hard-cheese
@@ -112,11 +113,11 @@ The attempt log uses a 6-column markdown table (written by `append-attempt`):
 
 Attempts append; nothing is overwritten within a single invocation. If a re-invocation finds the artifact stale (HEAD moved), new attempt rows are appended below the prior ones — the trail is cumulative.
 
-## Sub-agent contract — fresh peer, not diminutive
+## Sub-agent contract — fresh judge
 
-- **Fresh context, every invocation.** Same-context judging is biased toward "yes you understand it" because the model that helped write the code believes the code is good. The fresh context is the entire reason the judge means anything.
-- **Judge sub-agent type: no-tool or read-only — never `general-purpose`, which grants full write access the judge must not have** (e.g. the read-only built-in `Explore` agent; harness-agnostic selection lives in `../age/references/sub-agent-gate.md`). `references/judge-prompt.md` is the system prompt. Model inherits from the parent — do not pass `haiku` or any other tier downgrade.
-- **No tools needed for the judge.** It reads the prompt, diff summary, spec excerpt, and explanation, then returns JSON. No file access, no shell, no MCP — the judge is a graded read-only call.
+- **Fresh context, every invocation.** Same-context judging is biased toward the code it helped write.
+- Resolve a no-tool or read-only `reviewer` through the shared agent resolver at `default` power and `high` effort. A general worker qualifies only with prompt-only no-write enforcement and `degraded: true`.
+- `references/judge-prompt.md` is the system prompt. The judge reads the supplied diff summary, spec excerpt, and explanation, then returns JSON without repository writes.
 - **JSON output is parsed.** If parsing fails, the attempt is logged as `ERROR` and the gate fails open (see `## Divergence from the paper`).
 
 If the host harness has no sub-agent primitive, `/hard-cheese` is the wrong skill — the gate cannot run without a fresh judge. Recommend `/hard-cheese --no-judge` for users who still want the explanation captured as telemetry without the grading step.
@@ -189,3 +190,13 @@ Followed by:
 - `references/composition.md` — the full `--hard` / `--auto` matrix and the single puncture point.
 - `skills/hard-cheese/scripts/hard-cheese.pyz freshness-check` — checks whether a previous PASS is still fresh for the current HEAD and passing score (step 2).
 - `skills/hard-cheese/scripts/hard-cheese.pyz append-attempt` — atomically appends an attempt row to the audit trail (step 6).
+
+## Agent resolution
+
+Resolve the fresh judge through [`../cheese/references/agent-resolution.md`](../cheese/references/agent-resolution.md).
+
+| Work | Preferred types | Permissions/isolation | Minimum power | Effort | Fallback |
+| --- | --- | --- | --- | --- | --- |
+| Grade the explanation | reviewer | no-tool or read-only, fresh-context | default | high | compatible reviewer, then general |
+
+The canonical hard-cheese audit carries the shared `agent_resolution` block.

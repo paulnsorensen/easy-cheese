@@ -10,8 +10,7 @@ The sub-agent returns roughly 2 KB or less: structured summary, citations, gaps.
 
 ## Harness-agnostic sub-agent selection
 
-"Small, fast sub-agent" means whatever cheap-tier or read-only worker the host harness exposes (e.g. an explore-style default, a lighter task-tier worker, or a separate context window). Skills do not name specific model tiers; the harness chooses.
-
+Resolve every worker through [`../../cheese/references/agent-resolution.md`](../../cheese/references/agent-resolution.md). The calling skill supplies the work, permission/isolation floor, minimum power, effort, and fallback; this context kernel only governs digest boundaries.
 ## What the parent never delegates
 
 - Severity grading, final verdicts, approval gates. **Exception (scope-limited):** a skill may delegate single-dimension grading to a per-dimension worker **iff** the parent retains final cross-dimension reconciliation and the verdict — the verdict and the cross-cutting grade stay central. This exception does not loosen the default for any other case.

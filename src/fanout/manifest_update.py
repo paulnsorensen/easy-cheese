@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Atomic, schema-validated updates to an /ultracook fan-out run manifest.
 
-Three subcommands rewrite one field at a time:
+Commands rewrite bounded manifest state atomically:
 
     set-phase         --manifest <path> --phase <new-phase>
-    set-curd-status   --manifest <path> --curd <id> --status <status> [--commit-sha <sha>]
+    set-curd-status   --manifest <path> --curd <id> --status <status> [--commit-sha <sha>] [review context flags]
+    set-post-review   --manifest <path> <review context flags> [post-review fields]
     set-wiring-status --manifest <path> --wiring <id> --status <status> [--commit-sha <sha>]
     check-files       --manifest <path> [--root <repo-root>]
 
@@ -213,6 +214,19 @@ def cmd_set_curd_status(args: argparse.Namespace) -> None:
     def _body() -> None:
         data, original = _load_manifest(path)
         curd = _find_curd(data, args.curd)
+        review_values = (args.base_commit, args.reviewed_tree_oid, args.diff_hash, args.scope)
+        if any(value is not None for value in review_values):
+            if any(value is None for value in review_values):
+                raise cli.CliError(
+                    "review context requires --base-commit, --reviewed-tree-oid, "
+                    "--diff-hash, and at least one --scope"
+                )
+            curd["review_context"] = {
+                "base_commit": args.base_commit,
+                "reviewed_tree_oid": args.reviewed_tree_oid,
+                "diff_hash": args.diff_hash,
+                "scope": args.scope,
+            }
         curd["status"] = args.status
         if args.commit_sha is not None:
             curd["commit_sha"] = args.commit_sha
@@ -220,6 +234,37 @@ def cmd_set_curd_status(args: argparse.Namespace) -> None:
 
     _with_flock(lock, _body)
     cli.emit(f"curd {args.curd} status set to {args.status}")
+
+
+def cmd_set_post_review(args: argparse.Namespace) -> None:
+    path = Path(args.manifest)
+    lock = path.parent / ("." + path.name + ".lock")
+
+    def _body() -> None:
+        data, original = _load_manifest(path)
+        context = {
+            "base_commit": args.base_commit,
+            "reviewed_tree_oid": args.reviewed_tree_oid,
+            "diff_hash": args.diff_hash,
+            "scope": args.scope,
+        }
+        data["current_review"] = context
+        existing = data.get("post_review")
+        post_review = dict(existing) if isinstance(existing, dict) else {}
+        post_review["review_context"] = {**context, "scope": list(args.scope)}
+        for key in ("press_slug", "age_slug", "cure_slug"):
+            value = getattr(args, key)
+            if value is not None:
+                post_review[key] = value
+        for key in ("findings_applied", "findings_deferred"):
+            value = getattr(args, key)
+            if value is not None:
+                post_review[key] = value
+        data["post_review"] = post_review
+        _commit(path, data, original)
+
+    _with_flock(lock, _body)
+    cli.emit("post-merge review identity recorded")
 
 
 def _find_wiring(data: dict[str, Any], wiring_id: str) -> dict[str, Any]:
@@ -301,7 +346,26 @@ def _setup(parser: argparse.ArgumentParser) -> None:
     sc.add_argument("--curd", required=True, type=int)
     sc.add_argument("--status", required=True)
     sc.add_argument("--commit-sha", default=None)
+    sc.add_argument("--base-commit", default=None)
+    sc.add_argument("--reviewed-tree-oid", default=None)
+    sc.add_argument("--diff-hash", default=None)
+    sc.add_argument("--scope", action="append", default=None)
     sc.set_defaults(func=cmd_set_curd_status)
+
+    sr = subs.add_parser(
+        "set-post-review", help="atomically record final post-merge review identity"
+    )
+    sr.add_argument("--manifest", required=True)
+    sr.add_argument("--base-commit", required=True)
+    sr.add_argument("--reviewed-tree-oid", required=True)
+    sr.add_argument("--diff-hash", required=True)
+    sr.add_argument("--scope", action="append", required=True)
+    sr.add_argument("--press-slug", default=None)
+    sr.add_argument("--age-slug", default=None)
+    sr.add_argument("--cure-slug", default=None)
+    sr.add_argument("--findings-applied", type=int, default=None)
+    sr.add_argument("--findings-deferred", type=int, default=None)
+    sr.set_defaults(func=cmd_set_post_review)
 
     sw = subs.add_parser("set-wiring-status", help="update one wiring row's status")
     sw.add_argument("--manifest", required=True)

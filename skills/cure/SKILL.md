@@ -2,6 +2,7 @@
 name: cure
 description: Apply fixes from an /age report, finding list, or CI failure, then run the project's test/lint/build gates and hand a clean cure to /plate for commit/publication. Use when the user wants selected findings resolved. Do NOT use for review (route to /age), test authoring (route to /press), or direct publication (route to /plate).
 license: MIT
+metadata: {dispatches-agents: true}
 ---
 
 # /cure
@@ -194,3 +195,13 @@ In both cases terminal `/plate` dispatch is suppressed — the orchestrator owns
 
 Iron Law, Red Flags, and the fix-application Rationalization table live in
 [`references/cure-discipline.md`](references/cure-discipline.md).
+
+## Agent resolution
+
+Resolve fix application through [`../cheese/references/agent-resolution.md`](../cheese/references/agent-resolution.md).
+
+| Work | Preferred types | Permissions/isolation | Minimum power | Effort | Fallback |
+| --- | --- | --- | --- | --- | --- |
+| Apply selected findings | coder | write, isolated-worktree | default | high | compatible coder, then general |
+
+The canonical cure handoff carries the shared `agent_resolution` block.

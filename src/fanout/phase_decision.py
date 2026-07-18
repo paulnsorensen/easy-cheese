@@ -10,21 +10,19 @@ deterministic verdict naming the next phase to spawn (or the reason to stop).
 that runs after index `i` is `table[i + 1]`; the last entry is terminal
 (`next_phase=None`). Three tables ship:
 
-- `LINEAR_TABLE` — the deep 7-phase chain for linear mode. Unchanged from the
-  original single-mode ultracook, so linear behaviour is byte-for-byte the same.
-- `PARALLEL_CURD` — the per-curd pipeline run in each curd's own worktree.
-- `PARALLEL_POSTMERGE` — the single review pass over the merged diff.
+- `LINEAR_TABLE` — the fixed 7-phase chain for linear mode.
+- `PARALLEL_CURD` — the per-curd pipeline ending in a final age pass.
+- `PARALLEL_POSTMERGE` — the merged-diff pass ending in a final age pass.
 
-Any `status` beginning with `halt` short-circuits to `action=halt`. An age phase
-that reports `next: done` triggers `action=stop_early` because the medium+
-severity floor is already met; the chain skips the remaining cure/age spawns.
+Any `status` beginning with `halt` short-circuits to `action=halt`. In linear mode, a nonterminal age that reports `next: done` triggers `action=stop_early`. Parallel tables ignore that early signal and run their complete sequence through cure and final age.
 
 Inputs:
 
     --phase-index <int>     Which phase just returned (0-indexed into the table).
     --status <ok|halt:...>  Status field from the handoff slug.
     --next <name>           Optional. The `next` field from the handoff slug;
-                            only consulted on age phases to detect early-stop.
+                            terminal age always gates publication, while only
+                            linear mode permits nonterminal early-stop.
     --table <name>          Which table to walk (default: linear).
 
 Output (JSON):
@@ -45,8 +43,8 @@ import cli
 # A phase table is an ordered list of phase names; the phase that runs after
 # index i is table[i + 1], and the last entry is terminal.
 LINEAR_TABLE: list[str] = ["cook", "press", "age", "cure", "age", "cure", "age"]
-PARALLEL_CURD: list[str] = ["cook", "press", "age", "cure"]
-PARALLEL_POSTMERGE: list[str] = ["press", "age", "cure"]
+PARALLEL_CURD: list[str] = ["cook", "press", "age", "cure", "age"]
+PARALLEL_POSTMERGE: list[str] = ["press", "age", "cure", "age"]
 
 TABLES: dict[str, list[str]] = {
     "linear": LINEAR_TABLE,
@@ -65,6 +63,7 @@ def decide(
     next_field: str | None = None,
     *,
     table: list[str] = LINEAR_TABLE,
+    allow_early_stop: bool | None = None,
 ) -> dict:
     """Pure decision — no I/O. Raises CliError on invalid phase index."""
     max_index = len(table) - 1
@@ -74,6 +73,8 @@ def decide(
         )
     current_phase = table[phase_index]
     next_phase = table[phase_index + 1] if phase_index < max_index else None
+    if allow_early_stop is None:
+        allow_early_stop = table is LINEAR_TABLE
 
     if _is_halt(status):
         return {
@@ -82,18 +83,35 @@ def decide(
             "exit_message": f"{current_phase} (phase {phase_index}) halted: {status.strip()}",
         }
 
-    # Terminal phase — the table is exhausted whether next says "done" or not.
+    # The terminal entry of every table is the final review; it is publishable
+    # only when it positively reports done. Missing/next=cure means findings
+    # remain and publication must halt.
     if next_phase is None:
+        if (next_field or "").strip().lower() == "done":
+            return {
+                "action": "stop",
+                "next_phase": None,
+                "exit_message": (
+                    f"chain complete after final {current_phase} (phase {phase_index}); "
+                    "review reported next=done"
+                ),
+            }
         return {
-            "action": "stop",
+            "action": "halt",
             "next_phase": None,
-            "exit_message": f"chain complete after final {current_phase} (phase {phase_index})",
+            "exit_message": (
+                f"final {current_phase} (phase {phase_index}) is not publishable: "
+                f"next={(next_field or 'missing').strip()}"
+            ),
         }
 
-    # Early-stop: an age phase reports `next: done` when the diff is clean at
-    # the medium+ severity floor. Cure never writes `next: done`, so this only
-    # fires on age phases.
-    if current_phase == "age" and (next_field or "").strip().lower() == "done":
+    # Linear mode may stop on an early clean age. Parallel tables must execute
+    # their complete typed sequence through cure and final age.
+    if (
+        allow_early_stop
+        and current_phase == "age"
+        and (next_field or "").strip().lower() == "done"
+    ):
         return {
             "action": "stop_early",
             "next_phase": None,
@@ -111,7 +129,13 @@ def decide(
 
 
 def _cmd_decide(args: argparse.Namespace) -> None:
-    verdict = decide(args.phase_index, args.status, args.next, table=TABLES[args.table])
+    verdict = decide(
+        args.phase_index,
+        args.status,
+        args.next,
+        table=TABLES[args.table],
+        allow_early_stop=args.table == "linear",
+    )
     cli.emit(verdict, json_mode=True)
 
 

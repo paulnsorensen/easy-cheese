@@ -35,7 +35,7 @@ Name the semantic contract first:
 
 - fresh context or same context
 - read-only or write-capable
-- full peer or diminished worker
+- minimum power (`cheap | default | powerful`) and whether the selection is `degraded`
 - synchronous return or fire-and-forget
 - phase-only or may chain
 
@@ -46,6 +46,8 @@ Then show the host-specific syntax as an example:
 - OMP: `task(...)`
 
 Treat every syntax name as an example. Discover the active host capability and gate on fresh context, tool scope, and synchronous completion rather than a versioned identifier.
+
+Agent selection, minimum power, fallback order, permission degradation, and artifact provenance are normative in [`agent-resolution.md`](agent-resolution.md). Use that resolver before rendering any host-specific dispatch.
 
 ## GitHub operations
 

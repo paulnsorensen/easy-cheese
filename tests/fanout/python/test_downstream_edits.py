@@ -1,11 +1,4 @@
-"""Lint tests for downstream SKILL.md edits required by the ultracook retirement.
-
-After folding /cheese-factory into /ultracook:
-- /age must document the inline-degrade mode for sub-agent invocation.
-- /cheese must route decomposable specs to /ultracook (parallel mode).
-
-These tests assert those clauses are present so silent removal surfaces in CI.
-"""
+"""Lint tests for typed ultracook phase dispatch and downstream routing."""
 
 from __future__ import annotations
 
@@ -37,26 +30,14 @@ def agents_body() -> str:
     return (REPO_ROOT / "AGENTS.md").read_text(encoding="utf-8")
 
 
-class TestAgeInlineDegrade:
-    def test_inline_degrade_section_exists(self, age_body: str) -> None:
-        # Header style follows existing /age conventions (### sub-section).
-        assert "Inline-degrade mode" in age_body
+class TestAgeUltracookDispatch:
+    def test_ultracook_uses_fresh_reviewer_agents(self, age_body: str) -> None:
+        assert "fresh-context" in age_body.lower()
+        assert "reviewer" in age_body.lower()
 
-    def test_marker_phrase_documented(self, age_body: str) -> None:
-        # The detection marker must be named so ultracook curd workers
-        # know what to pass.
-        assert "invoked-from: ultracook-curd" in age_body
-
-    def test_nesting_limit_rationale_present(self, age_body: str) -> None:
-        # The "why" must travel with the contract — level-2 nesting is the
-        # specific harness limit being honoured.
-        lowered = age_body.lower()
-        assert "nesting" in lowered, "must name the nesting-depth limit"
-
-    def test_output_identity_guaranteed(self, age_body: str) -> None:
-        # Output between fan-out and inline-degrade must be identical or
-        # downstream chaining breaks.
-        assert "identical" in age_body.lower() or "same" in age_body.lower()
+    def test_parallel_curd_inline_degrade_is_removed(self, age_body: str) -> None:
+        assert "invoked-from: ultracook-curd" not in age_body
+        assert "Inline-degrade mode" not in age_body
 
 
 class TestCheeseRoutesToUltracook:
