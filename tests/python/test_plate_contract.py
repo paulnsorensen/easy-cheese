@@ -103,7 +103,7 @@ def test_ultracook_preflights_parallel_publication_before_commits() -> None:
     planner = read("skills/ultracook/references/pr-planner-prompt.md")
 
     preflight = skill.index("Publication topology preflight")
-    seed = skill.index("**Seed (inline).**")
+    seed = skill.index("**Seed (coder).**")
     assert preflight < seed
     assert "before Phase 1 seed or any worker commit" in skill
     assert "persist `single` without asking" in skill

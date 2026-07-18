@@ -2,6 +2,7 @@
 name: affinage
 description: Triage a PR's review comments and failing CI (plus merge conflicts) through the /age lens, deciding which claims are worth acting on. Use when the user says "respond to PR comments", "handle review feedback", "affinage the PR", "/affinage <pr>", "fix the failing build", "resolve the conflicts and respond". Do NOT use for a bare diff with no PR (route to /age).
 license: MIT
+metadata: {dispatches-agents: true}
 ---
 
 # /affinage
@@ -95,7 +96,7 @@ When `affinage.pyz pr-status` reports `merge.mergeable: CONFLICTING` or `merge.s
 
 ## Sub-agent context gate
 
-`/affinage` keeps dialogue, selection, approval state, and reply posting in the parent context. Spawn a read-only grading sub-agent — the `reviewer` phase-agent — only when the parent context would balloon (if the named `reviewer` isn't available, e.g. a harness that installs only easy-cheese, fall back to the read-only built-in `Explore` agent or inline grading — never `general-purpose`, which grants full write access):
+`/affinage` keeps dialogue, selection, approval state, and reply posting in the parent context. When the parent context would balloon, resolve a fresh read-only `reviewer` through the shared agent resolver. A compatible reviewer is preferred; a general worker qualifies only with prompt-only no-write enforcement and `degraded: true`:
 
 - Total input count (comments + CI failures) exceeds 10.
 - Diff exceeds ~25 KB.
@@ -280,3 +281,13 @@ If no findings meet the floor, skip the `/cure` dispatch, post replies for `Revi
 - `../cheese/references/handoff-gate.md` — gate primitives.
 - `python3 skills/affinage/scripts/affinage.pyz post-reply` — reply posting with `agent on behalf of <handle>` attribution.
 - `python3 skills/affinage/scripts/affinage.pyz pr-status` — PR status fetcher.
+
+## Agent resolution
+
+Resolve each dispatch through [`../cheese/references/agent-resolution.md`](../cheese/references/agent-resolution.md).
+
+| Work | Preferred types | Permissions/isolation | Minimum power | Effort | Fallback |
+| --- | --- | --- | --- | --- | --- |
+| Triage review claims and CI evidence | reviewer | read-only, fresh-context | powerful | high | compatible reviewer, then general |
+
+The canonical affinage report carries the shared `agent_resolution` block.

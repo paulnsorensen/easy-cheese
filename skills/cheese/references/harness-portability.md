@@ -47,6 +47,8 @@ Then show the host-specific syntax as an example:
 
 Treat every syntax name as an example. Discover the active host capability and gate on fresh context, tool scope, and synchronous completion rather than a versioned identifier.
 
+Agent selection, minimum power, fallback order, permission degradation, and artifact provenance are normative in [`agent-resolution.md`](agent-resolution.md). Use that resolver before rendering any host-specific dispatch.
+
 ## GitHub operations
 
 State the GitHub action first: read PR state, post a reply, push a branch, open a PR. Then name the transport:

@@ -59,16 +59,15 @@ class TestSpawnPhases:
 class TestStopTerminal:
     """Phase 6 is the final age; the chain table is exhausted."""
 
-    def test_phase_6_returns_stop(self, phase_decision: ModuleType) -> None:
-        # Acceptance: phase index 6 returns action=stop.
-        result = phase_decision.decide(6, "ok")
+    def test_phase_6_returns_stop_when_done(self, phase_decision: ModuleType) -> None:
+        result = phase_decision.decide(6, "ok", "done")
         assert result["action"] == "stop"
         assert result["next_phase"] is None
 
-    def test_phase_6_stop_even_with_next_done(self, phase_decision: ModuleType) -> None:
-        # Terminal stop wins over early-stop signal — the chain ends here either way.
-        result = phase_decision.decide(6, "ok", "done")
-        assert result["action"] == "stop"
+    def test_phase_6_halts_when_review_requests_cure(self, phase_decision: ModuleType) -> None:
+        result = phase_decision.decide(6, "ok", "cure")
+        assert result["action"] == "halt"
+        assert "not publishable" in result["exit_message"]
 
 
 class TestHaltShortCircuit:
@@ -182,8 +181,8 @@ class TestCli:
         assert payload["action"] == "spawn"
         assert payload["next_phase"] == "press"
 
-    def test_phase_6_returns_stop(self) -> None:
-        result = _run_cli("--phase-index", "6", "--status", "ok")
+    def test_phase_6_returns_stop_when_done(self) -> None:
+        result = _run_cli("--phase-index", "6", "--status", "ok", "--next", "done")
         assert result.returncode == 0
         payload = json.loads(result.stdout)
         assert payload["action"] == "stop"

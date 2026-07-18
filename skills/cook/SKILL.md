@@ -2,6 +2,7 @@
 name: cook
 description: Implement an approved spec or focused unambiguous task, editing through cheez-write. Use when the user wants code written — "implement this", "cook this spec", "/cook .cheese/specs/<slug>.md", or "fix this bug" when the fix is clear; also when the user just says "go" or "ship it" with a spec or clear acceptance criteria in scope. Runs standalone on an unambiguous task — a spec helps but is not required. Do NOT use for fuzzy planning (`/mold`), no-write discussion (`/culture`), or review-only work (`/age`).
 license: MIT
+metadata: {dispatches-agents: true}
 ---
 
 # /cook
@@ -165,3 +166,14 @@ Next step:      review the diff, then /plate when ready
 Iron Law, Red Flags, and the TDD Rationalization table live in
 [`references/cook-discipline.md`](references/cook-discipline.md).
 See [`../cheese/references/skill-authoring.md`](../cheese/references/skill-authoring.md) for the template these follow.
+
+## Agent resolution
+
+Resolve implementation and taste-test dispatches through [`../cheese/references/agent-resolution.md`](../cheese/references/agent-resolution.md).
+
+| Work | Preferred types | Permissions/isolation | Minimum power | Effort | Fallback |
+| --- | --- | --- | --- | --- | --- |
+| Implement the contract | coder | write, isolated-worktree | default | high | compatible coder, then general |
+| Fresh-context taste-test | reviewer | read-only, fresh-context | powerful | high | compatible reviewer, then general |
+
+The canonical cook handoff and package report carry the shared `agent_resolution` block.

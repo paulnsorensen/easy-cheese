@@ -2,6 +2,7 @@
 name: age
 description: Review a diff, PR, branch, or path across ten orthogonal dimensions (correctness, security, encapsulation, spec, complexity, deslop, assertions, NIH, efficiency, telemetry) and emit a severity-grouped findings report. Use when the user wants a code review — phrases like "review this", "/age", "is this safe to merge", "find bugs", "spot security issues", "check for slop", "review my PR", "what's wrong with this code". Use even when the user only asks for one dimension — the report scopes itself. Do NOT use for applying fixes (route to /cure) or test hardening (route to /press).
 license: MIT
+metadata: {dispatches-agents: true}
 ---
 
 # /age
@@ -125,7 +126,7 @@ Beyond `cheez-*` there are review-specific tools:
 
 ## Sub-agent context gate
 
-`/age` should fork a read-only review-context sub-agent — the `explorer` phase-agent, which gathers diff / caller / dependency evidence and returns a digest without grading — when evidence gathering is likely to exceed the parent context, especially for `--comprehensive` reviews. If the named `explorer` agent isn't available (e.g. a harness that installs only easy-cheese), fall back to the read-only built-in `Explore` agent or an inline read — never `general-purpose`, which grants full write access.
+`/age` should fork a read-only review-context sub-agent — preferably the `explorer` phase-agent — when evidence gathering is likely to exceed the parent context, especially for `--comprehensive` reviews. Resolve the worker through `../cheese/references/agent-resolution.md`: require read-only permissions and fresh context, prefer the exact specialist, then a compatible specialist, then a prompt-constrained general agent with `degraded: true`. Fall back inline only when dispatch itself is unavailable.
 
 **Scale threshold** — spawn when any of these are true:
 
@@ -144,7 +145,7 @@ Activates when **all** hold: the **scale threshold** (above) is met AND `/age` i
 
 **Seam 2 — Shared context packet.** The orchestrator assembles the packet once, writes it to `.cheese/age/<slug>-packet.md`, and each worker reads it. Eight components, and the reuse of the review-context digester as the orientation block, are documented in `references/packet.md`.
 
-**Seam 3 — Worker contract.** One worker per dimension — dispatch the `reviewer` phase-agent scoped to a single dimension (if the named `reviewer` isn't available, e.g. a harness that installs only easy-cheese, fall back to the read-only built-in `Explore` agent or the single-parent path — never `general-purpose`, which grants full write access). Each worker:
+**Seam 3 — Worker contract.** One worker per dimension. Resolve the `reviewer` role through `../cheese/references/agent-resolution.md`, requiring read-only permissions and fresh context; a prompt-constrained general fallback is allowed only with `degraded: true`. Each worker:
 - Reviews only its assigned dimension.
 - Computes **full per-finding severity** for that dimension (base + location bump + compounding bump).
 - Tags each finding with its dimension and an `also-relevant-to: [<dim>, ...]` field when cross-dimension overlap is suspected.
@@ -155,7 +156,7 @@ Activates when **all** hold: the **scale threshold** (above) is met AND `/age` i
 
 **Seam 5 — Shared impact evidence.** The packet carries the caller/dependency notes assembled through `tilth_deps` and `/cheez-search`. Workers use that packet instead of rebuilding impact context independently.
 
-**Output mode-invariance (invariant).** The findings report (`.cheese/age/<slug>.md`) is identical in shape — same dedup rule, same severity grouping, same finding format — whether produced by the single-parent path or fan-out mode. Only the internal execution path differs. This invariant also holds for inline-degrade mode (see `### Inline-degrade mode`).
+**Output shape invariant.** The findings report (`.cheese/age/<slug>.md`) has the same dedup, severity grouping, and finding format in the single-parent and fan-out paths. Resolution provenance may expose the selected role and topology.
 
 ## Output
 
@@ -328,19 +329,7 @@ When invoked with `--auto`:
 
 - Write `.cheese/age/<slug>.md` (with the handoff slug at the top) and stop. Do not invoke `/cure <slug> --auto --stake medium+` from inside the sub-agent.
 - Set `next:` from what you observe on this run, not from any guess about chain position. `next: cure` when at least one finding meets the **medium+ floor**; `next: done` when none do.
-- The two-cure-pass cap is enforced by ultracook's fixed chain length, not by age's `next:` field. Fresh-context age cannot count prior cure passes anyway, so this is the only honest contract. The orchestrator uses `next: done` for early-stop signalling; the natural terminal stop is the chain table running out of entries.
-
-### Inline-degrade mode (invoked from a sub-agent, e.g. /ultracook parallel-mode curd worker)
-
-When `/age` detects it is running as a sub-agent (the parent passes the `invoked-from: ultracook-curd` marker or equivalent context line in the prompt), it runs its ten dimensions inline within its own context instead of spawning per-dimension sub-agents. This honours the host's nesting-depth limit (harnesses cap sub-agent nesting depth, and the orchestrator's own spawn may already sit at that cap).
-
-Detection mechanism: scan the invoking prompt for an `invoked-from:` line — values like `ultracook-curd`, `fromagerie-curd`, or any harness-specific marker the orchestrator passes in. When present, switch modes:
-
-- Run every dimension's review inline. Do not fork the read-only review-context sub-agent gate (`## Sub-agent context gate` above is skipped under inline-degrade).
-- Output shape is mode-invariant — same findings report and handoff slug format whether fan-out or inline-degrade; see **Output mode-invariance** in `### Scale-triggered fan-out mode` above.
-- Honour the no-chain-forward directive as usual: write the slug and stop. Do not invoke `/cure` from the sub-agent — the orchestrator owns the chain.
-
-Inline-degrade is forced when the marker is present (no opt-out); it takes precedence even above the fan-out threshold — fan-out is forbidden when `/age` runs as a sub-agent because the nesting depth is already consumed.
+- The two-cure-pass cap is enforced by ultracook's fixed chain length. The terminal age is publishable only with `next: done`; `next: cure` or a missing `next` halts without publishing. Parallel curds and post-merge review dispatch age as a top-level fresh-context reviewer, never as nested inline self-review.
 
 ## Rules
 
@@ -359,3 +348,13 @@ Inline-degrade is forced when the marker is present (no opt-out); it takes prece
 - `references/voice.md` — shared output discipline, reasoning posture, and confidence vocabulary.
 - `references/deslop-rust.md` / `references/deslop-typescript.md` / `references/deslop-python.md` / `references/deslop-shell.md` / `references/deslop-go.md` — per-language `deslop` pattern catalogs with lint-rule mappings and citations.
 - `references/sub-agent-gate.md` — shared sub-agent kernel: digest contract, harness-agnostic selection, what the parent never delegates.
+
+## Agent resolution
+
+Resolve every dimension worker and fresh-context review through [`../cheese/references/agent-resolution.md`](../cheese/references/agent-resolution.md).
+
+| Work | Preferred types | Permissions/isolation | Minimum power | Effort | Fallback |
+| --- | --- | --- | --- | --- | --- |
+| Review a diff or one dimension | reviewer | read-only, fresh-context | powerful | high | compatible reviewer, then general |
+
+The canonical age report/handoff carries the shared `agent_resolution` block.

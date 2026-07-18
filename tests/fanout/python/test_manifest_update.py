@@ -39,6 +39,22 @@ def _manifest() -> dict:
         "phase": "gate_approved",
         "quality_gates": ["just check"],
         "host_capabilities": {"gh": True},
+        "agent_resolution": {
+            "request": {
+                "work": "test",
+                "preferred_types": ["planner"],
+                "required_tools": ["read"],
+                "permissions": "read-only",
+                "isolation": "fresh-context",
+                "minimum_power": "powerful",
+                "effort": "high",
+            },
+            "attempts": [{"type": "planner", "model": "test", "power": "powerful", "result": "accepted", "reason": "exact"}],
+            "resolved": {"type": "planner", "model": "test", "power": "powerful", "effort": "high", "topology": "sequential"},
+            "fallback_reason": None,
+            "degraded": False,
+            "permission_enforcement": "tool-restricted",
+        },
         "seed": {"items": []},
         "curds": _curds(),
         "wiring": [
@@ -123,13 +139,45 @@ class TestSetCurdStatus:
             "completed",
             "--commit-sha",
             "deadbeef",
+            "--base-commit",
+            "A" * 40,
+            "--reviewed-tree-oid",
+            "b" * 64,
+            "--diff-hash",
+            "sha256:" + "C" * 64,
+            "--scope",
+            "src/feature_2.ts",
         )
         assert result.returncode == 0, result.stderr
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
         curd = next(c for c in data["curds"] if c["id"] == 3)
         assert curd["status"] == "completed"
         assert curd["commit_sha"] == "deadbeef"
+        assert curd["review_context"] == {
+            "base_commit": "A" * 40,
+            "reviewed_tree_oid": "b" * 64,
+            "diff_hash": "sha256:" + "C" * 64,
+            "scope": ["src/feature_2.ts"],
+        }
         assert _validate(path).returncode == 0
+
+    def test_completed_without_review_context_is_rejected(self, tmp_path: Path) -> None:
+        path = _write_fixture(tmp_path)
+        original = path.read_bytes()
+        result = _run_cli(
+            "set-curd-status",
+            "--manifest",
+            str(path),
+            "--curd",
+            "3",
+            "--status",
+            "completed",
+            "--commit-sha",
+            "deadbeef",
+        )
+        assert result.returncode == 2
+        assert "review_context is required" in result.stderr
+        assert path.read_bytes() == original
 
     def test_other_curds_untouched(self, tmp_path: Path) -> None:
         path = _write_fixture(tmp_path)
@@ -153,6 +201,63 @@ class TestSetCurdStatus:
         )
         assert result.returncode == 2
         assert "curd id 999 not found" in result.stderr
+
+
+class TestSetPostReview:
+    def test_atomically_records_review_identity_and_allows_phase_advance(
+        self, tmp_path: Path
+    ) -> None:
+        path = _write_fixture(tmp_path)
+        result = _run_cli(
+            "set-post-review",
+            "--manifest",
+            str(path),
+            "--base-commit",
+            "A" * 40,
+            "--reviewed-tree-oid",
+            "b" * 64,
+            "--diff-hash",
+            "sha256:" + "C" * 64,
+            "--scope",
+            "src",
+            "--press-slug",
+            ".cheese/press/feature.md",
+            "--age-slug",
+            ".cheese/age/feature.md",
+            "--cure-slug",
+            ".cheese/cure/feature.md",
+            "--findings-applied",
+            "2",
+            "--findings-deferred",
+            "0",
+        )
+        assert result.returncode == 0, result.stderr
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        context = {
+            "base_commit": "A" * 40,
+            "reviewed_tree_oid": "b" * 64,
+            "diff_hash": "sha256:" + "C" * 64,
+            "scope": ["src"],
+        }
+        assert data["current_review"] == context
+        assert data["post_review"] == {
+            "review_context": context,
+            "press_slug": ".cheese/press/feature.md",
+            "age_slug": ".cheese/age/feature.md",
+            "cure_slug": ".cheese/cure/feature.md",
+            "findings_applied": 2,
+            "findings_deferred": 0,
+        }
+
+        advance = _run_cli(
+            "set-phase",
+            "--manifest",
+            str(path),
+            "--phase",
+            "post_review_complete",
+        )
+        assert advance.returncode == 0, advance.stderr
+        assert yaml.safe_load(path.read_text(encoding="utf-8"))["phase"] == "post_review_complete"
 
 
 class TestSetWiringStatus:

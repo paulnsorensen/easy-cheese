@@ -2,6 +2,7 @@
 name: briesearch
 description: Research questions external to the codebase across library docs (Context7), the web (Tavily), local code (cheez-search), GitHub examples (gh), and the repo wiki (hallouminate), then synthesize with explicit confidence. Use whenever the user asks to research, look up, compare, or investigate something — phrases like "research X", "look up the API for Y", "compare libraries", "what does the doc say about Z", "find examples of how to do W", "is this library maintained", or "before I implement, what's the right approach". Use even when the user only mentions a library name without saying "research". Do NOT use for a single obvious file lookup or when the user already has enough evidence.
 license: MIT
+metadata: {dispatches-agents: true}
 ---
 
 # /briesearch
@@ -40,7 +41,7 @@ The sub-agent returns the claim table, confidence, gaps, and the optional durabl
 
 When two or more heavy sources are independent, spawn one small sub-agent per source in parallel and merge their claim tables in the parent — one sub-agent doing five things sequentially is the wrong shape.
 
-**Fork target and harness portability.** On a harness with a dedicated research sub-agent (Claude Code: `researcher`), prefer it as the fork target — it already owns the cited-digest contract; tell it to write raw bodies under the briesearch-resolved `"$ROOT/research/<slug>/raw/"` (per `references/context-isolation.md`), overriding its own default location. On a harness with **no** Agent primitive (e.g. Codex), the fork is a no-op — there is nowhere to offload raw bodies — so degrade to inline gather: triage hard, keep `max_results` low, prefer `tavily_extract` over raw WebFetch, stream raw bodies straight to disk, and say once that no fork ran so the confidence note reflects the higher contamination risk.
+**Fork target and harness portability.** Resolve a `researcher` through the shared agent resolver. If no eligible fresh-context worker exists, gather inline, keep result counts low, stream raw bodies to disk, and record the degraded topology; missing a required routed tool still halts.
 
 ## Preferred tools and fallbacks
 
@@ -80,3 +81,13 @@ Cross-cutting house style and citation form: [`../cheese/references/formatting.m
 - `references/unavailable.md` — what to do when an MCP/tool is missing.
 - `references/evals.md` — should-trigger / should-not-trigger queries and trace checks.
 - Shared sub-agent kernel: `../age/references/sub-agent-gate.md` — digest contract, harness-agnostic selection, what the parent never delegates.
+
+## Agent resolution
+
+Resolve heavy research dispatches through [`../cheese/references/agent-resolution.md`](../cheese/references/agent-resolution.md).
+
+| Work | Preferred types | Permissions/isolation | Minimum power | Effort | Fallback |
+| --- | --- | --- | --- | --- | --- |
+| Fetch and synthesize one heavy source | researcher | read-only, fresh-context | default | medium | compatible researcher, then general |
+
+The canonical cited research report carries the shared `agent_resolution` block.

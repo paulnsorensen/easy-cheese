@@ -36,8 +36,8 @@ After cook says "I completed all the changes", run a taste test before press. Th
 
 **Who runs it.**
 
-- **Top-level `/cook`** (when the harness can fan out sub-agents): dispatch the `reviewer` phase-agent directly. Name the agent and pass **no call-site model** — its definition pins `model: opus` and is read-only (`disallowedTools: [Edit, Write, NotebookEdit, Agent]`), so the reviewer runs at ≥ the writer's tier, never the coder's `sonnet` pin. The dispatch is read-only and receives `{spec/contract, diff, cut-test list, any locked/user-approved decisions}`; it returns the per-lens verdict below, not a full `/age` report. If the named `reviewer` agent isn't available (e.g. a harness that installs only easy-cheese), fall back to the inline self-check — the same degrade as the coder-nested path below.
-- **Coder-nested `/cook`** (running inside the `coder` phase agent, which has `disallowedTools: [Agent]`): it **cannot** spawn a sub-agent. It runs the inline self-check and records `taste_test: deferred-to-orchestrator` in its handoff slug; the orchestrator that dispatched `coder` runs the authoritative fresh-context pass after the coder digest, before accepting the handoff. (The orchestrator side is the dotfiles phase-flow; until it lands, the coder-nested path degrades to the inline self-check.)
+- **Top-level `/cook`**: resolve the fresh-context taste-test through `../../cheese/references/agent-resolution.md`, requesting a read-only `reviewer` at `powerful` / `high`. Pass `{spec/contract, diff, cut-test list, any locked/user-approved decisions}`; it returns the per-lens verdict below, not a full `/age` report. A general worker may qualify only under the shared prompt-only read-only degradation.
+- **Coder-nested `/cook`**: when the active coder cannot dispatch, run the inline self-check and record `taste_test: deferred-to-orchestrator`; the orchestrator must resolve and run the authoritative reviewer before accepting the handoff.
 
 **Lenses.** Inline or dispatched, the taste-test returns `pass | revise` per lens (`halt` for Locked-decision):
 

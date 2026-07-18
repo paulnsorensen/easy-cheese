@@ -1,6 +1,7 @@
 # adr
 
 <!-- HALLOUMINATE:INDEX-START -->
+- [agent-resolution](./agent-resolution.md) — ADR: Progressive agent resolution is a shared contract
 - [cheese-kernel-shared-refs-001](./cheese-kernel-shared-refs-001.md) — ADR: shared docs live in the cheese skill's references dir, cited sibling-relative
 - [cheese-kernel-shared-refs-002](./cheese-kernel-shared-refs-002.md) — ADR: owner-homed cross-skill content stays with its owner
 - [codex-omp-portability-001](./codex-omp-portability-001.md) — ADR: Shared harness portability reference

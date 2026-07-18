@@ -9,6 +9,7 @@ and that an example manifest matches the required field set.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -39,6 +40,22 @@ def example_manifest() -> dict:
             "commit": True,
             "gh": True,
         },
+        "agent_resolution": {
+            "request": {
+                "work": "test",
+                "preferred_types": ["planner"],
+                "required_tools": ["read"],
+                "permissions": "read-only",
+                "isolation": "fresh-context",
+                "minimum_power": "powerful",
+                "effort": "high",
+            },
+            "attempts": [{"type": "planner", "model": "test", "power": "powerful", "result": "accepted", "reason": "exact"}],
+            "resolved": {"type": "planner", "model": "test", "power": "powerful", "effort": "high", "topology": "sequential"},
+            "fallback_reason": None,
+            "degraded": False,
+            "permission_enforcement": "tool-restricted",
+        },
         "seed": {
             "items": [
                 {
@@ -62,6 +79,12 @@ def example_manifest() -> dict:
                 "commit_sha": "def456",
                 "retry_count": 0,
                 "error": None,
+                "review_context": {
+                    "base_commit": "a" * 40,
+                    "reviewed_tree_oid": "b" * 40,
+                    "diff_hash": "sha256:" + "c" * 64,
+                    "scope": ["src/orders/order.ts", "src/orders/order.test.ts"],
+                },
             }
         ],
         "wiring": [
@@ -80,6 +103,12 @@ def example_manifest() -> dict:
             "cure_slug": ".cheese/cure/feature-name.md",
             "findings_applied": 3,
             "findings_deferred": 0,
+            "review_context": {
+                "base_commit": "a" * 40,
+                "reviewed_tree_oid": "d" * 40,
+                "diff_hash": "sha256:" + "e" * 64,
+                "scope": ["src/orders"],
+            },
         },
         "pr_plan": {
             "shape": "diamond_stack",
@@ -116,6 +145,7 @@ class TestSchemaShape:
             "phase",
             "quality_gates",
             "host_capabilities",
+            "agent_resolution",
             "seed",
             "curds",
             "wiring",
@@ -151,6 +181,36 @@ class TestSchemaShape:
             "stacked_linear",
             "diamond_stack",
         }
+
+    def test_review_context_records_reproducible_identity(self, schema: dict) -> None:
+        review = schema["$defs"]["review_context"]
+        assert set(review["required"]) == {
+            "base_commit",
+            "reviewed_tree_oid",
+            "diff_hash",
+            "scope",
+        }
+        assert "tree object" in review["properties"]["reviewed_tree_oid"]["description"].lower()
+        assert "commit sha" not in review["properties"]["reviewed_tree_oid"]["description"].lower()
+        assert schema["properties"]["current_review"] == {"$ref": "#/$defs/review_context"}
+        assert schema["properties"]["curds"]["items"]["properties"]["review_context"] == {
+            "$ref": "#/$defs/review_context"
+        }
+
+        for field in ("base_commit", "reviewed_tree_oid"):
+            pattern = review["properties"][field]["pattern"]
+            assert "A-F" in pattern
+            oid_pattern = re.compile(pattern)
+            assert oid_pattern.fullmatch("a" * 40)
+            assert oid_pattern.fullmatch("B" * 64)
+            assert oid_pattern.fullmatch("c" * 41) is None
+        resolution = schema["$defs"]["agent_resolution"]
+        assert resolution["properties"]["request"]["properties"]["required_tools"]["minItems"] == 1
+        assert set(resolution["properties"]["attempts"]["items"]["required"]) == {
+            "type", "model", "power", "result", "reason"
+        }
+        assert "allOf" in schema
+        assert "allOf" in schema["properties"]["curds"]["items"]
 
 
 class TestExampleManifestMatchesSchema:

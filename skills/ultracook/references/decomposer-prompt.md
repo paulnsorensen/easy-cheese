@@ -83,7 +83,7 @@ matching `skills/ultracook/references/manifest-schema.json`. Use only the
 JSON-compatible subset of YAML: mappings, lists, strings, numbers, booleans, and nulls.
 Do not use anchors, aliases, custom tags, or multi-document streams. Fill in:
 
-- `slug`, `spec_path`, `created`, `quality_gates`.
+- `slug`, `spec_path`, `created`, `quality_gates`, and the orchestrator-provided `agent_resolution` block.
 - `seed.items[]` — each with `description`, `files[]`, `status: "pending"`.
 - `curds[]` — each with `id`, `behavior`, `acceptance_criterion`, `files[]`,
   `test_target`, `status: "pending"`, `retry_count: 0`.
@@ -96,11 +96,9 @@ they're populated as later phases run.
 
 ## Tools
 
-You are a full-peer general-purpose sub-agent. Use whatever skills help you understand
-the spec and the existing codebase: `/culture` for codebase exploration, `/briesearch`
-for external grounding, `/cheez-search` and `/cheez-read` for code intelligence.
+You were resolved as the planner/general role through `skills/cheese/references/agent-resolution.md`. Stay read-only except for the manifest artifact. Use `/culture` for codebase exploration, `/briesearch` for external grounding, and `/cheez-search` plus `/cheez-read` for code intelligence when available.
 
-Do NOT write any production code in this phase — your only artifact is the manifest.
+Do NOT write any production code in this phase — your only artifact is the manifest. Preserve the orchestrator's `agent_resolution` block unchanged.
 
 ## Spec
 

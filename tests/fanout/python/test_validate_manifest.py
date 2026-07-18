@@ -9,6 +9,7 @@ from pathlib import Path
 from types import ModuleType
 
 import yaml
+import pytest
 
 import build_pyz
 
@@ -30,6 +31,14 @@ def _curds(n: int = 5) -> list[dict]:
     ]
 
 
+def _review_context() -> dict:
+    return {
+        "base_commit": "a" * 40,
+        "reviewed_tree_oid": "B" * 64,
+        "diff_hash": "sha256:" + "c" * 64,
+        "scope": ["src/feature.ts"],
+    }
+
 def _manifest() -> dict:
     return {
         "slug": "feature-name",
@@ -38,6 +47,22 @@ def _manifest() -> dict:
         "phase": "gate_approved",
         "quality_gates": ["just check"],
         "host_capabilities": {"gh": True},
+        "agent_resolution": {
+            "request": {
+                "work": "test",
+                "preferred_types": ["planner"],
+                "required_tools": ["read"],
+                "permissions": "read-only",
+                "isolation": "fresh-context",
+                "minimum_power": "powerful",
+                "effort": "high",
+            },
+            "attempts": [{"type": "planner", "model": "test", "power": "powerful", "result": "accepted", "reason": "exact"}],
+            "resolved": {"type": "planner", "model": "test", "power": "powerful", "effort": "high", "topology": "sequential"},
+            "fallback_reason": None,
+            "degraded": False,
+            "permission_enforcement": "tool-restricted",
+        },
         "seed": {"items": []},
         "curds": _curds(),
         "wiring": [
@@ -116,6 +141,198 @@ class TestRunManifestValidator:
         assert len(behavior_errors) == 1, (
             f"expected exactly 1 behavior error, got {len(behavior_errors)}: {behavior_errors}"
         )
+
+    def test_current_review_requires_reproducibility_fields(
+        self, validate_manifest: ModuleType
+    ) -> None:
+        manifest = _manifest()
+        manifest["current_review"] = {"base_commit": "a" * 40}
+        errors = validate_manifest.validate_run_manifest(manifest)
+        for field in ("reviewed_tree_oid", "diff_hash", "scope"):
+            assert any(f"current_review.{field} is required" in error for error in errors)
+
+    def test_post_review_requires_review_context(self, validate_manifest: ModuleType) -> None:
+        manifest = _manifest()
+        manifest["post_review"] = {"press_slug": ".cheese/press/feature.md"}
+        errors = validate_manifest.validate_run_manifest(manifest)
+        assert any("post_review.review_context is required" in error for error in errors)
+
+    def test_completed_curd_requires_review_context(self, validate_manifest: ModuleType) -> None:
+        manifest = _manifest()
+        manifest["curds"][0]["status"] = "completed"
+        errors = validate_manifest.validate_run_manifest(manifest)
+        assert any("curds[1].review_context is required" in error for error in errors)
+
+    @pytest.mark.parametrize("phase", ["post_review_complete", "pr_publish_complete"])
+    def test_completed_review_phases_require_provenance(
+        self, validate_manifest: ModuleType, phase: str
+    ) -> None:
+        manifest = _manifest()
+        manifest["phase"] = phase
+        errors = validate_manifest.validate_run_manifest(manifest)
+        assert any("manifest.current_review is required" in error for error in errors)
+        assert any("manifest.post_review is required" in error for error in errors)
+
+    def test_completed_review_provenance_passes(self, validate_manifest: ModuleType) -> None:
+        manifest = _manifest()
+        manifest["curds"][0].update(status="completed", review_context=_review_context())
+        manifest["phase"] = "post_review_complete"
+        manifest["current_review"] = _review_context()
+        manifest["post_review"] = {"review_context": _review_context()}
+        assert validate_manifest.validate_run_manifest(manifest) == []
+
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        [
+            ("base_commit", "g" * 40),
+            ("base_commit", "a" * 39),
+            ("base_commit", "a" * 41),
+            ("reviewed_tree_oid", "abc"),
+            ("reviewed_tree_oid", "B" * 41),
+            ("diff_hash", "sha256:" + "a" * 63),
+            ("diff_hash", "md5:" + "a" * 64),
+        ],
+    )
+    def test_review_context_rejects_malformed_identity(
+        self, validate_manifest: ModuleType, field: str, value: str
+    ) -> None:
+        manifest = _manifest()
+        manifest["current_review"] = _review_context()
+        manifest["current_review"][field] = value
+        errors = validate_manifest.validate_run_manifest(manifest)
+        assert any(f"current_review.{field}" in error for error in errors)
+
+    @pytest.mark.parametrize(
+        ("path", "value", "expected"),
+        [
+            (("request", "required_tools"), [], "required_tools"),
+            (("request", "preferred_types"), [], "preferred_types"),
+            (("request", "minimum_power"), "turbo", "minimum_power"),
+            (("attempts", 0, "result"), "maybe", "attempts[1].result"),
+            (("resolved", "topology"), "nested", "resolved.topology"),
+            (("fallback_reason",), "", "fallback_reason"),
+            (("degraded",), "yes", "degraded"),
+        ],
+    )
+    def test_agent_resolution_rejects_invalid_nested_fields(
+        self,
+        validate_manifest: ModuleType,
+        path: tuple[str | int, ...],
+        value: object,
+        expected: str,
+    ) -> None:
+        manifest = _manifest()
+        target: object = manifest["agent_resolution"]
+        for key in path[:-1]:
+            target = target[key]  # type: ignore[index]
+        target[path[-1]] = value  # type: ignore[index]
+        errors = validate_manifest.validate_run_manifest(manifest)
+        assert any(expected in error for error in errors)
+
+    def test_agent_resolution_requires_nested_fields(
+        self, validate_manifest: ModuleType
+    ) -> None:
+        manifest = _manifest()
+        del manifest["agent_resolution"]["request"]["effort"]
+        del manifest["agent_resolution"]["attempts"][0]["reason"]
+        del manifest["agent_resolution"]["resolved"]["model"]
+        errors = validate_manifest.validate_run_manifest(manifest)
+        for path in ("request.effort", "attempts[1].reason", "resolved.model"):
+            assert any(path in error and "required" in error for error in errors)
+
+    @pytest.mark.parametrize(
+        ("mutations", "expected"),
+        [
+            ({"permission_enforcement": "prompt-only"}, "degraded=true"),
+            ({"resolved.power": "unknown"}, "unknown power"),
+            ({"request.permissions": "write", "permission_enforcement": "prompt-only"}, "write request"),
+        ],
+    )
+    def test_agent_resolution_enforces_degradation_consistency(
+        self, validate_manifest: ModuleType, mutations: dict[str, object], expected: str
+    ) -> None:
+        manifest = _manifest()
+        resolution = manifest["agent_resolution"]
+        for path, value in mutations.items():
+            target = resolution
+            parts = path.split(".")
+            for part in parts[:-1]:
+                target = target[part]
+            target[parts[-1]] = value
+        errors = validate_manifest.validate_run_manifest(manifest)
+        assert any(expected in error for error in errors)
+
+    def test_agent_resolution_rejects_accepted_power_below_minimum(
+        self, validate_manifest: ModuleType
+    ) -> None:
+        manifest = _manifest()
+        resolution = manifest["agent_resolution"]
+        resolution["attempts"][0]["power"] = "cheap"
+        resolution["resolved"]["power"] = "cheap"
+        errors = validate_manifest.validate_run_manifest(manifest)
+        assert any("below request minimum" in error for error in errors)
+
+    def test_agent_resolution_requires_reason_for_nonpreferred_fallback(
+        self, validate_manifest: ModuleType
+    ) -> None:
+        manifest = _manifest()
+        resolution = manifest["agent_resolution"]
+        resolution["attempts"][0].update(type="general", model="general-test")
+        resolution["resolved"].update(type="general", model="general-test")
+        errors = validate_manifest.validate_run_manifest(manifest)
+        assert any("fallback_reason" in error for error in errors)
+
+    def test_agent_resolution_requires_resolved_to_match_accepted_attempt(
+        self, validate_manifest: ModuleType
+    ) -> None:
+        manifest = _manifest()
+        manifest["agent_resolution"]["resolved"]["model"] = "different-model"
+        errors = validate_manifest.validate_run_manifest(manifest)
+        assert any("must match the accepted attempt" in error for error in errors)
+
+    def test_agent_resolution_requires_exactly_one_accepted_attempt(
+        self, validate_manifest: ModuleType
+    ) -> None:
+        manifest = _manifest()
+        manifest["agent_resolution"]["attempts"].append(
+            {
+                "type": "general",
+                "model": "fallback",
+                "power": "powerful",
+                "result": "accepted",
+                "reason": "fallback",
+            }
+        )
+        errors = validate_manifest.validate_run_manifest(manifest)
+        assert any("exactly one accepted attempt" in error for error in errors)
+
+    def test_agent_resolution_unknown_acceptance_must_be_final(
+        self, validate_manifest: ModuleType
+    ) -> None:
+        manifest = _manifest()
+        resolution = manifest["agent_resolution"]
+        resolution["attempts"][0]["power"] = "unknown"
+        resolution["attempts"].append(
+            {
+                "type": "general",
+                "model": "fallback",
+                "power": "powerful",
+                "result": "rejected",
+                "reason": "not selected",
+            }
+        )
+        resolution["resolved"]["power"] = "unknown"
+        resolution["degraded"] = True
+        errors = validate_manifest.validate_run_manifest(manifest)
+        assert any("unknown-power accepted attempt must be final" in error for error in errors)
+
+    def test_agent_resolution_preferred_exact_acceptance_requires_null_reason(
+        self, validate_manifest: ModuleType
+    ) -> None:
+        manifest = _manifest()
+        manifest["agent_resolution"]["fallback_reason"] = "not a fallback"
+        errors = validate_manifest.validate_run_manifest(manifest)
+        assert any("preferred exact acceptance requires fallback_reason=null" in error for error in errors)
 
 
 class TestPrPlanValidator:
