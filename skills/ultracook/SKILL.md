@@ -1,13 +1,13 @@
 ---
 name: ultracook
-description: Pipeline one approved high-blast-radius spec through fresh-context sub-agents in one of two modes the decomposer picks. Use when the user has such a spec — phrases like "/ultracook .cheese/specs/<slug>.md", "ultracook this", "run the full pipeline in isolation", "parallelize this spec", "fan out the implementation", "many curds", "send it through the cave", "pipeline with no contamination". Do NOT use for short focused changes, fuzzy planning, or review-only work.
+description: Pipeline one approved spec through fresh-context sub-agents in one of two modes the decomposer picks — the full pipeline for a high-blast-radius spec, and a deterministic fast-path for low/medium blast radius. Use when the user has such a spec — phrases like "/ultracook .cheese/specs/<slug>.md", "ultracook this", "run the full pipeline in isolation", "parallelize this spec", "fan out the implementation", "many curds", "send it through the cave", "pipeline with no contamination". Do NOT use for short focused changes, fuzzy planning, or review-only work.
 license: MIT
 metadata: {dispatches-agents: true}
 ---
 
 # /ultracook
 
-Use this skill when the user wants an approved high-blast-radius spec run forward without per-step approval, **and** wants each phase to reason in fresh context — blind to the previous phase's chain-of-thought. Mode selection is a deterministic rule: a fast-path routes an indivisible spec straight to linear with no decomposer spawn; otherwise the decomposer decides linear vs parallel from the curd count. See `## Mode selection` below.
+Use this skill when the user wants an approved spec run forward without per-step approval, **and** wants each phase to reason in fresh context — blind to the previous phase's chain-of-thought. Mode selection is a deterministic rule: a fast-path routes an indivisible low/medium-blast-radius spec straight to linear with no decomposer spawn; otherwise the decomposer decides linear vs parallel from the curd count, which is where the full pipeline handles high blast radius. See `## Mode selection` below.
 
 - **Linear mode** — for an indivisible spec: the deep `cook → press → age → cure → age → cure → age` chain, all `--auto`, each phase a fresh sub-agent. This is the sub-agent-transport sibling of `/cook --auto`.
 - **Parallel mode** — for a decomposable spec: fan the spec out into independent behavioural curds; run typed `cook → press → age → cure → age` phase agents sequentially in each curd's worktree; harvest the curd branches; then run typed `press → age → cure → age` over the merged diff. The parent alone performs harvest and `/plate`. Ends in 1–N reviewable PRs. (This folds in the retired `/cheese-factory`.)

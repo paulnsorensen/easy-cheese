@@ -34,7 +34,7 @@ For each completed `/mold` Grill-mode run, verify:
 
 ## Failure modes to watch for
 
-- **Verdict monologue** — the agent steelmans every item, self-issues uphold/amend verdicts, and presents a finished verdict block with no user turn. This is the regression this eval exists to catch (see spec `mold-grill-dialogic`).
+- **Verdict monologue** — the agent steelmans every item, self-issues uphold/amend verdicts, and presents a finished verdict block with no user turn. This is the regression this eval exists to catch (see issue #279, and the Grill section in `skills/mold/references/modes.md`).
 - **Amendment silently folded into the ledger** — an amendment appears in `Decided` without a prior question to the user. Log as a regression.
 - **Over-batching** — an item with a real tension gets swept into the "batch-reported as upheld" exception meant only for clean steelmans.
 

@@ -15,11 +15,10 @@ Lopsided-split guard (issue #273 ask 2): count alone misjudges a dominant curd
 plus a trivial one (e.g. a one-line config allowlist entry) as worth
 parallelizing. When `select_mode` receives curd dicts carrying a size signal
 (the manifest's `weight` field, or its `files[]` list — see
-references/manifest-schema.json), a 2-curd split where exactly one curd is
+skills/ultracook/references/manifest-schema.json), a 2-curd split where exactly one curd is
 trivial (weight <= TRIVIAL_FILE_COUNT) routes linear instead of parallel.
 
-Design decisions (spec left these open; resolved here, see
-specs/ultracook-lopsided-split-guard.md):
+Design decisions (originating issue #273; resolved here):
   - Weight metric: estimated file count per curd. Curds are already
     file-disjoint sets, so `len(files)` is a free, truthful proxy — no LOC
     estimate or separate trivial/substantial flag needed.
@@ -29,7 +28,7 @@ specs/ultracook-lopsided-split-guard.md):
   - Fold vs linear: the guard only changes mode selection (routes linear); it
     does not mutate the manifest to fold the trivial curd into a sibling.
     Folding trivial curds at decomposition time is the decomposer's job (see
-    decomposer-prompt.md); this guard is the runtime backstop for a trivial
+    skills/ultracook/references/decomposer-prompt.md); this guard is the runtime backstop for a trivial
     curd that still makes it into the manifest standalone.
 
 Curds with no size signal (plain ints, `range()` elements — the CLI's
