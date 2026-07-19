@@ -1,6 +1,6 @@
 ---
 name: ultracook
-description: Pipeline one approved spec through fresh-context sub-agents in one of two modes the decomposer picks — the full pipeline for a high-blast-radius spec, and a deterministic fast-path for low/medium blast radius. Use when the user has such a spec — phrases like "/ultracook .cheese/specs/<slug>.md", "ultracook this", "run the full pipeline in isolation", "parallelize this spec", "fan out the implementation", "many curds", "send it through the cave", "pipeline with no contamination". Do NOT use for short focused changes, fuzzy planning, or review-only work.
+description: Pipeline one approved spec through fresh-context sub-agents in one of two modes the decomposer picks. Use when the user has such a spec — phrases like "/ultracook .cheese/specs/<slug>.md", "ultracook this", "run the full pipeline in isolation", "parallelize this spec", "fan out the implementation", "many curds", "send it through the cave", "pipeline with no contamination". Do NOT use for short focused changes, fuzzy planning, or review-only work.
 license: MIT
 metadata: {dispatches-agents: true}
 ---
@@ -40,13 +40,12 @@ Mode selection is a deterministic rule, not a deliberation: a fast-path routes i
 
 1. **Decompose** — resolve a fresh-context planner (or compatible general agent) through `../cheese/references/agent-resolution.md`, then dispatch `references/decomposer-prompt.md` to produce `seed[]`, `curds[]`, and `wiring[]` from the spec. Validate with `python3 skills/ultracook/scripts/ultracook.pyz validate_decomposition <manifest>` and re-run on validation failure (max 2 retries).
 2. **Pick the mode** — `python3 skills/ultracook/scripts/ultracook.pyz mode --count <curd-count>` → `linear | parallel`. The canonical `PARALLEL_THRESHOLD` (2) lives in the engine: a decomposition of **2 or more** curds routes to **parallel mode**; **1** curd stays **linear**. There is one threshold in the tree — the selector, `validate_decomposition`, and the mold hint all read it.
-   Exception: an exact 2-curd split where one curd is trivial (weight/file-count <=1) and the other substantial routes linear instead — the lopsided-split guard in `mode.py` (issue #273 ask 2).
 3. **Probe the engine seam** — `python3 skills/ultracook/scripts/ultracook.pyz milknado --tools "<available tool names>"` → `engine | tracker | none`. This decides how parallel mode runs curds (see `## Parallel mode`); linear mode ignores it.
 4. **Publication topology preflight** — when the selected mode is `parallel`, `--open-pr` is present, and no PR exists, dispatch `/plate` in topology-preflight mode against `.cheese/ultracook/<slug>/manifest.yaml` **before Phase 1 seed or any worker commit**. Apply `/plate`'s review-shape policy: preserve an explicit user choice, persist `single` without asking for one cohesive review unit, or ask once when stacked is recommended or shape is ambiguous. Read back `plate_layout: single | stacked` and re-run `validate_manifest`. Existing PRs preserve detected topology; runs without `--open-pr` do not preflight because their workers remain commit-only.
 
 Helper resolution — including the `${CLAUDE_SKILL_DIR}` packaged-helper fallback — follows [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md) § Helper resolution.
 
-A 1-curd spec runs `## Flow` (linear mode) unchanged. A 2+-curd spec runs `## Parallel mode` — except the lopsided 2-curd case above (one trivial + one substantial curd), which routes to `## Flow` (linear).
+A 1-curd spec runs `## Flow` (linear mode) unchanged. A 2+-curd spec runs `## Parallel mode`.
 
 ## Flow (linear mode)
 

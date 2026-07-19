@@ -66,10 +66,6 @@ artificial decomposition and do NOT pad curds to reach the parallel threshold.
 
 ## Trivial curds — fold, don't emit standalone
 
-For each curd, also emit `weight`: your estimated file count for that curd
-(normally `len(files)`). `select_mode` (`src/fanout/mode.py`) reads `weight`
-to weigh size, not curd count alone, when picking linear vs parallel.
-
 A curd touching 1 file or fewer (a pure config/allowlist entry, a one-line
 wiring stub) is trivial. Prefer folding a trivial curd into `seed` (if
 foundational), `wiring` (if integration), or a substantial sibling curd's
@@ -101,7 +97,6 @@ Do not use anchors, aliases, custom tags, or multi-document streams. Fill in:
 - `slug`, `spec_path`, `created`, `quality_gates`, and the orchestrator-provided `agent_resolution` block.
 - `seed.items[]` — each with `description`, `files[]`, `status: "pending"`.
 - `curds[]` — each with `id`, `behavior`, `acceptance_criterion`, `files[]`,
-  `weight` (estimated file count, normally `len(files[])`),
   `test_target`, `status: "pending"`, `retry_count: 0`.
 - `wiring[]` — each with `id` (e.g. `W1`), `type` (`barrel_export` | `di_registration` |
   `route_wiring` | `event_subscription` | `config_entry`), `file`, `depends_on[]`,

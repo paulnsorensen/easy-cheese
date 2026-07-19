@@ -44,61 +44,6 @@ class TestSelectMode:
         assert at == "parallel"
 
 
-class TestLopsidedSplitGuard:
-    """Issue #273 ask 2: a 2-curd split where one curd is trivial (weight
-    <=1) and the other substantial must route linear even though the count
-    alone (2) would otherwise select parallel. Regression coverage for the
-    balanced and >2-curd cases proves the guard doesn't over-fire."""
-
-    def test_lopsided_two_curd_split_routes_linear(self, mode: ModuleType) -> None:
-        curds = [
-            {"files": ["a.py", "b.py", "c.py"], "weight": 3},
-            {"files": ["config.yaml"], "weight": 1},
-        ]
-        assert mode.select_mode(curds) == "linear"
-
-    def test_lopsided_guard_ignores_curd_order(self, mode: ModuleType) -> None:
-        # Trivial-first ordering must guard identically to trivial-second.
-        curds = [
-            {"files": ["config.yaml"], "weight": 1},
-            {"files": ["a.py", "b.py", "c.py"], "weight": 3},
-        ]
-        assert mode.select_mode(curds) == "linear"
-
-    def test_balanced_two_curd_split_still_parallel(self, mode: ModuleType) -> None:
-        # Regression guard: two substantial curds must NOT be misread as
-        # lopsided just because one is smaller than the other.
-        curds = [
-            {"files": ["a.py", "b.py", "c.py"], "weight": 3},
-            {"files": ["d.py", "e.py"], "weight": 2},
-        ]
-        assert mode.select_mode(curds) == "parallel"
-
-    def test_three_curds_with_one_trivial_still_parallel(self, mode: ModuleType) -> None:
-        # The guard is 2-curd-only per spec framing: a trivial curd among
-        # >=3 curds does not demote the split to linear.
-        curds = [
-            {"files": ["a.py", "b.py"], "weight": 2},
-            {"files": ["c.py", "d.py"], "weight": 2},
-            {"files": ["config.yaml"], "weight": 1},
-        ]
-        assert mode.select_mode(curds) == "parallel"
-
-    def test_weight_falls_back_to_file_count_when_absent(self, mode: ModuleType) -> None:
-        # No explicit "weight" key: the guard must derive weight from
-        # len(files) so a manifest curd missing the field still guards.
-        curds = [
-            {"files": ["a.py", "b.py", "c.py"]},
-            {"files": ["config.yaml"]},
-        ]
-        assert mode.select_mode(curds) == "linear"
-
-    def test_legacy_int_curds_unaffected_by_guard(self, mode: ModuleType) -> None:
-        # Plain ints (the --count-only CLI path, old tests) carry no size
-        # signal at all -- the guard must never fire for them.
-        assert mode.select_mode([1, 2]) == "parallel"
-
-
 class TestCli:
     def _run(self, *args: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
