@@ -166,7 +166,7 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "behavior", "acceptance_criterion", "files", "test_target", "status", "retry_count"],
+        "required": ["id", "behavior", "acceptance_criterion", "files", "weight", "test_target", "status", "retry_count"],
         "allOf": [
           {
             "if": {"properties": {"status": {"const": "completed"}}, "required": ["status"]},
@@ -178,6 +178,7 @@
           "behavior": {"type": "string"},
           "acceptance_criterion": {"type": "string"},
           "files": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+          "weight": {"type": "integer", "minimum": 1, "description": "Per-curd size signal: the decomposer's estimated file count for this curd (normally len(files)). Consumed by select_mode's lopsided-split guard (src/fanout/mode.py) so mode selection weighs size, not curd count alone."},
           "test_target": {"type": "string"},
           "status": {"type": "string", "enum": ["pending", "running", "completed", "failed"]},
           "worktree_path": {"type": ["string", "null"]},
