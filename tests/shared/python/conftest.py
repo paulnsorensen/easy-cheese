@@ -77,3 +77,13 @@ def handoff_cli_mod() -> ModuleType:
 @pytest.fixture(scope="session")
 def paths_cli_mod() -> ModuleType:
     return importlib.import_module("paths_cli")
+
+
+@pytest.fixture(scope="session")
+def spec_match() -> ModuleType:
+    return importlib.import_module("spec_match")
+
+
+@pytest.fixture(scope="session")
+def spec_match_cli_mod() -> ModuleType:
+    return importlib.import_module("spec_match_cli")
