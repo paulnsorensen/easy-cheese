@@ -99,6 +99,40 @@ class TestHighTierBoundary:
         assert results[0]["score"] == spec_match.HIGH_SCORE_THRESHOLD
         assert results[0]["tier"] == "high"
 
+    def test_high_when_margin_at_smallest_achievable_value(
+        self, spec_match: ModuleType
+    ) -> None:
+        # req "xxx" vs "xxxyy" (3 matching x's, len 5): ratio = 2*3/8 = 0.75,
+        # clearing HIGH_SCORE_THRESHOLD. vs "xxxyyyy" (3 matching x's, len 7):
+        # ratio = 2*3/10 = 0.60. Margin is 0.75 - 0.60 == 0.15000000000000002,
+        # the smallest margin >= HIGH_MARGIN_THRESHOLD reachable through this
+        # string API (an exact-0.15 margin is unreachable, so this does not
+        # distinguish >= from > on the margin check -- it pins the boundary
+        # from the achievable side).
+        candidates = [
+            _candidate("top.md", slug="xxxyy"),
+            _candidate("other.md", slug="xxxyyyy"),
+        ]
+        results = spec_match.score_candidates("xxx", candidates)
+        assert results[0]["score"] >= spec_match.HIGH_SCORE_THRESHOLD
+        assert results[0]["score"] - results[1]["score"] >= spec_match.HIGH_MARGIN_THRESHOLD
+        assert results[0]["tier"] == "high"
+
+    def test_weak_when_margin_just_below_threshold(self, spec_match: ModuleType) -> None:
+        # req "xxx" vs "xxxyyy" (3 matching x's, len 6): ratio = 2*3/9 ==
+        # 0.6666..., clearing HIGH_SCORE_THRESHOLD. vs "xxxyyyyy" (3 matching
+        # x's, len 8): ratio = 2*3/11 == 0.5454..., margin == 0.1212...,
+        # clearly below HIGH_MARGIN_THRESHOLD despite the top score clearing
+        # HIGH_SCORE_THRESHOLD -- the margin gate alone drops it to 'weak'.
+        candidates = [
+            _candidate("top.md", slug="xxxyyy"),
+            _candidate("other.md", slug="xxxyyyyy"),
+        ]
+        results = spec_match.score_candidates("xxx", candidates)
+        assert results[0]["score"] >= spec_match.HIGH_SCORE_THRESHOLD
+        assert results[0]["score"] - results[1]["score"] < spec_match.HIGH_MARGIN_THRESHOLD
+        assert results[0]["tier"] == "weak"
+
 
 def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(

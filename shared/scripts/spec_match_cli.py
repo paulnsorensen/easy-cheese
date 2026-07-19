@@ -37,7 +37,7 @@ def _strip_front_matter(text: str) -> str:
 
 
 def _build_candidate(path: Path) -> dict:
-    text = path.read_text(encoding="utf-8")
+    text = path.read_text(encoding="utf-8", errors="replace")
     front_matter_match = _FRONT_MATTER.match(text)
     slug_match = _SLUG_FIELD.search(front_matter_match.group(1)) if front_matter_match else None
     slug = slug_match.group(1) if slug_match else path.stem
@@ -60,7 +60,12 @@ def _cmd_rank(args: argparse.Namespace) -> None:
     if not directory.is_dir():
         cli.emit([], json_mode=True)
         return
-    candidates = [_build_candidate(p) for p in sorted(directory.glob("*.md"))]
+    candidates = []
+    for p in sorted(directory.glob("*.md")):
+        try:
+            candidates.append(_build_candidate(p))
+        except OSError:
+            continue
     results = spec_match.score_candidates(args.request, candidates)
     cli.emit(results, json_mode=True)
 

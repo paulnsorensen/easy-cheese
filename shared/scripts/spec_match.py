@@ -42,17 +42,17 @@ def score_candidates(request_text: str, candidates: list[dict]) -> list[dict]:
     returns an empty result.
     """
     scored = [
-        {"path": c["path"], "score": round(_field_score(request_text, c), 3)}
+        {"path": c["path"], "raw": _field_score(request_text, c)}
         for c in candidates
     ]
-    scored.sort(key=lambda r: (-r["score"], r["path"]))
+    scored.sort(key=lambda r: (-r["raw"], r["path"]))
     if not scored:
         return []
-    top = scored[0]["score"]
-    margin = top - (scored[1]["score"] if len(scored) > 1 else 0.0)
+    top = scored[0]["raw"]
+    margin = top - (scored[1]["raw"] if len(scored) > 1 else 0.0)
     top_is_high = top >= HIGH_SCORE_THRESHOLD and margin >= HIGH_MARGIN_THRESHOLD
     results = []
     for i, r in enumerate(scored):
         tier = "high" if (i == 0 and top_is_high) else "weak"
-        results.append({"path": r["path"], "score": r["score"], "tier": tier})
+        results.append({"path": r["path"], "score": round(r["raw"], 3), "tier": tier})
     return results
