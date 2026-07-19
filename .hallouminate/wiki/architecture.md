@@ -32,7 +32,8 @@ from the body rather than inlining it (`skills/mold/SKILL.md:21`).
 
 The pattern is deliberate context economy: the agent reads `SKILL.md`
 first, then descends into `references/<topic>.md` only for the step it
-always-installed `cheese` skill's `references/` directory
+reaches. Content shared *across* skills lives in the always-installed
+`cheese` skill's `references/` directory
 (`skills/cheese/references/handoff-gate.md`, `skills/cheese/references/formatting.md`) and
 is referenced by sibling-relative path (`../cheese/references/<file>.md`
 from a `SKILL.md`, `../../cheese/references/<file>.md` from a

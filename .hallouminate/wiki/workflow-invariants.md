@@ -98,8 +98,9 @@ explicit wiring branch.
 
 There is exactly one shippability signal: green from `just check`
 (`AGENTS.md:7`). It autofixes lint (markdown, yaml, python via ruff) then
-runs skill-frontmatter validation, shell lint, the python + bash test
-suites, and `mkdocs build --strict`. CI runs `just ci` — the same gates,
+runs skill- and wiki-frontmatter validation, shell lint, the python +
+bash + JS test suites, and the Astro/Starlight docs build
+(`pnpm run docs:build`). CI runs `just ci` — the same gates,
 no autofixes. **Never commit or push on a red `just check`**, and never
 weaken or skip a test to force green. See [tooling](./tooling.md) for the
 recipe breakdown.

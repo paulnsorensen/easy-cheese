@@ -45,8 +45,8 @@ has a single definition rather than being split across the two validators:
 
 - `src/fanout/curd.py` — `behaviour_errors` (`curd.py:59`), `lifecycle_errors`
   (`curd.py:69`), `disjoint_files_errors` (`curd.py:90`).
-- `src/fanout/wiring.py` — `graph_errors` (`wiring.py:25`), `lifecycle_errors`
-  (`wiring.py:72`).
+- `src/fanout/wiring.py` — `graph_errors` (`wiring.py:26`), `lifecycle_errors`
+  (`wiring.py:58`).
 
 The always-on layer is named per entity, not forced symmetric: a Curd's is
 *content* (`behaviour_errors`), a Wiring node's is *graph* (`graph_errors`).
