@@ -63,24 +63,24 @@ Non-implementation intents bypass the escalation entirely. Their target skills o
 
 ## Rejected-directions check
 
-Before dispatching any `mold` intent, scan `.cheese/.out-of-scope/` for rejection records whose `## Direction` section's one-line description substantially matches the incoming request. If a match is found:
+Before dispatching any `mold` intent, scan `.cheese/.out-of-scope/` for rejection records whose `## Direction` section's one-line description substantially matches the incoming request:
 
 1. Surface the previously-rejected direction and its rationale in one line.
 2. Ask the user whether to proceed with the new request or take a different angle.
 3. Do not suppress or re-propose the rejected direction silently.
 
-This check is lightweight — a glob + keyword scan over `.cheese/.out-of-scope/*.md`. Skip silently when the directory does not exist. Non-`mold` intents skip this check.
+This check is deterministic — `python3 shared/scripts/spec_match_cli.py rank --request "<incoming request>" --dir .cheese/.out-of-scope` ranks every `*.md` record's slug/title/first_heading (the record's `first_heading` is the one-line description under `## Direction`) against the request. Treat `high` tier as a match to surface per the steps above; `weak` tier means no substantial match. Skip silently when the directory does not exist (the CLI itself emits `[]` for a missing `--dir`). Non-`mold` intents skip this check.
 
 ## Spec-discovery check
 
-Before minting a new mini-spec for a tier-1 `cook` or `mold` dispatch, look for an existing spec that already covers the request. Glob `.cheese/specs/*.md` and score each candidate on a lightweight keyword match against its slug, title, and first heading — a plain filename glob plus a text scan (host `rg` / read), not `cheez-search`, which is scoped to tracked source files and skips Markdown specs. This mirrors the rejected-directions scan and stays headless, so it runs on the autonomous path and across harnesses.
+Before minting a new mini-spec for a tier-1 `cook` or `mold` dispatch, look for an existing spec that already covers the request. Rank `.cheese/specs/*.md` against the request with `python3 shared/scripts/spec_match_cli.py rank --request "<incoming request>" --dir .cheese/specs`, which scores each candidate's slug/title/first_heading via `shared/scripts/spec_match.py` (stdlib `difflib.SequenceMatcher`, `high` tier requires top score ≥ 0.60 and margin to the runner-up ≥ 0.15 — see issue #267). This mirrors the rejected-directions scan and stays headless, so it runs on the autonomous path and across harnesses.
 
-Act on the score, do not guess:
+Act on the tier, do not guess:
 
-1. **One clear match (high confidence)** — surface the spec path in one line and dispatch against it (`/cook --auto .cheese/specs/<slug>.md`) instead of writing a duplicate.
-2. **Multiple plausible matches, or a weak best match** — under `--safe`, present the candidates in the handoff gate for the user to pick; without `--safe`, fall back to minting a fresh mini-spec rather than risk dispatching against the wrong spec.
+1. **One clear match (`high` tier)** — surface the spec path in one line and dispatch against it (`/cook --auto .cheese/specs/<slug>.md`) instead of writing a duplicate.
+2. **Multiple plausible matches, or a weak best match (`weak` tier)** — under `--safe`, present the candidates in the handoff gate for the user to pick; without `--safe`, fall back to minting a fresh mini-spec rather than risk dispatching against the wrong spec.
 
-Skip silently when `.cheese/specs/` is empty or absent, and when the user already named a spec path there (the path is authoritative). A dedicated Python scoring helper (stdlib `difflib.get_close_matches` over the slug/title list) would give deterministic ranking with zero dependencies and keep this check consistent with the rejected-directions scan — tracked in issue #267.
+Skip silently when `.cheese/specs/` is empty or absent (the CLI emits `[]` for a missing `--dir`), and when the user already named a spec path there (the path is authoritative).
 
 ## --continue
 
