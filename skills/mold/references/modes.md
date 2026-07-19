@@ -51,7 +51,7 @@ Mold has no fixed entry point. Inspect the input shape and pick a starting mode.
 
 ### Grill — adversarial clarification
 
-**Job:** stress-test the chosen approach plus sketched interfaces. **One question at a time**, posed as lettered options (`A/B/C/D`) the user picks — a consequential fork is put up for decision, not resolved rhetorically; minor mechanical calls are made but logged `[AGENT-DECIDED]` with a one-line alternative the user can veto. Traverse decision branches and contract corners. Pause for a Validate Cycle when an unverified assumption surfaces.
+**Job:** stress-test the chosen approach plus sketched interfaces. **One grilled item per turn** (the clean-steelman batch below is the only exception): each grilled item (any `[AGENT-DECIDED]` item or design decision) produces at most a **steelman + tension statement**, then a **user fork** — uphold / amend-as-proposed / user's own call — put to the user by actually invoking the question primitive per [`../../cheese/references/ask-user-question.md`](../../cheese/references/ask-user-question.md) (a real user turn, not an `A/B/C/D` block rendered in prose and then self-answered); verdicts are never self-issued for items that change the design. Items where the steelman fails cleanly (grilling finds nothing) MAY be batch-reported as upheld; any item whose grilling produces an amendment MUST surface as a question — through the same primitive — before the amendment enters the ledger. Traverse decision branches and contract corners. Pause for a Validate Cycle when an unverified assumption surfaces.
 
 **Exit when:** every branch and contract corner is touched and agent confidence ≥ user confidence.
 
