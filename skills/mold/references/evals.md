@@ -28,7 +28,7 @@ If a should-not query triggers `/mold`, the description in `SKILL.md` is over-br
 For each completed `/mold` Grill-mode run, verify:
 
 1. **Every grilled item produces a steelman + tension statement before any verdict.** No item skips straight to an uphold/amend verdict without first surfacing the steelman.
-2. **≥1 user-fork round for a grill of `[AGENT-DECIDED]` items.** A grill that touches at least one agent-decided or design-changing item produces at least one `AskUserQuestion` / lettered-option fork — never a self-issued verdict monologue with no user turn.
+2. **≥1 user-fork round for a grill of `[AGENT-DECIDED]` items.** A grill that touches at least one agent-decided or design-changing item invokes the question primitive at least once (`AskUserQuestion` on Claude Code/Conductor, the equivalent per [`ask-user-question.md`](../../cheese/references/ask-user-question.md) on other harnesses) — an actual user turn, never an `A/B/C/D` block the agent renders and answers itself, and never a self-issued verdict monologue with no user turn.
 3. **Amendments surface as questions before ledger entry.** Any item whose grilling produces an amendment appears as a question to the user before the amendment is written to the per-round decision ledger.
 4. **Clean-steelman batching stays scoped.** Only items where the steelman finds nothing are batch-reported as upheld; an item with a live tension is never folded into a batch.
 

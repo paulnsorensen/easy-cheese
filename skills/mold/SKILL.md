@@ -41,10 +41,10 @@ When candidates exist, complete the pre-Curdle disposition batch in `references/
 | Ground | A file, bug, or existing doc is named | Verify facts against evidence |
 | Shape | The goal is known but approach is open | Compare viable options (Do Nothing always included) |
 | Sketch | Interfaces or module boundaries matter | Lock responsibilities and seams |
-| Grill | A favoured approach needs stress-testing | Steelman each item, then put every design-changing verdict to the user as a fork |
+| Grill | A favoured approach needs stress-testing | Steelman each item, then put every design-changing call to the user as a fork |
 | Diagnose | A symptom, failure, or trace is supplied | Build a Loop → reproduce → hypothesize → confirm root cause |
 
-Full mode definitions, exit criteria, and user knobs in `references/modes.md`.
+Full mode definitions, exit criteria, and user knobs in `references/modes.md`. Trigger and trace evals for the skill — including the Grill user-fork checks — in `references/evals.md`.
 
 ## Agent-invoked mini-spec mode
 
