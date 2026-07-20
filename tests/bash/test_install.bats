@@ -9,12 +9,13 @@
 # external commands the script and suite actually use. Resolved against
 # the original full PATH, which is still active here. env and bash are
 # allowlisted only to back the stubs' `#!/usr/bin/env bash` shebangs,
-# not direct use — don't prune them.
+# not direct use — don't prune them. jq backs the gh stub's `--jq`
+# emulation (gh embeds jq in production; the stub runs it explicitly).
 setup_file() {
     ESSENTIALS_BIN="$BATS_FILE_TMPDIR/essentials"
     mkdir -p "$ESSENTIALS_BIN"
     local cmd resolved
-    for cmd in bash cat chmod grep mkdir ln dirname basename sort tr uname env; do
+    for cmd in bash cat chmod grep mkdir ln dirname basename sort tr uname env jq; do
         resolved="$(command -v "$cmd")" || {
             echo "setup_file: essential command not found: $cmd" >&2
             return 1
@@ -577,6 +578,65 @@ STUB
     [[ "$output" == *"claude CLI not found"* ]]
 }
 
+# -- ec_setup_cheese_corpus ---------------------------------------------------
+
+@test "ec_setup_cheese_corpus resolves the skill via gh skill list and runs global --apply" {
+    # Faithful gh stub: emits gh-shaped JSON honouring --json field selection,
+    # then pipes it through the real --jq filter. If --json omits skillName
+    # (the field the filter selects on), resolution returns empty -- so this
+    # test guards the field-selection regression, not just the wiring.
+    cat > "$STUB_BIN/gh" <<STUB
+#!/usr/bin/env bash
+echo "gh \$*" >> "$STUB_LOG"
+json_fields=""
+jq_expr=""
+while [[ \$# -gt 0 ]]; do
+    case "\$1" in
+        --json) json_fields="\$2"; shift 2 ;;
+        --jq) jq_expr="\$2"; shift 2 ;;
+        *) shift ;;
+    esac
+done
+if [[ "\$json_fields" == *skillName* ]]; then
+    rows='[{"path":"/fake/skills/easy-cheese-setup","skillName":"easy-cheese-setup"},{"path":"/fake/skills/cook","skillName":"cook"}]'
+else
+    rows='[{"path":"/fake/skills/easy-cheese-setup"},{"path":"/fake/skills/cook"}]'
+fi
+printf '%s' "\$rows" | jq -r "\$jq_expr"
+exit 0
+STUB
+    chmod +x "$STUB_BIN/gh"
+    make_stub python3
+    EC_GH="$STUB_BIN/gh" run ec_setup_cheese_corpus claude-code
+    [ "$status" -eq 0 ]
+    grep -q "^gh skill list --agent claude-code --scope user --json path,skillName" "$STUB_LOG"
+    grep -q "^python3 /fake/skills/easy-cheese-setup/scripts/easy-cheese-setup.pyz global --apply$" "$STUB_LOG"
+}
+
+@test "ec_setup_cheese_corpus warns and returns 0 when gh skill list resolves nothing" {
+    make_stub gh
+    make_stub python3
+    EC_GH="$STUB_BIN/gh" run ec_setup_cheese_corpus claude-code
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"could not resolve the easy-cheese-setup skill"* ]]
+    ! grep -q "easy-cheese-setup.pyz" "$STUB_LOG" || false
+}
+
+@test "ec_setup_cheese_corpus dry-run logs the plan and never invokes gh" {
+    make_stub gh
+    EC_GH="$STUB_BIN/gh" EC_DRY_RUN=1 run ec_setup_cheese_corpus claude-code
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"would resolve the easy-cheese-setup skill"* ]]
+    [[ "$output" == *"global --apply"* ]]
+    ! grep -q "^gh" "$STUB_LOG" || false
+}
+
+@test "ec_setup_cheese_corpus warns and returns 0 when gh CLI is missing" {
+    EC_GH="$STUB_BIN/no-such-gh" run ec_setup_cheese_corpus claude-code
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"gh CLI not found"* ]]
+}
+
 # -- ec_install_skills --------------------------------------------------------
 
 @test "ec_detect_harnesses finds installed main-line harness CLIs" {
@@ -904,6 +964,8 @@ STUB
     [[ "$output" == *"@upstash/context7-mcp@latest"* ]]
     [[ "$output" == *"plugin install hallouminate@hallouminate"* ]]
     [[ "$output" != *"prebuilt binary via the release installer"* ]]
+    # hallouminate is in the default MCP set, so the corpus step fires (dry-run).
+    [[ "$output" == *"cheese corpus: would resolve the easy-cheese-setup skill"* ]]
     [[ "$output" == *"Done."* ]]
 }
 
@@ -951,6 +1013,8 @@ STUB
     [ "$(grep -c '^gh skill install ' "$STUB_LOG")" -eq "$(count_skills)" ]
     # No brew calls should have happened.
     ! grep -q "^brew" "$STUB_LOG" || false
+    # hallouminate is not selected, so the corpus step must not fire.
+    [[ "$output" != *"cheese corpus"* ]]
 }
 
 # -- EC_FALLBACK_SKILLS sync --------------------------------------------------
