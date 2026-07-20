@@ -400,6 +400,53 @@ class TestCliDispatch:
         assert rc == 0
         assert not config_path.exists()
 
+    def test_doctor_dry_run_reports_legacy_migration_without_writing(
+        self,
+        hallouminate_setup: ModuleType,
+        config_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        original = (
+            '[[corpus]]\n'
+            'name = "cheese-global"\n'
+            'paths = ["~/.cheese"]\n'
+            'globs = ["**/*.md"]\n'
+        )
+        config_path.parent.mkdir(parents=True)
+        config_path.write_text(original, encoding="utf-8")
+        monkeypatch.setenv("HALLOUMINATE_CONFIG", str(config_path))
+
+        rc = hallouminate_setup.main(["hallouminate_setup.py", "doctor"])
+
+        assert rc == 0
+        assert "remove legacy cheese-global -> ~/.cheese block" in capsys.readouterr().out
+        assert config_path.read_text(encoding="utf-8") == original
+
+    def test_global_apply_does_not_remove_legacy_config(
+        self,
+        hallouminate_setup: ModuleType,
+        corpus_home: Path,
+        config_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        config_path.parent.mkdir(parents=True)
+        config_path.write_text(
+            '[[corpus]]\n'
+            'name = "cheese-global"\n'
+            'paths = ["~/.cheese"]\n'
+            'globs = ["**/*.md"]\n',
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("HALLOUMINATE_CONFIG", str(config_path))
+
+        rc = hallouminate_setup.main(["hallouminate_setup.py", "global", "--apply"])
+
+        assert rc == 0
+        text = config_path.read_text(encoding="utf-8")
+        assert 'name = "cheese-global"' in text
+        assert 'name = "cheese-durable"' in text
+
     def test_unknown_leg_returns_usage_error(
         self,
         hallouminate_setup: ModuleType,

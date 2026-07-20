@@ -293,6 +293,8 @@ def _report(change: Change) -> str:
 def _run_leg(leg: str, do_apply: bool) -> int:
     if leg in ("global", "doctor"):
         print(_report(apply_global(apply=do_apply)))
+    if leg == "doctor" and not do_apply:
+        print(_report(migrate_legacy(apply=False)))
     if leg in ("local", "doctor"):
         print(_report(apply_local(Path.cwd(), apply=do_apply)))
     return 0
