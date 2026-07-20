@@ -1,0 +1,360 @@
+---
+name: age
+description: Review a diff, PR, branch, or path across ten orthogonal dimensions (correctness, security, encapsulation, spec, complexity, deslop, assertions, NIH, efficiency, telemetry) and emit a severity-grouped findings report. Use when the user wants a code review — phrases like "review this", "/age", "is this safe to merge", "find bugs", "spot security issues", "check for slop", "review my PR", "what's wrong with this code". Use even when the user only asks for one dimension — the report scopes itself. Do NOT use for applying fixes (route to /cure) or test hardening (route to /press).
+license: MIT
+metadata: {dispatches-agents: true}
+---
+
+# /age
+
+Use this skill to review a diff or scoped path before merging, after `/press`, or whenever the user wants evidence-backed observations rather than an approval verdict.
+
+Do not use it to apply fixes directly. Hand fix work to `/cure`, which owns applying findings.
+
+## Inputs
+
+Accept:
+
+```text
+/age [<ref-or-range>] [--scope <path>] [--comprehensive] [--full] [--safe] [--open-pr] [--auto] [--html]
+/age <slug> [--full] [--safe] [--open-pr] [--auto] [--html]
+```
+
+`--full` un-collapses the `## Low` section when 10 or more low-severity findings exist (the default report collapses them to a one-line summary). Suppressed lows feed the cure-selection table only when `--full` is passed.
+
+`--safe` re-introduces cure selection. `--open-pr` propagates through `/cure` to terminal `/plate`; a new PR follows `/plate`'s explicit-choice and review-shape policy.
+
+When called with a `<slug>`, resolve `.cheese/press/<slug>.md` (if present) for press context and review the current working diff. When called with a `<ref-or-range>`, review that range. Default to the current working diff when neither is supplied. If the base branch is unclear, ask or use the repository's documented default.
+
+`--auto` is the propagated autonomous-mode flag from `/cook --auto`. It changes the handoff (see `## Handoff` and `## Auto mode` for the cap rule and full chain). See `### When invoked from /ultracook` for the no-shared-memory variant.
+
+`--hard` propagates through `/cure` to `/plate`. Age never fires the gate; `/plate` gives `/hard-cheese` the final verified artifact state before publication.
+
+`--html` emits a static HTML copy **in addition to** the standard `.cheese/age/<slug>.md` markdown report. Write the markdown report first, then render it:
+
+```bash
+python3 src/age/age-html-report.py \
+  --report .cheese/age/<slug>.md \
+  --slug <slug>
+```
+
+Print the returned temp-file path beside the markdown path. `html-report` groups the findings by severity into age's own badge template and wraps them in the shared document shell (`shared/scripts/html_report.render_document`); the output is stdlib-only, offline, and deterministic — no CDN, no JavaScript. Do not inline or hand-roll the document chrome. Pass `--out-dir <dir>` to write somewhere other than the OS temp dir.
+If the host only ships the bundle, `python3 ${CLAUDE_SKILL_DIR}/scripts/age.pyz html-report --report .cheese/age/<slug>.md --slug <slug>` is the fallback.
+
+Portability reference: [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
+The handoff blocks below are the portable contract; slash commands are host renderings, not the control model.
+
+## Review dimensions
+
+Dimensions answer **what kind of problem**. Severity (`blocker / high / medium / low`) is per-finding, computed from base + location + compounding modifiers (see `references/dimensions.md` § Severity computation).
+
+| Dimension | Base range | Look for |
+| --- | --- | --- |
+| correctness | low → blocker | broken behaviour, silent failures, ordering, null/empty edge cases, races, lost writes |
+| security | low → blocker | auth, injection, secrets, unsafe parsing, tainted inputs, weak crypto |
+| encapsulation | low → blocker | class-private peeks, module-internal leaks, cross-slice internals, ingress/egress contract violations, caller-shadowed domain invariants |
+| spec | low → blocker | drift from stated requirements or acceptance criteria; silent drift on security/data/correctness reqs |
+| complexity | low → high | unnecessary nesting, long functions, speculative abstractions, redundant state, parameter sprawl, stringly-typed code |
+| deslop | low → high | dead code, AI residue, duplicated logic, copy-paste-with-variation, vague names |
+| assertions | low → blocker | weak tests, shallow existence checks, swallowed errors, mocked SUT |
+| nih | low → high | reinvented dependency, stdlib, or existing project helper / utility / component |
+| efficiency | low → blocker | unnecessary work, missed concurrency, hot-path bloat, no-op updates, time-of-check/time-of-use (TOCTOU) pre-checks, memory leaks, overly broad reads |
+| telemetry | low → blocker | silent error branches on non-interactive paths (servers, daemons, workers, outbound API/DB/queue calls), un-instrumented outbound calls, silent worker loops, hand-rolled logging infrastructure, missing rotation/retention/config hygiene on new file logging, unstructured logs, wrong log levels, double-logging, errors logged without context, missing correlation/trace ids, high-cardinality metric labels or span names, logs-as-metrics, `print()`/`console.log` in production, tests asserting on log strings |
+
+Per-dimension base-severity tables, location-sensitivity, fix-cost-now / fix-cost-later, and recommendation shapes live in `references/dimensions.md`. This reduced workflow intentionally omits the git-history/precedent dimension.
+
+## Flow
+
+1. Identify the diff, scope, and relevant spec or issue. **Mode check (one decision point):** if the **scale threshold** (defined in `## Sub-agent context gate` below) is met — and `/age` is not itself a sub-agent — switch to `### Scale-triggered fan-out mode`; steps 2–4 (evidence-gather, per-dimension review, severity computation) are replaced by the fan-out path — both modes converge on steps 5–6.
+2. Gather evidence: diff, touched files, tests, callers/imports. If a press report exists for this slug, read it via:
+
+   ```
+   python3 shared/scripts/read_handoff_slug.py --phase press --slug <slug>
+   ```
+
+   If the host only ships the bundle, `python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz read_handoff_slug --phase press --slug <slug>` is the fallback.
+   Include a `## Press findings` sub-section in the age report summarising unresolved items — `/cure` reads only `.cheese/age/<slug>.md` and cannot access the press report directly.
+
+   If no press report exists for this slug, check for a cook handoff or report (`.cheese/cook/<slug>.md`):
+
+   ```
+   python3 shared/scripts/read_handoff_slug.py --phase cook --slug <slug>
+   ```
+
+   If the host only ships the bundle, `python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz read_handoff_slug --phase cook --slug <slug>` is the fallback.
+   When a cook artifact exists but no press artifact does, the diff was never hardened. Do not block the review — proceed — but record `press: skipped` in the report (see `## Output`) and print the one-line warning at handoff. A missing cook artifact is also non-fatal (an `artifact not found` result just means a non-pipeline diff): skip the marker and the warning and continue the review.
+
+   Independently of any press report, if `.cheese/glossary/<slug>.md` exists, read it now so naming drift against the resolved glossary can be flagged as a deslop finding.
+3. Review every dimension; dimensions with no findings simply omit themselves.
+4. Compute severity per finding (base + location bump + compounding bump, capped at `blocker`). Group findings by severity (`## Blocker → ## High → ## Medium → ## Low`); within a severity group, order by file.
+5. Write the report:
+
+   ```
+   report_file=$(mktemp)
+   # write the report markdown (everything below) to "$report_file", then:
+   python3 shared/scripts/write_handoff_artifact.py \
+     --phase age --slug <slug> --status ok --next cure \
+     --artifact "" --orientation "<one-line orientation>" \
+     --durable-flags "<none | one line per flag>" \
+     --body-file "$report_file"
+   ```
+
+   If the host only ships the bundle, `python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz write_handoff_artifact \
+     --phase age --slug <slug> --status ok --next cure \
+     --artifact "" --orientation "<one-line orientation>" \
+     --durable-flags "<none | one line per flag>" \
+     --body-file "$report_file"` is the fallback.
+   Then print the path.
+6. Hand off (see `## Handoff` below).
+
+## Preferred tools and fallbacks
+
+Code search and reading go through the `cheez-*` skills (`/cheez-search`, `/cheez-read`) — see those skills for tool selection rules. For caller graphs specifically, age uses `cheez-search` with `kind: "callers"` and `tilth_deps` (cheez-search owns the routing).
+
+Beyond `cheez-*` there are review-specific tools:
+
+| Need | Prefer | Fallback |
+| --- | --- | --- |
+| Diff inspection | `delta` | `git diff --unified=3` |
+| Caller/dependency impact + curated review context | `tilth_deps` + `/cheez-search` `kind: "callers"` | manual scoping |
+| Architecture / hotspot framing for large diffs | changed-file map + caller/dependency evidence | skip and note in confidence |
+| Design rationale for encapsulation/spec dimensions (optional) | `mcp__hallouminate__list_corpora` / `mcp__hallouminate__ground` on `repo:<repo>:wiki` corpus — if available, derive the query from the diff and the spec or issue in scope, ground design intent before grading encapsulation and spec findings, and render the consulted pages in the report's `## Wiki context` section so the pages that informed the review are visible | skip; omit `## Wiki context`; proceed with diff + code evidence only; cap at `speculating` when rationale is the primary evidence |
+| GitHub/PR context | `gh` | local git commands or user-provided PR data |
+| Merge/conflict awareness | mergiraf | manual conflict checks |
+
+**Optional MCPs:** hallouminate and milknado follow the detect-and-degrade contract in [`../cheese/references/optional-plugins.md`](../cheese/references/optional-plugins.md) — state absence once, fall back, reduce confidence only if evidence quality suffers, never block.
+
+## Sub-agent context gate
+
+`/age` should fork a read-only review-context sub-agent — preferably the `explorer` phase-agent — when evidence gathering is likely to exceed the parent context, especially for `--comprehensive` reviews. Resolve the worker through `../cheese/references/agent-resolution.md`: require read-only permissions and fresh context, prefer the exact specialist, then a compatible specialist, then a prompt-constrained general agent with `degraded: true`. Fall back inline only when dispatch itself is unavailable.
+
+**Scale threshold** — spawn when any of these are true:
+
+- The diff spans more than 15 files.
+- Touched code or generated review context is larger than roughly 25 KB (about 5 K tokens of raw output the parent would not read line-by-line).
+- Caller / dependency graph expansion crosses multiple subsystems.
+- Caller/dependency evidence from `tilth_deps` or `/cheez-search` crosses multiple subsystems.
+
+For the digest contract, harness-agnostic selection rules, and what the parent never delegates, see `references/sub-agent-gate.md`.
+
+### Scale-triggered fan-out mode
+
+Activates when **all** hold: the **scale threshold** (above) is met AND `/age` is not itself running as a dispatched sub-agent — ultracook-dispatched reviewers run inline by agent type, and a sub-agent cannot spawn sub-agents. Below threshold, or when running as a sub-agent, the single-parent path applies unchanged.
+
+**Seam 1 — Predicate.** The activation gate above (scale threshold met AND `/age` not a sub-agent) is the fan-out predicate.
+
+**Seam 2 — Shared context packet.** The orchestrator assembles the packet once, writes it to `.cheese/age/<slug>-packet.md`, and each worker reads it. Eight components, and the reuse of the review-context digester as the orientation block, are documented in `references/packet.md`.
+
+**Seam 3 — Worker contract.** One worker per dimension. Resolve the `reviewer` role through `../cheese/references/agent-resolution.md`, requiring read-only permissions and fresh context; a prompt-constrained general fallback is allowed only with `degraded: true`. Each worker:
+- Reviews only its assigned dimension.
+- Computes **full per-finding severity** for that dimension (base + location bump + compounding bump).
+- Tags each finding with its dimension and an `also-relevant-to: [<dim>, ...]` field when cross-dimension overlap is suspected.
+- Returns its dimension's findings as full per-finding rows in the `SKILL.md § Output` finding format (`**[dim:sev]** path:line — claim` + `location / fix-cost-now / fix-cost-later / confidence` + `recommendation`). Not an orientation digest — the `§ Digest contract` size ceiling does not apply.
+- Does **not** dedup, apply boundary tiebreakers, reconcile severity across dimensions, or write the report.
+
+**Seam 4 — Orchestrator reconciliation.** After all workers return, apply the `## Dimension boundaries` table (`references/dimensions.md:319-340`) verbatim to any line meeting EITHER condition: (1) flagged by two or more workers at the same `file:line`; (2) tagged `also-relevant-to: [d]` by any worker — the orchestrator re-evaluates dimension `d` against that line and applies the tiebreaker (keep the higher-base finding / suppress / emit-both-with-cross-reference per the 15 rules). This consumes the `also-relevant-to` signal and provides the cross-dimension coverage single-parent gets for free. Lines neither flagged by ≥2 workers nor tagged `also-relevant-to` need no reconciliation. Group by severity. The parent owns the canonical artifact. After reconciliation, continue at step 5 (write + print the report path) and `## Handoff` exactly as the single-parent path does.
+
+**Seam 5 — Shared impact evidence.** The packet carries the caller/dependency notes assembled through `tilth_deps` and `/cheez-search`. Workers use that packet instead of rebuilding impact context independently.
+
+**Output shape invariant.** The findings report (`.cheese/age/<slug>.md`) has the same dedup, severity grouping, and finding format in the single-parent and fan-out paths. Resolution provenance may expose the selected role and topology.
+
+## Output
+
+Cross-cutting house style and citation form: [`../cheese/references/formatting.md`](../cheese/references/formatting.md). This section owns the findings-report shape; formatting.md owns the voice rules and the footnote primitive.
+
+Write to `.cheese/age/<slug>.md` with a minimum handoff slug at the top so `/ultracook` and `/cheese --continue` can chain without re-parsing the report:
+
+```markdown
+status: ok | halt: <one-line reason>
+next: cure | done
+artifact: <path-to-press-report-or-prior-cure-if-any>
+durable_flags: none | <one line per flag: what durable knowledge changed -> target wiki page>
+<one-line orientation: what the diff does>
+
+press: skipped
+
+<!-- `press: skipped` is the first body line after the blank separator — the handoff slug stays exactly five physical lines. Omit it entirely when a press report exists for this slug or no cook artifact does. -->
+
+# Age Report — <slug>
+
+## Orientation
+<one or two factual sentences about what the diff does>
+
+## Press findings
+<omit this section when `.cheese/press/<slug>.md` does not exist. When it does, summarise unresolved press items in one or two bullets so `/cure` (which never reads the press report directly) sees them. When it does not exist but `.cheese/cook/<slug>.md` does, omit this section but add `press: skipped` as the first body line after the handoff slug (see above) instead.>
+
+## Wiki context
+<omit this section when hallouminate is absent or grounding returned no hits. When wiki pages informed the review context, list one bullet per consulted page — `<wiki page path>:<line>` — <one-line why it informed the review> — so the user can see, and challenge, what grounded the review.>
+
+## Blocker
+- **[encapsulation:blocker]** `src/users/index.ts:42` — `index` re-exports `SqlPgUser` (infra ORM type) across slice boundary. 3 consumer slices already import it.
+  - location: contract · fix-cost-now: sprawling · fix-cost-later: structural · confidence: certain
+  - recommendation: define `User` in the slice's public types, map at the boundary, deprecate the leaked export.
+
+## High
+- **[security:high]** `src/api/admin/users.ts:55` — admin route accepts user-supplied filter without validation.
+  - location: contract · fix-cost-now: contained · fix-cost-later: contained · confidence: certain
+  - recommendation: validate against `AdminFilter` schema at boundary.
+
+## Medium
+- **[complexity:medium]** `src/utils/format.ts:200-240` — 60-line function, 5 params.
+  - location: module · fix-cost-now: contained · fix-cost-later: contained · confidence: speculating
+  - recommendation: extract `formatHeader` / `formatBody`.
+
+## Low
+- **[deslop:low]** `src/utils/format.ts:18` — variable `data` shadows outer `data`.
+  - location: class · fix-cost-now: contained · fix-cost-later: contained · confidence: certain
+  - recommendation: rename to `lineItems`.
+
+## Confidence
+<`certain` | `speculating` | `don't know`> — <one-line justification including which evidence sources were unavailable>
+
+## Next step
+<when press was skipped, lead with>: Hardening was skipped for this diff — run `/press <slug>` before curing, or continue reviewing as-is.
+Auto-fixing the recommended set via `/cure` (or the selection prompt on a reason to ask / `--safe`).
+```
+
+Empty severity sections are omitted entirely. When ten or more `low` findings exist, collapse the `## Low` section to a single line:
+
+```markdown
+## Low
+*N low-severity findings suppressed.* Re-run with `--full` (or `/age --full`) to see them.
+```
+
+Per-finding `confidence:` uses the voice-kernel scale (`references/voice.md` § Reasoning posture): `certain` — the defect is verified by direct evidence (diff/code read, command output); `speculating` — inferred from indirect signal. A `don't know` grading never ships as a finding row — gather the missing evidence or drop the claim.
+
+Suppressed lows feed the cure-selection table only when `--full` is passed.
+
+`status: ok` when the review completed. `status: halt: <reason>` when evidence was unreachable in a way that blocks honest review. `next: cure` when at least one finding meets the **medium+ floor**; `next: done` when no finding meets it or the two-cure-pass cap has been reached. `durable_flags:` is the same conservative durable-change gate as cook's: recorded at report delivery, default `none`; a finding that changed the design (an architecture, protocol, convention, or rationale delta) earns one flag line (`<what changed> -> <target wiki page>`); routine findings record `durable_flags: none`. Age records flags only — it stays read-only and never writes the wiki; the publish-boundary writer (cure/plate/affinage) reads upstream flags as its write-back candidate list.
+
+Then print:
+
+```
+Age report: .cheese/age/<slug>.md
+```
+
+When `press: skipped` is set, also print a one-line warning:
+
+```
+Warning: no /press report for <slug> — hardening was skipped. Run /press <slug> first, or continue with /cure.
+```
+
+When `--html` is passed, render the HTML report — the render command and bundle fallback live with the `--html` flag under `## Inputs` — and print both paths:
+
+```
+Age report:  .cheese/age/<slug>.md
+HTML report: <path printed by html-report>
+```
+
+## Handoff
+
+**Pipeline:** culture → mold → cook → press → **[age]** → cure → plate
+
+**Compute the recommended set.** The recommended selection is the composite `all-medium, cheap` — floor at medium (blockers + high + medium) unioned with every `Low` whose `fix-cost-now: contained`. Expand it against the report into `resolved_ids`.
+
+**Decide act vs ask:**
+
+- **Empty set** — no finding meets the medium floor and no cheap lows exist. Nothing to cure: write `next: done`, print the report path, and stop. No question.
+- **Reason to ask present** — render the selection gate (below) and wait for a choice. A reason to ask is any of:
+  - a finding in the recommended set has `fix-cost-now: sprawling` **or** `fix-cost-later: structural` (auto-applying a large/structural change is unrequested scope);
+  - findings in the set conflict, or a fix forces a design decision the user should make;
+  - `--safe` was passed (always gate).
+
+  When the only reason is heavy findings, pre-select the recommended composite in the gate and flag the heavy rows so the user can drop them while the rest still go.
+- **Otherwise** — act. Announce the selection in one line (e.g. `Auto-fixing 4 findings (all-medium, cheap) → /cure`) and dispatch `/cure` immediately (see **Dispatch** below). No gate.
+
+### Selection gate (`--safe`, or a reason to ask)
+
+Use the shared handoff gate in [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md). Age's finding selection is the core decision; the tail (**Plate it**, **Checkpoint & stop**, **Stop**) follows.
+
+1. Render the numbered selection table:
+
+   ```
+   python3 shared/scripts/findings_cli.py render-table --report .cheese/age/<slug>.md
+   ```
+
+   If the host only ships the bundle, `python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz findings_cli render-table --report .cheese/age/<slug>.md` is the fallback.
+   Mark any sprawling/structural-fix row as *heavy*.
+2. Ask which findings to cure. Lead each option with the verb (what the user wants to *do* next); the underlying selection verb is the backing detail. Lead with the recommended composite, then present the same four severity-floor options below it, in the same most-inclusive-to-least order, so the gate is predictable across every run:
+   - **Fix mediums-and-above plus cheap lows** *(recommended)* — equivalent to `all-medium, cheap` (the composite floor defined at **Compute the recommended set** under `## Handoff`). The cheap lows are the small valid nits that are cheaper to fix than to defer; sprawling/structural lows are left out.
+   - **Fix everything** — equivalent to `all` (every finding regardless of severity).
+   - **Fix medium-severity and above** — equivalent to `all-medium` (the medium severity-floor from **Compute the recommended set** under `## Handoff`, without the cheap-lows union; add `cheap` to also union the contained-fix lows, i.e. the recommended composite above).
+   - **Fix high-severity and blockers** — equivalent to `all-high` (floor at high, includes blockers).
+   - **Fix blockers only** *(strict; land only the must-fix blockers and defer the rest to a follow-up)* — equivalent to `all-blocker`.
+
+   Then offer the non-floor and standard-tail options last:
+   - **Pick findings to fix** — accept a free-text reply using the verbs from `../cure/references/selection.md`; expand the verb to finding ids:
+
+     ```
+     python3 shared/scripts/findings_cli.py parse-selection --report .cheese/age/<slug>.md --selection "<verb>"
+     ```
+
+     If the host only ships the bundle, `python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz findings_cli parse-selection ...` is the fallback.
+   - **Plate it** — apply the recommended composite via `/cure <slug> --auto --open-pr --stake medium+`; terminal `/plate` resolves topology and publishes. Carry `--hard`.
+   - **Checkpoint & stop** — `/wheypoint`: write a resumable handoff and pause instead of curing now.
+   - **Stop — leave the report for later** — equivalent to `none`.
+
+   Present all four severity options on every run even when a severity band is empty (e.g. no blockers): a floor that resolves to an empty set is a valid, predictable no-op — do not drop or reorder options based on which bands happen to be populated. If the user selects a floor (or the recommended composite) that resolves to an empty set, treat the selection as `none`: report that no findings match and do not dispatch `/cure` with empty `resolved_ids` (the non-empty-selection contract in **Dispatch** still holds).
+
+### Dispatch
+
+On a non-empty selection — whether auto-selected by default or chosen at the gate — immediately dispatch `/cure <slug> [--safe] [--open-pr] [--hard]` with the selection locked in via context, not a CLI flag:
+
+```yaml
+handoff_context:
+  source_skill: /age
+  source_report: .cheese/age/<slug>.md
+  selection: "<recognized verb or explicit ids>"
+  resolved_ids: [<expanded ids>]
+```
+
+`/cure` skips its own selection prompt when this context is present, re-confirms the cited ids still exist, then owns the apply / validate / push loop. Always emit `resolved_ids` alongside `selection` — expand the verb yourself rather than leaving the field empty; `/cure` re-confirms against the report regardless. Propagate `--safe`, `--open-pr`, and `--hard` to `/cure` when they are in scope.
+
+On `none` / `Stop` (only reachable via the gate), exit cleanly with the report path.
+
+`--auto` substitutes a severity-floor selection and its own chain — see `## Auto mode` below.
+
+## Auto mode
+
+When invoked with `--auto`:
+
+- Skip the handoff gate.
+- If two cure passes have already completed (cap reached), stop and surface the final report — do not invoke `/cure` again even if findings remain.
+- Otherwise, if any finding meets the **medium+ floor** (the composite floor defined at **Compute the recommended set** under `## Handoff`) — invoke `/cure <slug> --auto --stake medium+` (forward `--open-pr` when it is in scope) and increment the cure-pass count when it returns.
+- If no finding meets the **medium+ floor**, stop the chain with a one-line "auto chain clean" note and the report path.
+
+### When invoked from /ultracook
+
+`/ultracook` spawns age as a fresh-context sub-agent and owns the chain itself. Honour the no-chain override:
+
+- Write `.cheese/age/<slug>.md` (with the handoff slug at the top) and stop. Do not invoke `/cure <slug> --auto --stake medium+` from inside the sub-agent.
+- Set `next:` from what you observe on this run, not from any guess about chain position. `next: cure` when at least one finding meets the **medium+ floor**; `next: done` when none do.
+- The two-cure-pass cap is enforced by ultracook's fixed chain length. The terminal age is publishable only with `next: done`; `next: cure` or a missing `next` halts without publishing. Parallel curds and post-merge review dispatch age as a top-level fresh-context reviewer, never as nested inline self-review.
+
+## Rules
+
+- Review is not a verdict; explain where to look and why.
+- Do not edit production files; `/cure` owns application.
+- Default to acting: auto-select the recommended set and dispatch `/cure` without a gate. Ask first only on a genuine reason (a sprawling/structural fix in the set, or conflicting findings) or under `--safe`. An empty recommended set is a clean stop, not a question.
+- Do not invent evidence. Cite files, diffs, commands, or unavailable-source notes.
+- Agree when the diff is fine. Do not manufacture findings to fill a dimension; an empty dimension is a valid outcome.
+- Keep confidence qualitative (`certain | speculating | don't know`); never emit a numeric score. This covers both the report-level `## Confidence` line and the per-finding `confidence:` label.
+- Findings carry location + recommendation. Do not write JSON sidecars or tag-anchored fix payloads — `/cure` reads the markdown directly.
+- Apply `references/voice.md` (output discipline, reasoning posture, confidence vocabulary).
+
+## References
+
+- `references/dimensions.md` — per-dimension rubrics and recommendation shapes.
+- `references/voice.md` — shared output discipline, reasoning posture, and confidence vocabulary.
+- `references/deslop-rust.md` / `references/deslop-typescript.md` / `references/deslop-python.md` / `references/deslop-shell.md` / `references/deslop-go.md` — per-language `deslop` pattern catalogs with lint-rule mappings and citations.
+- `references/sub-agent-gate.md` — shared sub-agent kernel: digest contract, harness-agnostic selection, what the parent never delegates.
+
+## Agent resolution
+
+Resolve every dimension worker and fresh-context review through [`../cheese/references/agent-resolution.md`](../cheese/references/agent-resolution.md).
+
+| Work | Preferred types | Permissions/isolation | Minimum power | Effort | Fallback |
+| --- | --- | --- | --- | --- | --- |
+| Review a diff or one dimension | reviewer | read-only, fresh-context | powerful | high | compatible reviewer, then general |
+
+The canonical age report/handoff carries the shared `agent_resolution` block.

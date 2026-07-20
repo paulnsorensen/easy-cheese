@@ -1,0 +1,103 @@
+{
+  "skill_name": "plate",
+  "evals": [
+    {
+      "id": 0,
+      "name": "commit-only",
+      "prompt": "Commit these finished changes locally; do not push or open a PR.",
+      "expected_output": "Runs final artifact inventory and read-back, then project quality gate, inspects diff, stages named files only, creates a Conventional Commit, verifies status, and stops without asking PR layout or publishing.",
+      "files": []
+    },
+    {
+      "id": 1,
+      "name": "cohesive-single-auto-selection",
+      "prompt": "Open a PR for this finished, cohesive feature and its tests.",
+      "expected_output": "Recognizes one cohesive review unit, selects a single PR, and proceeds without asking topology, including under auto.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "stack-recommendation-choice",
+      "prompt": "Open a PR for a change with a shared protocol layer, dependent implementation, and final wiring.",
+      "expected_output": "Names the independently reviewable ordered layers, recommends stacked PRs, and asks stacked versus one PR before any commit or branch-layout mutation.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "explicit-single-authoritative",
+      "prompt": "Plate this as one PR.",
+      "expected_output": "Treats the explicit single-PR choice as authoritative, skips the topology question, then runs durable-write and quality gates, commits named files, pushes, creates with explicit base/head and --body-file, and verifies via gh pr view.",
+      "files": []
+    },
+    {
+      "id": 12,
+      "name": "ambiguous-review-shape",
+      "prompt": "Open a PR for this finished branch; the changes share a goal but may form separable layers.",
+      "expected_output": "Explains the competing cohesion and layer evidence, recommends the best-supported option, and asks single versus stacked before mutation rather than silently choosing.",
+      "files": []
+    },
+    {
+      "id": 13,
+      "name": "pr-plan-cannot-override-explicit-choice",
+      "prompt": "Use one PR. A supplied pr_plan recommends a stack.",
+      "expected_output": "Keeps the explicit single-PR choice, skips the topology question, and treats the plan only as non-authoritative review-shape evidence.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "name": "existing-pr-no-choice",
+      "prompt": "Push these fixes to the PR already open for this branch.",
+      "expected_output": "Does not ask layout. Detects ordinary versus stack metadata, commits safely, then uses the matching update path and verifies the PR.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "name": "write-failure-halts",
+      "prompt": "Open a PR, but the promised ADR write fails read-back.",
+      "expected_output": "Halts before just check, staging, commit, push, or PR creation; reports a {target, backend, verified:false} completion row.",
+      "files": []
+    },
+    {
+      "id": 6,
+      "name": "hallouminate-fallback",
+      "prompt": "Publish this repo; hallouminate is unavailable and the implementation made a durable design decision.",
+      "expected_output": "Writes and reads back a tracked docs/adr fallback, includes it in the commit, and does not hand-edit a wiki.",
+      "files": []
+    },
+    {
+      "id": 7,
+      "name": "graphite-post-merge",
+      "prompt": "The bottom Graphite PR merged. Sync and republish the remaining stack.",
+      "expected_output": "Uses gt sync, gt log short, and gt submit --stack; never bare rebase or single-branch push.",
+      "files": []
+    },
+    {
+      "id": 8,
+      "name": "git-town-post-merge",
+      "prompt": "The bottom Git Town PR merged. Catch up the rest.",
+      "expected_output": "Uses git town sync --stack and git town branch. Conflict recovery uses git town continue/skip, not bare git rebase continuation.",
+      "files": []
+    },
+    {
+      "id": 9,
+      "name": "gh-stack-post-merge",
+      "prompt": "The bottom gh stack PR merged. What should happen locally?",
+      "expected_output": "Uses gh stack sync to pull server-cascaded state and gh stack view; submits only for unpublished local commits.",
+      "files": []
+    },
+    {
+      "id": 10,
+      "name": "stack-without-boundaries",
+      "prompt": "Make this a stack.",
+      "expected_output": "After the topology choice, asks for commit/file split boundaries rather than inventing them.",
+      "files": []
+    },
+    {
+      "id": 11,
+      "name": "hard-final-state",
+      "prompt": "Plate --hard and open a PR.",
+      "expected_output": "Runs final writing gate and validation before giving hard-cheese the final artifact inventory and completion rows, then publishes only if the gate passes.",
+      "files": []
+    }
+  ]
+}
