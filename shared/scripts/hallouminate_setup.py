@@ -87,7 +87,9 @@ def _atomic_write(path: Path, text: str) -> None:
     """Write via a temp sibling + ``os.replace`` so an interrupted write can
     never truncate the shared user config (it holds unrelated corpora)."""
     tmp = path.with_name(f"{path.name}.ec-tmp")
-    tmp.write_text(text, encoding="utf-8", newline="")
+    # write_bytes (not write_text) so line endings pass through verbatim on
+    # every Python -- write_text(newline=...) is 3.13+, CI runs 3.12.
+    tmp.write_bytes(text.encode("utf-8"))
     os.replace(tmp, path)
 
 
@@ -177,7 +179,9 @@ def apply_global(config_path: Path | None = None, *, apply: bool) -> Change:
     if not path.exists():
         path.write_text("", encoding="utf-8")
     if action != "noop":
-        text = path.read_text(encoding="utf-8", newline="")
+        # read_bytes (not read_text) so CRLF endings survive verbatim on
+        # every Python -- read_text(newline=...) is 3.13+, CI runs 3.12.
+        text = path.read_bytes().decode("utf-8")
         _atomic_write(path, _replace_marked_block(text, _block(home)))
     return Change("global", action, str(path), detail)
 
