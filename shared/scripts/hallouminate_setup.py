@@ -226,7 +226,9 @@ def migrate_legacy(config_path: Path | None = None, *, apply: bool) -> Change:
     no_legacy = Change("global", "noop", str(path), "no legacy cheese-global block found")
     if not path.is_file():
         return no_legacy
-    text = path.read_text(encoding="utf-8")
+    # read_bytes (not read_text) so CRLF endings survive verbatim on
+    # every Python -- read_text(newline=...) is 3.13+, CI runs 3.12.
+    text = path.read_bytes().decode("utf-8")
     lines = text.splitlines(keepends=True)
     for start, end in _unmarked_corpus_sections(text):
         section = "".join(lines[start:end])

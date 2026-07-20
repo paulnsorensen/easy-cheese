@@ -310,6 +310,31 @@ class TestApplyGlobalNewlinePreservation:
         assert b'name = "cheese-durable"' in raw
 
 
+class TestMigrateLegacyNewlinePreservation:
+    def test_crlf_config_stays_crlf_after_migrate(
+        self, hallouminate_setup: ModuleType, config_path: Path
+    ) -> None:
+        config_path.parent.mkdir(parents=True)
+        config_path.write_text(
+            '[[corpus]]\r\n'
+            'name = "cheese-global"\r\n'
+            'paths = ["~/.cheese"]\r\n'
+            'globs = ["**/*.md"]\r\n'
+            '[[repository]]\r\n'
+            'name = "other-repo"\r\n'
+            'path = "/opt/other"\r\n',
+            encoding="utf-8",
+            newline="",
+        )
+        change = hallouminate_setup.migrate_legacy(config_path, apply=True)
+        assert change.action == "remove"
+        raw = config_path.read_bytes()
+        # No lone LF: every LF is part of a CRLF pair.
+        assert raw.count(b"\n") == raw.count(b"\r\n")
+        assert b'name = "cheese-global"' not in raw
+        assert b'name = "other-repo"' in raw
+
+
 class TestMigrateLegacyDryRun:
     def test_dry_run_reports_remove_without_writing(
         self, hallouminate_setup: ModuleType, config_path: Path
