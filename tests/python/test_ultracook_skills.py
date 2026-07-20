@@ -1122,6 +1122,25 @@ class TestUltracookModeGate:
             "ultracook must state a 1-curd spec stays linear"
         )
 
+    def test_fast_path_skips_decomposer_for_single_low_or_medium_blast_curd(self) -> None:
+        body = _skill("ultracook")
+        body_lower = body.lower()
+        assert "fast-path" in body_lower, (
+            "ultracook must document a deterministic fast-path before the decompose step"
+        )
+        assert "hint = 1" in body, (
+            "fast-path must gate on a curd-count hint of exactly 1"
+        )
+        assert "low or medium" in body_lower, (
+            "fast-path must require blast radius low or medium"
+        )
+        assert "skip the decomposer spawn" in body_lower, (
+            "fast-path must skip the decomposer spawn entirely, not just prefer linear"
+        )
+        assert "never to pick parallel" in body_lower, (
+            "the hint must be trusted only to skip work, never to choose parallel"
+        )
+
 
 class TestUltracookParallelTopology:
     """Parallel mode uses typed fresh-context phase agents in one curd worktree,

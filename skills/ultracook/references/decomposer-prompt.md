@@ -64,6 +64,17 @@ Before producing curds, check each of these against the spec:
 When any of these applies, return the curds you can genuinely identify. Do NOT force an
 artificial decomposition and do NOT pad curds to reach the parallel threshold.
 
+## Trivial curds — fold, don't emit standalone
+
+A curd touching 1 file or fewer (a pure config/allowlist entry, a one-line
+wiring stub) is trivial. Prefer folding a trivial curd into `seed` (if
+foundational), `wiring` (if integration), or a substantial sibling curd's
+`files[]`/`behavior` rather than emitting it standalone — a dominant curd
+plus a trivial one is not worth the parallel fan-out overhead. Only emit a
+trivial curd standalone when folding would violate criterion 4
+(file-disjointness) or genuinely obscures an independent acceptance
+criterion.
+
 ## Validation
 The orchestrator will run `${CLAUDE_SKILL_DIR}/scripts/ultracook.pyz validate_manifest` on your output for required
 sections and field shapes, then `${CLAUDE_SKILL_DIR}/scripts/ultracook.pyz validate_decomposition` against the checks
