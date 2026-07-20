@@ -2,6 +2,9 @@
 
 <!-- HALLOUMINATE:INDEX-START -->
 - [agent-resolution](./agent-resolution.md) — ADR: Progressive agent resolution is a shared contract
+- [cheese-corpus-setup-001](./cheese-corpus-setup-001.md) — ADR-001: install.sh derives the durable root via the skill's bundled `.pyz`, not bash  [status: accepted]
+- [cheese-corpus-setup-002](./cheese-corpus-setup-002.md) — ADR-002: spec-discovery falls back to `resolve_slug` when hallouminate is absent  [status: accepted]
+- [cheese-corpus-setup-003](./cheese-corpus-setup-003.md) — ADR-003: delete the `spec_match` scoring engine rather than refactor it  [status: accepted]
 - [cheese-kernel-shared-refs-001](./cheese-kernel-shared-refs-001.md) — ADR: shared docs live in the cheese skill's references dir, cited sibling-relative
 - [cheese-kernel-shared-refs-002](./cheese-kernel-shared-refs-002.md) — ADR: owner-homed cross-skill content stays with its owner
 - [codex-omp-portability-001](./codex-omp-portability-001.md) — ADR: Shared harness portability reference

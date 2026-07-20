@@ -29,7 +29,7 @@ EC_SKILL_REPO="paulnsorensen/easy-cheese"
 # new skills land — this list is only used when the API call is
 # unavailable (offline, rate-limited, repo temporarily private). Kept
 # loosely in sync with skills/ but not load-bearing for happy-path runs.
-EC_FALLBACK_SKILLS="age affinage briesearch cheese cheez-read cheez-search cheez-write cook culture cure hard-cheese melt mold pasteurize plate press ultracook wheypoint"
+EC_FALLBACK_SKILLS="age affinage briesearch cheese cheez-read cheez-search cheez-write cook culture cure easy-cheese-setup hard-cheese melt mold pasteurize plate press ultracook wheypoint"
 
 # Default selections.
 EC_DEFAULT_TOOLS="$EC_KNOWN_TOOLS"
@@ -351,6 +351,36 @@ ec_install_mcp_hallouminate() {
     esac
 }
 
+# Registers the durable cheese-durable hallouminate corpus (global leg only
+# -- local per-repo tenant registration is a skill-only interactive flow, see
+# skills/easy-cheese-setup/SKILL.md). Corpus registration is global, so this
+# runs once against a single resolved harness, not once per harness. Never
+# aborts the installer -- resolution or registration failures are warnings.
+ec_setup_cheese_corpus() {
+    local harnesses="$1" gh="${EC_GH:-gh}" harness pyz_dir bundle
+    if ! ec_cmd_exists "$gh"; then
+        ec_warn "cheese corpus: gh CLI not found; skipping corpus registration."
+        return 0
+    fi
+    harness="${harnesses%%$'\n'*}"
+    if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
+        ec_log "cheese corpus: would resolve the easy-cheese-setup skill via '$gh skill list --agent $harness --scope user --json path,skillName' then run 'python3 <resolved-path>/scripts/easy-cheese-setup.pyz global --apply'"
+        return 0
+    fi
+    pyz_dir="$("$gh" skill list --agent "$harness" --scope user --json path,skillName \
+        --jq '.[] | select(.skillName=="easy-cheese-setup") | .path' 2>/dev/null)"
+    if [[ -z "$pyz_dir" ]]; then
+        ec_warn "cheese corpus: could not resolve the easy-cheese-setup skill path via gh skill list; skipping."
+        return 0
+    fi
+    bundle="$pyz_dir/scripts/easy-cheese-setup.pyz"
+    ec_log "cheese corpus: registering cheese-durable corpus"
+    if ! python3 "$bundle" global --apply; then
+        ec_warn "cheese corpus: failed to register cheese-durable corpus via $bundle"
+    fi
+    return 0
+}
+
 ec_install_mcp_milknado() {
     local harness="$1"
     local claude="${EC_CLAUDE:-claude}"
@@ -625,6 +655,10 @@ ec_main() {
     local harnesses
     harnesses="$(ec_resolve_harnesses "$EC_HARNESS")" || return $?
     ec_install_skills_for_harnesses "$harnesses" || return 1
+
+    case ",$EC_MCP," in
+        *,hallouminate,*) ec_setup_cheese_corpus "$harnesses" || true ;;
+    esac
 
     if [[ "$EC_MCP" != "none" ]]; then
         ec_install_mcp_for_harnesses "$EC_MCP" "$harnesses" "$EC_WITH_EDIT" || return 1

@@ -77,3 +77,8 @@ def handoff_cli_mod() -> ModuleType:
 @pytest.fixture(scope="session")
 def paths_cli_mod() -> ModuleType:
     return importlib.import_module("paths_cli")
+
+
+@pytest.fixture(scope="session")
+def hallouminate_setup() -> ModuleType:
+    return importlib.import_module("hallouminate_setup")

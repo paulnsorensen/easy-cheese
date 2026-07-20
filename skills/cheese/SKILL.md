@@ -73,14 +73,17 @@ This check is lightweight — a glob + keyword scan over `.cheese/.out-of-scope/
 
 ## Spec-discovery check
 
-Before minting a new mini-spec for a tier-1 `cook` or `mold` dispatch, look for an existing spec that already covers the request. Glob `.cheese/specs/*.md` and score each candidate on a lightweight keyword match against its slug, title, and first heading — a plain filename glob plus a text scan (host `rg` / read), not `cheez-search`, which is scoped to tracked source files and skips Markdown specs. This mirrors the rejected-directions scan and stays headless, so it runs on the autonomous path and across harnesses.
+Before minting a new mini-spec for a tier-1 `cook` or `mold` dispatch, look for an existing spec that already covers the request. Specs land in the durable XDG corpus (`default_root_for_phase("specs")`), not repo-local, so probe there:
 
-Act on the score, do not guess:
+- **hallouminate present** — `ground` the candidate spec text against the `cheese-durable` corpus for a near-duplicate (semantic match across every project's durable specs). Detect-and-degrade per [`references/optional-plugins.md`](references/optional-plugins.md).
+- **hallouminate absent** — fall back to `resolve_slug(candidate_slug, phase_hint="specs")` (the XDG-correct `difflib` resolver in `shared/scripts/paths.py`), and note the degrade once: name-based rather than semantic matching. This keeps slug-level dedup on the headless/cron path where hallouminate is routinely unavailable.
 
-1. **One clear match (high confidence)** — surface the spec path in one line and dispatch against it (`/cook --auto .cheese/specs/<slug>.md`) instead of writing a duplicate.
+Act on the result, do not guess:
+
+1. **One clear match (high confidence)** — surface the resolved spec path in one line and dispatch against it (`/cook --auto <resolved-spec-path>`) instead of writing a duplicate.
 2. **Multiple plausible matches, or a weak best match** — under `--safe`, present the candidates in the handoff gate for the user to pick; without `--safe`, fall back to minting a fresh mini-spec rather than risk dispatching against the wrong spec.
 
-Skip silently when `.cheese/specs/` is empty or absent, and when the user already named a spec path there (the path is authoritative). A dedicated Python scoring helper (stdlib `difflib.get_close_matches` over the slug/title list) would give deterministic ranking with zero dependencies and keep this check consistent with the rejected-directions scan — tracked in issue #267.
+Skip silently when no specs exist yet, and when the user already named a spec path (the path is authoritative).
 
 ## --continue
 

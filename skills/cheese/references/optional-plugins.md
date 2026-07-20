@@ -14,7 +14,7 @@ This document is the single source of truth for the contract. Every skill that r
 
 | MCP | Key tool(s) to probe | Fallback when absent | Confidence impact |
 | --- | --- | --- | --- |
-| hallouminate | `mcp__hallouminate__list_corpora`, `mcp__hallouminate__ground` | Skip wiki grounding; note absence once; proceed with diff + code evidence only | Cap at `speculating` when design rationale is central |
+| hallouminate | `mcp__hallouminate__list_corpora`, `mcp__hallouminate__ground` | Skip wiki grounding; note absence once; proceed with diff + code evidence only. Spec-discovery specifically falls back to `resolve_slug(slug, phase_hint="specs")` (name-based instead of semantic) | Cap at `speculating` when design rationale is central |
 | milknado | `mcp__milknado__milknado_todo_claim` + `mcp__milknado__milknado_node_verify` (engine) or `mcp__milknado__milknado_todo_add` (tracker) | Use the in-report curd decomposition (manifest YAML in `.cheese/ultracook/<slug>/manifest.yaml`); no external task-graph backend | No confidence impact — the decomposition itself is unchanged |
 
 ## Reporting an unavailable optional MCP
