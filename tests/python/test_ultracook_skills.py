@@ -242,6 +242,58 @@ class TestMoldHighBlastHandoff:
 
 
 # ---------------------------------------------------------------------------
+# /mold — low/medium-blast-radius handoff offers a non-recommended /ultracook
+# ---------------------------------------------------------------------------
+
+
+def _mold_low_medium_handoff_menu() -> str:
+    """The option list under mold's non-decomposable low/medium handoff branch.
+
+    Sliced from the branch header to the section's closing rationale paragraph
+    so assertions target the menu options themselves, not the surrounding
+    prose (which also references /ultracook and /cook --auto).
+    """
+    body = _skill("mold")
+    start = body.index("**Non-decomposable, low- or medium-blast-radius specs")
+    end = body.index("`/cook --auto` is omitted", start)
+    return body[start:end]
+
+
+class TestMoldLowMediumHandoff:
+    def test_offers_ultracook_option(self) -> None:
+        # /ultracook already appears in the high-blast-radius branch, so the
+        # body-wide TestMoldHighBlastHandoff guard cannot catch removal of this
+        # low/medium menu option — assert it on the branch's own option list.
+        menu = _mold_low_medium_handoff_menu()
+        assert "/ultracook <spec-path>" in menu, (
+            "mold's low/medium handoff menu must offer the /ultracook option"
+        )
+
+    def test_states_fast_path_cost(self) -> None:
+        # Acceptance: the option states the 1-curd fast-path (linear chain, no
+        # decomposer spawn) so users are not deterred by parallel-mode overhead.
+        menu = _mold_low_medium_handoff_menu()
+        assert "fast-path" in menu and "decomposer" in menu, (
+            "the /ultracook option must state the fast-path with no decomposer spawn"
+        )
+
+    def test_cook_keeps_recommended_slot(self) -> None:
+        # Menu-addition, not recommendation-flip: /cook stays recommended
+        # (the flip was the explicitly rejected direction).
+        menu = _mold_low_medium_handoff_menu()
+        recommended = [ln for ln in menu.splitlines() if "*(recommended)*" in ln]
+        assert len(recommended) == 1, (
+            "the low/medium menu must mark exactly one recommended option"
+        )
+        assert "/cook <spec-path>" in recommended[0], (
+            "/cook must remain the recommended low/medium option"
+        )
+        assert "/ultracook" not in recommended[0], (
+            "the /ultracook option must stay non-recommended"
+        )
+
+
+# ---------------------------------------------------------------------------
 # /cheese — --continue <slug> flag for fresh-context resumption
 # ---------------------------------------------------------------------------
 
