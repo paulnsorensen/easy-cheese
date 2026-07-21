@@ -47,6 +47,7 @@ SKILL_SUBCOMMANDS = {
     "cook": ["artifact-path"],
     "age": ["html-report"],
     "hard-cheese": ["append-attempt", "freshness-check"],
+    "wheypoint": ["lint"],
     "pasteurize": ["debug-tag-sweep", "repro-rerun"],
     "common": [
         "slugify",
