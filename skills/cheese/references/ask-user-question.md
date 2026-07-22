@@ -21,6 +21,28 @@ question:
 
 The record is the source of truth. A host rendering may change presentation, but it must preserve the prompt, recommended choice, every option's effect or tradeoff, selection mode, and a free-form `Other` path.
 
+## When to structure
+
+Answers *when* a decision may be a structured question; capability-first
+rendering (above) governs *how* once that gate passes.
+
+**Freshness rule.** A structured question may only confirm a trade-off
+already discussed with the user this session. A structured question must
+never introduce an undiscussed design option — anything undiscussed gets
+prose weighing first, before any structured question.
+
+**Mechanical fast-path.** A mechanical item is intelligible without
+prior-session context — for example, a branch name or a yes/no dispatch. A
+mechanical item may be asked as a direct structured question.
+
+**Design definition.** A design item is one whose options need session
+context to be intelligible — the tradeoffs cannot be judged without the
+discussion behind them. An undiscussed design fork is by definition
+non-fresh.
+
+**One confirm, never bundled.** After prose convergence, ask at most one
+structured confirm. Never bundle multiple design forks into one prompt.
+
 ## Capability-first rendering
 
 One rule: use the richest callable structured question primitive visible in
