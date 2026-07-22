@@ -152,10 +152,11 @@ The spec is large enough that per-phase context contamination becomes a real con
 
 - **Implement the spec** *(recommended)* — `/cook <spec-path>`.
 - **Implement and auto-review** — `/cook --auto <spec-path>`, chains through `/press → /age → /cure`. Opening or updating a PR remains a `/plate` step; a new PR follows its explicit-choice and review-shape policy.
+- **Run the pipeline in fresh-context isolation** — `/ultracook <spec-path>`. A 1-curd low/medium spec takes ultracook's fast-path: the linear chain with no decomposer spawn, dispatching each phase as a fresh sub-agent — slower than `/cook --auto`'s continuous in-session chain. Pick this when the diff feels riskier than the verdict, or when you want every phase blind to this session's dialogue.
 - **Research more first** — `/briesearch`, gather more external evidence before implementing.
 - **Stop** — dispatch none; leave the spec for later.
 
-`/cook --auto` is omitted from the decomposable and high-blast-radius offer sets: with many parallel curds or a wide footprint, `/ultracook` (parallel fan-out or fresh-context linear chain) is the actual motivation for going autonomous, and the in-session chain is the wrong transport. The no-pre-select-autonomous rule stated above applies here too; the user must opt in. `medium` blast radius keeps the standard handoff because the in-session `/cook --auto` chain is still the right tool for that footprint — the fresh-context premium is only worth paying when the spec actually crosses module boundaries broadly enough to flip the verdict to `high`, or when the spec decomposes into 2+ independent curds.
+`/cook --auto` is omitted from the decomposable and high-blast-radius offer sets: with many parallel curds or a wide footprint, `/ultracook` (parallel fan-out or fresh-context linear chain) is the actual motivation for going autonomous, and the in-session chain is the wrong transport. The no-pre-select-autonomous rule stated above applies here too; the user must opt in. `medium` blast radius keeps the standard handoff because the in-session `/cook --auto` chain is still the right tool for that footprint — the default recommendation reserves the fresh-context premium for specs that actually cross module boundaries broadly enough to flip the verdict to `high`, or that decompose into 2+ independent curds. The low/medium menu still lists `/ultracook` as a manual opt-in for the user who judges a spec riskier than its verdict; the recommendation logic is unchanged.
 
 ## Rules
 
