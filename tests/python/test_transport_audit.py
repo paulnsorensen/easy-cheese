@@ -1,21 +1,22 @@
 """Sweep test for the question-transport-policy audit (curd 4).
 
-Scans every question-asking site across `skills/*/SKILL.md` +
-`skills/*/references/*.md` (excluding this run's sibling-curd-owned files,
-which are mid-edit and exempted so this test stays valid post-merge) and
-pins each site to one of two states:
+Scans every question-asking site's **file** across `skills/*/SKILL.md` +
+`skills/*/references/*.md` and pins each file to one of three states:
 
   * routed  — the file already links the shared transport chokepoint
     (`handoff-gate.md` and/or `ask-user-question.md`).
+  * the transport doc itself — `ask-user-question.md` is the chokepoint
+    other files link to; it has no further pointer to link to itself.
   * exempt  — recorded here with a reason (mechanical fast-path, rhetorical
-    example text, or adjacent-to-sibling-curd scope this run).
+    example text, or a design decision deferred to cure/reviewer territory).
 
 Sites are pinned by file + literal snippet, not line number, so drift in
 surrounding prose doesn't rot the test — only a change to the pinned
 sentence itself does, which is the signal that the audit needs revisiting.
 
-Culture's handoff-gate mention (this curd's one repo pointer-edit) gets its
-own dedicated assertion: pre-fix it is bare (red), post-fix it must name the
+All five curds are merged as of this pass: the sweep now runs over the full
+corpus with no this-run sibling-owned scaffolding left behind. Culture's
+handoff-gate mention gets its own dedicated assertion: it must name the
 transport doc directly.
 """
 
@@ -39,14 +40,11 @@ QUESTION_KEYWORDS = re.compile(
     re.I,
 )
 
-# Files owned by a sibling curd this run — mid-edit, hard-excluded from the
-# bare-site assertion. Post-merge these WILL carry pointers; this test never
-# asserts their absence, only skips them entirely so it stays valid either
-# side of the merge.
-SIBLING_OWNED = {
-    "skills/mold/SKILL.md",
-    "skills/cheese/SKILL.md",
-    "skills/wheypoint/SKILL.md",
+# The transport doc itself — `ask-user-question.md` is the chokepoint every
+# other file links to; it has no further pointer to link to, so it can't
+# satisfy the ROUTED_FILES substring test and isn't a bare/exempt site
+# either. Accounted for separately in the sweep.
+TRANSPORT_DOC_ITSELF = {
     "skills/cheese/references/ask-user-question.md",
 }
 
@@ -60,14 +58,17 @@ ROUTED_FILES = {
     "skills/cheese/references/ask-user-question-sources.md",  # transport doc's own appendix
     "skills/cheese/references/handoff-gate.md",  # the chokepoint itself
     "skills/cheese/references/harness-portability.md",
+    "skills/cheese/SKILL.md",
     "skills/cook/SKILL.md",
-    "skills/culture/SKILL.md",  # after this curd's pointer edit
+    "skills/culture/SKILL.md",
     "skills/cure/SKILL.md",
     "skills/melt/SKILL.md",
     "skills/mold/references/evals.md",
+    "skills/mold/SKILL.md",
     "skills/pasteurize/SKILL.md",
     "skills/plate/SKILL.md",
     "skills/press/SKILL.md",
+    "skills/wheypoint/SKILL.md",
 }
 
 # Bare sites (no transport link anywhere in file) recorded with an explicit
@@ -95,20 +96,21 @@ EXEMPT_SITES: list[tuple[str, str, str]] = [
     (
         "skills/cheese/references/classification.md",
         "Ask one question. Re-enter",
-        "mechanical single clarifying question (clarify branch), adjacent "
-        "to sibling-curd-2 (cheese) scope this run",
+        "mechanical single clarifying question (clarify branch); deferred to "
+        "cure/reviewer territory, not this pass",
     ),
     (
         "skills/cheese/references/classification.md",
         "If still tied, clarify.",
-        "mechanical single clarifying question, adjacent to sibling-curd-2 "
-        "(cheese) scope this run",
+        "mechanical single clarifying question; deferred to cure/reviewer "
+        "territory, not this pass",
     ),
     (
         "skills/cheese/references/coherence-check.md",
         "the gate already exists, so swap its options",
         "internal mechanism note describing the same handoff gate cheese/"
-        "SKILL.md already routes through; adjacent to sibling-curd-2 scope",
+        "SKILL.md already routes through; deferred to cure/reviewer territory, "
+        "not this pass",
     ),
     (
         "skills/cheese/references/optional-plugins.md",
@@ -131,9 +133,9 @@ EXEMPT_SITES: list[tuple[str, str, str]] = [
         "skills/mold/references/handshake.md",
         "ask the user to choose the action: **create/link now** or "
         "**leave prepared**",
-        "mold reference file adjacent to sibling-curd-1 (mold) ownership "
-        "this run; deferred to avoid a duplicate/conflicting edit in the "
-        "same skill's directory",
+        "mechanical fast-path: create/link-now vs leave-prepared is the "
+        "operational disposition of an already-approved follow-up unit, "
+        "intelligible without prior-session context",
     ),
 ]
 
@@ -188,20 +190,24 @@ def _unaccounted_sites(
 
 
 def test_no_unaccounted_question_sites() -> None:
-    """Sweep every non-sibling SKILL.md / references/*.md file for
-    question-asking language. Every matching file must be either in
-    ROUTED_FILES or have every one of its exempt sites accounted for in
-    EXEMPT_SITES (matched by file). A brand-new bare site in a brand-new
-    file, or a new keyword hit in an already-known-bare file that isn't in
-    EXEMPT_SITES, fails this test — the sweep's teeth against drift."""
+    """Sweep every SKILL.md / references/*.md file for question-asking
+    language. Every matching file must be either in ROUTED_FILES, the
+    transport doc itself, or have every one of its exempt sites accounted
+    for in EXEMPT_SITES (matched by file). Accounting is per file, not
+    per site: a brand-new bare site in a brand-new file, or a new keyword
+    hit in an already-known-bare file that isn't in EXEMPT_SITES, fails
+    this test — the sweep's teeth against drift. A new bare site added to
+    an already-accounted file does not trip this test. No file is skipped
+    as sibling-owned scaffolding any more; all five curds are merged, so
+    the sweep runs over the full corpus."""
     exempt_files = {rel for rel, _, _ in EXEMPT_SITES}
-    accounted = ROUTED_FILES | exempt_files | SIBLING_OWNED
+    accounted = ROUTED_FILES | exempt_files | TRANSPORT_DOC_ITSELF
 
     candidates = list(SKILLS_DIR.glob("*/SKILL.md")) + list(
         SKILLS_DIR.glob("*/references/*.md")
     )
     unaccounted = _unaccounted_sites(
-        candidates, REPO_ROOT, sibling_owned=SIBLING_OWNED, accounted=accounted
+        candidates, REPO_ROOT, sibling_owned=set(), accounted=accounted
     )
     assert not unaccounted, (
         "question-asking sites found with no routing/exemption record — "
