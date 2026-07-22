@@ -72,7 +72,7 @@ Content shared _across_ skills lives in the always-installed `cheese` skill's `r
 | `skills/hard-cheese/SKILL.md` | `/hard-cheese` (or `--hard` flag) | Metacognitive vibecheck gate before review — asks the author to explain the diff's causal logic, grades the explanation against the SOLO Taxonomy. Standalone or via `--hard` propagation through the pipeline. |
 | `skills/ultracook/SKILL.md` | `/ultracook` | Autonomous fresh-context pipeline for high-blast-radius specs. Typed phase agents run each curd as sequential same-worktree spawns: coder (`cook`) → coder (`press`) → reviewer (`age`) → coder (`cure`) → reviewer (final `age`), followed by parent-owned commit-only `/plate`. Post-merge uses `press → age → cure → age`; an indivisible spec keeps the seven-phase linear chain. |
 | `skills/melt/SKILL.md` | `/melt` | Resolve merge / rebase / cherry-pick conflicts via the structural cascade (mergiraf → rerere → kdiff3) with batch, pick-side, and lockfile helpers. |
-| `skills/wheypoint/SKILL.md` | `/wheypoint` | Mark a checkpoint: compact a mid-task conversation into a durable handoff document at `.cheese/notes/<slug>.md` (resumable slug + state-mapped suggested-skills + redacted secrets) so a fresh agent can resume via `/cheese --continue <slug>`. |
+| `skills/wheypoint/SKILL.md` | `/wheypoint` | Mark a checkpoint: compact a mid-task conversation into a durable handoff document at `.cheese/notes/<slug>.md` (resumable slug + state-mapped suggested-skills + redacted secrets) so a fresh agent can resume via `/cheese --continue <slug>`. `--queue <task-slug>` instead upserts an entry into the persistent task queue at `.cheese/notes/queue.md`, resumable via `/cheese --continue queue`. |
 
 ### Tool skills
 

@@ -1,6 +1,6 @@
 ---
 name: wheypoint
-description: Mark a checkpoint in the current conversation — compact it into a durable handoff document so a fresh agent can resume the work without context loss. Use when the user wants to preserve session state for a later or parallel session — phrases like "hand this off", "write a handoff", "drop a wheypoint", "checkpoint this", "compact the conversation", "I'm running low on context", "save where we are for the next session", "prep a handoff for another agent", "/wheypoint". Use even when the user just says "wrap up" or "I need to clear context" mid-task. Do NOT use for per-phase pipeline handoffs — those belong to `/cook`, `/press`, `/age`, and `/cure`.
+description: Mark a checkpoint in the current conversation — compact it into a durable handoff document so a fresh agent can resume the work without context loss. Use when the user wants to preserve session state for a later or parallel session — phrases like "hand this off", "write a handoff", "drop a wheypoint", "checkpoint this", "compact the conversation", "I'm running low on context", "save where we are for the next session", "prep a handoff for another agent", "/wheypoint". Use even when the user just says "wrap up" or "I need to clear context" mid-task. Use `--queue` when the user wants a task tracked for later without a full handoff — phrases like "queue this task", "add this to the queue", "track this for later". Do NOT use for per-phase pipeline handoffs — those belong to `/cook`, `/press`, `/age`, and `/cure`.
 license: MIT
 ---
 
@@ -16,11 +16,13 @@ license: MIT
 - Optional argument: a description of what the next session will focus on. When present, treat it as the lens and tailor the document to it. Drop state that does not serve that focus to a one-line pointer.
 - Optional verb `--join <slugA> <slugB>`: merge two existing handoff notes into one. Reads both notes from `.cheese/notes/` and writes a single merged note whose `parents:` lists both slugs.
 - Optional verb `--split`: fork the current thread into two resumable tracks. Writes two child notes, each with `parents: [<current-slug>]` and a distinct slug.
+- Optional verb `--queue [<task-slug>]`: idempotently upsert one entry into the persistent, session-spanning task queue at `.cheese/notes/queue.md` — a stable path, not a per-session slug. Callable any number of times mid-session; matches entries by task slug and updates in place instead of appending a duplicate.
 
 ```text
 /wheypoint                     -> one note with session/git/created auto-filled
 /wheypoint --join A B          -> one merged note, parents: [A, B]
 /wheypoint --split             -> two child notes, each parents: [<current>]
+/wheypoint --queue <slug>      -> upserts one entry in .cheese/notes/queue.md
 ```
 
 ## Flow
@@ -30,6 +32,8 @@ license: MIT
 3. **Write the handoff document** to `.cheese/notes/<slug>.md` with the slug header (`## Handoff slug`) and body (`## Document`) below. When a focus argument was given, apply it as the lens throughout: emphasise state and decisions that serve the focus, and compress everything else to a one-line pointer.
 4. **Redact** secrets on the way out (`## Redaction`).
 5. **Point at resumption.** End by telling the user how to resume with `/cheese --continue <slug>` from the original repo, and include an absolute clickable path to the handoff note so the user can find it from any working directory.
+
+The default end-of-session flow is unchanged by `--queue` — it is additive. If a live queue at `.cheese/notes/queue.md` has entries relevant to this session, the handoff document may fold it in with one line pointing at the queue path; do not copy queue entries into the handoff's `## Document`.
 
 ### `--join <slugA> <slugB>`
 
@@ -49,6 +53,26 @@ Fork the current thread into two parallel tracks.
 2. Choose two distinct child slugs, one per track.
 3. Write TWO notes, `.cheese/notes/<child-a>.md` and `.cheese/notes/<child-b>.md`, each with `parents: [<current-slug>]`, its own auto-filled provenance, and a `## Document` scoped to that track's slice of the work.
 4. Point at resumption for each child so both tracks can be resumed independently.
+
+### `--queue [<task-slug>]`
+
+Upsert one entry into the persistent task queue instead of writing a session handoff.
+
+Unlike the default flow and `--join`/`--split`, `--queue` writes to a single stable path — `.cheese/notes/queue.md` — not a per-session slug file. It is callable any number of times across a session, or across many sessions: each call upserts one entry rather than appending a new note or narrative.
+
+1. **Derive or reuse a task slug** (e.g. `issue-214-queue-mode`). Reuse the same slug on every call that refers to the same task so updates land on the existing entry instead of duplicating it.
+2. **Read `.cheese/notes/queue.md`** if it exists; create it with a `# Queue` header if this is the first entry.
+3. **Upsert.** If a `## <task-slug>` section already exists, replace its fields in place. Otherwise append a new `## <task-slug>` section.
+4. Each entry carries exactly these fields and nothing else — no Goal/State/Key-decisions prose:
+   ```markdown
+   ## <task-slug>
+   task: <one-line description of the task>
+   status: open | in-progress | blocked | done
+   next: <runnable skill invocation with its expected argument, e.g. `/cook .cheese/specs/<slug>.md` — or one concrete manual action when no skill applies>
+   owner: <owning skill name, no leading slash, e.g. cook, mold, cure>
+   updated: <UTC ISO-8601>
+   ```
+5. `--queue` never writes a `## Document` section — it is a running list of entries, not a handoff document (see `## Do not duplicate`). Point at richer state (a spec, a PR, another handoff slug) from `next:` rather than re-pasting it there.
 
 ## Handoff slug
 
@@ -203,7 +227,7 @@ Strip anything sensitive before writing: API keys, tokens, passwords, connection
 
 ## Handoff
 
-The handoff document is the only thing `/wheypoint` writes. No commits, PRs, or production-code edits. Use the host's read-only inspection capabilities plus a write capability scoped to `.cheese/notes/**`. End by showing the slug's orientation line, a normal Markdown link to the note, and repo-root-aware resumption commands. Keep the note link outside fenced code so it is clickable. The link line should match this shape: `Wheypoint dropped: [.cheese/notes/<slug>.md](<absolute-note-path>)`.
+In the default checkpoint mode the handoff document is the only thing `/wheypoint` writes; in `--queue` mode it is the queue file instead. Either way: no commits, PRs, or production-code edits. Use the host's read-only inspection capabilities plus a write capability scoped to `.cheese/notes/**`. End by showing the slug's orientation line, a normal Markdown link to the note, and repo-root-aware resumption commands. Keep the note link outside fenced code so it is clickable. The link line should match this shape: `Wheypoint dropped: [.cheese/notes/<slug>.md](<absolute-note-path>)`. `--queue` writes under the same scoped write capability, to the stable path `.cheese/notes/queue.md`.
 
 Resume from original repo:
 
