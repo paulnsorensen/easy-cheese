@@ -72,10 +72,32 @@ class TestParallelCurdTable:
         with pytest.raises(phase_decision.cli.CliError):
             phase_decision.decide(5, "ok", table=phase_decision.PARALLEL_CURD)
 
-    def test_first_age_next_done_still_spawns_cure(self, phase_decision: ModuleType) -> None:
+    def test_first_age_next_done_clean_completes(self, phase_decision: ModuleType) -> None:
+        # A clean first age ends the curd: its bound review context becomes
+        # the final review identity; cure and final age are skipped.
         r = phase_decision.decide(2, "ok", "done", table=phase_decision.PARALLEL_CURD)
+        assert r["action"] == "clean_complete"
+        assert r["next_phase"] is None
+        assert "review context" in r["exit_message"]
+
+    @pytest.mark.parametrize("nxt", ["DONE", " done ", "Done"])
+    def test_first_age_next_done_normalised_clean_completes(
+        self, phase_decision: ModuleType, nxt: str
+    ) -> None:
+        r = phase_decision.decide(2, "ok", nxt, table=phase_decision.PARALLEL_CURD)
+        assert r["action"] == "clean_complete"
+
+    def test_first_age_with_no_next_still_spawns_cure(self, phase_decision: ModuleType) -> None:
+        # Clean-complete requires a positive done signal, never a missing field.
+        r = phase_decision.decide(2, "ok", table=phase_decision.PARALLEL_CURD)
         assert r["action"] == "spawn"
         assert r["next_phase"] == "cure"
+
+    def test_cure_with_next_done_still_spawns_final_age(self, phase_decision: ModuleType) -> None:
+        # Only age phases may clean-complete; a stray done from cure spawns on.
+        r = phase_decision.decide(3, "ok", "done", table=phase_decision.PARALLEL_CURD)
+        assert r["action"] == "spawn"
+        assert r["next_phase"] == "age"
 
     def test_halt_short_circuits(self, phase_decision: ModuleType) -> None:
         r = phase_decision.decide(1, "halt: boom", table=phase_decision.PARALLEL_CURD)
@@ -93,6 +115,8 @@ class TestParallelPostmergeTable:
         assert r["next_phase"] == "cure"
 
     def test_first_age_next_done_still_spawns_cure(self, phase_decision: ModuleType) -> None:
+        # Post-merge is the last review before publication — no clean-complete
+        # hatch; the full sequence through cure and final age always runs.
         r = phase_decision.decide(1, "ok", "done", table=phase_decision.PARALLEL_POSTMERGE)
         assert r["action"] == "spawn"
         assert r["next_phase"] == "cure"
@@ -130,10 +154,20 @@ class TestCliTableFlag:
         assert result.returncode == 0
         assert json.loads(result.stdout)["next_phase"] == "age"
 
-    def test_parallel_curd_first_age_done_still_spawns_cure(self) -> None:
+    def test_parallel_curd_first_age_done_clean_completes(self) -> None:
         result = self._run(
             "--phase-index", "2", "--status", "ok", "--next", "done",
             "--table", "parallel-curd",
+        )
+        assert result.returncode == 0
+        decision = json.loads(result.stdout)
+        assert decision["action"] == "clean_complete"
+        assert decision["next_phase"] is None
+
+    def test_parallel_postmerge_first_age_done_still_spawns_cure(self) -> None:
+        result = self._run(
+            "--phase-index", "1", "--status", "ok", "--next", "done",
+            "--table", "parallel-postmerge",
         )
         assert result.returncode == 0
         decision = json.loads(result.stdout)
