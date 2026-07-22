@@ -12,6 +12,10 @@ Press may add or strengthen tests and make tiny corrective fixes only when a tes
 
 `/press --hard` (propagated from `/cook --hard`) is pass-through only. Press runs no gate. Hand `--hard` forward to `/age` at the handoff so it eventually reaches `/cure`, which is the only pipeline skill that fires the metacognitive vibecheck. See `skills/hard-cheese/SKILL.md`.
 
+## Baseline-aware gates
+
+When the cooked diff's handoff slug carries a recorded `baseline:` block, press re-runs the project's gates but does not re-flag or re-halt on failures identical to that baseline (same test, same signature) — only new or changed failures affect readiness. See [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md) for the classification and policy.
+
 ## Flow
 
 1. **Read** — load the spec or acceptance criteria and the cooked diff. If `.cheese/glossary/<slug>.md` exists, read it for naming consistency when hardening tests.
@@ -19,7 +23,7 @@ Press may add or strengthen tests and make tiny corrective fixes only when a tes
 3. **Gap analysis** — identify weak assertions, missing boundaries, and uncovered integration seams. See `references/gap-analysis.md` for what counts as a gap and the priority order.
 4. **Add focused tests** — observe red first when behaviour changes. Use `cheez-write` for precise edits.
 5. **Corrective fixes** — only for defects the hardening tests expose. No new behaviour.
-6. **Run checks** — narrowest useful tests, then relevant wider gates already in the project.
+6. **Run checks** — narrowest useful tests, then relevant wider gates already in the project. When the handoff carries a `baseline:` block, classify gate failures against it per [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md): identical failures do not affect readiness; only new or changed failures do.
 7. **Report** — write `.cheese/press/<slug>.md` (slug carried from `/cook`, or derived from branch/task) and print the path. Mark readiness: `ready for /age`, `follow-up recommended`, or `blocked`.
 8. **Hand off** — in manual mode, prompt the next step via the shared handoff gate (see `## Handoff` below); in `--auto` mode, chain forward per `## Auto mode`.
 
@@ -49,6 +53,7 @@ Write to `.cheese/press/<slug>.md` with a minimum handoff slug at the top so `/u
 status: ok | halt: <one-line reason>
 next: press | age | done
 artifact: <path-if-any>
+baseline: none | <recorded baseline block copied from the cook handoff — see ../cook/references/quality-gates.md>
 <one-line orientation: what press did — e.g., "added 4 boundary tests; no defects exposed">
 
 # Press Report — <slug>
@@ -78,6 +83,8 @@ artifact: <path-if-any>
 ```
 
 `status: ok` maps to readiness `ready for /age` or `follow-up recommended`; `status: halt: <reason>` maps to `blocked`. `next:` names the next runnable phase: `age` when review-safe, `press` when blocking issues must be resolved and the hardening phase rerun. Use `next: done` only for true terminal completion, not for a blocked-but-resumable halt. `/ultracook` still stops automatically on any `status: halt`; `next:` is the resume hint for `/cheese --continue`.
+
+When `baseline:` is present, press honors it: identical recorded failures never move readiness off `ready for /age`; only new or changed failures do, per [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md).
 
 Then print:
 

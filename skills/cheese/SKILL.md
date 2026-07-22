@@ -105,6 +105,7 @@ Flow:
    - **When `next:` is `hold`** — surface the orientation line and stop without dispatching. `hold` means restore context and wait for instruction; it is not a runnable command. Distinct from `done` (terminal record) — `hold` is a live session paused for input.
    - **When `next:` is missing entirely** — flag the handoff as malformed (`malformed handoff: next: required`) and stop. Do not guess a next step or default to a phase; `hold` is the author's value for "no action."
    - **When `next:` is terminal** (`done` from a phase or culture-notes slug) — report the terminal state and stop. If `status:` starts with `halt`, call it a non-resumable halt (per cook/press's slug contract a resumable halt carries a runnable `next:`, so `halt` + `next: done` can only mean non-resumable); otherwise call it pipeline completion. The terminal value surfaces state to the user, not a runnable command; never construct `/done <slug>`.
+   - **When the handoff carries a recorded `baseline:` block** — treat it as settled state, not an open question: never re-ask about or re-halt on the failures it records, whether in this reader or in the dispatched phase. See [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md).
 
 Under `--safe`, gate the resumption through the handoff gate in [`references/handoff-gate.md`](references/handoff-gate.md); otherwise run the named phase immediately with the slug. The slug files are the resumability contract: they tell the router where the pipeline is and how to move it forward.
 

@@ -85,7 +85,7 @@ Per-dimension base-severity tables, location-sensitivity, fix-cost-now / fix-cos
    When a cook artifact exists but no press artifact does, the diff was never hardened. Do not block the review — proceed — but record `press: skipped` in the report (see `## Output`) and print the one-line warning at handoff. A missing cook artifact is also non-fatal (an `artifact not found` result just means a non-pipeline diff): skip the marker and the warning and continue the review.
 
    Independently of any press report, if `.cheese/glossary/<slug>.md` exists, read it now so naming drift against the resolved glossary can be flagged as a deslop finding.
-3. Review every dimension; dimensions with no findings simply omit themselves.
+3. Review every dimension; dimensions with no findings simply omit themselves. Do not raise a finding for a gate failure identical to the diff's recorded `baseline:` block — see [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md); flag only new or changed failures.
 4. Compute severity per finding (base + location bump + compounding bump, capped at `blocker`). Group findings by severity (`## Blocker → ## High → ## Medium → ## Low`); within a severity group, order by file.
 5. Write the report:
 
@@ -169,11 +169,12 @@ status: ok | halt: <one-line reason>
 next: cure | done
 artifact: <path-to-press-report-or-prior-cure-if-any>
 durable_flags: none | <one line per flag: what durable knowledge changed -> target wiki page>
+baseline: none | <recorded baseline block copied from the upstream handoff — see ../cook/references/quality-gates.md>
 <one-line orientation: what the diff does>
 
 press: skipped
 
-<!-- `press: skipped` is the first body line after the blank separator — the handoff slug stays exactly five physical lines. Omit it entirely when a press report exists for this slug or no cook artifact does. -->
+<!-- `press: skipped` is the first body line after the blank separator. Omit it entirely when a press report exists for this slug or no cook artifact does. -->
 
 # Age Report — <slug>
 
@@ -335,6 +336,7 @@ When invoked with `--auto`:
 
 - Review is not a verdict; explain where to look and why.
 - Do not edit production files; `/cure` owns application.
+- Do not raise a finding for a gate failure identical to the diff's recorded `baseline:` block; flag only new or changed failures per [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md).
 - Default to acting: auto-select the recommended set and dispatch `/cure` without a gate. Ask first only on a genuine reason (a sprawling/structural fix in the set, or conflicting findings) or under `--safe`. An empty recommended set is a clean stop, not a question.
 - Do not invent evidence. Cite files, diffs, commands, or unavailable-source notes.
 - Agree when the diff is fine. Do not manufacture findings to fill a dimension; an empty dimension is a valid outcome.
