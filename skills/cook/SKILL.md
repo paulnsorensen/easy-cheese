@@ -65,6 +65,14 @@ Falling back, mention any loss of precision that affects risk.
 
 Run existing project commands only — the most relevant tests for the touched area, plus lint/type/build if defined. Never remove, skip, or weaken unrelated tests to make the change pass.
 
+Gate failures are baseline-aware. Policy, the classification taxonomy, and the `baseline:` block shape are the shared reference [`references/quality-gates.md`](references/quality-gates.md); every downstream phase links there instead of restating it.
+
+- **Frame-owned (`/ultracook`)** — the baseline arrives in the dispatch; a curd cook never captures its own.
+- **Bare `/cook` (no frame)** — on the first red broad gate with no baseline yet, capture it lazily from the pre-change tree (`git stash` or a clean worktree checkout of the pre-cook state), then classify.
+- **Identical, outside the cooked contract** — record in the handoff's `baseline:` block and continue; never halt, never fix silently.
+- **New or changed** — fix it, capped at 2 rounds per gate; the same failure signature repeating twice consecutively halts early.
+- **Halt** only when rounds exhaust, the no-progress check trips, or the fix is design-shaped — the halt handoff carries the classification so resume never re-asks.
+
 ## Output
 
 House style and citations: [`../cheese/references/formatting.md`](../cheese/references/formatting.md). Authoritative report shape: [`references/package-report.md`](references/package-report.md); the bullets below sketch it.
@@ -86,12 +94,15 @@ next: mold | cook | press | age | done
 artifact: <path-to-richer-report-if-any>
 taste_test: inline-pass | dispatched-pass | revised | deferred-to-orchestrator
 durable_flags: none | <one line per flag: what durable knowledge changed -> target wiki page>
+baseline: omitted | <block — shape in references/quality-gates.md § Baseline block shape>
 <one-line orientation: what cook changed>
 ```
 
 `next:` names the next runnable phase: `press` for the standard chain, `age` if the user skips press, `cook` to rerun after resolving a blocker, `mold` when the spec needs another pass. Use `next: done` only for true terminal completion, never for a blocked-but-resumable or external-gate halt; `halt:` reasons follow the package-report stop conditions. The orientation line is one factual sentence about what the diff does, not a report summary. Omit `taste_test:` when the cost gate did not warrant a taste-test.
 
 `durable_flags:` is a conservative durable-change gate. Default `none`; add one line per architecture, protocol, convention, or rationale delta the diff introduced (`<what changed> -> <target wiki page>`). Mechanical and test-only changes always record `durable_flags: none`. Cook records flags only — it never writes the wiki; the publish-boundary writer (cure/plate/affinage) reads upstream flags as its write-back candidate list.
+
+`baseline:` is written only when the `## Quality gates` capture rule above ran and recorded at least one identical-to-baseline failure; omit it otherwise. Block shape: [`references/quality-gates.md`](references/quality-gates.md) § Baseline block shape.
 
 ## Handoff
 
@@ -123,7 +134,7 @@ When invoked with `--auto`, skip this gate entirely and proceed straight into th
 
 ### When auto mode stops early
 
-- A quality gate (test, lint, type, build) fails and the failure cannot be attributed to a single revertible finding.
+- A quality gate fails **new** or **changed** against baseline (see [`references/quality-gates.md`](references/quality-gates.md)) and the 2 fix rounds exhaust, the no-progress check trips, or the fix is design-shaped. Identical-to-baseline failures outside the cooked contract are recorded and never stop auto.
 - `/press` returns `blocked` (blocked criteria: [`../press/references/gap-analysis.md`](../press/references/gap-analysis.md)).
 - A cure pass cannot apply any finding (every selected fix breaks tests on revert-or-keep evaluation).
 - Two cure passes complete (success path).
