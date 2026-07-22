@@ -60,7 +60,7 @@ Culture-relevant `next:` values: `culture` or `hold` to resume the modeling in a
 
 **Pipeline:** **[culture]** → mold → cook → press → age → cure → plate
 
-At session end, write the durable wheypoint first (invoke `/wheypoint`), then — when the conversation reveals real work — ask via the shared handoff gate in [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md). Lead each option with the verb (what the user wants to *do* next); the skill command is the backing detail. Before asking, render a compact context packet so the downstream skill can dispatch without losing the discussion:
+At session end, write the durable wheypoint first (invoke `/wheypoint`), then — when the conversation reveals real work — ask via the shared handoff gate in [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md). Any structured confirm reaching this gate must satisfy the freshness rule in [`../cheese/references/ask-user-question.md`](../cheese/references/ask-user-question.md) — only a fork already discussed conversationally this session may reach a structured question here. Lead each option with the verb (what the user wants to *do* next); the skill command is the backing detail. Before asking, render a compact context packet so the downstream skill can dispatch without losing the discussion:
 
 ```yaml
 handoff_context:
