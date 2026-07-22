@@ -77,6 +77,7 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
     # sources live in the mode-neutral src/fanout/ dir (see SRC_DIRS).
     "ultracook": {
         "artifact-path": Shared("artifact_path.py"),
+        "baseline": "baseline.py",
         "phase_decision": "phase_decision.py",
         "mode": "mode.py",
         "worktree": "worktree.py",
