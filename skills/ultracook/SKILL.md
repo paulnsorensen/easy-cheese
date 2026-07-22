@@ -47,6 +47,18 @@ Helper resolution — including the `${CLAUDE_SKILL_DIR}` packaged-helper fallba
 
 A 1-curd spec runs `## Flow` (linear mode) unchanged. A 2+-curd spec runs `## Parallel mode`.
 
+## Baseline capture
+
+Before any curd cooks — linear mode's single `/cook` spawn, and parallel mode's curd fan-out alike — `/ultracook` captures the run's broad-gate baseline once, in the orchestrator's own tree, right after mode selection.
+
+1. **Run the gates** — run the run's broad quality gates once, in the same environment (worktree, toolchain) the cooks will re-run them in.
+2. **Classify** — pass the result through the tested helper, `src/fanout/baseline.py::classify()` via the ultracook `.pyz` (e.g. `python3 skills/ultracook/scripts/ultracook.pyz baseline` with the gate failures as JSON on stdin). Classification is never eyeballed by the agent. Full taxonomy and the three-way identical/new-or-changed/halt policy: [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md).
+3. **Hand it down, per mode:**
+   - **Linear mode** — carry the classified baseline in the Phase 1 `/cook <slug> --auto` dispatch (`## Phases and slug paths` below), so cook's own baseline-vs-regression check reuses this run's capture instead of capturing again.
+   - **Parallel mode** — record the classified result in `.cheese/ultracook/<slug>/manifest.yaml`'s `baseline:` block (shape: [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md) § Baseline block shape) before Seed, then hand it down in every curd's `cook` dispatch via `references/curd-prompt.md`'s `{baseline}` field.
+
+The final summary (`## Output`) reports baseline failures loud, per `../cook/references/quality-gates.md` § Loud, never hidden — a run with an identical-to-baseline failure outside the cooked contract states the full suite is not green, even when every gate the curds touch is green.
+
 ## Flow (linear mode)
 
 1. **Resolve slug** — derive `<slug>` from the input. If a spec path is given, the slug is the basename without `.md`; if a bare slug is given, confirm the spec exists at the durable path the spawned `/cook` resolves (`python3 shared/scripts/artifact_path.py specs <slug>`; if the host only exposes the packaged helper, `python3 ${CLAUDE_SKILL_DIR}/scripts/cook.pyz artifact-path specs <slug>` is the fallback; see `../cheese/references/formatting.md` § Corpus location).
@@ -153,10 +165,12 @@ Reached when the decomposer produces **2 or more** curds (`mode → parallel`). 
 
 ### Topology
 
+Baseline capture (`## Baseline capture`) runs before Seed and is recorded in the manifest's `baseline:` block before any step below dispatches.
+
 1. **Seed (coder).** Resolve and dispatch a `coder` for shared types/interfaces in an isolated worktree. It runs project gates and returns a handoff; the parent invokes `/plate` in commit-only mode.
 
    After the seed commit, advance the manifest: `python3 skills/ultracook/scripts/ultracook.pyz manifest_update set-phase --manifest .cheese/ultracook/<slug>/manifest.yaml --phase seed_complete`.
-2. **Per-curd fan-out.** Give each curd its **own worktree**, then make five top-level, fresh-context dispatches sequentially in that same worktree: `coder(cook) → coder(press) → reviewer(age) → coder(cure) → reviewer(final age)`. Use `references/curd-prompt.md` and the `PARALLEL_CURD` phase table: `python3 skills/ultracook/scripts/ultracook.pyz phase_decision --phase-index <i> --status <status> [--next <next>] --table parallel-curd`. Before each age dispatch record and pass the review context: base commit SHA, reviewed tree OID, deterministic diff hash, and review scope. The first age never short-circuits the table, including on `next: done`; cure and final age always run. The final age must return `next: done`; `next: cure` or a missing value halts that curd as not publishable. After a clean final age, the parent invokes `/plate` in commit-only mode.
+2. **Per-curd fan-out.** Give each curd its **own worktree**, then make five top-level, fresh-context dispatches sequentially in that same worktree: `coder(cook) → coder(press) → reviewer(age) → coder(cure) → reviewer(final age)`. Use `references/curd-prompt.md` and the `PARALLEL_CURD` phase table: `python3 skills/ultracook/scripts/ultracook.pyz phase_decision --phase-index <i> --status <status> [--next <next>] --table parallel-curd`. The `cook` dispatch carries the manifest's `baseline:` block via `references/curd-prompt.md`'s `{baseline}` field — a curd never captures its own baseline. Before each age dispatch record and pass the review context: base commit SHA, reviewed tree OID, deterministic diff hash, and review scope. The first age never short-circuits the table, including on `next: done`; cure and final age always run. The final age must return `next: done`; `next: cure` or a missing value halts that curd as not publishable. After a clean final age, the parent invokes `/plate` in commit-only mode.
    - **Worktree floor (no native primitive).** When the host lacks a native worktree-isolated sub-agent primitive, the orchestrator first creates each curd's worktree with `python3 skills/ultracook/scripts/ultracook.pyz worktree create --slug <id> --base <orchestrator-branch>` (returns `{path, branch}`), then dispatches each phase agent into that path. Harvest (step 3) and teardown (step 4) proceed unchanged.
 
    As each curd dispatches, mark it running (`manifest_update set-curd-status --manifest <path> --curd <id> --status running`); after a clean final age, atomically record completion and its final review identity (`--status completed --commit-sha <sha> --base-commit <sha> --reviewed-tree-oid <oid> --diff-hash sha256:<hex> --scope <path>`; repeat `--scope` for multiple paths), or record `--status failed`. After **all** curds return, `manifest_update set-phase --manifest <path> --phase curds_complete`.
