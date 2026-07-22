@@ -39,6 +39,23 @@ def _review_context() -> dict:
         "scope": ["src/feature.ts"],
     }
 
+def _baseline() -> dict:
+    return {
+        "captured_at": "2026-05-14T10:00:00Z",
+        "gates": [
+            {
+                "cmd": "just check",
+                "failures": [
+                    {
+                        "suite": "pytest",
+                        "test_id": "tests/test_foo.py::test_bar",
+                        "signature": "AssertionError: expected 1 got 2",
+                    }
+                ],
+            }
+        ],
+    }
+
 def _manifest() -> dict:
     return {
         "slug": "feature-name",
@@ -95,6 +112,163 @@ def _pr_plan() -> dict:
 class TestRunManifestValidator:
     def test_valid_manifest_passes(self, validate_manifest: ModuleType) -> None:
         assert validate_manifest.validate_run_manifest(_manifest()) == []
+
+    def test_valid_baseline_block_passes(self, validate_manifest: ModuleType) -> None:
+        manifest = _manifest()
+        manifest["baseline"] = _baseline()
+        assert validate_manifest.validate_run_manifest(manifest) == []
+
+    def test_absent_baseline_block_stays_valid(self, validate_manifest: ModuleType) -> None:
+        manifest = _manifest()
+        assert "baseline" not in manifest
+        assert validate_manifest.validate_run_manifest(manifest) == []
+
+    def test_baseline_missing_captured_at_is_reported(
+        self, validate_manifest: ModuleType
+    ) -> None:
+        manifest = _manifest()
+        baseline = _baseline()
+        del baseline["captured_at"]
+        manifest["baseline"] = baseline
+        errors = validate_manifest.validate_run_manifest(manifest)
+        assert any("baseline.captured_at is required" in error for error in errors)
+
+    def test_baseline_gate_missing_cmd_is_reported(
+        self, validate_manifest: ModuleType
+    ) -> None:
+        manifest = _manifest()
+        baseline = _baseline()
+        del baseline["gates"][0]["cmd"]
+        manifest["baseline"] = baseline
+        errors = validate_manifest.validate_run_manifest(manifest)
+        assert any("baseline.gates[1].cmd is required" in error for error in errors)
+
+    def test_baseline_failure_missing_signature_is_reported(
+        self, validate_manifest: ModuleType
+    ) -> None:
+        manifest = _manifest()
+        baseline = _baseline()
+        del baseline["gates"][0]["failures"][0]["signature"]
+        manifest["baseline"] = baseline
+        errors = validate_manifest.validate_run_manifest(manifest)
+        assert any(
+            "baseline.gates[1].failures[1].signature is required" in error for error in errors
+        )
+
+    def test_baseline_non_dict_is_reported(self, validate_manifest: ModuleType) -> None:
+        manifest = _manifest()
+        manifest["baseline"] = "not-an-object"
+        errors = validate_manifest.validate_run_manifest(manifest)
+        assert any("baseline must be an object" in error for error in errors)
+
+    def test_baseline_gates_non_list_is_reported(self, validate_manifest: ModuleType) -> None:
+        manifest = _manifest()
+        baseline = _baseline()
+        baseline["gates"] = "not-a-list"
+        manifest["baseline"] = baseline
+        errors = validate_manifest.validate_run_manifest(manifest)
+        assert any("baseline.gates must be a list" in error for error in errors)
+
+    def test_baseline_gate_entry_non_dict_is_reported(self, validate_manifest: ModuleType) -> None:
+        manifest = _manifest()
+        baseline = _baseline()
+        baseline["gates"] = ["not-an-object"]
+        manifest["baseline"] = baseline
+        errors = validate_manifest.validate_run_manifest(manifest)
+        assert any(
+            "baseline.gates[1] must be an object, got str" in error for error in errors
+        )
+
+    def test_baseline_failures_non_list_is_reported(self, validate_manifest: ModuleType) -> None:
+        manifest = _manifest()
+        baseline = _baseline()
+        baseline["gates"][0]["failures"] = "not-a-list"
+        manifest["baseline"] = baseline
+        errors = validate_manifest.validate_run_manifest(manifest)
+        assert any("baseline.gates[1].failures must be a list" in error for error in errors)
+
+    def test_baseline_failure_entry_non_dict_is_reported(
+        self, validate_manifest: ModuleType
+    ) -> None:
+        manifest = _manifest()
+        baseline = _baseline()
+        baseline["gates"][0]["failures"] = ["not-an-object"]
+        manifest["baseline"] = baseline
+        errors = validate_manifest.validate_run_manifest(manifest)
+        assert any(
+            "baseline.gates[1].failures[1] must be an object, got str" in error
+            for error in errors
+        )
+
+    def test_baseline_captured_at_empty_string_is_reported_not_as_missing(
+        self, validate_manifest: ModuleType
+    ) -> None:
+        # An empty/whitespace captured_at is a present-but-invalid value, distinct
+        # from an absent key -- it must fail non_empty_string, not required_keys.
+        manifest = _manifest()
+        baseline = _baseline()
+        baseline["captured_at"] = "   "
+        manifest["baseline"] = baseline
+        errors = validate_manifest.validate_run_manifest(manifest)
+        assert any("baseline.captured_at must be a non-empty string" in error for error in errors)
+        assert not any("baseline.captured_at is required" in error for error in errors)
+
+    def test_baseline_captured_at_non_string_is_reported(
+        self, validate_manifest: ModuleType
+    ) -> None:
+        manifest = _manifest()
+        baseline = _baseline()
+        baseline["captured_at"] = 20260514
+        manifest["baseline"] = baseline
+        errors = validate_manifest.validate_run_manifest(manifest)
+        assert any("baseline.captured_at must be a non-empty string" in error for error in errors)
+
+    def test_baseline_extra_keys_are_ignored_like_sibling_blocks(
+        self, validate_manifest: ModuleType
+    ) -> None:
+        # Matches post_review's posture: unknown keys aren't rejected by the
+        # validator, and the schema has no additionalProperties:false on
+        # sibling optional blocks either (checked below).
+        manifest = _manifest()
+        baseline = _baseline()
+        baseline["future_field"] = "reserved-for-later"
+        manifest["baseline"] = baseline
+        assert validate_manifest.validate_run_manifest(manifest) == []
+
+    def test_baseline_multiple_gates_and_failures_all_errors_reported(
+        self, validate_manifest: ModuleType
+    ) -> None:
+        # Aggregation, not first-error-wins: two gates each with two broken
+        # failures must surface all four distinct locations.
+        manifest = _manifest()
+        baseline = _baseline()
+        broken_failure = {"suite": "pytest"}  # missing test_id and signature
+        baseline["gates"] = [
+            {"cmd": "just check", "failures": [broken_failure, dict(broken_failure)]},
+            {"cmd": "just lint", "failures": [broken_failure, dict(broken_failure)]},
+        ]
+        manifest["baseline"] = baseline
+        errors = validate_manifest.validate_run_manifest(manifest)
+        for gate_index in (1, 2):
+            for failure_index in (1, 2):
+                where = f"baseline.gates[{gate_index}].failures[{failure_index}]"
+                assert any(f"{where}.test_id is required" in error for error in errors)
+                assert any(f"{where}.signature is required" in error for error in errors)
+
+    def test_baseline_schema_required_keys_match_validator(
+        self, manifest_schema_path
+    ) -> None:
+        # Schema/validator agreement: the JSON schema's required-key lists for
+        # baseline, gates, and failures must mirror what _validate_baseline
+        # actually enforces, or the two would silently diverge.
+        schema = json.loads(manifest_schema_path.read_text(encoding="utf-8"))
+        baseline_schema = schema["properties"]["baseline"]
+        assert "baseline" not in schema.get("required", [])
+        assert set(baseline_schema["required"]) == {"captured_at", "gates"}
+        gate_schema = baseline_schema["properties"]["gates"]["items"]
+        assert set(gate_schema["required"]) == {"cmd", "failures"}
+        failure_schema = gate_schema["properties"]["failures"]["items"]
+        assert set(failure_schema["required"]) == {"suite", "test_id", "signature"}
 
     def test_missing_top_level_section_fails(self, validate_manifest: ModuleType) -> None:
         manifest = _manifest()
