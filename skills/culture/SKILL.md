@@ -18,7 +18,7 @@ Do not use the user-facing mode when the user wants a written spec (`/mold`), im
 
 ## Invariant
 
-`/culture` writes no production code and does not commit changes, open PRs, or mutate project state. In **user-facing mode** it ends every session by writing a durable handoff, delegated to `/wheypoint` (see `## Handoff slug`); that wheypoint is written at session end only, never during the dialogue. In **internal mode** it writes nothing at all. If a user-facing conversation reveals that something should be built, route to `/mold` or `/cook` after the wheypoint is written. In internal mode, just return the decision and let the calling skill act.
+`/culture` writes no production code and does not commit changes, open PRs, or mutate project state. In **user-facing mode** it ends every session by writing a durable handoff, delegated to `/wheypoint` (see `## Handoff slug`); that wheypoint is written at session end only, never during the dialogue. The user declares the session over — the agent never declares convergence on the user's behalf; it may ask whether the thread feels settled, and otherwise carries it forward. In **internal mode** it writes nothing at all. If a user-facing conversation reveals that something should be built, route to `/mold` or `/cook` after the wheypoint is written. In internal mode, just return the decision and let the calling skill act.
 
 ## Flow
 
@@ -28,9 +28,9 @@ Both modes share this reasoning loop; the per-step difference is internal-return
 2. Identify assumptions, constraints, and decision criteria.
 3. Explore trade-offs and likely blast radius. When the trade-off hinges on "what does this touch", run a read-only shape check on the candidate seam — a `cheez-search` callers query plus dependency/blast-radius context from the selected semantic backend — and label each option `[low | medium | high blast radius]`. Procedure mirrors `../mold/references/shape-check.md`; culture stops at the verdict and never drafts signatures. Steelman the rejected option before settling on a recommendation.
 4. Gather evidence to the depth the question needs. Start with a light wiki probe — is this already decided or already known? — per the detect-and-degrade contract in [`../cheese/references/optional-plugins.md`](../cheese/references/optional-plugins.md): at most one `ground` call in internal mode, scaled up as useful in user-facing mode; when hallouminate is absent, skip, note the absence once, and cap confidence at `speculating` when design rationale is central. In internal mode keep the rest light — a quick shape check, no deep research — so the calling skill stays fast. In user-facing mode investigate as deeply as useful: dispatch the read-only `explorer` agent for code grounding and take back its digest, rather than dumping raw reads into the dialogue (where the `explorer` agent isn't available, e.g. a harness that installs only easy-cheese, ground directly via `/cheez-search` / `/cheez-read`).
-5. Decide the next move. In internal mode, return a single recommendation and stop. In user-facing mode you need not force convergence: render a compact summary and confidence-tagged open questions (`certain | speculating | don't know`), then either recommend a downstream skill or defer and carry the thread forward. End the session by writing the wheypoint (`## Handoff slug`), whose `next:` records where the modeling landed.
+5. Decide the next move. In internal mode, return a single recommendation and stop. In user-facing mode you need not force convergence: render a compact summary and confidence-tagged open questions (`certain | speculating | don't know`), then either recommend a downstream skill or defer and carry the thread forward. Once the user calls the thread over, end the session by writing the wheypoint (`## Handoff slug`), whose `next:` records where the modeling landed.
 
-Asking the user is the point: every consequential fork is theirs to decide, surfaced as a choice rather than settled for them. The depth you offer — full signatures, named edge cases, file:line evidence — informs each question; it never substitutes for asking it.
+Asking the user is the point: every consequential fork is theirs to decide, surfaced as a choice rather than settled for them. The depth you offer — full signatures, named edge cases, file:line evidence — informs each question; it never substitutes for asking it. In user-facing mode, raise forks conversationally in the dialogue; reserve structured question tools for the end-of-session handoff gate. Never bundle multiple consequential forks into one prompt.
 
 ## Preferred tools and fallbacks
 
@@ -54,7 +54,7 @@ See Flow step 5.
 
 **Every** user-facing session ends by writing a durable wheypoint, so the modeling is resumable. Invoke `/wheypoint <focus>` and let it own compaction, secret redaction, the state-mapped suggested-skills section, and the resumable slug. Culture does not maintain its own schema; the slug contract (`status` / `next` / `mode` / `artifact` and the `## Document` body) is defined in `skills/wheypoint/SKILL.md`, which is the single source of truth.
 
-Culture-relevant `next:` values: `culture` or `hold` to resume the modeling in a later session (defer convergence), `mold` (fuzzy idea, route to spec), `cook` (clear ask, route to implementation), or `done` when the thread is genuinely closed. When the next step is blocked on a human decision, set `status: gated:` rather than a `next:` value.
+Culture-relevant `next:` values: `culture` or `hold` to resume the modeling in a later session (defer convergence), `mold` (fuzzy idea, route to spec), `cook` (clear ask, route to implementation), or `done` when the user judges the thread genuinely closed. When the next step is blocked on a human decision, set `status: gated:` rather than a `next:` value.
 
 ## Handoff
 
