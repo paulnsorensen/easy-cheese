@@ -1,0 +1,270 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://easy-cheese.dev/schemas/ultracook-manifest.schema.json",
+  "title": "Ultracook Manifest",
+  "description": "Per-spec state file written by /ultracook at .cheese/ultracook/<slug>/manifest.yaml. Updated at every phase boundary so --resume can pick up after a crash.",
+  "type": "object",
+  "$defs": {
+    "review_context": {
+      "type": "object",
+      "required": ["base_commit", "reviewed_tree_oid", "diff_hash", "scope"],
+      "properties": {
+        "base_commit": {"type": "string", "pattern": "^(?:[0-9A-Fa-f]{40}|[0-9A-Fa-f]{64})$", "description": "Commit SHA used as the review diff base."},
+        "reviewed_tree_oid": {"type": "string", "pattern": "^(?:[0-9A-Fa-f]{40}|[0-9A-Fa-f]{64})$", "description": "Git tree object ID for the exact reviewed working tree, including uncommitted state; this is not a head commit."},
+        "diff_hash": {"type": "string", "pattern": "^sha256:[0-9A-Fa-f]{64}$", "description": "SHA-256 of the normalized reviewed diff."},
+        "scope": {"type": "array", "items": {"type": "string", "minLength": 1}, "minItems": 1, "description": "Paths or semantic scope included in the review."}
+      }
+    },
+    "agent_resolution": {
+      "type": "object",
+      "required": ["request", "attempts", "resolved", "fallback_reason", "degraded", "permission_enforcement"],
+      "properties": {
+        "request": {
+          "type": "object",
+          "required": ["work", "preferred_types", "required_tools", "permissions", "isolation", "minimum_power", "effort"],
+          "properties": {
+            "work": {"type": "string", "minLength": 1},
+            "preferred_types": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+            "required_tools": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+            "permissions": {"type": "string", "enum": ["read-only", "write"]},
+            "isolation": {"type": "string", "enum": ["none", "fresh-context", "isolated-worktree"]},
+            "minimum_power": {"type": "string", "enum": ["cheap", "default", "powerful"]},
+            "effort": {"type": "string", "enum": ["low", "medium", "high"]}
+          }
+        },
+        "attempts": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["type", "model", "power", "result", "reason"],
+            "properties": {
+              "type": {"type": "string", "minLength": 1},
+              "model": {"type": "string", "minLength": 1},
+              "power": {"type": "string", "enum": ["cheap", "default", "powerful", "unknown"]},
+              "result": {"type": "string", "enum": ["accepted", "rejected"]},
+              "reason": {"type": "string", "minLength": 1}
+            }
+          }
+        },
+        "resolved": {
+          "type": "object",
+          "required": ["type", "model", "power", "effort", "topology"],
+          "properties": {
+            "type": {"type": "string", "minLength": 1},
+            "model": {"type": "string", "minLength": 1},
+            "power": {"type": "string", "enum": ["cheap", "default", "powerful", "unknown"]},
+            "effort": {"type": "string", "enum": ["low", "medium", "high"]},
+            "topology": {"type": "string", "enum": ["inline", "sequential", "parallel", "fan-out-fan-in"]}
+          }
+        },
+        "fallback_reason": {"anyOf": [{"type": "null"}, {"type": "string", "minLength": 1}]},
+        "degraded": {"type": "boolean"},
+        "permission_enforcement": {"type": "string", "enum": ["tool-restricted", "prompt-only"]}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"permission_enforcement": {"const": "prompt-only"}}},
+          "then": {
+            "properties": {
+              "degraded": {"const": true},
+              "request": {"properties": {"permissions": {"const": "read-only"}}}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"resolved": {"properties": {"power": {"const": "unknown"}}}}},
+          "then": {"properties": {"degraded": {"const": true}}}
+        }
+      ]
+    }
+  },
+  "required": ["slug", "spec_path", "created", "phase", "quality_gates", "host_capabilities", "agent_resolution", "seed", "curds", "wiring"],
+  "allOf": [
+    {
+      "if": {"properties": {"phase": {"enum": ["post_review_complete", "pr_publish_complete"]}}, "required": ["phase"]},
+      "then": {"required": ["current_review", "post_review"]}
+    }
+  ],
+  "properties": {
+    "slug": {
+      "type": "string",
+      "description": "Kebab-case identifier shared with the durable-corpus spec (resolve via the artifact-path subcommand; see ../../cheese/references/formatting.md Corpus location).",
+      "pattern": "^(?!-)(?!.*--)[a-z0-9-]{1,64}(?<!-)$"
+    },
+    "spec_path": {
+      "type": "string",
+      "description": "Resolved path to the source spec in the durable corpus (artifact-path specs <slug>)."
+    },
+    "created": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC timestamp of manifest creation."
+    },
+    "phase": {
+      "type": "string",
+      "enum": [
+        "gate_approved",
+        "seed_complete",
+        "curds_complete",
+        "merge_complete",
+        "wiring_complete",
+        "final_merge_complete",
+        "post_review_complete",
+        "pr_publish_complete"
+      ],
+      "description": "Latest completed phase. --resume picks up at the next phase after this."
+    },
+    "quality_gates": {
+      "type": "array",
+      "items": {"type": "string"},
+      "minItems": 1,
+      "description": "Shell commands run as the project's quality gate (typically [\"just check\"])."
+    },
+    "host_capabilities": {
+      "type": "object",
+      "description": "Skill-discovery cache populated at Phase 7. Each key is a probed skill name; the value is whether it was usable in this run.",
+      "properties": {
+        "pr_stack": {"type": "boolean"},
+        "melt": {"type": "boolean"},
+        "commit": {"type": "boolean"},
+        "gh": {"type": "boolean"}
+      },
+      "additionalProperties": {"type": "boolean"}
+    },
+    "agent_resolution": {
+      "$ref": "#/$defs/agent_resolution"
+    },
+    "current_review": {
+      "$ref": "#/$defs/review_context"
+    },
+    "plate_layout": {
+      "type": "string",
+      "enum": ["single", "stacked"],
+      "description": "Authoritative /plate topology-preflight resolution. Required by the parallel --open-pr flow before any seed, curd, or wiring commit; may come from an explicit choice, cohesive-single inference, or user confirmation."
+    },
+    "seed": {
+      "type": "object",
+      "required": ["items"],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["description", "files", "status"],
+            "properties": {
+              "description": {"type": "string"},
+              "files": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+              "commit_sha": {"type": ["string", "null"]},
+              "status": {"type": "string", "enum": ["pending", "completed", "failed"]}
+            }
+          }
+        }
+      }
+    },
+    "curds": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "behavior", "acceptance_criterion", "files", "test_target", "status", "retry_count"],
+        "allOf": [
+          {
+            "if": {"properties": {"status": {"const": "completed"}}, "required": ["status"]},
+            "then": {"required": ["review_context"]}
+          }
+        ],
+        "properties": {
+          "id": {"type": "integer", "minimum": 1},
+          "behavior": {"type": "string"},
+          "acceptance_criterion": {"type": "string"},
+          "files": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+          "test_target": {"type": "string"},
+          "status": {"type": "string", "enum": ["pending", "running", "completed", "failed"]},
+          "worktree_path": {"type": ["string", "null"]},
+          "branch": {"type": ["string", "null"]},
+          "commit_sha": {"type": ["string", "null"]},
+          "retry_count": {"type": "integer", "minimum": 0, "maximum": 1},
+          "error": {"type": ["string", "null"]},
+          "review_context": {"$ref": "#/$defs/review_context"}
+        }
+      }
+    },
+    "wiring": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "file", "depends_on", "status"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^W[0-9]+$"},
+          "type": {"type": "string", "enum": ["barrel_export", "di_registration", "route_wiring", "event_subscription", "config_entry"]},
+          "file": {"type": "string"},
+          "depends_on": {"type": "array", "items": {"type": "string"}},
+          "status": {"type": "string", "enum": ["pending", "running", "completed", "failed"]},
+          "commit_sha": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "post_review": {
+      "type": "object",
+      "required": ["review_context"],
+      "properties": {
+        "review_context": {"$ref": "#/$defs/review_context"},
+        "press_slug": {"type": "string"},
+        "age_slug": {"type": "string"},
+        "cure_slug": {"type": "string"},
+        "findings_applied": {"type": "integer", "minimum": 0},
+        "findings_deferred": {"type": "integer", "minimum": 0}
+      }
+    },
+    "baseline": {
+      "type": "object",
+      "required": ["captured_at", "gates"],
+      "properties": {
+        "captured_at": {"type": "string", "format": "date-time"},
+        "gates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["cmd", "failures"],
+            "properties": {
+              "cmd": {"type": "string", "minLength": 1},
+              "failures": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["suite", "test_id", "signature"],
+                  "properties": {
+                    "suite": {"type": "string", "minLength": 1},
+                    "test_id": {"type": "string", "minLength": 1},
+                    "signature": {"type": "string", "minLength": 1}
+                  }
+                }
+              }
+            }
+          }
+        },
+        "repair_dispatch": {
+          "type": "object",
+          "required": ["slug", "branch"],
+          "properties": {
+            "slug": {"type": "string", "minLength": 1},
+            "branch": {"type": "string", "minLength": 1},
+            "pr": {"type": "string", "minLength": 1}
+          }
+        }
+      }
+    },
+    "pr_plan": {
+      "$ref": "pr-plan-schema.json"
+    },
+    "phase_summary": {
+      "type": "string",
+      "description": "Self-summary written at each compaction seam — 2-3 sentences. The only cross-seam continuity mechanism."
+    },
+    "carry_forward": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Keys to preserve across compaction. Typically [\"slug\", \"spec_summary\", \"manifest_path\", \"quality_gates\"]."
+    }
+  }
+}
