@@ -187,6 +187,20 @@ Pick the next move from where the session actually is, name it as an easy-cheese
 
 When the session sits mid-phase (e.g. `/cook` was interrupted), suggest re-entering that same phase with the slug. Tailor to the optional focus argument when the user gave one: it overrides the table if the next session is meant to do something other than advance the pipeline.
 
+## Required body sections by state
+
+The opening line ("`/wheypoint` captures just enough state for a cold reader to resume") sets the default: compress everything that does not serve the resume. This table names the one exception and pins the minimum `## Document` sections each `status:`/`next:` combination requires, so compression never eats the state a resume actually needs.
+
+| state | required Document sections |
+| --- | --- |
+| `status: gated:` | `## Decision dossier` — per open fork: options / evidence `file:line` / what-each-breaks / prior leanings |
+| `next: culture` | agenda + open-thread state |
+| `next: cure` | findings artifact ref |
+| `next: cook` / `press` / `age` | spec/slug pointers per existing conventions |
+| `next: hold` / `done` | orientation only |
+
+**`status: gated:` overrides the "just enough state" compression rule for gated notes.** Every open fork gets its own `## Decision dossier` entry — options considered, evidence as `file:line` citations, what each option breaks, and any prior leaning from the session — instead of the one-line decision the compression default would otherwise leave. A resumed session with a consequential fork rebuilds its prose weighing from this dossier; see [`../cheese/references/ask-user-question.md`](../cheese/references/ask-user-question.md) § When to structure for why an undiscussed design fork needs that weighing rather than a structured confirm.
+
 ## Do not duplicate
 
 The point of a handoff is to be short enough to read cold. Anything already captured in a durable artifact gets a reference, not a copy:
