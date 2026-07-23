@@ -42,6 +42,7 @@ def _render_preamble(
     orientation: str,
     taste_test: str | None = None,
     durable_flags: str | None = None,
+    baseline: str | None = None,
 ) -> str:
     """Render the preamble via handoff.render_handoff_slug (single SSOT)."""
     # Parse status into (status_kind, halt_reason).
@@ -60,6 +61,7 @@ def _render_preamble(
         orientation=orientation,
         taste_test=taste_test,
         durable_flags=durable_flags,
+        baseline=baseline,
     )
     return handoff.render_handoff_slug(slug)
 
@@ -88,6 +90,7 @@ def write_artifact(
     phase: str | None = None,
     taste_test: str | None = None,
     durable_flags: str | None = None,
+    baseline: str | None = None,
 ) -> Path:
     """Write the artifact atomically; return the final path.
 
@@ -121,6 +124,7 @@ def write_artifact(
         orientation=orientation,
         taste_test=taste_test,
         durable_flags=durable_flags,
+        baseline=baseline,
     )
     contents = _build_contents(preamble=preamble, body=body)
 
@@ -162,6 +166,7 @@ def _cmd_write(args: argparse.Namespace) -> None:
         phase=args.phase,
         taste_test=args.taste_test,
         durable_flags=args.durable_flags,
+        baseline=args.baseline,
     )
     cli.emit(str(target))
 
@@ -181,6 +186,11 @@ def _setup(parser: argparse.ArgumentParser) -> None:
         "--durable-flags",
         default=None,
         help="optional durable_flags: keyed preamble line (omitted when absent)",
+    )
+    parser.add_argument(
+        "--baseline",
+        default=None,
+        help="optional baseline: keyed preamble line (omitted when absent)",
     )
     parser.add_argument("--body-file", default=None, help="optional path to body content")
     parser.add_argument(

@@ -42,7 +42,7 @@ def test_happy_path_parse(tmp_path: Path) -> None:
     payload = json.loads(result.stdout)
     assert set(payload.keys()) == {
         "status", "next", "artifact", "orientation", "halt_reason",
-        "taste_test", "durable_flags",
+        "taste_test", "durable_flags", "baseline",
     }
     assert payload == {
         "status": "ok",
@@ -52,8 +52,28 @@ def test_happy_path_parse(tmp_path: Path) -> None:
         "halt_reason": None,
         "taste_test": None,
         "durable_flags": None,
+        "baseline": None,
     }
 
+
+def test_baseline_keyed_line_surfaces_in_json(tmp_path: Path) -> None:
+    # cure/press consume an upstream `baseline:` block via this helper read
+    # path; the keyed line must land in the JSON, not corrupt the orientation.
+    body = (
+        "status: ok\n"
+        "next: cure\n"
+        "artifact: .cheese/press/flagged.md\n"
+        "baseline: none\n"
+        "reviewed the widget\n"
+    )
+    _write_artifact(tmp_path, "age", "baselined", body)
+
+    result = _run(tmp_path, "--phase", "age", "--slug", "baselined")
+    assert result.returncode == 0, result.stderr
+
+    payload = json.loads(result.stdout)
+    assert payload["baseline"] == "none"
+    assert payload["orientation"] == "reviewed the widget"
 
 
 def test_durable_flags_keyed_line_surfaces_in_json(tmp_path: Path) -> None:

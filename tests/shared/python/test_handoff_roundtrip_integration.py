@@ -145,6 +145,7 @@ class TestWriterToReaderRoundTrip:
             "halt_reason": None,
             "taste_test": None,
             "durable_flags": None,
+            "baseline": None,
         }
 
     def test_halt_status_survives_cli_roundtrip(self, tmp_path: Path) -> None:
