@@ -16,8 +16,8 @@ Do not use it to apply fixes directly. Hand fix work to `/cure`, which owns appl
 Accept:
 
 ```text
-/age [<ref-or-range>] [--scope <path>] [--comprehensive] [--full] [--safe] [--open-pr] [--auto] [--html]
-/age <slug> [--full] [--safe] [--open-pr] [--auto] [--html]
+/age [<ref-or-range>] [--scope <path>] [--comprehensive] [--full] [--safe] [--open-pr] [--auto] [--html] [--post-report | --post-inline]
+/age <slug> [--full] [--safe] [--open-pr] [--auto] [--html] [--post-report | --post-inline]
 ```
 
 `--full` un-collapses the `## Low` section when 10 or more low-severity findings exist (the default report collapses them to a one-line summary). Suppressed lows feed the cure-selection table only when `--full` is passed.
@@ -40,6 +40,8 @@ python3 src/age/age-html-report.py \
 
 Print the returned temp-file path beside the markdown path. `html-report` groups the findings by severity into age's own badge template and wraps them in the shared document shell (`shared/scripts/html_report.render_document`); the output is stdlib-only, offline, and deterministic — no CDN, no JavaScript. Do not inline or hand-roll the document chrome. Pass `--out-dir <dir>` to write somewhere other than the OS temp dir.
 If the host only ships the bundle, `python3 ${CLAUDE_SKILL_DIR}/scripts/age.pyz html-report --report .cheese/age/<slug>.md --slug <slug>` is the fallback.
+
+`--post-report` publishes the reader-facing Age report as one top-level PR conversation comment. `--post-inline` publishes one inline thread per anchorable finding and puts unanchorable findings in a compact top-level summary comment. `--post-report` and `--post-inline` are mutually exclusive. Both require an existing PR and are explicit exceptions to Age's local-only default; see [`references/publication.md`](references/publication.md).
 
 Portability reference: [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
 The handoff blocks below are the portable contract; slash commands are host renderings, not the control model.
@@ -105,7 +107,8 @@ Per-dimension base-severity tables, location-sensitivity, fix-cost-now / fix-cos
      --durable-flags "<none | one line per flag>" \
      --body-file "$report_file"` is the fallback.
    Then print the path.
-6. Hand off (see `## Handoff` below).
+6. If `--post-report` or `--post-inline` is set, publish the completed report via `## GitHub publication`.
+7. Hand off (see `## Handoff` below).
 
 ## Preferred tools and fallbacks
 
@@ -247,6 +250,20 @@ Age report:  .cheese/age/<slug>.md
 HTML report: <path printed by html-report>
 ```
 
+## GitHub publication
+
+The canonical `.cheese/age/<slug>.md` artifact is always written before any GitHub write. Publication is opt-in and operates on the current invocation only.
+
+When a publication flag is set:
+
+1. Resolve the existing PR, repository, base SHA, and head SHA before review. Review the PR's exact committed `base...head` diff; exclude working-tree and index changes. `--open-pr` does not satisfy this requirement because no PR exists yet at review time.
+2. Refuse publication for a halted report, a report produced from any other diff, or a PR whose base or head differs from the reviewed SHAs.
+3. Follow [`references/publication.md`](references/publication.md) for report-comment or inline-thread rendering, anchoring, idempotency markers, and partial-failure behavior.
+4. Prefer a host GitHub primitive; use `gh` as the fallback per [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md). Never use a browser session for publication.
+5. Print the PR URL and created/updated comment counts, then continue to `## Handoff`. If publication fails, leave the local report intact, report the partial counts, and stop before `/cure`.
+
+The parent Age invocation owns publication. Dimension workers and the review-context sub-agent remain read-only and never post comments.
+
 ## Handoff
 
 **Pipeline:** culture → mold → cook → press → **[age]** → cure → plate
@@ -320,6 +337,7 @@ On `none` / `Stop` (only reachable via the gate), exit cleanly with the report p
 When invoked with `--auto`:
 
 - Skip the handoff gate.
+- Publish only the current report when an explicit publication flag is present; never propagate publication into the cure loop.
 - If two cure passes have already completed (cap reached), stop and surface the final report — do not invoke `/cure` again even if findings remain.
 - Otherwise, if any finding meets the **medium+ floor** (the composite floor defined at **Compute the recommended set** under `## Handoff`) — invoke `/cure <slug> --auto --stake medium+` (forward `--open-pr` when it is in scope) and increment the cure-pass count when it returns.
 - If no finding meets the **medium+ floor**, stop the chain with a one-line "auto chain clean" note and the report path.
@@ -328,6 +346,7 @@ When invoked with `--auto`:
 
 `/ultracook` spawns age as a fresh-context sub-agent and owns the chain itself. Honour the no-chain override:
 
+- Reject `--post-report` and `--post-inline` in this sub-agent context; ultracook does not delegate external publication.
 - Write `.cheese/age/<slug>.md` (with the handoff slug at the top) and stop. Do not invoke `/cure <slug> --auto --stake medium+` from inside the sub-agent.
 - Set `next:` from what you observe on this run, not from any guess about chain position. `next: cure` when at least one finding meets the **medium+ floor**; `next: done` when none do.
 - The two-cure-pass cap is enforced by ultracook's fixed chain length. The terminal age is publishable only with `next: done`; `next: cure` or a missing `next` halts without publishing. Parallel curds and post-merge review dispatch age as a top-level fresh-context reviewer, never as nested inline self-review.
@@ -336,6 +355,8 @@ When invoked with `--auto`:
 
 - Review is not a verdict; explain where to look and why.
 - Do not edit production files; `/cure` owns application.
+- The default remains local-only. GitHub writes require exactly one explicit publication flag and authorize comments only.
+- Do not propagate either publication flag to `/cure`, `/plate`, or nested `/age --auto` invocations.
 - Do not raise a finding for a gate failure identical to the diff's recorded `baseline:` block; flag only new or changed failures per [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md).
 - Default to acting: auto-select the recommended set and dispatch `/cure` without a gate. Ask first only on a genuine reason (a sprawling/structural fix in the set, or conflicting findings) or under `--safe`. An empty recommended set is a clean stop, not a question.
 - Do not invent evidence. Cite files, diffs, commands, or unavailable-source notes.
@@ -348,6 +369,7 @@ When invoked with `--auto`:
 
 - `references/dimensions.md` — per-dimension rubrics and recommendation shapes.
 - `references/voice.md` — shared output discipline, reasoning posture, and confidence vocabulary.
+- `references/publication.md` — explicit full-report and inline GitHub publication contracts.
 - `references/deslop-rust.md` / `references/deslop-typescript.md` / `references/deslop-python.md` / `references/deslop-shell.md` / `references/deslop-go.md` — per-language `deslop` pattern catalogs with lint-rule mappings and citations.
 - `references/sub-agent-gate.md` — shared sub-agent kernel: digest contract, harness-agnostic selection, what the parent never delegates.
 
