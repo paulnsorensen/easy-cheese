@@ -63,7 +63,7 @@ session: <harness>:<session-id>      # optional; auto-filled provenance
 git: <branch>@<short-sha>            # optional; auto-filled provenance
 created: <UTC ISO-8601>              # optional; auto-filled provenance
 parents: [<slug>, ...]               # optional; lineage (join => 2+, split-child => 1)
-baseline: <optional — carries a recorded baseline block forward from an upstream cook/press/cure handoff; see ../cook/references/quality-gates.md>
+baseline: none | <block — carries a recorded baseline block forward from an upstream cook/press/cure handoff; see ../cook/references/quality-gates.md>
 <one-line orientation: where the session is and what is mid-flight>
 ```
 

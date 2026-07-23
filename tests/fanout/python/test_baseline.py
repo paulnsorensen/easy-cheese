@@ -237,3 +237,28 @@ class TestCmdClassify:
         monkeypatch.setattr(sys, "stdin", io.StringIO("[1, 2, 3]"))
         with pytest.raises(baseline.cli.CliError, match="expected a JSON object"):
             baseline._cmd_classify(argparse.Namespace())
+
+    def test_wrong_typed_baseline_raises_cli_error(self, monkeypatch) -> None:
+        # A well-formed JSON object whose "baseline" value is the wrong type
+        # must raise CliError before reaching classify(), not a raw TypeError.
+        monkeypatch.setattr(
+            sys, "stdin", io.StringIO(json.dumps({"baseline": "notalist", "current": []}))
+        )
+        with pytest.raises(baseline.cli.CliError, match="baseline must be a list"):
+            baseline._cmd_classify(argparse.Namespace())
+
+    def test_wrong_typed_current_raises_cli_error(self, monkeypatch) -> None:
+        monkeypatch.setattr(
+            sys, "stdin", io.StringIO(json.dumps({"baseline": [], "current": "notalist"}))
+        )
+        with pytest.raises(baseline.cli.CliError, match="current must be a list"):
+            baseline._cmd_classify(argparse.Namespace())
+
+    def test_malformed_record_missing_keys_raises_cli_error(self, monkeypatch) -> None:
+        # A record shaped like {"foo": 1} parses fine but lacks the required
+        # keys classify() indexes -- must raise CliError, not KeyError.
+        monkeypatch.setattr(
+            sys, "stdin", io.StringIO(json.dumps({"baseline": [{"foo": 1}], "current": []}))
+        )
+        with pytest.raises(baseline.cli.CliError, match=r"baseline\[0\] missing required key"):
+            baseline._cmd_classify(argparse.Namespace())

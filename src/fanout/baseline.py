@@ -88,11 +88,26 @@ def classify(baseline: list[FailureRecord], current: list[FailureRecord]) -> Cla
     }
 
 
+def _validate_records(value: object, field: str) -> list[FailureRecord]:
+    """Shape-check a baseline/current payload value before it reaches the pure
+    classify() -- a wrong-typed value here must surface as CliError, not an
+    uncaught TypeError/KeyError once classify() starts indexing it."""
+    if not isinstance(value, list):
+        raise cli.CliError(f"{field} must be a list of failure records")
+    for index, record in enumerate(value):
+        if not isinstance(record, dict):
+            raise cli.CliError(f"{field}[{index}] must be an object")
+        missing = [key for key in ("suite", "test_id", "signature") if key not in record]
+        if missing:
+            raise cli.CliError(f"{field}[{index}] missing required key(s): {', '.join(missing)}")
+    return value  # type: ignore[return-value]
+
+
 def _cmd_classify(args: argparse.Namespace) -> None:
     try:
         payload = json.load(sys.stdin)
-        baseline_arg = payload.get("baseline", [])
-        current_arg = payload.get("current", [])
+        baseline_arg = _validate_records(payload.get("baseline", []), "baseline")
+        current_arg = _validate_records(payload.get("current", []), "current")
     except (json.JSONDecodeError, AttributeError) as exc:
         raise cli.CliError("expected a JSON object with baseline/current on stdin") from exc
     result = classify(baseline_arg, current_arg)

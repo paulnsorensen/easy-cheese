@@ -82,5 +82,5 @@ def test_auto_mode_early_stop_exempts_identical_and_defers_to_baseline_policy() 
 def test_handoff_slug_schema_carries_optional_baseline_field() -> None:
     skill = read(SKILL)
     schema = section_after(skill, "## Handoff slug")
-    assert "baseline: omitted" in schema
+    assert "baseline: none" in schema
     assert "quality-gates.md" in schema

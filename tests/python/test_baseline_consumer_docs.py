@@ -55,8 +55,8 @@ def test_consumer_handoff_schema_carries_baseline_field(rel_path: str) -> None:
     body = read(rel_path)
     schema_fence = _handoff_schema_fence(body)
     assert any(
-        line.strip().startswith("baseline:") for line in schema_fence.splitlines()
-    ), f"{rel_path} handoff-slug schema fence must carry a `baseline:` line"
+        line.strip().startswith("baseline: none |") for line in schema_fence.splitlines()
+    ), f"{rel_path} handoff-slug schema fence must carry a `baseline: none |` sentinel line"
 
 
 @pytest.mark.parametrize("rel_path", CONSUMERS)

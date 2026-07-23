@@ -196,6 +196,20 @@ def test_ultracook_baseline_rejects_malformed_stdin(bundles: Path) -> None:
     assert result.stderr.startswith("ERROR:")
 
 
+def test_ultracook_baseline_rejects_wrong_typed_value(bundles: Path) -> None:
+    """A well-formed JSON object whose baseline/current value is the wrong shape
+    (e.g. a string instead of a list) must raise CliError -- exit 2, 'ERROR:' on
+    stderr -- rather than reaching classify() and raising an uncaught TypeError."""
+    result = _run(
+        bundles / "ultracook.pyz",
+        "baseline",
+        stdin='{"baseline": "notalist", "current": []}',
+    )
+    assert result.returncode == 2, result.stderr
+    assert result.stderr.startswith("ERROR:")
+    assert "baseline must be a list" in result.stderr
+
+
 # Pinned env so the resolved corpus path is deterministic and does not depend on
 # the test host's git remote or real XDG dirs.
 _CORPUS_ENV = {"EASY_CHEESE_HOME": "/tmp/ec-corpus", "EASY_CHEESE_PROJECT": "demo-project"}

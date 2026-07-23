@@ -94,7 +94,7 @@ next: mold | cook | press | age | done
 artifact: <path-to-richer-report-if-any>
 taste_test: inline-pass | dispatched-pass | revised | deferred-to-orchestrator
 durable_flags: none | <one line per flag: what durable knowledge changed -> target wiki page>
-baseline: omitted | <block — shape in references/quality-gates.md § Baseline block shape>
+baseline: none | <block — shape in references/quality-gates.md § Baseline block shape>
 <one-line orientation: what cook changed>
 ```
 
