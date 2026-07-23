@@ -57,6 +57,8 @@ LOAD_BEARING_PHRASES = (
     "no-progress check trips",
     "design-shaped",
     "resume never re-asks",
+    "dedupe against a live `repair_dispatch`",
+    "to dispatch a concurrent `/pasteurize` in an isolated worktree",
 )
 
 
@@ -173,3 +175,46 @@ class TestBaselineBlockShapeAgreesWithSchema:
                 f"quality-gates.md's worked example is missing required "
                 f"failure key `{key}` from manifest-schema.json"
             )
+
+
+# ---------------------------------------------------------------------------
+# 4. Doc example <-> CLI truth: cook/SKILL.md's repair-pathway `worktree`
+#    subcommand must actually dispatch through the built cook.pyz bundle.
+# ---------------------------------------------------------------------------
+
+
+class TestCookWorktreeSubcommandDispatches:
+    def test_cook_skill_documents_worktree_subcommand(self) -> None:
+        body = read(COOK_SKILL)
+        assert "cook.pyz worktree" in body, (
+            "cook/SKILL.md's repair-pathway bullet must document the "
+            "`cook.pyz worktree` invocation this test then verifies actually dispatches"
+        )
+
+    def test_cook_pyz_worktree_create_actually_dispatches(self, tmp_path: Path) -> None:
+        # Build the real cook.pyz bundle the same way tests/fanout does and
+        # invoke `worktree create` exactly as the doc's example prescribes.
+        # If cook's SKILLS registry doesn't wire the shared worktree.py module
+        # in, this fails instead of the doc silently documenting a dead command.
+        sys.path.insert(0, str(REPO_ROOT / "scripts"))
+        import build_pyz  # noqa: E402  (path must be set before import)
+        import subprocess as sp
+
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        sp.run(["git", "init", "-q", "-b", "main", str(repo)], check=True)
+        sp.run(["git", "-C", str(repo), "config", "user.email", "t@example.com"], check=True)
+        sp.run(["git", "-C", str(repo), "config", "user.name", "Tester"], check=True)
+        (repo / "base.txt").write_text("base\n", encoding="utf-8")
+        sp.run(["git", "-C", str(repo), "add", "-A"], check=True)
+        sp.run(["git", "-C", str(repo), "commit", "-q", "-m", "init"], check=True)
+
+        bundle = build_pyz.cached_bundle("cook")
+        result = sp.run(
+            [sys.executable, str(bundle), "worktree", "create", "--slug", "repair-x", "--base", "main", "--repo", str(repo)],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, f"documented `cook.pyz worktree create` failed: {result.stderr}"
+        emitted = json.loads(result.stdout)
+        assert emitted == {"path": ".claude/worktrees/agent-repair-x", "branch": "worktree-agent-repair-x"}

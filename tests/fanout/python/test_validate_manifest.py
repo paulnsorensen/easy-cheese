@@ -235,6 +235,87 @@ class TestRunManifestValidator:
         manifest["baseline"] = baseline
         assert validate_manifest.validate_run_manifest(manifest) == []
 
+    def test_repair_dispatch_valid_passes(self, validate_manifest: ModuleType) -> None:
+        manifest = _manifest()
+        baseline = _baseline()
+        baseline["repair_dispatch"] = {
+            "slug": "repair-feature-name",
+            "branch": "worktree-agent-repair-feature-name",
+        }
+        manifest["baseline"] = baseline
+        assert validate_manifest.validate_run_manifest(manifest) == []
+
+    def test_repair_dispatch_with_pr_passes(self, validate_manifest: ModuleType) -> None:
+        manifest = _manifest()
+        baseline = _baseline()
+        baseline["repair_dispatch"] = {
+            "slug": "repair-feature-name",
+            "branch": "worktree-agent-repair-feature-name",
+            "pr": "https://github.com/example/repo/pull/42",
+        }
+        manifest["baseline"] = baseline
+        assert validate_manifest.validate_run_manifest(manifest) == []
+
+    def test_repair_dispatch_missing_branch_is_reported(self, validate_manifest: ModuleType) -> None:
+        manifest = _manifest()
+        baseline = _baseline()
+        baseline["repair_dispatch"] = {"slug": "repair-feature-name"}
+        manifest["baseline"] = baseline
+        errors = validate_manifest.validate_run_manifest(manifest)
+        assert any("baseline.repair_dispatch.branch is required" in error for error in errors)
+
+    def test_repair_dispatch_non_dict_is_reported(self, validate_manifest: ModuleType) -> None:
+        manifest = _manifest()
+        baseline = _baseline()
+        baseline["repair_dispatch"] = "not-an-object"
+        manifest["baseline"] = baseline
+        errors = validate_manifest.validate_run_manifest(manifest)
+        assert any("baseline.repair_dispatch must be an object" in error for error in errors)
+
+    def test_baseline_without_repair_dispatch_stays_valid(self, validate_manifest: ModuleType) -> None:
+        manifest = _manifest()
+        manifest["baseline"] = _baseline()
+        assert "repair_dispatch" not in manifest["baseline"]
+        assert validate_manifest.validate_run_manifest(manifest) == []
+
+    def test_repair_dispatch_empty_slug_is_reported_not_as_missing(
+        self, validate_manifest: ModuleType
+    ) -> None:
+        # A present-but-empty slug is a present-but-invalid value, distinct
+        # from an absent key -- matches captured_at's boundary posture above.
+        manifest = _manifest()
+        baseline = _baseline()
+        baseline["repair_dispatch"] = {"slug": "   ", "branch": "worktree-agent-repair-x"}
+        manifest["baseline"] = baseline
+        errors = validate_manifest.validate_run_manifest(manifest)
+        assert any("baseline.repair_dispatch.slug must be a non-empty string" in error for error in errors)
+        assert not any("baseline.repair_dispatch.slug is required" in error for error in errors)
+
+    def test_repair_dispatch_pr_non_string_is_reported(self, validate_manifest: ModuleType) -> None:
+        manifest = _manifest()
+        baseline = _baseline()
+        baseline["repair_dispatch"] = {
+            "slug": "repair-feature-name",
+            "branch": "worktree-agent-repair-feature-name",
+            "pr": 42,
+        }
+        manifest["baseline"] = baseline
+        errors = validate_manifest.validate_run_manifest(manifest)
+        assert any("baseline.repair_dispatch.pr must be a non-empty string" in error for error in errors)
+
+    def test_repair_dispatch_extra_keys_are_ignored_like_sibling_blocks(
+        self, validate_manifest: ModuleType
+    ) -> None:
+        manifest = _manifest()
+        baseline = _baseline()
+        baseline["repair_dispatch"] = {
+            "slug": "repair-feature-name",
+            "branch": "worktree-agent-repair-feature-name",
+            "future_field": "reserved-for-later",
+        }
+        manifest["baseline"] = baseline
+        assert validate_manifest.validate_run_manifest(manifest) == []
+
     def test_baseline_multiple_gates_and_failures_all_errors_reported(
         self, validate_manifest: ModuleType
     ) -> None:
@@ -269,6 +350,9 @@ class TestRunManifestValidator:
         assert set(gate_schema["required"]) == {"cmd", "failures"}
         failure_schema = gate_schema["properties"]["failures"]["items"]
         assert set(failure_schema["required"]) == {"suite", "test_id", "signature"}
+        assert set(
+            baseline_schema["properties"]["repair_dispatch"]["required"]
+        ) == {"slug", "branch"}
 
     def test_missing_top_level_section_fails(self, validate_manifest: ModuleType) -> None:
         manifest = _manifest()

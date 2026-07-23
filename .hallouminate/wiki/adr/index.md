@@ -2,6 +2,10 @@
 
 <!-- HALLOUMINATE:INDEX-START -->
 - [agent-resolution](./agent-resolution.md) — ADR: Progressive agent resolution is a shared contract
+- [baseline-repair-pathway-001](./baseline-repair-pathway-001.md) — ADR: Both frames get the concurrent repair pathway; worktree primitive becomes shared  [status: accepted]
+- [baseline-repair-pathway-002](./baseline-repair-pathway-002.md) — ADR: Repair consent is automatic under --auto, prompted at record time otherwise  [status: accepted]
+- [baseline-repair-pathway-003](./baseline-repair-pathway-003.md) — ADR: Repair merges as an independent PR from main; mechanical intertangle fallback  [status: accepted]
+- [baseline-repair-pathway-004](./baseline-repair-pathway-004.md) — ADR: /pasteurize stays unchanged in v1 — the frame owns isolation and briefing  [status: accepted]
 - [cheese-corpus-setup-001](./cheese-corpus-setup-001.md) — ADR-001: install.sh derives the durable root via the skill's bundled `.pyz`, not bash  [status: accepted]
 - [cheese-corpus-setup-002](./cheese-corpus-setup-002.md) — ADR-002: spec-discovery falls back to `resolve_slug` when hallouminate is absent  [status: accepted]
 - [cheese-corpus-setup-003](./cheese-corpus-setup-003.md) — ADR-003: delete the `spec_match` scoring engine rather than refactor it  [status: accepted]
