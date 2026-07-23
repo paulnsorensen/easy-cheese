@@ -317,16 +317,27 @@ On `none` / `Stop` (only reachable via the gate), exit cleanly with the report p
 
 ## Auto mode
 
-When invoked with `--auto`:
+When invoked with `--auto`, `/age` is one pass in an autonomous chain that a **driver** owns — the in-session `/cook --auto` frame, or the `/ultracook` orchestrator across spawns. The pass itself is uniform and never chains forward:
 
 - Skip the handoff gate.
-- If two cure passes have already completed (cap reached), stop and surface the final report — do not invoke `/cure` again even if findings remain.
-- Otherwise, if any finding meets the **medium+ floor** (the composite floor defined at **Compute the recommended set** under `## Handoff`) — invoke `/cure <slug> --auto --stake medium+` (forward `--open-pr` when it is in scope) and increment the cure-pass count when it returns.
-- If no finding meets the **medium+ floor**, stop the chain with a one-line "auto chain clean" note and the report path.
+- Set `next:` from what you observe on **this** run: `next: cure` when at least one finding meets the **medium+ floor** (the composite floor defined at **Compute the recommended set** under `## Handoff`); `next: done` when none do.
+- Write `.cheese/age/<slug>.md` (handoff slug at the top) and stop. Do **not** invoke `/cure` and do **not** count cure passes — a fresh-context age cannot count prior passes it never saw. The driver reads the slug and owns both the transition and the two-cure-pass cap.
+
+### Spawn contract
+
+This is the authoritative contract for dispatching an auto age pass; press's initial review (`## Auto mode` in [`../press/SKILL.md`](../press/SKILL.md)) and cure's verification (`## Auto mode` in [`../cure/SKILL.md`](../cure/SKILL.md)) reuse it by reference rather than duplicating it. Every auto age pass is a fresh-context reviewer read — same-context judging is biased toward the code the window helped write — so the driver dispatches age as a sub-agent whenever the host exposes a sub-agent primitive:
+
+1. Resolve a `reviewer` (read-only, fresh-context, powerful) through the shared resolver ([`../cheese/references/agent-resolution.md`](../cheese/references/agent-resolution.md)).
+2. Spawn it with the phase invocation (`/age <slug> --auto` for the initial review, `/age --scope <touched-paths> --auto` for verification) plus ultracook's no-chain directive verbatim (defined in [`../ultracook/SKILL.md`](../ultracook/SKILL.md) § No-chain isolation directive), so the sub-agent writes `.cheese/age/<slug>.md` and stops.
+3. Read the handoff slug with `python3 shared/scripts/handoff_cli.py parse --file .cheese/age/<slug>.md` (bundle fallback: `python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz handoff_cli parse --file .cheese/age/<slug>.md`) — **never** the sub-agent's stdout or final message — and drive the next step: on `next: cure`, and only while the cure-pass cap is not yet reached, invoke `/cure <slug> --auto --stake medium+` (forward `--open-pr` when in scope); on `next: done`, end the chain clean (or proceed to terminal publication per cure's contract); on any other value, halt and surface the slug status verbatim.
+
+**Degrade — inline, loud, never a halt.** When the host exposes **no sub-agent primitive**, the driver runs `/age ... --auto` inline in its own window (same-window review, as before this contract) and states the degrade in one loud line: `no sub-agent primitive: age runs inline (same-window review)`. The age pass and the cap ownership are unchanged; only the review's context freshness is lost, so this never halts — `/cook --auto` must keep working on such hosts. Sub-agent-primitive detection follows [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md) § Sub-agent dispatch.
+
+**Cap ownership.** The two-cure-pass cap belongs to the driving **chain frame**, not to age: the in-session `/cook --auto` frame counts the cure passes it dispatches across its press and cure steps (mirroring `/ultracook`'s chain-length rule), and `/ultracook` enforces the same cap by fixed chain length. Once two cure passes have completed the driver stops the chain regardless of remaining findings.
 
 ### When invoked from /ultracook
 
-`/ultracook` spawns age as a fresh-context sub-agent and owns the chain itself. Honour the no-chain override:
+`/ultracook` is one such driver — it spawns age as a fresh-context sub-agent and owns the chain itself, so the uniform pass above already honours its no-chain override:
 
 - Write `.cheese/age/<slug>.md` (with the handoff slug at the top) and stop. Do not invoke `/cure <slug> --auto --stake medium+` from inside the sub-agent.
 - Set `next:` from what you observe on this run, not from any guess about chain position. `next: cure` when at least one finding meets the **medium+ floor**; `next: done` when none do.

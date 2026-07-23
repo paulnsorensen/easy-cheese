@@ -112,7 +112,7 @@ Pre-select **Review the diff** when ready. If blocked, do not pre-select **Plate
 When invoked with `--auto` (propagated from `/cook --auto`):
 
 - Skip the handoff gate entirely.
-- If readiness is `ready for /age` or `follow-up recommended`, invoke `/age <slug> --auto` directly (forward `--open-pr` when it is in scope).
+- If readiness is `ready for /age` or `follow-up recommended`, press is the driver for the **initial review**: run the age pass through the shared spawn contract (`## Auto mode` § Spawn contract in [`../age/SKILL.md`](../age/SKILL.md)) — dispatch a fresh-context reviewer sub-agent carrying the no-chain directive when the host exposes a sub-agent primitive, else run `/age <slug> --auto` inline with the loud degrade note. Then read the age handoff slug and drive the next step: on `next: cure` invoke `/cure <slug> --auto --stake medium+` (forward `--open-pr` when it is in scope); on `next: done` stop the chain clean. This is the first of at most two cure passes the chain frame permits.
 - If readiness is `blocked`, stop the auto chain and surface the press report to the user. Blocked criteria: defined once in [`references/gap-analysis.md`](references/gap-analysis.md).
 
 ### When invoked from /ultracook
