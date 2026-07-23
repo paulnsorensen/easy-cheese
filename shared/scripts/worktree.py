@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Worktree fan-out floor for /ultracook parallel mode: create, harvest, teardown.
+"""Shared worktree floor for isolated sub-agent/worktree dispatch: create, harvest, teardown. Used by /ultracook's parallel-mode fan-out and by the repair-worktree pathway (skills/cook/references/quality-gates.md § Repair pathway).
 
 On Claude Code the native `Agent(isolation:"worktree")` primitive creates the
 worktree and returns `{agentId, worktreePath, worktreeBranch}`, so the

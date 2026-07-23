@@ -72,6 +72,7 @@ Gate failures are baseline-aware. Policy, the classification taxonomy, and the `
 - **Identical, outside the cooked contract** — record in the handoff's `baseline:` block and continue; never halt, never fix silently.
 - **New or changed** — fix it, capped at 2 rounds per gate; the same failure signature repeating twice consecutively halts early.
 - **Halt** only when rounds exhaust, the no-progress check trips, or the fix is design-shaped — the halt handoff carries the classification so resume never re-asks.
+- **Repair pathway** — when the capture records ≥1 identical-to-baseline failure, dedupe against a live `repair_dispatch`, then follow the repair pathway ([`references/quality-gates.md`](references/quality-gates.md) § Repair pathway) to dispatch a concurrent `/pasteurize` in an isolated worktree via `cook.pyz worktree create --slug repair-<slug> --base origin/main`.
 
 ## Output
 

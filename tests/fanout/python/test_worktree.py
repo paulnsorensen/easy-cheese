@@ -1,4 +1,4 @@
-"""Tests for src/fanout/worktree.py — create / harvest / teardown.
+"""Tests for shared/scripts/worktree.py — create / harvest / teardown.
 
 Locks acceptance #5: the helper harvests a curd branch onto the orchestrator
 branch with no `git fetch` (shared object store), and tears the worktree and

@@ -90,6 +90,10 @@ the layout question. Preserve that topology and use its matching update path.
 Commit-only isolated workers also do not ask because publication is out of
 scope.
 
+### Repair-worktree topology
+
+A branch created by the repair pathway ([`../cook/references/quality-gates.md`](../cook/references/quality-gates.md) § Repair pathway; branch name `worktree-agent-repair-*`) resolves topology through that pathway's mechanical file-overlap check before this section's policy: no shared files (or the originating run branch is already gone) plates an ordinary independent PR against `main`; shared files at or under the small-repair threshold harvest onto the run branch instead of publishing; shared files over threshold restack with the repair as the base PR through the stack machinery below. Any other branch uses the policy above unchanged.
+
 ## Flow
 
 1. **Classify** — commit-only, topology preflight, new PR, existing PR, or

@@ -22,7 +22,7 @@ line or file counts. Parallel `/ultracook --open-pr` runs the same policy in top
 preflight before seed or worker commits, persists `plate_layout`, and reuses that
 resolution at terminal publication rather than asking twice.[^4] A later `pr_plan` may
 support a stack recommendation but cannot override an explicit or verified choice.
-Updating an existing PR preserves its detected topology without asking again.
+Updating an existing PR preserves its detected topology without asking again. A branch created by the baseline-repair pathway (name convention `worktree-agent-repair-*`) resolves through a mechanical file-overlap check ahead of this policy: no overlap plates an ordinary independent PR against main, small overlap (≤2 files, ≤50 lines) harvests onto the run branch instead of publishing, and larger overlap restacks with the repair as the base PR — falling back to the policy above for any other branch.[^6]
 
 Before validation or publication, `/plate` inventories promised artifacts and durable
 implementation learnings. It routes durable knowledge through the consumer repo's
@@ -61,3 +61,4 @@ Related: [[architecture]], [[workflow-invariants]].
 [^3]: skills/plate/references/durable-writes.md:1-40
 [^4]: skills/ultracook/SKILL.md:34-45,149-176
 [^5]: skills/plate/SKILL.md:128-147
+[^6]: skills/plate/SKILL.md § Repair-worktree topology; skills/cook/references/quality-gates.md § Repair pathway, Merge-time topology.

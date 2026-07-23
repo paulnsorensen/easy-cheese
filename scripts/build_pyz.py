@@ -58,7 +58,7 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
         "artifact-path": Shared("artifact_path.py"),
         "ground-check": "ground_check.py",
     },
-    "cook": {"artifact-path": Shared("artifact_path.py")},
+    "cook": {"artifact-path": Shared("artifact_path.py"), "worktree": Shared("worktree.py")},
     "easy-cheese-setup": {
         "global": Shared("hallouminate_setup.py"),
         "local": Shared("hallouminate_setup.py"),
@@ -80,7 +80,7 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
         "baseline": "baseline.py",
         "phase_decision": "phase_decision.py",
         "mode": "mode.py",
-        "worktree": "worktree.py",
+        "worktree": Shared("worktree.py"),
         "milknado": "milknado.py",
         "validate_decomposition": "validate_decomposition.py",
         "validate_manifest": "validate_manifest.py",

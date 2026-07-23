@@ -43,7 +43,6 @@ class TestScriptsPresent:
     REQUIRED_SCRIPTS = (
         "phase_decision.py",
         "mode.py",
-        "worktree.py",
         "milknado.py",
         "validate_decomposition.py",
         "validate_manifest.py",
@@ -78,7 +77,7 @@ class TestScriptsPresent:
 
 class TestSharedHelpersPresent:
     def test_shared_helpers_present(self) -> None:
-        for helper in ("manifest_io.py", "schema.py", "cli.py"):
+        for helper in ("manifest_io.py", "schema.py", "cli.py", "worktree.py"):
             assert (REPO_ROOT / "shared" / "scripts" / helper).is_file(), (
                 f"missing required shared helper: shared/scripts/{helper}"
             )

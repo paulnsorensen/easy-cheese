@@ -350,6 +350,16 @@ def _validate_post_review(post_review: object) -> list[str]:
     return errors
 
 
+def _validate_repair_dispatch(value: object, where: str) -> list[str]:
+    if not isinstance(value, dict):
+        return [f"{where} must be an object, got {type_name(value)}"]
+    errors = required_keys(value, ("slug", "branch"), where)
+    for key in ("slug", "branch", "pr"):
+        if key in value:
+            errors.extend(non_empty_string(value, key, where))
+    return errors
+
+
 def _validate_baseline(baseline: object) -> list[str]:
     if baseline is None:
         return []
@@ -392,6 +402,10 @@ def _validate_baseline(baseline: object) -> list[str]:
                             for key in ("suite", "test_id", "signature"):
                                 if key in failure:
                                     errors.extend(non_empty_string(failure, key, f_where))
+    if "repair_dispatch" in baseline:
+        errors.extend(
+            _validate_repair_dispatch(baseline["repair_dispatch"], "baseline.repair_dispatch")
+        )
     return errors
 
 
