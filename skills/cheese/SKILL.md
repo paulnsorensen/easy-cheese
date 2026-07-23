@@ -29,6 +29,7 @@ If `$ARGUMENTS` is missing entirely and there is no recent context to lean on, a
 
 ## Flow
 
+0. **Read the full user message, not just `$ARGUMENTS`.** Any prose accompanying the invocation is a directive list; execute or answer it before — and where it conflicts, instead of — the flow's defaults and any handoff protocol. The handoff file restores state; the user's live message overrides it.
 1. **Think first (silent).** Model the problem internally per `skills/culture/SKILL.md` — restate the ask, list candidate targets, name the deciding signal. Output is the classification that drives step 2.
 2. **Classify** — match `$ARGUMENTS` against the intent shapes in `references/classification.md`. Pick the highest-confidence shape; below the threshold, route to `clarify` (handled by the tier-3 escalation in step 4).
 3. **Clarity check (implementation intents only).** Run cook's fast-path check for `cook` and `mold`. Direct `plate` intents bypass it.
@@ -91,6 +92,7 @@ Skip silently when no specs exist yet, and when the user already named a spec pa
 
 Flow:
 
+0. **Read the full user message, not just the `--continue` argument.** Any prose accompanying the invocation is a directive list; execute or answer it before — and where it conflicts, instead of — the handoff protocol below. The handoff file restores state; the user's live message overrides it.
 1. If the argument is a readable `.md` handoff path, read that file directly and derive `<slug>` from its basename. If the path contains a `.cheese/` parent, treat the directory above `.cheese/` as the original repo root for any repo-relative paths in the handoff.
 2. Otherwise, scan for the most recently modified handoff slug across `.cheese/{cook,press,age,cure,affinage,notes}/<slug>.md`.
 3. If none exist, offer to start the pipeline from scratch — `/mold` for fuzzy specs, `/cook` for clear asks, `/ultracook` for high-blast-radius specs — and stop.
@@ -100,7 +102,7 @@ Flow:
    - **When `status:` starts with `halt` and `next:` names a phase** (`mold | cook | press | age | cure | affinage | ultracook`) — surface the halt reason, then treat `/cheese --continue <slug>` as the user's explicit permission to dispatch the next phase. `affinage` is the exception: it takes a PR ref, not a slug, so read the PR from the slug's `artifact:` field (`PR#<n>` or its URL) and dispatch `/affinage <pr>`; fall back to a bare `/affinage` (branch auto-detect) only when `artifact:` carries no PR. Under `--safe`, offer the dispatch as the pre-selected option, with `/ultracook \<slug\>` as an alternative and `Stop` last.
    - **When `status:` is `ok` and `next:` names a pipeline phase** (`mold | cook | press | age | cure | affinage`) — dispatch `/\<next\> \<slug\>` directly, with the same `affinage` exception above. Under `--safe`, offer it as the pre-selected option, with `/ultracook \<slug\>` as an alternative and `Stop` last.
    - **When `status:` is `ok` and `next:` names a read-only kickoff** (`briesearch | culture`) — auto-dispatch it directly (`/briesearch \<arg\>`, `/culture`), taking `\<arg\>` from the handoff's orientation line. These are read-only and low-risk, so frictionless dispatch is the goal; do not gate them behind a question. Under `--safe`, offer the dispatch as the pre-selected option with `Stop` last.
-   - **When `status:` starts with `gated:`** — do *not* auto-dispatch `next:`, whatever it names. Surface the one-line decision from `status:` plus the body's open-questions/blockers, then ask the user which direction: **research / decide / build**. Dispatch nothing until the user picks; on the pick, route research → `/briesearch`, build → the named phase, decide → resolve the decision with the user, then re-read the handoff. Never fire a binary design popup that presumes the user wants to decide.
+   - **When `status:` starts with `gated:`** — do *not* auto-dispatch `next:`, whatever it names. If the accompanying message contains directives or already answers the gate, execute them and surface the gate as one line of plain text — do not raise the structured question. Otherwise, surface the one-line decision from `status:` plus the body's open-questions/blockers, then ask the user which direction: **research / decide / build**. First classify each open gate item as mechanical or design per [`references/ask-user-question.md`](references/ask-user-question.md) § When to structure: a mechanical item may go straight to that structured question, but a design item whose weighing was not already shown this session must not — re-establish the weighing in prose first (both ends, code-grounded evidence, pushback invited), converge conversationally, then ask at most one structured confirm, and never bundle multiple design forks into one prompt. Dispatch nothing until the user picks; on the pick, route research → `/briesearch`, build → the named phase, decide → resolve the decision with the user, then re-read the handoff. Never fire a binary design popup that presumes the user wants to decide.
    - **When `next:` is a list** (`next: [<skill> "<arg>", ...]`) — `order:` is required; if it is missing, stop and ask for a corrected handoff. The inline list accepts only read-only skills (`briesearch | culture`); if any item names a write or pipeline skill, reject it and point at the heavyweight `mode: parallel` + `tasks:` block (which carries the worktree/branch isolation those skills need). With `order: parallel`, dispatch one read agent per item in the same turn so they run concurrently; with `order: sequential`, dispatch the items in listed order. Under `--safe`, offer the batch dispatch as the pre-selected option with `Stop` last.
    - **When `next:` is `hold`** — surface the orientation line and stop without dispatching. `hold` means restore context and wait for instruction; it is not a runnable command. Distinct from `done` (terminal record) — `hold` is a live session paused for input.
    - **When `next:` is missing entirely** — flag the handoff as malformed (`malformed handoff: next: required`) and stop. Do not guess a next step or default to a phase; `hold` is the author's value for "no action."
@@ -167,6 +169,7 @@ Pre-select only the highest-confidence target. Without `--safe`, surface the tar
 ## Rules
 
 - Never paraphrase or summarise downstream skill output — that is the downstream skill's job.
+- A declined question gate is an answer. Do not re-raise it; state the open item as one line and wait for freeform input.
 
 ## References
 

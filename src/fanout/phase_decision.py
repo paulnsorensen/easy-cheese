@@ -14,21 +14,22 @@ that runs after index `i` is `table[i + 1]`; the last entry is terminal
 - `PARALLEL_CURD` — the per-curd pipeline ending in a final age pass.
 - `PARALLEL_POSTMERGE` — the merged-diff pass ending in a final age pass.
 
-Any `status` beginning with `halt` short-circuits to `action=halt`. In linear mode, a nonterminal age that reports `next: done` triggers `action=stop_early`. Parallel tables ignore that early signal and run their complete sequence through cure and final age.
+Any `status` beginning with `halt` short-circuits to `action=halt`. In linear mode, a nonterminal age that reports `next: done` triggers `action=stop_early`. On the parallel-curd table the same signal triggers `action=clean_complete`: the curd is finished and the first age's bound review context becomes its final review identity — safe because the merged diff is re-reviewed by the post-merge sequence. The parallel-postmerge table is the last review before publication, so it ignores the early signal and always runs through cure and final age.
 
 Inputs:
 
     --phase-index <int>     Which phase just returned (0-indexed into the table).
     --status <ok|halt:...>  Status field from the handoff slug.
     --next <name>           Optional. The `next` field from the handoff slug;
-                            terminal age always gates publication, while only
-                            linear mode permits nonterminal early-stop.
+                            terminal age always gates publication, while a
+                            nonterminal clean age ends the linear and
+                            parallel-curd tables early (never post-merge).
     --table <name>          Which table to walk (default: linear).
 
 Output (JSON):
 
     {
-      "action": "spawn" | "stop" | "stop_early" | "halt",
+      "action": "spawn" | "stop" | "stop_early" | "clean_complete" | "halt",
       "next_phase": "press" | "age" | "cure" | null,
       "exit_message": "<one-line operator-visible reason>"
     }
@@ -105,21 +106,32 @@ def decide(
             ),
         }
 
-    # Linear mode may stop on an early clean age. Parallel tables must execute
-    # their complete typed sequence through cure and final age.
-    if (
-        allow_early_stop
-        and current_phase == "age"
-        and (next_field or "").strip().lower() == "done"
-    ):
-        return {
-            "action": "stop_early",
-            "next_phase": None,
-            "exit_message": (
-                f"age (phase {phase_index}) reported next=done; "
-                "diff is clean at medium+ severity floor"
-            ),
-        }
+    # A nonterminal clean age ends the table early everywhere except
+    # post-merge, which is the last review before publication and must run
+    # its complete typed sequence through cure and final age. Linear mode
+    # stops and hands the diff to the user; a parallel curd clean-completes —
+    # its bound review context becomes the final one, and the post-merge
+    # review still re-covers the merged diff.
+    if current_phase == "age" and (next_field or "").strip().lower() == "done":
+        if allow_early_stop:
+            return {
+                "action": "stop_early",
+                "next_phase": None,
+                "exit_message": (
+                    f"age (phase {phase_index}) reported next=done; "
+                    "diff is clean at medium+ severity floor"
+                ),
+            }
+        if table is PARALLEL_CURD:
+            return {
+                "action": "clean_complete",
+                "next_phase": None,
+                "exit_message": (
+                    f"age (phase {phase_index}) reported next=done; curd is clean "
+                    "at medium+ severity floor — record this age's review context "
+                    "as final and mark the curd completed"
+                ),
+            }
 
     return {
         "action": "spawn",
