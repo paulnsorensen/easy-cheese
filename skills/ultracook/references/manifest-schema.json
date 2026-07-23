@@ -216,6 +216,35 @@
         "findings_deferred": {"type": "integer", "minimum": 0}
       }
     },
+    "baseline": {
+      "type": "object",
+      "required": ["captured_at", "gates"],
+      "properties": {
+        "captured_at": {"type": "string", "format": "date-time"},
+        "gates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["cmd", "failures"],
+            "properties": {
+              "cmd": {"type": "string", "minLength": 1},
+              "failures": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["suite", "test_id", "signature"],
+                  "properties": {
+                    "suite": {"type": "string", "minLength": 1},
+                    "test_id": {"type": "string", "minLength": 1},
+                    "signature": {"type": "string", "minLength": 1}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "pr_plan": {
       "$ref": "pr-plan-schema.json"
     },

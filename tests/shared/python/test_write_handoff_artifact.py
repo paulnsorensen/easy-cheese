@@ -227,6 +227,90 @@ class TestOptionalKeyedLines:
         assert slug.taste_test == "inline-pass"
         assert slug.durable_flags == "none"
 
+    def test_baseline_keyed_line_present_does_not_corrupt_orientation(
+        self, handoff_mod: ModuleType
+    ) -> None:
+        # Repro: a `baseline:` line between artifact and orientation must be
+        # consumed as a keyed line, not swallowed as the orientation.
+        slug = handoff_mod.parse_handoff_slug(
+            "status: ok\n"
+            "next: cure\n"
+            "artifact: .cheese/press/demo.md\n"
+            "baseline: none\n"
+            "reviewed the retry path\n"
+        )
+        assert slug.baseline == "none"
+        assert slug.orientation == "reviewed the retry path"
+
+    def test_render_parse_roundtrip_with_baseline_present(
+        self, handoff_mod: ModuleType
+    ) -> None:
+        original = handoff_mod.HandoffSlug(
+            status="ok",
+            halt_reason=None,
+            next_skill="cure",
+            artifact=".cheese/age/demo.md",
+            orientation="reviewed widget",
+            taste_test="dispatched-pass",
+            durable_flags="none",
+            baseline="none",
+        )
+        rendered = handoff_mod.render_handoff_slug(original)
+        assert handoff_mod.parse_handoff_slug(rendered) == original
+
+    def test_render_parse_roundtrip_with_baseline_absent(
+        self, handoff_mod: ModuleType
+    ) -> None:
+        original = handoff_mod.HandoffSlug(
+            status="ok",
+            halt_reason=None,
+            next_skill="cure",
+            artifact=".cheese/age/demo.md",
+            orientation="reviewed widget",
+        )
+        rendered = handoff_mod.render_handoff_slug(original)
+        round_tripped = handoff_mod.parse_handoff_slug(rendered)
+        assert round_tripped == original
+        assert round_tripped.baseline is None
+
+    def test_writer_emits_baseline(
+        self, writer: ModuleType, handoff_mod: ModuleType, tmp_path: Path
+    ) -> None:
+        target = writer.write_artifact(
+            slug="baselined",
+            status="ok",
+            next_skill="cure",
+            artifact="",
+            orientation="reviewed widget",
+            body=None,
+            root=tmp_path,
+            phase="age",
+            baseline="none",
+        )
+        slug = handoff_mod.parse_handoff_slug(target.read_text(encoding="utf-8"))
+        assert slug.baseline == "none"
+        assert slug.orientation == "reviewed widget"
+
+    def test_writer_cli_baseline_flag_roundtrip(
+        self, handoff_mod: ModuleType, tmp_path: Path
+    ) -> None:
+        # Locks the argparse dest wiring (--baseline).
+        result = subprocess.run(
+            [
+                sys.executable, str(WRITER_CLI),
+                "--slug", "cli-baselined", "--status", "ok", "--phase", "age",
+                "--next", "cure", "--artifact", "", "--orientation", "demo",
+                "--baseline", "none",
+            ],
+            capture_output=True,
+            text=True,
+            cwd=tmp_path,
+        )
+        assert result.returncode == 0, result.stderr
+        target = tmp_path / ".cheese" / "age" / "cli-baselined.md"
+        slug = handoff_mod.parse_handoff_slug(target.read_text(encoding="utf-8"))
+        assert slug.baseline == "none"
+
 
 class TestBodyFile:
     def test_body_content_appended_with_blank_separator(

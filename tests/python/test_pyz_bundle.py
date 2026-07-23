@@ -30,6 +30,7 @@ SKILL_SUBCOMMANDS = {
     ],
     "ultracook": [
         "artifact-path",
+        "baseline",
         "phase_decision",
         "mode",
         "worktree",
@@ -79,7 +80,12 @@ def bundles(tmp_path_factory) -> Path:
     return out
 
 
-def _run(pyz: Path, *args: str, extra_env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+def _run(
+    pyz: Path,
+    *args: str,
+    extra_env: dict[str, str] | None = None,
+    stdin: str | None = None,
+) -> subprocess.CompletedProcess[str]:
     # Run from the bundle's own dir with PYTHONPATH stripped, so the only way an
     # import can resolve is from inside the .pyz itself.
     env = dict(os.environ)
@@ -92,6 +98,7 @@ def _run(pyz: Path, *args: str, extra_env: dict[str, str] | None = None) -> subp
         capture_output=True,
         text=True,
         env=env,
+        input=stdin,
     )
 
 
@@ -162,6 +169,45 @@ def test_ultracook_bundle_contains_entity_modules(bundles: Path) -> None:
     cf = set(zipfile.ZipFile(bundles / "ultracook.pyz").namelist())
     assert "curd.py" in cf, f"curd.py missing from ultracook bundle; contents: {sorted(cf)}"
     assert "wiring.py" in cf, f"wiring.py missing from ultracook bundle; contents: {sorted(cf)}"
+
+
+def test_ultracook_baseline_classifies_failures_via_stdin(bundles: Path) -> None:
+    """baseline reads {baseline, current} JSON from stdin and emits the classified
+    diff — the real end-to-end path /ultracook's quality gate drives."""
+    payload = (
+        '{"baseline": [], "current": '
+        '[{"suite": "s", "test_id": "t", "signature": "x"}]}'
+    )
+    result = _run(bundles / "ultracook.pyz", "baseline", stdin=payload)
+    assert result.returncode == 0, result.stderr
+    import json
+    classification = json.loads(result.stdout)
+    assert classification["new"] == [{"suite": "s", "test_id": "t", "signature": "x"}]
+    assert classification["identical"] == []
+    assert classification["changed"] == []
+    assert classification["resolved"] == []
+
+
+def test_ultracook_baseline_rejects_malformed_stdin(bundles: Path) -> None:
+    """Malformed stdin (not a JSON object) raises CliError -- exit 2, 'ERROR:' on
+    stderr -- rather than an uncaught traceback."""
+    result = _run(bundles / "ultracook.pyz", "baseline", stdin="not json")
+    assert result.returncode == 2, result.stderr
+    assert result.stderr.startswith("ERROR:")
+
+
+def test_ultracook_baseline_rejects_wrong_typed_value(bundles: Path) -> None:
+    """A well-formed JSON object whose baseline/current value is the wrong shape
+    (e.g. a string instead of a list) must raise CliError -- exit 2, 'ERROR:' on
+    stderr -- rather than reaching classify() and raising an uncaught TypeError."""
+    result = _run(
+        bundles / "ultracook.pyz",
+        "baseline",
+        stdin='{"baseline": "notalist", "current": []}',
+    )
+    assert result.returncode == 2, result.stderr
+    assert result.stderr.startswith("ERROR:")
+    assert "baseline must be a list" in result.stderr
 
 
 # Pinned env so the resolved corpus path is deterministic and does not depend on

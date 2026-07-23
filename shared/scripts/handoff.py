@@ -7,6 +7,7 @@ Schema (see skills/cheese/references/formatting.md § Required preamble):
     artifact: <path-to-prior-report-if-any>
     taste_test: <verdict>                     (optional keyed line)
     durable_flags: none | <flag lines>        (optional keyed line)
+    baseline: none | <block>                  (optional keyed line)
     <one-line orientation: what changed or what was reviewed>
 
 The keyed lines between `artifact:` and the orientation are optional: a
@@ -35,6 +36,7 @@ class HandoffSlug:
     orientation: str
     taste_test: str | None = None
     durable_flags: str | None = None
+    baseline: str | None = None
 
     def is_halt(self) -> bool:
         return self.status == "halt"
@@ -44,7 +46,7 @@ _STATUS_RE = re.compile(r"^status:\s*(?P<rest>.+?)\s*$")
 _NEXT_RE = re.compile(r"^next:\s*(?P<value>\S.*?)\s*$")
 _ARTIFACT_RE = re.compile(r"^artifact:\s*(?P<value>.*?)\s*$")
 # Optional keyed lines allowed between `artifact:` and the orientation.
-_OPTIONAL_KEY_RE = re.compile(r"^(?P<key>taste_test|durable_flags):\s*(?P<value>.*?)\s*$")
+_OPTIONAL_KEY_RE = re.compile(r"^(?P<key>taste_test|durable_flags|baseline):\s*(?P<value>.*?)\s*$")
 
 
 class HandoffParseError(ValueError):
@@ -71,7 +73,7 @@ def parse_handoff_slug(text: str) -> HandoffSlug:
 
     The preamble is strictly the first *physical* lines: status, next,
     artifact (value may be empty), zero or more optional keyed lines
-    (`taste_test:`, `durable_flags:`), orientation. Treating blank lines as
+    (`taste_test:`, `durable_flags:`, `baseline:`), orientation. Treating blank lines as
     skippable would let a missing orientation silently consume the first
     body line (e.g. a `# Press Report` heading) as the orientation.
     """
@@ -121,6 +123,7 @@ def parse_handoff_slug(text: str) -> HandoffSlug:
         orientation=orientation,
         taste_test=optional.get("taste_test"),
         durable_flags=optional.get("durable_flags"),
+        baseline=optional.get("baseline"),
     )
 
 
@@ -139,6 +142,8 @@ def render_handoff_slug(slug: HandoffSlug) -> str:
         lines.append(f"taste_test: {slug.taste_test}")
     if slug.durable_flags is not None:
         lines.append(f"durable_flags: {slug.durable_flags}")
+    if slug.baseline is not None:
+        lines.append(f"baseline: {slug.baseline}")
     lines.append(slug.orientation)
     return "\n".join(lines)
 

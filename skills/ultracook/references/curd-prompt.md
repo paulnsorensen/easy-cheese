@@ -1,6 +1,6 @@
 # Per-curd phase prompt template
 
-Loaded by `/ultracook` for each top-level phase spawn. Substitute `{N}`, `{slug}`, `{phase}`, `{worktree_path}`, `{file_list}`, `{behaviour}`, `{acceptance_criterion}`, `{test_target}`, `{spec_summary}`, `{prior_handoff}`, `{review_context}`, and `{agent_resolution}`.
+Loaded by `/ultracook` for each top-level phase spawn. Substitute `{N}`, `{slug}`, `{phase}`, `{worktree_path}`, `{file_list}`, `{behaviour}`, `{acceptance_criterion}`, `{test_target}`, `{spec_summary}`, `{baseline}`, `{prior_handoff}`, `{review_context}`, and `{agent_resolution}`.
 
 ````text
 You are executing {phase} for curd #{N} of spec {slug}.
@@ -15,6 +15,7 @@ Acceptance criterion: {acceptance_criterion}
 Intended files: {file_list}
 Focused test: {test_target}
 Spec summary: {spec_summary}
+Baseline: {baseline} — the run manifest's classified `baseline:` block, carried down for the cook phase's baseline-vs-regression check; a curd never captures its own baseline.
 
 Stay inside this behaviour. The file list may be stale; add only files directly required by the acceptance criterion and record any expansion.
 

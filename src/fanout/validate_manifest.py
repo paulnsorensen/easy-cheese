@@ -350,6 +350,51 @@ def _validate_post_review(post_review: object) -> list[str]:
     return errors
 
 
+def _validate_baseline(baseline: object) -> list[str]:
+    if baseline is None:
+        return []
+    if not isinstance(baseline, dict):
+        return [f"baseline must be an object, got {type_name(baseline)}"]
+    errors: list[str] = []
+    errors.extend(required_keys(baseline, ("captured_at", "gates"), "baseline"))
+    if "captured_at" in baseline:
+        errors.extend(non_empty_string(baseline, "captured_at", "baseline"))
+    if "gates" in baseline:
+        gates = baseline["gates"]
+        if not isinstance(gates, list):
+            errors.append("baseline.gates must be a list")
+        else:
+            for index, gate in enumerate(gates, start=1):
+                where = f"baseline.gates[{index}]"
+                if not isinstance(gate, dict):
+                    errors.append(f"{where} must be an object, got {type_name(gate)}")
+                    continue
+                errors.extend(required_keys(gate, ("cmd", "failures"), where))
+                if "cmd" in gate:
+                    errors.extend(non_empty_string(gate, "cmd", where))
+                if "failures" in gate:
+                    failures = gate["failures"]
+                    if not isinstance(failures, list):
+                        errors.append(f"{where}.failures must be a list")
+                    else:
+                        for f_index, failure in enumerate(failures, start=1):
+                            f_where = f"{where}.failures[{f_index}]"
+                            if not isinstance(failure, dict):
+                                errors.append(
+                                    f"{f_where} must be an object, got {type_name(failure)}"
+                                )
+                                continue
+                            errors.extend(
+                                required_keys(
+                                    failure, ("suite", "test_id", "signature"), f_where
+                                )
+                            )
+                            for key in ("suite", "test_id", "signature"):
+                                if key in failure:
+                                    errors.extend(non_empty_string(failure, key, f_where))
+    return errors
+
+
 def validate_run_manifest(manifest: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     required = (
@@ -386,6 +431,7 @@ def validate_run_manifest(manifest: dict[str, Any]) -> list[str]:
     errors.extend(_validate_curds(manifest.get("curds")))
     errors.extend(_validate_wiring(manifest.get("wiring")))
     errors.extend(_validate_post_review(manifest.get("post_review")))
+    errors.extend(_validate_baseline(manifest.get("baseline")))
     if "current_review" in manifest:
         errors.extend(_validate_review_context(manifest["current_review"], "current_review"))
     if "pr_plan" in manifest:

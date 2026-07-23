@@ -39,7 +39,7 @@ The handoff blocks below are the portable contract; slash commands are host rend
 
    If the host only ships the bundle, `python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz findings_cli parse-selection ...` is the fallback.
 3. **Apply** — fix one logical group at a time via `cheez-read` (re-confirm anchor location) and `cheez-write` (apply).
-4. **Validate** — run the narrowest tests that prove each fix, then any relevant project-wide gates (lint, typecheck, build).
+4. **Validate** — run the narrowest tests that prove each fix, then any relevant project-wide gates (lint, typecheck, build). When the handoff carries a recorded `baseline:` block, classify gate failures against it per [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md): identical failures do not block a clean cure or trigger a halt; only new or changed failures are cure's to fix.
 5. **Taste-test (behavioural fixes only)** — if this cure applied a *behavioural* fix (touched production logic or public surface), run the fresh-context taste-test before the handoff slug: dispatch the read-only `reviewer` phase-agent (named, no call-site model — its def pins `model: opus`) over the cure diff with the same lenses cook uses, or fall back to the inline self-check when no such reviewer sub-agent is available. *Mechanical* fixes — formatting, comment, import, no-logic rename — skip this and keep the current flow. Pipe any `revise` into a bounded corrective pass; a Locked-decision `halt` stops for a human. (A coder-nested cure cannot fan out; it defers the authoritative pass to the orchestrator.)
 6. **Domain-model correction (diff-touched terms only)** — after the cook's fixes land, correct the project domain model (ubiquitous language) for terms **touched by the cook's diff** (bounded — diff-touched terms only, never a free rewrite). Resolve the store with `domain_model_target()` (`shared/scripts/paths.py`, read-probe cascade wiki → docs → XDG; an existing model always wins). For a diff-touched entry whose definition or `_Code_:` referent no longer matches the code, update it and write a one-line change note per edit (entry format: `**Term** — definition.` / `_Avoid_: syn1, syn2` / `_Code_: file:line (or NEW ENTITY)`). **HARD rule — flag, don't reverse:** if a correction would REVERSE a mold-decided canonical term (replace the term mold made authoritative, or contradict its definition), do not rewrite — flag it to the user (the term, mold's decision, the conflict) and leave the entry unchanged. mold DECIDES canonical terms at curdle; cure only APPLIES BOUNDED corrections and never overrules the authoritative writer.
 7. **Re-review hand-off** — recommend `/age --scope <touched-path>` so review runs through the proper skill rather than reimplementing it inline. `/cure` does not re-grade its own work. If the user picks re-age, the resulting report can feed a fresh `/cure` invocation.
@@ -69,7 +69,7 @@ Run the narrowest tests that prove the fix, then any relevant existing wider gat
 
 Applied requires its proving test green (Iron Law — see `references/cure-discipline.md`).
 
-**clean cure** — ≥1 fix applied, all gates green, no false-premise halt. To map the post-cure gate booleans to a readiness verdict (agent judges the booleans; the CLI maps them):
+**clean cure** — ≥1 fix applied, all gates green (identical recorded `baseline:` failures don't count against green — see [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md)), no false-premise halt. To map the post-cure gate booleans to a readiness verdict (agent judges the booleans; the CLI maps them):
 
    ```
    python3 shared/scripts/gates_cli.py classify \
@@ -87,6 +87,7 @@ Write the cure report to `.cheese/cure/<slug>.md` with a minimum handoff slug at
 status: ok | halt: <one-line reason>
 next: age | done
 artifact: <path-if-any>
+baseline: none | <recorded baseline block copied from the upstream handoff — see ../cook/references/quality-gates.md>
 <one-line orientation: what cure applied or deferred>
 ```
 
@@ -185,6 +186,7 @@ In both cases terminal `/plate` dispatch is suppressed — the orchestrator owns
 
 - Default to the recommended composite (`all-medium, cheap`), or the selection `/age` / `/affinage` locked in. `--safe` re-introduces the selection gate. A finding resting on a false premise, or a sprawling/structural fix, still pauses for a decision regardless of mode.
 - Keep fixes scoped to selected (or auto-selected) findings.
+- Do not re-halt or re-flag gate failures identical to the handoff's recorded `baseline:` block; only new or changed failures are cure's to fix — see [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md).
 - Do not hide failed or skipped checks. In auto mode, reverted findings go under `### Deferred`, never silently dropped.
 - Publication contract — existing PR authorization, `--open-pr`, `--safe`, and never publishing an unclean cure: see `## Handoff`.
 - If a selected finding rests on a false premise (the `/age` claim is wrong, or the diff already addresses it), stop and surface the premise before applying. Disagreeing with the report is allowed; silently working around it is not.

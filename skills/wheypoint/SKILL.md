@@ -63,10 +63,13 @@ session: <harness>:<session-id>      # optional; auto-filled provenance
 git: <branch>@<short-sha>            # optional; auto-filled provenance
 created: <UTC ISO-8601>              # optional; auto-filled provenance
 parents: [<slug>, ...]               # optional; lineage (join => 2+, split-child => 1)
+baseline: none | <block — carries a recorded baseline block forward from an upstream cook/press/cure handoff; see ../cook/references/quality-gates.md>
 <one-line orientation: where the session is and what is mid-flight>
 ```
 
 `mode:` is optional for backwards compatibility; omitted mode means `mode: single`. In `mode: single`, `next:` names the skill the cold reader should run, which is the machine-readable form of the suggested-skills section below. Use `done` only when the work is genuinely finished and the handoff is a record, not a baton. `/cheese --continue <slug>` scans `.cheese/notes/<slug>.md` and dispatches `next:` directly; `/cheese --continue <absolute-note-path>` reads that handoff file directly when the user is outside the original repo. When `next: affinage`, record the PR reference (`PR#<n>` or its URL) in `artifact:` so the resume dispatches `/affinage <pr>` explicitly rather than relying on branch auto-detection.
+
+When the checkpointed session carries a recorded `baseline:` block, propagate it verbatim to the child note: it is settled state, not something the resumed phase should re-ask about or re-halt on. `--split` carries the block unchanged to each child note; `--join` merges the parents' baseline entries into their union — a settled-state merge that never re-opens a recorded entry. See [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md).
 
 ### Provenance fields
 
