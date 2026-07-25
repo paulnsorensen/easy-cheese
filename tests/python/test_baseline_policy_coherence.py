@@ -28,7 +28,6 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 COOK_SKILL = REPO_ROOT / "skills" / "cook" / "SKILL.md"
 QUALITY_GATES = REPO_ROOT / "skills" / "cook" / "references" / "quality-gates.md"
-ULTRACOOK_SKILL = REPO_ROOT / "skills" / "ultracook" / "SKILL.md"
 MANIFEST_SCHEMA = REPO_ROOT / "skills" / "ultracook" / "references" / "manifest-schema.json"
 
 
@@ -92,9 +91,11 @@ class TestCookSkillMatchesQualityGatesDoc:
 
 class TestBaselineCaptureExampleDispatches:
     def test_skill_doc_names_the_documented_subcommand(self) -> None:
-        body = read(ULTRACOOK_SKILL)
+        # /ultracook retired to a stub; its `## Baseline capture` section
+        # (and the documented example) now live in cook/SKILL.md.
+        body = read(COOK_SKILL)
         assert "ultracook.pyz baseline" in body, (
-            "ultracook/SKILL.md's Baseline capture example must document the "
+            "cook/SKILL.md's Baseline capture example must document the "
             "`ultracook.pyz baseline` invocation this test then verifies "
             "actually dispatches"
         )
@@ -107,7 +108,7 @@ class TestBaselineCaptureExampleDispatches:
         # wiring commit landed), this fails instead of the doc silently
         # documenting a dead command.
         sys.path.insert(0, str(REPO_ROOT / "scripts"))
-        import build_pyz  # noqa: E402  (path must be set before import)
+        import build_pyz
 
         bundle = build_pyz.cached_bundle("ultracook")
         payload = {
@@ -197,8 +198,9 @@ class TestCookWorktreeSubcommandDispatches:
         # If cook's SKILLS registry doesn't wire the shared worktree.py module
         # in, this fails instead of the doc silently documenting a dead command.
         sys.path.insert(0, str(REPO_ROOT / "scripts"))
-        import build_pyz  # noqa: E402  (path must be set before import)
         import subprocess as sp
+
+        import build_pyz
 
         repo = tmp_path / "repo"
         repo.mkdir()

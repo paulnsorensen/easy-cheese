@@ -53,6 +53,21 @@ agent_resolution:
 - Do not turn a known underpowered candidate into a fallback.
 - Use unknown power only after every known-power candidate is rejected, and record the degradation.
 
+## Roles x tiers (spawn-primitive effort per role)
+
+Each role's spawn-primitive `effort` default, harness-agnostic (harness-specific model/tier bindings live in `routing-policy.md`'s Roles x tiers table):
+
+| Role | Effort | Notes |
+|---|---|---|
+| explorer | low | judgment-shaped digests stay at a capable-but-cheap tier; schema-constrained scans may go cheaper |
+| researcher | medium | unchanged |
+| coder | medium | gains the ESCALATE contract; delegation IS the downgrade |
+| verifier | low | "verify exactly one claim"; schema-constrained; the cheap severity-filter leg |
+| reviewer | low \| medium \| high (dial) | pinned to a powerful model; count and effort follow the age router |
+| planner / integrator | xhigh (at mold) | never delegated; owns the approval loop |
+
+A local skill table's `Effort` column defaults to this table for the matching role; override only with a stated reason (e.g. a router-driven dial).
+
 ## Local skill tables
 
 Each dispatching skill declares a local `## Agent resolution` table with the columns `Work`, `Preferred types`, `Permissions/isolation`, `Minimum power`, `Effort`, and `Fallback`. The table narrows this shared algorithm; it does not replace it.

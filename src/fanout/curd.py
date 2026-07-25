@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 
-from schema import required_keys  # noqa: E402
+from schema import disjoint_errors, required_keys
 
 # A behaviour sentence joining two distinct verbs with "and" usually means
 # the curd should be split. We flag the simple case: "<verb> X and <verb> Y"
@@ -89,25 +89,12 @@ def lifecycle_errors(curd: dict, where: str) -> list[str]:
 
 def disjoint_files_errors(curds: list[dict]) -> list[str]:
     """Cross-curd file collision + missing/empty files. Skips non-dict entries."""
-    errors: list[str] = []
-    file_to_curd: dict[str, int | str] = {}
-    for curd in curds:
-        if not isinstance(curd, dict):
-            continue
-        curd_id = curd.get("id", "?")
-        files = curd.get("files", [])
-        if not isinstance(files, list) or not files:
-            errors.append(f"curd {curd_id}: missing or empty 'files'")
-            continue
-        for f in files:
-            if not isinstance(f, str):
-                errors.append(f"curd {curd_id}: non-string file entry: {f!r}")
-                continue
-            if f in file_to_curd:
-                errors.append(
-                    f"file {f!r} appears in curd {file_to_curd[f]} and curd {curd_id} — "
-                    f"curds must be file-disjoint (move shared content to seed or wiring)"
-                )
-            else:
-                file_to_curd[f] = curd_id
-    return errors
+    return disjoint_errors(
+        curds,
+        id_key="id",
+        message=lambda f, first, second: (
+            f"file {f!r} appears in curd {first} and curd {second} — "
+            "curds must be file-disjoint (move shared content to seed or wiring)"
+        ),
+        strict=True,
+    )

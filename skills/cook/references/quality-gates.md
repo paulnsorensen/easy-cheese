@@ -6,7 +6,7 @@ Single source of truth for how `/cook`, `/press`, `/cure`, and `/ultracook` trea
 
 Baseline capture is frame-owned, not per-cook:
 
-- **`/ultracook` run** — captures the broad-gate baseline once per run, before any curd cooks, and hands it down to curd cooks via dispatch. A curd never captures its own baseline.
+- **`/cook`'s fan pathway** — captures the broad-gate baseline once per run, before any curd cooks, and hands it down to curd cooks via dispatch. A curd never captures its own baseline.
 - **Bare `/cook` (no frame)** — captures lazily, on the first red broad gate, from the pre-change tree (`git stash` or a clean worktree checkout), classifies the failures, then proceeds with the classified result.
 
 Frame capture and the gate re-run happen in the same environment (same worktree, same toolchain) to minimize signature drift from environment-sensitive flakes.
@@ -75,5 +75,5 @@ The repair worktree's own `/plate` step, at publication time, applies a mechanic
 - `/cook` writes the `baseline:` block.
 - `/press`, `/age`, `/cure` honor it: no re-halt, no re-flag of identical entries.
 - `/cheese --continue` treats it as settled state, not an open question.
-- `/ultracook` validates it in the run manifest.
+- `/cook`'s fan pathway validates it in the run manifest.
 - `/plate` applies the repair pathway's merge-time topology check when publishing a repair-worktree branch (§ Repair pathway, Merge-time topology).

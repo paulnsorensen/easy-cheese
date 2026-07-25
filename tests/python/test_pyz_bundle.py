@@ -17,8 +17,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 BUILD = REPO_ROOT / "scripts" / "build_pyz.py"
 
 sys.path.insert(0, str(REPO_ROOT / "shared" / "scripts"))
-import build_pyz  # noqa: E402  bundle manifest — single source for the orphan check
-import paths  # noqa: E402  the path-math single source the shim must agree with
+import build_pyz  # noqa: E402
+import paths  # noqa: E402
 
 SKILL_SUBCOMMANDS = {
     "melt": [
@@ -159,7 +159,9 @@ def test_bundle_carries_only_its_own_skill(bundles: Path) -> None:
 
     affinage = set(zipfile.ZipFile(bundles / "affinage.pyz").namelist())
     assert "pr_status.py" in affinage
-    assert not (affinage & {"git_utils.py", "manifest_io.py", "schema.py"})  # no shared needed
+    assert "age_route.py" in affinage  # affinage's own age-route subcommand
+    assert "manifest_io.py" in affinage  # age-route's own import, not cross-skill vendoring
+    assert not (affinage & {"git_utils.py", "schema.py"})  # no shared needed beyond that
 
 
 def test_ultracook_bundle_contains_entity_modules(bundles: Path) -> None:
@@ -560,12 +562,14 @@ def test_no_orphan_committed_bundles():
 
 def test_local_skill_modules_finds_libs_and_excludes_subcommands() -> None:
     """build_pyz._local_skill_modules discovers local src/<skill>/ library modules a
-    registered script imports (curd/wiring), and EXCLUDES registered subcommands and
-    shared modules. Unit-locks the discovery the bundle-content test only covers
-    end-to-end — a regression that stopped excluding registered names or stopped
-    finding the siblings would fail here with a precise diff."""
+    registered script imports (curd/wiring/age_route), and EXCLUDES registered
+    subcommands and shared modules. Unit-locks the discovery the bundle-content test
+    only covers end-to-end — a regression that stopped excluding registered names or
+    stopped finding the siblings would fail here with a precise diff. age_route is
+    discovered here (not via EXTRA_MODULES) because ultracook's src dir is aliased to
+    src/fanout/, where age_route.py lives alongside age_route_cli.py."""
     local = build_pyz._local_skill_modules("ultracook")
-    assert local == {"curd", "wiring"}, local
+    assert local == {"curd", "wiring", "age_route"}, local
     assert "validate_decomposition" not in local  # registered subcommand, not a local lib
     assert "validate_manifest" not in local
     assert "schema" not in local  # shared module (shared/scripts), not src/fanout

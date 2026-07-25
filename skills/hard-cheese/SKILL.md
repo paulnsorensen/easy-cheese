@@ -60,7 +60,7 @@ The handoff blocks below are the portable contract; slash commands are host rend
 
 4. **Capture the user's explanation** as free text. No coaching, no example answers — the explanation is the artifact under test.
 
-5. **Spawn the judge sub-agent** in fresh context (same pattern `/ultracook` uses for adversarial review). The judge:
+5. **Spawn the judge sub-agent** in fresh context (same pattern `/cook`'s fan pathway uses for adversarial review). The judge:
    - Reads `references/judge-prompt.md` as its system prompt.
    - Receives the passing score threshold, the diff summary, the spec excerpt (if any), and the user's explanation as context.
    - Returns a JSON object: `{score, level, pass, feedback, socratic_qs}`.

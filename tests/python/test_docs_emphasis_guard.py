@@ -18,7 +18,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-FENCE_RE = re.compile(r"```.*?```", re.S)
+FENCE_RE = re.compile(r"```.*?```", re.DOTALL)
 INLINE_CODE_RE = re.compile(r"`[^`\n]*`")
 BARE_TOKEN = "cheez-*"
 # The corruptor is the `cheez-*` glob's `*` abutting a closing `**` run, i.e.
@@ -152,7 +152,10 @@ def test_harness_portability_reference_is_linked_from_workflow_docs():
         REPO_ROOT / "skills/press/SKILL.md",
         REPO_ROOT / "skills/age/SKILL.md",
         REPO_ROOT / "skills/cure/SKILL.md",
-        REPO_ROOT / "skills/ultracook/SKILL.md",
+        # skills/ultracook/SKILL.md dropped: retired to a short redirect
+        # stub, no longer a harness-dispatching workflow doc in its own
+        # right (its mechanics — and this portability reference — moved
+        # into skills/cook/SKILL.md, already in this list).
         REPO_ROOT / "skills/mold/SKILL.md",
         REPO_ROOT / "skills/cheese/SKILL.md",
         REPO_ROOT / "skills/affinage/SKILL.md",
@@ -175,17 +178,11 @@ def test_harness_portability_reference_is_linked_from_workflow_docs():
 
 
     portable_examples = {
+        # /ultracook retired to a stub; its own portable-example CLI
+        # invocations (phase_decision, validate_decomposition, mode,
+        # milknado, worktree create/harvest/teardown) now live inside
+        # cook/SKILL.md's `## Fan pathway`, merged into cook's own entry.
         REPO_ROOT / "skills/cook/SKILL.md": (
-            "shared/scripts/artifact_path.py",
-            "fallback",
-        ),
-        REPO_ROOT / "skills/age/SKILL.md": (
-            "shared/scripts/read_handoff_slug.py",
-            "shared/scripts/write_handoff_artifact.py",
-            "fallback",
-            "src/age/age-html-report.py",
-        ),
-        REPO_ROOT / "skills/ultracook/SKILL.md": (
             "shared/scripts/artifact_path.py",
             "shared/scripts/read_handoff_slug.py",
             "python3 skills/ultracook/scripts/ultracook.pyz phase_decision",
@@ -196,6 +193,12 @@ def test_harness_portability_reference_is_linked_from_workflow_docs():
             "python3 skills/ultracook/scripts/ultracook.pyz worktree create",
             "python3 skills/ultracook/scripts/ultracook.pyz worktree harvest",
             "python3 skills/ultracook/scripts/ultracook.pyz worktree teardown",
+        ),
+        REPO_ROOT / "skills/age/SKILL.md": (
+            "shared/scripts/read_handoff_slug.py",
+            "shared/scripts/write_handoff_artifact.py",
+            "fallback",
+            "src/age/age-html-report.py",
         ),
         REPO_ROOT / "skills/affinage/SKILL.md": (
             "python3 skills/affinage/scripts/affinage.pyz pr-status",

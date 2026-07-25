@@ -26,7 +26,7 @@ Accept:
 
 When called with a `<slug>`, resolve `.cheese/press/<slug>.md` (if present) for press context and review the current working diff. When called with a `<ref-or-range>`, review that range. Default to the current working diff when neither is supplied. If the base branch is unclear, ask or use the repository's documented default.
 
-`--auto` is the propagated autonomous-mode flag from `/cook --auto`. It changes the handoff (see `## Handoff` and `## Auto mode` for the cap rule and full chain). See `### When invoked from /ultracook` for the no-shared-memory variant.
+`--auto` is the propagated autonomous-mode flag from `/cook --auto`. It changes the handoff (see `## Handoff` and `## Auto mode` for the cap rule and full chain). See `### Within cook's own fan pathway` for the no-shared-memory variant.
 
 `--hard` propagates through `/cure` to `/plate`. Age never fires the gate; `/plate` gives `/hard-cheese` the final verified artifact state before publication.
 
@@ -65,7 +65,7 @@ Per-dimension base-severity tables, location-sensitivity, fix-cost-now / fix-cos
 
 ## Flow
 
-1. Identify the diff, scope, and relevant spec or issue. **Mode check (one decision point):** if the **scale threshold** (defined in `## Sub-agent context gate` below) is met — and `/age` is not itself a sub-agent — switch to `### Scale-triggered fan-out mode`; steps 2–4 (evidence-gather, per-dimension review, severity computation) are replaced by the fan-out path — both modes converge on steps 5–6.
+1. Identify the diff, scope, and relevant spec or issue. **Mode check (one decision point):** compute `files_changed`/`insertions`/`deletions` from the diff stat and grep the diff for `age_route.OVERRIDE_FLAGS` tokens to build `risk_flags`, then call `age_route.route(files_changed=..., insertions=..., deletions=..., risk_flags=..., entry="age")` (`src/fanout/age_route.py`). Branch on the returned `n`: `n=1` — steps 2–4 below (single-parent path), unchanged. `n=4` — switch to `### Grouped-lens fan-out mode (N=4)`. `n=10` — switch to `### Scale-triggered fan-out mode (N=10)`. Fan-out (`n=4` or `n=10`) additionally requires `/age` not itself be a sub-agent — ultracook-dispatched reviewers run inline by agent type, and a sub-agent cannot spawn sub-agents; when `/age` is a sub-agent, stay on the single-parent path regardless of `n`. Thread the router's `effort` into whichever reviewer dispatch fires (fast pass at `low`/`medium`, thorough at `high`).
 2. Gather evidence: diff, touched files, tests, callers/imports. If a press report exists for this slug, read it via:
 
    ```
@@ -85,7 +85,7 @@ Per-dimension base-severity tables, location-sensitivity, fix-cost-now / fix-cos
    When a cook artifact exists but no press artifact does, the diff was never hardened. Do not block the review — proceed — but record `press: skipped` in the report (see `## Output`) and print the one-line warning at handoff. A missing cook artifact is also non-fatal (an `artifact not found` result just means a non-pipeline diff): skip the marker and the warning and continue the review.
 
    Independently of any press report, if `.cheese/glossary/<slug>.md` exists, read it now so naming drift against the resolved glossary can be flagged as a deslop finding.
-3. Review every dimension; dimensions with no findings simply omit themselves. Do not raise a finding for a gate failure identical to the diff's recorded `baseline:` block — see [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md); flag only new or changed failures.
+3. Review every dimension; dimensions with no findings simply omit themselves. Report every defect you notice, however minor — do not self-filter on perceived significance; filtering happens downstream in the verifier pass (`n=10`/`n=4`) or the severity computation itself (single-parent). Do not raise a finding for a gate failure identical to the diff's recorded `baseline:` block — see [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md); flag only new or changed failures.
 4. Compute severity per finding (base + location bump + compounding bump, capped at `blocker`). Group findings by severity (`## Blocker → ## High → ## Medium → ## Low`); within a severity group, order by file.
 5. Write the report:
 
@@ -126,22 +126,44 @@ Beyond `cheez-*` there are review-specific tools:
 
 ## Sub-agent context gate
 
-`/age` should fork a read-only review-context sub-agent — preferably the `explorer` phase-agent — when evidence gathering is likely to exceed the parent context, especially for `--comprehensive` reviews. Resolve the worker through `../cheese/references/agent-resolution.md`: require read-only permissions and fresh context, prefer the exact specialist, then a compatible specialist, then a prompt-constrained general agent with `degraded: true`. Fall back inline only when dispatch itself is unavailable.
+`/age` sizes its own fan-out via the age router (`src/fanout/age_route.py`) rather than a size-only threshold. Resolve every dispatched worker through `../cheese/references/agent-resolution.md`: require read-only permissions and fresh context, prefer the exact specialist, then a compatible specialist, then a prompt-constrained general agent with `degraded: true`. Fall back inline only when dispatch itself is unavailable.
 
-**Scale threshold** — spawn when any of these are true:
+**Router call** — compute `files_changed`/`insertions`/`deletions` from the diff stat, grep the diff for `age_route.OVERRIDE_FLAGS` tokens to populate `risk_flags`, then call:
 
-- The diff spans more than 15 files.
-- Touched code or generated review context is larger than roughly 25 KB (about 5 K tokens of raw output the parent would not read line-by-line).
-- Caller / dependency graph expansion crosses multiple subsystems.
-- Caller/dependency evidence from `tilth_deps` or `/cheez-search` crosses multiple subsystems.
+```python
+from src.fanout.age_route import route
+route(files_changed=<n>, insertions=<n>, deletions=<n>, risk_flags=[...], entry="age")
+```
+
+If the host only ships the bundle, `echo '{"files_changed": <n>, "insertions": <n>, "deletions": <n>, "risk_flags": [...], "entry": "age"}' | python3 ${CLAUDE_SKILL_DIR}/scripts/age.pyz age-route` is the fallback (JSON on stdin, route JSON on stdout).
+
+The returned `n` (1 / 4 / 10) is the fan-out mode; `effort` (`low`/`medium`/`high`) dials the reviewer dispatch; `overrides_hit` names any hard risk-override that forced `n=10` regardless of size (auth/secrets/crypto, tenant isolation, payments/ledgers, concurrency/idempotency/ordering/retries, schema/migration/protocol/public-API change, production-destructive ops, weak integration coverage — see `age_route.OVERRIDE_FLAGS` for the exact grep tokens). A hard override always wins: it pushes `n` to 10 and `effort` to `high` even on a tiny diff.
+
+Independently of the router's `n`, `/age` may still fork a read-only review-context sub-agent — preferably the `explorer` phase-agent — purely for evidence-gathering (not fan-out) when caller/dependency graph expansion from `tilth_deps` or `/cheez-search` crosses multiple subsystems, especially for `--comprehensive` reviews. This is a separate, orthogonal dispatch from the `n`-way fan-out below.
 
 For the digest contract, harness-agnostic selection rules, and what the parent never delegates, see `references/sub-agent-gate.md`.
 
-### Scale-triggered fan-out mode
+### Grouped-lens fan-out mode (N=4)
 
-Activates when **all** hold: the **scale threshold** (above) is met AND `/age` is not itself running as a dispatched sub-agent — ultracook-dispatched reviewers run inline by agent type, and a sub-agent cannot spawn sub-agents. Below threshold, or when running as a sub-agent, the single-parent path applies unchanged.
+Activates when the router returns `n=4` AND `/age` is not itself a sub-agent. One worker per **lens group**, not per single dimension — a lighter version of the `N=10` worker contract below. The verbatim grouping (spec-locked): `correctness+spec+assertions`; `security`; `complexity+deslop+nih`; `efficiency+telemetry+encapsulation`.
 
-**Seam 1 — Predicate.** The activation gate above (scale threshold met AND `/age` not a sub-agent) is the fan-out predicate.
+Reuses `N=10`'s Seams 2 (shared context packet), 4 (orchestrator reconciliation), 5 (shared impact evidence), and 6 (verifier pass) unchanged — a lens-grouped worker can still double-flag a line another lens-grouped worker also flags, so reconciliation and verification apply exactly as they do at `N=10`. The only difference from Seam 3 is worker scope:
+
+**Seam 3 (N=4 variant) — Worker contract.** One worker per lens group (four workers total, not ten). Resolve the `reviewer` role through `../cheese/references/agent-resolution.md` at the router's `effort` dial. Each worker:
+- Reviews all dimensions in its assigned group (e.g. the `security` worker reviews only `security`; the `correctness+spec+assertions` worker reviews all three).
+- Computes **full per-finding severity** for every dimension in its group (base + location bump + compounding bump).
+- Tags each finding with its dimension and an `also-relevant-to: [<dim>, ...]` field when cross-dimension overlap is suspected (including overlap with a dimension owned by a *different* lens group).
+- Reports every defect it notices, however minor — no severity-conservative self-filtering; the verifier pass (Seam 6) and orchestrator reconciliation (Seam 4) do the filtering.
+- Returns full per-finding rows in the `SKILL.md § Output` finding format — same as the `N=10` worker contract, not a digest.
+- Does **not** dedup, apply boundary tiebreakers, reconcile severity across dimensions or lens groups, or write the report.
+
+After all four workers return, continue at Seam 4 (reconciliation) below, then Seam 6 (verifier pass), then step 5 (write + print the report path) and `## Handoff`.
+
+### Scale-triggered fan-out mode (N=10)
+
+Activates when the router returns `n=10` AND `/age` is not itself running as a dispatched sub-agent — ultracook-dispatched reviewers run inline by agent type, and a sub-agent cannot spawn sub-agents. At `n=1`, or when running as a sub-agent, the single-parent path applies unchanged.
+
+**Seam 1 — Predicate.** The router call above returning `n=10` (or `n=4`, see the grouped-lens mode) AND `/age` not a sub-agent is the fan-out predicate.
 
 **Seam 2 — Shared context packet.** The orchestrator assembles the packet once, writes it to `.cheese/age/<slug>-packet.md`, and each worker reads it. Eight components, and the reuse of the review-context digester as the orientation block, are documented in `references/packet.md`.
 
@@ -149,20 +171,28 @@ Activates when **all** hold: the **scale threshold** (above) is met AND `/age` i
 - Reviews only its assigned dimension.
 - Computes **full per-finding severity** for that dimension (base + location bump + compounding bump).
 - Tags each finding with its dimension and an `also-relevant-to: [<dim>, ...]` field when cross-dimension overlap is suspected.
+- Reports every defect it notices, however minor — no severity-conservative self-filtering; the verifier pass (Seam 6) and orchestrator reconciliation (Seam 4) do the filtering.
 - Returns its dimension's findings as full per-finding rows in the `SKILL.md § Output` finding format (`**[dim:sev]** path:line — claim` + `location / fix-cost-now / fix-cost-later / confidence` + `recommendation`). Not an orientation digest — the `§ Digest contract` size ceiling does not apply.
 - Does **not** dedup, apply boundary tiebreakers, reconcile severity across dimensions, or write the report.
 
-**Seam 4 — Orchestrator reconciliation.** After all workers return, apply the `## Dimension boundaries` table (`references/dimensions.md:319-340`) verbatim to any line meeting EITHER condition: (1) flagged by two or more workers at the same `file:line`; (2) tagged `also-relevant-to: [d]` by any worker — the orchestrator re-evaluates dimension `d` against that line and applies the tiebreaker (keep the higher-base finding / suppress / emit-both-with-cross-reference per the 15 rules). This consumes the `also-relevant-to` signal and provides the cross-dimension coverage single-parent gets for free. Lines neither flagged by ≥2 workers nor tagged `also-relevant-to` need no reconciliation. Group by severity. The parent owns the canonical artifact. After reconciliation, continue at step 5 (write + print the report path) and `## Handoff` exactly as the single-parent path does.
+**Seam 4 — Orchestrator reconciliation.** After all workers return, apply the `## Dimension boundaries` table (`references/dimensions.md:319-340`) verbatim to any line meeting EITHER condition: (1) flagged by two or more workers at the same `file:line`; (2) tagged `also-relevant-to: [d]` by any worker — the orchestrator re-evaluates dimension `d` against that line and applies the tiebreaker (keep the higher-base finding / suppress / emit-both-with-cross-reference per the 15 rules). This consumes the `also-relevant-to` signal and provides the cross-dimension coverage single-parent gets for free. Lines neither flagged by ≥2 workers nor tagged `also-relevant-to` need no reconciliation. Group by severity. The parent owns the canonical artifact. After reconciliation, continue at Seam 6 (verifier pass), then step 5 (write + print the report path) and `## Handoff` exactly as the single-parent path does.
 
 **Seam 5 — Shared impact evidence.** The packet carries the caller/dependency notes assembled through `tilth_deps` and `/cheez-search`. Workers use that packet instead of rebuilding impact context independently.
 
-**Output shape invariant.** The findings report (`.cheese/age/<slug>.md`) has the same dedup, severity grouping, and finding format in the single-parent and fan-out paths. Resolution provenance may expose the selected role and topology.
+**Seam 6 — Verifier pass.** After Seam 4 reconciliation produces the candidate findings list, a cheap `verifier` role (haiku/tiny tier, `effort: low` per the Roles x tiers table) checks each reconciled finding against the evidence slice cited in its `recommendation`/location fields — one verifier call per finding, schema-constrained to "verify exactly one claim." Three outcomes:
+- **Confirm** — the cited evidence supports the claimed severity; the finding ships unchanged.
+- **Downgrade/drop** — the evidence does not support the claimed severity (or the claim itself); the verifier lowers the severity tier or drops the finding, and the orchestrator records the original claim and the verifier's reasoning in the report's confidence trail.
+- **Escalate** — the evidence given cannot settle the claim either way (cross-cutting contract 1: "a claim no evidence can settle returns `escalate`, never a guessed pass or fail"). The finding is kept at its **original** severity with an `escalate` flag — never silently dropped or silently passed through unflagged.
+
+This is the "cheap severity-filter leg" referenced in the Roles x tiers table; it applies at `N=10` and, reusing the same mechanism, at `N=4`. It does not run at `N=1` — the single-parent path has no reconciliation step to filter, and the reviewer's own severity computation is the only grading pass.
+
+**Output shape invariant.** The findings report (`.cheese/age/<slug>.md`) has the same dedup, severity grouping, and finding format in the single-parent, `N=4`, and `N=10` fan-out paths. Resolution provenance may expose the selected role and topology.
 
 ## Output
 
 Cross-cutting house style and citation form: [`../cheese/references/formatting.md`](../cheese/references/formatting.md). This section owns the findings-report shape; formatting.md owns the voice rules and the footnote primitive.
 
-Write to `.cheese/age/<slug>.md` with a minimum handoff slug at the top so `/ultracook` and `/cheese --continue` can chain without re-parsing the report:
+Write to `.cheese/age/<slug>.md` with a minimum handoff slug at the top so `/cook`'s fan pathway and `/cheese --continue` can chain without re-parsing the report:
 
 ```markdown
 status: ok | halt: <one-line reason>
@@ -324,13 +354,13 @@ When invoked with `--auto`:
 - Otherwise, if any finding meets the **medium+ floor** (the composite floor defined at **Compute the recommended set** under `## Handoff`) — invoke `/cure <slug> --auto --stake medium+` (forward `--open-pr` when it is in scope) and increment the cure-pass count when it returns.
 - If no finding meets the **medium+ floor**, stop the chain with a one-line "auto chain clean" note and the report path.
 
-### When invoked from /ultracook
+### Within cook's own fan pathway
 
-`/ultracook` spawns age as a fresh-context sub-agent and owns the chain itself. Honour the no-chain override:
+`/cook`'s fan pathway (its retired-`/ultracook` mechanics, now self-hosted — see `skills/cook/SKILL.md` `## Fan pathway`) spawns age as a fresh-context sub-agent and owns the chain itself. Honour the no-chain isolation directive:
 
 - Write `.cheese/age/<slug>.md` (with the handoff slug at the top) and stop. Do not invoke `/cure <slug> --auto --stake medium+` from inside the sub-agent.
 - Set `next:` from what you observe on this run, not from any guess about chain position. `next: cure` when at least one finding meets the **medium+ floor**; `next: done` when none do.
-- The two-cure-pass cap is enforced by ultracook's fixed chain length. The terminal age is publishable only with `next: done`; `next: cure` or a missing `next` halts without publishing. Parallel curds and post-merge review dispatch age as a top-level fresh-context reviewer, never as nested inline self-review.
+- The two-cure-pass cap is enforced by the fan pathway's fixed chain length, not by age counting passes. The terminal age is publishable only with `next: done`; `next: cure` or a missing `next` halts without publishing. Parallel curds and post-merge review dispatch age as a top-level fresh-context reviewer, never as nested inline self-review.
 
 ## Rules
 
