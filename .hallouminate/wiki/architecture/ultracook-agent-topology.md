@@ -1,6 +1,14 @@
-# Ultracook agent topology
+# Ultracook agent topology (now owned by /cook's fan pathway)
 
-Ultracook assigns a fresh typed agent to each reasoning phase instead of
+> **Ownership moved (2026-07-24, PR #314):** `/ultracook` is retired to a
+> redirect stub; this topology — mode selection, milknado seam, phase-chain
+> ordering, deterministic phase loop, worker-exhaustion/aggregate-gate
+> recovery, worktree lifecycle, resolution provenance, baseline capture, and
+> `--resume` — was absorbed verbatim into `/cook`'s single **Fan pathway**
+> (`skills/cook/SKILL.md § Fan pathway`). The invariants below still hold;
+> only the owning skill changed.
+
+The fan pathway assigns a fresh typed agent to each reasoning phase instead of
 running a whole curd through one write-capable worker.
 
 ## Phase ownership
@@ -36,9 +44,16 @@ context, so review was not independent and cure could modify code after the
 last review. Post-merge review also lacked a reproducible diff identity. Typed
 top-level phases and a mandatory final age close both publication paths.
 
+The `/ultracook` → `/cook` consolidation (PR #314) removed the duplicate entry
+point: one skill now owns both the linear and fan pathways, choosing by the
+same decompose gate, so mode selection is a routing decision inside `/cook`
+rather than a skill choice the user makes up front.
+
 Related decision: [progressive agent resolution](../adr/agent-resolution.md).
 
-[^1]: skills/ultracook/SKILL.md:93-96,224-227
-[^2]: skills/ultracook/SKILL.md:152-170; src/fanout/phase_decision.py:45-48,84-132
-[^3]: skills/ultracook/SKILL.md:177-180; src/fanout/validate_manifest.py:64-80,380-390
+[^1]: skills/cook/SKILL.md § Fan pathway (moved from skills/ultracook/SKILL.md, retired to a stub in PR #314)
+[^2]: skills/cook/SKILL.md § Fan pathway; src/fanout/phase_decision.py:45-48,84-132
+[^3]: src/fanout/validate_manifest.py:64-80,380-390
 [^4]: src/fanout/manifest_update.py:239-267,336-368
+
+_Source: subagent-routing-overhaul PR1 (#314) cure/plate write-back · Updated: 2026-07-24 · Supersedes: /ultracook as the owning skill (2026-07-18 revision)_

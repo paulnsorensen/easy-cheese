@@ -2,6 +2,8 @@
 
 Loaded by `/ultracook` at Phase 0. Substitute `{spec_text}`, `{slug}`, and `{quality_gate}` before dispatch.
 
+> **Scope note:** this template produces the legacy manifest schema (`seed[]`/`curds[]` with `id`/`behavior`/`retry_count`, `wiring[]`), validated by `validate_manifest` — NOT the curd-block schema (`curds[]`/`waves[]`/`decomposer{}`) validated by `validate_curd_block`. Curd-block producers must use [`../../cheese/references/decomposer.md`](../../cheese/references/decomposer.md).
+
 ````text
 You are the decomposer sub-agent for /ultracook spec: {slug}
 
