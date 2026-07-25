@@ -22,6 +22,7 @@ __pycache__/
 *.pyc
 .venv/
 node_modules/
+tools/skill-overlap/target/
 
 # OS / editor
 .DS_Store

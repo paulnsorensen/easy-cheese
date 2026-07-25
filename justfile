@@ -24,8 +24,12 @@ test:
     node --test 'tests/js/**/*.test.mjs'
     bats tests/bash/test_install.bats
     bats tests/fanout/bash/test_pr_plan_to_branches.bats
+    cargo test --manifest-path tools/skill-overlap/Cargo.toml
 
 # Build self-contained .pyz bundles for shared-consuming skills (CI rebuilds on every push to main)
+# Run model-free overlap analyzer tests (never fetches model artifacts)
+test-skill-overlap:
+    cargo test --manifest-path tools/skill-overlap/Cargo.toml
 bundle:
     python3 scripts/build_pyz.py
 

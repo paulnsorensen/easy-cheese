@@ -27,6 +27,10 @@
 - [post-pr-wiki-writeback-002](./post-pr-wiki-writeback-002.md) — ADR: post-PR learnings write-back reuses wiki-ingest, not the personal wiki-curator skill
 - [skill-docs-single-page-001](./skill-docs-single-page-001.md) — ADR-001: Fold skill references into one docs page instead of separate sub-pages  [status: accepted]
 - [skill-docs-single-page-002](./skill-docs-single-page-002.md) — ADR-002: Left-nav heading TOC is h2-only, via a custom Starlight Sidebar override  [status: accepted]
+- [skill-overlap-ratchet-001](./skill-overlap-ratchet-001.md) — ADR: Own the Snowflake overlap analyzer in easy-cheese
+- [skill-overlap-ratchet-002](./skill-overlap-ratchet-002.md) — ADR: Preserve H2 and H3 identity during semantic chunking
+- [skill-overlap-ratchet-003](./skill-overlap-ratchet-003.md) — ADR: Compare semantic overlap against explicit reference topology
+- [skill-overlap-ratchet-004](./skill-overlap-ratchet-004.md) — ADR: Ratchet reviewed content-specific overlap findings
 - [starlight-docs-cutover-001](./starlight-docs-cutover-001.md) — ADR: Starlight docs cutover
 - [wheypoint-provenance-schema-001](./wheypoint-provenance-schema-001.md) — ADR: wheypoint provenance as additive header fields with join/split verbs
 <!-- HALLOUMINATE:INDEX-END -->
