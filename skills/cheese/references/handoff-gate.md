@@ -132,6 +132,33 @@ Examples of when to attach a `handoff_context:` block:
 
 Keep payloads short and factual. If a payload would exceed a compact screenful, write or reference a `.cheese/.../<slug>.md` handoff artifact and pass the path instead.
 
+## Fan-in envelope fields
+
+Every phase handoff slug (`/cook`, `/press`, `/age`, `/cure`, and equivalents) already carries `status`/`next`/`artifact`/orientation — see each skill's own `## Handoff slug` section for its exact schema. This section documents the additional fields that make the envelope mechanically validatable at fan-in points (a workflow barrier collecting multiple sub-agent handoffs, `/ultracook`'s per-phase resume, or a reconcile pass over fanned-out reviewers): SCOPE, EVIDENCE, ASSUMPTIONS, and RISKS. Extend the existing slug with these fields; do not fork a second handoff shape.
+
+```yaml
+status: ok | halt: <one-line reason>
+next: <phase-or-skill> | done
+artifact: <path-to-richer-report-if-any>
+<one-line orientation>
+scope:
+  owned: [<files or areas this dispatch is authoritative over>]
+  untouched: [<files or areas explicitly out of bounds for this dispatch>]
+evidence:
+  - <diff hunk, spec line, test output, or other citation the verdict rests on>
+assumptions:
+  - <loaded assumption the dispatch made when evidence was incomplete>
+risks:
+  - <residual risk, tagged certain | speculating | don't know>
+```
+
+- **SCOPE** — `owned` lists what this dispatch is authoritative over (files it changed or reviewed); `untouched` lists what it explicitly did not touch, so a fan-in barrier can tell disjointness held.
+- **EVIDENCE** — the citation(s) backing the verdict (diff hunks, spec lines, test output), per cross-cutting contract 1 (grounded verdicts) in `routing-policy.md`: a claim no evidence can settle returns `escalate`, never a guessed pass or fail.
+- **ASSUMPTIONS** — any loaded assumption the dispatch made where evidence was incomplete; empty when none.
+- **RISKS** — residual risk, tagged `certain | speculating | don't know` per the shared voice kernel.
+
+A fan-in workflow validates the envelope mechanically (presence and shape of these fields) before consuming an entry — validation is not routing, and the thin-wrapper rule holds: the validating workflow script does not re-derive `next`/`scope`/`risks` itself, it only checks the fields are present and well-formed.
+
 ## Flag propagation
 
 Propagate `--hard` through every runnable downstream option while the flag is in scope. Propagate `--auto` inside documented auto-mode chains and inside `/cheese`'s autonomous-by-default dispatch path (see `skills/cheese/SKILL.md` § Escalation — tier-1 and tier-2 dispatches pre-select the auto variant and run it without a gate unless `--safe` is set).
