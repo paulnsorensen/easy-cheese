@@ -54,9 +54,9 @@ lint-yaml-fix:
 lint-yaml:
     yamllint -c .yamllint.yml .
 
-# Autofix Python lint with pinned ruff via uvx (no global install needed)
+# Autofix Python lint with ruff (via uvx, no global install needed)
 lint-py-fix:
-    uvx --from "ruff==0.15.7" ruff check --fix .
+    uvx ruff check --fix .
 
 # Full local check with autofixes
 check: lint-md-fix lint-yaml-fix lint-yaml lint-py-fix lint-sh test docs-build
