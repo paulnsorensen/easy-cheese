@@ -8,7 +8,8 @@
     "docs:generate": "python3 scripts/gen_docs.py",
     "docs:dev": "python3 scripts/gen_docs.py && astro dev",
     "docs:build": "python3 scripts/gen_docs.py && astro build",
-    "docs:preview": "astro preview"
+    "docs:preview": "astro preview",
+    "workflows:check": "node --test tests/js/workflow-scripts.test.mjs"
   },
   "devDependencies": {
     "@astrojs/starlight": "^0.41.3",

@@ -11,7 +11,9 @@ change, production-destructive ops, weak integration coverage) forces `n=10` +
 unresolved comment count and CI failure class, so a heavily-commented or
 red-CI PR gets the bigger fan-out even on a tiny diff.
 
-Consumers are `/age`'s mode check and `/affinage`'s fresh-window review.
+Consumers: `/age`'s mode check, `/affinage`'s fresh-window review, and the
+`cheese-factory` Workflow script's age barrier (which calls the deployed
+entry point, never repo internals).
 
 ## Purity contract and the sibling-CLI gotcha
 
@@ -31,6 +33,17 @@ The CLI ships as the `age-route` subcommand of the `age`, `affinage`, and
 so `age_route.py` rides alongside its CLI in each bundle; shared-module
 dependencies (`manifest_io`, `schema`) auto-vendor. Skill docs carry the
 standard repo-path-then-bundle fallback for the router call.
+
+## Cross-language lens contract
+
+Lens slugs are **lowercase** (`nih`, not `NIH`) because `workflows/age-fanout.js`
+validates them against `DIM_SLUG_RE` (`^[a-z][a-z-]*$`) and byte-matches
+`### <dim>` headings in the age dimensions reference. A case mismatch does not
+error loudly — the fan-out returns `blocked` and cheese-factory silently
+degrades to a single reviewer. Regression-locked by
+`tests/fanout/python/test_age_route.py::TestLensSlugsMatchAgeFanoutContract`,
+which reads the JS pattern from the workflow source and asserts every lens
+`route()` can emit matches it.
 
 ## Open design decision
 

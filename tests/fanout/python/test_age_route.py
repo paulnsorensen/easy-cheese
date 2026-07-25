@@ -8,6 +8,7 @@ regardless of size, and the verbatim N=4 lens grouping.
 from __future__ import annotations
 
 import ast
+import re
 import sys
 from pathlib import Path
 
@@ -257,3 +258,26 @@ class TestPurity:
         src = (REPO_ROOT / "src" / "fanout" / "age_route.py").read_text(encoding="utf-8")
         ast.parse(src)  # raises SyntaxError if invalid
 
+
+class TestLensSlugsMatchAgeFanoutContract:
+    """Cross-language contract: every lens age_route can emit must byte-match
+    age-fanout.js's DIM_SLUG_RE, or fan-out silently degrades to one reviewer
+    (correctness:blocker -- see age_route.py's DIMENSIONS/LENS_GROUPS_N4).
+    """
+
+    def _dim_slug_re(self) -> re.Pattern[str]:
+        src = (REPO_ROOT / "workflows" / "age-fanout.js").read_text(encoding="utf-8")
+        match = re.search(r"const DIM_SLUG_PATTERN = '([^']+)'", src)
+        assert match, "could not find DIM_SLUG_PATTERN in workflows/age-fanout.js"
+        return re.compile(match.group(1))
+
+    def test_every_dimension_matches_dim_slug_re(self) -> None:
+        pattern = self._dim_slug_re()
+        for dim in age_route.DIMENSIONS:
+            assert pattern.match(dim), f"{dim!r} does not match age-fanout's DIM_SLUG_RE"
+
+    def test_every_n4_lens_group_member_matches_dim_slug_re(self) -> None:
+        pattern = self._dim_slug_re()
+        for group in age_route.LENS_GROUPS_N4:
+            for dim in group:
+                assert pattern.match(dim), f"{dim!r} does not match age-fanout's DIM_SLUG_RE"
