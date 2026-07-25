@@ -26,3 +26,7 @@ Resolve every worker through [`../../cheese/references/agent-resolution.md`](../
 ## Parallelism
 
 When two or more heavy units of work are independent, spawn one small sub-agent per unit in parallel and merge their digests in the parent. One sub-agent doing five things sequentially is the wrong shape.
+
+## Age router as fan-out predicate
+
+`/age` (and `/affinage` through it) no longer use a size-only threshold to decide fan-out — `skills/age/SKILL.md § Sub-agent context gate` calls `src/fanout/age_route.py`'s `route()` and forks per its `n` (1 / 4 / 10). This file's digest contract, selection rules, and delegation boundaries still apply unchanged to every worker the router spawns.

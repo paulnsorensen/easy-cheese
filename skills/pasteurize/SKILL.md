@@ -58,6 +58,13 @@ Confirm the returned `reproduced: true` and check `failures` matches the expecte
 
 Do not proceed until you reproduce the bug.
 
+## Symptom-shape gate
+
+Before forming any hypothesis, classify the symptom shape:
+
+- **Clean stack trace + deterministic repro** — stay at current tier, proceed to Phase 3 normally.
+- **Heisenbug, race condition, cross-module failure, or perf regression** — warn to upgrade (harness-detected phrasing: claude `/model opus` + `/effort`; codex/OMP named equivalent; generic fallback) _before_ forming any hypothesis. The extra tier buys the wider context window and reasoning depth these shapes need; do not start Phase 3 at the current tier once this branch fires.
+
 ## Phase 3 — Hypothesise
 
 Generate **3–5 ranked hypotheses** before testing any of them. Single-hypothesis generation anchors on the first plausible idea.

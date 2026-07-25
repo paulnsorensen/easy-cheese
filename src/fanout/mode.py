@@ -3,7 +3,7 @@
 
 `PARALLEL_THRESHOLD` is the single source of truth for how many curds make a
 decomposition worth fanning out. A decomposition of `PARALLEL_THRESHOLD` or more
-curds runs /ultracook's parallel mode; fewer stays linear. Both the fan-out
+curds runs /cook's fan-out waves; fewer stays linear. Both the fan-out
 engine (`validate_decomposition`) and the mold pre-dispatch hint (`curd-count`)
 import this constant, so exactly one number governs the split.
 

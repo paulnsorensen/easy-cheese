@@ -226,6 +226,17 @@ This is the runtime home of the **Durable writes** coherence gate (`handshake.md
 
 **Loud fallback.** When hallouminate is unavailable and the resolver degrades to a file backend (`docs/adr/…`, `docs/domain-model*`, or the XDG corpus), say so in one visible line — never let a write silently go to files when the author expected the wiki. Absent-plugin degrade contract: [`../../cheese/references/optional-plugins.md`](../../cheese/references/optional-plugins.md).
 
+## Decomposer dispatch (curd block)
+
+After phase two's external publication attempts and the mechanical `Deferred follow-ups` reconciliation finish, and before `curd-count` runs (`../curd-count.md`), dispatch a fresh-context `decomposer` sub-agent on the draft spec text to identify candidate curds.
+
+1. **Dispatch** the decomposer on the current draft spec text (source: mold). Read [`../../cheese/references/decomposer.md`](../../cheese/references/decomposer.md) for the locked curd-block schema first — do not invent the schema from memory. It returns a curd block.
+2. **Validate** the returned block with `src/fanout/curd_block.py::validate_curd_block`. On failure, retry the dispatch once.
+3. **Still invalid after the retry** — omit the `## Curds` section from the spec entirely. Do not embed an invalid block: a broken decomposer output must never corrupt the spec. Note the omission in the curdle completion record.
+4. **On success**, embed the validated curd block as a new `## Curds` section in the spec artifact, appended after `## Quality gates` (or the natural equivalent section for this spec's shape).
+
+This dispatch is local to phase two's reconciliation window — it produces spec content, not an external publication, so it does not gate on any external capability being available.
+
 ## Hand-off
 
 Do not render this hand-off until phase-two publication attempts and the mechanical `Deferred follow-ups` reconciliation are complete.

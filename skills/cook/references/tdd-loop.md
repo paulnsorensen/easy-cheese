@@ -32,14 +32,16 @@ If cook reports partial or skipped work, **stop and resolve before taste-test**.
 
 After cook says "I completed all the changes", run a taste test before press. The taste-test is a **fresh-context review**: when the cooked diff is non-trivial it is dispatched to a read-only reviewer that did not write the code. Small diffs keep the cheap inline check.
 
-**Cost gate — where it runs.** Dispatch the fresh-context taste-test only when the cooked diff **touches more than one file OR adds public surface** (a new exported/public function, type, or CLI seam). Single-file, no-public-surface fixes keep the inline self-check — the dispatch is not worth its latency there.
+**Cost gate — where it runs.** Dispatch the fresh-context reviewer unless all four hold: single file AND no new public surface AND <~40 changed lines AND no risk flag — then run the coder self-check instead. Any one term failing routes to 1 fresh opus reviewer.
+
+**Risk flag** — one of the override categories in `src/fanout/age_route.py`'s `OVERRIDE_FLAGS` constant: auth/secrets/crypto/tenant isolation; payments/ledgers/irreversible effects; concurrency/idempotency/ordering/retries; schema/migration/protocol/public-API change; production-destructive ops; weak integration coverage around a global invariant. On a bundle-only host the same constant ships in the age bundle (`python3 ${CLAUDE_SKILL_DIR}/../age/scripts/age.pyz age-route` consumes the flags; see `skills/age/SKILL.md § Router call` for the exact vocabulary).
 
 **Who runs it.**
 
 - **Top-level `/cook`**: resolve the fresh-context taste-test through `../../cheese/references/agent-resolution.md`, requesting a read-only `reviewer` at `powerful` / `high`. Pass `{spec/contract, diff, cut-test list, any locked/user-approved decisions}`; it returns the per-lens verdict below, not a full `/age` report. A general worker may qualify only under the shared prompt-only read-only degradation.
 - **Coder-nested `/cook`**: when the active coder cannot dispatch, run the inline self-check and record `taste_test: deferred-to-orchestrator`; the orchestrator must resolve and run the authoritative reviewer before accepting the handoff.
 
-**Lenses.** Inline or dispatched, the taste-test returns `pass | revise` per lens (`halt` for Locked-decision):
+**Lenses.** Inline or dispatched, the taste-test returns `pass | revise | escalate` per lens (`halt` for Locked-decision):
 
 | Lens | Question | Pass criterion |
 | --- | --- | --- |
@@ -53,13 +55,15 @@ After cook says "I completed all the changes", run a taste test before press. Th
 
 The last three lenses are the fresh-context additions — they encode the failures the inline taste-test historically passed: a missing production path, public functions with zero non-test callers, and a silently-substituted design decision. A `halt` from the Locked-decision lens stops the chain for a human decision; it is not a corrective-cook finding.
 
+**Escalate-unverifiable.** When a lens cannot verify its claim from available evidence, it returns `escalate` for that lens, never a guessed `pass` or `revise` (cross-cutting contract 1 in the spec: "a claim no evidence can settle returns escalate, never a guessed pass or fail").
+
 The **Simplify** lens runs three sub-checks (the same three axes `/simplify` uses):
 
 - **Reuse** — new code does not duplicate an existing utility/helper/component; inline logic that has a project helper uses it; no near-duplicates of an existing function.
 - **Quality** — no redundant state (cached value that can be derived), no parameter sprawl (added params instead of restructuring), no copy-paste-with-variation, no leaky abstraction (exposing internals across a slice boundary), no stringly-typed code where a constant/enum/union exists.
 - **Efficiency** — no unnecessary work (redundant compute, repeated reads, N+1), no missed concurrency on independent ops, no recurring no-op state/store updates in loops or handlers, no pre-existence checks that should instead perform the operation and handle the resulting error, no unbounded structures or leaked listeners/timers, no full-file/dataset reads when a slice would do.
 
-Each lens returns `pass` or `revise` (`halt` for Locked-decision). Pipe every `revise` finding back into a bounded corrective cook pass with the original spec, the cook report, and the taste evidence.
+Each lens returns `pass`, `revise`, or `escalate` (`halt` for Locked-decision). Pipe every `revise` finding back into a bounded corrective cook pass with the original spec, the cook report, and the taste evidence.
 
 ## Two-round cap
 

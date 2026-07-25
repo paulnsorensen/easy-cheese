@@ -47,7 +47,7 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
         "detect-squash-residue": "detect-squash-residue.py",
         "lockfile-resolve": "lockfile-resolve.py",
     },
-    "affinage": {"pr-status": "pr-status.py", "post-reply": "post-reply.py"},
+    "affinage": {"pr-status": "pr-status.py", "post-reply": "post-reply.py", "age-route": "fanout/age_route_cli.py"},
     "mold": {
         "artifact-path": Shared("artifact_path.py"),
         "curd-count": "curd-count.py",
@@ -64,7 +64,7 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
         "local": Shared("hallouminate_setup.py"),
         "doctor": Shared("hallouminate_setup.py"),
     },
-    "age": {"html-report": "age-html-report.py"},
+    "age": {"html-report": "age-html-report.py", "age-route": "fanout/age_route_cli.py"},
     "hard-cheese": {
         "append-attempt": "append-attempt.py",
         "freshness-check": "freshness-check.py",
@@ -88,6 +88,8 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
         "manifest_update": "manifest_update.py",
         "wiring_topo_sort": "wiring_topo_sort.py",
         "pr_plan_to_branches": "pr_plan_to_branches.py",
+        "age-route": "fanout/age_route_cli.py",
+        "curd-block": "fanout/curd_block.py",
     },
 }
 
@@ -99,7 +101,12 @@ SRC_DIRS: dict[str, str] = {"ultracook": "fanout"}
 # plain importable modules (not subcommands). mold/curd-count imports the
 # canonical PARALLEL_THRESHOLD from src/fanout/mode.py — one source file,
 # vendored into both the mold and ultracook bundles.
-EXTRA_MODULES: dict[str, list[tuple[str, str]]] = {"mold": [("fanout", "mode.py")]}
+EXTRA_MODULES: dict[str, list[tuple[str, str]]] = {
+    "mold": [("fanout", "mode.py")],
+    "age": [("fanout", "age_route.py")],
+    "affinage": [("fanout", "age_route.py")],
+    "ultracook": [("fanout", "age_route.py")],
+}
 
 # The "common" bundle ships cross-cutting CLI entrypoints sourced from
 # shared/scripts/ (not src/<skill>/). It has no skill dir of its own; instead a
@@ -123,7 +130,7 @@ _CACHE: dict[str, Path] = {}
 
 
 def _module_name(filename: str) -> str:
-    return filename[:-3].replace("-", "_")
+    return Path(filename).stem.replace("-", "_")
 
 
 def _src_dir(skill: str) -> Path:
@@ -152,10 +159,14 @@ def _filename(source: str | Shared) -> str:
 
 def _source_path(skill: str, source: str | Shared) -> Path:
     """Resolve a subcommand's source file. Shared() modules and every
-    common-bundle subcommand live in shared/scripts/; a plain string in a real
-    skill lives in src/<skill>/."""
+    common-bundle subcommand live in shared/scripts/; a plain string containing
+    a path separator is src/-relative (a cross-skill source, e.g. a fanout/
+    module bundled into age/affinage/ultracook); any other plain string in a
+    real skill lives in src/<skill>/."""
     if isinstance(source, Shared) or skill == COMMON:
         return SHARED_SCRIPTS / _filename(source)
+    if isinstance(source, str) and "/" in source:
+        return SRC_ROOT / source
     return _src_dir(skill) / source
 
 
