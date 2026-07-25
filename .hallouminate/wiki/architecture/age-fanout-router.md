@@ -23,6 +23,14 @@ lives in a sibling wrapper, `src/fanout/age_route_cli.py` (JSON on stdin — no
 path arg, not `-` — route JSON on stdout). Do not add a `main()` back into
 `age_route.py`.
 
+## Deployment
+
+The CLI ships as the `age-route` subcommand of the `age`, `affinage`, and
+`ultracook` bundles. `scripts/build_pyz.py` supports cross-directory sources
+(a `"dir/file.py"` source resolves under `src/`) and `EXTRA_MODULES` staging
+so `age_route.py` rides alongside its CLI in each bundle; shared-module
+dependencies (`manifest_io`, `schema`) auto-vendor. Skill docs carry the
+standard repo-path-then-bundle fallback for the router call.
 
 ## Open design decision
 

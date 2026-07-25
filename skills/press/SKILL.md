@@ -47,7 +47,7 @@ If optional tools are missing, press a narrower surface and state the residual r
 
 House style and citation form: [`../cheese/references/formatting.md`](../cheese/references/formatting.md). This section owns the press-report shape.
 
-Write to `.cheese/press/<slug>.md` with a minimum handoff slug at the top so `/ultracook` and `/cheese --continue` can chain without re-parsing the report. The full report shape:
+Write to `.cheese/press/<slug>.md` with a minimum handoff slug at the top so `/cook`'s fan pathway and `/cheese --continue` can chain without re-parsing the report. The full report shape:
 
 ```markdown
 status: ok | halt: <one-line reason>
@@ -115,9 +115,9 @@ When invoked with `--auto` (propagated from `/cook --auto`):
 - If readiness is `ready for /age` or `follow-up recommended`, invoke `/age <slug> --auto` directly (forward `--open-pr` when it is in scope).
 - If readiness is `blocked`, stop the auto chain and surface the press report to the user. Blocked criteria: defined once in [`references/gap-analysis.md`](references/gap-analysis.md).
 
-### When invoked from /ultracook
+### Within cook's own fan pathway
 
-`/ultracook` spawns press as a fresh-context sub-agent and owns the chain itself. When the spawn prompt explicitly says "for THIS PHASE ONLY" and "do not chain forward to the next phase," honour the override: write `.cheese/press/<slug>.md` (with the handoff slug at the top) and stop. Do not invoke `/age <slug> --auto` from inside the sub-agent regardless of readiness. The orchestrator reads the handoff slug and either chains to age (when `status: ok` and `next: age`) or halts (when `status: halt`, regardless of `next:`). `next:` remains the resume hint for `/cheese --continue`.
+When `/cook`'s fan pathway (its retired-`/ultracook` mechanics, now self-hosted — see `skills/cook/SKILL.md` `## Fan pathway`) spawns press as a fresh-context sub-agent, it owns the chain itself. When the spawn prompt explicitly says "for THIS PHASE ONLY" and "do not chain forward to the next phase," honour the override: write `.cheese/press/<slug>.md` (with the handoff slug at the top) and stop. Do not invoke `/age <slug> --auto` from inside the sub-agent regardless of readiness. The orchestrator reads the handoff slug and either chains to age (when `status: ok` and `next: age`) or halts (when `status: halt`, regardless of `next:`). `next:` remains the resume hint for `/cheese --continue`.
 
 ## Rules
 
