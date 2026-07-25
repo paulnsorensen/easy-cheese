@@ -23,6 +23,8 @@ const PARITY_COMMIT: &str = "3e5307f822b015fa82b7798bc99c3354caec8554";
 const PARITY_SOURCE_PATH: &str = "crates/hallouminate-adapters/src/embedder.rs";
 const PARITY_RUNNER: &str = "ubuntu-24.04-x86_64";
 const PARITY_EXECUTION_PROVIDER: &str = "onnxruntime-cpu";
+const MODEL_POOLING: &str = "cls";
+const MODEL_NORMALIZATION: &str = "l2";
 const MODEL_REVISION: &str = "b637eda6144b122ccef9318e9c8dd1483399ce87";
 
 #[derive(Parser)]
@@ -139,6 +141,8 @@ struct ModelLock {
     threads: u8,
     batch_size: usize,
     passage_prefix: String,
+    pooling: String,
+    normalization: String,
     artifacts: Vec<Artifact>,
 }
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -162,6 +166,8 @@ struct Detector {
     version: String,
     model_lock_digest: String,
     chunker: String,
+    pooling: String,
+    normalization: String,
 }
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 struct Thresholds {
@@ -324,12 +330,27 @@ struct ScoreStratum {
     max_score: f32,
     count: usize,
 }
+#[derive(Debug)]
+struct FrontmatterValue {
+    path: String,
+    field: String,
+    value: String,
+}
 #[derive(Debug, Serialize, Deserialize)]
 struct Advisory {
     left: String,
     right: String,
     field: String,
+    left_value: String,
+    right_value: String,
     score: f32,
+}
+#[derive(Debug, Default)]
+struct TrendAccumulator {
+    current_findings: usize,
+    baseline_findings: usize,
+    current_estimated_duplicate_tokens: usize,
+    baseline_estimated_duplicate_tokens: usize,
 }
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct TrendGroup {
@@ -401,6 +422,8 @@ fn validate_model_lock(lock: &ModelLock) -> Result<(), String> {
         || !lock.passage_prefix.is_empty()
         || lock.execution_provider != PARITY_EXECUTION_PROVIDER
         || lock.threads != 1
+        || lock.pooling != MODEL_POOLING
+        || lock.normalization != MODEL_NORMALIZATION
     {
         return Err(
             "model lock has incompatible embedder metadata; recalibrate and rebaseline".into(),
@@ -580,6 +603,8 @@ fn validate_fixture_provenance(value: &serde_json::Value, lock_digest: &str) -> 
         ("source_path", PARITY_SOURCE_PATH),
         ("runner", PARITY_RUNNER),
         ("execution_provider", PARITY_EXECUTION_PROVIDER),
+        ("pooling", MODEL_POOLING),
+        ("normalization", MODEL_NORMALIZATION),
     ] {
         let actual = h.get(key).and_then(|value| value.as_str()).unwrap_or("");
         if actual != expected {
@@ -659,30 +684,69 @@ fn verify_parity(args: ParityArgs) -> Result<(), String> {
 }
 
 fn load_roots(repo: &Path, manifest: &Path) -> Result<Vec<PathBuf>, String> {
+    let canonical_repo = fs::canonicalize(repo).map_err(ioerr)?;
     let value: serde_json::Value = read_json(manifest)?;
     value
         .get("skills")
         .and_then(|v| v.as_array())
         .ok_or_else(|| "manifest lacks skills array".to_owned())?
         .iter()
-        .map(|v| {
-            v.as_str()
-                .ok_or_else(|| "manifest skill is not a path".to_owned())
-                .map(|s| repo.join(s))
+        .map(|value| {
+            let raw = value
+                .as_str()
+                .ok_or_else(|| "manifest skill is not a path".to_owned())?;
+            let relative = Path::new(raw);
+            if relative.is_absolute() {
+                return Err(format!("manifest skill path must be relative: {raw}"));
+            }
+            if relative
+                .components()
+                .any(|component| matches!(component, std::path::Component::ParentDir))
+            {
+                return Err(format!(
+                    "manifest skill path contains parent traversal: {raw}"
+                ));
+            }
+            let root = repo.join(relative);
+            let canonical_root = fs::canonicalize(&root).map_err(ioerr)?;
+            if !canonical_root.starts_with(&canonical_repo) {
+                return Err(format!("manifest skill root escapes repository: {raw}"));
+            }
+            Ok(root)
         })
         .collect()
 }
 
-fn markdown_files(root: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
-    for item in fs::read_dir(root).map_err(ioerr)? {
-        let path = item.map_err(ioerr)?.path();
-        if path.is_dir() {
-            markdown_files(&path, out)?;
-        } else if path.extension().is_some_and(|x| x == "md") {
-            out.push(path);
+fn markdown_files(repo: &Path, root: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
+    fn visit(repo: &Path, root: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
+        let metadata = fs::symlink_metadata(root).map_err(ioerr)?;
+        if metadata.file_type().is_symlink() {
+            return Err(format!("refusing symlink traversal at {}", root.display()));
         }
+        let canonical_root = fs::canonicalize(root).map_err(ioerr)?;
+        if !canonical_root.starts_with(repo) {
+            return Err(format!(
+                "Markdown root escapes repository: {}",
+                root.display()
+            ));
+        }
+        for item in fs::read_dir(root).map_err(ioerr)? {
+            let path = item.map_err(ioerr)?.path();
+            let metadata = fs::symlink_metadata(&path).map_err(ioerr)?;
+            if metadata.file_type().is_symlink() {
+                return Err(format!("refusing symlink traversal at {}", path.display()));
+            }
+            if metadata.is_dir() {
+                visit(repo, &path, out)?;
+            } else if path.extension().is_some_and(|extension| extension == "md") {
+                out.push(path);
+            }
+        }
+        Ok(())
     }
-    Ok(())
+
+    let canonical_repo = fs::canonicalize(repo).map_err(ioerr)?;
+    visit(&canonical_repo, root, out)
 }
 
 fn parse_document(path: &Path, repo: &Path, counter: &TokenCounter) -> Result<Document, String> {
@@ -696,7 +760,28 @@ fn parse_document(path: &Path, repo: &Path, counter: &TokenCounter) -> Result<Do
     let mut h2 = String::new();
     let mut current: Option<(Vec<String>, usize, Vec<String>)> = None;
     let mut sections = Vec::new();
-    let mut fence = false;
+    let fence_marker = |line: &str| {
+        let indentation = line.bytes().take_while(|byte| *byte == b' ').count();
+        if indentation > 3 {
+            return None;
+        }
+        let trimmed = &line[indentation..];
+        let marker = trimmed.chars().next()?;
+        if !matches!(marker, '`' | '~') {
+            return None;
+        }
+        let length = trimmed
+            .chars()
+            .take_while(|character| *character == marker)
+            .count();
+        (length >= 3).then(|| {
+            let blank_suffix = trimmed[length..]
+                .bytes()
+                .all(|byte| matches!(byte, b' ' | b'\t'));
+            (marker, length, blank_suffix)
+        })
+    };
+    let mut fence = None::<(char, usize)>;
     let finish = |current: &mut Option<(Vec<String>, usize, Vec<String>)>,
                   end: usize,
                   sections: &mut Vec<Section>|
@@ -718,14 +803,24 @@ fn parse_document(path: &Path, repo: &Path, counter: &TokenCounter) -> Result<Do
     };
     for (index, line) in text.lines().enumerate() {
         let line_number = index + 1;
-        if line.trim_start().starts_with("```") || line.trim_start().starts_with("~~~") {
-            fence = !fence;
+        if let Some((marker, length, blank_suffix)) = fence_marker(line) {
+            match fence {
+                None => fence = Some((marker, length)),
+                Some((opening_marker, opening_length))
+                    if marker == opening_marker
+                        && length >= opening_length
+                        && blank_suffix =>
+                {
+                    fence = None;
+                }
+                Some(_) => {}
+            }
             if let Some((_, _, body)) = &mut current {
                 body.push(line.to_owned());
             }
             continue;
         }
-        if !fence {
+        if fence.is_none() {
             if let Some(title) = line.strip_prefix("# ") {
                 h1 = title.trim().to_owned();
                 h2.clear();
@@ -814,6 +909,7 @@ fn pointer_only(body: &str, refs: &[RelativeRef], counter: &TokenCounter) -> Res
         .filter(|line| !matches!(line.trim(), "---" | "***" | "___"))
         .collect::<Vec<_>>()
         .join("\n");
+    let normalized = normalize(&trimmed);
     let has_list = Regex::new(r"(?m)^\s*(?:[-*+]|[0-9]+\.)\s+")
         .unwrap()
         .is_match(&trimmed);
@@ -821,9 +917,9 @@ fn pointer_only(body: &str, refs: &[RelativeRef], counter: &TokenCounter) -> Res
         .lines()
         .any(|line| line.trim().starts_with('|') || line.matches('|').count() >= 2);
     if refs.len() != 1
-        || counter.count(trimmed.trim())? > 40
-        || trimmed.contains("```")
-        || trimmed.contains("~~~")
+        || counter.count(&normalized)? > 40
+        || normalized.contains("```")
+        || normalized.contains("~~~")
         || has_list
         || has_table
     {
@@ -835,7 +931,7 @@ fn pointer_only(body: &str, refs: &[RelativeRef], counter: &TokenCounter) -> Res
     let pattern = format!(
         r"^(?:See {syntactic_ref}|Full .+ in {syntactic_ref}|.+ lives in {syntactic_ref})[.!?]?$"
     );
-    Ok(Regex::new(&pattern).unwrap().is_match(trimmed.trim()))
+    Ok(Regex::new(&pattern).unwrap().is_match(&normalized))
 }
 
 fn normalize(text: &str) -> String {
@@ -1184,6 +1280,8 @@ fn split_section(
             .max(1);
         let mut target_candidates = Vec::new();
         let mut cap_candidates = Vec::new();
+        let mut fallback_target_candidates = Vec::new();
+        let mut fallback_cap_candidates = Vec::new();
         for end in start + 1..=lines.len() {
             let body = join_split_lines(&lines[start..end]);
             let tokens = counter.count(&body)?;
@@ -1195,12 +1293,24 @@ fn split_section(
                 if tokens <= target {
                     target_candidates.push(end);
                 }
+            } else if lines[start].list_group.is_some_and(|group| {
+                lines[end - 1].list_group == Some(group)
+                    && lines.get(end).and_then(|line| line.list_group) == Some(group)
+            }) {
+                fallback_cap_candidates.push(end);
+                if tokens <= target {
+                    fallback_target_candidates.push(end);
+                }
             }
         }
-        let candidates = if target_candidates.is_empty() {
-            &cap_candidates
-        } else {
+        let candidates = if !target_candidates.is_empty() {
             &target_candidates
+        } else if !cap_candidates.is_empty() {
+            &cap_candidates
+        } else if !fallback_target_candidates.is_empty() {
+            &fallback_target_candidates
+        } else {
+            &fallback_cap_candidates
         };
         let cut = candidates
             .iter()
@@ -1296,7 +1406,6 @@ fn exact_findings(
     counter: &TokenCounter,
     edges: &GraphEdges,
     owner: &BTreeMap<String, usize>,
-    lock_digest: &str,
 ) -> Result<Vec<Finding>, String> {
     let sections = documents
         .iter()
@@ -1313,7 +1422,7 @@ fn exact_findings(
             let left = section_chunk(left_section, counter)?;
             let right = section_chunk(right_section, counter)?;
             findings.push(Finding {
-                id: identity("exact", &left, &right, lock_digest),
+                id: identity("exact", &left, &right, None),
                 lane: "body".into(),
                 detector: DETECTOR_VERSION.into(),
                 kind: "exact".into(),
@@ -1453,15 +1562,23 @@ fn endpoint_identity(chunk: &Chunk) -> String {
     .expect("endpoint identity is serializable")
 }
 
-fn identity(kind: &str, a: &Chunk, b: &Chunk, lock_digest: &str) -> String {
+fn identity(kind: &str, a: &Chunk, b: &Chunk, lock_digest: Option<&str>) -> String {
     let (left, right) = if a.endpoint <= b.endpoint {
         (a, b)
     } else {
         (b, a)
     };
+    let model_identity = if kind == "semantic" {
+        format!(
+            ":{}",
+            lock_digest.expect("semantic identity requires a model-lock digest")
+        )
+    } else {
+        String::new()
+    };
     digest(
         format!(
-            "body:{kind}:{DETECTOR_VERSION}:{CHUNKER_VERSION}:{lock_digest}:{}:{}",
+            "body:{kind}:{DETECTOR_VERSION}:{CHUNKER_VERSION}{model_identity}:{}:{}",
             endpoint_identity(left),
             endpoint_identity(right)
         )
@@ -1675,50 +1792,64 @@ fn trends(classified: &[(Finding, String)], baseline: Option<&Baseline>) -> Tren
             .map(|id| (id, component.redundant_tokens_estimate))
     })
     .collect::<BTreeMap<_, _>>();
-    let mut groups = BTreeMap::<Key, [usize; 4]>::new();
+    let mut groups = BTreeMap::<Key, TrendAccumulator>::new();
     for (finding, disposition) in classified {
         let key = (
             finding.lane.clone(),
             graph_class_name(&finding.graph),
             disposition.clone(),
         );
-        let values = groups.entry(key).or_default();
-        values[0] += 1;
-        values[2] += current_component_tokens
+        let accumulator = groups.entry(key).or_default();
+        accumulator.current_findings += 1;
+        accumulator.current_estimated_duplicate_tokens += current_component_tokens
             .get(&finding.id)
             .copied()
             .unwrap_or(0);
     }
     if let Some(baseline) = baseline {
         for disposition in baseline.findings.values() {
-            let values = groups
+            let accumulator = groups
                 .entry((
                     disposition.lane.clone(),
                     disposition.graph_class.clone(),
                     disposition.status.clone(),
                 ))
                 .or_default();
-            values[1] += 1;
-            values[3] += disposition.component_tokens_estimate;
+            accumulator.baseline_findings += 1;
+            accumulator.baseline_estimated_duplicate_tokens +=
+                disposition.component_tokens_estimate;
         }
     }
     Trends {
         groups: groups
             .into_iter()
-            .map(|((lane, graph_class, disposition), values)| TrendGroup {
-                lane,
-                graph_class,
-                disposition,
-                current_findings: values[0],
-                baseline_findings: values[1],
-                current_estimated_duplicate_tokens: values[2],
-                baseline_estimated_duplicate_tokens: values[3],
-            })
+            .map(
+                |((lane, graph_class, disposition), accumulator)| TrendGroup {
+                    lane,
+                    graph_class,
+                    disposition,
+                    current_findings: accumulator.current_findings,
+                    baseline_findings: accumulator.baseline_findings,
+                    current_estimated_duplicate_tokens: accumulator
+                        .current_estimated_duplicate_tokens,
+                    baseline_estimated_duplicate_tokens: accumulator
+                        .baseline_estimated_duplicate_tokens,
+                },
+            )
             .collect(),
     }
 }
 
+fn validate_analysis_mode(mode: Mode, has_calibration: bool) -> Result<(), String> {
+    if matches!(mode, Mode::Calibrate) && has_calibration {
+        Err("calibrate mode does not accept --calibration".into())
+    } else {
+        Ok(())
+    }
+}
+
 fn analyze(args: AnalyzeArgs) -> Result<(), String> {
+    validate_analysis_mode(args.mode, args.calibration.is_some())?;
     let lock = verify_model(&args.model_lock, &args.model_dir)?;
     let lock_digest = model_digest(&lock)?;
     let calibration = args
@@ -1755,7 +1886,7 @@ fn analyze(args: AnalyzeArgs) -> Result<(), String> {
     let roots = load_roots(&args.repo, &args.manifest)?;
     let mut paths = Vec::new();
     for root in &roots {
-        markdown_files(root, &mut paths)?;
+        markdown_files(&args.repo, root, &mut paths)?;
     }
     paths.sort();
     let counter = model_token_counter(&args.model_dir)?;
@@ -1764,7 +1895,7 @@ fn analyze(args: AnalyzeArgs) -> Result<(), String> {
         .map(|path| parse_document(path, &args.repo, &counter))
         .collect::<Result<Vec<_>, _>>()?;
     let (edges, owner) = graph(&docs, &roots, &args.repo);
-    let mut findings = exact_findings(&docs, &counter, &edges, &owner, &lock_digest)?;
+    let mut findings = exact_findings(&docs, &counter, &edges, &owner)?;
     let chunks = chunks(&docs, &counter)?;
     let vectors = embed_payloads(
         &args.model_dir,
@@ -1781,7 +1912,7 @@ fn analyze(args: AnalyzeArgs) -> Result<(), String> {
             let score = cosine(&vectors[left_index], &vectors[right_index]);
             if score >= floor {
                 findings.push(Finding {
-                    id: identity("semantic", left, right, &lock_digest),
+                    id: identity("semantic", left, right, Some(&lock_digest)),
                     lane: "body".into(),
                     detector: DETECTOR_VERSION.into(),
                     kind: "semantic".into(),
@@ -1820,6 +1951,8 @@ fn analyze(args: AnalyzeArgs) -> Result<(), String> {
             version: DETECTOR_VERSION.into(),
             model_lock_digest: lock_digest,
             chunker: CHUNKER_VERSION.into(),
+            pooling: MODEL_POOLING.into(),
+            normalization: MODEL_NORMALIZATION.into(),
         },
         mode: format!("{:?}", args.mode).to_lowercase(),
         trends: trends(&classified, baseline.as_ref()),
@@ -1871,26 +2004,28 @@ fn frontmatter_advisories(roots: &[PathBuf]) -> Result<Vec<Advisory>, String> {
                     .map_err(|error| format!("{}: {error}", file.display()))?;
                 for field in ["name", "description"] {
                     if let Some(value) = yaml.get(field).and_then(|value| value.as_str()) {
-                        values.push((
-                            file.display().to_string(),
-                            field.to_owned(),
-                            value.to_owned(),
-                        ));
+                        values.push(FrontmatterValue {
+                            path: file.display().to_string(),
+                            field: field.to_owned(),
+                            value: value.to_owned(),
+                        });
                     }
                 }
             }
         }
     }
     let mut results = Vec::new();
-    for (i, a) in values.iter().enumerate() {
-        for b in values.iter().skip(i + 1) {
-            if a.1 == b.1 {
-                let score = lexical_strings(&a.2, &b.2);
+    for (left_index, left_value) in values.iter().enumerate() {
+        for right_value in values.iter().skip(left_index + 1) {
+            if left_value.field == right_value.field {
+                let score = lexical_strings(&left_value.value, &right_value.value);
                 if score > 0.0 {
                     results.push(Advisory {
-                        left: a.0.clone(),
-                        right: b.0.clone(),
-                        field: a.1.clone(),
+                        left: left_value.path.clone(),
+                        right: right_value.path.clone(),
+                        field: left_value.field.clone(),
+                        left_value: left_value.value.clone(),
+                        right_value: right_value.value.clone(),
                         score,
                     });
                 }
@@ -1899,15 +2034,16 @@ fn frontmatter_advisories(roots: &[PathBuf]) -> Result<Vec<Advisory>, String> {
     }
     Ok(results)
 }
-fn lexical_strings(a: &str, b: &str) -> f32 {
-    let an = normalize(a);
-    let bn = normalize(b);
-    let x: BTreeSet<_> = an.split_whitespace().collect();
-    let y: BTreeSet<_> = bn.split_whitespace().collect();
-    if x.is_empty() || y.is_empty() {
+fn lexical_strings(left: &str, right: &str) -> f32 {
+    let left_normalized = normalize(left);
+    let right_normalized = normalize(right);
+    let left_tokens: BTreeSet<_> = left_normalized.split_whitespace().collect();
+    let right_tokens: BTreeSet<_> = right_normalized.split_whitespace().collect();
+    if left_tokens.is_empty() || right_tokens.is_empty() {
         0.0
     } else {
-        x.intersection(&y).count() as f32 / ((x.len() * y.len()) as f32).sqrt()
+        left_tokens.intersection(&right_tokens).count() as f32
+            / ((left_tokens.len() * right_tokens.len()) as f32).sqrt()
     }
 }
 fn markdown(report: &Report) -> String {
@@ -2000,10 +2136,21 @@ fn markdown(report: &Report) -> String {
             ));
         }
     }
-    out.push_str(&format!(
-        "\nFrontmatter advisory pairs: {}\n",
-        report.frontmatter.len()
-    ));
+    out.push_str("\n## Frontmatter advisories\n\n");
+    if report.frontmatter.is_empty() {
+        out.push_str("No frontmatter advisory pairs.\n");
+    }
+    for advisory in &report.frontmatter {
+        out.push_str(&format!(
+            "- `{}` ↔ `{}`\n  - Field: `{}`\n  - Score: `{:.6}`\n  - Left value: {:?}\n  - Right value: {:?}\n",
+            advisory.left,
+            advisory.right,
+            advisory.field,
+            advisory.score,
+            advisory.left_value,
+            advisory.right_value
+        ));
+    }
     out
 }
 
@@ -2014,10 +2161,13 @@ fn indent_markdown(text: &str) -> String {
         .join("\n")
 }
 fn validate_calibration(value: &Calibration, lock_digest: &str) -> Result<(), String> {
-    if value.status != "reviewed"
+    if value.format != 1
+        || value.status != "reviewed"
         || value.detector.version != DETECTOR_VERSION
         || value.detector.chunker != CHUNKER_VERSION
         || value.detector.model_lock_digest != lock_digest
+        || value.detector.pooling != MODEL_POOLING
+        || value.detector.normalization != MODEL_NORMALIZATION
         || !(0.0 <= value.thresholds.review
             && value.thresholds.review < value.thresholds.block
             && value.thresholds.block <= 1.0)
@@ -2047,6 +2197,8 @@ fn validate_baseline(
         || value.detector.version != DETECTOR_VERSION
         || value.detector.chunker != CHUNKER_VERSION
         || value.detector.model_lock_digest != lock_digest
+        || value.detector.pooling != MODEL_POOLING
+        || value.detector.normalization != MODEL_NORMALIZATION
         || !digest_is_valid
         || !(0.0 < value.block_threshold && value.block_threshold <= 1.0)
     {
@@ -2193,6 +2345,79 @@ mod tests {
     static TEMP_ID: AtomicU64 = AtomicU64::new(0);
 
     #[test]
+    fn load_roots_rejects_absolute_manifest_paths() {
+        let repo = temp_dir("absolute-root-repo");
+        let outside = temp_dir("absolute-root-outside");
+        let manifest = repo.join("manifest.json");
+        fs::write(
+            &manifest,
+            serde_json::to_vec(&serde_json::json!({ "skills": [outside] })).unwrap(),
+        )
+        .unwrap();
+
+        let error = load_roots(&repo, &manifest).unwrap_err();
+        assert!(error.contains("relative"), "{error}");
+
+        let _ = fs::remove_dir_all(repo);
+        let _ = fs::remove_dir_all(outside);
+    }
+
+    #[test]
+    fn load_roots_rejects_parent_manifest_paths() {
+        let repo = temp_dir("parent-root-repo");
+        let manifest = repo.join("manifest.json");
+        fs::write(
+            &manifest,
+            serde_json::to_vec(&serde_json::json!({ "skills": ["../outside"] })).unwrap(),
+        )
+        .unwrap();
+
+        let error = load_roots(&repo, &manifest).unwrap_err();
+        assert!(error.contains("parent"), "{error}");
+
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn markdown_files_rejects_directory_symlink_escape() {
+        let repo = temp_dir("directory-symlink-repo");
+        let root = repo.join("skills/example");
+        fs::create_dir_all(&root).unwrap();
+        let outside = temp_dir("directory-symlink-outside");
+        fs::write(outside.join("secret.md"), "secret").unwrap();
+        std::os::unix::fs::symlink(&outside, root.join("escape")).unwrap();
+
+        let mut paths = Vec::new();
+        let error = markdown_files(&repo, &root, &mut paths).unwrap_err();
+        assert!(error.contains("symlink"), "{error}");
+        assert!(paths.is_empty());
+
+        let _ = fs::remove_dir_all(repo);
+        let _ = fs::remove_dir_all(outside);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn markdown_files_rejects_markdown_symlink_escape() {
+        let repo = temp_dir("file-symlink-repo");
+        let root = repo.join("skills/example");
+        fs::create_dir_all(&root).unwrap();
+        let outside = temp_dir("file-symlink-outside");
+        let secret = outside.join("secret.md");
+        fs::write(&secret, "secret").unwrap();
+        std::os::unix::fs::symlink(&secret, root.join("escape.md")).unwrap();
+
+        let mut paths = Vec::new();
+        let error = markdown_files(&repo, &root, &mut paths).unwrap_err();
+        assert!(error.contains("symlink"), "{error}");
+        assert!(paths.is_empty());
+
+        let _ = fs::remove_dir_all(repo);
+        let _ = fs::remove_dir_all(outside);
+    }
+
+    #[test]
     fn relative_refs_match_python_contract() {
         let cases: serde_json::Value =
             serde_json::from_str(include_str!("../fixtures/relative-md-refs.json")).unwrap();
@@ -2243,6 +2468,21 @@ mod tests {
     }
 
     #[test]
+    fn wrapped_pointer_is_classified_after_whitespace_normalization() {
+        let root = temp_path("wrapped-pointer.md");
+        fs::write(
+            &root,
+            "# Doc\n## Wrapped\nSee [the\n guide](references/a.md).\n",
+        )
+        .unwrap();
+
+        let doc = parse_document(&root, root.parent().unwrap(), &TokenCounter::Test).unwrap();
+        assert!(doc.sections[0].pointer);
+
+        let _ = fs::remove_file(root);
+    }
+
+    #[test]
     fn normalization_preserves_case_and_punctuation() {
         assert_eq!(normalize("A  B\r\nC"), "A B C");
         assert_ne!(normalize("A"), normalize("a"));
@@ -2256,6 +2496,60 @@ mod tests {
         assert_eq!(doc.sections.len(), 1);
         assert_eq!(doc.sections[0].headings, vec!["Doc", "One"]);
         let _ = fs::remove_file(root);
+    }
+
+    #[test]
+    fn fences_close_only_with_matching_marker_and_length() {
+        for (name, text) in [
+            (
+                "short-backticks.md",
+                "# Doc\n## One\n````md\n```\n## fake\n```\n````\n## Two\nbody\n",
+            ),
+            (
+                "mixed-markers.md",
+                "# Doc\n## One\n```md\n~~~\n## fake\n~~~\n```\n## Two\nbody\n",
+            ),
+        ] {
+            let root = temp_path(name);
+            fs::write(&root, text).unwrap();
+            let doc = parse_document(&root, root.parent().unwrap(), &TokenCounter::Test).unwrap();
+            assert_eq!(
+                doc.sections
+                    .iter()
+                    .map(|section| section.headings.last().unwrap().as_str())
+                    .collect::<Vec<_>>(),
+                vec!["One", "Two"],
+                "{name}"
+            );
+            let _ = fs::remove_file(root);
+        }
+    }
+
+    #[test]
+    fn fence_closers_require_commonmark_indent_and_blank_suffix() {
+        for (name, invalid_closer) in [
+            ("trailing-text.md", "```not-a-closer"),
+            ("four-space-indent.md", "    ```"),
+        ] {
+            let root = temp_path(name);
+            fs::write(
+                &root,
+                format!(
+                    "# Doc\n## One\n```md\n{invalid_closer}\n## fake\n``` \t\n## Two\nbody\n"
+                ),
+            )
+            .unwrap();
+            let doc = parse_document(&root, root.parent().unwrap(), &TokenCounter::Test).unwrap();
+            assert_eq!(
+                doc.sections
+                    .iter()
+                    .map(|section| section.headings.last().unwrap().as_str())
+                    .collect::<Vec<_>>(),
+                vec!["One", "Two"],
+                "{name}"
+            );
+            let _ = fs::remove_file(root);
+        }
     }
 
     #[test]
@@ -2273,6 +2567,7 @@ mod tests {
 
     #[test]
     fn oversized_sections_split_with_exact_source_spans() {
+        let source_lines = (0..500).map(|n| format!("word{n}")).collect::<Vec<_>>();
         let section = test_section(
             "x.md",
             &["Doc", "Long"],
@@ -2280,15 +2575,20 @@ mod tests {
                 start: 10,
                 end: 509,
             },
-            &(0..500)
-                .map(|n| format!("word{n}"))
-                .collect::<Vec<_>>()
-                .join("\n"),
+            &source_lines.join("\n"),
         );
         let pieces = split_section(&section, 2, &TokenCounter::Test).unwrap();
         assert!(pieces.len() > 1);
-        assert_eq!(pieces.first().unwrap().span.start, 10);
-        assert_eq!(pieces.last().unwrap().span.end, 509);
+        let mut next_start = 10;
+        for piece in &pieces {
+            assert_eq!(piece.span.start, next_start);
+            assert_eq!(
+                piece.body,
+                source_lines[piece.span.start - 10..=piece.span.end - 10].join("\n")
+            );
+            next_start = piece.span.end + 1;
+        }
+        assert_eq!(next_start, 510);
         assert!(pieces
             .iter()
             .all(|piece| piece.body.split_whitespace().count() + 2 <= 480));
@@ -2365,6 +2665,47 @@ mod tests {
             .find(|piece| piece.body.contains("- parent"))
             .unwrap();
         assert!(list_piece.body.contains("  child29"));
+    }
+
+    #[test]
+    fn oversized_list_group_falls_back_to_targeted_source_line_cuts() {
+        let mut lines = vec!["- parent".to_owned()];
+        lines.extend((0..500).map(|n| format!("  child{n}")));
+        let section = test_section(
+            "x.md",
+            &["Doc"],
+            Span {
+                start: 10,
+                end: 510,
+            },
+            &lines.join("\n"),
+        );
+
+        let pieces = split_section(&section, 2, &TokenCounter::Test).unwrap();
+
+        assert_eq!(pieces.len(), 2);
+        assert_eq!(
+            pieces[0].body.split_whitespace().count() + 2,
+            384,
+            "fallback still targets the preferred payload size"
+        );
+        assert_eq!(
+            pieces[0].span,
+            Span {
+                start: 10,
+                end: 390
+            }
+        );
+        assert_eq!(
+            pieces[1].span,
+            Span {
+                start: 391,
+                end: 510
+            }
+        );
+        assert!(pieces
+            .iter()
+            .all(|piece| piece.body.split_whitespace().count() + 2 <= 480));
     }
 
     #[test]
@@ -2488,7 +2829,6 @@ mod tests {
             &TokenCounter::Test,
             &BTreeMap::new(),
             &BTreeMap::new(),
-            "lock",
         )
         .unwrap();
         assert_eq!(findings.len(), 1);
@@ -2536,15 +2876,42 @@ mod tests {
         let other = test_chunk("skills/b/SKILL.md", &["Doc", "Other"], 1, "other");
         let changed_heading = test_chunk("skills/a/SKILL.md", &["Doc", "Two"], 1, "same");
         let changed_part = test_chunk("skills/a/SKILL.md", &["Doc", "One"], 2, "same");
-        let id = identity("semantic", &base, &other, "lock");
-        assert_ne!(id, identity("semantic", &changed_heading, &other, "lock"));
-        assert_ne!(id, identity("semantic", &changed_part, &other, "lock"));
-        assert_eq!(id, identity("semantic", &other, &base, "lock"));
+        let id = identity("semantic", &base, &other, Some("lock"));
+        assert_ne!(
+            id,
+            identity("semantic", &changed_heading, &other, Some("lock"))
+        );
+        assert_ne!(
+            id,
+            identity("semantic", &changed_part, &other, Some("lock"))
+        );
+        assert_eq!(id, identity("semantic", &other, &base, Some("lock")));
+    }
+
+    #[test]
+    fn exact_identity_ignores_model_lock_while_semantic_identity_tracks_it() {
+        let left = test_chunk("skills/a/SKILL.md", &["Doc", "One"], 1, "left");
+        let right = test_chunk("skills/b/SKILL.md", &["Doc", "Two"], 1, "right");
+
+        assert_eq!(
+            identity("exact", &left, &right, Some("first-lock")),
+            identity("exact", &left, &right, Some("second-lock"))
+        );
+        assert_ne!(
+            identity("semantic", &left, &right, Some("first-lock")),
+            identity("semantic", &left, &right, Some("second-lock"))
+        );
     }
 
     #[test]
     fn model_lock_rejects_unsafe_and_incomplete_artifact_sets() {
         assert!(validate_model_lock(&valid_lock()).is_ok());
+        let mut pooling = valid_lock();
+        pooling.pooling = "mean".into();
+        assert!(validate_model_lock(&pooling).is_err());
+        let mut normalization = valid_lock();
+        normalization.normalization = "none".into();
+        assert!(validate_model_lock(&normalization).is_err());
         for unsafe_path in [
             "../config.json",
             "/config.json",
@@ -2586,22 +2953,55 @@ mod tests {
                 "source_path": PARITY_SOURCE_PATH,
                 "runner": PARITY_RUNNER,
                 "execution_provider": PARITY_EXECUTION_PROVIDER,
-                "threads": 1
+                "threads": 1,
+                "pooling": MODEL_POOLING,
+                "normalization": MODEL_NORMALIZATION
             },
             "model_lock_digest": "lock",
             "cases": [{"input": "case", "output": vec![0.0; 384]}]
         });
         assert!(validate_fixture_provenance(&valid, "lock").is_ok());
+        for pointer in [
+            "/hallouminate/tag",
+            "/hallouminate/commit",
+            "/hallouminate/source_path",
+            "/hallouminate/runner",
+            "/hallouminate/execution_provider",
+            "/hallouminate/threads",
+            "/model_lock_digest",
+            "/cases/0/input",
+            "/cases/0/output",
+        ] {
+            let mut missing = valid.clone();
+            missing.pointer_mut(pointer).unwrap().take();
+            assert!(
+                validate_fixture_provenance(&missing, "lock").is_err(),
+                "accepted missing required provenance at {pointer}"
+            );
+        }
+        let mut corrupt_output = valid.clone();
+        corrupt_output["cases"][0]["output"] = serde_json::json!(vec!["invalid"; 384]);
+        assert!(validate_fixture_provenance(&corrupt_output, "lock").is_err());
+        for (field, value) in [("pooling", "mean"), ("normalization", "none")] {
+            let mut drifted = valid.clone();
+            drifted["hallouminate"][field] = value.into();
+            assert!(validate_fixture_provenance(&drifted, "lock").is_err());
+        }
 
         let checked_in: serde_json::Value =
             serde_json::from_str(include_str!("../fixtures/hallouminate-fastembed.json")).unwrap();
+        let checked_in_lock: ModelLock =
+            serde_json::from_str(include_str!("../model.lock.json")).unwrap();
         assert_eq!(checked_in["hallouminate"]["runner"], PARITY_RUNNER);
         assert_eq!(checked_in["hallouminate"]["threads"], 1);
-        assert!(validate_fixture_provenance(
-            &checked_in,
-            checked_in["model_lock_digest"].as_str().unwrap(),
-        )
-        .is_ok());
+        assert_eq!(checked_in["hallouminate"]["pooling"], MODEL_POOLING);
+        assert_eq!(
+            checked_in["hallouminate"]["normalization"],
+            MODEL_NORMALIZATION
+        );
+        let lock_digest = model_digest(&checked_in_lock).unwrap();
+        assert_eq!(checked_in["model_lock_digest"], lock_digest);
+        assert!(validate_fixture_provenance(&checked_in, &lock_digest).is_ok());
     }
 
     #[test]
@@ -2756,7 +3156,14 @@ mod tests {
                 finding_ids: vec!["stable-id".into()],
                 redundant_tokens_estimate: 7,
             }],
-            frontmatter: vec![],
+            frontmatter: vec![Advisory {
+                left: "skills/frontmatter-a/SKILL.md".into(),
+                right: "skills/frontmatter-b/SKILL.md".into(),
+                field: "description".into(),
+                left_value: "Build cheese".into(),
+                right_value: "Build aged cheese".into(),
+                score: 0.75,
+            }],
             trends: Trends {
                 groups: vec![TrendGroup {
                     lane: "body".into(),
@@ -2787,6 +3194,13 @@ mod tests {
             "Duplicate-token estimate: `7`",
             "| body | directly-linked | debt | 1 | 1 | 7 | 7 |",
             "redundant-token estimate `7`",
+            "## Frontmatter advisories",
+            "skills/frontmatter-a/SKILL.md",
+            "skills/frontmatter-b/SKILL.md",
+            "Field: `description`",
+            "Score: `0.750000`",
+            "Left value: \"Build cheese\"",
+            "Right value: \"Build aged cheese\"",
         ] {
             assert!(
                 rendered.contains(evidence),
@@ -2843,6 +3257,77 @@ mod tests {
         })
         .unwrap();
         assert_eq!(candidate.samples, expected_samples);
+    }
+
+    #[test]
+    fn reviewed_preprocessing_metadata_rejects_drift() {
+        let mut calibration = Calibration {
+            format: 1,
+            status: "reviewed".into(),
+            detector: detector("lock"),
+            thresholds: Thresholds {
+                review: 0.8,
+                block: 0.9,
+            },
+            samples: vec![Sample {
+                left: "left".into(),
+                right: "right".into(),
+                score: 0.95,
+                label: "duplicate".into(),
+            }],
+        };
+        assert!(validate_calibration(&calibration, "lock").is_ok());
+        calibration.detector.pooling = "mean".into();
+        assert!(validate_calibration(&calibration, "lock").is_err());
+        calibration.detector = detector("lock");
+        calibration.detector.normalization = "none".into();
+        assert!(validate_calibration(&calibration, "lock").is_err());
+
+        let mut baseline = Baseline {
+            format: 1,
+            status: "reviewed".into(),
+            detector: detector("lock"),
+            calibration_digest: "a".repeat(64),
+            block_threshold: 0.9,
+            findings: BTreeMap::new(),
+        };
+        assert!(validate_baseline(&baseline, "lock", None).is_ok());
+        baseline.detector.pooling = "mean".into();
+        assert!(validate_baseline(&baseline, "lock", None).is_err());
+        baseline.detector = detector("lock");
+        baseline.detector.normalization = "none".into();
+        assert!(validate_baseline(&baseline, "lock", None).is_err());
+    }
+
+    #[test]
+    fn calibration_rejects_incompatible_format() {
+        let calibration = Calibration {
+            format: 2,
+            status: "reviewed".into(),
+            detector: detector("lock"),
+            thresholds: Thresholds {
+                review: 0.8,
+                block: 0.9,
+            },
+            samples: vec![Sample {
+                left: "left".into(),
+                right: "right".into(),
+                score: 0.95,
+                label: "duplicate".into(),
+            }],
+        };
+        assert!(validate_calibration(&calibration, "lock")
+            .unwrap_err()
+            .contains("explicitly recalibrate"));
+    }
+
+    #[test]
+    fn calibrate_mode_rejects_prior_calibration_before_model_access() {
+        assert!(validate_analysis_mode(Mode::Calibrate, false).is_ok());
+        assert!(validate_analysis_mode(Mode::Report, true).is_ok());
+        assert!(validate_analysis_mode(Mode::Calibrate, true)
+            .unwrap_err()
+            .contains("does not accept --calibration"));
     }
 
     #[test]
@@ -2990,6 +3475,8 @@ mod tests {
             version: DETECTOR_VERSION.into(),
             model_lock_digest: lock.into(),
             chunker: CHUNKER_VERSION.into(),
+            pooling: MODEL_POOLING.into(),
+            normalization: MODEL_NORMALIZATION.into(),
         }
     }
 
@@ -3016,6 +3503,8 @@ mod tests {
             threads: 1,
             batch_size: 32,
             passage_prefix: String::new(),
+            pooling: MODEL_POOLING.into(),
+            normalization: MODEL_NORMALIZATION.into(),
             artifacts: REQUIRED_ARTIFACTS
                 .iter()
                 .map(|path| Artifact {

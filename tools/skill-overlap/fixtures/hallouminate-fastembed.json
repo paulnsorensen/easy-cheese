@@ -785,7 +785,9 @@
     "source_path": "crates/hallouminate-adapters/src/embedder.rs",
     "runner": "ubuntu-24.04-x86_64",
     "execution_provider": "onnxruntime-cpu",
-    "threads": 1
+    "threads": 1,
+    "pooling": "cls",
+    "normalization": "l2"
   },
-  "model_lock_digest": "55816f5ed8b2e70227ea22410919c38c6a5f7172764bdd203f4ed6931e3a4b8a"
+  "model_lock_digest": "407c52989ba1efc534d99c700c4bd04ecaad337d23aa71fcac478907c484d3ae"
 }
