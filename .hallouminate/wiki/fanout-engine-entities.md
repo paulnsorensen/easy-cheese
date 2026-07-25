@@ -58,7 +58,8 @@ AST-derived from `curd.py`'s actual source so a collision fails the suite
   produces the **incompatible run-manifest schema** and is scope-noted as
   such — do not present the two as the same decomposer.
 - Deployed as the `curd-block` subcommand of `ultracook.pyz`
-  (`scripts/build_pyz.py`).
+  (`scripts/build_pyz.py`); the cheese-factory workflow validates blocks
+  through that entry point, never by `sys.path` reaches into repo internals.
 
 ## One validation home per entity
 

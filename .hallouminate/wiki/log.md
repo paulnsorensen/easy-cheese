@@ -7,6 +7,6 @@
 
 
 - 2026-07-24 · c46a53ce6c7ef323 · merged · architecture/ultracook-agent-topology.md · ownership moved to /cook fan pathway in PR #316; /ultracook retired in PR #317; topology invariants retained, footnotes recited, Supersedes recorded.
-- 2026-07-24 · c46a53ce6c7ef323 · new-page · architecture/age-fanout-router.md · deterministic age router: N∈{1,4,10} + hard overrides, purity/sibling-CLI gotcha, bundle deployment, open effort:low decision.
+- 2026-07-24 · c46a53ce6c7ef323 · new-page · architecture/age-fanout-router.md · deterministic age router: N∈{1,4,10} + hard overrides, purity/sibling-CLI gotcha, bundle deployment, lowercase lens contract, open effort:low decision.
 - 2026-07-24 · c46a53ce6c7ef323 · merged · fanout-engine-entities.md · added The Curd block entity (locked decomposition vocabulary, single producer contract, legacy prompt scope note) + shared disjoint_errors extraction; /ultracook framing corrected to /cook.
 

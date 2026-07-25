@@ -48,7 +48,10 @@ The `/ultracook` → `/cook` consolidation moved fan-path ownership in PR #316
 and retired the duplicate `/ultracook` entry point in PR #317: one skill now
 owns both the linear and fan pathways, choosing by the same decompose gate, so
 mode selection is a routing decision inside `/cook` rather than a skill choice
-the user makes up front.
+the user makes up front. The workflow-script implementations
+(`workflows/cheese-factory.js`, `workflows/age-fanout.js`) carry validation
+only — routing logic and threshold constants are banned from the JS and
+grep-locked by `tests/js/workflow-scripts.test.mjs`.
 
 Related decision: [progressive agent resolution](../adr/agent-resolution.md).
 
