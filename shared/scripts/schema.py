@@ -7,6 +7,7 @@ validation pass can report every problem at once. The error format is
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 
@@ -34,4 +35,41 @@ def string_list(value: object, where: str, *, non_empty: bool = False) -> list[s
     for index, item in enumerate(value, start=1):
         if not isinstance(item, str) or not item.strip():
             errors.append(f"{where}[{index}] must be a non-empty string")
+    return errors
+
+
+def disjoint_errors(
+    curds: list,
+    *,
+    id_key: str,
+    message: Callable[[str, Any, Any], str],
+    strict: bool = False,
+) -> list[str]:
+    """Cross-curd file collision, generalized over curd.py's run-manifest
+    contract (strict=True: flags non-dict curds, missing/empty files, and
+    non-string file entries) and curd_block.py's decomposition-artifact
+    contract (strict=False: caller has already dict-filtered; silently skips
+    non-list files / non-string entries)."""
+    errors: list[str] = []
+    file_to_id: dict[str, Any] = {}
+    for curd in curds:
+        if strict and not isinstance(curd, dict):
+            continue
+        cid = curd.get(id_key, "?")
+        files = curd.get("files")
+        if strict:
+            if not isinstance(files, list) or not files:
+                errors.append(f"curd {cid}: missing or empty 'files'")
+                continue
+        elif not isinstance(files, list):
+            continue
+        for f in files:
+            if not isinstance(f, str):
+                if strict:
+                    errors.append(f"curd {cid}: non-string file entry: {f!r}")
+                continue
+            if f in file_to_id:
+                errors.append(message(f, file_to_id[f], cid))
+            else:
+                file_to_id[f] = cid
     return errors
