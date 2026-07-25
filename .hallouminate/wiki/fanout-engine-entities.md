@@ -42,10 +42,11 @@ A Wiring node (`W<n>`) is the unit of cross-curd integration —
 
 ## The Curd block
 
-Added in the subagent-routing overhaul (PR1, #314). A Curd block is the
-**decomposition artifact** both decomposer doors emit — `/mold` curdle's
-decomposer dispatch and `/cook`'s fallback decompose gate — with a **locked
-vocabulary that deliberately does not overlap the run-manifest Curd**:
+Added in the subagent-routing overhaul foundation (PR #315). A Curd block is
+the **decomposition artifact** both decomposer doors emit — `/mold`'s
+pre-approval decomposer dispatch and `/cook`'s fallback decompose gate — with
+a **locked vocabulary that deliberately does not overlap the run-manifest
+Curd**:
 `curds[]` entries carry `{slug, contract, files, test_target, acceptance,
 seed}` plus block-level `waves[]` and `decomposer{}` (`src/fanout/curd_block.py`).
 The disjointness of the two vocabularies is test-locked: the field-name set is
@@ -97,4 +98,4 @@ four-way validator merge.
 - [workflow-invariants](./workflow-invariants.md) — pipeline ordering and the curdle gate.
 - [age-fanout-router](./architecture/age-fanout-router.md) — deterministic review fan-out sizing (same PR).
 
-_Source: subagent-routing-overhaul PR1 (#314) cure/plate write-back · Updated: 2026-07-24 · Supersedes: /ultracook-owned framing (retired this PR)_
+_Source: subagent-routing-overhaul PR1 stack (PR #315 entity/validation foundation; PR #317 `/mold` integration and `/ultracook` retirement) cure/plate write-back · Updated: 2026-07-24 · Supersedes: /ultracook-owned framing (retired in PR #317)_
