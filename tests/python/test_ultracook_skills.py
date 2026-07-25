@@ -81,6 +81,17 @@ class TestUltracookResolvesToCook:
         body = _skill("cheese")
         assert "`/ultracook <slug-or-path>` resolves to `/cook <slug-or-path>`" in body
 
+    def test_retained_legacy_manifest_template_belongs_to_cook_internals(self) -> None:
+        stub = _skill("ultracook")
+        prompt = _read(SKILLS_DIR / "ultracook" / "references" / "decomposer-prompt.md")
+
+        assert "remain at their existing paths" in stub
+        assert "remain in place, untouched" not in stub
+        assert "retained legacy-manifest template" in prompt
+        assert "consumed by `/cook`'s fan-path internals" in prompt
+        assert "Loaded by `/ultracook` at Phase 0" not in prompt
+        assert "decomposer sub-agent for /ultracook" not in prompt
+
 
 class TestUltracookPhaseChain:
     """/ultracook's linear-mode mechanics (single, un-decomposed spec) now
@@ -564,6 +575,16 @@ class TestReadmeMentionsUltracook:
         readme = _read(REPO_ROOT / "README.md")
         assert "skills/ultracook/SKILL.md" in readme
         assert "/ultracook" in readme
+
+    def test_public_docs_name_cook_as_the_orchestrator(self) -> None:
+        readme = _read(REPO_ROOT / "README.md")
+        agents = _read(REPO_ROOT / "AGENTS.md")
+
+        assert "`/cook` is the single implementation orchestrator" in readme
+        assert "Compatibility redirect to `/cook`" in readme
+        assert "milknado (MCP) | Mikado task-graph backend for `/cook`'s fan-path" in readme
+        assert "Single implementation orchestrator" in agents
+        assert "milknado (mikado task-graph backend for `/cook`'s fan pathway)" in agents
 
 
 # ---------------------------------------------------------------------------

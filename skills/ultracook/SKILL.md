@@ -15,7 +15,7 @@ Any `/ultracook <spec> [flags]` invocation resolves to `/cook <spec> [flags]`. C
 
 ## What did not move
 
-- `skills/ultracook/scripts/` and `skills/ultracook/references/` remain in place, untouched — nothing here vaporized. `/cook`'s fan-pathway prose points at these files by their current relative path (e.g. `../ultracook/scripts/ultracook.pyz`, `../ultracook/references/decomposer-prompt.md`) rather than duplicating or moving them.
+- `skills/ultracook/scripts/` and `skills/ultracook/references/` remain at their existing paths — nothing here vaporized. `/cook`'s fan-pathway prose points at these retained files by their current relative path (e.g. `../ultracook/scripts/ultracook.pyz`, `../ultracook/references/decomposer-prompt.md`) rather than duplicating or moving them.
 - The manifest path stays `.cheese/ultracook/<slug>/manifest.yaml` for continuity — the identity of the skill that reads/writes it changed, not the path.
 - `src/fanout/mode.py` and `src/fanout/curd_block.py` remain decomposer/fanout internals — `/cook`'s fan pathway calls them directly rather than through this retired skill.
 

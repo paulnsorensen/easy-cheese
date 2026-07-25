@@ -33,14 +33,14 @@ This is a skills-only collection following the [Agent Skills spec](https://agent
 | `/mold` | Iterative dialogue to converge a fuzzy idea into an approved spec |
 | `/culture` | Deep no-write exploration of a codebase or topic |
 | `/pasteurize` | Hard-bug diagnosis — feedback-loop-first investigation, regression test, minimal fix, then handoff to `/cook` |
-| `/cook` | TDD-disciplined implementation of an approved spec |
+| `/cook` | Single implementation orchestrator: TDD-disciplined single-coder execution or fresh-context fan-out of an approved curd block |
 | `/press` | Adversarial test hardening after `/cook` |
 | `/age` | Ten-dimension code review producing a severity-grouped findings report |
 | `/affinage` | Triages a PR's review comments and CI failures through the `/age` lens, routes fixes to `/cure`, posts replies |
 | `/cure` | Applies selected `/age` findings as focused fixes |
 | `/plate` | Final durable-artifact gate, safe commit transaction, and ordinary-or-stacked PR publication |
 | `/hard-cheese` | Metacognitive vibecheck gate before sharing for review (standalone or via `--hard` propagation) |
-| `/ultracook` | Autonomous fresh-context pipeline for high-blast-radius specs, one sub-agent per phase. The decomposer picks the mode: a decomposable 2+-curd spec fans out into parallel curds (per-curd `cook → press → age → cure` in its own worktree, harvested back, one post-merge review pass, ending in 1–N reviewable PRs); an indivisible spec runs the linear chain `cook → press → age → cure → age → cure → age`, all `--auto` |
+| `/ultracook` | Compatibility redirect to `/cook`; retained scripts, references, and manifest paths remain `/cook` fan-path internals |
 | `/melt` | Resolves merge / rebase / cherry-pick conflicts via the structural-merge cascade |
 | `/wheypoint` | Checkpoints a mid-task conversation into a durable handoff at `.cheese/notes/<slug>.md`, resumable via `/cheese --continue` |
 
@@ -74,7 +74,7 @@ for the durable-vs-transient boundary and the authoring loop.
 
 - Python validators in `.github/scripts/` allow only `pyyaml` and `pytest` as third-party deps — see `.github/instructions/python.instructions.md`.
 - Shell scripts and bats tests follow the rules in `.github/instructions/shell.instructions.md`.
-- `cheez-*` skills use the safest semantic backend available for source code: prefer tilth when present; otherwise accept equivalent native LSP/AST/anchored/stale-checking backends. Use LSP for type-grounded defs/refs/renames/code actions, `sg` for structural rewrites, batch reads/writes when possible, and treat blind shell search/view/edit as weaker fallback evidence, not an equivalent source-code backend. Optional integrations — hallouminate (repo-wiki grounding for `/mold` and `/age`) and milknado (mikado task-graph backend for `/ultracook` parallel mode) — are wired in as optional plugins per `skills/cheese/references/optional-plugins.md`: they degrade gracefully when absent and never block a skill run.
+- `cheez-*` skills use the safest semantic backend available for source code: prefer tilth when present; otherwise accept equivalent native LSP/AST/anchored/stale-checking backends. Use LSP for type-grounded defs/refs/renames/code actions, `sg` for structural rewrites, batch reads/writes when possible, and treat blind shell search/view/edit as weaker fallback evidence, not an equivalent source-code backend. Optional integrations — hallouminate (repo-wiki grounding for `/mold` and `/age`) and milknado (mikado task-graph backend for `/cook`'s fan pathway) — are wired in as optional plugins per `skills/cheese/references/optional-plugins.md`: they degrade gracefully when absent and never block a skill run.
 - SKILL.md files must pass `validate_skills.py` (YAML frontmatter validation).
 - Conventional Commits format for all commits and PR titles (enforced by `validate.yml` for PRs).
 - Cheese / Dune / Mad Max / LOTR / Princess Bride flavor is welcome in user-facing docs and `SKILL.md` files. Keep commit messages and YAML frontmatter neutral.

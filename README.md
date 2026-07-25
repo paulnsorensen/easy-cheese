@@ -63,14 +63,14 @@ Content shared _across_ skills lives in the always-installed `cheese` skill's `r
 | `skills/mold/SKILL.md` | `/mold` | Shape fuzzy ideas into grounded specs through dialogue, validate cycles, and a two-key handshake. |
 | `skills/culture/SKILL.md` | `/culture` | The agent's internal-thinking skill — invoked silently by `/cheese` and other workflow skills to model a problem before dispatching. Surfaces to the user only when they explicitly opted out of writes ("no writes", "rubber-duck this"). Hard invariant: writes only the opt-in `.cheese/notes/<slug>.md` handoff at session end, and only when the user asks for notes. |
 | `skills/pasteurize/SKILL.md` | `/pasteurize` | Diagnose hard bugs, flaky failures, and performance regressions with a feedback-loop-first investigation, then hand off into `/cook → /press → /age → /cure`. |
-| `skills/cook/SKILL.md` | `/cook` | Implement clear specs via cut → cook → taste-test with scoped edits and tests. |
+| `skills/cook/SKILL.md` | `/cook` | Single implementation orchestrator: runs a focused spec through one coder or fans an approved curd block through fresh-context phase agents. |
 | `skills/press/SKILL.md` | `/press` | Harden cooked changes with coverage, assertion, and boundary checks. |
 | `skills/age/SKILL.md` | `/age` | Review diffs across ten staff-engineer dimensions and produce a severity-grouped findings report. |
 | `skills/affinage/SKILL.md` | `/affinage` | Triage external PR claims — review comments and CI failures — through the `/age` lens, hand the chosen fixes to `/cure`, then post replies back on GitHub. |
 | `skills/cure/SKILL.md` | `/cure` | Fix user-selected findings, validate, and prepare the branch for shipping. |
 | `skills/plate/SKILL.md` | `/plate` | Final writing, validation, commit, and ordinary-or-stacked PR publication gate. Explicit topology choices win; obvious cohesive work opens as one PR, while stack recommendations and ambiguous shapes ask before mutation. |
 | `skills/hard-cheese/SKILL.md` | `/hard-cheese` (or `--hard` flag) | Metacognitive vibecheck gate before review — asks the author to explain the diff's causal logic, grades the explanation against the SOLO Taxonomy. Standalone or via `--hard` propagation through the pipeline. |
-| `skills/ultracook/SKILL.md` | `/ultracook` | Autonomous fresh-context pipeline for high-blast-radius specs. Typed phase agents run each curd as sequential same-worktree spawns: coder (`cook`) → coder (`press`) → reviewer (`age`) → coder (`cure`) → reviewer (final `age`), followed by parent-owned commit-only `/plate`. Post-merge uses `press → age → cure → age`; an indivisible spec keeps the seven-phase linear chain. |
+| `skills/ultracook/SKILL.md` | `/ultracook` | Compatibility redirect to `/cook`; its retained scripts, references, and manifest paths remain fan-path internals consumed by `/cook`. |
 | `skills/melt/SKILL.md` | `/melt` | Resolve merge / rebase / cherry-pick conflicts via the structural cascade (mergiraf → rerere → kdiff3) with batch, pick-side, and lockfile helpers. |
 | `skills/wheypoint/SKILL.md` | `/wheypoint` | Mark a checkpoint: compact a mid-task conversation into a durable handoff document at `.cheese/notes/<slug>.md` (resumable slug + state-mapped suggested-skills + redacted secrets) so a fresh agent can resume via `/cheese --continue <slug>`. |
 
@@ -120,7 +120,7 @@ See [Installing MCP servers](#installing-mcp-servers) below — expand the tilth
    ├─ need info / external evidence  ──►  /briesearch
    ├─ no-writes discussion only      ──►  /culture                  (user explicitly opted out of writes)
    ├─ fuzzy / multi-module idea       ──►  /mold        ──►  /cook --auto      ──►  /press  ──►  /age  ──►  /cure
-   ├─ high-blast-radius spec          ──►  /mold        ──►  /ultracook        (fresh-context: cook → press → age → cure → age → cure → age)
+   ├─ high-blast-radius spec          ──►  /mold        ──►  /cook --auto      (fresh-context fan pathway)
    ├─ clear, scoped ask               ──►  /cook --auto                                                ──►  /press  ──►  /age  ──►  /cure
    ├─ debugging task                  ──►  /pasteurize --auto ──►  /cook --auto                        ──►  /press  ──►  /age  ──►  /cure
    ├─ PR comments / CI failures       ──►  /affinage    ──►  /cure
@@ -149,7 +149,7 @@ Easy-cheese is intentionally a small surface. What that means in practice:
 
 - **Skills only.** No agents, commands, eta templates, or compiled harness bundles. Each capability is a single `SKILL.md`.
 - **No repo-wide MCP requirement.** Workflow skills suggest tools (tilth, Context7, Tavily) but have host-native fallbacks. The cheez-* tool skills require an AST-aware search/read path and stale-checking edit path; prefer tilth when present, but equivalent native AST/LSP/anchored-edit backends satisfy the contract.
-- **One orchestrator skill, narrowly scoped.** `/ultracook` is the only orchestrator. It resolves planner/coder/reviewer phase agents by capability and minimum power; harvest and `/plate` remain parent-owned. Parallel curds use sequential same-worktree phase spawns and a terminal reviewer pass before publication.
+- **One orchestrator skill, narrowly scoped.** `/cook` is the single implementation orchestrator: focused specs use its single-coder path, while approved file-disjoint curds use its fresh-context fan pathway. `/ultracook` is only a compatibility redirect to `/cook`. Harvest and `/plate` remain parent-owned; parallel curds use sequential same-worktree phase spawns and a terminal reviewer pass before publication.
 - **No automatic re-age loop in `/cure`.** The skill describes the protocol; the human runs the next `/age` when ready.
 
 ## Optional tools
@@ -164,7 +164,7 @@ Workflow skills name preferred tools when they help, with fallbacks for portabil
 | Tavily (MCP) | Current web/vendor research | host web search or user-supplied sources |
 | LSP / [Serena](https://github.com/oraios/serena) (MCP) | Type-aware xrefs (`find_referencing_symbols`, `find_implementations`), symbol-bounded edits (`rename_symbol`, `replace_symbol_body`, `safe_delete_symbol`), and LSP diagnostics — concrete tools for the abstract "if your harness has an LSP" sections in `cheez-*` skills | `sg`, `tilth_search`, targeted reads via tilth |
 | hallouminate (MCP) | Per-repo wiki for cross-session design rationale, ADR grounding, and `/mold` evidence | Skip wiki grounding; proceed with diff + code evidence only; cap at `speculating` when design rationale is central |
-| milknado (MCP) | Mikado task-graph backend for `/ultracook` parallel-mode curd prerequisite tracking | In-report curd decomposition in manifest YAML; no external task-graph backend needed |
+| milknado (MCP) | Mikado task-graph backend for `/cook`'s fan-path curd prerequisite tracking | In-report curd decomposition in manifest YAML; no external task-graph backend needed |
 | `ripgrep` | Fast text search | `grep`, `find`, editor search |
 | `gh` | GitHub issues, PRs, checks, examples | local git commands or user-provided links/logs |
 | `delta` | Readable diffs | plain `git diff` |
