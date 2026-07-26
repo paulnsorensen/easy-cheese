@@ -58,6 +58,9 @@ jobs:
       - name: Run fan-out script tests
         run: python3 -m pytest tests/fanout/python -q
 
+      - name: Run skill distillation tests
+        run: python3 -m pytest tests/skill-distill/python -q
+
   install-script:
     name: test install.sh (macOS)
     runs-on: macos-latest
