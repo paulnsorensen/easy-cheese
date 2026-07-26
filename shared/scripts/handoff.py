@@ -167,8 +167,6 @@ def propagate_flags(source_flags: list[str], *, in_auto_chain: bool) -> list[str
     result: list[str] = []
     for flag in source_flags:
         bare = flag.split("=", 1)[0]
-        if bare in ALWAYS_PROPAGATE:
-            result.append(flag)
-        elif bare in CHAIN_ONLY and in_auto_chain:
+        if bare in ALWAYS_PROPAGATE or bare in CHAIN_ONLY and in_auto_chain:
             result.append(flag)
     return result

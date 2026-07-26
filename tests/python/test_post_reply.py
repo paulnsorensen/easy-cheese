@@ -9,7 +9,7 @@ records every POST so endpoint routing and the composed body can be asserted.
 from __future__ import annotations
 
 import subprocess
-from typing import Callable, Iterable
+from collections.abc import Callable, Iterable
 
 import pytest
 

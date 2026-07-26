@@ -6,9 +6,9 @@ import json
 import re
 import shutil
 from dataclasses import dataclass
-from functools import lru_cache
+from functools import cache
 from pathlib import Path
-from typing import Callable
+from collections.abc import Callable
 
 import yaml
 
@@ -77,7 +77,7 @@ def _is_external(url: str) -> bool:
     return url.startswith(("http://", "https://", "mailto:", "#"))
 
 
-@lru_cache(maxsize=None)
+@cache
 def _read_text_cached(path: Path, _mtime: float) -> str:
     return path.read_text(encoding="utf-8")
 
@@ -187,7 +187,7 @@ def _ref_title(skill_name: str, ref_stem: str) -> str:
     return _ref_title_cached(str(SKILLS_DIR), skill_name, ref_stem)
 
 
-@lru_cache(maxsize=None)
+@cache
 def _ref_title_cached(skills_dir: str, skill_name: str, ref_stem: str) -> str:
     ref_path = Path(skills_dir) / skill_name / "references" / f"{ref_stem}.md"
     try:
