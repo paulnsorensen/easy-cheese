@@ -10,7 +10,8 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from typing import Any, Callable, Iterable, NoReturn
+from typing import Any, NoReturn
+from collections.abc import Callable, Iterable
 
 
 class CliError(Exception):

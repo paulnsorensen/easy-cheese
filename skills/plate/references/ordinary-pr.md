@@ -55,6 +55,21 @@ completion rows, risks, follow-ups, and any stack relationship. Keep the body
 file transient unless the repo explicitly tracks PR templates or release
 artifacts; leave it unstaged after verification.
 
+Write for the reviewer's verification pass:
+
+- A semantics-preserving change (behavior-preserving refactor, mechanical
+  internal move or rename with no public contract change, formatting-only
+  change) says so in its first line, names the mechanism, and states the
+  invariant to verify: behavior unchanged, plus a mechanism-specific check
+  such as nothing dropped or duplicated during a move. This tells the reviewer
+  to scan for accidental semantic drift rather than infer intent line by line.
+- A semantics-altering change names the behavior or contract that changed and
+  its observable verification, so scrutiny lands on the changed logic rather
+  than on inferring intent line by line.
+- A change that is not self-contained links its context — spike branch, plan,
+  or the stack siblings that show the abstraction in use — instead of leaving
+  the reviewer to ask what it is for.
+
 ## Push verification
 
 Read remote/upstream before pushing. Push the exact named head branch. Verify

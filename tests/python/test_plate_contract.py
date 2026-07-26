@@ -9,6 +9,7 @@ def read(path: str) -> str:
 
 def test_plate_owns_commit_stack_and_review_shape_policy() -> None:
     skill = read("skills/plate/SKILL.md")
+    flat_skill = " ".join(skill.split())
     assert "name: plate" in skill
     assert "\nmodel:" not in skill
     assert "commit-only" in skill.lower()
@@ -16,6 +17,18 @@ def test_plate_owns_commit_stack_and_review_shape_policy() -> None:
     assert "proceed without asking" in skill
     assert "independently reviewable ordered" in skill
     assert "Do not use line-count or file-count thresholds" in skill
+    assert "**semantics-altering**" in skill
+    assert "**semantics-preserving**" in skill
+    assert (
+        "https://jeff.sarn.at/blog/structuring-changes-with-the-code-reviewer-in-mind"
+        in skill
+    )
+    assert "worktree-agent-repair-" in skill
+    assert "A diff containing both is never one review unit" in flat_skill
+    assert "changes an externally observable" in flat_skill
+    assert "inherit its layer" in flat_skill
+    assert "## Attribution" in skill
+    assert "project-specific extensions" in flat_skill
     assert "explicit user choice" in skill
     assert "It is authoritative" in skill
     assert "genuinely ambiguous" in skill

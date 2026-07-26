@@ -34,7 +34,7 @@ def _cmd_parse_selection(args: argparse.Namespace) -> None:
     try:
         ids = findings.parse_selection(args.selection, items)
     except findings.SelectionError as exc:
-        raise cli.CliError(str(exc))
+        raise cli.CliError(str(exc)) from exc
     cli.emit(ids, full=args.full, json_mode=args.json_mode)
 
 

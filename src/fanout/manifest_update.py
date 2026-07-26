@@ -28,6 +28,7 @@ dispatch context, not block it.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import os
 import tempfile
 from pathlib import Path
@@ -134,15 +135,11 @@ def _atomic_write(path: Path, data: dict[str, Any], *, as_json: bool) -> None:
             handle.write(text)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(tmp, path)
+        tmp.replace(path)
     except Exception:
         if tmp.exists():
-            try:
+            with contextlib.suppress(OSError):
                 tmp.unlink()
-            except OSError:
-                # tmpfile is gone or already locked; nothing to undo. Swallow
-                # so the original write error propagates uncovered.
-                pass
         raise
 
 
@@ -161,14 +158,11 @@ def _revalidate_or_restore(path: Path, original: bytes) -> None:
         try:
             with os.fdopen(fd, "wb") as handle:
                 handle.write(original)
-            os.replace(tmp, path)
+            tmp.replace(path)
         except Exception:
             if tmp.exists():
-                try:
+                with contextlib.suppress(OSError):
                     tmp.unlink()
-                except OSError:
-                    # Best-effort cleanup only; don't mask the original failure.
-                    pass
             raise
         raise cli.CliError(f"validation rejected update; restored original ({errors[-1]})")
 

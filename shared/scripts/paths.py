@@ -126,7 +126,7 @@ def _xdg_dir(env_var: str, *default: str) -> Path:
     ignored in favour of the default.
     """
     raw = os.environ.get(env_var, "").strip()
-    if raw and os.path.isabs(raw):
+    if raw and Path(raw).is_absolute():
         return Path(raw)
     return Path.home().joinpath(*default)
 
@@ -215,7 +215,7 @@ def corpus_home() -> Path:
     (default ``~/.local/share/cheese``).
     """
     override = os.environ.get("EASY_CHEESE_HOME", "").strip()
-    if override and os.path.isabs(override):
+    if override and Path(override).is_absolute():
         return Path(override)
     return xdg_data_home() / "cheese"
 
