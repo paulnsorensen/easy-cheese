@@ -16,7 +16,6 @@ not this helper's.
 from __future__ import annotations
 
 import argparse
-import os
 import tempfile
 from pathlib import Path
 
@@ -35,7 +34,7 @@ def _cmd_render(args: argparse.Namespace) -> None:
     if not src.is_file():
         raise cli.CliError(f"--in not found: {args.in_path}")
     document = html_report.render(src.read_text(encoding="utf-8"), title=args.title)
-    out_path = Path(os.path.join(tempfile.gettempdir(), f"{args.out_name}.html"))
+    out_path = Path(tempfile.gettempdir()) / f"{args.out_name}.html"
     out_path.write_text(document, encoding="utf-8")
     cli.emit(str(out_path))
 

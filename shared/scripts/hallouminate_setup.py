@@ -44,7 +44,7 @@ def config_path() -> Path:
     if override:
         return Path(override)
     raw = os.environ.get("XDG_CONFIG_HOME", "").strip()
-    base = Path(raw) if raw and os.path.isabs(raw) else Path.home() / ".config"
+    base = Path(raw) if raw and Path(raw).is_absolute() else Path.home() / ".config"
     return base / "hallouminate" / "config.toml"
 
 
@@ -90,7 +90,7 @@ def _atomic_write(path: Path, text: str) -> None:
     # write_bytes (not write_text) so line endings pass through verbatim on
     # every Python -- write_text(newline=...) is 3.13+, CI runs 3.12.
     tmp.write_bytes(text.encode("utf-8"))
-    os.replace(tmp, path)
+    tmp.replace(path)
 
 
 def _extract_block(text: str) -> str | None:

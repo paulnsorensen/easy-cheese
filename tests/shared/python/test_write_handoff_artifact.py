@@ -105,10 +105,10 @@ class TestRerunOverwrite:
     def test_rerun_same_slug_overwrites(self, writer: ModuleType, tmp_path: Path) -> None:
         # os.replace (not os.rename) must overwrite an existing artifact cleanly
         # on a re-run — the cross-platform atomic-overwrite contract.
-        common = dict(
-            slug="rerun", status="ok", next_skill="age", artifact="",
-            body=None, root=tmp_path,
-        )
+        common = {
+            "slug": "rerun", "status": "ok", "next_skill": "age", "artifact": "",
+            "body": None, "root": tmp_path,
+        }
         writer.write_artifact(orientation="first pass", **common)
         target = writer.write_artifact(orientation="second pass", **common)
         assert "second pass" in target.read_text(encoding="utf-8")

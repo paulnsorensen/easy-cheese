@@ -111,7 +111,7 @@ def main() -> int:
         return 1
 
     skill_files = sorted(
-        p for p in Path(".").rglob("SKILL.md")
+        p for p in Path().rglob("SKILL.md")
         if not any(part.startswith(".") for part in p.parts)
     )
     if not skill_files:
