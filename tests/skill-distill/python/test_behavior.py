@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import pytest
 
 from skill_distill.behavior import evaluate_behavior
@@ -62,4 +64,19 @@ def test_variant_cannot_reclassify_an_original_obligation_as_noncritical():
         for row in rows("v", "variant", "route")
     ]
     with pytest.raises(ValueError, match="obligation signatures differ"):
+        evaluate_behavior(originals, variant)
+
+
+def test_variant_cannot_invert_an_original_obligations_expected_semantics():
+    originals = rows("o1", "original-1", "route") + rows("o2", "original-2", "route")
+    variant = [replace(row, expected=False, observed=False) for row in rows("v", "variant", "route")]
+    with pytest.raises(ValueError, match="obligation signatures differ"):
+        evaluate_behavior(originals, variant)
+
+
+def test_matrix_cannot_mix_expected_semantics_for_one_obligation():
+    originals = rows("o1", "original-1", "route") + rows("o2", "original-2", "route")
+    variant = rows("v", "variant", "route")
+    variant[0] = replace(variant[0], expected=False, observed=False)
+    with pytest.raises(ValueError, match="inconsistent expected semantics"):
         evaluate_behavior(originals, variant)

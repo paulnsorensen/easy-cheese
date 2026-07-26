@@ -41,12 +41,14 @@ def _validate_matrix(rows: list[BehaviorScorecard]) -> None:
             raise ValueError(f"{obligation_id} does not form a 3-by-3 matrix")
 
 
-def _obligation_signature(rows: list[BehaviorScorecard]) -> dict[str, bool]:
-    signature: dict[str, bool] = {}
+def _obligation_signature(rows: list[BehaviorScorecard]) -> dict[str, tuple[bool, bool]]:
+    signature: dict[str, tuple[bool, bool]] = {}
     for row in rows:
-        classification = signature.setdefault(row.obligation_id, row.critical)
+        classification, expected = signature.setdefault(row.obligation_id, (row.critical, row.expected))
         if classification != row.critical:
             raise ValueError(f"{row.obligation_id} has inconsistent critical classification")
+        if expected != row.expected:
+            raise ValueError(f"{row.obligation_id} has inconsistent expected semantics")
     return signature
 
 
