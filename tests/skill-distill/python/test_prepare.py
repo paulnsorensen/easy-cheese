@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import struct
 from pathlib import Path
 
 import pytest
@@ -105,31 +106,50 @@ def _control(finding: dict) -> dict:
 
 
 def _report() -> dict:
-    findings = [
+    high = [
         _finding(
-            f"block-{index:03}",
+            f"high-{index:03}",
             0.95,
             f"family-{index % 5}",
             index,
-            "unaccepted",
+            "advisory",
         )
-        for index in range(181)
+        for index in range(163)
     ]
-    findings.extend(
+    fill = [
+        _finding(
+            f"fill-{index:03}",
+            0.899 - index / 100_000,
+            f"family-{index % 5}",
+            index,
+            "advisory",
+        )
+        for index in range(18)
+    ]
+    review = [
         _finding(
             f"review-{index:03}",
-            0.70 + (index % 20) / 100,
+            0.80 + (index % 9) / 100,
             f"family-{index % 7}",
             index,
             "advisory",
         )
         for index in range(240)
-    )
-    findings.extend(
+    ]
+    exact_control = _finding("adversarial-exact", 0.0, "controls", 0, "unaccepted")
+    exact_control.update({"kind": "exact", "detector": "normalized", "cosine": None})
+    controls = [exact_control]
+    controls.extend(
         _finding(
-            f"adversarial-{index:03}", 0.20, "controls", index, "advisory"
+            f"adversarial-high-{index:03}", 0.96, "controls", index, "advisory"
         )
-        for index in range(1, 41)
+        for index in range(1, 14)
+    )
+    controls.extend(
+        _finding(
+            f"adversarial-low-{index:03}", 0.20, "controls", index, "advisory"
+        )
+        for index in range(14, 40)
     )
     return {
         "format": 1,
@@ -140,13 +160,13 @@ def _report() -> dict:
             "pooling": "cls",
             "normalization": "l2",
         },
-        "mode": "report",
-        "findings": findings,
+        "mode": "calibrate",
+        "findings": high + fill + review + controls,
         "duplicate_components": [
             {
                 "id": "component",
                 "endpoints": ["left", "right"],
-                "finding_ids": ["block-000"],
+                "finding_ids": ["high-000"],
                 "redundant_tokens_estimate": 12,
             }
         ],
@@ -175,15 +195,15 @@ def _report() -> dict:
         },
         "calibration": {
             "score_distribution": [
-                {"min_score": 0.2, "max_score": 0.9, "count": 3}
+                {"min_score": -1.0, "max_score": 0.5, "count": 26},
+                {"min_score": 0.5, "max_score": 0.7, "count": 0},
+                {"min_score": 0.7, "max_score": 0.8, "count": 0},
+                {"min_score": 0.8, "max_score": 0.9, "count": 258},
+                {"min_score": 0.9, "max_score": 1.0, "count": 176},
             ],
             "samples": [
                 {"left": "left", "right": "right", "score": 0.5, "label": "review"}
             ],
-        },
-        "reviewed_calibration": {
-            "digest": "calibration",
-            "thresholds": {"review": 0.70, "block": 0.90},
         },
     }
 
@@ -233,7 +253,6 @@ def test_prepare_has_the_fixed_unique_composition(tmp_path: Path) -> None:
     assert [pair.selection for pair in dataset.pairs].count("review") == 200
     assert [pair.selection for pair in dataset.pairs].count("adversarial") == 40
     assert {pair.score_decile for pair in dataset.pairs if pair.selection == "review"} >= {
-        7,
         8,
     }
     assert len(
@@ -242,6 +261,19 @@ def test_prepare_has_the_fixed_unique_composition(tmp_path: Path) -> None:
     assert len(
         {pair.skill_family for pair in dataset.pairs if pair.selection == "review"}
     ) == 7
+
+
+def test_prepare_reserves_overlapping_controls_before_block_selection(
+    tmp_path: Path,
+) -> None:
+    report_path, controls_path = _write_inputs(tmp_path)
+    dataset = prepare_to_path(report_path, controls_path, tmp_path / "dataset.json")
+    selections = {pair.pair_id: pair.selection for pair in dataset.pairs}
+
+    assert selections["adversarial-exact"] == "adversarial"
+    assert selections["adversarial-high-001"] == "adversarial"
+    assert selections["fill-017"] == "block"
+    assert all(selections[f"high-{index:03}"] == "block" for index in range(163))
 
 
 def test_tracked_adversarial_controls_use_endpoint_evidence() -> None:
@@ -261,7 +293,7 @@ def test_tracked_adversarial_controls_use_endpoint_evidence() -> None:
     ) == 13
 
 
-def test_tracked_adversarial_fixture_matches_pr_322_report() -> None:
+def test_tracked_adversarial_fixture_matches_pr_322_report(tmp_path: Path) -> None:
     report_path_value = os.environ.get("SKILL_DISTILL_PR_322_REPORT")
     if report_path_value is None:
         pytest.skip("SKILL_DISTILL_PR_322_REPORT is not set")
@@ -273,11 +305,23 @@ def test_tracked_adversarial_fixture_matches_pr_322_report() -> None:
             / "tools/skill-distill/fixtures/adversarial-report-findings-v1.json"
         ).read_text(encoding="utf-8")
     )
-    with Path(report_path_value).open("rb") as report:
-        report_sha256 = hashlib.file_digest(report, "sha256").hexdigest()
+    report_path = Path(report_path_value)
+    source_before = report_path.read_bytes()
+    report_sha256 = hashlib.sha256(source_before).hexdigest()
 
     assert report_sha256 == PR_322_REPORT_SHA256
     assert fixture["source_report_sha256"] == report_sha256
+
+    dataset = prepare_to_path(
+        report_path,
+        repo_root / "tools/skill-distill/labels/adversarial-controls-v1.yaml",
+        tmp_path / "dataset.json",
+    )
+    assert report_path.read_bytes() == source_before
+    assert len({pair.pair_id for pair in dataset.pairs}) == 421
+    assert [pair.selection for pair in dataset.pairs].count("block") == 181
+    assert [pair.selection for pair in dataset.pairs].count("review") == 200
+    assert [pair.selection for pair in dataset.pairs].count("adversarial") == 40
 
 
 def test_tracked_adversarial_controls_resolve_the_pr_322_fixture() -> None:
@@ -372,12 +416,19 @@ def test_prepare_rejects_unmatched_adversarial_evidence(tmp_path: Path) -> None:
             "samples has invalid",
         ),
         (
-            lambda report: report["reviewed_calibration"].__setitem__("digest", 1),
+            lambda report: report.__setitem__(
+                "reviewed_calibration",
+                {"digest": 1, "thresholds": {"review": 0.8, "block": 0.9}},
+            ),
             "reviewed_calibration.digest",
         ),
         (
-            lambda report: report["reviewed_calibration"]["thresholds"].__setitem__(
-                "review", True
+            lambda report: report.__setitem__(
+                "reviewed_calibration",
+                {
+                    "digest": "calibration",
+                    "thresholds": {"review": True, "block": 0.9},
+                },
             ),
             "thresholds must be finite",
         ),
@@ -392,4 +443,26 @@ def test_prepare_rejects_invalid_rust_report_field_types(
     report_path.write_text(json.dumps(report), encoding="utf-8")
 
     with pytest.raises(ReportValidationError, match=message):
+        prepare_to_path(report_path, controls_path, tmp_path / "dataset.json")
+
+
+def test_prepare_rejects_rust_usize_overflow(tmp_path: Path) -> None:
+    report_path, controls_path = _write_inputs(tmp_path)
+    report = _report()
+    report["findings"][0]["duplicate_tokens_estimate"] = 1 << (
+        struct.calcsize("P") * 8
+    )
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+
+    with pytest.raises(ReportValidationError, match="duplicate_tokens_estimate"):
+        prepare_to_path(report_path, controls_path, tmp_path / "dataset.json")
+
+
+def test_prepare_rejects_rust_f32_overflow(tmp_path: Path) -> None:
+    report_path, controls_path = _write_inputs(tmp_path)
+    report = _report()
+    report["frontmatter"][0]["score"] = float.fromhex("0x1.fffffep+128")
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+
+    with pytest.raises(ReportValidationError, match="frontmatter has invalid"):
         prepare_to_path(report_path, controls_path, tmp_path / "dataset.json")

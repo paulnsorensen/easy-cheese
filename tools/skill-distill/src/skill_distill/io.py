@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import struct
 from pathlib import Path
 from typing import Any
 
@@ -63,6 +64,9 @@ _CONTROL_CATEGORIES = {"high-overlap", "reversed-obligation", "low-cosine-repeat
 _CONTROL_EVIDENCE_KEYS = {"left", "right"}
 _CONTROL_ENDPOINT_KEYS = {"path", "heading_path", "part", "source_hash", "span"}
 _CONTROL_PREDICATE_KEYS = {"lane", "detector", "kind", "disposition"}
+
+_RUST_USIZE_MAX = (1 << (struct.calcsize("P") * 8)) - 1
+_RUST_F32_MAX = float.fromhex("0x1.fffffep+127")
 
 
 def canonical_json_bytes(value: Any) -> bytes:
@@ -153,28 +157,38 @@ def findings_for_adversarial_controls(
 
 
 def report_block_threshold(report: dict[str, Any]) -> float:
-    reviewed = report.get("reviewed_calibration")
-    if not isinstance(reviewed, dict):
-        raise ReportValidationError(
-            "overlap report lacks reviewed_calibration block-threshold evidence"
-        )
-    thresholds = reviewed.get("thresholds")
-    if not isinstance(thresholds, dict):
-        raise ReportValidationError(
-            "overlap report lacks reviewed_calibration.thresholds"
-        )
-    block = thresholds.get("block")
-    review = thresholds.get("review")
-    if not _finite_score(block) or not _finite_score(review) or review > block:
-        raise ReportValidationError(
-            "overlap report has impossible reviewed calibration thresholds"
-        )
-    return float(block)
+    return _report_thresholds(report)[1]
 
 
 def report_review_threshold(report: dict[str, Any]) -> float:
-    reviewed = report["reviewed_calibration"]
-    return float(reviewed["thresholds"]["review"])
+    return _report_thresholds(report)[0]
+
+
+def _report_thresholds(report: dict[str, Any]) -> tuple[float, float]:
+    reviewed = report.get("reviewed_calibration")
+    if isinstance(reviewed, dict):
+        thresholds = reviewed["thresholds"]
+        review, block = thresholds["review"], thresholds["block"]
+    else:
+        calibration = report.get("calibration")
+        strata = (
+            calibration.get("score_distribution")
+            if isinstance(calibration, dict)
+            else None
+        )
+        if (
+            report.get("mode") != "calibrate"
+            or not isinstance(strata, list)
+            or len(strata) < 2
+        ):
+            raise ReportValidationError(
+                "overlap report lacks frozen calibration threshold evidence"
+            )
+        ordered = sorted(strata, key=lambda item: item["min_score"])
+        review, block = ordered[-2]["min_score"], ordered[-1]["min_score"]
+    if not _finite_score(review) or not _finite_score(block) or review > block:
+        raise ReportValidationError("overlap report has impossible calibration thresholds")
+    return float(review), float(block)
 
 
 def pair_from_finding(finding: dict[str, Any], selection: str) -> PairEvidenceV1:
@@ -528,7 +542,11 @@ def _validate_object_strings(value: Any, keys: set[str], where: str) -> None:
 
 
 def _unsigned_int(value: Any) -> bool:
-    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+    return (
+        isinstance(value, int)
+        and not isinstance(value, bool)
+        and 0 <= value <= _RUST_USIZE_MAX
+    )
 
 
 def _finite_score(value: Any) -> bool:
@@ -536,6 +554,7 @@ def _finite_score(value: Any) -> bool:
         isinstance(value, (int, float))
         and not isinstance(value, bool)
         and math.isfinite(value)
+        and -_RUST_F32_MAX <= value <= _RUST_F32_MAX
     )
 
 

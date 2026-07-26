@@ -22,7 +22,7 @@ BLOCK_PAIR_COUNT = 181
 REVIEW_SAMPLE_COUNT = 200
 ADVERSARIAL_CONTROL_COUNT = 40
 PILOT_PAIR_COUNT = BLOCK_PAIR_COUNT + REVIEW_SAMPLE_COUNT + ADVERSARIAL_CONTROL_COUNT
-_PREPROCESSING_VERSION = b"skill-distill-prepare-v1:round-robin-strata"
+_PREPROCESSING_VERSION = b"skill-distill-prepare-v2:controls-block-review"
 
 
 def prepare_dataset(report_path: Path, controls_path: Path) -> DatasetV1:
@@ -35,24 +35,25 @@ def prepare_dataset(report_path: Path, controls_path: Path) -> DatasetV1:
         report["findings"], controls
     )
     findings = {finding["id"]: finding for finding in report["findings"]}
+    control_ids = {finding["id"] for finding in selected_controls}
 
-    block_findings = [
-        finding for finding in findings.values() if _is_block(finding, block)
-    ]
+    block_findings = sorted(
+        (finding for finding in findings.values() if finding["id"] not in control_ids),
+        key=_block_rank,
+    )[:BLOCK_PAIR_COUNT]
     if len(block_findings) != BLOCK_PAIR_COUNT:
         raise ReportValidationError(
-            f"expected {BLOCK_PAIR_COUNT} block-band pairs, found {len(block_findings)}"
+            f"expected at least {BLOCK_PAIR_COUNT} non-control block candidates, "
+            f"found {len(block_findings)}"
         )
-    control_ids = {finding["id"] for finding in selected_controls}
-    if control_ids & {finding["id"] for finding in block_findings}:
-        raise ReportValidationError(
-            "adversarial controls must be outside the block band to preserve the fixed composition"
-        )
+    block_ids = {finding["id"] for finding in block_findings}
 
     review_findings = [
         finding
         for finding in findings.values()
-        if _is_review(finding, review, block) and finding["id"] not in control_ids
+        if _is_review(finding, review, block)
+        and finding["id"] not in control_ids
+        and finding["id"] not in block_ids
     ]
     selected_review = _stratified_review_sample(review_findings)
     if len(selected_review) != REVIEW_SAMPLE_COUNT:
@@ -126,19 +127,15 @@ def _plain(value):
     return value
 
 
-def _is_block(finding: dict, block: float) -> bool:
-    if finding["kind"] == "exact":
-        return finding["disposition"] != "advisory"
-    return (
-        finding["cosine"] >= block and finding["disposition"] != "advisory"
-    )
+def _block_rank(finding: dict) -> tuple[bool, float, str]:
+    score = finding["cosine"] if finding["cosine"] is not None else 0.0
+    return finding["kind"] != "exact", -score, finding["id"]
 
 
 def _is_review(finding: dict, review: float, block: float) -> bool:
     return (
         finding["kind"] == "semantic"
         and review <= finding["cosine"] < block
-        and finding["disposition"] == "advisory"
     )
 
 
