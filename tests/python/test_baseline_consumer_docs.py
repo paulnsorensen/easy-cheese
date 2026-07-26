@@ -1,10 +1,8 @@
-"""Curd 4 (baseline-quality-gate) hardened the five phase-consumer SKILL.md
-files to honor an upstream `baseline:` handoff block as settled state: no
-re-flagging and no re-halting on gate failures identical to the recorded
-baseline. If a future edit strips the `baseline:` handoff-schema line or the
-no-re-flag/no-re-halt prose (or its link to the shared policy doc), a slug
-carrying a baseline block would again get re-asked about or re-halted on
-already-recorded failures — exactly the regression this test exists to catch.
+"""Baseline propagation stays explicit in phase contracts and consumer prose.
+
+Contract-aware phases declare `payload.baseline` in their phase-owned YAML.
+Consumers treat an inherited baseline as settled state: identical failures are
+not re-flagged, re-halted, or re-asked about.
 """
 
 from __future__ import annotations
@@ -37,26 +35,20 @@ def test_quality_gates_policy_doc_exists() -> None:
     assert "no re-halt, no re-flag of identical entries" in body
 
 
-SCHEMA_CONSUMERS = tuple(c for c in CONSUMERS if c != "skills/cheese/SKILL.md")
+CONTRACT_CONSUMERS = {
+    "skills/press/SKILL.md": "skills/press/references/handoff-contract.yaml",
+    "skills/age/SKILL.md": "skills/age/references/handoff-contract.yaml",
+    "skills/cure/SKILL.md": "skills/cure/references/handoff-contract.yaml",
+}
 
 
-def _handoff_schema_fence(body: str) -> str:
-    """Return the first ```markdown fenced block (the handoff-slug schema)."""
-    marker = "```markdown"
-    start = body.index(marker) + len(marker)
-    end = body.index("```", start)
-    return body[start:end]
-
-
-@pytest.mark.parametrize("rel_path", SCHEMA_CONSUMERS)
-def test_consumer_handoff_schema_carries_baseline_field(rel_path: str) -> None:
-    # cheese/SKILL.md has no handoff-slug schema (router doc, prose-only
-    # baseline mention) so it is excluded from SCHEMA_CONSUMERS above.
-    body = read(rel_path)
-    schema_fence = _handoff_schema_fence(body)
-    assert any(
-        line.strip().startswith("baseline: none |") for line in schema_fence.splitlines()
-    ), f"{rel_path} handoff-slug schema fence must carry a `baseline: none |` sentinel line"
+@pytest.mark.parametrize(("rel_path", "contract_path"), CONTRACT_CONSUMERS.items())
+def test_consumer_phase_contract_carries_baseline_field(
+    rel_path: str, contract_path: str
+) -> None:
+    contract = read(contract_path)
+    assert "payload:" in contract, rel_path
+    assert "baseline:" in contract, rel_path
 
 
 @pytest.mark.parametrize("rel_path", CONSUMERS)

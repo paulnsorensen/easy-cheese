@@ -79,8 +79,9 @@ def test_auto_mode_early_stop_exempts_identical_and_defers_to_baseline_policy() 
     assert "never stop auto" in section
 
 
-def test_handoff_slug_schema_carries_optional_baseline_field() -> None:
-    skill = read(SKILL)
-    schema = section_after(skill, "## Handoff slug")
-    assert "baseline: none" in schema
-    assert "quality-gates.md" in schema
+def test_phase_contract_carries_optional_baseline_field() -> None:
+    contract = read(ROOT / "skills" / "cook" / "references" / "handoff-contract.yaml")
+    assert "payload:" in contract
+    assert "baseline:" in contract
+    assert "payload.baseline" in read(SKILL)
+    assert "quality-gates.md" in read(SKILL)

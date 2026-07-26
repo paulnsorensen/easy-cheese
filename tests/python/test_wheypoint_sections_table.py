@@ -1,18 +1,8 @@
+"""Doc-lint guard for Wheypoint's state-to-required-sections table.
 
-"""Doc-lint guard for wheypoint's state→required-body-sections table (question-transport-policy, curd 3).
-
-Supply-side fix: `/wheypoint` used to compress a `status: gated:` note down to
-a one-line decision, discarding the design-fork weighing built up earlier in
-the session — so a resumed session had nothing to discuss from. The fix adds
-a state→required-Document-sections table beside `## Suggested skills` whose
-`status: gated:` row mandates a decision dossier per open fork (options /
-evidence `file:line` / what-each-breaks / prior leanings), and states that this
-mandate overrides the "just enough state" compression rule for gated notes.
-
-Each assertion pins the *semantic relationship* within a bounded span, not a
-vacuous co-occurrence of isolated substrings anywhere in the file — the same
-discipline `test_culture_convergence.py` and `test_when_to_structure_policy.py`
-use.
+A halted human-decision handoff must preserve the weighing needed to resume the
+fork. The versioned contract represents that state as `status: halt` plus
+`next_phase: hold`; other destinations preserve their own minimum orientation.
 """
 
 from __future__ import annotations
@@ -27,15 +17,13 @@ WHEYPOINT_SKILL = REPO_ROOT / "skills" / "wheypoint" / "SKILL.md"
 def _read() -> str:
     return WHEYPOINT_SKILL.read_text(encoding="utf-8")
 
-# --- Table existence + gated→dossier row --------------------------------
-# The table maps a `state` column to a `required Document sections` column,
-# and its gated row points at a `## Decision dossier` section.
+# --- Table existence + halt-to-dossier row -----------------------------------
 STATE_TO_SECTIONS_TABLE = re.compile(
-    r"\bstate\b[^|\n]{0,20}\|[^|\n]{0,10}\brequired\b[^|\n]{0,10}\bDocument\b[^|\n]{0,10}\bsections\b",
+    r"\bState\b[^|\n]{0,20}\|[^|\n]{0,10}\bRequired\b[^|\n]{0,10}\bDocument\b[^|\n]{0,10}\bsections\b",
     re.I,
 )
-GATED_ROW_POINTS_AT_DOSSIER = re.compile(
-    r"`?status:\s*gated:`?[^|\n]{0,20}\|[^\n]{0,40}##\s*Decision dossier",
+HALT_ROW_POINTS_AT_DOSSIER = re.compile(
+    r"`status:\s*halt`[^|\n]{0,40}`next_phase:\s*hold`[^|\n]{0,20}\|[^\n]{0,80}##\s*Decision dossier",
     re.I,
 )
 
@@ -58,28 +46,24 @@ DOSSIER_PER_OPEN_FORK = re.compile(
 
 # --- Remaining state rows -----------------------------------------------------
 CULTURE_ROW = re.compile(
-    r"`?next:\s*culture`?[^|\n]{0,20}\|[^\n]{0,80}\bagenda\b[^\n]{0,40}\bopen[- ]thread\b[^\n]{0,20}\bstate\b",
+    r"`next_phase:\s*culture`[^|\n]{0,20}\|[^\n]{0,80}\bagenda\b[^\n]{0,40}\bopen[- ]thread\b[^\n]{0,20}\bstate\b",
     re.I,
 )
 CURE_ROW = re.compile(
-    r"`?next:\s*cure`?[^|\n]{0,20}\|[^\n]{0,80}\bfindings\b[^\n]{0,20}\bartifact\b",
+    r"`next_phase:\s*cure`[^|\n]{0,20}\|[^\n]{0,80}\bfindings\b[^\n]{0,20}\bartifact\b",
     re.I,
 )
 COOK_PRESS_AGE_ROW = re.compile(
-    r"`?next:\s*cook`?[^|\n]{0,80}`?press`?[^|\n]{0,80}`?age`?[^|\n]{0,20}\|[^\n]{0,80}\bspec\b[^\n]{0,10}/[^\n]{0,10}\bslug\b[^\n]{0,20}\bpointers\b",
+    r"`next_phase:\s*cook`[^|\n]{0,80}`press`[^|\n]{0,80}`age`[^|\n]{0,20}\|[^\n]{0,80}\bspec\b[^\n]{0,20}\bartifact pointers\b",
     re.I,
 )
 HOLD_DONE_ROW = re.compile(
-    r"`?next:\s*hold`?[^|\n]{0,80}`?done`?[^|\n]{0,20}\|[^\n]{0,40}\borientation only\b",
+    r"`next_phase:\s*hold`[^|\n]{0,80}`done`[^|\n]{0,20}\|[^\n]{0,80}\bOrientation only\b",
     re.I,
 )
 
-# --- Override of the "just enough state" compression rule -------------------
-# The compression rule lives in the skill's own opening line ("captures just
-# enough state for a cold reader to resume"); the new table must say the
-# dossier mandate overrides it for gated notes.
 OVERRIDES_COMPRESSION_RULE = re.compile(
-    r"\boverrides?\b[^.\n]{0,60}\bjust enough state\b[^.\n]{0,60}\bcompression\b[^.\n]{0,20}\bgated\b",
+    r"\boverrides?\b[^.\n]{0,60}\bjust enough state\b[^.\n]{0,60}\bcompression\b[^.\n]{0,40}\bhalted decision gates\b",
     re.I,
 )
 
@@ -100,16 +84,14 @@ def test_wheypoint_skill_exists() -> None:
     assert WHEYPOINT_SKILL.exists(), f"wheypoint SKILL.md moved or renamed: {WHEYPOINT_SKILL}"
 
 
-def test_state_to_sections_table_present_with_gated_dossier_row() -> None:
+def test_state_to_sections_table_present_with_halt_dossier_row() -> None:
     body = _read()
     missing = []
     if not STATE_TO_SECTIONS_TABLE.search(body):
         missing.append("a state -> required Document sections table")
-    if not GATED_ROW_POINTS_AT_DOSSIER.search(body):
-        missing.append("the `status: gated:` row pointing at a `## Decision dossier` section")
-    assert not missing, (
-        "question-transport-policy curd 3 table absent:\n  - " + "\n  - ".join(missing)
-    )
+    if not HALT_ROW_POINTS_AT_DOSSIER.search(body):
+        missing.append("the halt/hold row pointing at a Decision dossier")
+    assert not missing, "state-to-sections table absent:\n  - " + "\n  - ".join(missing)
 
 
 def test_decision_dossier_requires_all_four_elements() -> None:
@@ -135,13 +117,13 @@ def test_remaining_state_rows_present() -> None:
     body = _read()
     missing = []
     if not CULTURE_ROW.search(body):
-        missing.append("`next: culture` -> agenda + open-thread state")
+        missing.append("`next_phase: culture` -> agenda + open-thread state")
     if not CURE_ROW.search(body):
-        missing.append("`next: cure` -> findings artifact ref")
+        missing.append("`next_phase: cure` -> findings artifact ref")
     if not COOK_PRESS_AGE_ROW.search(body):
-        missing.append("`next: cook`/`press`/`age` -> spec/slug pointers")
+        missing.append("cook/press/age -> spec + exact artifact pointers")
     if not HOLD_DONE_ROW.search(body):
-        missing.append("`next: hold`/`done` -> orientation only")
+        missing.append("hold/done -> orientation only")
     assert not missing, (
         "state->sections table missing rows:\n  - " + "\n  - ".join(missing)
     )
@@ -150,8 +132,8 @@ def test_remaining_state_rows_present() -> None:
 def test_dossier_mandate_overrides_compression_rule() -> None:
     body = _read()
     assert OVERRIDES_COMPRESSION_RULE.search(body), (
-        "the table must state explicitly that the gated dossier requirement "
-        "overrides the \"just enough state\" compression rule for gated notes"
+        "the table must state that the decision dossier overrides the "
+        "just enough state compression rule for halted decision gates"
     )
 
 

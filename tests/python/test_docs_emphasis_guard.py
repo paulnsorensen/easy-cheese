@@ -1,7 +1,6 @@
 """Contract tests for shared workflow documentation."""
 
 from __future__ import annotations
-
 import re
 import shutil
 from pathlib import Path
@@ -105,8 +104,9 @@ def test_harness_portability_reference_is_linked_from_workflow_docs():
         # cook/SKILL.md's `## Fan pathway`, merged into cook's own entry.
         REPO_ROOT / "skills/cook/SKILL.md": (
             "shared/scripts/artifact_path.py",
-            "shared/scripts/read_handoff_slug.py",
-            "python3 skills/ultracook/scripts/ultracook.pyz phase_decision",
+            "handoff-commit",
+            "handoff-resolve",
+            "phase_decision",
             "fallback",
             "python3 skills/ultracook/scripts/ultracook.pyz validate_decomposition",
             "python3 skills/ultracook/scripts/ultracook.pyz mode",
@@ -116,8 +116,8 @@ def test_harness_portability_reference_is_linked_from_workflow_docs():
             "python3 skills/ultracook/scripts/ultracook.pyz worktree teardown",
         ),
         REPO_ROOT / "skills/age/SKILL.md": (
-            "shared/scripts/read_handoff_slug.py",
-            "shared/scripts/write_handoff_artifact.py",
+            "handoff-commit",
+            "handoff-resolve",
             "fallback",
             "src/age/age-html-report.py",
         ),
@@ -336,16 +336,15 @@ def test_core_cheese_questions_use_the_shared_handoff_gate():
     assert "Codex-safe" not in cheese
 
 
-def test_wheypoint_git_provenance_is_capability_based_and_optional():
+def test_wheypoint_provenance_is_observed_and_optional():
     body = (REPO_ROOT / "skills/wheypoint/SKILL.md").read_text(encoding="utf-8")
 
-    assert "callable, read-only git inspection capability" in body
-    assert "git status --short --branch" in body
-    assert "git rev-parse --short HEAD" in body
-    assert "branch and short commit" in body
-    assert "Omit the field when git inspection is unavailable" in body
-    assert "Bash(git" not in body
-    assert "grant" not in body.lower()
+    assert "provenance" in body
+    assert "session identity" in body
+    assert "branch and commit" in body
+    assert "UTC timestamp" in body
+    assert "exact parent artifact paths" in body
+    assert "Never accept user-supplied provenance as observed fact" in body
 
 
 def test_router_and_wheypoint_do_not_assume_claude_native_tools():
@@ -363,3 +362,86 @@ def test_ultracook_spawn_reference_requires_fresh_context_or_halts():
     assert 'fork_turns: "none"' in body
     assert "halt `/ultracook` and recommend `/cook --auto`" in body
     assert "same context) instead" not in body
+
+
+
+def test_work_contract_docs_require_continuity_and_companion_runtime():
+    workflow_skills = (
+        "affinage",
+        "age",
+        "briesearch",
+        "cook",
+        "culture",
+        "cure",
+        "hard-cheese",
+        "mold",
+        "pasteurize",
+        "plate",
+        "press",
+        "ultracook",
+        "wheypoint",
+    )
+    for skill in workflow_skills:
+        body = (REPO_ROOT / f"skills/{skill}/SKILL.md").read_text(encoding="utf-8")
+        assert "## Work continuity" in body, skill
+        assert "work-contract.md" in body, skill
+        assert "read_handoff_slug.py" not in body, skill
+        assert "write_handoff_artifact.py" not in body, skill
+        assert "status: ok | halt" not in body, skill
+
+    work_contract = (REPO_ROOT / "skills/cheese/references/work-contract.md").read_text(
+        encoding="utf-8"
+    )
+    for phrase in (
+        "work ensure",
+        "work continue",
+        "work migrate",
+        "handoff-commit",
+        "handoff-resolve",
+        ".cheese/<phase>/<work-id>/<operation-id>-<slug>.md",
+        "scope: work",
+        "scope: attempt",
+        "Cheese contract runtime is required; install easy-cheese's Cheese companion runtime",
+    ):
+        assert phrase in work_contract
+
+    cheese = (REPO_ROOT / "skills/cheese/SKILL.md").read_text(encoding="utf-8")
+    for phrase in (
+        "zero candidates opens the project picker",
+        "one resumes automatically",
+        "two or more opens the worktree picker",
+        "without sorting by modification time, revision recency, or update order",
+        "`done` reports terminal state and never constructs or dispatches a phase command",
+        "`hold` pauses without dispatch",
+        "`tasks` exposes its structured pending directives and is never a phase command",
+        "retain it and report it unavailable",
+    ):
+        assert phrase in cheese
+
+    formatting = (REPO_ROOT / "skills/cheese/references/formatting.md").read_text(
+        encoding="utf-8"
+    )
+    for field in (
+        "contract_version",
+        "work_id",
+        "attempt_id",
+        "operation_id",
+        "phase",
+        "halt_reason",
+        "payload",
+        "provenance",
+    ):
+        assert field in formatting
+
+    shared = "\n".join(
+        (REPO_ROOT / relative).read_text(encoding="utf-8")
+        for relative in (
+            "AGENTS.md",
+            "README.md",
+            "skills/cheese/references/handoff-gate.md",
+            "skills/cheese/references/harness-portability.md",
+        )
+    )
+    assert "repo-local snapshots" in shared
+    assert "second writable authority" in shared
+    assert "Cheese contract runtime is required; install easy-cheese's Cheese companion runtime" in shared

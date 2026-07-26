@@ -31,7 +31,7 @@ designed as a nudge:
 | Estimate | Action |
 | --- | --- |
 | ~120k tokens | **Advisory:** note the window is filling; prefer sub-agent offload for the next heavy step; tighten questions. |
-| ~140k tokens | **Suggest a re-up:** recommend `/wheypoint` to compact the session into a durable handoff slug, then resume in a fresh context. |
+| ~140k tokens | **Suggest a re-up:** recommend `/wheypoint` to commit a durable WorkRecord-linked artifact, then resume in a fresh context. |
 
 Estimate from the visible signals — turn count, sub-agent digests folded in,
 large pastes — not a false-precision number. When in doubt, offload before you
@@ -43,8 +43,8 @@ At the ~140k nudge, recommend (do not auto-run):
 
 ```text
 The dialogue is large enough to risk the model's dumb zone. /wheypoint will
-compact what we've decided into .cheese/notes/<slug>.md so a fresh session can
-resume without losing the handshake state. Resume with /cheese --continue <slug>.
+compact what we've decided into a versioned WorkRecord-linked artifact so a fresh
+session can resume without losing the handshake state. Resume with /cheese --continue.
 ```
 
 `/wheypoint` preserves the dialogue, contradictions, approval state, and any open

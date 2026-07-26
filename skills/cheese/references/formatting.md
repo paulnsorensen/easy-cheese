@@ -100,7 +100,7 @@ Reserve plain parenthetical hyperlinks (`see [name](URL)`) for cases where the l
 
 Three shapes are written often enough to deserve a single owner each. The owner skill holds the authoritative shape; this file lists the entry point and the cross-cutting rules.
 
-**Corpus location.** Two roots hold artifacts. Durable, project-scoped knowledge — specs and research reports — anchors at a stable XDG path so it survives branch switches and clones and stays out of git: `$XDG_DATA_HOME/cheese/<project>/` (default `~/.local/share/cheese/<project>/`), where `<project>` matches the git repository (origin `owner/repo`, sanitized; falls back to the toplevel dir name). Transient pipeline handoffs — `cook`/`press`/`age`/`cure` reports, `notes`, `hard` — stay repo-local under `.cheese/` so they travel with the branch and surface in the PR. Override the base with `EASY_CHEESE_HOME` and the project key with `EASY_CHEESE_PROJECT`. The path math is owned by `shared/scripts/paths.py`: `artifact_path` builds flat-phase paths (specs, transient reports), and `project_corpus_root` gives the durable root that `/briesearch` composes the nested `research/<slug>/<slug>.md` report path under. This is the target layout: skills are being migrated onto these helpers, and per-skill docs that still name `.cheese/specs/<slug>.md` predate the durable/transient split and have not yet been updated.
+**Corpus location.** Durable, project-scoped specs and research reports live at `$XDG_DATA_HOME/cheese/<project>/` (default `~/.local/share/cheese/<project>/`), where `<project>` derives from the repository identity. Transient workflow evidence stays repo-local under `.cheese/`. `shared/scripts/paths.py` owns durable corpus paths and WorkRecord snapshots. Versioned phase handoffs are never flat: `handoff-commit` derives `.cheese/<phase>/<work-id>/<operation-id>-<slug>.md` and returns the authoritative path. Override durable storage with `EASY_CHEESE_HOME` and the project key with `EASY_CHEESE_PROJECT`.
 
 **Interop contract for external spec-producing skills.** A third-party or host-level skill that produces specs outside this pipeline (e.g. an external `/spec` skill) must persist them through this same contract — `artifact-path specs <slug>` or, when the resolver is unavailable, the legacy repo-local fallback (`.cheese/specs/<slug>.md`) — so `/cook`-family skills can discover them. A spec written to a skill-private location (e.g. `.claude/specs/`) is invisible to `/cook`, `/mold`, and `/ultracook` regardless of content quality.
 
@@ -122,21 +122,9 @@ Specs that touch existing systems open Approach with one diagram (flowchart or s
 
 A findings report is the output of a review skill — `/age`, `/cure`, `/press`, or `/cook` taste-test. Each skill owns its own variant; the cross-cutting rules below apply to all of them.
 
-- **Owners and paths:**
-  - `/age` → `.cheese/age/<slug>.md` (review findings, severity-grouped). See `skills/age/SKILL.md` § Output.
-  - `/cure` → `.cheese/cure/<slug>.md` (applied fixes + gate results). See `skills/cure/SKILL.md` § Output.
-  - `/press` → `.cheese/press/<slug>.md` (test-hardening report). See `skills/press/SKILL.md` § Output.
-  - `/cook` → `.cheese/cook/<slug>.md` (implementation report). See `skills/cook/SKILL.md` § Output.
-- **Required preamble.** Every findings report opens with the handoff slug block so downstream skills (`/ultracook`, `/cheese --continue`) can chain without re-parsing:
-
-  ```
-  status: ok | halt: <one-line reason>
-  next: <skill-name> | done
-  artifact: <path-to-prior-report-if-any>
-  <one-line orientation: what changed or what was reviewed>
-  ```
-
-- **Section shape:** owned by each skill's `## Output` section (see the per-owner paths above). The cross-cutting rule is that whatever sections an owner template defines, the same handoff slug sits at the top and a `## References` block sits at the bottom whenever footnotes are used.
+- **Owners and paths:** `/age`, `/cure`, `/press`, and `/cook` own their report bodies. The shared runtime derives `.cheese/<phase>/<work-id>/<operation-id>-<slug>.md`; no phase derives a flat report path.
+- **Required envelope.** Commit every findings report through [`work-contract.md`](work-contract.md). `handoff-commit` writes JSON frontmatter containing `contract_version`, `work_id`, `attempt_id`, `operation_id`, `phase`, `status`, `halt_reason`, `next`, the artifact's own derived path, the phase-owned `payload`, and `provenance`.
+- **Section shape:** owned by each skill's `## Output` section. The body follows the versioned envelope, and a `## References` block sits at the bottom whenever footnotes are used.
 - **Findings format.** Each finding is one bullet:
 
   ```markdown
@@ -210,3 +198,9 @@ Prose duplicating a code block → keep one:
 > ✅ The signature, with a one-line caption only if the caption adds something the signature does not.
 
 Per-shape length budgets live in each shape's `**Length budget:**` bullet under [Canonical shapes](#canonical-shapes). A draft past its budget means the cut is not done.
+
+## Versioned workflow handoffs
+
+Every emitting phase writes a versioned HandoffEnvelope with JSON frontmatter and a Markdown body. Its phase-owned `handoff-contract.yaml` declaration controls the payload and permitted outgoing transitions; the shared Cheese runtime validates the installed registry with `python3 skills/cheese/scripts/cheese.pyz contract-registry validate` before the artifact is emitted. Keep invocation-input schemas and full report-body schemas out of this shared contract.
+
+The envelope carries `contract_version`, `work_id`, `attempt_id`, `operation_id`, `phase`, `status`, `halt_reason`, `next`, `artifact`, `payload`, and `provenance`. `status` is `ok | halt`; a halt has a structured, non-empty reason and does not silently change the WorkRecord lifecycle. Reserved `next` values are control outcomes: `done` records terminal state with no dispatch, `hold` pauses with no dispatch, and `tasks` exposes structured pending directives without becoming a phase command.

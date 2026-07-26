@@ -31,7 +31,7 @@ Phase sequence and types:
 4. coder: cure (`--stake medium+`)
 5. reviewer: final age
 
-A first age reporting `next: done` clean-completes the curd — the parent records that age's review context as the final review identity and skips cure and final age. On any other `next:` value all five phases run and only the final age may terminate the table.
+A first age whose committed artifact resolves to `action: done` clean-completes the curd — the parent records that age's review context as the final review identity and skips cure and final age. On any other resolver action all five phases run unless the action halts dispatch; only the final age may terminate the table.
 
 For age phases, review exactly this explicit context and copy it into the age handoff:
 
@@ -51,17 +51,7 @@ agent_resolution: {agent_resolution}
 
 ## Handoff
 
-Write `.cheese/ultracook/{slug}/curds/{N}/{phase}.md` with:
-
-```yaml
-status: ok | halt: <one-line reason>
-next: <next phase | done | cure>
-artifact: <phase report path>
-agent_resolution: <shared block>
-review_context: <required for age>
-```
-
-Every age writes `next: done` only when publishable. A final-age `next: cure` halts the curd. After the final age succeeds (or the first age clean-completes), return control; the parent invokes `/plate` commit-only and writes the aggregate `.cheese/ultracook/{slug}/curds/{N}.md`.
+Join the inherited WorkRecord, commit this phase's versioned envelope and body through `handoff-commit`, and return its runtime-derived artifact path. Preserve `{agent_resolution}` in provenance; for age, include `{review_context}` in the declared phase payload. The parent calls `handoff-resolve` and owns the next dispatch. Every age chooses `next_phase: done` only when publishable; a final-age destination of `cure` stops the curd.
 
 Do not push, publish, harvest, plate, spawn another phase, or run outside `{worktree_path}`.
 ````

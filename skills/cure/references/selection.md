@@ -13,7 +13,7 @@ When `/age` or `/affinage` resolves a non-empty selection — auto-selected by d
 ```yaml
 handoff_context:
   source_skill: /age
-  source_report: .cheese/age/<slug>.md
+  source_report: .cheese/age/<work-id>/<operation-id>-<slug>.md
   selection: "1,3,5 | all-blocker | all-high | all-medium | cheap | all | skip N"
   resolved_ids: [1, 3, 5]
 ```
@@ -24,7 +24,7 @@ There is no CLI flag (`--select` is not a supported syntax). The selection trave
 
 ## Rendering the selection list
 
-When invoked with a slug, load `.cheese/age/<slug>.md` and render a numbered table grouped by severity (`blocker` first, then `high → medium → low`):
+When invoked from a WorkRecord, load its exact linked age artifact and render a numbered table grouped by severity (`blocker` first, then `high → medium → low`). For a direct invocation, require an explicit report path; never reconstruct a versioned artifact from a readable slug:
 
 ```text
 | # | severity | confidence  | dim           | location                  | summary |

@@ -54,7 +54,7 @@ Before any curd cooks — linear mode's single `/cook` spawn, and parallel mode'
 1. **Run the gates** — run the run's broad quality gates once, in the same environment (worktree, toolchain) the cooks will re-run them in.
 2. **Classify** — pass the result through the tested helper, `src/fanout/baseline.py::classify()` via the ultracook `.pyz` (e.g. `python3 skills/ultracook/scripts/ultracook.pyz baseline` with the gate failures as JSON on stdin). Classification is never eyeballed by the agent. Full taxonomy and the three-way identical/new-or-changed/halt policy: [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md).
 3. **Hand it down, per mode:**
-   - **Linear mode** — carry the classified baseline in the Phase 1 `/cook <slug> --auto` dispatch (`## Phases and slug paths` below), so cook's own baseline-vs-regression check reuses this run's capture instead of capturing again.
+   - **Linear mode** — carry the classified baseline in the Phase 1 `/cook <slug> --auto` dispatch (`## Phases and artifact ownership` below), so cook's own baseline-vs-regression check reuses this run's capture instead of capturing again.
    - **Parallel mode** — record the classified result in `.cheese/ultracook/<slug>/manifest.yaml`'s `baseline:` block (shape: [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md) § Baseline block shape) before Seed, then hand it down in every curd's `cook` dispatch via `references/curd-prompt.md`'s `{baseline}` field.
 4. **Repair pathway** — when capture records ≥1 identical-to-baseline failure, dedupe against a live `repair_dispatch`, then follow the repair pathway ([`../cook/references/quality-gates.md`](../cook/references/quality-gates.md) § Repair pathway) to dispatch a concurrent `/pasteurize` in an isolated worktree via `ultracook.pyz worktree create --slug repair-<slug> --base origin/main`, excluded from this run's teardown (`## Rules`).
 
@@ -63,45 +63,39 @@ The final summary (`## Output`) reports baseline failures loud, per `../cook/ref
 ## Flow (linear mode)
 
 1. **Resolve slug** — derive `<slug>` from the input. If a spec path is given, the slug is the basename without `.md`; if a bare slug is given, confirm the spec exists at the durable path the spawned `/cook` resolves (`python3 shared/scripts/artifact_path.py specs <slug>`; if the host only exposes the packaged helper, `python3 ${CLAUDE_SKILL_DIR}/scripts/cook.pyz artifact-path specs <slug>` is the fallback; see `../cheese/references/formatting.md` § Corpus location).
-2. **Guard against re-entry** — if any of `.cheese/{cook,press,age,cure}/<slug>.md` already exist, stop with a one-line list of the existing handoffs and tell the user to either run `/cheese --continue <slug>` to resume from the latest phase or `rm` the relevant files to start fresh.
-3. **Phase loop** — for each phase in `cook, press, age, cure, age, cure, age`, resolve the phase role through `../cheese/references/agent-resolution.md`, spawn a fresh sub-agent (see `## Sub-agent contract` below), wait for it to return, then read each phase's handoff slug and compute the next action deterministically:
-   1. **Parse the slug** — `python3 shared/scripts/read_handoff_slug.py --phase <phase> --slug <slug>` → JSON `{status, next, artifact, orientation, halt_reason}`. Do not infer success from the sub-agent's last line of stdout — read the file.
-   2. **Compute the verdict** — `python3 skills/ultracook/scripts/ultracook.pyz phase_decision --phase-index <i> --status <status> [--next <next>]` → JSON `{action, next_phase, exit_message}` (if the host only exposes the packaged helper, `python3 ${CLAUDE_SKILL_DIR}/scripts/ultracook.pyz phase_decision ...` is the fallback). `<i>` is the **0-based** position in the chain (0 = cook, 1 = press, … 6 = the final age) — one less than the spawn `#` in the "Phases and slug paths" table below.
-   3. **Act on the verdict**:
-      - `action=halt` → surface the `exit_message` (which contains the halt reason verbatim) and stop. Never push on a halt.
-      - `action=stop_early` → age reported `next: done`; the diff is clean at the medium+ severity floor. Stop early with a clean summary.
-      - `action=stop` → the terminal age reported `next: done`. Proceed to `/plate`. A terminal age that reports `next: cure` or omits `next` halts as not publishable.
-      - `action=spawn` → spawn `next_phase` and continue.
+2. **Guard against re-entry** — ensure or join the WorkRecord. If its current attempt already links phase artifacts, stop and direct `/cheese --continue`; never delete workflow evidence to restart.
+3. **Phase loop** — for each phase in `cook, press, age, cure, age, cure, age`, resolve the phase role, spawn fresh context, then consume only the artifact path returned by that phase's `handoff-commit`:
+   1. Call `handoff-resolve` with the returned artifact and locally callable phases.
+   2. `halt`, `unavailable`, `hold`, or `tasks` stops automatic chaining and reports the structured result. `done` clean-completes when valid for the current position. `dispatch` must name the expected next phase before spawning it.
+   3. The fixed seven-position table still enforces the two-cure cap; the resolver, not stdout or file recency, supplies the destination.
 4. **Terminal plate** — after the final non-halt stop, dispatch `/plate` for an existing PR. With `--open-pr`, dispatch `/plate` for a new PR; before its first commit it honors an explicit choice, proceeds with an obviously cohesive single PR, or asks when stacked is recommended or shape is ambiguous. A halt never commits or publishes.
 5. **Final summary** — report phases, findings, final age path, and `/plate` outcome (or `review the diff, then /plate when ready`).
 
-## Phases and slug paths
+## Phases and artifact ownership
 
-Every spawn uses the canonical `/<phase> <slug> --auto` form. Cook accepts a bare slug per its Inputs section; the other phases already resolve their paths from the slug.
+Every spawn uses the canonical `/<phase> <slug> --auto` form. Each phase joins the inherited WorkRecord and commits a unique artifact under `.cheese/<phase>/<work-id>/<operation-id>-<slug>.md`; later passes never overwrite earlier evidence.
 
-| # | Phase invocation                          | Handoff slug                  |
-|---|-------------------------------------------|-------------------------------|
-| 1 | `/cook <slug> --auto`                     | `.cheese/cook/<slug>.md`      |
-| 2 | `/press <slug> --auto`                    | `.cheese/press/<slug>.md`     |
-| 3 | `/age <slug> --auto`                      | `.cheese/age/<slug>.md`       |
-| 4 | `/cure <slug> --auto --stake medium+`     | `.cheese/cure/<slug>.md`      |
-| 5 | `/age <slug> --auto`                      | `.cheese/age/<slug>.md` (overwritten) |
-| 6 | `/cure <slug> --auto --stake medium+`     | `.cheese/cure/<slug>.md` (overwritten) |
-| 7 | `/age <slug> --auto`                      | `.cheese/age/<slug>.md` (final report) |
+| # | Phase invocation |
+|---|------------------|
+| 1 | `/cook <slug> --auto` |
+| 2 | `/press <slug> --auto` |
+| 3 | `/age <slug> --auto` |
+| 4 | `/cure <slug> --auto --stake medium+` |
+| 5 | `/age <slug> --auto` |
+| 6 | `/cure <slug> --auto --stake medium+` |
+| 7 | `/age <slug> --auto` |
 
 ### Cap enforcement
 
 The two-cure-pass cap is enforced by **chain length, not by age** — age boots in fresh context and cannot count prior passes. So:
 
 - The chain table has exactly seven entries, with two cure spawns (#4 and #6) and three age spawns (#3, #5, #7).
-- Each age spawn writes `next:` from what it observes on its own run: `next: cure` when at least one finding meets the `medium+` floor (medium-or-above, or a cheap contained-fix low), `next: done` when none do. Before the terminal position this drives early-stop; at the terminal position only `next: done` is publishable. `next: cure` or a missing `next` halts because the cure-pass cap is exhausted with unresolved review work.
+- Each age spawn commits `next_phase: cure` when at least one finding meets the `medium+` floor (medium-or-above, or a cheap contained-fix low), or `next_phase: done` when none do. `handoff-resolve` returns `dispatch` or `done`; before the terminal position `done` drives early stop, while at the terminal position only `done` is publishable. A terminal `dispatch` back to cure, `halt`, or malformed result stops publication because the cure-pass cap is exhausted with unresolved review work.
 - `/ultracook` does not pass a pass-ordinal hint to age. Age has no need to know whether it is age₁, age₂, or age₃; the orchestrator owns the position.
 
 ## No-chain isolation directive
 
-Each phase's existing `--auto` contract chains forward in-session — `/cook --auto` invokes `/press --auto`, which invokes `/age --auto`, etc. `/ultracook` overrides that behaviour: every spawn must run only its own phase, write the slug, and stop. The orchestrator owns the chain.
-
-The override travels in the spawn prompt as the explicit no-chain directive: `Do not chain forward to the next phase even though your auto-mode contract documents that. Write your handoff slug and stop. The /ultracook orchestrator is driving the chain. Run in the foreground — do not background yourself, spawn detached processes, or defer work to a later session. If you cannot complete the phase within your context window, write a partial slug with status: halt: <reason> and stop; do not silently timeout.`
+Each phase's existing `--auto` contract can chain forward in-session. `/ultracook` overrides that behaviour: every spawn runs this phase only, does not chain forward, commits its versioned handoff through the inherited WorkRecord, returns the runtime artifact path, and stops. On exhaustion it commits `status: halt` with a non-empty `halt_reason`; the orchestrator resolves that persisted envelope and decides retry policy.
 
 Each phase's SKILL.md `## Auto mode` section honours this directive — see `skills/<phase>/SKILL.md` `### When invoked from /ultracook` for the per-phase contract amendment.
 
@@ -109,42 +103,19 @@ Each phase's SKILL.md `## Auto mode` section honours this directive — see `ski
 
 Resolve every dispatch against the local role table in `## Agent resolution` and the shared protocol in [`../cheese/references/agent-resolution.md`](../cheese/references/agent-resolution.md). The resolver first filters for required capabilities, tools, permissions, and isolation, then selects minimum power and maximum specificity. A prompt-only read-only general fallback may continue with `degraded: true`; a missing required tool or write permission halts.
 
-## Handoff slug schema
+## Handoff contract
 
-Every phase writes its handoff slug to `.cheese/<phase>/<slug>.md` with the following minimum shape (prepended as frontmatter or inline at the top of richer reports such as age and press):
+Every phase commits a versioned envelope and its phase-owned report body through the Cheese companion runtime. The runtime derives `.cheese/<phase>/<work-id>/<operation-id>-<slug>.md`; the orchestrator reads the returned artifact path and calls `handoff-resolve` rather than parsing stdout or a flat slug file.
 
-```markdown
-status: ok | halt: <one-line reason>
-next: <phase-name | done>
-artifact: <path-to-richer-report-if-any>
-<one-line orientation: what this phase did>
-```
-
-`status: ok`: phase finished cleanly, `next` names the next phase. `status: halt: <reason>`: the chain stops and surfaces the reason verbatim; for cook and press slugs `next` still names the runnable resume phase for `/cheese --continue` (age and cure halt slugs keep their finding-driven `next:` values — `cure | done` and `age | done`). `next: done` is terminal — age writes it when the diff is clean at the medium+ floor (early-stop).
-
-For phases that already write rich reports (`/age`, `/press`, `/cure` once extended, `/cook` once extended), the slug schema is prepended at the top of the same file — there is no second file. The schema is the contract; the body is whatever the phase normally writes.
+`action: halt` stops the chain and reports the structured reason verbatim. `action: done` is terminal. `action: dispatch` must match the orchestrator's expected phase position. `hold`, `tasks`, and `unavailable` stop automatic phase chaining for the orchestrator to handle explicitly. The report body remains phase-owned.
 
 ## When auto mode stops early
 
-Beyond the halt and age `next: done` cases in Flow step 3, one more early-stop case is an error, not a clean stop:
+Beyond a structured halt or terminal result, failure to return a committed artifact path is an error. Re-dispatch the phase at most twice with the foreground-only directive reinforced. After the second miss, report that no handoff was committed and stop. When a path is returned, show that exact path; table exhaustion alone never authorizes publication.
 
-- A phase's slug file is missing after the sub-agent returns (the sub-agent did not write its handoff). Before surfacing this as a hard stop, attempt a **re-dispatch** with the foreground-only directive reinforced in the prompt. Cap re-dispatches at **2** per phase. After the second failed re-dispatch with no slug, print: `"<phase> did not write handoff after 2 re-dispatch attempts — check sub-agent logs"` and stop. Track the attempt count per phase in the orchestrator loop; reset to 0 when advancing to a new phase.
+## Existing work
 
-In every early-stop case, surface the slug file path so the user can read the full report. The natural terminal case requires the final age slug to say `next: done`; table exhaustion alone never authorizes publication.
-
-## Existing handoffs
-
-When any `.cheese/{cook,press,age,cure}/<slug>.md` exist (per Flow step 2), scan all four paths and print only the ones present:
-
-```
-Slug `<slug>` has existing handoffs:
-  .cheese/cook/<slug>.md     (when present)
-  .cheese/press/<slug>.md    (when present)
-  .cheese/age/<slug>.md      (when present)
-  .cheese/cure/<slug>.md     (when present)
-Use `/cheese --continue <slug>` to resume from the latest phase, or
-`rm` the listed files to start fresh.
-```
+The WorkRecord is the re-entry guard. If its current attempt already links phase artifacts, stop and direct `/cheese --continue`; do not scan four flat paths, choose by recency, or delete evidence to restart.
 
 ## Output
 
@@ -154,7 +125,7 @@ A short final summary, after the chain stops (success or early stop):
 Ultracook summary — <slug>
 Passes completed: <list of phase names that ran>
 Findings:         <fixed count> applied, <count> deferred (cure-report path)
-Final age:        .cheese/age/<slug>.md
+Final age:        <runtime-returned-artifact-path>
 Next step:        review the diff, then /plate when ready
 ```
 
@@ -171,8 +142,8 @@ Baseline capture (`## Baseline capture`) runs before Seed and is recorded in the
 1. **Seed (coder).** Resolve and dispatch a `coder` for shared types/interfaces in an isolated worktree. It runs project gates and returns a handoff; the parent invokes `/plate` in commit-only mode.
 
    After the seed commit, advance the manifest: `python3 skills/ultracook/scripts/ultracook.pyz manifest_update set-phase --manifest .cheese/ultracook/<slug>/manifest.yaml --phase seed_complete`.
-2. **Per-curd fan-out.** Give each curd its **own worktree**, then make five top-level, fresh-context dispatches sequentially in that same worktree: `coder(cook) → coder(press) → reviewer(age) → coder(cure) → reviewer(final age)`. Use `references/curd-prompt.md` and the `PARALLEL_CURD` phase table: `python3 skills/ultracook/scripts/ultracook.pyz phase_decision --phase-index <i> --status <status> [--next <next>] --table parallel-curd`. The `cook` dispatch carries the manifest's `baseline:` block via `references/curd-prompt.md`'s `{baseline}` field — a curd never captures its own baseline. Before each age dispatch record and pass the review context: base commit SHA, reviewed tree OID, deterministic diff hash, and review scope. A first age reporting `next: done` **clean-completes** the curd (`action=clean_complete`): nothing has touched the tree since that review, so its bound review context becomes the curd's final review identity and cure and final age are skipped — the post-merge review still re-covers the merged diff. Otherwise cure and final age run, the final age must return `next: done`, and `next: cure` or a missing value halts that curd as not publishable. After a clean final age (or a clean-complete first age), the parent invokes `/plate` in commit-only mode.
-   - `action=clean_complete` → the first per-curd age reported `next: done`; record that age's review context as the curd's final review identity, mark the curd completed, and skip cure and the final per-curd age (parallel-curd table only — the post-merge table keeps no hatch).
+2. **Per-curd fan-out.** Give each curd its **own worktree**, then make five top-level, fresh-context dispatches sequentially in that same worktree: `coder(cook) → coder(press) → reviewer(age) → coder(cure) → reviewer(final age)`. Use `references/curd-prompt.md` and the `PARALLEL_CURD` phase table. The `cook` dispatch carries the manifest's `baseline:` block via `references/curd-prompt.md`'s `{baseline}` field — a curd never captures its own baseline. Before each age dispatch record and pass the review context: base commit SHA, reviewed tree OID, deterministic diff hash, and review scope. After every phase, read the exact `handoff-commit` artifact and call `handoff-resolve`; validate the returned action against the table position. A first age resolving to `done` clean-completes the curd: its bound review context becomes final, and cure plus final age are skipped. Otherwise cure and final age run; the final age must resolve to `done`, while another cure dispatch, halt, or malformed result stops publication. After a clean final age (or clean-complete first age), the parent invokes `/plate` in commit-only mode.
+   - `action=clean_complete` means the first per-curd age resolved to `done`; record that age's review context as the curd's final review identity, mark the curd completed, and skip cure and the final per-curd age (parallel-curd table only — the post-merge table keeps no hatch).
    - **Worktree floor (no native primitive).** When the host lacks a native worktree-isolated sub-agent primitive, the orchestrator first creates each curd's worktree with `python3 skills/ultracook/scripts/ultracook.pyz worktree create --slug <id> --base <orchestrator-branch>` (returns `{path, branch}`), then dispatches each phase agent into that path. Harvest (step 3) and teardown (step 4) proceed unchanged.
 
    As each curd dispatches, mark it running (`manifest_update set-curd-status --manifest <path> --curd <id> --status running`); after a clean final age or a clean-complete first age, atomically record completion and its final review identity (`--status completed --commit-sha <sha> --base-commit <sha> --reviewed-tree-oid <oid> --diff-hash sha256:<hex> --scope <path>`; repeat `--scope` for multiple paths), or record `--status failed`. After **all** curds return, `manifest_update set-phase --manifest <path> --phase curds_complete`.
@@ -185,7 +156,7 @@ Helper resolution — including the `${CLAUDE_SKILL_DIR}` packaged-helper fallba
 5. **Wiring (coder).** Resolve a `coder` for each topo-sorted `wiring[]` integration task (`ultracook.pyz wiring_topo_sort`) and dispatch sequentially within each wave.
 
    Mark each wiring row as it runs (`manifest_update set-wiring-status --manifest <path> --wiring <id> --status running|completed|failed [--commit-sha <sha>]`). After the last wave, `manifest_update set-phase --manifest <path> --phase wiring_complete`, then immediately `manifest_update set-phase --manifest <path> --phase final_merge_complete`: wiring commits land directly on the orchestrator branch in this flow (no distinct wiring-merge action — the retired cheese-factory's separate Phase 5 final-merge is folded in), so the two markers coincide.
-6. **Post-merge review.** Make four top-level, fresh-context dispatches on the orchestrator tree: `coder(press) → reviewer(age) → coder(cure) → reviewer(final age)`, using the `PARALLEL_POSTMERGE` table (`--table parallel-postmerge`). Before each age dispatch refresh `current_review` and pass its base commit SHA, reviewed tree OID, deterministic diff hash, and review scope in the prompt. Unlike the per-curd table, the first age never short-circuits here, including on `next: done` — this is the last review before publication, so cure and final age always run. Only a final-age `next: done` may advance; `next: cure` or a missing value halts as not publishable.
+6. **Post-merge review.** Make four top-level, fresh-context dispatches on the orchestrator tree: `coder(press) → reviewer(age) → coder(cure) → reviewer(final age)`, using the `PARALLEL_POSTMERGE` table (`--table parallel-postmerge`). Before each age dispatch refresh `current_review` and pass its base commit SHA, reviewed tree OID, deterministic diff hash, and review scope in the prompt. Unlike the per-curd table, the first age never short-circuits here, including when its artifact resolves to `done` — this is the last review before publication, so cure and final age always run. Only a final-age resolver action of `done` may advance; another cure dispatch, halt, or malformed result is not publishable.
 
    After the final age returns clean, atomically record the final review packet in both `current_review` and `post_review.review_context`: `manifest_update set-post-review --manifest <path> --base-commit <sha> --reviewed-tree-oid <oid> --diff-hash sha256:<hex> --scope <path> [--press-slug <path> --age-slug <path> --cure-slug <path> --findings-applied <n> --findings-deferred <n>]` (repeat `--scope` for multiple paths). Only after that command succeeds, run `manifest_update set-phase --manifest <path> --phase post_review_complete`.
 7. **PR plan + parent-owned plate.** Plan the layout (`references/pr-planner-prompt.md`) using the authoritative `manifest.plate_layout` and copy that value into `pr-plan.yaml`. The plan may document why the decomposition supports a stack, but it cannot override an explicit or previously verified choice. The parent dispatches `/plate`; it inventories and verifies all durable artifacts, verifies the manifest and plan selections agree, and reuses the preflight resolution — do not ask twice. It publishes through the ordinary or detected stack-provider path.
@@ -209,16 +180,16 @@ The `milknado` probe from **Mode selection** decides how curds run:
 
 ### Recovery paths (issue #194)
 
-- **Worker exhaustion.** A curd worker that runs out of context or turns writes a partial `status: halt: <reason>` slug. Retry that curd **once** with the error folded into its context; if it halts again, mark it failed, keep harvesting the rest, and report the failed curd in the final summary. Never silently drop it.
+- **Worker exhaustion.** A curd worker commits `status: halt` with a non-empty reason. Retry the exact request once; a second halt marks the curd failed without dropping other committed results.
 - **Aggregate-gate failure.** After harvesting all curds, run the project gates over the merged tree. On failure, distinguish a **real cross-curd conflict** (the curds passed individually but collide in aggregate — a decomposer error → halt and surface it) from **harmless drift** (a formatter or generated-file delta the post-merge cure can absorb → continue). Do not auto-resolve a real conflict.
 
 ### Output contract
 
-Parallel and linear modes keep the same behavioral handoff and final-summary fields (`## Handoff slug schema`, `## Output`). Required `agent_resolution` provenance intentionally makes the selected role, fallback, degradation, and topology visible.
+Parallel and linear modes share the versioned work contract and final-summary body. Required `agent_resolution` provenance records role, fallback, degradation, and topology.
 
 ## --resume <slug>
 
-`--resume <slug>` is the sanctioned re-entry into a crashed **parallel** run. (Linear runs carry no manifest — resume those through `/cheese --continue <slug>`, which reads the per-phase handoff slugs.) It reads `.cheese/ultracook/<slug>/manifest.yaml` and continues from where the crash left off:
+`--resume <slug>` remains the sanctioned re-entry for a crashed **parallel manifest** run. Linear runs resume through the WorkRecord with `/cheese --continue`; they never scan phase handoffs by slug.
 
 1. **Load the manifest.** Read `.cheese/ultracook/<slug>/manifest.yaml`. If it is missing, fail fast with `"no manifest at .cheese/ultracook/<slug>/manifest.yaml — nothing to resume"`. Optionally re-check its shape with `python3 ${CLAUDE_SKILL_DIR}/scripts/ultracook.pyz validate_manifest <path>`.
    For `--open-pr` with no existing PR, also read `plate_layout`. If the phase is still `gate_approved` and the value is absent, run `/plate` topology preflight under the same explicit-choice/cohesive-single/stack-recommendation policy and persist the resolution before continuing. If any commit-bearing phase is already complete and the value is absent, halt: the before-commit resolution cannot be reconstructed retroactively. A recorded value is authoritative at terminal publication.
@@ -227,7 +198,7 @@ Parallel and linear modes keep the same behavioral handoff and final-summary fie
 4. **Restore continuity.** Read `phase_summary` and `carry_forward` from the manifest — the cross-seam continuity mechanism. A resumed orchestrator reasons from these, never from conversation history (a fresh spawn has none).
 5. **Pick up at the next incomplete phase.** Read the `phase` field — the latest completed phase, one of the ordered enum in `references/manifest-schema.json`: `gate_approved → seed_complete → curds_complete → merge_complete → wiring_complete → final_merge_complete → post_review_complete → pr_publish_complete`. Continue from the next incomplete phase in `## Parallel mode` § Topology, skipping every curd/wiring row already marked `completed`. Report `Resuming <slug> from phase <next-phase>`. If `phase` is already `pr_publish_complete`, the run is done — report and stop.
 
-**Guard interaction.** A bare re-run (no `--resume`) that finds an existing `.cheese/ultracook/<slug>/manifest.yaml` stops and tells the user to pass `--resume <slug>` to continue or `rm -r .cheese/ultracook/<slug>/` to start fresh — the same never-wipe posture linear mode applies to its handoff slugs (Flow step 2). `--resume <slug>` is the one sanctioned re-entry, and it never wipes.
+**Guard interaction.** A bare parallel re-run that finds an existing manifest stops and requires `--resume <slug>`. Manifest reset is separate from WorkRecord continuation and never deletes versioned phase artifacts.
 
 ## Preferred tools and fallbacks
 
@@ -236,7 +207,7 @@ The orchestrator only needs the capabilities below. Source-code reads and edits 
 | Need                              | Prefer                | Fallback                          |
 |-----------------------------------|-----------------------|-----------------------------------|
 | Spawning the per-phase worker     | `Agent()` / harness sub-agent primitive | none — without sub-agent spawn, the fresh-context property cannot be honoured |
-| Reading the handoff slug          | bounded host file read | another bounded file read |
+| Reading a committed handoff | exact runtime-returned path | bounded host file read |
 | Detecting existing handoffs       | host file glob / list | repo-aware backend glob |
 
 If the host harness does not expose a sub-agent primitive at all, `/ultracook` is the wrong skill — recommend `/cook --auto` instead, which uses the same flag semantics in the parent's own context.
@@ -244,12 +215,12 @@ If the host harness does not expose a sub-agent primitive at all, `/ultracook` i
 ## Rules
 
 - Resolve typed phase agents through the shared protocol: planner/general for decomposition, coder for cook/press/cure/seed/wiring, reviewer for every age, and parent ownership for harvest and plate. Use the minimum capable power and record `agent_resolution`; halt when required tools or write permissions are absent.
-- In linear mode the chain is fixed: cook → press → age → cure → age → cure → age, all `--auto`, cure severity floor `medium+` (the `--stake` flag literal is preserved across callers). Parallel mode uses per-curd `cook → press → age → cure → age` and post-merge `press → age → cure → age`; a per-curd first age reporting `next: done` clean-completes that curd (its review context becomes final), while the post-merge table never short-circuits. A terminal age is publishable only with `next: done`; `next: cure` or missing `next` halts.
-- Read each phase's handoff slug after the sub-agent returns. Do not infer success from the sub-agent's last line — read the file.
+- In linear mode the chain is fixed: cook → press → age → cure → age → cure → age, all `--auto`, cure severity floor `medium+` (the `--stake` flag literal is preserved across callers). Parallel mode uses per-curd `cook → press → age → cure → age` and post-merge `press → age → cure → age`; a per-curd first age whose resolver action is `done` clean-completes that curd (its review context becomes final), while the post-merge table never short-circuits. A terminal age is publishable only when the resolver returns `done`; a dispatch back to cure or a missing/malformed result halts.
+- Read each phase's exact runtime-returned artifact path after the sub-agent returns and call `handoff-resolve`. Do not infer success from the sub-agent's last line or locate an artifact by slug.
 - Surface halts verbatim. Do not paraphrase, do not soften, do not "retry" a halted phase silently.
 - In parallel mode, own worktree teardown: no `worktree-agent-*` branch or `.claude/worktrees/agent-*` dir may leak after a completed run. State the milknado parity difference (native self-verify vs milknado verify-until-green) when it applies. A repair-pathway worktree ([`../cook/references/quality-gates.md`](../cook/references/quality-gates.md) § Repair pathway) has an independent lifecycle and is exempt from this invariant.
 - At the terminal, dispatch `/plate` for an existing PR (Rule 11). For a new PR, `--open-pr` is required: linear mode resolves topology before its first commit; parallel mode must have a verified `plate_layout` recorded before any seed, curd, or wiring commit. Explicit choices are authoritative, cohesive singles do not ask, stack recommendations and ambiguous shapes ask once, and no halt may commit or publish.
-- Never wipe existing handoffs. Stop and tell the user to use `/cheese --continue` or `rm` by hand.
+- Never wipe existing WorkRecords or phase artifacts. Stop and direct `/cheese --continue`.
 - Apply the shared voice kernel (lives at `../age/references/voice.md`): lead the final summary with what happened, flag residual risk as `certain | speculating | don't know`, do not manufacture follow-ups.
 
 ## Agent resolution
@@ -264,3 +235,7 @@ Resolve every phase through [`../cheese/references/agent-resolution.md`](../chee
 | Harvest and plate | parent | parent-owned repository state | powerful | high | no fallback; halt |
 
 The manifest and every curd or phase output carry a consistent shared `agent_resolution` block. Resolution provenance intentionally records role and topology.
+
+## Work continuity
+
+Follow the executable [cross-skill work contract](../cheese/references/work-contract.md) before phase work. A meaningful direct invocation ensures one WorkRecord; a nested invocation joins the inherited work ID. Emitting phases commit their versioned envelope and report body through `handoff-commit`, then act only on `handoff-resolve`. Never write or route from a legacy line-based handoff header.

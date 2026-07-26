@@ -145,7 +145,7 @@ The spec is large enough that per-phase context contamination becomes a real con
 
 - **Run the full pipeline in fresh-context isolation** *(recommended)* — `/ultracook <spec-path>`, autonomous chain (`cook → press → age → cure → age → cure → age`, all `--auto`) with each phase running inside its own sub-agent, blind to prior phases.
 - **Implement manually, one phase at a time** — `/cook <spec-path>`.
-- **Compact and resume by hand** — dispatch none; clear context, then dispatch `/cook <spec-path>` or `/ultracook <spec-path>` directly. (`/cheese --continue` scans phase handoff slugs only — fresh specs don't surface there until cook lands a slug — so dispatching the explicit command is the resumption path here.)
+- **Compact and resume by hand** — dispatch `/wheypoint`, clear context, then run `/cheese --continue`. The current WorkRecord remains the continuation authority, and the wheypoint artifact preserves the exact checkpoint; direct `/cook <spec-path>` or `/ultracook <spec-path>` dispatch remains an explicit alternative.
 - **Stop** — dispatch none; leave the spec for later.
 
 **Non-decomposable, low- or medium-blast-radius specs (`decomposable: false`, verdict `low` or `medium`):**
@@ -179,3 +179,7 @@ Resolve exploration and research delegates through [`../cheese/references/agent-
 | Research external constraints | researcher | read-only, fresh-context | default | medium | compatible researcher, then general |
 
 The canonical mold spec or mini-spec carries the shared `agent_resolution` block.
+
+## Work continuity
+
+Follow the executable [cross-skill work contract](../cheese/references/work-contract.md) before phase work. A meaningful direct invocation ensures one WorkRecord; a nested invocation joins the inherited work ID. Emitting phases commit their versioned envelope and report body through `handoff-commit`, then act only on `handoff-resolve`. Never write or route from a legacy line-based handoff header.

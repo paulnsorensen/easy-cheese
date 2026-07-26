@@ -33,7 +33,7 @@ For each parallel curd, the parent creates one worktree and performs five top-le
 coder(cook) → coder(press) → reviewer(age) → coder(cure) → reviewer(final age)
 ```
 
-After each return, the parent reads the phase handoff, records its `agent_resolution`, and passes the artifact path plus worktree path to the next fresh spawn. Before each age dispatch, the parent records and passes explicit review context: base commit SHA, reviewed tree object ID, normalized diff hash, and scope. The final age must return `next: done`; `next: cure` or a missing value halts and is not publishable. The parent then runs `/plate` in commit-only mode.
+After each return, the parent reads the exact runtime-returned artifact, records its `agent_resolution`, calls `handoff-resolve`, and passes the artifact path plus worktree path to the next fresh spawn only for a valid `dispatch` action. Before each age dispatch, the parent records and passes explicit review context: base commit SHA, reviewed tree object ID, normalized diff hash, and scope. The final age must resolve to `action: done`; another cure dispatch, halt, or malformed result is not publishable. The parent then runs `/plate` in commit-only mode.
 
 ## Host examples
 

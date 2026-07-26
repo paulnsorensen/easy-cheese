@@ -76,3 +76,7 @@ for the durable-vs-transient boundary and the authoring loop.
 - SKILL.md files must pass `validate_skills.py` (YAML frontmatter validation).
 - Conventional Commits format for all commits and PR titles (enforced by `validate.yml` for PRs).
 - Cheese / Dune / Mad Max / LOTR / Princess Bride flavor is welcome in user-facing docs and `SKILL.md` files. Keep commit messages and YAML frontmatter neutral.
+
+## Cross-skill work contract
+
+A meaningful direct workflow creates or joins one WorkRecord. Nested phases inherit its work ID. WorkRecord is the continuation authority; artifacts are linked evidence. Before an emitting phase writes a handoff, it uses its phase-owned declaration and validates the shared Cheese registry with `python3 skills/cheese/scripts/cheese.pyz contract-registry validate`. If the companion runtime is absent, halt with exactly: `Cheese contract runtime is required; install easy-cheese's Cheese companion runtime`.

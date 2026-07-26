@@ -37,7 +37,7 @@ The goal is not a clean repro but a **higher reproduction rate**. Loop the trigg
 
 ### When you genuinely cannot build a loop
 
-Stop and say so explicitly. List what you tried. Ask the user for: (a) access to whatever environment reproduces it, (b) a captured artifact (HAR file, log dump, core dump, screen recording with timestamps), or (c) permission to add temporary production instrumentation. Do **not** proceed to hypothesise without a loop. Write a `status: halt` handoff slug (see below) and stop.
+Stop and say so explicitly. List what you tried and ask for the missing evidence. Commit `status: halt` with a non-empty reason and a resumable destination through `handoff-commit`; do not proceed to hypotheses without a loop.
 
 Do not proceed to Phase 2 until the loop passes all four checks:
 
@@ -97,7 +97,7 @@ Write the regression test **before the fix** — but only if there is a **correc
 
 A correct seam is one where the test exercises the **real bug pattern** as it occurs at the call site. If the only available seam is too shallow (single-caller test when the bug needs multiple callers, unit test that can't replicate the chain that triggered the bug), a regression test there gives false confidence.
 
-**If no correct seam exists, that itself is the finding.** Note it in the handoff slug as an architectural follow-up. The codebase is preventing the bug from being locked down. Skip the test write; do not paper over it. Phase 6's "what would have prevented this bug?" retrospective still applies.
+**If no correct seam exists, that itself is the finding.** Record it in the report body and phase payload as an architectural follow-up. Skip the test write; Phase 6's retrospective still applies.
 
 **Before writing the test, confirm the seam is correct:** verify that the test you're about to write targets the boundary where the bug actually occurs — the real call site, the real data path, the real failure mode. A test at the wrong seam (too shallow, wrong abstraction level, mocked-away side that hides the failure) will pass after the fix but won't catch a regression. If you discover the seam is wrong at this point, treat it as "no correct seam": write the no-correct-seam halt string from [Early-stop conditions](#early-stop-conditions) and route to `/mold`, per the halt path above.
 
@@ -111,11 +111,11 @@ If a correct seam exists:
 
 **After 3 failed fix attempts** (3 cycles of "apply change → watch test → revert because test still fails"), stop attempting fixes and re-question the approach: is the hypothesis from Phase 3 actually correct? Is the seam exposing the right failure? Is the bug at a different layer than assumed? Step back to Phase 3 and generate a fresh ranked hypothesis list — do NOT attempt a 4th blind fix. If the re-questioning produces a new hypothesis, restart from Phase 4. If all hypotheses are exhausted, write the fix-attempts-exhausted halt string from [Early-stop conditions](#early-stop-conditions) and route to `/mold`.
 
-Broader implementation (related cleanup, follow-on changes, anything beyond the minimal fix) is **not** pasteurize's job. Note it in the slug and let `/cook --auto` pick it up in Phase 6's handoff.
+Broader implementation is not pasteurize's job. Record it in the report body and let the resolved `cook` destination own it.
 
 ## Phase 6 — Cleanup
 
-Before writing the handoff slug, confirm:
+Before committing the handoff, confirm:
 
 - [ ] Original repro no longer reproduces (re-run the Phase 1 loop).
 - [ ] Regression test passes (or absence of seam is documented in the slug).
@@ -157,29 +157,15 @@ Return a short report covering:
 - Cleanup status (`[DEBUG-...]` removed, harnesses deleted or relocated).
 - Suggested next skill — `/cook <slug> --auto` for the autonomous chain forward.
 
-## Handoff slug
+## Handoff artifact
 
-Write a minimum-shape handoff slug to `.cheese/pasteurize/<slug>.md` so `/cook` (and any orchestrator) can resume without re-reading the full report. Schema:
-
-```markdown
-status: ok | halt: <one-line reason>
-next: cook | mold | done
-artifact: <path-to-richer-report-if-any>
-cause: <one-sentence named cause>
-loop: <command or repro path>
-seam: <regression-test path:line, or "none — architectural follow-up">
-fix: <production diff footprint, e.g. "src/foo.ts:42">
-follow_up: <architectural follow-up note, or "none">
-<one-line orientation: what pasteurize converged on>
-```
-
-`status: ok` when the regression test is green, the original repro no longer reproduces, and cleanup is done. `status: halt: <reason>` when any early-stop condition fires — see [Early-stop conditions](#early-stop-conditions) below. `next:` is `cook` for the standard chain, `mold` if the diagnosis itself recommends an architectural spec instead of a per-bug fix, or `done` if the bug was caused outside the repo and no follow-up is needed.
+Commit the diagnosis report through the shared runtime with `phase: pasteurize`. Put `cause`, `loop`, `seam`, `fix`, and `follow_up` in the phase payload, and keep the full diagnosis in the Markdown body. Set `status: ok` only when the regression test is green, the original reproduction no longer fails, and cleanup is complete; otherwise use `status: halt` plus the early-stop reason. Set `next_phase` to `cook` for the standard chain, `mold` for an architectural spec, or `done` when the cause is outside the repository and no follow-up remains. Use the artifact path returned by `handoff-commit`.
 
 ## Handoff
 
 **Pipeline:** cheese (debug) → **[pasteurize]** → cook --auto → press → age → cure → plate
 
-After the report is printed and the handoff slug is on disk, ask through the host routing guide in [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md) which downstream to run. Lead each option with the verb (what the user wants to _do_ next):
+After committing the report and resolving its destination, ask through the host routing guide when manual choice remains. Lead each option with the verb:
 
 - **Validate and chain forward** _(recommended when `status: ok`)_ — `/cook <slug> --auto`.
 - **Validate without auto chain** — `/cook <slug>` (cook runs taste-test, then the user picks each subsequent step).
@@ -196,23 +182,27 @@ When invoked with `--auto`, skip this host-routed question entirely and chain fo
 
 ### Early-stop conditions
 
-- Phase 1 fails (`status: halt` written, no loop achievable).
-- Phase 3 disproves all hypotheses across two rounds (cap at two Phase 3 rounds, then halt).
-- Phase 5's seam check finds no correct seam — write `status: halt: no correct regression-test seam` and route to `/mold` instead of `/cook`.
+- Phase 1 fails: commit `status: halt` with the unavailable-loop reason.
+- Phase 3 disproves all hypotheses across two rounds.
+- Phase 5 finds no correct seam: commit halt with reason `no correct regression-test seam` and retain `next_phase: mold`.
 - The fix breaks an unrelated test that pasteurize cannot reconcile within scope.
-- Phase 5's fix loop exhausts all hypotheses after 3 failed fix attempts — write `status: halt: fix attempts exhausted — architectural re-examination needed` and route to `/mold` instead of `/cook`.
+- Three failed fix attempts exhaust the hypotheses: commit halt with reason `fix attempts exhausted — architectural re-examination needed` and retain `next_phase: mold`.
 
-In every early-stop case, write the halt slug and surface the report. Do not silently downgrade to "best guess".
+Every early stop commits the versioned report and lets `handoff-resolve` return `action: halt`; never silently downgrade to a best guess.
 
 ## Rules
 
 - Do not skip Phase 1, and do not hypothesise without a reproducing loop.
 - Phase 5 writes only the regression test and the **minimal** production change; broader work belongs in `/cook`.
-- Do not leave `[DEBUG-...]` tags in the tree — clean them before the handoff slug is written.
+- Remove every `[DEBUG-...]` tag before committing the handoff.
 - Do not claim "shipped". Pasteurize claims "cause named, regression green, fix in tree, ready for chain". The chain (cook → press → age → cure) claims shipped.
-- If the bug exposes an architectural gap (no correct regression-test seam), say so in the slug. Do not silently paper over it.
+- If the bug exposes an architectural gap, record it in the payload and report body.
 
 ## References
 
 - `skills/pasteurize/scripts/pasteurize.pyz repro-rerun` — run the repro command N times and emit `{exit_code, reproduced, runs, failures}` (Phase 2).
 - `skills/pasteurize/scripts/pasteurize.pyz debug-tag-sweep` — scan the tree for instrumentation tag prefixes and exit 1 if any survive (Phase 6 cleanup gate).
+
+## Work continuity
+
+Follow the executable [cross-skill work contract](../cheese/references/work-contract.md) before phase work. A meaningful direct invocation ensures one WorkRecord; a nested invocation joins the inherited work ID. Emitting phases commit their versioned envelope and report body through `handoff-commit`, then act only on `handoff-resolve`. Never write or route from a legacy line-based handoff header.
