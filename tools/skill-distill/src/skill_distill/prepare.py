@@ -38,12 +38,16 @@ def prepare_dataset(report_path: Path, controls_path: Path) -> DatasetV1:
     control_ids = {finding["id"] for finding in selected_controls}
 
     block_findings = sorted(
-        (finding for finding in findings.values() if finding["id"] not in control_ids),
+        (
+            finding
+            for finding in findings.values()
+            if finding["id"] not in control_ids and _is_block(finding, block)
+        ),
         key=_block_rank,
-    )[:BLOCK_PAIR_COUNT]
+    )
     if len(block_findings) != BLOCK_PAIR_COUNT:
         raise ReportValidationError(
-            f"expected at least {BLOCK_PAIR_COUNT} non-control block candidates, "
+            f"expected exactly {BLOCK_PAIR_COUNT} unique non-control block-band pairs, "
             f"found {len(block_findings)}"
         )
     block_ids = {finding["id"] for finding in block_findings}
@@ -130,6 +134,12 @@ def _plain(value):
 def _block_rank(finding: dict) -> tuple[bool, float, str]:
     score = finding["cosine"] if finding["cosine"] is not None else 0.0
     return finding["kind"] != "exact", -score, finding["id"]
+
+
+def _is_block(finding: dict, block: float) -> bool:
+    return finding["kind"] == "exact" or (
+        finding["kind"] == "semantic" and finding["cosine"] >= block
+    )
 
 
 def _is_review(finding: dict, review: float, block: float) -> bool:

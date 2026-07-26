@@ -115,7 +115,7 @@ def _report() -> dict:
             index,
             "advisory",
         )
-        for index in range(163)
+        for index in range(181)
     ]
     fill = [
         _finding(
@@ -289,7 +289,7 @@ def test_prepare_has_the_fixed_unique_composition(tmp_path: Path) -> None:
     ) == 7
 
 
-def test_prepare_reserves_overlapping_controls_before_block_selection(
+def test_prepare_reserves_controls_and_never_fills_block_from_review_band(
     tmp_path: Path,
 ) -> None:
     report_path, controls_path = _write_inputs(tmp_path)
@@ -298,8 +298,38 @@ def test_prepare_reserves_overlapping_controls_before_block_selection(
 
     assert selections["adversarial-exact"] == "adversarial"
     assert selections["adversarial-high-001"] == "adversarial"
-    assert selections["fill-017"] == "block"
-    assert all(selections[f"high-{index:03}"] == "block" for index in range(163))
+    assert all(selections.get(f"fill-{index:03}") != "block" for index in range(18))
+    assert all(selections[f"high-{index:03}"] == "block" for index in range(181))
+
+
+def test_prepare_accepts_exact_and_semantic_block_threshold_boundary(
+    tmp_path: Path,
+) -> None:
+    report = _report()
+    exact = report["findings"][0]
+    exact.update({"kind": "exact", "detector": "normalized", "cosine": None})
+    report["findings"][180]["cosine"] = 0.9
+    report_path, controls_path = _write_inputs(tmp_path)
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+
+    dataset = prepare_to_path(report_path, controls_path, tmp_path / "dataset.json")
+    selections = {pair.pair_id: pair.selection for pair in dataset.pairs}
+
+    assert selections["high-000"] == "block"
+    assert selections["high-180"] == "block"
+
+
+def test_prepare_rejects_report_without_exact_block_band_count(tmp_path: Path) -> None:
+    report = _report()
+    report["findings"][180]["cosine"] = 0.899
+    report_path, controls_path = _write_inputs(tmp_path)
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+
+    with pytest.raises(
+        ReportValidationError,
+        match="expected exactly 181 unique non-control block-band pairs, found 180",
+    ):
+        prepare_to_path(report_path, controls_path, tmp_path / "dataset.json")
 
 
 def test_tracked_adversarial_controls_use_endpoint_evidence() -> None:
@@ -338,16 +368,16 @@ def test_tracked_adversarial_fixture_matches_pr_322_report(tmp_path: Path) -> No
     assert report_sha256 == PR_322_REPORT_SHA256
     assert fixture["source_report_sha256"] == report_sha256
 
-    dataset = prepare_to_path(
-        report_path,
-        repo_root / "tools/skill-distill/labels/adversarial-controls-v1.yaml",
-        tmp_path / "dataset.json",
-    )
+    with pytest.raises(
+        ReportValidationError,
+        match="expected exactly 181 unique non-control block-band pairs",
+    ):
+        prepare_to_path(
+            report_path,
+            repo_root / "tools/skill-distill/labels/adversarial-controls-v1.yaml",
+            tmp_path / "dataset.json",
+        )
     assert report_path.read_bytes() == source_before
-    assert len({pair.pair_id for pair in dataset.pairs}) == 421
-    assert [pair.selection for pair in dataset.pairs].count("block") == 181
-    assert [pair.selection for pair in dataset.pairs].count("review") == 200
-    assert [pair.selection for pair in dataset.pairs].count("adversarial") == 40
 
 
 def test_tracked_adversarial_controls_resolve_the_pr_322_fixture() -> None:
