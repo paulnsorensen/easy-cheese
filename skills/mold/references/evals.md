@@ -38,6 +38,29 @@ For each completed `/mold` Grill-mode run, verify:
 - **Amendment silently folded into the ledger** — an amendment appears in `Decided` without a prior question to the user. Log as a regression.
 - **Over-batching** — an item with a real tension gets swept into the "batch-reported as upheld" exception meant only for clean steelmans.
 
+## Manual transcript cases
+
+### Overloaded term → Ground → durable writes
+
+- **Setup:** the user uses “account” for both a login identity and a billing customer.
+- **Expected dialogue:** Ground pauses for a canonical-term question and records the chosen terms plus the rejected ambiguous synonym.
+- **Expected Curdle:** after the handshake, the glossary/domain-model flush writes `.cheese/glossary/<slug>.md`, merges the same terms into the cumulative domain model, reads both back, and names both in the completion record.
+
+### ADR eligibility matrix
+
+Run four decision transcripts and inspect the spec decision log plus durable ADR output:
+
+- **Qualifies: all three** — hard to reverse, surprising without context, and produced by a real trade-off; write one ADR and retain its decision-log index entry.
+- **Reject: missing hard to reverse** — surprising and traded off, but cheaply reversible; keep only the spec decision-log entry and write no ADR.
+- **Reject: missing surprising without context** — hard to reverse and traded off, but rationale is obvious from code and spec; keep only the spec decision-log entry and write no ADR.
+- **Reject: missing real trade-off** — hard to reverse and surprising, but forced by a constraint with no viable alternative; keep only the spec decision-log entry and write no ADR.
+
+### Ambiguous second-context routing
+
+- **Setup:** one domain-model context exists and a resolved term could belong to either it or a new bounded context.
+- **Expected dialogue:** Mold names the candidate contexts and asks the user which context owns the term rather than inferring ownership.
+- **Expected Curdle:** Mold writes only the selected context, leaves the other context pages unchanged, and records only the confirmed relationship in `domain-model/index.md`.
+
 ## How to run
 
 These evals are intentionally manual today.
