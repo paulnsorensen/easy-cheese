@@ -30,3 +30,20 @@ def test_family_apply_commits_all_members_together(tmp_path):
     assert (a.read_text(), b.read_text()) == ("new-a", "new-b")
     assert stat.S_IMODE(a.stat().st_mode) == 0o640
     assert stat.S_IMODE(b.stat().st_mode) == 0o751
+
+
+def test_family_apply_removes_new_members_when_gate_raises(tmp_path):
+    existing = tmp_path / "existing"
+    created = tmp_path / "created"
+    existing.write_text("old")
+    existing.chmod(0o640)
+
+    def fail():
+        raise RuntimeError("gate crashed")
+
+    with pytest.raises(RuntimeError, match="gate crashed"):
+        apply_family("f", {existing: b"new", created: b"created"}, fail)
+
+    assert existing.read_text() == "old"
+    assert stat.S_IMODE(existing.stat().st_mode) == 0o640
+    assert not created.exists()

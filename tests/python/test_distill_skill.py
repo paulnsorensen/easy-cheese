@@ -20,8 +20,9 @@ def test_distill_is_a_tracked_repo_local_skill() -> None:
     assert not (REPO_ROOT / "skills" / "distill").exists()
 
 
-def test_release_allowlist_excludes_repo_local_agent_skills() -> None:
+def test_release_allowlist_excludes_distillation_development_surfaces() -> None:
     assert ".agents" not in stage_release.SHIP
+    assert "tools" not in stage_release.SHIP
 
 
 def test_distillation_gates_are_separated_in_justfile() -> None:
@@ -34,3 +35,15 @@ def test_distillation_gates_are_separated_in_justfile() -> None:
     assert "python -m skill_distill prepare {{args}}" in justfile
     assert "current-harness" not in justfile.lower()
     assert "llm" not in justfile.lower()
+
+
+def test_ci_runs_only_the_model_free_distillation_suite() -> None:
+    workflow = (REPO_ROOT / ".github" / "workflows" / "validate.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "pytest tests/skill-distill/python" in workflow
+    assert "distill-pilot" not in workflow
+    assert "skill_distill prepare" not in workflow
+    assert "current-harness" not in workflow.lower()
+    assert "llm" not in workflow.lower()

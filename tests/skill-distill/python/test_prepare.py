@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from skill_distill.cli import main
 from skill_distill.io import (
     ReportValidationError,
     findings_for_adversarial_controls,
@@ -242,6 +243,31 @@ def test_prepare_is_byte_stable_and_preserves_the_source_report(
         pair.pair_id for pair in second.pairs
     ]
 
+
+def test_cli_prepare_executes_the_real_dataset_pipeline(tmp_path: Path) -> None:
+    report_path, controls_path = _write_inputs(tmp_path)
+    output_path = tmp_path / "cli-dataset.json"
+
+    assert main(
+        [
+            "prepare",
+            "--report",
+            str(report_path),
+            "--adversarial-controls",
+            str(controls_path),
+            "--out",
+            str(output_path),
+        ]
+    ) == 0
+
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    assert payload["schema_version"] == "dataset-v1"
+    assert len(payload["pairs"]) == 421
+    assert {pair["selection"] for pair in payload["pairs"]} == {
+        "block",
+        "review",
+        "adversarial",
+    }
 
 def test_prepare_has_the_fixed_unique_composition(tmp_path: Path) -> None:
     report_path, controls_path = _write_inputs(tmp_path)
