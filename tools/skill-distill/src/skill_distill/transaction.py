@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import stat
 import tempfile
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -15,7 +16,7 @@ class TransactionResult:
     applied_paths: tuple[Path, ...]
 
 
-def _replace(path: Path, content: bytes) -> None:
+def _replace(path: Path, content: bytes, mode: int | None = None) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     try:
@@ -23,6 +24,8 @@ def _replace(path: Path, content: bytes) -> None:
             stream.write(content)
             stream.flush()
             os.fsync(stream.fileno())
+        if mode is not None:
+            os.chmod(temporary, mode)
         os.replace(temporary, path)
     except BaseException:
         if os.path.exists(temporary):
@@ -41,18 +44,23 @@ def apply_family(
     ordered = tuple(sorted((Path(path) for path in changes), key=lambda path: path.as_posix()))
     if len(set(ordered)) != len(ordered):
         raise ValueError("family changes contain duplicate paths")
-    snapshots = {path: path.read_bytes() if path.exists() else None for path in ordered}
+    snapshots = {
+        path: (path.read_bytes(), stat.S_IMODE(path.stat().st_mode)) if path.exists() else None
+        for path in ordered
+    }
     try:
         for path in ordered:
-            _replace(path, changes[path])
+            snapshot = snapshots[path]
+            _replace(path, changes[path], snapshot[1] if snapshot is not None else None)
         if not gate():
             raise RuntimeError(f"family gate failed: {family_id}")
     except BaseException:
         for path in ordered:
-            previous = snapshots[path]
-            if previous is None:
+            snapshot = snapshots[path]
+            if snapshot is None:
                 path.unlink(missing_ok=True)
             else:
-                _replace(path, previous)
+                content, mode = snapshot
+                _replace(path, content, mode)
         raise
     return TransactionResult(family_id, ordered)

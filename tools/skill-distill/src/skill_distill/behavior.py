@@ -41,6 +41,15 @@ def _validate_matrix(rows: list[BehaviorScorecard]) -> None:
             raise ValueError(f"{obligation_id} does not form a 3-by-3 matrix")
 
 
+def _obligation_signature(rows: list[BehaviorScorecard]) -> dict[str, bool]:
+    signature: dict[str, bool] = {}
+    for row in rows:
+        classification = signature.setdefault(row.obligation_id, row.critical)
+        if classification != row.critical:
+            raise ValueError(f"{row.obligation_id} has inconsistent critical classification")
+    return signature
+
+
 def _rate(rows: list[BehaviorScorecard]) -> float | None:
     noncritical = [row.passed for row in rows if not row.critical]
     return sum(noncritical) / len(noncritical) if noncritical else None
@@ -70,6 +79,9 @@ def evaluate_behavior(
             _validate_matrix(rows)
         if any(not row.passed for rows in originals.values() for row in rows if row.critical):
             raise ValueError(f"scenario {scenario} has an invalid critical baseline")
+        signatures = [_obligation_signature(rows) for rows in (*originals.values(), *variants.values())]
+        if any(signature != signatures[0] for signature in signatures[1:]):
+            raise ValueError(f"scenario {scenario} obligation signatures differ")
 
         variant = next(iter(variants.values()))
         critical_distortions = sum(not row.passed for row in variant if row.critical)
