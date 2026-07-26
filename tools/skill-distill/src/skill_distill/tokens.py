@@ -137,6 +137,8 @@ def measure_load_events(
                 len(token_ids),
             )
         )
+    if not events:
+        raise ValueError("token metric profile requires at least one load event")
     return TokenMetricProfile(identity.identity_digest, tuple(events))
 
 

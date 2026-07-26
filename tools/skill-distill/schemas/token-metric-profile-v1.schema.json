@@ -6,8 +6,8 @@
   "additionalProperties": false,
   "required": ["tokenizer_identity_digest", "load_events", "schema_version"],
   "properties": {
-    "tokenizer_identity_digest": {"type": "string", "minLength": 1},
-    "load_events": {"type": "array", "items": {"$ref": "load-event-v1.schema.json"}},
+    "tokenizer_identity_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "load_events": {"type": "array", "minItems": 1, "items": {"$ref": "load-event-v1.schema.json"}},
     "schema_version": {"const": "token-metric-profile-v1"}
   }
 }

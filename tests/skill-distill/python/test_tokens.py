@@ -63,6 +63,14 @@ def test_load_events_are_encoded_independently_and_repeated_loads_repeat_cost(
     assert token_savings(profile, variant) == 3
 
 
+def test_token_measurement_rejects_an_empty_load_profile(tmp_path: Path):
+    snapshot, digest = tokenizer_snapshot(tmp_path)
+    identity = build_tokenizer_identity("example/tokenizer", REVISION, digest, RUNTIME)
+
+    with pytest.raises(ValueError, match="at least one load event"):
+        measure_load_events(identity, [], Words(), snapshot=snapshot, runtime=RUNTIME)
+
+
 def test_tokenizer_identity_is_stable_and_does_not_include_load_events():
     digest = sha256(b"tokenizer").hexdigest()
     first = build_tokenizer_identity("example/tokenizer", REVISION, digest, RUNTIME)

@@ -84,9 +84,26 @@ def test_annotation_validation_rejects_false_rewrite_authority() -> None:
         }])
 
 
-def test_propose_validates_authority_tokens_and_center_before_atomic_apply(
-    tmp_path: Path,
-) -> None:
+TOKENIZER_DIGEST = "a" * 64
+CONTENT_DIGEST = "b" * 64
+
+
+def _token_profile(path: str, tokens: int, identity: str = TOKENIZER_DIGEST) -> dict[str, object]:
+    return {
+        "tokenizer_identity_digest": identity,
+        "load_events": [{
+            "role": "skill",
+            "canonical_path": path,
+            "content_digest": CONTENT_DIGEST,
+            "tokenizer_identity_digest": identity,
+            "token_count": tokens,
+            "schema_version": "load-event-v1",
+        }],
+        "schema_version": "token-metric-profile-v1",
+    }
+
+
+def _proposal_fixture(tmp_path: Path) -> tuple[Path, Path, Path, Path, Path, dict[str, object]]:
     context = tmp_path / ".context"
     annotations_path = context / "annotations.yaml"
     scores_path = context / "scores.json"
@@ -119,7 +136,7 @@ def test_propose_validates_authority_tokens_and_center_before_atomic_apply(
         "left_contradicts_right": 0.1,
         "right_contradicts_left": 0.2,
     }])
-    _write(drafts_path, [{
+    draft: dict[str, object] = {
         "pair_ids": ["p"],
         "family_id": "family",
         "relation": "equivalent",
@@ -130,15 +147,15 @@ def test_propose_validates_authority_tokens_and_center_before_atomic_apply(
             "member_residuals": {"a": [], "b": []},
         },
         "original_obligations": {"a": [atom], "b": [atom]},
-        "original_loaded_tokens": 20,
+        "original_token_profile": _token_profile("original/a.md", 20),
         "variants": {
             "physical-reference": {
-                "loaded_tokens": 15,
+                "token_metric_profile": _token_profile("physical/a.md", 15),
                 "behavior_passed": True,
                 "changes": {"result.txt": "physical"},
             },
             "compact-inline": {
-                "loaded_tokens": 10,
+                "token_metric_profile": _token_profile("inline/a.md", 10),
                 "behavior_passed": True,
                 "changes": {"result.txt": "compact"},
             },
@@ -147,19 +164,110 @@ def test_propose_validates_authority_tokens_and_center_before_atomic_apply(
             "deterministic_passed": True,
             "behavior_passed": True,
             "overlap_passed": True,
-            "llm_disposition": "pass",
+            "llm_disposition": "concern",
+            "human_disposition": "approved",
         },
         "reversal_patch": "reverse",
-    }])
+    }
+    return annotations_path, scores_path, drafts_path, proposals, repository, draft
 
-    proposal_path, = build_proposals(
-        annotations_path, scores_path, drafts_path, proposals
-    )
-    applied = apply_proposal(proposal_path, repository)
 
-    assert load_document(proposal_path)["loaded_token_delta"] == 10
+def _build_fixture(tmp_path: Path) -> tuple[Path, Path, dict[str, object]]:
+    annotations, scores, drafts, proposals, repository, draft = _proposal_fixture(tmp_path)
+    _write(drafts, [draft])
+    proposal, = build_proposals(annotations, scores, drafts, proposals)
+    return proposal, repository, draft
+
+
+def test_propose_derives_token_savings_and_applies_only_after_post_write_gate(tmp_path: Path) -> None:
+    proposal_path, repository, _draft = _build_fixture(tmp_path)
+
+    applied = apply_proposal(proposal_path, repository, lambda: True)
+
+    proposal = load_document(proposal_path)
+    assert proposal["loaded_token_delta"] == 10
+    assert proposal["original_token_profile"]["load_events"][0]["token_count"] == 20
     assert applied == (repository / "result.txt",)
     assert (repository / "result.txt").read_text() == "compact"
+
+
+@pytest.mark.parametrize("profile_name", ["original", "physical-reference", "compact-inline"])
+def test_propose_rejects_empty_token_telemetry(tmp_path: Path, profile_name: str) -> None:
+    annotations, scores, drafts, proposals, _repository, draft = _proposal_fixture(tmp_path)
+    if profile_name == "original":
+        profile = draft["original_token_profile"]
+    else:
+        profile = draft["variants"][profile_name]["token_metric_profile"]  # type: ignore[index]
+    profile["load_events"] = []  # type: ignore[index]
+    _write(drafts, [draft])
+
+    with pytest.raises(LifecycleError, match="nonempty load events"):
+        build_proposals(annotations, scores, drafts, proposals)
+
+
+@pytest.mark.parametrize("location", ["original", "physical-reference"])
+def test_propose_rejects_free_token_totals(tmp_path: Path, location: str) -> None:
+    annotations, scores, drafts, proposals, _repository, draft = _proposal_fixture(tmp_path)
+    if location == "original":
+        draft["original_loaded_tokens"] = 1
+    else:
+        draft["variants"][location]["loaded_tokens"] = 1  # type: ignore[index]
+    _write(drafts, [draft])
+
+    with pytest.raises(LifecycleError, match="free token totals"):
+        build_proposals(annotations, scores, drafts, proposals)
+
+
+@pytest.mark.parametrize(("field", "value", "message"), [
+    ("canonical_path", "../escape.md", "not canonical"),
+    ("content_digest", "incomplete", "SHA-256"),
+    ("tokenizer_identity_digest", "c" * 64, "identity drift"),
+])
+def test_propose_rejects_incomplete_path_and_digest_evidence(
+    tmp_path: Path, field: str, value: str, message: str
+) -> None:
+    annotations, scores, drafts, proposals, _repository, draft = _proposal_fixture(tmp_path)
+    profile = draft["variants"]["physical-reference"]["token_metric_profile"]  # type: ignore[index]
+    profile["load_events"][0][field] = value  # type: ignore[index]
+    _write(drafts, [draft])
+
+    with pytest.raises(LifecycleError, match=message):
+        build_proposals(annotations, scores, drafts, proposals)
+
+
+@pytest.mark.parametrize("llm_disposition", ["concern", "abstain"])
+@pytest.mark.parametrize("human_disposition", [None, "reject", "rejected", "other"])
+def test_apply_rejects_unapproved_human_disposition(
+    tmp_path: Path, llm_disposition: str, human_disposition: str | None
+) -> None:
+    proposal_path, repository, _draft = _build_fixture(tmp_path)
+    proposal = load_document(proposal_path)
+    proposal["behavioral_evidence"]["llm_disposition"] = llm_disposition
+    if human_disposition is None:
+        proposal["behavioral_evidence"].pop("human_disposition", None)
+    else:
+        proposal["behavioral_evidence"]["human_disposition"] = human_disposition
+    _write(proposal_path, proposal)
+
+    with pytest.raises(LifecycleError, match="diagnostic gate"):
+        apply_proposal(proposal_path, repository, lambda: True)
+
+    assert not (repository / "result.txt").exists()
+
+
+def test_apply_rolls_back_when_applied_tree_gate_fails(tmp_path: Path) -> None:
+    proposal_path, repository, _draft = _build_fixture(tmp_path)
+    result = repository / "result.txt"
+    result.write_text("original", encoding="utf-8")
+
+    def reject_applied_tree() -> bool:
+        assert result.read_text(encoding="utf-8") == "compact"
+        return False
+
+    with pytest.raises(RuntimeError, match="family gate failed"):
+        apply_proposal(proposal_path, repository, reject_applied_tree)
+
+    assert result.read_text(encoding="utf-8") == "original"
 
 def test_score_dataset_preserves_output_when_score_evidence_is_invalid(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path

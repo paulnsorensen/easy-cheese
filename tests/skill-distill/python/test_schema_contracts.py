@@ -9,6 +9,7 @@ from skill_distill import contracts
 
 SCHEMAS = Path(__file__).parents[3] / "tools/skill-distill/schemas"
 CONTRACT_SCHEMAS = {
+    "apply-gate-v1.schema.json": contracts.ApplyGateV1,
     "annotation-v1.schema.json": contracts.AnnotationV1,
     "behavior-harness-v1.schema.json": contracts.BehaviorHarness,
     "behavior-scorecard-v1.schema.json": contracts.BehaviorScorecard,
@@ -54,3 +55,31 @@ def test_nested_dataset_and_proposal_contracts_cannot_drift() -> None:
     _assert_schema_matches_contract(
         proposal["$defs"]["canonicalCenter"], contracts.CanonicalCenter
     )
+
+
+def test_proposal_requires_measured_profiles_and_closed_dispositions() -> None:
+    proposal = json.loads(
+        (SCHEMAS / "proposal-v1.schema.json").read_text(encoding="utf-8")
+    )
+    profile = json.loads(
+        (SCHEMAS / "token-metric-profile-v1.schema.json").read_text(encoding="utf-8")
+    )
+    event = json.loads(
+        (SCHEMAS / "load-event-v1.schema.json").read_text(encoding="utf-8")
+    )
+
+    assert profile["properties"]["load_events"]["minItems"] == 1
+    assert event["properties"]["canonical_path"]["pattern"]
+    assert event["properties"]["content_digest"]["pattern"] == "^[0-9a-f]{64}$"
+    assert event["properties"]["tokenizer_identity_digest"]["pattern"] == "^[0-9a-f]{64}$"
+    assert proposal["properties"]["original_token_profile"]["$ref"] == "token-metric-profile-v1.schema.json"
+    assert proposal["$defs"]["representationVariant"]["required"] == [
+        "token_metric_profile", "behavior_passed", "changes"
+    ]
+    disposition = proposal["$defs"]["behavioralEvidence"]
+    assert disposition["properties"]["human_disposition"]["enum"] == [
+        "approved", "rejected"
+    ]
+    assert disposition["allOf"][0]["then"]["properties"]["human_disposition"] == {
+        "const": "approved"
+    }

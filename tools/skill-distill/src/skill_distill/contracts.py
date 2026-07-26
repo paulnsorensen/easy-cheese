@@ -179,10 +179,24 @@ class DistillationFamily(_ImmutableContract):
 
 
 @dataclass(frozen=True)
+class ApplyGateV1(_ImmutableContract):
+    deterministic: tuple[str, ...]
+    behavior: tuple[str, ...]
+    overlap: tuple[str, ...]
+    schema_version: str = "apply-gate-v1"
+
+
+class HumanDisposition(StrEnum):
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+@dataclass(frozen=True)
 class ProposalV1(_ImmutableContract):
     family_id: str
     canonical_center: CanonicalCenter
     residuals: Mapping[str, tuple[Mapping[str, Any], ...]]
+    original_token_profile: TokenMetricProfile
     physical_reference_variant: Mapping[str, Any]
     compact_inline_variant: Mapping[str, Any]
     loaded_token_delta: int

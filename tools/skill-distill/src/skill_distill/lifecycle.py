@@ -6,9 +6,10 @@ import importlib.util
 import json
 import math
 import os
+from collections.abc import Callable
 from dataclasses import fields, is_dataclass
 from enum import Enum
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from types import ModuleType, SimpleNamespace
 from typing import Any, Mapping, Sequence
 
@@ -27,14 +28,18 @@ from .contracts import (
     DistillationFamily,
     DistillationRun,
     FusionProfile,
+    HumanDisposition,
+    LoadEvent,
     ModelLock,
     ProposalV1,
     RelationKind,
     RunState,
+    TokenMetricProfile,
 )
 from .interaction import InteractionResult, gate_interactions
 from .representations import RepresentationCandidate, choose_representation
 from .retrieval import LocalScoringRunner, ScoringPair
+from .tokens import loaded_tokens, token_savings
 from .transaction import apply_family
 
 
@@ -286,6 +291,84 @@ def score_dataset(
     return scores
 
 
+_SHA256 = frozenset("0123456789abcdef")
+_VARIANT_NAMES = ("physical-reference", "compact-inline")
+
+
+def _sha256(value: Any, field: str) -> str:
+    if not isinstance(value, str) or len(value) != 64 or set(value) - _SHA256:
+        raise LifecycleError(f"{field} must be a lowercase SHA-256 digest")
+    return value
+
+
+def _canonical_load_path(value: Any) -> str:
+    if not isinstance(value, str) or not value:
+        raise LifecycleError("load event canonical_path is required")
+    path = PurePosixPath(value)
+    if path.is_absolute() or path.as_posix() != value or any(part in {".", ".."} for part in path.parts):
+        raise LifecycleError(f"load event path is not canonical: {value}")
+    return value
+
+
+def _token_profile(value: Any) -> TokenMetricProfile:
+    if not isinstance(value, Mapping) or value.get("schema_version") != "token-metric-profile-v1":
+        raise LifecycleError("token metric profile is missing or has the wrong schema version")
+    identity = _sha256(value.get("tokenizer_identity_digest"), "tokenizer identity")
+    raw_events = value.get("load_events")
+    if not isinstance(raw_events, list) or not raw_events:
+        raise LifecycleError("token metric profile requires nonempty load events")
+    events = []
+    for raw in raw_events:
+        if not isinstance(raw, Mapping) or raw.get("schema_version") != "load-event-v1":
+            raise LifecycleError("load event is incomplete or has the wrong schema version")
+        token_count = raw.get("token_count")
+        if isinstance(token_count, bool) or not isinstance(token_count, int) or token_count < 0:
+            raise LifecycleError("load event token_count must be a non-negative integer")
+        event_identity = _sha256(raw.get("tokenizer_identity_digest"), "load event tokenizer identity")
+        if event_identity != identity:
+            raise LifecycleError("load event tokenizer identity drift")
+        role = raw.get("role")
+        if not isinstance(role, str) or not role:
+            raise LifecycleError("load event role is required")
+        events.append(LoadEvent(
+            role,
+            _canonical_load_path(raw.get("canonical_path")),
+            _sha256(raw.get("content_digest"), "load event content"),
+            event_identity,
+            token_count,
+        ))
+    return TokenMetricProfile(identity, tuple(events))
+
+
+def _proposal_profiles(draft: Mapping[str, Any]) -> tuple[TokenMetricProfile, dict[str, TokenMetricProfile]]:
+    if "original_loaded_tokens" in draft:
+        raise LifecycleError("free token totals are forbidden; provide measured token profiles")
+    original = _token_profile(draft.get("original_token_profile"))
+    variants = draft.get("variants")
+    if not isinstance(variants, Mapping) or set(variants) != set(_VARIANT_NAMES):
+        raise LifecycleError("proposal requires physical-reference and compact-inline variants")
+    profiles = {}
+    for name in _VARIANT_NAMES:
+        variant = variants[name]
+        if not isinstance(variant, Mapping):
+            raise LifecycleError(f"{name} variant must be an object")
+        if not isinstance(variant.get("behavior_passed"), bool):
+            raise LifecycleError(f"{name} variant requires boolean behavior evidence")
+        if "loaded_tokens" in variant:
+            raise LifecycleError("free token totals are forbidden; provide measured token profiles")
+        profiles[name] = _token_profile(variant.get("token_metric_profile"))
+    if any(profile.tokenizer_identity_digest != original.tokenizer_identity_digest for profile in profiles.values()):
+        raise LifecycleError("proposal token profiles use different tokenizer identities")
+    return original, profiles
+
+
+def _diagnostic_passed(evidence: Mapping[str, Any]) -> bool:
+    disposition = evidence.get("llm_disposition")
+    if disposition == "pass":
+        return True
+    return disposition in {"concern", "abstain"} and evidence.get("human_disposition") == HumanDisposition.APPROVED.value
+
+
 def build_proposals(
     annotations_path: Path,
     scores_path: Path,
@@ -313,18 +396,21 @@ def build_proposals(
             draft["family_id"], RelationKind(draft["relation"]), tuple(draft["members"]), center
         )
         validate_family(family, draft["original_obligations"])
+        original_profile, profiles = _proposal_profiles(draft)
         candidates = tuple(
-            RepresentationCandidate(name, value["loaded_tokens"], value["behavior_passed"])
+            RepresentationCandidate(name, loaded_tokens(profiles[name]), value["behavior_passed"])
             for name, value in draft["variants"].items()
         )
-        choice = choose_representation(draft["original_loaded_tokens"], candidates)
+        choice = choose_representation(loaded_tokens(original_profile), candidates)
+        chosen_profile = profiles[choice.name]
         proposal = ProposalV1(
             family.family_id,
             center,
             center.member_residuals,
+            original_profile,
             draft["variants"]["physical-reference"],
             draft["variants"]["compact-inline"],
-            choice.loaded_token_savings,
+            token_savings(original_profile, chosen_profile),
             {**draft["behavioral_evidence"], "selected_representation": choice.name},
             draft["reversal_patch"],
         )
@@ -334,15 +420,18 @@ def build_proposals(
     return tuple(written)
 
 
-def apply_proposal(proposal_path: Path, repository: Path) -> tuple[Path, ...]:
+def apply_proposal(
+    proposal_path: Path,
+    repository: Path,
+    post_write_gate: Callable[[], bool],
+) -> tuple[Path, ...]:
     value = load_document(require_context_path(proposal_path))
     evidence = value["behavioral_evidence"]
-    disposition = evidence.get("llm_disposition")
-    deterministic = all(evidence.get(name) is True for name in ("deterministic_passed", "behavior_passed", "overlap_passed"))
-    diagnostic = disposition == "pass" or (
-        disposition in {"concern", "abstain"} and bool(evidence.get("human_disposition"))
+    deterministic = all(
+        evidence.get(name) is True
+        for name in ("deterministic_passed", "behavior_passed", "overlap_passed")
     )
-    if not deterministic or not diagnostic:
+    if not deterministic or not _diagnostic_passed(evidence):
         raise LifecycleError("proposal has not passed every deterministic and diagnostic gate")
     variant = value[evidence["selected_representation"].replace("-", "_") + "_variant"]
     changes = {
@@ -352,7 +441,7 @@ def apply_proposal(proposal_path: Path, repository: Path) -> tuple[Path, ...]:
     root = repository.resolve()
     if any(root not in path.parents for path in changes):
         raise LifecycleError("proposal change escapes the repository")
-    return apply_family(value["family_id"], changes, lambda: True).applied_paths
+    return apply_family(value["family_id"], changes, post_write_gate).applied_paths
 
 
 def verify_run(run_path: Path, evidence_path: Path) -> InteractionResult:

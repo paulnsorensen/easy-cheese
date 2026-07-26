@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import argparse
 import json
-from collections.abc import Sequence
+import subprocess
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
 from . import lifecycle
+from .contracts import ApplyGateV1
 
 
 def _prepare(args: argparse.Namespace) -> int:
@@ -69,8 +71,39 @@ def _propose(args: argparse.Namespace) -> int:
     return 0
 
 
+_APPLY_GATES = ("deterministic", "behavior", "overlap")
+
+
+def _resolve_apply_gate(contract_path: Path, repository: Path) -> Callable[[], bool]:
+    raw = lifecycle.load_document(lifecycle.require_context_path(contract_path))
+    if not isinstance(raw, Mapping) or raw.get("schema_version") != "apply-gate-v1":
+        raise lifecycle.LifecycleError("apply gate contract has the wrong schema version")
+
+    def command(name: str) -> tuple[str, ...]:
+        value = raw.get(name)
+        if (
+            not isinstance(value, list)
+            or not value
+            or any(not isinstance(part, str) or not part for part in value)
+        ):
+            raise lifecycle.LifecycleError(f"apply gate contract requires a {name} command")
+        return tuple(value)
+
+    contract = ApplyGateV1(*(command(name) for name in _APPLY_GATES))
+
+    def gate() -> bool:
+        results = [
+            subprocess.run(getattr(contract, name), cwd=repository, check=False).returncode == 0
+            for name in _APPLY_GATES
+        ]
+        return all(results)
+
+    return gate
+
+
 def _apply(args: argparse.Namespace) -> int:
-    lifecycle.apply_proposal(args.proposal, args.repository)
+    gate = _resolve_apply_gate(args.gate_contract, args.repository)
+    lifecycle.apply_proposal(args.proposal, args.repository, gate)
     return 0
 
 
@@ -140,6 +173,7 @@ def _parser() -> argparse.ArgumentParser:
     apply = commands.add_parser("apply")
     _path_argument(apply, "--proposal", required=True)
     _path_argument(apply, "--repository", default=Path.cwd())
+    _path_argument(apply, "--gate-contract", required=True)
     apply.set_defaults(run_command=_apply)
 
     verify = commands.add_parser("verify")

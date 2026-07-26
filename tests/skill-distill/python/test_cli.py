@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-from pathlib import Path
+import json
 import sys
-from types import ModuleType
+from pathlib import Path
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
+import skill_distill.cli as cli
 from skill_distill.cli import main
 
 
@@ -67,6 +69,33 @@ def test_cli_exposes_the_complete_locked_lifecycle() -> None:
         "apply",
         "verify",
     }
+
+
+def test_apply_gate_contract_resolves_all_model_free_post_write_commands(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    repository = tmp_path / "repo"
+    repository.mkdir()
+    contract = tmp_path / ".context" / "gate.json"
+    contract.parent.mkdir()
+    commands = {
+        "deterministic": ["deterministic-check"],
+        "behavior": ["behavior-check"],
+        "overlap": ["overlap-check"],
+    }
+    contract.write_text(json.dumps({"schema_version": "apply-gate-v1", **commands}))
+    calls: list[tuple[tuple[str, ...], Path]] = []
+    monkeypatch.setattr(
+        cli.subprocess,
+        "run",
+        lambda command, *, cwd, check: (
+            calls.append((command, cwd))
+            or SimpleNamespace(returncode=int(command[0] == "deterministic-check"))
+        ),
+    )
+
+    assert not cli._resolve_apply_gate(contract, repository)()
+    assert calls == [(tuple(command), repository) for command in commands.values()]
 
 
 def test_generated_output_outside_context_is_rejected(
