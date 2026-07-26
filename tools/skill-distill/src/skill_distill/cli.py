@@ -14,6 +14,8 @@ def _prepare(args: argparse.Namespace) -> int:
     from .prepare import prepare_to_path
 
     lifecycle.require_context_path(args.out)
+    if args.run:
+        lifecycle.require_new_run_path(args.run)
     prepare_to_path(args.report, args.adversarial_controls, args.out)
     if args.run:
         lifecycle.initialize_run(args.run, args.run_id)

@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import yaml
+
+import skill_distill.lifecycle as lifecycle
 
 from skill_distill.contracts import RunState
 from skill_distill.lifecycle import (
@@ -17,6 +21,7 @@ from skill_distill.lifecycle import (
     load_document,
     record_labels,
     require_context_path,
+    score_dataset,
     validate_annotations,
 )
 
@@ -155,3 +160,64 @@ def test_propose_validates_authority_tokens_and_center_before_atomic_apply(
     assert load_document(proposal_path)["loaded_token_delta"] == 10
     assert applied == (repository / "result.txt",)
     assert (repository / "result.txt").read_text() == "compact"
+
+def test_score_dataset_preserves_output_when_score_evidence_is_invalid(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    context = tmp_path / ".context"
+    dataset_path = context / "dataset.json"
+    output_path = context / "scores.json"
+    locks_path = tmp_path / "locks.json"
+    fusion_path = tmp_path / "fusion.json"
+    inventory_path = tmp_path / "inventory.json"
+    _write(dataset_path, {"pairs": [{
+        "pair_id": "pair",
+        "left": {"original_excerpt": "left"},
+        "right": {"original_excerpt": "right"},
+    }]})
+    _write(locks_path, [{"model_id": model_id} for model_id in (
+        "snowflake/snowflake-arctic-embed-s",
+        "BAAI/bge-m3",
+        "cross-encoder/nli-deberta-v3-base",
+    )])
+    _write(fusion_path, {})
+    _write(inventory_path, {})
+    output_path.write_bytes(b"preserved scores\n")
+    invalid = {
+        "model_profile_digest": "models",
+        "fusion_profile_digest": "fusion",
+        "pair_id": "pair",
+        "arctic_s": math.nan,
+        "dense": 0.2,
+        "sparse": 0.3,
+        "colbert": 0.5,
+        "fused": 0.38,
+        "left_entails_right": 0.9,
+        "right_entails_left": 0.8,
+        "left_contradicts_right": 0.1,
+        "right_contradicts_left": 0.2,
+    }
+    monkeypatch.setattr(lifecycle, "_contract", lambda _model, value: value)
+    monkeypatch.setattr(
+        lifecycle,
+        "_load_adapter_module",
+        lambda _path: SimpleNamespace(arctic=object(), bge=object(), nli=object()),
+    )
+    monkeypatch.setattr(
+        lifecycle,
+        "LocalScoringRunner",
+        lambda *_adapters: SimpleNamespace(score=lambda *_args: (invalid,)),
+    )
+
+    with pytest.raises(LifecycleError, match="score evidence is incomplete"):
+        score_dataset(
+            dataset_path,
+            output_path,
+            tmp_path / "adapters.py",
+            locks_path,
+            {"arctic": Path(), "bge": Path(), "nli": Path()},
+            fusion_path,
+            inventory_path,
+        )
+
+    assert output_path.read_bytes() == b"preserved scores\n"

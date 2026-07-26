@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import math
 
 import pytest
 
@@ -185,3 +186,39 @@ def test_preflight_rejects_undeclared_snapshot_file_before_adapters_run(tmp_path
         )
     assert arctic.calls == nli.calls == 0
     assert bge.paths == []
+
+
+@pytest.mark.parametrize(
+    ("adapter_name", "invalid"),
+    (("arctic", True), ("bge", math.nan), ("nli", math.inf), ("nli", -math.inf)),
+)
+def test_local_scoring_rejects_non_finite_and_boolean_adapter_scores(
+    tmp_path: Path, adapter_name: str, invalid: float | bool
+) -> None:
+    arctic_lock, arctic_snapshot = _snapshot_lock(tmp_path, ARCTIC_S_MODEL)
+    bge_lock, bge_snapshot = _snapshot_lock(tmp_path, BGE_M3_MODEL)
+    nli_lock, nli_snapshot = _snapshot_lock(tmp_path, NLI_MODEL)
+    arctic, bge, nli = FakeArctic(), FakeBge(), FakeNli()
+    if adapter_name == "arctic":
+        arctic.score = lambda _snapshot, _pairs: {"pair-1": invalid}  # type: ignore[method-assign,return-value]
+    elif adapter_name == "bge":
+        bge.score = lambda _snapshot, _pairs: {  # type: ignore[method-assign,return-value]
+            "pair-1": BgeM3Evidence(invalid, 0.3, 0.5)
+        }
+    else:
+        nli.diagnose = lambda _snapshot, _pairs: {  # type: ignore[method-assign,return-value]
+            "pair-1": BidirectionalNliEvidence(0.9, 0.8, invalid, 0.2)
+        }
+
+    with pytest.raises(ModelLockError, match="finite real number"):
+        LocalScoringRunner(arctic, bge, nli).score(
+            (ScoringPair("pair-1", "left", "right"),),
+            arctic_lock,
+            arctic_snapshot,
+            bge_lock,
+            bge_snapshot,
+            nli_lock,
+            nli_snapshot,
+            _fusion_profile(),
+            _dependency_inventory(),
+        )

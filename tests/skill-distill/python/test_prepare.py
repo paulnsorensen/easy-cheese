@@ -269,6 +269,36 @@ def test_cli_prepare_executes_the_real_dataset_pipeline(tmp_path: Path) -> None:
         "adversarial",
     }
 
+def test_cli_prepare_preserves_an_existing_human_frozen_run(tmp_path: Path) -> None:
+    report_path, controls_path = _write_inputs(tmp_path)
+    context = tmp_path / ".context"
+    run_path = context / "run.json"
+    labels_path = tmp_path / "human-labels.json"
+    labels_path.write_text(
+        json.dumps([{"pair_id": "pair", "relation": "conflict", "reviewer": "human"}]),
+        encoding="utf-8",
+    )
+    from skill_distill.lifecycle import freeze_labels, initialize_run
+
+    initialize_run(run_path, "frozen-run")
+    freeze_labels(run_path, labels_path, "2026-07-26T12:00:00Z")
+    run_before = run_path.read_bytes()
+    output_path = context / "replacement-dataset.json"
+
+    with pytest.raises(SystemExit) as error:
+        main([
+            "prepare",
+            "--report", str(report_path),
+            "--adversarial-controls", str(controls_path),
+            "--out", str(output_path),
+            "--run", str(run_path),
+            "--run-id", "replacement-run",
+        ])
+
+    assert error.value.code == 2
+    assert run_path.read_bytes() == run_before
+    assert not output_path.exists()
+
 def test_prepare_has_the_fixed_unique_composition(tmp_path: Path) -> None:
     report_path, controls_path = _write_inputs(tmp_path)
     dataset = prepare_to_path(report_path, controls_path, tmp_path / "dataset.json")

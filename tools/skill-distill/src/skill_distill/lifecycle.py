@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import math
+import os
 from dataclasses import fields, is_dataclass
 from enum import Enum
 from pathlib import Path
@@ -47,6 +48,14 @@ def require_context_path(path: Path) -> Path:
     if ".context" not in resolved.parts:
         raise LifecycleError(f"generated evidence must be written under .context: {path}")
     return resolved
+
+
+def require_new_run_path(path: Path) -> Path:
+    """Return a normalized run path only when no record exists there."""
+    target = require_context_path(path)
+    if target.exists():
+        raise LifecycleError(f"run already exists: {path}")
+    return target
 
 
 def _plain(value: Any) -> Any:
@@ -93,8 +102,19 @@ def _run(value: Mapping[str, Any]) -> DistillationRun:
 
 
 def initialize_run(path: Path, run_id: str) -> DistillationRun:
+    target = require_new_run_path(path)
     run = DistillationRun(run_id, RunState.PREPARED)
-    write_evidence(path, run)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with target.open("xb") as stream:
+            stream.write(_encoded(target, run))
+            stream.flush()
+            os.fsync(stream.fileno())
+    except FileExistsError as error:
+        raise LifecycleError(f"run already exists: {path}") from error
+    except BaseException:
+        target.unlink(missing_ok=True)
+        raise
     return run
 
 
@@ -257,9 +277,12 @@ def score_dataset(
         _contract(FusionProfile, load_document(fusion_path)),
         _contract(DependencyInventoryV1, load_document(inventory_path)),
     )
-    if len(scores) != len(pairs):
-        raise LifecycleError("score output does not cover the complete dataset")
-    write_evidence(output_path, scores)
+    score_values = _plain(scores)
+    validate_score_coverage(
+        ({"pair_id": pair.pair_id} for pair in pairs),
+        score_values,
+    )
+    write_evidence(output_path, score_values)
     return scores
 
 

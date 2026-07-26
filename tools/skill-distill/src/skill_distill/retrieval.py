@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from hashlib import sha256
 import json
+import math
 from pathlib import Path
 from typing import Mapping, Protocol, Sequence
 
@@ -92,6 +93,12 @@ def _require_complete(pair_ids: set[str], values: dict[str, object], evidence_na
         raise ModelLockError(f"{evidence_name} must cover every labeled pair exactly once")
 
 
+def _require_finite_score(value: object, evidence_name: str, pair_id: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, int | float) or not math.isfinite(value):
+        raise ModelLockError(f"{evidence_name} must be a finite real number: {pair_id}")
+    return float(value)
+
+
 class LocalScoringRunner:
     """Preflights frozen dependencies, artifacts, and adapters before scoring."""
 
@@ -139,23 +146,38 @@ class LocalScoringRunner:
         profile_digest = model_profile_digest(locks)
         fused_digest = fusion_profile_digest(fusion_profile)
 
-        scores = tuple(
-            ScoresV1(
+        scores = []
+        for pair_id in pair_ids:
+            bge_evidence = bge[pair_id]
+            nli_evidence = nli[pair_id]
+            values = {
+                "arctic_s": _require_finite_score(arctic[pair_id], "Arctic-S score", pair_id),
+                "dense": _require_finite_score(bge_evidence.dense, "BGE-M3 dense score", pair_id),
+                "sparse": _require_finite_score(bge_evidence.sparse, "BGE-M3 sparse score", pair_id),
+                "colbert": _require_finite_score(bge_evidence.colbert, "BGE-M3 ColBERT score", pair_id),
+                "left_entails_right": _require_finite_score(
+                    nli_evidence.left_entails_right, "NLI left-entails-right score", pair_id
+                ),
+                "right_entails_left": _require_finite_score(
+                    nli_evidence.right_entails_left, "NLI right-entails-left score", pair_id
+                ),
+                "left_contradicts_right": _require_finite_score(
+                    nli_evidence.left_contradicts_right, "NLI left-contradicts-right score", pair_id
+                ),
+                "right_contradicts_left": _require_finite_score(
+                    nli_evidence.right_contradicts_left, "NLI right-contradicts-left score", pair_id
+                ),
+            }
+            values["fused"] = _require_finite_score(
+                fuse(bge_evidence, fusion_profile.weights), "fused score", pair_id
+            )
+            scores.append(ScoresV1(
                 model_profile_digest=profile_digest,
                 fusion_profile_digest=fused_digest,
                 pair_id=pair_id,
-                arctic_s=arctic[pair_id],
-                dense=bge[pair_id].dense,
-                sparse=bge[pair_id].sparse,
-                colbert=bge[pair_id].colbert,
-                fused=fuse(bge[pair_id], fusion_profile.weights),
-                left_entails_right=nli[pair_id].left_entails_right,
-                right_entails_left=nli[pair_id].right_entails_left,
-                left_contradicts_right=nli[pair_id].left_contradicts_right,
-                right_contradicts_left=nli[pair_id].right_contradicts_left,
-            )
-            for pair_id in pair_ids
-        )
+                **values,
+            ))
+        scores = tuple(scores)
         if {score.pair_id for score in scores} != expected:
             raise ModelLockError("serialized scores must cover every labeled pair exactly once")
         return scores
