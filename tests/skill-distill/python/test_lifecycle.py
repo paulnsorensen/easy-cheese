@@ -195,6 +195,58 @@ def test_propose_derives_token_savings_and_applies_only_after_post_write_gate(tm
     assert (repository / "result.txt").read_text() == "compact"
 
 
+def test_apply_rejects_symlinked_proposal_path(tmp_path: Path) -> None:
+    annotations, scores, drafts, proposals, repository, draft = _proposal_fixture(tmp_path)
+    compact = draft["variants"]["compact-inline"]  # type: ignore[index]
+    compact["changes"] = {"alias.txt": "compact"}  # type: ignore[index]
+    compact["token_metric_profile"] = _token_profile("alias.txt", "compact", 10)  # type: ignore[index]
+    _write(drafts, [draft])
+    proposal_path, = build_proposals(annotations, scores, drafts, proposals)
+    alias = repository / "alias.txt"
+    alias.symlink_to("result.txt")
+    gate_called = False
+
+    def gate(_mirror: Path) -> bool:
+        nonlocal gate_called
+        gate_called = True
+        return True
+
+    with pytest.raises(LifecycleError, match="symlink"):
+        apply_proposal(proposal_path, repository, gate)
+
+    assert not gate_called
+    assert alias.is_symlink()
+    assert (repository / "result.txt").read_text(encoding="utf-8") == "original"
+
+
+def test_apply_rejects_symlink_alias_and_target_collision(tmp_path: Path) -> None:
+    annotations, scores, drafts, proposals, repository, draft = _proposal_fixture(tmp_path)
+    compact = draft["variants"]["compact-inline"]  # type: ignore[index]
+    compact["changes"] = {"result.txt": "compact", "alias.txt": "other"}  # type: ignore[index]
+    profile = _token_profile("result.txt", "compact", 8)
+    profile["load_events"].extend(  # type: ignore[union-attr]
+        _token_profile("alias.txt", "other", 2)["load_events"]  # type: ignore[arg-type]
+    )
+    compact["token_metric_profile"] = profile  # type: ignore[index]
+    _write(drafts, [draft])
+    proposal_path, = build_proposals(annotations, scores, drafts, proposals)
+    alias = repository / "alias.txt"
+    alias.symlink_to("result.txt")
+    gate_called = False
+
+    def gate(_mirror: Path) -> bool:
+        nonlocal gate_called
+        gate_called = True
+        return True
+
+    with pytest.raises(LifecycleError, match="duplicate resolved targets"):
+        apply_proposal(proposal_path, repository, gate)
+
+    assert not gate_called
+    assert alias.is_symlink()
+    assert (repository / "result.txt").read_text(encoding="utf-8") == "original"
+
+
 def test_apply_binds_unchanged_recursively_loaded_reference_to_each_view(
     tmp_path: Path,
 ) -> None:

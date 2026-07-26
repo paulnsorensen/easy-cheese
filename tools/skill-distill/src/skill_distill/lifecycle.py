@@ -516,6 +516,15 @@ def _repository_path(root: Path, relative: str) -> Path:
     return path
 
 
+def _has_symlink_component(root: Path, relative: str) -> bool:
+    path = root
+    for part in Path(relative).parts:
+        path /= part
+        if path.is_symlink():
+            return True
+    return False
+
+
 def _representation_view(
     root: Path,
     profile: TokenMetricProfile,
@@ -579,7 +588,21 @@ def apply_proposal(
     }
     relative_changes = variant_changes[selected_name]
     root = repository.resolve()
-    changes = {_repository_path(root, relative): content for relative, content in relative_changes.items()}
+    resolved_changes = tuple(
+        ((root / relative).resolve(), relative, content)
+        for relative, content in relative_changes.items()
+    )
+    targets = tuple(path for path, _relative, _content in resolved_changes)
+    if len(set(targets)) != len(targets):
+        raise LifecycleError("proposal changes contain duplicate resolved targets")
+    if any(
+        _has_symlink_component(root, relative)
+        for _path, relative, _content in resolved_changes
+    ):
+        raise LifecycleError("proposal change path contains a symlink")
+    if any(root not in path.parents for path in targets):
+        raise LifecycleError("proposal path escapes the repository")
+    changes = {path: content for path, _relative, content in resolved_changes}
     if any(path.exists() and not path.is_file() for path in changes):
         raise LifecycleError("proposal change target exists but is not a file")
 
