@@ -1,0 +1,10 @@
+phase: press
+next:
+  - press
+  - age
+  - hold
+  - done
+payload:
+  baseline:
+    type: string
+    required: false

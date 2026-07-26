@@ -1,0 +1,20 @@
+phase: wheypoint
+next:
+  - mold
+  - cook
+  - press
+  - age
+  - cure
+  - affinage
+  - briesearch
+  - culture
+  - done
+  - hold
+  - tasks
+payload:
+  tasks:
+    type: list
+    required: false
+    items:
+      type: mapping
+      fields: {}

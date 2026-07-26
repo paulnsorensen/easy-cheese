@@ -14,6 +14,7 @@ shell out for the canonical preamble logic without re-implementing it.
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
 import cli
@@ -77,6 +78,25 @@ def _cmd_dispatch(args: argparse.Namespace) -> None:
     cli.emit({"skill": skill, "args": dispatch_args})
 
 
+def _cmd_envelope_parse(args: argparse.Namespace) -> None:
+    path = Path(args.file)
+    if not path.is_file():
+        raise cli.CliError(f"file not found: {args.file}")
+    try:
+        envelope = handoff.parse_handoff(path.read_text(encoding="utf-8"), path)
+    except handoff.HandoffParseError as exc:
+        raise cli.CliError(str(exc)) from exc
+    cli.emit(envelope.as_mapping(), json_mode=True)
+
+
+def _cmd_envelope_render(args: argparse.Namespace) -> None:
+    try:
+        envelope = handoff.HandoffEnvelope.from_mapping(json.loads(args.envelope))
+        print(handoff.render_handoff(envelope, args.body))
+    except (ValueError, json.JSONDecodeError, handoff.HandoffParseError) as exc:
+        raise cli.CliError(str(exc)) from exc
+
+
 def _setup(parser: argparse.ArgumentParser) -> None:
     parser.description = "Render, parse, and dispatch handoff preambles."
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -97,6 +117,15 @@ def _setup(parser: argparse.ArgumentParser) -> None:
     dispatch = sub.add_parser("dispatch", help="split a '/skill arg --flag' command")
     dispatch.add_argument("command", help="full dispatch string, e.g. '/age slug --hard'")
     dispatch.set_defaults(func=_cmd_dispatch)
+
+    envelope_parse = sub.add_parser("envelope-parse", help="parse a versioned YAML envelope")
+    envelope_parse.add_argument("--file", required=True)
+    envelope_parse.set_defaults(func=_cmd_envelope_parse)
+
+    envelope_render = sub.add_parser("envelope-render", help="render a versioned YAML envelope")
+    envelope_render.add_argument("--envelope", required=True, help="JSON envelope mapping")
+    envelope_render.add_argument("--body", default="")
+    envelope_render.set_defaults(func=_cmd_envelope_render)
 
 
 if __name__ == "__main__":

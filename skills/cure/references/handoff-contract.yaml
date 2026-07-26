@@ -1,0 +1,9 @@
+phase: cure
+next:
+  - age
+  - done
+  - hold
+payload:
+  baseline:
+    type: string
+    required: false

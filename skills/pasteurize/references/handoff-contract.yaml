@@ -1,0 +1,22 @@
+phase: pasteurize
+next:
+  - cook
+  - mold
+  - hold
+  - done
+payload:
+  cause:
+    type: string
+    required: false
+  loop:
+    type: string
+    required: false
+  seam:
+    type: string
+    required: false
+  fix:
+    type: string
+    required: false
+  follow_up:
+    type: string
+    required: false

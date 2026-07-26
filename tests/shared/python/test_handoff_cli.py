@@ -198,6 +198,57 @@ class TestJsonMode:
         assert payload["artifact"] is None
 
 
+class TestEnvelope:
+    def test_render_then_parse_preserves_versioned_envelope(self, tmp_path: Path) -> None:
+        artifact = tmp_path / "handoff.md"
+        envelope = {
+            "contract_version": "cheese-handoff/v1",
+            "work_id": "wk_test",
+            "attempt_id": "wa_test",
+            "operation_id": "op_test",
+            "phase": "press",
+            "status": "ok",
+            "halt_reason": None,
+            "next": "age",
+            "artifact": str(artifact),
+            "payload": {"coverage": "hardened"},
+            "provenance": {"source": "press"},
+        }
+        rendered = _run(
+            "envelope-render", "--envelope", json.dumps(envelope), "--body", "# Report"
+        )
+        assert rendered.returncode == 0, rendered.stderr
+        artifact.write_text(rendered.stdout, encoding="utf-8")
+
+        parsed = _run("envelope-parse", "--file", str(artifact))
+        assert parsed.returncode == 0, parsed.stderr
+        assert json.loads(parsed.stdout) == envelope
+
+    def test_parse_rejects_declared_path_mismatch(self, tmp_path: Path) -> None:
+        declared = tmp_path / "declared.md"
+        loaded = tmp_path / "loaded.md"
+        envelope = {
+            "contract_version": "cheese-handoff/v1",
+            "work_id": "wk_test",
+            "attempt_id": "wa_test",
+            "operation_id": "op_test",
+            "phase": "press",
+            "status": "ok",
+            "halt_reason": None,
+            "next": "age",
+            "artifact": str(declared),
+            "payload": {},
+            "provenance": {},
+        }
+        rendered = _run("envelope-render", "--envelope", json.dumps(envelope))
+        assert rendered.returncode == 0, rendered.stderr
+        loaded.write_text(rendered.stdout, encoding="utf-8")
+
+        parsed = _run("envelope-parse", "--file", str(loaded))
+        assert parsed.returncode == 2
+        assert "artifact path mismatch" in parsed.stderr
+
+
 class TestArgparse:
     def test_missing_subcommand_exits_two(self) -> None:
         result = _run()

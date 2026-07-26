@@ -1,7 +1,4 @@
-"""Read the handoff preamble from a .cheese/<phase>/<slug>.md artifact.
-
-Emits JSON with keys: status, next, artifact, orientation, halt_reason,
-taste_test, durable_flags, baseline.
+"""Read the versioned handoff envelope from a .cheese artifact.
 
     python3 shared/scripts/read_handoff_slug.py --phase age --slug foo
     -> {"status": "ok", "next": "cure", ...}
@@ -19,23 +16,22 @@ def _cmd(args: argparse.Namespace) -> None:
     artifact = paths.artifact_path(args.phase, args.slug)
     if not artifact.is_file():
         raise cli.CliError(f"artifact not found: {artifact}")
+    text = artifact.read_text(encoding="utf-8")
     try:
-        slug = handoff.parse_handoff_slug(artifact.read_text(encoding="utf-8"))
+        envelope = handoff.parse_handoff(text, artifact)
     except handoff.HandoffParseError as exc:
-        raise cli.CliError(f"malformed handoff preamble in {artifact}: {exc}") from exc
-    cli.emit(
-        {
-            "status": slug.status,
-            "next": slug.next_skill,
-            "artifact": slug.artifact,
-            "orientation": slug.orientation,
-            "halt_reason": slug.halt_reason,
-            "taste_test": slug.taste_test,
-            "durable_flags": slug.durable_flags,
-            "baseline": slug.baseline,
-        },
-        json_mode=True,
-    )
+        if text.startswith("---\\n"):
+            raise cli.CliError(f"malformed handoff preamble in {artifact}: {exc}") from exc
+        try:
+            slug = handoff.parse_handoff_slug(text)
+        except handoff.HandoffParseError as legacy_exc:
+            raise cli.CliError(f"malformed handoff preamble in {artifact}: {legacy_exc}") from legacy_exc
+        cli.emit({"status": slug.status, "next": slug.next_skill, "artifact": slug.artifact,
+                  "orientation": slug.orientation, "halt_reason": slug.halt_reason,
+                  "taste_test": slug.taste_test, "durable_flags": slug.durable_flags,
+                  "baseline": slug.baseline}, json_mode=True)
+        return
+    cli.emit(envelope.as_mapping(), json_mode=True)
 
 
 def _setup(parser: argparse.ArgumentParser) -> None:
