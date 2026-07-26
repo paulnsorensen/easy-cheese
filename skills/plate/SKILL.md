@@ -214,14 +214,6 @@ use `gh pr create --body-file`; never embed a markdown heredoc in `--body`.
 Push the named branch, create the PR with explicit base/head, then read it back
 with `gh pr view` to verify number, URL, base, head, and state.
 
-## Attribution
-
-The semantics-preserving/semantics-altering review-unit policy adapts Jeff
-Sarnat's
-[Structuring Changes With The Code Reviewer in Mind](https://jeff.sarn.at/blog/structuring-changes-with-the-code-reviewer-in-mind).
-`/plate`'s PR-topology, commit-shaping, and verification-body rules are
-project-specific extensions of that principle.
-
 ## Stack provider detection
 
 Resolve metadata through `GIT_DIR="$(git rev-parse --git-dir)"`; never assume
