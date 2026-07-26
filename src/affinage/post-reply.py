@@ -119,8 +119,8 @@ def _post(api_path: str, full_body: str) -> None:
             text=True,
             check=False,
         )
-    except FileNotFoundError:
-        raise _die("gh CLI not found in PATH")
+    except FileNotFoundError as exc:
+        raise _die("gh CLI not found in PATH") from exc
     if result.returncode != 0:
         raise _die(f"gh api POST {api_path} failed (exit {result.returncode}): {result.stderr.strip()}")
     sys.stdout.write(result.stdout)

@@ -4,7 +4,7 @@ The Codex/OMP portability cleanup should add one shared harness-portability refe
 
 ## Context
 
-A read-only audit found that multiple workflow skills still present Claude Code mechanisms as mandatory execution paths: `${CLAUDE_SKILL_DIR}/scripts/*.pyz`, Claude `Agent()` wording, `gh` CLI operations, and slash-command handoffs. The earlier harness-native overlap work already made `cheez-*` backend-flexible, so this decision covers the remaining workflow and orchestration docs.
+A read-only audit found that multiple workflow skills still present Claude Code mechanisms as mandatory execution paths: `${CLAUDE_SKILL_DIR}/scripts/*.pyz`, Claude `Agent()` wording, `gh` CLI operations, and slash-command handoffs. The earlier harness-native overlap work already made the retired code-intelligence wrapper skills backend-flexible, so this decision covers the remaining workflow and orchestration docs.
 
 ## Decision
 

@@ -36,7 +36,7 @@ Use when classification confidence falls below `medium`, or critical facts are m
 | `$ARGUMENTS` is empty or a single word | `/cheese`, `/cheese help` |
 | Pronoun-only reference with no recent context | "fix it", "review that" |
 | Two strong but conflicting signals | spec path **and** PR url in one prompt |
-| Mentioned file/spec/slug does not exist | path that fails `cheez-read` |
+| Mentioned file/spec/slug does not exist | path that fails a bounded file read |
 
 Ask one question. Re-enter `/cheese` with the answer.
 

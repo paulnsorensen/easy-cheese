@@ -48,7 +48,7 @@ Concrete classification examples:
 - "The pipeline order is culture → mold → cook → press → age → cure" → **durable → wiki**.
 - "The approved spec for the durable-memory boundary" → **durable → XDG corpus**.
 - "Curd #3 of the durable-memory spec failed its press pass" → **transient → `.cheese/`**.
-- "cheez-* skills hard-fail without tilth MCP; everything else degrades" → **durable → wiki**.
+- "The retired code-intelligence wrapper skills became a shared routing contract" → **durable → wiki**.
 - "The age report for PR #107 flagged two medium findings" → **transient → `.cheese/`**.
 
 ## One topic per file

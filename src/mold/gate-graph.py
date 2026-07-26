@@ -69,8 +69,7 @@ def gate_id(checklist_label: str) -> str:
     first colon (the gate's name), lowercase, non-alphanumerics to single dashes.
     `handshake.md` and the model both run through this, so the two stay in sync."""
     head = checklist_label.split(":", 1)[0]
-    slug = re.sub(r"[^a-z0-9]+", "-", head.strip().lower()).strip("-")
-    return slug
+    return re.sub(r"[^a-z0-9]+", "-", head.strip().lower()).strip("-")
 
 
 # The 13 coherence-checklist gates, verbatim from handshake.md's checklist (the
@@ -205,8 +204,8 @@ def render(
             capture_output=True,
             timeout=30,
         )
-    except subprocess.TimeoutExpired:
-        raise RenderError(f"dot -T{target} timed out after 30 s")
+    except subprocess.TimeoutExpired as exc:
+        raise RenderError(f"dot -T{target} timed out after 30 s") from exc
     if proc.returncode != 0:
         raise RenderError(f"dot -T{target} failed: {proc.stderr.decode('utf-8', 'replace').strip()}")
     return target, proc.stdout
