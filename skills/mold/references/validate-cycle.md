@@ -35,14 +35,13 @@ spec). Confidence-gathering is the goal; an arbitrary cap cuts it short.
   deep evidence to a sub-agent and watch the window.
 - **Soft backstop of 10.** At the 10th launched cycle, ask once "still gathering —
   continue?"; it is a check, not a stop, and the user can wave it through.
-- Cycles backed by `cheez-search` evidence alone are unbudgeted — they do not count
-  toward the backstop.
+- Cycles backed by local semantic source-code evidence alone are unbudgeted — they do not count toward the backstop.
 
 The same context-bounded rule governs Prototype Cycles (`prototype-cycle.md`).
 
 ## When to skip
 
-- The claim is already grounded (a `cheez-read` or earlier cycle settled it).
+- The claim is already grounded by a bounded source read or earlier cycle; source-code reads follow the [shared routing contract](../../cheese/references/code-intelligence-routing.md).
 - The decision is reversible and small — running a cycle costs more than just trying it.
 - The user explicitly said "skip the cycle".
 

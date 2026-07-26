@@ -8,7 +8,7 @@ license: MIT
 
 A discipline for hard bugs. Skip phases only when explicitly justified.
 
-When exploring the codebase, use `/cheez-search` to orient and check `.cheese/specs/` for any spec or design notes that touch the failing seam.
+When exploring the codebase, call the selected source-code backend directly according to [`code-intelligence-routing.md`](../cheese/references/code-intelligence-routing.md), and check `.cheese/specs/` for any spec or design notes that touch the failing seam.
 
 Portability reference: [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
 The handoff blocks below are the portable contract; slash commands are host renderings, not the control model.
@@ -87,7 +87,7 @@ Tool preference:
 2. **Targeted logs** at the boundaries that distinguish hypotheses.
 3. Never "log everything and search".
 
-**Tag every debug log** with a unique prefix, e.g. `[DEBUG-a4f2]`. Cleanup at the end becomes a single `/cheez-search` content query. Untagged logs survive; tagged logs die.
+**Tag every debug log** with a unique prefix, e.g. `[DEBUG-a4f2]`. Cleanup at the end becomes a single content query through the selected search backend. Untagged logs survive; tagged logs die.
 
 **Perf branch.** For performance regressions, logs are usually wrong. Instead: establish a baseline measurement (timing harness, `performance.now()`, profiler, query plan), then bisect. Measure first, fix second.
 
@@ -137,9 +137,9 @@ Once the checklist is green and the slug is on disk, hand off to `/cook <slug> -
 
 | Need | Prefer | Fallback |
 | --- | --- | --- |
-| Code search / blast radius | `/cheez-search` (tilth MCP) | LSP, native AST search, or another semantic backend that answers the same question |
-| Reading code | `/cheez-read` (tilth MCP) | Native bounded read with snapshot/line anchors, or LSP symbol read when it supplies a stale-safe edit path |
-| Editing instrumentation | `/cheez-write` (tilth MCP) | Native anchored-edit backend with stale-write detection, or LSP-driven edit when it preserves the same safety |
+| Code search / blast radius | semantic caller and dependency search | bounded text search with explicit precision loss |
+| Reading code | fresh bounded read from the intended write backend family | native bounded read with snapshot/line anchors |
+| Editing instrumentation | stale-safe anchored edit | LSP or native snapshot edit with stale-write detection |
 | Diff visualization | `delta` | plain `git diff` |
 | GitHub context | `gh` | local git history or user-provided links |
 | External sanity check | `/briesearch` | clearly mark as an assumption |

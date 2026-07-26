@@ -19,9 +19,9 @@ When the cooked diff's handoff slug carries a recorded `baseline:` block, press 
 ## Flow
 
 1. **Read** — load the spec or acceptance criteria and the cooked diff. If `.cheese/glossary/<slug>.md` exists, read it for naming consistency when hardening tests.
-2. **Map** — for each changed behaviour, find the test(s) that cover it via `cheez-search`.
+2. **Map** — for each changed behaviour, find the test(s) that cover it through semantic caller search.
 3. **Gap analysis** — identify weak assertions, missing boundaries, and uncovered integration seams. See `references/gap-analysis.md` for what counts as a gap and the priority order.
-4. **Add focused tests** — observe red first when behaviour changes. Use `cheez-write` for precise edits.
+4. **Add focused tests** — observe red first when behaviour changes. Apply precise stale-safe edits.
 5. **Corrective fixes** — only for defects the hardening tests expose. No new behaviour.
 6. **Run checks** — narrowest useful tests, then relevant wider gates already in the project. When the handoff carries a `baseline:` block, classify gate failures against it per [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md): identical failures do not affect readiness; only new or changed failures do.
 7. **Report** — write `.cheese/press/<slug>.md` (slug carried from `/cook`, or derived from branch/task) and print the path. Mark readiness: `ready for /age`, `follow-up recommended`, or `blocked`.
@@ -29,17 +29,17 @@ When the cooked diff's handoff slug carries a recorded `baseline:` block, press 
 
 ## Preferred tools and fallbacks
 
-Code search, reading, and editing all go through the `cheez-*` skills (`/cheez-search`, `/cheez-read`, `/cheez-write`) — see those skills for tool selection rules. For coverage and test discovery, press uses `cheez-search` (callers via `kind: "callers"`) and `tilth_deps`.
+Call source-code search, read, and edit backends directly according to [`code-intelligence-routing.md`](../cheese/references/code-intelligence-routing.md). For coverage and test discovery, use semantic caller search plus `tilth_deps` when available.
 
 Portability reference: [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
 The handoff blocks below are the portable contract; slash commands are host renderings, not the control model.
 
-Beyond `cheez-*` there are press-specific tools:
+Beyond source-code routing there are press-specific tools:
 
 | Need | Prefer | Fallback |
 | --- | --- | --- |
 | Diff review | `delta` | plain `git diff` |
-| Affected execution flows + risk scoring | caller/dependency tracing from `/cheez-search` and `tilth_deps` | manual flow tracing from changed files |
+| Affected execution flows + risk scoring | semantic caller/dependency tracing and `tilth_deps` | manual flow tracing from changed files; note the precision loss |
 
 If optional tools are missing, press a narrower surface and state the residual risk.
 

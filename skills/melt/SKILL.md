@@ -8,13 +8,9 @@ license: MIT
 
 Use this skill to resolve git merge, rebase, or cherry-pick conflicts using the structural cascade: **mergiraf → rerere → kdiff3**. Each tool handles what the previous could not.
 
-## File IO delegation
+## File IO routing
 
-For per-file inspection or manual edits, delegate to the `cheez-*` skills:
-
-- **`/cheez-search`** — locate conflict markers or related symbols across the tree.
-- **`/cheez-read`** — inspect conflicted files, view conflict hunks, list directory contents.
-- **`/cheez-write`** — apply tag-anchored resolutions when bash flows are not enough.
+For conflict-marker or symbol search, bounded inspection, and manual edits, call the selected source-code backend directly according to [`code-intelligence-routing.md`](../cheese/references/code-intelligence-routing.md). Preserve search → fresh bounded read → stale-safe write when applying a manual resolution.
 
 ## Cascade
 

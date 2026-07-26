@@ -38,7 +38,7 @@ The handoff blocks below are the portable contract; slash commands are host rend
    ```
 
    If the host only ships the bundle, `python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz findings_cli parse-selection ...` is the fallback.
-3. **Apply** — fix one logical group at a time via `cheez-read` (re-confirm anchor location) and `cheez-write` (apply).
+3. **Apply** — fix one logical group at a time: re-confirm the anchor through a fresh bounded read, then apply a stale-safe write from a compatible backend family.
 4. **Validate** — run the narrowest tests that prove each fix, then any relevant project-wide gates (lint, typecheck, build). When the handoff carries a recorded `baseline:` block, classify gate failures against it per [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md): identical failures do not block a clean cure or trigger a halt; only new or changed failures are cure's to fix.
 5. **Taste-test (behavioural fixes only)** — if this cure applied a *behavioural* fix (touched production logic or public surface), run the fresh-context taste-test before the handoff slug: dispatch the read-only `reviewer` phase-agent (named, no call-site model — its def pins `model: opus`) over the cure diff with the same lenses cook uses, or fall back to the inline self-check when no such reviewer sub-agent is available. *Mechanical* fixes — formatting, comment, import, no-logic rename — skip this and keep the current flow. Pipe any `revise` into a bounded corrective pass; a Locked-decision `halt` stops for a human. (A coder-nested cure cannot fan out; it defers the authoritative pass to the orchestrator.)
 6. **Domain-model correction (diff-touched terms only)** — after the cook's fixes land, correct the project domain model (ubiquitous language) for terms **touched by the cook's diff** (bounded — diff-touched terms only, never a free rewrite). Resolve the store with `domain_model_target()` (`shared/scripts/paths.py`, read-probe cascade wiki → docs → XDG; an existing model always wins). For a diff-touched entry whose definition or `_Code_:` referent no longer matches the code, update it and write a one-line change note per edit (entry format: `**Term** — definition.` / `_Avoid_: syn1, syn2` / `_Code_: file:line (or NEW ENTITY)`). **HARD rule — flag, don't reverse:** if a correction would REVERSE a mold-decided canonical term (replace the term mold made authoritative, or contradict its definition), do not rewrite — flag it to the user (the term, mold's decision, the conflict) and leave the entry unchanged. mold DECIDES canonical terms at curdle; cure only APPLIES BOUNDED corrections and never overrules the authoritative writer.
@@ -48,9 +48,9 @@ The handoff blocks below are the portable contract; slash commands are host rend
 
 ## Preferred tools and fallbacks
 
-Code search, reading, and editing all go through the `cheez-*` skills (`/cheez-search`, `/cheez-read`, `/cheez-write`) — see those skills for tool selection rules.
+Call source-code search, read, and write backends directly according to [`code-intelligence-routing.md`](../cheese/references/code-intelligence-routing.md).
 
-Beyond `cheez-*` there are cure-specific tools:
+Beyond source-code routing there are cure-specific tools:
 
 | Need | Prefer | Fallback |
 | --- | --- | --- |
@@ -58,8 +58,8 @@ Beyond `cheez-*` there are cure-specific tools:
 | CI and PR context | `gh` | local test output or user-provided logs |
 | Diffs | `delta` | plain `git diff` |
 | Conflict resolution | mergiraf | manual resolution with targeted tests |
-| Code navigation | `/cheez-search` `kind:symbol` then `kind:callers` | LSP, native AST search, or another semantic backend that answers the same question |
-| Read before edit | `/cheez-read` ranged/outline (`paths: ["f#n-m"]`, `mode:stripped`) | Native bounded read with snapshot/line anchors, or LSP symbol read when it supplies a stale-safe edit path |
+| Code navigation | semantic symbol search, then caller search | LSP or bounded native search; report precision loss |
+| Read before edit | fresh bounded read from the write backend family | another snapshot-capable bounded read; re-read if anchors are incompatible |
 
 If a preferred tool is missing, continue with the fallback. If a missing tool prevents safe application, stop and explain the blocker.
 

@@ -64,11 +64,12 @@ The workflow skills compose into one pipeline, ordered
 | `/plate` | Write and verify final artifacts, validate, commit, and publish one PR or a stack |
 | `/ultracook` | Pipeline a spec in fresh-context isolation; parallel mode fans file-disjoint curds → PRs |
 
-Lower-level **tool skills** sit beneath the pipeline: `/cheez-search`,
-`/cheez-read`, `/cheez-write` (tilth-backed primitives), plus the
-`/ultracook` composite that chains cook → press → age → cure
-non-interactively in fresh-context isolation; its parallel mode (formerly
-`/cheese-factory`) fans file-disjoint curds through the `src/fanout/` engine
+Workflow skills call source-code backends directly through the shared
+`skills/cheese/references/code-intelligence-routing.md` contract. The retired
+code-intelligence wrapper skills previously sat beneath the pipeline; their
+policy now lives in that shared reference. `/ultracook` chains cook → press →
+age → cure non-interactively in fresh-context isolation; its parallel mode
+(formerly `/cheese-factory`) fans file-disjoint curds through `src/fanout/`
 into reviewable PRs (`AGENTS.md:42-49`).
 
 ## Portability is the design center
@@ -77,12 +78,11 @@ No repo-wide MCP requirement. Workflow skills *suggest* tools (tilth,
 Context7, Tavily, code-review-graph) but carry host-native fallbacks, so
 the collection runs on any compliant agent host (`README.md:161`).
 
-The one deliberate exception is the `cheez-*` tool skills: they require
-tilth MCP and **hard-fail** when it is unavailable rather than silently
-degrade to `grep`/`cat`/`Edit` (`AGENTS.md:73`, `README.md:87`). That
-asymmetry is intentional — the workflow skills stay universal; the tool
-skills trade portability for AST-grounded precision and announce the
-trade by refusing to run without it (`skills/cheez-search/SKILL.md:3-5`).
+The retired code-intelligence wrapper skills previously encoded stricter
+backend selection and edit sequencing. Workflow skills now preserve that
+precision through the shared routing contract while degrading explicitly to
+bounded native fallbacks when semantic backends are unavailable
+(`skills/cheese/references/code-intelligence-routing.md`).
 
 ## Why a wiki at all
 

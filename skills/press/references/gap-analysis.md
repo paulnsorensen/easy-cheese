@@ -14,7 +14,7 @@
 
 For each function or module touched by the cooked diff:
 
-1. Find existing tests via `cheez-search`:
+1. Find existing tests through semantic caller search, following the [shared routing contract](../../cheese/references/code-intelligence-routing.md). With tilth:
    ```
    tilth_search(queries: [{query: "<changed-symbol>", kind: "callers"}], scope: "**/*.test.*")
    ```
