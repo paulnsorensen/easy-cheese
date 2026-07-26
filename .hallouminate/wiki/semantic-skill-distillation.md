@@ -50,6 +50,46 @@ Human records, schemas, manifests, adversarial fixtures, gold labels, and adjudi
 
 Wave one owns `pyproject.toml`, `uv.lock`, and `DependencyInventoryV1`; later scoring waves consume that frozen inventory without modifying package metadata.
 
+## Apply-gate mirror: containment vs. recursion safety
+
+`lifecycle.apply_proposal` copies the repository into a disposable temp mirror,
+applies a proposed family's changes there, and runs the operator-supplied
+post-write gate against the mirror instead of the real tree — pinned by
+`test_failed_gate_cannot_mutate_real_unrelated_files`
+(`tests/skill-distill/python/test_lifecycle.py`).
+
+That mirror has two safety properties that a naive `shutil.copytree(symlinks=...)`
+choice trades against each other, not two independent knobs:
+
+- `symlinks=False` dereferences symlinks into regular files. A gate writing
+  through a symlink stays contained inside the mirror, but a directory symlink
+  pointing at an ancestor makes the copy recurse until disk or stack
+  exhaustion.
+- `symlinks=True` fixes the recursion but breaks containment — symlinks copy
+  verbatim, so one with an absolute or repo-escaping target still points at
+  the real filesystem, and a gate writing through it escapes the sandbox.
+
+Neither value is correct alone. The fix keeps `symlinks=True` and adds a
+post-copy pass, `_neutralize_escaping_symlinks`, that walks the mirror with
+`os.walk(followlinks=False)`, resolves each symlink through its full chain,
+and unlinks any whose resolved target lands outside the mirror root.
+
+Two things not to assume from reading the code in isolation:
+
+- `_has_symlink_component` guards *proposal change paths* — it says nothing
+  about gate side effects, and does not cover this case.
+- Accepted tradeoff: a legitimate repo symlink pointing to an absolute path
+  outside the repo is now silently removed from the mirror, so a gate
+  depending on such a link fails without an obvious cause.
+
+The mirror also excludes `.git`, `.venv`, `node_modules`, and `__pycache__`
+for copy cost. Because gate argv is arbitrary operator input, a gate
+referencing an excluded path (e.g. `.venv/bin/pytest`) now surfaces as an
+attributed gate failure rather than an uncaught `FileNotFoundError`
+traceback.
+
+_Source: PR 329 (commit 0d671e9) · Updated: 2026-07-26_
+
 ## Related decisions
 
 - [ADR: Evidence-gated semantic skill distillation](./adr/semantic-skill-distillation-001.md)
