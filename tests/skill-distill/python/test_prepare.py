@@ -246,7 +246,7 @@ def test_prepare_is_byte_stable_and_preserves_the_source_report(
 
 def test_cli_prepare_executes_the_real_dataset_pipeline(tmp_path: Path) -> None:
     report_path, controls_path = _write_inputs(tmp_path)
-    output_path = tmp_path / "cli-dataset.json"
+    output_path = tmp_path / ".context" / "cli-dataset.json"
 
     assert main(
         [

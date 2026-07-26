@@ -106,6 +106,14 @@ def test_local_scoring_collects_every_required_evidence_without_downloads(tmp_pa
 
     assert isinstance(result[0], ScoresV1)
     assert result[0].fused == pytest.approx(0.38)
+    assert result[0].arctic_s == pytest.approx(0.25)
+    assert result[0].dense == pytest.approx(0.2)
+    assert result[0].sparse == pytest.approx(0.3)
+    assert result[0].colbert == pytest.approx(0.5)
+    assert result[0].left_entails_right == pytest.approx(0.9)
+    assert result[0].right_entails_left == pytest.approx(0.8)
+    assert result[0].left_contradicts_right == pytest.approx(0.1)
+    assert result[0].right_contradicts_left == pytest.approx(0.2)
     assert bge.paths == [bge_snapshot.resolve()]
     assert arctic.calls == nli.calls == 1
 

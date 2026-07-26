@@ -5,6 +5,9 @@ description = "Versioned evidence contracts for semantic skill distillation"
 requires-python = ">=3.12"
 dependencies = ["PyYAML==6.0.2"]
 
+[project.scripts]
+skill-distill = "skill_distill.cli:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

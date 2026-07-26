@@ -17,13 +17,13 @@ Run semantic skill distillation as an experimental repository-local protocol. Th
 ## Run the pilot
 
 1. Run `just test-skill-distill`. Stop if the model-free contracts and deterministic algorithms fail.
-2. Produce the Rust overlap report and adversarial-controls file without changing the overlap report schema.
-3. Run `just distill-pilot --report <report.json> --adversarial-controls <controls.json> --out <dataset.json>` to prepare the deterministic dataset.
-4. Freeze the human labels before obtaining independent LLM labels. Reconcile committed digests only in the enforced `prepared -> human-frozen -> llm-recorded -> reconciled` order; a second human adjudicates every disagreement and compression-positive pair.
-5. Run scoring directly as the agent, never through `just` or CI. Require local, immutable locks for Arctic-S, full BGE-M3 dense/sparse/multi-vector evidence, and bidirectional DeBERTa-v3-base NLI. Verify artifact revision, artifact hash, runtime identity, dependency inventory, and BGE modes before loading anything. Do not download models; missing or drifted artifacts halt the run.
-6. Compare physical-reference and compact-inline proposals by invocation-loaded tokens. Count every exact UTF-8 load event independently, including repeated loads, with the pinned behavior-model tokenizer and no chat template or added special tokens.
-7. Run deterministic mutations, then the current-harness behavior matrix and fresh-context LLM diagnostic directly as agent-owned diagnostics. Never add either diagnostic to a `just` recipe or CI. `concern` and `abstain` require human disposition and cannot waive deterministic failures.
-8. Apply a passing family atomically with its reversal patch, run the cross-family interaction gate, and bisect and revert any failure.
+2. Prepare the dataset and initial run together under `.context/`: `just distill-pilot --report <report.json> --adversarial-controls <controls.yaml> --out .context/distill/dataset.json --run .context/distill/run.json --run-id <id>`.
+3. Record the human labels with `freeze-human-labels --run .context/distill/run.json --labels <human.yaml> --frozen-at <timestamp>`, then export only source spans with `export-llm-pairs --run ... --dataset .context/distill/dataset.json --out .context/distill/llm-pairs.json`.
+4. Run the source-only LLM annotation as the agent. Do not expose the human labels or digest. Record its result with `record-llm-labels`, then run `reconcile` with the human, LLM, and second-human adjudication files. The run and annotations advance in one atomic write.
+5. Run `score` directly as the agent with an explicit local adapter module, three immutable lock/snapshot pairs, the frozen fusion profile, and dependency inventory. Never invoke scoring, the current harness, or an LLM through `just` or CI. Missing or drifted evidence halts before `scores-v1` is written; no downloader or remote fallback exists.
+6. Run `validate`, then give `propose --scores .context/distill/scores.json` agent-authored family drafts containing the canonical center, explicit residuals, both token-measured variants, original obligations, and recorded gate evidence. Proposal generation rejects missing pair coverage, mixed scorer profiles, or incomplete Arctic-S/BGE/NLI evidence. Generated datasets, run records, exports, scores, validation reports, diagnostics, and proposals must stay under `.context/`.
+7. Run deterministic mutations, two original current-harness matrices, one matrix per representation, and the fresh-context diagnostic as agent-owned steps. Record `concern` or `abstain` with an explicit human disposition; neither can waive deterministic, behavior, token, or overlap failures.
+8. Run `apply --proposal <.context proposal> --repository <repo>` one passing family at a time. Finish with `verify --run <run.json> --evidence <interaction.json>` only after the agent-owned cross-family gate has passed and any interacting families have been bisected and reverted.
 
 ## Finish
 

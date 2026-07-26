@@ -139,15 +139,23 @@ class LocalScoringRunner:
         profile_digest = model_profile_digest(locks)
         fused_digest = fusion_profile_digest(fusion_profile)
 
-        return tuple(
+        scores = tuple(
             ScoresV1(
                 model_profile_digest=profile_digest,
                 fusion_profile_digest=fused_digest,
                 pair_id=pair_id,
+                arctic_s=arctic[pair_id],
                 dense=bge[pair_id].dense,
                 sparse=bge[pair_id].sparse,
                 colbert=bge[pair_id].colbert,
                 fused=fuse(bge[pair_id], fusion_profile.weights),
+                left_entails_right=nli[pair_id].left_entails_right,
+                right_entails_left=nli[pair_id].right_entails_left,
+                left_contradicts_right=nli[pair_id].left_contradicts_right,
+                right_contradicts_left=nli[pair_id].right_contradicts_left,
             )
             for pair_id in pair_ids
         )
+        if {score.pair_id for score in scores} != expected:
+            raise ModelLockError("serialized scores must cover every labeled pair exactly once")
+        return scores

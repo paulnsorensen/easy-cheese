@@ -149,10 +149,15 @@ class ScoresV1(_ImmutableContract):
     model_profile_digest: str
     fusion_profile_digest: str
     pair_id: str
+    arctic_s: float
     dense: float
     sparse: float
     colbert: float
     fused: float
+    left_entails_right: float
+    right_entails_left: float
+    left_contradicts_right: float
+    right_contradicts_left: float
     schema_version: str = "scores-v1"
 
 
