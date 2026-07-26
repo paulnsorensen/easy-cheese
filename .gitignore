@@ -15,6 +15,7 @@
 !.agents/skills/
 .agents/skills/*
 !.agents/skills/pythonic/
+!.agents/skills/distill/
 .claude/skills/
 
 # milknado optional-plugin runtime data (SQLite task graph)
