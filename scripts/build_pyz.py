@@ -1,19 +1,16 @@
 #!/usr/bin/env python3
-"""Build one self-contained .pyz per skill: only that skill's scripts plus the
-shared/scripts modules they actually import.
+"""Build deterministic skill bundles and the Cheese contract-runtime companion.
 
-Sources live outside the shipped skill dirs — skill scripts in src/<skill>/, the
-shared library in shared/scripts/. Each bundle is assembled from just what the
-skill needs (shared deps computed by scanning imports) and deployed to
-skills/<skill>/scripts/<skill>.pyz. No skill ships another skill's code, and a
-shared module is vendored only into the bundles that import it — keeping the
-total shipped footprint O(scripts), not O(skills × scripts).
+The Cheese companion is the sole shipped runtime for cross-skill contracts. It
+embeds the compiled phase registry; PyYAML is required only while building that
+registry. Ordinary skill bundles remain independently built.
 """
 
 from __future__ import annotations
 
 import argparse
 import ast
+import importlib.metadata
 import shutil
 import sys
 import tempfile
@@ -26,6 +23,11 @@ SRC_ROOT = REPO_ROOT / "src"
 SHARED_SCRIPTS = REPO_ROOT / "shared" / "scripts"
 SHARED_MODULES = {p.stem for p in SHARED_SCRIPTS.glob("*.py")}
 ZIP_TIMESTAMP = (1980, 1, 2, 0, 0, 0)
+PY_YAML_VERSION = "6.0.2"
+CHEESE = "cheese"
+
+sys.path.insert(0, str(SHARED_SCRIPTS))
+import handoff  # noqa: E402
 
 
 @dataclass(frozen=True)
@@ -108,10 +110,9 @@ EXTRA_MODULES: dict[str, list[tuple[str, str]]] = {
     "ultracook": [("fanout", "age_route.py")],
 }
 
-# The "common" bundle ships cross-cutting CLI entrypoints sourced from
-# shared/scripts/ (not src/<skill>/). It has no skill dir of its own; instead a
-# copy is fanned out into every consuming skill's scripts/ dir so each skill
-# stays self-contained after `gh skill install`.
+# The historical common bundle remains available only through --out-dir for
+# compatibility with developer tests. It is never deployed or staged for release;
+# Cheese is the only shipped cross-skill contract runtime.
 COMMON = "common"
 COMMON_SUBCOMMANDS: dict[str, str] = {
     "slugify": "slugify.py",
@@ -123,7 +124,6 @@ COMMON_SUBCOMMANDS: dict[str, str] = {
     "handoff_cli": "handoff_cli.py",
     "render_html": "html_report_cli.py",
 }
-# Wave 1: consumer skills receive common.pyz
 COMMON_CONSUMERS: frozenset[str] = frozenset({"cure", "age", "ultracook"})
 
 _CACHE: dict[str, Path] = {}
@@ -247,8 +247,10 @@ def _write_zipapp(source: Path, target: Path) -> None:
     with target.open("wb") as pyz:
         pyz.write(b"#!/usr/bin/env python3\n")
         with zipfile.ZipFile(pyz, "w", compression=zipfile.ZIP_STORED) as archive:
-            for staged_file in sorted(source.iterdir(), key=lambda p: p.name):
-                info = zipfile.ZipInfo(staged_file.name, date_time=ZIP_TIMESTAMP)
+            for staged_file in sorted(source.rglob("*"), key=lambda p: p.as_posix()):
+                if not staged_file.is_file():
+                    continue
+                info = zipfile.ZipInfo(staged_file.relative_to(source).as_posix(), date_time=ZIP_TIMESTAMP)
                 info.create_system = 3
                 info.external_attr = 0o644 << 16
                 archive.writestr(info, staged_file.read_bytes())
@@ -279,6 +281,104 @@ def build_bundle(skill: str, target: Path) -> Path:
     return target
 
 
+def _require_pyyaml() -> None:
+    """Require the exact build-time PyYAML version used to compile contracts."""
+    try:
+        version = importlib.metadata.version("PyYAML")
+    except importlib.metadata.PackageNotFoundError as exc:
+        raise SystemExit(f"build_pyz: PyYAML {PY_YAML_VERSION} is required") from exc
+    if version != PY_YAML_VERSION:
+        raise SystemExit(
+            f"build_pyz: PyYAML must be exactly {PY_YAML_VERSION}, found {version}"
+        )
+
+
+def build_cheese_bundle(target: Path) -> Path:
+    """Build the mandatory Cheese companion with compiled contracts."""
+    _require_pyyaml()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    registry = handoff.assemble_transition_registry(
+        sorted((REPO_ROOT / "skills").glob("*/references/handoff-contract.yaml"))
+    )
+    with tempfile.TemporaryDirectory() as td:
+        stage = Path(td)
+        for module in (
+            "cli",
+            "handoff",
+            "paths",
+            "work",
+            "work_cli",
+            "write_handoff_artifact",
+        ):
+            shutil.copy(SHARED_SCRIPTS / f"{module}.py", stage / f"{module}.py")
+        (stage / "contract_registry.py").write_text(
+            f"REGISTRY = {registry!r}\n", encoding="utf-8"
+        )
+        (stage / "contract_registry_cli.py").write_text(
+            "import sys\nfrom contract_registry import REGISTRY\n\n"
+            "def main():\n"
+            "    if sys.argv[1:] != ['validate']:\n"
+            "        sys.stderr.write('usage: cheese.pyz contract-registry validate\\n')\n"
+            "        raise SystemExit(2)\n"
+            "    phases = REGISTRY.get('phases') if isinstance(REGISTRY, dict) else None\n"
+            "    if not isinstance(phases, dict) or not phases:\n"
+            "        raise SystemExit('invalid compiled contract registry')\n"
+            "    print('contract registry valid')\n\n"
+            "if __name__ == '__main__':\n    main()\n",
+            encoding="utf-8",
+        )
+        (stage / "handoff_commit_cli.py").write_text(
+            "import json\nimport sys\nfrom contract_registry import REGISTRY\nfrom write_handoff_artifact import commit_handoff\n\n"
+            "def main():\n"
+            "    try:\n"
+            "        request = json.load(sys.stdin)\n"
+            "        if not isinstance(request, dict):\n"
+            "            raise ValueError('request must be a JSON object')\n"
+            "        request.setdefault('contracts', REGISTRY)\n"
+            "        print(json.dumps(commit_handoff(**request), default=str))\n"
+            "    except (OSError, ValueError, json.JSONDecodeError) as exc:\n"
+            "        print(json.dumps({'error': str(exc)}), file=sys.stderr)\n"
+            "        raise SystemExit(2) from exc\n\n"
+            "if __name__ == '__main__':\n    main()\n",
+            encoding="utf-8",
+        )
+        (stage / "handoff_resolve_cli.py").write_text(
+            "import json\nimport sys\nfrom pathlib import Path\n"
+            "from contract_registry import REGISTRY\n"
+            "from handoff import HandoffEnvelope, parse_handoff, resolve_next\n\n"
+            "def main():\n"
+            "    try:\n"
+            "        request = json.load(sys.stdin)\n"
+            "        if not isinstance(request, dict):\n"
+            "            raise ValueError('request must be a JSON object')\n"
+            "        if 'artifact' in request:\n"
+            "            path = Path(request['artifact'])\n"
+            "            envelope = parse_handoff(path.read_text(encoding='utf-8'), path)\n"
+            "        else:\n"
+            "            envelope = HandoffEnvelope.from_mapping(request.get('envelope'))\n"
+            "        result = resolve_next(envelope, request.get('available_phases', []), REGISTRY)\n"
+            "        print(json.dumps(result, sort_keys=True))\n"
+            "    except (OSError, ValueError, json.JSONDecodeError) as exc:\n"
+            "        print(json.dumps({'error': str(exc)}), file=sys.stderr)\n"
+            "        raise SystemExit(2) from exc\n\n"
+            "if __name__ == '__main__':\n    main()\n",
+            encoding="utf-8",
+        )
+        (stage / "__main__.py").write_text(
+            _dispatcher_source(
+                {
+                    "contract-registry": "contract_registry_cli",
+                    "handoff-commit": "handoff_commit_cli",
+                    "handoff-resolve": "handoff_resolve_cli",
+                    "work": "work_cli",
+                }
+            ),
+            encoding="utf-8",
+        )
+        _write_zipapp(stage, target)
+    return target
+
+
 def cached_bundle(skill: str) -> Path:
     """Build ``skill``'s bundle once per process (to a temp dir) and reuse it.
     Used by the test conftests so the suite imports from the bundled artifact."""
@@ -298,36 +398,30 @@ def main(argv: list[str]) -> int:
     )
     parser.add_argument("skills", nargs="*", help="Skills to build (default: all).")
     args = parser.parse_args(argv[1:])
-    # Consumer-only skills (age/cure/press) have no own bundle but receive
-    # common.pyz, so they are valid targets even though they are not in SKILLS.
-    known = {*SKILLS, COMMON, *COMMON_CONSUMERS}
+    known = {*SKILLS, COMMON, CHEESE, *COMMON_CONSUMERS}
     unknown = [s for s in args.skills if s not in known]
     if unknown:
         parser.error(f"unknown skill(s): {', '.join(unknown)}; known: {', '.join(sorted(known))}")
-    targets = args.skills or [*SKILLS, COMMON]
-    real = [s for s in targets if s in SKILLS]  # only skills that ship their own .pyz
-    want_common = COMMON in targets or any(s in COMMON_CONSUMERS for s in targets)
-    consumers = _common_consumers(targets, explicit=bool(args.skills))
+    targets = args.skills or [*SKILLS, COMMON, CHEESE]
+    real = [skill for skill in targets if skill in SKILLS]
+    want_common = COMMON in targets
+    want_cheese = CHEESE in targets
 
     if args.out_dir is not None:
         for skill in real:
             print(f"built {build_bundle(skill, args.out_dir / f'{skill}.pyz')}")
         if want_common:
             print(f"built {build_bundle(COMMON, args.out_dir / 'common.pyz')}")
+        if want_cheese:
+            print(f"built {build_cheese_bundle(args.out_dir / 'cheese.pyz')}")
         return 0
 
     for skill in real:
         print(f"deployed {build_bundle(skill, REPO_ROOT / 'skills' / skill / 'scripts' / f'{skill}.pyz')}")
-    if want_common:
-        # Build once, then fan the same artifact out to each consuming skill so
-        # every skill ships self-contained — common has no skill dir of its own.
-        with tempfile.TemporaryDirectory() as td:
-            common = build_bundle(COMMON, Path(td) / "common.pyz")
-            for consumer in sorted(consumers):
-                dest = REPO_ROOT / "skills" / consumer / "scripts" / "common.pyz"
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy(common, dest)
-                print(f"deployed {dest}")
+    if want_cheese:
+        print(
+            f"deployed {build_cheese_bundle(REPO_ROOT / 'skills' / 'cheese' / 'scripts' / 'cheese.pyz')}"
+        )
     return 0
 
 
