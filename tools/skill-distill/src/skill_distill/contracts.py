@@ -90,6 +90,7 @@ class DistillationRun(_ImmutableContract):
     state: RunState
     human_labels_digest: str | None = None
     llm_labels_digest: str | None = None
+    human_labels_frozen_at: str | None = None
     schema_version: str = "distillation-run-v1"
 
     def __post_init__(self) -> None:
@@ -103,6 +104,10 @@ class DistillationRun(_ImmutableContract):
         requires_human, requires_llm = required_digests[self.state]
         if bool(self.human_labels_digest) != requires_human:
             raise ValueError(f"{self.state} requires human_labels_digest={requires_human}")
+        if bool(self.human_labels_frozen_at) != requires_human:
+            raise ValueError(
+                f"{self.state} requires human_labels_frozen_at={requires_human}"
+            )
         if bool(self.llm_labels_digest) != requires_llm:
             raise ValueError(f"{self.state} requires llm_labels_digest={requires_llm}")
 
@@ -233,6 +238,12 @@ class RelationAdjudication(_ImmutableContract):
     atom_resolution: Mapping[str, Any]
     rationale: str
     schema_version: str = "relation-adjudication-v1"
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        object.__setattr__(self, "relation", RelationKind(self.relation))
+        if not self.pair_id or not self.adjudicator or not self.rationale:
+            raise ValueError("adjudications require pair_id, adjudicator, and rationale")
 
 
 @dataclass(frozen=True)
