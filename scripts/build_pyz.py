@@ -69,6 +69,7 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
         "append-attempt": "append-attempt.py",
         "freshness-check": "freshness-check.py",
     },
+    "wheypoint": {"lint": "lint.py"},
     "pasteurize": {
         "debug-tag-sweep": "debug-tag-sweep.py",
         "repro-rerun": "repro-rerun.py",

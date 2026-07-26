@@ -18,6 +18,7 @@ DISPATCHING = {
     "hard-cheese",
     "mold",
     "ultracook",
+    "wheypoint",
 }
 TABLE_COLUMNS = (
     "Work",

@@ -2,6 +2,7 @@
 name: wheypoint
 description: Mark a checkpoint in the current conversation — compact it into a durable handoff document so a fresh agent can resume the work without context loss. Use when the user wants to preserve session state for a later or parallel session — phrases like "hand this off", "write a handoff", "drop a wheypoint", "checkpoint this", "compact the conversation", "I'm running low on context", "save where we are for the next session", "prep a handoff for another agent", "/wheypoint". Use even when the user just says "wrap up" or "I need to clear context" mid-task. Do NOT use for per-phase pipeline handoffs — those belong to `/cook`, `/press`, `/age`, and `/cure`.
 license: MIT
+metadata: {dispatches-agents: true}
 ---
 
 # /wheypoint
@@ -16,11 +17,13 @@ license: MIT
 - Optional argument: a description of what the next session will focus on. When present, treat it as the lens and tailor the document to it. Drop state that does not serve that focus to a one-line pointer.
 - Optional verb `--join <slugA> <slugB>`: merge two existing handoff notes into one. Reads both notes from `.cheese/notes/` and writes a single merged note whose `parents:` lists both slugs.
 - Optional verb `--split`: fork the current thread into two resumable tracks. Writes two child notes, each with `parents: [<current-slug>]` and a distinct slug.
+- Optional flag `--verify`: force the fresh-context cold-reader on the finished note, regardless of its `status:`/`mode:`. Without the flag the cold-reader is gated to high-stakes notes (`status: gated:` or `mode: parallel`); the deterministic lint always runs either way. See `## Verify` and [`references/cold-reader.md`](references/cold-reader.md).
 
 ```text
 /wheypoint                     -> one note with session/git/created auto-filled
 /wheypoint --join A B          -> one merged note, parents: [A, B]
 /wheypoint --split             -> two child notes, each parents: [<current>]
+/wheypoint --verify            -> one note, cold-reader forced after the lint
 ```
 
 ## Flow
@@ -29,7 +32,8 @@ license: MIT
 2. **Inventory what already exists.** List the `.cheese/` artifacts, specs, PRs, issues, commits, and diffs this session produced or touched. These get referenced, never re-summarised.
 3. **Write the handoff document** to `.cheese/notes/<slug>.md` with the slug header (`## Handoff slug`) and body (`## Document`) below. When a focus argument was given, apply it as the lens throughout: emphasise state and decisions that serve the focus, and compress everything else to a one-line pointer.
 4. **Redact** secrets on the way out (`## Redaction`).
-5. **Point at resumption.** End by telling the user how to resume with `/cheese --continue <slug>` from the original repo, and include an absolute clickable path to the handoff note so the user can find it from any working directory.
+5. **Verify** the note before finalizing (`## Verify`): run the deterministic lint and fix every finding, then run the gated cold-reader when the note is high-stakes or `--verify` was passed.
+6. **Point at resumption.** End by telling the user how to resume with `/cheese --continue <slug>` from the original repo, and include an absolute clickable path to the handoff note so the user can find it from any working directory.
 
 ### `--join <slugA> <slugB>`
 
@@ -218,9 +222,25 @@ Summarise an artifact only when the summary is genuinely shorter than its pointe
 
 Strip anything sensitive before writing: API keys, tokens, passwords, connection strings, and personally identifiable information. If a secret is required for the next session, reference where it lives (env var name, secret manager path), never its value.
 
+## Verify
+
+Between writing the draft and finalizing, `/wheypoint` verifies the note in two layers. The deterministic lint always runs; the fresh-context cold-reader is gated to high-stakes notes so the median checkpoint pays no spawn.
+
+1. **Lint (always).** Run the note through the deterministic contract check:
+
+   ```bash
+   python3 skills/wheypoint/scripts/wheypoint.pyz lint .cheese/notes/<slug>.md
+   ```
+
+   It exits non-zero and prints one `<note-path>: <finding>` line per violation: header grammar (`status:` first, `next:` second, a non-empty orientation line), `status:`/`next:`/`mode:` grammar and enums, `next:` list rules (`order:` required, read-only skills only), `mode: parallel` requiring a `tasks:` block with each task carrying `command:` and the isolation fields its `worktree_strategy` needs, every `artifact:` and referenced `.cheese/` path resolving on disk, and the documented misfire — `status: ok` over un-negated blocker language in the open-questions/blockers section. Fix every finding and re-run until the lint is clean; a note is never finalized with an open lint finding. If `python3` is unavailable, skip the lint with one loud line and finalize the draft as-is.
+
+2. **Cold-reader (gated).** When the finalized note carries `status: gated:` or `mode: parallel`, or `--verify` was passed, dispatch a fresh-context read-only cold-reader (`## Agent resolution`). Give it the note and the probe set in [`references/cold-reader.md`](references/cold-reader.md); it returns structured gaps. Apply at most one fix round from the gaps, then finalize — there is no retry loop, and the cold-reader never edits the note itself. Fail open: if it errors or returns output that cannot be parsed, record the failure, warn in one line, and finalize anyway (hard-cheese precedent). When the host has no sub-agent primitive, render the probe set as an advisory self-checklist and say so in one line.
+
+The median `status: ok` single-track note runs the lint only. The lint catches the documented misfire class mechanically, so the semantic cold-reader pays its latency only on high-stakes notes, or when `--verify` asks for it.
+
 ## Handoff
 
-The handoff document is the only thing `/wheypoint` writes. No commits, PRs, or production-code edits. Use the host's read-only inspection capabilities plus a write capability scoped to `.cheese/notes/**`. End by showing the slug's orientation line, a normal Markdown link to the note, and repo-root-aware resumption commands. Keep the note link outside fenced code so it is clickable. The link line should match this shape: `Wheypoint dropped: [.cheese/notes/<slug>.md](<absolute-note-path>)`.
+The handoff document is the only thing `/wheypoint` writes. No commits, PRs, or production-code edits. The gated cold-reader (`## Verify`) is a read-only dispatch that inspects the note and reports gaps; it writes nothing, and any fix from its gaps is applied by the writer to the same note. Use the host's read-only inspection capabilities plus a write capability scoped to `.cheese/notes/**`. End by showing the slug's orientation line, a normal Markdown link to the note, and repo-root-aware resumption commands. Keep the note link outside fenced code so it is clickable. The link line should match this shape: `Wheypoint dropped: [.cheese/notes/<slug>.md](<absolute-note-path>)`.
 
 Resume from original repo:
 
@@ -234,3 +254,18 @@ Resume from anywhere:
 ```bash
 /cheese --continue <absolute-repo-path>/.cheese/notes/<slug>.md
 ```
+
+## References
+
+- [`references/cold-reader.md`](references/cold-reader.md) — the cold-reader sub-agent system prompt, the four-probe set, its JSON gap output, and the fail-open contract.
+- `skills/wheypoint/scripts/wheypoint.pyz lint <note-path>` — the deterministic note lint run in step 1 of `## Verify` (add `--json` for structured output).
+
+## Agent resolution
+
+Resolve the gated cold-reader through [`../cheese/references/agent-resolution.md`](../cheese/references/agent-resolution.md).
+
+| Work | Preferred types | Permissions/isolation | Minimum power | Effort | Fallback |
+| --- | --- | --- | --- | --- | --- |
+| Cold-read the note for resumability | reviewer | read-only, fresh-context | default | high | compatible reviewer, then general |
+
+The cold-reader dispatch records the shared `agent_resolution` block; a general worker qualifies only with prompt-only no-write enforcement and `degraded: true`.
