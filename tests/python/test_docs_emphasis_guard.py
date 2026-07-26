@@ -1,148 +1,69 @@
-r"""Guard against bare ``cheez-*`` wildcard tokens corrupting Markdown emphasis.
-
-``scripts/gen_docs.py`` mirrors these sources into the Starlight docs site. A
-bare ``cheez-*`` in prose has its ``*`` parsed as an emphasis delimiter by
-Markdown renderers: two in one paragraph italicise the span between them, and one
-immediately before a ``**`` close (``cheez-***``) leaks the ``*`` out of the
-bold. Both render wrong on the docs site (confirmed by building it). The fix is
-to wrap the token in inline code (```` `cheez-*` ````) or escape it
-(``cheez-\*``). This test fails if a regression reintroduces the bare hazard.
-"""
+"""Contract tests for shared workflow documentation."""
 
 from __future__ import annotations
 
 import re
+import shutil
 from pathlib import Path
 
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-FENCE_RE = re.compile(r"```.*?```", re.DOTALL)
-INLINE_CODE_RE = re.compile(r"`[^`\n]*`")
-BARE_TOKEN = "cheez-*"
-# The corruptor is the `cheez-*` glob's `*` abutting a closing `**` run, i.e.
-# three asterisks (`cheez-***`). A legit `cheez-**bold**` (two asterisks opening
-# an intended bold) must NOT match.
-COLLISION = "cheez-***"
+def test_shared_source_routing_contract_is_linked_and_complete():
+    routing = REPO_ROOT / "skills/cheese/references/code-intelligence-routing.md"
+    body = routing.read_text(encoding="utf-8")
 
+    assert "Route by question or edit shape" in body
+    assert "LSP" in body and "Serena" in body and "code action" in body
+    assert "tilth" in body and "semantic source-code backend" in body
+    assert "AST search or rewrite" in body and "`sg`" in body
+    assert "Search" in body and "Fresh bounded read" in body and "Stale-safe write" in body
+    assert "backend-family contracts" in body
+    assert "precision loss" in body
 
-def _rendered_markdown() -> list[Path]:
-    """Every markdown source the Starlight site renders or mirrors.
-
-    Covers both what gen_docs.py mirrors verbatim (root docs, SKILL.md bodies,
-    references, shared contracts) and the hand-authored Starlight homepage — a
-    bare ``cheez-*`` corrupts emphasis in either.
-    """
-    files = [
-        REPO_ROOT / "README.md",
-        REPO_ROOT / "CONTRIBUTING.md",
-        REPO_ROOT / "SECURITY.md",
-        REPO_ROOT / "CODE_OF_CONDUCT.md",
-        REPO_ROOT / "src" / "content" / "docs" / "index.md",
-    ]
-    files += sorted((REPO_ROOT / "skills").glob("*/SKILL.md"))
-    files += sorted((REPO_ROOT / "skills").glob("*/references/*.md"))
-    return [f for f in files if f.exists()]
-
-
-def _strip_code(text: str) -> str:
-    """Blank out code spans (backticked tokens are exempt) but keep line count."""
-    text = FENCE_RE.sub(lambda m: "\n" * m.group(0).count("\n"), text)
-    return INLINE_CODE_RE.sub("", text)
-
-
-def _hazards(text: str) -> list[tuple[int, str]]:
-    """Return (paragraph-start-line, snippet) for each corrupting paragraph."""
-    hazards: list[tuple[int, str]] = []
-    para: list[str] = []
-    start = 0
-
-    def flush() -> None:
-        if not para:
-            return
-        blob = " ".join(para)
-        if blob.count(BARE_TOKEN) >= 2 or COLLISION in blob:
-            hazards.append((start, blob.strip()[:120]))
-
-    for i, line in enumerate(_strip_code(text).splitlines(), 1):
-        if line.strip():
-            if not para:
-                start = i
-            para.append(line)
-        else:
-            flush()
-            para = []
-    flush()
-    return hazards
-
-
-def test_no_bare_cheez_star_emphasis_hazard():
-    offenders: list[str] = []
-    for f in _rendered_markdown():
-        for line, snippet in _hazards(f.read_text(encoding="utf-8")):
-            offenders.append(f"{f.relative_to(REPO_ROOT)}:{line}  {snippet!r}")
-    assert not offenders, (
-        "Bare `cheez-*` corrupts Markdown emphasis in the docs build; wrap each "
-        "occurrence in backticks (`cheez-*`) or escape it (cheez-\\*):\n"
-        + "\n".join(offenders)
+    routed_docs = (
+        "skills/age/SKILL.md",
+        "skills/affinage/SKILL.md",
+        "skills/briesearch/SKILL.md",
+        "skills/cheese/SKILL.md",
+        "skills/cook/SKILL.md",
+        "skills/culture/SKILL.md",
+        "skills/cure/SKILL.md",
+        "skills/melt/SKILL.md",
+        "skills/mold/SKILL.md",
+        "skills/pasteurize/SKILL.md",
+        "skills/press/SKILL.md",
+        "skills/ultracook/SKILL.md",
     )
+    for path in routed_docs:
+        assert "code-intelligence-routing.md" in (REPO_ROOT / path).read_text(encoding="utf-8"), path
 
 
-def test_detector_flags_paired_tokens():
-    # Two bare tokens in one paragraph -> italic span between them.
-    assert _hazards("use cheez-* skills, not cheez-* fallbacks\n") == [
-        (1, "use cheez-* skills, not cheez-* fallbacks")
-    ]
+def test_documented_single_workflow_install_resolves_shared_routing_contract(tmp_path):
+    readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+    _, heading, tail = readme.partition("Install one workflow skill")
+    assert heading, "README must document workflow-skill dependencies"
+    section, next_heading, _ = tail.partition("Pin both skills")
+    assert next_heading
 
+    skills = re.findall(
+        r"gh skill install paulnsorensen/easy-cheese ([\w-]+)", section
+    )
+    assert skills == ["cheese", "cook"]
 
-def test_detector_flags_bold_collision():
-    # cheez-* immediately before a `**` close -> the `*` leaks out of the bold.
-    assert _hazards("**goes through cheez-***.\n") == [(1, "**goes through cheez-***.")]
+    installed = tmp_path / "skills"
+    for skill in skills:
+        shutil.copytree(REPO_ROOT / "skills" / skill, installed / skill)
 
-
-def test_detector_ignores_single_bare_token():
-    # A lone cheez-* followed by whitespace stays literal in the render.
-    assert not _hazards("the cheez-* skills prefer tilth.\n")
-
-
-def test_detector_ignores_legit_bold_after_token():
-    # `cheez-**bold**` is an intended bold run, not the `cheez-***` corruptor.
-    assert not _hazards("use cheez-**bold** here\n")
-
-
-def test_detector_ignores_backticked_tokens():
-    assert not _hazards("use `cheez-*` and `cheez-*` freely\n")
-
-
-def test_cheez_skills_accept_equivalent_native_backends_without_blind_shell_fallbacks():
-    docs = [
-        REPO_ROOT / "README.md",
-        REPO_ROOT / "AGENTS.md",
-        REPO_ROOT / ".github/copilot-instructions.md",
-        REPO_ROOT / ".hallouminate/wiki/tooling.md",
-        REPO_ROOT / "skills/cheez-read/SKILL.md",
-        REPO_ROOT / "skills/cheez-search/SKILL.md",
-        REPO_ROOT / "skills/cheez-write/SKILL.md",
-    ]
-    combined = "\n".join(path.read_text(encoding="utf-8") for path in docs)
-
-    # Shape contract: route by question/edit shape, with tilth as the example backend.
-    assert "source-code backend contract" in combined
-    assert "type-grounded" in combined and "LSP" in combined and "code actions" in combined
-    assert "sg" in combined and "codemods" in combined
-    assert "anchored" in combined and "anchors" in combined and "tilth" in combined
-    assert "fallback evidence only" in combined
-
-    # Live tilth tool identifiers must be documented (these are what the MCP exposes).
-    assert "mcp__tilth__tilth_write" in combined
-    assert "mcp__tilth__tilth_list" in combined
-
-    # Renamed-away identifiers must never reappear — the MCP does not expose them.
-    assert "tilth_edit" not in combined
-    assert "tilth_files" not in combined
-    assert "hard-fail without it" not in combined
-
+    cook = installed / "cook" / "SKILL.md"
+    links = re.findall(
+        r"\]\(([^)]+code-intelligence-routing\.md)\)",
+        cook.read_text(encoding="utf-8"),
+    )
+    assert links
+    for link in links:
+        assert (cook.parent / link).resolve().is_file(), link
 
 
 def test_harness_portability_reference_is_linked_from_workflow_docs():

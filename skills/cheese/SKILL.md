@@ -125,9 +125,9 @@ At `medium` or above, dispatch directly. For implementation intents, the cook-fa
 
 ## Preferred tools and fallbacks
 
-When the input is a path or slug, code reading and searching go through the `cheez-*` skills (`/cheez-read`, `/cheez-search`) — see those skills for tool selection rules.
+When the input is a path or slug, call the selected source-code read or search backend directly according to [`references/code-intelligence-routing.md`](references/code-intelligence-routing.md).
 
-Beyond `cheez-*` there are router-specific tools:
+Beyond source-code routing there are router-specific tools:
 
 | Need | Prefer | Fallback |
 | --- | --- | --- |

@@ -1,6 +1,6 @@
 ---
 name: briesearch
-description: Research questions external to the codebase across library docs (Context7), the web (Tavily), local code (cheez-search), GitHub examples (gh), and the repo wiki (hallouminate), then synthesize with explicit confidence. Use whenever the user asks to research, look up, compare, or investigate something — phrases like "research X", "look up the API for Y", "compare libraries", "what does the doc say about Z", "find examples of how to do W", "is this library maintained", or "before I implement, what's the right approach". Use even when the user only mentions a library name without saying "research". Do NOT use for a single obvious file lookup or when the user already has enough evidence.
+description: Research questions external to the codebase across library docs (Context7), the web (Tavily), local code through semantic source search, GitHub examples (gh), and the repo wiki (hallouminate), then synthesize with explicit confidence. Use whenever the user asks to research, look up, compare, or investigate something — phrases like "research X", "look up the API for Y", "compare libraries", "what does the doc say about Z", "find examples of how to do W", "is this library maintained", or "before I implement, what's the right approach". Use even when the user only mentions a library name without saying "research". Do NOT use for a single obvious file lookup or when the user already has enough evidence.
 license: MIT
 metadata: {dispatches-agents: true}
 ---
@@ -45,9 +45,9 @@ When two or more heavy sources are independent, spawn one small sub-agent per so
 
 ## Preferred tools and fallbacks
 
-Local code patterns go through the `cheez-*` skills (`/cheez-search`, `/cheez-read`) — see those skills for tool selection rules.
+For local code patterns, call source-code search and read backends directly according to the shared [`code-intelligence-routing.md`](../cheese/references/code-intelligence-routing.md) contract.
 
-Beyond `cheez-*` there are research-specific tools:
+Beyond source-code routing there are research-specific tools:
 
 | Need | Prefer | Fallback |
 | --- | --- | --- |

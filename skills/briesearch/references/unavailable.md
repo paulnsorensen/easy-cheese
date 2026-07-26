@@ -8,7 +8,7 @@ Optional MCP servers (Context7, Tavily, tilth) are not always present. Fallbacks
 | --- | --- | --- |
 | Context7 | Read repo docs, package README, vendor pages, then web search | Cap at `speculating` for version-specific questions |
 | Tavily | WebFetch (host fetch) for verify/extract; host web search or user-provided links for discovery | Cap at `speculating` when freshness matters |
-| Codebase (`cheez-*`) | Fall back to Serena or LSP, `sg`, `ripgrep`, `find`, and targeted reads | Cap at `speculating` when local precedent is central |
+| Codebase semantic backend | Fall back to Serena or LSP, `sg`, bounded text search, and targeted reads per the [shared routing contract](../../cheese/references/code-intelligence-routing.md) | Cap at `speculating` when local precedent is central |
 | GitHub (`gh`) | Note absence; user-supplied URLs are acceptable | Skip with a confidence note |
 
 ## Reporting an unavailable source
