@@ -97,7 +97,7 @@ def evaluate_behavior(
         else:
             first, second = original_rates
             assert first is not None and second is not None and variant_rate is not None
-            baseline_rate = (first + second) / 2
+            baseline_rate = min(first, second)
             allowed = min(abs(first - second), 0.05)
             noncritical_passed = baseline_rate - variant_rate <= allowed + 1e-12
         results.append(

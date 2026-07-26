@@ -24,10 +24,16 @@ def test_critical_obligations_allow_zero_distortion():
     assert result.scenarios[0].critical_distortions == 9
 
 
-def test_noncritical_degradation_is_bounded_by_self_variance_capped_at_five_points():
-    originals = rows("o1", "original-1", "route", noncritical_passes=9) + rows("o2", "original-2", "route", noncritical_passes=8)
-    result = evaluate_behavior(originals, rows("v", "variant", "route", noncritical_passes=8))
-    assert not result.passed
+def test_noncritical_baseline_is_lower_original_and_equality_passes():
+    originals = rows("o1", "original-1", "route", noncritical_passes=9) + rows(
+        "o2", "original-2", "route", noncritical_passes=8
+    )
+    result = evaluate_behavior(
+        originals, rows("v", "variant", "route", noncritical_passes=8)
+    )
+
+    assert result.passed
+    assert result.scenarios[0].original_noncritical_rate == 8 / 9
     assert result.scenarios[0].allowed_degradation == 0.05
 
 
