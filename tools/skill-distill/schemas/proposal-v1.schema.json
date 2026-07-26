@@ -52,19 +52,8 @@
         "behavior_passed": {"const": true},
         "overlap_passed": {"const": true},
         "llm_disposition": {"enum": ["pass", "concern", "abstain"]},
-        "human_disposition": {"enum": ["approved", "rejected"]},
         "selected_representation": {"enum": ["physical-reference", "compact-inline"]}
-      },
-      "allOf": [{
-        "if": {
-          "properties": {"llm_disposition": {"enum": ["concern", "abstain"]}},
-          "required": ["llm_disposition"]
-        },
-        "then": {
-          "required": ["human_disposition"],
-          "properties": {"human_disposition": {"const": "approved"}}
-        }
-      }]
+      }
     }
   }
 }

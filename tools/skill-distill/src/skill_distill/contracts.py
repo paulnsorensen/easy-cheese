@@ -190,6 +190,15 @@ class HumanDisposition(StrEnum):
     APPROVED = "approved"
     REJECTED = "rejected"
 
+@dataclass(frozen=True)
+class HumanDispositionV1(_ImmutableContract):
+    proposal_digest: str
+    decision: str
+    reviewer_identity: str
+    reviewed_at: str
+    commitment: str
+    schema_version: str = "human-disposition-v1"
+
 
 @dataclass(frozen=True)
 class ProposalV1(_ImmutableContract):

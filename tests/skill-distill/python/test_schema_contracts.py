@@ -15,6 +15,7 @@ CONTRACT_SCHEMAS = {
     "behavior-scorecard-v1.schema.json": contracts.BehaviorScorecard,
     "dataset-v1.schema.json": contracts.DatasetV1,
     "distillation-run-v1.schema.json": contracts.DistillationRun,
+    "human-disposition-v1.schema.json": contracts.HumanDispositionV1,
     "load-event-v1.schema.json": contracts.LoadEvent,
     "proposal-v1.schema.json": contracts.ProposalV1,
     "scores-v1.schema.json": contracts.ScoresV1,
@@ -76,10 +77,9 @@ def test_proposal_requires_measured_profiles_and_closed_dispositions() -> None:
     assert proposal["$defs"]["representationVariant"]["required"] == [
         "token_metric_profile", "behavior_passed", "changes"
     ]
-    disposition = proposal["$defs"]["behavioralEvidence"]
-    assert disposition["properties"]["human_disposition"]["enum"] == [
-        "approved", "rejected"
-    ]
-    assert disposition["allOf"][0]["then"]["properties"]["human_disposition"] == {
-        "const": "approved"
-    }
+    disposition = json.loads(
+        (SCHEMAS / "human-disposition-v1.schema.json").read_text(encoding="utf-8")
+    )
+    assert "human_disposition" not in proposal["$defs"]["behavioralEvidence"]["properties"]
+    assert disposition["properties"]["decision"] == {"const": "approve"}
+    assert disposition["properties"]["proposal_digest"]["pattern"] == "^[0-9a-f]{64}$"

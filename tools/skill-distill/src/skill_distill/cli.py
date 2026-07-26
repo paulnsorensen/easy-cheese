@@ -74,7 +74,7 @@ def _propose(args: argparse.Namespace) -> int:
 _APPLY_GATES = ("deterministic", "behavior", "overlap")
 
 
-def _resolve_apply_gate(contract_path: Path, repository: Path) -> Callable[[], bool]:
+def _resolve_apply_gate(contract_path: Path) -> Callable[[Path], bool]:
     raw = lifecycle.load_document(lifecycle.require_context_path(contract_path))
     if not isinstance(raw, Mapping) or raw.get("schema_version") != "apply-gate-v1":
         raise lifecycle.LifecycleError("apply gate contract has the wrong schema version")
@@ -91,7 +91,7 @@ def _resolve_apply_gate(contract_path: Path, repository: Path) -> Callable[[], b
 
     contract = ApplyGateV1(*(command(name) for name in _APPLY_GATES))
 
-    def gate() -> bool:
+    def gate(repository: Path) -> bool:
         results = [
             subprocess.run(getattr(contract, name), cwd=repository, check=False).returncode == 0
             for name in _APPLY_GATES
@@ -102,8 +102,8 @@ def _resolve_apply_gate(contract_path: Path, repository: Path) -> Callable[[], b
 
 
 def _apply(args: argparse.Namespace) -> int:
-    gate = _resolve_apply_gate(args.gate_contract, args.repository)
-    lifecycle.apply_proposal(args.proposal, args.repository, gate)
+    gate = _resolve_apply_gate(args.gate_contract)
+    lifecycle.apply_proposal(args.proposal, args.repository, gate, args.disposition)
     return 0
 
 
@@ -174,6 +174,7 @@ def _parser() -> argparse.ArgumentParser:
     _path_argument(apply, "--proposal", required=True)
     _path_argument(apply, "--repository", default=Path.cwd())
     _path_argument(apply, "--gate-contract", required=True)
+    _path_argument(apply, "--disposition")
     apply.set_defaults(run_command=_apply)
 
     verify = commands.add_parser("verify")

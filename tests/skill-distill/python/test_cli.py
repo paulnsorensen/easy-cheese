@@ -94,7 +94,8 @@ def test_apply_gate_contract_resolves_all_model_free_post_write_commands(
         ),
     )
 
-    assert not cli._resolve_apply_gate(contract, repository)()
+    gate = cli._resolve_apply_gate(contract)
+    assert not gate(repository)
     assert calls == [(tuple(command), repository) for command in commands.values()]
 
 

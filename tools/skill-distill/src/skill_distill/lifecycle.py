@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import math
 import os
+import shutil
+import tempfile
 from collections.abc import Callable
 from dataclasses import fields, is_dataclass
+from datetime import datetime
 from enum import Enum
 from pathlib import Path, PurePosixPath
 from types import ModuleType, SimpleNamespace
@@ -28,7 +32,7 @@ from .contracts import (
     DistillationFamily,
     DistillationRun,
     FusionProfile,
-    HumanDisposition,
+    HumanDispositionV1,
     LoadEvent,
     ModelLock,
     ProposalV1,
@@ -340,6 +344,23 @@ def _token_profile(value: Any) -> TokenMetricProfile:
     return TokenMetricProfile(identity, tuple(events))
 
 
+def _profile_paths(profile: TokenMetricProfile) -> set[str]:
+    return {event.canonical_path for event in profile.load_events}
+
+
+def _validate_profile_content(
+    profile: TokenMetricProfile,
+    expected: Mapping[str, bytes],
+    label: str,
+) -> None:
+    if _profile_paths(profile) != set(expected):
+        raise LifecycleError(f"{label} token profile paths do not match proposal changes")
+    for event in profile.load_events:
+        digest = hashlib.sha256(expected[event.canonical_path]).hexdigest()
+        if event.content_digest != digest:
+            raise LifecycleError(f"{label} token profile content digest does not match exact bytes")
+
+
 def _proposal_profiles(draft: Mapping[str, Any]) -> tuple[TokenMetricProfile, dict[str, TokenMetricProfile]]:
     if "original_loaded_tokens" in draft:
         raise LifecycleError("free token totals are forbidden; provide measured token profiles")
@@ -357,16 +378,71 @@ def _proposal_profiles(draft: Mapping[str, Any]) -> tuple[TokenMetricProfile, di
         if "loaded_tokens" in variant:
             raise LifecycleError("free token totals are forbidden; provide measured token profiles")
         profiles[name] = _token_profile(variant.get("token_metric_profile"))
+        changes = variant.get("changes")
+        if not isinstance(changes, Mapping) or not changes or any(
+            not isinstance(path, str) or not isinstance(content, str)
+            for path, content in changes.items()
+        ):
+            raise LifecycleError(f"{name} variant requires text changes")
+        _validate_profile_content(
+            profiles[name], {path: content.encode() for path, content in changes.items()}, name
+        )
+    original_paths = _profile_paths(original)
+    if any(_profile_paths(profile) != original_paths for profile in profiles.values()):
+        raise LifecycleError("original and variant token profile paths must match proposal changes")
     if any(profile.tokenizer_identity_digest != original.tokenizer_identity_digest for profile in profiles.values()):
         raise LifecycleError("proposal token profiles use different tokenizer identities")
     return original, profiles
 
 
-def _diagnostic_passed(evidence: Mapping[str, Any]) -> bool:
+def _require_human_approval(proposal_path: Path, disposition_path: Path | None) -> None:
+    if disposition_path is None:
+        raise LifecycleError("concern or abstain requires a separate human disposition record")
+    path = require_context_path(disposition_path)
+    value = load_document(path)
+    expected_fields = {
+        "proposal_digest", "decision", "reviewer_identity", "reviewed_at", "commitment", "schema_version"
+    }
+    if (
+        not isinstance(value, Mapping)
+        or set(value) != expected_fields
+        or value.get("schema_version") != "human-disposition-v1"
+    ):
+        raise LifecycleError("human disposition is incomplete or has the wrong schema version")
+    text_fields = ("decision", "reviewer_identity", "reviewed_at", "commitment")
+    if any(not isinstance(value[field], str) or not value[field] for field in text_fields):
+        raise LifecycleError("human disposition fields must be nonempty strings")
+    record = HumanDispositionV1(
+        proposal_digest=_sha256(value["proposal_digest"], "proposal digest"),
+        decision=value["decision"],
+        reviewer_identity=value["reviewer_identity"],
+        reviewed_at=value["reviewed_at"],
+        commitment=value["commitment"],
+    )
+    if record.proposal_digest != hashlib.sha256(proposal_path.read_bytes()).hexdigest():
+        raise LifecycleError("human disposition proposal digest does not match proposal bytes")
+    if record.decision != "approve":
+        raise LifecycleError("human disposition decision must explicitly approve")
+    if not record.reviewer_identity or not record.commitment:
+        raise LifecycleError("human disposition requires reviewer identity and commitment")
+    try:
+        reviewed_at = datetime.fromisoformat(record.reviewed_at.replace("Z", "+00:00"))
+    except ValueError as error:
+        raise LifecycleError("human disposition reviewed_at must be an ISO-8601 timestamp") from error
+    if reviewed_at.tzinfo is None:
+        raise LifecycleError("human disposition reviewed_at must include a timezone")
+
+
+def _diagnostic_passed(
+    evidence: Mapping[str, Any], proposal_path: Path, disposition_path: Path | None
+) -> bool:
     disposition = evidence.get("llm_disposition")
     if disposition == "pass":
         return True
-    return disposition in {"concern", "abstain"} and evidence.get("human_disposition") == HumanDisposition.APPROVED.value
+    if disposition not in {"concern", "abstain"}:
+        return False
+    _require_human_approval(proposal_path, disposition_path)
+    return True
 
 
 def build_proposals(
@@ -423,25 +499,51 @@ def build_proposals(
 def apply_proposal(
     proposal_path: Path,
     repository: Path,
-    post_write_gate: Callable[[], bool],
+    post_write_gate: Callable[[Path], bool],
+    disposition_path: Path | None = None,
 ) -> tuple[Path, ...]:
-    value = load_document(require_context_path(proposal_path))
+    proposal_path = require_context_path(proposal_path)
+    value = load_document(proposal_path)
     evidence = value["behavioral_evidence"]
     deterministic = all(
         evidence.get(name) is True
         for name in ("deterministic_passed", "behavior_passed", "overlap_passed")
     )
-    if not deterministic or not _diagnostic_passed(evidence):
+    if not deterministic or not _diagnostic_passed(evidence, proposal_path, disposition_path):
         raise LifecycleError("proposal has not passed every deterministic and diagnostic gate")
-    variant = value[evidence["selected_representation"].replace("-", "_") + "_variant"]
-    changes = {
-        (repository / relative).resolve(): content.encode()
-        for relative, content in variant["changes"].items()
-    }
+    selected_name = evidence["selected_representation"]
+    selected = selected_name.replace("-", "_") + "_variant"
+    variant = value[selected]
+    proposal_profiles = _proposal_profiles({
+        "original_token_profile": value["original_token_profile"],
+        "variants": {
+            name: value[name.replace("-", "_") + "_variant"] for name in _VARIANT_NAMES
+        },
+    })
+    relative_changes = {relative: content.encode() for relative, content in variant["changes"].items()}
     root = repository.resolve()
+    changes = {(root / relative).resolve(): content for relative, content in relative_changes.items()}
     if any(root not in path.parents for path in changes):
         raise LifecycleError("proposal change escapes the repository")
-    return apply_family(value["family_id"], changes, post_write_gate).applied_paths
+    if any(not path.is_file() for path in changes):
+        raise LifecycleError("proposal token evidence requires existing file targets")
+
+    original, profiles = proposal_profiles
+    current = {path.relative_to(root).as_posix(): path.read_bytes() for path in changes}
+    _validate_profile_content(original, current, "original")
+    _validate_profile_content(profiles[selected_name], relative_changes, "selected variant")
+
+    with tempfile.TemporaryDirectory(prefix="skill-distill-apply-") as temporary:
+        mirror = Path(temporary) / "repository"
+        shutil.copytree(root, mirror, symlinks=False, ignore_dangling_symlinks=True)
+        mirror_changes = {mirror / path.relative_to(root): content for path, content in changes.items()}
+        apply_family(value["family_id"], mirror_changes, lambda: True)
+        if not post_write_gate(mirror):
+            raise RuntimeError(f"family gate failed: {value['family_id']}")
+
+    refreshed = {path.relative_to(root).as_posix(): path.read_bytes() for path in changes}
+    _validate_profile_content(original, refreshed, "original")
+    return apply_family(value["family_id"], changes, lambda: True).applied_paths
 
 
 def verify_run(run_path: Path, evidence_path: Path) -> InteractionResult:
