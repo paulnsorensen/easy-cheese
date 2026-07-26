@@ -92,18 +92,30 @@ def _resolve_apply_gate(contract_path: Path) -> Callable[[Path], bool]:
     contract = ApplyGateV1(*(command(name) for name in _APPLY_GATES))
 
     def gate(repository: Path) -> bool:
-        results = [
-            subprocess.run(getattr(contract, name), cwd=repository, check=False).returncode == 0
-            for name in _APPLY_GATES
-        ]
-        return all(results)
+        failures = []
+        for name in _APPLY_GATES:
+            try:
+                result = subprocess.run(getattr(contract, name), cwd=repository, check=False)
+            except OSError as error:
+                failures.append(f"{name} (gate command not found in mirror: {error})")
+                continue
+            if result.returncode != 0:
+                failures.append(f"{name} (exit {result.returncode})")
+        gate.failures = tuple(failures)
+        return not failures
 
     return gate
 
 
 def _apply(args: argparse.Namespace) -> int:
     gate = _resolve_apply_gate(args.gate_contract)
-    lifecycle.apply_proposal(args.proposal, args.repository, gate, args.disposition)
+    try:
+        lifecycle.apply_proposal(args.proposal, args.repository, gate, args.disposition)
+    except RuntimeError as error:
+        failures = getattr(gate, "failures", None)
+        if failures:
+            raise RuntimeError(f"{error}: {', '.join(failures)}") from error
+        raise
     return 0
 
 

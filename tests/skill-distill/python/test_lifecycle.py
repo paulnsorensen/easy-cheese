@@ -247,6 +247,24 @@ def test_apply_rejects_symlink_alias_and_target_collision(tmp_path: Path) -> Non
     assert (repository / "result.txt").read_text(encoding="utf-8") == "original"
 
 
+def test_gate_cannot_escape_mirror_through_repo_symlink(tmp_path: Path) -> None:
+    proposal_path, repository, _draft = _build_fixture(tmp_path)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    secret = outside / "secret.txt"
+    secret.write_text("untouched", encoding="utf-8")
+    escape = repository / "escape.txt"
+    escape.symlink_to(secret)
+
+    def gate_writes_through_symlink(mirror: Path) -> bool:
+        (mirror / "escape.txt").write_text("hijacked", encoding="utf-8")
+        return True
+
+    apply_proposal(proposal_path, repository, gate_writes_through_symlink)
+
+    assert secret.read_text(encoding="utf-8") == "untouched"
+
+
 def test_apply_binds_unchanged_recursively_loaded_reference_to_each_view(
     tmp_path: Path,
 ) -> None:

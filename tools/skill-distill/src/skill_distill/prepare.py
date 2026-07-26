@@ -45,11 +45,12 @@ def prepare_dataset(report_path: Path, controls_path: Path) -> DatasetV1:
         ),
         key=_block_rank,
     )
-    if len(block_findings) != BLOCK_PAIR_COUNT:
+    if len(block_findings) < BLOCK_PAIR_COUNT:
         raise ReportValidationError(
-            f"expected exactly {BLOCK_PAIR_COUNT} unique non-control block-band pairs, "
+            f"expected at least {BLOCK_PAIR_COUNT} unique non-control block-band pairs, "
             f"found {len(block_findings)}"
         )
+    block_findings = block_findings[:BLOCK_PAIR_COUNT]
     block_ids = {finding["id"] for finding in block_findings}
 
     review_findings = [
@@ -63,7 +64,7 @@ def prepare_dataset(report_path: Path, controls_path: Path) -> DatasetV1:
     if len(selected_review) != REVIEW_SAMPLE_COUNT:
         raise ReportValidationError(
             f"expected at least {REVIEW_SAMPLE_COUNT} non-control review-band pairs, "
-            f"found {len(review_findings)}"
+            f"found {len(selected_review)}"
         )
 
     pairs = tuple(

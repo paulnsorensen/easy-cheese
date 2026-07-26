@@ -349,7 +349,7 @@ def test_prepare_accepts_exact_and_semantic_block_threshold_boundary(
     assert selections["high-180"] == "block"
 
 
-def test_prepare_rejects_report_without_exact_block_band_count(tmp_path: Path) -> None:
+def test_prepare_rejects_report_without_minimum_block_band_count(tmp_path: Path) -> None:
     report = _report()
     report["findings"][180]["cosine"] = 0.899
     report_path, controls_path = _write_inputs(tmp_path)
@@ -357,9 +357,26 @@ def test_prepare_rejects_report_without_exact_block_band_count(tmp_path: Path) -
 
     with pytest.raises(
         ReportValidationError,
-        match="expected exactly 181 unique non-control block-band pairs, found 180",
+        match="expected at least 181 unique non-control block-band pairs, found 180",
     ):
         prepare_to_path(report_path, controls_path, tmp_path / "dataset.json")
+
+
+def test_prepare_truncates_excess_block_findings_deterministically(tmp_path: Path) -> None:
+    report_path, controls_path = _write_inputs(tmp_path)
+    report = _report()
+    extra = _finding("extra-block-000", 0.99, "family-9", 0, "advisory")
+    report["findings"] = [extra] + report["findings"]
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+
+    dataset = prepare_to_path(report_path, controls_path, tmp_path / "dataset.json")
+    selections = {pair.pair_id: pair.selection for pair in dataset.pairs}
+
+    assert len(dataset.pairs) == 421
+    assert [pair.selection for pair in dataset.pairs].count("block") == 181
+    assert selections["extra-block-000"] == "block"
+    assert all(selections[f"high-{index:03}"] == "block" for index in range(180))
+    assert "high-180" not in selections
 
 
 def test_tracked_adversarial_controls_use_endpoint_evidence() -> None:
@@ -400,7 +417,7 @@ def test_tracked_adversarial_fixture_matches_pr_322_report(tmp_path: Path) -> No
 
     with pytest.raises(
         ReportValidationError,
-        match="expected exactly 181 unique non-control block-band pairs",
+        match="expected at least 181 unique non-control block-band pairs",
     ):
         prepare_to_path(
             report_path,

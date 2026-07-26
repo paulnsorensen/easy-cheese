@@ -127,7 +127,6 @@ def validate_weights(weights: tuple[float, float, float]) -> None:
 
 
 def fuse(evidence: BgeM3Evidence, weights: tuple[float, float, float]) -> float:
-    validate_weights(weights)
     return sum(score * weight for score, weight in zip((evidence.dense, evidence.sparse, evidence.colbert), weights))
 
 
@@ -140,17 +139,28 @@ def _rank(example: FusionExample, weights: tuple[float, float, float]) -> tuple[
     )
 
 
-def _metrics(examples: Iterable[FusionExample], weights: tuple[float, float, float], cutoff: int) -> tuple[float, float]:
+def _ranked_examples(
+    examples: Iterable[FusionExample], weights: tuple[float, float, float]
+) -> tuple[tuple[tuple[RetrievalCandidate, ...], int], ...]:
+    ranked = []
+    for example in examples:
+        relevant = sum(candidate.relevant for candidate in example.candidates)
+        if not relevant:
+            raise ValueError(f"{example.pair_id} has no relevant candidate")
+        ranked.append((_rank(example, weights), relevant))
+    return tuple(ranked)
+
+
+def _metrics(
+    ranked_examples: tuple[tuple[tuple[RetrievalCandidate, ...], int], ...], cutoff: int
+) -> tuple[float, float]:
     recall_total = 0.0
     mrr_total = 0.0
     count = 0
-    for example in examples:
-        relevant = [candidate for candidate in example.candidates if candidate.relevant]
-        if not relevant:
-            raise ValueError(f"{example.pair_id} has no relevant candidate")
-        ranked = _rank(example, weights)[:cutoff]
-        recall_total += sum(candidate.relevant for candidate in ranked) / len(relevant)
-        mrr_total += next((1 / index for index, candidate in enumerate(ranked, start=1) if candidate.relevant), 0.0)
+    for ranked, relevant in ranked_examples:
+        sliced = ranked[:cutoff]
+        recall_total += sum(candidate.relevant for candidate in sliced) / relevant
+        mrr_total += next((1 / index for index, candidate in enumerate(sliced, start=1) if candidate.relevant), 0.0)
         count += 1
     if not count:
         raise ValueError("development split is empty")
@@ -173,10 +183,13 @@ def select_fusion(
     if available < 1:
         raise ValueError("development candidates are empty")
 
+    development_examples = tuple(item.example for item in development)
     eligible: list[tuple[float, float, tuple[float, float, float], int]] = []
     for weights in weight_grid():
+        validate_weights(weights)
+        ranked_examples = _ranked_examples(development_examples, weights)
         for cutoff in range(1, min(50, available) + 1):
-            recall, mrr = _metrics((item.example for item in development), weights, cutoff)
+            recall, mrr = _metrics(ranked_examples, cutoff)
             if recall >= _RECALL_FLOOR:
                 eligible.append((recall, mrr, weights, cutoff))
                 break

@@ -150,6 +150,18 @@ def test_second_human_is_required_for_all_compression_positive_pairs():
         reconcile(recorded, human, llm, (same_human,))
 
 
+def test_reconciliation_rejects_adjudication_for_an_unknown_pair_id():
+    human, llm = labels()
+    frozen = freeze(DistillationRun("run-1", RunState.PREPARED), human)
+    recorded = record_llm_labels(frozen, llm)
+    stray = RelationAdjudication(
+        "pair-unknown", "second-human", RelationKind.EQUIVALENT, {}, "confirmed"
+    )
+
+    with pytest.raises(ValueError, match="outside the label pairs"):
+        reconcile(recorded, human, llm, (stray,))
+
+
 def test_shared_shell_is_eligible_after_second_human_adjudication():
     human, llm = labels(RelationKind.SHARED_SHELL)
     frozen = freeze(DistillationRun("run-1", RunState.PREPARED), human)

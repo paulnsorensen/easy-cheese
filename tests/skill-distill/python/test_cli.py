@@ -8,7 +8,6 @@ from types import ModuleType, SimpleNamespace
 import pytest
 
 import skill_distill.cli as cli
-from skill_distill.cli import main
 
 
 def test_prepare_routes_validated_paths_to_dataset_builder(
@@ -25,7 +24,7 @@ def test_prepare_routes_validated_paths_to_dataset_builder(
     controls = tmp_path / "adversarial.json"
     output = tmp_path / ".context" / "dataset.json"
 
-    assert main(
+    assert cli.main(
         [
             "prepare",
             "--report",
@@ -43,11 +42,11 @@ def test_prepare_dependency_is_loaded_only_when_command_runs(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delitem(sys.modules, "skill_distill.prepare", raising=False)
-
     with pytest.raises(SystemExit) as error:
-        main([])
+        cli.main([])
 
     assert error.value.code == 2
+    assert "skill_distill.prepare" not in sys.modules
 
 
 def test_cli_exposes_the_complete_locked_lifecycle() -> None:
@@ -93,10 +92,73 @@ def test_apply_gate_contract_resolves_all_model_free_post_write_commands(
             or SimpleNamespace(returncode=int(command[0] == "deterministic-check"))
         ),
     )
-
     gate = cli._resolve_apply_gate(contract)
     assert not gate(repository)
     assert calls == [(tuple(command), repository) for command in commands.values()]
+    assert gate.failures == ("deterministic (exit 1)",)
+
+
+def test_apply_gate_contract_records_missing_gate_command_without_raising(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    repository = tmp_path / "repo"
+    repository.mkdir()
+    contract = tmp_path / ".context" / "gate.json"
+    contract.parent.mkdir()
+    commands = {
+        "deterministic": ["deterministic-check"],
+        "behavior": ["behavior-check"],
+        "overlap": ["overlap-check"],
+    }
+    contract.write_text(json.dumps({"schema_version": "apply-gate-v1", **commands}))
+
+    def missing(command: tuple[str, ...], *, cwd: Path, check: bool) -> SimpleNamespace:
+        raise FileNotFoundError(command[0])
+
+    monkeypatch.setattr(cli.subprocess, "run", missing)
+    gate = cli._resolve_apply_gate(contract)
+
+    assert not gate(repository)
+    assert gate.failures == (
+        "deterministic (gate command not found in mirror: deterministic-check)",
+        "behavior (gate command not found in mirror: behavior-check)",
+        "overlap (gate command not found in mirror: overlap-check)",
+    )
+
+
+def test_apply_enriches_family_gate_failure_with_gate_names_and_exit_codes(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    contract = tmp_path / ".context" / "gate.json"
+    contract.parent.mkdir()
+    contract.write_text(json.dumps({
+        "schema_version": "apply-gate-v1",
+        "deterministic": ["deterministic-check"],
+        "behavior": ["behavior-check"],
+        "overlap": ["overlap-check"],
+    }))
+    monkeypatch.setattr(
+        cli.subprocess,
+        "run",
+        lambda command, *, cwd, check: SimpleNamespace(returncode=int(command[0] == "deterministic-check")),
+    )
+
+    def fake_apply_proposal(
+        proposal: Path, repository: Path, gate, disposition: Path | None
+    ) -> tuple[Path, ...]:
+        gate(repository)
+        raise RuntimeError("family gate failed: family-x")
+
+    monkeypatch.setattr(cli.lifecycle, "apply_proposal", fake_apply_proposal)
+    args = SimpleNamespace(
+        proposal=tmp_path / "proposal.json",
+        repository=tmp_path,
+        gate_contract=contract,
+        disposition=None,
+    )
+
+    with pytest.raises(RuntimeError, match=r"family gate failed: family-x: deterministic \(exit 1\)"):
+        cli._apply(args)
 
 
 def test_generated_output_outside_context_is_rejected(
@@ -107,7 +169,7 @@ def test_generated_output_outside_context_is_rejected(
     monkeypatch.setitem(sys.modules, "skill_distill.prepare", prepare)
 
     with pytest.raises(SystemExit) as error:
-        main([
+        cli.main([
             "prepare",
             "--report", str(tmp_path / "report.json"),
             "--adversarial-controls", str(tmp_path / "controls.json"),

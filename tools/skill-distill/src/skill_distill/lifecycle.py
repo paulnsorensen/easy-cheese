@@ -96,7 +96,7 @@ def _encoded(path: Path, value: Any) -> bytes:
 
 def write_evidence(path: Path, value: Any) -> Path:
     target = require_context_path(path)
-    apply_family("lifecycle-evidence", {target: _encoded(target, value)}, lambda: True)
+    apply_family("lifecycle-evidence", {target: _encoded(target, value)})
     return target
 
 
@@ -180,7 +180,6 @@ def reconcile_labels(
     apply_family(
         f"reconcile-{result.run.run_id}",
         {run_path: _encoded(run_path, result.run), output_path: _encoded(output_path, result.annotations)},
-        lambda: True,
     )
     return result.annotations
 
@@ -525,6 +524,30 @@ def _has_symlink_component(root: Path, relative: str) -> bool:
     return False
 
 
+def _neutralize_escaping_symlinks(mirror: Path) -> None:
+    """Remove any symlink in the mirror whose resolved target leaves the mirror.
+
+    ``shutil.copytree(..., symlinks=True)`` copies symlinks verbatim instead of
+    following them, which stops unbounded recursion through a directory symlink
+    that points back at an ancestor. But a symlink copied verbatim still points
+    at its original target - if that target is absolute, or escapes the mirror
+    via enough ``..`` segments, a gate writing through the symlink would mutate
+    the real filesystem instead of the disposable mirror. Stripping any symlink
+    whose resolved target lands outside the mirror closes that gap while
+    leaving symlinks that stay within the mirror untouched.
+    """
+    root = mirror.resolve()
+    for dirpath, dirnames, filenames in os.walk(mirror, followlinks=False):
+        current = Path(dirpath)
+        for name in (*dirnames, *filenames):
+            candidate = current / name
+            if not candidate.is_symlink():
+                continue
+            target = candidate.resolve()
+            if target != root and root not in target.parents:
+                candidate.unlink()
+
+
 def _representation_view(
     root: Path,
     profile: TokenMetricProfile,
@@ -572,7 +595,9 @@ def apply_proposal(
     )
     if not deterministic or not _diagnostic_passed(evidence, proposal_path, disposition_path):
         raise LifecycleError("proposal has not passed every deterministic and diagnostic gate")
-    selected_name = evidence["selected_representation"]
+    selected_name = evidence.get("selected_representation")
+    if not isinstance(selected_name, str) or not selected_name:
+        raise LifecycleError("proposal evidence is missing selected_representation")
     proposal_profiles = _proposal_profiles({
         "original_token_profile": value["original_token_profile"],
         "variants": {
@@ -612,9 +637,15 @@ def apply_proposal(
 
     with tempfile.TemporaryDirectory(prefix="skill-distill-apply-") as temporary:
         mirror = Path(temporary) / "repository"
-        shutil.copytree(root, mirror, symlinks=False, ignore_dangling_symlinks=True)
+        shutil.copytree(
+            root,
+            mirror,
+            symlinks=True,
+            ignore=shutil.ignore_patterns(".git", ".venv", "node_modules", "__pycache__"),
+        )
+        _neutralize_escaping_symlinks(mirror)
         mirror_changes = {mirror / path.relative_to(root): content for path, content in changes.items()}
-        apply_family(value["family_id"], mirror_changes, lambda: True)
+        apply_family(value["family_id"], mirror_changes)
         if not post_write_gate(mirror):
             raise RuntimeError(f"family gate failed: {value['family_id']}")
 
@@ -622,7 +653,7 @@ def apply_proposal(
     if refreshed != snapshots:
         raise LifecycleError("proposal change targets changed while the applied-tree gate ran")
     _validate_proposal_views(root, original, profiles, variant_changes)
-    return apply_family(value["family_id"], changes, lambda: True).applied_paths
+    return apply_family(value["family_id"], changes).applied_paths
 
 
 def verify_run(run_path: Path, evidence_path: Path) -> InteractionResult:

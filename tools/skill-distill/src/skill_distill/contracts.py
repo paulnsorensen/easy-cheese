@@ -29,14 +29,6 @@ class RunState(StrEnum):
     RECONCILED = "reconciled"
 
 
-RUN_STATE_ORDER = (
-    RunState.PREPARED,
-    RunState.HUMAN_FROZEN,
-    RunState.LLM_RECORDED,
-    RunState.RECONCILED,
-)
-
-
 def _deep_freeze(value: Any) -> Any:
     """Copy JSON-shaped contract inputs into immutable collections."""
     if isinstance(value, Mapping):
@@ -185,10 +177,6 @@ class ApplyGateV1(_ImmutableContract):
     overlap: tuple[str, ...]
     schema_version: str = "apply-gate-v1"
 
-
-class HumanDisposition(StrEnum):
-    APPROVED = "approved"
-    REJECTED = "rejected"
 
 @dataclass(frozen=True)
 class HumanDispositionV1(_ImmutableContract):

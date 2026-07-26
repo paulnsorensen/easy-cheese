@@ -1,5 +1,4 @@
 import skill_distill
-from skill_distill import behavior, canonical, interaction, mutations, tokens, transaction
 
 
 def test_package_exports_the_distillation_rewrite_api() -> None:
@@ -40,14 +39,14 @@ def test_package_exports_the_distillation_rewrite_api() -> None:
 
 def test_barrel_exports_resolve_to_their_owning_modules() -> None:
     owners = {
-        "apply_family": transaction,
-        "bisect_interaction": interaction,
-        "build_tokenizer_identity": tokens,
-        "deterministic_mutations": mutations,
-        "evaluate_behavior": behavior,
-        "gate_interactions": interaction,
-        "measure_load_events": tokens,
-        "validate_family": canonical,
+        "apply_family": skill_distill.transaction,
+        "bisect_interaction": skill_distill.interaction,
+        "build_tokenizer_identity": skill_distill.tokens,
+        "deterministic_mutations": skill_distill.mutations,
+        "evaluate_behavior": skill_distill.behavior,
+        "gate_interactions": skill_distill.interaction,
+        "measure_load_events": skill_distill.tokens,
+        "validate_family": skill_distill.canonical,
     }
 
     assert all(

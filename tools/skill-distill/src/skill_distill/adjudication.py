@@ -242,6 +242,8 @@ def reconcile(
     if human_by_pair.keys() != llm_by_pair.keys():
         raise ValueError("human and LLM labels must cover the same pairs")
     adjudication_by_pair = _by_pair(adjudications)
+    if not adjudication_by_pair.keys() <= human_by_pair.keys():
+        raise ValueError("adjudications reference pair_ids outside the label pairs")
 
     annotations = []
     for pair_id in sorted(human_by_pair):

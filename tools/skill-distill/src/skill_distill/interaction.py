@@ -16,7 +16,7 @@ def bisect_interaction(
     families: Sequence[str],
     gate: Callable[[tuple[str, ...]], bool],
 ) -> tuple[str, ...]:
-    """Return a deterministic one-minimal subset that still fails the gate."""
+    """Return a deterministic subset that still fails the gate (not guaranteed minimal)."""
     current = tuple(families)
     if not current or gate(current):
         return ()
