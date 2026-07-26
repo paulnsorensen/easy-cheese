@@ -11,6 +11,7 @@ import pytest
 import yaml
 
 import skill_distill.lifecycle as lifecycle
+import skill_distill.transaction as transaction
 
 from skill_distill.contracts import RunState
 from skill_distill.lifecycle import (
@@ -194,6 +195,84 @@ def test_propose_derives_token_savings_and_applies_only_after_post_write_gate(tm
     assert (repository / "result.txt").read_text() == "compact"
 
 
+def test_apply_binds_unchanged_recursively_loaded_reference_to_each_view(
+    tmp_path: Path,
+) -> None:
+    annotations, scores, drafts, proposals, repository, draft = _proposal_fixture(tmp_path)
+    reference = repository / "references" / "shared.md"
+    reference.parent.mkdir()
+    reference.write_text("unchanged reference", encoding="utf-8")
+    profile = draft["variants"]["compact-inline"]["token_metric_profile"]  # type: ignore[index]
+    event = _token_profile("references/shared.md", "unchanged reference", 2)["load_events"][0]  # type: ignore[index]
+    profile["load_events"].append(event)  # type: ignore[index]
+    _write(drafts, [draft])
+    proposal_path, = build_proposals(annotations, scores, drafts, proposals)
+
+    apply_proposal(proposal_path, repository, lambda _root: True)
+
+    assert (repository / "result.txt").read_text(encoding="utf-8") == "compact"
+    assert reference.read_text(encoding="utf-8") == "unchanged reference"
+
+
+def test_apply_rejects_drifted_unchanged_loaded_reference(tmp_path: Path) -> None:
+    annotations, scores, drafts, proposals, repository, draft = _proposal_fixture(tmp_path)
+    reference = repository / "references" / "shared.md"
+    reference.parent.mkdir()
+    reference.write_text("measured", encoding="utf-8")
+    profile = draft["variants"]["compact-inline"]["token_metric_profile"]  # type: ignore[index]
+    event = _token_profile("references/shared.md", "measured", 2)["load_events"][0]  # type: ignore[index]
+    profile["load_events"].append(event)  # type: ignore[index]
+    _write(drafts, [draft])
+    proposal_path, = build_proposals(annotations, scores, drafts, proposals)
+    reference.write_text("drifted", encoding="utf-8")
+
+    with pytest.raises(LifecycleError, match="content digest does not match exact bytes"):
+        apply_proposal(proposal_path, repository, lambda _root: True)
+
+
+def test_new_physical_reference_is_atomic_across_applied_tree_gate(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    annotations, scores, drafts, proposals, repository, draft = _proposal_fixture(tmp_path)
+    physical = draft["variants"]["physical-reference"]  # type: ignore[index]
+    physical["changes"]["references/shared.md"] = "new reference"  # type: ignore[index]
+    event = _token_profile("references/shared.md", "new reference", 1)["load_events"][0]  # type: ignore[index]
+    physical["token_metric_profile"]["load_events"].append(event)  # type: ignore[index]
+    draft["variants"]["compact-inline"]["behavior_passed"] = False  # type: ignore[index]
+    _write(drafts, [draft])
+    proposal_path, = build_proposals(annotations, scores, drafts, proposals)
+    reference = repository / "references" / "shared.md"
+
+    def reject(mirror: Path) -> bool:
+        assert (mirror / "result.txt").read_text(encoding="utf-8") == "physical"
+        assert (mirror / "references" / "shared.md").read_text(encoding="utf-8") == "new reference"
+        return False
+
+    with pytest.raises(RuntimeError, match="family gate failed"):
+        apply_proposal(proposal_path, repository, reject)
+    assert (repository / "result.txt").read_text(encoding="utf-8") == "original"
+    assert not reference.exists()
+
+    original_replace = transaction._replace
+
+    def fail_real_apply(path: Path, content: bytes, mode: int | None = None) -> None:
+        if path == repository / "result.txt" and content == b"physical":
+            raise OSError("write failed")
+        original_replace(path, content, mode)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(transaction, "_replace", fail_real_apply)
+        with pytest.raises(OSError, match="write failed"):
+            apply_proposal(proposal_path, repository, lambda _root: True)
+    assert (repository / "result.txt").read_text(encoding="utf-8") == "original"
+    assert not reference.exists()
+
+    applied = apply_proposal(proposal_path, repository, lambda _root: True)
+
+    assert applied == (repository / "references" / "shared.md", repository / "result.txt")
+    assert reference.read_text(encoding="utf-8") == "new reference"
+
+
 @pytest.mark.parametrize("profile_name", ["original", "physical-reference", "compact-inline"])
 def test_propose_rejects_empty_token_telemetry(tmp_path: Path, profile_name: str) -> None:
     annotations, scores, drafts, proposals, _repository, draft = _proposal_fixture(tmp_path)
@@ -328,7 +407,7 @@ def test_propose_rejects_telemetry_path_not_in_changes(tmp_path: Path) -> None:
     event["canonical_path"] = "other.txt"  # type: ignore[index]
     _write(drafts, [draft])
 
-    with pytest.raises(LifecycleError, match="paths do not match proposal changes"):
+    with pytest.raises(LifecycleError, match="does not represent every proposal change"):
         build_proposals(annotations, scores, drafts, proposals)
 
 

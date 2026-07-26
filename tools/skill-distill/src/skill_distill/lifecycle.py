@@ -353,12 +353,27 @@ def _validate_profile_content(
     expected: Mapping[str, bytes],
     label: str,
 ) -> None:
-    if _profile_paths(profile) != set(expected):
-        raise LifecycleError(f"{label} token profile paths do not match proposal changes")
+    missing = _profile_paths(profile) - set(expected)
+    if missing:
+        raise LifecycleError(f"{label} token profile paths are absent from its applied-tree view")
     for event in profile.load_events:
         digest = hashlib.sha256(expected[event.canonical_path]).hexdigest()
         if event.content_digest != digest:
             raise LifecycleError(f"{label} token profile content digest does not match exact bytes")
+
+
+def _validate_changed_content(
+    profile: TokenMetricProfile,
+    changes: Mapping[str, bytes],
+    label: str,
+) -> None:
+    if not set(changes) <= _profile_paths(profile):
+        raise LifecycleError(f"{label} token profile does not represent every proposal change")
+    for event in profile.load_events:
+        if event.canonical_path in changes:
+            digest = hashlib.sha256(changes[event.canonical_path]).hexdigest()
+            if event.content_digest != digest:
+                raise LifecycleError(f"{label} token profile content digest does not match exact bytes")
 
 
 def _proposal_profiles(draft: Mapping[str, Any]) -> tuple[TokenMetricProfile, dict[str, TokenMetricProfile]]:
@@ -384,12 +399,10 @@ def _proposal_profiles(draft: Mapping[str, Any]) -> tuple[TokenMetricProfile, di
             for path, content in changes.items()
         ):
             raise LifecycleError(f"{name} variant requires text changes")
-        _validate_profile_content(
-            profiles[name], {path: content.encode() for path, content in changes.items()}, name
-        )
-    original_paths = _profile_paths(original)
-    if any(_profile_paths(profile) != original_paths for profile in profiles.values()):
-        raise LifecycleError("original and variant token profile paths must match proposal changes")
+        encoded_changes = {
+            _canonical_load_path(path): content.encode() for path, content in changes.items()
+        }
+        _validate_changed_content(profiles[name], encoded_changes, name)
     if any(profile.tokenizer_identity_digest != original.tokenizer_identity_digest for profile in profiles.values()):
         raise LifecycleError("proposal token profiles use different tokenizer identities")
     return original, profiles
@@ -496,6 +509,45 @@ def build_proposals(
     return tuple(written)
 
 
+def _repository_path(root: Path, relative: str) -> Path:
+    path = (root / relative).resolve()
+    if root not in path.parents:
+        raise LifecycleError("proposal path escapes the repository")
+    return path
+
+
+def _representation_view(
+    root: Path,
+    profile: TokenMetricProfile,
+    changes: Mapping[str, bytes],
+    label: str,
+) -> dict[str, bytes]:
+    view = dict(changes)
+    for relative in _profile_paths(profile) - set(changes):
+        path = _repository_path(root, relative)
+        if not path.is_file():
+            raise LifecycleError(f"{label} token profile requires an existing loaded file: {relative}")
+        view[relative] = path.read_bytes()
+    return view
+
+
+def _validate_proposal_views(
+    root: Path,
+    original: TokenMetricProfile,
+    profiles: Mapping[str, TokenMetricProfile],
+    variant_changes: Mapping[str, Mapping[str, bytes]],
+) -> None:
+    _validate_profile_content(
+        original, _representation_view(root, original, {}, "original"), "original"
+    )
+    for name, profile in profiles.items():
+        _validate_profile_content(
+            profile,
+            _representation_view(root, profile, variant_changes[name], name),
+            name,
+        )
+
+
 def apply_proposal(
     proposal_path: Path,
     repository: Path,
@@ -512,26 +564,28 @@ def apply_proposal(
     if not deterministic or not _diagnostic_passed(evidence, proposal_path, disposition_path):
         raise LifecycleError("proposal has not passed every deterministic and diagnostic gate")
     selected_name = evidence["selected_representation"]
-    selected = selected_name.replace("-", "_") + "_variant"
-    variant = value[selected]
     proposal_profiles = _proposal_profiles({
         "original_token_profile": value["original_token_profile"],
         "variants": {
             name: value[name.replace("-", "_") + "_variant"] for name in _VARIANT_NAMES
         },
     })
-    relative_changes = {relative: content.encode() for relative, content in variant["changes"].items()}
+    variant_changes = {
+        name: {
+            relative: content.encode()
+            for relative, content in value[name.replace("-", "_") + "_variant"]["changes"].items()
+        }
+        for name in _VARIANT_NAMES
+    }
+    relative_changes = variant_changes[selected_name]
     root = repository.resolve()
-    changes = {(root / relative).resolve(): content for relative, content in relative_changes.items()}
-    if any(root not in path.parents for path in changes):
-        raise LifecycleError("proposal change escapes the repository")
-    if any(not path.is_file() for path in changes):
-        raise LifecycleError("proposal token evidence requires existing file targets")
+    changes = {_repository_path(root, relative): content for relative, content in relative_changes.items()}
+    if any(path.exists() and not path.is_file() for path in changes):
+        raise LifecycleError("proposal change target exists but is not a file")
 
     original, profiles = proposal_profiles
-    current = {path.relative_to(root).as_posix(): path.read_bytes() for path in changes}
-    _validate_profile_content(original, current, "original")
-    _validate_profile_content(profiles[selected_name], relative_changes, "selected variant")
+    _validate_proposal_views(root, original, profiles, variant_changes)
+    snapshots = {path: path.read_bytes() if path.exists() else None for path in changes}
 
     with tempfile.TemporaryDirectory(prefix="skill-distill-apply-") as temporary:
         mirror = Path(temporary) / "repository"
@@ -541,8 +595,10 @@ def apply_proposal(
         if not post_write_gate(mirror):
             raise RuntimeError(f"family gate failed: {value['family_id']}")
 
-    refreshed = {path.relative_to(root).as_posix(): path.read_bytes() for path in changes}
-    _validate_profile_content(original, refreshed, "original")
+    refreshed = {path: path.read_bytes() if path.exists() else None for path in changes}
+    if refreshed != snapshots:
+        raise LifecycleError("proposal change targets changed while the applied-tree gate ran")
+    _validate_proposal_views(root, original, profiles, variant_changes)
     return apply_family(value["family_id"], changes, lambda: True).applied_paths
 
 
