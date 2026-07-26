@@ -175,16 +175,21 @@ def _unaccounted_sites(
     sibling_owned: set[str],
     accounted: set[str],
 ) -> list[str]:
-    """Core sweep logic, factored out so a synthetic fixture can exercise
-    it directly (see test_sweep_catches_new_bare_site_in_new_file) instead
-    of relying only on today's real-repo census staying bare."""
+    """Report question sites that are neither explicitly accounted for nor
+    directly linked to the shared question transport. The synthetic tests
+    prove both the bare-site failure and direct-pointer success paths."""
     unaccounted = []
     for path in candidates:
         rel = str(path.relative_to(repo_root))
         if rel in sibling_owned:
             continue
         text = path.read_text(encoding="utf-8")
-        if QUESTION_KEYWORDS.search(text) and rel not in accounted:
+        has_transport_pointer = TRANSPORT_REF in text or HANDOFF_GATE_REF in text
+        if (
+            QUESTION_KEYWORDS.search(text)
+            and rel not in accounted
+            and not has_transport_pointer
+        ):
             unaccounted.append(rel)
     return unaccounted
 
@@ -256,6 +261,21 @@ def test_sweep_catches_new_bare_site_in_new_file(tmp_path: Path) -> None:
         candidates, tmp_path, sibling_owned=set(), accounted=set()
     )
     assert unaccounted == ["skills/newskill/SKILL.md"]
+
+
+def test_sweep_accepts_new_site_with_transport_pointer(tmp_path: Path) -> None:
+    """A new question site is routed by its direct transport pointer."""
+    skill_dir = tmp_path / "skills" / "newskill"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "# New Skill\n\nBefore running, ask the user to pick an option through "
+        "[`ask-user-question.md`](../cheese/references/ask-user-question.md).\n",
+        encoding="utf-8",
+    )
+    candidates = list((tmp_path / "skills").glob("*/SKILL.md"))
+    assert _unaccounted_sites(
+        candidates, tmp_path, sibling_owned=set(), accounted=set()
+    ) == []
 
 
 def test_sweep_skips_sibling_owned_and_accounted_files(tmp_path: Path) -> None:

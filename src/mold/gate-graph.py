@@ -88,7 +88,7 @@ COHERENCE_GATES: tuple[str, ...] = (
     "Open questions all marked [TBD] / [BLOCKED] / [?] (none silent)",
     "Quality gates specified (≥1 runnable command)",
     "Reproduction loop captured if Diagnose ran (or [BLOCKED] if no loop is possible)",
-    "Durable writes: ADR + domain-model targets resolved and the write, read-back, and completion-record protocol committed for the atomic step (or loud fallback noted)",
+    "Durable writes: ADR + domain-model targets resolved, glossary target included when terms were resolved, and the write, read-back, and completion-record protocol committed for every durable artifact (or loud fallback noted)",
 )
 
 MODES: tuple[Node, ...] = (
