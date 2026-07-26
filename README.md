@@ -50,7 +50,7 @@ skills/
 
 Each `SKILL.md` is self-contained markdown with YAML frontmatter. There are no nested sub-skills; deeper material lives in `references/<topic>.md` so the harness can load it progressively.
 
-Content shared _across_ skills lives in the always-installed `cheese` skill's `references/` directory (e.g. `skills/cheese/references/handoff-gate.md`), so both installers ship it as part of `cheese`. Skills reference it by sibling-relative path (`../cheese/references/<file>.md` from a `SKILL.md`, `../../cheese/references/<file>.md` from a `references/*.md`) — a form that resolves identically in the repo tree and any installed skills directory.
+Content shared _across_ skills lives in the `cheese` skill's `references/` directory (e.g. `skills/cheese/references/handoff-gate.md`). Full installs include `cheese`; when installing one workflow skill, install `cheese` alongside it. Skills reference shared material by sibling-relative path (`../cheese/references/<file>.md` from a `SKILL.md`, `../../cheese/references/<file>.md` from a `references/*.md`) so links resolve identically in the repo tree and any installed skills directory.
 
 ## Skills
 
@@ -191,16 +191,19 @@ for s in age affinage briesearch cheese cook culture cure hard-cheese melt mold 
 done
 ```
 
-Install one specific skill by name:
+Install one workflow skill with its shared contracts:
 
 ```sh
+gh skill install paulnsorensen/easy-cheese cheese
 gh skill install paulnsorensen/easy-cheese cook
 ```
 
-Pin to a specific release tag or commit SHA for reproducibility:
+Pin both skills to the same release tag or commit SHA for reproducibility:
 
 ```sh
+gh skill install paulnsorensen/easy-cheese cheese@v0.10.1
 gh skill install paulnsorensen/easy-cheese cook@v0.10.1
+gh skill install paulnsorensen/easy-cheese cheese@abc123def
 gh skill install paulnsorensen/easy-cheese cook@abc123def
 ```
 

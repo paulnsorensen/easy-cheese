@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+import shutil
 from pathlib import Path
 
 import pytest
@@ -36,6 +38,32 @@ def test_shared_source_routing_contract_is_linked_and_complete():
     )
     for path in routed_docs:
         assert "code-intelligence-routing.md" in (REPO_ROOT / path).read_text(encoding="utf-8"), path
+
+
+def test_documented_single_workflow_install_resolves_shared_routing_contract(tmp_path):
+    readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+    _, heading, tail = readme.partition("Install one workflow skill")
+    assert heading, "README must document workflow-skill dependencies"
+    section, next_heading, _ = tail.partition("Pin both skills")
+    assert next_heading
+
+    skills = re.findall(
+        r"gh skill install paulnsorensen/easy-cheese ([\w-]+)", section
+    )
+    assert skills == ["cheese", "cook"]
+
+    installed = tmp_path / "skills"
+    for skill in skills:
+        shutil.copytree(REPO_ROOT / "skills" / skill, installed / skill)
+
+    cook = installed / "cook" / "SKILL.md"
+    links = re.findall(
+        r"\]\(([^)]+code-intelligence-routing\.md)\)",
+        cook.read_text(encoding="utf-8"),
+    )
+    assert links
+    for link in links:
+        assert (cook.parent / link).resolve().is_file(), link
 
 
 def test_harness_portability_reference_is_linked_from_workflow_docs():
