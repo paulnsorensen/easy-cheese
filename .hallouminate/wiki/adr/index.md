@@ -25,6 +25,7 @@
 - [plate-publication-boundary-001](./plate-publication-boundary-001.md) — ADR: plate owns the commit-to-PR publication boundary
 - [post-pr-wiki-writeback-001](./post-pr-wiki-writeback-001.md) — ADR: curdle wiki writes enforced by gate node + read-back verify, not a Stop-hook
 - [post-pr-wiki-writeback-002](./post-pr-wiki-writeback-002.md) — ADR: post-PR learnings write-back reuses wiki-ingest, not the personal wiki-curator skill
+- [semantic-skill-distillation-001](./semantic-skill-distillation-001.md) — ADR: Evidence-gated semantic skill distillation
 - [skill-docs-single-page-001](./skill-docs-single-page-001.md) — ADR-001: Fold skill references into one docs page instead of separate sub-pages  [status: accepted]
 - [skill-docs-single-page-002](./skill-docs-single-page-002.md) — ADR-002: Left-nav heading TOC is h2-only, via a custom Starlight Sidebar override  [status: accepted]
 - [skill-overlap-ratchet-001](./skill-overlap-ratchet-001.md) — ADR: Own the Snowflake overlap analyzer in easy-cheese
