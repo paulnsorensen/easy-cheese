@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://easy-cheese.dev/schemas/skill-distill/annotation-v1.schema.json",
+  "title": "AnnotationV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["pair_id", "human_relation", "llm_relation", "atoms", "reconciliation", "reviewer", "status", "schema_version"],
+  "properties": {
+    "pair_id": {"type": "string", "minLength": 1},
+    "human_relation": {"$ref": "#/$defs/relationKind"},
+    "llm_relation": {"anyOf": [{"$ref": "#/$defs/relationKind"}, {"type": "null"}]},
+    "atoms": {"type": "array", "items": {"type": "object"}},
+    "reconciliation": {"type": "object"},
+    "reviewer": {"type": "string", "minLength": 1},
+    "status": {"type": "string", "minLength": 1},
+    "schema_version": {"const": "annotation-v1"}
+  },
+  "$defs": {
+    "relationKind": {
+      "enum": ["equivalent", "left-subsumes-right", "right-subsumes-left", "shared-shell", "conflict", "unrelated", "insufficient-evidence"]
+    }
+  }
+}

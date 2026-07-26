@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://easy-cheese.dev/schemas/skill-distill/tokenizer-identity-v1.schema.json",
+  "title": "TokenizerIdentity",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["tokenizer_artifact", "tokenizer_revision", "tokenizer_hash", "runtime", "identity_digest", "text_encoding", "event_mode", "chat_template", "add_special_tokens", "schema_version"],
+  "properties": {
+    "tokenizer_artifact": {"type": "string", "minLength": 1},
+    "tokenizer_revision": {"type": "string", "minLength": 1},
+    "tokenizer_hash": {"type": "string", "minLength": 1},
+    "runtime": {"type": "string", "minLength": 1},
+    "identity_digest": {"type": "string", "minLength": 1},
+    "text_encoding": {"const": "utf-8"},
+    "event_mode": {"const": "independent"},
+    "chat_template": {"const": "none"},
+    "add_special_tokens": {"const": false},
+    "schema_version": {"const": "tokenizer-identity-v1"}
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://easy-cheese.dev/schemas/skill-distill/proposal-v1.schema.json",
+  "title": "ProposalV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["family_id", "canonical_center", "residuals", "physical_reference_variant", "compact_inline_variant", "loaded_token_delta", "behavioral_evidence", "reversal_patch", "schema_version"],
+  "properties": {
+    "family_id": {"type": "string", "minLength": 1},
+    "canonical_center": {"$ref": "#/$defs/canonicalCenter"},
+    "residuals": {"type": "object", "additionalProperties": {"type": "array", "items": {"type": "object"}}},
+    "physical_reference_variant": {"type": "object"},
+    "compact_inline_variant": {"type": "object"},
+    "loaded_token_delta": {"type": "integer"},
+    "behavioral_evidence": {"type": "object"},
+    "reversal_patch": {"type": "string"},
+    "schema_version": {"const": "proposal-v1"}
+  },
+  "$defs": {
+    "canonicalCenter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["family_id", "clauses", "member_residuals", "schema_version"],
+      "properties": {
+        "family_id": {"type": "string", "minLength": 1},
+        "clauses": {"type": "array", "items": {"type": "object"}},
+        "member_residuals": {"type": "object", "additionalProperties": {"type": "array", "items": {"type": "object"}}},
+        "schema_version": {"const": "canonical-center-v1"}
+      }
+    }
+  }
+}

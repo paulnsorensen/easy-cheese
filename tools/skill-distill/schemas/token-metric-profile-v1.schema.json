@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://easy-cheese.dev/schemas/skill-distill/token-metric-profile-v1.schema.json",
+  "title": "TokenMetricProfile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["tokenizer_identity_digest", "load_events", "schema_version"],
+  "properties": {
+    "tokenizer_identity_digest": {"type": "string", "minLength": 1},
+    "load_events": {"type": "array", "items": {"$ref": "load-event-v1.schema.json"}},
+    "schema_version": {"const": "token-metric-profile-v1"}
+  }
+}

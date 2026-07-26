@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://easy-cheese.dev/schemas/skill-distill/behavior-harness-v1.schema.json",
+  "title": "BehaviorHarness",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["harness_id", "model_identity", "tokenizer_identity_digest", "fixtures", "schema_version"],
+  "properties": {
+    "harness_id": {"type": "string", "minLength": 1},
+    "model_identity": {"type": "string", "minLength": 1},
+    "tokenizer_identity_digest": {"type": "string", "minLength": 1},
+    "fixtures": {"type": "array", "items": {"type": "object"}},
+    "schema_version": {"const": "behavior-harness-v1"}
+  }
+}
