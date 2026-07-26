@@ -61,6 +61,17 @@ class PairEvidenceV1(_ImmutableContract):
     pair_id: str
     left: Mapping[str, Any]
     right: Mapping[str, Any]
+    lane: str
+    detector: str
+    kind: str
+    graph: Mapping[str, Any]
+    cosine: float | None
+    duplicate_tokens_estimate: int
+    disposition: str
+    selection: str
+    score_decile: int | None
+    graph_class: str
+    skill_family: str
     schema_version: str = "pair-evidence-v1"
 
 

@@ -1,0 +1,1896 @@
+{
+  "source_report_sha256": "3a660e94a52855dcf08b6e8c1a1435fc78cf44a7bf991cefc5f9b8ac1c27f274",
+  "findings": [
+    {
+      "id": "7149c98279e8cf8494d4f7b7fb5a41bfd85a08c6ae0269aba545f1a1516223e0",
+      "lane": "body",
+      "detector": "1",
+      "kind": "exact",
+      "left": {
+        "path": "skills/briesearch/references/evals.md",
+        "heading_path": [
+          "Evals",
+          "How to run"
+        ],
+        "part": 1,
+        "source_hash": "effeab2e3d36f39f4da9317ccd0c744132b44d7191dd5506561bdab97cf3fe0a",
+        "span": {
+          "start": 53,
+          "end": 54
+        },
+        "original_excerpt": "\nThese evals are intentionally manual today.",
+        "token_count": 10
+      },
+      "right": {
+        "path": "skills/mold/references/evals.md",
+        "heading_path": [
+          "Evals",
+          "How to run"
+        ],
+        "part": 1,
+        "source_hash": "effeab2e3d36f39f4da9317ccd0c744132b44d7191dd5506561bdab97cf3fe0a",
+        "span": {
+          "start": 42,
+          "end": 43
+        },
+        "original_excerpt": "\nThese evals are intentionally manual today.",
+        "token_count": 10
+      },
+      "graph": {
+        "directly_linked": false,
+        "directed_distance": null,
+        "undirected_distance": 3,
+        "same_component": true,
+        "same_skill": false,
+        "disconnected": false
+      },
+      "cosine": null,
+      "duplicate_tokens_estimate": 10,
+      "disposition": "unaccepted"
+    },
+    {
+      "id": "8757cdeda170ad4fa2a389bdc4bab270e73e9c086cdd55939e8f9fe947c2e38c",
+      "lane": "body",
+      "detector": "1",
+      "kind": "semantic",
+      "left": {
+        "path": "skills/cure/SKILL.md",
+        "heading_path": [
+          "/cure",
+          "Auto mode"
+        ],
+        "part": 1,
+        "source_hash": "70aea529438edbf4d77738f21632eb6a991f078cc9c270e3d3cf371598404720",
+        "span": {
+          "start": 160,
+          "end": 162
+        },
+        "original_excerpt": "\nWhen invoked with `--auto --stake <floor>`:\n",
+        "token_count": 17
+      },
+      "right": {
+        "path": "skills/cure/references/selection.md",
+        "heading_path": [
+          "Selection gate",
+          "Auto-mode selection"
+        ],
+        "part": 1,
+        "source_hash": "0ff10dcf6f48c11116709da4094ac9f6500961051bc29332258ddb4bc688ba7c",
+        "span": {
+          "start": 85,
+          "end": 87
+        },
+        "original_excerpt": "\nWhen `/cure` is invoked with `--auto --stake <floor>`:\n",
+        "token_count": 22
+      },
+      "graph": {
+        "directly_linked": true,
+        "directed_distance": 1,
+        "undirected_distance": 1,
+        "same_component": true,
+        "same_skill": true,
+        "disconnected": false
+      },
+      "cosine": 0.9677303,
+      "duplicate_tokens_estimate": 17,
+      "disposition": "advisory"
+    },
+    {
+      "id": "e89d8998e1387ac14401edb8c29932ee8de9c9d3a51be535295a5ab04605d317",
+      "lane": "body",
+      "detector": "1",
+      "kind": "semantic",
+      "left": {
+        "path": "skills/cook/SKILL.md",
+        "heading_path": [
+          "/cook",
+          "Baseline capture"
+        ],
+        "part": 4,
+        "source_hash": "7c063cfcaa1638b437caf6c8022d2662a702dd3944c35d6cc9a8cd1464179c98",
+        "span": {
+          "start": 175,
+          "end": 176
+        },
+        "original_excerpt": "Portability reference: [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.\nThe handoff blocks below are the portable contract; slash commands are host renderings, not the control model.",
+        "token_count": 114
+      },
+      "right": {
+        "path": "skills/cure/SKILL.md",
+        "heading_path": [
+          "/cure",
+          "Inputs"
+        ],
+        "part": 4,
+        "source_hash": "62eb86158b3268a444d378bd61bfccb8e8b6cea122c4ef58cef882bb9e658cdc",
+        "span": {
+          "start": 28,
+          "end": 29
+        },
+        "original_excerpt": "Portability reference: [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.\nThe handoff blocks below are the portable contract; slash commands are host renderings, not the control model.",
+        "token_count": 114
+      },
+      "graph": {
+        "directly_linked": false,
+        "directed_distance": null,
+        "undirected_distance": 2,
+        "same_component": true,
+        "same_skill": false,
+        "disconnected": false
+      },
+      "cosine": 0.9689954,
+      "duplicate_tokens_estimate": 114,
+      "disposition": "advisory"
+    },
+    {
+      "id": "38c1697a4df22bbb15c4aed9a4bfd4e3a68810ac2606d320653f38f7a22b13ab",
+      "lane": "body",
+      "detector": "1",
+      "kind": "semantic",
+      "left": {
+        "path": "skills/cheese/SKILL.md",
+        "heading_path": [
+          "/cheese",
+          "Flow"
+        ],
+        "part": 5,
+        "source_hash": "b66200c6b07ebae6b00f534fb1654fffa1ea9eacd117d1745166e369b8087ecf",
+        "span": {
+          "start": 44,
+          "end": 45
+        },
+        "original_excerpt": "Portability reference: [`references/harness-portability.md`](references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.\nThe handoff blocks below are the portable contract; slash commands are host renderings, not the control model.",
+        "token_count": 104
+      },
+      "right": {
+        "path": "skills/cook/SKILL.md",
+        "heading_path": [
+          "/cook",
+          "Baseline capture"
+        ],
+        "part": 4,
+        "source_hash": "7c063cfcaa1638b437caf6c8022d2662a702dd3944c35d6cc9a8cd1464179c98",
+        "span": {
+          "start": 175,
+          "end": 176
+        },
+        "original_excerpt": "Portability reference: [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.\nThe handoff blocks below are the portable contract; slash commands are host renderings, not the control model.",
+        "token_count": 114
+      },
+      "graph": {
+        "directly_linked": false,
+        "directed_distance": null,
+        "undirected_distance": 2,
+        "same_component": true,
+        "same_skill": false,
+        "disconnected": false
+      },
+      "cosine": 0.96976054,
+      "duplicate_tokens_estimate": 104,
+      "disposition": "advisory"
+    },
+    {
+      "id": "9ab888fb95cb7d7622bd13935900885e567678a3cdad459bbfa5edb9a04ca8d8",
+      "lane": "body",
+      "detector": "1",
+      "kind": "semantic",
+      "left": {
+        "path": "skills/affinage/SKILL.md",
+        "heading_path": [
+          "/affinage",
+          "Inputs"
+        ],
+        "part": 4,
+        "source_hash": "79b2a2c0910b238e365e2271a7b26de48e9da082b30467cf01e4815403b2199a",
+        "span": {
+          "start": 38,
+          "end": 39
+        },
+        "original_excerpt": "Portability reference: [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.\nThe handoff blocks below are the portable contract; slash commands are host renderings, not the control model.",
+        "token_count": 114
+      },
+      "right": {
+        "path": "skills/cure/SKILL.md",
+        "heading_path": [
+          "/cure",
+          "Inputs"
+        ],
+        "part": 4,
+        "source_hash": "62eb86158b3268a444d378bd61bfccb8e8b6cea122c4ef58cef882bb9e658cdc",
+        "span": {
+          "start": 28,
+          "end": 29
+        },
+        "original_excerpt": "Portability reference: [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.\nThe handoff blocks below are the portable contract; slash commands are host renderings, not the control model.",
+        "token_count": 114
+      },
+      "graph": {
+        "directly_linked": false,
+        "directed_distance": null,
+        "undirected_distance": 2,
+        "same_component": true,
+        "same_skill": false,
+        "disconnected": false
+      },
+      "cosine": 0.97044873,
+      "duplicate_tokens_estimate": 114,
+      "disposition": "advisory"
+    },
+    {
+      "id": "2000554d32a009e5f0d286a71efa375bc681ab308146470aa486ac69d7d87dae",
+      "lane": "body",
+      "detector": "1",
+      "kind": "semantic",
+      "left": {
+        "path": "skills/cheese/SKILL.md",
+        "heading_path": [
+          "/cheese",
+          "Flow"
+        ],
+        "part": 5,
+        "source_hash": "b66200c6b07ebae6b00f534fb1654fffa1ea9eacd117d1745166e369b8087ecf",
+        "span": {
+          "start": 44,
+          "end": 45
+        },
+        "original_excerpt": "Portability reference: [`references/harness-portability.md`](references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.\nThe handoff blocks below are the portable contract; slash commands are host renderings, not the control model.",
+        "token_count": 104
+      },
+      "right": {
+        "path": "skills/cure/SKILL.md",
+        "heading_path": [
+          "/cure",
+          "Inputs"
+        ],
+        "part": 4,
+        "source_hash": "62eb86158b3268a444d378bd61bfccb8e8b6cea122c4ef58cef882bb9e658cdc",
+        "span": {
+          "start": 28,
+          "end": 29
+        },
+        "original_excerpt": "Portability reference: [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.\nThe handoff blocks below are the portable contract; slash commands are host renderings, not the control model.",
+        "token_count": 114
+      },
+      "graph": {
+        "directly_linked": false,
+        "directed_distance": null,
+        "undirected_distance": 2,
+        "same_component": true,
+        "same_skill": false,
+        "disconnected": false
+      },
+      "cosine": 0.9713824,
+      "duplicate_tokens_estimate": 104,
+      "disposition": "advisory"
+    },
+    {
+      "id": "dda133652be476e3c94dedaf19853c2df059c2b81528d734fcddf6416786ff75",
+      "lane": "body",
+      "detector": "1",
+      "kind": "semantic",
+      "left": {
+        "path": "skills/age/SKILL.md",
+        "heading_path": [
+          "/age",
+          "Inputs"
+        ],
+        "part": 3,
+        "source_hash": "3f9a4ba9e07ac22956d6ea7f6e2ce0509008685f4822775b2e3bdf84160cf7c7",
+        "span": {
+          "start": 44,
+          "end": 45
+        },
+        "original_excerpt": "Portability reference: [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.\nThe handoff blocks below are the portable contract; slash commands are host renderings, not the control model.",
+        "token_count": 114
+      },
+      "right": {
+        "path": "skills/cook/SKILL.md",
+        "heading_path": [
+          "/cook",
+          "Baseline capture"
+        ],
+        "part": 4,
+        "source_hash": "7c063cfcaa1638b437caf6c8022d2662a702dd3944c35d6cc9a8cd1464179c98",
+        "span": {
+          "start": 175,
+          "end": 176
+        },
+        "original_excerpt": "Portability reference: [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.\nThe handoff blocks below are the portable contract; slash commands are host renderings, not the control model.",
+        "token_count": 114
+      },
+      "graph": {
+        "directly_linked": false,
+        "directed_distance": null,
+        "undirected_distance": 2,
+        "same_component": true,
+        "same_skill": false,
+        "disconnected": false
+      },
+      "cosine": 0.9747675,
+      "duplicate_tokens_estimate": 114,
+      "disposition": "advisory"
+    },
+    {
+      "id": "0a1715ede1b093b9729845ee8b4fe7bcaac53b91e567e0516120b2b7a00444d2",
+      "lane": "body",
+      "detector": "1",
+      "kind": "semantic",
+      "left": {
+        "path": "skills/cheese/SKILL.md",
+        "heading_path": [
+          "/cheese",
+          "Flow"
+        ],
+        "part": 1,
+        "source_hash": "b66200c6b07ebae6b00f534fb1654fffa1ea9eacd117d1745166e369b8087ecf",
+        "span": {
+          "start": 31,
+          "end": 31
+        },
+        "original_excerpt": "",
+        "token_count": 2
+      },
+      "right": {
+        "path": "skills/hard-cheese/SKILL.md",
+        "heading_path": [
+          "/hard-cheese",
+          "Flow"
+        ],
+        "part": 1,
+        "source_hash": "f71405527efec5e2da6281c806579cac6901f6a7d5c06857d4e4fe6f678045b1",
+        "span": {
+          "start": 38,
+          "end": 38
+        },
+        "original_excerpt": "",
+        "token_count": 2
+      },
+      "graph": {
+        "directly_linked": false,
+        "directed_distance": null,
+        "undirected_distance": 2,
+        "same_component": true,
+        "same_skill": false,
+        "disconnected": false
+      },
+      "cosine": 0.97586554,
+      "duplicate_tokens_estimate": 2,
+      "disposition": "advisory"
+    },
+    {
+      "id": "da8de8335c59523713ebb88aa181d8d2d1a7d49e508c92aab9f0a9c790dd8c15",
+      "lane": "body",
+      "detector": "1",
+      "kind": "semantic",
+      "left": {
+        "path": "skills/cure/SKILL.md",
+        "heading_path": [
+          "/cure",
+          "Inputs"
+        ],
+        "part": 4,
+        "source_hash": "62eb86158b3268a444d378bd61bfccb8e8b6cea122c4ef58cef882bb9e658cdc",
+        "span": {
+          "start": 28,
+          "end": 29
+        },
+        "original_excerpt": "Portability reference: [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.\nThe handoff blocks below are the portable contract; slash commands are host renderings, not the control model.",
+        "token_count": 114
+      },
+      "right": {
+        "path": "skills/mold/SKILL.md",
+        "heading_path": [
+          "/mold",
+          "Flow"
+        ],
+        "part": 6,
+        "source_hash": "0edd3c58797e811043a1e3b2c98010cc3e53108b9bc37641a046dccc17f05bb9",
+        "span": {
+          "start": 27,
+          "end": 28
+        },
+        "original_excerpt": "Portability reference: [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.\nThe handoff blocks below are the portable contract; slash commands are host renderings, not the control model.",
+        "token_count": 114
+      },
+      "graph": {
+        "directly_linked": false,
+        "directed_distance": null,
+        "undirected_distance": 2,
+        "same_component": true,
+        "same_skill": false,
+        "disconnected": false
+      },
+      "cosine": 0.9769342,
+      "duplicate_tokens_estimate": 114,
+      "disposition": "advisory"
+    },
+    {
+      "id": "30f59d73a37887bc15a826f5a415bc74257f2d4c9a1f30c97dc252be6f86a625",
+      "lane": "body",
+      "detector": "1",
+      "kind": "semantic",
+      "left": {
+        "path": "skills/age/SKILL.md",
+        "heading_path": [
+          "/age",
+          "Inputs"
+        ],
+        "part": 3,
+        "source_hash": "3f9a4ba9e07ac22956d6ea7f6e2ce0509008685f4822775b2e3bdf84160cf7c7",
+        "span": {
+          "start": 44,
+          "end": 45
+        },
+        "original_excerpt": "Portability reference: [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.\nThe handoff blocks below are the portable contract; slash commands are host renderings, not the control model.",
+        "token_count": 114
+      },
+      "right": {
+        "path": "skills/cheese/SKILL.md",
+        "heading_path": [
+          "/cheese",
+          "Flow"
+        ],
+        "part": 5,
+        "source_hash": "b66200c6b07ebae6b00f534fb1654fffa1ea9eacd117d1745166e369b8087ecf",
+        "span": {
+          "start": 44,
+          "end": 45
+        },
+        "original_excerpt": "Portability reference: [`references/harness-portability.md`](references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.\nThe handoff blocks below are the portable contract; slash commands are host renderings, not the control model.",
+        "token_count": 104
+      },
+      "graph": {
+        "directly_linked": false,
+        "directed_distance": null,
+        "undirected_distance": 2,
+        "same_component": true,
+        "same_skill": false,
+        "disconnected": false
+      },
+      "cosine": 0.9770133,
+      "duplicate_tokens_estimate": 104,
+      "disposition": "advisory"
+    },
+    {
+      "id": "27d241bf262bfa4011b4947bdbb6070ff08f34de433cb3396f449deebe7ce2a1",
+      "lane": "body",
+      "detector": "1",
+      "kind": "semantic",
+      "left": {
+        "path": "skills/affinage/SKILL.md",
+        "heading_path": [
+          "/affinage",
+          "Inputs"
+        ],
+        "part": 4,
+        "source_hash": "79b2a2c0910b238e365e2271a7b26de48e9da082b30467cf01e4815403b2199a",
+        "span": {
+          "start": 38,
+          "end": 39
+        },
+        "original_excerpt": "Portability reference: [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.\nThe handoff blocks below are the portable contract; slash commands are host renderings, not the control model.",
+        "token_count": 114
+      },
+      "right": {
+        "path": "skills/age/SKILL.md",
+        "heading_path": [
+          "/age",
+          "Inputs"
+        ],
+        "part": 3,
+        "source_hash": "3f9a4ba9e07ac22956d6ea7f6e2ce0509008685f4822775b2e3bdf84160cf7c7",
+        "span": {
+          "start": 44,
+          "end": 45
+        },
+        "original_excerpt": "Portability reference: [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.\nThe handoff blocks below are the portable contract; slash commands are host renderings, not the control model.",
+        "token_count": 114
+      },
+      "graph": {
+        "directly_linked": true,
+        "directed_distance": 1,
+        "undirected_distance": 1,
+        "same_component": true,
+        "same_skill": false,
+        "disconnected": false
+      },
+      "cosine": 0.9773442,
+      "duplicate_tokens_estimate": 114,
+      "disposition": "advisory"
+    },
+    {
+      "id": "dae46d0786319ef55dda4eb34ca853ca3aad77e263b5584670c18999c5e86da1",
+      "lane": "body",
+      "detector": "1",
+      "kind": "semantic",
+      "left": {
+        "path": "skills/age/SKILL.md",
+        "heading_path": [
+          "/age",
+          "Inputs"
+        ],
+        "part": 3,
+        "source_hash": "3f9a4ba9e07ac22956d6ea7f6e2ce0509008685f4822775b2e3bdf84160cf7c7",
+        "span": {
+          "start": 44,
+          "end": 45
+        },
+        "original_excerpt": "Portability reference: [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.\nThe handoff blocks below are the portable contract; slash commands are host renderings, not the control model.",
+        "token_count": 114
+      },
+      "right": {
+        "path": "skills/mold/SKILL.md",
+        "heading_path": [
+          "/mold",
+          "Flow"
+        ],
+        "part": 6,
+        "source_hash": "0edd3c58797e811043a1e3b2c98010cc3e53108b9bc37641a046dccc17f05bb9",
+        "span": {
+          "start": 27,
+          "end": 28
+        },
+        "original_excerpt": "Portability reference: [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.\nThe handoff blocks below are the portable contract; slash commands are host renderings, not the control model.",
+        "token_count": 114
+      },
+      "graph": {
+        "directly_linked": false,
+        "directed_distance": null,
+        "undirected_distance": 2,
+        "same_component": true,
+        "same_skill": false,
+        "disconnected": false
+      },
+      "cosine": 0.9780095,
+      "duplicate_tokens_estimate": 114,
+      "disposition": "advisory"
+    },
+    {
+      "id": "b9fed2a000360c277582ff8079409538f7ed9b9b89eac1aaa604a3a02c448f43",
+      "lane": "body",
+      "detector": "1",
+      "kind": "semantic",
+      "left": {
+        "path": "skills/age/SKILL.md",
+        "heading_path": [
+          "/age",
+          "Inputs"
+        ],
+        "part": 3,
+        "source_hash": "3f9a4ba9e07ac22956d6ea7f6e2ce0509008685f4822775b2e3bdf84160cf7c7",
+        "span": {
+          "start": 44,
+          "end": 45
+        },
+        "original_excerpt": "Portability reference: [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.\nThe handoff blocks below are the portable contract; slash commands are host renderings, not the control model.",
+        "token_count": 114
+      },
+      "right": {
+        "path": "skills/cure/SKILL.md",
+        "heading_path": [
+          "/cure",
+          "Inputs"
+        ],
+        "part": 4,
+        "source_hash": "62eb86158b3268a444d378bd61bfccb8e8b6cea122c4ef58cef882bb9e658cdc",
+        "span": {
+          "start": 28,
+          "end": 29
+        },
+        "original_excerpt": "Portability reference: [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.\nThe handoff blocks below are the portable contract; slash commands are host renderings, not the control model.",
+        "token_count": 114
+      },
+      "graph": {
+        "directly_linked": false,
+        "directed_distance": null,
+        "undirected_distance": 2,
+        "same_component": true,
+        "same_skill": false,
+        "disconnected": false
+      },
+      "cosine": 0.98204,
+      "duplicate_tokens_estimate": 114,
+      "disposition": "advisory"
+    },
+    {
+      "id": "c5df5f332b35b16161c01ccd8e915e170988af7b0b8a5fc5e9f4d3d4040c9e97",
+      "lane": "body",
+      "detector": "1",
+      "kind": "semantic",
+      "left": {
+        "path": "skills/cheese/SKILL.md",
+        "heading_path": [
+          "/cheese",
+          "Flow"
+        ],
+        "part": 5,
+        "source_hash": "b66200c6b07ebae6b00f534fb1654fffa1ea9eacd117d1745166e369b8087ecf",
+        "span": {
+          "start": 44,
+          "end": 45
+        },
+        "original_excerpt": "Portability reference: [`references/harness-portability.md`](references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.\nThe handoff blocks below are the portable contract; slash commands are host renderings, not the control model.",
+        "token_count": 104
+      },
+      "right": {
+        "path": "skills/mold/SKILL.md",
+        "heading_path": [
+          "/mold",
+          "Flow"
+        ],
+        "part": 6,
+        "source_hash": "0edd3c58797e811043a1e3b2c98010cc3e53108b9bc37641a046dccc17f05bb9",
+        "span": {
+          "start": 27,
+          "end": 28
+        },
+        "original_excerpt": "Portability reference: [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.\nThe handoff blocks below are the portable contract; slash commands are host renderings, not the control model.",
+        "token_count": 114
+      },
+      "graph": {
+        "directly_linked": false,
+        "directed_distance": null,
+        "undirected_distance": 2,
+        "same_component": true,
+        "same_skill": false,
+        "disconnected": false
+      },
+      "cosine": 0.985165,
+      "duplicate_tokens_estimate": 104,
+      "disposition": "advisory"
+    },
+    {
+      "id": "fff9c528e9c5484cd02ae2768a5e5031b248855a571123a049cdabb51056c49b",
+      "lane": "body",
+      "detector": "1",
+      "kind": "semantic",
+      "left": {
+        "path": "skills/cook/references/package-report.md",
+        "heading_path": [
+          "Package-ready report",
+          "Honesty rules"
+        ],
+        "part": 1,
+        "source_hash": "c6b2daec380b9bde453109a77ebc73ad4a2fca75b0f24d8f866e08004e523524",
+        "span": {
+          "start": 43,
+          "end": 48
+        },
+        "original_excerpt": "\n- **Never claim green on partial work.** If a test is skipped, list the command and the reason.\n- **Never hide a failed gate.** If lint failed and you didn't fix it, the report says so and recommends a follow-up.\n- **Never claim \"ready for /age\" if any taste-test lens returned `revise` and you didn't address it.** That's the cardinal sin.\n- **When the Baseline section lists any recorded failures, the final summary states plainly that the full suite is not green** and lists those failures — loud, never hidden, per [`quality-gates.md`](quality-gates.md).\n",
+        "token_count": 154
+      },
+      "right": {
+        "path": "skills/cook/references/quality-gates.md",
+        "heading_path": [
+          "Quality gates — baseline-aware three-way policy",
+          "Classification taxonomy"
+        ],
+        "part": 1,
+        "source_hash": "602c119b715c849215f6b9b6c27b6262adc8d758edf4be81065948d7257c3c7a",
+        "span": {
+          "start": 15,
+          "end": 24
+        },
+        "original_excerpt": "\nClassification is deterministic and computed by the tested helper `src/fanout/baseline.py::classify()` — never agent-eyeballed.\n\n`FailureRecord = {suite, test_id, signature}`, where `signature` is the first line of the failure message, whitespace-normalized.\n\n- **identical** — same test, same signature as baseline.\n- **new** — not in baseline.\n- **changed** — same test, different signature. Treated as `new`.\n- **resolved** — in baseline, now green. Recorded for the summary; not a failure.\n",
+        "token_count": 142
+      },
+      "graph": {
+        "directly_linked": true,
+        "directed_distance": 1,
+        "undirected_distance": 1,
+        "same_component": true,
+        "same_skill": true,
+        "disconnected": false
+      },
+      "cosine": 0.6877335,
+      "duplicate_tokens_estimate": 142,
+      "disposition": "advisory"
+    },
+    {
+      "id": "02f515a03f8a7355dff9d0bf905703e19f7ad04a88074a6c4b7088c70dbd208f",
+      "lane": "body",
+      "detector": "1",
+      "kind": "semantic",
+      "left": {
+        "path": "skills/melt/SKILL.md",
+        "heading_path": [
+          "/melt",
+          "Protocol",
+          "2. Structural resolution"
+        ],
+        "part": 1,
+        "source_hash": "b612b20bfbc3a9cd119eb2a403a4b652a11dcf7c29489ea86d7d32afaa2e2544",
+        "span": {
+          "start": 82,
+          "end": 108
+        },
+        "original_excerpt": "\nFor every file mergiraf supports, attempt structural merge:\n\n```bash\n# Preview (dry-run is the default)\npython3 ${CLAUDE_SKILL_DIR}/scripts/melt.pyz batch-resolve\n\n# Apply clean resolutions and stage them\npython3 ${CLAUDE_SKILL_DIR}/scripts/melt.pyz batch-resolve --apply\n\n# Markdown output and mergiraf debug logs\npython3 ${CLAUDE_SKILL_DIR}/scripts/melt.pyz batch-resolve --verbose\n```\n\nTo inspect what mergiraf would produce for a single file without touching the working copy, use `--debug`:\n\n```bash\npython3 ${CLAUDE_SKILL_DIR}/scripts/melt.pyz batch-resolve --debug <path>\n```\n\nIt prints paths to the merged output, the log, and the conflict-marker count. Inspect with `cat`/`diff` against the printed paths; if the merged output is clean, apply it:\n\n```bash\ncp <merged_path> <path>\ngit add <path>\n```\n",
+        "token_count": 248
+      },
+      "right": {
+        "path": "skills/plate/references/durable-writes.md",
+        "heading_path": [
+          "Durable writes",
+          "Inventory"
+        ],
+        "part": 1,
+        "source_hash": "cf0841caa40658adf860bd382ac3ffe796793ec406690bf8ab6cf88ce29655f8",
+        "span": {
+          "start": 7,
+          "end": 12
+        },
+        "original_excerpt": "\nBuild one list from upstream handoffs/specs, promised reports or generated\nfiles, ADR/domain-model decisions, release notes, and implementation-time\narchitecture, convention, protocol, or gotcha knowledge. Classify each item as\nrequired or optional and tracked or transient.\n",
+        "token_count": 57
+      },
+      "graph": {
+        "directly_linked": false,
+        "directed_distance": null,
+        "undirected_distance": 4,
+        "same_component": true,
+        "same_skill": false,
+        "disconnected": false
+      },
+      "cosine": 0.6877335,
+      "duplicate_tokens_estimate": 57,
+      "disposition": "advisory"
+    },
+    {
+      "id": "da67ab3c9ef765862a112ccd7655921964e4913aca3dad0198b4ce9628414f37",
+      "lane": "body",
+      "detector": "1",
+      "kind": "semantic",
+      "left": {
+        "path": "skills/age/references/dimensions.md",
+        "heading_path": [
+          "Review dimensions",
+          "Per-dimension rubrics",
+          "efficiency"
+        ],
+        "part": 1,
+        "source_hash": "68d0739a6db42214f97841b691e44d8880a49577cf4ca3aa3647eeea7312b7c3",
+        "span": {
+          "start": 286,
+          "end": 301
+        },
+        "original_excerpt": "\nLook for: unnecessary work, missed concurrency, hot-path bloat, no-op updates, TOCTOU pre-checks, memory leaks, overly broad reads.\n\n| Base | Trigger |\n| --- | --- |\n| `blocker` | Unbounded cache/queue, listener/timer leak, retained references after teardown — anything that grows without bound in a long-running process |\n| `high` | Blocking work on per-request / startup / per-render path; N+1 on a high-traffic endpoint |\n| `medium` | N+1 on a moderate endpoint; redundant compute in a non-hot loop |\n| `low` | Redundant compute outside hot paths |\n\nInherited shape: an N+1, unbounded structure, or hot-path cost already present that the diff's new call site now triggers. Check whether the changed path runs hot or long-running before grading clean.\n\nBoundaries: nih (import exists to nih), correctness (TOCTOU wrong-data to correctness), complexity (cache decision to complexity). Full rules in § Dimension boundaries.\n\nRecommendation shape: \"Hoist `<call>` out of the loop\" / \"Run `<a>` and `<b>` in parallel with `Promise.all` (or equivalent)\" / \"Guard the store write on a value change\" / \"Drop the existence pre-check; handle the error from `<op>` instead\" / \"Bound `<structure>` or add cleanup on `<teardown>`\" / \"Read only the needed range/columns\".\n",
+        "token_count": 343
+      },
+      "right": {
+        "path": "skills/mold/references/handshake.md",
+        "heading_path": [
+          "The two-key handshake",
+          "Entity-referent binding"
+        ],
+        "part": 3,
+        "source_hash": "2a674612f5593ab9ac0562c28a40e4f74d2353c06c0d1816da2d96ad4752ef9e",
+        "span": {
+          "start": 138,
+          "end": 138
+        },
+        "original_excerpt": "This gate is the referent-level sibling of Agent-introduced scope — that gate asks *did the user type this noun*, this one asks *does the code have it, with the assumed shape*. A fully handshook spec once declared its goal-claims \"owned by the run/session\" while the code's `run` was a single task dispatch, not a coordinator session; the aliased noun survived to a re-age blocker and a cure-pass-2 design decision that belonged in mold. Curdle is the single chokepoint; downstream skills (`/cook`, etc.) trust the spec frontmatter and do not re-block — record bound and flagged nouns in frontmatter as `entity_referent_bindings: [{noun, verdict, referent, citation, note}, …]` (a list of binding records) so the referent and `file:line` citation the trail promises actually survive.",
+        "token_count": 204
+      },
+      "graph": {
+        "directly_linked": false,
+        "directed_distance": null,
+        "undirected_distance": null,
+        "same_component": false,
+        "same_skill": false,
+        "disconnected": true
+      },
+      "cosine": 0.68773425,
+      "duplicate_tokens_estimate": 204,
+      "disposition": "advisory"
+    },
+    {
+      "id": "f0cb9bd37f9e3f173f8f86eec09173a2517abcc1ce1091d0e2cc59c1def92c60",
+      "lane": "body",
+      "detector": "1",
+      "kind": "semantic",
+      "left": {
+        "path": "skills/age/references/deslop-rust.md",
+        "heading_path": [
+          "Rust De-slop Catalog",
+          "12. Hallucinated APIs and deprecated syntax"
+        ],
+        "part": 1,
+        "source_hash": "b9a5d3e14aa55a683662eb9da088773243ee9896c31852c0c7d0dba3a6d53f45",
+        "span": {
+          "start": 487,
+          "end": 497
+        },
+        "original_excerpt": "\nAI generates functions that don't exist or uses outdated API patterns\n(e.g., `clap` `App::new` instead of derive macros).\n\n**Fix:**\n\n- Run `cargo check` immediately after generating code\n- Pin specific crate versions\n- Use Clippy: `cargo clippy -- -W clippy::all`\n- When in doubt, check docs against the current crate version\n",
+        "token_count": 90
+      },
+      "right": {
+        "path": "skills/age/references/packet.md",
+        "heading_path": [
+          "Shared context packet",
+          "Orientation and citations block"
+        ],
+        "part": 1,
+        "source_hash": "0ecc4142d2ea94fa0ca3320d475017a50b83023b6b2543f8f6843334dd70a285",
+        "span": {
+          "start": 17,
+          "end": 19
+        },
+        "original_excerpt": "\nThe existing review-context sub-agent (`SKILL.md § Sub-agent context gate`) is reused as the packet's orientation + citations block. Its digest is embedded in the packet — not duplicated or re-generated.\n",
+        "token_count": 51
+      },
+      "graph": {
+        "directly_linked": false,
+        "directed_distance": null,
+        "undirected_distance": null,
+        "same_component": false,
+        "same_skill": true,
+        "disconnected": true
+      },
+      "cosine": 0.6877345,
+      "duplicate_tokens_estimate": 51,
+      "disposition": "advisory"
+    },
+    {
+      "id": "0cd43fa19fa9422f69e6003b92b253f284d601ce5f9f0c95a86dcb94958f5df3",
+      "lane": "body",
+      "detector": "1",
+      "kind": "semantic",
+      "left": {
+        "path": "skills/cheese/SKILL.md",
+        "heading_path": [
+          "/cheese",
+          "--continue"
+        ],
+        "part": 2,
+        "source_hash": "64de25e99de8d298b2faa9cfd8e7bead6c1c9ade154bf1e987caae442308597d",
+        "span": {
+          "start": 95,
+          "end": 98
+        },
+        "original_excerpt": "0. **Read the full user message, not just the `--continue` argument.** Any prose accompanying the invocation is a directive list; execute or answer it before — and where it conflicts, instead of — the handoff protocol below. The handoff file restores state; the user's live message overrides it.\n1. If the argument is a readable `.md` handoff path, read that file directly and derive `<slug>` from its basename. If the path contains a `.cheese/` parent, treat the directory above `.cheese/` as the original repo root for any repo-relative paths in the handoff.\n2. Otherwise, scan for the most recently modified handoff slug across `.cheese/{cook,press,age,cure,affinage,notes}/<slug>.md`.\n3. If none exist, offer to start the pipeline from scratch — `/mold` for fuzzy specs, `/cook` for clear asks, `/ultracook` for high-blast-radius specs — and stop.",
+        "token_count": 236
+      },
+      "right": {
+        "path": "skills/plate/references/git-town.md",
+        "heading_path": [
+          "Git Town publication",
+          "Install, configure, and detect"
+        ],
+        "part": 1,
+        "source_hash": "8180a50f2a3762edad96902cf39dd9d7366109ba3c18bf6d3f3c7a9197802580",
+        "span": {
+          "start": 23,
+          "end": 37
+        },
+        "original_excerpt": "\n- Install with `brew install git-town`, `choco install git-town`, or\n  `scoop install git-town`; check `git town --version`.\n- Configure with `git town config setup`, or set trunk directly using\n  `git config --local git-town.main-branch <trunk>`.\n- On GitHub, prefer `git-town.github-connector gh` to reuse authenticated CLI\n  access; environment tokens are preferable in ephemeral systems.\n- Usability requires the executable and a non-empty `git-town.main-branch`.\n  Inspect parents with `git config --get-regexp '^git-town-branch\\.'`.\n- Resolve repository metadata with `git rev-parse --git-dir` when inspecting\n  git-owned state; never assume a literal metadata path.\n\nGit Town is forge-agnostic. Configure `git-town.forge-type` when forge\nauto-detection is wrong.\n",
+        "token_count": 247
+      },
+      "graph": {
+        "directly_linked": false,
+        "directed_distance": null,
+        "undirected_distance": 3,
+        "same_component": true,
+        "same_skill": false,
+        "disconnected": false
+      },
+      "cosine": 0.68773526,
+      "duplicate_tokens_estimate": 236,
+      "disposition": "advisory"
+    },
+    {
+      "id": "dbe7e4af670d636b6112fa0efbc617afa4e6cfc78bce9643ba034c40c501c602",
+      "lane": "body",
+      "detector": "1",
+      "kind": "semantic",
+      "left": {
+        "path": "skills/affinage/SKILL.md",
+        "heading_path": [
+          "/affinage",
+          "References"
+        ],
+        "part": 1,
+        "source_hash": "4ae7450ff13c8cdbae66c13f212ccc0862c6e97cb11f8afdf339647806250de2",
+        "span": {
+          "start": 275,
+          "end": 284
+        },
+        "original_excerpt": "\n- `skills/age/SKILL.md` — review pipeline, dimensions, sub-agent gate, report shape.\n- `../age/references/dimensions.md` — per-dimension rubrics and severity computation.\n- `skills/cure/SKILL.md` — apply pipeline, `--auto --stake` floors, handoff context shape.\n- `../cure/references/selection.md` — selection verbs and composition.\n- `skills/melt/SKILL.md` — merge-conflict resolution cascade (mergiraf → rerere → kdiff3).\n- `../cheese/references/handoff-gate.md` — gate primitives.\n- `python3 skills/affinage/scripts/affinage.pyz post-reply` — reply posting with `agent on behalf of <handle>` attribution.\n- `python3 skills/affinage/scripts/affinage.pyz pr-status` — PR status fetcher.\n",
+        "token_count": 219
+      },
+      "right": {
+        "path": "skills/mold/references/handshake.md",
+        "heading_path": [
+          "The two-key handshake",
+          "Why both keys"
+        ],
+        "part": 1,
+        "source_hash": "4f53036a0910b396d666a26d8a4e073ab1ab203e25a707d54f2fe0230139081f",
+        "span": {
+          "start": 145,
+          "end": 146
+        },
+        "original_excerpt": "\nThe user knows their intent; the agent knows the dialogue's coherence. Either one alone produces drift — user-only writes incoherent specs; agent-only writes specs the user didn't actually want.",
+        "token_count": 50
+      },
+      "graph": {
+        "directly_linked": false,
+        "directed_distance": null,
+        "undirected_distance": 2,
+        "same_component": true,
+        "same_skill": false,
+        "disconnected": false
+      },
+      "cosine": 0.68773615,
+      "duplicate_tokens_estimate": 50,
+      "disposition": "advisory"
+    },
+    {
+      "id": "42daea67f9ec02c06b8cce720ba5061b2fe3dd275942fee3b220aca83e5800bf",
+      "lane": "body",
+      "detector": "1",
+      "kind": "semantic",
+      "left": {
+        "path": "skills/mold/references/handshake.md",
+        "heading_path": [
+          "The two-key handshake",
+          "Entity-referent binding"
+        ],
+        "part": 3,
+        "source_hash": "2a674612f5593ab9ac0562c28a40e4f74d2353c06c0d1816da2d96ad4752ef9e",
+        "span": {
+          "start": 138,
+          "end": 138
+        },
+        "original_excerpt": "This gate is the referent-level sibling of Agent-introduced scope — that gate asks *did the user type this noun*, this one asks *does the code have it, with the assumed shape*. A fully handshook spec once declared its goal-claims \"owned by the run/session\" while the code's `run` was a single task dispatch, not a coordinator session; the aliased noun survived to a re-age blocker and a cure-pass-2 design decision that belonged in mold. Curdle is the single chokepoint; downstream skills (`/cook`, etc.) trust the spec frontmatter and do not re-block — record bound and flagged nouns in frontmatter as `entity_referent_bindings: [{noun, verdict, referent, citation, note}, …]` (a list of binding records) so the referent and `file:line` citation the trail promises actually survive.",
+        "token_count": 204
+      },
+      "right": {
+        "path": "skills/press/SKILL.md",
+        "heading_path": [
+          "/press",
+          "Auto mode"
+        ],
+        "part": 1,
+        "source_hash": "bf23c06cf16b10a1347c885f1fca133731c6f3b488e1583ab46b83fb3612a65b",
+        "span": {
+          "start": 111,
+          "end": 117
+        },
+        "original_excerpt": "\nWhen invoked with `--auto` (propagated from `/cook --auto`):\n\n- Skip the handoff gate entirely.\n- If readiness is `ready for /age` or `follow-up recommended`, invoke `/age <slug> --auto` directly (forward `--open-pr` when it is in scope).\n- If readiness is `blocked`, stop the auto chain and surface the press report to the user. Blocked criteria: defined once in [`references/gap-analysis.md`](references/gap-analysis.md).\n",
+        "token_count": 128
+      },
+      "graph": {
+        "directly_linked": false,
+        "directed_distance": null,
+        "undirected_distance": 2,
+        "same_component": true,
+        "same_skill": false,
+        "disconnected": false
+      },
+      "cosine": 0.6877363,
+      "duplicate_tokens_estimate": 128,
+      "disposition": "advisory"
+    },
+    {
+      "id": "a72a21de5b0d882094bd04b6e6ce3b994005c8bb780c76c075f0b067e47623dd",
+      "lane": "body",
+      "detector": "1",
+      "kind": "semantic",
+      "left": {
+        "path": "skills/age/references/dimensions.md",
+        "heading_path": [
+          "Review dimensions",
+          "Per-dimension rubrics",
+          "efficiency"
+        ],
+        "part": 1,
+        "source_hash": "68d0739a6db42214f97841b691e44d8880a49577cf4ca3aa3647eeea7312b7c3",
+        "span": {
+          "start": 286,
+          "end": 301
+        },
+        "original_excerpt": "\nLook for: unnecessary work, missed concurrency, hot-path bloat, no-op updates, TOCTOU pre-checks, memory leaks, overly broad reads.\n\n| Base | Trigger |\n| --- | --- |\n| `blocker` | Unbounded cache/queue, listener/timer leak, retained references after teardown — anything that grows without bound in a long-running process |\n| `high` | Blocking work on per-request / startup / per-render path; N+1 on a high-traffic endpoint |\n| `medium` | N+1 on a moderate endpoint; redundant compute in a non-hot loop |\n| `low` | Redundant compute outside hot paths |\n\nInherited shape: an N+1, unbounded structure, or hot-path cost already present that the diff's new call site now triggers. Check whether the changed path runs hot or long-running before grading clean.\n\nBoundaries: nih (import exists to nih), correctness (TOCTOU wrong-data to correctness), complexity (cache decision to complexity). Full rules in § Dimension boundaries.\n\nRecommendation shape: \"Hoist `<call>` out of the loop\" / \"Run `<a>` and `<b>` in parallel with `Promise.all` (or equivalent)\" / \"Guard the store write on a value change\" / \"Drop the existence pre-check; handle the error from `<op>` instead\" / \"Bound `<structure>` or add cleanup on `<teardown>`\" / \"Read only the needed range/columns\".\n",
+        "token_count": 343
+      },
+      "right": {
+        "path": "skills/cheese/references/formatting.md",
+        "heading_path": [
+          "Formatting",
+          "Citations",
+          "References section"
+        ],
+        "part": 1,
+        "source_hash": "0ea9c6c13cc9a98ba15812724b5aec6a3302028c3aabce33163a9f56bf5568c8",
+        "span": {
+          "start": 84,
+          "end": 98
+        },
+        "original_excerpt": "\nAt the bottom of the artifact, under `## References`:\n\n```markdown\n## References\n\n[^stripe-retry]: Stripe API reference, \"Idempotent Requests\". https://docs.stripe.com/api/idempotent_requests (fetched 2026-05-18).\n[^oidc-core]: OpenID Connect Core 1.0, § 2 ID Token. https://openid.net/specs/openid-connect-core-1_0.html#IDToken\n[^press-2026-05-12]: `.cheese/press/auth-retry.md` (commit `f9f2973`).\n```\n\nOne line per footnote. URLs absolute. For external sources, include a fetch date when freshness matters (\"as of 2026-05-18\"). For internal artifacts, include the commit hash or the path so the citation is reproducible even after the artifact moves.\n\nReserve plain parenthetical hyperlinks (`see [name](URL)`) for cases where the link text itself carries information the reader needs inline — glossary terms, named proposals, vendor doc titles. Audit-trail evidence uses footnotes.\n",
+        "token_count": 277
+      },
+      "graph": {
+        "directly_linked": false,
+        "directed_distance": null,
+        "undirected_distance": null,
+        "same_component": false,
+        "same_skill": false,
+        "disconnected": true
+      },
+      "cosine": 0.68773645,
+      "duplicate_tokens_estimate": 277,
+      "disposition": "advisory"
+    },
+    {
+      "id": "9c6c5defa0ff54bb3583789718d8e2ceb1a6d2c8b27b7730867bad704563416f",
+      "lane": "body",
+      "detector": "1",
+      "kind": "semantic",
+      "left": {
+        "path": "skills/cheese/references/ask-user-question.md",
+        "heading_path": [
+          "Ask user question",
+          "Portable fallback"
+        ],
+        "part": 1,
+        "source_hash": "827ace307bcafe1d95e35e8a1a13e343bf10ba5c073d768d85dba233a6405437",
+        "span": {
+          "start": 91,
+          "end": 110
+        },
+        "original_excerpt": "\n```markdown\nQuestion: <one short question>\nRecommended: <label> — <recommended option's description>\n\n1. <label> — <effect/tradeoff>\n2. <label> — <effect/tradeoff>\n3. <label> — <effect/tradeoff>\n4. <label> — <effect/tradeoff, when present>\n... <continue until every question option is explicit>\nOther: reply with `other: <short answer>`\n```\n\nA fallback must enumerate every option; its list is not capped at three. When\n`question.recommended` names an option, render its label and description on the\n`Recommended:` line; do not assume it is option 1. When\n`question.recommended` is `none`, omit the `Recommended:` line.\nA hybrid is lossless only when every action omitted from the structured control\nremains an explicit, equally actionable numbered choice.\n",
+        "token_count": 198
+      },
+      "right": {
+        "path": "skills/cheese/references/classification.md",
+        "heading_path": [
+          "Classification reference",
+          "Signal table",
+          "research (`/briesearch`)"
+        ],
+        "part": 1,
+        "source_hash": "7d15e3e6003da81a5a8888fc68a60ab34a828e5c7ab4a32ba797feb2efaec87e",
+        "span": {
+          "start": 44,
+          "end": 55
+        },
+        "original_excerpt": "\nExternal-evidence questions where the answer is not in the working tree.\n\n| Signal | Example |\n| --- | --- |\n| Names a library / framework / API / CLI | \"what does the Stripe SDK do for idempotency keys\" |\n| Comparison or recommendation question | \"best rate limiter library\", \"compare X vs Y\" |\n| Asks about current vendor state | \"is library X still maintained\" |\n| \"Before I implement…\" framing | \"before I implement, what's the right approach\" |\n\nDefer to `/briesearch` even when the user did not say \"research\" — the router's job is to recognise the shape.\n",
+        "token_count": 149
+      },
+      "graph": {
+        "directly_linked": false,
+        "directed_distance": null,
+        "undirected_distance": 2,
+        "same_component": true,
+        "same_skill": true,
+        "disconnected": false
+      },
+      "cosine": 0.68773717,
+      "duplicate_tokens_estimate": 149,
+      "disposition": "advisory"
+    },
+    {
+      "id": "f40013c7b5204e4fc4510ab0ead2a9e06ccb14e0265c52478efbfe588fd5c0a6",
+      "lane": "body",
+      "detector": "1",
+      "kind": "semantic",
+      "left": {
+        "path": "skills/cook/SKILL.md",
+        "heading_path": [
+          "/cook",
+          "Auto mode",
+          "Failure handling inside cure"
+        ],
+        "part": 1,
+        "source_hash": "b5ee899b1b4321ef1fe77ab4611ca74fe0be2042505381093b33654644f0ac6b",
+        "span": {
+          "start": 285,
+          "end": 287
+        },
+        "original_excerpt": "\nSee `skills/cure/SKILL.md` `## Auto mode` for cure's per-finding revert/defer behaviour. Cook does not duplicate the contract — cure owns it.\n",
+        "token_count": 43
+      },
+      "right": {
+        "path": "skills/mold/references/context-budget.md",
+        "heading_path": [
+          "Context budget — staying out of the dumb zone",
+          "The wheypoint re-up"
+        ],
+        "part": 1,
+        "source_hash": "dfd6916b142aefee8bdc08fa4b599467d662cb981c5040becd98dea0986e649c",
+        "span": {
+          "start": 41,
+          "end": 53
+        },
+        "original_excerpt": "\nAt the ~140k nudge, recommend (do not auto-run):\n\n```text\nThe dialogue is large enough to risk the model's dumb zone. /wheypoint will\ncompact what we've decided into .cheese/notes/<slug>.md so a fresh session can\nresume without losing the handshake state. Resume with /cheese --continue <slug>.\n```\n\n`/wheypoint` preserves the dialogue, contradictions, approval state, and any open\nValidate/Prototype cycles, so the fresh agent picks up mid-handshake rather than\nre-deriving the design. See `skills/wheypoint/SKILL.md`.\n",
+        "token_count": 145
+      },
+      "graph": {
+        "directly_linked": false,
+        "directed_distance": null,
+        "undirected_distance": 2,
+        "same_component": true,
+        "same_skill": false,
+        "disconnected": false
+      },
+      "cosine": 0.68773717,
+      "duplicate_tokens_estimate": 43,
+      "disposition": "advisory"
+    },
+    {
+      "id": "fd3c8a05b6c8e27c3a43baf49cf831cb4ef15c733960c39311307c3d5a5ff9de",
+      "lane": "body",
+      "detector": "1",
+      "kind": "semantic",
+      "left": {
+        "path": "skills/cook/references/tdd-loop.md",
+        "heading_path": [
+          "The TDD loop: cut → implement → taste-test",
+          "Taste-test — drift, readability, scope, simplify, plus three fresh-context lenses"
+        ],
+        "part": 4,
+        "source_hash": "775b68e9ef72496cc8a7013e75873024624c5f345ddc3a0eee8b802f5d35ed4d",
+        "span": {
+          "start": 56,
+          "end": 61
+        },
+        "original_excerpt": "The last three lenses are the fresh-context additions — they encode the failures the inline taste-test historically passed: a missing production path, public functions with zero non-test callers, and a silently-substituted design decision. A `halt` from the Locked-decision lens stops the chain for a human decision; it is not a corrective-cook finding.\n\n**Escalate-unverifiable.** When a lens cannot verify its claim from available evidence, it returns `escalate` for that lens, never a guessed `pass` or `revise` (cross-cutting contract 1 in the spec: \"a claim no evidence can settle returns escalate, never a guessed pass or fail\").\n\nThe **Simplify** lens runs three sub-checks (the same three axes `/simplify` uses):\n",
+        "token_count": 180
+      },
+      "right": {
+        "path": "skills/ultracook/SKILL.md",
+        "heading_path": [
+          "/ultracook",
+          "Parallel mode"
+        ],
+        "part": 1,
+        "source_hash": "0b68bfa54007ba2bbade1b3b74f77e34424a43af8b7ae01a7d6bf4e60c4f1258",
+        "span": {
+          "start": 164,
+          "end": 166
+        },
+        "original_excerpt": "\nReached when the decomposer produces **2 or more** curds (`mode → parallel`). Parallel mode is **curd-light** — each curd runs its own review, then one integration pass reviews the merged diff. Behavioral output remains stable across modes, while required resolution provenance records the selected role, fallback, and topology. The per-run manifest lives at `.cheese/ultracook/<slug>/manifest.yaml`.\n",
+        "token_count": 105
+      },
+      "graph": {
+        "directly_linked": false,
+        "directed_distance": null,
+        "undirected_distance": 2,
+        "same_component": true,
+        "same_skill": false,
+        "disconnected": false
+      },
+      "cosine": 0.6877374,
+      "duplicate_tokens_estimate": 105,
+      "disposition": "advisory"
+    },
+    {
+      "id": "b0b855afe45032190170edd702844b373714567f3a94859f07c91324423e491f",
+      "lane": "body",
+      "detector": "1",
+      "kind": "semantic",
+      "left": {
+        "path": "skills/briesearch/references/routing.md",
+        "heading_path": [
+          "Source routing",
+          "Source priority"
+        ],
+        "part": 1,
+        "source_hash": "6f6ce1c98317cb96046bb0b1e7855b659afad8ff6f029339a11aa6e2a8cff462",
+        "span": {
+          "start": 145,
+          "end": 156
+        },
+        "original_excerpt": "\nWithin each source class, prefer authoritative over secondary:\n\n1. **Official vendor / library docs** for API, config, migration claims.\n2. **Original papers, standards, RFCs** for technical claims.\n3. **Release notes / changelogs** for version or freshness claims.\n4. **Repo-local evidence** from semantic source search for local conventions.\n5. **GitHub examples** as supporting evidence unless the user asked for OSS precedent.\n6. **Blogs, tutorials, AI-generated content** only when nothing above answers the question — and disclose them as such.\n\nFor named-library questions, the routed-call order is **semantic source search → Context7 → Tavily**: cheap repo precedent first, the library's own indexed docs second, current-events / vendor announcements / coverage gaps last. Fan all routed calls in a single assistant turn (parallel tool calls) so total wall time is one round-trip.\n",
+        "token_count": 217
+      },
+      "right": {
+        "path": "skills/mold/SKILL.md",
+        "heading_path": [
+          "/mold",
+          "Handoff"
+        ],
+        "part": 4,
+        "source_hash": "54d36a3e9af82f93b0c1017fc76d5ec41534eff3a229d4bdffa104b44a5c8300",
+        "span": {
+          "start": 153,
+          "end": 158
+        },
+        "original_excerpt": "- **Implement the spec** *(recommended)* — `/cook <spec-path>`.\n- **Implement and auto-review** — `/cook --auto <spec-path>`, chains through `/press → /age → /cure`. Opening or updating a PR remains a `/plate` step; a new PR follows its explicit-choice and review-shape policy.\n- **Run the pipeline in fresh-context isolation** — `/ultracook <spec-path>`. A 1-curd low/medium spec takes ultracook's fast-path: the linear chain with no decomposer spawn, dispatching each phase as a fresh sub-agent — slower than `/cook --auto`'s continuous in-session chain. Pick this when the diff feels riskier than the verdict, or when you want every phase blind to this session's dialogue.\n- **Research more first** — `/briesearch`, gather more external evidence before implementing.\n- **Stop** — dispatch none; leave the spec for later.\n",
+        "token_count": 242
+      },
+      "graph": {
+        "directly_linked": false,
+        "directed_distance": null,
+        "undirected_distance": 2,
+        "same_component": true,
+        "same_skill": false,
+        "disconnected": false
+      },
+      "cosine": 0.68773746,
+      "duplicate_tokens_estimate": 217,
+      "disposition": "advisory"
+    },
+    {
+      "id": "5ffa42d9fbe44c81446f45f83f8b7eff3a1e027c1e07a4587643cd7d74f68956",
+      "lane": "body",
+      "detector": "1",
+      "kind": "semantic",
+      "left": {
+        "path": "skills/cheese/references/coherence-check.md",
+        "heading_path": [
+          "Coherence self-check",
+          "Pre-dispatch checklist"
+        ],
+        "part": 2,
+        "source_hash": "a6973eaa25556a29011ca571611addbab49936e11cfee0bd5f16c7072a1eb7b7",
+        "span": {
+          "start": 7,
+          "end": 20
+        },
+        "original_excerpt": "1. **Does the cited artifact exist?**\n   - Spec path under `.cheese/specs/<slug>.md` resolves through a bounded file read per [`code-intelligence-routing.md`](code-intelligence-routing.md).\n   - Press / age / cure report path resolves when the input names a slug.\n   - PR / issue reference is well-formed (number or URL); not required to be fetched.\n   - If a path or slug is named but missing → `clarify`, ask whether to create or pick a different target.\n\n2. **Is the routing reason a signal, not a guess?**\n   - The announced reason cites a concrete signal: file extension, path prefix, verb, presence of a stack trace, PR URL.\n   - If the reason reads like \"feels like a cook task\" with no anchor → downgrade to `clarify`.\n\n3. **Does the input contain conflicting verbs?**\n   - \"Review and ship\" without specifying review-then-fix vs review-only → `clarify`.\n   - \"Design and implement\" with no spec → prefer `mold` over `cook`, but ask once if scope is unclear.\n",
+        "token_count": 256
+      },
+      "right": {
+        "path": "skills/cure/references/selection.md",
+        "heading_path": [
+          "Selection gate",
+          "Auto-mode selection"
+        ],
+        "part": 3,
+        "source_hash": "0ff10dcf6f48c11116709da4094ac9f6500961051bc29332258ddb4bc688ba7c",
+        "span": {
+          "start": 95,
+          "end": 99
+        },
+        "original_excerpt": "- **Order of application:** blocker first, then high, then medium, then — under the `medium+` floor — the cheap lows, in the order they appear in the age report. Within a severity band, group by file to minimise re-reads.\n- **Per-finding flow:** same as `## After selection`; on test breakage, revert that finding's edit, log it under `### Deferred` with the test name and one-line failure summary, and continue.\n- **On a finding that is no longer applicable** (file moved, code already fixed): record under `### Skipped` exactly as in interactive mode.\n- **After all selected findings are processed:** invoke `/age --scope <touched-paths> --auto` directly (no handoff gate). The pass-cap is enforced inside `/age --auto`, not here — cure keeps applying when called.\n",
+        "token_count": 216
+      },
+      "graph": {
+        "directly_linked": false,
+        "directed_distance": null,
+        "undirected_distance": 2,
+        "same_component": true,
+        "same_skill": false,
+        "disconnected": false
+      },
+      "cosine": 0.6877379,
+      "duplicate_tokens_estimate": 216,
+      "disposition": "advisory"
+    },
+    {
+      "id": "504cb703a0d4351e67e1c25d07e3571d009853b37ace1d3111418e71b4e876ac",
+      "lane": "body",
+      "detector": "1",
+      "kind": "semantic",
+      "left": {
+        "path": "skills/age/references/deslop-typescript.md",
+        "heading_path": [
+          "TypeScript / JavaScript De-slop Catalog",
+          "4. `Array.forEach` with async callbacks"
+        ],
+        "part": 1,
+        "source_hash": "636ad4674ffc0aa16f658deffc74eba8f5d30b498e82a9c106aa0f042448fb87",
+        "span": {
+          "start": 66,
+          "end": 83
+        },
+        "original_excerpt": "\n`forEach` doesn't await — async callbacks fire and are silently dropped.\n\n```typescript\n// SLOP — these await calls do nothing useful\nitems.forEach(async (item) => {\n  await processItem(item);  // Runs concurrently, forEach doesn't wait\n});\n\n// CLEAN — sequential\nfor (const item of items) {\n  await processItem(item);\n}\n\n// CLEAN — concurrent with control\nawait Promise.all(items.map(item => processItem(item)));\n```\n",
+        "token_count": 128
+      },
+      "right": {
+        "path": "skills/plate/references/ordinary-pr.md",
+        "heading_path": [
+          "Ordinary PR publication",
+          "New PR"
+        ],
+        "part": 1,
+        "source_hash": "581f6a7b7948b91b4ae92fb1d6ab60d9a1e27117740e43bd52b40808cc39dd7d",
+        "span": {
+          "start": 7,
+          "end": 23
+        },
+        "original_excerpt": "\n1. Confirm `/plate` resolved the new PR as single: explicitly, by cohesive-shape inference, or after a user question.\n2. Resolve trunk and current branch; reject publication from trunk.\n3. Draft a title and body covering purpose, verification, durable artifacts,\n   and residual risks.\n4. Write the body to a temporary or transient file and pass `--body-file`.\n5. Push the named branch without force.\n6. Create with explicit base and head:\n\n```bash\ngh pr create --title \"<title>\" --body-file <body-path> --base <base> --head <head>\n```\n\n1. Verify with `gh pr view --json number,url,title,baseRefName,headRefName,state`.\n\nDo not use `--fill` when it would omit artifact or verification details.\n",
+        "token_count": 194
+      },
+      "graph": {
+        "directly_linked": false,
+        "directed_distance": null,
+        "undirected_distance": null,
+        "same_component": false,
+        "same_skill": false,
+        "disconnected": true
+      },
+      "cosine": 0.40248194,
+      "duplicate_tokens_estimate": 128,
+      "disposition": "advisory"
+    },
+    {
+      "id": "ff09c0c9f49b322c0019cbab05f08170956616a24620f0c5a5a67e673d83b7af",
+      "lane": "body",
+      "detector": "1",
+      "kind": "semantic",
+      "left": {
+        "path": "skills/age/references/deslop-typescript.md",
+        "heading_path": [
+          "TypeScript / JavaScript De-slop Catalog",
+          "4. `Array.forEach` with async callbacks"
+        ],
+        "part": 1,
+        "source_hash": "636ad4674ffc0aa16f658deffc74eba8f5d30b498e82a9c106aa0f042448fb87",
+        "span": {
+          "start": 66,
+          "end": 83
+        },
+        "original_excerpt": "\n`forEach` doesn't await — async callbacks fire and are silently dropped.\n\n```typescript\n// SLOP — these await calls do nothing useful\nitems.forEach(async (item) => {\n  await processItem(item);  // Runs concurrently, forEach doesn't wait\n});\n\n// CLEAN — sequential\nfor (const item of items) {\n  await processItem(item);\n}\n\n// CLEAN — concurrent with control\nawait Promise.all(items.map(item => processItem(item)));\n```\n",
+        "token_count": 128
+      },
+      "right": {
+        "path": "skills/plate/SKILL.md",
+        "heading_path": [
+          "/plate",
+          "Ordinary PR publication"
+        ],
+        "part": 1,
+        "source_hash": "26508bad8ccac333891e766d676ee12d6d50f2fae7ea5f50a443c05222e9d70c",
+        "span": {
+          "start": 208,
+          "end": 216
+        },
+        "original_excerpt": "\nRead [`references/ordinary-pr.md`](references/ordinary-pr.md). Draft the title\nand body from the validated diff and commits; the body labels the change as\nsemantics-preserving or semantics-altering and states what the reviewer must\nverify. Write the PR body to a file and\nuse `gh pr create --body-file`; never embed a markdown heredoc in `--body`.\nPush the named branch, create the PR with explicit base/head, then read it back\nwith `gh pr view` to verify number, URL, base, head, and state.\n",
+        "token_count": 135
+      },
+      "graph": {
+        "directly_linked": false,
+        "directed_distance": null,
+        "undirected_distance": null,
+        "same_component": false,
+        "same_skill": false,
+        "disconnected": true
+      },
+      "cosine": 0.40836847,
+      "duplicate_tokens_estimate": 128,
+      "disposition": "advisory"
+    },
+    {
+      "id": "b6186faee4fbda86732eb524fcae3fb96c522f90aebd230e9f6eea64ff3483d5",
+      "lane": "body",
+      "detector": "1",
+      "kind": "semantic",
+      "left": {
+        "path": "skills/age/references/deslop-typescript.md",
+        "heading_path": [
+          "TypeScript / JavaScript De-slop Catalog",
+          "4. `Array.forEach` with async callbacks"
+        ],
+        "part": 1,
+        "source_hash": "636ad4674ffc0aa16f658deffc74eba8f5d30b498e82a9c106aa0f042448fb87",
+        "span": {
+          "start": 66,
+          "end": 83
+        },
+        "original_excerpt": "\n`forEach` doesn't await — async callbacks fire and are silently dropped.\n\n```typescript\n// SLOP — these await calls do nothing useful\nitems.forEach(async (item) => {\n  await processItem(item);  // Runs concurrently, forEach doesn't wait\n});\n\n// CLEAN — sequential\nfor (const item of items) {\n  await processItem(item);\n}\n\n// CLEAN — concurrent with control\nawait Promise.all(items.map(item => processItem(item)));\n```\n",
+        "token_count": 128
+      },
+      "right": {
+        "path": "skills/plate/references/gt.md",
+        "heading_path": [
+          "Graphite publication",
+          "Plate recipes",
+          "Create a two-layer stack"
+        ],
+        "part": 1,
+        "source_hash": "a31024b96495eee16014bc275eeb7f00c66211923c9ff48c3ecdc54f7f11f37a",
+        "span": {
+          "start": 99,
+          "end": 105
+        },
+        "original_excerpt": "\n1. From clean trunk, run `gt create <bottom>`.\n2. Write bottom/common artifacts, validate, stage named paths, and commit.\n3. Run `gt create <top>`; repeat the per-layer transaction for top-only work.\n4. Inspect with `gt log short`.\n5. Publish with `gt submit --stack` and verify every PR/base pair.\n",
+        "token_count": 87
+      },
+      "graph": {
+        "directly_linked": false,
+        "directed_distance": null,
+        "undirected_distance": null,
+        "same_component": false,
+        "same_skill": false,
+        "disconnected": true
+      },
+      "cosine": 0.42310515,
+      "duplicate_tokens_estimate": 87,
+      "disposition": "advisory"
+    },
+    {
+      "id": "36896c336cfa3e4e627491253de8438e94ab62ef2520ea6342e776f04283f43c",
+      "lane": "body",
+      "detector": "1",
+      "kind": "semantic",
+      "left": {
+        "path": "skills/age/references/deslop-python.md",
+        "heading_path": [
+          "Python De-slop Catalog",
+          "1. `range(len())` instead of `enumerate`"
+        ],
+        "part": 1,
+        "source_hash": "c65f1a1bf6500336a144380af3860f1fc47af0f5c4f3151311fca8cde9169660",
+        "span": {
+          "start": 6,
+          "end": 25
+        },
+        "original_excerpt": "\nAI defaults to C-style index loops.\n\n```python\n# SLOP\nfor i in range(len(items)):\n    print(i, items[i])\n\n# CLEAN\nfor i, item in enumerate(items):\n    print(i, item)\n```\n\nWhen you don't need the index at all, just iterate directly:\n\n```python\nfor item in items:\n    process(item)\n```\n",
+        "token_count": 94
+      },
+      "right": {
+        "path": "skills/wheypoint/SKILL.md",
+        "heading_path": [
+          "/wheypoint",
+          "Flow",
+          "`--join <slugA> <slugB>`"
+        ],
+        "part": 1,
+        "source_hash": "e1cca316e8827c4e2ed5db5ce87bfffbc15a8c9de612e4a4f42142b547496b4f",
+        "span": {
+          "start": 35,
+          "end": 43
+        },
+        "original_excerpt": "\nMerge two interrupted threads into one resumable note.\n\n1. Read both source notes from `.cheese/notes/<slugA>.md` and `.cheese/notes/<slugB>.md`.\n2. Derive a merged slug that names the joined effort.\n3. Write ONE note to `.cheese/notes/<merged-slug>.md` with `parents: [<slugA>, <slugB>]` and the usual auto-filled provenance (`session:` / `git:` / `created:` from the live session).\n4. In `## Document`, consolidate both sources' Goal / State / Key decisions by **reference**, not re-paste (per `## Do not duplicate`): point at each source note by path and capture only the merged picture and any conflicts to reconcile.\n5. Point at resumption as in the default flow.\n",
+        "token_count": 199
+      },
+      "graph": {
+        "directly_linked": false,
+        "directed_distance": null,
+        "undirected_distance": null,
+        "same_component": false,
+        "same_skill": false,
+        "disconnected": true
+      },
+      "cosine": 0.4263656,
+      "duplicate_tokens_estimate": 94,
+      "disposition": "advisory"
+    },
+    {
+      "id": "ee0f09a82e4f6e99d19af8d98f0fd0c7716df414002cdb3572558c4ea061fb51",
+      "lane": "body",
+      "detector": "1",
+      "kind": "semantic",
+      "left": {
+        "path": "skills/age/references/deslop-typescript.md",
+        "heading_path": [
+          "TypeScript / JavaScript De-slop Catalog",
+          "4. `Array.forEach` with async callbacks"
+        ],
+        "part": 1,
+        "source_hash": "636ad4674ffc0aa16f658deffc74eba8f5d30b498e82a9c106aa0f042448fb87",
+        "span": {
+          "start": 66,
+          "end": 83
+        },
+        "original_excerpt": "\n`forEach` doesn't await — async callbacks fire and are silently dropped.\n\n```typescript\n// SLOP — these await calls do nothing useful\nitems.forEach(async (item) => {\n  await processItem(item);  // Runs concurrently, forEach doesn't wait\n});\n\n// CLEAN — sequential\nfor (const item of items) {\n  await processItem(item);\n}\n\n// CLEAN — concurrent with control\nawait Promise.all(items.map(item => processItem(item)));\n```\n",
+        "token_count": 128
+      },
+      "right": {
+        "path": "skills/plate/references/gt.md",
+        "heading_path": [
+          "Graphite publication",
+          "Plate recipes",
+          "Update a lower layer"
+        ],
+        "part": 1,
+        "source_hash": "21e3bb48c7eb6bd5eec4d2c1ae9edc18705e18e4c3918221a2bbb7e57aecd085",
+        "span": {
+          "start": 107,
+          "end": 110
+        },
+        "original_excerpt": "\nCheck out the lower branch, stage named paths, create a new commit with\n`gt modify -c`, run `gt restack`, inspect, then `gt submit --stack`.\n",
+        "token_count": 42
+      },
+      "graph": {
+        "directly_linked": false,
+        "directed_distance": null,
+        "undirected_distance": null,
+        "same_component": false,
+        "same_skill": false,
+        "disconnected": true
+      },
+      "cosine": 0.42836437,
+      "duplicate_tokens_estimate": 42,
+      "disposition": "advisory"
+    },
+    {
+      "id": "61f4f8713abd909314733b7ea310e8dc8123cf7d8801e41962948e25dba69451",
+      "lane": "body",
+      "detector": "1",
+      "kind": "semantic",
+      "left": {
+        "path": "skills/age/references/deslop-typescript.md",
+        "heading_path": [
+          "TypeScript / JavaScript De-slop Catalog",
+          "4. `Array.forEach` with async callbacks"
+        ],
+        "part": 1,
+        "source_hash": "636ad4674ffc0aa16f658deffc74eba8f5d30b498e82a9c106aa0f042448fb87",
+        "span": {
+          "start": 66,
+          "end": 83
+        },
+        "original_excerpt": "\n`forEach` doesn't await — async callbacks fire and are silently dropped.\n\n```typescript\n// SLOP — these await calls do nothing useful\nitems.forEach(async (item) => {\n  await processItem(item);  // Runs concurrently, forEach doesn't wait\n});\n\n// CLEAN — sequential\nfor (const item of items) {\n  await processItem(item);\n}\n\n// CLEAN — concurrent with control\nawait Promise.all(items.map(item => processItem(item)));\n```\n",
+        "token_count": 128
+      },
+      "right": {
+        "path": "skills/plate/SKILL.md",
+        "heading_path": [
+          "/plate",
+          "New-PR topology policy"
+        ],
+        "part": 3,
+        "source_hash": "74f57132740049c58d5bf221013ebe85e55c242cc00d7830e274bf6362c6565e",
+        "span": {
+          "start": 62,
+          "end": 92
+        },
+        "original_excerpt": "3. Ask one single-versus-stacked question when stacked is recommended or the\n   review shape is genuinely ambiguous. For a stack recommendation, name the\n   proposed layers and recommend **Stacked PRs**. For ambiguity, state the\n   competing evidence and recommend the best-supported option rather than\n   choosing silently.\n\nThis policy is unchanged under `--auto`. Transport any required question\nthrough\n[`../cheese/references/ask-user-question.md`](../cheese/references/ask-user-question.md).\n\n```yaml\nquestion:\nid: plate-layout\nprompt: How should this work be plated for review?\nrecommended: <single | stacked>\nmulti: false\noptions:\n    - id: single\n      label: Single PR\n      description: Keep the cohesive change as one branch and one review unit.\n    - id: stacked\n      label: Stacked PRs\n      description: Split the named layers into ordered branches and dependent PRs.\n```\n\nA supplied `pr_plan` is evidence for a stack recommendation and may provide\nexplicit commit/file boundaries. It cannot override an explicit user choice or\nanother verified topology resolution. If stacked is selected but neither the\nuser nor the plan supplies clear boundaries, ask for the split rather than\ninventing it.\n",
+        "token_count": 259
+      },
+      "graph": {
+        "directly_linked": false,
+        "directed_distance": null,
+        "undirected_distance": null,
+        "same_component": false,
+        "same_skill": false,
+        "disconnected": true
+      },
+      "cosine": 0.43170458,
+      "duplicate_tokens_estimate": 128,
+      "disposition": "advisory"
+    },
+    {
+      "id": "3b23216f21f498915d63184d84347d3512ea485d3ad8cfc4bc2885dea0a6fc19",
+      "lane": "body",
+      "detector": "1",
+      "kind": "semantic",
+      "left": {
+        "path": "skills/age/references/deslop-python.md",
+        "heading_path": [
+          "Python De-slop Catalog",
+          "1. `range(len())` instead of `enumerate`"
+        ],
+        "part": 1,
+        "source_hash": "c65f1a1bf6500336a144380af3860f1fc47af0f5c4f3151311fca8cde9169660",
+        "span": {
+          "start": 6,
+          "end": 25
+        },
+        "original_excerpt": "\nAI defaults to C-style index loops.\n\n```python\n# SLOP\nfor i in range(len(items)):\n    print(i, items[i])\n\n# CLEAN\nfor i, item in enumerate(items):\n    print(i, item)\n```\n\nWhen you don't need the index at all, just iterate directly:\n\n```python\nfor item in items:\n    process(item)\n```\n",
+        "token_count": 94
+      },
+      "right": {
+        "path": "skills/mold/references/handshake.md",
+        "heading_path": [
+          "The two-key handshake",
+          "Agent key — coherence self-check"
+        ],
+        "part": 2,
+        "source_hash": "974691400a6e2b821db0deaffb4538dfdf3124246829654e4b907a8e9cd63324",
+        "span": {
+          "start": 34,
+          "end": 35
+        },
+        "original_excerpt": "The last box — **Durable writes** — is a *commitment* checked before the handshake, not a claim the write already happened: it asserts the ADR + domain-model targets are resolved and the write → read-back → completion-record protocol is locked in for the atomic-write step (`curdle.md` § Atomic write). The read-back verify and the visible completion record fire *during* that step, and the hallouminate-absent fallback is noted loud, never silent.\n",
+        "token_count": 112
+      },
+      "graph": {
+        "directly_linked": false,
+        "directed_distance": null,
+        "undirected_distance": null,
+        "same_component": false,
+        "same_skill": false,
+        "disconnected": true
+      },
+      "cosine": 0.43671954,
+      "duplicate_tokens_estimate": 94,
+      "disposition": "advisory"
+    },
+    {
+      "id": "be6d3ee14cf8fb3e27381519ecd42e8d7d3b5813f9bc6341e6841b568915fc2b",
+      "lane": "body",
+      "detector": "1",
+      "kind": "semantic",
+      "left": {
+        "path": "skills/age/references/deslop-python.md",
+        "heading_path": [
+          "Python De-slop Catalog",
+          "1. `range(len())` instead of `enumerate`"
+        ],
+        "part": 1,
+        "source_hash": "c65f1a1bf6500336a144380af3860f1fc47af0f5c4f3151311fca8cde9169660",
+        "span": {
+          "start": 6,
+          "end": 25
+        },
+        "original_excerpt": "\nAI defaults to C-style index loops.\n\n```python\n# SLOP\nfor i in range(len(items)):\n    print(i, items[i])\n\n# CLEAN\nfor i, item in enumerate(items):\n    print(i, item)\n```\n\nWhen you don't need the index at all, just iterate directly:\n\n```python\nfor item in items:\n    process(item)\n```\n",
+        "token_count": 94
+      },
+      "right": {
+        "path": "skills/plate/references/ordinary-pr.md",
+        "heading_path": [
+          "Ordinary PR publication",
+          "New PR"
+        ],
+        "part": 1,
+        "source_hash": "581f6a7b7948b91b4ae92fb1d6ab60d9a1e27117740e43bd52b40808cc39dd7d",
+        "span": {
+          "start": 7,
+          "end": 23
+        },
+        "original_excerpt": "\n1. Confirm `/plate` resolved the new PR as single: explicitly, by cohesive-shape inference, or after a user question.\n2. Resolve trunk and current branch; reject publication from trunk.\n3. Draft a title and body covering purpose, verification, durable artifacts,\n   and residual risks.\n4. Write the body to a temporary or transient file and pass `--body-file`.\n5. Push the named branch without force.\n6. Create with explicit base and head:\n\n```bash\ngh pr create --title \"<title>\" --body-file <body-path> --base <base> --head <head>\n```\n\n1. Verify with `gh pr view --json number,url,title,baseRefName,headRefName,state`.\n\nDo not use `--fill` when it would omit artifact or verification details.\n",
+        "token_count": 194
+      },
+      "graph": {
+        "directly_linked": false,
+        "directed_distance": null,
+        "undirected_distance": null,
+        "same_component": false,
+        "same_skill": false,
+        "disconnected": true
+      },
+      "cosine": 0.43677205,
+      "duplicate_tokens_estimate": 94,
+      "disposition": "advisory"
+    },
+    {
+      "id": "2be02fc4c1156f135cd11304086b1654da9c18387d35197c72aaac5cefa07a07",
+      "lane": "body",
+      "detector": "1",
+      "kind": "semantic",
+      "left": {
+        "path": "skills/age/references/deslop-typescript.md",
+        "heading_path": [
+          "TypeScript / JavaScript De-slop Catalog",
+          "4. `Array.forEach` with async callbacks"
+        ],
+        "part": 1,
+        "source_hash": "636ad4674ffc0aa16f658deffc74eba8f5d30b498e82a9c106aa0f042448fb87",
+        "span": {
+          "start": 66,
+          "end": 83
+        },
+        "original_excerpt": "\n`forEach` doesn't await — async callbacks fire and are silently dropped.\n\n```typescript\n// SLOP — these await calls do nothing useful\nitems.forEach(async (item) => {\n  await processItem(item);  // Runs concurrently, forEach doesn't wait\n});\n\n// CLEAN — sequential\nfor (const item of items) {\n  await processItem(item);\n}\n\n// CLEAN — concurrent with control\nawait Promise.all(items.map(item => processItem(item)));\n```\n",
+        "token_count": 128
+      },
+      "right": {
+        "path": "skills/plate/references/git-town.md",
+        "heading_path": [
+          "Git Town publication",
+          "Plate recipes",
+          "Create a two-layer stack"
+        ],
+        "part": 1,
+        "source_hash": "d351be6914d3dffe774453ce6d46bff09be197e8d2eb5f43b5e5021749d10656",
+        "span": {
+          "start": 104,
+          "end": 110
+        },
+        "original_excerpt": "\n1. Run `git town hack <bottom> --non-interactive`.\n2. Write common artifacts, validate, stage named paths, and commit.\n3. Run `git town append <top> --non-interactive`; repeat for top-only work.\n4. Run `git town branch` to verify parents.\n5. Run `git town propose --stack --non-interactive`, then verify PR bases.\n",
+        "token_count": 98
+      },
+      "graph": {
+        "directly_linked": false,
+        "directed_distance": null,
+        "undirected_distance": null,
+        "same_component": false,
+        "same_skill": false,
+        "disconnected": true
+      },
+      "cosine": 0.44200677,
+      "duplicate_tokens_estimate": 98,
+      "disposition": "advisory"
+    },
+    {
+      "id": "cd2e71cc8ba307eab0c0452d81d154b141216abf1f150ea8e99d7d705bfedf1a",
+      "lane": "body",
+      "detector": "1",
+      "kind": "semantic",
+      "left": {
+        "path": "skills/age/references/deslop-typescript.md",
+        "heading_path": [
+          "TypeScript / JavaScript De-slop Catalog",
+          "4. `Array.forEach` with async callbacks"
+        ],
+        "part": 1,
+        "source_hash": "636ad4674ffc0aa16f658deffc74eba8f5d30b498e82a9c106aa0f042448fb87",
+        "span": {
+          "start": 66,
+          "end": 83
+        },
+        "original_excerpt": "\n`forEach` doesn't await — async callbacks fire and are silently dropped.\n\n```typescript\n// SLOP — these await calls do nothing useful\nitems.forEach(async (item) => {\n  await processItem(item);  // Runs concurrently, forEach doesn't wait\n});\n\n// CLEAN — sequential\nfor (const item of items) {\n  await processItem(item);\n}\n\n// CLEAN — concurrent with control\nawait Promise.all(items.map(item => processItem(item)));\n```\n",
+        "token_count": 128
+      },
+      "right": {
+        "path": "skills/wheypoint/SKILL.md",
+        "heading_path": [
+          "/wheypoint",
+          "Flow",
+          "`--join <slugA> <slugB>`"
+        ],
+        "part": 1,
+        "source_hash": "e1cca316e8827c4e2ed5db5ce87bfffbc15a8c9de612e4a4f42142b547496b4f",
+        "span": {
+          "start": 35,
+          "end": 43
+        },
+        "original_excerpt": "\nMerge two interrupted threads into one resumable note.\n\n1. Read both source notes from `.cheese/notes/<slugA>.md` and `.cheese/notes/<slugB>.md`.\n2. Derive a merged slug that names the joined effort.\n3. Write ONE note to `.cheese/notes/<merged-slug>.md` with `parents: [<slugA>, <slugB>]` and the usual auto-filled provenance (`session:` / `git:` / `created:` from the live session).\n4. In `## Document`, consolidate both sources' Goal / State / Key decisions by **reference**, not re-paste (per `## Do not duplicate`): point at each source note by path and capture only the merged picture and any conflicts to reconcile.\n5. Point at resumption as in the default flow.\n",
+        "token_count": 199
+      },
+      "graph": {
+        "directly_linked": false,
+        "directed_distance": null,
+        "undirected_distance": null,
+        "same_component": false,
+        "same_skill": false,
+        "disconnected": true
+      },
+      "cosine": 0.44202477,
+      "duplicate_tokens_estimate": 128,
+      "disposition": "advisory"
+    },
+    {
+      "id": "481a391353320c0da11c203cf8e77a4955790d1522b4a7960b2dae361e6d0bc1",
+      "lane": "body",
+      "detector": "1",
+      "kind": "semantic",
+      "left": {
+        "path": "skills/age/references/deslop-typescript.md",
+        "heading_path": [
+          "TypeScript / JavaScript De-slop Catalog",
+          "4. `Array.forEach` with async callbacks"
+        ],
+        "part": 1,
+        "source_hash": "636ad4674ffc0aa16f658deffc74eba8f5d30b498e82a9c106aa0f042448fb87",
+        "span": {
+          "start": 66,
+          "end": 83
+        },
+        "original_excerpt": "\n`forEach` doesn't await — async callbacks fire and are silently dropped.\n\n```typescript\n// SLOP — these await calls do nothing useful\nitems.forEach(async (item) => {\n  await processItem(item);  // Runs concurrently, forEach doesn't wait\n});\n\n// CLEAN — sequential\nfor (const item of items) {\n  await processItem(item);\n}\n\n// CLEAN — concurrent with control\nawait Promise.all(items.map(item => processItem(item)));\n```\n",
+        "token_count": 128
+      },
+      "right": {
+        "path": "skills/plate/references/git-town.md",
+        "heading_path": [
+          "Git Town publication",
+          "Install, configure, and detect"
+        ],
+        "part": 1,
+        "source_hash": "8180a50f2a3762edad96902cf39dd9d7366109ba3c18bf6d3f3c7a9197802580",
+        "span": {
+          "start": 23,
+          "end": 37
+        },
+        "original_excerpt": "\n- Install with `brew install git-town`, `choco install git-town`, or\n  `scoop install git-town`; check `git town --version`.\n- Configure with `git town config setup`, or set trunk directly using\n  `git config --local git-town.main-branch <trunk>`.\n- On GitHub, prefer `git-town.github-connector gh` to reuse authenticated CLI\n  access; environment tokens are preferable in ephemeral systems.\n- Usability requires the executable and a non-empty `git-town.main-branch`.\n  Inspect parents with `git config --get-regexp '^git-town-branch\\.'`.\n- Resolve repository metadata with `git rev-parse --git-dir` when inspecting\n  git-owned state; never assume a literal metadata path.\n\nGit Town is forge-agnostic. Configure `git-town.forge-type` when forge\nauto-detection is wrong.\n",
+        "token_count": 247
+      },
+      "graph": {
+        "directly_linked": false,
+        "directed_distance": null,
+        "undirected_distance": null,
+        "same_component": false,
+        "same_skill": false,
+        "disconnected": true
+      },
+      "cosine": 0.4430965,
+      "duplicate_tokens_estimate": 128,
+      "disposition": "advisory"
+    },
+    {
+      "id": "292b515a9aa5b158b27530c7d19951472f17fc7c1475ce8e561ecc0e3e6e8b9e",
+      "lane": "body",
+      "detector": "1",
+      "kind": "semantic",
+      "left": {
+        "path": "skills/age/references/deslop-typescript.md",
+        "heading_path": [
+          "TypeScript / JavaScript De-slop Catalog",
+          "4. `Array.forEach` with async callbacks"
+        ],
+        "part": 1,
+        "source_hash": "636ad4674ffc0aa16f658deffc74eba8f5d30b498e82a9c106aa0f042448fb87",
+        "span": {
+          "start": 66,
+          "end": 83
+        },
+        "original_excerpt": "\n`forEach` doesn't await — async callbacks fire and are silently dropped.\n\n```typescript\n// SLOP — these await calls do nothing useful\nitems.forEach(async (item) => {\n  await processItem(item);  // Runs concurrently, forEach doesn't wait\n});\n\n// CLEAN — sequential\nfor (const item of items) {\n  await processItem(item);\n}\n\n// CLEAN — concurrent with control\nawait Promise.all(items.map(item => processItem(item)));\n```\n",
+        "token_count": 128
+      },
+      "right": {
+        "path": "skills/age/references/dimensions.md",
+        "heading_path": [
+          "Review dimensions",
+          "Dimension boundaries"
+        ],
+        "part": 1,
+        "source_hash": "063a3e7603a361fdce0ebfab52e3682ff2b1653297771fa10e14f96d94ba3573",
+        "span": {
+          "start": 322,
+          "end": 324
+        },
+        "original_excerpt": "\nWhen two dimensions could tag the same `path:line`, this table decides the primary. The per-dimension `Boundaries:` lines point here. The grader dedups by `file:line` when writing the report, keeping the higher-base finding and noting the secondary dimension.\n",
+        "token_count": 62
+      },
+      "graph": {
+        "directly_linked": false,
+        "directed_distance": null,
+        "undirected_distance": null,
+        "same_component": false,
+        "same_skill": true,
+        "disconnected": true
+      },
+      "cosine": 0.44348338,
+      "duplicate_tokens_estimate": 62,
+      "disposition": "advisory"
+    },
+    {
+      "id": "eef92d8f25aff4e63cdb6c106483ea224835be8478b62385779943409f4654d3",
+      "lane": "body",
+      "detector": "1",
+      "kind": "semantic",
+      "left": {
+        "path": "skills/age/references/deslop-typescript.md",
+        "heading_path": [
+          "TypeScript / JavaScript De-slop Catalog",
+          "4. `Array.forEach` with async callbacks"
+        ],
+        "part": 1,
+        "source_hash": "636ad4674ffc0aa16f658deffc74eba8f5d30b498e82a9c106aa0f042448fb87",
+        "span": {
+          "start": 66,
+          "end": 83
+        },
+        "original_excerpt": "\n`forEach` doesn't await — async callbacks fire and are silently dropped.\n\n```typescript\n// SLOP — these await calls do nothing useful\nitems.forEach(async (item) => {\n  await processItem(item);  // Runs concurrently, forEach doesn't wait\n});\n\n// CLEAN — sequential\nfor (const item of items) {\n  await processItem(item);\n}\n\n// CLEAN — concurrent with control\nawait Promise.all(items.map(item => processItem(item)));\n```\n",
+        "token_count": 128
+      },
+      "right": {
+        "path": "skills/plate/references/gt.md",
+        "heading_path": [
+          "Graphite publication",
+          "Conflict recovery"
+        ],
+        "part": 1,
+        "source_hash": "574d4973af3c3b2db6e423edbb49f0c4830317a97ed0d83a5915d65e33c8089b",
+        "span": {
+          "start": 90,
+          "end": 95
+        },
+        "original_excerpt": "\nResolve and stage each conflicted path by name, then run `gt continue` or\n`gt abort`. A bare `git rebase --continue` is never the recovery path because\nGraphite must advance its stack metadata. There is no documented `gt skip`;\nabort and isolate the branch instead.\n",
+        "token_count": 67
+      },
+      "graph": {
+        "directly_linked": false,
+        "directed_distance": null,
+        "undirected_distance": null,
+        "same_component": false,
+        "same_skill": false,
+        "disconnected": true
+      },
+      "cosine": 0.44479576,
+      "duplicate_tokens_estimate": 67,
+      "disposition": "advisory"
+    }
+  ]
+}
