@@ -231,13 +231,13 @@ Parallel and linear modes keep the same behavioral handoff and final-summary fie
 
 ## Preferred tools and fallbacks
 
-The orchestrator only needs:
+The orchestrator only needs the capabilities below. Source-code reads and edits follow the shared [`code-intelligence-routing.md`](../cheese/references/code-intelligence-routing.md) contract.
 
 | Need                              | Prefer                | Fallback                          |
 |-----------------------------------|-----------------------|-----------------------------------|
 | Spawning the per-phase worker     | `Agent()` / harness sub-agent primitive | none — without sub-agent spawn, the fresh-context property cannot be honoured |
-| Reading the handoff slug          | `cheez-read` / host file read | host file read                    |
-| Detecting existing handoffs       | host file glob / list | `cheez-read` `tilth_list` glob     |
+| Reading the handoff slug          | bounded host file read | another bounded file read |
+| Detecting existing handoffs       | host file glob / list | repo-aware backend glob |
 
 If the host harness does not expose a sub-agent primitive at all, `/ultracook` is the wrong skill — recommend `/cook --auto` instead, which uses the same flag semantics in the parent's own context.
 

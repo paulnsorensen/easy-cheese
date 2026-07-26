@@ -170,7 +170,7 @@ Followed by:
 | Need | Prefer | Fallback |
 | --- | --- | --- |
 | Diff inspection for the user-facing summary | `delta` | `git diff --unified=3` |
-| Reading the spec (when present) | `cheez-read` | host file read |
+| Reading the spec (when present) | bounded file read per [`code-intelligence-routing.md`](../cheese/references/code-intelligence-routing.md) | host file read |
 | Spawning the judge | host sub-agent primitive (`Agent()` or harness equivalent) | none — without sub-agent spawn, run `--no-judge` mode and tell the user the judge is unavailable |
 | GitHub / PR context (out of scope here) | n/a | n/a |
 

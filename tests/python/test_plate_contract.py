@@ -144,8 +144,6 @@ def test_plate_is_installed_and_routed() -> None:
         "skills/cheese/references/classification.md",
         "skills/cheese/references/coherence-check.md",
         "skills/cheese/references/handoff-gate.md",
-        "skills/cheez-read/SKILL.md",
-        "skills/cheez-search/SKILL.md",
     ):
         body = read(path)
         assert "/commit" not in body

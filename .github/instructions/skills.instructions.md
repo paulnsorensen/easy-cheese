@@ -21,7 +21,7 @@ Spend your review budget on the things linters cannot see.
     fine.
   - Call out boundaries — what this skill does **not** do — when there's a
     sibling skill it could be confused with (e.g., `/age` finds vs `/cure`
-    fixes; `/cheez-search` searches vs `/cheez-read` reads).
+    fixes).
 - `model`, `allowed-tools`, `license` are optional but should be consistent
   across siblings unless a skill genuinely needs different values.
 
@@ -46,8 +46,7 @@ Spend your review budget on the things linters cannot see.
 
 ## Writing style
 
-- Imperative voice ("Run `/cheez-search`", not "You should run
-  `/cheez-search`").
+- Imperative voice ("Run the caller search", not "You should run the caller search").
 - Explain *why* a step matters when the reasoning isn't self-evident.
   Heavy-handed `MUST` / `ALWAYS` / `NEVER` is a yellow flag — replace with
   reasoning where possible. Reserve all-caps for genuine footguns
@@ -63,8 +62,7 @@ Spend your review budget on the things linters cannot see.
 - Workflow skills (`mold`, `cook`, `press`, `age`, `cure`, `melt`, etc.)
   cover one phase of the lifecycle each. Adding a second phase is a new
   skill, not a new section.
-- Tool skills (`cheez-*`) wrap source-code search/read/edit capabilities, not a mandatory MCP server. Keep search, read, and write independently invokable.
-- `cheez-*` should prefer tilth when present, but equivalent native AST/LSP/anchored-edit backends satisfy the contract. Every workflow skill must degrade cleanly to host-native tools when MCPs are unavailable; do not introduce new mandatory-MCP dependencies.
+- Workflow skills call source-code capabilities directly through `skills/cheese/references/code-intelligence-routing.md`. Keep the search → fresh bounded read → stale-safe write sequence and degrade cleanly when preferred backends are unavailable.
 - Skills do not invoke other skills programmatically. Documented handoffs
   (e.g., `/age` → `/cure`, `/cook` → `/press` → `/age`) belong in the
   README's "Suggested flow" or as explicit user-visible prompts in the
