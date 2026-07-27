@@ -17,4 +17,13 @@ payload:
     required: false
     items:
       type: mapping
-      fields: {}
+      fields:
+        phase:
+          type: string
+          required: true
+        subject:
+          type: string
+          required: true
+        input:
+          type: mapping
+          required: false

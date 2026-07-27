@@ -20,7 +20,7 @@ def _cmd(args: argparse.Namespace) -> None:
     try:
         envelope = handoff.parse_handoff(text, artifact)
     except handoff.HandoffParseError as exc:
-        if text.startswith("---\\n"):
+        if text.startswith("---\n"):
             raise cli.CliError(f"malformed handoff preamble in {artifact}: {exc}") from exc
         try:
             slug = handoff.parse_handoff_slug(text)
@@ -29,9 +29,9 @@ def _cmd(args: argparse.Namespace) -> None:
         cli.emit({"status": slug.status, "next": slug.next_skill, "artifact": slug.artifact,
                   "orientation": slug.orientation, "halt_reason": slug.halt_reason,
                   "taste_test": slug.taste_test, "durable_flags": slug.durable_flags,
-                  "baseline": slug.baseline}, json_mode=True)
+                  "baseline": slug.baseline, "format": "legacy"}, json_mode=True)
         return
-    cli.emit(envelope.as_mapping(), json_mode=True)
+    cli.emit({**envelope.as_mapping(), "format": "envelope"}, json_mode=True)
 
 
 def _setup(parser: argparse.ArgumentParser) -> None:
