@@ -1,0 +1,11 @@
+format: 1
+status: draft
+detector:
+  version: "1"
+  model_lock_digest: review-required
+  chunker: "h2-h3-v2"
+  pooling: "cls"
+  normalization: "l2"
+calibration_digest: review-required
+block_threshold: 0.90
+findings: {}

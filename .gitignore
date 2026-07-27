@@ -32,6 +32,9 @@ node_modules/
 .idea/
 .vscode/
 
+# Rust build artifacts
+tools/skill-overlap/target/
+
 # Starlight build output and generated docs
 dist/
 .astro/

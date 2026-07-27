@@ -1,0 +1,16 @@
+format: 1
+status: draft
+detector:
+  version: "1"
+  model_lock_digest: review-required
+  chunker: "h2-h3-v2"
+  pooling: "cls"
+  normalization: "l2"
+thresholds:
+  review: 0.80
+  block: 0.90
+samples:
+  - left: review-required
+    right: review-required
+    score: 0.0
+    label: review-required
