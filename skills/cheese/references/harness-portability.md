@@ -59,7 +59,7 @@ State the GitHub action first: read PR state, post a reply, push a branch, open 
 
 ## Handoff transitions
 
-Slash commands are presentation, not the control model. The portable contract is the versioned JSON envelope committed through [`work-contract.md`](work-contract.md): stable work/attempt/operation identity, source `phase`, structured `status` and `halt_reason`, registered `next`, self-identifying `artifact`, phase-owned `payload`, and `provenance`.
+Slash commands are presentation, not the control model. The portable contract is the versioned HandoffEnvelope persisted as YAML frontmatter through [`work-contract.md`](work-contract.md): stable work/attempt/operation identity, source `phase`, structured `status` and `halt_reason`, registered `next`, self-identifying `artifact`, phase-owned `payload`, and `provenance`.
 
 Resolve transitions through `handoff-resolve` with explicit dispatch data and the phases actually available in the host. Slash-capable hosts may render the resulting dispatch, but `done`, `hold`, and `tasks` are control actions rather than commands, and a valid unavailable phase remains persisted without dispatch.
 

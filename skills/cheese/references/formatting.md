@@ -123,7 +123,7 @@ Specs that touch existing systems open Approach with one diagram (flowchart or s
 A findings report is the output of a review skill — `/age`, `/cure`, `/press`, or `/cook` taste-test. Each skill owns its own variant; the cross-cutting rules below apply to all of them.
 
 - **Owners and paths:** `/age`, `/cure`, `/press`, and `/cook` own their report bodies. The shared runtime derives `.cheese/<phase>/<work-id>/<operation-id>-<slug>.md`; no phase derives a flat report path.
-- **Required envelope.** Commit every findings report through [`work-contract.md`](work-contract.md). `handoff-commit` writes JSON frontmatter containing `contract_version`, `work_id`, `attempt_id`, `operation_id`, `phase`, `status`, `halt_reason`, `next`, the artifact's own derived path, the phase-owned `payload`, and `provenance`.
+- **Required envelope.** Commit every findings report through [`work-contract.md`](work-contract.md). `handoff-commit` writes YAML frontmatter containing `contract_version`, `work_id`, `attempt_id`, `operation_id`, `phase`, `status`, `halt_reason`, `next`, the artifact's own derived path, the phase-owned `payload`, and `provenance`.
 - **Section shape:** owned by each skill's `## Output` section. The body follows the versioned envelope, and a `## References` block sits at the bottom whenever footnotes are used.
 - **Findings format.** Each finding is one bullet:
 
@@ -201,6 +201,6 @@ Per-shape length budgets live in each shape's `**Length budget:**` bullet under 
 
 ## Versioned workflow handoffs
 
-Every emitting phase writes a versioned HandoffEnvelope with JSON frontmatter and a Markdown body. Its phase-owned `handoff-contract.yaml` declaration controls the payload and permitted outgoing transitions; the shared Cheese runtime validates the installed registry with `python3 skills/cheese/scripts/cheese.pyz contract-registry validate` before the artifact is emitted. Keep invocation-input schemas and full report-body schemas out of this shared contract.
+Every emitting phase writes a versioned HandoffEnvelope with YAML frontmatter and a Markdown body. Its phase-owned `handoff-contract.yaml` declaration controls the payload and permitted outgoing transitions; the shared Cheese runtime validates the installed registry with `python3 skills/cheese/scripts/cheese.pyz contract-registry validate` before the artifact is emitted. Keep invocation-input schemas and full report-body schemas out of this shared contract.
 
 The envelope carries `contract_version`, `work_id`, `attempt_id`, `operation_id`, `phase`, `status`, `halt_reason`, `next`, `artifact`, `payload`, and `provenance`. `status` is `ok | halt`; a halt has a structured, non-empty reason and does not silently change the WorkRecord lifecycle. Reserved `next` values are control outcomes: `done` records terminal state with no dispatch, `hold` pauses with no dispatch, and `tasks` exposes structured pending directives without becoming a phase command.
