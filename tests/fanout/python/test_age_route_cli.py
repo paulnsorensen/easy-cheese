@@ -12,7 +12,7 @@ from __future__ import annotations
 import io
 import json
 import sys
-from contextlib import redirect_stdin, redirect_stdout
+from contextlib import redirect_stdout
 from pathlib import Path
 
 import pytest
@@ -25,9 +25,15 @@ import age_route_cli  # noqa: E402
 
 
 def _run(payload: dict, capsys: pytest.CaptureFixture[str]) -> tuple[int, str, str]:
+    # contextlib has no redirect_stdin; swap sys.stdin directly and restore.
     buf = io.StringIO()
-    with redirect_stdout(buf), redirect_stdin(io.StringIO(json.dumps(payload))):
-        exit_code = age_route_cli.main(["age_route_cli.py"])
+    original_stdin = sys.stdin
+    sys.stdin = io.StringIO(json.dumps(payload))
+    try:
+        with redirect_stdout(buf):
+            exit_code = age_route_cli.main(["age_route_cli.py"])
+    finally:
+        sys.stdin = original_stdin
     return exit_code, buf.getvalue(), capsys.readouterr().err
 
 
