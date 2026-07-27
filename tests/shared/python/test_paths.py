@@ -1,6 +1,7 @@
 """Tests for shared/scripts/paths.py — slug validation and artifact paths."""
 
 from __future__ import annotations
+import hashlib
 
 from pathlib import Path
 from types import ModuleType
@@ -613,3 +614,30 @@ class TestResolveSlug:
                 assert Path(match["abs_path"]).is_absolute(), (slug, match)
             for root in result["fallback_roots"]:
                 assert Path(root).is_absolute(), (slug, root)
+
+
+class TestWorkPaths:
+    def test_worktree_key_uses_absolute_git_directory(
+        self, paths: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        git_dir = tmp_path / "common.git" / "worktrees" / "feature"
+
+        class Result:
+            returncode = 0
+            stdout = str(git_dir)
+
+        monkeypatch.setattr(paths.subprocess, "run", lambda *args, **kwargs: Result())
+        expected = "wt_" + hashlib.sha256(str(git_dir.resolve()).encode()).hexdigest()[:32]
+        assert paths.worktree_key(tmp_path / "checkout-a") == expected
+        assert paths.worktree_key(tmp_path / "checkout-b") == expected
+
+    def test_external_path_segments_cannot_escape_corpus(
+        self, paths: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setenv("EASY_CHEESE_HOME", str(tmp_path / "data"))
+        with pytest.raises(ValueError, match="invalid project"):
+            paths.project_corpus_root(str(tmp_path / "escape"))
+        with pytest.raises(ValueError, match="invalid work_id"):
+            paths.work_record_path("../escape", "safe-project")
+        with pytest.raises(ValueError, match="invalid work_id"):
+            paths.local_work_snapshot_path("/absolute", tmp_path)

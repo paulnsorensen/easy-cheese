@@ -147,6 +147,19 @@ def _sanitize_segment(name: str) -> str:
     return (cleaned or "default")[:96]
 
 
+def _require_safe_segment(value: str, label: str) -> str:
+    """Reject externally supplied path segments instead of rewriting them."""
+    if (
+        not isinstance(value, str)
+        or not value
+        or Path(value).name != value
+        or value in {".", ".."}
+        or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", value)
+    ):
+        raise ValueError(f"invalid {label}")
+    return value
+
+
 def _slug_from_remote(url: str) -> str:
     """Reduce a git remote URL to its trailing ``owner/repo``.
 
@@ -222,7 +235,12 @@ def corpus_home() -> Path:
 
 def project_corpus_root(project: str | None = None) -> Path:
     """``<corpus_home>/<project>`` — the per-project durable corpus root."""
-    return corpus_home() / (project or project_key())
+    key = project_key() if project is None else _require_safe_segment(project, "project")
+    root = corpus_home().resolve()
+    target = (root / key).resolve()
+    if target.parent != root:
+        raise ValueError("invalid project")
+    return target
 
 
 def default_root_for_phase(phase: str, *, project: str | None = None) -> Path:
@@ -587,3 +605,44 @@ def domain_model_target(
         return ("hallouminate", wiki)
     create_root = docs_root if docs_root.is_dir() else xdg_root
     return ("file", create_root / f"{DOMAIN_MODEL_STEM}.md")
+
+
+
+def work_record_path(work_id: str, project: str | None = None) -> Path:
+    """Durable path for one WorkRecord."""
+    identifier = _require_safe_segment(work_id, "work_id")
+    return project_corpus_root(project) / "work" / identifier / "index.md"
+
+
+def local_work_snapshot_path(
+    work_id: str, repo_root: Path | str | None = None
+) -> Path:
+    """Optional portable snapshot path; it is never an automatic mirror."""
+    identifier = _require_safe_segment(work_id, "work_id")
+    root = Path(repo_root or Path.cwd()).resolve()
+    target = (root / ".cheese" / "work" / identifier / "index.md").resolve()
+    if root not in target.parents:
+        raise ValueError("invalid work_id")
+    return target
+
+
+def worktree_key(repo_root: Path | str | None = None) -> str:
+    """Stable identity derived from the worktree-specific absolute Git directory."""
+    import hashlib
+
+    root = Path(repo_root or Path.cwd()).resolve()
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--absolute-git-dir"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise ValueError("cannot derive worktree key outside a Git worktree") from exc
+    if result.returncode != 0 or not result.stdout.strip():
+        raise ValueError("cannot derive worktree key outside a Git worktree")
+    git_dir = Path(result.stdout.strip()).resolve()
+    return "wt_" + hashlib.sha256(str(git_dir).encode()).hexdigest()[:32]
