@@ -33,7 +33,7 @@ DEFAULT_WEIGHTS: tuple[tuple[str, float], ...] = (
     ("*.pyc", 0.0),
     ("*.pyz", 0.0),
     ("fixtures/**", 0.0),
-    ("**/snapshots/**", 0.0),
+    ("snapshots/**", 0.0),
     ("vendor/**", 0.0),
     ("README*", 0.25),
     ("CHANGELOG*", 0.25),
@@ -49,8 +49,11 @@ def weigh(path: str, weights: tuple[tuple[str, float], ...] | None = None) -> fl
     """First-match-wins glob weight for a single path. Falls through to
     _DEFAULT_WEIGHT (1.0) when nothing matches."""
     table = weights if weights is not None else DEFAULT_WEIGHTS
+    # Patterns match anchored (at repo root) or nested ("**/" + pattern)
+    # so the table reads position-independently regardless of where a
+    # matching path sits in the tree.
     for pattern, weight in table:
-        if fnmatch.fnmatch(path, pattern):
+        if fnmatch.fnmatch(path, pattern) or fnmatch.fnmatch(path, "**/" + pattern):
             return weight
     return _DEFAULT_WEIGHT
 

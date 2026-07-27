@@ -160,3 +160,53 @@ class TestDualGlobFirstMatchWinsRealTable:
         assert zero_indices
         assert quarter_indices
         assert max(zero_indices) < min(quarter_indices)
+
+
+class TestAnchoredOrNestedMatch:
+    """CURE FIX (deterministic-fanout-sizing press finding): fnmatch anchors
+    at the string start, so a bare table entry like `fixtures/**` matched
+    only at repo root while `**/snapshots/**` matched only when nested --
+    one table can't mean both. weigh() now tries a pattern both anchored
+    and nested (`"**/" + pattern`), and DEFAULT_WEIGHTS is normalized to
+    bare form throughout, so every entry means "anywhere in the tree."
+    """
+
+    @pytest.mark.parametrize(
+        "path",
+        [
+            # Real fixture the spec cites as its motivating example: a
+            # nested fixtures/ dir that must not inflate the review score.
+            "tools/skill-overlap/fixtures/hallouminate-fastembed.json",
+            "tests/fanout/python/fixtures/numstat_30_commits.json",
+        ],
+    )
+    def test_nested_fixtures_path_zeroed(self, path: str) -> None:
+        assert review_surface.weigh(path) == 0.0
+
+    def test_top_level_snapshots_path_zeroed(self) -> None:
+        # Before the fix, snapshots/** only matched nested (**/snapshots/**),
+        # so a top-level snapshots/ dir wrongly scored as full-weight code.
+        assert review_surface.weigh("snapshots/a.snap") == 0.0
+
+    def test_nested_vendor_path_zeroed(self) -> None:
+        # vendor/** was anchored-only; nested vendored code must not count
+        # toward the reviewer's attention budget either.
+        assert review_surface.weigh("src/vendor/x.go") == 0.0
+
+    @pytest.mark.parametrize(
+        "path,expected",
+        [
+            ("fixtures/x.json", 0.0),
+            ("vendor/x.go", 0.0),
+            ("docs/a.md", 0.25),
+        ],
+    )
+    def test_anchored_forms_still_match(self, path: str, expected: float) -> None:
+        # The dual-match fix must not regress the original repo-root cases.
+        assert review_surface.weigh(path) == expected
+
+    def test_nested_prose_path_scores_as_prose_not_code(self) -> None:
+        # Deliberate behaviour change: docs/** now matches nested too, so
+        # nested documentation scores as low-stakes prose (0.25) instead of
+        # silently inflating to full-weight code (1.0).
+        assert review_surface.weigh("skills/age/docs/a.md") == 0.25
