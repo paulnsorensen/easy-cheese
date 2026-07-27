@@ -17,12 +17,28 @@ import cli
 
 PARALLEL_THRESHOLD = 2
 
+# No curd-block proof of file-disjointness exists without a curd block, so
+# fanning coders in parallel is never safe purely on size. A big un-curded
+# spec routes to the decomposer instead of blind parallelism.
+DECOMPOSE_FIRST_THRESHOLD = 250
+
 
 def select_mode(curds) -> str:
     """Return "parallel" when the decomposition has at least
     `PARALLEL_THRESHOLD` curds, else "linear". `curds` is any sized
     collection — only its length is consulted."""
     return "parallel" if len(curds) >= PARALLEL_THRESHOLD else "linear"
+
+
+def select_mode_from_score(score: float) -> str:
+    """Return "decompose-first" above DECOMPOSE_FIRST_THRESHOLD, else "linear".
+    Never returns "parallel" -- score alone proves nothing about file
+    disjointness, so blind parallel fan-out is never safe at any size."""
+    return (
+        "decompose-first"
+        if score > DECOMPOSE_FIRST_THRESHOLD
+        else "linear"
+    )
 
 
 def _cmd_select(args: object) -> None:

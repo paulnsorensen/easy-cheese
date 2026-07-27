@@ -11,11 +11,19 @@ import sys
 from pathlib import Path
 from types import ModuleType
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 import build_pyz  # noqa: E402
 
 BUNDLE = build_pyz.cached_bundle("ultracook")
+
+# Imported directly (not via the `mode` fixture) so DECOMPOSE_FIRST_THRESHOLD
+# is available at collection time for parametrize -- fixtures only resolve
+# during test execution.
+sys.path.insert(0, str(BUNDLE))
+import mode as _mode_module  # noqa: E402
 
 
 class TestSelectMode:
@@ -100,3 +108,30 @@ class TestSingleSourceOfTruth:
         # No private threshold constant, no dead /cheese-factory target.
         assert "CURD_THRESHOLD = 5" not in src
         assert "/cheese-factory" not in src
+
+
+class TestSelectModeFromScore:
+    @pytest.mark.parametrize(
+        "score, expected",
+        [
+            (0, "linear"),
+            (_mode_module.DECOMPOSE_FIRST_THRESHOLD - 1, "linear"),
+            (_mode_module.DECOMPOSE_FIRST_THRESHOLD, "linear"),
+            (_mode_module.DECOMPOSE_FIRST_THRESHOLD + 1, "decompose-first"),
+        ],
+    )
+    def test_boundary_tracks_the_constant(
+        self, mode: ModuleType, score: float, expected: str
+    ) -> None:
+        assert mode.select_mode_from_score(score) == expected
+
+    def test_never_returns_parallel(self, mode: ModuleType) -> None:
+        scores = list(range(0, 2000, 10)) + [0, 10_000_000]
+        for score in scores:
+            assert mode.select_mode_from_score(score) != "parallel"
+
+    def test_below_threshold_is_linear(self, mode: ModuleType) -> None:
+        assert mode.select_mode_from_score(100) == "linear"
+
+    def test_above_threshold_is_decompose_first(self, mode: ModuleType) -> None:
+        assert mode.select_mode_from_score(251) == "decompose-first"

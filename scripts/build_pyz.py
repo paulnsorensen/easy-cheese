@@ -47,7 +47,12 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
         "detect-squash-residue": "detect-squash-residue.py",
         "lockfile-resolve": "lockfile-resolve.py",
     },
-    "affinage": {"pr-status": "pr-status.py", "post-reply": "post-reply.py", "age-route": "fanout/age_route_cli.py"},
+    "affinage": {
+        "pr-status": "pr-status.py",
+        "post-reply": "post-reply.py",
+        "age-route": "fanout/age_route_cli.py",
+        "review-surface": "fanout/review_surface_cli.py",
+    },
     "mold": {
         "artifact-path": Shared("artifact_path.py"),
         "curd-count": "curd-count.py",
@@ -64,7 +69,11 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
         "local": Shared("hallouminate_setup.py"),
         "doctor": Shared("hallouminate_setup.py"),
     },
-    "age": {"html-report": "age-html-report.py", "age-route": "fanout/age_route_cli.py"},
+    "age": {
+        "html-report": "age-html-report.py",
+        "age-route": "fanout/age_route_cli.py",
+        "review-surface": "fanout/review_surface_cli.py",
+    },
     "hard-cheese": {
         "append-attempt": "append-attempt.py",
         "freshness-check": "freshness-check.py",
@@ -87,8 +96,8 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
         "validate_pr_plan": "validate_pr_plan.py",
         "manifest_update": "manifest_update.py",
         "wiring_topo_sort": "wiring_topo_sort.py",
-        "pr_plan_to_branches": "pr_plan_to_branches.py",
         "age-route": "fanout/age_route_cli.py",
+        "review-surface": "fanout/review_surface_cli.py",
         "curd-block": "fanout/curd_block.py",
     },
 }
@@ -103,9 +112,21 @@ SRC_DIRS: dict[str, str] = {"ultracook": "fanout"}
 # vendored into both the mold and ultracook bundles.
 EXTRA_MODULES: dict[str, list[tuple[str, str]]] = {
     "mold": [("fanout", "mode.py")],
-    "age": [("fanout", "age_route.py")],
-    "affinage": [("fanout", "age_route.py")],
-    "ultracook": [("fanout", "age_route.py")],
+    "age": [
+        ("fanout", "age_route.py"),
+        ("fanout", "review_surface.py"),
+        ("fanout", "review_surface_cli.py"),
+    ],
+    "affinage": [
+        ("fanout", "age_route.py"),
+        ("fanout", "review_surface.py"),
+        ("fanout", "review_surface_cli.py"),
+    ],
+    "ultracook": [
+        ("fanout", "age_route.py"),
+        ("fanout", "review_surface.py"),
+        ("fanout", "review_surface_cli.py"),
+    ],
 }
 
 # The "common" bundle ships cross-cutting CLI entrypoints sourced from
