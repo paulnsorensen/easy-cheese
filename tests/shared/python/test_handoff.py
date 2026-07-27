@@ -31,23 +31,10 @@ def test_parse_requires_declared_artifact_to_match_loaded_path(tmp_path: Path) -
         handoff.parse_handoff(text, tmp_path / "other.md")
 
 
-def test_parse_rejects_yaml_frontmatter(tmp_path: Path) -> None:
+def test_parse_rejects_invalid_yaml(tmp_path: Path) -> None:
     artifact = tmp_path / "artifact.md"
-    text = f"""---
-contract_version: {handoff.CONTRACT_VERSION}
-work_id: work
-attempt_id: attempt
-operation_id: op
-phase: age
-status: ok
-halt_reason: null
-next: done
-artifact: {artifact}
-payload: {{}}
-provenance: {{}}
----
-"""
-    with pytest.raises(handoff.HandoffParseError, match="invalid handoff JSON"):
+    text = "---\n[unterminated\n---\n"
+    with pytest.raises(handoff.HandoffParseError, match="invalid handoff YAML"):
         handoff.parse_handoff(text, artifact)
 
 
