@@ -1,9 +1,9 @@
 """Tests for src/fanout/age_route.py -- the pure age/affinage sizing router.
 
-Locks the spec's age-router seam (subagent-routing-overhaul.md `## Seam
-schemas (locked)` + `## The four sizing functions` age-router row): N in
-{1, 4, 10} from diff-stat size, hard risk-overrides forcing N=10/effort=high
-regardless of size, and the verbatim N=4 lens grouping.
+Locks deterministic-fanout-sizing.md's age-router seam (`### 2. Reviewer
+ladder` + `### 3. Overrides promote`): n in {1, 2, 5} from a single score,
+override flags PROMOTING their mapped dimension into a solo lens (not
+escalating to the top tier), and the five-lens refinement tree.
 """
 from __future__ import annotations
 
@@ -19,227 +19,275 @@ sys.path.insert(0, str(REPO_ROOT / "src" / "fanout"))
 import age_route  # noqa: E402
 
 
-class TestSizeTiers:
-    """No risk flags: N is decided purely by diff-stat magnitude."""
+class TestScoreTiers:
+    """No risk flags: n is decided purely by score."""
 
-    def test_tiny_diff_routes_n1_medium(self) -> None:
-        # Acceptance #3: the 3-line-diff fixture must land at n=1/effort=medium.
-        result = age_route.route(files_changed=1, insertions=2, deletions=1, risk_flags=[])
+    def test_low_score_routes_n1_low_effort(self) -> None:
+        # Acceptance: route(score=30) -> n=1, effort='low', one lens of all ten.
+        result = age_route.route(score=30, risk_flags=[])
         assert result["n"] == 1
-        assert result["effort"] == "medium"
+        assert result["effort"] == "low"
         assert result["overrides_hit"] == []
         assert result["lenses"] == [list(age_route.DIMENSIONS)]
 
-    def test_medium_diff_routes_n4(self) -> None:
-        result = age_route.route(files_changed=5, insertions=25, deletions=10, risk_flags=[])
-        assert result["n"] == 4
+    def test_mid_score_routes_n2_medium(self) -> None:
+        # Acceptance: route(score=150) -> n=2, the two-group split, medium.
+        result = age_route.route(score=150, risk_flags=[])
+        assert result["n"] == 2
+        assert result["effort"] == "medium"
+        assert result["overrides_hit"] == []
+        assert result["lenses"] == [
+            ["correctness", "spec", "assertions", "security", "telemetry"],
+            ["encapsulation", "complexity", "deslop", "nih", "efficiency"],
+        ]
+
+    def test_high_score_routes_n5_five_named_lenses(self) -> None:
+        # Acceptance: route(score=400) -> n=5, the five named lenses.
+        result = age_route.route(score=400, risk_flags=[])
+        assert result["n"] == 5
         assert result["effort"] == "medium"
         assert result["overrides_hit"] == []
         assert result["lenses"] == [
             ["correctness", "spec", "assertions"],
-            ["security"],
-            ["complexity", "deslop", "nih"],
-            ["efficiency", "telemetry", "encapsulation"],
+            ["security", "telemetry"],
+            ["encapsulation", "complexity"],
+            ["deslop", "nih"],
+            ["efficiency"],
         ]
 
-    def test_large_diff_routes_n10_high(self) -> None:
-        result = age_route.route(files_changed=20, insertions=500, deletions=400, risk_flags=[])
-        assert result["n"] == 10
+    def test_score_over_900_is_high_effort_alone(self) -> None:
+        # Acceptance: route(score=1000, risk_flags=[]) -> effort='high' via
+        # the score>900 branch alone (no overrides involved).
+        result = age_route.route(score=1000, risk_flags=[])
+        assert result["n"] == 5
         assert result["effort"] == "high"
         assert result["overrides_hit"] == []
-        assert result["lenses"] == [[dim] for dim in age_route.DIMENSIONS]
-        assert len(result["lenses"]) == 10
 
-    def test_large_line_count_alone_routes_n10(self) -> None:
-        # A single-file diff can still be huge; lines alone must trigger N=10.
-        result = age_route.route(files_changed=1, insertions=900, deletions=0, risk_flags=[])
-        assert result["n"] == 10
-        assert result["effort"] == "high"
-
-    def test_boundary_just_under_n4_stays_n1(self) -> None:
-        result = age_route.route(files_changed=3, insertions=40, deletions=40, risk_flags=[])
+    def test_boundary_just_under_n2_stays_n1(self) -> None:
+        result = age_route.route(score=59.9, risk_flags=[])
         assert result["n"] == 1
 
-    def test_boundary_just_over_n4_files_moves_to_n4(self) -> None:
-        result = age_route.route(files_changed=4, insertions=1, deletions=1, risk_flags=[])
-        assert result["n"] == 4
+    def test_boundary_at_n2_floor_moves_to_n2(self) -> None:
+        result = age_route.route(score=60, risk_flags=[])
+        assert result["n"] == 2
 
-    def test_boundary_just_under_n10_stays_n4(self) -> None:
-        result = age_route.route(files_changed=15, insertions=400, deletions=400, risk_flags=[])
-        assert result["n"] == 4
+    def test_boundary_at_n5_floor_stays_n2(self) -> None:
+        result = age_route.route(score=250, risk_flags=[])
+        assert result["n"] == 2
 
-    def test_boundary_just_over_n10_files_moves_to_n10(self) -> None:
-        result = age_route.route(files_changed=16, insertions=1, deletions=1, risk_flags=[])
-        assert result["n"] == 10
+    def test_boundary_just_over_n5_floor_moves_to_n5(self) -> None:
+        result = age_route.route(score=250.1, risk_flags=[])
+        assert result["n"] == 5
+
+    def test_score_at_900_is_not_high_effort(self) -> None:
+        result = age_route.route(score=900, risk_flags=[])
+        assert result["effort"] == "medium"
 
 
-class TestHardOverrides:
-    """A hard risk-override forces N=10/effort=high even on a trivial diff."""
+class TestOverridePromotion:
+    """An OVERRIDE_FLAGS hit promotes its dimension to a solo lens; the
+    group it left survives with its remaining members -- it never escalates
+    to a blanket top tier."""
 
-    def test_trivial_diff_with_auth_flag_forces_n10(self) -> None:
-        result = age_route.route(
-            files_changed=1, insertions=2, deletions=1, risk_flags=["auth"]
-        )
-        assert result["n"] == 10
+    def test_auth_on_tiny_score_promotes_security_solo(self) -> None:
+        # SPEC ACCEPTANCE 5: route(score=20, risk_flags=['auth']) -> n=2,
+        # lenses [[security],[rest]], overrides_hit=['auth'], effort='high'.
+        result = age_route.route(score=20, risk_flags=["auth"])
+        assert result["n"] == 2
         assert result["effort"] == "high"
         assert result["overrides_hit"] == ["auth"]
-        assert len(result["lenses"]) == 10
+        rest = [d for d in age_route.DIMENSIONS if d != "security"]
+        assert result["lenses"] == [["security"], rest]
 
     def test_multiple_overrides_all_recorded(self) -> None:
         result = age_route.route(
-            files_changed=1,
-            insertions=1,
-            deletions=0,
+            score=1,
             risk_flags=["schema-migration", "production-destructive", "not-an-override"],
         )
-        assert result["n"] == 10
         assert result["effort"] == "high"
         assert result["overrides_hit"] == ["production-destructive", "schema-migration"]
+        # Both flags promote different dimensions (correctness, encapsulation);
+        # both must appear as solo lenses, nothing truncated.
+        assert ["correctness"] in result["lenses"]
+        assert ["encapsulation"] in result["lenses"]
 
-    def test_unrecognized_flag_does_not_force_override(self) -> None:
-        result = age_route.route(
-            files_changed=1, insertions=2, deletions=1, risk_flags=["typo-fix"]
-        )
+    def test_unrecognized_flag_does_not_promote(self) -> None:
+        result = age_route.route(score=20, risk_flags=["typo-fix"])
         assert result["n"] == 1
         assert result["overrides_hit"] == []
+        assert result["effort"] == "low"
 
     def test_every_documented_override_category_is_recognized(self) -> None:
-        # Spec's hard-override paragraph names six categories; every flag we
-        # advertise as canonical must independently force n=10.
         for flag in age_route.OVERRIDE_FLAGS:
-            result = age_route.route(
-                files_changed=1, insertions=1, deletions=0, risk_flags=[flag]
-            )
-            assert result["n"] == 10, f"{flag} did not force n=10"
+            result = age_route.route(score=1, risk_flags=[flag])
             assert result["overrides_hit"] == [flag]
+            assert result["effort"] == "high"
+            promoted = age_route._PROMOTIONS[flag]
+            assert [promoted] in result["lenses"], f"{flag} did not promote {promoted}"
+
+    def test_all_four_override_categories_uncapped_n9(self) -> None:
+        # SPEC ACCEPTANCE 7: all four override categories at once -> n=9,
+        # every promoted dimension solo, nothing truncated. Requires the n=5
+        # base tree (score > 250) so each promoted dimension comes from its
+        # own tree lens.
+        result = age_route.route(
+            score=400,
+            risk_flags=["auth", "payments", "schema-migration", "weak-integration-coverage"],
+        )
+        assert result["n"] == 9
+        assert result["effort"] == "high"
+        assert result["overrides_hit"] == [
+            "auth",
+            "payments",
+            "schema-migration",
+            "weak-integration-coverage",
+        ]
+        for solo in ("security", "correctness", "encapsulation", "assertions"):
+            assert [solo] in result["lenses"]
+        # Every dimension appears exactly once across the partition.
+        flat = [dim for lens in result["lenses"] for dim in lens]
+        assert sorted(flat) == sorted(age_route.DIMENSIONS)
+        assert len(flat) == len(age_route.DIMENSIONS)
+
+
+class TestEncapsulationSeparation:
+    """SPEC ACCEPTANCE 6: encapsulation never shares a lens with efficiency
+    or telemetry at the ladder's finest partition (n=5), which is the level
+    the old N=4 'leftovers' grouping got wrong. Coarser tiers merge whole
+    tree lenses together by design (n=2's second group spans lens3-5), so
+    the never-co-occur guarantee is meaningful precisely where the tree is
+    fully resolved."""
+
+    def test_n5_keeps_encapsulation_isolated_from_efficiency_and_telemetry(self) -> None:
+        result = age_route.route(score=400, risk_flags=[])
+        for lens in result["lenses"]:
+            if "encapsulation" in lens:
+                assert "efficiency" not in lens
+                assert "telemetry" not in lens
+
+    def test_promoted_encapsulation_is_always_isolated(self) -> None:
+        # Whenever encapsulation is promoted (any base tier), it is solo --
+        # trivially separated from efficiency and telemetry.
+        for score in (20, 150, 400):
+            result = age_route.route(score=score, risk_flags=["schema-migration"])
+            assert ["encapsulation"] in result["lenses"]
+
+
+class TestDimensionPartitionInvariant:
+    """Every dimension appears exactly once across the lens partition, at
+    every tier and under every override combination."""
+
+    @pytest.mark.parametrize("score", [10, 30, 59.9, 60, 150, 250, 250.1, 400, 1000])
+    def test_partition_covers_every_dimension_exactly_once_no_override(self, score: float) -> None:
+        result = age_route.route(score=score, risk_flags=[])
+        flat = [dim for lens in result["lenses"] for dim in lens]
+        assert sorted(flat) == sorted(age_route.DIMENSIONS)
+        assert len(flat) == len(age_route.DIMENSIONS)
+
+    @pytest.mark.parametrize("score", [20, 150, 400])
+    @pytest.mark.parametrize(
+        "flags",
+        [
+            ["auth"],
+            ["payments"],
+            ["schema-migration"],
+            ["weak-integration-coverage"],
+            ["auth", "payments", "schema-migration", "weak-integration-coverage"],
+        ],
+    )
+    def test_partition_covers_every_dimension_exactly_once_with_overrides(
+        self, score: float, flags: list[str]
+    ) -> None:
+        result = age_route.route(score=score, risk_flags=flags)
+        flat = [dim for lens in result["lenses"] for dim in lens]
+        assert sorted(flat) == sorted(age_route.DIMENSIONS)
+        assert len(flat) == len(age_route.DIMENSIONS)
 
 
 class TestAffinageEscalation:
-    """affinage entries weight high comment count / risky ci_class upward."""
+    """affinage entries weight high comment count / risky ci_class upward,
+    one tier step in the (1, 2, 5) order, capped at the top."""
 
     def test_age_entry_ignores_comments_and_ci_class(self) -> None:
         result = age_route.route(
-            files_changed=1,
-            insertions=2,
-            deletions=1,
-            risk_flags=[],
-            entry="age",
-            comments=999,
-            ci_class="failing",
+            score=30, risk_flags=[], entry="age", comments=999, ci_class="failing"
         )
         assert result["n"] == 1
 
     def test_affinage_high_comment_count_bumps_tier(self) -> None:
-        result = age_route.route(
-            files_changed=1,
-            insertions=2,
-            deletions=1,
-            risk_flags=[],
-            entry="affinage",
-            comments=15,
-        )
-        assert result["n"] == 4
+        result = age_route.route(score=30, risk_flags=[], entry="affinage", comments=15)
+        assert result["n"] == 2
 
     def test_affinage_low_comment_count_does_not_bump(self) -> None:
-        result = age_route.route(
-            files_changed=1,
-            insertions=2,
-            deletions=1,
-            risk_flags=[],
-            entry="affinage",
-            comments=2,
-        )
+        result = age_route.route(score=30, risk_flags=[], entry="affinage", comments=2)
         assert result["n"] == 1
 
     def test_affinage_failing_ci_class_bumps_tier(self) -> None:
-        result = age_route.route(
-            files_changed=1,
-            insertions=2,
-            deletions=1,
-            risk_flags=[],
-            entry="affinage",
-            ci_class="failing",
-        )
-        assert result["n"] == 4
+        result = age_route.route(score=30, risk_flags=[], entry="affinage", ci_class="failing")
+        assert result["n"] == 2
 
-    def test_affinage_bump_never_exceeds_n10(self) -> None:
+    def test_affinage_bump_never_exceeds_n5(self) -> None:
         result = age_route.route(
-            files_changed=20,
-            insertions=500,
-            deletions=400,
-            risk_flags=[],
-            entry="affinage",
-            comments=50,
-            ci_class="failing",
+            score=400, risk_flags=[], entry="affinage", comments=50, ci_class="failing"
         )
-        assert result["n"] == 10
-        assert result["effort"] == "high"
+        assert result["n"] == 5
 
     def test_affinage_comment_count_at_exact_threshold_bumps(self) -> None:
-        # >= _AFFINAGE_COMMENT_BUMP (10) bumps; boundary itself must bump.
-        result = age_route.route(
-            files_changed=1, insertions=2, deletions=1, risk_flags=[],
-            entry="affinage", comments=10,
-        )
-        assert result["n"] == 4
+        result = age_route.route(score=30, risk_flags=[], entry="affinage", comments=10)
+        assert result["n"] == 2
 
     def test_affinage_comment_count_just_under_threshold_does_not_bump(self) -> None:
-        result = age_route.route(
-            files_changed=1, insertions=2, deletions=1, risk_flags=[],
-            entry="affinage", comments=9,
-        )
+        result = age_route.route(score=30, risk_flags=[], entry="affinage", comments=9)
         assert result["n"] == 1
 
     def test_affinage_red_ci_class_bumps_tier(self) -> None:
-        result = age_route.route(
-            files_changed=1, insertions=2, deletions=1, risk_flags=[],
-            entry="affinage", ci_class="red",
-        )
-        assert result["n"] == 4
+        result = age_route.route(score=30, risk_flags=[], entry="affinage", ci_class="red")
+        assert result["n"] == 2
 
     def test_affinage_flaky_ci_class_bumps_tier(self) -> None:
-        result = age_route.route(
-            files_changed=1, insertions=2, deletions=1, risk_flags=[],
-            entry="affinage", ci_class="flaky",
-        )
-        assert result["n"] == 4
+        result = age_route.route(score=30, risk_flags=[], entry="affinage", ci_class="flaky")
+        assert result["n"] == 2
 
     def test_affinage_healthy_ci_class_does_not_bump(self) -> None:
-        result = age_route.route(
-            files_changed=1, insertions=2, deletions=1, risk_flags=[],
-            entry="affinage", ci_class="passing",
-        )
+        result = age_route.route(score=30, risk_flags=[], entry="affinage", ci_class="passing")
         assert result["n"] == 1
 
     def test_affinage_comments_and_ci_class_both_bump_in_one_call(self) -> None:
-        # A small diff (n=1) with both a high comment count and a risky
-        # ci_class must bump twice: 1 -> 4 -> 10, one step per signal, and
-        # the rationale must record both reasons in the combined form.
+        # A score in the n=1 rung with both a high comment count and a risky
+        # ci_class must bump twice: 1 -> 2 -> 5, one step per signal, and the
+        # rationale must record both reasons in the combined form.
         result = age_route.route(
-            files_changed=1, insertions=2, deletions=1, risk_flags=[],
-            entry="affinage", comments=15, ci_class="failing",
+            score=30, risk_flags=[], entry="affinage", comments=15, ci_class="failing"
         )
-        assert result["n"] == 10
-        assert result["effort"] == "high"
+        assert result["n"] == 5
+        assert result["effort"] == "medium"
         assert "15 comments + ci_class=failing" in result["rationale"]
 
 
 class TestInputValidation:
     def test_invalid_entry_raises(self) -> None:
         with pytest.raises(ValueError):
-            age_route.route(files_changed=1, insertions=1, deletions=0, entry="bogus")
+            age_route.route(score=1, entry="bogus")
+
+
+class TestOutputSchema:
+    def test_output_keys_are_exactly_the_locked_shape(self) -> None:
+        # SPEC ACCEPTANCE 9: output keys are exactly {n, lenses, effort,
+        # overrides_hit, rationale}.
+        result = age_route.route(score=30)
+        assert set(result.keys()) == {"n", "lenses", "effort", "overrides_hit", "rationale"}
 
 
 class TestRationale:
     def test_rationale_is_one_line_and_mentions_decision(self) -> None:
-        result = age_route.route(files_changed=3, insertions=20, deletions=20, risk_flags=[])
+        result = age_route.route(score=150, risk_flags=[])
         assert "\n" not in result["rationale"]
-        assert "n=1" in result["rationale"]
+        assert "n=2" in result["rationale"]
         assert "effort=medium" in result["rationale"]
 
 
 class TestPurity:
-    """Acceptance #4: the module is a pure function -- no os/network/file I/O."""
+    """Acceptance #2: the module is a pure function -- no os/network/file I/O."""
 
     def test_module_has_no_io_imports(self) -> None:
         src = (REPO_ROOT / "src" / "fanout" / "age_route.py").read_text(encoding="utf-8")
@@ -256,4 +304,3 @@ class TestPurity:
     def test_module_parses_as_valid_python(self) -> None:
         src = (REPO_ROOT / "src" / "fanout" / "age_route.py").read_text(encoding="utf-8")
         ast.parse(src)  # raises SyntaxError if invalid
-
