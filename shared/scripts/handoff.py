@@ -10,7 +10,7 @@ recognized historical notes without modifying their sources.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from functools import cache
 from pathlib import Path
 from typing import Any
@@ -429,6 +429,19 @@ def resolve_next(
     if envelope.next in set(available_phases):
         return {"action": "dispatch", "phase": envelope.next}
     return {"action": "unavailable", "phase": envelope.next}
+
+
+def registry_as_mapping(registry: TransitionRegistry) -> dict[str, Any]:
+    """JSON-native form of a compiled registry, for journals that persist it."""
+    data = asdict(registry)
+    for contract in data["phases"].values():
+        contract["next"] = list(contract["next"])
+    return data
+
+
+def registry_from_mapping(value: object) -> TransitionRegistry:
+    """Rebuild a compiled registry from the form registry_as_mapping emits."""
+    return _converter().structure(value, TransitionRegistry)
 
 
 def assemble_transition_registry(contract_paths) -> TransitionRegistry:

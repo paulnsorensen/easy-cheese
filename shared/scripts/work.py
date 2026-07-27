@@ -514,7 +514,7 @@ def reconcile_work(work_id: str, project: str | None = None) -> dict[str, Any]:
     return {"work_id": work_id, "reconciled": reconciled, "pending": pending}
 
 
-def _legacy_registry() -> dict:
+def _legacy_registry() -> handoff.TransitionRegistry:
     root = Path(__file__).resolve().parents[2]
     return handoff.assemble_transition_registry(root.glob("skills/*/references/handoff-contract.yaml"))
 
@@ -541,9 +541,9 @@ def _migrate_handoff(source: Path, text: str, project: str | None) -> WorkRecord
     ] if original_next.startswith("[") and original_next.endswith("]") else []
     next_value = "hold" if status_line.startswith("status: gated:") else ("tasks" if tasks else original_next.lstrip("/"))
     registry = _legacy_registry()
-    if next_value not in registry["phases"]["wheypoint"]["next"]:
+    if next_value not in registry.phases["wheypoint"].next:
         return None
-    if any(task["phase"] not in registry["phases"] for task in tasks):
+    if any(task["phase"] not in registry.phases for task in tasks):
         return None
 
     title = source.stem.replace("-", " ").strip() or "Imported handoff"
@@ -575,7 +575,7 @@ def _migrate_handoff(source: Path, text: str, project: str | None) -> WorkRecord
     if handoff.validate_handoff(envelope, registry):
         return None
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(handoff.render_handoff(envelope, text, registry), encoding="utf-8")
+    target.write_text(handoff.render_handoff(envelope, text, contracts=registry), encoding="utf-8")
     attempt.artifacts.append({"path": str(target), "phase": "wheypoint", "operation_id": operation_id})
     record.working_context = text
     record.context_log.append(f"migrated:{source.resolve()}")
