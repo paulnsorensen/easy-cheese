@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 import handoff
+import yaml
 
 try:
     from paths import local_work_snapshot_path, project_key, work_record_path, worktree_key
@@ -96,7 +97,9 @@ def _render(record: WorkRecord) -> str:
         + "\n".join(record.context_log)
         + "\n"
     )
-    frontmatter = json.dumps(record.to_mapping(), indent=2, ensure_ascii=False, allow_nan=False)
+    frontmatter = yaml.safe_dump(
+        record.to_mapping(), sort_keys=False, allow_unicode=True
+    ).rstrip("\n")
     return f"---\n{frontmatter}\n---\n{body}"
 
 
@@ -108,8 +111,8 @@ def _decode(path: Path) -> WorkRecord:
     if end < 0:
         raise ValueError(f"invalid work record: {path}")
     try:
-        return _record_from_mapping(json.loads(text[4:end]))
-    except (json.JSONDecodeError, TypeError, ValueError, handoff.HandoffParseError) as exc:
+        return _record_from_mapping(yaml.safe_load(text[4:end]))
+    except (yaml.YAMLError, TypeError, ValueError, handoff.HandoffParseError) as exc:
         raise ValueError(f"invalid work record: {path}") from exc
 
 

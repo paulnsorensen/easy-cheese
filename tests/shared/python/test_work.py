@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 sys.path.insert(0, str(Path(__file__).parents[3] / "shared" / "scripts"))
 import work  # noqa: E402
@@ -131,12 +131,12 @@ def test_continue_imports_local_snapshot_and_rejects_divergence(
         work.resolve_continue(worktree="wt_two")
 
 
-def test_work_record_uses_json_frontmatter() -> None:
-    record = work.ensure_work(subject="Readable JSON", worktree="wt_one")
+def test_work_record_uses_yaml_frontmatter() -> None:
+    record = work.ensure_work(subject="Readable YAML", worktree="wt_one")
     assert record is not None
     text = work.work_record_path(record.work_id).read_text(encoding="utf-8")
     frontmatter = text.removeprefix("---\n").split("\n---\n", 1)[0]
-    assert json.loads(frontmatter) == record.to_mapping()
+    assert yaml.safe_load(frontmatter) == record.to_mapping()
 
 
 def test_legacy_handoff_migration_writes_validated_envelope(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
