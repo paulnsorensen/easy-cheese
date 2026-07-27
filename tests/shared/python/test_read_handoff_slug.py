@@ -42,7 +42,7 @@ def test_happy_path_parse(tmp_path: Path) -> None:
     payload = json.loads(result.stdout)
     assert set(payload.keys()) == {
         "status", "next", "artifact", "orientation", "halt_reason",
-        "taste_test", "durable_flags", "baseline",
+        "taste_test", "durable_flags", "baseline", "format",
     }
     assert payload == {
         "status": "ok",
@@ -50,6 +50,7 @@ def test_happy_path_parse(tmp_path: Path) -> None:
         "artifact": ".cheese/age/foo.md",
         "orientation": "high-stake encapsulation leak in cli.py",
         "halt_reason": None,
+        "format": "legacy",
         "taste_test": None,
         "durable_flags": None,
         "baseline": None,
