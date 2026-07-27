@@ -8,6 +8,7 @@ escalating to the top tier), and the five-lens refinement tree.
 from __future__ import annotations
 
 import ast
+import inspect
 import sys
 from pathlib import Path
 
@@ -357,14 +358,23 @@ class TestInputValidation:
             age_route.route(score=float("inf"))
 
     def test_score_is_keyword_only(self) -> None:
-        # A stale positional call (score used to be `files_changed: int`)
-        # must fail loud instead of silently routing under a new meaning.
-        # Unpacked from a tuple so the deliberate arity violation is not a
-        # statically-resolvable wrong-argument-count (CodeQL
-        # py/call/wrong-arguments); the runtime call is still positional.
-        stale_positional_args = (30, [])
-        with pytest.raises(TypeError):
-            age_route.route(*stale_positional_args)
+        # `score` used to be `files_changed: int` in the same position, so a
+        # stale positional call must fail loud rather than silently route
+        # under a new meaning. Asserted on the signature rather than by
+        # making the bad call: it pins the contract directly (a TypeError
+        # could come from anything) and does not plant a deliberate
+        # wrong-arity call for static analysis to flag.
+        params = inspect.signature(age_route.route).parameters
+        assert params["score"].kind is inspect.Parameter.KEYWORD_ONLY, (
+            "route()'s score must stay keyword-only so a stale positional "
+            "call raises TypeError instead of being read as a score"
+        )
+        assert not [
+            name
+            for name, p in params.items()
+            if p.kind
+            in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+        ], "route() takes no positional parameters"
 
     def test_age_entry_rejects_comments_only(self) -> None:
         with pytest.raises(ValueError):
