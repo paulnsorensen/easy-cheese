@@ -10,7 +10,7 @@ recognized historical notes without modifying their sources.
 from __future__ import annotations
 
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
 from typing import Any
@@ -433,10 +433,7 @@ def resolve_next(
 
 def registry_as_mapping(registry: TransitionRegistry) -> dict[str, Any]:
     """JSON-native form of a compiled registry, for journals that persist it."""
-    data = asdict(registry)
-    for contract in data["phases"].values():
-        contract["next"] = list(contract["next"])
-    return data
+    return _converter().unstructure(registry)
 
 
 def registry_from_mapping(value: object) -> TransitionRegistry:
