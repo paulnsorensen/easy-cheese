@@ -1,14 +1,15 @@
 """Versioned WorkRecord handoffs plus bounded legacy-preamble migration.
 
-`HandoffEnvelope`, `render_handoff`, `load_handoff`, and `resolve_next` define
-the authoritative block-YAML phase contract used by `handoff-commit` and
-`handoff-resolve`. The line-oriented `HandoffSlug` parser remains only so
-`work migrate` can import recognized historical notes without modifying their
-sources; new workflow documentation and emitters must not route through it.
+`HandoffEnvelope`, `render_handoff`, `parse_handoff`, and `resolve_next` define
+the authoritative JSON-frontmatter phase contract used by `handoff-commit` and
+`handoff-resolve`. Source PhaseContracts remain YAML inputs to the build-time
+registry compiler. The line-oriented `HandoffSlug` parser only imports
+recognized historical notes without modifying their sources.
 """
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -215,25 +216,17 @@ class HandoffEnvelope:
         }
 
 
-def _yaml():
-    try:
-        import yaml
-    except ImportError as exc:
-        raise HandoffParseError("PyYAML is required; install easy-cheese's Cheese companion runtime") from exc
-    return yaml
-
-
 def parse_handoff(text: str, loaded_path: str | Path) -> HandoffEnvelope:
-    """Parse an artifact's YAML envelope and bind it to the loaded path."""
+    """Parse an artifact's JSON envelope and bind it to the loaded path."""
     if not text.startswith("---\n"):
-        raise HandoffParseError("handoff requires YAML frontmatter")
+        raise HandoffParseError("handoff requires JSON frontmatter")
     end = text.find("\n---\n", 4)
     if end < 0:
         raise HandoffParseError("handoff frontmatter is not closed")
     try:
-        raw = _yaml().safe_load(text[4:end])
-    except Exception as exc:
-        raise HandoffParseError(f"invalid handoff YAML: {exc}") from exc
+        raw = json.loads(text[4:end])
+    except json.JSONDecodeError as exc:
+        raise HandoffParseError(f"invalid handoff JSON: {exc.msg}") from exc
     envelope = HandoffEnvelope.from_mapping(raw)
     actual = Path(loaded_path).expanduser().resolve()
     declared = Path(envelope.artifact).expanduser()
@@ -248,7 +241,7 @@ def render_handoff(envelope: HandoffEnvelope, body: str = "", contracts: dict | 
     errors = validate_handoff(envelope, contracts)
     if errors:
         raise ValueError("; ".join(errors))
-    frontmatter = _yaml().safe_dump(envelope.as_mapping(), sort_keys=False, allow_unicode=True).rstrip()
+    frontmatter = json.dumps(envelope.as_mapping(), indent=2, ensure_ascii=False, allow_nan=False)
     return f"---\n{frontmatter}\n---\n" + (f"\n{body}" if body else "")
 
 
@@ -399,12 +392,17 @@ def resolve_next(
 
 
 def assemble_transition_registry(contract_paths) -> dict:
-    """Compile and validate phase-owned contracts into the global registry."""
+    """Compile build-time YAML phase contracts into the global registry."""
+    try:
+        import yaml
+    except ImportError as exc:
+        raise RuntimeError("PyYAML is required to compile phase contracts") from exc
+
     registry = {"phases": {}}
     for raw_path in contract_paths:
         path = Path(raw_path)
         try:
-            data = _yaml().safe_load(path.read_text(encoding="utf-8"))
+            data = yaml.safe_load(path.read_text(encoding="utf-8"))
         except Exception as exc:
             raise ValueError(f"malformed phase contract: {path}") from exc
         if not isinstance(data, dict) or set(data) != {"phase", "next", "payload"}:

@@ -31,6 +31,26 @@ def test_parse_requires_declared_artifact_to_match_loaded_path(tmp_path: Path) -
         handoff.parse_handoff(text, tmp_path / "other.md")
 
 
+def test_parse_rejects_yaml_frontmatter(tmp_path: Path) -> None:
+    artifact = tmp_path / "artifact.md"
+    text = f"""---
+contract_version: {handoff.CONTRACT_VERSION}
+work_id: work
+attempt_id: attempt
+operation_id: op
+phase: age
+status: ok
+halt_reason: null
+next: done
+artifact: {artifact}
+payload: {{}}
+provenance: {{}}
+---
+"""
+    with pytest.raises(handoff.HandoffParseError, match="invalid handoff JSON"):
+        handoff.parse_handoff(text, artifact)
+
+
 def test_status_rules_are_mutually_exclusive() -> None:
     assert "halt requires a non-empty halt_reason" in handoff.validate_handoff(_envelope(status="halt"))
     assert "ok forbids halt_reason" in handoff.validate_handoff(_envelope(halt_reason="no"))

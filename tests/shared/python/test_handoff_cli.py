@@ -29,12 +29,9 @@ def handoff_cli_mod() -> ModuleType:
     return module
 
 
-def _run(*args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        [sys.executable, str(HANDOFF_CLI), *args],
-        capture_output=True,
-        text=True,
-    )
+def _run(*args: str, no_site: bool = False) -> subprocess.CompletedProcess[str]:
+    command = [sys.executable, *(("-S",) if no_site else ()), str(HANDOFF_CLI), *args]
+    return subprocess.run(command, capture_output=True, text=True)
 
 
 class TestRender:
@@ -199,7 +196,7 @@ class TestJsonMode:
 
 
 class TestEnvelope:
-    def test_render_then_parse_preserves_versioned_envelope(self, tmp_path: Path) -> None:
+    def test_json_frontmatter_round_trips_without_site_packages(self, tmp_path: Path) -> None:
         artifact = tmp_path / "handoff.md"
         envelope = {
             "contract_version": "cheese-handoff/v1",
@@ -215,12 +212,15 @@ class TestEnvelope:
             "provenance": {"source": "press"},
         }
         rendered = _run(
-            "envelope-render", "--envelope", json.dumps(envelope), "--body", "# Report"
+            "envelope-render", "--envelope", json.dumps(envelope), "--body", "# Report",
+            no_site=True,
         )
         assert rendered.returncode == 0, rendered.stderr
+        frontmatter = rendered.stdout.removeprefix("---\n").split("\n---\n", 1)[0]
+        assert json.loads(frontmatter) == envelope
         artifact.write_text(rendered.stdout, encoding="utf-8")
 
-        parsed = _run("envelope-parse", "--file", str(artifact))
+        parsed = _run("envelope-parse", "--file", str(artifact), no_site=True)
         assert parsed.returncode == 0, parsed.stderr
         assert json.loads(parsed.stdout) == envelope
 
