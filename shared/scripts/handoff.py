@@ -431,6 +431,16 @@ def resolve_next(
     return {"action": "unavailable", "phase": envelope.next}
 
 
+def registry_as_mapping(registry: TransitionRegistry) -> dict[str, Any]:
+    """JSON-native form of a compiled registry, for journals that persist it."""
+    return _converter().unstructure(registry)
+
+
+def registry_from_mapping(value: object) -> TransitionRegistry:
+    """Rebuild a compiled registry from the form registry_as_mapping emits."""
+    return _converter().structure(value, TransitionRegistry)
+
+
 def assemble_transition_registry(contract_paths) -> TransitionRegistry:
     """Compile YAML phase contracts into the global registry."""
     import yaml

@@ -510,3 +510,207 @@ class TestAtomicRename:
         assert not (target_dir / "never.md").exists()
         leftovers = list(target_dir.glob("*.tmp")) if target_dir.exists() else []
         assert leftovers == [], f"tmp file leaked: {leftovers}"
+
+
+class TestAtomicHandoffCommit:
+    def test_idempotent_commit_has_unique_artifact_and_one_event(
+        self, writer: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+        monkeypatch.setenv("EASY_CHEESE_PROJECT", "handoff-test")
+        record = writer.work.ensure_work(subject="Ship handoff", worktree="wt_test")
+        assert record is not None
+        attempt = record.attempts[0]
+        attempt.current_phase = "cook"
+        writer.work._save(record)
+
+        request = {
+            "phase": "cook", "slug": "same-slug", "work_id": record.work_id,
+            "attempt_id": attempt.attempt_id, "expected_revision": 0, "next_phase": "done",
+            "status": "ok", "halt_reason": None, "payload": {}, "provenance": {},
+            "work_patch": {"scope": "work", "changes": []}, "body": "completed", "operation_id": "op_one",
+            "root": tmp_path,
+        }
+        first = writer.commit_handoff(**request)
+        second = writer.commit_handoff(**request)
+
+        assert first == second
+        assert Path(first["artifact"]) == tmp_path / ".cheese" / "cook" / record.work_id / "op_one-same-slug.md"
+        saved = writer.work.load_work(record.work_id, include_local=False)
+        assert saved.context_log == ["handoff:op_one"]
+        assert saved.attempts[0].status == "completed"
+
+    def test_promotion_failure_reconciles_prepared_operation(
+        self, writer: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+        monkeypatch.setenv("EASY_CHEESE_PROJECT", "reconcile-test")
+        record = writer.work.ensure_work(subject="Recover handoff", worktree="wt_test")
+        assert record is not None
+        attempt = record.attempts[0]
+        attempt.current_phase = "cook"
+        writer.work._save(record)
+        original = writer.work._save
+
+        def fail_record_write(*args: object, **kwargs: object) -> Path:
+            raise OSError("record write failed")
+
+        monkeypatch.setattr(writer.work, "_save", fail_record_write)
+        with pytest.raises(OSError, match="record write failed"):
+            writer.commit_handoff(
+                "cook", "recover", record.work_id, attempt.attempt_id, 0, "done", "ok", None,
+                {}, {}, {"scope": "work", "changes": []}, "body", operation_id="op_recover", root=tmp_path,
+            )
+        monkeypatch.setattr(writer.work, "_save", original)
+
+        result = writer.work.reconcile_work(record.work_id)
+        assert len(result["reconciled"]) == 1
+        assert writer.work.load_work(record.work_id, include_local=False).revision == 1
+
+
+    def test_halt_preserves_attempt_lifecycle(self, writer: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+        record = writer.work.ensure_work(subject="Pause handoff", worktree="wt_test")
+        assert record is not None
+        attempt = record.attempts[0]
+        attempt.current_phase = "cook"
+        writer.work._save(record)
+
+        writer.commit_handoff(
+            "cook", "halt", record.work_id, attempt.attempt_id, 0, "press", "halt", "waiting",
+            {}, {}, {"scope": "work", "changes": []}, "halted", operation_id="op_halt", root=tmp_path,
+        )
+
+        assert writer.work.load_work(record.work_id, include_local=False).attempts[0].status == "active"
+
+    def test_tasks_commit_persists_ordered_directives_once(self, writer: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+        record = writer.work.ensure_work(subject="Split handoff", worktree="wt_test")
+        assert record is not None
+        attempt = record.attempts[0]
+        attempt.current_phase = "cook"
+        writer.work._save(record)
+        schema = writer.handoff.PayloadSchema
+        string = schema("string", required=True)
+        task = schema("mapping", fields={"phase": string, "subject": string, "input": schema("mapping")})
+        contracts = writer.handoff.TransitionRegistry(phases={
+            "cook": writer.handoff.PhaseContract(
+                "cook", ("tasks",), schema("mapping", fields={"tasks": schema("list", items=task)})
+            ),
+            "press": writer.handoff.PhaseContract("press", ("done",), schema("mapping", fields={})),
+        })
+        request = {
+            "phase": "cook", "slug": "tasks", "work_id": record.work_id, "attempt_id": attempt.attempt_id,
+            "expected_revision": 0, "next_phase": "tasks", "status": "ok", "halt_reason": None,
+            "payload": {"tasks": [{"phase": "press", "subject": "First"}, {"phase": "press", "subject": "Second", "input": {"risk": "low"}}]},
+            "provenance": {}, "work_patch": {"scope": "work", "changes": []}, "body": "tasks", "operation_id": "op_tasks",
+            "root": tmp_path, "contracts": contracts,
+        }
+        writer.commit_handoff(**request)
+        saved = writer.work.load_work(record.work_id, include_local=False)
+        assert [(task["task_id"], task["subject"], task["status"]) for task in saved.tasks] == [("op_tasks:0", "First", "pending"), ("op_tasks:1", "Second", "pending")]
+        assert saved.attempts[0].current_phase == "cook"
+        assert saved.attempts[0].status == "active"
+
+
+def test_record_saved_before_journal_completion_replays_once(
+    writer: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+    record = writer.work.ensure_work(subject="Replay handoff", worktree="wt_test")
+    assert record is not None
+    record.attempts[0].current_phase = "cook"
+    writer.work._save(record)
+    request = {
+        "phase": "cook",
+        "slug": "replay",
+        "work_id": record.work_id,
+        "attempt_id": record.attempts[0].attempt_id,
+        "expected_revision": 0,
+        "next_phase": "done",
+        "status": "ok",
+        "halt_reason": None,
+        "payload": {},
+        "provenance": {},
+        "work_patch": {"scope": "work", "changes": []},
+        "body": "done",
+        "operation_id": "op_replay",
+        "root": tmp_path,
+    }
+    original = writer.work._write_journal
+
+    def fail_completion(path: Path, entry: dict) -> None:
+        if entry.get("kind") == "handoff" and entry.get("complete"):
+            raise OSError("journal completion failed")
+        original(path, entry)
+
+    monkeypatch.setattr(writer.work, "_write_journal", fail_completion)
+    with pytest.raises(OSError, match="journal completion failed"):
+        writer.commit_handoff(**request)
+    monkeypatch.setattr(writer.work, "_write_journal", original)
+
+    writer.commit_handoff(**request)
+    saved = writer.work.load_work(record.work_id, include_local=False)
+    assert saved.revision == 1
+    assert saved.context_log == ["handoff:op_replay"]
+
+
+def test_changed_retry_is_rejected(
+    writer: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+    record = writer.work.ensure_work(subject="Immutable retry", worktree="wt_test")
+    assert record is not None
+    record.attempts[0].current_phase = "cook"
+    writer.work._save(record)
+    original = writer.os.replace
+    target = writer._handoff_target(
+        tmp_path, "cook", record.work_id, "op_immutable", "retry"
+    )
+
+    def fail_promotion(source: object, destination: object) -> None:
+        if Path(destination) == target:
+            raise OSError("promotion failed")
+        original(source, destination)
+
+    monkeypatch.setattr(writer.os, "replace", fail_promotion)
+    with pytest.raises(OSError, match="promotion failed"):
+        writer.commit_handoff(
+            "cook", "retry", record.work_id, record.attempts[0].attempt_id, 0,
+            "done", "ok", None, {}, {}, {"scope": "work", "changes": []},
+            "original", operation_id="op_immutable", root=tmp_path,
+        )
+    monkeypatch.setattr(writer.os, "replace", original)
+    with pytest.raises(ValueError, match="different handoff"):
+        writer.commit_handoff(
+            "cook", "retry", record.work_id, record.attempts[0].attempt_id, 0,
+            "done", "ok", None, {}, {}, {"scope": "work", "changes": []},
+            "changed", operation_id="op_immutable", root=tmp_path,
+        )
+
+
+def test_task_completion_requires_bound_phase(
+    writer: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+    record = writer.work.ensure_work(subject="Task phase", worktree="wt_test")
+    assert record is not None
+    attempt = record.attempts[0]
+    attempt.current_phase = "cook"
+    record.tasks = [{
+        "task_id": "op_parent:0",
+        "phase": "press",
+        "subject": "Harden",
+        "input": {},
+        "status": "active",
+        "attempt_id": attempt.attempt_id,
+        "reason": None,
+    }]
+    writer.work._save(record)
+
+    with pytest.raises(ValueError, match="attempt and phase"):
+        writer.commit_handoff(
+            "cook", "wrong-task-phase", record.work_id, attempt.attempt_id, 0,
+            "done", "ok", None, {}, {}, {"scope": "work", "changes": []},
+            "wrong phase", task_id="op_parent:0", operation_id="op_wrong_phase", root=tmp_path,
+        )
