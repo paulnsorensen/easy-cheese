@@ -14,12 +14,13 @@ Decision rule (recommended slot only — `--auto` variants are user-opt-in
 alternatives surfaced by the Handoff menu, not picks the script makes):
 
   candidate_curds = goals_bullets   # distinct behaviours; NOT acceptance criteria
-  candidate_curds >= PARALLEL_THRESHOLD          -> /ultracook (parallel mode)
-  candidate_curds <  PARALLEL_THRESHOLD, high    -> /ultracook (linear mode)
-  candidate_curds <  PARALLEL_THRESHOLD (else)   -> /cook
+  candidate_curds >= PARALLEL_THRESHOLD          -> /cook, mode=parallel
+  candidate_curds <  PARALLEL_THRESHOLD, high    -> /cook, mode=linear
+  candidate_curds <  PARALLEL_THRESHOLD (else)   -> /cook, mode=None
 
-`/ultracook` carries both modes now (the retired parallel-factory skill folded
-in); the count only picks which mode the hint suggests. The count is a signal,
+`/ultracook` is retired as a top-level skill; this script always recommends
+/cook and reports `mode` purely as an internal wave-plan hint (parallel
+fan-out vs linear chain), not a distinct skill choice. The count is a signal,
 not a verdict — the decomposer stays authoritative and confirms file-disjointness
 (criterion 4) before parallel fan-out runs.
 """
@@ -65,20 +66,20 @@ def _count_bullets(section: str | None) -> int:
 def _recommend(
     candidate_curds: int, blast_radius: str | None
 ) -> tuple[str, str | None, str]:
-    """Return (recommended_skill, ultracook_mode, rationale).
+    """Return (recommended_skill, mode, rationale).
 
-    `ultracook_mode` is "parallel" or "linear" when the pick is /ultracook, else
-    None (a /cook pick has no ultracook mode)."""
+    `mode` is "parallel" or "linear" as an internal wave-plan hint, else
+    None (no fan-out signal for this pick)."""
     if candidate_curds >= PARALLEL_THRESHOLD:
         return (
-            "/ultracook",
+            "/cook",
             "parallel",
             f"{candidate_curds} candidate curds >= {PARALLEL_THRESHOLD} threshold; parallel fan-out",
         )
     radius = (blast_radius or "").lower()
     if radius == "high":
         return (
-            "/ultracook",
+            "/cook",
             "linear",
             f"{candidate_curds} candidate curds < {PARALLEL_THRESHOLD}; blast radius high; linear chain",
         )
@@ -132,7 +133,7 @@ def analyze(spec_path: Path, blast_radius: str | None) -> dict:
         "notes": [
             "Count is a signal, not a verdict.",
             "candidate_curds = goals only; acceptance-criteria / quality-gate count does not drive it (issue #111).",
-            "Confirm curd independence (criterion 4: file-disjoint) before parallel /ultracook fan-out.",
+            "Confirm curd independence (criterion 4: file-disjoint) before /cook fans out in parallel waves.",
         ],
     }
 

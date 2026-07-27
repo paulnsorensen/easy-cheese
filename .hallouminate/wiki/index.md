@@ -15,6 +15,7 @@ git-tracking axis (`skills/cheese/references/formatting.md:103`).
 <!-- HALLOUMINATE:INDEX-START -->
 - [adr/](./adr/index.md) — adr
 - [architecture/](./architecture/index.md) — architecture
+- [specs/](./specs/index.md) — specs
 - [architecture](./architecture.md) — Architecture of easy-cheese
 - [domain-model](./domain-model.md) — Domain model
 - [fanout-engine-entities](./fanout-engine-entities.md) — Fan-out engine entities

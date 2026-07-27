@@ -111,7 +111,9 @@ def test_plate_stack_flow_is_per_layer_and_metadata_is_resolved() -> None:
 
 
 def test_ultracook_preflights_parallel_publication_before_commits() -> None:
-    skill = read("skills/ultracook/SKILL.md")
+    # /ultracook retired to a stub; the preflight mechanics it used to
+    # document now live in cook/SKILL.md's `## Fan pathway`.
+    skill = read("skills/cook/SKILL.md")
     schema = read("skills/ultracook/references/manifest-schema.json")
     plan_schema = read("skills/ultracook/references/pr-plan-schema.json")
     planner = read("skills/ultracook/references/pr-planner-prompt.md")

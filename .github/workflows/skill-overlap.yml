@@ -24,16 +24,21 @@ permissions:
 
 jobs:
   overlap:
-    runs-on: ubuntu-24.04
+    name: skill overlap ratchet
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       CARGO_TERM_COLOR: always
-      MODEL_DIR: ${{ runner.temp }}/skill-overlap-model
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@b3b07ba8b418998c39fb35e2971d4e74a26cb535 # stable
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      - name: Set MODEL_DIR
+        run: echo "MODEL_DIR=$RUNNER_TEMP/skill-overlap-model" >> "$GITHUB_ENV"
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+      - name: Restore cargo + model cache
+        id: cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/.cargo/registry
@@ -41,6 +46,8 @@ jobs:
             tools/skill-overlap/target
             ${{ env.MODEL_DIR }}
           key: skill-overlap-${{ runner.os }}-${{ hashFiles('tools/skill-overlap/Cargo.lock', 'tools/skill-overlap/model.lock.json') }}
+          restore-keys: |
+            skill-overlap-${{ runner.os }}-
       - name: Select advisory or requested mode
         id: mode
         shell: bash
@@ -108,6 +115,7 @@ jobs:
           --model-lock tools/skill-overlap/model.lock.json --model-dir "$MODEL_DIR"
           --fixture tools/skill-overlap/fixtures/hallouminate-fastembed.json
       - name: Analyze
+        id: analyze
         run: |
           args=(analyze --mode "${{ steps.mode.outputs.value }}" --repo .)
           args+=(--manifest .claude-plugin/plugin.json)
@@ -130,11 +138,31 @@ jobs:
             fi
             echo "- Full evidence: \`skill-overlap-report\` artifact"
           } >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+          if [[ "${{ steps.analyze.outcome }}" == failure ]]; then
+            echo "::error::skill-overlap check failed; accept a blocker by recording it as intentional or debt with a reason in .github/skill-overlap-baseline.yml, or fix the overlap."
+          fi
+      # Saving is what makes the split worthwhile: it still runs when analysis fails, which is
+      # the run this workflow exists to produce. Skipped on an exact-key hit, where save errors.
+      - name: Save cargo + model cache
+        if: always() && steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            tools/skill-overlap/target
+            ${{ env.MODEL_DIR }}
+          key: skill-overlap-${{ runner.os }}-${{ hashFiles('tools/skill-overlap/Cargo.lock', 'tools/skill-overlap/model.lock.json') }}
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: skill-overlap-report
           path: |
             report.json
             report.md
+          retention-days: 5
           if-no-files-found: warn
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true

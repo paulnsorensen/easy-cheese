@@ -12,6 +12,7 @@ serde_json = "1.0.143"
 serde_yaml = "0.9.34"
 sha2 = "0.10.9"
 unicode-normalization = "0.1.24"
+pulldown-cmark = { version = "0.13.4", default-features = false }
 fastembed = { version = "=5.17.3", optional = true }
 reqwest = { version = "0.12.28", default-features = false, features = ["blocking", "rustls-tls"], optional = true }
 tokenizers = { version = "=0.22.2", optional = true }

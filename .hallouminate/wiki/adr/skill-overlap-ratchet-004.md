@@ -1,4 +1,3 @@
-
 # ADR: Ratchet reviewed content-specific overlap findings
 
 The job begins advisory, then blocks only new content-specific exact or high-confidence semantic findings against a reviewed baseline; aggregate duplication totals never decide pass or fail.
@@ -13,5 +12,3 @@ The job begins advisory, then blocks only new content-specific exact or high-con
 - **Consequences:** New duplicated content cannot be offset or hidden, and medium-confidence overlap remains visible without destabilizing CI. Small edits to accepted repetition can require renewed review. Detector, model, tokenizer, chunker, or calibration changes require explicit rebaseline.
 
 Related: [[skill-overlap-ratchet-001]], [[skill-overlap-ratchet-003]].
-
-[^1]: `justfile:61-65`; `.github/workflows/scorecard.yml:25-40`

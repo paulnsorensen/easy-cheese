@@ -1,7 +1,8 @@
-"""Documentation-lint tests for ultracook's frame-owned baseline capture.
+"""Documentation-lint tests for the fan pathway's frame-owned baseline capture.
 
-The `## Baseline capture` section in `skills/ultracook/SKILL.md` and the
-`{baseline}` field in `skills/ultracook/references/curd-prompt.md` encode a
+The `## Baseline capture` section now lives in `skills/cook/SKILL.md` (ported
+from retired /ultracook's own section) and the `{baseline}` field in
+`skills/ultracook/references/curd-prompt.md` encode a
 prose contract with no code path: nothing else fails if the wording rots. If
 the capture-before-any-curd-cooks ordering, the tested-classifier reference,
 or the substitution field silently disappear, a future editor could
@@ -33,14 +34,14 @@ SECTION_HEADER = "## Baseline capture"
 
 class TestBaselineCaptureSection:
     def test_section_exists(self) -> None:
-        body = _skill("ultracook")
+        body = _skill("cook")
         assert SECTION_HEADER in body, (
             "ultracook SKILL.md must document the frame-owned baseline-capture "
             "contract, or the single-capture-per-run guarantee has no written spec"
         )
 
     def test_section_links_quality_gates_doc(self) -> None:
-        body = _skill("ultracook")
+        body = _skill("cook")
         idx = body.find(SECTION_HEADER)
         assert idx != -1
         # Scope the link check to the section body (up to the next `## `
@@ -49,14 +50,17 @@ class TestBaselineCaptureSection:
         # doc rather than restating (and drifting from) the taxonomy inline.
         next_heading = body.find("\n## ", idx + len(SECTION_HEADER))
         section = body[idx:next_heading if next_heading != -1 else len(body)]
-        assert "cook/references/quality-gates.md" in section, (
+        # Content now lives inside skills/cook/SKILL.md itself, one directory
+        # closer to quality-gates.md than the retired ultracook/SKILL.md was —
+        # the relative link correctly drops the `cook/` prefix.
+        assert "references/quality-gates.md" in section, (
             "Baseline capture section must link quality-gates.md — the single "
             "source of truth for the classification taxonomy — instead of "
             "restating it inline where it can drift"
         )
 
     def test_capture_happens_before_any_curd_cooks(self) -> None:
-        body = _skill("ultracook")
+        body = _skill("cook")
         idx = body.find(SECTION_HEADER)
         assert idx != -1
         next_heading = body.find("\n## ", idx + len(SECTION_HEADER))
@@ -70,7 +74,7 @@ class TestBaselineCaptureSection:
         )
 
     def test_classification_defers_to_tested_helper(self) -> None:
-        body = _skill("ultracook")
+        body = _skill("cook")
         idx = body.find(SECTION_HEADER)
         assert idx != -1
         next_heading = body.find("\n## ", idx + len(SECTION_HEADER))
@@ -81,7 +85,7 @@ class TestBaselineCaptureSection:
         assert "src/fanout/baseline.py::classify()" in section
 
     def test_manifest_baseline_block_referenced_for_parallel_mode(self) -> None:
-        body = _skill("ultracook")
+        body = _skill("cook")
         idx = body.find(SECTION_HEADER)
         assert idx != -1
         next_heading = body.find("\n## ", idx + len(SECTION_HEADER))

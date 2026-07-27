@@ -1,6 +1,14 @@
-# Ultracook agent topology
+# Ultracook agent topology (now owned by /cook's fan pathway)
 
-Ultracook assigns a fresh typed agent to each reasoning phase instead of
+> **Ownership moved (2026-07-24, PR #316; retirement PR #317):** `/cook`
+> absorbed this topology — mode selection, milknado seam, phase-chain ordering,
+> deterministic phase loop, worker-exhaustion/aggregate-gate recovery, worktree
+> lifecycle, resolution provenance, baseline capture, and `--resume` — into its
+> single **Fan pathway** (`skills/cook/SKILL.md § Fan pathway`). `/ultracook`
+> was then retired to a redirect stub in PR #317. The invariants below still
+> hold; only the owning skill changed.
+
+The fan pathway assigns a fresh typed agent to each reasoning phase instead of
 running a whole curd through one write-capable worker.
 
 ## Phase ownership
@@ -36,9 +44,17 @@ context, so review was not independent and cure could modify code after the
 last review. Post-merge review also lacked a reproducible diff identity. Typed
 top-level phases and a mandatory final age close both publication paths.
 
+The `/ultracook` → `/cook` consolidation moved fan-path ownership in PR #316
+and retired the duplicate `/ultracook` entry point in PR #317: one skill now
+owns both the linear and fan pathways, choosing by the same decompose gate, so
+mode selection is a routing decision inside `/cook` rather than a skill choice
+the user makes up front.
+
 Related decision: [progressive agent resolution](../adr/agent-resolution.md).
 
-[^1]: skills/ultracook/SKILL.md:93-96,224-227
-[^2]: skills/ultracook/SKILL.md:152-170; src/fanout/phase_decision.py:45-48,84-132
-[^3]: skills/ultracook/SKILL.md:177-180; src/fanout/validate_manifest.py:64-80,380-390
+[^1]: skills/cook/SKILL.md § Fan pathway (moved from skills/ultracook/SKILL.md in PR #316; the old skill retired to a redirect stub in PR #317)
+[^2]: skills/cook/SKILL.md § Fan pathway; src/fanout/phase_decision.py:45-48,84-132
+[^3]: src/fanout/validate_manifest.py:64-80,380-390
 [^4]: src/fanout/manifest_update.py:239-267,336-368
+
+_Source: subagent-routing-overhaul PR1 stack (PR #316 fan-path ownership; PR #317 `/ultracook` retirement) cure/plate write-back · Updated: 2026-07-24 · Supersedes: /ultracook as the owning skill (2026-07-18 revision)_
