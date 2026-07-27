@@ -172,23 +172,26 @@ Recommendation shape: "Validate at the boundary" / "Use the project's existing `
 
 ### encapsulation
 
-Look for: cross-module reach into internals, public APIs leaking implementation types, parameters that take more context than needed, new exports without a use case, and the inverse — a domain invariant lifted *out* of the producer and enforced above it by every caller.
+Look for: cross-module reach into internals, public APIs leaking implementation types, parameters that take more context than needed, new exports without a use case, the inverse — a domain invariant lifted *out* of the producer and enforced above it by every caller — and error, default, and configuration decisions the producer could absorb but exports to every caller instead.
 
 | Base | Trigger |
 | --- | --- |
 | `blocker` | **Ingress/egress contract violation** — public API leaks ORM model, infra adapter, framework type, or storage internal across the slice boundary; slice's `index` re-exports an internal type |
 | `high` | Cross-module reach into another slice's internals, bypassing crust/index |
 | `high` | **Caller-shadowed domain invariant** — a guard/validation that all callers must invoke (or redundantly do) lives *outside* the producer; the domain doesn't enforce its own invariant, so a caller can skip it. Especially when a symbol is made public *solely* to be called from above the domain layer. |
+| `high` | **Exported special case** — an error, empty/boundary case, or configuration decision every caller must handle identically, where the producer has the information to absorb it (return an empty result instead of raising; apply the safe default instead of demanding one) |
 | `medium` | Module-internal leak (cross-file inside one slice exposes private detail) |
 | `low` | Class-level — one class touches another's private member within the same file |
 
 Detection signals for the caller-shadowed invariant: a guard defined inside a slice but never called by that slice (only by external entrypoints); N callers each repeating the same check before/after one producer; a public/exported guard whose only consumers sit above the domain layer; asymmetry where some callers apply the check and others skip it. Beware the false-clean trap — this often reads as good Sliced-Bread hygiene (a private helper promoted to public + crust-exported), so a diff-scoped pass grades it clean. The violation is usually *inherited*, not introduced by the diff under review.
 
+Detection signals for the exported special case: N callers wrapping the same call in the same `try`/`except`; the same literal passed for the same parameter at every call site; each caller re-deriving the same default. The test is whether the producer *has the information* to decide — if callers legitimately differ, the parameter is doing real work. The limiting case is a configuration knob the caller cannot set correctly (a "voodoo constant" the module should compute itself); a knob expressing genuine caller-specific policy is not a finding.
+
 Boundaries: deslop (misplaced-invariant dup to encapsulation), complexity (boundary-leaking param to encapsulation). Full rules in § Dimension boundaries.
 
 Note: base tier *is* the location tier here, so the contract bump tends to redundantly raise an already-blocker finding (capped).
 
-Recommendation shape: "Import from `<slice>/index` instead of `<slice>/internal/foo`" / "Narrow the public surface to `<minimal-type>`" / "Move the `<invariant>` into `<producer>` so every caller inherits it; drop the external guard and narrow the public surface".
+Recommendation shape: "Import from `<slice>/index` instead of `<slice>/internal/foo`" / "Narrow the public surface to `<minimal-type>`" / "Move the `<invariant>` into `<producer>` so every caller inherits it; drop the external guard and narrow the public surface" / "Return an empty `<result>` instead of raising on the boundary case" / "Absorb `<default>` into `<producer>` and drop the parameter" / "Compute `<constant>` inside the module instead of asking every caller for it".
 
 ### spec
 
@@ -211,21 +214,27 @@ Recommendation shape: "Restore the X requirement" / "Confirm with the user that 
 
 ### complexity
 
-Look for: functions over budget (40 lines / 4 params / 3 nesting), files over 300 lines that grew, speculative abstractions, redundant state, parameter sprawl, stringly-typed code, explanatory-renaming comments.
+Look for: functions over budget (40 lines / 4 params / 3 nesting), files over 300 lines that grew, speculative abstractions, redundant state, parameter sprawl, stringly-typed code, explanatory-renaming comments, and the inverse failure — abstractions whose interface costs more than they hide: pass-through methods, pass-through variables, adjacent layers restating the same abstraction, wrapper types that forward every call.
 
 | Base | Trigger |
 | --- | --- |
-| `high` | God function (3× budget), param sprawl threading through 3+ layers, new god module created in this diff |
+| `high` | God function (3× budget), param sprawl threading through 3+ layers (intermediate layers read or transform it), new god module created in this diff |
+| `high` | **Shallow layer** — a new module, class, or layer whose public interface is nearly as large as the functionality it hides; callers must still know the internals to use it correctly |
 | `medium` | 2× budget, generic helper with one user, redundant cached state |
+| `medium` | **Pass-through method** — forwards to another method with an unchanged signature and adds no functionality; or a **pass-through variable** threaded through 3+ layers to reach one consumer, with no intermediate layer reading it; or adjacent layers whose abstractions are the same |
 | `low` | Few lines over budget, mildly speculative abstraction |
+
+Detection signals for a shallow abstraction: a method body that is one delegating call with an unchanged or near-unchanged signature; a parameter that exists in a function only to be handed to the next call; two adjacent layers whose method names map 1:1; a class whose public method count approaches its count of non-delegating statements. Dispatchers are the deliberate exception — a method that routes to *different* implementations by type or key is doing real work, not passing through.
 
 Inherited shape: a god function or param-sprawl the diff extends by a few lines rather than introduces. Grade the function as it now stands, not only the added lines.
 
-Boundaries: encapsulation (boundary-leaking param to encapsulation), efficiency (cache decision to complexity, runtime cost to efficiency). Full rules in § Dimension boundaries.
+Boundaries: encapsulation (boundary-leaking param to encapsulation, exported-decision param to encapsulation), deslop (pass-through and same-abstraction layers to complexity, fake-modularity file sprawl to deslop), efficiency (cache decision to complexity, runtime cost to efficiency). Full rules in § Dimension boundaries.
 
 No default `blocker` row, but complexity still *reaches* `blocker`: a base `high` finding with `fix-cost-later: structural` takes the `+1` compounding bump to `blocker`. "No blocker row" means no *base* blocker, not that complexity caps at high. (Once criticality returns, the floor may push complexity findings up on `critical`-tier paths.)
 
-Recommendation shape: "Extract `<sub-function>`" / "Inline `<one-call helper>`" / "Derive `<value>` instead of caching" / "Replace `<string>` with `<enum>`" / "Replace `<vague-name>` with `<concrete-name>`".
+**The budget is a smell trigger, not a target.** Splitting a coherent function into shallow pieces to get under 40 lines is itself a `complexity` finding — grade the resulting call-depth and interface cost, not the line count. When a function is over budget but has no clean decomposition, grade it clean and record why; the budget rows fire only when a decomposition exists that would leave each piece independently understandable.
+
+Recommendation shape: "Extract `<sub-function>`" / "Inline `<one-call helper>`" / "Derive `<value>` instead of caching" / "Replace `<string>` with `<enum>`" / "Replace `<vague-name>` with `<concrete-name>`" / "Inline `<pass-through>` into its caller" / "Collapse `<layer-a>` and `<layer-b>` — same abstraction twice" / "Pass `<context-object>` instead of threading `<param>` through 3 layers" / "Keep `<function>` whole — the split to meet budget fragments one abstraction".
 
 ### deslop
 
@@ -241,7 +250,7 @@ Per-language pattern catalogs with lint-rule mappings live in `deslop-rust.md` /
 
 Inherited shape: duplicated logic or a dead branch the diff copies or leaves untouched beside its change. Read the surrounding block, not only the hunk.
 
-Boundaries: correctness (AI-residue claim to deslop, silent-failure to correctness), nih (existing helper to nih), assertions (generic catch in tests to assertions), encapsulation (misplaced-invariant dup to encapsulation). Full rules in § Dimension boundaries.
+Boundaries: correctness (AI-residue claim to deslop, silent-failure to correctness), nih (existing helper to nih), assertions (generic catch in tests to assertions), encapsulation (misplaced-invariant dup to encapsulation), complexity (fake-modularity file sprawl to deslop, pass-through and same-abstraction layers to complexity). Full rules in § Dimension boundaries.
 
 No default `blocker` row.
 
@@ -336,6 +345,8 @@ When two dimensions could tag the same `path:line`, this table decides the prima
 | efficiency / correctness | TOCTOU as wasted work tags efficiency; TOCTOU that can produce wrong data under a race tags correctness. Split by failure mode. |
 | encapsulation / deslop | Duplication caused by a misplaced invariant tags encapsulation (root cause is ownership), not deslop. |
 | encapsulation / complexity | A parameter that leaks context or type across a boundary tags encapsulation; raw param count or threading with no boundary concern tags complexity. |
+| complexity / encapsulation (exported special case) | Extends the `encapsulation / complexity` row above. When a threaded parameter also carries a decision the producer has the information to make (a voodoo constant), encapsulation wins — misplaced ownership is the root cause. Structural cost alone, with no misplaced decision, stays complexity. |
+| complexity / deslop | Pass-through methods and same-abstraction layers tag complexity; a single-function utils file or one-consumer over-abstraction tags deslop. Both read as fake modularity — split by whether the harm is call-depth or file sprawl. |
 | spec / correctness | Emit both with a cross-reference: spec records the broken contract commitment, correctness records the runtime risk. They are orthogonal. |
 | assertions / telemetry | Tests asserting on log strings are telemetry-owned. |
 | complexity / efficiency | Complexity owns the structural decision to cache; efficiency owns the runtime cost of redundant work. |
