@@ -197,9 +197,57 @@ struct ReviewedCalibration {
     digest: String,
     thresholds: Thresholds,
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum FindingKind {
+    Exact,
+    Semantic,
+}
+impl std::fmt::Display for FindingKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            FindingKind::Exact => "exact",
+            FindingKind::Semantic => "semantic",
+        })
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+enum DispositionStatus {
+    Intentional,
+    Debt,
+    ReviewRequired,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum FindingDisposition {
+    Intentional,
+    Debt,
+    Unaccepted,
+    Advisory,
+}
+impl std::fmt::Display for FindingDisposition {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            FindingDisposition::Intentional => "intentional",
+            FindingDisposition::Debt => "debt",
+            FindingDisposition::Unaccepted => "unaccepted",
+            FindingDisposition::Advisory => "advisory",
+        })
+    }
+}
+impl From<DispositionStatus> for FindingDisposition {
+    fn from(status: DispositionStatus) -> Self {
+        match status {
+            DispositionStatus::Intentional => FindingDisposition::Intentional,
+            DispositionStatus::Debt => FindingDisposition::Debt,
+            DispositionStatus::ReviewRequired => FindingDisposition::Unaccepted,
+        }
+    }
+}
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct Disposition {
-    status: String,
+    status: DispositionStatus,
     reason: Option<String>,
     issue: Option<String>,
     lane: String,
@@ -269,7 +317,7 @@ struct Finding {
     id: String,
     lane: String,
     detector: String,
-    kind: String,
+    kind: FindingKind,
     left: Chunk,
     right: Chunk,
     graph: GraphClass,
@@ -296,13 +344,13 @@ struct ReportFinding {
     id: String,
     lane: String,
     detector: String,
-    kind: String,
+    kind: FindingKind,
     left: ReportEndpoint,
     right: ReportEndpoint,
     graph: GraphClass,
     cosine: Option<f32>,
     duplicate_tokens_estimate: usize,
-    disposition: String,
+    disposition: FindingDisposition,
 }
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 struct ReportEndpoint {
@@ -359,7 +407,7 @@ struct TrendAccumulator {
 struct TrendGroup {
     lane: String,
     graph_class: String,
-    disposition: String,
+    disposition: FindingDisposition,
     current_findings: usize,
     baseline_findings: usize,
     current_estimated_duplicate_tokens: usize,
@@ -1673,10 +1721,10 @@ fn exact_findings(
                 let left = section_chunk(left_section, counter)?;
                 let right = section_chunk(right_section, counter)?;
                 findings.push(Finding {
-                    id: identity("exact", &left, &right, None),
+                    id: identity(FindingKind::Exact, &left, &right, None),
                     lane: "body".into(),
                     detector: DETECTOR_VERSION.into(),
-                    kind: "exact".into(),
+                    kind: FindingKind::Exact,
                     graph: memoized_graph_class(
                         graph_cache,
                         edges,
@@ -1850,13 +1898,13 @@ fn endpoint_identity(chunk: &Chunk) -> String {
     .expect("endpoint identity is serializable")
 }
 
-fn identity(kind: &str, a: &Chunk, b: &Chunk, lock_digest: Option<&str>) -> String {
+fn identity(kind: FindingKind, a: &Chunk, b: &Chunk, lock_digest: Option<&str>) -> String {
     let (left, right) = if a.endpoint <= b.endpoint {
         (a, b)
     } else {
         (b, a)
     };
-    let model_identity = if kind == "semantic" {
+    let model_identity = if kind == FindingKind::Semantic {
         format!(
             ":{}",
             lock_digest.expect("semantic identity requires a model-lock digest")
@@ -1874,7 +1922,10 @@ fn identity(kind: &str, a: &Chunk, b: &Chunk, lock_digest: Option<&str>) -> Stri
     )
 }
 
-fn report_finding_with_disposition(finding: &Finding, disposition: &str) -> ReportFinding {
+fn report_finding_with_disposition(
+    finding: &Finding,
+    disposition: FindingDisposition,
+) -> ReportFinding {
     let endpoint = |chunk: &Chunk| ReportEndpoint {
         path: chunk.endpoint.path.clone(),
         heading_path: chunk.endpoint.heading_path.clone(),
@@ -1894,13 +1945,13 @@ fn report_finding_with_disposition(finding: &Finding, disposition: &str) -> Repo
         graph: finding.graph.clone(),
         cosine: finding.score,
         duplicate_tokens_estimate: finding.duplicate_tokens_estimate,
-        disposition: disposition.into(),
+        disposition,
     }
 }
 
 #[cfg(test)]
 fn report_finding(finding: &Finding) -> ReportFinding {
-    report_finding_with_disposition(finding, "unaccepted")
+    report_finding_with_disposition(finding, FindingDisposition::Unaccepted)
 }
 
 const SCORE_STRATA: [(f32, f32); 5] = [(-1.0, 0.5), (0.5, 0.7), (0.7, 0.8), (0.8, 0.9), (0.9, 1.0)];
@@ -1956,7 +2007,7 @@ fn calibrate_score_distribution(
             }
             let stratum = score_stratum(score);
             counts[stratum] += 1;
-            let id = identity("semantic", left, right, Some(lock_digest));
+            let id = identity(FindingKind::Semantic, left, right, Some(lock_digest));
             let sample = || Sample {
                 left: sample_endpoint_from_chunk(left),
                 right: sample_endpoint_from_chunk(right),
@@ -1992,7 +2043,7 @@ fn calibrate_score_distribution(
 fn calibration_data(findings: &[ReportFinding]) -> CalibrationData {
     let semantic = findings
         .iter()
-        .filter(|finding| finding.kind == "semantic" && finding.cosine.is_some())
+        .filter(|finding| finding.kind == FindingKind::Semantic && finding.cosine.is_some())
         .collect::<Vec<_>>();
     let mut counts = vec![0usize; SCORE_STRATA.len()];
     let mut selected = BTreeMap::<usize, &ReportFinding>::new();
@@ -2056,15 +2107,20 @@ fn graph_class_name(graph: &GraphClass) -> String {
     .into()
 }
 
-fn finding_disposition(finding: &Finding, baseline: Option<&Baseline>, block: f32) -> String {
-    let blocking = finding.kind == "exact" || finding.score.is_some_and(|score| score >= block);
+fn finding_disposition(
+    finding: &Finding,
+    baseline: Option<&Baseline>,
+    block: f32,
+) -> FindingDisposition {
+    let blocking =
+        finding.kind == FindingKind::Exact || finding.score.is_some_and(|score| score >= block);
     if !blocking {
-        return "advisory".into();
+        return FindingDisposition::Advisory;
     }
     baseline
         .and_then(|baseline| baseline.findings.get(&finding.id))
-        .map(|disposition| disposition.status.clone())
-        .unwrap_or_else(|| "unaccepted".into())
+        .map(|disposition| disposition.status.into())
+        .unwrap_or(FindingDisposition::Unaccepted)
 }
 
 fn duplicate_components<'a>(
@@ -2129,12 +2185,12 @@ fn duplicate_components<'a>(
     components
 }
 
-fn trends(classified: &[(Finding, String)], baseline: Option<&Baseline>) -> Trends {
-    type Key = (String, String, String);
+fn trends(classified: &[(Finding, FindingDisposition)], baseline: Option<&Baseline>) -> Trends {
+    type Key = (String, String, FindingDisposition);
     let current_component_tokens = duplicate_components(
         classified
             .iter()
-            .filter(|(_, disposition)| disposition != "advisory")
+            .filter(|(_, disposition)| *disposition != FindingDisposition::Advisory)
             .map(|(finding, _)| finding),
     )
     .into_iter()
@@ -2151,7 +2207,7 @@ fn trends(classified: &[(Finding, String)], baseline: Option<&Baseline>) -> Tren
         let key = (
             finding.lane.clone(),
             graph_class_name(&finding.graph),
-            disposition.clone(),
+            *disposition,
         );
         let accumulator = groups.entry(key).or_default();
         accumulator.current_findings += 1;
@@ -2166,7 +2222,7 @@ fn trends(classified: &[(Finding, String)], baseline: Option<&Baseline>) -> Tren
                 .entry((
                     disposition.lane.clone(),
                     disposition.graph_class.clone(),
-                    disposition.status.clone(),
+                    disposition.status.into(),
                 ))
                 .or_default();
             accumulator.baseline_findings += 1;
@@ -2286,10 +2342,10 @@ fn analyze(args: AnalyzeArgs) -> Result<(), String> {
                 let score = cosine(&vectors[left_index], &vectors[right_index]);
                 if score >= floor {
                     findings.push(Finding {
-                        id: identity("semantic", left, right, Some(&lock_digest)),
+                        id: identity(FindingKind::Semantic, left, right, Some(&lock_digest)),
                         lane: "body".into(),
                         detector: DETECTOR_VERSION.into(),
-                        kind: "semantic".into(),
+                        kind: FindingKind::Semantic,
                         left: left.clone(),
                         right: right.clone(),
                         graph: memoized_graph_class(
@@ -2318,13 +2374,16 @@ fn analyze(args: AnalyzeArgs) -> Result<(), String> {
         .collect::<Vec<_>>();
     let report_findings = classified
         .iter()
-        .filter(|(_, disposition)| disposition != "intentional")
-        .map(|(finding, disposition)| report_finding_with_disposition(finding, disposition))
+        .filter(|(_, disposition)| *disposition != FindingDisposition::Intentional)
+        .map(|(finding, disposition)| report_finding_with_disposition(finding, *disposition))
         .collect::<Vec<_>>();
     let report_components = duplicate_components(
         classified
             .iter()
-            .filter(|(_, disposition)| disposition != "intentional" && disposition != "advisory")
+            .filter(|(_, disposition)| {
+                *disposition != FindingDisposition::Intentional
+                    && *disposition != FindingDisposition::Advisory
+            })
             .map(|(finding, _)| finding),
     );
     let report = Report {
@@ -2352,9 +2411,9 @@ fn analyze(args: AnalyzeArgs) -> Result<(), String> {
     fs::write(&args.markdown_out, markdown(&report)).map_err(ioerr)?;
     let blocked = classified
         .iter()
-        .filter(|(_, disposition)| disposition == "unaccepted")
+        .filter(|(_, disposition)| *disposition == FindingDisposition::Unaccepted)
         .filter(|(finding, _)| {
-            finding.kind == "exact" || finding.score.is_some_and(|score| score >= block)
+            finding.kind == FindingKind::Exact || finding.score.is_some_and(|score| score >= block)
         })
         .collect::<Vec<_>>();
     if matches!(args.mode, Mode::Check) && !blocked.is_empty() {
@@ -2594,12 +2653,14 @@ fn validate_baseline(
         );
     }
     for (id, disposition) in &value.findings {
-        if !matches!(disposition.status.as_str(), "intentional" | "debt")
-            || disposition
-                .reason
-                .as_deref()
-                .filter(|reason| !reason.trim().is_empty())
-                .is_none()
+        if !matches!(
+            disposition.status,
+            DispositionStatus::Intentional | DispositionStatus::Debt
+        ) || disposition
+            .reason
+            .as_deref()
+            .filter(|reason| !reason.trim().is_empty())
+            .is_none()
             || disposition.lane.trim().is_empty()
             || !matches!(
                 disposition.graph_class.as_str(),
@@ -2664,7 +2725,7 @@ fn baseline(command: BaselineCommand) -> Result<(), String> {
                 .findings
                 .into_iter()
                 .filter(|finding| {
-                    finding.kind == "exact"
+                    finding.kind == FindingKind::Exact
                         || finding
                             .cosine
                             .is_some_and(|score| score >= reviewed.thresholds.block)
@@ -2676,7 +2737,7 @@ fn baseline(command: BaselineCommand) -> Result<(), String> {
                     (
                         finding.id,
                         Disposition {
-                            status: "review-required".into(),
+                            status: DispositionStatus::ReviewRequired,
                             reason: None,
                             issue: None,
                             lane: finding.lane,
@@ -3215,7 +3276,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].kind, "exact");
+        assert_eq!(findings[0].kind, FindingKind::Exact);
     }
 
     #[test]
@@ -3271,16 +3332,24 @@ mod tests {
         let other = test_chunk("skills/b/SKILL.md", &["Doc", "Other"], 1, "other");
         let changed_heading = test_chunk("skills/a/SKILL.md", &["Doc", "Two"], 1, "same");
         let changed_part = test_chunk("skills/a/SKILL.md", &["Doc", "One"], 2, "same");
-        let id = identity("semantic", &base, &other, Some("lock"));
+        let id = identity(FindingKind::Semantic, &base, &other, Some("lock"));
         assert_ne!(
             id,
-            identity("semantic", &changed_heading, &other, Some("lock"))
+            identity(
+                FindingKind::Semantic,
+                &changed_heading,
+                &other,
+                Some("lock")
+            )
         );
         assert_ne!(
             id,
-            identity("semantic", &changed_part, &other, Some("lock"))
+            identity(FindingKind::Semantic, &changed_part, &other, Some("lock"))
         );
-        assert_eq!(id, identity("semantic", &other, &base, Some("lock")));
+        assert_eq!(
+            id,
+            identity(FindingKind::Semantic, &other, &base, Some("lock"))
+        );
     }
 
     #[test]
@@ -3289,12 +3358,12 @@ mod tests {
         let right = test_chunk("skills/b/SKILL.md", &["Doc", "Two"], 1, "right");
 
         assert_eq!(
-            identity("exact", &left, &right, Some("first-lock")),
-            identity("exact", &left, &right, Some("second-lock"))
+            identity(FindingKind::Exact, &left, &right, Some("first-lock")),
+            identity(FindingKind::Exact, &left, &right, Some("second-lock"))
         );
         assert_ne!(
-            identity("semantic", &left, &right, Some("first-lock")),
-            identity("semantic", &left, &right, Some("second-lock"))
+            identity(FindingKind::Semantic, &left, &right, Some("first-lock")),
+            identity(FindingKind::Semantic, &left, &right, Some("second-lock"))
         );
     }
 
@@ -3401,8 +3470,8 @@ mod tests {
 
     #[test]
     fn dispositions_and_trends_retain_intentional_and_debt_history() {
-        let intentional = test_finding("intentional-id", "exact", None, 7);
-        let debt = test_finding("debt-id", "semantic", Some(0.95), 11);
+        let intentional = test_finding("intentional-id", FindingKind::Exact, None, 7);
+        let debt = test_finding("debt-id", FindingKind::Semantic, Some(0.95), 11);
         let baseline = Baseline {
             format: 1,
             status: "reviewed".into(),
@@ -3410,21 +3479,30 @@ mod tests {
             calibration_digest: "a".repeat(64),
             block_threshold: 0.9,
             findings: BTreeMap::from([
-                (intentional.id.clone(), disposition("intentional", 7)),
-                (debt.id.clone(), disposition("debt", 11)),
+                (
+                    intentional.id.clone(),
+                    disposition(DispositionStatus::Intentional, 7),
+                ),
+                (debt.id.clone(), disposition(DispositionStatus::Debt, 11)),
             ]),
         };
         assert_eq!(
             finding_disposition(&intentional, Some(&baseline), 0.9),
-            "intentional"
+            FindingDisposition::Intentional
         );
-        assert_eq!(finding_disposition(&debt, Some(&baseline), 0.9), "debt");
-        let classified = vec![(intentional, "intentional".into()), (debt, "debt".into())];
+        assert_eq!(
+            finding_disposition(&debt, Some(&baseline), 0.9),
+            FindingDisposition::Debt
+        );
+        let classified = vec![
+            (intentional, FindingDisposition::Intentional),
+            (debt, FindingDisposition::Debt),
+        ];
         let trends = trends(&classified, Some(&baseline));
         let intentional = trends
             .groups
             .iter()
-            .find(|group| group.disposition == "intentional")
+            .find(|group| group.disposition == FindingDisposition::Intentional)
             .unwrap();
         assert_eq!(
             (intentional.current_findings, intentional.baseline_findings),
@@ -3448,7 +3526,8 @@ mod tests {
         b.tokens = 20;
         c.tokens = 30;
         let pair = |id: &str, left: Chunk, right: Chunk| {
-            let mut finding = test_finding(id, "exact", None, left.tokens.min(right.tokens));
+            let mut finding =
+                test_finding(id, FindingKind::Exact, None, left.tokens.min(right.tokens));
             finding.left = left;
             finding.right = right;
             finding
@@ -3464,7 +3543,7 @@ mod tests {
         assert_eq!(components[0].finding_ids, vec!["ab", "ac", "bc"]);
         let classified = findings
             .into_iter()
-            .map(|finding| (finding, "unaccepted".into()))
+            .map(|finding| (finding, FindingDisposition::Unaccepted))
             .collect::<Vec<_>>();
         let trend = trends(&classified, None).groups.pop().unwrap();
         assert_eq!(trend.current_estimated_duplicate_tokens, 30);
@@ -3480,14 +3559,17 @@ mod tests {
         left.tokens = 10;
         middle.tokens = 20;
         right.tokens = 30;
-        let mut first = test_finding("first", "exact", None, 10);
+        let mut first = test_finding("first", FindingKind::Exact, None, 10);
         first.left = left;
         first.right = middle.clone();
         first.graph.directly_linked = true;
-        let mut second = test_finding("second", "exact", None, 20);
+        let mut second = test_finding("second", FindingKind::Exact, None, 20);
         second.left = middle;
         second.right = right;
-        let classified = vec![(first, "debt".into()), (second, "unaccepted".into())];
+        let classified = vec![
+            (first, FindingDisposition::Debt),
+            (second, FindingDisposition::Unaccepted),
+        ];
         let trends = trends(&classified, None);
         assert_eq!(
             trends
@@ -3501,7 +3583,7 @@ mod tests {
             trends
                 .groups
                 .iter()
-                .find(|group| group.disposition == "debt")
+                .find(|group| group.disposition == FindingDisposition::Debt)
                 .unwrap()
                 .current_estimated_duplicate_tokens,
             30
@@ -3510,7 +3592,7 @@ mod tests {
 
     #[test]
     fn report_serialization_and_markdown_preserve_finding_evidence() {
-        let mut finding = test_finding("stable-id", "semantic", Some(0.875), 7);
+        let mut finding = test_finding("stable-id", FindingKind::Semantic, Some(0.875), 7);
         finding.left.endpoint.path = "skills/a/SKILL.md".into();
         finding.left.endpoint.heading_path = vec!["Doc".into(), "Parent".into(), "Left".into()];
         finding.left.endpoint.part = 2;
@@ -3528,7 +3610,7 @@ mod tests {
         finding.graph.undirected_distance = Some(1);
         finding.graph.same_component = true;
         finding.graph.disconnected = false;
-        let finding = report_finding_with_disposition(&finding, "debt");
+        let finding = report_finding_with_disposition(&finding, FindingDisposition::Debt);
         let json = serde_json::to_value(&finding).unwrap();
         assert_eq!(json["disposition"], "debt");
         assert_eq!(json["left"]["span"]["start"], 10);
@@ -3563,7 +3645,7 @@ mod tests {
                 groups: vec![TrendGroup {
                     lane: "body".into(),
                     graph_class: "directly-linked".into(),
-                    disposition: "debt".into(),
+                    disposition: FindingDisposition::Debt,
                     current_findings: 1,
                     baseline_findings: 1,
                     current_estimated_duplicate_tokens: 7,
@@ -3607,13 +3689,13 @@ mod tests {
     #[test]
     fn calibration_is_stratified_deterministic_and_review_required() {
         let mut findings = vec![
-            scored_report_finding("z-low", "semantic", Some(0.2)),
-            scored_report_finding("z-mid", "semantic", Some(0.55)),
-            scored_report_finding("a-mid", "semantic", Some(0.56)),
-            scored_report_finding("z-related", "semantic", Some(0.75)),
-            scored_report_finding("z-review", "semantic", Some(0.85)),
-            scored_report_finding("z-block", "semantic", Some(0.95)),
-            scored_report_finding("exact-is-excluded", "exact", None),
+            scored_report_finding("z-low", FindingKind::Semantic, Some(0.2)),
+            scored_report_finding("z-mid", FindingKind::Semantic, Some(0.55)),
+            scored_report_finding("a-mid", FindingKind::Semantic, Some(0.56)),
+            scored_report_finding("z-related", FindingKind::Semantic, Some(0.75)),
+            scored_report_finding("z-review", FindingKind::Semantic, Some(0.85)),
+            scored_report_finding("z-block", FindingKind::Semantic, Some(0.95)),
+            scored_report_finding("exact-is-excluded", FindingKind::Exact, None),
         ];
         let data = calibration_data(&findings);
         assert_eq!(
@@ -3734,9 +3816,9 @@ mod tests {
             detector: detector("lock"),
             mode: "report".into(),
             findings: vec![
-                scored_report_finding("below", "semantic", Some(0.92)),
-                scored_report_finding("above", "semantic", Some(0.96)),
-                scored_report_finding("exact", "exact", None),
+                scored_report_finding("below", FindingKind::Semantic, Some(0.92)),
+                scored_report_finding("above", FindingKind::Semantic, Some(0.96)),
+                scored_report_finding("exact", FindingKind::Exact, None),
             ],
             duplicate_components: vec![],
             frontmatter: vec![],
@@ -3788,6 +3870,38 @@ mod tests {
         assert!(validate_baseline(&baseline, "lock", Some(&reviewed))
             .unwrap_err()
             .contains("explicitly rebaseline"));
+    }
+
+    // A misspelled disposition must fail loudly at deserialize rather than reaching the
+    // block/allow decision, where it would read as "not intentional" and silently pass a
+    // real duplicate through a green CI run.
+    #[test]
+    fn misspelled_disposition_status_is_rejected_at_deserialize() {
+        let disposition = |status: &str| {
+            format!(
+                "status: {status}\nreason: accepted\nlane: body\ngraph_class: linked\nduplicate_tokens_estimate: 10\n"
+            )
+        };
+
+        for accepted in ["intentional", "debt", "review-required"] {
+            serde_yaml::from_str::<Disposition>(&disposition(accepted))
+                .unwrap_or_else(|error| panic!("{accepted} must deserialize: {error}"));
+        }
+
+        for typo in ["intentionl", "Intentional", "dept", "unaccepted", ""] {
+            assert!(
+                serde_yaml::from_str::<Disposition>(&disposition(typo)).is_err(),
+                "{typo:?} must be rejected, not treated as a non-blocking disposition"
+            );
+        }
+    }
+
+    // `identity()` interpolates the kind into the digest text, so these strings are part of
+    // the on-disk fingerprint: changing them silently rebaselines every finding.
+    #[test]
+    fn finding_kind_display_is_stable_wire_text() {
+        assert_eq!(FindingKind::Exact.to_string(), "exact");
+        assert_eq!(FindingKind::Semantic.to_string(), "semantic");
     }
 
     #[test]
@@ -3868,9 +3982,9 @@ mod tests {
         }
     }
 
-    fn disposition(status: &str, tokens: usize) -> Disposition {
+    fn disposition(status: DispositionStatus, tokens: usize) -> Disposition {
         Disposition {
-            status: status.into(),
+            status,
             reason: Some("reviewed".into()),
             issue: None,
             lane: "body".into(),
@@ -3914,7 +4028,7 @@ mod tests {
         }
     }
 
-    fn test_finding(id: &str, kind: &str, score: Option<f32>, tokens: usize) -> Finding {
+    fn test_finding(id: &str, kind: FindingKind, score: Option<f32>, tokens: usize) -> Finding {
         let mut left = test_chunk(&format!("{id}-left.md"), &["Doc", "Left"], 1, "left");
         let mut right = test_chunk(&format!("{id}-right.md"), &["Doc", "Right"], 1, "right");
         left.tokens = tokens;
@@ -3923,7 +4037,7 @@ mod tests {
             id: id.into(),
             lane: "body".into(),
             detector: DETECTOR_VERSION.into(),
-            kind: kind.into(),
+            kind,
             left,
             right,
             graph: GraphClass {
@@ -3939,7 +4053,7 @@ mod tests {
         }
     }
 
-    fn scored_report_finding(id: &str, kind: &str, cosine: Option<f32>) -> ReportFinding {
+    fn scored_report_finding(id: &str, kind: FindingKind, cosine: Option<f32>) -> ReportFinding {
         let mut finding = test_finding(id, kind, cosine, 1);
         finding.left.original_excerpt = format!("{id} left");
         finding.right.original_excerpt = format!("{id} right");
