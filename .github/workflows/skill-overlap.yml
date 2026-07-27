@@ -41,6 +41,7 @@ jobs:
         run: echo "MODEL_DIR=$RUNNER_TEMP/skill-overlap-model" >> "$GITHUB_ENV"
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
       - name: Restore cargo + model cache
+        id: cache
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
@@ -144,8 +145,10 @@ jobs:
           if [[ "${{ steps.analyze.outcome }}" == failure ]]; then
             echo "::error::skill-overlap check failed; accept a blocker by recording it as intentional or debt with a reason in .github/skill-overlap-baseline.yml, or fix the overlap."
           fi
+      # Saving is what makes the split worthwhile: it still runs when analysis fails, which is
+      # the run this workflow exists to produce. Skipped on an exact-key hit, where save errors.
       - name: Save cargo + model cache
-        if: always()
+        if: always() && steps.cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
