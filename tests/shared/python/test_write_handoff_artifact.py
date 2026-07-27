@@ -590,7 +590,15 @@ class TestAtomicHandoffCommit:
         attempt = record.attempts[0]
         attempt.current_phase = "cook"
         writer.work._save(record)
-        contracts = {"phases": {"cook": {"next": ["tasks"], "payload": {"type": "mapping", "fields": {}}}, "press": {"next": ["done"], "payload": {"type": "mapping", "fields": {}}}}}
+        schema = writer.handoff.PayloadSchema
+        string = schema("string", required=True)
+        task = schema("mapping", fields={"phase": string, "subject": string, "input": schema("mapping")})
+        contracts = writer.handoff.TransitionRegistry(phases={
+            "cook": writer.handoff.PhaseContract(
+                "cook", ("tasks",), schema("mapping", fields={"tasks": schema("list", items=task)})
+            ),
+            "press": writer.handoff.PhaseContract("press", ("done",), schema("mapping", fields={})),
+        })
         request = {
             "phase": "cook", "slug": "tasks", "work_id": record.work_id, "attempt_id": attempt.attempt_id,
             "expected_revision": 0, "next_phase": "tasks", "status": "ok", "halt_reason": None,

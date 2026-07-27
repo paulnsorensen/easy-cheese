@@ -39,8 +39,10 @@ jobs:
           sudo install -m 755 "/tmp/gh_${ver}_linux_amd64/bin/gh" /usr/local/bin/gh
           gh --version
 
-      - name: Install PyYAML build dependency
-        run: pip install --no-cache-dir pyyaml==6.0.2
+      - name: Install pinned bundle dependencies
+        run: >-
+          pip install --no-cache-dir pyyaml==6.0.2
+          cattrs==26.1.0 attrs==26.1.0 typing-extensions==4.16.0
       - name: Stage shippable release tree
         run: python3 scripts/stage_release.py --out "$RUNNER_TEMP/release"
 

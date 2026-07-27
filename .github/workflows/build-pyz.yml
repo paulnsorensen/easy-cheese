@@ -46,8 +46,10 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install PyYAML
-        run: pip install --no-cache-dir pyyaml==6.0.2
+      - name: Install pinned bundle dependencies
+        run: >-
+          pip install --no-cache-dir pyyaml==6.0.2
+          cattrs==26.1.0 attrs==26.1.0 typing-extensions==4.16.0
       - name: Build bundles
         run: python3 scripts/build_pyz.py
 

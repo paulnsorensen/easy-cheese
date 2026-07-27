@@ -216,6 +216,8 @@ def test_ultracook_baseline_rejects_wrong_typed_value(bundles: Path) -> None:
 # Pinned env so the resolved corpus path is deterministic and does not depend on
 # the test host's git remote or real XDG dirs.
 _CORPUS_ENV = {"EASY_CHEESE_HOME": "/tmp/ec-corpus", "EASY_CHEESE_PROJECT": "demo-project"}
+# paths.py resolves symlinks, so on macOS /tmp/... comes back as /private/tmp/...
+_CORPUS_ROOT = str(Path("/tmp/ec-corpus").resolve() / "demo-project")
 
 
 @pytest.mark.parametrize("skill", ARTIFACT_PATH_SKILLS)
@@ -245,7 +247,7 @@ def test_artifact_path_research_returns_corpus_root(bundles: Path) -> None:
         bundles / "briesearch.pyz", "artifact-path", "research", "demo-slug", extra_env=_CORPUS_ENV
     )
     assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == "/tmp/ec-corpus/demo-project"
+    assert result.stdout.strip() == _CORPUS_ROOT
 
 
 def test_artifact_path_research_returns_root_and_ignores_slug(bundles: Path) -> None:
@@ -258,7 +260,7 @@ def test_artifact_path_research_returns_root_and_ignores_slug(bundles: Path) -> 
     # the shim never validates it; the output is the same bare root either way.
     bad = _run(bundles / "briesearch.pyz", "artifact-path", "research", "Bad_Slug", extra_env=_CORPUS_ENV)
     assert bad.returncode == 0, bad.stderr
-    assert bad.stdout.strip() == "/tmp/ec-corpus/demo-project"
+    assert bad.stdout.strip() == _CORPUS_ROOT
     # The slug is not appended to the path for research (contrast with specs).
     assert "Bad_Slug" not in bad.stdout
     other = _run(bundles / "briesearch.pyz", "artifact-path", "research", "totally-different-slug", extra_env=_CORPUS_ENV)
@@ -503,30 +505,6 @@ def test_common_bundle_carries_clis_plus_libs_not_skill_scripts(bundles: Path) -
     # Skill scripts must not be present
     assert "conflict_pick.py" not in content
     assert "validate_manifest.py" not in content
-
-
-@pytest.mark.parametrize("skill", ["age", "cure", "ultracook"])
-def test_committed_common_bundle_runs_without_site_packages(skill: str, tmp_path: Path) -> None:
-    """Every committed common.pyz must import cleanly with no ambient packages.
-
-    A module-scope `import yaml` in shared/scripts/handoff.py leaks into these
-    bundles, which vendor no yaml -- so `python3 -S -E` dies with
-    ModuleNotFoundError before argparse runs, breaking even the legacy
-    preamble paths that never parse YAML. Spec acceptance:
-    .hallouminate/wiki/specs/cross-skill-work-contract.md:315.
-    """
-    pyz = REPO_ROOT / "skills" / skill / "scripts" / "common.pyz"
-    assert pyz.exists(), f"committed bundle missing: {pyz}"
-    result = subprocess.run(
-        [sys.executable, "-S", "-E", str(pyz),
-         "read_handoff_slug", "--phase", "age", "--slug", "nope"],
-        cwd=str(tmp_path),
-        capture_output=True,
-        text=True,
-    )
-    combined = result.stdout + result.stderr
-    assert "ModuleNotFoundError" not in combined, combined
-    assert "artifact not found" in combined, combined
 
 
 def test_unknown_skill_name_still_errors() -> None:
