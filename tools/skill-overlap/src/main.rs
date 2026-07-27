@@ -290,7 +290,6 @@ struct Document {
 struct Chunk {
     endpoint: Endpoint,
     payload: String,
-    evidence: String,
     original_excerpt: String,
     tokens: usize,
     original_span: Span,
@@ -1183,7 +1182,8 @@ fn extract_relative_refs(text: &str) -> Vec<String> {
     }
     for capture in ticks.captures_iter(text) {
         let candidate = capture[1].split(" § ").next().unwrap();
-        if prose.is_match(candidate) {
+        let probe = candidate.strip_suffix('\n').unwrap_or(candidate);
+        if prose.is_match(probe) {
             refs.push(candidate.split('#').next().unwrap().to_owned());
         }
     }
@@ -1655,7 +1655,6 @@ fn chunks(documents: &[Document], counter: &TokenCounter) -> Result<Vec<Chunk>, 
                 return Err("chunk payload exceeds the 480-token cap".into());
             }
             chunks.push(Chunk {
-                evidence: normalize(&piece.body),
                 original_excerpt: piece.body.clone(),
                 endpoint: Endpoint {
                     path: section.path.clone(),
@@ -1673,17 +1672,16 @@ fn chunks(documents: &[Document], counter: &TokenCounter) -> Result<Vec<Chunk>, 
     Ok(chunks)
 }
 fn section_chunk(section: &Section, counter: &TokenCounter) -> Result<Chunk, String> {
-    let evidence = normalize(&section.body);
+    let normalized = normalize(&section.body);
     Ok(Chunk {
         endpoint: Endpoint {
             path: section.path.clone(),
             heading_path: section.headings.clone(),
             part: 1,
-            source_hash: digest(evidence.as_bytes()),
+            source_hash: digest(normalized.as_bytes()),
             span: section.span.clone(),
         },
         payload: section.body.clone(),
-        evidence,
         original_excerpt: section.body.clone(),
         tokens: counter.count(&section.body)?,
         original_span: section.span.clone(),
@@ -2417,7 +2415,7 @@ fn analyze(args: AnalyzeArgs) -> Result<(), String> {
         trends: trends(&classified, baseline.as_ref()),
         findings: report_findings,
         duplicate_components: report_components,
-        frontmatter: frontmatter_advisories(&roots)?,
+        frontmatter: frontmatter_advisories(&roots, floor)?,
         calibration: report_calibration,
         reviewed_calibration: reviewed,
     };
@@ -2450,7 +2448,8 @@ fn analyze(args: AnalyzeArgs) -> Result<(), String> {
     Ok(())
 }
 
-fn frontmatter_advisories(roots: &[PathBuf]) -> Result<Vec<Advisory>, String> {
+const FRONTMATTER_ADVISORY_CAP: usize = 20;
+fn frontmatter_advisories(roots: &[PathBuf], floor: f32) -> Result<Vec<Advisory>, String> {
     let mut values = Vec::new();
     for root in roots {
         let file = root.join("SKILL.md");
@@ -2478,7 +2477,7 @@ fn frontmatter_advisories(roots: &[PathBuf]) -> Result<Vec<Advisory>, String> {
         for right_value in values.iter().skip(left_index + 1) {
             if left_value.field == right_value.field {
                 let score = lexical_strings(&left_value.value, &right_value.value);
-                if score > 0.0 {
+                if score >= floor {
                     results.push(Advisory {
                         left: left_value.path.clone(),
                         right: right_value.path.clone(),
@@ -2491,6 +2490,8 @@ fn frontmatter_advisories(roots: &[PathBuf]) -> Result<Vec<Advisory>, String> {
             }
         }
     }
+    results.sort_by(|a, b| b.score.total_cmp(&a.score));
+    results.truncate(FRONTMATTER_ADVISORY_CAP);
     Ok(results)
 }
 fn lexical_strings(left: &str, right: &str) -> f32 {
@@ -2893,6 +2894,11 @@ mod tests {
     fn relative_refs_match_python_contract() {
         let cases: serde_json::Value =
             serde_json::from_str(include_str!("../fixtures/relative-md-refs.json")).unwrap();
+        assert_eq!(
+            cases.as_array().unwrap().len(),
+            3,
+            "expected 3 fixture cases"
+        );
         for case in cases.as_array().unwrap() {
             let expected = case["refs"]
                 .as_array()
@@ -2907,6 +2913,31 @@ mod tests {
                 case["name"].as_str().unwrap()
             );
         }
+    }
+
+    #[test]
+    fn frontmatter_advisory_below_floor_is_suppressed() {
+        let root_a = temp_dir("frontmatter-floor-a");
+        fs::write(
+            root_a.join("SKILL.md"),
+            "---\nname: alpha\ndescription: the quick fox jumps\n---\nBody\n",
+        )
+        .unwrap();
+        let root_b = temp_dir("frontmatter-floor-b");
+        fs::write(
+            root_b.join("SKILL.md"),
+            "---\nname: beta\ndescription: the slow turtle walks\n---\nBody\n",
+        )
+        .unwrap();
+
+        let results = frontmatter_advisories(&[root_a.clone(), root_b.clone()], 0.3).unwrap();
+        assert!(
+            results.is_empty(),
+            "near-zero-score pair should be suppressed by the floor: {results:?}"
+        );
+
+        let _ = fs::remove_dir_all(root_a);
+        let _ = fs::remove_dir_all(root_b);
     }
 
     #[test]
@@ -3215,7 +3246,6 @@ mod tests {
             .skip(1)
             .find(|chunk| chunk.payload.contains("| Name | Value |"))
             .unwrap();
-        assert!(!repeated.evidence.contains("Name"));
         assert!(!repeated.original_excerpt.contains("Name"));
         assert_eq!(
             repeated.tokens,
@@ -4122,7 +4152,6 @@ mod tests {
                 span: Span { start: 1, end: 2 },
             },
             payload: "payload".into(),
-            evidence: "evidence".into(),
             original_excerpt: "original excerpt".into(),
             tokens: 1,
             original_span: Span { start: 1, end: 2 },

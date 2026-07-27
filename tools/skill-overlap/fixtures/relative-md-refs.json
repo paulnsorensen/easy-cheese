@@ -6,7 +6,12 @@
   },
   {
     "name": "external and fragments do not count",
-    "text": "[web](https://example.test/a.md) [anchor](#section) \u0060skills/age/SKILL.md\u0060",
+    "text": "[web](https://example.test/a.md) [anchor](#section) `skills/age/SKILL.md`",
     "refs": []
+  },
+  {
+    "name": "trailing newline before closing backtick",
+    "text": "see `references/a.md\n`",
+    "refs": ["references/a.md\n"]
   }
 ]
