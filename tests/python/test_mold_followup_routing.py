@@ -226,6 +226,35 @@ def test_mold_handoff_waits_for_followup_reconciliation() -> None:
     )
 
 
+def test_mold_decomposes_before_two_key_approval_and_persists_the_block() -> None:
+    flow = _section(MOLD, "Flow")
+    _assert_in_order(
+        flow,
+        "5. **Decompose for approval**",
+        "6. **Two-key handshake**",
+        "7. **Curdle**",
+    )
+
+    approval = _section(MOLD, "Approval gate")
+    _assert_in_order(
+        approval,
+        "fresh-context curd-block decomposer",
+        "`N curds / M waves`",
+        "both keys pass",
+    )
+
+    procedure = _section(CURDLE, "Pre-approval decomposer dispatch (curd block)")
+    _assert_in_order(
+        procedure,
+        "before the two-key handshake",
+        "1. **Dispatch**",
+        "2. **Validate**",
+        "`N curds / M waves`",
+        "persist the same approved curd block",
+    )
+    assert "Do not re-dispatch" in procedure
+
+
 def test_mold_never_hardcodes_transient_spec_paths() -> None:
     offenders = [
         str(path.relative_to(REPO_ROOT))

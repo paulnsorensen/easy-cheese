@@ -152,29 +152,29 @@ class TestCountBullets:
 
 
 class TestRecommend:
-    def test_at_threshold_picks_parallel_ultracook(
+    def test_at_threshold_picks_parallel_mode(
         self, curd_count: ModuleType
     ) -> None:
         # PARALLEL_THRESHOLD curds is parallel-eligible regardless of blast radius.
         skill, mode, rationale = curd_count._recommend(
             curd_count.PARALLEL_THRESHOLD, "low"
         )
-        assert skill == "/ultracook"
+        assert skill == "/cook"
         assert mode == "parallel"
         assert str(curd_count.PARALLEL_THRESHOLD) in rationale
 
-    def test_above_threshold_picks_parallel_ultracook(
+    def test_above_threshold_picks_parallel_mode(
         self, curd_count: ModuleType
     ) -> None:
         skill, mode, _ = curd_count._recommend(12, "low")
-        assert skill == "/ultracook"
+        assert skill == "/cook"
         assert mode == "parallel"
 
-    def test_one_curd_high_blast_picks_linear_ultracook(
+    def test_one_curd_high_blast_picks_linear_mode(
         self, curd_count: ModuleType
     ) -> None:
         skill, mode, rationale = curd_count._recommend(1, "high")
-        assert skill == "/ultracook"
+        assert skill == "/cook"
         assert mode == "linear"
         assert "high" in rationale
 
@@ -193,16 +193,16 @@ class TestRecommend:
         assert skill == "/cook"
         assert "unknown" in rationale
 
-    def test_zero_curds_high_blast_picks_linear_ultracook(
+    def test_zero_curds_high_blast_picks_linear_mode(
         self, curd_count: ModuleType
     ) -> None:
         skill, mode, _ = curd_count._recommend(0, "high")
-        assert skill == "/ultracook"
+        assert skill == "/cook"
         assert mode == "linear"
 
     def test_blast_radius_case_insensitive(self, curd_count: ModuleType) -> None:
         skill, mode, _ = curd_count._recommend(1, "HIGH")
-        assert skill == "/ultracook"
+        assert skill == "/cook"
         assert mode == "linear"
 
 
@@ -212,24 +212,24 @@ class TestAnalyze:
         path.write_text(body)
         return path
 
-    def test_decomposable_spec_recommends_parallel_ultracook(
+    def test_decomposable_spec_recommends_parallel_mode(
         self, curd_count: ModuleType, tmp_path: Path
     ) -> None:
         spec = self._write(tmp_path, "big.md", SPEC_LARGE)
         digest = curd_count.analyze(spec, "high")
         assert digest["candidate_curds"] == 7
         assert digest["decomposable"] is True
-        assert digest["recommended_skill"] == "/ultracook"
+        assert digest["recommended_skill"] == "/cook"
         assert digest["mode"] == "parallel"
 
-    def test_small_spec_high_blast_recommends_ultracook(
+    def test_small_spec_high_blast_recommends_linear_mode(
         self, curd_count: ModuleType, tmp_path: Path
     ) -> None:
         spec = self._write(tmp_path, "small.md", SPEC_SMALL)
         digest = curd_count.analyze(spec, "high")
         assert digest["candidate_curds"] == 1
         assert digest["decomposable"] is False
-        assert digest["recommended_skill"] == "/ultracook"
+        assert digest["recommended_skill"] == "/cook"
 
     def test_small_spec_low_blast_recommends_cook(
         self, curd_count: ModuleType, tmp_path: Path
@@ -270,13 +270,13 @@ class TestAnalyze:
         assert digest["decomposable"] is False
         assert digest["recommended_skill"] == "/cook"
 
-    def test_gates_heavy_high_blast_routes_ultracook_not_cheese_factory(
+    def test_gates_heavy_high_blast_routes_cook_not_cheese_factory(
         self, curd_count: ModuleType, tmp_path: Path
     ) -> None:
         # Even at high blast radius, gate count alone must not trigger fan-out.
         spec = self._write(tmp_path, "refactor.md", SPEC_GATES_HEAVY)
         digest = curd_count.analyze(spec, "high")
-        assert digest["recommended_skill"] == "/ultracook"
+        assert digest["recommended_skill"] == "/cook"
 
     def test_missing_goals_section_with_gates_yields_zero_curds(
         self, curd_count: ModuleType, tmp_path: Path
@@ -312,7 +312,7 @@ class TestAnalyze:
         digest = curd_count.analyze(spec, "high")
         assert digest["candidate_curds"] == 0
         assert digest["decomposable"] is False
-        assert digest["recommended_skill"] == "/ultracook"
+        assert digest["recommended_skill"] == "/cook"
 
     def test_slug_extracted_from_filename(
         self, curd_count: ModuleType, tmp_path: Path
@@ -384,7 +384,7 @@ class TestMain:
         assert exit_code == 0
         out = capsys.readouterr().out
         digest = json.loads(out)
-        assert digest["recommended_skill"] == "/ultracook"
+        assert digest["recommended_skill"] == "/cook"
         assert digest["blast_radius"] == "high"
 
     def test_no_blast_radius_arg_still_works(
