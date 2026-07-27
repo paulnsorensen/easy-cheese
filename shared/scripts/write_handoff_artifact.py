@@ -174,7 +174,10 @@ def _apply_patch(record: work.WorkRecord, attempt: work.WorkAttempt, patch: dict
 
 def _apply_handoff(record: work.WorkRecord, entry: dict, *, persist: bool = True) -> dict:
     envelope = handoff.HandoffEnvelope.from_mapping(entry["envelope"])
-    errors = handoff.validate_handoff(envelope, entry.get("contracts"))
+    contracts = entry.get("contracts")
+    errors = handoff.validate_handoff(
+        envelope, handoff.registry_from_mapping(contracts) if contracts is not None else None
+    )
     if errors:
         raise ValueError("; ".join(errors))
     event = f"handoff:{envelope.operation_id}"
@@ -292,7 +295,7 @@ def commit_handoff(
     *,
     root: Path | str | None = None,
     project: str | None = None,
-    contracts: dict | None = None,
+    contracts: handoff.TransitionRegistry | None = None,
 ) -> dict:
     """Commit an envelope artifact and its WorkRecord update as one journaled operation."""
     operation_id = operation_id or "op_" + uuid.uuid4().hex
@@ -314,7 +317,7 @@ def commit_handoff(
     errors = handoff.validate_handoff(envelope, contracts)
     if errors:
         raise ValueError("; ".join(errors))
-    contents = handoff.render_handoff(envelope, body, contracts)
+    contents = handoff.render_handoff(envelope, body, contracts=contracts)
     artifact_sha256 = hashlib.sha256(contents.encode()).hexdigest()
     target.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=target.parent, delete=False) as handle:
@@ -336,7 +339,7 @@ def commit_handoff(
                 "envelope": envelope.as_mapping(),
                 "work_patch": work_patch,
                 "task_id": task_id,
-                "contracts": contracts,
+                "contracts": handoff.registry_as_mapping(contracts) if contracts is not None else None,
                 "artifact_sha256": artifact_sha256,
             }
             if journal.is_file():

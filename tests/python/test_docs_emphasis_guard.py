@@ -378,7 +378,8 @@ def test_work_contract_docs_require_continuity_and_companion_runtime():
         "pasteurize",
         "plate",
         "press",
-        "ultracook",
+        # ultracook dropped: retired to a redirect stub that dispatches no
+        # phase of its own, so it carries no work-continuity contract.
         "wheypoint",
     )
     for skill in workflow_skills:

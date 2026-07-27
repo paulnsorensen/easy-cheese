@@ -89,11 +89,25 @@ def _cmd_envelope_parse(args: argparse.Namespace) -> None:
     cli.emit(envelope.as_mapping(), json_mode=True)
 
 
+def _contract_paths(pattern: str) -> list[Path]:
+    """Phase contracts from the nearest enclosing repo checkout.
+
+    Anchored on the working directory, not this module: inside a bundled .pyz
+    there is no repo layout around the module to walk up from. Fails loudly
+    rather than compiling an empty registry, which would validate nothing.
+    """
+    for root in (Path.cwd(), *Path.cwd().parents):
+        if paths := sorted(root.glob(pattern)):
+            return paths
+    raise cli.CliError(f"no phase contracts matched {pattern!r} under {Path.cwd()} or its parents")
+
+
 def _cmd_envelope_render(args: argparse.Namespace) -> None:
     try:
+        contracts = handoff.assemble_transition_registry(_contract_paths(args.contracts_glob))
         envelope = handoff.HandoffEnvelope.from_mapping(json.loads(args.envelope))
-        print(handoff.render_handoff(envelope, args.body))
-    except (ValueError, json.JSONDecodeError, handoff.HandoffParseError) as exc:
+        print(handoff.render_handoff(envelope, args.body, contracts=contracts))
+    except ValueError as exc:
         raise cli.CliError(str(exc)) from exc
 
 
@@ -125,6 +139,11 @@ def _setup(parser: argparse.ArgumentParser) -> None:
     envelope_render = sub.add_parser("envelope-render", help="render a versioned YAML-frontmatter envelope")
     envelope_render.add_argument("--envelope", required=True, help="JSON envelope mapping")
     envelope_render.add_argument("--body", default="")
+    envelope_render.add_argument(
+        "--contracts-glob",
+        default="skills/*/references/handoff-contract.yaml",
+        help="glob (relative to repo root) of phase contract YAML files",
+    )
     envelope_render.set_defaults(func=_cmd_envelope_render)
 
 

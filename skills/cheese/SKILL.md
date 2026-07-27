@@ -146,8 +146,8 @@ Default targets per intent:
 - **research** — `/briesearch` (recommended). No auto variant.
 - **rubber-duck** — `/culture` (recommended). Only reached when the user explicitly opted out of writes. No auto variant.
 - **mold** — `/mold` (recommended). Safe-mode alternative: `/briesearch first` when external evidence is missing.
-- **cook** — default: `/cook --auto <slug-or-path>`. Safe-mode alternatives: `/cook <slug-or-path>` (no auto), `/mold first` if scope is borderline.
-- **ultracook** — `/ultracook <slug-or-path>` (recommended for a high-blast or decomposable spec). The decomposer picks the mode: parallel curd fan-out when the spec decomposes into 2+ file-disjoint curds, else the linear 7-phase chain.
+- **cook** — default: `/cook --auto <slug-or-path>`. Safe-mode alternatives: `/cook <slug-or-path>` (no auto), `/mold first` if scope is borderline. A high-blast-radius or decomposable spec triggers cook's own fan pathway automatically — no separate dispatch needed.
+- **ultracook (retired)** — `/ultracook <slug-or-path>` resolves to `/cook <slug-or-path>`, carrying forward `--open-pr`/`--resume`/`--auto`.
 - **plate** — `/plate` for commit-only work, ordinary PR publication, or stack publication/maintenance. New PRs infer an obviously cohesive single, recommend and ask for reviewable ordered stacks, and ask when shape is ambiguous; explicit choices win.
 - **debug** — default: `/pasteurize --auto <input>`. Safe-mode alternatives: `/pasteurize <input>` (no auto), `/culture` only when the user explicitly wants no-write diagnosis.
 - **age** — `/age <ref>` (recommended). Safe-mode alternative: `/age --scope <path>` when the user named a path glob.

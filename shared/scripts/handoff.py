@@ -10,11 +10,10 @@ recognized historical notes without modifying their sources.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+from functools import cache
 from pathlib import Path
 from typing import Any
-
-import yaml
 
 # Flag propagation rules — see skills/cheese/references/handoff-gate.md § Flag propagation.
 ALWAYS_PROPAGATE: frozenset[str] = frozenset({"--hard"})
@@ -158,20 +157,31 @@ def parse_skill_dispatch(dispatch: str) -> tuple[str, list[str]]:
 
 def propagate_flags(source_flags: list[str], *, in_auto_chain: bool) -> list[str]:
     """Return the subset of source flags that survive the propagation rules."""
-    result: list[str] = []
-    for flag in source_flags:
-        bare = flag.split("=", 1)[0]
-        if bare in ALWAYS_PROPAGATE or bare in CHAIN_ONLY and in_auto_chain:
-            result.append(flag)
-    return result
+    allowed = ALWAYS_PROPAGATE | (CHAIN_ONLY if in_auto_chain else frozenset())
+    return [flag for flag in source_flags if flag.split("=", 1)[0] in allowed]
 
 
 # Versioned contract runtime --------------------------------------------------
 
 CONTRACT_VERSION = "cheese-handoff/v1"
 RESERVED_NEXT = frozenset({"done", "hold", "tasks"})
-_ENVELOPE_KEYS = frozenset({"contract_version", "work_id", "attempt_id", "operation_id", "phase", "status", "halt_reason", "next", "artifact", "payload", "provenance"})
 _SCHEMA_TYPES = frozenset({"string", "integer", "boolean", "mapping", "list"})
+
+
+def _strict_structure(value: object, expected: type) -> object:
+    if type(value) is not expected:
+        raise TypeError
+    return value
+
+
+@cache
+def _converter() -> Any:
+    from cattrs import Converter
+
+    converter = Converter(forbid_extra_keys=True)
+    converter.register_structure_hook(str, _strict_structure)
+    converter.register_structure_hook(dict, _strict_structure)
+    return converter
 
 
 @dataclass(frozen=True)
@@ -189,36 +199,49 @@ class HandoffEnvelope:
     provenance: dict
 
     @classmethod
-    def from_mapping(cls, value: dict) -> "HandoffEnvelope":
+    def from_mapping(cls, value: object) -> "HandoffEnvelope":
+        from cattrs import BaseValidationError, transform_error
+
         if not isinstance(value, dict):
             raise HandoffParseError("handoff frontmatter must be a mapping")
-        required = _ENVELOPE_KEYS - {"halt_reason", "payload", "provenance"}
-        missing = required - value.keys()
-        extra = value.keys() - _ENVELOPE_KEYS
-        if missing:
-            raise HandoffParseError(f"handoff envelope missing: {', '.join(sorted(missing))}")
-        if extra:
-            raise HandoffParseError(f"handoff envelope has unknown keys: {', '.join(sorted(extra))}")
-        return cls(**{key: value.get(key, {} if key in {"payload", "provenance"} else None) for key in _ENVELOPE_KEYS})
+        data = dict(value)
+        data.setdefault("halt_reason", None)
+        data.setdefault("payload", {})
+        data.setdefault("provenance", {})
+        try:
+            return _converter().structure(data, cls)
+        except BaseValidationError as exc:
+            raise HandoffParseError("; ".join(transform_error(exc))) from exc
 
-    def as_mapping(self) -> dict:
-        return {
-            "contract_version": self.contract_version,
-            "work_id": self.work_id,
-            "attempt_id": self.attempt_id,
-            "operation_id": self.operation_id,
-            "phase": self.phase,
-            "status": self.status,
-            "halt_reason": self.halt_reason,
-            "next": self.next,
-            "artifact": self.artifact,
-            "payload": self.payload,
-            "provenance": self.provenance,
-        }
+    def as_mapping(self) -> dict[str, Any]:
+        return _converter().unstructure(self)
+
+
+@dataclass(frozen=True)
+class PayloadSchema:
+    type: str
+    required: bool = False
+    nullable: bool = False
+    fields: dict[str, "PayloadSchema"] | None = None
+    items: "PayloadSchema | None" = None
+
+
+@dataclass(frozen=True)
+class PhaseContract:
+    phase: str
+    next: tuple[str, ...]
+    payload: PayloadSchema
+
+
+@dataclass(frozen=True)
+class TransitionRegistry:
+    phases: dict[str, PhaseContract]
 
 
 def parse_handoff(text: str, loaded_path: str | Path) -> HandoffEnvelope:
     """Parse an artifact's YAML envelope and bind it to the loaded path."""
+    import yaml
+
     if not text.startswith("---\n"):
         raise HandoffParseError("handoff requires YAML frontmatter")
     end = text.find("\n---\n", 4)
@@ -230,15 +253,15 @@ def parse_handoff(text: str, loaded_path: str | Path) -> HandoffEnvelope:
         raise HandoffParseError(f"invalid handoff YAML: {exc}") from exc
     envelope = HandoffEnvelope.from_mapping(raw)
     actual = Path(loaded_path).expanduser().resolve()
-    declared = Path(envelope.artifact).expanduser()
-    if not declared.is_absolute():
-        declared = (Path.cwd() / declared).resolve()
+    declared = Path(envelope.artifact).expanduser().resolve()
     if actual != declared:
         raise HandoffParseError(f"artifact path mismatch: {envelope.artifact!r} != {str(actual)!r}")
     return envelope
 
 
-def render_handoff(envelope: HandoffEnvelope, body: str = "", contracts: dict | None = None) -> str:
+def render_handoff(envelope: HandoffEnvelope, body: str = "", *, contracts: TransitionRegistry) -> str:
+    import yaml
+
     errors = validate_handoff(envelope, contracts)
     if errors:
         raise ValueError("; ".join(errors))
@@ -256,7 +279,7 @@ def _schema_error(schema: object, path: str = "payload") -> str | None:
     if unknown:
         return f"{path} schema has unsupported keys: {', '.join(sorted(unknown))}"
     kind = schema.get("type")
-    if kind not in _SCHEMA_TYPES:
+    if not isinstance(kind, str) or kind not in _SCHEMA_TYPES:
         return f"{path} schema has unsupported type {kind!r}"
     if any(not isinstance(schema.get(key), bool) for key in ("required", "nullable") if key in schema):
         return f"{path} schema required and nullable must be booleans"
@@ -281,10 +304,10 @@ def _schema_error(schema: object, path: str = "payload") -> str | None:
     return None
 
 
-def _validate_value(value: object, schema: dict, path: str) -> list[str]:
+def _validate_value(value: object, schema: PayloadSchema, path: str) -> list[str]:
     if value is None:
-        return [] if schema.get("nullable", False) else [f"{path} must not be null"]
-    kind = schema["type"]
+        return [] if schema.nullable else [f"{path} must not be null"]
+    kind = schema.type
     if kind == "string":
         return [] if isinstance(value, str) else [f"{path} must be a string"]
     if kind == "integer":
@@ -294,21 +317,26 @@ def _validate_value(value: object, schema: dict, path: str) -> list[str]:
     if kind == "list":
         if not isinstance(value, list):
             return [f"{path} must be a list"]
-        return [error for index, item in enumerate(value) for error in _validate_value(item, schema["items"], f"{path}[{index}]")]
+        return [
+            error
+            for index, item in enumerate(value)
+            for error in _validate_value(item, schema.items, f"{path}[{index}]")
+        ]
     if not isinstance(value, dict):
         return [f"{path} must be a mapping"]
-    fields = schema.get("fields", {})
-    errors = [f"{path} has unknown field {key!r}" for key in value.keys() - fields.keys()]
-    for name, child in fields.items():
+    if schema.fields is None:
+        return []
+    errors = [f"{path} has unknown field {key!r}" for key in value.keys() - schema.fields.keys()]
+    for name, child in schema.fields.items():
         if name not in value:
-            if child.get("required", False):
+            if child.required:
                 errors.append(f"{path}.{name} is required")
         else:
             errors.extend(_validate_value(value[name], child, f"{path}.{name}"))
     return errors
 
 
-def _payload_schema(raw: object, path: Path) -> dict:
+def _payload_schema(raw: object, path: Path) -> dict[str, Any]:
     if not isinstance(raw, dict):
         raise ValueError(f"malformed payload schema: {path}")
     schema = raw if "type" in raw else {"type": "mapping", "fields": raw}
@@ -318,13 +346,18 @@ def _payload_schema(raw: object, path: Path) -> dict:
     return schema
 
 
-def validate_handoff(envelope: HandoffEnvelope, contracts: dict | None = None) -> list[str]:
+def validate_handoff(
+    envelope: HandoffEnvelope,
+    contracts: TransitionRegistry | None = None,
+) -> list[str]:
     errors: list[str] = []
     if envelope.contract_version != CONTRACT_VERSION:
         errors.append(f"unsupported contract_version {envelope.contract_version!r}")
     if envelope.status not in {"ok", "halt"}:
         errors.append("status must be 'ok' or 'halt'")
-    if envelope.status == "halt" and (not isinstance(envelope.halt_reason, str) or not envelope.halt_reason.strip()):
+    if envelope.status == "halt" and (
+        not isinstance(envelope.halt_reason, str) or not envelope.halt_reason.strip()
+    ):
         errors.append("halt requires a non-empty halt_reason")
     if envelope.status == "ok" and envelope.halt_reason is not None:
         errors.append("ok forbids halt_reason")
@@ -335,39 +368,43 @@ def validate_handoff(envelope: HandoffEnvelope, contracts: dict | None = None) -
         errors.append("payload must be a mapping")
     if not isinstance(envelope.provenance, dict):
         errors.append("provenance must be a mapping")
-    phases = (contracts or {}).get("phases", contracts or {})
+    phases: dict[str, PhaseContract] | None = None
+    if contracts is not None:
+        if not isinstance(contracts, TransitionRegistry):
+            errors.append("contracts must be a compiled TransitionRegistry")
+        elif not contracts.phases:
+            errors.append("contracts registry has no phases")
+        else:
+            phases = contracts.phases
     if phases:
         source = phases.get(envelope.phase)
         if source is None:
             errors.append(f"unknown source phase {envelope.phase!r}")
-        elif envelope.next not in source["next"]:
+        elif envelope.next not in source.next:
             errors.append(f"disallowed transition: {envelope.phase} -> {envelope.next}")
         if envelope.next not in RESERVED_NEXT and envelope.next not in phases:
             errors.append(f"unknown next phase {envelope.next!r}")
-        if source is not None and isinstance(envelope.payload, dict) and envelope.next != "tasks":
-            errors.extend(_validate_value(envelope.payload, source["payload"], "payload"))
+        if source is not None and isinstance(envelope.payload, dict):
+            errors.extend(_validate_value(envelope.payload, source.payload, "payload"))
     if envelope.next == "tasks":
         tasks = envelope.payload.get("tasks") if isinstance(envelope.payload, dict) else None
         if not isinstance(tasks, list) or not tasks:
             errors.append("tasks requires a non-empty payload.tasks list")
-        else:
+        elif phases:
             for index, task in enumerate(tasks):
-                if not isinstance(task, dict) or set(task) - {"phase", "subject", "input"}:
-                    errors.append(f"payload.tasks[{index}] must be a phase directive")
+                if not isinstance(task, dict):
                     continue
-                if not isinstance(task.get("phase"), str) or task["phase"] not in phases:
+                if isinstance(task.get("phase"), str) and task["phase"] not in phases:
                     errors.append(f"payload.tasks[{index}].phase must name a registered phase")
-                if not isinstance(task.get("subject"), str) or not task["subject"].strip():
+                if isinstance(task.get("subject"), str) and not task["subject"].strip():
                     errors.append(f"payload.tasks[{index}].subject must be a non-empty string")
-                if "input" in task and not isinstance(task["input"], dict):
-                    errors.append(f"payload.tasks[{index}].input must be a mapping")
     return errors
 
 
 def resolve_next(
     envelope: HandoffEnvelope,
     available_phases: list[str] | set[str] | tuple[str, ...],
-    contracts: dict,
+    contracts: TransitionRegistry,
 ) -> dict[str, Any]:
     """Resolve a validated destination without rewriting persisted lifecycle state."""
     errors = validate_handoff(envelope, contracts)
@@ -394,27 +431,52 @@ def resolve_next(
     return {"action": "unavailable", "phase": envelope.next}
 
 
-def assemble_transition_registry(contract_paths) -> dict:
+def registry_as_mapping(registry: TransitionRegistry) -> dict[str, Any]:
+    """JSON-native form of a compiled registry, for journals that persist it."""
+    data = asdict(registry)
+    for contract in data["phases"].values():
+        contract["next"] = list(contract["next"])
+    return data
+
+
+def registry_from_mapping(value: object) -> TransitionRegistry:
+    """Rebuild a compiled registry from the form registry_as_mapping emits."""
+    return _converter().structure(value, TransitionRegistry)
+
+
+def assemble_transition_registry(contract_paths) -> TransitionRegistry:
     """Compile YAML phase contracts into the global registry."""
-    registry = {"phases": {}}
+    import yaml
+
+    phases: dict[str, dict[str, Any]] = {}
     for raw_path in contract_paths:
         path = Path(raw_path)
         try:
-            data = yaml.safe_load(path.read_text(encoding="utf-8"))
-        except Exception as exc:
+            text = path.read_text(encoding="utf-8")
+        except FileNotFoundError as exc:
+            raise ValueError(f"phase contract not found: {path}") from exc
+        try:
+            data = yaml.safe_load(text)
+        except yaml.YAMLError as exc:
             raise ValueError(f"malformed phase contract: {path}") from exc
         if not isinstance(data, dict) or set(data) != {"phase", "next", "payload"}:
             raise ValueError(f"malformed phase contract: {path}")
         phase, outgoing = data["phase"], data["next"]
-        if not isinstance(phase, str) or not re.fullmatch(r"[a-z][a-z-]*", phase):
+        if not isinstance(phase, str) or not re.fullmatch(r"[a-z]+(-[a-z]+)*", phase):
             raise ValueError(f"malformed phase declaration: {path}")
-        if phase in RESERVED_NEXT or phase in registry["phases"]:
+        if phase in RESERVED_NEXT or phase == "phases" or phase in phases:
             raise ValueError(f"duplicate or reserved phase declaration: {phase}")
-        if not isinstance(outgoing, list) or len(outgoing) != len(set(outgoing)) or not all(isinstance(item, str) for item in outgoing):
+        if not isinstance(outgoing, list) or not all(isinstance(item, str) for item in outgoing):
             raise ValueError(f"malformed outgoing transitions: {path}")
-        registry["phases"][phase] = {"next": outgoing, "payload": _payload_schema(data["payload"], path)}
-    for phase, contract in registry["phases"].items():
-        invalid = set(contract["next"]) - set(registry["phases"]) - RESERVED_NEXT
+        if len(outgoing) != len(set(outgoing)):
+            raise ValueError(f"malformed outgoing transitions: {path}")
+        phases[phase] = {
+            "phase": phase,
+            "next": outgoing,
+            "payload": _payload_schema(data["payload"], path),
+        }
+    for phase, contract in phases.items():
+        invalid = set(contract["next"]) - set(phases) - RESERVED_NEXT
         if invalid:
             raise ValueError(f"{phase} names unknown destinations: {', '.join(sorted(invalid))}")
-    return registry
+    return _converter().structure({"phases": phases}, TransitionRegistry)

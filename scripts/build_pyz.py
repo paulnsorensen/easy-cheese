@@ -2,8 +2,9 @@
 """Build deterministic skill bundles and the Cheese contract-runtime companion.
 
 The Cheese companion is the sole shipped runtime for cross-skill contracts. It
-embeds the compiled phase registry and pinned pure-Python PyYAML so users install
-no Python libraries separately. Ordinary skill bundles remain independently built.
+embeds the compiled phase registry and the pinned pure-Python distributions the
+runtime imports, so users install no Python libraries separately. Ordinary skill
+bundles remain independently built.
 """
 
 from __future__ import annotations
@@ -24,6 +25,15 @@ SHARED_SCRIPTS = REPO_ROOT / "shared" / "scripts"
 SHARED_MODULES = {p.stem for p in SHARED_SCRIPTS.glob("*.py")}
 ZIP_TIMESTAMP = (1980, 1, 2, 0, 0, 0)
 PY_YAML_VERSION = "6.0.2"
+# (distribution name, pinned version, top-level import roots) for every library
+# vendored into cheese.pyz. Each must be pure Python -- the bundle ships no
+# compiled extensions. A root names either a package directory or a bare module.
+VENDORED_DISTRIBUTIONS = (
+    ("PyYAML", PY_YAML_VERSION, ("yaml",)),
+    ("cattrs", "26.1.0", ("cattr", "cattrs")),
+    ("attrs", "26.1.0", ("attr", "attrs")),
+    ("typing-extensions", "4.16.0", ("typing_extensions",)),
+)
 CHEESE = "cheese"
 
 sys.path.insert(0, str(SHARED_SCRIPTS))
@@ -281,29 +291,33 @@ def build_bundle(skill: str, target: Path) -> Path:
     return target
 
 
-def _require_pyyaml() -> importlib.metadata.Distribution:
-    """Require and return the exact PyYAML distribution bundled into Cheese."""
+def _require_distribution(name: str, version: str) -> importlib.metadata.Distribution:
+    """Require and return one exact pinned distribution vendored into Cheese."""
     try:
-        distribution = importlib.metadata.distribution("PyYAML")
+        distribution = importlib.metadata.distribution(name)
     except importlib.metadata.PackageNotFoundError as exc:
-        raise SystemExit(f"build_pyz: PyYAML {PY_YAML_VERSION} is required") from exc
-    if distribution.version != PY_YAML_VERSION:
+        raise SystemExit(f"build_pyz: {name} {version} is required") from exc
+    if distribution.version != version:
         raise SystemExit(
-            f"build_pyz: PyYAML must be exactly {PY_YAML_VERSION}, "
+            f"build_pyz: {name} must be exactly {version}, "
             f"found {distribution.version}"
         )
     return distribution
 
 
-def _stage_pyyaml(
-    stage: Path, distribution: importlib.metadata.Distribution
+def _stage_distribution(
+    stage: Path,
+    name: str,
+    distribution: importlib.metadata.Distribution,
+    roots: tuple[str, ...],
 ) -> None:
-    """Stage PyYAML's pure-Python package and license into the archive."""
+    """Stage one distribution's pure-Python modules and license into the archive."""
     files = tuple(distribution.files or ())
+    wanted = set(roots) | {f"{root}.py" for root in roots}
     sources = sorted(
         member
         for member in files
-        if member.parts[:1] == ("yaml",) and member.suffix == ".py"
+        if member.parts[0] in wanted and member.suffix == ".py"
     )
     licenses = [
         member
@@ -312,21 +326,24 @@ def _stage_pyyaml(
         and any(part.endswith(".dist-info") for part in member.parts)
     ]
     if not sources or len(licenses) != 1:
-        raise SystemExit("build_pyz: PyYAML distribution is incomplete")
+        raise SystemExit(f"build_pyz: {name} distribution is incomplete")
 
     for member in sources:
         target = stage / Path(*member.parts)
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(distribution.locate_file(member), target)
 
-    license_target = stage / "licenses" / "PyYAML-LICENSE.txt"
+    license_target = stage / "licenses" / f"{name}-LICENSE.txt"
     license_target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy(distribution.locate_file(licenses[0]), license_target)
 
 
 def build_cheese_bundle(target: Path) -> Path:
-    """Build the Cheese companion with compiled contracts and bundled PyYAML."""
-    distribution = _require_pyyaml()
+    """Build the Cheese companion with compiled contracts and vendored libraries."""
+    distributions = [
+        (name, _require_distribution(name, version), roots)
+        for name, version, roots in VENDORED_DISTRIBUTIONS
+    ]
     target.parent.mkdir(parents=True, exist_ok=True)
     registry = handoff.assemble_transition_registry(
         sorted((REPO_ROOT / "skills").glob("*/references/handoff-contract.yaml"))
@@ -342,9 +359,15 @@ def build_cheese_bundle(target: Path) -> Path:
             "write_handoff_artifact",
         ):
             shutil.copy(SHARED_SCRIPTS / f"{module}.py", stage / f"{module}.py")
-        _stage_pyyaml(stage, distribution)
+        for name, distribution, roots in distributions:
+            _stage_distribution(stage, name, distribution, roots)
         (stage / "contract_registry.py").write_text(
-            f"REGISTRY = {registry!r}\n", encoding="utf-8"
+            # The registry is compiled at build time and emitted as a repr
+            # literal, so loading it costs no YAML parse. That repr names the
+            # contract dataclasses, so the module must import them itself.
+            "from handoff import PayloadSchema, PhaseContract, TransitionRegistry\n\n"
+            f"REGISTRY = {registry!r}\n",
+            encoding="utf-8",
         )
         (stage / "contract_registry_cli.py").write_text(
             "import sys\nfrom contract_registry import REGISTRY\n\n"
@@ -352,7 +375,7 @@ def build_cheese_bundle(target: Path) -> Path:
             "    if sys.argv[1:] != ['validate']:\n"
             "        sys.stderr.write('usage: cheese.pyz contract-registry validate\\n')\n"
             "        raise SystemExit(2)\n"
-            "    phases = REGISTRY.get('phases') if isinstance(REGISTRY, dict) else None\n"
+            "    phases = getattr(REGISTRY, 'phases', None)\n"
             "    if not isinstance(phases, dict) or not phases:\n"
             "        raise SystemExit('invalid compiled contract registry')\n"
             "    print('contract registry valid')\n\n"

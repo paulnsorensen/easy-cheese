@@ -6,7 +6,6 @@ from pathlib import Path
 
 import yaml
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SKILLS = REPO_ROOT / "skills"
 DISPATCHING = {
@@ -17,7 +16,9 @@ DISPATCHING = {
     "cure",
     "hard-cheese",
     "mold",
-    "ultracook",
+    # ultracook excluded: retired to a short redirect stub that no longer
+    # dispatches agents itself (its `## Agent resolution` table moved into
+    # cook/SKILL.md's `## Fan pathway`, already covered via "cook").
 }
 TABLE_COLUMNS = (
     "Work",

@@ -143,6 +143,7 @@ class TestWriterToReaderRoundTrip:
             "artifact": ".cheese/cook/cook-to-press.md",
             "orientation": "implemented widget",
             "halt_reason": None,
+            "format": "legacy",
             "taste_test": None,
             "durable_flags": None,
             "baseline": None,

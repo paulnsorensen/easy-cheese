@@ -210,7 +210,7 @@ class TestEnvelope:
             "halt_reason": None,
             "next": "age",
             "artifact": str(artifact),
-            "payload": {"coverage": "hardened"},
+            "payload": {"baseline": "abc123"},
             "provenance": {"source": "press"},
         }
         rendered = _run(
