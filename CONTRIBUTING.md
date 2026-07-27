@@ -19,7 +19,9 @@ Requires Python 3.12+ and (for bash tests) bats-core + shellcheck.
 ```sh
 git clone https://github.com/paulnsorensen/easy-cheese.git
 cd easy-cheese
-pip install pyyaml==6.0.2 pytest==9.0.3   # validation + Python tests
+pip install \
+  pyyaml==6.0.2 pytest==9.0.3 \
+  cattrs==26.1.0 attrs==26.1.0 typing-extensions==4.16.0  # Python tests
 brew install bats-core shellcheck           # macOS — bash tests
 ```
 

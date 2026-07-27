@@ -15,6 +15,7 @@
 - [cross-skill-work-contract-001](./cross-skill-work-contract-001.md) — ADR: WorkRecord continuity is worktree-scoped and pointer-free
 - [cross-skill-work-contract-002](./cross-skill-work-contract-002.md) — ADR: Cross-skill handoffs use a versioned envelope and phase-owned contracts
 - [cross-skill-work-contract-003](./cross-skill-work-contract-003.md) — ADR: Cheese bundles its YAML contract runtime
+- [cross-skill-work-contract-004](./cross-skill-work-contract-004.md) — ADR: Frozen dataclasses with cattrs define work-contract models
 - [culture-wheypoint-collaboration-001](./culture-wheypoint-collaboration-001.md) — ADR: /culture delegates its end-of-session artifact to /wheypoint
 - [hallouminate-wiring-stack-001](./hallouminate-wiring-stack-001.md) — ADR: hallouminate wiring ships as a stacked 4-PR build, one PR per issue
 - [hallouminate-wiring-stack-002](./hallouminate-wiring-stack-002.md) — ADR: cook and age record durable-change flags; only the publication boundary writes the wiki
