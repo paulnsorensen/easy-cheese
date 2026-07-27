@@ -1,14 +1,16 @@
 # Fan-out engine entities
 
 The fan-out engine (`src/fanout/`, formerly `/cheese-factory`, now driven by
-`/ultracook`'s parallel mode) has two domain entities the validators check:
-the **Curd** and the **Wiring node**. Each is *one* entity that appears at two
-pipeline stages with a growing field set, and each has a single validation
-home under `src/fanout/` rather than splitting its rules across two files.
+`/cook`'s fan pathway — `/ultracook` is retired to a redirect stub) has three
+domain entities the validators check: the **Curd**, the **Wiring node**, and
+the **Curd block**. Curd and Wiring node are each *one* entity that appears at
+two pipeline stages with a growing field set; each entity has a single
+validation home under `src/fanout/` rather than splitting its rules across
+files.
 
 ## The Curd
 
-A Curd is the unit of independent parallel work in `/ultracook` parallel mode — one
+A Curd is the unit of independent parallel work in `/cook`'s fan pathway — one
 behaviour, file-disjoint from its siblings. It appears at two stages:
 
 - **Decomposition stage** — `{id, behavior, acceptance_criterion,
@@ -38,6 +40,26 @@ A Wiring node (`W<n>`) is the unit of cross-curd integration —
   known set, `file` present, `status` enum (`_validate_wiring`,
   `validate_manifest.py:100-119`).
 
+## The Curd block
+
+Added in the subagent-routing overhaul foundation (PR #315). A Curd block is
+the **decomposition artifact** both decomposer doors emit — `/mold`'s
+pre-approval decomposer dispatch and `/cook`'s fallback decompose gate — with
+a **locked vocabulary that deliberately does not overlap the run-manifest
+Curd**:
+`curds[]` entries carry `{slug, contract, files, test_target, acceptance,
+seed}` plus block-level `waves[]` and `decomposer{}` (`src/fanout/curd_block.py`).
+The disjointness of the two vocabularies is test-locked: the field-name set is
+AST-derived from `curd.py`'s actual source so a collision fails the suite
+(`tests/fanout/python/test_curd_block.py`).
+
+- The single producer contract lives at `skills/cheese/references/decomposer.md`
+  ("same schema both doors"); the legacy `skills/ultracook/references/decomposer-prompt.md`
+  produces the **incompatible run-manifest schema** and is scope-noted as
+  such — do not present the two as the same decomposer.
+- Deployed as the `curd-block` subcommand of `ultracook.pyz`
+  (`scripts/build_pyz.py`).
+
 ## One validation home per entity
 
 Each entity has its own module under `src/fanout/`, so "what is a valid curd"
@@ -47,14 +69,20 @@ has a single definition rather than being split across the two validators:
   (`curd.py:69`), `disjoint_files_errors` (`curd.py:90`).
 - `src/fanout/wiring.py` — `graph_errors` (`wiring.py:26`), `lifecycle_errors`
   (`wiring.py:58`).
+- `src/fanout/curd_block.py` — `validate_curd_block` (locked decomposition
+  vocabulary; see The Curd block above).
 
 The always-on layer is named per entity, not forced symmetric: a Curd's is
 *content* (`behaviour_errors`), a Wiring node's is *graph* (`graph_errors`).
 The run-manifest-only rules sit in each module's `lifecycle_errors`.
-File-disjointness lives in `curd.py` as an entity invariant; the parallel-
-eligibility gate (`len(curds) >= PARALLEL_THRESHOLD` routes to parallel mode;
-below it stays linear `/ultracook`) stays in `validate_decomposition.py`
-because it is pipeline policy, not a fact about whether a curd is valid.
+The pairwise file-disjointness **algorithm** is generalized into
+`shared/scripts/schema.py::disjoint_errors` and called by both `curd.py`
+(strict, `id`-keyed) and `curd_block.py` (lenient, `slug`-keyed) with each
+module's original error text byte-preserved — the *invariant* stays owned per
+entity, only the algorithm is shared. The parallel-eligibility gate
+(`len(curds) >= PARALLEL_THRESHOLD` routes to the fan pathway; below it stays
+a linear `/cook` run) stays in `validate_decomposition.py` because it is
+pipeline policy, not a fact about whether a curd is valid.
 
 **The validators are deliberately NOT merged.** `validate_decomposition.py`
 and `validate_manifest.py` stay as leaf/composite validators that
@@ -68,3 +96,6 @@ four-way validator merge.
 
 - [architecture](./architecture.md) — the skills-only collection and the cheese pipeline.
 - [workflow-invariants](./workflow-invariants.md) — pipeline ordering and the curdle gate.
+- [age-fanout-router](./architecture/age-fanout-router.md) — deterministic review fan-out sizing (same PR).
+
+_Source: subagent-routing-overhaul PR1 stack (PR #315 entity/validation foundation; PR #317 `/mold` integration and `/ultracook` retirement) cure/plate write-back · Updated: 2026-07-24 · Supersedes: /ultracook-owned framing (retired in PR #317)_
