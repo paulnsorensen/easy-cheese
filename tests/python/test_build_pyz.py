@@ -15,20 +15,26 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 import build_pyz  # noqa: E402
 
 
-def test_build_workflow_installs_pinned_pyyaml_before_bundle_build() -> None:
-    workflow = (REPO_ROOT / ".github" / "workflows" / "build-pyz.yml").read_text()
-    install = f"pip install --no-cache-dir pyyaml=={build_pyz.PY_YAML_VERSION}"
-    build = "python3 scripts/build_pyz.py"
-    assert install in workflow
-    assert workflow.index(install) < workflow.index(build)
+def _assert_pins_installed_before(workflow_name: str, step: str) -> None:
+    """Every distribution build_pyz vendors must be pip-pinned before ``step``.
+
+    A missing pin makes the bundle build fail in CI (PyYAML) or ship a runtime
+    that dies with ModuleNotFoundError under `python3 -S` (cattrs and friends).
+    """
+    workflow = (REPO_ROOT / ".github" / "workflows" / workflow_name).read_text()
+    assert f"pip install --no-cache-dir pyyaml=={build_pyz.PY_YAML_VERSION}" in workflow
+    for name, version, _roots in build_pyz.VENDORED_DISTRIBUTIONS:
+        pin = f"{name.lower()}=={version}"
+        assert pin in workflow, f"{workflow_name} is missing pin {pin}"
+        assert workflow.index(pin) < workflow.index(step), f"{pin} installed after {step}"
 
 
-def test_release_workflow_installs_pinned_pyyaml_before_staging() -> None:
-    workflow = (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text()
-    install = f"pip install --no-cache-dir pyyaml=={build_pyz.PY_YAML_VERSION}"
-    stage = "python3 scripts/stage_release.py"
-    assert install in workflow
-    assert workflow.index(install) < workflow.index(stage)
+def test_build_workflow_installs_pinned_distributions_before_bundle_build() -> None:
+    _assert_pins_installed_before("build-pyz.yml", "python3 scripts/build_pyz.py")
+
+
+def test_release_workflow_installs_pinned_distributions_before_staging() -> None:
+    _assert_pins_installed_before("release.yml", "python3 scripts/stage_release.py")
 
 
 def test_cheese_archive_bundles_pure_python_pyyaml_and_license(tmp_path: Path) -> None:
@@ -55,6 +61,22 @@ def test_cheese_archive_is_reproducible_with_bundled_pyyaml(tmp_path: Path) -> N
     first = build_pyz.build_cheese_bundle(tmp_path / "first.pyz")
     second = build_pyz.build_cheese_bundle(tmp_path / "second.pyz")
     assert first.read_bytes() == second.read_bytes()
+
+
+def test_cheese_archive_bundles_every_pinned_distribution(tmp_path: Path) -> None:
+    """All four vendored distributions ship with their sources and licenses.
+
+    handoff.py imports cattrs lazily, so a bundle missing it builds fine and
+    only fails at runtime under `python3 -S`.
+    Spec: .hallouminate/wiki/specs/cross-skill-work-contract.md:279.
+    """
+    archive = build_pyz.build_cheese_bundle(tmp_path / "cheese.pyz")
+    with zipfile.ZipFile(archive) as bundle:
+        names = set(bundle.namelist())
+        for name, _version, roots in build_pyz.VENDORED_DISTRIBUTIONS:
+            assert bundle.read(f"licenses/{name}-LICENSE.txt").strip()
+            for root in roots:
+                assert {f"{root}/__init__.py", f"{root}.py"} & names, root
 
 
 def test_cheese_archive_runs_without_ambient_packages(tmp_path: Path) -> None:
