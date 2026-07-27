@@ -418,8 +418,8 @@ struct Trends {
     groups: Vec<TrendGroup>,
 }
 
-fn main() -> Result<(), String> {
-    match Cli::parse().command {
+fn main() -> std::process::ExitCode {
+    let result = match Cli::parse().command {
         Command::Model {
             command: ModelCommand::Fetch(args),
         } => model_fetch(&args),
@@ -427,6 +427,13 @@ fn main() -> Result<(), String> {
         Command::Analyze(args) => analyze(args),
         Command::Calibration { command } => calibration(command),
         Command::Baseline { command } => baseline(command),
+    };
+    match result {
+        Ok(()) => std::process::ExitCode::SUCCESS,
+        Err(message) => {
+            eprintln!("{message}");
+            std::process::ExitCode::FAILURE
+        }
     }
 }
 
@@ -1782,8 +1789,9 @@ fn graph(
     for (index, root) in roots.iter().enumerate() {
         if let Ok(relative) = root.strip_prefix(repo) {
             let prefix = relative.to_string_lossy().replace('\\', "/");
+            let prefix_with_slash = format!("{prefix}/");
             for path in &paths {
-                if path.starts_with(&prefix) {
+                if *path == prefix || path.starts_with(&prefix_with_slash) {
                     owner.insert(path.clone(), index);
                 }
             }
@@ -2250,16 +2258,26 @@ fn trends(classified: &[(Finding, FindingDisposition)], baseline: Option<&Baseli
     }
 }
 
-fn validate_analysis_mode(mode: Mode, has_calibration: bool) -> Result<(), String> {
+fn validate_analysis_mode(
+    mode: Mode,
+    has_calibration: bool,
+    has_baseline: bool,
+) -> Result<(), String> {
     if matches!(mode, Mode::Calibrate) && has_calibration {
         Err("calibrate mode does not accept --calibration".into())
+    } else if !matches!(mode, Mode::Check) && has_baseline {
+        Err("--baseline is only accepted in check mode".into())
     } else {
         Ok(())
     }
 }
 
 fn analyze(args: AnalyzeArgs) -> Result<(), String> {
-    validate_analysis_mode(args.mode, args.calibration.is_some())?;
+    validate_analysis_mode(
+        args.mode,
+        args.calibration.is_some(),
+        args.baseline.is_some(),
+    )?;
     let lock = verify_model(&args.model_lock, &args.model_dir)?;
     let lock_digest = model_digest(&lock)?;
     let calibration = args
@@ -3327,6 +3345,29 @@ mod tests {
     }
 
     #[test]
+    fn graph_root_does_not_claim_sibling_directory_with_shared_prefix() {
+        let documents = vec![
+            Document {
+                path: "skills/gh/SKILL.md".into(),
+                refs: vec![],
+                sections: vec![],
+            },
+            Document {
+                path: "skills/gh-bootstrap/SKILL.md".into(),
+                refs: vec![],
+                sections: vec![],
+            },
+        ];
+        let roots = vec![
+            PathBuf::from("skills/gh"),
+            PathBuf::from("skills/gh-bootstrap"),
+        ];
+        let (_, owner) = graph(&documents, &roots, Path::new(""));
+        assert_eq!(owner.get("skills/gh/SKILL.md"), Some(&0));
+        assert_eq!(owner.get("skills/gh-bootstrap/SKILL.md"), Some(&1));
+    }
+
+    #[test]
     fn identity_uses_complete_unordered_endpoint_identity() {
         let base = test_chunk("skills/a/SKILL.md", &["Doc", "One"], 1, "same");
         let other = test_chunk("skills/b/SKILL.md", &["Doc", "Other"], 1, "other");
@@ -3800,11 +3841,22 @@ mod tests {
 
     #[test]
     fn calibrate_mode_rejects_prior_calibration_before_model_access() {
-        assert!(validate_analysis_mode(Mode::Calibrate, false).is_ok());
-        assert!(validate_analysis_mode(Mode::Report, true).is_ok());
-        assert!(validate_analysis_mode(Mode::Calibrate, true)
+        assert!(validate_analysis_mode(Mode::Calibrate, false, false).is_ok());
+        assert!(validate_analysis_mode(Mode::Report, true, false).is_ok());
+        assert!(validate_analysis_mode(Mode::Calibrate, true, false)
             .unwrap_err()
             .contains("does not accept --calibration"));
+    }
+
+    #[test]
+    fn report_mode_rejects_baseline_outside_check_mode() {
+        assert!(validate_analysis_mode(Mode::Check, false, true).is_ok());
+        assert!(validate_analysis_mode(Mode::Report, false, true)
+            .unwrap_err()
+            .contains("--baseline is only accepted in check mode"));
+        assert!(validate_analysis_mode(Mode::Calibrate, false, true)
+            .unwrap_err()
+            .contains("--baseline is only accepted in check mode"));
     }
 
     #[test]
