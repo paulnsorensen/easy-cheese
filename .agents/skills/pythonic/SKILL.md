@@ -25,7 +25,7 @@ This is a repository-local agent skill. Keep it under `.agents/skills/pythonic/`
 - Prefer the standard library for bundled helpers. Use `argparse`, `json`, `pathlib`, `tempfile`, `shutil`, `zipfile`, `collections`, `itertools`, and `contextlib` before adding a package.
 - PyYAML 6.0.2 is the approved runtime exception for schema-bounded YAML contracts. `cheese.pyz` bundles only its pure-Python modules and license so users install no Python packages separately.
 - PyYAML is also approved for existing validators, docs tooling, manifest paths, and tests; pytest is approved for tests. Any other dependency requires an explicit package, bundle, and CI decision.
-- Do not add Pydantic, Requests, pandas, or another dependency because this skill mentions a pattern that library supports. Match this repository's approved dependency set.
+- The bundling boundary is *pure Python*, not "any package". `zipapp` cannot import a native extension module from inside an archive, and a compiled wheel is platform-locked. PyYAML qualifies because it runs without its optional C extension; Pydantic does not, because `pydantic_core` ships only a compiled `.so`. See `.hallouminate/wiki/adr/cross-skill-work-contract-003.md`. Do not reach for Pydantic, Requests, or pandas because this skill names a pattern they support.
 
 ## Model data declaratively
 
