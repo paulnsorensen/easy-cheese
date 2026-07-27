@@ -12,6 +12,9 @@
 - [cheese-kernel-shared-refs-001](./cheese-kernel-shared-refs-001.md) — ADR: shared docs live in the cheese skill's references dir, cited sibling-relative
 - [cheese-kernel-shared-refs-002](./cheese-kernel-shared-refs-002.md) — ADR: owner-homed cross-skill content stays with its owner
 - [codex-omp-portability-001](./codex-omp-portability-001.md) — ADR: Shared harness portability reference
+- [cross-skill-work-contract-001](./cross-skill-work-contract-001.md) — ADR: WorkRecord continuity is worktree-scoped and pointer-free
+- [cross-skill-work-contract-002](./cross-skill-work-contract-002.md) — ADR: Cross-skill handoffs use a versioned envelope and phase-owned contracts
+- [cross-skill-work-contract-003](./cross-skill-work-contract-003.md) — ADR: Cheese ships a standard-library contract runtime
 - [culture-wheypoint-collaboration-001](./culture-wheypoint-collaboration-001.md) — ADR: /culture delegates its end-of-session artifact to /wheypoint
 - [hallouminate-wiring-stack-001](./hallouminate-wiring-stack-001.md) — ADR: hallouminate wiring ships as a stacked 4-PR build, one PR per issue
 - [hallouminate-wiring-stack-002](./hallouminate-wiring-stack-002.md) — ADR: cook and age record durable-change flags; only the publication boundary writes the wiki
