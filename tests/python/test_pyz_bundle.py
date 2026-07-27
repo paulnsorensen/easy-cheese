@@ -215,6 +215,8 @@ def test_ultracook_baseline_rejects_wrong_typed_value(bundles: Path) -> None:
 # Pinned env so the resolved corpus path is deterministic and does not depend on
 # the test host's git remote or real XDG dirs.
 _CORPUS_ENV = {"EASY_CHEESE_HOME": "/tmp/ec-corpus", "EASY_CHEESE_PROJECT": "demo-project"}
+# paths.py resolves symlinks, so on macOS /tmp/... comes back as /private/tmp/...
+_CORPUS_ROOT = str(Path("/tmp/ec-corpus").resolve() / "demo-project")
 
 
 @pytest.mark.parametrize("skill", ARTIFACT_PATH_SKILLS)
@@ -244,7 +246,7 @@ def test_artifact_path_research_returns_corpus_root(bundles: Path) -> None:
         bundles / "briesearch.pyz", "artifact-path", "research", "demo-slug", extra_env=_CORPUS_ENV
     )
     assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == "/tmp/ec-corpus/demo-project"
+    assert result.stdout.strip() == _CORPUS_ROOT
 
 
 def test_artifact_path_research_returns_root_and_ignores_slug(bundles: Path) -> None:
@@ -257,7 +259,7 @@ def test_artifact_path_research_returns_root_and_ignores_slug(bundles: Path) -> 
     # the shim never validates it; the output is the same bare root either way.
     bad = _run(bundles / "briesearch.pyz", "artifact-path", "research", "Bad_Slug", extra_env=_CORPUS_ENV)
     assert bad.returncode == 0, bad.stderr
-    assert bad.stdout.strip() == "/tmp/ec-corpus/demo-project"
+    assert bad.stdout.strip() == _CORPUS_ROOT
     # The slug is not appended to the path for research (contrast with specs).
     assert "Bad_Slug" not in bad.stdout
     other = _run(bundles / "briesearch.pyz", "artifact-path", "research", "totally-different-slug", extra_env=_CORPUS_ENV)
