@@ -28,6 +28,7 @@ test:
 # Build self-contained .pyz bundles for shared-consuming skills (CI rebuilds on every push to main)
 bundle:
     python3 scripts/build_pyz.py
+    python3 -S skills/cheese/scripts/cheese.pyz contract-registry validate
 
 # Preview the exact tree a release ships (skills + .pyz only, no sources)
 release-preview:

@@ -123,3 +123,9 @@ def test_release_workflow_pins_checkout_to_v7_0_0() -> None:
     workflow = (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
 
     assert "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0" in workflow
+
+
+def test_staged_release_has_one_cheese_contract_runtime(staged: Path) -> None:
+    cheese = staged / "skills" / "cheese" / "scripts" / "cheese.pyz"
+    assert cheese.is_file()
+    assert not list((staged / "skills").rglob("common.pyz"))

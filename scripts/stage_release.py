@@ -1,14 +1,9 @@
 #!/usr/bin/env python3
-"""Assemble the shippable release tree: SKILL.md + one built <skill>.pyz per skill,
-plus top-level project metadata. Everything a consumer does NOT need — raw script
-sources (src/, shared/), build/test tooling, docs, CI config — is left behind.
+"""Assemble the shippable release tree with one Cheese contract companion.
 
-The release workflow commits this tree to the `release` branch and points the
-version tag at it, so `gh skill install` (which reads the git tree at the tag)
-pulls a minimal, self-contained skill: the dispatching .pyz, never the loose .py.
-
-Bundles are built straight into the staged tree via build_pyz.build_bundle, so
-neither this script nor its test mutates the repo's working copy.
+The release keeps skill metadata and generated archives only. `cheese.pyz` owns
+the compiled registry and bundled pure-Python PyYAML; raw sources and consumer
+`common.pyz` copies do not ship.
 """
 
 from __future__ import annotations
@@ -72,6 +67,8 @@ def stage(out: Path) -> Path:
         target = out / "skills" / skill / "scripts" / f"{skill}.pyz"
         build_pyz.build_bundle(skill, target)
 
+    build_pyz.build_cheese_bundle(out / "skills" / "cheese" / "scripts" / "cheese.pyz")
+
     _verify(out)
     return out
 
@@ -87,6 +84,13 @@ def _verify(out: Path) -> None:
         pyz = skills / skill / "scripts" / f"{skill}.pyz"
         if not pyz.is_file():
             raise SystemExit(f"stage_release: missing bundle {pyz}")
+
+    cheese = skills / "cheese" / "scripts" / "cheese.pyz"
+    if not cheese.is_file():
+        raise SystemExit(f"stage_release: missing Cheese companion {cheese}")
+    common = sorted(str(p.relative_to(out)) for p in skills.rglob("common.pyz"))
+    if common:
+        raise SystemExit("stage_release: consumer common runtimes must not ship: " + ", ".join(common))
 
     stray = sorted(str(p.relative_to(out)) for p in skills.rglob("*.py"))
     if stray:

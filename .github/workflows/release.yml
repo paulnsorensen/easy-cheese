@@ -39,6 +39,10 @@ jobs:
           sudo install -m 755 "/tmp/gh_${ver}_linux_amd64/bin/gh" /usr/local/bin/gh
           gh --version
 
+      - name: Install pinned bundle dependencies
+        run: >-
+          pip install --no-cache-dir pyyaml==6.0.2
+          cattrs==26.1.0 attrs==26.1.0 typing-extensions==4.16.0
       - name: Stage shippable release tree
         run: python3 scripts/stage_release.py --out "$RUNNER_TEMP/release"
 
@@ -47,6 +51,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh skill publish --dry-run
+
+      - name: Validate bundled Cheese companion
+        working-directory: ${{ runner.temp }}/release
+        run: python3 -S skills/cheese/scripts/cheese.pyz contract-registry validate
 
       # `gh skill install` reads the git tree at the resolved tag, so the tag must
       # point at a commit that actually contains the built .pyz. main carries the

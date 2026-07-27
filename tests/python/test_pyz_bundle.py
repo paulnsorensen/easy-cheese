@@ -59,6 +59,7 @@ SKILL_SUBCOMMANDS = {
         "handoff_cli",
         "render_html",
     ],
+    "cheese": ["contract-registry", "handoff-commit", "handoff-resolve", "work"],
 }
 
 # Every skill that registers the durable-corpus resolver shim. One shared source
@@ -506,30 +507,6 @@ def test_common_bundle_carries_clis_plus_libs_not_skill_scripts(bundles: Path) -
     assert "validate_manifest.py" not in content
 
 
-@pytest.mark.parametrize("skill", ["age", "cure", "ultracook"])
-def test_committed_common_bundle_runs_without_site_packages(skill: str, tmp_path: Path) -> None:
-    """Every committed common.pyz must import cleanly with no ambient packages.
-
-    A module-scope `import yaml` in shared/scripts/handoff.py leaks into these
-    bundles, which vendor no yaml -- so `python3 -S -E` dies with
-    ModuleNotFoundError before argparse runs, breaking even the legacy
-    preamble paths that never parse YAML. Spec acceptance:
-    .hallouminate/wiki/specs/cross-skill-work-contract.md:315.
-    """
-    pyz = REPO_ROOT / "skills" / skill / "scripts" / "common.pyz"
-    assert pyz.exists(), f"committed bundle missing: {pyz}"
-    result = subprocess.run(
-        [sys.executable, "-S", "-E", str(pyz),
-         "read_handoff_slug", "--phase", "age", "--slug", "nope"],
-        cwd=str(tmp_path),
-        capture_output=True,
-        text=True,
-    )
-    combined = result.stdout + result.stderr
-    assert "ModuleNotFoundError" not in combined, combined
-    assert "artifact not found" in combined, combined
-
-
 def test_unknown_skill_name_still_errors() -> None:
     """build_pyz.py must exit non-zero for truly unknown skill names."""
     result = subprocess.run(
@@ -547,12 +524,9 @@ def _bundle_content(pyz: Path) -> dict[str, bytes]:
         return {name: archive.read(name) for name in archive.namelist()}
 
 
-@pytest.mark.parametrize("skill", [s for s in SKILL_SUBCOMMANDS if s != "common"])
+@pytest.mark.parametrize("skill", [skill for skill in SKILL_SUBCOMMANDS if skill != "common"])
 def test_committed_bundle_matches_source(bundles: Path, skill: str) -> None:
-    """Every committed skills/<skill>/scripts/<skill>.pyz must byte-match a fresh
-    build of the current source, because CI gates PRs with the same rebuild+diff.
-    common.pyz is excluded: it has no single canonical path (fanned out to each
-    consumer in Wave 1+, not stored in skills/common/)."""
+    """Every deployed archive must byte-match a fresh build."""
     committed = REPO_ROOT / "skills" / skill / "scripts" / f"{skill}.pyz"
     fresh = bundles / f"{skill}.pyz"
     assert committed.exists(), f"committed bundle missing: {committed}"
@@ -572,17 +546,15 @@ def test_committed_bundle_matches_source(bundles: Path, skill: str) -> None:
 
 
 def test_no_orphan_committed_bundles():
-    """A skill dropped from build_pyz.SKILLS must not leave a stale committed
-    .pyz behind — the build-pyz workflow only diffs bundles it rebuilds, so an
-    orphan would ship silently.
-    common.pyz is excluded: it fans out to consumer skills in Wave 1+ and has no
-    single committed path under skills/common/."""
+    """Committed archives are exactly normal skill bundles plus Cheese."""
     committed = {
-        p.relative_to(REPO_ROOT).as_posix()
-        for p in REPO_ROOT.glob("skills/*/scripts/*.pyz")
-        if p.name != "common.pyz"
+        path.relative_to(REPO_ROOT).as_posix()
+        for path in REPO_ROOT.glob("skills/*/scripts/*.pyz")
     }
-    expected = {f"skills/{skill}/scripts/{skill}.pyz" for skill in build_pyz.SKILLS}
+    expected = {
+        *(f"skills/{skill}/scripts/{skill}.pyz" for skill in build_pyz.SKILLS),
+        "skills/cheese/scripts/cheese.pyz",
+    }
     assert committed == expected
 
 

@@ -12,6 +12,7 @@ on:
       - 'shared/scripts/**'
       - 'scripts/build_pyz.py'
       - 'skills/*/scripts/*.pyz'
+      - 'skills/*/references/handoff-contract.yaml'
   push:
     branches: [main]
     # Keep the check on main too so stale bundles are visible after merges.
@@ -21,6 +22,7 @@ on:
       - 'shared/scripts/**'
       - 'scripts/build_pyz.py'
       - 'skills/*/scripts/*.pyz'
+      - 'skills/*/references/handoff-contract.yaml'
 
 permissions:
   contents: read
@@ -44,8 +46,15 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install pinned bundle dependencies
+        run: >-
+          pip install --no-cache-dir pyyaml==6.0.2
+          cattrs==26.1.0 attrs==26.1.0 typing-extensions==4.16.0
       - name: Build bundles
         run: python3 scripts/build_pyz.py
+
+      - name: Validate Cheese companion without ambient packages
+        run: python3 -S skills/cheese/scripts/cheese.pyz contract-registry validate
 
       - name: Check bundles are current
         run: |-
