@@ -3,9 +3,11 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
+    borrow::Cow,
     collections::{BTreeMap, BTreeSet, VecDeque},
     fs,
     path::{Path, PathBuf},
+    sync::LazyLock,
 };
 use unicode_normalization::UnicodeNormalization;
 
@@ -26,6 +28,18 @@ const PARITY_EXECUTION_PROVIDER: &str = "onnxruntime-cpu";
 const MODEL_POOLING: &str = "cls";
 const MODEL_NORMALIZATION: &str = "l2";
 const MODEL_REVISION: &str = "b637eda6144b122ccef9318e9c8dd1483399ce87";
+
+static LINKS_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\[[^\]]*\]\(([^)\s]+)\)").unwrap());
+static TICKS_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"`([^`]+)`").unwrap());
+static PROSE_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^(?:\.\./)+[\w./-]+\.md(?:#[\w-]+)?$|^references/[\w./-]+\.md(?:#[\w-]+)?$")
+        .unwrap()
+});
+static COMMENT_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?s)<!--.*?-->").unwrap());
+static LIST_MARKER_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?m)^\s*(?:[-*+]|[0-9]+\.)\s+").unwrap());
+static SHA_HEX_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[a-f0-9]{64}$").unwrap());
 
 #[derive(Parser)]
 #[command(name = "skill-overlap", about = "Graph-aware skill overlap analyzer")]
@@ -150,17 +164,6 @@ struct Artifact {
     path: String,
     sha256: String,
 }
-#[derive(Debug, Clone, Serialize, PartialEq, Eq, PartialOrd, Ord)]
-#[serde(rename_all = "kebab-case")]
-enum RefKind {
-    MarkdownLink,
-    BacktickedPath,
-}
-#[derive(Debug, Clone, Serialize, PartialEq, Eq, PartialOrd, Ord)]
-struct RelativeRef {
-    path: String,
-    kind: RefKind,
-}
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct Detector {
     version: String,
@@ -226,13 +229,13 @@ struct Section {
     headings: Vec<String>,
     span: Span,
     body: String,
-    refs: Vec<RelativeRef>,
+    refs: Vec<String>,
     pointer: bool,
 }
 #[derive(Debug, Clone)]
 struct Document {
     path: String,
-    refs: Vec<RelativeRef>,
+    refs: Vec<String>,
     sections: Vec<Section>,
 }
 #[derive(Debug, Clone, Serialize)]
@@ -529,7 +532,17 @@ fn fetch_locked_artifacts(lock: &ModelLock, model_dir: &Path) -> Result<(), Stri
 }
 
 #[cfg(feature = "model")]
-fn load_embedder(model_dir: &Path) -> Result<fastembed::TextEmbedding, String> {
+fn execution_providers_for(
+    provider: &str,
+) -> Result<Vec<fastembed::ExecutionProviderDispatch>, String> {
+    match provider {
+        "onnxruntime-cpu" => Ok(Vec::new()),
+        other => Err(format!("unsupported execution provider {other}")),
+    }
+}
+
+#[cfg(feature = "model")]
+fn load_embedder(model_dir: &Path, lock: &ModelLock) -> Result<fastembed::TextEmbedding, String> {
     use fastembed::{
         InitOptionsUserDefined, Pooling, TextEmbedding, TokenizerFiles, UserDefinedEmbeddingModel,
     };
@@ -547,24 +560,35 @@ fn load_embedder(model_dir: &Path) -> Result<fastembed::TextEmbedding, String> {
     .with_pooling(Pooling::Cls);
     TextEmbedding::try_new_from_user_defined(
         model,
-        InitOptionsUserDefined::new().with_intra_threads(1),
+        InitOptionsUserDefined::new()
+            .with_intra_threads(lock.threads as usize)
+            .with_execution_providers(execution_providers_for(&lock.execution_provider)?),
     )
     .map_err(|error| format!("initialize verified local ONNX model: {error}"))
 }
 
 #[cfg(feature = "model")]
-fn embed_payloads(model_dir: &Path, payloads: &[String]) -> Result<Vec<Vec<f32>>, String> {
-    let mut embedder = load_embedder(model_dir)?;
+fn embed_payloads(
+    model_dir: &Path,
+    payloads: &[String],
+    lock: &ModelLock,
+) -> Result<Vec<Vec<f32>>, String> {
+    let mut embedder = load_embedder(model_dir, lock)?;
+    let prefixed = payloads
+        .iter()
+        .map(|payload| format!("{}{}", lock.passage_prefix, payload))
+        .collect::<Vec<_>>();
     let vectors = embedder
-        .embed(payloads, Some(32))
+        .embed(&prefixed, Some(lock.batch_size))
         .map_err(|error| format!("embed verified local chunks: {error}"))?;
     vectors
         .into_iter()
         .map(|mut vector| {
-            if vector.len() != 384 {
+            if vector.len() != lock.dimensions {
                 return Err(format!(
-                    "embedder returned {} dimensions, expected 384",
-                    vector.len()
+                    "embedder returned {} dimensions, expected {}",
+                    vector.len(),
+                    lock.dimensions
                 ));
             }
             l2_normalize(&mut vector);
@@ -574,7 +598,7 @@ fn embed_payloads(model_dir: &Path, payloads: &[String]) -> Result<Vec<Vec<f32>>
 }
 
 #[cfg(not(feature = "model"))]
-fn embed_payloads(_: &Path, _: &[String]) -> Result<Vec<Vec<f32>>, String> {
+fn embed_payloads(_: &Path, _: &[String], _: &ModelLock) -> Result<Vec<Vec<f32>>, String> {
     Err("rebuild with --features model for semantic analysis".into())
 }
 
@@ -655,7 +679,7 @@ fn verify_parity(args: ParityArgs) -> Result<(), String> {
             .iter()
             .map(|case| case["input"].as_str().unwrap().to_owned())
             .collect::<Vec<_>>();
-        let actual = embed_payloads(&args.model.model_dir, &inputs)?;
+        let actual = embed_payloads(&args.model.model_dir, &inputs, &lock)?;
         for (case, actual) in cases.iter().zip(actual) {
             let expected = case["output"].as_array().unwrap();
             let max_error = expected
@@ -749,7 +773,245 @@ fn markdown_files(repo: &Path, root: &Path, out: &mut Vec<PathBuf>) -> Result<()
     visit(&canonical_repo, root, out)
 }
 
+fn line_offsets(text: &str) -> Vec<usize> {
+    let mut offsets = vec![0usize];
+    for (index, byte) in text.bytes().enumerate() {
+        if byte == b'\n' {
+            offsets.push(index + 1);
+        }
+    }
+    offsets
+}
+
+fn byte_to_line(offsets: &[usize], byte: usize) -> usize {
+    offsets.partition_point(|&start| start <= byte)
+}
+
+fn heading_level_number(level: pulldown_cmark::HeadingLevel) -> u8 {
+    use pulldown_cmark::HeadingLevel;
+    match level {
+        HeadingLevel::H1 => 1,
+        HeadingLevel::H2 => 2,
+        HeadingLevel::H3 => 3,
+        HeadingLevel::H4 => 4,
+        HeadingLevel::H5 => 5,
+        HeadingLevel::H6 => 6,
+    }
+}
+
+fn heading_title(raw_lines: &[&str], start_line: usize, end_line: usize, level: u8) -> String {
+    if end_line > start_line {
+        // Setext heading: every line above the underline (=== or ---) is title text. A setext
+        // heading's content is a whole paragraph, so it can span several physical lines; join
+        // them rather than truncating to the first.
+        raw_lines[start_line - 1..end_line - 1]
+            .iter()
+            .map(|line| line.trim())
+            .collect::<Vec<_>>()
+            .join(" ")
+    } else {
+        // ATX heading: re-slice the raw line so title text stays byte-identical to the
+        // pre-pulldown-cmark implementation (do not use inline Event::Text/Event::Code,
+        // which would strip markdown syntax like backticks or `**`).
+        let raw = raw_lines[start_line - 1];
+        let trimmed = raw.trim_start();
+        let rest = trimmed.get(level as usize..).unwrap_or("");
+        rest.trim_start_matches([' ', '\t']).trim().to_owned()
+    }
+}
+
+// pulldown-cmark 0.13.4's `scan_closing_code_fence` only accepts ASCII space after the
+// fence-char run, not tab:
+// https://github.com/pulldown-cmark/pulldown-cmark/blob/v0.13.4/pulldown-cmark/src/scanners.rs#L528
+// CommonMark 0.31.2 §4.5 says a closing fence "may be followed only by spaces or tabs,
+// which are ignored" (the `cmark` reference impl accepts `[ \t]*`), so a trailing tab after
+// a closing fence leaves pulldown-cmark's fence open, silently swallowing every later
+// heading in the file. Rewrite the trailing-whitespace suffix of fence-shaped lines
+// (tabs -> spaces only, never truncated) before handing the text to the parser; byte length
+// is preserved so every byte offset -> line-number mapping stays identical to the original
+// `text`, which is still what everything else (titles, body, refs) reads from.
+fn normalize_fence_closer_tabs(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for line in text.split_inclusive('\n') {
+        let (content, ending) = match line.strip_suffix("\r\n") {
+            Some(rest) => (rest, "\r\n"),
+            None => match line.strip_suffix('\n') {
+                Some(rest) => (rest, "\n"),
+                None => (line, ""),
+            },
+        };
+        out.push_str(&normalize_fence_shape_line(content));
+        out.push_str(ending);
+    }
+    debug_assert_eq!(
+        out.len(),
+        text.len(),
+        "normalize_fence_closer_tabs must preserve byte length"
+    );
+    out
+}
+
+fn normalize_fence_shape_line(line: &str) -> Cow<'_, str> {
+    let indentation = line.bytes().take_while(|byte| *byte == b' ').count();
+    if indentation > 3 {
+        return Cow::Borrowed(line);
+    }
+    let trimmed = &line[indentation..];
+    let marker = match trimmed.chars().next() {
+        Some(character @ ('`' | '~')) => character,
+        _ => return Cow::Borrowed(line),
+    };
+    let run_len = trimmed
+        .chars()
+        .take_while(|character| *character == marker)
+        .count();
+    if run_len < 3 {
+        return Cow::Borrowed(line);
+    }
+    let suffix = &trimmed[run_len..];
+    if suffix.is_empty()
+        || !suffix.bytes().all(|byte| matches!(byte, b' ' | b'\t'))
+        || !suffix.contains('\t')
+    {
+        return Cow::Borrowed(line);
+    }
+    let mut normalized = String::with_capacity(line.len());
+    normalized.push_str(&line[..indentation + run_len]);
+    for byte in suffix.bytes() {
+        normalized.push(if byte == b'\t' { ' ' } else { byte as char });
+    }
+    Cow::Owned(normalized)
+}
+
+// A line that plausibly belongs to a YAML front-matter block: blank, a comment, a `key:`
+// line (at any indent, since nested mappings and list-item bodies are legal frontmatter), or
+// a `- ` list item (bare, or opening a nested mapping like `- text: Get started`). A run of
+// 2+ `#` is a markdown ATX heading (`##`+), never a YAML comment, so it does not count -- this
+// is what lets shape (1) below abort the scan instead of dot-filling real headings.
+//
+// Single `#` is deliberately tolerated as a YAML comment rather than aborting on a Markdown
+// H1: a real H1 can only appear here if the block never was frontmatter (see the thematic-
+// break shape-1 test, which the 2+-hash check above already catches -- Markdown documents
+// virtually always follow a thematic-break `---` with content before a lone `#`, e.g. another
+// heading or a paragraph, and the corpus scan backing this fix (23 files starting with `---`)
+// contains no thematic-break opener that goes straight to a bare `#` line). Over-strictness
+// here is the measured, currently-happening failure mode (a real frontmatter block aborts and
+// reintroduces a phantom section); over-permissiveness only misfires on a document shape not
+// observed in this repo. Given that asymmetry, tolerate.
+fn is_yaml_line_shape(trimmed: &str) -> bool {
+    let content = trimmed.trim_start();
+    if content.is_empty() {
+        return true;
+    }
+    let hashes = content
+        .chars()
+        .take_while(|character| *character == '#')
+        .count();
+    if hashes >= 2 {
+        return false;
+    }
+    if hashes == 1 {
+        return true;
+    }
+    if content == "-" {
+        return true;
+    }
+    // Strip a list-item marker, if present, before checking mapping-key shape: both a bare
+    // list item ("- Get started") and a list item opening a mapping ("- text: Get started")
+    // are legal frontmatter.
+    let rest = content.strip_prefix("- ").unwrap_or(content);
+    match rest.split_once(':') {
+        Some((key, _)) => !key.is_empty() && !key.contains(char::is_whitespace),
+        None => rest.len() != content.len(),
+    }
+}
+
+fn is_block_scalar_key(trimmed: &str) -> bool {
+    trimmed
+        .split_once(':')
+        .map(|(_, value)| matches!(value.trim(), "|" | ">" | "|-" | "|+" | ">-" | ">+"))
+        .unwrap_or(false)
+}
+
+// GitHub-style YAML front matter (`---\n...\n---\n`) at the very start of a file has no
+// heading semantics in the legacy hand-rolled parser (it only recognizes `#`/`##`/`###`
+// lines; front matter is inert text that predates any section). pulldown-cmark has no
+// front-matter extension, so it reads the closing `---` as a setext H2 underline for the
+// front-matter line above it, manufacturing a heading that never existed (confirmed via the
+// Stage-A parity harness against every `.github/instructions/*.md` and `skills/*/SKILL.md`
+// file, all of which open with `---`-delimited front matter). Neutralize the front-matter
+// block (opening delimiter through closing delimiter, inclusive) to `.`-filled lines before
+// parsing so it can never read as a heading or thematic break; length and line count stay
+// identical so byte-to-line mapping is unaffected, and the ORIGINAL `text` is still what
+// titles/body/refs are sliced from.
+fn neutralize_front_matter(text: &str) -> String {
+    let mut lines = text.split_inclusive('\n');
+    let Some(first) = lines.next() else {
+        return text.to_owned();
+    };
+    if first.trim_end_matches(['\r', '\n']) != "---" {
+        return text.to_owned();
+    }
+    let mut consumed = first.len();
+    let mut closing_len = None;
+    let mut in_scalar = false;
+    for line in lines {
+        consumed += line.len();
+        let indented = line.starts_with(' ') || line.starts_with('\t');
+        let trimmed = line.trim_end_matches(['\r', '\n']);
+        if in_scalar {
+            if indented || trimmed.is_empty() {
+                continue;
+            }
+            in_scalar = false;
+        }
+        if trimmed == "---" || trimmed == "..." {
+            closing_len = Some(consumed);
+            break;
+        }
+        if !is_yaml_line_shape(trimmed) {
+            return text.to_owned();
+        }
+        if is_block_scalar_key(trimmed) {
+            in_scalar = true;
+        }
+    }
+    let Some(end) = closing_len else {
+        return text.to_owned();
+    };
+    let mut out = String::with_capacity(text.len());
+    for byte in text[..end].bytes() {
+        out.push(if matches!(byte, b'\n' | b'\r') {
+            byte as char
+        } else {
+            '.'
+        });
+    }
+    out.push_str(&text[end..]);
+    debug_assert_eq!(
+        out.len(),
+        text.len(),
+        "neutralize_front_matter must preserve byte length"
+    );
+    out
+}
+
+// Both shims rewrite the parser's input only; the original `text` still feeds titles, body,
+// and refs. They preserve byte length exactly, so a byte offset from an event parsed out of
+// this string maps through `line_offsets(original)` to the same line it would have in the
+// original. Every `Span` in the crate depends on that invariant, hence the assert.
+fn parser_input(text: &str) -> String {
+    let out = normalize_fence_closer_tabs(&neutralize_front_matter(text));
+    debug_assert_eq!(
+        out.len(),
+        text.len(),
+        "parser_input must preserve byte length"
+    );
+    out
+}
 fn parse_document(path: &Path, repo: &Path, counter: &TokenCounter) -> Result<Document, String> {
+    use pulldown_cmark::{Event, Options, Parser, Tag};
+
     let text = fs::read_to_string(path).map_err(ioerr)?;
     let rel = path
         .strip_prefix(repo)
@@ -760,35 +1022,13 @@ fn parse_document(path: &Path, repo: &Path, counter: &TokenCounter) -> Result<Do
     let mut h2 = String::new();
     let mut current: Option<(Vec<String>, usize, Vec<String>)> = None;
     let mut sections = Vec::new();
-    let fence_marker = |line: &str| {
-        let indentation = line.bytes().take_while(|byte| *byte == b' ').count();
-        if indentation > 3 {
-            return None;
-        }
-        let trimmed = &line[indentation..];
-        let marker = trimmed.chars().next()?;
-        if !matches!(marker, '`' | '~') {
-            return None;
-        }
-        let length = trimmed
-            .chars()
-            .take_while(|character| *character == marker)
-            .count();
-        (length >= 3).then(|| {
-            let blank_suffix = trimmed[length..]
-                .bytes()
-                .all(|byte| matches!(byte, b' ' | b'\t'));
-            (marker, length, blank_suffix)
-        })
-    };
-    let mut fence = None::<(char, usize)>;
     let finish = |current: &mut Option<(Vec<String>, usize, Vec<String>)>,
                   end: usize,
                   sections: &mut Vec<Section>|
      -> Result<(), String> {
         if let Some((headings, start, lines)) = current.take() {
             let body = lines.join("\n");
-            let refs = extract_typed_relative_refs(&body);
+            let refs = extract_relative_refs(&body);
             let pointer = pointer_only(&body, &refs, counter)?;
             sections.push(Section {
                 path: rel.clone(),
@@ -801,71 +1041,78 @@ fn parse_document(path: &Path, repo: &Path, counter: &TokenCounter) -> Result<Do
         }
         Ok(())
     };
-    for (index, line) in text.lines().enumerate() {
-        let line_number = index + 1;
-        if let Some((marker, length, blank_suffix)) = fence_marker(line) {
-            match fence {
-                None => fence = Some((marker, length)),
-                Some((opening_marker, opening_length))
-                    if marker == opening_marker
-                        && length >= opening_length
-                        && blank_suffix =>
-                {
-                    fence = None;
-                }
-                Some(_) => {}
-            }
-            if let Some((_, _, body)) = &mut current {
-                body.push(line.to_owned());
-            }
-            continue;
-        }
-        if fence.is_none() {
-            if let Some(title) = line.strip_prefix("# ") {
-                h1 = title.trim().to_owned();
-                h2.clear();
+
+    let raw_lines: Vec<&str> = text.lines().collect();
+    let total_lines = raw_lines.len();
+    let offsets = line_offsets(&text);
+
+    // Event scan: build a heading map keyed by the heading's start line, for H1-H3 only
+    // (H4-H6 stay body content). Each entry carries (level, end_line) where end_line is
+    // the last physical source line the heading occupies (== start_line for ATX,
+    // start_line + 1 for setext).
+    let mut heading_at: Vec<Option<(u8, usize)>> = vec![None; total_lines + 1];
+    let parsed_input = parser_input(&text);
+    let parser = Parser::new_ext(&parsed_input, Options::ENABLE_TABLES).into_offset_iter();
+    for (event, range) in parser {
+        if let Event::Start(Tag::Heading { level, .. }) = event {
+            let level_num = heading_level_number(level);
+            if !(1..=3).contains(&level_num) {
                 continue;
             }
-            let heading = line.trim_start();
-            let level = heading
-                .chars()
-                .take_while(|character| *character == '#')
-                .count();
-            if level == 2 && heading.as_bytes().get(level) == Some(&b' ') {
-                finish(&mut current, line_number.saturating_sub(1), &mut sections)?;
-                h2 = heading[level + 1..].trim().to_owned();
-                current = Some((vec![h1.clone(), h2.clone()], line_number + 1, Vec::new()));
-                continue;
-            }
-            if level == 3 && heading.as_bytes().get(level) == Some(&b' ') {
-                finish(&mut current, line_number.saturating_sub(1), &mut sections)?;
-                let mut headings = vec![h1.clone()];
-                if !h2.is_empty() {
-                    headings.push(h2.clone());
-                }
-                headings.push(heading[level + 1..].trim().to_owned());
-                current = Some((headings, line_number + 1, Vec::new()));
-                continue;
-            }
-        }
-        if let Some((_, _, body)) = &mut current {
-            body.push(line.to_owned());
+            let start_line = byte_to_line(&offsets, range.start);
+            let end_byte = range.end.saturating_sub(1).max(range.start);
+            let end_line = byte_to_line(&offsets, end_byte);
+            heading_at[start_line] = Some((level_num, end_line));
         }
     }
-    finish(&mut current, text.lines().count(), &mut sections)?;
+
+    // Line loop: drives body accumulation and the finish/current dance, delegating only
+    // heading detection (is-heading / level / fence-awareness) to pulldown-cmark above.
+    let mut line_number = 1usize;
+    while line_number <= total_lines {
+        if let Some((level, end_line)) = heading_at[line_number] {
+            let title = heading_title(&raw_lines, line_number, end_line, level);
+            match level {
+                1 => {
+                    h1 = title;
+                    h2.clear();
+                }
+                2 => {
+                    finish(&mut current, line_number.saturating_sub(1), &mut sections)?;
+                    h2 = title.clone();
+                    current = Some((vec![h1.clone(), h2.clone()], end_line + 1, Vec::new()));
+                }
+                3 => {
+                    finish(&mut current, line_number.saturating_sub(1), &mut sections)?;
+                    let mut headings = vec![h1.clone()];
+                    if !h2.is_empty() {
+                        headings.push(h2.clone());
+                    }
+                    headings.push(title);
+                    current = Some((headings, end_line + 1, Vec::new()));
+                }
+                _ => unreachable!("heading_at only stores levels 1-3"),
+            }
+            line_number = end_line + 1;
+            continue;
+        }
+        if let Some((_, _, body)) = &mut current {
+            body.push(raw_lines[line_number - 1].to_owned());
+        }
+        line_number += 1;
+    }
+    finish(&mut current, total_lines, &mut sections)?;
     Ok(Document {
         path: rel,
-        refs: extract_typed_relative_refs(&text),
+        refs: extract_relative_refs(&text),
         sections,
     })
 }
 
-fn extract_typed_relative_refs(text: &str) -> Vec<RelativeRef> {
-    let links = Regex::new(r"\[[^\]]*\]\(([^)\s]+)\)").unwrap();
-    let ticks = Regex::new(r"`([^`]+)`").unwrap();
-    let prose =
-        Regex::new(r"^(?:\.\./)+[\w./-]+\.md(?:#[\w-]+)?$|^references/[\w./-]+\.md(?:#[\w-]+)?$")
-            .unwrap();
+fn extract_relative_refs(text: &str) -> Vec<String> {
+    let links = &*LINKS_RE;
+    let ticks = &*TICKS_RE;
+    let prose = &*PROSE_RE;
     let mut refs = Vec::new();
     for capture in links.captures_iter(text) {
         let raw = &capture[1];
@@ -875,44 +1122,28 @@ fn extract_typed_relative_refs(text: &str) -> Vec<RelativeRef> {
         {
             let path = raw.split('#').next().unwrap();
             if path.ends_with(".md") {
-                refs.push(RelativeRef {
-                    path: path.to_owned(),
-                    kind: RefKind::MarkdownLink,
-                });
+                refs.push(path.to_owned());
             }
         }
     }
     for capture in ticks.captures_iter(text) {
         let candidate = capture[1].split(" § ").next().unwrap();
         if prose.is_match(candidate) {
-            refs.push(RelativeRef {
-                path: candidate.split('#').next().unwrap().to_owned(),
-                kind: RefKind::BacktickedPath,
-            });
+            refs.push(candidate.split('#').next().unwrap().to_owned());
         }
     }
     refs
 }
 
-#[cfg(test)]
-fn extract_relative_refs(text: &str) -> Vec<String> {
-    extract_typed_relative_refs(text)
-        .into_iter()
-        .map(|reference| reference.path)
-        .collect()
-}
-
-fn pointer_only(body: &str, refs: &[RelativeRef], counter: &TokenCounter) -> Result<bool, String> {
-    let cleaned = Regex::new(r"(?s)<!--.*?-->").unwrap().replace_all(body, "");
+fn pointer_only(body: &str, refs: &[String], counter: &TokenCounter) -> Result<bool, String> {
+    let cleaned = COMMENT_RE.replace_all(body, "");
     let trimmed = cleaned
         .lines()
         .filter(|line| !matches!(line.trim(), "---" | "***" | "___"))
         .collect::<Vec<_>>()
         .join("\n");
     let normalized = normalize(&trimmed);
-    let has_list = Regex::new(r"(?m)^\s*(?:[-*+]|[0-9]+\.)\s+")
-        .unwrap()
-        .is_match(&trimmed);
+    let has_list = LIST_MARKER_RE.is_match(&trimmed);
     let has_table = trimmed
         .lines()
         .any(|line| line.trim().starts_with('|') || line.matches('|').count() >= 2);
@@ -925,7 +1156,7 @@ fn pointer_only(body: &str, refs: &[RelativeRef], counter: &TokenCounter) -> Res
     {
         return Ok(false);
     }
-    let target = regex::escape(&refs[0].path);
+    let target = regex::escape(&refs[0]);
     let syntactic_ref =
         format!(r"(?:\[[^\]\n]*\]\({target}(?:#[^\s)]+)?\)|`{target}(?:#[\w-]+)?(?: § [^`]+)?`)",);
     let pattern = format!(
@@ -949,8 +1180,6 @@ enum TokenCounter {
     TestChars,
     #[cfg(feature = "model")]
     Model(Box<tokenizers::Tokenizer>),
-    #[cfg(all(not(test), not(feature = "model")))]
-    Unavailable,
 }
 
 impl TokenCounter {
@@ -966,7 +1195,7 @@ impl TokenCounter {
                 .map(|encoding| encoding.len())
                 .map_err(|error| format!("count model tokens: {error}")),
             #[cfg(all(not(test), not(feature = "model")))]
-            Self::Unavailable => Err("pinned model tokenizer is unavailable".into()),
+            _ => unreachable!("no token counter variants configured"),
         }
     }
 }
@@ -1005,64 +1234,79 @@ struct SplitPiece {
     span: Span,
 }
 
-fn list_indent(line: &str) -> Option<usize> {
-    let indent = line.len() - line.trim_start().len();
-    let trimmed = line.trim_start();
-    let unordered = ["- ", "* ", "+ "]
-        .iter()
-        .any(|prefix| trimmed.starts_with(prefix));
-    let ordered = trimmed.split_once(". ").is_some_and(|(prefix, _)| {
-        !prefix.is_empty() && prefix.bytes().all(|byte| byte.is_ascii_digit())
-    });
-    (unordered || ordered).then_some(indent)
-}
-
-fn list_groups(lines: &[&str]) -> Vec<Option<usize>> {
+fn list_groups(lines: &[&str], body: &str) -> Vec<Option<usize>> {
+    use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
     let mut groups = vec![None; lines.len()];
-    let mut active = None::<(usize, usize)>;
-    let mut next_group = 0;
-    for (index, line) in lines.iter().enumerate() {
-        if let Some(indent) = list_indent(line) {
-            if active.is_none_or(|(root_indent, _)| indent <= root_indent) {
-                next_group += 1;
-                active = Some((indent, next_group));
+    let offsets = line_offsets(body);
+    let parsed_body = parser_input(body);
+    let parser = Parser::new_ext(&parsed_body, Options::ENABLE_TABLES).into_offset_iter();
+    let mut depth = 0i32;
+    let mut item_start_byte = 0usize;
+    let mut next_group = 0usize;
+    for (event, range) in parser {
+        match event {
+            Event::Start(Tag::Item) => {
+                if depth == 0 {
+                    item_start_byte = range.start;
+                }
+                depth += 1;
             }
-            groups[index] = active.map(|(_, group)| group);
-        } else if let Some((root_indent, group)) = active {
-            let indent = line.len() - line.trim_start().len();
-            if line.trim().is_empty() || indent > root_indent {
-                groups[index] = Some(group);
-            } else {
-                active = None;
+            Event::End(TagEnd::Item) => {
+                depth -= 1;
+                if depth == 0 {
+                    next_group += 1;
+                    let start_line = byte_to_line(&offsets, item_start_byte);
+                    let end_byte = range.end.saturating_sub(1).max(item_start_byte);
+                    let end_line = byte_to_line(&offsets, end_byte);
+                    for line in start_line..=end_line {
+                        if line >= 1 && line <= lines.len() {
+                            groups[line - 1] = Some(next_group);
+                        }
+                    }
+                }
             }
+            _ => {}
         }
     }
     groups
 }
 
-fn is_table_row(line: &str) -> bool {
-    let trimmed = line.trim();
-    !trimmed.is_empty() && trimmed.contains('|')
-}
-
-fn table_contexts(lines: &[&str], section_start: usize) -> Vec<Option<TableContext>> {
-    let delimiter = Regex::new(r"^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$").unwrap();
+fn table_contexts(lines: &[&str], section_start: usize, body: &str) -> Vec<Option<TableContext>> {
+    use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
     let mut contexts = vec![None; lines.len()];
-    let mut index = 0;
-    while index + 1 < lines.len() {
-        if is_table_row(lines[index]) && delimiter.is_match(lines[index + 1]) {
-            let context = TableContext {
-                header: lines[index].to_owned(),
-                header_line: section_start + index,
-            };
-            let mut end = index;
-            while end < lines.len() && is_table_row(lines[end]) {
-                contexts[end] = Some(context.clone());
-                end += 1;
+    let offsets = line_offsets(body);
+    let parsed_body = parser_input(body);
+    let parser = Parser::new_ext(&parsed_body, Options::ENABLE_TABLES).into_offset_iter();
+    let mut table_start_byte: Option<usize> = None;
+    let mut header_line: Option<usize> = None;
+    for (event, range) in parser {
+        match event {
+            Event::Start(Tag::Table(_)) => {
+                table_start_byte = Some(range.start);
             }
-            index = end;
-        } else {
-            index += 1;
+            Event::Start(Tag::TableHead) => {
+                header_line = Some(byte_to_line(&offsets, range.start));
+            }
+            Event::End(TagEnd::Table) => {
+                if let (Some(start_byte), Some(head_line)) = (table_start_byte, header_line) {
+                    let start_line = byte_to_line(&offsets, start_byte);
+                    let end_byte = range.end.saturating_sub(1).max(start_byte);
+                    let end_line = byte_to_line(&offsets, end_byte);
+                    let header_text = lines.get(head_line - 1).copied().unwrap_or("").to_owned();
+                    let context = TableContext {
+                        header: header_text,
+                        header_line: section_start + (head_line - 1),
+                    };
+                    for line in start_line..=end_line {
+                        if line >= 1 && line <= lines.len() {
+                            contexts[line - 1] = Some(context.clone());
+                        }
+                    }
+                }
+                table_start_byte = None;
+                header_line = None;
+            }
+            _ => {}
         }
     }
     contexts
@@ -1214,8 +1458,8 @@ fn split_section(
         }]);
     }
     let source_lines = section.body.lines().collect::<Vec<_>>();
-    let groups = list_groups(&source_lines);
-    let tables = table_contexts(&source_lines, section.span.start);
+    let groups = list_groups(&source_lines, &section.body);
+    let tables = table_contexts(&source_lines, section.span.start, &section.body);
     let mut lines = Vec::new();
     for (offset, line) in source_lines.iter().enumerate() {
         let source_line = section.span.start + offset;
@@ -1405,33 +1649,49 @@ fn exact_findings(
     documents: &[Document],
     counter: &TokenCounter,
     edges: &GraphEdges,
+    forward: &Adjacency,
+    undirected: &Adjacency,
     owner: &BTreeMap<String, usize>,
+    graph_cache: &mut BTreeMap<(String, String), GraphClass>,
 ) -> Result<Vec<Finding>, String> {
     let sections = documents
         .iter()
         .flat_map(|document| &document.sections)
         .filter(|section| !normalize(&section.body).is_empty())
         .collect::<Vec<_>>();
+    let mut buckets: BTreeMap<String, Vec<&Section>> = BTreeMap::new();
+    for section in &sections {
+        buckets
+            .entry(normalize(&section.body))
+            .or_default()
+            .push(section);
+    }
     let mut findings = Vec::new();
-    for (index, left_section) in sections.iter().enumerate() {
-        let left_normalized = normalize(&left_section.body);
-        for right_section in sections.iter().skip(index + 1) {
-            if left_normalized != normalize(&right_section.body) {
-                continue;
+    for members in buckets.values().filter(|members| members.len() >= 2) {
+        for (index, left_section) in members.iter().enumerate() {
+            for right_section in members.iter().skip(index + 1) {
+                let left = section_chunk(left_section, counter)?;
+                let right = section_chunk(right_section, counter)?;
+                findings.push(Finding {
+                    id: identity("exact", &left, &right, None),
+                    lane: "body".into(),
+                    detector: DETECTOR_VERSION.into(),
+                    kind: "exact".into(),
+                    graph: memoized_graph_class(
+                        graph_cache,
+                        edges,
+                        forward,
+                        undirected,
+                        owner,
+                        &left,
+                        &right,
+                    ),
+                    duplicate_tokens_estimate: left.tokens.min(right.tokens),
+                    left,
+                    right,
+                    score: None,
+                });
             }
-            let left = section_chunk(left_section, counter)?;
-            let right = section_chunk(right_section, counter)?;
-            findings.push(Finding {
-                id: identity("exact", &left, &right, None),
-                lane: "body".into(),
-                detector: DETECTOR_VERSION.into(),
-                kind: "exact".into(),
-                graph: graph_class(edges, owner, &left, &right),
-                duplicate_tokens_estimate: left.tokens.min(right.tokens),
-                left,
-                right,
-                score: None,
-            });
         }
     }
     Ok(findings)
@@ -1458,7 +1718,7 @@ fn lexical_path(path: &Path) -> String {
     parts.join("/")
 }
 
-type GraphEdges = BTreeMap<String, BTreeSet<(String, RefKind)>>;
+type GraphEdges = BTreeMap<String, BTreeSet<String>>;
 
 fn graph(
     documents: &[Document],
@@ -1485,9 +1745,9 @@ fn graph(
         let base = Path::new(&document.path).parent().unwrap_or(Path::new(""));
         let mut targets = BTreeSet::new();
         for reference in &document.refs {
-            let joined = lexical_path(&base.join(&reference.path));
+            let joined = lexical_path(&base.join(reference));
             if paths.contains(&joined) {
-                targets.insert((joined, reference.kind.clone()));
+                targets.insert(joined);
             }
         }
         edges.insert(document.path.clone(), targets);
@@ -1495,7 +1755,27 @@ fn graph(
     (edges, owner)
 }
 
-fn distances(edges: &GraphEdges, from: &str, to: &str, undirected: bool) -> Option<usize> {
+type Adjacency = BTreeMap<String, BTreeSet<String>>;
+
+fn forward_adjacency(edges: &GraphEdges) -> Adjacency {
+    edges
+        .iter()
+        .map(|(from, targets)| (from.clone(), targets.clone()))
+        .collect()
+}
+
+fn undirected_adjacency(edges: &GraphEdges) -> Adjacency {
+    let mut result: Adjacency = BTreeMap::new();
+    for (from, targets) in edges {
+        for to in targets {
+            result.entry(from.clone()).or_default().insert(to.clone());
+            result.entry(to.clone()).or_default().insert(from.clone());
+        }
+    }
+    result
+}
+
+fn distances(adjacency: &Adjacency, from: &str, to: &str) -> Option<usize> {
     let mut queue = VecDeque::from([(from.to_owned(), 0)]);
     let mut seen = BTreeSet::new();
     while let Some((node, depth)) = queue.pop_front() {
@@ -1505,41 +1785,28 @@ fn distances(edges: &GraphEdges, from: &str, to: &str, undirected: bool) -> Opti
         if node == to {
             return Some(depth);
         }
-        let mut next = edges
-            .get(&node)
-            .into_iter()
-            .flatten()
-            .map(|(target, _)| target.clone())
-            .collect::<BTreeSet<_>>();
-        if undirected {
-            for (source, targets) in edges {
-                if targets.iter().any(|(target, _)| target == &node) {
-                    next.insert(source.clone());
-                }
+        if let Some(next) = adjacency.get(&node) {
+            for next_node in next {
+                queue.push_back((next_node.clone(), depth + 1));
             }
-        }
-        for next_node in next {
-            queue.push_back((next_node, depth + 1));
         }
     }
     None
 }
 fn graph_class(
     edges: &GraphEdges,
+    forward: &Adjacency,
+    undirected: &Adjacency,
     owner: &BTreeMap<String, usize>,
     a: &Chunk,
     b: &Chunk,
 ) -> GraphClass {
-    let linked = |from: &str, to: &str| {
-        edges
-            .get(from)
-            .is_some_and(|targets| targets.iter().any(|(target, _)| target == to))
-    };
+    let linked = |from: &str, to: &str| edges.get(from).is_some_and(|targets| targets.contains(to));
     let direct =
         linked(&a.endpoint.path, &b.endpoint.path) || linked(&b.endpoint.path, &a.endpoint.path);
-    let directed = distances(edges, &a.endpoint.path, &b.endpoint.path, false)
-        .or_else(|| distances(edges, &b.endpoint.path, &a.endpoint.path, false));
-    let undirected = distances(edges, &a.endpoint.path, &b.endpoint.path, true);
+    let directed = distances(forward, &a.endpoint.path, &b.endpoint.path)
+        .or_else(|| distances(forward, &b.endpoint.path, &a.endpoint.path));
+    let undirected = distances(undirected, &a.endpoint.path, &b.endpoint.path);
     GraphClass {
         directly_linked: direct,
         directed_distance: directed,
@@ -1551,6 +1818,27 @@ fn graph_class(
             .is_some_and(|(left, right)| left == right),
         disconnected: undirected.is_none(),
     }
+}
+fn memoized_graph_class(
+    cache: &mut BTreeMap<(String, String), GraphClass>,
+    edges: &GraphEdges,
+    forward: &Adjacency,
+    undirected: &Adjacency,
+    owner: &BTreeMap<String, usize>,
+    a: &Chunk,
+    b: &Chunk,
+) -> GraphClass {
+    let key = if a.endpoint.path <= b.endpoint.path {
+        (a.endpoint.path.clone(), b.endpoint.path.clone())
+    } else {
+        (b.endpoint.path.clone(), a.endpoint.path.clone())
+    };
+    if let Some(cached) = cache.get(&key) {
+        return cached.clone();
+    }
+    let class = graph_class(edges, forward, undirected, owner, a, b);
+    cache.insert(key, class.clone());
+    class
 }
 fn endpoint_identity(chunk: &Chunk) -> String {
     serde_json::to_string(&(
@@ -1625,6 +1913,7 @@ fn score_stratum(score: f32) -> usize {
         .expect("score is clamped to the calibration strata")
 }
 
+#[cfg(test)]
 fn sample_endpoint(endpoint: &ReportEndpoint) -> String {
     format!(
         "{}#{}#part-{}#{}",
@@ -1635,6 +1924,71 @@ fn sample_endpoint(endpoint: &ReportEndpoint) -> String {
     )
 }
 
+fn sample_endpoint_from_chunk(chunk: &Chunk) -> String {
+    format!(
+        "{}#{}#part-{}#{}",
+        chunk.endpoint.path,
+        chunk.endpoint.heading_path.join(" > "),
+        chunk.endpoint.part,
+        chunk.endpoint.source_hash
+    )
+}
+
+/// Streams stratum counts + one representative sample per stratum directly from
+/// chunk/vector pairs, avoiding materializing a `Finding`/`ReportFinding` per pair.
+/// Calibrate mode's score floor is -1.0, so every eligible pair is otherwise kept.
+fn calibrate_score_distribution(
+    chunks: &[Chunk],
+    vectors: &[Vec<f32>],
+    floor: f32,
+    lock_digest: &str,
+) -> CalibrationData {
+    let mut counts = vec![0usize; SCORE_STRATA.len()];
+    let mut selected = BTreeMap::<usize, (String, Sample)>::new();
+    for (left_index, left) in chunks.iter().enumerate() {
+        for (right_index, right) in chunks.iter().enumerate().skip(left_index + 1) {
+            if !semantic_pair_eligible(left, right) {
+                continue;
+            }
+            let score = cosine(&vectors[left_index], &vectors[right_index]);
+            if score < floor {
+                continue;
+            }
+            let stratum = score_stratum(score);
+            counts[stratum] += 1;
+            let id = identity("semantic", left, right, Some(lock_digest));
+            let sample = || Sample {
+                left: sample_endpoint_from_chunk(left),
+                right: sample_endpoint_from_chunk(right),
+                score,
+                label: "review-required".into(),
+            };
+            selected
+                .entry(stratum)
+                .and_modify(|(current_id, current_sample)| {
+                    if id < *current_id {
+                        *current_id = id.clone();
+                        *current_sample = sample();
+                    }
+                })
+                .or_insert_with(|| (id.clone(), sample()));
+        }
+    }
+    CalibrationData {
+        score_distribution: SCORE_STRATA
+            .iter()
+            .zip(counts)
+            .map(|((min_score, max_score), count)| ScoreStratum {
+                min_score: *min_score,
+                max_score: *max_score,
+                count,
+            })
+            .collect(),
+        samples: selected.into_values().map(|(_, sample)| sample).collect(),
+    }
+}
+
+#[cfg(test)]
 fn calibration_data(findings: &[ReportFinding]) -> CalibrationData {
     let semantic = findings
         .iter()
@@ -1895,7 +2249,18 @@ fn analyze(args: AnalyzeArgs) -> Result<(), String> {
         .map(|path| parse_document(path, &args.repo, &counter))
         .collect::<Result<Vec<_>, _>>()?;
     let (edges, owner) = graph(&docs, &roots, &args.repo);
-    let mut findings = exact_findings(&docs, &counter, &edges, &owner)?;
+    let forward_edges = forward_adjacency(&edges);
+    let undirected_edges = undirected_adjacency(&edges);
+    let mut graph_cache: BTreeMap<(String, String), GraphClass> = BTreeMap::new();
+    let mut findings = exact_findings(
+        &docs,
+        &counter,
+        &edges,
+        &forward_edges,
+        &undirected_edges,
+        &owner,
+        &mut graph_cache,
+    )?;
     let chunks = chunks(&docs, &counter)?;
     let vectors = embed_payloads(
         &args.model_dir,
@@ -1903,28 +2268,47 @@ fn analyze(args: AnalyzeArgs) -> Result<(), String> {
             .iter()
             .map(|chunk| chunk.payload.clone())
             .collect::<Vec<_>>(),
+        &lock,
     )?;
-    for (left_index, left) in chunks.iter().enumerate() {
-        for (right_index, right) in chunks.iter().enumerate().skip(left_index + 1) {
-            if !semantic_pair_eligible(left, right) {
-                continue;
-            }
-            let score = cosine(&vectors[left_index], &vectors[right_index]);
-            if score >= floor {
-                findings.push(Finding {
-                    id: identity("semantic", left, right, Some(&lock_digest)),
-                    lane: "body".into(),
-                    detector: DETECTOR_VERSION.into(),
-                    kind: "semantic".into(),
-                    left: left.clone(),
-                    right: right.clone(),
-                    graph: graph_class(&edges, &owner, left, right),
-                    score: Some(score),
-                    duplicate_tokens_estimate: left.tokens.min(right.tokens),
-                });
+    let report_calibration = if matches!(args.mode, Mode::Calibrate) {
+        Some(calibrate_score_distribution(
+            &chunks,
+            &vectors,
+            floor,
+            &lock_digest,
+        ))
+    } else {
+        for (left_index, left) in chunks.iter().enumerate() {
+            for (right_index, right) in chunks.iter().enumerate().skip(left_index + 1) {
+                if !semantic_pair_eligible(left, right) {
+                    continue;
+                }
+                let score = cosine(&vectors[left_index], &vectors[right_index]);
+                if score >= floor {
+                    findings.push(Finding {
+                        id: identity("semantic", left, right, Some(&lock_digest)),
+                        lane: "body".into(),
+                        detector: DETECTOR_VERSION.into(),
+                        kind: "semantic".into(),
+                        left: left.clone(),
+                        right: right.clone(),
+                        graph: memoized_graph_class(
+                            &mut graph_cache,
+                            &edges,
+                            &forward_edges,
+                            &undirected_edges,
+                            &owner,
+                            left,
+                            right,
+                        ),
+                        score: Some(score),
+                        duplicate_tokens_estimate: left.tokens.min(right.tokens),
+                    });
+                }
             }
         }
-    }
+        None
+    };
     let classified = findings
         .into_iter()
         .map(|finding| {
@@ -1943,8 +2327,6 @@ fn analyze(args: AnalyzeArgs) -> Result<(), String> {
             .filter(|(_, disposition)| disposition != "intentional" && disposition != "advisory")
             .map(|(finding, _)| finding),
     );
-    let report_calibration =
-        matches!(args.mode, Mode::Calibrate).then(|| calibration_data(&report_findings));
     let report = Report {
         format: 1,
         detector: Detector {
@@ -2189,9 +2571,7 @@ fn validate_baseline(
     lock_digest: &str,
     calibration: Option<&ReviewedCalibration>,
 ) -> Result<(), String> {
-    let digest_is_valid = Regex::new(r"^[a-f0-9]{64}$")
-        .unwrap()
-        .is_match(&value.calibration_digest);
+    let digest_is_valid = SHA_HEX_RE.is_match(&value.calibration_digest);
     if value.format != 1
         || value.status != "reviewed"
         || value.detector.version != DETECTOR_VERSION
@@ -2345,6 +2725,19 @@ mod tests {
     static TEMP_ID: AtomicU64 = AtomicU64::new(0);
 
     #[test]
+    #[cfg(feature = "model")]
+    fn execution_providers_for_rejects_unknown_provider() {
+        let error = execution_providers_for("bogus").unwrap_err();
+        assert_eq!(error, "unsupported execution provider bogus");
+    }
+
+    #[test]
+    #[cfg(feature = "model")]
+    fn execution_providers_for_accepts_locked_cpu_provider() {
+        let providers = execution_providers_for("onnxruntime-cpu").unwrap();
+        assert!(providers.is_empty());
+    }
+    #[test]
     fn load_roots_rejects_absolute_manifest_paths() {
         let repo = temp_dir("absolute-root-repo");
         let outside = temp_dir("absolute-root-outside");
@@ -2438,17 +2831,6 @@ mod tests {
     }
 
     #[test]
-    fn relative_refs_preserve_edge_type() {
-        assert_eq!(
-            extract_typed_relative_refs("[Guide](references/a.md) and `../b/SKILL.md`"),
-            vec![
-                relative_ref("references/a.md", RefKind::MarkdownLink),
-                relative_ref("../b/SKILL.md", RefKind::BacktickedPath),
-            ]
-        );
-    }
-
-    #[test]
     fn pointer_grammar_uses_actual_relative_reference_syntax() {
         let root = temp_path("pointers.md");
         fs::write(
@@ -2534,9 +2916,7 @@ mod tests {
             let root = temp_path(name);
             fs::write(
                 &root,
-                format!(
-                    "# Doc\n## One\n```md\n{invalid_closer}\n## fake\n``` \t\n## Two\nbody\n"
-                ),
+                format!("# Doc\n## One\n```md\n{invalid_closer}\n## fake\n``` \t\n## Two\nbody\n"),
             )
             .unwrap();
             let doc = parse_document(&root, root.parent().unwrap(), &TokenCounter::Test).unwrap();
@@ -2641,7 +3021,10 @@ mod tests {
     fn fixed_windows_split_one_oversized_source_unit() {
         let pieces = fixed_token_windows(&"x".repeat(25), 10, &TokenCounter::TestChars).unwrap();
         assert_eq!(pieces.concat(), "x".repeat(25));
-        assert_eq!(pieces.iter().map(String::len).collect::<Vec<_>>(), vec![10, 10, 5]);
+        assert_eq!(
+            pieces.iter().map(String::len).collect::<Vec<_>>(),
+            vec![10, 10, 5]
+        );
     }
 
     #[test]
@@ -2783,7 +3166,7 @@ mod tests {
     }
 
     #[test]
-    fn graph_reads_intro_references_and_preserves_both_edge_types() {
+    fn graph_dedupes_target_reachable_by_link_and_backtick_reference() {
         let repo = temp_dir("intro-graph");
         let a = repo.join("a.md");
         let references = repo.join("references");
@@ -2798,10 +3181,7 @@ mod tests {
         let (edges, _) = graph(&documents, &[], &repo);
         assert_eq!(
             edges["a.md"],
-            BTreeSet::from([
-                ("references/b.md".into(), RefKind::MarkdownLink),
-                ("references/b.md".into(), RefKind::BacktickedPath),
-            ])
+            BTreeSet::from(["references/b.md".to_owned()])
         );
         let _ = fs::remove_dir_all(repo);
     }
@@ -2814,7 +3194,7 @@ mod tests {
             Span { start: 3, end: 3 },
             "See `references/shared.md`.",
         );
-        left.refs = extract_typed_relative_refs(&left.body);
+        left.refs = extract_relative_refs(&left.body);
         left.pointer = pointer_only(&left.body, &left.refs, &TokenCounter::Test).unwrap();
         let mut right = left.clone();
         right.headings = vec!["Doc".into(), "Two".into()];
@@ -2829,6 +3209,9 @@ mod tests {
             &TokenCounter::Test,
             &BTreeMap::new(),
             &BTreeMap::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &mut BTreeMap::new(),
         )
         .unwrap();
         assert_eq!(findings.len(), 1);
@@ -2854,7 +3237,7 @@ mod tests {
         let documents = vec![
             Document {
                 path: "skills/a/SKILL.md".into(),
-                refs: vec![relative_ref("../b/SKILL.md", RefKind::BacktickedPath)],
+                refs: vec!["../b/SKILL.md".to_owned()],
                 sections: vec![],
             },
             Document {
@@ -2865,9 +3248,21 @@ mod tests {
         ];
         let roots = vec![PathBuf::from("skills/a"), PathBuf::from("skills/b")];
         let (edges, owner) = graph(&documents, &roots, Path::new(""));
+        let forward_edges = forward_adjacency(&edges);
+        let undirected_edges = undirected_adjacency(&edges);
         let left = test_chunk("skills/a/SKILL.md", &["A", "Body"], 1, "a");
         let right = test_chunk("skills/b/SKILL.md", &["B", "Body"], 1, "b");
-        assert!(graph_class(&edges, &owner, &left, &right).directly_linked);
+        assert!(
+            graph_class(
+                &edges,
+                &forward_edges,
+                &undirected_edges,
+                &owner,
+                &left,
+                &right
+            )
+            .directly_linked
+        );
     }
 
     #[test]
@@ -3463,13 +3858,6 @@ mod tests {
         }
     }
 
-    fn relative_ref(path: &str, kind: RefKind) -> RelativeRef {
-        RelativeRef {
-            path: path.into(),
-            kind,
-        }
-    }
-
     fn detector(lock: &str) -> Detector {
         Detector {
             version: DETECTOR_VERSION.into(),
@@ -3587,5 +3975,425 @@ mod tests {
         let path = temp_path(name);
         fs::create_dir_all(&path).unwrap();
         path
+    }
+
+    #[test]
+    fn committed_calibration_seed_deserializes() {
+        let yaml = include_str!("../../../.github/skill-overlap-calibration.yml");
+        let calibration: Calibration = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(calibration.detector.chunker, CHUNKER_VERSION);
+        assert_eq!(calibration.detector.pooling, MODEL_POOLING);
+        assert_eq!(calibration.detector.normalization, MODEL_NORMALIZATION);
+    }
+
+    #[test]
+    fn committed_baseline_seed_deserializes() {
+        let yaml = include_str!("../../../.github/skill-overlap-baseline.yml");
+        let baseline: Baseline = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(baseline.detector.chunker, CHUNKER_VERSION);
+        assert_eq!(baseline.detector.pooling, MODEL_POOLING);
+        assert_eq!(baseline.detector.normalization, MODEL_NORMALIZATION);
+        assert!(baseline.findings.is_empty());
+    }
+
+    #[test]
+    fn setext_h2_opens_a_section_and_setext_h1_only_sets_the_parent_heading() {
+        // Setext (=== / ---) headings never split sections in the pre-pulldown parser, which
+        // only recognized `#`/`##`/`###` lines; pulldown-cmark understands setext natively.
+        // The blank lines are required: without them the paragraph above `---` would absorb
+        // the preceding line into a single multi-line setext heading.
+        let root = temp_path("setext.md");
+        fs::write(&root, "# Doc\nOne\n===\n\nfirst\n\nTwo\n---\n\nsecond\n").unwrap();
+        let doc = parse_document(&root, root.parent().unwrap(), &TokenCounter::Test).unwrap();
+        // Setext H1 `One` replaces the `# Doc` parent context without opening a section of
+        // its own, exactly as an ATX H1 does; only the setext H2 `Two` opens one.
+        assert_eq!(doc.sections.len(), 1);
+        assert_eq!(doc.sections[0].headings, vec!["One", "Two"]);
+        assert_eq!(doc.sections[0].span, Span { start: 9, end: 10 });
+        assert_eq!(doc.sections[0].body, "\nsecond");
+        let _ = fs::remove_file(root);
+    }
+
+    #[test]
+    fn multi_line_setext_heading_title_joins_every_line_above_the_underline() {
+        // A setext heading's content is a paragraph, so it may span several physical lines.
+        // Truncating to the first line would silently drop half the heading's identity, and
+        // headings feed `Endpoint.heading_path` used for finding identity.
+        let root = temp_path("setext-multiline.md");
+        fs::write(&root, "# Doc\nfirst\nTwo\n---\nbody\n").unwrap();
+        let doc = parse_document(&root, root.parent().unwrap(), &TokenCounter::Test).unwrap();
+        assert_eq!(doc.sections.len(), 1);
+        assert_eq!(doc.sections[0].headings, vec!["Doc", "first Two"]);
+        assert_eq!(doc.sections[0].body, "body");
+        let _ = fs::remove_file(root);
+    }
+
+    #[test]
+    fn indented_h1_up_to_three_spaces_is_still_a_heading_finding_28() {
+        // finding 28: a 1-3-space-indented H1 is CommonMark-legal and must still open a
+        // section, matching the tolerance the legacy code already gave H2/H3.
+        let root = temp_path("indent-h1.md");
+        fs::write(&root, "   # Title\n## Sub\nbody\n").unwrap();
+        let doc = parse_document(&root, root.parent().unwrap(), &TokenCounter::Test).unwrap();
+        assert_eq!(
+            doc.sections[0].headings,
+            vec!["Title".to_string(), "Sub".to_string()]
+        );
+        let _ = fs::remove_file(root);
+    }
+
+    #[test]
+    fn four_space_indented_hash_is_code_not_a_heading() {
+        // CommonMark treats 4+ leading spaces as an indented code block, not a heading — the
+        // legacy hand-rolled scanner had no indent limit and would have wrongly split here.
+        let root = temp_path("indent-code.md");
+        fs::write(&root, "    # Not a heading\n## Sub\nbody\n").unwrap();
+        let doc = parse_document(&root, root.parent().unwrap(), &TokenCounter::Test).unwrap();
+        assert_eq!(
+            doc.sections[0].headings,
+            vec![String::new(), "Sub".to_string()]
+        );
+        let _ = fs::remove_file(root);
+    }
+
+    #[test]
+    fn headings_in_backtick_and_tilde_fences_require_matching_run_length() {
+        // A closing fence must use the same character and be at least as long as the opener
+        // (CommonMark run-length matching); a shorter run of the same char, or an info-string
+        // line, must not close the fence and must not let interior '#' lines split sections.
+        let root = temp_path("fence-runlen.md");
+        fs::write(
+            &root,
+            "# Doc\n## One\n````rust\n## fake\n```\n#### still fenced\n````\n~~~~\n## fake2\n~~~\n~~~~\n## Two\nbody\n",
+        )
+        .unwrap();
+        let doc = parse_document(&root, root.parent().unwrap(), &TokenCounter::Test).unwrap();
+        assert_eq!(
+            doc.sections
+                .iter()
+                .map(|section| section.headings.last().unwrap().as_str())
+                .collect::<Vec<_>>(),
+            vec!["One", "Two"]
+        );
+        let _ = fs::remove_file(root);
+    }
+
+    #[test]
+    fn closing_fence_with_trailing_tab_closes() {
+        // Pins the normalize_fence_closer_tabs shim directly: without it, pulldown-cmark
+        // 0.13.4 leaves a tab-suffixed closing fence open, swallowing "## Two" into the
+        // fenced block and merging it into section "One".
+        let root = temp_path("fence-tab.md");
+        fs::write(&root, "# Doc\n## One\n```\nfenced\n```\t\n## Two\nbody\n").unwrap();
+        let doc = parse_document(&root, root.parent().unwrap(), &TokenCounter::Test).unwrap();
+        assert_eq!(
+            doc.sections
+                .iter()
+                .map(|section| section.headings.last().unwrap().as_str())
+                .collect::<Vec<_>>(),
+            vec!["One", "Two"]
+        );
+        let _ = fs::remove_file(root);
+    }
+
+    #[test]
+    fn heading_titles_keep_inline_markdown_syntax_byte_identical() {
+        // Titles are re-sliced from the raw source line, not built from pulldown-cmark's
+        // inline Event::Text/Event::Code, so backticks and ** survive verbatim.
+        let root = temp_path("inline-title.md");
+        fs::write(&root, "# Doc\n## `just check` vs **just ci**\nbody\n").unwrap();
+        let doc = parse_document(&root, root.parent().unwrap(), &TokenCounter::Test).unwrap();
+        assert_eq!(
+            doc.sections[0].headings.last().unwrap(),
+            "`just check` vs **just ci**"
+        );
+        let _ = fs::remove_file(root);
+    }
+
+    #[test]
+    fn h4_h5_h6_headings_stay_body_content() {
+        let root = temp_path("h4-h6.md");
+        fs::write(
+            &root,
+            "# Doc\n## One\n#### Four\nbody\n##### Five\n###### Six\n",
+        )
+        .unwrap();
+        let doc = parse_document(&root, root.parent().unwrap(), &TokenCounter::Test).unwrap();
+        assert_eq!(doc.sections.len(), 1);
+        assert_eq!(
+            doc.sections[0].body,
+            "#### Four\nbody\n##### Five\n###### Six"
+        );
+        let _ = fs::remove_file(root);
+    }
+
+    #[test]
+    fn nested_sublists_stay_in_one_list_group() {
+        // list_groups groups by outermost Tag::Item, not outermost Tag::List: a top-level
+        // item's nested sublist shares that item's group (child a/child b stay with parent
+        // one), but sibling top-level items each get their own group so valid_cut can still
+        // prefer the boundary between them (see boundary_rank's list-group-transition rank 6).
+        let body = "- parent one\n  - child a\n  - child b\n- parent two\n";
+        let lines: Vec<&str> = body.lines().collect();
+        let groups = list_groups(&lines, body);
+        assert_eq!(groups, vec![Some(1), Some(1), Some(1), Some(2)]);
+    }
+
+    #[test]
+    fn gfm_tables_recognize_single_dash_and_triple_dash_header_delimiters() {
+        // pulldown-cmark's GFM table extension accepts any run of one or more `-` (optionally
+        // with `:` alignment markers) as the header-delimiter row; the legacy hand-rolled regex
+        // required exactly `---`. Cover both forms so the newly-recognized single-dash case and
+        // the legacy triple-dash case stay covered together.
+        let single_dash = "| A | B |\n| - | - |\n| 1 | 2 |\n";
+        let lines: Vec<&str> = single_dash.lines().collect();
+        let contexts = table_contexts(&lines, 10, single_dash);
+        assert!(contexts.iter().all(|context| context.is_some()));
+        assert_eq!(contexts[0].as_ref().unwrap().header, "| A | B |");
+        assert_eq!(contexts[0].as_ref().unwrap().header_line, 10);
+
+        let triple_dash = "| A | B |\n| --- | --- |\n| 1 | 2 |\n";
+        let lines: Vec<&str> = triple_dash.lines().collect();
+        let contexts = table_contexts(&lines, 20, triple_dash);
+        assert!(contexts.iter().all(|context| context.is_some()));
+        assert_eq!(contexts[0].as_ref().unwrap().header, "| A | B |");
+        assert_eq!(contexts[0].as_ref().unwrap().header_line, 20);
+    }
+
+    #[test]
+    fn parser_input_shim_reaches_list_and_table_detection() {
+        // Fix 1 pin: only parse_document routed the tab-closed-fence shim through
+        // parser_input originally; list_groups and table_contexts parsed the raw section body
+        // directly. A trailing-tab closing fence leaves pulldown-cmark's fence open for THEM
+        // specifically, silently absorbing the list and table that follow. All three call
+        // sites now route through parser_input.
+        let body =
+            "```\nfenced\n```\t\n- item one\n- item two\n\n| A | B |\n| - | - |\n| 1 | 2 |\n";
+        let lines: Vec<&str> = body.lines().collect();
+
+        let groups = list_groups(&lines, body);
+        assert_eq!(
+            groups[3],
+            Some(1),
+            "list item one must be detected past the tab-closed fence"
+        );
+        assert_eq!(
+            groups[4],
+            Some(2),
+            "list item two must be detected past the tab-closed fence"
+        );
+
+        let contexts = table_contexts(&lines, 10, body);
+        assert!(
+            contexts[6].is_some() && contexts[7].is_some() && contexts[8].is_some(),
+            "the GFM table past the tab-closed fence must be detected"
+        );
+        assert_eq!(contexts[6].as_ref().unwrap().header, "| A | B |");
+    }
+
+    #[test]
+    fn sibling_top_level_list_items_cut_on_item_boundaries() {
+        // list_groups now groups by outermost Tag::Item (sibling top-level items each get
+        // their own group), so the boundary between two sibling items is a valid_cut and
+        // ranks 6 in boundary_rank -- second only to an H4 heading. Chunk boundaries feed the
+        // duplicate-detection ratchet directly: a chunk that opens cleanly at "- parent1"
+        // carries more standalone context for embedding/matching than one that opens mid-item,
+        // so cutting on the item boundary (rather than splitting parent1's children) is a real
+        // chunk-quality improvement, not just cosmetic.
+        let mut lines = Vec::new();
+        for parent in 0..3 {
+            lines.push(format!("- parent{parent}"));
+            lines.extend((0..200).map(|child| format!("  child{parent}-{child}")));
+        }
+        let total = lines.len();
+        let section = test_section(
+            "x.md",
+            &["Doc"],
+            Span {
+                start: 10,
+                end: 10 + total - 1,
+            },
+            &lines.join("\n"),
+        );
+
+        let pieces = split_section(&section, 2, &TokenCounter::Test).unwrap();
+
+        assert_eq!(pieces.len(), 3);
+        assert_eq!(
+            pieces[0].span,
+            Span {
+                start: 10,
+                end: 210
+            }
+        );
+        assert_eq!(
+            pieces[1].span,
+            Span {
+                start: 211,
+                end: 411
+            }
+        );
+        assert_eq!(
+            pieces[2].span,
+            Span {
+                start: 412,
+                end: 612
+            }
+        );
+        assert!(
+            pieces[0].body.starts_with("- parent0") && pieces[0].body.ends_with("child0-199"),
+            "piece 0 must be exactly parent0's item boundary, not a mid-item split: {:?}..{:?}",
+            pieces[0].body.lines().next(),
+            pieces[0].body.lines().last()
+        );
+        assert!(
+            pieces[1].body.starts_with("- parent1") && pieces[1].body.ends_with("child1-199"),
+            "piece 1 must start at the parent1 item boundary, not mid-item: {:?}..{:?}",
+            pieces[1].body.lines().next(),
+            pieces[1].body.lines().last()
+        );
+        assert!(
+            pieces[2].body.starts_with("- parent2") && pieces[2].body.ends_with("child2-199"),
+            "piece 2 must start at the parent2 item boundary, not mid-item: {:?}..{:?}",
+            pieces[2].body.lines().next(),
+            pieces[2].body.lines().last()
+        );
+    }
+
+    #[test]
+    fn crlf_document_with_tab_closed_fence_still_splits_after_heading() {
+        // Pins Fix 3: normalize_fence_closer_tabs strips a CRLF line ending as one unit and
+        // re-appends it verbatim, so a tab-suffixed closing fence in a CRLF document still
+        // closes the fence (rather than leaving it open and swallowing "## Two").
+        let root = temp_path("fence-tab-crlf.md");
+        fs::write(
+            &root,
+            "# Doc\r\n## One\r\n```\r\nfenced\r\n```\t\r\n## Two\r\nbody\r\n",
+        )
+        .unwrap();
+        let doc = parse_document(&root, root.parent().unwrap(), &TokenCounter::Test).unwrap();
+        assert_eq!(
+            doc.sections
+                .iter()
+                .map(|section| section.headings.last().unwrap().as_str())
+                .collect::<Vec<_>>(),
+            vec!["One", "Two"]
+        );
+        let _ = fs::remove_file(root);
+    }
+
+    #[test]
+    fn normalize_fence_closer_tabs_preserves_byte_length_on_crlf() {
+        let text = "```\t\r\nfenced\r\n```\t\r\n";
+        assert_eq!(normalize_fence_closer_tabs(text).len(), text.len());
+    }
+
+    #[test]
+    fn shims_preserve_byte_length_round_trip() {
+        // Pins Fix 4: both shims (and parser_input's composition of them) must never change
+        // the input's byte length, since every downstream Span depends on byte offsets from
+        // the shimmed text mapping through line_offsets(original) to the same source line. The
+        // CJK/emoji frontmatter case is sharpest: neutralize_front_matter dot-fills byte-by-
+        // byte, so a multi-byte UTF-8 character replaced by a single-byte '.' per byte is the
+        // path most likely to silently shrink the output if that per-byte loop regressed to
+        // per-character.
+        let no_trailing_newline = "# Doc\n## One\n```\t";
+        assert_eq!(
+            normalize_fence_closer_tabs(no_trailing_newline).len(),
+            no_trailing_newline.len()
+        );
+        assert_eq!(
+            parser_input(no_trailing_newline).len(),
+            no_trailing_newline.len()
+        );
+
+        let empty_fence_suffix = "# Doc\n## One\n```\nfenced\n```\n";
+        assert_eq!(
+            normalize_fence_closer_tabs(empty_fence_suffix).len(),
+            empty_fence_suffix.len()
+        );
+
+        let cjk_emoji_frontmatter =
+            "---\ntitle: \u{65e5}\u{672c}\u{8a9e}\u{306e}\u{30bf}\u{30a4}\u{30c8}\u{30eb}\nemoji: \u{1f389}\u{1f9c0}\n---\n# Heading\nbody\n";
+        assert_eq!(
+            neutralize_front_matter(cjk_emoji_frontmatter).len(),
+            cjk_emoji_frontmatter.len()
+        );
+        assert_eq!(
+            parser_input(cjk_emoji_frontmatter).len(),
+            cjk_emoji_frontmatter.len()
+        );
+
+        let composed = "---\ntitle: \u{7d75}\u{6587}\u{5b57} \u{1f389}\n---\n## One\n```\t\nfenced\n```\t\n## Two\nbody\n";
+        assert_eq!(parser_input(composed).len(), composed.len());
+    }
+
+    #[test]
+    fn thematic_break_dash_line_is_not_mistaken_for_front_matter() {
+        // Pins Fix 5 shape 1: a document opening with a THEMATIC BREAK "---" (no preceding
+        // paragraph, so pulldown-cmark reads it as a horizontal rule, not frontmatter) must not
+        // be neutralized. is_yaml_line_shape rejects the 2+-`#` ATX heading inside it, which
+        // aborts the scan before any dot-filling happens.
+        let text = "---\n## Real Heading\nbody\n\n---\nmore\n";
+        assert_eq!(neutralize_front_matter(text), text);
+
+        let root = temp_path("thematic-break.md");
+        fs::write(&root, text).unwrap();
+        let doc = parse_document(&root, root.parent().unwrap(), &TokenCounter::Test).unwrap();
+        assert!(doc
+            .sections
+            .iter()
+            .any(|section| section.headings.last().is_some_and(|h| h == "Real Heading")));
+        assert!(doc
+            .sections
+            .iter()
+            .any(|section| section.body.contains("body")));
+        let _ = fs::remove_file(root);
+    }
+
+    #[test]
+    fn block_scalar_containing_column_zero_dashes_is_a_known_unfixed_limitation() {
+        // Pins Fix 5 shape 2 as a DOCUMENTED, NOT-fixed limitation: distinguishing a YAML block
+        // scalar's own content from the real closing "---" needs a YAML parser. "notes: |"
+        // opens a block scalar; the "---" at column 0 a few lines down is meant as literal
+        // scalar content, but because it carries no leading whitespace, is_block_scalar_key's
+        // crude indentation tracking (in_scalar clears on any unindented, non-empty line) reads
+        // it as the closing delimiter instead of the real closer two lines further down. Do not
+        // "fix" this by making the tracker YAML-aware -- that scope is explicitly out.
+        let text = "---\ntitle: x\nnotes: |\n  indented content\n---\n  more scalar text\n---\n# Heading\nbody\n";
+        let neutralized = neutralize_front_matter(text);
+        let mistaken_closer_end = text.find("---\n  more").unwrap() + "---\n".len();
+        let expected_prefix: String = text[..mistaken_closer_end]
+            .bytes()
+            .map(|byte| {
+                if matches!(byte, b'\n' | b'\r') {
+                    byte as char
+                } else {
+                    '.'
+                }
+            })
+            .collect();
+        assert_eq!(&neutralized[..mistaken_closer_end], expected_prefix);
+        assert_eq!(
+            &neutralized[mistaken_closer_end..],
+            &text[mistaken_closer_end..]
+        );
+    }
+
+    #[test]
+    fn astro_style_nested_mappings_and_list_of_mappings_are_valid_front_matter() {
+        // Regression pin for the phantom-section bug: a genuine Astro/Starlight front-matter
+        // block with a nested mapping (`hero:` -> `image:` -> `file:`/`alt:`) and a YAML list
+        // of mappings under a key (`actions:` -> `- text: ...` / indented `link:`/`icon:`/
+        // `variant:`) must still be recognized and neutralized -- not aborted.
+        let text = "---\ntitle: Example\nhero:\n  title: Example\n  image:\n    file: ../a.svg\n    alt: logo\n  actions:\n    - text: Get started\n      link: install/\n      icon: right-arrow\n      variant: primary\n    - text: View on GitHub\n      link: https://example.com\n      icon: external\n      variant: minimal\n---\nbody\n";
+        let neutralized = neutralize_front_matter(text);
+        assert_ne!(neutralized, text);
+        assert_eq!(neutralized.len(), text.len());
+        let front_matter_end = text.find("---\nbody").unwrap() + "---\n".len();
+        assert!(neutralized[..front_matter_end]
+            .bytes()
+            .all(|byte| matches!(byte, b'.' | b'\n' | b'\r')));
+        assert_eq!(&neutralized[front_matter_end..], &text[front_matter_end..]);
     }
 }
