@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pythonic"
+  short_description: "Write concise, self-contained Python"
+  default_prompt: "Use $pythonic to implement this Python change succinctly and remove AI-generated slop."
