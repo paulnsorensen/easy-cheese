@@ -569,10 +569,13 @@ def test_local_skill_modules_finds_libs_and_excludes_subcommands() -> None:
     discovered here (not via EXTRA_MODULES) because ultracook's src dir is aliased to
     src/fanout/, where age_route.py lives alongside age_route_cli.py."""
     local = build_pyz._local_skill_modules("ultracook")
-    assert local == {"curd", "wiring", "age_route"}, local
+    assert local == {"curd", "wiring", "age_route", "review_surface"}, local
     assert "validate_decomposition" not in local  # registered subcommand, not a local lib
     assert "validate_manifest" not in local
     assert "schema" not in local  # shared module (shared/scripts), not src/fanout
+    # review_surface is the pure scorer imported by the review-surface subcommand,
+    # so it is a discovered lib; its CLI sibling is registered and must stay excluded.
+    assert "review_surface_cli" not in local
 
 def test_age_bundle_exposes_html_report_help(bundles: Path) -> None:
     """age.pyz should expose the new html-report subcommand and its CLI surface."""
