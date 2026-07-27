@@ -1,4 +1,3 @@
-
 # ADR: Own the Snowflake overlap analyzer in easy-cheese
 
 The skill-overlap job is one standalone Rust binary under `tools/skill-overlap/`, reproducing Hallouminate's Snowflake embedding path without depending on Hallouminate's index or storage schema.
@@ -14,5 +13,5 @@ The skill-overlap job is one standalone Rust binary under `tools/skill-overlap/`
 
 Related: [[skill-overlap-ratchet-002]], [[skill-overlap-ratchet-004]].
 
-[^1]: `.github/instructions/python.instructions.md:7-24`; `tests/python/ref_extraction.py:1-30`
+[^1]: `.github/instructions/python.instructions.md:11-24`
 [^2]: https://github.com/paulnsorensen/hallouminate/blob/v0.5.0/crates/hallouminate-adapters/src/embedder.rs#L99-L180

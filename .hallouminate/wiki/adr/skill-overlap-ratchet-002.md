@@ -1,4 +1,3 @@
-
 # ADR: Preserve H2 and H3 identity during semantic chunking
 
 Meaningful H2 and H3 sections remain independent semantic units at any length; only oversized embedding payloads are subdivided, and generated parts retain their original section identity.

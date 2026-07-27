@@ -1,4 +1,3 @@
-
 # ADR: Compare semantic overlap against explicit reference topology
 
 The analyzer keeps document references, collapsed skill ownership, and semantic similarity as distinct graph views; slash-command mentions are not invocation edges.
