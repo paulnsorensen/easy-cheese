@@ -734,8 +734,22 @@ fn verify_parity(args: ParityArgs) -> Result<(), String> {
             .map(|case| case["input"].as_str().unwrap().to_owned())
             .collect::<Vec<_>>();
         let actual = embed_payloads(&args.model.model_dir, &inputs, &lock)?;
+        if actual.len() != cases.len() {
+            return Err(format!(
+                "parity failed: expected {} embeddings, got {}",
+                cases.len(),
+                actual.len()
+            ));
+        }
         for (case, actual) in cases.iter().zip(actual) {
             let expected = case["output"].as_array().unwrap();
+            if expected.len() != actual.len() {
+                return Err(format!(
+                    "parity failed: expected {}-dim embedding, got {}",
+                    expected.len(),
+                    actual.len()
+                ));
+            }
             let max_error = expected
                 .iter()
                 .zip(&actual)
@@ -1858,8 +1872,14 @@ fn graph_class(
     let linked = |from: &str, to: &str| edges.get(from).is_some_and(|targets| targets.contains(to));
     let direct =
         linked(&a.endpoint.path, &b.endpoint.path) || linked(&b.endpoint.path, &a.endpoint.path);
-    let directed = distances(forward, &a.endpoint.path, &b.endpoint.path)
-        .or_else(|| distances(forward, &b.endpoint.path, &a.endpoint.path));
+    let directed = match (
+        distances(forward, &a.endpoint.path, &b.endpoint.path),
+        distances(forward, &b.endpoint.path, &a.endpoint.path),
+    ) {
+        (Some(a_to_b), Some(b_to_a)) => Some(a_to_b.min(b_to_a)),
+        (Some(distance), None) | (None, Some(distance)) => Some(distance),
+        (None, None) => None,
+    };
     let undirected = distances(undirected, &a.endpoint.path, &b.endpoint.path);
     GraphClass {
         directly_linked: direct,
@@ -1967,7 +1987,13 @@ fn score_stratum(score: f32) -> usize {
     SCORE_STRATA
         .iter()
         .position(|(min, max)| score >= *min && (score < *max || (*max == 1.0 && score <= *max)))
-        .expect("score is clamped to the calibration strata")
+        .unwrap_or_else(|| {
+            debug_assert!(
+                score.is_nan(),
+                "score {score} should be clamped to the calibration strata"
+            );
+            0
+        })
 }
 
 #[cfg(test)]
@@ -2415,10 +2441,16 @@ fn analyze(args: AnalyzeArgs) -> Result<(), String> {
         trends: trends(&classified, baseline.as_ref()),
         findings: report_findings,
         duplicate_components: report_components,
-        frontmatter: frontmatter_advisories(&roots, floor)?,
+        frontmatter: frontmatter_advisories(&roots, &args.repo, floor)?,
         calibration: report_calibration,
         reviewed_calibration: reviewed,
     };
+    if let Some(parent) = args.json_out.parent() {
+        fs::create_dir_all(parent).map_err(ioerr)?;
+    }
+    if let Some(parent) = args.markdown_out.parent() {
+        fs::create_dir_all(parent).map_err(ioerr)?;
+    }
     fs::write(
         &args.json_out,
         serde_json::to_string_pretty(&report).map_err(|error| error.to_string())?,
@@ -2449,25 +2481,34 @@ fn analyze(args: AnalyzeArgs) -> Result<(), String> {
 }
 
 const FRONTMATTER_ADVISORY_CAP: usize = 20;
-fn frontmatter_advisories(roots: &[PathBuf], floor: f32) -> Result<Vec<Advisory>, String> {
+fn frontmatter_advisories(
+    roots: &[PathBuf],
+    repo: &Path,
+    floor: f32,
+) -> Result<Vec<Advisory>, String> {
     let mut values = Vec::new();
     for root in roots {
         let file = root.join("SKILL.md");
-        if let Ok(text) = fs::read_to_string(&file) {
-            if let Some(frontmatter) = text.strip_prefix("---\n").and_then(|body| {
-                body.split_once("\n---\n")
-                    .map(|(frontmatter, _)| frontmatter)
-            }) {
-                let yaml: serde_yaml::Value = serde_yaml::from_str(frontmatter)
-                    .map_err(|error| format!("{}: {error}", file.display()))?;
-                for field in ["name", "description"] {
-                    if let Some(value) = yaml.get(field).and_then(|value| value.as_str()) {
-                        values.push(FrontmatterValue {
-                            path: file.display().to_string(),
-                            field: field.to_owned(),
-                            value: value.to_owned(),
-                        });
-                    }
+        let text =
+            fs::read_to_string(&file).map_err(|error| format!("{}: {error}", file.display()))?;
+        let rel = file
+            .strip_prefix(repo)
+            .unwrap_or(&file)
+            .to_string_lossy()
+            .replace('\\', "/");
+        if let Some(frontmatter) = text.strip_prefix("---\n").and_then(|body| {
+            body.split_once("\n---\n")
+                .map(|(frontmatter, _)| frontmatter)
+        }) {
+            let yaml: serde_yaml::Value = serde_yaml::from_str(frontmatter)
+                .map_err(|error| format!("{}: {error}", file.display()))?;
+            for field in ["name", "description"] {
+                if let Some(value) = yaml.get(field).and_then(|value| value.as_str()) {
+                    values.push(FrontmatterValue {
+                        path: rel.clone(),
+                        field: field.to_owned(),
+                        value: value.to_owned(),
+                    });
                 }
             }
         }
@@ -2930,7 +2971,12 @@ mod tests {
         )
         .unwrap();
 
-        let results = frontmatter_advisories(&[root_a.clone(), root_b.clone()], 0.3).unwrap();
+        let results = frontmatter_advisories(
+            &[root_a.clone(), root_b.clone()],
+            &std::env::temp_dir(),
+            0.3,
+        )
+        .unwrap();
         assert!(
             results.is_empty(),
             "near-zero-score pair should be suppressed by the floor: {results:?}"
