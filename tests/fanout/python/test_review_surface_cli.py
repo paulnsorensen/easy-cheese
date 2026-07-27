@@ -133,3 +133,69 @@ class TestErrorHandling:
         )
         assert exit_code != 0
         assert "ERROR" in capsys.readouterr().err
+
+
+class TestNumstatRows:
+    """review_surface_cli._numstat_rows -- git's binary-diff marker `-`
+    must be converted to 0, and split("\t", 2) must protect paths that
+    contain spaces.
+    """
+
+    def test_binary_diff_rows_zeroed(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        stdout = "10\t5\tsrc/a.py\n-\t-\tassets/logo.png\n"
+
+        def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout=stdout, stderr="")
+
+        monkeypatch.setattr(review_surface_cli.subprocess, "run", fake_run)
+        rows = review_surface_cli._numstat_rows("irrelevant-repo", ["HEAD"])
+        assert rows == [("src/a.py", 10, 5), ("assets/logo.png", 0, 0)]
+
+    def test_path_with_spaces_parses(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        stdout = "3\t1\tsrc/file with spaces.py\n"
+
+        def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout=stdout, stderr="")
+
+        monkeypatch.setattr(review_surface_cli.subprocess, "run", fake_run)
+        rows = review_surface_cli._numstat_rows("irrelevant-repo", ["HEAD"])
+        assert rows == [("src/file with spaces.py", 3, 1)]
+
+
+class TestLoadWeightOverrideEdgeShapes:
+    def test_table_without_weights_key_returns_none(self, tmp_path: Path) -> None:
+        config = tmp_path / "config.toml"
+        config.write_text("[review_surface]\nother_key = 1\n", encoding="utf-8")
+        assert review_surface_cli._load_weight_override(str(config)) is None
+
+    def test_missing_table_returns_none(self, tmp_path: Path) -> None:
+        config = tmp_path / "config.toml"
+        config.write_text("[other_section]\nkey = 1\n", encoding="utf-8")
+        assert review_surface_cli._load_weight_override(str(config)) is None
+
+    def test_empty_weights_list_returns_empty_tuple_not_none(self, tmp_path: Path) -> None:
+        config = tmp_path / "config.toml"
+        config.write_text("[review_surface]\nweights = []\n", encoding="utf-8")
+        result = review_surface_cli._load_weight_override(str(config))
+        assert result == ()
+        assert result is not None
+
+        # Deliberate "replaces wholesale" semantic: an empty override list
+        # means NO exclusions at all, not "no override" -- weigh() falls
+        # through to the 1.0 default for every path, so an all-lockfile
+        # diff scored with an empty override is NOT zeroed.
+        rows = [("pnpm-lock.yaml", 400, 276)]
+        scored = review_surface.score(rows, weights=result)
+        assert scored["zeroed"] == []
+        assert scored["score"] == pytest.approx(676.0 + review_surface.FILE_COST * 1.0)
+
+    def test_missing_config_path_raises_cannot_read(self, tmp_path: Path) -> None:
+        missing = tmp_path / "does-not-exist.toml"
+        with pytest.raises(RuntimeError, match="cannot read config"):
+            review_surface_cli._load_weight_override(str(missing))
+
+    def test_malformed_toml_raises_malformed_toml(self, tmp_path: Path) -> None:
+        config = tmp_path / "bad.toml"
+        config.write_text("this is not [ valid toml", encoding="utf-8")
+        with pytest.raises(RuntimeError, match="malformed TOML"):
+            review_surface_cli._load_weight_override(str(config))

@@ -131,3 +131,32 @@ class TestPurity:
     def test_module_parses_as_valid_python(self) -> None:
         src = (REPO_ROOT / "src" / "fanout" / "review_surface.py").read_text(encoding="utf-8")
         ast.parse(src)  # raises SyntaxError if invalid
+
+
+class TestDualGlobFirstMatchWinsRealTable:
+    """SPEC ACCEPTANCE: DEFAULT_WEIGHTS entries are ordered so a zero-
+    weight glob always wins over a later quarter-weight glob for paths
+    that match both -- fnmatch lets `*` cross `/`, so these paths match
+    two entries of the SHIPPED table.
+    """
+
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "docs/notes/deps.lock",  # matches *.lock (0.0) and docs/** (0.25)
+            "README.lock",  # matches *.lock (0.0) and README* (0.25)
+            ".hallouminate/scripts/age.pyz",  # matches *.pyz (0.0) and .hallouminate/** (0.25)
+        ],
+    )
+    def test_zero_weight_glob_wins_over_later_quarter_weight_glob(self, path: str) -> None:
+        assert review_surface.weigh(path) == 0.0
+
+    def test_zero_weight_entries_precede_quarter_weight_entries(self) -> None:
+        # Structural invariant that makes first-match-wins produce the
+        # zero-weight result above: every 0.0 entry must sit at a lower
+        # index than every 0.25 entry.
+        zero_indices = [i for i, (_, w) in enumerate(review_surface.DEFAULT_WEIGHTS) if w == 0.0]
+        quarter_indices = [i for i, (_, w) in enumerate(review_surface.DEFAULT_WEIGHTS) if w == 0.25]
+        assert zero_indices
+        assert quarter_indices
+        assert max(zero_indices) < min(quarter_indices)

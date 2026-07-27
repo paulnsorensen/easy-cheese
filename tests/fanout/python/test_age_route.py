@@ -204,6 +204,39 @@ class TestDimensionPartitionInvariant:
         assert len(flat) == len(age_route.DIMENSIONS)
 
 
+class TestRefinementTreeStructuralInvariant:
+    """A regrouping regression that only shifted which lens a dimension
+    lands in -- without changing DIMENSIONS or lens counts -- would not be
+    caught by the hardcoded-list tests above if they were ever loosened.
+    Every coarser tier's lens groups must be exact unions of whole
+    next-finer-tier groups, with no finer group split across two coarser
+    ones. Computed structurally from route()'s own output -- no dimension
+    names hardcoded here."""
+
+    @staticmethod
+    def _assert_coarse_is_union_of_fine(coarse: list[list[str]], fine: list[list[str]]) -> None:
+        fine_sets = [frozenset(group) for group in fine]
+        for coarse_group in coarse:
+            coarse_set = frozenset(coarse_group)
+            covering = [fs for fs in fine_sets if fs <= coarse_set]
+            assert covering, (coarse_group, fine)
+            assert frozenset().union(*covering) == coarse_set, (coarse_group, fine)
+            # No fine group straddles this coarse group's boundary: each one
+            # is either fully inside it or fully outside it.
+            for fs in fine_sets:
+                assert fs <= coarse_set or fs.isdisjoint(coarse_set), (fs, coarse_group)
+
+    def test_n2_groups_are_unions_of_whole_n5_groups(self) -> None:
+        n2 = age_route.route(score=150, risk_flags=[])["lenses"]
+        n5 = age_route.route(score=400, risk_flags=[])["lenses"]
+        self._assert_coarse_is_union_of_fine(n2, n5)
+
+    def test_n1_lens_is_union_of_both_n2_groups(self) -> None:
+        n1 = age_route.route(score=30, risk_flags=[])["lenses"]
+        n2 = age_route.route(score=150, risk_flags=[])["lenses"]
+        self._assert_coarse_is_union_of_fine(n1, n2)
+
+
 class TestAffinageEscalation:
     """affinage entries weight high comment count / risky ci_class upward,
     one tier step in the (1, 2, 5) order, capped at the top."""

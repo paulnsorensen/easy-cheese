@@ -249,6 +249,21 @@ class TestSurfaceFloor:
         errors = curd_block.validate_curd_block(block)
         assert any("est_edit_lines must be a positive integer" in e for e in errors), errors
 
+    def test_zero_est_edit_lines_fails_positive_int_check_not_merge_candidate(self) -> None:
+        curd = _curd("solo", ["src/solo.py"])
+        curd["est_edit_lines"] = 0
+        block = _block(curds=[curd], waves=[["solo"]])
+        errors = curd_block.validate_curd_block(block)
+        assert any("est_edit_lines must be a positive integer" in e for e in errors), errors
+        assert not any("MERGE CANDIDATE" in e for e in errors), errors
+
+    def test_bool_true_est_edit_lines_fails_despite_equaling_one(self) -> None:
+        curd = _curd("solo", ["src/solo.py"])
+        curd["est_edit_lines"] = True
+        block = _block(curds=[curd], waves=[["solo"]])
+        errors = curd_block.validate_curd_block(block)
+        assert any("est_edit_lines must be a positive integer" in e for e in errors), errors
+
     def test_eight_one_line_curds_produce_eight_floor_violations(self) -> None:
         curds = [_curd(f"c{i}", [f"src/c{i}.py"], est_edit_lines=1) for i in range(8)]
         waves = [[c["slug"] for c in curds[:4]], [c["slug"] for c in curds[4:]]]
