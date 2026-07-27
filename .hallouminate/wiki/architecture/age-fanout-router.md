@@ -58,6 +58,36 @@ so `age_route.py` rides alongside its CLI in each bundle; shared-module
 dependencies (`manifest_io`, `schema`) auto-vendor. Skill docs carry the
 standard repo-path-then-bundle fallback for the router call.
 
+### These CLIs are bundle-only. Document the `.pyz` form, never the script path
+
+`src/fanout/*_cli.py` cannot be run directly. `cli` and `git_utils` live in
+`shared/scripts/` and are only co-staged *flat* inside each `.pyz`, so
+`python3 src/fanout/review_surface_cli.py …` dies on
+`ModuleNotFoundError: No module named 'cli'`. The same is true of `mode.py`,
+`baseline.py`, `curd_block.py`, and `phase_decision.py`.
+
+This is not cosmetic. A skill prompt that documents the script path ships a
+command that crashes, and an agent reading the crash as "score unavailable"
+falls back to `n=1` — a large diff gets one reviewer, which is the exact
+silent under-review failure this router exists to prevent. It shipped once
+(caught in the second `/age` pass) because adopting the shared helpers turned
+a previously-runnable script bundle-only.
+
+Always document the `.pyz` subcommand as the primary invocation and cite the
+repo path as *source only*. `PYTHONPATH=shared/scripts` works but no other
+skill doc uses it.
+
+### `git diff --numstat -z` — put `--` after the revisions, never before
+
+`git diff --numstat -z --no-renames -- HEAD~1 HEAD` returns **zero rows and
+exit 0**: git reads everything after `--` as pathspecs, so the revisions match
+no path and the diff is silently empty. The scorer then returns `score: 0.0`
+and the router sizes `n=1`. The correct form is
+`git diff --numstat -z --no-renames <revs> --`, matching git's documented
+`git diff [<commit>…] [--] [<path>…]` grammar. Argument injection is closed by
+rejecting leading-dash `diff_args` *before* building the command, not by the
+`--` placement.
+
 ## Canonicity
 
 The routing-*policy* prose is canonical in the dotfiles wiki
