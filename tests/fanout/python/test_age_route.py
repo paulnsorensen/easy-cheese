@@ -359,8 +359,12 @@ class TestInputValidation:
     def test_score_is_keyword_only(self) -> None:
         # A stale positional call (score used to be `files_changed: int`)
         # must fail loud instead of silently routing under a new meaning.
+        # Unpacked from a tuple so the deliberate arity violation is not a
+        # statically-resolvable wrong-argument-count (CodeQL
+        # py/call/wrong-arguments); the runtime call is still positional.
+        stale_positional_args = (30, [])
         with pytest.raises(TypeError):
-            age_route.route(30, [])
+            age_route.route(*stale_positional_args)
 
     def test_age_entry_rejects_comments_only(self) -> None:
         with pytest.raises(ValueError):
