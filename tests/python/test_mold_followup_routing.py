@@ -44,6 +44,24 @@ def test_scoped_documents_exist() -> None:
     assert not missing, f"Mold follow-up routing files moved or renamed: {missing}"
 
 
+def test_user_key_allows_contextual_affirmations_without_inference() -> None:
+    section = _section(HANDSHAKE, "User key")
+    for phrase in (
+        "explicit extraction intent",
+        "curdle",
+        "ship it",
+        "extract",
+        "that's enough",
+        "directly answers an agent's extraction question",
+        "ok let's go",
+        "sounds good",
+        "go ahead",
+    ):
+        assert phrase.casefold() in section.casefold()
+    assert "Never inferred" not in section
+    assert "unrelated or ambiguous approval" in section
+
+
 def test_candidate_collection_is_non_committing_dialogue_state() -> None:
     _assert_phrases(
         MOLD,

@@ -15,15 +15,15 @@ These four answers together describe the shape of the change and bound its blast
 
 Run all three. Cheap when the answers are small; the cost of skipping is silent misrouting later.
 
-| Question | Tool | Call |
+| Question | Backend capability | Call |
 | --- | --- | --- |
-| Current signature? Sibling signatures? Downstream callees (`── calls ──` footer)? | `cheez-search` | `tilth_search(queries: [{query: "<symbol>", kind: "symbol"}], expand: 2, scope: "<module>")` |
-| Who calls this? (upstream) | `cheez-search` | `tilth_search(queries: [{query: "<symbol>", kind: "callers"}])` |
-| What's the import / blast radius? | `cheez-search` | `tilth_deps(path: "<file>")` |
+| Current signature? Sibling signatures? Downstream callees (`── calls ──` footer)? | semantic symbol search | `tilth_search(queries: [{query: "<symbol>", kind: "symbol"}], expand: 2, scope: "<module>")` |
+| Who calls this? (upstream) | semantic caller search | `tilth_search(queries: [{query: "<symbol>", kind: "callers"}])` |
+| What's the import / blast radius? | dependency search | `tilth_deps(path: "<file>")` |
 
 The first call does double duty — its `── calls ──` footer is the cheap callee read; do not issue a separate query for it.
 
-For multi-symbol changes, batch up to five symbols in a single `cheez-search` call (`query: "a, b, c"`). Re-run only when a new symbol enters scope.
+For multi-symbol changes, batch up to five symbols in a single semantic search call (`query: "a, b, c"`). Re-run only when a new symbol enters scope. Follow the [shared routing contract](../../cheese/references/code-intelligence-routing.md).
 
 ## Output expected before exit
 
@@ -42,9 +42,9 @@ The `callees` line is optional — print it only when the symbol query's `──
 
 A `high` verdict (multi-module callers or more than five importers) makes the Grill gate mandatory in mold (see `handshake.md`) and forces culture to label the option `[high blast radius]` before continuing trade-off talk.
 
-## When tilth / cheez-search is unavailable
+## When semantic source tooling is unavailable
 
-Shape-check should not block the dialogue when its preferred tools are missing. Substitute where a sanctioned alternative exists; **for shape-check specifically, do not substitute textual search** — `grep` / `rg` over a symbol name produces a count of string occurrences, not callers or importers, and a guessed blast-radius verdict is worse than an honest unknown. (This is a shape-check rule, not a global `cheez-*` ban: outside `cheez-*` skills, mold and other workflow skills may use host tools where they are the right answer — see the README's "host tools are still the right call outside code work" line.)
+Shape-check should not block the dialogue when its preferred tools are missing. Substitute where a sanctioned alternative exists; **for shape-check specifically, do not substitute textual search** — `grep` / `rg` over a symbol name produces a count of string occurrences, not callers or importers, and a guessed blast-radius verdict is worse than an unknown.
 
 - **Callers / callees**: fall back to LSP `textDocument/references` / `textDocument/prepareCallHierarchy` when a language server is reachable. Note the substitution out loud.
 - **Imports / blast radius**: no LSP equivalent. Skip the count, mark the line `unknown`, and lean on the verdict downgrade below.

@@ -27,7 +27,7 @@ input" shape, kept so existing tests and callers do not break mid-rollout).
 from __future__ import annotations
 
 import argparse
-import os
+import contextlib
 from pathlib import Path
 
 import cli
@@ -131,17 +131,13 @@ def write_artifact(
     tmp = target.with_name(target.name + ".tmp")
     try:
         tmp.write_text(contents, encoding="utf-8")
-        os.replace(tmp, target)
+        tmp.replace(target)
     except BaseException:
         # Atomic-rename contract: clean up the tmp on failure so callers never
         # see a half-written sibling. swallow tmp-cleanup errors — the real
         # failure is the one we're propagating.
-        try:
+        with contextlib.suppress(FileNotFoundError):
             tmp.unlink()
-        except FileNotFoundError:
-            # tmp was never created or has already been cleaned up; nothing
-            # to undo. Swallow so the original write error propagates uncovered.
-            pass
         raise
     return target
 

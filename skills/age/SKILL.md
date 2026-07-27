@@ -109,14 +109,14 @@ Per-dimension base-severity tables, location-sensitivity, fix-cost-now / fix-cos
 
 ## Preferred tools and fallbacks
 
-Code search and reading go through the `cheez-*` skills (`/cheez-search`, `/cheez-read`) — see those skills for tool selection rules. For caller graphs specifically, age uses `cheez-search` with `kind: "callers"` and `tilth_deps` (cheez-search owns the routing).
+Call source-code backends directly according to the shared [`code-intelligence-routing.md`](../cheese/references/code-intelligence-routing.md) contract. For caller graphs, use the selected semantic backend's caller query plus `tilth_deps` when available.
 
-Beyond `cheez-*` there are review-specific tools:
+Beyond source-code routing there are review-specific tools:
 
 | Need | Prefer | Fallback |
 | --- | --- | --- |
 | Diff inspection | `delta` | `git diff --unified=3` |
-| Caller/dependency impact + curated review context | `tilth_deps` + `/cheez-search` `kind: "callers"` | manual scoping |
+| Caller/dependency impact + curated review context | semantic caller search + `tilth_deps` | manual scoping; note the precision loss |
 | Architecture / hotspot framing for large diffs | changed-file map + caller/dependency evidence | skip and note in confidence |
 | Design rationale for encapsulation/spec dimensions (optional) | `mcp__hallouminate__list_corpora` / `mcp__hallouminate__ground` on `repo:<repo>:wiki` corpus — if available, derive the query from the diff and the spec or issue in scope, ground design intent before grading encapsulation and spec findings, and render the consulted pages in the report's `## Wiki context` section so the pages that informed the review are visible | skip; omit `## Wiki context`; proceed with diff + code evidence only; cap at `speculating` when rationale is the primary evidence |
 | GitHub/PR context | `gh` | local git commands or user-provided PR data |
@@ -139,7 +139,7 @@ If the host only ships the bundle, `echo '{"files_changed": <n>, "insertions": <
 
 The returned `n` (1 / 4 / 10) is the fan-out mode; `effort` (`low`/`medium`/`high`) dials the reviewer dispatch; `overrides_hit` names any hard risk-override that forced `n=10` regardless of size (auth/secrets/crypto, tenant isolation, payments/ledgers, concurrency/idempotency/ordering/retries, schema/migration/protocol/public-API change, production-destructive ops, weak integration coverage — see `age_route.OVERRIDE_FLAGS` for the exact grep tokens). A hard override always wins: it pushes `n` to 10 and `effort` to `high` even on a tiny diff.
 
-Independently of the router's `n`, `/age` may still fork a read-only review-context sub-agent — preferably the `explorer` phase-agent — purely for evidence-gathering (not fan-out) when caller/dependency graph expansion from `tilth_deps` or `/cheez-search` crosses multiple subsystems, especially for `--comprehensive` reviews. This is a separate, orthogonal dispatch from the `n`-way fan-out below.
+Independently of the router's `n`, `/age` may still fork a read-only review-context sub-agent — preferably the `explorer` phase-agent — purely for evidence-gathering (not fan-out) when caller/dependency graph expansion from `tilth_deps` or the selected semantic caller search crosses multiple subsystems, especially for `--comprehensive` reviews. This is a separate, orthogonal dispatch from the `n`-way fan-out below.
 
 For the digest contract, harness-agnostic selection rules, and what the parent never delegates, see `references/sub-agent-gate.md`.
 
@@ -177,7 +177,7 @@ Activates when the router returns `n=10` AND `/age` is not itself running as a d
 
 **Seam 4 — Orchestrator reconciliation.** After all workers return, apply the `## Dimension boundaries` table (`references/dimensions.md:319-340`) verbatim to any line meeting EITHER condition: (1) flagged by two or more workers at the same `file:line`; (2) tagged `also-relevant-to: [d]` by any worker — the orchestrator re-evaluates dimension `d` against that line and applies the tiebreaker (keep the higher-base finding / suppress / emit-both-with-cross-reference per the 15 rules). This consumes the `also-relevant-to` signal and provides the cross-dimension coverage single-parent gets for free. Lines neither flagged by ≥2 workers nor tagged `also-relevant-to` need no reconciliation. Group by severity. The parent owns the canonical artifact. After reconciliation, continue at Seam 6 (verifier pass), then step 5 (write + print the report path) and `## Handoff` exactly as the single-parent path does.
 
-**Seam 5 — Shared impact evidence.** The packet carries the caller/dependency notes assembled through `tilth_deps` and `/cheez-search`. Workers use that packet instead of rebuilding impact context independently.
+**Seam 5 — Shared impact evidence.** The packet carries the caller/dependency notes assembled through `tilth_deps` and the selected semantic caller search. Workers use that packet instead of rebuilding impact context independently.
 
 **Seam 6 — Verifier pass.** After Seam 4 reconciliation produces the candidate findings list, a cheap `verifier` role (haiku/tiny tier, `effort: low` per the Roles x tiers table) checks each reconciled finding against the evidence slice cited in its `recommendation`/location fields — one verifier call per finding, schema-constrained to "verify exactly one claim." Three outcomes:
 - **Confirm** — the cited evidence supports the claimed severity; the finding ships unchanged.

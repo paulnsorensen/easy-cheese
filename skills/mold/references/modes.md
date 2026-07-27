@@ -29,7 +29,7 @@ Mold has no fixed entry point. Inspect the input shape and pick a starting mode.
 
 **On Ground entry:** resolve and load the project's cumulative domain model via `domain_model_target()` (`shared/scripts/paths.py`) — the read-probe cascade (consumer wiki, shape-matched via `list_corpora` and confirmed via `wiki_has_model` → tracked `docs/domain-model*` → `<project_corpus_root()>/domain-model*`), checked in full before any write: a wiki corpus that is merely *listed* does not win on its own — an existing file-store model wins over a wiki corpus with no confirmed model. It mirrors the `adr_target()` resolution *pattern* (`adr.md` § Resolution): dynamic, existing model always wins, and if the probe is unreachable degrade to "not loaded" and say so — never block Ground on it. The model is cross-session memory; the per-slug glossary is the branch-local handoff. When a user term conflicts with an existing model entry, **challenge immediately** ("the model defines X as …, you seem to mean Y — which is it?"). Challenges are LIVE here; writes to the model are deferred to the approval gate — curdle owns the write (see `curdle.md`), never inline during Ground.
 
-**Invariant:** never say "I think the code does X" without a `cheez-search` call.
+**Invariant:** never say "I think the code does X" without semantic source-code evidence gathered according to the [shared routing contract](../../cheese/references/code-intelligence-routing.md).
 
 **Exit when:** every critical claim has a citation.
 
@@ -41,7 +41,7 @@ Mold has no fixed entry point. Inspect the input shape and pick a starting mode.
 
 ### Sketch — interface lockdown
 
-**Job:** lock modules, responsibilities, I/O contracts, and seams in pseudocode signatures. Before drafting, when the change touches more than one module or introduces a new public interface, run the shape check (`shape-check.md`) — signatures, callers (via `cheez-search`, i.e. `tilth_search kind: "callers"`), and `tilth_deps` blast radius — on the touched symbols so new seams fit existing convention and the impact is bounded. Print the shape-check summary block before any pseudocode. Single-module, internals-only sketches may skip the gate; note "shape check skipped: single-module change" instead.
+**Job:** lock modules, responsibilities, I/O contracts, and seams in pseudocode signatures. Before drafting, when the change touches more than one module or introduces a new public interface, run the shape check (`shape-check.md`) — signatures, semantic caller search, and dependency blast radius — on the touched symbols so new seams fit existing convention and the impact is bounded. Print the shape-check summary block before any pseudocode. Single-module, internals-only sketches may skip the gate; note "shape check skipped: single-module change" instead.
 
 **Acceptance notation (EARS):** for every public seam, emit acceptance criteria in EARS form: `WHEN <trigger> THE SYSTEM SHALL <response>`. If the trigger cannot be stated precisely (e.g. pure internal utilities), fall back to prose with a `[prose-fallback]` marker.
 

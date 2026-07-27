@@ -50,7 +50,7 @@ skills/
 
 Each `SKILL.md` is self-contained markdown with YAML frontmatter. There are no nested sub-skills; deeper material lives in `references/<topic>.md` so the harness can load it progressively.
 
-Content shared _across_ skills lives in the always-installed `cheese` skill's `references/` directory (e.g. `skills/cheese/references/handoff-gate.md`), so both installers ship it as part of `cheese`. Skills reference it by sibling-relative path (`../cheese/references/<file>.md` from a `SKILL.md`, `../../cheese/references/<file>.md` from a `references/*.md`) — a form that resolves identically in the repo tree and any installed skills directory.
+Content shared _across_ skills lives in the `cheese` skill's `references/` directory (e.g. `skills/cheese/references/handoff-gate.md`). Full installs include `cheese`; when installing one workflow skill, install `cheese` alongside it. Skills reference shared material by sibling-relative path (`../cheese/references/<file>.md` from a `SKILL.md`, `../../cheese/references/<file>.md` from a `references/*.md`) so links resolve identically in the repo tree and any installed skills directory.
 
 ## Skills
 
@@ -74,44 +74,15 @@ Content shared _across_ skills lives in the always-installed `cheese` skill's `r
 | `skills/melt/SKILL.md` | `/melt` | Resolve merge / rebase / cherry-pick conflicts via the structural cascade (mergiraf → rerere → kdiff3) with batch, pick-side, and lockfile helpers. |
 | `skills/wheypoint/SKILL.md` | `/wheypoint` | Mark a checkpoint: compact a mid-task conversation into a durable handoff document at `.cheese/notes/<slug>.md` (resumable slug + state-mapped suggested-skills + redacted secrets) so a fresh agent can resume via `/cheese --continue <slug>`. |
 
-### Tool skills
+### Source-code routing
 
-The workflow skills can delegate code search, reading, and editing to these backend-aware skills when tilth or an equivalent native source-code backend is available:
-
-| Skill path | Command | Purpose |
-| --- | --- | --- |
-| `skills/cheez-search/SKILL.md` | `/cheez-search` | AST-aware code/text/regex/caller search via tilth MCP, harness-native AST search, or LSP. Replaces grep / rg / find. |
-| `skills/cheez-read/SKILL.md` | `/cheez-read` | Smart file/directory reading through a freshness-aware backend; tilth MCP is preferred because it emits stale-write-safe edit tags. Replaces cat / head / tail / ls. |
-| `skills/cheez-write/SKILL.md` | `/cheez-write` | Anchored, surgical edits through tilth MCP or an equivalent harness-native stale-snapshot edit tool. Never rewrites whole files blindly. |
+Workflow skills call source-code backends directly rather than dispatching wrapper skills. The shared [`code-intelligence-routing.md`](skills/cheese/references/code-intelligence-routing.md) contract defines capability selection and the mandatory search → fresh bounded read → stale-safe write sequence.
 
 Dispatching skills resolve agent type, power, permissions, isolation, and fallback through the shared [`agent-resolution.md`](skills/cheese/references/agent-resolution.md) contract.
 
-The `cheez-*` skills tell the model which source-code backend to use when the harness has one. Prefer tilth MCP by name; use LSP for type-grounded definitions/references/renames/code actions, `ast_grep`/`sg` for structural patterns and codemods, and anchored/stale-checking edits for ordinary block changes. Plain text shell tools are fallback evidence only, not equivalent source-code backends.
-
-#### cheez-* router protocol
-
-The three `cheez-*` skills are designed to chain. The standard sequence:
-
-1. **`/cheez-search`** — locate the symbol, caller, content match, or file with tilth, AST search, or LSP.
-2. **`/cheez-read`** — read the target file or section with enough line/hash/snapshot context for a safe edit.
-3. **`/cheez-write`** — apply the change through tilth edit, LSP workspace edit, AST rewrite, or another stale-checking edit backend.
-
-Workflow skills (`/cook`, `/age`, `/cure`) call into this chain when they need code intelligence. A skill should never search-then-edit without reading in between — the read is what produces the anchors that make the edit safe.
-
-##### Source-code tool routing
-
-For source code, route by capability instead of command name:
-
-- LSP wins for type-grounded definitions, references, renames, and code actions.
-- AST search / `sg` wins for syntax-shaped patterns and codemods.
-- tilth wins for broad source search/read/edit context, anchors, outlines, token estimates, and dependency context.
-- Anchored or stale-checking edits win for ordinary block/range changes.
-
-Plain shell search/view/edit is fallback evidence only; use it for non-code paths, logs, generated output, or when no semantic backend exists, and name the downgrade.
-
 #### Installing tilth MCP
 
-See [Installing MCP servers](#installing-mcp-servers) below — expand the tilth section for the preferred `cheez-*` backend. If tilth is unavailable, use equivalent native AST/LSP/anchored-edit tooling when the harness provides it; otherwise name the weaker fallback instead of pretending blind shell tools have the same safety.
+See [Installing MCP servers](#installing-mcp-servers) below — expand the tilth section for the preferred broad source-code backend. If tilth is unavailable, use equivalent native AST/LSP/anchored-edit tooling when the harness provides it; otherwise name the weaker fallback instead of pretending blind shell tools have the same safety.
 
 ### Suggested flow
 
@@ -148,21 +119,21 @@ before review.
 Easy-cheese is intentionally a small surface. What that means in practice:
 
 - **Skills only.** No agents, commands, eta templates, or compiled harness bundles. Each capability is a single `SKILL.md`.
-- **No repo-wide MCP requirement.** Workflow skills suggest tools (tilth, Context7, Tavily) but have host-native fallbacks. The cheez-* tool skills require an AST-aware search/read path and stale-checking edit path; prefer tilth when present, but equivalent native AST/LSP/anchored-edit backends satisfy the contract.
+- **No repo-wide MCP requirement.** Workflow skills suggest tools (tilth, Context7, Tavily) but have host-native fallbacks. Source-code work follows the shared routing contract: prefer tilth when present, use equivalent native AST/LSP/anchored-edit backends when available, and report any precision loss from bounded fallbacks.
 - **One orchestrator skill, narrowly scoped.** `/cook` is the single implementation orchestrator: focused specs use its single-coder path, while approved file-disjoint curds use its fresh-context fan pathway. `/ultracook` is only a compatibility redirect to `/cook`. Harvest and `/plate` remain parent-owned; parallel curds use sequential same-worktree phase spawns and a terminal reviewer pass before publication.
 - **No automatic re-age loop in `/cure`.** The skill describes the protocol; the human runs the next `/age` when ready.
 
 ## Optional tools
 
-Workflow skills name preferred tools when they help, with fallbacks for portability. Tool skills can be stricter when their purpose is to enforce a specific tool protocol.
+Workflow skills name preferred tools when they help, with bounded fallbacks for portability.
 
 | Tool | Helps with | Fallback |
 | --- | --- | --- |
-| tilth (MCP) | AST-aware read/search/edit and dependency context | Preferred for cheez-\*; native AST/LSP/anchored-edit tools may satisfy the same contract |
+| tilth (MCP) | AST-aware read/search/edit and dependency context | Native AST/LSP/anchored-edit tools per the shared routing contract |
 | `sg` (ast-grep) | Structural pattern matching and codemods (`sg --rewrite`) with metavariables | LSP or tilth for symbol/caller questions; anchored edits for non-structural block changes |
 | Context7 (MCP) | Library and API documentation | repo docs, package docs, vendor pages, web search |
 | Tavily (MCP) | Current web/vendor research | host web search or user-supplied sources |
-| LSP / [Serena](https://github.com/oraios/serena) (MCP) | Type-aware xrefs (`find_referencing_symbols`, `find_implementations`), symbol-bounded edits (`rename_symbol`, `replace_symbol_body`, `safe_delete_symbol`), and LSP diagnostics — concrete tools for the abstract "if your harness has an LSP" sections in `cheez-*` skills | `sg`, `tilth_search`, targeted reads via tilth |
+| LSP / [Serena](https://github.com/oraios/serena) (MCP) | Type-aware xrefs (`find_referencing_symbols`, `find_implementations`), symbol-bounded edits (`rename_symbol`, `replace_symbol_body`, `safe_delete_symbol`), and LSP diagnostics | `sg`, `tilth_search`, targeted reads via tilth |
 | hallouminate (MCP) | Per-repo wiki for cross-session design rationale, ADR grounding, and `/mold` evidence | Skip wiki grounding; proceed with diff + code evidence only; cap at `speculating` when design rationale is central |
 | milknado (MCP) | Mikado task-graph backend for `/cook`'s fan-path curd prerequisite tracking | In-report curd decomposition in manifest YAML; no external task-graph backend needed |
 | `ripgrep` | Fast text search | `grep`, `find`, editor search |
@@ -173,7 +144,7 @@ Workflow skills name preferred tools when they help, with fallbacks for portabil
 | `fd` | Fast file discovery | `find` |
 | `just` | Project task discovery | package scripts or documented commands |
 
-When a preferred tool is unavailable, workflow skills say so once, fall back, and lower confidence only if evidence quality suffers. The `cheez-*` skills should teach the strongest available backend shape, not break on a missing MCP.
+When a preferred tool is unavailable, workflow skills say so once, use the strongest bounded fallback, and lower confidence only if evidence quality suffers.
 
 ## Install
 
@@ -215,21 +186,24 @@ gh skill install paulnsorensen/easy-cheese
 Install every current skill in one shot:
 
 ```sh
-for s in age affinage briesearch cheese cheez-read cheez-search cheez-write cook culture cure hard-cheese melt mold pasteurize press ultracook wheypoint; do
+for s in age affinage briesearch cheese cook culture cure hard-cheese melt mold pasteurize press ultracook wheypoint; do
   gh skill install paulnsorensen/easy-cheese "$s"
 done
 ```
 
-Install one specific skill by name:
+Install one workflow skill with its shared contracts:
 
 ```sh
+gh skill install paulnsorensen/easy-cheese cheese
 gh skill install paulnsorensen/easy-cheese cook
 ```
 
-Pin to a specific release tag or commit SHA for reproducibility:
+Pin both skills to the same release tag or commit SHA for reproducibility:
 
 ```sh
+gh skill install paulnsorensen/easy-cheese cheese@v0.10.1
 gh skill install paulnsorensen/easy-cheese cook@v0.10.1
+gh skill install paulnsorensen/easy-cheese cheese@abc123def
 gh skill install paulnsorensen/easy-cheese cook@abc123def
 ```
 
@@ -288,12 +262,12 @@ Each `SKILL.md` must have YAML frontmatter with at least `name` and `description
 
 ## Installing MCP servers
 
-The `cheez-*` tool skills and several workflow skills benefit from MCP servers. Install the ones you need.
+Several workflow skills benefit from MCP servers. Install the ones you need.
 
 <details>
-<summary><strong>tilth</strong> (preferred for `cheez-*` skills) — AST-aware code search, smart reading, tag-anchored edits</summary>
+<summary><strong>tilth</strong> — AST-aware code search, smart reading, tag-anchored edits</summary>
 
-[tilth](https://www.npmjs.com/package/@paulnsorensen/tilth-nightly) provides AST-aware code search, smart file reading, and tag-anchored edits. It is the preferred backend for `/cheez-search`, `/cheez-read`, and `/cheez-write`; equivalent native AST/LSP/anchored-edit backends satisfy the same contract when Tilth is unavailable.
+[tilth](https://www.npmjs.com/package/@paulnsorensen/tilth-nightly) provides the preferred broad source search/read/edit backend. Equivalent native AST/LSP/anchored-edit backends satisfy the shared source-code routing contract when Tilth is unavailable.
 
 ```sh
 # Install tilth CLI via npm (Node.js v18+) — no Homebrew formula upstream
@@ -301,7 +275,7 @@ npm install -g @paulnsorensen/tilth-nightly@latest
 # or run via npx — no global install needed:
 #   npx -y @paulnsorensen/tilth-nightly@latest install claude-code --edit
 
-# Register as an MCP server — include --edit only if you plan to use cheez-write
+# Register as an MCP server — include --edit for tag-anchored writes
 tilth install claude-code --edit   # Claude Code
 tilth install cursor --edit        # Cursor
 tilth install vscode --edit        # VS Code
@@ -558,14 +532,16 @@ winget install Casey.Just      # Windows
 
 ## Credits
 
+The `/plate` skill's semantics-preserving/semantics-altering review-unit policy adapts Jeff Sarnat's [Structuring Changes With The Code Reviewer in Mind](https://jeff.sarn.at/blog/structuring-changes-with-the-code-reviewer-in-mind). `/plate`'s PR-topology, commit-shaping, and verification-body rules are project-specific extensions of that principle.
+
 The shared voice kernel at [`skills/age/references/voice.md`](skills/age/references/voice.md) — output discipline, reasoning posture, the `certain | speculating | don't know` confidence vocabulary, and the depth-vs-question split — adapts a [Claude Opus 4.7 system-prompt experiment by Reebz](https://gist.github.com/Reebz/b81ad99409d5b5de3045bebde71d4471), narrowed to the parts that earn their keep in a portable skills toolkit. Cross-referenced from `briesearch`, `culture`, `mold`, `cook`, and `cure`.
 
-The `/pasteurize` skill — the six-phase diagnosis loop (feedback loop → reproduce → hypothesise → instrument → fix + regression test → cleanup) and the "build a feedback loop first" insight — adapts [Matt Pocock's `diagnose` skill](https://github.com/mattpocock/skills/blob/main/skills/engineering/diagnose/SKILL.md). Easy-cheese-specific adaptations (`cheez-*` tooling, handoff slug schema, `--auto` chain, `/cook` handoff for Phase 5) are layered on top.
+The `/pasteurize` skill — the six-phase diagnosis loop (feedback loop → reproduce → hypothesise → instrument → fix + regression test → cleanup) and the "build a feedback loop first" insight — adapts [Matt Pocock's `diagnose` skill](https://github.com/mattpocock/skills/blob/main/skills/engineering/diagnose/SKILL.md). Easy-cheese-specific adaptations (shared source-code routing, handoff slug schema, `--auto` chain, `/cook` handoff for Phase 5) are layered on top.
 
 The `/wheypoint` skill — compacting a conversation into a handoff document (with a suggested-skills section, no-duplication of existing artifacts, and secret redaction) — adapts [Matt Pocock's `handoff` skill](https://github.com/mattpocock/skills/blob/main/skills/productivity/handoff/SKILL.md). Easy-cheese-specific adaptations: the handoff lands as a durable, resumable artifact at `.cheese/notes/<slug>.md` (rather than the OS temp directory) carrying the standard handoff slug, the suggested-skills section is a state-to-skill mapping over the cheese pipeline expressed as the slug's `next:` field plus named skills, and resumption runs through `/cheese --continue <slug>`.
 
 The Superpowers [`brainstorming`](https://github.com/ejfox/superpowers-mcp) skill — adapted into `/mold`'s design dialogue. Easy-cheese-specific adaptations: the agent-introduced-scope grep gate, shape-check blast-radius numbers, the two-key handshake (curdle gating on the user verb plus the agent's coherence self-check), and ADRs captured as a durable curdle by-product are ahead of the borrowed brainstorming flow.
 
-The [`grill-with-docs`](https://github.com/mattpocock/skills/blob/main/skills/engineering/grill-with-docs/SKILL.md) skill (Pocock) — adapted into `/mold`'s Grill phase with grounded, cited claims: every critical claim is verified via `cheez-search` / `briesearch` before seams are locked.
+The [`grill-with-docs`](https://github.com/mattpocock/skills/blob/main/skills/engineering/grill-with-docs/SKILL.md) skill (Pocock) — adapted into `/mold`'s Grill phase with grounded, cited claims: every critical claim is verified from local code or `/briesearch` before seams are locked.
 
 The `cumulative-domain-model` feature — the cumulative ubiquitous-language discipline that grows a durable `domain-model.md` domain model across sessions — adapts [Matt Pocock's `domain-modeling` skill](https://github.com/mattpocock/skills/blob/main/skills/engineering/domain-modeling/SKILL.md). Easy-cheese-specific adaptations layer the cheese pipeline's grounding and artifact conventions on top.

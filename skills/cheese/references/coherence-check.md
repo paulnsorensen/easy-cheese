@@ -5,7 +5,7 @@ Run these questions before dispatching. If any answer is `no`, downgrade the rou
 ## Pre-dispatch checklist
 
 1. **Does the cited artifact exist?**
-   - Spec path under `.cheese/specs/<slug>.md` resolves with `cheez-read`.
+   - Spec path under `.cheese/specs/<slug>.md` resolves through a bounded file read per [`code-intelligence-routing.md`](code-intelligence-routing.md).
    - Press / age / cure report path resolves when the input names a slug.
    - PR / issue reference is well-formed (number or URL); not required to be fetched.
    - If a path or slug is named but missing → `clarify`, ask whether to create or pick a different target.

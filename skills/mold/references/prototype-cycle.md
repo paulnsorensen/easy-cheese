@@ -7,8 +7,8 @@ the throwaway. The code is discarded; the answer is the keeper.
 
 Use it when a question is **ungrillable**: an API's real behaviour, whether two
 libraries compose, the actual shape of an error, an ergonomics call that only a
-running sketch can answer. Do not use it for questions a `cheez-search` /
-`cheez-read` / Validate Cycle already settles — those are cheaper.
+running sketch can answer. Do not use it for questions a semantic source search,
+bounded source read, or Validate Cycle already settles — those are cheaper. Follow the [shared routing contract](../../cheese/references/code-intelligence-routing.md) for source-code evidence.
 
 ## The frame
 

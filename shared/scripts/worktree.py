@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import os
 import subprocess
+from pathlib import Path
 
 # cli is co-staged in the bundled .pyz alongside this module
 import cli
@@ -61,10 +62,11 @@ def _validate_teardown_target(path: str, branch: str) -> None:
     a branch, so an arbitrary path/branch would be destructive."""
     norm = os.path.normpath(path)
     prefix = WORKTREE_DIR + os.sep
+    norm_path = Path(norm)
     if (
         not norm.startswith(prefix)
-        or ".." in norm.split(os.sep)
-        or not os.path.basename(norm).startswith("agent-")
+        or ".." in norm_path.parts
+        or not norm_path.name.startswith("agent-")
     ):
         raise cli.CliError(
             f"refusing to tear down {path!r}: not a {WORKTREE_DIR}/agent-* worktree"

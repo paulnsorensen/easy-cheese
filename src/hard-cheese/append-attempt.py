@@ -24,6 +24,7 @@ itself is atomic via tmpfile + `os.replace`.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import datetime as _dt
 import os
 import subprocess
@@ -91,15 +92,11 @@ def _atomic_rewrite(target: Path, new_text: str) -> None:
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             fh.write(new_text)
-        os.replace(tmp_name, target)
+        Path(tmp_name).replace(target)
     except Exception:
         # Best-effort cleanup; do not mask the original error.
-        try:
-            os.unlink(tmp_name)
-        except OSError:
-            # tmpfile already cleaned up by the OS or never created; swallow
-            # so the original write error propagates uncovered.
-            pass
+        with contextlib.suppress(OSError):
+            Path(tmp_name).unlink()
         raise
 
 
@@ -139,14 +136,7 @@ def _cmd_append(args: argparse.Namespace) -> None:
     target = artifact_dir / f"{slug}.md"
     lock = artifact_dir / f".{slug}.lock"
     timestamp = _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds")
-    row = "| {} | {} | {} | {} | {} | {} |\n".format(
-        timestamp,
-        _head_sha(),
-        _escape_cell(args.status),
-        _escape_cell(str(args.score)),
-        _escape_cell(args.feedback),
-        _escape_cell(args.explanation),
-    )
+    row = f"| {timestamp} | {_head_sha()} | {_escape_cell(args.status)} | {_escape_cell(str(args.score))} | {_escape_cell(args.feedback)} | {_escape_cell(args.explanation)} |\n"
     _with_flock(lock, lambda: _append_row(target, row))
     try:
         rel = target.relative_to(REPO_ROOT)

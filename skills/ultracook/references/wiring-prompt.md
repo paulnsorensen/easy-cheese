@@ -27,9 +27,8 @@ Description: {description}
 
 ## Workflow
 
-1. Read the file to understand the surrounding structure.
-2. Apply the integration change via /cheez-write (or host edit tool if cheez-* is
-   unavailable).
+1. Read the file with the backend that will validate the write anchor.
+2. Apply the integration change through a stale-safe edit according to `skills/cheese/references/code-intelligence-routing.md`.
 3. Run the project's quality gate command — STOP and write
    `status: halt: quality gate failed` if it fails.
 4. Commit via `/plate` commit-only mode.

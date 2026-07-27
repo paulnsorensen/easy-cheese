@@ -320,8 +320,7 @@ def _emphasis(s: str) -> str:
     s = html.escape(s)
     s = _BOLD.sub(r"<strong>\1</strong>", s)
     s = _ITALIC_STAR.sub(r"<em>\1</em>", s)
-    s = _ITALIC_UNDER.sub(r"<em>\1</em>", s)
-    return s
+    return _ITALIC_UNDER.sub(r"<em>\1</em>", s)
 
 
 def _url_is_safe(url: str) -> bool:

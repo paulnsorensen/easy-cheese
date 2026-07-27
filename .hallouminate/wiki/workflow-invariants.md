@@ -33,9 +33,11 @@ slug the next phase reads.
 `/mold` will not extract a spec until **both keys** turn
 (`skills/mold/references/handshake.md:1-3`):
 
-1. **User key** — the user says an explicit extraction verb: `curdle`,
-   `ship it`, `extract`, `that's enough`. A vague "ok let's go" does not
-   count (`handshake.md:5-9`).
+1. **User key** — the user expresses explicit extraction intent: `curdle`,
+   `ship it`, `extract`, or `that's enough`. A clear affirmative such as
+   `ok let's go`, `sounds good`, or `go ahead` also counts when it directly
+   answers an agent's extraction question. Do not infer the key from unrelated
+   or ambiguous approval (`handshake.md:5-10`).
 2. **Agent key** — the agent prints a 10-item coherence self-check
    (problem grounded, ≥2 options weighed including Do Nothing, interface
    sketches with pseudocode signatures, Validate Cycles judged, Grill run

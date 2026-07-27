@@ -14,9 +14,9 @@ model *why* not just *what*, and whether bundled resources earn their keep.
 
 - **Is**: self-contained `SKILL.md` files for shaping ideas, implementing
   them, and reviewing the result. Workflow skills (`mold`, `culture`, `cook`,
-  `press`, `age`, `cure`, `melt`, `cheese`, `briesearch`) plus tool skills
-  (`cheez-search`, `cheez-read`, `cheez-write`).
-- **Isn't**: an agent framework, an orchestrator, or a mandatory-MCP runtime. For `cheez-*`, prefer tilth when present; native LSP/AST/anchored-edit backends also satisfy the source-code backend contract.
+  `press`, `age`, `cure`, `melt`, `cheese`, `briesearch`) call source-code
+  backends directly through the shared routing contract.
+- **Isn't**: an agent framework, an orchestrator, or a mandatory-MCP runtime. Native LSP/AST/anchored-edit backends may satisfy `skills/cheese/references/code-intelligence-routing.md` without a specific MCP.
 Keep this scope in mind — flag scope creep (intent classification baked into
 a workflow skill, multi-CLI fan-out inside a tool skill, implicit cross-skill
 invocation) at review time. Cross-skill handoffs belong in the README's

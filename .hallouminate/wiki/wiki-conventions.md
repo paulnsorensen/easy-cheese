@@ -16,39 +16,44 @@ three lanes, two of which live outside git (`skills/cheese/references/formatting
 
 | Where | Git | Lifecycle | Use for |
 |---|---|---|---|
-| `.hallouminate/wiki/` (`repo:easy-cheese:wiki`) | **tracked** | durable across sessions | architecture, protocols, conventions, "why this design not that one" |
-| `$XDG_DATA_HOME/cheese/<project>/` (`paths.py`) | **out of git** | durable across branches/clones | specs, research reports |
+| `.hallouminate/wiki/` (`repo:easy-cheese:wiki`) | **tracked** | durable across sessions | architecture, protocols, conventions, rationale, and specs explicitly promoted for repository review |
+| `$XDG_DATA_HOME/cheese/<project>/` (`paths.py`) | **out of git** | durable across branches/clones | Mold specs and research reports by default |
 | `.cheese/` (`cheese-local`) | **gitignored** | transient per-task | `/cook` `/age` `/press` `/cure` reports, notes, hard, handoffs, exploration |
 
-**Durable ≠ git-tracked.** Architecture/convention/rationale notes are
-durable *and* committed into the tree — they go in this wiki. Specs and
-research reports are just as durable but anchor at a stable XDG path
-(`$XDG_DATA_HOME/cheese/<project>/`, default
-`~/.local/share/cheese/<project>/`) so they survive branch switches and
-clones while staying out of git; the path math is owned by
-`shared/scripts/paths.py` (`project_corpus_root`, `artifact_path`). Only
-per-task pipeline output is *transient*, and it stays repo-local under
-`.cheese/` so it travels with the branch and shows up in the PR
-(`.gitignore:2`).
+**Durable ≠ git-tracked.** Architecture, conventions, and rationale are
+durable and committed in this wiki. Mold specs and research reports default
+to the stable XDG project corpus so they survive branch switches and clones.
+The path math is owned by `shared/scripts/paths.py` (`project_corpus_root`,
+`artifact_path`). Pipeline output stays repo-local and gitignored under
+`.cheese/` (`.gitignore:2`).
+
+A spec may be promoted from XDG into `.hallouminate/wiki/specs/` when a
+human explicitly asks to review and approve the specification in a PR. The
+tracked copy then becomes the implementation authority for that change; the
+XDG original remains source provenance, not a second authority. This is an
+intentional review exception, not the default Mold output path.
 
 > **Migration note.** Some skill docs still name `.cheese/specs/<slug>.md`.
 > That path predates the durable/transient split and is being moved onto
-> the `paths.py` helpers (`skills/cheese/references/formatting.md:103`); treat the XDG
-> corpus as the home for specs.
+> the `paths.py` helpers (`skills/cheese/references/formatting.md:103`); treat
+> the XDG corpus as the default home for specs unless a human promotes one
+> for repository review.
 
 Classify in two steps:
 
 1. *Worth keeping past the task that produced it?* No → transient,
    `.cheese/`.
-2. If durable: *architecture / protocol / convention / rationale* → this
-   wiki; *spec or research report* → the XDG project corpus.
+2. If durable: architecture, protocol, convention, or rationale → this
+   wiki; ordinary spec or research report → XDG; explicitly review-promoted
+   spec → `.hallouminate/wiki/specs/`.
 
 Concrete classification examples:
 
 - "The pipeline order is culture → mold → cook → press → age → cure" → **durable → wiki**.
-- "The approved spec for the durable-memory boundary" → **durable → XDG corpus**.
+- "The approved Mold spec for the durable-memory boundary" → **durable → XDG corpus by default**.
+- "Review this spec and its ADRs in a PR" → **durable → tracked wiki spec**.
 - "Curd #3 of the durable-memory spec failed its press pass" → **transient → `.cheese/`**.
-- "cheez-* skills hard-fail without tilth MCP; everything else degrades" → **durable → wiki**.
+- "The retired code-intelligence wrapper skills became a shared routing contract" → **durable → wiki**.
 - "The age report for PR #107 flagged two medium findings" → **transient → `.cheese/`**.
 
 ## One topic per file

@@ -44,13 +44,11 @@ This is a skills-only collection following the [Agent Skills spec](https://agent
 | `/melt` | Resolves merge / rebase / cherry-pick conflicts via the structural-merge cascade |
 | `/wheypoint` | Checkpoints a mid-task conversation into a durable handoff at `.cheese/notes/<slug>.md`, resumable via `/cheese --continue` |
 
-### Tool skills (lower-level primitives)
+### Source-code routing
 
-| Skill | Purpose |
-|---|---|
-| `/cheez-search` | AST/LSP-aware source search via tilth MCP or an equivalent semantic backend — replaces blind grep / rg / ripgrep |
-| `/cheez-read` | Fresh bounded file/directory reader via tilth MCP or equivalent native snapshot/list backend — replaces blind cat / head / tail |
-| `/cheez-write` | Stale-safe anchored edit writer via tilth MCP, LSP workspace edits, AST rewrites, or equivalent native snapshot edits — replaces blind inline Edit / Write |
+Workflow skills call source-code backends directly according to the shared
+[`code-intelligence-routing.md`](skills/cheese/references/code-intelligence-routing.md)
+contract.
 
 See `README.md` for the full workflow and the suggested skill ordering.
 
@@ -74,7 +72,7 @@ for the durable-vs-transient boundary and the authoring loop.
 
 - Python validators in `.github/scripts/` allow only `pyyaml` and `pytest` as third-party deps — see `.github/instructions/python.instructions.md`.
 - Shell scripts and bats tests follow the rules in `.github/instructions/shell.instructions.md`.
-- `cheez-*` skills use the safest semantic backend available for source code: prefer tilth when present; otherwise accept equivalent native LSP/AST/anchored/stale-checking backends. Use LSP for type-grounded defs/refs/renames/code actions, `sg` for structural rewrites, batch reads/writes when possible, and treat blind shell search/view/edit as weaker fallback evidence, not an equivalent source-code backend. Optional integrations — hallouminate (repo-wiki grounding for `/mold` and `/age`) and milknado (mikado task-graph backend for `/cook`'s fan pathway) — are wired in as optional plugins per `skills/cheese/references/optional-plugins.md`: they degrade gracefully when absent and never block a skill run.
+- Source-code work follows `skills/cheese/references/code-intelligence-routing.md`: route by question or edit shape, preserve search → fresh bounded read → stale-safe write sequencing, prefer semantic and anchored backends, and report precision loss when only weaker fallbacks exist. Optional integrations — hallouminate (repo-wiki grounding for `/mold` and `/age`) and milknado (mikado task-graph backend for `/cook`'s fan pathway) — are wired in as optional plugins per `skills/cheese/references/optional-plugins.md`: they degrade gracefully when absent and never block a skill run.
 - SKILL.md files must pass `validate_skills.py` (YAML frontmatter validation).
 - Conventional Commits format for all commits and PR titles (enforced by `validate.yml` for PRs).
 - Cheese / Dune / Mad Max / LOTR / Princess Bride flavor is welcome in user-facing docs and `SKILL.md` files. Keep commit messages and YAML frontmatter neutral.

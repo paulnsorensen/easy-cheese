@@ -37,6 +37,16 @@ For a **new PR**, resolve topology before any commit or branch-layout mutation:
 1. Honor an explicit user choice from the current request or verified workflow
    state. It is authoritative, so persist it and skip the topology question.
 2. Otherwise inspect the finished work's review shape:
+   - First classify each production change as **semantics-altering** (features,
+     fixes, or externally observable contract changes) or
+     **semantics-preserving** (behavior-preserving refactors, mechanical
+     internal moves or renames, formatting-only changes). A diff containing
+     both is never one review unit, however small: preserved behavior and
+     changed behavior demand different review scrutiny. Fix-ups done "along
+     the way" get their own change; they never ride along on a feature or fix.
+     Treat any move or rename that changes an externally observable name, path,
+     API, configuration key, serialized shape, command, or documented contract
+     as semantics-altering.
    - Choose **single** and proceed without asking when the change is one
      cohesive review unit: its implementation, tests, docs, and durable
      artifacts all serve one behavior or contract, and splitting them would
@@ -46,7 +56,9 @@ For a **new PR**, resolve topology before any commit or branch-layout mutation:
      boundary: a lower layer can be understood on its own, and later layers
      build on it without mixing unrelated concerns. A change is also stack-sized
      when one review would combine distinct concerns that have honest ordered
-     boundaries. Do not use line-count or file-count thresholds.
+     boundaries — canonically, a semantics-preserving layer below the
+     semantics-altering layer that depends on the reorganization.
+     Do not use line-count or file-count thresholds.
 3. Ask one single-versus-stacked question when stacked is recommended or the
    review shape is genuinely ambiguous. For a stack recommendation, name the
    proposed layers and recommend **Stacked PRs**. For ambiguity, state the
@@ -92,7 +104,15 @@ scope.
 
 ### Repair-worktree topology
 
-A branch created by the repair pathway ([`../cook/references/quality-gates.md`](../cook/references/quality-gates.md) § Repair pathway; branch name `worktree-agent-repair-*`) resolves topology through that pathway's mechanical file-overlap check before this section's policy: no shared files (or the originating run branch is already gone) plates an ordinary independent PR against `main`; shared files at or under the small-repair threshold harvest onto the run branch instead of publishing; shared files over threshold restack with the repair as the base PR through the stack machinery below. Any other branch uses the policy above unchanged.
+A branch created by the repair pathway
+([`../cook/references/quality-gates.md`](../cook/references/quality-gates.md)
+§ Repair pathway; branch name `worktree-agent-repair-*`) resolves topology
+through that pathway's mechanical file-overlap check before this section's
+policy: no shared files (or the originating run branch is already gone) plates
+an ordinary independent PR against `main`; shared files at or under the
+small-repair threshold harvest onto the run branch instead of publishing;
+shared files over threshold restack with the repair as the base PR through the
+stack machinery below. Any other branch uses the policy above unchanged.
 
 ## Flow
 
@@ -134,7 +154,11 @@ Commit-only mode stops after verification. It never pushes or opens a PR.
 1. Select the configured provider and read its reference.
 2. Require explicit split boundaries. Partition paths and commits by layer;
    place shared durable writes on the bottom/common layer or an explicit
-   wiring layer.
+   wiring layer. Classify the production implementation decision; tests, docs,
+   and durable artifacts inherit its layer when they directly verify or
+   describe it. Every layer's implementation either preserves semantics or
+   alters them, never both, and semantics-preserving layers sit below the
+   semantic changes that depend on their reorganization.
 3. Create or adopt provider lineage in the approved bottom-to-top order.
 4. For **each layer**, bottom to top:
    1. Check out its provider-tracked branch.
@@ -173,10 +197,19 @@ project accepts it; otherwise omit it. After staging, inspect the cached diff.
 If the working diff is empty, distinguish "nothing to commit" from "everything
 is staged" by checking the cached diff.
 
+Structure one commit per review unit: one for a single PR, one per stack
+layer. Do not shape a PR for commit-by-commit review — per-commit approval
+state is untracked, quality gates usually run only on the branch tip, and
+feedback on any one commit holds the rest hostage. Multiple commits in one PR
+are reserved for a short series of simple, non-controversial steps that stay
+small taken together.
+
 ## Ordinary PR publication
 
 Read [`references/ordinary-pr.md`](references/ordinary-pr.md). Draft the title
-and body from the validated diff and commits. Write the PR body to a file and
+and body from the validated diff and commits; the body labels the change as
+semantics-preserving or semantics-altering and states what the reviewer must
+verify. Write the PR body to a file and
 use `gh pr create --body-file`; never embed a markdown heredoc in `--body`.
 Push the named branch, create the PR with explicit base/head, then read it back
 with `gh pr view` to verify number, URL, base, head, and state.

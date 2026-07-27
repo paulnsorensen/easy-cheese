@@ -4,9 +4,9 @@ Curdle (artifact extraction) requires **both** keys. Neither is optional.
 
 ## User key
 
-The user must say one of: `curdle`, `ship it`, `extract`, `that's enough`. **Never inferred.**
+The user must express explicit extraction intent: `curdle`, `ship it`, `extract`, or `that's enough`. A clear affirmative such as `ok let's go`, `sounds good`, or `go ahead` also turns the key when it directly answers an agent's extraction question.
 
-A vague "ok let's go" or "sounds good" is not the user key. Ask explicitly.
+Do not infer the key from unrelated or ambiguous approval; ask explicitly when the context does not establish that the user is approving Curdle.
 
 ## Agent key — coherence self-check
 
@@ -45,7 +45,7 @@ These are not soft suggestions — Curdle hard-blocks until they are addressed:
 - **Ground gate:** ≥1 Ground pass with a citation before Shape's options. Exception: pure greenfield (the agent must say so out loud).
 - **Shape gate:** ≥1 Option block weighed (Do Nothing counts).
 - **Sketch gate:** mandatory when the chosen option touches more than one module or introduces a new public interface. Skip only for trivial single-function changes (the agent must say so out loud).
-- **Grill gate:** mandatory for high-blast-radius decisions. The shape check (`shape-check.md`) ranks blast radius `low | medium | high` from a `cheez-search` callers query (`tilth_search kind: "callers"`) and `tilth_deps`. A `high` verdict — multi-module callers or more than five importers — makes Grill mandatory.
+- **Grill gate:** mandatory for high-blast-radius decisions. The shape check (`shape-check.md`) ranks blast radius `low | medium | high` from semantic caller search and `tilth_deps` when available. A `high` verdict — multi-module callers or more than five importers — makes Grill mandatory.
 - **Open hypotheses:** any Validate Cycle launched but unjudged blocks Curdle unless the user accepts it as `[TBD]`.
 - **Agent-introduced scope:** every distinguishing noun in the spec must trace to a user-typed mention or get per-term approval. Full procedure in § Agent-introduced scope below — Curdle is the single chokepoint, since downstream skills trust the resulting frontmatter and do not re-block.
 - **Entity-referent binding:** every identity noun binds to a code referent or is marked NEW ENTITY; an ALIAS must be resolved, not just noted. Full procedure in § Entity-referent binding below.
@@ -111,7 +111,7 @@ The user approves grouping, splitting, semantic-match reuse, destination, and an
 
 Before curdle, audit the draft for **identity/ownership-role nouns** — any noun the design treats as holding, owning, spanning, or claiming state or lifecycle (owner, run, session, claim-holder, coordinator, worker, lease, tenant, lock-holder, …). The trigger is the *role*, not a fixed word list: domain-specific identities are caught and plain value nouns (formats, algorithms, config knobs) are not flagged.
 
-The mechanism is symbol search (`cheez-search`), one query per identity noun. The gate is *not* "did search find something" — it is a three-way verdict on what search returns:
+The mechanism is semantic symbol search, one query per identity noun, following the [shared routing contract](../../cheese/references/code-intelligence-routing.md). The gate is *not* "did search find something" — it is a three-way verdict on what search returns:
 
 | Search outcome | Verdict | Action |
 | --- | --- | --- |
@@ -122,7 +122,7 @@ The mechanism is symbol search (`cheez-search`), one query per identity noun. Th
 Procedure:
 
 1. Extract identity/ownership-role nouns from the spec's `Approach`, `Decisions`, and `Interface sketches` blocks.
-2. `cheez-search` each noun and classify it `Bound` / `ALIAS` / `NEW ENTITY` per the table above.
+2. Search each noun and classify it `Bound` / `ALIAS` / `NEW ENTITY` per the table above.
 3. Present the binding table inline in the draft — one row per identity-role noun:
 
    ```

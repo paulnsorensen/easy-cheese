@@ -15,7 +15,7 @@
   "MD031": false,
   "MD032": false,
 
-  // False positives on wildcard names like `cheez-*`.
+  // Wildcard names in prose can produce false positives.
   "MD037": false,
 
   // Many shell/text fences are intentionally unlabelled in skill prose.

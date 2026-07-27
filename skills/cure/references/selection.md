@@ -74,8 +74,8 @@ When an age report lacks the `fix-cost-now` sub-field on its findings (older rep
 
 For each selected finding:
 
-1. Re-read the cited file/lines via `cheez-read` to confirm the finding is still accurate (the diff may have moved).
-2. Apply the fix via `cheez-write` using the read's edit tag.
+1. Re-read the cited file/lines through a fresh bounded read to confirm the finding is still accurate (the diff may have moved).
+2. Apply the fix through a stale-safe write compatible with the read anchor; see the [shared routing contract](../../cheese/references/code-intelligence-routing.md).
 3. Run the narrowest test that proves the fix.
 4. Move to the next selected item.
 

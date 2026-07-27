@@ -109,7 +109,7 @@ they're populated as later phases run.
 
 ## Tools
 
-You were resolved as the planner/general role through `skills/cheese/references/agent-resolution.md`. Stay read-only except for the manifest artifact. Use `/culture` for codebase exploration, `/briesearch` for external grounding, and `/cheez-search` plus `/cheez-read` for code intelligence when available.
+You were resolved as the planner/general role through `skills/cheese/references/agent-resolution.md`. Stay read-only except for the manifest artifact. Use `/culture` for codebase exploration, `/briesearch` for external grounding, and call the selected source-code backends directly according to `skills/cheese/references/code-intelligence-routing.md`.
 
 Do NOT write any production code in this phase — your only artifact is the manifest. Preserve the orchestrator's `agent_resolution` block unchanged.
 

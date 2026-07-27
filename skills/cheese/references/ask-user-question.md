@@ -21,6 +21,8 @@ question:
 
 The record is the source of truth. A host rendering may change presentation, but it must preserve the prompt, recommended choice, every option's effect or tradeoff, selection mode, and a free-form `Other` path.
 
+**Self-containment (hard).** The rendered question must stand alone: a user seeing only the widget — a truncated `prompt` plus short option `label`/`description` fields — must be able to understand the decision and every option's tradeoff without hunting for prose elsewhere. Host widgets truncate the `prompt` and hide any assistant text that is not in the same visible turn (or that lives in a thinking block). So never rely on framing that sits in a separate message, an earlier turn, or a thinking block: either fold the needed context into the `prompt` and each option's `description`, or emit a visible prose block in the same turn immediately before the question call. A picker that arrives with no visible framing is a transport defect, not a rendering quirk.
+
 ## When to structure
 
 Answers *when* a decision may be a structured question; capability-first

@@ -18,7 +18,7 @@ Is it about a past decision or rationale in this repo?
   YES → Wiki  (hallouminate `ground`)
 
 Is it about patterns in this repo?
-  YES → Codebase  (cheez-search + cheez-read)
+  YES → Codebase  (semantic search + bounded read per the shared routing contract)
 
 Is it about how open-source projects solve something?
   YES → GitHub  (+ Tavily if written analysis would help)
@@ -33,7 +33,7 @@ Is it deep, multi-source, comparative, or "compare X vs Y / market analysis / li
 | --- | --- | --- |
 | Context7 (MCP) | Library APIs, config, migration notes for indexed open-source dependencies | Tools: `resolve-library-id` (`libraryName` + `query`) → `query-docs` (`libraryId` + `query`). Both require a `query`. See "Context7 method" below. |
 | Tavily (MCP) | Current facts, technical articles, vendor docs, best practices, deep multi-source synthesis | Use the method matrix to pick the right rung. |
-| Codebase | Local conventions, existing usage, constraints | Use `cheez-search` and `cheez-read`. |
+| Codebase | Local conventions, existing usage, constraints | Follow the [shared source-code routing contract](../../cheese/references/code-intelligence-routing.md). |
 | Wiki (hallouminate MCP) | Past decisions, rationale, ADRs, conventions recorded in the repo wiki | Tool: `ground` against the repo's wiki corpus. Optional — when hallouminate is absent, degrade per `../../cheese/references/optional-plugins.md`: skip, note once, cap confidence. |
 | GitHub | Real-world OSS usage patterns | `gh` CLI or harness GitHub integration. Treat as supporting evidence unless the user asked for OSS precedent. |
 
@@ -148,11 +148,11 @@ Within each source class, prefer authoritative over secondary:
 1. **Official vendor / library docs** for API, config, migration claims.
 2. **Original papers, standards, RFCs** for technical claims.
 3. **Release notes / changelogs** for version or freshness claims.
-4. **Repo-local evidence** (cheez-search) for local conventions.
+4. **Repo-local evidence** from semantic source search for local conventions.
 5. **GitHub examples** as supporting evidence unless the user asked for OSS precedent.
 6. **Blogs, tutorials, AI-generated content** only when nothing above answers the question — and disclose them as such.
 
-For named-library questions, the routed-call order is **cheez-search → Context7 → Tavily**: cheap repo precedent first, the library's own indexed docs second, current-events / vendor announcements / coverage gaps last. Fan all routed calls in a single assistant turn (parallel tool calls) so total wall time is one round-trip.
+For named-library questions, the routed-call order is **semantic source search → Context7 → Tavily**: cheap repo precedent first, the library's own indexed docs second, current-events / vendor announcements / coverage gaps last. Fan all routed calls in a single assistant turn (parallel tool calls) so total wall time is one round-trip.
 
 ## Routing block
 

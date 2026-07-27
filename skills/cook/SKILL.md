@@ -1,6 +1,6 @@
 ---
 name: cook
-description: Implement an approved spec or focused unambiguous task, editing through cheez-write. Use when the user wants code written — "implement this", "cook this spec", "/cook .cheese/specs/<slug>.md", or "fix this bug" when the fix is clear; also when the user just says "go" or "ship it" with a spec or clear acceptance criteria in scope. Runs standalone on an unambiguous task — a spec helps but is not required. Do NOT use for fuzzy planning (`/mold`), no-write discussion (`/culture`), or review-only work (`/age`).
+description: Implement an approved spec or focused unambiguous task through stale-safe source edits. Use when the user wants code written — "implement this", "cook this spec", "/cook .cheese/specs/<slug>.md", or "fix this bug" when the fix is clear; also when the user just says "go" or "ship it" with a spec or clear acceptance criteria in scope. Runs standalone on an unambiguous task — a spec helps but is not required. Do NOT use for fuzzy planning (`/mold`), no-write discussion (`/culture`), or review-only work (`/age`).
 license: MIT
 metadata: {dispatches-agents: true}
 ---
@@ -170,7 +170,7 @@ Before any curd cooks — the fan pathway's curd fan-out alike — `/cook` captu
 
 The final summary reports baseline failures loud, never hidden — a run with an identical-to-baseline failure outside the cooked contract states the full suite is not green, even when every gate the curds touch is green.
 
-Edits go through `/cheez-write` (search and reads via the tools below).
+For source changes, call the selected backend directly and follow [`code-intelligence-routing.md`](../cheese/references/code-intelligence-routing.md), including search → fresh bounded read → stale-safe write.
 
 Portability reference: [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
 The handoff blocks below are the portable contract; slash commands are host renderings, not the control model.
@@ -183,8 +183,8 @@ The handoff blocks below are the portable contract; slash commands are host rend
 | GitHub context | `gh` | local git history or user-provided links |
 | Merge assistance | mergiraf | manual conflict resolution with tests |
 | Task commands | `just`, package scripts | direct documented commands |
-| Code navigation | `/cheez-search` `kind:symbol` then `kind:callers` | LSP, native AST search, or another semantic backend that answers the same question |
-| Read before edit | `/cheez-read` ranged/outline (`paths: ["f#n-m"]`, `mode:stripped`) | Native bounded read with snapshot/line anchors, or LSP symbol read when it supplies a stale-safe edit path |
+| Code navigation | semantic symbol search, then caller search | LSP or bounded native search; report precision loss |
+| Read before edit | fresh bounded read from the write backend family | another snapshot-capable bounded read; re-read if anchors are incompatible |
 
 Falling back, mention any loss of precision that affects risk.
 

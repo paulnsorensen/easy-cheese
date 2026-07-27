@@ -42,10 +42,10 @@ def resolve_file(path: str, dry_run: bool = True, verbose: bool = False) -> dict
         return result
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        base_path = os.path.join(tmpdir, "base")
-        ours_path = os.path.join(tmpdir, "ours")
-        theirs_path = os.path.join(tmpdir, "theirs")
-        merged_path = os.path.join(tmpdir, "merged")
+        base_path = str(Path(tmpdir) / "base")
+        ours_path = str(Path(tmpdir) / "ours")
+        theirs_path = str(Path(tmpdir) / "theirs")
+        merged_path = str(Path(tmpdir) / "merged")
 
         Path(base_path).write_text(base)
         Path(ours_path).write_text(ours)
@@ -122,11 +122,11 @@ def debug_file(path: str, keep_dir: str | None = None) -> dict:
         return result
 
     tmpdir = keep_dir or tempfile.mkdtemp(prefix="melt-debug-")
-    base_path = os.path.join(tmpdir, "base")
-    ours_path = os.path.join(tmpdir, "ours")
-    theirs_path = os.path.join(tmpdir, "theirs")
-    merged_path = os.path.join(tmpdir, "merged")
-    log_path = os.path.join(tmpdir, "mergiraf.log")
+    base_path = str(Path(tmpdir) / "base")
+    ours_path = str(Path(tmpdir) / "ours")
+    theirs_path = str(Path(tmpdir) / "theirs")
+    merged_path = str(Path(tmpdir) / "merged")
+    log_path = str(Path(tmpdir) / "mergiraf.log")
 
     Path(base_path).write_text(base)
     Path(ours_path).write_text(ours)
