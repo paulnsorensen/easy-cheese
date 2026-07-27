@@ -149,6 +149,48 @@ class TestOverridePromotion:
         assert sorted(flat) == sorted(age_route.DIMENSIONS)
         assert len(flat) == len(age_route.DIMENSIONS)
 
+class TestOverridePromotionNeverReducesN:
+    """Finding 1 regression (BLOCKER): an override must never reduce n
+    below what the same score/comments/ci_class would route without it --
+    promotion composes on top of any affinage escalation, it never resets
+    the tier the override promotes from."""
+
+    @pytest.mark.parametrize("score", [1, 20, 59.9, 60, 100, 150, 250, 250.1, 400, 1000])
+    @pytest.mark.parametrize(
+        "entry,comments,ci_class",
+        [
+            ("age", None, None),
+            ("affinage", None, None),
+            ("affinage", 2, None),
+            ("affinage", 15, None),
+            ("affinage", None, "passing"),
+            ("affinage", None, "failing"),
+            ("affinage", 20, "failing"),
+        ],
+    )
+    def test_override_never_lowers_n(
+        self, score: float, entry: str, comments: int | None, ci_class: str | None
+    ) -> None:
+        without = age_route.route(
+            score=score, risk_flags=[], entry=entry, comments=comments, ci_class=ci_class
+        )
+        with_override = age_route.route(
+            score=score, risk_flags=["auth"], entry=entry, comments=comments, ci_class=ci_class
+        )
+        assert with_override["n"] >= without["n"]
+
+    def test_blocker_repro_auth_flag_increases_n_under_affinage_escalation(self) -> None:
+        # The exact repro from the BLOCKER finding: adding "auth" must not
+        # drop n from 5 to 3 -- it must compose on top of the escalated tier.
+        without = age_route.route(
+            score=100.0, risk_flags=[], entry="affinage", comments=20, ci_class="failing"
+        )
+        with_override = age_route.route(
+            score=100.0, risk_flags=["auth"], entry="affinage", comments=20, ci_class="failing"
+        )
+        assert with_override["n"] >= without["n"]
+        assert without["n"] == 5
+        assert with_override["n"] == 6
 
 class TestEncapsulationSeparation:
     """SPEC ACCEPTANCE 6: encapsulation never shares a lens with efficiency
@@ -241,11 +283,13 @@ class TestAffinageEscalation:
     """affinage entries weight high comment count / risky ci_class upward,
     one tier step in the (1, 2, 5) order, capped at the top."""
 
-    def test_age_entry_ignores_comments_and_ci_class(self) -> None:
-        result = age_route.route(
-            score=30, risk_flags=[], entry="age", comments=999, ci_class="failing"
-        )
-        assert result["n"] == 1
+    def test_age_entry_rejects_comments_and_ci_class(self) -> None:
+        # entry="age" silently dropping comments/ci_class hid a miswired
+        # caller getting a quietly smaller fan-out -- now it fails loud.
+        with pytest.raises(ValueError):
+            age_route.route(
+                score=30, risk_flags=[], entry="age", comments=999, ci_class="failing"
+            )
 
     def test_affinage_high_comment_count_bumps_tier(self) -> None:
         result = age_route.route(score=30, risk_flags=[], entry="affinage", comments=15)
@@ -302,6 +346,26 @@ class TestInputValidation:
         with pytest.raises(ValueError):
             age_route.route(score=1, entry="bogus")
 
+    def test_negative_score_raises(self) -> None:
+        with pytest.raises(ValueError):
+            age_route.route(score=-1)
+
+    def test_non_finite_score_raises(self) -> None:
+        with pytest.raises(ValueError):
+            age_route.route(score=float("nan"))
+        with pytest.raises(ValueError):
+            age_route.route(score=float("inf"))
+
+    def test_score_is_keyword_only(self) -> None:
+        # A stale positional call (score used to be `files_changed: int`)
+        # must fail loud instead of silently routing under a new meaning.
+        with pytest.raises(TypeError):
+            age_route.route(30, [])
+
+    def test_age_entry_rejects_comments_only(self) -> None:
+        with pytest.raises(ValueError):
+            age_route.route(score=30, entry="age", comments=50)
+
 
 class TestOutputSchema:
     def test_output_keys_are_exactly_the_locked_shape(self) -> None:
@@ -317,6 +381,18 @@ class TestRationale:
         assert "\n" not in result["rationale"]
         assert "n=2" in result["rationale"]
         assert "effort=medium" in result["rationale"]
+
+    def test_override_rationale_reflects_affinage_inputs(self) -> None:
+        # Finding 3: the audit trail must reconstruct the decision -- two
+        # calls differing only in comments/ci_class must not produce
+        # byte-identical rationale (that's how finding 1 stayed invisible).
+        escalated = age_route.route(
+            score=100.0, risk_flags=["auth"], entry="affinage", comments=20, ci_class="failing"
+        )
+        baseline = age_route.route(
+            score=100.0, risk_flags=["auth"], entry="affinage", comments=0, ci_class=None
+        )
+        assert escalated["rationale"] != baseline["rationale"]
 
 
 class TestPurity:
@@ -337,3 +413,46 @@ class TestPurity:
     def test_module_parses_as_valid_python(self) -> None:
         src = (REPO_ROOT / "src" / "fanout" / "age_route.py").read_text(encoding="utf-8")
         ast.parse(src)  # raises SyntaxError if invalid
+
+
+class TestLadderBounds:
+    """Brute-forced bounds the routing ladder must never exceed (spec
+    'Invariants that must survive')."""
+
+    def test_max_n_under_promotion_is_9(self) -> None:
+        all_flags = ["auth", "payments", "schema-migration", "weak-integration-coverage"]
+        max_n = 0
+        for score in range(0, 2000, 5):
+            for entry, comments, ci_class in (
+                ("age", None, None),
+                ("affinage", 0, None),
+                ("affinage", 50, "failing"),
+            ):
+                result = age_route.route(
+                    score=score,
+                    risk_flags=all_flags,
+                    entry=entry,
+                    comments=comments,
+                    ci_class=ci_class,
+                )
+                max_n = max(max_n, result["n"])
+        assert max_n == 9
+
+    def test_min_n_with_any_override_is_2(self) -> None:
+        min_n = None
+        for score in range(0, 2000, 5):
+            for flag in sorted(age_route.OVERRIDE_FLAGS):
+                for entry, comments, ci_class in (
+                    ("age", None, None),
+                    ("affinage", 0, None),
+                ):
+                    result = age_route.route(
+                        score=score,
+                        risk_flags=[flag],
+                        entry=entry,
+                        comments=comments,
+                        ci_class=ci_class,
+                    )
+                    if min_n is None or result["n"] < min_n:
+                        min_n = result["n"]
+        assert min_n == 2

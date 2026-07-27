@@ -13,6 +13,8 @@ module only turns a score plus risk flags into a routing decision.
 """
 from __future__ import annotations
 
+import math
+
 # The ten age dimensions, in the order /age's SKILL.md lists them.
 DIMENSIONS: tuple[str, ...] = (
     "correctness",
@@ -114,10 +116,6 @@ def _raw_groups_for(n: int) -> list[list[str]]:
     return [list(lens) for lens in _LENS_TREE]
 
 
-def _lenses_for(n: int) -> list[list[str]]:
-    return _raw_groups_for(n)
-
-
 def _tier_for_score(score: float) -> int:
     if score < _SCORE_N2_FLOOR:
         return 1
@@ -140,6 +138,7 @@ def _promote(base_groups: list[list[str]], promoted_dims: set[str]) -> list[list
 
 
 def route(
+    *,
     score: float,
     risk_flags: list[str] | None = None,
     entry: str = "age",
@@ -150,53 +149,59 @@ def route(
     {n, lenses, effort, overrides_hit, rationale}."""
     if entry not in ("age", "affinage"):
         raise ValueError(f"invalid entry {entry!r}: must be 'age' or 'affinage'")
+    if not math.isfinite(score) or score < 0:
+        raise ValueError(f"invalid score {score!r}: must be a non-negative finite number")
+    if entry == "age" and (comments is not None or ci_class is not None):
+        raise ValueError("comments/ci_class require entry='affinage'")
     risk_flags = risk_flags or []
 
-    overrides_hit = sorted({flag for flag in risk_flags if flag in OVERRIDE_FLAGS})
-    if overrides_hit:
-        promoted_dims = {_PROMOTIONS[flag] for flag in overrides_hit}
-        base_n = _tier_for_score(score)
-        lenses = _promote(_raw_groups_for(base_n), promoted_dims)
-        n = len(lenses)
-        rationale = (
-            f"score={score:g}, override(s) {', '.join(overrides_hit)} promote "
-            f"{', '.join(sorted(promoted_dims))} -> n={n}/effort=high"
-        )
-        return {
-            "n": n,
-            "lenses": lenses,
-            "effort": "high",
-            "overrides_hit": overrides_hit,
-            "rationale": rationale,
-        }
-
-    n = _tier_for_score(score)
-
+    # Score -> base tier, with the affinage comment/CI escalation folded in
+    # *before* override promotion so promotion composes on top of the
+    # escalated tier rather than replacing it (ADR-001).
+    base_n = _tier_for_score(score)
     bump_reason = None
     if entry == "affinage":
         if comments is not None and comments >= _AFFINAGE_COMMENT_BUMP:
-            bumped = _bump(n)
-            if bumped != n:
+            bumped = _bump(base_n)
+            if bumped != base_n:
                 bump_reason = f"{comments} comments"
-            n = bumped
+            base_n = bumped
         if ci_class in _AFFINAGE_CI_BUMP_CLASSES:
-            bumped = _bump(n)
-            if bumped != n:
+            bumped = _bump(base_n)
+            if bumped != base_n:
                 bump_reason = (
                     f"{bump_reason} + ci_class={ci_class}" if bump_reason else f"ci_class={ci_class}"
                 )
-            n = bumped
+            base_n = bumped
 
-    effort = "high" if score > _HIGH_EFFORT_SCORE else ("low" if n == 1 else "medium")
-    rationale = (
-        f"score={score:g}"
-        + (f", {bump_reason} escalation" if bump_reason else "")
-        + f" -> n={n}/effort={effort}"
-    )
+    overrides_hit = sorted({flag for flag in risk_flags if flag in OVERRIDE_FLAGS})
+
+    if overrides_hit:
+        promoted_dims = {_PROMOTIONS[flag] for flag in overrides_hit}
+        lenses = _promote(_raw_groups_for(base_n), promoted_dims)
+        n = len(lenses)
+        effort = "high"
+    else:
+        lenses = _raw_groups_for(base_n)
+        n = base_n
+        effort = "high" if score > _HIGH_EFFORT_SCORE else ("low" if n == 1 else "medium")
+
+    rationale = f"score={score:g}, entry={entry}"
+    if entry == "affinage":
+        rationale += f", comments={comments}, ci_class={ci_class!r}"
+    if bump_reason:
+        rationale += f", {bump_reason} escalation"
+    if overrides_hit:
+        rationale += (
+            f", override(s) {', '.join(overrides_hit)} promote "
+            f"{', '.join(sorted(promoted_dims))}"
+        )
+    rationale += f" -> n={n}/effort={effort}"
+
     return {
         "n": n,
-        "lenses": _lenses_for(n),
+        "lenses": lenses,
         "effort": effort,
-        "overrides_hit": [],
+        "overrides_hit": overrides_hit,
         "rationale": rationale,
     }

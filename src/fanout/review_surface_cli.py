@@ -3,34 +3,42 @@
 Split from review_surface.py so that module stays a pure function with zero
 I/O imports (see review_surface.py's module docstring); all git I/O and the
 optional [review_surface] TOML override live here instead. Mirrors
-age_route_cli.py's split-CLI pattern.
+baseline.py's argparse + cli.run + cli.CliError pattern (cli is co-staged in
+the bundled .pyz alongside this module).
 """
 from __future__ import annotations
 
 import argparse
-import json
-import subprocess
-import sys
+import math
 import tomllib
 
+import cli
+import git_utils
 from review_surface import score
 
 
 def _numstat_rows(repo: str, diff_args: list[str]) -> list[tuple[str, int, int]]:
-    result = subprocess.run(
-        ["git", "-C", repo, "diff", "--numstat", *diff_args],
-        capture_output=True,
-        text=True,
+    for arg in diff_args:
+        if arg.startswith("-"):
+            raise cli.CliError(f"diff argument must not start with '-': {arg!r}")
+    # -z: NUL-delimited records with raw (unescaped, unquoted) paths --
+    # eliminates core.quotePath escaping of non-ASCII paths.
+    # --no-renames: a renamed file becomes a plain delete + add row instead
+    # of a brace-compressed "{old => new}/path" synthetic string.
+    # "--" separates diff_args from git flags so a leading-"-" element
+    # (rejected above as defense in depth) can never be read as a flag.
+    result = git_utils.run_git(
+        ["-C", repo, "diff", "--numstat", "-z", "--no-renames", *diff_args, "--"]
     )
     if result.returncode != 0:
-        raise RuntimeError(
+        raise cli.CliError(
             f"git diff --numstat {' '.join(diff_args)} failed: {result.stderr.strip()}"
         )
     rows: list[tuple[str, int, int]] = []
-    for line in result.stdout.splitlines():
-        if not line.strip():
+    for record in result.stdout.split("\0"):
+        if not record:
             continue
-        insertions, deletions, path = line.split("\t", 2)
+        insertions, deletions, path = record.split("\t", 2)
         rows.append(
             (
                 path,
@@ -45,24 +53,61 @@ def _load_weight_override(config_path: str) -> tuple[tuple[str, float], ...] | N
     """Read an optional [review_surface] TOML table's `weights` key -- a list
     of [glob, weight] pairs that REPLACES review_surface.DEFAULT_WEIGHTS
     wholesale. Returns None when the table or key is absent (module defaults
-    ship unmodified)."""
+    ship unmodified). Every entry is validated: exactly two elements, a
+    non-empty string glob, and a finite weight in [0.0, 1.0] -- an
+    out-of-range or malformed weight must not be able to silently drive a
+    repo's own sizing negative or off the scale."""
     try:
         with open(config_path, "rb") as fh:
             data = tomllib.load(fh)
     except OSError as exc:
-        raise RuntimeError(f"cannot read config {config_path}: {exc}") from exc
+        raise cli.CliError(f"cannot read config {config_path}: {exc}") from exc
     except tomllib.TOMLDecodeError as exc:
-        raise RuntimeError(f"malformed TOML in {config_path}: {exc}") from exc
+        raise cli.CliError(f"malformed TOML in {config_path}: {exc}") from exc
     table = data.get("review_surface")
     if not table or "weights" not in table:
         return None
-    return tuple((str(glob), float(weight)) for glob, weight in table["weights"])
+    raw = table["weights"]
+    if not isinstance(raw, list):
+        raise cli.CliError(f"[review_surface].weights must be a list, got {type(raw).__name__}")
+    weights: list[tuple[str, float]] = []
+    for index, entry in enumerate(raw):
+        if not isinstance(entry, list) or len(entry) != 2:
+            raise cli.CliError(
+                f"[review_surface].weights[{index}] must be a [glob, weight] pair: {entry!r}"
+            )
+        glob, weight = entry
+        if not isinstance(glob, str) or not glob:
+            raise cli.CliError(
+                f"[review_surface].weights[{index}] glob must be a non-empty string: {glob!r}"
+            )
+        if isinstance(weight, bool) or not isinstance(weight, (int, float)):
+            raise cli.CliError(
+                f"[review_surface].weights[{index}] weight must be a number: {weight!r}"
+            )
+        weight = float(weight)
+        if not math.isfinite(weight) or not (0.0 <= weight <= 1.0):
+            raise cli.CliError(
+                f"[review_surface].weights[{index}] weight must be finite in [0.0, 1.0]: {weight!r}"
+            )
+        weights.append((glob, weight))
+    return tuple(weights)
 
 
-def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(
-        description="Score a git diff's review surface via review_surface.score()."
-    )
+def _cmd_score(args: argparse.Namespace) -> None:
+    weights = None
+    weights_source = "defaults"
+    if args.config:
+        weights = _load_weight_override(args.config)
+        if weights is not None:
+            weights_source = args.config
+    rows = _numstat_rows(args.repo, args.diff_args)
+    result = score(rows, weights=weights, weights_source=weights_source)
+    cli.emit(result, json_mode=True)
+
+
+def _setup(parser: argparse.ArgumentParser) -> None:
+    parser.description = "Score a git diff's review surface via review_surface.score()."
     parser.add_argument("--repo", default=".", help="path to the git repository")
     parser.add_argument(
         "--config",
@@ -74,27 +119,8 @@ def main(argv: list[str]) -> int:
         default=["HEAD"],
         help="git diff --numstat arguments (e.g. HEAD~1 HEAD, or HEAD~1..HEAD); defaults to HEAD",
     )
-    args = parser.parse_args(argv[1:])
-
-    weights = None
-    if args.config:
-        try:
-            weights = _load_weight_override(args.config)
-        except RuntimeError as exc:
-            print(f"ERROR: {exc}", file=sys.stderr)
-            return 1
-
-    try:
-        rows = _numstat_rows(args.repo, args.diff_args)
-    except RuntimeError as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
-
-    result = score(rows, weights=weights)
-    json.dump(result, sys.stdout, indent=2)
-    sys.stdout.write("\n")
-    return 0
+    parser.set_defaults(func=_cmd_score)
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv))
+    cli.run(_setup)

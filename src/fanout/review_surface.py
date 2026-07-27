@@ -28,10 +28,11 @@ FILE_COST: int = 8
 # subtracted from that default.
 DEFAULT_WEIGHTS: tuple[tuple[str, float], ...] = (
     ("*.lock", 0.0),
-    ("*lock.json", 0.0),
-    ("*lock.yaml", 0.0),
+    ("*-lock.json", 0.0),
+    ("*-lock.yaml", 0.0),
     ("*.pyc", 0.0),
     ("*.pyz", 0.0),
+    ("go.sum", 0.0),
     ("fixtures/**", 0.0),
     ("snapshots/**", 0.0),
     ("vendor/**", 0.0),
@@ -42,18 +43,48 @@ DEFAULT_WEIGHTS: tuple[tuple[str, float], ...] = (
     (".hallouminate/**", 0.25),
 )
 
+# The hyphen in "*-lock.json"/"*-lock.yaml" is required: a real lockfile is
+# "package-lock.json" / "pnpm-lock.yaml", always hyphenated before "lock".
+# A bare "*lock.json" also matches "unlock.json" or "mylock.yaml" -- ordinary
+# source whose basename merely ends in the substring "lock" -- and silently
+# zeroes it out of review sizing.
+
 _DEFAULT_WEIGHT = 1.0
 
 
 def weigh(path: str, weights: tuple[tuple[str, float], ...] | None = None) -> float:
-    """First-match-wins glob weight for a single path. Falls through to
-    _DEFAULT_WEIGHT (1.0) when nothing matches."""
+    """First-match-wins glob weight for a single path.
+
+    A pattern with no "/" is basename-anchored -- it matches only the
+    path's final segment (path.rsplit("/", 1)[-1]). It still matches at any
+    depth ("a/b/README.md" -> 0.25, "deep/dir/go.sum" -> 0.0), but because
+    fnmatch's "*" crosses "/", the nested form "**/README*" would also match
+    a *directory* component and quarter real source underneath it:
+    "src/READMEs/code.py" scored 0.25 that way, and is 1.0 here.
+
+    Basename anchoring does not by itself stop a pattern from over-matching
+    within the filename -- "*lock.json" still swallows "src/unlock.json" on
+    its basename alone. That is why the lockfile globs are hyphenated
+    ("*-lock.json", "*-lock.yaml"); see ADR-002. One residual over-match is
+    accepted: "src/READMEparser.py" weighs 0.25, since its basename really
+    does start with "README".
+
+    A pattern containing "/" keeps the anchored-or-nested match
+    (fnmatchcase(path, pat) or fnmatchcase(path, "**/" + pat)) so a
+    directory name means that directory anywhere in the tree.
+
+    Uses fnmatchcase (not fnmatch) -- fnmatch applies os.path.normcase,
+    which would make this determinism-critical module platform-dependent.
+
+    Falls through to _DEFAULT_WEIGHT (1.0) when nothing matches.
+    """
     table = weights if weights is not None else DEFAULT_WEIGHTS
-    # Patterns match anchored (at repo root) or nested ("**/" + pattern)
-    # so the table reads position-independently regardless of where a
-    # matching path sits in the tree.
+    basename = path.rsplit("/", 1)[-1]
     for pattern, weight in table:
-        if fnmatch.fnmatch(path, pattern) or fnmatch.fnmatch(path, "**/" + pattern):
+        if "/" in pattern:
+            if fnmatch.fnmatchcase(path, pattern) or fnmatch.fnmatchcase(path, "**/" + pattern):
+                return weight
+        elif fnmatch.fnmatchcase(basename, pattern):
             return weight
     return _DEFAULT_WEIGHT
 
@@ -61,14 +92,22 @@ def weigh(path: str, weights: tuple[tuple[str, float], ...] | None = None) -> fl
 def score(
     rows: list[tuple[str, int, int]],
     weights: tuple[tuple[str, float], ...] | None = None,
+    weights_source: str = "defaults",
 ) -> dict:
     """rows are (path, insertions, deletions) numstat tuples. Returns
-    {score, weighted_files, weighted_lines, zeroed}."""
+    {score, weighted_files, weighted_lines, zeroed, weights_source, rows}.
+
+    weights_source is provenance only (the CLI's knowledge of whether
+    DEFAULT_WEIGHTS or a --config override was used) -- it does not affect
+    scoring. The weights table is resolved once here and passed down to
+    every weigh() call rather than re-resolving the None sentinel per row.
+    """
+    table = weights if weights is not None else DEFAULT_WEIGHTS
     weighted_lines = 0.0
     weighted_files = 0.0
     zeroed: list[str] = []
     for path, insertions, deletions in rows:
-        w = weigh(path, weights=weights)
+        w = weigh(path, weights=table)
         weighted_lines += w * (insertions + deletions)
         weighted_files += w
         if w == 0.0:
@@ -78,4 +117,6 @@ def score(
         "weighted_files": weighted_files,
         "weighted_lines": weighted_lines,
         "zeroed": zeroed,
+        "weights_source": weights_source,
+        "rows": len(rows),
     }

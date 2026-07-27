@@ -81,6 +81,7 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
     "pasteurize": {
         "debug-tag-sweep": "debug-tag-sweep.py",
         "repro-rerun": "repro-rerun.py",
+        "pasteurize-route": "fanout/pasteurize_route_cli.py",
     },
     # /ultracook drives the fan-out engine (formerly /cheese-factory); its
     # sources live in the mode-neutral src/fanout/ dir (see SRC_DIRS).
@@ -96,8 +97,8 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
         "validate_pr_plan": "validate_pr_plan.py",
         "manifest_update": "manifest_update.py",
         "wiring_topo_sort": "wiring_topo_sort.py",
+        "pr_plan_to_branches": "pr_plan_to_branches.py",
         "age-route": "fanout/age_route_cli.py",
-        "review-surface": "fanout/review_surface_cli.py",
         "curd-block": "fanout/curd_block.py",
     },
 }
@@ -115,18 +116,12 @@ EXTRA_MODULES: dict[str, list[tuple[str, str]]] = {
     "age": [
         ("fanout", "age_route.py"),
         ("fanout", "review_surface.py"),
-        ("fanout", "review_surface_cli.py"),
     ],
     "affinage": [
         ("fanout", "age_route.py"),
         ("fanout", "review_surface.py"),
-        ("fanout", "review_surface_cli.py"),
     ],
-    "ultracook": [
-        ("fanout", "age_route.py"),
-        ("fanout", "review_surface.py"),
-        ("fanout", "review_surface_cli.py"),
-    ],
+    "pasteurize": [("fanout", "pasteurize_route.py")],
 }
 
 # The "common" bundle ships cross-cutting CLI entrypoints sourced from

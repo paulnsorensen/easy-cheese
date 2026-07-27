@@ -48,7 +48,7 @@ SKILL_SUBCOMMANDS = {
     "cook": ["artifact-path"],
     "age": ["html-report"],
     "hard-cheese": ["append-attempt", "freshness-check"],
-    "pasteurize": ["debug-tag-sweep", "repro-rerun"],
+    "pasteurize": ["debug-tag-sweep", "repro-rerun", "pasteurize-route"],
     "common": [
         "slugify",
         "write_handoff_artifact",
@@ -111,6 +111,16 @@ def test_subcommand_resolves_inside_bundle(bundles: Path, skill: str, sub: str) 
     combined = result.stdout + result.stderr
     assert "ModuleNotFoundError" not in combined, combined
     assert "Traceback" not in combined, combined
+    # A deleted subcommand falls through to the dispatcher's own unknown-subcommand
+    # fallback ("usage: <pyz> {other-subs}"), which never names the deleted sub. A
+    # real subcommand always dispatches into its own code -- whether it then exits 0
+    # on --help (most) or errors on "--help" as a bogus positional argument
+    # (validate_manifest/validate_pr_plan/validate_decomposition, which take a bare
+    # manifest path and never print their own name) is immaterial: either way it never
+    # produces the dispatcher's exact fallback string. This is the precise negation of
+    # the deleted-subcommand failure mode, verified by a watched-it-fail cycle.
+    dispatcher_fallback = combined.strip().startswith("usage: <pyz>")
+    assert not dispatcher_fallback, combined
 
 
 @pytest.mark.parametrize("skill", list(SKILL_SUBCOMMANDS))
@@ -161,7 +171,12 @@ def test_bundle_carries_only_its_own_skill(bundles: Path) -> None:
     assert "pr_status.py" in affinage
     assert "age_route.py" in affinage  # affinage's own age-route subcommand
     assert "manifest_io.py" in affinage  # age-route's own import, not cross-skill vendoring
-    assert not (affinage & {"git_utils.py", "schema.py"})  # no shared needed beyond that
+    # review-surface (affinage's own subcommand) imports both, so they vendor in by design.
+    assert "git_utils.py" in affinage
+    assert "cli.py" in affinage
+    # Still excluded: shared modules nothing in affinage imports. This is the actual
+    # invariant -- carry what you import, nothing else -- so it is pinned both ways.
+    assert not (affinage & {"schema.py", "severity.py"})
 
 
 def test_ultracook_bundle_contains_entity_modules(bundles: Path) -> None:
@@ -567,14 +582,15 @@ def test_local_skill_modules_finds_libs_and_excludes_subcommands() -> None:
     only covers end-to-end — a regression that stopped excluding registered names or
     stopped finding the siblings would fail here with a precise diff. age_route is
     discovered here (not via EXTRA_MODULES) because ultracook's src dir is aliased to
-    src/fanout/, where age_route.py lives alongside age_route_cli.py."""
+    src/fanout/, where age_route.py lives alongside age_route_cli.py. review_surface
+    is absent: ultracook dropped the review-surface subcommand (no caller), so nothing
+    in ultracook's registered scripts imports it anymore."""
     local = build_pyz._local_skill_modules("ultracook")
-    assert local == {"curd", "wiring", "age_route", "review_surface"}, local
+    assert local == {"curd", "wiring", "age_route"}, local
     assert "validate_decomposition" not in local  # registered subcommand, not a local lib
     assert "validate_manifest" not in local
     assert "schema" not in local  # shared module (shared/scripts), not src/fanout
-    # review_surface is the pure scorer imported by the review-surface subcommand,
-    # so it is a discovered lib; its CLI sibling is registered and must stay excluded.
+    assert "review_surface" not in local  # dropped with the review-surface subcommand
     assert "review_surface_cli" not in local
 
 def test_age_bundle_exposes_html_report_help(bundles: Path) -> None:

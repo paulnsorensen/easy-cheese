@@ -87,6 +87,36 @@ class TestCli:
         assert "linear" not in result.stdout
         assert "invalid --count" in result.stderr
 
+    def test_score_below_threshold_prints_linear(self) -> None:
+        result = self._run("--score", str(_mode_module.DECOMPOSE_FIRST_THRESHOLD - 1))
+        assert result.returncode == 0
+        assert result.stdout.strip() == "linear"
+
+    def test_score_above_threshold_prints_decompose_first(self) -> None:
+        result = self._run("--score", str(_mode_module.DECOMPOSE_FIRST_THRESHOLD + 1))
+        assert result.returncode == 0
+        assert result.stdout.strip() == "decompose-first"
+
+    def test_score_at_threshold_prints_linear(self) -> None:
+        # select_mode_from_score uses strict >, so the threshold itself is
+        # still "linear" -- pin the boundary against the named constant.
+        result = self._run("--score", str(_mode_module.DECOMPOSE_FIRST_THRESHOLD))
+        assert result.returncode == 0
+        assert result.stdout.strip() == "linear"
+
+    def test_negative_score_fails_loud(self) -> None:
+        result = self._run("--score", "-1")
+        assert result.returncode != 0
+        assert "invalid --score" in result.stderr
+
+    def test_both_count_and_score_rejected(self) -> None:
+        result = self._run("--count", "1", "--score", "1")
+        assert result.returncode != 0
+
+    def test_neither_count_nor_score_rejected(self) -> None:
+        result = self._run()
+        assert result.returncode != 0
+
 
 class TestSingleSourceOfTruth:
     """Acceptance #3, grep-proof: the old five-curd gate is gone from both

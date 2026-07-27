@@ -141,12 +141,21 @@ The signal is inverted relative to review: a reviewer (`age_route.route`) reads 
 
 | Bug shape | Range | Repro | Agents |
 | --- | --- | --- | --- |
-| regression | tight (score < 250) | deterministic | 1 (linear, no fan) |
+| regression | tight (score <= 250) | deterministic | 1 (linear, no fan) |
+| regression | tight (score <= 250) | non-deterministic | 2 |
 | regression | wide (score > 250) | deterministic | 2 |
+| regression | wide (score > 250) | non-deterministic | 3 |
+| regression | score is `None` (no diff to anchor to) | deterministic | 3 |
+| regression | score is `None` (no diff to anchor to) | non-deterministic | 5 |
 | heisenbug / race / perf regression | any | any | 3 |
-| cold bug (no diff to anchor to, score is `None`) | — | — | 3-5 |
+| cold bug (no diff to anchor to, score is `None`) | -- | deterministic | 3 |
+| cold bug (no diff to anchor to, score is `None`) | -- | non-deterministic | 5 |
 
-Every constant above (`WIDE_RANGE_THRESHOLD`, `_REGRESSION_TIGHT_N`, `_REGRESSION_WIDE_N`, `_UNSTABLE_REPRO_N`, `_COLD_BUG_MIN_N`, `_COLD_BUG_MAX_N`) is **reasoned, not measured**. Unlike every reviewer threshold in the router — each validated against 30 commits of real history — these have no historical validation, because `/pasteurize` fans zero agents today. They are named tunable constants and should be revisited once real runs exist.
+**Boundary:** the code checks `score > 250`, so exactly `250` counts as tight (`score <= 250`), not `score < 250` as a naive reading of "tight" might suggest.
+
+Every constant above (`WIDE_RANGE_THRESHOLD`, `_REGRESSION_TIGHT_DETERMINISTIC_N`, `_REGRESSION_TIGHT_NONDETERMINISTIC_N`, `_REGRESSION_WIDE_DETERMINISTIC_N`, `_REGRESSION_WIDE_NONDETERMINISTIC_N`, `_UNSTABLE_REPRO_N`, `_COLD_BUG_DETERMINISTIC_N`, `_COLD_BUG_NONDETERMINISTIC_N`) is **reasoned, not measured**. Unlike every reviewer threshold in the router -- each validated against 30 commits of real history -- these have no historical validation, because `/pasteurize` fans zero agents today. They are named tunable constants and should be revisited once real runs exist.
+
+On a bundle-only host, `size_pasteurize_fanout` is also reachable as `python3 skills/pasteurize/scripts/pasteurize.pyz pasteurize-route <request.json>` (JSON in, JSON out -- mirrors `age-route`'s bundle convention).
 
 ## Preferred tools and fallbacks
 

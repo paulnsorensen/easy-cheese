@@ -1,6 +1,6 @@
 # Shared context packet
 
-The orchestrator assembles this packet once per fan-out run and writes it to `.cheese/age/<slug>-packet.md`. Each per-dimension worker reads the full packet. There is no persistent cross-run cache — every run rebuilds (staleness risk + YAGNI).
+The orchestrator assembles this packet once per fan-out run and writes it to `.cheese/age/<slug>-packet.md`. Each lens worker reads the full packet — a worker owns a `lenses[i]` entry, which may bundle up to three dimensions. There is no persistent cross-run cache — every run rebuilds (staleness risk + YAGNI).
 
 ## Components (eight, in assembly order)
 
@@ -8,10 +8,10 @@ The orchestrator assembles this packet once per fan-out run and writes it to `.c
 2. **Dependency manifest contents** — `package.json`, `Cargo.toml`, `pyproject.toml`, or equivalent for the project under review.
 3. **Project-helper index** — one `tilth_search` for `sanitize / validate / escape / safe / retry / debounce / logger` across `src/` and `shared/`, so workers can flag NIH or missing helper usage.
 4. **Path-context map** — which entrypoints are non-interactive or hot (servers, daemons, CLI handlers, outbound callers); workers need this for location classification and telemetry coverage.
-5. **Per-dimension rubric slice + shared formula sections** — the worker's assigned dimension rubric from `dimensions.md`, plus `§ Location sensitivity`, `§ Fix-cost-now`, and `§ Fix-cost-later` so each worker can compute severity independently. Extract from the dimension's `## <Dimension name>` heading to the next `##` heading.
+5. **Per-lens rubric slice + shared formula sections** — the worker's assigned lens's rubric slice, the union of the dimension rubrics for every dimension in that `lenses[i]` list, from `dimensions.md`, plus `§ Location sensitivity`, `§ Fix-cost-now`, and `§ Fix-cost-later` so each worker can compute severity independently. Extract each dimension's `## <Dimension name>` heading to the next `##` heading and concatenate.
 6. **The severity machinery** — the full `§ Severity computation` section.
 7. **Output contract** — the per-finding fields table and finding format from `SKILL.md § Output`, **plus the `also-relevant-to: [<dim>, ...]` field from Seam 3** — it is the cross-dimension signal Seam 4 reconciliation consumes and is not part of `§ Output`'s base format, so a worker following `§ Output` alone would omit it. Workers emit full per-finding rows (format fields + `also-relevant-to`) the orchestrator can parse and reconcile unambiguously.
-8. **Dedup-ownership statement** — explicit: workers do NOT dedup, apply boundary tiebreakers, reconcile severity across dimensions, or write the report. The orchestrator owns those steps (Seam 4).
+8. **Dedup-ownership statement** — explicit: workers do NOT dedup, apply boundary tiebreakers, reconcile severity across dimensions or lenses, or write the report. The orchestrator owns those steps (Seam 4), covering reconciliation across lenses as well as dimensions.
 
 ## Orientation and citations block
 

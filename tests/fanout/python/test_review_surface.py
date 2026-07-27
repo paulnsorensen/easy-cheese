@@ -18,6 +18,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO_ROOT / "src" / "fanout"))
 
 import review_surface  # noqa: E402
+import age_route  # noqa: E402
 
 FIXTURE_PATH = REPO_ROOT / "tests" / "fanout" / "python" / "fixtures" / "numstat_30_commits.json"
 
@@ -38,7 +39,7 @@ class TestWeigh:
         # A path matching an earlier (zero-weight) pattern must not fall
         # through to the 1.0 default even though it also looks like normal
         # source -- first match in DEFAULT_WEIGHTS wins.
-        weights = [("*.lock", 0.0), ("*", 1.0)]
+        weights = (("*.lock", 0.0), ("*", 1.0))
         assert review_surface.weigh("foo.lock", weights=weights) == 0.0
 
     def test_fixtures_dir_zeroed(self) -> None:
@@ -83,6 +84,24 @@ class TestScore:
         result = review_surface.score(rows)
         assert result["score"] <= 20
 
+    def test_score_includes_weights_source_and_rows(self) -> None:
+        rows = [("src/main.py", 10, 5)]
+
+        default_result = review_surface.score(rows)
+        assert default_result["weights_source"] == "defaults"
+        assert default_result["rows"] == 1
+
+        override_result = review_surface.score(
+            rows, weights=(("*", 1.0),), weights_source="config:.review-weights.toml"
+        )
+        assert override_result["weights_source"] == "config:.review-weights.toml"
+        assert override_result["rows"] == 1
+
+    def test_score_rows_counts_input_rows_not_zeroed_rows(self) -> None:
+        rows = [("Cargo.lock", 10, 0), ("src/main.py", 1, 1), ("README.md", 2, 0)]
+        result = review_surface.score(rows)
+        assert result["rows"] == 3
+
 
 class TestFrozenFixturePyramid:
     """SPEC ACCEPTANCE 1: the frozen 30-commit numstat fixture reproduces the
@@ -94,16 +113,26 @@ class TestFrozenFixturePyramid:
         commits = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
         assert len(commits) == 30
 
+        n2_floor = age_route._SCORE_N2_FLOOR
+        n5_floor = age_route._SCORE_N5_FLOOR
+        high_effort = age_route._HIGH_EFFORT_SCORE
+
         tiers = {"top": 0, "mid": 0, "low": 0, "single": 0}
         for commit in commits:
             rows = [tuple(row) for row in commit["rows"]]
             result = review_surface.score(rows)
             s = result["score"]
-            if s > 900:
+            # age_route._tier_for_score routes `score < n2_floor` to n=1 and
+            # everything else to n=2+, so the "single" bucket boundary must
+            # be an exclusive `<` (equivalently the low-tier floor is `>=`)
+            # to match the router exactly -- a plain `> n2_floor` literal
+            # would misfile score == n2_floor into "single" while the real
+            # router sends it to n=2.
+            if s > high_effort:
                 tiers["top"] += 1
-            elif s > 250:
+            elif s > n5_floor:
                 tiers["mid"] += 1
-            elif s > 60:
+            elif s >= n2_floor:
                 tiers["low"] += 1
             else:
                 tiers["single"] += 1
@@ -119,7 +148,21 @@ class TestPurity:
     def test_module_has_no_io_imports(self) -> None:
         src = (REPO_ROOT / "src" / "fanout" / "review_surface.py").read_text(encoding="utf-8")
         tree = ast.parse(src)
-        banned = {"os", "sys", "socket", "subprocess", "requests", "urllib", "pathlib", "shutil"}
+        banned = {
+            "os",
+            "sys",
+            "socket",
+            "subprocess",
+            "requests",
+            "urllib",
+            "pathlib",
+            "shutil",
+            "io",
+            "tempfile",
+            "http",
+            "importlib",
+            "pickle",
+        }
         imported = set()
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
@@ -210,3 +253,42 @@ class TestAnchoredOrNestedMatch:
         # nested documentation scores as low-stakes prose (0.25) instead of
         # silently inflating to full-weight code (1.0).
         assert review_surface.weigh("skills/age/docs/a.md") == 0.25
+
+
+class TestGlobFixRegression:
+    """CURE FIX (deterministic-fanout-sizing): weigh() now splits by
+    pattern shape -- a pattern with no "/" is basename-anchored, one with
+    "/" matches anchored-or-nested -- and DEFAULT_WEIGHTS uses hyphenated
+    "*-lock.json"/"*-lock.yaml" plus a "go.sum" entry. Each parametrized
+    case pins one direction of that fix:
+
+    - real source whose basename merely CONTAINS "lock" or a nested
+      README/CHANGELOG directory must stay at full weight (1.0) -- a
+      zeroed weight makes the file invisible to sizing *and* lists it in
+      `zeroed` as non-review, which is exactly the under-review outcome
+      the inverted weights table exists to prevent;
+    - a genuine lockfile (hyphen-before-"lock", or go.sum) must still
+      zero, so dependency-bot diffs don't inflate the reviewer's budget;
+    - tools/skill-overlap/fixtures/x.json is the exact case commit
+      9089710 fixed (nested fixtures/ must match via the anchored-or-
+      nested check) and must not regress back to full weight.
+    """
+
+    @pytest.mark.parametrize(
+        "path,expected",
+        [
+            ("src/unlock.json", 1.0),
+            ("src/config/deadlock.json", 1.0),
+            ("src/mylock.yaml", 1.0),
+            ("src/READMEs/code.py", 1.0),
+            ("CHANGELOGS/entry.py", 1.0),
+            ("package-lock.json", 0.0),
+            ("pnpm-lock.yaml", 0.0),
+            ("Cargo.lock", 0.0),
+            ("yarn.lock", 0.0),
+            ("go.sum", 0.0),
+            ("tools/skill-overlap/fixtures/x.json", 0.0),
+        ],
+    )
+    def test_glob_shape_split_direction(self, path: str, expected: float) -> None:
+        assert review_surface.weigh(path) == expected

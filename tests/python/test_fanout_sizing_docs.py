@@ -9,9 +9,14 @@ policy, ...) makes the corresponding test fail.
 """
 
 import re
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+
+sys.path.insert(0, str(ROOT))
+from src.fanout import age_route  # noqa: E402
+from src.fanout import pasteurize_route  # noqa: E402
 
 AGE_SKILL = ROOT / "skills" / "age" / "SKILL.md"
 AGE_SUB_AGENT_GATE = ROOT / "skills" / "age" / "references" / "sub-agent-gate.md"
@@ -19,6 +24,17 @@ AFFINAGE_SKILL = ROOT / "skills" / "affinage" / "SKILL.md"
 COOK_SKILL = ROOT / "skills" / "cook" / "SKILL.md"
 PASTEURIZE_SKILL = ROOT / "skills" / "pasteurize" / "SKILL.md"
 ROUTING_POLICY = ROOT / "skills" / "cheese" / "references" / "routing-policy.md"
+DECOMPOSER_DOC = ROOT / "skills" / "cheese" / "references" / "decomposer.md"
+PACKET_DOC = ROOT / "skills" / "age" / "references" / "packet.md"
+MODE_PY = ROOT / "src" / "fanout" / "mode.py"
+CURD_BLOCK_PY = ROOT / "src" / "fanout" / "curd_block.py"
+
+WIKI_AGE_ROUTER = ROOT / ".hallouminate" / "wiki" / "architecture" / "age-fanout-router.md"
+WIKI_ADR_001 = ROOT / ".hallouminate" / "wiki" / "adr" / "deterministic-fanout-sizing-001.md"
+WIKI_ADR_002 = ROOT / ".hallouminate" / "wiki" / "adr" / "deterministic-fanout-sizing-002.md"
+WIKI_ADR_003 = ROOT / ".hallouminate" / "wiki" / "adr" / "deterministic-fanout-sizing-003.md"
+WIKI_ADR_004 = ROOT / ".hallouminate" / "wiki" / "adr" / "deterministic-fanout-sizing-004.md"
+WIKI_ENTITIES = ROOT / ".hallouminate" / "wiki" / "fanout-engine-entities.md"
 
 ALL_SIX = [
     AGE_SKILL,
@@ -29,7 +45,22 @@ ALL_SIX = [
     ROUTING_POLICY,
 ]
 
-MODE_PY = ROOT / "src" / "fanout" / "mode.py"
+# The retired-vocabulary sweep (TestNoVacuousRouteParams, TestAgeLadder) also
+# covers the wiki pages a full /age review found stale on this branch. The
+# ADRs legitimately discuss the *old* ladder as historical contrast (e.g.
+# ADR-001's "n=10" in a before/after sentence), but the banned patterns below
+# are the whole-ladder shapes (`{1, 4, 10}` / `1/4/10`) and the vacuous diff-stat
+# params -- neither appears in that legitimate historical prose, so the same
+# ban applies file-wide without punishing correct contrast.
+WIKI_SET = [
+    WIKI_AGE_ROUTER,
+    WIKI_ADR_001,
+    WIKI_ADR_002,
+    WIKI_ADR_003,
+    WIKI_ADR_004,
+    WIKI_ENTITIES,
+    PACKET_DOC,
+]
 
 
 def read(path: Path) -> str:
@@ -43,7 +74,7 @@ class TestNoVacuousRouteParams:
     parameter."""
 
     def test_no_doc_references_old_diff_stat_params(self) -> None:
-        for path in ALL_SIX:
+        for path in ALL_SIX + WIKI_SET:
             text = read(path)
             for banned in ("files_changed=", "insertions=", "deletions="):
                 assert banned not in text, f"{path} still references {banned!r}"
@@ -75,18 +106,19 @@ class TestAgeLadder:
 
     def test_age_skill_names_all_five_lens_groupings(self) -> None:
         text = read(AGE_SKILL)
-        lens_groups = [
-            ("correctness", "spec", "assertions"),
-            ("security", "telemetry"),
-            ("encapsulation", "complexity"),
-            ("deslop", "nih"),
-            ("efficiency",),
-        ]
-        for group in lens_groups:
+        for group in age_route._LENS_TREE:
             pattern = r"\[\s*" + r"\s*,\s*".join(group) + r"\s*\]"
             assert re.search(pattern, text), (
                 f"age/SKILL.md does not name the lens grouping {group!r}"
             )
+
+    def test_wiki_docs_do_not_describe_old_1_4_10_ladder(self) -> None:
+        for path in WIKI_SET:
+            text = read(path)
+            assert not re.search(r"\{\s*1\s*,\s*4\s*,\s*10\s*\}", text), (
+                f"{path} still describes the retired {{1, 4, 10}} ladder"
+            )
+            assert "1/4/10" not in text, f"{path} still describes the retired 1/4/10 ladder"
 
 
 class TestAffinageRouteCall:
@@ -165,4 +197,124 @@ class TestThresholdCodeDocsAgreement:
         cook_text = read(COOK_SKILL)
         assert threshold in cook_text, (
             f"cook/SKILL.md does not mention the live threshold {threshold}"
+        )
+
+    def test_age_skill_router_ladder_matches_live_score_floors(self) -> None:
+        assert age_route._SCORE_N2_FLOOR == 60
+        assert age_route._SCORE_N5_FLOOR == 250
+        assert age_route._HIGH_EFFORT_SCORE == 900
+
+        age_text = read(AGE_SKILL)
+        assert f"<{age_route._SCORE_N2_FLOOR}" in age_text, (
+            f"age/SKILL.md does not quote the live _SCORE_N2_FLOOR "
+            f"({age_route._SCORE_N2_FLOOR})"
+        )
+        assert f"{age_route._SCORE_N2_FLOOR}–{age_route._SCORE_N5_FLOOR}" in age_text, (
+            f"age/SKILL.md does not quote the live _SCORE_N2_FLOOR-_SCORE_N5_FLOOR "
+            f"band ({age_route._SCORE_N2_FLOOR}-{age_route._SCORE_N5_FLOOR})"
+        )
+        assert f">{age_route._SCORE_N5_FLOOR}" in age_text, (
+            f"age/SKILL.md does not quote the live _SCORE_N5_FLOOR "
+            f"({age_route._SCORE_N5_FLOOR})"
+        )
+        assert str(age_route._HIGH_EFFORT_SCORE) in age_text, (
+            f"age/SKILL.md does not quote the live _HIGH_EFFORT_SCORE "
+            f"({age_route._HIGH_EFFORT_SCORE})"
+        )
+
+    def test_pasteurize_skill_fanout_table_matches_live_constants(self) -> None:
+        pasteurize_text = read(PASTEURIZE_SKILL)
+
+        assert f"score < {pasteurize_route.WIDE_RANGE_THRESHOLD}" in pasteurize_text
+        assert f"score > {pasteurize_route.WIDE_RANGE_THRESHOLD}" in pasteurize_text
+
+        table = re.search(
+            r"\| Bug shape \| Range \| Repro \| Agents \|.*?(?=\n\n)",
+            pasteurize_text,
+            re.DOTALL,
+        )
+        assert table, "pasteurize/SKILL.md's fan-out sizing table is missing"
+        rows = table.group(0)
+
+        expectations = [
+            ("tight", "deterministic", pasteurize_route._REGRESSION_TIGHT_DETERMINISTIC_N),
+            ("tight", "non-deterministic", pasteurize_route._REGRESSION_TIGHT_NONDETERMINISTIC_N),
+            ("wide", "deterministic", pasteurize_route._REGRESSION_WIDE_DETERMINISTIC_N),
+            ("wide", "non-deterministic", pasteurize_route._REGRESSION_WIDE_NONDETERMINISTIC_N),
+        ]
+        for range_word, repro_word, expected_n in expectations:
+            row_pattern = (
+                r"\| regression \| " + range_word + r"[^|]*\| " + repro_word
+                + r" \| " + str(expected_n) + r"\b"
+            )
+            assert re.search(row_pattern, rows), (
+                f"pasteurize/SKILL.md's table does not show n={expected_n} for "
+                f"regression/{range_word}/{repro_word}"
+            )
+
+        assert re.search(
+            r"heisenbug.*?\| " + str(pasteurize_route._UNSTABLE_REPRO_N) + r"\b", rows
+        ), (
+            f"pasteurize/SKILL.md's table does not show n="
+            f"{pasteurize_route._UNSTABLE_REPRO_N} for the heisenbug row"
+        )
+        assert re.search(
+            r"cold bug.*?deterministic \| "
+            + str(pasteurize_route._COLD_BUG_DETERMINISTIC_N) + r"\b",
+            rows,
+        ), (
+            f"pasteurize/SKILL.md's table does not show n="
+            f"{pasteurize_route._COLD_BUG_DETERMINISTIC_N} for the deterministic cold-bug row"
+        )
+        assert re.search(
+            r"cold bug.*?non-deterministic \| "
+            + str(pasteurize_route._COLD_BUG_NONDETERMINISTIC_N) + r"\b",
+            rows,
+        ), (
+            f"pasteurize/SKILL.md's table does not show n="
+            f"{pasteurize_route._COLD_BUG_NONDETERMINISTIC_N} for the non-deterministic "
+            f"cold-bug row"
+        )
+
+    def test_min_curd_surface_matches_docs(self) -> None:
+        curd_block_text = read(CURD_BLOCK_PY)
+        match = re.search(r"MIN_CURD_SURFACE\s*=\s*(\d+)", curd_block_text)
+        assert match, "src/fanout/curd_block.py no longer defines MIN_CURD_SURFACE"
+        floor = match.group(1)
+
+        for path in (DECOMPOSER_DOC, WIKI_ENTITIES):
+            text = read(path)
+            assert re.search(r"MIN_CURD_SURFACE\W{0,4}" + floor + r"\b", text), (
+                f"{path} does not quote the live MIN_CURD_SURFACE ({floor})"
+            )
+
+
+class TestPacketSpeaksLens:
+    """packet.md moved from per-dimension workers to per-lens workers; it must
+    not describe the retired per-dimension contract as current."""
+
+    def test_packet_doc_does_not_describe_per_dimension_workers(self) -> None:
+        # Match any phrasing that assigns a worker a *dimension*, not just the one
+        # exact retired phrase -- "Each dimension worker" is the same defect as
+        # "per-dimension worker" and must fail too.
+        text = read(PACKET_DOC)
+        stale = re.search(r"(per-)?dimension\s+worker", text, re.IGNORECASE)
+        assert not stale, (
+            "packet.md still assigns workers a dimension rather than a lens: "
+            f"{stale.group(0)!r}"
+        )
+
+    def test_packet_doc_describes_lens_workers(self) -> None:
+        # Pin the structural contract, not the mere presence of the word "lens":
+        # a worker owns a lenses[i] entry whose rubric slice is the union of that
+        # lens's dimension rubrics.
+        text = read(PACKET_DOC)
+        assert re.search(r"lens\s+worker", text, re.IGNORECASE), (
+            "packet.md does not describe per-lens workers"
+        )
+        assert "lenses[i]" in text, (
+            "packet.md does not name the lenses[i] entry a worker owns"
+        )
+        assert re.search(r"union of the dimension rubrics", text, re.IGNORECASE), (
+            "packet.md does not state the rubric slice is the union over the lens's dimensions"
         )
