@@ -11,7 +11,7 @@ Use this skill after `/age`, failed validation, or user-selected review findings
 
 ## Inputs
 
-Accept any of: a `/age` slug (`/cure <slug>` reads `.cheese/age/<slug>.md`), a pasted findings list, a CI failure summary, or a scoped instruction like "fix the high-severity age findings". `/age` may also hand off with a pre-locked selection by passing the chosen ids in a structured handoff context (see `references/selection.md#handoff-from-age` for the canonical format); when that context is present, skip rendering the selection list and go straight to apply.
+Accept an exact linked `/age` or `/affinage` artifact path from the current WorkRecord, a pasted findings list, a CI failure summary, or a scoped instruction. A pre-locked selection travels in structured handoff context; when present, skip selection rendering and go straight to apply. A bare readable slug never reconstructs a flat report path.
 
 Age reports older than this severity-rubric revision lack the `severity`, `location`, `fix-cost-now`, and `fix-cost-later` sub-fields on each finding. Tolerate the older shape: when a finding has no `severity` field, infer it from the section header (`## High-stake findings` → `high`, `## Medium-stake findings` → `medium`); when `fix-cost-now` is absent, the `cheap` selection verb resolves to the empty set per `references/selection.md`. Never reject a report for missing sub-fields; record any inference in the cure report under `### Notes`. Reports predating the per-finding `confidence:` label simply lack it; treat missing confidence as unspecified — no inference, no rejection.
 
@@ -40,10 +40,10 @@ The handoff blocks below are the portable contract; slash commands are host rend
    If the host only ships the bundle, `python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz findings_cli parse-selection ...` is the fallback.
 3. **Apply** — fix one logical group at a time: re-confirm the anchor through a fresh bounded read, then apply a stale-safe write from a compatible backend family.
 4. **Validate** — run the narrowest tests that prove each fix, then any relevant project-wide gates (lint, typecheck, build). When the handoff carries a recorded `baseline:` block, classify gate failures against it per [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md): identical failures do not block a clean cure or trigger a halt; only new or changed failures are cure's to fix.
-5. **Taste-test (behavioural fixes only)** — if this cure applied a *behavioural* fix (touched production logic or public surface), run the fresh-context taste-test before the handoff slug: dispatch the read-only `reviewer` phase-agent (named, no call-site model — its def pins `model: opus`) over the cure diff with the same lenses cook uses, or fall back to the inline self-check when no such reviewer sub-agent is available. *Mechanical* fixes — formatting, comment, import, no-logic rename — skip this and keep the current flow. Pipe any `revise` into a bounded corrective pass; a Locked-decision `halt` stops for a human. (A coder-nested cure cannot fan out; it defers the authoritative pass to the orchestrator.)
+5. **Taste-test (behavioural fixes only)** — if this cure changed production logic or public surface, run the fresh-context taste-test before committing the handoff: dispatch the read-only reviewer over the cure diff with cook's lenses, or use the inline self-check when no reviewer is callable. Mechanical fixes skip this. Pipe `revise` into a bounded corrective pass; a locked-decision halt stops for a human.
 6. **Domain-model correction (diff-touched terms only)** — after the cook's fixes land, correct the project domain model (ubiquitous language) for terms **touched by the cook's diff** (bounded — diff-touched terms only, never a free rewrite). Resolve the store with `domain_model_target()` (`shared/scripts/paths.py`, read-probe cascade wiki → docs → XDG; an existing model always wins). For a diff-touched entry whose definition or `_Code_:` referent no longer matches the code, update it and write a one-line change note per edit (entry format: `**Term** — definition.` / `_Avoid_: syn1, syn2` / `_Code_: file:line (or NEW ENTITY)`). **HARD rule — flag, don't reverse:** if a correction would REVERSE a mold-decided canonical term (replace the term mold made authoritative, or contradict its definition), do not rewrite — flag it to the user (the term, mold's decision, the conflict) and leave the entry unchanged. mold DECIDES canonical terms at curdle; cure only APPLIES BOUNDED corrections and never overrules the authoritative writer.
 7. **Re-review hand-off** — recommend `/age --scope <touched-path>` so review runs through the proper skill rather than reimplementing it inline. `/cure` does not re-grade its own work. If the user picks re-age, the resulting report can feed a fresh `/cure` invocation.
-8. **Ship report** — what changed, checks run, deferred items, residual risks. Write the handoff slug at the top of `.cheese/cure/<slug>.md` (see `## Handoff slug` below) so the chain (and `/cook`'s fan pathway) can read the outcome without re-parsing the full report.
+8. **Ship report** — write the phase-owned body, commit the versioned `cure` envelope through `handoff-commit`, and print its runtime-returned artifact path so the parent can call `handoff-resolve`.
 9. **Plate / hand off** — on a clean cure, dispatch `/plate` per `## Handoff`.
 
 ## Preferred tools and fallbacks
@@ -79,25 +79,13 @@ Applied requires its proving test green (Iron Law — see `references/cure-disci
 
    If the host only ships the bundle, `python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz gates_cli classify ...` is the fallback.
 
-## Handoff slug
+## Handoff artifact
 
-Write the cure report to `.cheese/cure/<slug>.md` with a minimum handoff slug at the top so `/cook`'s fan pathway and `/cheese --continue` can chain without re-parsing the full report:
-
-```markdown
-status: ok | halt: <one-line reason>
-next: age | done
-artifact: <path-if-any>
-baseline: none | <recorded baseline block copied from the upstream handoff — see ../cook/references/quality-gates.md>
-<one-line orientation: what cure applied or deferred>
-```
-
-`status: ok` when at least one finding applied cleanly (or no findings met the severity floor in `--auto` mode); `status: halt: <reason>` when every selected fix failed the revert/keep evaluation or a project-wide gate cannot be made green. `next:` is `age` whenever re-review should follow — that is the autonomous-chain default and the standard interactive recommendation. `next:` is `done` only when invoked interactively without `--auto` *and* the user explicitly opts out of re-review. Cure does not track which pass it is on; the two-cure-pass cap is enforced by `/age --auto`'s third invocation, not by cure.
+Build the cure report body below and commit it through the shared runtime with `phase: cure`. Set `status: ok` when at least one finding applied cleanly or no finding met the auto floor; set `status: halt` with a non-empty `halt_reason` when every selected fix failed or a project gate cannot be made green. Set `next_phase: age` whenever re-review should follow, and `done` only when the interactive user explicitly opts out. Put a propagated quality-gate baseline in `payload.baseline`.
 
 ## Output
 
-Cross-cutting house style and citation form: [`../cheese/references/formatting.md`](../cheese/references/formatting.md).
-
-The cure report body lives below the handoff slug in the same file at `.cheese/cure/<slug>.md`:
+Cross-cutting house style and citation form: [`../cheese/references/formatting.md`](../cheese/references/formatting.md). Use the artifact path returned by `handoff-commit`.
 
 ```markdown
 ## Cure Report
@@ -144,7 +132,7 @@ Pre-select **Plate it** only when all selected findings applied cleanly and gate
 
 After any path that **publishes to a PR** — the default `/plate` dispatch, an `--open-pr` new PR, the `--safe` **Plate it** selection, or the auto-mode terminal publication — record the session's *implementation-time* learnings to the wiki. This is the second wiki write moment; curdle owns the design-time write, this owns what only surfaces while building: constraints discovered in `/cook`, `/age` findings that changed the design, and any domain terms the diff introduced or redefined.
 
-- **Candidates — upstream `durable_flags` + new-since-curdle ADRs.** Read `durable_flags:` from the upstream `/cook` and `/age` handoff slugs (`.cheese/cook/<slug>.md`, `.cheese/age/<slug>.md`); every non-`none` line is a write-back candidate alongside the new ADRs + domain-model deltas. Upstream phases record flags only — cure/plate/affinage remain the only wiki writers.
+- **Candidates — upstream `payload.durable_flags` + new-since-curdle ADRs.** Read durable flags from the exact upstream `cook` and `age` envelopes linked by the WorkRecord; every non-`none` entry is a write-back candidate alongside new ADRs and domain-model deltas.
 - **Writer — `/wiki-ingest`, detect-and-degrade.** When the hallouminate plugin is available, dispatch `/wiki-ingest` with the candidate list above; its dedup/route/merge/contradiction handling ensures only rationale *new since curdle* lands (say "new since curdle" in the dispatch so it does not re-add design-time ADRs). When hallouminate is absent, write `docs/adr/<slug>-NNN.md` + the domain-model file fallback and emit a **loud one-line note** that the write-back went to files, not the wiki — never a silent degrade. Detection and the degrade contract: [`../cheese/references/optional-plugins.md`](../cheese/references/optional-plugins.md).
 - **Every publication path.** Fires from the frame that dispatched terminal `/plate` — manual `cook→cure` and `--auto` alike — after publication lands.
 - **Publication-owner exception.** When cure does not own terminal `/plate` — the `/cook` fan-pathway no-publish cases below, or the `/affinage` chain where affinage owns terminal `/plate` — cure does **not** write back; the skill that owns the `/plate` dispatch owns the write-back at its publish boundary.
@@ -165,11 +153,11 @@ When invoked with `--auto --stake <floor>`:
 - Apply findings one at a time. After each fix, run the narrowest test that proves it. If the fix breaks a previously-passing test or any project-wide gate, revert that single finding's edit and record it under `### Deferred` in the cure report with the test name and the failure summary. Continue with the remaining findings.
 - After all selected findings are processed, skip the handoff gate and invoke `/age --scope <touched-paths> --auto` (forward `--open-pr` when it is in scope) so the chain can re-review.
 - `/age --auto` enforces the two-pass cap. Cure does not need to track passes itself — it just keeps applying when invoked.
-- **Terminal publication.** When the age child returns `next: done`, dispatch `/plate` once. It updates an existing PR automatically or, with `--open-pr`, applies the explicit-choice and review-shape policy before committing a new PR layout. After the publication lands, run the **§ Post-PR learnings write-back** in `## Handoff`.
+- **Terminal publication.** Read the age child's exact runtime-returned artifact and call `handoff-resolve`. When it returns `action: done`, dispatch `/plate` once. It updates an existing PR automatically or, with `--open-pr`, applies the explicit-choice and review-shape policy before committing a new PR layout. After the publication lands, run the **§ Post-PR learnings write-back** in `## Handoff`.
 - **Orchestrated sub-agent exception.** A phase-only cure dispatched by `/cook`'s fan pathway never invokes `/plate`; the orchestrator owns commit and publication.
 - **`/affinage` chain exception.** When `handoff_context.source_skill` is `/affinage`, suppress this terminal `/plate` — affinage posts its GitHub replies (final writes) and then owns terminal `/plate`.
 
-**`--auto --hard` puncture clause.** When age returns `next: done`, dispatch `/plate --hard` rather than firing `/hard-cheese` directly. `/plate`'s final writing gate makes the completed artifact inventory visible to the metacognitive check. A failed hard gate halts publication; a non-TTY environment reports that `--hard` needs an interactive TTY.
+**`--auto --hard` puncture clause.** When age resolves to `action: done`, dispatch `/plate --hard` rather than firing `/hard-cheese` directly. `/plate`'s final writing gate makes the completed artifact inventory visible to the metacognitive check. A failed hard gate halts publication; a non-TTY environment reports that `--hard` needs an interactive TTY.
 
 If no findings meet the floor, write an empty cure report with `### Applied: (none — no findings meet <floor>)` and skip straight to the auto handoff with a one-line "auto chain clean" note.
 
@@ -177,8 +165,8 @@ If no findings meet the floor, write an empty cure report with `### Applied: (no
 
 When `/cook`'s fan pathway (its retired-`/ultracook` mechanics, now self-hosted — see `skills/cook/SKILL.md` `## Fan pathway`) spawns cure as a phase-only sub-agent and owns the chain itself, honour the no-chain / no-push override:
 
-- **Single-curd chain** — the spawn prompt says "for THIS PHASE ONLY" and "do not chain forward to the next phase." Apply the auto-selected findings, write `.cheese/cure/<slug>.md` (handoff slug at the top, `next: age`), and stop. Do not invoke `/age --scope <touched-paths> --auto`. The orchestrator reads the cure slug and spawns the next age itself.
-- **Wave curd worker** — apply findings, write the cure slug, and stop. Do not invoke `/plate` or touch the remote; the fan pathway owns final commit and publication.
+- **Single-curd chain** — apply the auto-selected findings, commit the cure envelope with `next_phase: age`, return its artifact path, and stop. Do not invoke age; the parent resolves and dispatches it.
+- **Wave curd worker** — apply findings, commit the cure envelope, and stop. Do not invoke `/plate` or touch the remote.
 
 In both cases terminal `/plate` dispatch is suppressed — the orchestrator owns it.
 
@@ -191,7 +179,7 @@ In both cases terminal `/plate` dispatch is suppressed — the orchestrator owns
 - Publication contract — existing PR authorization, `--open-pr`, `--safe`, and never publishing an unclean cure: see `## Handoff`.
 - If a selected finding rests on a false premise (the `/age` claim is wrong, or the diff already addresses it), stop and surface the premise before applying. Disagreeing with the report is allowed; silently working around it is not.
 - Apply the shared voice kernel (lives at `../age/references/voice.md`): lead the cure report with what was applied, flag residual risk as `certain | speculating | don't know`, agree when the diff is fine without manufacturing follow-ups.
-- **Verification before `status: ok`:** before writing `status: ok` in the handoff slug, (1) identify the gate command, (2) run it fresh in the same turn, (3) read the full output, (4) only then claim. Hedging words (`should`, `probably`, `I think`) are banned in completion claims — state what the gate output showed, not what you expect it to show.
+- **Verification before `status: ok`:** identify the gate, run it fresh, read the full output, and only then commit the successful envelope.
 
 ## Discipline
 
@@ -207,3 +195,7 @@ Resolve fix application through [`../cheese/references/agent-resolution.md`](../
 | Apply selected findings | coder | write, isolated-worktree | default | high | compatible coder, then general |
 
 The canonical cure handoff carries the shared `agent_resolution` block.
+
+## Work continuity
+
+Follow the executable [cross-skill work contract](../cheese/references/work-contract.md) before phase work. A meaningful direct invocation ensures one WorkRecord; a nested invocation joins the inherited work ID. Emitting phases commit their versioned envelope and report body through `handoff-commit`, then act only on `handoff-resolve`. Never write or route from a legacy line-based handoff header.

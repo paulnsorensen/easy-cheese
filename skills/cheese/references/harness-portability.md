@@ -59,14 +59,9 @@ State the GitHub action first: read PR state, post a reply, push a branch, open 
 
 ## Handoff transitions
 
-Slash commands are presentation, not the control model. The portable contract is the structured handoff:
+Slash commands are presentation, not the control model. The portable contract is the versioned HandoffEnvelope persisted as YAML frontmatter through [`work-contract.md`](work-contract.md): stable work/attempt/operation identity, source `phase`, structured `status` and `halt_reason`, registered `next`, self-identifying `artifact`, phase-owned `payload`, and `provenance`.
 
-- `status`
-- `next`
-- `artifact`
-- one-line orientation
-
-If a skill can render a slash command, it may do so, but the same transition should also be usable as explicit dispatch data for non-slash hosts. When the handoff is a resume point, `next` names the runnable target; when it is terminal, `next: done` records that the chain is complete.
+Resolve transitions through `handoff-resolve` with explicit dispatch data and the phases actually available in the host. Slash-capable hosts may render the resulting dispatch, but `done`, `hold`, and `tasks` are control actions rather than commands, and a valid unavailable phase remains persisted without dispatch.
 
 ## Quick checklist
 
@@ -77,5 +72,9 @@ When writing or editing a skill doc:
 3. Preserve every explicit action, recommendations, option tradeoffs, free-form `Other`, and immediate selected action.
 4. Show the bundled or repo-local helper path before the host fallback.
 5. Treat `${CLAUDE_SKILL_DIR}` as optional host context, not the required contract.
-6. Keep `status`, `next`, and `artifact` as the durable handoff fields.
+6. Use the versioned WorkRecord envelope, `handoff-commit`, and `handoff-resolve`; never route from hand-written `status` / `next` / `artifact` lines.
 7. Use the host GitHub primitive when present; use `gh` as the documented fallback.
+
+## Cheese companion runtime
+
+Contract-aware workflow skills require the sibling `/cheese` runtime. Before emitting a phase handoff, invoke `python3 skills/cheese/scripts/cheese.pyz contract-registry validate` to validate the installed transition registry. If it is unavailable, halt with exactly: `Cheese contract runtime is required; install easy-cheese's Cheese companion runtime`. A declared globally valid next phase can remain valid even when it is not installed locally; report it unavailable rather than changing the transition.

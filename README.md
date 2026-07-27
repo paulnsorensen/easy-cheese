@@ -545,3 +545,9 @@ The Superpowers [`brainstorming`](https://github.com/ejfox/superpowers-mcp) skil
 The [`grill-with-docs`](https://github.com/mattpocock/skills/blob/main/skills/engineering/grill-with-docs/SKILL.md) skill (Pocock) — adapted into `/mold`'s Grill phase with grounded, cited claims: every critical claim is verified from local code or `/briesearch` before seams are locked.
 
 The `cumulative-domain-model` feature — the cumulative ubiquitous-language discipline that grows a durable `domain-model.md` domain model across sessions — adapts [Matt Pocock's `domain-modeling` skill](https://github.com/mattpocock/skills/blob/main/skills/engineering/domain-modeling/SKILL.md). Easy-cheese-specific adaptations layer the cheese pipeline's grounding and artifact conventions on top.
+
+## Workflow continuity
+
+Direct workflow entries with a meaningful subject create or join a durable WorkRecord; nested phases inherit the same work ID. WorkRecord, not newest artifact time, is the continuation authority. `/cheese --continue` considers durable records and explicit repo-local snapshots: zero candidates opens a project picker, one continues automatically, and two or more opens a worktree picker. A repo-local file is an explicit snapshot, never a second writable authority.
+
+Every emitting phase uses its own `handoff-contract.yaml` declaration with Cheese's shared contract runtime. Install `/cheese` with direct phase installs. Validate the installed transition registry with `python3 skills/cheese/scripts/cheese.pyz contract-registry validate`; if it is unavailable, halt with `Cheese contract runtime is required; install easy-cheese's Cheese companion runtime`.

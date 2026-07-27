@@ -24,12 +24,12 @@ _Code_: `shared/scripts/work.py`
 _Avoid_: branch key, cwd key
 _Code_: `shared/scripts/paths.py`
 
-**HandoffEnvelope** — versioned cross-phase JSON metadata surrounding a phase-owned Markdown report.
+**HandoffEnvelope** — versioned, schema-bounded YAML frontmatter surrounding a phase-owned Markdown report.
 _Avoid_: positional status header, unrestricted YAML document
 _Code_: `shared/scripts/handoff.py`
 
-**PhaseContract** — a human-authored YAML declaration of a source phase's payload schema and permitted outgoing transitions; it is compiled at build time.
-_Avoid_: universal payload schema, runtime YAML dependency
+**PhaseContract** — a human-authored YAML declaration of a source phase's payload schema and permitted outgoing transitions; it is compiled into the Cheese runtime registry.
+_Avoid_: universal payload schema, unpinned ambient YAML dependency
 _Code_: `skills/<phase>/references/handoff-contract.yaml`
 
 **Global transition registry** — build-assembled validation model containing every globally addressable workflow phase, destination-only contracts, and reserved control outcomes, independent of current harness installation.

@@ -127,10 +127,10 @@ Review request that explicitly asks for fixes too.
 | Signal | Example |
 | --- | --- |
 | "Review and fix" / "find and fix" | — |
-| Existing `.cheese/age/<slug>.md` plus "act on the findings" | `/cure` may be the direct target if the report is fresh |
+| WorkRecord links an age artifact plus "act on the findings" | `/cure` may be the direct target when that exact artifact is current |
 | CI failure with multiple unrelated findings | route to `/age` first to scope, then `/cure` |
 
-If a fresh `.cheese/age/<slug>.md` already exists and the user only wants fixes, target `/cure <slug>` directly without re-running `/age`.
+When the WorkRecord links a current age artifact and the user only wants fixes, target `/cure` with that exact path without re-running `/age`.
 
 ### plate (`/plate`)
 

@@ -91,3 +91,7 @@ Resolve heavy research dispatches through [`../cheese/references/agent-resolutio
 | Fetch and synthesize one heavy source | researcher | read-only, fresh-context | default | medium | compatible researcher, then general |
 
 The canonical cited research report carries the shared `agent_resolution` block.
+
+## Work continuity
+
+Follow the executable [cross-skill work contract](../cheese/references/work-contract.md) before phase work. A meaningful direct invocation ensures one WorkRecord; a nested invocation joins the inherited work ID. Emitting phases commit their versioned envelope and report body through `handoff-commit`, then act only on `handoff-resolve`. Never write or route from a legacy line-based handoff header.

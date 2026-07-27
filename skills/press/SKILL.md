@@ -14,7 +14,7 @@ Press may add or strengthen tests and make tiny corrective fixes only when a tes
 
 ## Baseline-aware gates
 
-When the cooked diff's handoff slug carries a recorded `baseline:` block, press re-runs the project's gates but does not re-flag or re-halt on failures identical to that baseline (same test, same signature) — only new or changed failures affect readiness. See [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md) for the classification and policy.
+When the inherited cook envelope carries `payload.baseline`, press re-runs the gates but does not re-flag failures identical to that recorded baseline; only new or changed failures affect readiness.
 
 ## Flow
 
@@ -23,9 +23,9 @@ When the cooked diff's handoff slug carries a recorded `baseline:` block, press 
 3. **Gap analysis** — identify weak assertions, missing boundaries, and uncovered integration seams. See `references/gap-analysis.md` for what counts as a gap and the priority order.
 4. **Add focused tests** — observe red first when behaviour changes. Apply precise stale-safe edits.
 5. **Corrective fixes** — only for defects the hardening tests expose. No new behaviour.
-6. **Run checks** — narrowest useful tests, then relevant wider gates already in the project. When the handoff carries a `baseline:` block, classify gate failures against it per [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md): identical failures do not affect readiness; only new or changed failures do.
-7. **Report** — write `.cheese/press/<slug>.md` (slug carried from `/cook`, or derived from branch/task) and print the path. Mark readiness: `ready for /age`, `follow-up recommended`, or `blocked`.
-8. **Hand off** — in manual mode, prompt the next step via the shared handoff gate (see `## Handoff` below); in `--auto` mode, chain forward per `## Auto mode`.
+6. **Run checks** — narrowest useful tests, then relevant wider gates already in the project. When the handoff carries `payload.baseline`, classify gate failures against it per [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md): identical failures do not affect readiness; only new or changed failures do.
+7. **Report** — build the press body, commit the versioned `press` envelope through `handoff-commit`, and print its returned path. Mark readiness as `ready for /age`, `follow-up recommended`, or `blocked`.
+8. **Hand off** — in manual mode, prompt the next step via the shared [handoff gate](../cheese/references/handoff-gate.md) (see `## Handoff` below); in `--auto` mode, chain forward per `## Auto mode`.
 
 ## Preferred tools and fallbacks
 
@@ -47,19 +47,13 @@ If optional tools are missing, press a narrower surface and state the residual r
 
 House style and citation form: [`../cheese/references/formatting.md`](../cheese/references/formatting.md). This section owns the press-report shape.
 
-Write to `.cheese/press/<slug>.md` with a minimum handoff slug at the top so `/cook`'s fan pathway and `/cheese --continue` can chain without re-parsing the report. The full report shape:
+Build the report body below, then commit it through the shared runtime with `phase: press`. Put a propagated quality-gate baseline in `payload.baseline` and use the artifact path returned by `handoff-commit`.
 
 ```markdown
-status: ok | halt: <one-line reason>
-next: press | age | done
-artifact: <path-if-any>
-baseline: none | <recorded baseline block copied from the cook handoff — see ../cook/references/quality-gates.md>
-<one-line orientation: what press did — e.g., "added 4 boundary tests; no defects exposed">
-
 # Press Report — <slug>
 
 ## Orientation
-<one or two factual sentences about what press did this pass — the hardening added, the gaps closed, the readiness verdict. `/cheese --continue` surfaces the slug's orientation line to the user as "where you are", so press's orientation must describe press's own work, not duplicate cook's orientation.>
+<one or two factual sentences about the hardening added, gaps closed, and readiness verdict.>
 
 ## Checks run
 - <command>: <pass|fail|skipped with reason>
@@ -82,23 +76,15 @@ baseline: none | <recorded baseline block copied from the cook handoff — see .
 <blocked>:                  resolve blocking issues before proceeding
 ```
 
-`status: ok` maps to readiness `ready for /age` or `follow-up recommended`; `status: halt: <reason>` maps to `blocked`. `next:` names the next runnable phase: `age` when review-safe, `press` when blocking issues must be resolved and the hardening phase rerun. Use `next: done` only for true terminal completion, not for a blocked-but-resumable halt. `/ultracook` still stops automatically on any `status: halt`; `next:` is the resume hint for `/cheese --continue`.
+Commit `status: ok` for `ready for /age` or `follow-up recommended`; commit `status: halt` with a non-empty reason for `blocked`. Set `next_phase: age` when review-safe, `press` when the phase must rerun, or `done` only for terminal completion. When `payload.baseline` is present, identical recorded failures do not change readiness; only new or changed failures do.
 
-When `baseline:` is present, press honors it: identical recorded failures never move readiness off `ready for /age`; only new or changed failures do, per [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md).
-
-Then print:
-
-```
-Press report: .cheese/press/<slug>.md
-Next step:    /age <slug>                          (when ready for /age or follow-up recommended)
-              blocked — resolve before continuing  (when blocked)
-```
+Print `Press report: <path>` using the artifact returned by `handoff-commit`, followed by the readiness next step.
 
 ## Handoff
 
 **Pipeline:** culture → mold → cook → **[press]** → age → cure → plate
 
-After the press report is on disk, ask via the shared handoff gate in [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md), following its **Standard forward-step menu**. Lead each option with the verb (what the user wants to *do* next); the skill command (with any in-scope `--hard` propagation) is the backing detail. Default options:
+After committing the press report, call `handoff-resolve`; when manual choice is still required, use the shared [handoff gate](../cheese/references/handoff-gate.md). Lead each option with the verb. Default options:
 
 - **Review the diff** *(recommended when readiness is `ready for /age` or `follow-up recommended`)* — `/age <slug>`. For `follow-up recommended`, documented follow-ups can be addressed after review.
 - **Plate it** — `/age <slug> --auto --open-pr`: run age → cure, then `/plate` resolves topology and publishes.
@@ -117,7 +103,7 @@ When invoked with `--auto` (propagated from `/cook --auto`):
 
 ### Within cook's own fan pathway
 
-When `/cook`'s fan pathway (its retired-`/ultracook` mechanics, now self-hosted — see `skills/cook/SKILL.md` `## Fan pathway`) spawns press as a fresh-context sub-agent, it owns the chain itself. When the spawn prompt explicitly says "for THIS PHASE ONLY" and "do not chain forward to the next phase," honour the override: write `.cheese/press/<slug>.md` (with the handoff slug at the top) and stop. Do not invoke `/age <slug> --auto` from inside the sub-agent regardless of readiness. The orchestrator reads the handoff slug and either chains to age (when `status: ok` and `next: age`) or halts (when `status: halt`, regardless of `next:`). `next:` remains the resume hint for `/cheese --continue`.
+When `/cook`'s fan pathway spawns press phase-only, commit the versioned press envelope, return its artifact path, and stop. Set `next_phase: age` for review-safe work or commit `status: halt` with a non-empty reason when blocked. The parent calls `handoff-resolve` and owns dispatch.
 
 ## Rules
 
@@ -128,3 +114,7 @@ When `/cook`'s fan pathway (its retired-`/ultracook` mechanics, now self-hosted 
 - Surface medium and high findings explicitly; summarize low findings.
 - If the cooked diff or spec rests on a false premise (the contract is wrong, or the test surface is solving the wrong problem), stop and surface the premise before adding tests; do not harden the wrong angle.
 - Apply the shared voice kernel (lives at `../age/references/voice.md`): lead the press report with the readiness verdict, flag residual risk as `certain | speculating | don't know`, agree when coverage is already sufficient without manufacturing tests.
+
+## Work continuity
+
+Follow the executable [cross-skill work contract](../cheese/references/work-contract.md) before phase work. A meaningful direct invocation ensures one WorkRecord; a nested invocation joins the inherited work ID. Emitting phases commit their versioned envelope and report body through `handoff-commit`, then act only on `handoff-resolve`. Never write or route from a legacy line-based handoff header.

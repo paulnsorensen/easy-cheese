@@ -42,7 +42,7 @@ When the fast-path applies, derive a slug from the task (e.g. `tail-trailing-new
 2. **Cut** — write failing tests for the changed behaviour. See `references/tdd-loop.md`.
 3. **Implement** — make the cut tests pass with the smallest production change.
 4. **Taste-test** — check spec drift, readability, scope, plus three fresh-context lenses (production path, wired callers, locked-decision). Dispatch the fresh-context `reviewer` for multi-file or public-surface diffs; keep the inline check otherwise. Two-round cap. Cost gate, reviewer-model pin, and the coder-nested degrade live in `references/tdd-loop.md`.
-5. **Hand off** — produce the package-ready report (`references/package-report.md`), write the handoff slug (`## Handoff slug` below), and prompt the next step via the shared handoff gate (see `## Handoff` below). The default chain is `/press` → `/age` → `/cure`.
+5. **Hand off** — produce the package-ready report body (`references/package-report.md`), commit the versioned `cook` envelope through the shared work contract, and prompt the next step via `handoff-resolve` plus the shared [handoff gate](../cheese/references/handoff-gate.md). The default chain is `/press` → `/age` → `/cure`.
 
 ## Fan pathway
 
@@ -56,19 +56,9 @@ When the fast-path applies, derive a slug from the task (e.g. `tail-trailing-new
 
 **Wave cap.** Waves are capped at `<=4` curds, enforced by `MAX_WAVE_SIZE` in `src/fanout/curd_block.py` — cited, not reimplemented here.
 
-### Existing handoffs guard
+### Existing work guard
 
-Before dispatching the decomposer for an un-curded big spec, check whether any of `.cheese/cook/<slug>.md`, `.cheese/press/<slug>.md`, `.cheese/age/<slug>.md`, `.cheese/cure/<slug>.md` already exist. If any do, stop — print only the ones present — and tell the user to either run `/cheese --continue <slug>` to resume from the latest phase or `rm` the listed files to start fresh. Never wipe an existing handoff silently:
-
-```
-Slug `<slug>` has existing handoffs:
-  .cheese/cook/<slug>.md     (when present)
-  .cheese/press/<slug>.md    (when present)
-  .cheese/age/<slug>.md      (when present)
-  .cheese/cure/<slug>.md     (when present)
-Use `/cheese --continue <slug>` to resume from the latest phase, or
-`rm` the listed files to start fresh.
-```
+Before dispatching the decomposer, ensure or join the WorkRecord. If the current nonterminal attempt already links phase artifacts, stop, identify that record, and direct `/cheese --continue`. Runtime operation IDs preserve every phase result, so restarting never deletes or overwrites workflow evidence.
 
 ### Mode selection
 
@@ -97,18 +87,15 @@ This parity difference is deliberate: native curds self-verify (gates run once, 
 | Per curd | `coder(cook) → coder(press) → reviewer(age) → coder(cure) → reviewer(final age)` | `parallel-curd` |
 | Post-merge, once, over the merged diff | `press → age → cure → age` | `parallel-postmerge` |
 
-This is not the old 7-spawn linear `/ultracook` chain (`cook → press → age → cure → age → cure → age`, table `linear` in `src/fanout/phase_decision.py`) run verbatim — that table still backs the single-coder path's own `--auto` chain (`## Auto mode` below) — the fan pathway's own topology is the two tables above. The per-curd table can end early: a first age reporting `next: done` **clean-completes** the curd (`action=clean_complete`) and skips cure and the final age, because nothing has touched the tree since that review and the post-merge pass re-covers the merged diff anyway. The post-merge table never short-circuits on that signal — it is the last review before publication, so cure and final age always run, and only a final-age `next: done` is publishable; `next: cure` or a missing `next` halts.
+Phase destinations are resolved from the committed envelopes, not from stdout or a flat file. A first age whose resolver action is `done` clean-completes a curd; the post-merge table does not short-circuit before its final age. A terminal resolver result that requests another cure, halts, or is malformed stops publication.
 
 ### Deterministic phase loop
 
-Between dispatches, `/cook`'s fan-pathway orchestrator decides the next action mechanically:
-
-1. **Parse the slug** — `python3 shared/scripts/read_handoff_slug.py --phase <phase> --slug <slug>` (the same helper `/age`'s own flow calls, e.g. `skills/age/SKILL.md`) → JSON `{status, next, artifact, orientation, halt_reason}`. Never infer success from a sub-agent's last line of stdout — read the file.
-2. **Compute the verdict** — `python3 skills/ultracook/scripts/ultracook.pyz phase_decision --phase-index <i> --status <status> [--next <next>] --table parallel-curd|parallel-postmerge` (`src/fanout/phase_decision.py`) → JSON `{action, next_phase, exit_message}`. `action=halt` surfaces the reason and stops; `action=clean_complete` (per-curd table only) records the first age's review context as final and skips ahead; `action=spawn` dispatches `next_phase`.
+Between dispatches, `/cook` consumes the exact artifact path returned by `handoff-commit`, calls `handoff-resolve`, and checks that any `dispatch` phase matches the table position. `halt`, `unavailable`, `hold`, and `tasks` stop automatic chaining; `done` follows the table's clean-complete or terminal rules.
 
 ### Worker exhaustion and aggregate-gate recovery
 
-- **Worker exhaustion.** A curd worker that runs out of context or turns writes a partial `status: halt: <reason>` slug. Retry that curd **once** with the error folded into its context; if it halts again, mark it failed, keep harvesting the rest, and report the failed curd in the final summary — never silently drop it.
+- **Worker exhaustion.** A curd worker commits `status: halt` with a non-empty reason. Retry that exact operation once only when the request is unchanged; otherwise allocate a new operation. A second halt marks the curd failed without dropping other results.
 - **Aggregate-gate cross-curd conflict vs. drift.** After harvesting all curds, run the project gates over the merged tree. On failure, distinguish a **real cross-curd conflict** (curds passed individually but collide in aggregate — a decomposer error → halt and surface it) from **harmless drift** (a formatter or generated-file delta the post-merge cure pass can absorb → continue). Never auto-resolve a real conflict.
 
 (ported from the retired `/ultracook`'s recovery-paths section, issue #194)
@@ -153,11 +140,11 @@ Every phase and curd dispatch resolves against the typed-role table in the Agent
 | Every age pass | reviewer |
 | Harvest and plate | parent |
 
-The resolver filters for required capabilities/tools/permissions/isolation first, then picks minimum power and maximum specificity; a prompt-only read-only general fallback may continue with `degraded: true`, while a missing required tool or write permission halts. Typed-role shorthand, ported verbatim from the retired `/ultracook`'s Rules: planner/general for decomposition, coder for cook/press/cure/seed/wiring, reviewer for every age, and parent ownership for harvest and plate. Every phase's handoff slug and the fan pathway's own summary carry the resulting `agent_resolution` block, so role, fallback, and degradation stay visible rather than implicit.
+The resolver filters for required capabilities/tools/permissions/isolation first, then picks minimum power and maximum specificity; a prompt-only read-only general fallback may continue with `degraded: true`, while a missing required tool or write permission halts. Typed-role shorthand remains planner/general for decomposition, coder for cook/press/cure/seed/wiring, reviewer for every age, and parent ownership for harvest and plate. Every phase preserves the resulting `agent_resolution` in provenance.
 
-A terminal age is **publishable only with `next: done`**; `next: cure` or a missing `next` halts as not publishable — this applies at the end of both the per-curd table and the post-merge table above, and to the single-coder `--auto` chain's own terminal age (`## Auto mode` below).
+A terminal age is publishable only when its committed artifact resolves to `action: done`; a dispatch back to cure, halt, or missing/malformed result is not publishable. This applies at the end of both the per-curd table and the post-merge table above, and to the single-coder `--auto` chain's own terminal age (`## Auto mode` below).
 
-The fan pathway and the single-coder path keep the same behavioral output and final-summary shape (`## Handoff slug`, `## Output`); required `agent_resolution` provenance records the selected role, fallback, and topology regardless of which pathway ran.
+The fan pathway and single-coder path keep the same behavioral output and final-summary shape; required `agent_resolution` provenance records the selected role, fallback, and topology.
 
 ## Baseline capture
 
@@ -192,13 +179,13 @@ Falling back, mention any loss of precision that affects risk.
 
 Run existing project commands only — the most relevant tests for the touched area, plus lint/type/build if defined. Never remove, skip, or weaken unrelated tests to make the change pass.
 
-Gate failures are baseline-aware. Policy, the classification taxonomy, and the `baseline:` block shape are the shared reference [`references/quality-gates.md`](references/quality-gates.md); every downstream phase links there instead of restating it.
+Gate failures are baseline-aware. Policy, classification, and the `payload.baseline` mapping are defined in [`references/quality-gates.md`](references/quality-gates.md); downstream phases link there instead of restating it.
 
 - **Frame-owned (`/cook`'s fan pathway)** — the baseline arrives in the dispatch; a curd cook never captures its own.
 - **Bare `/cook` (no frame)** — on the first red broad gate with no baseline yet, capture it lazily from the pre-change tree (`git stash` or a clean worktree checkout of the pre-cook state), then classify.
-- **Identical, outside the cooked contract** — record in the handoff's `baseline:` block and continue; never halt, never fix silently.
+- **Identical, outside the cooked contract** — record in `payload.baseline` and continue; never halt, never fix silently.
 - **New or changed** — fix it, capped at 2 rounds per gate; the same failure signature repeating twice consecutively halts early.
-- **Halt** only when rounds exhaust, the no-progress check trips, or the fix is design-shaped — the halt handoff carries the classification so resume never re-asks.
+- **Halt** only when rounds exhaust, the no-progress check trips, or the fix is design-shaped — the halt envelope carries the classification so resume never re-asks.
 - **Repair pathway** — when the capture records ≥1 identical-to-baseline failure, dedupe against a live `repair_dispatch`, then follow the repair pathway ([`references/quality-gates.md`](references/quality-gates.md) § Repair pathway) to dispatch a concurrent `/pasteurize` in an isolated worktree via `cook.pyz worktree create --slug repair-<slug> --base origin/main`.
 
 ## Output
@@ -212,31 +199,17 @@ Summarize:
 - Remaining risks or skipped checks.
 - Suggested next skill: usually `/press` → `/age` → `/cure`.
 
-## Handoff slug
-
-Write a minimum-shape handoff slug to `.cheese/cook/<slug>.md` so downstream phases (and cook's own fan pathway, when it is orchestrating a wave) can resume or chain without re-reading the full package-ready report. The slug is prepended at the top of the same file the package-ready report lives in — there is no second file. Schema:
-
-```markdown
-status: ok | halt: <one-line reason>
-next: mold | cook | press | age | done
-artifact: <path-to-richer-report-if-any>
-taste_test: inline-pass | dispatched-pass | revised | deferred-to-orchestrator
-durable_flags: none | <one line per flag: what durable knowledge changed -> target wiki page>
-baseline: none | <block — shape in references/quality-gates.md § Baseline block shape>
-<one-line orientation: what cook changed>
-```
-
-`next:` names the next runnable phase: `press` for the standard chain, `age` if the user skips press, `cook` to rerun after resolving a blocker, `mold` when the spec needs another pass. Use `next: done` only for true terminal completion, never for a blocked-but-resumable or external-gate halt; `halt:` reasons follow the package-report stop conditions. The orientation line is one factual sentence about what the diff does, not a report summary. Omit `taste_test:` when the cost gate did not warrant a taste-test.
-
-`durable_flags:` is a conservative durable-change gate. Default `none`; add one line per architecture, protocol, convention, or rationale delta the diff introduced (`<what changed> -> <target wiki page>`). Mechanical and test-only changes always record `durable_flags: none`. Cook records flags only — it never writes the wiki; the publish-boundary writer (cure/plate/affinage) reads upstream flags as its write-back candidate list.
-
-`baseline:` is written only when the `## Quality gates` capture rule above ran and recorded at least one identical-to-baseline failure; omit it otherwise. Block shape: [`references/quality-gates.md`](references/quality-gates.md) § Baseline block shape.
-
 ## Handoff
+
+Commit the package-ready report through the shared runtime with `phase: cook`; do not write a separate slug or derive a flat path. Set `next_phase` to `press` for the standard chain, `age` when press is explicitly skipped, `cook` to rerun after a blocker, `mold` when the spec needs another pass, or `done` only for terminal completion. A stopped run uses `status: halt` plus a non-empty `halt_reason`.
+
+The phase payload accepts `taste_test`, `durable_flags`, and `baseline`. Omit `taste_test` when the cost gate did not warrant one. Default `durable_flags` to `none`; record only architecture, protocol, convention, or rationale deltas. Include `baseline` only when the quality-gate capture rule recorded an identical failure; its shape remains owned by [`references/quality-gates.md`](references/quality-gates.md).
+
+The Markdown body is the package-ready report from `references/package-report.md`. Use the path returned by `handoff-commit`, then call `handoff-resolve` as required by the shared work contract.
 
 **Pipeline:** culture → mold → **[cook]** → press → age → cure → plate
 
-After the package-ready report is printed and the handoff slug is on disk, ask via the shared handoff gate in [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md), following its **Standard forward-step menu**. Lead each option with the verb (what the user wants to *do* next); the skill command (with any in-scope `--hard` propagation) is the backing detail. Default options:
+After the package-ready body is committed and its artifact path is printed, resolve the destination and ask via the shared handoff gate when required. Lead each option with the verb; the skill command is the backing detail. Default options:
 
 - **Harden tests before review** *(recommended)* — `/press <slug>`.
 - **Plate it** — `/press <slug> --auto --open-pr`: run the remaining review chain, then `/plate` resolves topology and publishes.
@@ -255,14 +228,14 @@ When invoked with `--auto`, skip this gate entirely and proceed straight into th
 
 1. After the package-ready report, invoke `/press <slug> --auto`; append `--open-pr` so terminal `/plate` may publish a new PR.
 2. `/press --auto` runs its hardening pass and, if readiness is `ready for /age` or `follow-up recommended`, invokes `/age <slug> --auto`. Both states mean the cooked contract is sound and every changed behaviour has a hardening test; documented follow-ups are review-safe. Only `blocked` stops auto — blocked criteria: defined once in [`../press/references/gap-analysis.md`](../press/references/gap-analysis.md).
-3. `/age <slug> --auto` writes the report and invokes `/cure <slug> --auto --stake medium+`.
-4. `/cure --auto --stake medium+` bypasses the selection gate, applies every finding of `blocker`, `high`, or `medium` severity plus every cheap (contained-fix) `Low`, then invokes `/age --scope <touched-paths> --auto` for verification.
-5. The age → cure cycle is capped at **two cure passes total**. Pass 1 fixes the initial findings. Pass 2 fixes anything the re-age surfaces. After pass 2 the chain stops with a final summary, regardless of whether new findings remain.
+3. `/age <slug> --auto` commits its report envelope with `next_phase: cure` or `done`; the caller reads the exact returned artifact and routes only from `handoff-resolve`.
+4. On `action: dispatch` to cure, `/cure --auto --stake medium+` bypasses the selection gate, applies every finding of `blocker`, `high`, or `medium` severity plus every cheap (contained-fix) `Low`, then invokes `/age --scope <touched-paths> --auto` for verification.
+5. The age → cure cycle is capped at **two cure passes total**. Pass 1 fixes the initial findings. Pass 2 fixes anything the re-age finds. After pass 2, only a resolved `done` result is publishable; another cure request or a halt stops the chain.
 6. `/cook` itself never invokes `/plate`. At the chain terminal, `/cure` dispatches `/plate` for an existing PR, and for a new PR only when `--open-pr` is in scope. `/plate` honors explicit topology, selects an obviously cohesive single without asking, and asks before mutation when stacked is recommended or shape is ambiguous, including under auto.
 
 ### Cap enforcement
 
-The two-cure-pass cap is enforced by chain length, not by age — age boots in fresh context each pass and cannot count prior passes. Each age pass writes `next:` from what it observes on that one run (`next: cure` when a medium+ finding remains, `next: done` when none do); before the terminal position this drives an early stop, but the value itself is informational for cap purposes — the loop's fixed two-pass structure, not age's own `next:` value, is what terminates the chain. `/cook` does not pass a pass-ordinal hint to age: age has no need to know whether it is the first or second post-cure check, since the orchestrator owns the position.
+The two-cure-pass cap is enforced by chain length, not by age — age boots in fresh context each pass and cannot count prior passes. Each age pass commits `next_phase: cure` when a medium+ finding remains or `next_phase: done` when none do; the caller acts only on `handoff-resolve`. Before the terminal position `done` drives an early stop, while the loop's fixed two-pass structure owns cap enforcement. `/cook` does not pass a pass-ordinal hint to age because the orchestrator owns the position.
 
 ### When auto mode stops early
 
@@ -275,9 +248,7 @@ In every early-stop case, surface the report from the failing skill and tell the
 
 ### No-chain isolation directive
 
-Each phase's existing `--auto` contract chains forward in-session — `/cook --auto` invokes `/press --auto`, which invokes `/age --auto`, and so on. When `/cook` is running as its own fan-pathway orchestrator (`## Fan pathway` above), that default is overridden for every per-curd or post-merge dispatch: each phase sub-agent runs only its own phase, writes its handoff slug, and stops — it never chains forward to the next phase itself, even though its own `--auto` contract documents that behavior. The fan-pathway orchestrator loop (`### Deterministic phase loop` under `## Fan pathway`) owns deciding and dispatching what runs next, exactly as the retired `/ultracook` orchestrator once did.
-
-The override travels in the spawn prompt as an explicit no-chain directive, carried over verbatim from `/ultracook`'s original wording: "Do not chain forward to the next phase even though your auto-mode contract documents that. Write your handoff slug and stop. `/cook`'s fan pathway is driving the chain. Run in the foreground — do not background yourself, spawn detached processes, or defer work to a later session. If you cannot complete the phase within your context window, write a partial slug with `status: halt: <reason>` and stop; do not silently timeout."
+Each phase's existing `--auto` contract chains forward in-session. In the fan pathway, every phase sub-agent instead runs only its phase, commits its versioned envelope through the inherited WorkRecord, returns the runtime artifact path, and stops. The parent calls `handoff-resolve` and owns the next dispatch. On exhaustion, commit `status: halt` with a non-empty `halt_reason`; never leave an unpersisted partial result.
 
 Each phase's own `SKILL.md` `## Auto mode` section honours this under its `### When invoked from /ultracook` heading (now: when invoked from `/cook`'s fan pathway) — see e.g. `skills/press/SKILL.md`, `skills/age/SKILL.md`, `skills/cure/SKILL.md`.
 
@@ -306,7 +277,7 @@ Next step:      review the diff, then /plate when ready
 - Stop and ask when implementation reveals a design decision the spec did not answer.
 - If the spec or fast-path request rests on a false premise, stop and surface the premise before writing code; do not work the wrong angle to honour the request literally.
 - Apply the shared voice kernel (lives at `../age/references/voice.md`): lead the package-ready report with the answer, name loaded assumptions in the contract, flag residual risk as `certain | speculating | don't know`.
-- **Verification before `status: ok`:** before writing `status: ok` in the handoff slug, (1) identify the gate command, (2) run it fresh in the same turn, (3) read the full output, (4) only then claim. Hedging words (`should`, `probably`, `I think`) are banned in completion claims — state what the gate output showed, not what you expect it to show.
+- **Verification before `status: ok`:** identify the gate, run it fresh in the same turn, read the full output, and only then commit the successful envelope. Completion claims state what the gate output showed.
 
 ## Discipline
 
@@ -326,3 +297,7 @@ Resolve implementation and taste-test dispatches through [`../cheese/references/
 | Harvest and plate | parent | parent-owned repository state | powerful | high | no fallback; halt |
 
 The canonical cook handoff and package report carry the shared `agent_resolution` block.
+
+## Work continuity
+
+Follow the executable [cross-skill work contract](../cheese/references/work-contract.md) before phase work. A meaningful direct invocation ensures one WorkRecord; a nested invocation joins the inherited work ID. Emitting phases commit their versioned envelope and report body through `handoff-commit`, then act only on `handoff-resolve`. Never write or route from a legacy line-based handoff header.

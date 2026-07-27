@@ -132,11 +132,11 @@ def _setup(parser: argparse.ArgumentParser) -> None:
     dispatch.add_argument("command", help="full dispatch string, e.g. '/age slug --hard'")
     dispatch.set_defaults(func=_cmd_dispatch)
 
-    envelope_parse = sub.add_parser("envelope-parse", help="parse a versioned JSON envelope")
+    envelope_parse = sub.add_parser("envelope-parse", help="parse a versioned YAML-frontmatter envelope")
     envelope_parse.add_argument("--file", required=True)
     envelope_parse.set_defaults(func=_cmd_envelope_parse)
 
-    envelope_render = sub.add_parser("envelope-render", help="render a versioned JSON envelope")
+    envelope_render = sub.add_parser("envelope-render", help="render a versioned YAML-frontmatter envelope")
     envelope_render.add_argument("--envelope", required=True, help="JSON envelope mapping")
     envelope_render.add_argument("--body", default="")
     envelope_render.add_argument(

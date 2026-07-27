@@ -29,22 +29,9 @@ Description: {description}
 
 1. Read the file with the backend that will validate the write anchor.
 2. Apply the integration change through a stale-safe edit according to `skills/cheese/references/code-intelligence-routing.md`.
-3. Run the project's quality gate command — STOP and write
-   `status: halt: quality gate failed` if it fails.
-4. Commit via `/plate` commit-only mode.
-5. Write the handoff slug.
-
-## Handoff slug
-
-Write `.cheese/ultracook/{slug}/wiring/{id}.md` with:
-
-```
-status: ok | halt: <one-line reason>
-next: merge | done
-artifact: <path-to-richer-report-if-any>
-<one-line orientation: what this wiring task did>
-agent_resolution: {agent_resolution}
-```
+3. Run the project's quality gate. If it fails, commit `status: halt` with `halt_reason: quality gate failed`.
+4. Commit via `/plate` commit-only mode only after a green gate.
+5. Join the inherited WorkRecord and commit the wiring result through the shared `skills/cheese/references/work-contract.md` transaction. Return the runtime-derived artifact path and preserve `{agent_resolution}` in provenance. Do not hand-write a flat handoff file.
 
 ## Do NOT
 
