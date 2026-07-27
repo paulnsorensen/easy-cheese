@@ -46,8 +46,10 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install pytest + pyyaml
-        run: pip install --no-cache-dir pytest==9.0.3 pyyaml==6.0.2
+      - name: Install Python test dependencies
+        run: >-
+          pip install --no-cache-dir pytest==9.0.3 pyyaml==6.0.2
+          cattrs==26.1.0 attrs==26.1.0 typing-extensions==4.16.0
 
       - name: Run melt script tests
         run: python3 -m pytest tests/python -q

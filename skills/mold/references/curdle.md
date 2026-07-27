@@ -93,6 +93,9 @@ If the trigger cannot be stated precisely (e.g. pure internal utilities with no 
 ## Quality gates
 - <runnable command>: <expected result>
 
+## Curds
+<the validated curd block approved at the two-key handshake>
+
 ## Reproduction (Diagnose only)
 <failing test, curl, replay command, etc.>
 
@@ -226,16 +229,17 @@ This is the runtime home of the **Durable writes** coherence gate (`handshake.md
 
 **Loud fallback.** When hallouminate is unavailable and the resolver degrades to a file backend (`docs/adr/…`, `docs/domain-model*`, or the XDG corpus), say so in one visible line — never let a write silently go to files when the author expected the wiki. Absent-plugin degrade contract: [`../../cheese/references/optional-plugins.md`](../../cheese/references/optional-plugins.md).
 
-## Decomposer dispatch (curd block)
+## Pre-approval decomposer dispatch (curd block)
 
-After phase two's external publication attempts and the mechanical `Deferred follow-ups` reconciliation finish, and before `curd-count` runs (`../curd-count.md`), dispatch a fresh-context `decomposer` sub-agent on the draft spec text to identify candidate curds.
+Run this procedure on dialogue-state draft text before the two-key handshake. It prepares approval input; Curdle later persists that exact approved input.
 
-1. **Dispatch** the decomposer on the current draft spec text (source: mold). Read [`../../cheese/references/decomposer.md`](../../cheese/references/decomposer.md) for the locked curd-block schema first — do not invent the schema from memory. It returns a curd block.
+1. **Dispatch** a fresh-context `decomposer` sub-agent on the current draft spec text (source: mold). Read [`../../cheese/references/decomposer.md`](../../cheese/references/decomposer.md) for the locked curd-block schema first — do not invent the schema from memory. It returns a curd block.
 2. **Validate** the returned block with `src/fanout/curd_block.py::validate_curd_block`. On failure, retry the dispatch once.
-3. **Still invalid after the retry** — omit the `## Curds` section from the spec entirely. Do not embed an invalid block: a broken decomposer output must never corrupt the spec. Note the omission in the curdle completion record.
-4. **On success**, embed the validated curd block as a new `## Curds` section in the spec artifact, appended after `## Quality gates` (or the natural equivalent section for this spec's shape).
+3. **Still invalid after the retry** — stop before the two-key handshake. Do not approve or embed an invalid block: a broken decomposer output must never corrupt the spec.
+4. **On success**, count the block's `curds` and `waves`, then show `N curds / M waves` with the final approval request. The validated block is part of what both handshake keys approve.
+5. **During Curdle phase one**, persist the same approved curd block as `## Curds` after `## Quality gates` (or the natural equivalent section for this spec's shape). Do not re-dispatch, regenerate, or mutate it after approval.
 
-This dispatch is local to phase two's reconciliation window — it produces spec content, not an external publication, so it does not gate on any external capability being available.
+The pre-approval dispatch produces dialogue state, not a durable artifact or external publication. The two-key handshake still gates every write, and the dispatch does not depend on any external publication capability.
 
 ## Hand-off
 
