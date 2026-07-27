@@ -8,6 +8,8 @@ import sys
 import zipfile
 from pathlib import Path
 
+import yaml
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 import build_pyz  # noqa: E402
@@ -29,17 +31,30 @@ def test_release_workflow_installs_pinned_pyyaml_before_staging() -> None:
     assert workflow.index(install) < workflow.index(stage)
 
 
-def test_cheese_archive_excludes_pyyaml_and_license(tmp_path: Path) -> None:
+def test_cheese_archive_bundles_pure_python_pyyaml_and_license(tmp_path: Path) -> None:
     archive = build_pyz.build_cheese_bundle(tmp_path / "cheese.pyz")
     with zipfile.ZipFile(archive) as bundle:
         names = bundle.namelist()
-        assert not [name for name in names if name == "yaml" or name.startswith("yaml/")]
-        assert not [name for name in names if "PyYAML" in name]
+        assert "yaml/__init__.py" in names
+        assert bundle.read("licenses/PyYAML-LICENSE.txt").strip()
         assert "contract_registry.py" in names
         assert "work_cli.py" in names
         assert "handoff_resolve_cli.py" in names
-        assert not [name for name in names if name.endswith((".so", ".pyd", ".pyc")) or "__pycache__" in name]
+        assert not [
+            name
+            for name in names
+            if name.endswith((".so", ".pyd", ".pyc")) or "__pycache__" in name
+        ]
+        assert not [
+            name for name in names if ".dist-info/" in name or ".egg-info/" in name
+        ]
         assert all(info.date_time == build_pyz.ZIP_TIMESTAMP for info in bundle.infolist())
+
+
+def test_cheese_archive_is_reproducible_with_bundled_pyyaml(tmp_path: Path) -> None:
+    first = build_pyz.build_cheese_bundle(tmp_path / "first.pyz")
+    second = build_pyz.build_cheese_bundle(tmp_path / "second.pyz")
+    assert first.read_bytes() == second.read_bytes()
 
 
 def test_cheese_archive_runs_without_ambient_packages(tmp_path: Path) -> None:
@@ -80,6 +95,18 @@ def test_cheese_archive_executes_work_and_availability_commands(tmp_path: Path) 
     record = json.loads(created.stdout)
     assert record["title"] == "Bundled work"
 
+    record_path = (
+        tmp_path
+        / "data"
+        / "cheese"
+        / "bundle-test"
+        / "work"
+        / record["work_id"]
+        / "index.md"
+    )
+    frontmatter = record_path.read_text(encoding="utf-8").split("---\n", 2)[1]
+    assert yaml.safe_load(frontmatter) == record
+
     resumed = subprocess.run(
         [sys.executable, "-S", str(archive), "work", "continue", "--worktree", "wt_bundle"],
         capture_output=True,
@@ -90,6 +117,7 @@ def test_cheese_archive_executes_work_and_availability_commands(tmp_path: Path) 
     assert resumed.returncode == 0, resumed.stderr
     assert json.loads(resumed.stdout)["action"] == "continue"
 
+    artifact = tmp_path / "handoff.md"
     envelope = {
         "contract_version": "cheese-handoff/v1",
         "work_id": record["work_id"],
@@ -99,13 +127,17 @@ def test_cheese_archive_executes_work_and_availability_commands(tmp_path: Path) 
         "status": "ok",
         "halt_reason": None,
         "next": "press",
-        "artifact": ".cheese/cook/example.md",
+        "artifact": str(artifact),
         "payload": {},
         "provenance": {},
     }
+    artifact.write_text(
+        "---\n" + yaml.safe_dump(envelope, sort_keys=False, allow_unicode=True) + "---\n",
+        encoding="utf-8",
+    )
     resolved = subprocess.run(
         [sys.executable, "-S", str(archive), "handoff-resolve"],
-        input=json.dumps({"envelope": envelope, "available_phases": []}),
+        input=json.dumps({"artifact": str(artifact), "available_phases": []}),
         capture_output=True,
         text=True,
         env=env,

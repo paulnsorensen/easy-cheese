@@ -2,8 +2,8 @@
 """Build deterministic skill bundles and the Cheese contract-runtime companion.
 
 The Cheese companion is the sole shipped runtime for cross-skill contracts. It
-embeds the compiled phase registry; PyYAML is required only while building that
-registry. Ordinary skill bundles remain independently built.
+embeds the compiled phase registry and pinned pure-Python PyYAML so users install
+no Python libraries separately. Ordinary skill bundles remain independently built.
 """
 
 from __future__ import annotations
@@ -281,21 +281,52 @@ def build_bundle(skill: str, target: Path) -> Path:
     return target
 
 
-def _require_pyyaml() -> None:
-    """Require the exact build-time PyYAML version used to compile contracts."""
+def _require_pyyaml() -> importlib.metadata.Distribution:
+    """Require and return the exact PyYAML distribution bundled into Cheese."""
     try:
-        version = importlib.metadata.version("PyYAML")
+        distribution = importlib.metadata.distribution("PyYAML")
     except importlib.metadata.PackageNotFoundError as exc:
         raise SystemExit(f"build_pyz: PyYAML {PY_YAML_VERSION} is required") from exc
-    if version != PY_YAML_VERSION:
+    if distribution.version != PY_YAML_VERSION:
         raise SystemExit(
-            f"build_pyz: PyYAML must be exactly {PY_YAML_VERSION}, found {version}"
+            f"build_pyz: PyYAML must be exactly {PY_YAML_VERSION}, "
+            f"found {distribution.version}"
         )
+    return distribution
+
+
+def _stage_pyyaml(
+    stage: Path, distribution: importlib.metadata.Distribution
+) -> None:
+    """Stage PyYAML's pure-Python package and license into the archive."""
+    files = tuple(distribution.files or ())
+    sources = sorted(
+        member
+        for member in files
+        if member.parts[:1] == ("yaml",) and member.suffix == ".py"
+    )
+    licenses = [
+        member
+        for member in files
+        if member.name == "LICENSE"
+        and any(part.endswith(".dist-info") for part in member.parts)
+    ]
+    if not sources or len(licenses) != 1:
+        raise SystemExit("build_pyz: PyYAML distribution is incomplete")
+
+    for member in sources:
+        target = stage / Path(*member.parts)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(distribution.locate_file(member), target)
+
+    license_target = stage / "licenses" / "PyYAML-LICENSE.txt"
+    license_target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy(distribution.locate_file(licenses[0]), license_target)
 
 
 def build_cheese_bundle(target: Path) -> Path:
-    """Build the mandatory Cheese companion with compiled contracts."""
-    _require_pyyaml()
+    """Build the Cheese companion with compiled contracts and bundled PyYAML."""
+    distribution = _require_pyyaml()
     target.parent.mkdir(parents=True, exist_ok=True)
     registry = handoff.assemble_transition_registry(
         sorted((REPO_ROOT / "skills").glob("*/references/handoff-contract.yaml"))
@@ -311,6 +342,7 @@ def build_cheese_bundle(target: Path) -> Path:
             "write_handoff_artifact",
         ):
             shutil.copy(SHARED_SCRIPTS / f"{module}.py", stage / f"{module}.py")
+        _stage_pyyaml(stage, distribution)
         (stage / "contract_registry.py").write_text(
             f"REGISTRY = {registry!r}\n", encoding="utf-8"
         )

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Assemble the shippable release tree with one Cheese contract companion.
 
-The release keeps skill metadata and generated archives only. `cheese.pyz` is
-built directly into the staged Cheese skill and owns the compiled registry;
-raw sources, PyYAML, and consumer `common.pyz` copies do not ship.
+The release keeps skill metadata and generated archives only. `cheese.pyz` owns
+the compiled registry and bundled pure-Python PyYAML; raw sources and consumer
+`common.pyz` copies do not ship.
 """
 
 from __future__ import annotations
