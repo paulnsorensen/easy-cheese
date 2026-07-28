@@ -17,7 +17,7 @@ from ref_extraction import relative_md_refs
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SKILLS_ROOT = REPO_ROOT / "skills"
 
-# The six docs that used to live at repo-root shared/*.md before the
+# The five docs that used to live at repo-root shared/*.md before the
 # cheese-kernel-shared-refs move; semantic-backends was inlined and deleted
 # rather than relocated, but a regressed reference to it is equally dangling.
 _FORMER_SHARED_NAMES = (
@@ -25,7 +25,6 @@ _FORMER_SHARED_NAMES = (
     "handoff-gate",
     "harness-portability",
     "optional-plugins",
-    "skill-authoring",
     "semantic-backends",
 )
 _SHARED_MD_RE = re.compile(

@@ -45,11 +45,11 @@ lint-sh:
 
 # Fix markdown formatting issues
 lint-md-fix:
-    markdownlint-cli2 --fix "skills/**/*.md" "*.md"
+    markdownlint-cli2 --fix "skills/**/*.md" ".agents/**/*.md" "*.md"
 
 # Verify markdown (no autofix)
 lint-md:
-    markdownlint-cli2 "skills/**/*.md" "*.md"
+    markdownlint-cli2 "skills/**/*.md" ".agents/**/*.md" "*.md"
 
 # Fix YAML formatting issues
 lint-yaml-fix:
@@ -62,6 +62,10 @@ lint-yaml:
 # Autofix Python lint with ruff (via uvx, no global install needed)
 lint-py-fix:
     uvx ruff check --fix .
+
+# Regenerate .github/skill-budgets.json (size/structure ratchet) after shrinking a skill
+update-skill-budgets:
+    python3 .github/scripts/validate_skills.py --write-budgets
 
 # Full local check with autofixes
 check: lint-md-fix lint-yaml-fix lint-yaml lint-py-fix lint-sh test docs-build

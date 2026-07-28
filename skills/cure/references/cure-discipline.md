@@ -1,10 +1,5 @@
 # /cure — Fix-Application Discipline
 
-See [`../../cheese/references/skill-authoring.md`](../../cheese/references/skill-authoring.md) for the
-Iron Law / Red Flags / Rationalization-table template that governs this section.
-
----
-
 ## Iron Law
 
 **No finding is "fixed" without a gate-passing test run to prove it.**

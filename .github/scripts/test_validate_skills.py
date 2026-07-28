@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import json
 import os
 import shutil
 import sys
@@ -44,6 +45,15 @@ class ValidateSkillsTest(unittest.TestCase):
 
     def _write_skill(self, name: str, parent: str = "skills") -> None:
         self._write(f"{parent}/{name}/SKILL.md", VALID_BODY.format(name=name))
+
+    def _write_budgets(self, data: dict) -> None:
+        self._write(".github/skill-budgets.json", json.dumps(data))
+
+    def _skill_text(self, name: str, body_tokens: int) -> str:
+        # FRONTMATTER_RE consumes the single \n right after the closing '---',
+        # so the filler below is exactly the measured body.
+        filler = "x" * (body_tokens * 4)
+        return f"---\nname: {name}\ndescription: t\n---\n{filler}"
 
     def _run(self) -> tuple[int, str, str]:
         out, err = io.StringIO(), io.StringIO()
@@ -87,6 +97,46 @@ class ValidateSkillsTest(unittest.TestCase):
         self._write_skill("foo")
         self._write(".github/SKILL.md", VALID_BODY.format(name="github"))
         self._write(".cache/plugins/x/skills/y/SKILL.md", VALID_BODY.format(name="y"))
+        rc, out, _ = self._run()
+        self.assertEqual(rc, 0)
+        self.assertIn("validated 1", out)
+
+    # --- .agents/skills/ repo-local skills ---
+
+    def test_agents_skill_passes_and_is_counted(self) -> None:
+        self._write_skill("foo")
+        self._write_skill("bar", parent=".agents/skills")
+        rc, out, _ = self._run()
+        self.assertEqual(rc, 0)
+        self.assertIn("validated 2", out)
+
+    def test_agents_skill_name_dir_mismatch_fails(self) -> None:
+        self._write_skill("foo")
+        self._write(".agents/skills/bar/SKILL.md", VALID_BODY.format(name="baz"))
+        rc, _, err = self._run()
+        self.assertEqual(rc, 1)
+        self.assertIn("does not match parent directory", err)
+
+    def test_agents_skill_over_target_fails(self) -> None:
+        self._write_skill("foo")
+        over = validate_skills.TARGET_TOKENS + 1
+        self._write(".agents/skills/bar/SKILL.md", self._skill_text("bar", over))
+        rc, _, err = self._run()
+        self.assertEqual(rc, 1)
+        self.assertIn(f"~{over} estimated tokens", err)
+        self.assertIn(f"exceeds budget of {validate_skills.TARGET_TOKENS}", err)
+
+    def test_agents_skill_too_deep_fails(self) -> None:
+        self._write_skill("foo")
+        self._write(".agents/skills/bar/baz/SKILL.md", VALID_BODY.format(name="baz"))
+        rc, _, err = self._run()
+        self.assertEqual(rc, 1)
+        self.assertIn("not at the documented path", err)
+        self.assertIn("nested sub-skills are not supported", err)
+
+    def test_agents_dir_outside_skills_still_skipped(self) -> None:
+        self._write_skill("foo")
+        self._write(".agents/bar/SKILL.md", VALID_BODY.format(name="bar"))
         rc, out, _ = self._run()
         self.assertEqual(rc, 0)
         self.assertIn("validated 1", out)
@@ -172,6 +222,220 @@ class ValidateSkillsTest(unittest.TestCase):
         rc, out, _ = self._run()
         self.assertEqual(rc, 0)
         self.assertIn("validated 1", out)
+
+    # --- size ratchet ---
+
+    def test_body_size_at_target_passes(self) -> None:
+        self._write("skills/foo/SKILL.md", self._skill_text("foo", validate_skills.TARGET_TOKENS))
+        rc, out, _ = self._run()
+        self.assertEqual(rc, 0)
+        self.assertIn("validated 1", out)
+
+    def test_body_size_over_target_fails(self) -> None:
+        over = validate_skills.TARGET_TOKENS + 1
+        self._write("skills/foo/SKILL.md", self._skill_text("foo", over))
+        rc, _, err = self._run()
+        self.assertEqual(rc, 1)
+        self.assertIn(f"~{over} estimated tokens", err)
+        self.assertIn(f"exceeds budget of {validate_skills.TARGET_TOKENS}", err)
+
+    def test_body_size_shrink_passes(self) -> None:
+        self._write_budgets({"skills": {"foo": 6000}})
+        self._write("skills/foo/SKILL.md", self._skill_text("foo", 5500))
+        rc, out, _ = self._run()
+        self.assertEqual(rc, 0)
+        self.assertIn("validated 1", out)
+
+    def test_body_size_grandfathered_at_recorded_value_passes(self) -> None:
+        self._write_budgets({"skills": {"foo": 6000}})
+        self._write("skills/foo/SKILL.md", self._skill_text("foo", 6000))
+        rc, out, _ = self._run()
+        self.assertEqual(rc, 0)
+        self.assertIn("validated 1", out)
+
+    def test_body_size_grandfathered_over_recorded_value_fails(self) -> None:
+        self._write_budgets({"skills": {"foo": 6000}})
+        self._write("skills/foo/SKILL.md", self._skill_text("foo", 6001))
+        rc, _, err = self._run()
+        self.assertEqual(rc, 1)
+        self.assertIn("~6001 estimated tokens", err)
+        self.assertIn("exceeds budget of 6000", err)
+        self.assertIn("grandfathered", err)
+
+    def test_body_size_new_skill_over_target_fails(self) -> None:
+        self._write_budgets({"skills": {"bar": 9000}})
+        over = validate_skills.TARGET_TOKENS + 1
+        self._write("skills/foo/SKILL.md", self._skill_text("foo", over))
+        rc, _, err = self._run()
+        self.assertEqual(rc, 1)
+        self.assertIn(f"exceeds budget of {validate_skills.TARGET_TOKENS}", err)
+
+    def test_body_size_recorded_at_target_stays_capped_at_target(self) -> None:
+        self._write_budgets({"skills": {"foo": 2000}})
+        over = validate_skills.TARGET_TOKENS + 1
+        self._write("skills/foo/SKILL.md", self._skill_text("foo", over))
+        rc, _, err = self._run()
+        self.assertEqual(rc, 1)
+        self.assertIn(f"exceeds budget of {validate_skills.TARGET_TOKENS}", err)
+
+    # --- structural ratchet ---
+
+    def test_cross_skill_reference_link_counts_as_linked(self) -> None:
+        self._write_skill("a")
+        self._write("skills/a/references/shared.md", "shared content\n")
+        self._write_skill("b")
+        self._write(
+            "skills/b/SKILL.md",
+            VALID_BODY.format(name="b") + "See [shared](../a/references/shared.md).\n",
+        )
+        rc, out, _ = self._run()
+        self.assertEqual(rc, 0)
+        self.assertIn("validated 2", out)
+
+    def test_new_nested_reference_fails(self) -> None:
+        self._write_skill("a")
+        self._write(
+            "skills/a/references/x.md",
+            "See [y](../references/y.md) for detail.\n",
+        )
+        rc, _, err = self._run()
+        self.assertEqual(rc, 1)
+        self.assertIn("skills/a/references/x.md", err)
+        self.assertIn("references/", err)
+        self.assertIn("keep references one level deep", err)
+
+    def test_hidden_second_hop_fails(self) -> None:
+        # skills/a/SKILL.md links x.md (reachable); x.md links b.md, which is
+        # NOT linked from any SKILL.md. That is a genuine hidden hop: reading
+        # only x.md misses b.md's content. Under the OLD any-references/-link
+        # behaviour this fires for the same reason as test_new_nested_reference_fails
+        # above; the point of this test is that it still fires under the
+        # narrowed reachability-based check.
+        self._write_skill("a")
+        self._write(
+            "skills/a/SKILL.md",
+            VALID_BODY.format(name="a") + "See [x](references/x.md).\n",
+        )
+        self._write(
+            "skills/a/references/x.md",
+            "See [b](references/b.md) for detail.\n",
+        )
+        self._write("skills/a/references/b.md", "unreachable tail content\n")
+        rc, _, err = self._run()
+        self.assertEqual(rc, 1)
+        self.assertIn("skills/a/references/x.md", err)
+        self.assertIn("keep references one level deep", err)
+
+    def test_lateral_reference_link_passes(self) -> None:
+        # x.md links b.md, but b.md IS also linked directly from a SKILL.md
+        # (a lateral citation, not a hidden hop) -- reading x.md alone never
+        # hides content nobody else could find. Under the OLD any-references/-
+        # link behaviour this would have failed; the narrowed check must not
+        # flag it.
+        self._write_skill("a")
+        self._write(
+            "skills/a/SKILL.md",
+            VALID_BODY.format(name="a")
+            + "See [x](references/x.md) and [b](references/b.md).\n",
+        )
+        self._write(
+            "skills/a/references/x.md",
+            "See [b](references/b.md) for detail.\n",
+        )
+        self._write("skills/a/references/b.md", "shared content\n")
+        rc, out, _ = self._run()
+        self.assertEqual(rc, 0)
+        self.assertIn("validated 1", out)
+
+    def test_allowlisted_nested_reference_passes(self) -> None:
+        self._write_skill("a")
+        self._write(
+            "skills/a/references/x.md",
+            "See [y](../references/y.md) for detail.\n",
+        )
+        self._write(
+            "skills/a/SKILL.md",
+            VALID_BODY.format(name="a") + "See [x](references/x.md).\n",
+        )
+        self._write_budgets(
+            {"nested_references_allowlist": ["skills/a/references/x.md"]}
+        )
+        rc, out, _ = self._run()
+        self.assertEqual(rc, 0)
+        self.assertIn("validated 1", out)
+
+    def test_new_orphan_reference_fails(self) -> None:
+        self._write_skill("a")
+        self._write("skills/a/references/orphan.md", "nobody links here\n")
+        rc, _, err = self._run()
+        self.assertEqual(rc, 1)
+        self.assertIn("skills/a/references/orphan.md", err)
+        self.assertIn("orphaned reference file", err)
+
+    def test_allowlisted_orphan_reference_passes(self) -> None:
+        self._write_skill("a")
+        self._write("skills/a/references/orphan.md", "nobody links here\n")
+        self._write_budgets(
+            {"orphaned_references_allowlist": ["skills/a/references/orphan.md"]}
+        )
+        rc, out, _ = self._run()
+        self.assertEqual(rc, 0)
+        self.assertIn("validated 1", out)
+
+    # --- regen (just update-skill-budgets) ---
+
+    def test_write_budgets_is_idempotent(self) -> None:
+        self._write("skills/foo/SKILL.md", self._skill_text("foo", 6000))
+        validate_skills.write_budgets()
+        first = validate_skills.BUDGET_FILE.read_text(encoding="utf-8")
+        validate_skills.write_budgets()
+        second = validate_skills.BUDGET_FILE.read_text(encoding="utf-8")
+        self.assertEqual(first, second)
+        data = json.loads(first)
+        self.assertEqual(data["skills"]["foo"], 6000)
+
+    def test_write_budgets_clamps_growth_to_prior_recorded_value(self) -> None:
+        self._write_budgets({"skills": {"foo": 3000}})
+        self._write("skills/foo/SKILL.md", self._skill_text("foo", 6000))
+        validate_skills.write_budgets()
+        data = json.loads(validate_skills.BUDGET_FILE.read_text(encoding="utf-8"))
+        self.assertEqual(data["skills"]["foo"], 3000)
+
+    def test_write_budgets_still_shrinks(self) -> None:
+        self._write_budgets({"skills": {"foo": 6000}})
+        self._write("skills/foo/SKILL.md", self._skill_text("foo", 3000))
+        validate_skills.write_budgets()
+        data = json.loads(validate_skills.BUDGET_FILE.read_text(encoding="utf-8"))
+        self.assertEqual(data["skills"]["foo"], 3000)
+
+    # --- frontmatter reporting (goal + aggregate) ---
+
+    def test_frontmatter_reporting_emits_on_pass_and_exits_0(self) -> None:
+        self._write_skill("foo")
+        rc, out, _ = self._run()
+        self.assertEqual(rc, 0)
+        self.assertIn("Frontmatter tokens", out)
+
+    def test_frontmatter_reporting_absent_when_other_check_fails(self) -> None:
+        self._write_skill("foo")
+        self._write("skills/bar/SKILL.md", "---\nname: bar\nbogus: 1\n---\n")
+        rc, out, err = self._run()
+        self.assertEqual(rc, 1)
+        self.assertNotIn("Frontmatter tokens", out)
+        self.assertNotIn("Frontmatter tokens", err)
+
+    # --- frontmatter extra-token cap ---
+    def test_frontmatter_extra_over_cap_fails(self) -> None:
+        filler = "y" * (validate_skills.FRONTMATTER_EXTRA_MAX * 4 + 40)
+        self._write(
+            "skills/foo/SKILL.md",
+            f"---\nname: foo\ndescription: t\nmetadata:\n  x: {filler}\n---\n",
+        )
+        rc, _, err = self._run()
+        self.assertEqual(rc, 1)
+        self.assertIn("non-description frontmatter", err)
+        self.assertIn("metadata", err)
+        self.assertIn(f"{validate_skills.FRONTMATTER_EXTRA_MAX}-token cap", err)
 
 
 if __name__ == "__main__":

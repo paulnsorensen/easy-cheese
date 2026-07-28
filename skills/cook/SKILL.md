@@ -314,7 +314,6 @@ Next step:      review the diff, then /plate when ready
 
 Iron Law, Red Flags, and the TDD Rationalization table live in
 [`references/cook-discipline.md`](references/cook-discipline.md).
-See [`../cheese/references/skill-authoring.md`](../cheese/references/skill-authoring.md) for the template these follow.
 
 ## Agent resolution
 
