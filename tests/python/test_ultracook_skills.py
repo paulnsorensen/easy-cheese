@@ -684,13 +684,13 @@ class TestUltracookExistingHandoffsScansAllPhases:
 
     @pytest.mark.parametrize("phase", ["cook", "press", "age", "cure"])
     def test_each_phase_path_is_named_in_existing_guard(self, phase: str) -> None:
-        body = _skill("cook")
+        body = _skill_corpus("cook")
         # Slice to the existing-handoffs guard section only (cut at the next
         # top-level `## ` heading) so an unrelated third mention elsewhere in
         # the skill (e.g. the Handoff-slug schema) can't pad the count and
         # mask a shrink within the guard itself.
-        start = body.index("### Existing handoffs guard")
-        end = body.index("\n## ", start)
+        start = body.index("## Existing handoffs guard")
+        end = body.index("\n## Mode selection", start)
         guard_section = body[start:end]
         # The existing-handoffs guard must mention every phase's handoff
         # path at least twice (prose + the printed listing) — dropping it

@@ -29,6 +29,19 @@ def gates_section(skill: str) -> str:
     return section_after(skill, "## Quality gates")
 
 
+AUTO_MODE = ROOT / "skills" / "cook" / "references" / "auto-mode.md"
+
+
+def qg_section(header: str) -> str:
+    """Body of a `## ` section in the shared quality-gates reference.
+
+    cook/SKILL.md's `## Quality gates` section now routes to that reference
+    instead of restating the policy, so the policy assertions below check the
+    doc that owns the rule.
+    """
+    return section_after(read(QUALITY_GATES), header)
+
+
 def test_quality_gates_section_links_shared_baseline_reference() -> None:
     skill = read(SKILL)
     assert QUALITY_GATES.is_file()
@@ -37,14 +50,14 @@ def test_quality_gates_section_links_shared_baseline_reference() -> None:
 
 
 def test_bare_cook_lazily_captures_baseline_with_no_frame() -> None:
-    section = gates_section(read(SKILL))
+    section = qg_section("## Baseline capture ownership")
     assert "no baseline yet" in section or "no frame" in section
     assert "lazily" in section
     assert "pre-change tree" in section
 
 
 def test_identical_failures_are_recorded_and_never_halt() -> None:
-    section = gates_section(read(SKILL))
+    section = qg_section("## Three-way gate policy")
     identical_line = next(
         line for line in section.splitlines() if line.strip().startswith("- **Identical")
     )
@@ -53,16 +66,16 @@ def test_identical_failures_are_recorded_and_never_halt() -> None:
 
 
 def test_new_or_changed_failures_get_bounded_two_round_fix() -> None:
-    section = gates_section(read(SKILL))
+    section = qg_section("## Three-way gate policy")
     new_line = next(
         line for line in section.splitlines() if line.strip().startswith("- **New or changed")
     )
-    assert "2 rounds" in new_line
+    assert "2 fix rounds" in new_line
     assert "twice" in new_line and "halt" in new_line
 
 
 def test_halt_conditions_include_design_shaped_and_carry_classification() -> None:
-    section = gates_section(read(SKILL))
+    section = qg_section("## Three-way gate policy")
     halt_line = next(
         line for line in section.splitlines() if line.strip().startswith("- **Halt**")
     )
@@ -71,9 +84,9 @@ def test_halt_conditions_include_design_shaped_and_carry_classification() -> Non
 
 
 def test_auto_mode_early_stop_exempts_identical_and_defers_to_baseline_policy() -> None:
-    skill = read(SKILL)
-    section = skill.split("### When auto mode stops early", 1)[1].split("\n### ", 1)[0]
-    assert "references/quality-gates.md" in section
+    auto = read(AUTO_MODE)
+    section = auto.split("## When auto mode stops early", 1)[1].split("\n## ", 1)[0]
+    assert "quality-gates.md" in section
     assert "new" in section.lower() and "changed" in section.lower()
     assert "Identical-to-baseline failures" in section
     assert "never stop auto" in section
