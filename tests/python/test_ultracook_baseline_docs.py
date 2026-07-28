@@ -29,6 +29,10 @@ def _skill(name: str) -> str:
     return _read(SKILLS_DIR / name / "SKILL.md")
 
 
+def _quality_gates() -> str:
+    return _read(SKILLS_DIR / "cook" / "references" / "quality-gates.md")
+
+
 SECTION_HEADER = "## Baseline capture"
 
 
@@ -74,22 +78,14 @@ class TestBaselineCaptureSection:
         )
 
     def test_classification_defers_to_tested_helper(self) -> None:
-        body = _skill("cook")
-        idx = body.find(SECTION_HEADER)
-        assert idx != -1
-        next_heading = body.find("\n## ", idx + len(SECTION_HEADER))
-        section = body[idx:next_heading if next_heading != -1 else len(body)]
+        section = _quality_gates()
         # Classification must route through the tested helper, never get
         # eyeballed by the agent — this is what quality-gates.md mandates,
         # and the guarantee is worthless if the section stops naming it.
         assert "src/fanout/baseline.py::classify()" in section
 
     def test_manifest_baseline_block_referenced_for_parallel_mode(self) -> None:
-        body = _skill("cook")
-        idx = body.find(SECTION_HEADER)
-        assert idx != -1
-        next_heading = body.find("\n## ", idx + len(SECTION_HEADER))
-        section = body[idx:next_heading if next_heading != -1 else len(body)]
+        section = _quality_gates()
         assert "baseline:" in section and "manifest.yaml" in section, (
             "Parallel mode must record the classified baseline in the run "
             "manifest's `baseline:` block so curd dispatches can read it back"
