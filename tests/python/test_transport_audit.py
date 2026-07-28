@@ -53,6 +53,7 @@ TRANSPORT_DOC_ITSELF = {
 # or ask-user-question.md appears somewhere in the file).
 ROUTED_FILES = {
     "skills/affinage/SKILL.md",
+    "skills/age/references/handoff-detail.md",  # gate menu, moved out of the body
     "skills/age/SKILL.md",
     "skills/briesearch/SKILL.md",
     "skills/cheese/references/ask-user-question-sources.md",  # transport doc's own appendix
