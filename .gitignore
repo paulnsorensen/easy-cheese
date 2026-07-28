@@ -10,11 +10,14 @@
 # Claude Code machine-local worktree registry
 .claude/worktrees/
 
-# Coding-agent scratch dirs; keep the repo-maintained Python skill trackable.
+# Coding-agent scratch dirs; keep the repo-maintained authoring skills trackable.
+# This is an allowlist: every tracked skill dir needs its own `!` line here, or
+# it is silently untracked.
 .agents/*
 !.agents/skills/
 .agents/skills/*
-!.agents/skills/pythonic/
+!.agents/skills/python-authoring/
+!.agents/skills/skill-authoring/
 .claude/skills/
 
 # milknado optional-plugin runtime data (SQLite task graph)

@@ -1,10 +1,5 @@
 # /cook — TDD Discipline
 
-See [`../../cheese/references/skill-authoring.md`](../../cheese/references/skill-authoring.md) for the
-Iron Law / Red Flags / Rationalization-table template that governs this section.
-
----
-
 ## Iron Law
 
 **No production code without a failing test first.**

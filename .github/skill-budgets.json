@@ -1,0 +1,32 @@
+{
+  "nested_references_allowlist": [],
+  "orphaned_references_allowlist": [
+    "skills/cheese/references/ask-user-question-sources.md",
+    "skills/cheese/references/routing-policy.md",
+    "skills/ultracook/references/pr-plan-schema.json",
+    "skills/ultracook/references/pr-planner-prompt.md",
+    "skills/ultracook/references/spawn-primitive-reference.md",
+    "skills/ultracook/references/wiring-prompt.md"
+  ],
+  "skills": {
+    "affinage": 7953,
+    "age": 8736,
+    "briesearch": 2064,
+    "cheese": 5543,
+    "cook": 9069,
+    "culture": 2521,
+    "cure": 5130,
+    "easy-cheese-setup": 760,
+    "hard-cheese": 3085,
+    "melt": 2178,
+    "mold": 5357,
+    "pasteurize": 4234,
+    "plate": 3078,
+    "press": 2339,
+    "python-authoring": 1544,
+    "skill-authoring": 1817,
+    "ultracook": 410,
+    "wheypoint": 4570
+  },
+  "target": 3600
+}

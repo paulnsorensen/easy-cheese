@@ -113,6 +113,7 @@ jobs:
         with:
           globs: |
             skills/**/*.md
+            .agents/**/*.md
             *.md
 
       - name: yamllint

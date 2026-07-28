@@ -595,7 +595,7 @@ class TestMainGeneration:
 
 
 class TestMainGenerationRealCheeseKernelDocs:
-    """Integration-shaped check: the five real shared docs that moved to
+    """Integration-shaped check: the four real shared docs that moved to
     skills/cheese/references/ in the cheese-kernel-shared-refs change must
     actually render as folded sections inside cheese's single Starlight page,
     and no src/content/docs/shared/ section may reappear. Copies the real
@@ -609,7 +609,6 @@ class TestMainGenerationRealCheeseKernelDocs:
         "handoff-gate",
         "harness-portability",
         "optional-plugins",
-        "skill-authoring",
     )
 
     def test_moved_docs_fold_into_cheese_page_no_shared_dir(self, gen_docs, isolated_docs):
