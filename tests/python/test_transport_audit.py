@@ -115,15 +115,15 @@ EXEMPT_SITES: list[tuple[str, str, str]] = [
         "not this pass",
     ),
     (
+        "skills/cheese/references/optional-plugins.md",
+        "Do not ask the user to install the MCP during the run.",
+        "negative instruction, not a question-asking site",
+    ),
+    (
         "skills/affinage/references/handoff-templates.md",
         "Read this when rendering either handoff gate",
         "internal mechanism note for the gates affinage/SKILL.md already "
         "routes through handoff-gate.md; not a transport site itself",
-    ),
-    (
-        "skills/cheese/references/optional-plugins.md",
-        "Do not ask the user to install the MCP during the run.",
-        "negative instruction, not a question-asking site",
     ),
     (
         "skills/cheese/references/escalation.md",
