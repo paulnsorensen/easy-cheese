@@ -61,6 +61,12 @@ class ValidateSkillsTest(unittest.TestCase):
             rc = validate_skills.main()
         return rc, out.getvalue(), err.getvalue()
 
+    def _run_argv(self, argv: list[str]) -> tuple[int, str, str]:
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            rc = validate_skills.main(argv)
+        return rc, out.getvalue(), err.getvalue()
+
     def test_valid_skill_passes(self) -> None:
         self._write_skill("foo")
         rc, out, _ = self._run()
@@ -436,6 +442,91 @@ class ValidateSkillsTest(unittest.TestCase):
         self.assertIn("non-description frontmatter", err)
         self.assertIn("metadata", err)
         self.assertIn(f"{validate_skills.FRONTMATTER_EXTRA_MAX}-token cap", err)
+
+    # --- body-size goal report ---
+    def test_body_size_goal_report_shows_over_goal_row(self) -> None:
+        excess = 100
+        self._write(
+            "skills/foo/SKILL.md",
+            self._skill_text("foo", validate_skills.GOAL_TOKENS + excess),
+        )
+        rc, out, _ = self._run()
+        self.assertEqual(rc, 0)
+        self.assertIn("Body-size goal", out)
+        self.assertIn(f"skills/foo/SKILL.md: +{excess} over goal", out)
+
+    # --- shipped/repo-local split ---
+    def test_frontmatter_reporting_shipped_local_split_counts(self) -> None:
+        self._write_skill("foo")
+        self._write_skill("bar", parent=".agents/skills")
+        rc, out, _ = self._run()
+        self.assertEqual(rc, 0)
+        self.assertIn("(1 shipped + 1 repo-local under .agents/skills/)", out)
+
+    # --- --checks family selection ---
+
+    def test_checks_frontmatter_skips_size_violation(self) -> None:
+        over = validate_skills.TARGET_TOKENS + 1
+        self._write("skills/foo/SKILL.md", self._skill_text("foo", over))
+        rc, _, _ = self._run_argv(["--checks", "frontmatter"])
+        self.assertEqual(rc, 0)
+
+    def test_no_checks_flag_still_catches_size_violation(self) -> None:
+        over = validate_skills.TARGET_TOKENS + 1
+        self._write("skills/foo/SKILL.md", self._skill_text("foo", over))
+        rc, _, err = self._run_argv([])
+        self.assertEqual(rc, 1)
+        self.assertIn("exceeds budget", err)
+
+    def test_checks_frontmatter_still_catches_frontmatter_violation(self) -> None:
+        filler = "y" * (validate_skills.FRONTMATTER_EXTRA_MAX * 4 + 40)
+        self._write(
+            "skills/foo/SKILL.md",
+            f"---\nname: foo\ndescription: t\nmetadata:\n  x: {filler}\n---\n",
+        )
+        rc, _, err = self._run_argv(["--checks", "frontmatter"])
+        self.assertEqual(rc, 1)
+        self.assertIn("non-description frontmatter", err)
+
+    def test_checks_structure_ignores_size_violation(self) -> None:
+        over = validate_skills.TARGET_TOKENS + 1
+        self._write("skills/foo/SKILL.md", self._skill_text("foo", over))
+        rc, _, _ = self._run_argv(["--checks", "structure"])
+        self.assertEqual(rc, 0)
+
+    def test_checks_size_ignores_structure_violation(self) -> None:
+        self._write_skill("a")
+        self._write("skills/a/references/orphan.md", "nobody links here\n")
+        rc, _, _ = self._run_argv(["--checks", "size"])
+        self.assertEqual(rc, 0)
+
+    def test_narrowed_run_omits_report_blocks(self) -> None:
+        self._write_skill("foo")
+        rc, out, _ = self._run_argv(["--checks", "frontmatter"])
+        self.assertEqual(rc, 0)
+        self.assertIn("OK: validated 1 SKILL.md file(s)", out)
+        self.assertNotIn("Frontmatter tokens", out)
+        self.assertNotIn("Body-size goal", out)
+
+    def test_full_run_still_emits_report_blocks(self) -> None:
+        self._write_skill("foo")
+        rc, out, _ = self._run_argv([])
+        self.assertEqual(rc, 0)
+        self.assertIn("Frontmatter tokens", out)
+        self.assertIn("Body-size goal", out)
+
+    def test_checks_bogus_family_is_argparse_error(self) -> None:
+        self._write_skill("foo")
+        with redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit) as cm:
+                validate_skills.main(["--checks", "bogus"])
+        self.assertEqual(cm.exception.code, 2)
+
+    def test_write_budgets_flag_via_argv(self) -> None:
+        self._write("skills/foo/SKILL.md", self._skill_text("foo", 6000))
+        rc, out, _ = self._run_argv(["--write-budgets"])
+        self.assertEqual(rc, 0)
+        self.assertIn("OK: wrote", out)
 
 
 if __name__ == "__main__":
