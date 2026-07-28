@@ -23,6 +23,8 @@ A reword that keeps the words but flips the direction still fails.
 
 from __future__ import annotations
 
+import os
+import re
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -38,6 +40,31 @@ def _section(text: str, heading: str) -> str:
     start = text.index(marker)
     end = text.find("\n## ", start + len(marker))
     return text[start:] if end == -1 else text[start:end]
+
+_LINK_PATTERN = re.compile(r"\[[^\]]*\]\(([^)]+\.md)\)")
+
+
+def _widen(
+    section: str,
+    base_dir: Path,
+    skill_root: Path,
+    _seen: frozenset[Path] = frozenset(),
+) -> str:
+    # Follows markdown links out of `section`, recursing into each linked
+    # file's own links, and appends each followed file's content behind a
+    # `--- resolved reference: <normalized-path> ---` marker. Paths are
+    # normalized relative to `skill_root` so assertions can match the
+    # sibling-relative link text a nested reference file uses.
+    widened = section
+    for match in _LINK_PATTERN.finditer(section):
+        target = (base_dir / match.group(1)).resolve()
+        if target in _seen or not target.exists():
+            continue
+        normalized = os.path.relpath(target, skill_root.resolve())
+        linked = target.read_text(encoding="utf-8")
+        linked = _widen(linked, target.parent, skill_root, _seen | {target})
+        widened += f"\n--- resolved reference: {normalized} ---\n{linked}"
+    return widened
 
 
 def _assert_in_order(body: str, *phrases: str) -> None:
@@ -73,7 +100,7 @@ def test_flow_reads_full_message_and_live_overrides_handoff() -> None:
 def test_continue_reads_full_message_and_live_overrides_handoff() -> None:
     # Rule 1 in ## --continue: the same override direction must be stated on the
     # branch that actually parses the handoff slug, not only in the generic flow.
-    section = _section(_text(), "--continue")
+    section = _widen(_section(_text(), "--continue"), CHEESE.parent, CHEESE.parent)
     _assert_in_order(
         section,
         "read the full user message",
@@ -90,7 +117,7 @@ def test_gated_branch_executes_directives_before_raising_the_question() -> None:
     # executed with the gate surfaced as one plain line, and this carve-out is
     # stated BEFORE the structured research/decide/build ask — so the carve-out
     # takes precedence over the mandatory question rather than following it.
-    section = _section(_text(), "--continue")
+    section = _widen(_section(_text(), "--continue"), CHEESE.parent, CHEESE.parent)
     _assert_in_order(
         section,
         "starts with `gated:`",

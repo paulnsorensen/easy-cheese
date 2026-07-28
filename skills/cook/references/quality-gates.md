@@ -6,7 +6,8 @@ Single source of truth for how `/cook`, `/press`, `/cure`, and `/ultracook` trea
 
 Baseline capture is frame-owned, not per-cook:
 
-- **`/cook`'s fan pathway** — captures the broad-gate baseline once per run, before any curd cooks, and hands it down to curd cooks via dispatch. A curd never captures its own baseline.
+- **`/cook`'s fan pathway** — captures the broad-gate baseline once per run, before any curd cooks, and hands it down to curd cooks via dispatch. A curd never captures its own baseline. The hand-down happens before Seed, writing the classified result into `.cheese/ultracook/<slug>/manifest.yaml`'s `baseline:` block, then reaching each curd's `cook` dispatch through `../../ultracook/references/curd-prompt.md`'s `{baseline}` field.
+  Documented example: `python3 skills/ultracook/scripts/ultracook.pyz baseline`.
 - **Bare `/cook` (no frame)** — captures lazily, on the first red broad gate, from the pre-change tree (`git stash` or a clean worktree checkout), classifies the failures, then proceeds with the classified result.
 
 Frame capture and the gate re-run happen in the same environment (same worktree, same toolchain) to minimize signature drift from environment-sensitive flakes.
@@ -24,7 +25,7 @@ Classification is deterministic and computed by the tested helper `src/fanout/ba
 
 ## Three-way gate policy
 
-- **Identical, outside the cooked contract** — record in the handoff's `baseline:` block, continue. Never halt, never fix silently.
+- **Identical, outside the cooked contract** — record in the handoff's `baseline:` block, continue; never halt, never fix silently.
 - **New or changed** — the cook fixes it: up to **2 fix rounds per gate**, with a no-progress check. The same failure signature appearing twice consecutively halts early. Collateral repairs (files outside the cooked contract) are allowed freely; record each one in the report's Files-changed with reason `collateral repair: <one line>`.
 - **Halt** only when: rounds exhaust, the no-progress check trips, or the fix is design-shaped (requires a decision outside the spec). The halt handoff carries the classification so resume never re-asks.
 
@@ -56,7 +57,7 @@ At the frame's existing record point (ultracook: pre-Seed manifest write; bare c
 
 1. **Dedupe** — dedupe against a live `repair_dispatch`: if the `baseline:` block already carries one (its branch still exists and its handoff chain has not reached a terminal `status: ok` or `status: halt`), skip. Never dispatch a second repair for the same debt.
 2. **Consent** — automatic under `--auto`; otherwise prompt once at record time ([`../../cheese/references/ask-user-question.md`](../../cheese/references/ask-user-question.md)) with the failure count. Decline skips the repair; the debt stays recorded either way.
-3. **Worktree** — create a repair worktree via the shared primitive: `<skill>.pyz worktree create --slug repair-<run-slug> --base origin/main`. Never the cook's own tree — an independent lifecycle, excluded from the run's worktree teardown.
+3. **Worktree** — create a repair worktree via the shared primitive: `<skill>.pyz worktree create --slug repair-<run-slug> --base origin/main`. Never the cook's own tree — an independent lifecycle, excluded from the run's worktree teardown. Bare `/cook` example: `python3 skills/cook/scripts/cook.pyz worktree create --slug repair-<slug> --base origin/main`.
 4. **Dispatch** — to dispatch a concurrent `/pasteurize` in an isolated worktree, brief it with the recorded failures (suite, test_id, signature per entry) as the symptom, plus one explicit per-dispatch override: chain forward at Phase 6 with `/cook <repair-slug> --auto --open-pr`, not pasteurize's own documented `/cook <repair-slug> --auto`. This is a dispatch-time instruction in the brief, not a change to pasteurize's SKILL.md — it is more specific than the skill's generic default and governs for this one invocation, so the repair publishes its own PR by default. `/pasteurize`'s own contract is unchanged.
 5. **Record** — write `repair_dispatch: {slug, branch}` into the `baseline:` block (manifest for ultracook, handoff slug for bare cook); add `pr` once one is plated.
 
