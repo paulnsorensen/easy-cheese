@@ -140,7 +140,12 @@ def test_harness_portability_reference_is_linked_from_workflow_docs():
     }
 
     for path, snippets in portable_examples.items():
+        # A skill's portable invocations may live in the SKILL.md body or in any
+        # of its routed references/ files -- the body is token-budgeted, so
+        # worked command examples legitimately sit one hop out.
         text = path.read_text(encoding="utf-8")
+        for ref in sorted((path.parent / "references").glob("*.md")):
+            text += ref.read_text(encoding="utf-8")
         for snippet in snippets:
             assert snippet in text, path
 
