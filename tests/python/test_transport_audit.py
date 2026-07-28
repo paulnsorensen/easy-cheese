@@ -53,6 +53,7 @@ TRANSPORT_DOC_ITSELF = {
 # or ask-user-question.md appears somewhere in the file).
 ROUTED_FILES = {
     "skills/affinage/SKILL.md",
+    "skills/age/references/handoff-detail.md",  # gate menu, moved out of the body
     "skills/age/SKILL.md",
     "skills/briesearch/SKILL.md",
     "skills/cheese/references/continue-resume.md",  # --continue flow, moved out of the body
@@ -112,6 +113,12 @@ EXEMPT_SITES: list[tuple[str, str, str]] = [
         "internal mechanism note describing the same handoff gate cheese/"
         "SKILL.md already routes through; deferred to cure/reviewer territory, "
         "not this pass",
+    ),
+    (
+        "skills/affinage/references/handoff-templates.md",
+        "Read this when rendering either handoff gate",
+        "internal mechanism note for the gates affinage/SKILL.md already "
+        "routes through handoff-gate.md; not a transport site itself",
     ),
     (
         "skills/cheese/references/optional-plugins.md",
