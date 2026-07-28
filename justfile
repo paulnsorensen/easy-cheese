@@ -10,8 +10,8 @@ export PYTEST_DISABLE_PLUGIN_AUTOLOAD := "1"
 @default:
     just --list
 
-# Run all tests (skill validators + melt + shared + fan-out suites + bash install tests + fan-out bats + JS)
-test:
+# Run all model-free tests (skill validators + distillation + shared suites + bash + JS)
+test: test-skill-distill
     python3 .github/scripts/test_validate_skills.py -v
     python3 .github/scripts/test_validate_wiki.py
     python3 .github/scripts/validate_skills.py
@@ -29,6 +29,14 @@ test:
 # Run model-free overlap analyzer tests (never fetches model artifacts)
 test-skill-overlap:
     cargo test --manifest-path tools/skill-overlap/Cargo.toml
+
+# Run model-free skill-distill tests (never loads or fetches model artifacts)
+test-skill-distill:
+    python3 -m pytest tests/skill-distill/python -q
+
+# Manually prepare the pinned local distillation pilot; model diagnostics stay agent-run
+distill-pilot *args:
+    uv run --project tools/skill-distill python -m skill_distill prepare {{args}}
 
 # Build self-contained .pyz bundles for shared-consuming skills (CI rebuilds on every push to main)
 bundle:

@@ -17,10 +17,11 @@ git-tracking axis (`skills/cheese/references/formatting.md:103`).
 - [architecture/](./architecture/index.md) — architecture
 - [specs/](./specs/index.md) — specs
 - [architecture](./architecture.md) — Architecture of easy-cheese
-- [domain-model](./domain-model.md) — Easy-cheese domain model
+- [domain-model](./domain-model.md) — Domain model
 - [fanout-engine-entities](./fanout-engine-entities.md) — Fan-out engine entities
 - [log](./log.md) — Ingest Log
 - [post-pr-wiki-writeback](./post-pr-wiki-writeback.md) — Post-PR wiki write-back — plan and followups
+- [semantic-skill-distillation](./semantic-skill-distillation.md) — Semantic skill distillation
 - [skill-parity-analysis](./skill-parity-analysis.md) — Skill-parity analysis
 - [spec-workflow-comparison](./spec-workflow-comparison.md) — Spec / brainstorm-to-spec workflow comparison
 - [tooling](./tooling.md) — Tooling

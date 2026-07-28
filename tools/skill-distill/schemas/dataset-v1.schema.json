@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://easy-cheese.dev/schemas/skill-distill/dataset-v1.schema.json",
+  "title": "DatasetV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["source_report_digest", "preprocessing_digest", "pairs", "schema_version"],
+  "properties": {
+    "source_report_digest": {"type": "string", "minLength": 1},
+    "preprocessing_digest": {"type": "string", "minLength": 1},
+    "pairs": {"type": "array", "items": {"$ref": "#/$defs/pairEvidence"}},
+    "schema_version": {"const": "dataset-v1"}
+  },
+  "$defs": {
+    "pairEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pair_id", "lane", "detector", "kind", "left", "right", "graph", "cosine", "duplicate_tokens_estimate", "disposition", "selection", "score_decile", "graph_class", "skill_family", "schema_version"],
+      "properties": {
+        "pair_id": {"type": "string", "minLength": 1},
+        "lane": {"type": "string", "minLength": 1},
+        "detector": {"type": "string", "minLength": 1},
+        "kind": {"enum": ["exact", "semantic"]},
+        "left": {"$ref": "#/$defs/endpoint"},
+        "right": {"$ref": "#/$defs/endpoint"},
+        "graph": {"$ref": "#/$defs/graph"},
+        "cosine": {"type": ["number", "null"]},
+        "duplicate_tokens_estimate": {"type": "integer", "minimum": 0},
+        "disposition": {"type": "string", "minLength": 1},
+        "selection": {"enum": ["block", "review", "adversarial"]},
+        "score_decile": {"type": ["integer", "null"], "minimum": 0, "maximum": 9},
+        "graph_class": {"enum": ["directly-linked", "same-skill", "connected", "disconnected"]},
+        "skill_family": {"type": "string", "minLength": 1},
+        "schema_version": {"const": "pair-evidence-v1"}
+      }
+    },
+    "endpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "heading_path", "part", "source_hash", "span", "original_excerpt", "token_count"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "heading_path": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "part": {"type": "integer", "minimum": 0},
+        "source_hash": {"type": "string", "minLength": 1},
+        "span": {"type": "object", "additionalProperties": false, "required": ["start", "end"], "properties": {"start": {"type": "integer", "minimum": 1}, "end": {"type": "integer", "minimum": 1}}},
+        "original_excerpt": {"type": "string"},
+        "token_count": {"type": "integer", "minimum": 0}
+      }
+    },
+    "graph": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["directly_linked", "directed_distance", "undirected_distance", "same_component", "same_skill", "disconnected"],
+      "properties": {
+        "directly_linked": {"type": "boolean"},
+        "directed_distance": {"type": ["integer", "null"], "minimum": 0},
+        "undirected_distance": {"type": ["integer", "null"], "minimum": 0},
+        "same_component": {"type": "boolean"},
+        "same_skill": {"type": "boolean"},
+        "disconnected": {"type": "boolean"}
+      }
+    }
+  }
+}

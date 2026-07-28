@@ -1,0 +1,1093 @@
+schema_version: adversarial-controls-v1
+controls:
+  - category: high-overlap
+    evidence:
+      left:
+        path: skills/briesearch/references/evals.md
+        heading_path:
+          - Evals
+          - How to run
+        part: 1
+        source_hash: effeab2e3d36f39f4da9317ccd0c744132b44d7191dd5506561bdab97cf3fe0a
+        span:
+          start: 53
+          end: 54
+      right:
+        path: skills/mold/references/evals.md
+        heading_path:
+          - Evals
+          - How to run
+        part: 1
+        source_hash: effeab2e3d36f39f4da9317ccd0c744132b44d7191dd5506561bdab97cf3fe0a
+        span:
+          start: 42
+          end: 43
+    predicates:
+      lane: body
+      detector: "1"
+      kind: exact
+      disposition: unaccepted
+  - category: high-overlap
+    evidence:
+      left:
+        path: skills/cure/SKILL.md
+        heading_path:
+          - /cure
+          - Auto mode
+        part: 1
+        source_hash: 70aea529438edbf4d77738f21632eb6a991f078cc9c270e3d3cf371598404720
+        span:
+          start: 160
+          end: 162
+      right:
+        path: skills/cure/references/selection.md
+        heading_path:
+          - Selection gate
+          - Auto-mode selection
+        part: 1
+        source_hash: 0ff10dcf6f48c11116709da4094ac9f6500961051bc29332258ddb4bc688ba7c
+        span:
+          start: 85
+          end: 87
+    predicates:
+      lane: body
+      detector: "1"
+      kind: semantic
+      disposition: advisory
+  - category: high-overlap
+    evidence:
+      left:
+        path: skills/cook/SKILL.md
+        heading_path:
+          - /cook
+          - Baseline capture
+        part: 4
+        source_hash: 7c063cfcaa1638b437caf6c8022d2662a702dd3944c35d6cc9a8cd1464179c98
+        span:
+          start: 175
+          end: 176
+      right:
+        path: skills/cure/SKILL.md
+        heading_path:
+          - /cure
+          - Inputs
+        part: 4
+        source_hash: 62eb86158b3268a444d378bd61bfccb8e8b6cea122c4ef58cef882bb9e658cdc
+        span:
+          start: 28
+          end: 29
+    predicates:
+      lane: body
+      detector: "1"
+      kind: semantic
+      disposition: advisory
+  - category: high-overlap
+    evidence:
+      left:
+        path: skills/cheese/SKILL.md
+        heading_path:
+          - /cheese
+          - Flow
+        part: 5
+        source_hash: b66200c6b07ebae6b00f534fb1654fffa1ea9eacd117d1745166e369b8087ecf
+        span:
+          start: 44
+          end: 45
+      right:
+        path: skills/cook/SKILL.md
+        heading_path:
+          - /cook
+          - Baseline capture
+        part: 4
+        source_hash: 7c063cfcaa1638b437caf6c8022d2662a702dd3944c35d6cc9a8cd1464179c98
+        span:
+          start: 175
+          end: 176
+    predicates:
+      lane: body
+      detector: "1"
+      kind: semantic
+      disposition: advisory
+  - category: high-overlap
+    evidence:
+      left:
+        path: skills/affinage/SKILL.md
+        heading_path:
+          - /affinage
+          - Inputs
+        part: 4
+        source_hash: 79b2a2c0910b238e365e2271a7b26de48e9da082b30467cf01e4815403b2199a
+        span:
+          start: 38
+          end: 39
+      right:
+        path: skills/cure/SKILL.md
+        heading_path:
+          - /cure
+          - Inputs
+        part: 4
+        source_hash: 62eb86158b3268a444d378bd61bfccb8e8b6cea122c4ef58cef882bb9e658cdc
+        span:
+          start: 28
+          end: 29
+    predicates:
+      lane: body
+      detector: "1"
+      kind: semantic
+      disposition: advisory
+  - category: high-overlap
+    evidence:
+      left:
+        path: skills/cheese/SKILL.md
+        heading_path:
+          - /cheese
+          - Flow
+        part: 5
+        source_hash: b66200c6b07ebae6b00f534fb1654fffa1ea9eacd117d1745166e369b8087ecf
+        span:
+          start: 44
+          end: 45
+      right:
+        path: skills/cure/SKILL.md
+        heading_path:
+          - /cure
+          - Inputs
+        part: 4
+        source_hash: 62eb86158b3268a444d378bd61bfccb8e8b6cea122c4ef58cef882bb9e658cdc
+        span:
+          start: 28
+          end: 29
+    predicates:
+      lane: body
+      detector: "1"
+      kind: semantic
+      disposition: advisory
+  - category: high-overlap
+    evidence:
+      left:
+        path: skills/age/SKILL.md
+        heading_path:
+          - /age
+          - Inputs
+        part: 3
+        source_hash: 3f9a4ba9e07ac22956d6ea7f6e2ce0509008685f4822775b2e3bdf84160cf7c7
+        span:
+          start: 44
+          end: 45
+      right:
+        path: skills/cook/SKILL.md
+        heading_path:
+          - /cook
+          - Baseline capture
+        part: 4
+        source_hash: 7c063cfcaa1638b437caf6c8022d2662a702dd3944c35d6cc9a8cd1464179c98
+        span:
+          start: 175
+          end: 176
+    predicates:
+      lane: body
+      detector: "1"
+      kind: semantic
+      disposition: advisory
+  - category: high-overlap
+    evidence:
+      left:
+        path: skills/cheese/SKILL.md
+        heading_path:
+          - /cheese
+          - Flow
+        part: 1
+        source_hash: b66200c6b07ebae6b00f534fb1654fffa1ea9eacd117d1745166e369b8087ecf
+        span:
+          start: 31
+          end: 31
+      right:
+        path: skills/hard-cheese/SKILL.md
+        heading_path:
+          - /hard-cheese
+          - Flow
+        part: 1
+        source_hash: f71405527efec5e2da6281c806579cac6901f6a7d5c06857d4e4fe6f678045b1
+        span:
+          start: 38
+          end: 38
+    predicates:
+      lane: body
+      detector: "1"
+      kind: semantic
+      disposition: advisory
+  - category: high-overlap
+    evidence:
+      left:
+        path: skills/cure/SKILL.md
+        heading_path:
+          - /cure
+          - Inputs
+        part: 4
+        source_hash: 62eb86158b3268a444d378bd61bfccb8e8b6cea122c4ef58cef882bb9e658cdc
+        span:
+          start: 28
+          end: 29
+      right:
+        path: skills/mold/SKILL.md
+        heading_path:
+          - /mold
+          - Flow
+        part: 6
+        source_hash: 0edd3c58797e811043a1e3b2c98010cc3e53108b9bc37641a046dccc17f05bb9
+        span:
+          start: 27
+          end: 28
+    predicates:
+      lane: body
+      detector: "1"
+      kind: semantic
+      disposition: advisory
+  - category: high-overlap
+    evidence:
+      left:
+        path: skills/age/SKILL.md
+        heading_path:
+          - /age
+          - Inputs
+        part: 3
+        source_hash: 3f9a4ba9e07ac22956d6ea7f6e2ce0509008685f4822775b2e3bdf84160cf7c7
+        span:
+          start: 44
+          end: 45
+      right:
+        path: skills/cheese/SKILL.md
+        heading_path:
+          - /cheese
+          - Flow
+        part: 5
+        source_hash: b66200c6b07ebae6b00f534fb1654fffa1ea9eacd117d1745166e369b8087ecf
+        span:
+          start: 44
+          end: 45
+    predicates:
+      lane: body
+      detector: "1"
+      kind: semantic
+      disposition: advisory
+  - category: high-overlap
+    evidence:
+      left:
+        path: skills/affinage/SKILL.md
+        heading_path:
+          - /affinage
+          - Inputs
+        part: 4
+        source_hash: 79b2a2c0910b238e365e2271a7b26de48e9da082b30467cf01e4815403b2199a
+        span:
+          start: 38
+          end: 39
+      right:
+        path: skills/age/SKILL.md
+        heading_path:
+          - /age
+          - Inputs
+        part: 3
+        source_hash: 3f9a4ba9e07ac22956d6ea7f6e2ce0509008685f4822775b2e3bdf84160cf7c7
+        span:
+          start: 44
+          end: 45
+    predicates:
+      lane: body
+      detector: "1"
+      kind: semantic
+      disposition: advisory
+  - category: high-overlap
+    evidence:
+      left:
+        path: skills/age/SKILL.md
+        heading_path:
+          - /age
+          - Inputs
+        part: 3
+        source_hash: 3f9a4ba9e07ac22956d6ea7f6e2ce0509008685f4822775b2e3bdf84160cf7c7
+        span:
+          start: 44
+          end: 45
+      right:
+        path: skills/mold/SKILL.md
+        heading_path:
+          - /mold
+          - Flow
+        part: 6
+        source_hash: 0edd3c58797e811043a1e3b2c98010cc3e53108b9bc37641a046dccc17f05bb9
+        span:
+          start: 27
+          end: 28
+    predicates:
+      lane: body
+      detector: "1"
+      kind: semantic
+      disposition: advisory
+  - category: high-overlap
+    evidence:
+      left:
+        path: skills/age/SKILL.md
+        heading_path:
+          - /age
+          - Inputs
+        part: 3
+        source_hash: 3f9a4ba9e07ac22956d6ea7f6e2ce0509008685f4822775b2e3bdf84160cf7c7
+        span:
+          start: 44
+          end: 45
+      right:
+        path: skills/cure/SKILL.md
+        heading_path:
+          - /cure
+          - Inputs
+        part: 4
+        source_hash: 62eb86158b3268a444d378bd61bfccb8e8b6cea122c4ef58cef882bb9e658cdc
+        span:
+          start: 28
+          end: 29
+    predicates:
+      lane: body
+      detector: "1"
+      kind: semantic
+      disposition: advisory
+  - category: high-overlap
+    evidence:
+      left:
+        path: skills/cheese/SKILL.md
+        heading_path:
+          - /cheese
+          - Flow
+        part: 5
+        source_hash: b66200c6b07ebae6b00f534fb1654fffa1ea9eacd117d1745166e369b8087ecf
+        span:
+          start: 44
+          end: 45
+      right:
+        path: skills/mold/SKILL.md
+        heading_path:
+          - /mold
+          - Flow
+        part: 6
+        source_hash: 0edd3c58797e811043a1e3b2c98010cc3e53108b9bc37641a046dccc17f05bb9
+        span:
+          start: 27
+          end: 28
+    predicates:
+      lane: body
+      detector: "1"
+      kind: semantic
+      disposition: advisory
+  - category: reversed-obligation
+    evidence:
+      left:
+        path: skills/cook/references/package-report.md
+        heading_path:
+          - Package-ready report
+          - Honesty rules
+        part: 1
+        source_hash: c6b2daec380b9bde453109a77ebc73ad4a2fca75b0f24d8f866e08004e523524
+        span:
+          start: 43
+          end: 48
+      right:
+        path: skills/cook/references/quality-gates.md
+        heading_path:
+          - Quality gates — baseline-aware three-way policy
+          - Classification taxonomy
+        part: 1
+        source_hash: 602c119b715c849215f6b9b6c27b6262adc8d758edf4be81065948d7257c3c7a
+        span:
+          start: 15
+          end: 24
+    predicates:
+      lane: body
+      detector: "1"
+      kind: semantic
+      disposition: advisory
+  - category: reversed-obligation
+    evidence:
+      left:
+        path: skills/melt/SKILL.md
+        heading_path:
+          - /melt
+          - Protocol
+          - 2. Structural resolution
+        part: 1
+        source_hash: b612b20bfbc3a9cd119eb2a403a4b652a11dcf7c29489ea86d7d32afaa2e2544
+        span:
+          start: 82
+          end: 108
+      right:
+        path: skills/plate/references/durable-writes.md
+        heading_path:
+          - Durable writes
+          - Inventory
+        part: 1
+        source_hash: cf0841caa40658adf860bd382ac3ffe796793ec406690bf8ab6cf88ce29655f8
+        span:
+          start: 7
+          end: 12
+    predicates:
+      lane: body
+      detector: "1"
+      kind: semantic
+      disposition: advisory
+  - category: reversed-obligation
+    evidence:
+      left:
+        path: skills/age/references/dimensions.md
+        heading_path:
+          - Review dimensions
+          - Per-dimension rubrics
+          - efficiency
+        part: 1
+        source_hash: 68d0739a6db42214f97841b691e44d8880a49577cf4ca3aa3647eeea7312b7c3
+        span:
+          start: 286
+          end: 301
+      right:
+        path: skills/mold/references/handshake.md
+        heading_path:
+          - The two-key handshake
+          - Entity-referent binding
+        part: 3
+        source_hash: 2a674612f5593ab9ac0562c28a40e4f74d2353c06c0d1816da2d96ad4752ef9e
+        span:
+          start: 138
+          end: 138
+    predicates:
+      lane: body
+      detector: "1"
+      kind: semantic
+      disposition: advisory
+  - category: reversed-obligation
+    evidence:
+      left:
+        path: skills/age/references/deslop-rust.md
+        heading_path:
+          - Rust De-slop Catalog
+          - 12. Hallucinated APIs and deprecated syntax
+        part: 1
+        source_hash: b9a5d3e14aa55a683662eb9da088773243ee9896c31852c0c7d0dba3a6d53f45
+        span:
+          start: 487
+          end: 497
+      right:
+        path: skills/age/references/packet.md
+        heading_path:
+          - Shared context packet
+          - Orientation and citations block
+        part: 1
+        source_hash: 0ecc4142d2ea94fa0ca3320d475017a50b83023b6b2543f8f6843334dd70a285
+        span:
+          start: 17
+          end: 19
+    predicates:
+      lane: body
+      detector: "1"
+      kind: semantic
+      disposition: advisory
+  - category: reversed-obligation
+    evidence:
+      left:
+        path: skills/cheese/SKILL.md
+        heading_path:
+          - /cheese
+          - --continue
+        part: 2
+        source_hash: 64de25e99de8d298b2faa9cfd8e7bead6c1c9ade154bf1e987caae442308597d
+        span:
+          start: 95
+          end: 98
+      right:
+        path: skills/plate/references/git-town.md
+        heading_path:
+          - Git Town publication
+          - Install, configure, and detect
+        part: 1
+        source_hash: 8180a50f2a3762edad96902cf39dd9d7366109ba3c18bf6d3f3c7a9197802580
+        span:
+          start: 23
+          end: 37
+    predicates:
+      lane: body
+      detector: "1"
+      kind: semantic
+      disposition: advisory
+  - category: reversed-obligation
+    evidence:
+      left:
+        path: skills/affinage/SKILL.md
+        heading_path:
+          - /affinage
+          - References
+        part: 1
+        source_hash: 4ae7450ff13c8cdbae66c13f212ccc0862c6e97cb11f8afdf339647806250de2
+        span:
+          start: 275
+          end: 284
+      right:
+        path: skills/mold/references/handshake.md
+        heading_path:
+          - The two-key handshake
+          - Why both keys
+        part: 1
+        source_hash: 4f53036a0910b396d666a26d8a4e073ab1ab203e25a707d54f2fe0230139081f
+        span:
+          start: 145
+          end: 146
+    predicates:
+      lane: body
+      detector: "1"
+      kind: semantic
+      disposition: advisory
+  - category: reversed-obligation
+    evidence:
+      left:
+        path: skills/mold/references/handshake.md
+        heading_path:
+          - The two-key handshake
+          - Entity-referent binding
+        part: 3
+        source_hash: 2a674612f5593ab9ac0562c28a40e4f74d2353c06c0d1816da2d96ad4752ef9e
+        span:
+          start: 138
+          end: 138
+      right:
+        path: skills/press/SKILL.md
+        heading_path:
+          - /press
+          - Auto mode
+        part: 1
+        source_hash: bf23c06cf16b10a1347c885f1fca133731c6f3b488e1583ab46b83fb3612a65b
+        span:
+          start: 111
+          end: 117
+    predicates:
+      lane: body
+      detector: "1"
+      kind: semantic
+      disposition: advisory
+  - category: reversed-obligation
+    evidence:
+      left:
+        path: skills/age/references/dimensions.md
+        heading_path:
+          - Review dimensions
+          - Per-dimension rubrics
+          - efficiency
+        part: 1
+        source_hash: 68d0739a6db42214f97841b691e44d8880a49577cf4ca3aa3647eeea7312b7c3
+        span:
+          start: 286
+          end: 301
+      right:
+        path: skills/cheese/references/formatting.md
+        heading_path:
+          - Formatting
+          - Citations
+          - References section
+        part: 1
+        source_hash: 0ea9c6c13cc9a98ba15812724b5aec6a3302028c3aabce33163a9f56bf5568c8
+        span:
+          start: 84
+          end: 98
+    predicates:
+      lane: body
+      detector: "1"
+      kind: semantic
+      disposition: advisory
+  - category: reversed-obligation
+    evidence:
+      left:
+        path: skills/cheese/references/ask-user-question.md
+        heading_path:
+          - Ask user question
+          - Portable fallback
+        part: 1
+        source_hash: 827ace307bcafe1d95e35e8a1a13e343bf10ba5c073d768d85dba233a6405437
+        span:
+          start: 91
+          end: 110
+      right:
+        path: skills/cheese/references/classification.md
+        heading_path:
+          - Classification reference
+          - Signal table
+          - research (`/briesearch`)
+        part: 1
+        source_hash: 7d15e3e6003da81a5a8888fc68a60ab34a828e5c7ab4a32ba797feb2efaec87e
+        span:
+          start: 44
+          end: 55
+    predicates:
+      lane: body
+      detector: "1"
+      kind: semantic
+      disposition: advisory
+  - category: reversed-obligation
+    evidence:
+      left:
+        path: skills/cook/SKILL.md
+        heading_path:
+          - /cook
+          - Auto mode
+          - Failure handling inside cure
+        part: 1
+        source_hash: b5ee899b1b4321ef1fe77ab4611ca74fe0be2042505381093b33654644f0ac6b
+        span:
+          start: 285
+          end: 287
+      right:
+        path: skills/mold/references/context-budget.md
+        heading_path:
+          - Context budget — staying out of the dumb zone
+          - The wheypoint re-up
+        part: 1
+        source_hash: dfd6916b142aefee8bdc08fa4b599467d662cb981c5040becd98dea0986e649c
+        span:
+          start: 41
+          end: 53
+    predicates:
+      lane: body
+      detector: "1"
+      kind: semantic
+      disposition: advisory
+  - category: reversed-obligation
+    evidence:
+      left:
+        path: skills/cook/references/tdd-loop.md
+        heading_path:
+          - 'The TDD loop: cut → implement → taste-test'
+          - Taste-test — drift, readability, scope, simplify, plus three fresh-context lenses
+        part: 4
+        source_hash: 775b68e9ef72496cc8a7013e75873024624c5f345ddc3a0eee8b802f5d35ed4d
+        span:
+          start: 56
+          end: 61
+      right:
+        path: skills/ultracook/SKILL.md
+        heading_path:
+          - /ultracook
+          - Parallel mode
+        part: 1
+        source_hash: 0b68bfa54007ba2bbade1b3b74f77e34424a43af8b7ae01a7d6bf4e60c4f1258
+        span:
+          start: 164
+          end: 166
+    predicates:
+      lane: body
+      detector: "1"
+      kind: semantic
+      disposition: advisory
+  - category: reversed-obligation
+    evidence:
+      left:
+        path: skills/briesearch/references/routing.md
+        heading_path:
+          - Source routing
+          - Source priority
+        part: 1
+        source_hash: 6f6ce1c98317cb96046bb0b1e7855b659afad8ff6f029339a11aa6e2a8cff462
+        span:
+          start: 145
+          end: 156
+      right:
+        path: skills/mold/SKILL.md
+        heading_path:
+          - /mold
+          - Handoff
+        part: 4
+        source_hash: 54d36a3e9af82f93b0c1017fc76d5ec41534eff3a229d4bdffa104b44a5c8300
+        span:
+          start: 153
+          end: 158
+    predicates:
+      lane: body
+      detector: "1"
+      kind: semantic
+      disposition: advisory
+  - category: reversed-obligation
+    evidence:
+      left:
+        path: skills/cheese/references/coherence-check.md
+        heading_path:
+          - Coherence self-check
+          - Pre-dispatch checklist
+        part: 2
+        source_hash: a6973eaa25556a29011ca571611addbab49936e11cfee0bd5f16c7072a1eb7b7
+        span:
+          start: 7
+          end: 20
+      right:
+        path: skills/cure/references/selection.md
+        heading_path:
+          - Selection gate
+          - Auto-mode selection
+        part: 3
+        source_hash: 0ff10dcf6f48c11116709da4094ac9f6500961051bc29332258ddb4bc688ba7c
+        span:
+          start: 95
+          end: 99
+    predicates:
+      lane: body
+      detector: "1"
+      kind: semantic
+      disposition: advisory
+  - category: low-cosine-repeat
+    evidence:
+      left:
+        path: skills/age/references/deslop-typescript.md
+        heading_path:
+          - TypeScript / JavaScript De-slop Catalog
+          - 4. `Array.forEach` with async callbacks
+        part: 1
+        source_hash: 636ad4674ffc0aa16f658deffc74eba8f5d30b498e82a9c106aa0f042448fb87
+        span:
+          start: 66
+          end: 83
+      right:
+        path: skills/plate/references/ordinary-pr.md
+        heading_path:
+          - Ordinary PR publication
+          - New PR
+        part: 1
+        source_hash: 581f6a7b7948b91b4ae92fb1d6ab60d9a1e27117740e43bd52b40808cc39dd7d
+        span:
+          start: 7
+          end: 23
+    predicates:
+      lane: body
+      detector: "1"
+      kind: semantic
+      disposition: advisory
+  - category: low-cosine-repeat
+    evidence:
+      left:
+        path: skills/age/references/deslop-typescript.md
+        heading_path:
+          - TypeScript / JavaScript De-slop Catalog
+          - 4. `Array.forEach` with async callbacks
+        part: 1
+        source_hash: 636ad4674ffc0aa16f658deffc74eba8f5d30b498e82a9c106aa0f042448fb87
+        span:
+          start: 66
+          end: 83
+      right:
+        path: skills/plate/SKILL.md
+        heading_path:
+          - /plate
+          - Ordinary PR publication
+        part: 1
+        source_hash: 26508bad8ccac333891e766d676ee12d6d50f2fae7ea5f50a443c05222e9d70c
+        span:
+          start: 208
+          end: 216
+    predicates:
+      lane: body
+      detector: "1"
+      kind: semantic
+      disposition: advisory
+  - category: low-cosine-repeat
+    evidence:
+      left:
+        path: skills/age/references/deslop-typescript.md
+        heading_path:
+          - TypeScript / JavaScript De-slop Catalog
+          - 4. `Array.forEach` with async callbacks
+        part: 1
+        source_hash: 636ad4674ffc0aa16f658deffc74eba8f5d30b498e82a9c106aa0f042448fb87
+        span:
+          start: 66
+          end: 83
+      right:
+        path: skills/plate/references/gt.md
+        heading_path:
+          - Graphite publication
+          - Plate recipes
+          - Create a two-layer stack
+        part: 1
+        source_hash: a31024b96495eee16014bc275eeb7f00c66211923c9ff48c3ecdc54f7f11f37a
+        span:
+          start: 99
+          end: 105
+    predicates:
+      lane: body
+      detector: "1"
+      kind: semantic
+      disposition: advisory
+  - category: low-cosine-repeat
+    evidence:
+      left:
+        path: skills/age/references/deslop-python.md
+        heading_path:
+          - Python De-slop Catalog
+          - 1. `range(len())` instead of `enumerate`
+        part: 1
+        source_hash: c65f1a1bf6500336a144380af3860f1fc47af0f5c4f3151311fca8cde9169660
+        span:
+          start: 6
+          end: 25
+      right:
+        path: skills/wheypoint/SKILL.md
+        heading_path:
+          - /wheypoint
+          - Flow
+          - '`--join <slugA> <slugB>`'
+        part: 1
+        source_hash: e1cca316e8827c4e2ed5db5ce87bfffbc15a8c9de612e4a4f42142b547496b4f
+        span:
+          start: 35
+          end: 43
+    predicates:
+      lane: body
+      detector: "1"
+      kind: semantic
+      disposition: advisory
+  - category: low-cosine-repeat
+    evidence:
+      left:
+        path: skills/age/references/deslop-typescript.md
+        heading_path:
+          - TypeScript / JavaScript De-slop Catalog
+          - 4. `Array.forEach` with async callbacks
+        part: 1
+        source_hash: 636ad4674ffc0aa16f658deffc74eba8f5d30b498e82a9c106aa0f042448fb87
+        span:
+          start: 66
+          end: 83
+      right:
+        path: skills/plate/references/gt.md
+        heading_path:
+          - Graphite publication
+          - Plate recipes
+          - Update a lower layer
+        part: 1
+        source_hash: 21e3bb48c7eb6bd5eec4d2c1ae9edc18705e18e4c3918221a2bbb7e57aecd085
+        span:
+          start: 107
+          end: 110
+    predicates:
+      lane: body
+      detector: "1"
+      kind: semantic
+      disposition: advisory
+  - category: low-cosine-repeat
+    evidence:
+      left:
+        path: skills/age/references/deslop-typescript.md
+        heading_path:
+          - TypeScript / JavaScript De-slop Catalog
+          - 4. `Array.forEach` with async callbacks
+        part: 1
+        source_hash: 636ad4674ffc0aa16f658deffc74eba8f5d30b498e82a9c106aa0f042448fb87
+        span:
+          start: 66
+          end: 83
+      right:
+        path: skills/plate/SKILL.md
+        heading_path:
+          - /plate
+          - New-PR topology policy
+        part: 3
+        source_hash: 74f57132740049c58d5bf221013ebe85e55c242cc00d7830e274bf6362c6565e
+        span:
+          start: 62
+          end: 92
+    predicates:
+      lane: body
+      detector: "1"
+      kind: semantic
+      disposition: advisory
+  - category: low-cosine-repeat
+    evidence:
+      left:
+        path: skills/age/references/deslop-python.md
+        heading_path:
+          - Python De-slop Catalog
+          - 1. `range(len())` instead of `enumerate`
+        part: 1
+        source_hash: c65f1a1bf6500336a144380af3860f1fc47af0f5c4f3151311fca8cde9169660
+        span:
+          start: 6
+          end: 25
+      right:
+        path: skills/mold/references/handshake.md
+        heading_path:
+          - The two-key handshake
+          - Agent key — coherence self-check
+        part: 2
+        source_hash: 974691400a6e2b821db0deaffb4538dfdf3124246829654e4b907a8e9cd63324
+        span:
+          start: 34
+          end: 35
+    predicates:
+      lane: body
+      detector: "1"
+      kind: semantic
+      disposition: advisory
+  - category: low-cosine-repeat
+    evidence:
+      left:
+        path: skills/age/references/deslop-python.md
+        heading_path:
+          - Python De-slop Catalog
+          - 1. `range(len())` instead of `enumerate`
+        part: 1
+        source_hash: c65f1a1bf6500336a144380af3860f1fc47af0f5c4f3151311fca8cde9169660
+        span:
+          start: 6
+          end: 25
+      right:
+        path: skills/plate/references/ordinary-pr.md
+        heading_path:
+          - Ordinary PR publication
+          - New PR
+        part: 1
+        source_hash: 581f6a7b7948b91b4ae92fb1d6ab60d9a1e27117740e43bd52b40808cc39dd7d
+        span:
+          start: 7
+          end: 23
+    predicates:
+      lane: body
+      detector: "1"
+      kind: semantic
+      disposition: advisory
+  - category: low-cosine-repeat
+    evidence:
+      left:
+        path: skills/age/references/deslop-typescript.md
+        heading_path:
+          - TypeScript / JavaScript De-slop Catalog
+          - 4. `Array.forEach` with async callbacks
+        part: 1
+        source_hash: 636ad4674ffc0aa16f658deffc74eba8f5d30b498e82a9c106aa0f042448fb87
+        span:
+          start: 66
+          end: 83
+      right:
+        path: skills/plate/references/git-town.md
+        heading_path:
+          - Git Town publication
+          - Plate recipes
+          - Create a two-layer stack
+        part: 1
+        source_hash: d351be6914d3dffe774453ce6d46bff09be197e8d2eb5f43b5e5021749d10656
+        span:
+          start: 104
+          end: 110
+    predicates:
+      lane: body
+      detector: "1"
+      kind: semantic
+      disposition: advisory
+  - category: low-cosine-repeat
+    evidence:
+      left:
+        path: skills/age/references/deslop-typescript.md
+        heading_path:
+          - TypeScript / JavaScript De-slop Catalog
+          - 4. `Array.forEach` with async callbacks
+        part: 1
+        source_hash: 636ad4674ffc0aa16f658deffc74eba8f5d30b498e82a9c106aa0f042448fb87
+        span:
+          start: 66
+          end: 83
+      right:
+        path: skills/wheypoint/SKILL.md
+        heading_path:
+          - /wheypoint
+          - Flow
+          - '`--join <slugA> <slugB>`'
+        part: 1
+        source_hash: e1cca316e8827c4e2ed5db5ce87bfffbc15a8c9de612e4a4f42142b547496b4f
+        span:
+          start: 35
+          end: 43
+    predicates:
+      lane: body
+      detector: "1"
+      kind: semantic
+      disposition: advisory
+  - category: low-cosine-repeat
+    evidence:
+      left:
+        path: skills/age/references/deslop-typescript.md
+        heading_path:
+          - TypeScript / JavaScript De-slop Catalog
+          - 4. `Array.forEach` with async callbacks
+        part: 1
+        source_hash: 636ad4674ffc0aa16f658deffc74eba8f5d30b498e82a9c106aa0f042448fb87
+        span:
+          start: 66
+          end: 83
+      right:
+        path: skills/plate/references/git-town.md
+        heading_path:
+          - Git Town publication
+          - Install, configure, and detect
+        part: 1
+        source_hash: 8180a50f2a3762edad96902cf39dd9d7366109ba3c18bf6d3f3c7a9197802580
+        span:
+          start: 23
+          end: 37
+    predicates:
+      lane: body
+      detector: "1"
+      kind: semantic
+      disposition: advisory
+  - category: low-cosine-repeat
+    evidence:
+      left:
+        path: skills/age/references/deslop-typescript.md
+        heading_path:
+          - TypeScript / JavaScript De-slop Catalog
+          - 4. `Array.forEach` with async callbacks
+        part: 1
+        source_hash: 636ad4674ffc0aa16f658deffc74eba8f5d30b498e82a9c106aa0f042448fb87
+        span:
+          start: 66
+          end: 83
+      right:
+        path: skills/age/references/dimensions.md
+        heading_path:
+          - Review dimensions
+          - Dimension boundaries
+        part: 1
+        source_hash: 063a3e7603a361fdce0ebfab52e3682ff2b1653297771fa10e14f96d94ba3573
+        span:
+          start: 322
+          end: 324
+    predicates:
+      lane: body
+      detector: "1"
+      kind: semantic
+      disposition: advisory
+  - category: low-cosine-repeat
+    evidence:
+      left:
+        path: skills/age/references/deslop-typescript.md
+        heading_path:
+          - TypeScript / JavaScript De-slop Catalog
+          - 4. `Array.forEach` with async callbacks
+        part: 1
+        source_hash: 636ad4674ffc0aa16f658deffc74eba8f5d30b498e82a9c106aa0f042448fb87
+        span:
+          start: 66
+          end: 83
+      right:
+        path: skills/plate/references/gt.md
+        heading_path:
+          - Graphite publication
+          - Conflict recovery
+        part: 1
+        source_hash: 574d4973af3c3b2db6e423edbb49f0c4830317a97ed0d83a5915d65e33c8089b
+        span:
+          start: 90
+          end: 95
+    predicates:
+      lane: body
+      detector: "1"
+      kind: semantic
+      disposition: advisory

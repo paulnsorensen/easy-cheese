@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://easy-cheese.dev/schemas/skill-distill/scores-v1.schema.json",
+  "title": "ScoresV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["model_profile_digest", "fusion_profile_digest", "pair_id", "arctic_s", "dense", "sparse", "colbert", "fused", "left_entails_right", "right_entails_left", "left_contradicts_right", "right_contradicts_left", "schema_version"],
+  "properties": {
+    "model_profile_digest": {"type": "string", "minLength": 1},
+    "fusion_profile_digest": {"type": "string", "minLength": 1},
+    "pair_id": {"type": "string", "minLength": 1},
+    "arctic_s": {"type": "number"},
+    "dense": {"type": "number"},
+    "sparse": {"type": "number"},
+    "colbert": {"type": "number"},
+    "fused": {"type": "number"},
+    "left_entails_right": {"type": "number"},
+    "right_entails_left": {"type": "number"},
+    "left_contradicts_right": {"type": "number"},
+    "right_contradicts_left": {"type": "number"},
+    "schema_version": {"const": "scores-v1"}
+  }
+}

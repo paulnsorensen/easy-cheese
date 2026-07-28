@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://easy-cheese.dev/schemas/skill-distill/proposal-v1.schema.json",
+  "title": "ProposalV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["family_id", "canonical_center", "residuals", "original_token_profile", "physical_reference_variant", "compact_inline_variant", "loaded_token_delta", "behavioral_evidence", "reversal_patch", "schema_version"],
+  "properties": {
+    "family_id": {"type": "string", "minLength": 1},
+    "canonical_center": {"$ref": "#/$defs/canonicalCenter"},
+    "residuals": {"type": "object", "additionalProperties": {"type": "array", "items": {"type": "object"}}},
+    "original_token_profile": {"$ref": "token-metric-profile-v1.schema.json"},
+    "physical_reference_variant": {"$ref": "#/$defs/representationVariant"},
+    "compact_inline_variant": {"$ref": "#/$defs/representationVariant"},
+    "loaded_token_delta": {"type": "integer", "minimum": 1},
+    "behavioral_evidence": {"$ref": "#/$defs/behavioralEvidence"},
+    "reversal_patch": {"type": "string"},
+    "schema_version": {"const": "proposal-v1"}
+  },
+  "$defs": {
+    "canonicalCenter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["family_id", "clauses", "member_residuals", "schema_version"],
+      "properties": {
+        "family_id": {"type": "string", "minLength": 1},
+        "clauses": {"type": "array", "items": {"type": "object"}},
+        "member_residuals": {"type": "object", "additionalProperties": {"type": "array", "items": {"type": "object"}}},
+        "schema_version": {"const": "canonical-center-v1"}
+      }
+    },
+    "representationVariant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["token_metric_profile", "behavior_passed", "changes"],
+      "properties": {
+        "token_metric_profile": {"$ref": "token-metric-profile-v1.schema.json"},
+        "behavior_passed": {"type": "boolean"},
+        "changes": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {"type": "string"}
+        }
+      }
+    },
+    "behavioralEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["deterministic_passed", "behavior_passed", "overlap_passed", "llm_disposition", "selected_representation"],
+      "properties": {
+        "deterministic_passed": {"const": true},
+        "behavior_passed": {"const": true},
+        "overlap_passed": {"const": true},
+        "llm_disposition": {"enum": ["pass", "concern", "abstain"]},
+        "selected_representation": {"enum": ["physical-reference", "compact-inline"]}
+      }
+    }
+  }
+}

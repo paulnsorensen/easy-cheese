@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://easy-cheese.dev/schemas/skill-distill/load-event-v1.schema.json",
+  "title": "LoadEvent",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["role", "canonical_path", "content_digest", "tokenizer_identity_digest", "token_count", "schema_version"],
+  "properties": {
+    "role": {"type": "string", "minLength": 1},
+    "canonical_path": {"type": "string", "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.?(?:/|$))(?!.*//).+$"},
+    "content_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "tokenizer_identity_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "token_count": {"type": "integer", "minimum": 0},
+    "schema_version": {"const": "load-event-v1"}
+  }
+}

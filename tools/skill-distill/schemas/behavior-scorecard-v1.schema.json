@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://easy-cheese.dev/schemas/skill-distill/behavior-scorecard-v1.schema.json",
+  "title": "BehaviorScorecard",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["matrix_id", "subject", "scenario", "phrasing", "repetition", "obligation_id", "critical", "expected", "observed", "passed", "schema_version"],
+  "properties": {
+    "matrix_id": {"type": "string", "minLength": 1},
+    "subject": {"type": "string", "minLength": 1},
+    "scenario": {"type": "string", "minLength": 1},
+    "phrasing": {"type": "string", "minLength": 1},
+    "repetition": {"type": "integer", "minimum": 1},
+    "obligation_id": {"type": "string", "minLength": 1},
+    "critical": {"type": "boolean"},
+    "expected": {"type": "boolean"},
+    "observed": {"type": "boolean"},
+    "passed": {"type": "boolean"},
+    "schema_version": {"const": "behavior-scorecard-v1"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"expected": {"const": true}, "observed": {"const": true}}},
+      "then": {"properties": {"passed": {"const": true}}}
+    },
+    {
+      "if": {"properties": {"expected": {"const": false}, "observed": {"const": false}}},
+      "then": {"properties": {"passed": {"const": true}}}
+    },
+    {
+      "if": {"properties": {"expected": {"const": true}, "observed": {"const": false}}},
+      "then": {"properties": {"passed": {"const": false}}}
+    },
+    {
+      "if": {"properties": {"expected": {"const": false}, "observed": {"const": true}}},
+      "then": {"properties": {"passed": {"const": false}}}
+    }
+  ]
+}

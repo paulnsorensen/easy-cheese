@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://easy-cheese.dev/schemas/skill-distill/distillation-run-v1.schema.json",
+  "title": "DistillationRun",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["run_id", "state", "human_labels_digest", "llm_labels_digest", "human_labels_frozen_at", "schema_version"],
+  "properties": {
+    "run_id": {"type": "string", "minLength": 1},
+    "state": {"enum": ["prepared", "human-frozen", "llm-recorded", "reconciled"]},
+    "human_labels_digest": {"type": ["string", "null"]},
+    "llm_labels_digest": {"type": ["string", "null"]},
+    "human_labels_frozen_at": {"type": ["string", "null"]},
+    "schema_version": {"const": "distillation-run-v1"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"state": {"const": "prepared"}}},
+      "then": {"properties": {"human_labels_digest": {"type": "null"}, "llm_labels_digest": {"type": "null"}, "human_labels_frozen_at": {"type": "null"}}}
+    },
+    {
+      "if": {"properties": {"state": {"const": "human-frozen"}}},
+      "then": {"properties": {"human_labels_digest": {"type": "string", "minLength": 1}, "llm_labels_digest": {"type": "null"}, "human_labels_frozen_at": {"type": "string", "minLength": 1}}}
+    },
+    {
+      "if": {"properties": {"state": {"enum": ["llm-recorded", "reconciled"]}}},
+      "then": {"properties": {"human_labels_digest": {"type": "string", "minLength": 1}, "llm_labels_digest": {"type": "string", "minLength": 1}, "human_labels_frozen_at": {"type": "string", "minLength": 1}}}
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://easy-cheese.dev/schemas/skill-distill/apply-gate-v1.schema.json",
+  "title": "ApplyGateV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["deterministic", "behavior", "overlap", "schema_version"],
+  "properties": {
+    "deterministic": {"$ref": "#/$defs/command"},
+    "behavior": {"$ref": "#/$defs/command"},
+    "overlap": {"$ref": "#/$defs/command"},
+    "schema_version": {"const": "apply-gate-v1"}
+  },
+  "$defs": {
+    "command": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "minLength": 1}
+    }
+  }
+}

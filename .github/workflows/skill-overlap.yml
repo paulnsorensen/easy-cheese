@@ -22,10 +22,6 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   overlap:
     name: skill overlap ratchet
@@ -166,3 +162,7 @@ jobs:
             report.md
           retention-days: 5
           if-no-files-found: warn
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true

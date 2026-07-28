@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://easy-cheese.dev/schemas/skill-distill/human-disposition-v1.schema.json",
+  "title": "HumanDispositionV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["proposal_digest", "decision", "reviewer_identity", "reviewed_at", "commitment", "schema_version"],
+  "properties": {
+    "proposal_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "decision": {"const": "approve"},
+    "reviewer_identity": {"type": "string", "minLength": 1},
+    "reviewed_at": {"type": "string", "format": "date-time"},
+    "commitment": {"type": "string", "minLength": 1},
+    "schema_version": {"const": "human-disposition-v1"}
+  }
+}
