@@ -28,6 +28,7 @@ DECOMPOSER_DOC = ROOT / "skills" / "cheese" / "references" / "decomposer.md"
 PACKET_DOC = ROOT / "skills" / "age" / "references" / "packet.md"
 MODE_PY = ROOT / "src" / "fanout" / "mode.py"
 CURD_BLOCK_PY = ROOT / "src" / "fanout" / "curd_block.py"
+AGE_FAN_OUT_DOC = ROOT / "skills" / "age" / "references" / "fan-out.md"
 
 WIKI_AGE_ROUTER = ROOT / ".hallouminate" / "wiki" / "architecture" / "age-fanout-router.md"
 WIKI_ADR_001 = ROOT / ".hallouminate" / "wiki" / "adr" / "deterministic-fanout-sizing-001.md"
@@ -84,9 +85,9 @@ class TestAgeLadder:
     """Age's fan-out ladder moved from the old 1/4/10 sizes to n in {1, 2, 5}."""
 
     def test_age_skill_describes_1_2_5_ladder(self) -> None:
-        text = read(AGE_SKILL)
+        text = read(AGE_FAN_OUT_DOC)
         assert re.search(r"\{\s*1\s*,\s*2\s*,\s*5\s*\}", text), (
-            "age/SKILL.md does not describe the n in {1, 2, 5} ladder"
+            "age/references/fan-out.md does not describe the n in {1, 2, 5} ladder"
         )
 
     def test_age_skill_does_not_describe_old_1_4_10_ladder(self) -> None:
@@ -105,7 +106,7 @@ class TestAgeLadder:
         assert not re.search(r"1\s*/\s*4\s*/\s*10", text)
 
     def test_age_skill_names_all_five_lens_groupings(self) -> None:
-        text = read(AGE_SKILL)
+        text = read(AGE_FAN_OUT_DOC)
         for group in age_route._LENS_TREE:
             pattern = r"\[\s*" + r"\s*,\s*".join(group) + r"\s*\]"
             assert re.search(pattern, text), (
@@ -204,7 +205,7 @@ class TestThresholdCodeDocsAgreement:
         assert age_route._SCORE_N5_FLOOR == 250
         assert age_route._HIGH_EFFORT_SCORE == 900
 
-        age_text = read(AGE_SKILL)
+        age_text = read(AGE_FAN_OUT_DOC)
         assert f"<{age_route._SCORE_N2_FLOOR}" in age_text, (
             f"age/SKILL.md does not quote the live _SCORE_N2_FLOOR "
             f"({age_route._SCORE_N2_FLOOR})"
