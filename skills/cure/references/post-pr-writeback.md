@@ -1,0 +1,13 @@
+# Post-PR learnings write-back (cure)
+
+Read this before any path that publishes to a PR (the default `/plate` dispatch, an `--open-pr` new PR, the `--safe` **Plate it** selection, or the auto-mode terminal publication).
+
+After any path that **publishes to a PR**, record the session's *implementation-time* learnings to the wiki. This is the second wiki write moment; curdle owns the design-time write, this owns what only surfaces while building: constraints discovered in `/cook`, `/age` findings that changed the design, and any domain terms the diff introduced or redefined.
+
+- **Candidates — upstream `durable_flags` + new-since-curdle ADRs.** Read `durable_flags:` from the upstream `/cook` and `/age` handoff slugs (`.cheese/cook/<slug>.md`, `.cheese/age/<slug>.md`); every non-`none` line is a write-back candidate alongside the new ADRs + domain-model deltas. Upstream phases record flags only — cure/plate/affinage remain the only wiki writers.
+- **Writer — `/wiki-ingest`, detect-and-degrade.** When the hallouminate plugin is available, dispatch `/wiki-ingest` with the candidate list above; its dedup/route/merge/contradiction handling ensures only rationale *new since curdle* lands (say "new since curdle" in the dispatch so it does not re-add design-time ADRs). When hallouminate is absent, write `docs/adr/<slug>-NNN.md` + the domain-model file fallback and emit a **loud one-line note** that the write-back went to files, not the wiki — never a silent degrade. Detection and the degrade contract: [`../../cheese/references/optional-plugins.md`](../../cheese/references/optional-plugins.md).
+- **Every publication path.** Fires from the frame that dispatched terminal `/plate` — manual `cook→cure` and `--auto` alike — after publication lands.
+- **Publication-owner exception.** When cure does not own terminal `/plate` — the `/cook` fan-pathway no-publish cases, or the `/affinage` chain where affinage owns terminal `/plate` — cure does **not** write back; the skill that owns the `/plate` dispatch owns the write-back at its publish boundary.
+- **Nothing to record** — all upstream `durable_flags` are `none` (or absent), no new ADR-worthy decision, and no domain-model delta — skip with a one-line "no post-PR learnings" note. Do not manufacture an entry.
+
+`[TBD]` The write-back trigger lives at this cure boundary today; `/plate` (the dedicated commit/PR skill) now exists, so the deferred follow-up is to move the trigger onto `/plate` so publication and learnings-capture are wired at one seam (see the `post-pr-wiki-writeback` wiki page). Upstream `durable_flags` feed whichever skill owns this single publish-boundary write, so if the trigger moves to `/plate`, flag consumption moves with it.
