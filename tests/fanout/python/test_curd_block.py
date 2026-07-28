@@ -21,7 +21,7 @@ sys.path.insert(0, str(REPO_ROOT / "src" / "fanout"))
 import curd_block  # noqa: E402
 
 
-def _curd(slug: str, files: list[str]) -> dict:
+def _curd(slug: str, files: list[str], est_edit_lines: int = curd_block.MIN_CURD_SURFACE) -> dict:
     return {
         "slug": slug,
         "contract": f"Implement {slug}.",
@@ -29,6 +29,7 @@ def _curd(slug: str, files: list[str]) -> dict:
         "test_target": f"pytest tests/test_{slug}.py",
         "acceptance": [f"{slug} behaves correctly"],
         "seed": [],
+        "est_edit_lines": est_edit_lines,
     }
 
 
@@ -61,6 +62,7 @@ curds:
     test_target: pytest tests/test_solo.py
     acceptance: ["solo behaves correctly"]
     seed: []
+    est_edit_lines: 25
 waves:
   - [solo]
 decomposer: {source: mold, model: claude-opus-5, prompt_version: deadbeef}
@@ -103,7 +105,9 @@ class TestWaves:
 
 
 class TestRequiredFields:
-    @pytest.mark.parametrize("missing", ["slug", "contract", "files", "test_target", "acceptance", "seed"])
+    @pytest.mark.parametrize(
+        "missing", ["slug", "contract", "files", "test_target", "acceptance", "seed", "est_edit_lines"]
+    )
     def test_curd_missing_required_field(self, missing: str) -> None:
         curd = _curd("solo", ["src/solo.py"])
         del curd[missing]
@@ -200,7 +204,7 @@ class TestNoCollisionWithCurdPy:
         retry_count; the spec-locked block uses contract/acceptance/seed —
         assert the two vocabularies stay disjoint so no field silently overloads
         the other module's meaning."""
-        locked_fields = {"slug", "contract", "files", "test_target", "acceptance", "seed"}
+        locked_fields = {"slug", "contract", "files", "test_target", "acceptance", "seed", "est_edit_lines"}
         # "files"/"test_target" are intentionally shared key names between the
         # two modules (both validate a files list / test_target string) -- not
         # a collision. Everything else curd.py touches must stay disjoint from
@@ -208,3 +212,64 @@ class TestNoCollisionWithCurdPy:
         known_shared = {"files", "test_target"}
         curd_py_only_fields = _curd_py_field_keys() - known_shared
         assert locked_fields.isdisjoint(curd_py_only_fields)
+
+
+class TestSurfaceFloor:
+    """est_edit_lines gates dispatch worthiness: a curd below MIN_CURD_SURFACE
+    is declared too small to justify a fresh coder dispatch and must merge into
+    a sibling — the regression case is the real 8-curd block whose wave 2 held
+    a curd editing three lines of a dict."""
+
+    def test_curd_at_floor_passes(self) -> None:
+        block = _block(
+            curds=[_curd("solo", ["src/solo.py"], est_edit_lines=curd_block.MIN_CURD_SURFACE)],
+            waves=[["solo"]],
+        )
+        assert curd_block.validate_curd_block(block) == []
+
+    def test_curd_below_floor_fails_as_merge_candidate(self) -> None:
+        block = _block(
+            curds=[_curd("tiny", ["src/tiny.py"], est_edit_lines=curd_block.MIN_CURD_SURFACE - 1)],
+            waves=[["tiny"]],
+        )
+        errors = curd_block.validate_curd_block(block)
+        assert any("tiny" in e and "MERGE CANDIDATE" in e for e in errors), errors
+
+    def test_non_int_est_edit_lines_fails(self) -> None:
+        curd = _curd("solo", ["src/solo.py"])
+        curd["est_edit_lines"] = "25"
+        block = _block(curds=[curd], waves=[["solo"]])
+        errors = curd_block.validate_curd_block(block)
+        assert any("est_edit_lines must be a positive integer" in e for e in errors), errors
+
+    def test_negative_est_edit_lines_fails(self) -> None:
+        curd = _curd("solo", ["src/solo.py"])
+        curd["est_edit_lines"] = -5
+        block = _block(curds=[curd], waves=[["solo"]])
+        errors = curd_block.validate_curd_block(block)
+        assert any("est_edit_lines must be a positive integer" in e for e in errors), errors
+
+    def test_zero_est_edit_lines_fails_positive_int_check_not_merge_candidate(self) -> None:
+        curd = _curd("solo", ["src/solo.py"])
+        curd["est_edit_lines"] = 0
+        block = _block(curds=[curd], waves=[["solo"]])
+        errors = curd_block.validate_curd_block(block)
+        assert any("est_edit_lines must be a positive integer" in e for e in errors), errors
+        assert not any("MERGE CANDIDATE" in e for e in errors), errors
+
+    def test_bool_true_est_edit_lines_fails_despite_equaling_one(self) -> None:
+        curd = _curd("solo", ["src/solo.py"])
+        curd["est_edit_lines"] = True
+        block = _block(curds=[curd], waves=[["solo"]])
+        errors = curd_block.validate_curd_block(block)
+        assert any("est_edit_lines must be a positive integer" in e for e in errors), errors
+
+    def test_eight_one_line_curds_produce_eight_floor_violations(self) -> None:
+        curds = [_curd(f"c{i}", [f"src/c{i}.py"], est_edit_lines=1) for i in range(8)]
+        waves = [[c["slug"] for c in curds[:4]], [c["slug"] for c in curds[4:]]]
+        block = _block(curds=curds, waves=waves)
+        errors = curd_block.validate_curd_block(block)
+        floor_errors = [e for e in errors if "MERGE CANDIDATE" in e]
+        assert len(floor_errors) == 8, errors
+        for curd in curds:
+            assert any(curd["slug"] in e for e in floor_errors), (curd["slug"], errors)

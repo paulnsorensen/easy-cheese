@@ -47,7 +47,12 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
         "detect-squash-residue": "detect-squash-residue.py",
         "lockfile-resolve": "lockfile-resolve.py",
     },
-    "affinage": {"pr-status": "pr-status.py", "post-reply": "post-reply.py", "age-route": "fanout/age_route_cli.py"},
+    "affinage": {
+        "pr-status": "pr-status.py",
+        "post-reply": "post-reply.py",
+        "age-route": "fanout/age_route_cli.py",
+        "review-surface": "fanout/review_surface_cli.py",
+    },
     "mold": {
         "artifact-path": Shared("artifact_path.py"),
         "curd-count": "curd-count.py",
@@ -64,7 +69,11 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
         "local": Shared("hallouminate_setup.py"),
         "doctor": Shared("hallouminate_setup.py"),
     },
-    "age": {"html-report": "age-html-report.py", "age-route": "fanout/age_route_cli.py"},
+    "age": {
+        "html-report": "age-html-report.py",
+        "age-route": "fanout/age_route_cli.py",
+        "review-surface": "fanout/review_surface_cli.py",
+    },
     "hard-cheese": {
         "append-attempt": "append-attempt.py",
         "freshness-check": "freshness-check.py",
@@ -72,6 +81,7 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
     "pasteurize": {
         "debug-tag-sweep": "debug-tag-sweep.py",
         "repro-rerun": "repro-rerun.py",
+        "pasteurize-route": "fanout/pasteurize_route_cli.py",
     },
     # /ultracook drives the fan-out engine (formerly /cheese-factory); its
     # sources live in the mode-neutral src/fanout/ dir (see SRC_DIRS).
@@ -103,9 +113,15 @@ SRC_DIRS: dict[str, str] = {"ultracook": "fanout"}
 # vendored into both the mold and ultracook bundles.
 EXTRA_MODULES: dict[str, list[tuple[str, str]]] = {
     "mold": [("fanout", "mode.py")],
-    "age": [("fanout", "age_route.py")],
-    "affinage": [("fanout", "age_route.py")],
-    "ultracook": [("fanout", "age_route.py")],
+    "age": [
+        ("fanout", "age_route.py"),
+        ("fanout", "review_surface.py"),
+    ],
+    "affinage": [
+        ("fanout", "age_route.py"),
+        ("fanout", "review_surface.py"),
+    ],
+    "pasteurize": [("fanout", "pasteurize_route.py")],
 }
 
 # The "common" bundle ships cross-cutting CLI entrypoints sourced from

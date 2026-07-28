@@ -133,6 +133,30 @@ Before writing the handoff slug, confirm:
 
 Once the checklist is green and the slug is on disk, hand off to `/cook <slug> --auto` (default). Cook --auto picks up the post-fix state, runs its taste-test against the applied diff for spec drift / readability / scope creep, produces its package-ready report, and triggers the autonomous `/press → /age → /cure` chain. Pasteurize itself does not commit, open PRs, or drive the chain — cook owns that.
 
+## Fan-out sizing
+
+`/pasteurize` fans zero agents today. `size_pasteurize_fanout(bug_shape, score, deterministic_repro)` in `src/fanout/pasteurize_route.py` is the sizing policy for when it does.
+
+The signal is inverted relative to review: a reviewer (`age_route.route`) reads a diff that exists — more diff, more agents. `size_pasteurize_fanout` instead reads the `review_surface` score **descending**, over the **suspect range** (last-known-good..HEAD), not over a diff under review — less evidence means more agents, because the search space is what gets fanned over.
+
+| Bug shape | Range | Repro | Agents |
+| --- | --- | --- | --- |
+| regression | tight (score <= 250) | deterministic | 1 (linear, no fan) |
+| regression | tight (score <= 250) | non-deterministic | 2 |
+| regression | wide (score > 250) | deterministic | 2 |
+| regression | wide (score > 250) | non-deterministic | 3 |
+| regression | score is `None` (no diff to anchor to) | deterministic | 3 |
+| regression | score is `None` (no diff to anchor to) | non-deterministic | 5 |
+| heisenbug / race / perf regression | any | any | 3 |
+| cold bug (no diff to anchor to, score is `None`) | -- | deterministic | 3 |
+| cold bug (no diff to anchor to, score is `None`) | -- | non-deterministic | 5 |
+
+**Boundary:** the code checks `score > 250`, so exactly `250` counts as tight (`score <= 250`), not `score < 250` as a naive reading of "tight" might suggest.
+
+Every constant above (`WIDE_RANGE_THRESHOLD`, `_REGRESSION_TIGHT_DETERMINISTIC_N`, `_REGRESSION_TIGHT_NONDETERMINISTIC_N`, `_REGRESSION_WIDE_DETERMINISTIC_N`, `_REGRESSION_WIDE_NONDETERMINISTIC_N`, `_UNSTABLE_REPRO_N`, `_COLD_BUG_DETERMINISTIC_N`, `_COLD_BUG_NONDETERMINISTIC_N`) is **reasoned, not measured**. Unlike every reviewer threshold in the router -- each validated against 30 commits of real history -- these have no historical validation, because `/pasteurize` fans zero agents today. They are named tunable constants and should be revisited once real runs exist.
+
+On a bundle-only host, `size_pasteurize_fanout` is also reachable as `python3 skills/pasteurize/scripts/pasteurize.pyz pasteurize-route <request.json>` (JSON in, JSON out -- mirrors `age-route`'s bundle convention).
+
 ## Preferred tools and fallbacks
 
 | Need | Prefer | Fallback |

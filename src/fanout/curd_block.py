@@ -18,6 +18,7 @@ Schema:
         test_target: <command or test id>
         acceptance: [<verifiable checks>]
         seed: [<frozen interfaces this curd implements>]
+        est_edit_lines: <int, declared estimate of source+test edit lines>
     waves: [[<slug>, ...], ...]   # <=4 slugs per wave
     decomposer: {source: mold | cook, model: <id>, prompt_version: <hash>}
 """
@@ -39,7 +40,8 @@ from schema import (
 )
 
 MAX_WAVE_SIZE = 4
-_CURD_REQUIRED_KEYS = ("slug", "contract", "files", "test_target", "acceptance", "seed")
+MIN_CURD_SURFACE = 25
+_CURD_REQUIRED_KEYS = ("slug", "contract", "files", "test_target", "acceptance", "seed", "est_edit_lines")
 _DECOMPOSER_SOURCES = ("mold", "cook")
 
 
@@ -61,7 +63,23 @@ def _curd_errors(curd: Any, where: str) -> list[str]:
         errors.extend(string_list(curd["acceptance"], f"{where}.acceptance", non_empty=True))
     if "seed" in curd:
         errors.extend(string_list(curd["seed"], f"{where}.seed"))
+    if "est_edit_lines" in curd:
+        errors.extend(_est_edit_lines_errors(curd, where))
     return errors
+
+
+def _est_edit_lines_errors(curd: dict, where: str) -> list[str]:
+    value = curd["est_edit_lines"]
+    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+        return [f"{where}.est_edit_lines must be a positive integer"]
+    if value < MIN_CURD_SURFACE:
+        slug = curd.get("slug", "?")
+        return [
+            f"{where}.est_edit_lines={value} is below the surface floor of "
+            f"{MIN_CURD_SURFACE} — curd {slug!r} is a MERGE CANDIDATE: merge it "
+            "into a sibling curd rather than dispatch a fresh coder for it"
+        ]
+    return []
 
 
 def _disjoint_files_errors(curds: list[dict]) -> list[str]:

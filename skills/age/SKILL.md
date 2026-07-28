@@ -65,7 +65,7 @@ Per-dimension base-severity tables, location-sensitivity, fix-cost-now / fix-cos
 
 ## Flow
 
-1. Identify the diff, scope, and relevant spec or issue. **Mode check (one decision point):** compute `files_changed`/`insertions`/`deletions` from the diff stat and grep the diff for `age_route.OVERRIDE_FLAGS` tokens to build `risk_flags`, then call `age_route.route(files_changed=..., insertions=..., deletions=..., risk_flags=..., entry="age")` (`src/fanout/age_route.py`). Branch on the returned `n`: `n=1` — steps 2–4 below (single-parent path), unchanged. `n=4` — switch to `### Grouped-lens fan-out mode (N=4)`. `n=10` — switch to `### Scale-triggered fan-out mode (N=10)`. Fan-out (`n=4` or `n=10`) additionally requires `/age` not itself be a sub-agent — ultracook-dispatched reviewers run inline by agent type, and a sub-agent cannot spawn sub-agents; when `/age` is a sub-agent, stay on the single-parent path regardless of `n`. Thread the router's `effort` into whichever reviewer dispatch fires (fast pass at `low`/`medium`, thorough at `high`).
+1. Identify the diff, scope, and relevant spec or issue. **Mode check (one decision point):** compute the review range's `review_surface` score and the `age_route.OVERRIDE_FLAGS` risk flags — invocation, diff range, bundle fallback, and grep scope: `## Sub-agent context gate` § Router call below — then call `age_route.route(score=..., risk_flags=..., entry="age")` (`src/fanout/age_route.py`). Branch on the returned `n`: `n=1` — steps 2–4 below (single-parent path), unchanged. Any `n>1` — switch to `### Lens fan-out mode (n>1)` below; the router's returned `lenses` list, not a fixed label, determines how many workers to dispatch. Fan-out (`n>1`) additionally requires `/age` not itself be a sub-agent — ultracook-dispatched reviewers run inline by agent type, and a sub-agent cannot spawn sub-agents; when `/age` is a sub-agent, stay on the single-parent path regardless of `n`. Thread the router's `effort` into whichever reviewer dispatch fires (fast pass at `low`/`medium`, thorough at `high`).
 2. Gather evidence: diff, touched files, tests, callers/imports. If a press report exists for this slug, read it via:
 
    ```
@@ -85,7 +85,7 @@ Per-dimension base-severity tables, location-sensitivity, fix-cost-now / fix-cos
    When a cook artifact exists but no press artifact does, the diff was never hardened. Do not block the review — proceed — but record `press: skipped` in the report (see `## Output`) and print the one-line warning at handoff. A missing cook artifact is also non-fatal (an `artifact not found` result just means a non-pipeline diff): skip the marker and the warning and continue the review.
 
    Independently of any press report, if `.cheese/glossary/<slug>.md` exists, read it now so naming drift against the resolved glossary can be flagged as a deslop finding.
-3. Review every dimension; dimensions with no findings simply omit themselves. Report every defect you notice, however minor — do not self-filter on perceived significance; filtering happens downstream in the verifier pass (`n=10`/`n=4`) or the severity computation itself (single-parent). Do not raise a finding for a gate failure identical to the diff's recorded `baseline:` block — see [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md); flag only new or changed failures.
+3. Review every dimension; dimensions with no findings simply omit themselves. Report every defect you notice, however minor — do not self-filter on perceived significance; filtering happens downstream in the verifier pass (fan-out, any `n>1`) or the severity computation itself (single-parent). Do not raise a finding for a gate failure identical to the diff's recorded `baseline:` block — see [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md); flag only new or changed failures.
 4. Compute severity per finding (base + location bump + compounding bump, capped at `blocker`). Group findings by severity (`## Blocker → ## High → ## Medium → ## Low`); within a severity group, order by file.
 5. Write the report:
 
@@ -128,54 +128,47 @@ Beyond source-code routing there are review-specific tools:
 
 `/age` sizes its own fan-out via the age router (`src/fanout/age_route.py`) rather than a size-only threshold. Resolve every dispatched worker through `../cheese/references/agent-resolution.md`: require read-only permissions and fresh context, prefer the exact specialist, then a compatible specialist, then a prompt-constrained general agent with `degraded: true`. Fall back inline only when dispatch itself is unavailable.
 
-**Router call** — compute `files_changed`/`insertions`/`deletions` from the diff stat, grep the diff for `age_route.OVERRIDE_FLAGS` tokens to populate `risk_flags`, then call:
+**Router call** — compute the review range's `review_surface` score via the `review-surface` CLI (source: `src/fanout/review_surface_cli.py`, wrapping `src/fanout/review_surface.py::score()`). Run it through the `.pyz` bundle — the direct script imports `cli`/`git_utils` from `shared/scripts/`, which are only co-staged flat inside the bundle, so running it directly (`python3 src/fanout/review_surface_cli.py ...`) fails with `ModuleNotFoundError: No module named 'cli'`: `python3 ${CLAUDE_SKILL_DIR}/scripts/age.pyz review-surface --repo . <base>...HEAD` — the range must be the diff under review (`<base>...HEAD` for an already-committed branch, the bare working diff otherwise); never rely on the CLI's bare default, which scores the working tree against `HEAD` and silently zeroes an already-committed branch. Grep the diff's **added lines outside `skills/**` and `.hallouminate/**`** for `age_route.OVERRIDE_FLAGS` tokens to populate `risk_flags` — scoped so a diff that merely documents the override vocabulary does not trip its own tokens; a token the grep misses means no promoted lens, not a missing security lens, so treat a hit as a hint, not a guarantee. Then call:
 
 ```python
 from src.fanout.age_route import route
-route(files_changed=<n>, insertions=<n>, deletions=<n>, risk_flags=[...], entry="age")
+route(score=<float>, risk_flags=[...], entry="age")
 ```
 
-If the host only ships the bundle, `echo '{"files_changed": <n>, "insertions": <n>, "deletions": <n>, "risk_flags": [...], "entry": "age"}' | python3 ${CLAUDE_SKILL_DIR}/scripts/age.pyz age-route` is the fallback (JSON on stdin, route JSON on stdout).
+If the host only ships the bundle, `echo '{"score": <float>, "risk_flags": [...], "entry": "age"}' | python3 ${CLAUDE_SKILL_DIR}/scripts/age.pyz age-route` is the fallback (JSON on stdin, route JSON on stdout).
 
-The returned `n` (1 / 4 / 10) is the fan-out mode; `effort` (`low`/`medium`/`high`) dials the reviewer dispatch; `overrides_hit` names any hard risk-override that forced `n=10` regardless of size (auth/secrets/crypto, tenant isolation, payments/ledgers, concurrency/idempotency/ordering/retries, schema/migration/protocol/public-API change, production-destructive ops, weak integration coverage — see `age_route.OVERRIDE_FLAGS` for the exact grep tokens). A hard override always wins: it pushes `n` to 10 and `effort` to `high` even on a tiny diff.
+The returned `n` is the fan-out mode. The base ladder is `n ∈ {1, 2, 5}` from `score` alone (`<60` → 1, `60–250` → 2, `>250` → 5), with `n=1` reviewed single-parent (no fan-out) via steps 2–4 above, unchanged; `effort` (`low`/`medium`/`high`) dials the reviewer dispatch; `overrides_hit` names any risk-override token matched (auth/secrets/crypto, tenant isolation, payments/ledgers, concurrency/idempotency/ordering/retries, schema/migration/protocol/public-API change, production-destructive ops, weak integration coverage — see `age_route.OVERRIDE_FLAGS` for the exact grep tokens). An override no longer forces the top tier: it **promotes** its mapped dimension out of whichever base-ladder group the score placed it in, into its own solo lens — the group's remaining members stay grouped as one lens. `n` climbs by however many dimensions were promoted, uncapped, with a natural maximum of 9 when all four override categories hit simultaneously at the top score tier. `effort` is `high` whenever any override hits **or** `score` exceeds 900; `low` only at `n=1` (unreachable with an override, since an override always forces `high`); `medium` otherwise.
 
 Independently of the router's `n`, `/age` may still fork a read-only review-context sub-agent — preferably the `explorer` phase-agent — purely for evidence-gathering (not fan-out) when caller/dependency graph expansion from `tilth_deps` or the selected semantic caller search crosses multiple subsystems, especially for `--comprehensive` reviews. This is a separate, orthogonal dispatch from the `n`-way fan-out below.
 
 For the digest contract, harness-agnostic selection rules, and what the parent never delegates, see `references/sub-agent-gate.md`.
 
-### Grouped-lens fan-out mode (N=4)
+### Lens fan-out mode (n>1)
 
-Activates when the router returns `n=4` AND `/age` is not itself a sub-agent. One worker per **lens group**, not per single dimension — a lighter version of the `N=10` worker contract below. The verbatim grouping (spec-locked): `correctness+spec+assertions`; `security`; `complexity+deslop+nih`; `efficiency+telemetry+encapsulation`.
+Activates on the router predicate from the ladder above (`n>1` and `/age` not itself a sub-agent). One worker per **lens** in the router's returned `lenses` list — not per single dimension — dispatch exactly `len(lenses)` workers. The base ladder's lens partitions at `n>1`, before any override promotion:
 
-Reuses `N=10`'s Seams 2 (shared context packet), 4 (orchestrator reconciliation), 5 (shared impact evidence), and 6 (verifier pass) unchanged — a lens-grouped worker can still double-flag a line another lens-grouped worker also flags, so reconciliation and verification apply exactly as they do at `N=10`. The only difference from Seam 3 is worker scope:
+- `n=2` — `[correctness, spec, assertions, security, telemetry]` / `[encapsulation, complexity, deslop, nih, efficiency]`.
+- `n=5` — the five cohesion-grouped lenses: `[correctness, spec, assertions]`; `[security, telemetry]`; `[encapsulation, complexity]`; `[deslop, nih]`; `[efficiency]`.
 
-**Seam 3 (N=4 variant) — Worker contract.** One worker per lens group (four workers total, not ten). Resolve the `reviewer` role through `../cheese/references/agent-resolution.md` at the router's `effort` dial. Each worker:
-- Reviews all dimensions in its assigned group (e.g. the `security` worker reviews only `security`; the `correctness+spec+assertions` worker reviews all three).
-- Computes **full per-finding severity** for every dimension in its group (base + location bump + compounding bump).
-- Tags each finding with its dimension and an `also-relevant-to: [<dim>, ...]` field when cross-dimension overlap is suspected (including overlap with a dimension owned by a *different* lens group).
-- Reports every defect it notices, however minor — no severity-conservative self-filtering; the verifier pass (Seam 6) and orchestrator reconciliation (Seam 4) do the filtering.
-- Returns full per-finding rows in the `SKILL.md § Output` finding format — same as the `N=10` worker contract, not a digest.
-- Does **not** dedup, apply boundary tiebreakers, reconcile severity across dimensions or lens groups, or write the report.
+An override promotion (mechanics: § Router call above) pulls its mapped dimension out of whichever group the base tier placed it in and gives it its own solo lens; the group's remaining members survive as one lens together. Every grouping above is chosen for thematic cohesion — `encapsulation` never shares a lens with `efficiency` or `telemetry` at `n=5`.
 
-After all four workers return, continue at Seam 4 (reconciliation) below, then Seam 6 (verifier pass), then step 5 (write + print the report path) and `## Handoff`.
+The seam sequence below is identical for every `n>1` — only worker count and each worker's assigned dimension set vary with `n`:
 
-### Scale-triggered fan-out mode (N=10)
-
-Activates when the router returns `n=10` AND `/age` is not itself running as a dispatched sub-agent — ultracook-dispatched reviewers run inline by agent type, and a sub-agent cannot spawn sub-agents. At `n=1`, or when running as a sub-agent, the single-parent path applies unchanged.
-
-**Seam 1 — Predicate.** The router call above returning `n=10` (or `n=4`, see the grouped-lens mode) AND `/age` not a sub-agent is the fan-out predicate.
+**Seam 1 — Predicate.** As defined at the section opener above.
 
 **Seam 2 — Shared context packet.** The orchestrator assembles the packet once, writes it to `.cheese/age/<slug>-packet.md`, and each worker reads it. Eight components, and the reuse of the review-context digester as the orientation block, are documented in `references/packet.md`.
 
-**Seam 3 — Worker contract.** One worker per dimension. Resolve the `reviewer` role through `../cheese/references/agent-resolution.md`, requiring read-only permissions and fresh context; a prompt-constrained general fallback is allowed only with `degraded: true`. Each worker:
-- Reviews only its assigned dimension.
-- Computes **full per-finding severity** for that dimension (base + location bump + compounding bump).
-- Tags each finding with its dimension and an `also-relevant-to: [<dim>, ...]` field when cross-dimension overlap is suspected.
+**Seam 3 — Worker contract.** One worker per lens. Resolve the `reviewer` role through `../cheese/references/agent-resolution.md` at the router's `effort` dial; require read-only permissions and fresh context, a prompt-constrained general fallback allowed only with `degraded: true`. Each worker:
+- Reviews every dimension in its assigned lens (a solo-lens worker reviews just that one dimension; a multi-dimension lens worker reviews all dimensions in its group, e.g. the `[correctness, spec, assertions]` worker reviews all three).
+- Computes **full per-finding severity** for every dimension in its lens (base + location bump + compounding bump).
+- Tags each finding with its dimension and an `also-relevant-to: [<dim>, ...]` field when cross-dimension overlap is suspected (including overlap with a dimension owned by a *different* lens).
 - Reports every defect it notices, however minor — no severity-conservative self-filtering; the verifier pass (Seam 6) and orchestrator reconciliation (Seam 4) do the filtering.
-- Returns its dimension's findings as full per-finding rows in the `SKILL.md § Output` finding format (`**[dim:sev]** path:line — claim` + `location / fix-cost-now / fix-cost-later / confidence` + `recommendation`). Not an orientation digest — the `§ Digest contract` size ceiling does not apply.
-- Does **not** dedup, apply boundary tiebreakers, reconcile severity across dimensions, or write the report.
+- Returns full per-finding rows in the `SKILL.md § Output` finding format (`**[dim:sev]** path:line — claim` + `location / fix-cost-now / fix-cost-later / confidence` + `recommendation`). Not an orientation digest — the `§ Digest contract` size ceiling does not apply.
+- Does **not** dedup, apply boundary tiebreakers, reconcile severity across dimensions or lenses, or write the report.
 
-**Seam 4 — Orchestrator reconciliation.** After all workers return, apply the `## Dimension boundaries` table (`references/dimensions.md:319-340`) verbatim to any line meeting EITHER condition: (1) flagged by two or more workers at the same `file:line`; (2) tagged `also-relevant-to: [d]` by any worker — the orchestrator re-evaluates dimension `d` against that line and applies the tiebreaker (keep the higher-base finding / suppress / emit-both-with-cross-reference per the 15 rules). This consumes the `also-relevant-to` signal and provides the cross-dimension coverage single-parent gets for free. Lines neither flagged by ≥2 workers nor tagged `also-relevant-to` need no reconciliation. Group by severity. The parent owns the canonical artifact. After reconciliation, continue at Seam 6 (verifier pass), then step 5 (write + print the report path) and `## Handoff` exactly as the single-parent path does.
+After all workers return, continue at Seam 4 (reconciliation) below.
+
+**Seam 4 — Orchestrator reconciliation.** After all workers return, apply the `## Dimension boundaries` table (`references/dimensions.md` § Dimension boundaries) verbatim to any line meeting EITHER condition: (1) flagged by two or more workers at the same `file:line`; (2) tagged `also-relevant-to: [d]` by any worker — the orchestrator re-evaluates dimension `d` against that line and applies the tiebreaker (keep the higher-base finding / suppress / emit-both-with-cross-reference per the 15 rules). This consumes the `also-relevant-to` signal and provides the cross-dimension coverage single-parent gets for free. Lines neither flagged by ≥2 workers nor tagged `also-relevant-to` need no reconciliation. Group by severity. The parent owns the canonical artifact. After reconciliation, continue at Seam 6 (verifier pass), then step 5 (write + print the report path) and `## Handoff` exactly as the single-parent path does.
 
 **Seam 5 — Shared impact evidence.** The packet carries the caller/dependency notes assembled through `tilth_deps` and the selected semantic caller search. Workers use that packet instead of rebuilding impact context independently.
 
@@ -184,9 +177,9 @@ Activates when the router returns `n=10` AND `/age` is not itself running as a d
 - **Downgrade/drop** — the evidence does not support the claimed severity (or the claim itself); the verifier lowers the severity tier or drops the finding, and the orchestrator records the original claim and the verifier's reasoning in the report's confidence trail.
 - **Escalate** — the evidence given cannot settle the claim either way (cross-cutting contract 1: "a claim no evidence can settle returns `escalate`, never a guessed pass or fail"). The finding is kept at its **original** severity with an `escalate` flag — never silently dropped or silently passed through unflagged.
 
-This is the "cheap severity-filter leg" referenced in the Roles x tiers table; it applies at `N=10` and, reusing the same mechanism, at `N=4`. It does not run at `N=1` — the single-parent path has no reconciliation step to filter, and the reviewer's own severity computation is the only grading pass.
+This is the "cheap severity-filter leg" referenced in the Roles x tiers table; it applies whenever `n>1`. It does not run at `n=1` — the single-parent path has no reconciliation step to filter, and the reviewer's own severity computation is the only grading pass.
 
-**Output shape invariant.** The findings report (`.cheese/age/<slug>.md`) has the same dedup, severity grouping, and finding format in the single-parent, `N=4`, and `N=10` fan-out paths. Resolution provenance may expose the selected role and topology.
+**Output shape invariant.** The findings report (`.cheese/age/<slug>.md`) has the same dedup, severity grouping, and finding format in the single-parent path and every lens fan-out width. Resolution provenance may expose the selected role and topology.
 
 ## Output
 

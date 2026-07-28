@@ -16,6 +16,10 @@
 - [cross-skill-work-contract-002](./cross-skill-work-contract-002.md) — ADR: Cross-skill handoffs use a versioned envelope and phase-owned contracts
 - [cross-skill-work-contract-003](./cross-skill-work-contract-003.md) — ADR: Cheese bundles its YAML contract runtime
 - [culture-wheypoint-collaboration-001](./culture-wheypoint-collaboration-001.md) — ADR: /culture delegates its end-of-session artifact to /wheypoint
+- [deterministic-fanout-sizing-001](./deterministic-fanout-sizing-001.md) — ADR-001: Risk overrides promote a dimension, they do not escalate `n`  [status: accepted]
+- [deterministic-fanout-sizing-002](./deterministic-fanout-sizing-002.md) — ADR-002: The file-weight table is inverted: default full weight  [status: accepted]
+- [deterministic-fanout-sizing-003](./deterministic-fanout-sizing-003.md) — ADR-003: No LLM classifier in the sizing path  [status: accepted]
+- [deterministic-fanout-sizing-004](./deterministic-fanout-sizing-004.md) — ADR-004: Curd blocks declare a size estimate; the validator gates it  [status: accepted]
 - [hallouminate-wiring-stack-001](./hallouminate-wiring-stack-001.md) — ADR: hallouminate wiring ships as a stacked 4-PR build, one PR per issue
 - [hallouminate-wiring-stack-002](./hallouminate-wiring-stack-002.md) — ADR: cook and age record durable-change flags; only the publication boundary writes the wiki
 - [hallouminate-wiring-stack-003](./hallouminate-wiring-stack-003.md) — ADR: liberal wiki grounding in mold/culture is prose guidance, not a coherence gate

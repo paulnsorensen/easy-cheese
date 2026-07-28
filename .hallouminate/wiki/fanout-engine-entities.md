@@ -43,20 +43,31 @@ A Wiring node (`W<n>`) is the unit of cross-curd integration —
 ## The Curd block
 
 Added in the subagent-routing overhaul foundation (PR #315). A Curd block is
-the **decomposition artifact** both decomposer doors emit — `/mold`'s
-pre-approval decomposer dispatch and `/cook`'s fallback decompose gate — with
+the **decomposition artifact** both decomposer doors emit -- `/mold`'s
+pre-approval decomposer dispatch and `/cook`'s fallback decompose gate -- with
 a **locked vocabulary that deliberately does not overlap the run-manifest
 Curd**:
 `curds[]` entries carry `{slug, contract, files, test_target, acceptance,
-seed}` plus block-level `waves[]` and `decomposer{}` (`src/fanout/curd_block.py`).
+seed, est_edit_lines}` plus block-level `waves[]` and `decomposer{}`
+(`src/fanout/curd_block.py`).
 The disjointness of the two vocabularies is test-locked: the field-name set is
 AST-derived from `curd.py`'s actual source so a collision fails the suite
 (`tests/fanout/python/test_curd_block.py`).
 
+`est_edit_lines` is a **required**, declared estimate of the curd's total
+source-plus-test edit lines -- the whole dispatch's work, not just the files
+it touches. `MIN_CURD_SURFACE = 25` gates it: a curd estimated below the
+floor fails validation as a **merge candidate**, because a fresh coder
+dispatch's context setup costs more than the edit itself. See
+[ADR-004](./adr/deterministic-fanout-sizing-004.md) for why this is a
+declared-and-gated estimate rather than a measurement -- at decomposition
+time the diff the curd would produce does not exist yet, so it cannot be
+measured the way `review_surface` measures a completed diff.
+
 - The single producer contract lives at `skills/cheese/references/decomposer.md`
   ("same schema both doors"); the legacy `skills/ultracook/references/decomposer-prompt.md`
   produces the **incompatible run-manifest schema** and is scope-noted as
-  such — do not present the two as the same decomposer.
+  such -- do not present the two as the same decomposer.
 - Deployed as the `curd-block` subcommand of `ultracook.pyz`
   (`scripts/build_pyz.py`).
 
