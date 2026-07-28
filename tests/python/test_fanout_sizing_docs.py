@@ -29,6 +29,7 @@ PACKET_DOC = ROOT / "skills" / "age" / "references" / "packet.md"
 MODE_PY = ROOT / "src" / "fanout" / "mode.py"
 CURD_BLOCK_PY = ROOT / "src" / "fanout" / "curd_block.py"
 AGE_FAN_OUT_DOC = ROOT / "skills" / "age" / "references" / "fan-out.md"
+AFFINAGE_FLOW_DETAILS_DOC = ROOT / "skills" / "affinage" / "references" / "flow-details.md"
 
 WIKI_AGE_ROUTER = ROOT / ".hallouminate" / "wiki" / "architecture" / "age-fanout-router.md"
 WIKI_ADR_001 = ROOT / ".hallouminate" / "wiki" / "adr" / "deterministic-fanout-sizing-001.md"
@@ -124,9 +125,9 @@ class TestAgeLadder:
 
 class TestAffinageRouteCall:
     def test_affinage_route_call_passes_score_kwarg(self) -> None:
-        text = read(AFFINAGE_SKILL)
+        text = read(AFFINAGE_FLOW_DETAILS_DOC)
         assert re.search(r"route\(\s*score\s*=", text), (
-            "affinage/SKILL.md's route call does not pass score="
+            "affinage/references/flow-details.md's route call does not pass score="
         )
 
 
