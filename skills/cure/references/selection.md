@@ -98,3 +98,7 @@ When `/cure` is invoked with `--auto --stake <floor>`:
 - **After all selected findings are processed:** invoke `/age --scope <touched-paths> --auto` directly (no handoff gate). The pass-cap is enforced inside `/age --auto`, not here — cure keeps applying when called.
 
 `--auto` is not a verb the user should type interactively. It exists to make the `/cook --auto` chain coherent. If a user types `/cure --auto` directly without `--stake`, error out with a one-line message pointing them at standard interactive `/cure <slug>` — `--stake` is the contract for auto mode, and without it `/cure --auto` has no inclusion threshold. Do not prompt for a floor; do not silently fall back to interactive selection.
+
+## Older report shape
+
+Age reports older than the severity-rubric revision lack the `severity`, `location`, `fix-cost-now`, and `fix-cost-later` sub-fields on each finding. Tolerate the older shape: when a finding has no `severity` field, infer it from the section header (`## High-stake findings` → `high`, `## Medium-stake findings` → `medium`); when `fix-cost-now` is absent, the `cheap` selection verb resolves to the empty set (see `## Recognized selection verbs` above). Never reject a report for missing sub-fields; record any inference in the cure report under `### Notes`. Reports predating the per-finding `confidence:` label simply lack it; treat missing confidence as unspecified — no inference, no rejection.
