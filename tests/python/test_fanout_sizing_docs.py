@@ -28,9 +28,9 @@ DECOMPOSER_DOC = ROOT / "skills" / "cheese" / "references" / "decomposer.md"
 PACKET_DOC = ROOT / "skills" / "age" / "references" / "packet.md"
 MODE_PY = ROOT / "src" / "fanout" / "mode.py"
 CURD_BLOCK_PY = ROOT / "src" / "fanout" / "curd_block.py"
+AFFINAGE_FLOW_DETAILS_DOC = ROOT / "skills" / "affinage" / "references" / "flow-details.md"
 AGE_FAN_OUT_DOC = ROOT / "skills" / "age" / "references" / "fan-out.md"
 COOK_FAN_PATHWAY_DOC = ROOT / "skills" / "cook" / "references" / "fan-pathway.md"
-AFFINAGE_FLOW_DETAILS_DOC = ROOT / "skills" / "affinage" / "references" / "flow-details.md"
 
 WIKI_AGE_ROUTER = ROOT / ".hallouminate" / "wiki" / "architecture" / "age-fanout-router.md"
 WIKI_ADR_001 = ROOT / ".hallouminate" / "wiki" / "adr" / "deterministic-fanout-sizing-001.md"
@@ -93,7 +93,7 @@ class TestAgeLadder:
         )
 
     def test_age_skill_does_not_describe_old_1_4_10_ladder(self) -> None:
-        text = read(AGE_SKILL)
+        text = read(AGE_FAN_OUT_DOC)
         assert not re.search(r"\{\s*1\s*,\s*4\s*,\s*10\s*\}", text)
         assert "1/4/10" not in text
 
@@ -112,7 +112,7 @@ class TestAgeLadder:
         for group in age_route._LENS_TREE:
             pattern = r"\[\s*" + r"\s*,\s*".join(group) + r"\s*\]"
             assert re.search(pattern, text), (
-                f"age/SKILL.md does not name the lens grouping {group!r}"
+                f"age/references/fan-out.md does not name the lens grouping {group!r}"
             )
 
     def test_wiki_docs_do_not_describe_old_1_4_10_ladder(self) -> None:
@@ -209,19 +209,19 @@ class TestThresholdCodeDocsAgreement:
 
         age_text = read(AGE_FAN_OUT_DOC)
         assert f"<{age_route._SCORE_N2_FLOOR}" in age_text, (
-            f"age/SKILL.md does not quote the live _SCORE_N2_FLOOR "
+            f"age/references/fan-out.md does not quote the live _SCORE_N2_FLOOR "
             f"({age_route._SCORE_N2_FLOOR})"
         )
         assert f"{age_route._SCORE_N2_FLOOR}–{age_route._SCORE_N5_FLOOR}" in age_text, (
-            f"age/SKILL.md does not quote the live _SCORE_N2_FLOOR-_SCORE_N5_FLOOR "
+            f"age/references/fan-out.md does not quote the live _SCORE_N2_FLOOR-_SCORE_N5_FLOOR "
             f"band ({age_route._SCORE_N2_FLOOR}-{age_route._SCORE_N5_FLOOR})"
         )
         assert f">{age_route._SCORE_N5_FLOOR}" in age_text, (
-            f"age/SKILL.md does not quote the live _SCORE_N5_FLOOR "
+            f"age/references/fan-out.md does not quote the live _SCORE_N5_FLOOR "
             f"({age_route._SCORE_N5_FLOOR})"
         )
         assert str(age_route._HIGH_EFFORT_SCORE) in age_text, (
-            f"age/SKILL.md does not quote the live _HIGH_EFFORT_SCORE "
+            f"age/references/fan-out.md does not quote the live _HIGH_EFFORT_SCORE "
             f"({age_route._HIGH_EFFORT_SCORE})"
         )
 

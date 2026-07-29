@@ -125,7 +125,7 @@ Skips the selection gate. Resolves merge conflicts via `/melt` first (halt `stat
 
 ## References
 
-Affinage-local, each also routed inline above: `references/flow-details.md`, `references/merge-conflict.md`, `references/report-template.md`, `references/handoff-templates.md`, `references/auto-mode.md`. `references/sub-agent-gate.md` is `../age/references/sub-agent-gate.md` (shared, not affinage-local).
+Affinage-local, each also routed inline above: `references/flow-details.md`, `references/merge-conflict.md`, `references/report-template.md`, `references/handoff-templates.md`, `references/auto-mode.md`. `sub-agent-gate.md` is `../age/references/sub-agent-gate.md` (shared, not affinage-local).
 
 Scripts: `skills/affinage/scripts/affinage.pyz post-reply` (reply posting), `pr-status` (PR status fetcher).
 

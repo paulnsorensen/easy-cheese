@@ -6,7 +6,7 @@ Read this when rendering either handoff gate `SKILL.md` § Handoff describes —
 
 Lead with the recommended composite, then present the four severity-floor options below it, in the same most-inclusive-to-least order, so the gate is predictable across every run:
 
-- The five severity-floor options (recommended `all-medium, cheap`, then `all`, `all-medium`, `all-high`, `all-blocker`) are exactly age's — see [`../../age/SKILL.md`](../../age/SKILL.md) § Selection gate for their labels and semantics.
+- The five severity-floor options (recommended `all-medium, cheap`, then `all`, `all-medium`, `all-high`, `all-blocker`) are exactly age's — see [`../../age/references/handoff-detail.md`](../../age/references/handoff-detail.md) § Selection gate for their labels and semantics.
 
 Then offer the non-floor options last:
 
@@ -14,7 +14,7 @@ Then offer the non-floor options last:
 - **Resolve merge conflicts** *(offered only when the PR has conflicts)* — checkout + `/melt` per `merge-conflict.md`, then re-render this gate.
 - **Stop — leave the report for later** — equivalent to `none`.
 
-The "present all four severity options on every run, empty-set-resolves-to-`none`" rule is age's — see [`../../age/SKILL.md`](../../age/SKILL.md) § Selection gate.
+The "present all four severity options on every run, empty-set-resolves-to-`none`" rule is age's — see [`../../age/references/handoff-detail.md`](../../age/references/handoff-detail.md) § Selection gate.
 
 ## Reply-approval gate
 
