@@ -63,4 +63,4 @@ Auto-fixing the recommended set via `/cure`; drafted replies are held for the re
 
 Empty severity sections are omitted entirely. `## Needs-investigation` and `## Reviewer-rejected` are omitted when no items land there.
 
-Per-finding `confidence:` uses the voice-kernel scale (`../age/references/voice.md` § Reasoning posture): `certain` — the defect is verified by direct evidence (diff/code read, command output); `speculating` — inferred from indirect signal. A `don't know` grading never ships as a severity row — route it to `## Needs-investigation`.
+Per-finding `confidence:` uses the voice-kernel scale (`../../age/references/voice.md` § Reasoning posture): `certain` — the defect is verified by direct evidence (diff/code read, command output); `speculating` — inferred from indirect signal. A `don't know` grading never ships as a severity row — route it to `## Needs-investigation`.

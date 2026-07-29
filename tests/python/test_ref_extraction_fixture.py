@@ -14,3 +14,17 @@ def test_relative_reference_fixture_contract() -> None:
     assert len(cases) == 3, "fixture case count changed; update this guard alongside the fixture"
     for case in cases:
         assert relative_md_refs(case["text"]) == case["refs"], case["name"]
+
+
+def test_fenced_code_block_does_not_desync_backtick_pairing() -> None:
+    """A ``` fence is itself a run of backtick characters; if it isn't
+    stripped first, _BACKTICK_RE's positional pairing desyncs and every real
+    ref after the fence in the same document goes unreported."""
+    text = (
+        "# Doc\n"
+        "```python\n"
+        "x = `not a ref`\n"
+        "```\n"
+        "See `references/missing.md` for detail.\n"
+    )
+    assert relative_md_refs(text) == ["references/missing.md"]

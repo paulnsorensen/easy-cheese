@@ -27,6 +27,8 @@ direction (e.g. design items going straight to structured) still fails.
 
 from __future__ import annotations
 
+import os
+import re
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -45,6 +47,31 @@ def _section(text: str, heading: str) -> str:
     return text[start:] if end == -1 else text[start:end]
 
 
+_LINK_PATTERN = re.compile(r"\[[^\]]*\]\(([^)]+\.md)\)")
+
+
+def _widen(
+    section: str,
+    base_dir: Path,
+    skill_root: Path,
+    _seen: frozenset[Path] = frozenset(),
+) -> str:
+    # Follows markdown links out of `section`, recursing into each linked
+    # file's own links, and appends each followed file's content behind a
+    # `--- resolved reference: <normalized-path> ---` marker. Paths are
+    # normalized relative to `skill_root` so assertions can match the
+    # sibling-relative link text a nested reference file uses.
+    widened = section
+    for match in _LINK_PATTERN.finditer(section):
+        target = (base_dir / match.group(1)).resolve()
+        if target in _seen or not target.exists():
+            continue
+        normalized = os.path.relpath(target, skill_root.resolve())
+        linked = target.read_text(encoding="utf-8")
+        linked = _widen(linked, target.parent, skill_root, _seen | {target})
+        widened += f"\n--- resolved reference: {normalized} ---\n{linked}"
+    return widened
+
 def _gated_bullet(text: str) -> str:
     # Bounds the span to the single `gated:` sub-bullet of `--continue`
     # (not the whole section) so a classifier moved to a sibling bullet
@@ -52,7 +79,7 @@ def _gated_bullet(text: str) -> str:
     # notice the move.
     start_marker = "**When `status:` starts with `gated:`**"
     end_marker = "**When `next:` is a list**"
-    section = _section(text, "--continue")
+    section = _widen(_section(text, "--continue"), CHEESE.parent, CHEESE.parent)
     start = section.index(start_marker)
     end = section.index(end_marker, start)
     return section[start:end]
@@ -76,7 +103,7 @@ def test_cheese_skill_and_transport_reference_exist() -> None:
 def test_gated_branch_points_at_transport_reference_not_a_copy() -> None:
     # Rule 1: the gated branch links to the § When to structure chokepoint
     # rather than restating its definitions inline.
-    section = _section(_text(), "--continue")
+    section = _widen(_section(_text(), "--continue"), CHEESE.parent, CHEESE.parent)
     assert "references/ask-user-question.md" in section
     assert "When to structure" in section
 
@@ -85,7 +112,7 @@ def test_gated_branch_classifies_before_choosing_a_transport() -> None:
     # Rules 2-5: classification precedes the mechanical/design fork, mechanical
     # goes straight to structured, design re-establishes prose weighing first,
     # converges, then allows at most one structured confirm, and never bundles.
-    section = _section(_text(), "--continue")
+    section = _widen(_section(_text(), "--continue"), CHEESE.parent, CHEESE.parent)
     _assert_in_order(
         section,
         "ask the user which direction",
@@ -103,7 +130,7 @@ def test_gated_branch_classifies_before_choosing_a_transport() -> None:
 def test_design_item_definition_requires_session_context() -> None:
     # Rule 3: the design classification is pinned to "weighing not already
     # shown this session", not merely "a design decision exists".
-    section = _section(_text(), "--continue")
+    section = _widen(_section(_text(), "--continue"), CHEESE.parent, CHEESE.parent)
     _assert_in_order(
         section,
         "a design item",
@@ -116,7 +143,7 @@ def test_live_message_carve_out_still_precedes_the_classifier() -> None:
     # Rule 6 (regression pin for #303): directives/answers in the live message
     # still execute, and the gate still surfaces as one plain line, BEFORE the
     # classifier or the structured question is ever reached.
-    section = _section(_text(), "--continue")
+    section = _widen(_section(_text(), "--continue"), CHEESE.parent, CHEESE.parent)
     _assert_in_order(
         section,
         "starts with `gated:`",
