@@ -22,7 +22,9 @@ def _text(path: Path) -> str:
 def _section(path: Path, heading: str) -> str:
     body = _text(path)
     marker = f"## {heading}"
-    start = body.index(marker)
+    match = re.search(rf"(?m)^{re.escape(marker)}", body)
+    assert match, f"heading {marker!r} not found in {path}"
+    start = match.start()
     end = body.find("\n## ", start + len(marker))
     return body[start:] if end == -1 else body[start:end]
 
@@ -68,6 +70,9 @@ def test_candidate_collection_is_non_committing_dialogue_state() -> None:
         "every non-goal and explicit dialogue deferral",
         "follow-up candidate",
         "[FOLLOW-UP?]",
+    )
+    _assert_phrases(
+        HANDSHAKE,
         "within `Decided`",
         "does not create",
     )
@@ -199,23 +204,22 @@ def test_mold_handoff_waits_for_followup_reconciliation() -> None:
     flow = _section(MOLD, "Flow")
     _assert_in_order(
         flow,
-        "local artifacts and write-ahead prepared state",
+        "local artifact and write-ahead prepared state",
         "publishes approved follow-ups",
         "reconciles their state and references into the durable spec",
         "curd-count",
-        "handoff gate",
+        "## Handoff",
     )
 
     handoff = _section(MOLD, "Handoff")
     _assert_in_order(
         handoff,
-        "phase-two publication attempts",
-        "mechanical reconciliation",
+        "Curdle's phase two finishes",
         "curd-count",
         "shared handoff gate",
     )
 
-    followups = _section(MOLD, "Follow-up candidates")
+    followups = _section(HANDSHAKE, "Follow-up disposition (inside the non-goals audit)")
     _assert_in_order(
         followups,
         "after both keys pass",
@@ -238,7 +242,7 @@ def test_mold_decomposes_before_two_key_approval_and_persists_the_block() -> Non
     approval = _section(MOLD, "Approval gate")
     _assert_in_order(
         approval,
-        "fresh-context curd-block decomposer",
+        "validated curd block",
         "`N curds / M waves`",
         "both keys pass",
     )

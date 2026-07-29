@@ -107,6 +107,8 @@ Before the two-key handshake can pass, dispose of every follow-up candidate in o
 
 The user approves grouping, splitting, semantic-match reuse, destination, and any applicable action; Mold settles none silently. When no candidates exist, omit the disposition batch and preserve the current handshake and Curdle flow.
 
+Record each candidate within `Decided` as `[FOLLOW-UP?]` with its summary, source, and rationale. A follow-up candidate is dialogue state only — collecting one does not create an artifact or future commitment. After both keys pass, Curdle writes local artifacts first (including the same approved curd block), publishes approved follow-ups, and reconciles their state and references into the durable spec, and only then renders the implementation handoff.
+
 ## Entity-referent binding
 
 Before curdle, audit the draft for **identity/ownership-role nouns** — any noun the design treats as holding, owning, spanning, or claiming state or lifecycle (owner, run, session, claim-holder, coordinator, worker, lease, tenant, lock-holder, …). The trigger is the *role*, not a fixed word list: domain-specific identities are caught and plain value nouns (formats, algorithms, config knobs) are not flagged.
