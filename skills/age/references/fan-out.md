@@ -17,7 +17,7 @@ The returned `n` is the fan-out mode. The base ladder is `n ∈ {1, 2, 5}` from 
 
 Independently of the router's `n`, `/age` may still fork a read-only review-context sub-agent — preferably the `explorer` phase-agent — purely for evidence-gathering (not fan-out) when caller/dependency graph expansion from `tilth_deps` or the selected semantic caller search crosses multiple subsystems, especially for `--comprehensive` reviews. This is a separate, orthogonal dispatch from the `n`-way fan-out below.
 
-For the digest contract, harness-agnostic selection rules, and what the parent never delegates, see `references/sub-agent-gate.md`.
+For the digest contract, harness-agnostic selection rules, and what the parent never delegates, see `sub-agent-gate.md`.
 
 ## Lens fan-out mode (n>1)
 
@@ -32,7 +32,7 @@ The seam sequence below is identical for every `n>1` — only worker count and e
 
 **Seam 1 — Predicate.** As defined at the section opener above.
 
-**Seam 2 — Shared context packet.** The orchestrator assembles the packet once, writes it to `.cheese/age/<slug>-packet.md`, and each worker reads it. Eight components, and the reuse of the review-context digester as the orientation block, are documented in `references/packet.md`.
+**Seam 2 — Shared context packet.** The orchestrator assembles the packet once, writes it to `.cheese/age/<slug>-packet.md`, and each worker reads it. Eight components, and the reuse of the review-context digester as the orientation block, are documented in `packet.md`.
 
 **Seam 3 — Worker contract.** One worker per lens. Resolve the `reviewer` role through `../../cheese/references/agent-resolution.md` at the router's `effort` dial; require read-only permissions and fresh context, a prompt-constrained general fallback allowed only with `degraded: true`. Each worker:
 - Reviews every dimension in its assigned lens (a solo-lens worker reviews just that one dimension; a multi-dimension lens worker reviews all dimensions in its group, e.g. the `[correctness, spec, assertions]` worker reviews all three).
@@ -44,7 +44,7 @@ The seam sequence below is identical for every `n>1` — only worker count and e
 
 After all workers return, continue at Seam 4 (reconciliation) below.
 
-**Seam 4 — Orchestrator reconciliation.** After all workers return, apply the `## Dimension boundaries` table (`references/dimensions.md` § Dimension boundaries) verbatim to any line meeting EITHER condition: (1) flagged by two or more workers at the same `file:line`; (2) tagged `also-relevant-to: [d]` by any worker — the orchestrator re-evaluates dimension `d` against that line and applies the tiebreaker (keep the higher-base finding / suppress / emit-both-with-cross-reference per the 15 rules). This consumes the `also-relevant-to` signal and provides the cross-dimension coverage single-parent gets for free. Lines neither flagged by ≥2 workers nor tagged `also-relevant-to` need no reconciliation. Group by severity. The parent owns the canonical artifact. After reconciliation, continue at Seam 6 (verifier pass), then step 5 (write + print the report path) and `SKILL.md § Handoff` exactly as the single-parent path does.
+**Seam 4 — Orchestrator reconciliation.** After all workers return, apply the `## Dimension boundaries` table (`dimensions.md` § Dimension boundaries) verbatim to any line meeting EITHER condition: (1) flagged by two or more workers at the same `file:line`; (2) tagged `also-relevant-to: [d]` by any worker — the orchestrator re-evaluates dimension `d` against that line and applies the tiebreaker (keep the higher-base finding / suppress / emit-both-with-cross-reference per the 15 rules). This consumes the `also-relevant-to` signal and provides the cross-dimension coverage single-parent gets for free. Lines neither flagged by ≥2 workers nor tagged `also-relevant-to` need no reconciliation. Group by severity. The parent owns the canonical artifact. After reconciliation, continue at Seam 6 (verifier pass), then step 5 (write + print the report path) and `SKILL.md § Handoff` exactly as the single-parent path does.
 
 **Seam 5 — Shared impact evidence.** The packet carries the caller/dependency notes assembled through `tilth_deps` and the selected semantic caller search. Workers use that packet instead of rebuilding impact context independently.
 
