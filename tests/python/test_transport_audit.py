@@ -133,6 +133,12 @@ EXEMPT_SITES: list[tuple[str, str, str]] = [
         "not this pass",
     ),
     (
+        "skills/cure/references/auto-mode.md",
+        "the handoff gate",
+        "internal auto-mode mechanism note; cure/SKILL.md's own ask site "
+        "already routes through handoff-gate.md",
+    ),
+    (
         "skills/cure/references/selection.md",
         "invoke `/age --scope <touched-paths> --auto` directly (no handoff gate)",
         "internal auto-mode mechanism note; cure/SKILL.md's own ask site "

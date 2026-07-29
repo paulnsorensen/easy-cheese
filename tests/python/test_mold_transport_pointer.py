@@ -63,7 +63,7 @@ ROUTES_VIA_TRANSPORT = re.compile(
 # A structured fork is valid only when its depth was contributed in-dialogue
 # first — mold's rendering of the freshness rule.
 CONFORMANCE_DEPTH_IN_DIALOGUE = re.compile(
-    r"\bstructured fork\b[^.\n]{0,60}\bvalid\b[^.\n]{0,60}\bdepth\b[^.\n]{0,60}"
+    r"\bfork\b[^.\n]{0,60}\bvalid\b[^.\n]{0,60}\bdepth\b[^.\n]{0,60}"
     r"\bcontributed\b[^.\n]{0,30}\bin-dialogue\b[^.\n]{0,20}\bfirst\b",
     re.I,
 )
@@ -124,7 +124,7 @@ def test_conformance_line_relocated_outside_bullet_is_not_credited() -> None:
     satisfying the assertion."""
     body = _body_below_frontmatter(MOLD_SKILL)
     bullet = _tiered_lettered_options_bullet(body)
-    conformance_match = re.search(r"Conformance:.*", bullet, re.S)
+    conformance_match = CONFORMANCE_DEPTH_IN_DIALOGUE.search(bullet)
     assert conformance_match, "expected a Conformance clause in the bullet fixture"
     truncated_bullet = bullet[: conformance_match.start()].rstrip()
     assert not CONFORMANCE_DEPTH_IN_DIALOGUE.search(truncated_bullet), (

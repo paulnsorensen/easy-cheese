@@ -141,7 +141,11 @@ def test_ultracook_preflights_parallel_publication_before_commits() -> None:
 
 
 def test_cure_open_pr_dispatch_obeys_plate_policy() -> None:
-    cure = read("skills/cure/SKILL.md")
+    cure_dir = ROOT / "skills" / "cure"
+    cure = read("skills/cure/SKILL.md") + "".join(
+        (cure_dir / "references" / f"{name}.md").read_text()
+        for name in ("auto-mode", "selection", "post-pr-writeback")
+    )
     assert "explicit topology choices and obviously cohesive work proceed without asking" in cure
     assert "stack-sized or ambiguous work asks before commit or branch-layout mutation" in cure
 
