@@ -35,6 +35,13 @@ def read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def _cook_corpus() -> str:
+    """cook/SKILL.md plus its references/*.md, concatenated."""
+    parts = [read(COOK_SKILL)]
+    parts += [read(p) for p in sorted((COOK_SKILL.parent / "references").glob("*.md"))]
+    return "\n".join(parts)
+
+
 # ---------------------------------------------------------------------------
 # 1. Cross-doc policy drift: cook/SKILL.md's summary vs quality-gates.md
 # ---------------------------------------------------------------------------
@@ -69,17 +76,21 @@ class TestCookSkillMatchesQualityGatesDoc:
         )
 
     def test_load_bearing_phrases_appear_in_both_docs(self) -> None:
+        # cook/SKILL.md no longer restates the baseline policy verbatim; it
+        # links references/quality-gates.md (the canonical doc) instead. So
+        # the "two copies must not drift" premise from curd 2 is gone -- the
+        # canonical doc must still carry every phrase, and the pointer must
+        # still resolve.
         cook_body = read(COOK_SKILL)
         gates_body = read(QUALITY_GATES)
-        missing_from_cook = [p for p in LOAD_BEARING_PHRASES if p not in cook_body]
         missing_from_gates = [p for p in LOAD_BEARING_PHRASES if p not in gates_body]
-        assert not missing_from_cook, (
-            f"cook/SKILL.md is missing policy phrases present in quality-gates.md: "
-            f"{missing_from_cook}"
-        )
         assert not missing_from_gates, (
             f"quality-gates.md is missing policy phrases present in cook/SKILL.md: "
             f"{missing_from_gates}"
+        )
+        assert "references/quality-gates.md" in cook_body, (
+            "cook/SKILL.md must still link references/quality-gates.md as the "
+            "canonical policy source"
         )
 
 
@@ -92,10 +103,11 @@ class TestCookSkillMatchesQualityGatesDoc:
 class TestBaselineCaptureExampleDispatches:
     def test_skill_doc_names_the_documented_subcommand(self) -> None:
         # /ultracook retired to a stub; its `## Baseline capture` section
-        # (and the documented example) now live in cook/SKILL.md.
-        body = read(COOK_SKILL)
+        # (and the documented example) now live under cook's own corpus --
+        # SKILL.md or one of its references/*.md files.
+        body = _cook_corpus()
         assert "ultracook.pyz baseline" in body, (
-            "cook/SKILL.md's Baseline capture example must document the "
+            "cook's corpus (SKILL.md + references/*.md) must document the "
             "`ultracook.pyz baseline` invocation this test then verifies "
             "actually dispatches"
         )
@@ -186,9 +198,9 @@ class TestBaselineBlockShapeAgreesWithSchema:
 
 class TestCookWorktreeSubcommandDispatches:
     def test_cook_skill_documents_worktree_subcommand(self) -> None:
-        body = read(COOK_SKILL)
+        body = _cook_corpus()
         assert "cook.pyz worktree" in body, (
-            "cook/SKILL.md's repair-pathway bullet must document the "
+            "cook's corpus (SKILL.md + references/*.md) must document the "
             "`cook.pyz worktree` invocation this test then verifies actually dispatches"
         )
 

@@ -1,3 +1,8 @@
+---
+name: skill-authoring
+description: Codify the Iron Law, Red Flags, and Rationalization-table template that easy-cheese skills follow, plus the CSO description rule and size-budget checklist for authoring or revising a skill. Use when writing a new skill or SKILL.md, adding a discipline section, or reviewing an existing skill against easy-cheese's authoring conventions.
+---
+
 # Skill Authoring — easy-cheese conventions
 
 This document codifies the skill-authoring rules for easy-cheese, drawn from
@@ -32,26 +37,42 @@ all others based on these words alone? If not, the triggers are missing.
 ## Size budget
 
 Keep SKILL.md bodies lean. The goal is a body a model can read in one pass
-without losing the thread — not a hard line count.
+without losing the thread.
+
+**The budget: 3,600 estimated tokens** for the SKILL.md body (frontmatter
+excluded). At this repo's measured prose density that's roughly 150 lines,
+but tokens are the gated unit, not lines — line count misleads on dense
+prose: all 16 skills in this repo pass Anthropic's 500-line rule, while 8
+exceed our 3,600-token budget on the same bodies.
+
+**Enforcement:** CI runs this as a shrink-only ratchet —
+`.github/scripts/validate_skills.py`, baselines recorded in
+`.github/skill-budgets.json`, regenerated via `just update-skill-budgets`.
+A skill already over budget when the ratchet was introduced is grandfathered
+at its recorded value and may only shrink from there; a skill at or under
+budget must stay under 3,600.
+
+Anthropic's published Level-2 figures are 500 lines / under 5k tokens.
+easy-cheese deliberately sits tighter than that ceiling.
 
 **Practical budget:**
-- A SKILL.md body that fits on one screen (roughly 80-150 lines) stays
-  readable. Bodies beyond that almost always have prose that belongs in a
-  `references/` file instead.
 - Push satellite detail — step-by-step sub-protocols, reference tables,
   prompt templates, large examples — into named `references/*.md` files.
   The SKILL.md body points to them; it does not duplicate them.
 - The `references/` dir is the right home for: long rationalization tables,
   output format templates, detailed sub-protocol steps, graph conventions.
+- Splitting only helps if SKILL.md says *when* to read the reference file.
+  Reference files load only on an explicit link from the body — moving
+  prose into `references/` without a pointer just relocates the tokens off
+  the visible budget rather than deferring them from the model's read.
 
 **Smell test:** if the SKILL.md body has grown to the point where the Flow
 section is buried below a long Inputs section and three flag tables, it is
 time to factor.
 
-Note: Matt Pocock's skills repo enforces a hard \<100-line cap. easy-cheese
-skills carry more protocol prose by design (the `references/` progressive-
-disclosure model), so a hard cap is not appropriate here. The spirit of the
-budget — push detail out, keep the body scannable — applies.
+Provenance: the budget originated as an adaptation of Matt Pocock's
+\<100-line cap for his skills repo, and has since been restated in tokens
+against this repo's own measured prose density.
 
 ---
 
@@ -113,8 +134,11 @@ Before a skill ships, verify:
 - [ ] **Concrete examples.** At least one worked example exists — either
   inline or in a `references/` file.
 - [ ] **References one level deep.** The SKILL.md body points to
-  `references/*.md` files; those files do not point further into their own
-  sub-references. Two levels is the maximum depth.
+  `references/*.md` files; those files do not markdown-link further into their
+  own sub-references. A partial `head`-style read of a reference file would
+  silently miss the tail of a hidden second hop. A link to a reference file
+  that is itself linked from a SKILL.md is a lateral citation, not a second
+  hop, and passes.
 - [ ] **Discipline skills have the Iron Law section.** Any skill that enforces
   a gate or a loop carries the three-part template above.
 - [ ] **Dual-listed.** The skill's directory appears in the

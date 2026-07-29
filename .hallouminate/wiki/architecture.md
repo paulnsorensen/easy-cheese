@@ -46,6 +46,23 @@ shared helpers are self-contained at install time — invoked as
 cook, melt, mold, and ultracook; `build-pyz.yml` rebuilds them on
 every relevant push to `main`.
 
+
+
+The four-directory shape above is the *file layout*. Anthropic separately
+names three **load levels**, which is what actually costs context: Level 1
+metadata (frontmatter, always loaded for every installed skill, ~100
+tokens each), Level 2 instructions (the `SKILL.md` body, on trigger,
+target under 5k tokens), and Level 3+ resources (`references/`,
+`scripts/`, `assets/`, zero cost until accessed). Level 3 has no
+auto-discovery — a file the body never links is a file the model never
+reads.
+
+Deferring content into `references/` therefore only saves context when
+`SKILL.md` also states *when* to read the file; a bare split relocates
+the tokens rather than deferring them. Budgets, the measured state of
+this repo, and the CI ratchet live in
+[skill-size-budget](./skill-size-budget.md).
+
 ## The cheese pipeline
 
 The workflow skills compose into one pipeline, ordered
@@ -96,3 +113,7 @@ Durability is not the same axis as git-tracking
 for the classification rule and
 [workflow-invariants](./workflow-invariants.md) for where it sits among
 the other pipeline invariants.
+
+
+_Source: /briesearch on Agent Skill sizing (progressive-disclosure load levels) · Updated: 2026-07-27_
+

@@ -1,13 +1,13 @@
 ---
-name: pythonic
+name: python-authoring
 description: Write, edit, refactor, or review Python in easy-cheese with concise stdlib-first code, Python 3.12, self-contained .pyz packaging, and repository test and validation conventions. Use for Python changes under src/, shared/scripts/, scripts/, .github/scripts/, or tests/, especially when the user asks for Pythonic, succinct, de-slopped, dataclass-based, CLI, validator, or bundled-helper code.
 ---
 
-# Pythonic
+# Authoring Python
 
 Produce the smallest readable Python change that satisfies the request and matches easy-cheese.
 
-This is a repository-local skill. Keep it under `.agents/skills/pythonic/`; do not mirror it into the published `skills/` tree or add `agents/openai.yaml`.
+This is a repository-local skill. Keep it under `.agents/skills/python-authoring/`; do not mirror it into the published `skills/` tree or add `agents/openai.yaml`. Renaming this directory requires updating the matching `!.agents/skills/<dir>/` line in `.gitignore` — that path list is an allowlist, so a renamed dir without its own line is silently untracked.
 
 ## Work in this order
 

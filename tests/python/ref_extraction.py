@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import re
 
+_FENCE_RE = re.compile(r"(?m)^(`{3,})[^\n]*\n.*?^\1[ \t]*$", re.DOTALL)
 _MD_LINK_RE = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
 _BACKTICK_RE = re.compile(r"`([^`]+)`")
 _PROSE_REF_RE = re.compile(r"^(?:\.\./)+[\w./-]+\.md(?:#[\w-]+)?$|^references/[\w./-]+\.md(?:#[\w-]+)?$")
@@ -14,7 +15,14 @@ _PROSE_REF_RE = re.compile(r"^(?:\.\./)+[\w./-]+\.md(?:#[\w-]+)?$|^references/[\
 def relative_md_refs(text: str) -> list[str]:
     """Every relative markdown-link target and backticked relative-path prose
     ref in ``text``, with any `#fragment` (and ` § heading` prose suffix)
-    stripped."""
+    stripped.
+
+    Fenced code blocks are stripped first: a ``` fence is itself a run of
+    backtick characters, so leaving it in desyncs _BACKTICK_RE's positional
+    pairing for every backtick that follows in the file, silently dropping
+    real refs later in the same document.
+    """
+    text = _FENCE_RE.sub("", text)
     refs: list[str] = []
     for match in _MD_LINK_RE.finditer(text):
         target = match.group(1)

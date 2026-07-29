@@ -92,12 +92,11 @@ _MOVED_DOC_NAMES = (
     "handoff-gate",
     "harness-portability",
     "optional-plugins",
-    "skill-authoring",
 )
 
 
 def test_moved_cheese_kernel_docs_ship_with_zero_vendoring(staged: Path) -> None:
-    """The five shared docs move with the wholesale skills/ copy — no dedicated
+    """The four shared docs move with the wholesale skills/ copy — no dedicated
     vendoring step exists or is needed. Locks the ship location explicitly so a
     future denylist/exclude change to stage_release can't silently drop them
     while test_relative_refs_resolve_in_staged_tree stays green (that test only
