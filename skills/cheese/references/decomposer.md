@@ -24,8 +24,9 @@ decomposer: {source: mold | cook, model: <id>, prompt_version: <hash>}
   during design; the resulting curd block is embedded into the approved spec
   artifact.
 - **`/cook` fallback decompose gate** — when `/cook` receives an un-curded
-  task that sizes above the linear threshold, it runs the same decomposer
-  inline and gates on the resulting wave plan before implementing.
+  task that sizes above the linear threshold, it dispatches a fresh-context
+  decomposer sub-agent against the spec text and gates on the resulting wave
+  plan before implementing.
 
 Both producers must emit a block that satisfies the schema above verbatim —
 field names are locked and must not drift per-caller.

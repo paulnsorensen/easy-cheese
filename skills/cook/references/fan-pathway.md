@@ -47,6 +47,8 @@ This parity difference is deliberate: native curds self-verify (gates run once, 
 
 This is not the old 7-spawn linear `/ultracook` chain (`cook → press → age → cure → age → cure → age`, table `linear` in `src/fanout/phase_decision.py`) run verbatim — that table still backs the single-coder path's own `--auto` chain (`auto-mode.md`) — the fan pathway's own topology is the two tables above. The per-curd table can end early: a first age reporting `next: done` **clean-completes** the curd (`action=clean_complete`) and skips cure and the final age, because nothing has touched the tree since that review and the post-merge pass re-covers the merged diff anyway. The post-merge table never short-circuits on that signal — it is the last review before publication, so cure and final age always run, and only a final-age `next: done` is publishable; `next: cure` or a missing `next` halts.
 
+**Projected dispatch count.** The upper bound `/cook`'s decompose gate shows the user (`SKILL.md` § Fan pathway (c)) is derived from the two tables above: 1 seed `coder` + 5 × curds (the per-curd chain, shortened to 3 by a first-age `clean_complete`) + 4 (the post-merge chain) = `5 + 5 × curds`. Wiring dispatches are not counted — wiring rows live in the manifest, not the curd block, so they are unknown at gate time.
+
 ## Deterministic phase loop
 
 Between dispatches, `/cook`'s fan-pathway orchestrator decides the next action mechanically:

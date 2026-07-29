@@ -107,11 +107,12 @@ The three blast-radius branches — decomposable, non-decomposable high-blast-ra
 
 ## Agent resolution
 
-Resolve exploration and research delegates through [`../cheese/references/agent-resolution.md`](../cheese/references/agent-resolution.md).
+Resolve delegates through [`../cheese/references/agent-resolution.md`](../cheese/references/agent-resolution.md).
 
 | Work | Preferred types | Permissions/isolation | Minimum power | Effort | Fallback |
 | --- | --- | --- | --- | --- | --- |
 | Explore the codebase | explorer | read-only, fresh-context | default | medium | compatible explorer, then general |
 | Research external constraints | researcher | read-only, fresh-context | default | medium | compatible researcher, then general |
+| Decompose for approval | planner, general | read-only, fresh-context | powerful | high | compatible planner, then general |
 
 The canonical mold spec or mini-spec carries the shared `agent_resolution` block.
