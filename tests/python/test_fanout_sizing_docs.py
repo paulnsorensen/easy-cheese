@@ -30,6 +30,7 @@ MODE_PY = ROOT / "src" / "fanout" / "mode.py"
 CURD_BLOCK_PY = ROOT / "src" / "fanout" / "curd_block.py"
 AFFINAGE_FLOW_DETAILS_DOC = ROOT / "skills" / "affinage" / "references" / "flow-details.md"
 AGE_FAN_OUT_DOC = ROOT / "skills" / "age" / "references" / "fan-out.md"
+COOK_FAN_PATHWAY_DOC = ROOT / "skills" / "cook" / "references" / "fan-pathway.md"
 
 WIKI_AGE_ROUTER = ROOT / ".hallouminate" / "wiki" / "architecture" / "age-fanout-router.md"
 WIKI_ADR_001 = ROOT / ".hallouminate" / "wiki" / "adr" / "deterministic-fanout-sizing-001.md"
@@ -133,18 +134,18 @@ class TestAffinageRouteCall:
 
 class TestCookModeSelection:
     def test_documents_select_mode_from_score(self) -> None:
-        text = read(COOK_SKILL)
+        text = read(COOK_FAN_PATHWAY_DOC)
         assert "select_mode_from_score" in text
 
     def test_documents_both_linear_and_decompose_first(self) -> None:
-        text = read(COOK_SKILL)
+        text = read(COOK_FAN_PATHWAY_DOC)
         assert '"linear"' in text
         assert "decompose-first" in text
 
     def test_states_it_never_returns_parallel(self) -> None:
-        text = read(COOK_SKILL)
+        text = read(COOK_FAN_PATHWAY_DOC)
         assert re.search(r"never returns[^.]*parallel", text), (
-            "cook/SKILL.md does not state select_mode_from_score never returns parallel"
+            "cook/references/fan-pathway.md does not state select_mode_from_score never returns parallel"
         )
 
 
@@ -196,9 +197,9 @@ class TestThresholdCodeDocsAgreement:
         assert match, "src/fanout/mode.py no longer defines DECOMPOSE_FIRST_THRESHOLD"
         threshold = match.group(1)
 
-        cook_text = read(COOK_SKILL)
+        cook_text = read(COOK_FAN_PATHWAY_DOC)
         assert threshold in cook_text, (
-            f"cook/SKILL.md does not mention the live threshold {threshold}"
+            f"cook/references/fan-pathway.md does not mention the live threshold {threshold}"
         )
 
     def test_age_skill_router_ladder_matches_live_score_floors(self) -> None:
