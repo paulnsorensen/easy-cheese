@@ -23,6 +23,7 @@ A portable, harness-agnostic Agent Skills toolkit — self-contained `SKILL.md` 
 - [Skill layout](#skill-layout)
 - [Skills](#skills)
 - [Scope](#scope)
+- [Python package](#python-package)
 - [Optional tools](#optional-tools)
 - [Install](#install)
 - [Validate](#validate)
@@ -122,6 +123,16 @@ Easy-cheese is intentionally a small surface. What that means in practice:
 - **No repo-wide MCP requirement.** Workflow skills suggest tools (tilth, Context7, Tavily) but have host-native fallbacks. Source-code work follows the shared routing contract: prefer tilth when present, use equivalent native AST/LSP/anchored-edit backends when available, and report any precision loss from bounded fallbacks.
 - **One orchestrator skill, narrowly scoped.** `/cook` is the single implementation orchestrator: focused specs use its single-coder path, while approved file-disjoint curds use its fresh-context fan pathway. `/ultracook` is only a compatibility redirect to `/cook`. Harvest and `/plate` remain parent-owned; parallel curds use sequential same-worktree phase spawns and a terminal reviewer pass before publication.
 - **No automatic re-age loop in `/cure`.** The skill describes the protocol; the human runs the next `/age` when ready.
+
+## Python package
+
+The artifact contracts the skills read and write — run manifests, decompositions, curd blocks, PR plans — are published as `easy-cheese-schemas` on PyPI, so external tooling can produce and consume easy-cheese documents without reimplementing their field rules.
+
+```sh
+pip install easy-cheese-schemas
+```
+
+Stability policy, the `schema_version` contract, and the strictness tiers: [docs/easy-cheese-schemas.md](docs/easy-cheese-schemas.md).
 
 ## Optional tools
 
