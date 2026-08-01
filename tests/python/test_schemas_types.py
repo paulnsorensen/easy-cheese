@@ -150,8 +150,13 @@ PR_PLAN: dict[str, Any] = {
 
 
 def _without(payload: dict[str, Any], key: str) -> dict[str, Any]:
+    """Drop `key`; a dotted key reaches into a nested mapping."""
     stripped = deepcopy(payload)
-    del stripped[key]
+    *parents, leaf = key.split(".")
+    target = stripped
+    for parent in parents:
+        target = target[parent]
+    del target[leaf]
     return stripped
 
 
@@ -164,6 +169,12 @@ def _curd(slug: str, path: str) -> dict[str, Any]:
 
 ARTIFACTS = [
     pytest.param(RUN_MANIFEST, RunManifest, "phase", id="run-manifest"),
+    pytest.param(
+        RUN_MANIFEST,
+        RunManifest,
+        "agent_resolution.resolved",
+        id="run-manifest-nested",
+    ),
     pytest.param(DECOMPOSITION, Decomposition, "curds", id="decomposition"),
     pytest.param(CURD_BLOCK, CurdBlock, "decomposer", id="curd-block"),
     pytest.param(PR_PLAN, PrPlan, "groups", id="pr-plan"),
@@ -176,7 +187,7 @@ class TestArtifactRoundTrip:
         self, payload: dict[str, Any], cls: type, required_key: str
     ) -> None:
         result = load(deepcopy(payload), cls, strict=True)
-        assert result.problems == []
+        assert result.problems == ()
         assert isinstance(result.value, cls)
 
     @pytest.mark.parametrize(("payload", "cls", "required_key"), ARTIFACTS)
@@ -202,23 +213,132 @@ class TestRunManifestFields:
         payload["phase"] = "cheese_complete"
         result = load(payload, RunManifest, strict=True)
         assert result.value is None
-        assert any("phase" in problem for problem in result.problems)
+        assert result.problems == (
+            "RunManifest.phase must be valid: 'cheese_complete' is not a valid Phase",
+        )
 
     def test_review_context_rejects_a_short_tree_oid(self) -> None:
         payload = deepcopy(RUN_MANIFEST)
         payload["current_review"] = dict(REVIEW_CONTEXT, reviewed_tree_oid="abc123")
         result = load(payload, RunManifest, strict=True)
         assert result.value is None
-        assert any("reviewed_tree_oid" in problem for problem in result.problems)
+        assert result.problems == (
+            "RunManifest.current_review.reviewed_tree_oid must be exactly 40 or 64 "
+            "hexadecimal characters",
+        )
 
     def test_review_context_accepts_the_documented_shape(self) -> None:
         payload = deepcopy(RUN_MANIFEST)
         payload["current_review"] = deepcopy(REVIEW_CONTEXT)
         result = load(payload, RunManifest, strict=True)
-        assert result.problems == []
+        assert result.problems == ()
         assert result.value is not None
         assert result.value.current_review is not None
         assert result.value.current_review.scope == ["src/easy_cheese_schemas/"]
+
+
+class TestRunManifestCollectionRules:
+    """Rules over the whole collection: a manifest whose every field is valid can
+    still describe a run that cannot be dispatched."""
+
+    def test_two_curds_claiming_one_file_are_rejected(self) -> None:
+        payload = deepcopy(RUN_MANIFEST)
+        payload["curds"] = [deepcopy(CURD_RECORD), dict(deepcopy(CURD_RECORD), id=2)]
+        result = load(payload, RunManifest, strict=True)
+        assert result.value is None
+        assert result.problems == (
+            "RunManifest: file 'src/easy_cheese_schemas/manifest.py' appears in curd "
+            "1 and curd 2 -- curds must be file-disjoint (move shared content to "
+            "seed or wiring)",
+        )
+
+    def test_wiring_cycle_is_rejected(self) -> None:
+        """Wiring rows are applied in dependency order, so a cycle has no order."""
+        payload = deepcopy(RUN_MANIFEST)
+        payload["wiring"] = [
+            dict(WIRING_ROW, id="W1", depends_on=["W2"]),
+            dict(WIRING_ROW, id="W2", depends_on=["W1"]),
+        ]
+        result = load(payload, RunManifest, strict=True)
+        assert result.value is None
+        assert result.problems == ("RunManifest: wiring DAG has cycle: W1 -> W2 -> W1",)
+
+    def test_wiring_depending_on_an_unknown_row_is_rejected(self) -> None:
+        payload = deepcopy(RUN_MANIFEST)
+        payload["wiring"] = [dict(WIRING_ROW, id="W1", depends_on=["W9"])]
+        result = load(payload, RunManifest, strict=True)
+        assert result.value is None
+        assert result.problems == (
+            "RunManifest: wiring W1: depends_on references unknown id 'W9'",
+        )
+
+    def test_a_curd_id_dependency_is_not_a_wiring_dependency(self) -> None:
+        """Only W<n> ids name wiring rows; a curd id dependency is legitimate."""
+        payload = deepcopy(RUN_MANIFEST)
+        payload["wiring"] = [dict(WIRING_ROW, id="W1", depends_on=["1"])]
+        assert load(payload, RunManifest, strict=True).problems == ()
+
+    def test_a_nested_gap_is_attributed_to_its_full_path(self) -> None:
+        payload = deepcopy(RUN_MANIFEST)
+        del payload["agent_resolution"]["resolved"]
+        result = load(payload, RunManifest, strict=True)
+        assert result.value is None
+        assert result.problems == ("RunManifest.agent_resolution.resolved is required",)
+
+    def test_a_gap_inside_a_list_carries_its_1_based_index(self) -> None:
+        payload = deepcopy(RUN_MANIFEST)
+        second = {
+            key: value
+            for key, value in dict(deepcopy(CURD_RECORD), id=2).items()
+            if key != "files"
+        }
+        payload["curds"] = [deepcopy(CURD_RECORD), second]
+        result = load(payload, RunManifest, strict=True)
+        assert result.value is None
+        assert result.problems == ("RunManifest.curds[2].files is required",)
+
+
+class TestPrimitivesAreCheckedNotCoerced:
+    """cattrs coerces primitives by calling the type -- str(v), int(v), list(v).
+    A reader asking whether a document is trustworthy must not be handed a
+    repaired copy of an untrustworthy one, so each of these must be reported."""
+
+    def test_a_string_is_not_a_list_of_strings(self) -> None:
+        payload = deepcopy(RUN_MANIFEST)
+        payload["curds"][0]["files"] = "src/a.py"
+        result = load(payload, RunManifest, strict=True)
+        assert result.value is None
+        assert result.problems == ("RunManifest.curds[1].files must be a list, not str",)
+
+    def test_a_boolean_is_not_an_integer(self) -> None:
+        payload = deepcopy(RUN_MANIFEST)
+        payload["curds"][0]["retry_count"] = True
+        result = load(payload, RunManifest, strict=True)
+        assert result.value is None
+        assert result.problems == (
+            "RunManifest.curds[1].retry_count must be an integer, not bool",
+        )
+
+    def test_an_integer_is_not_a_string(self) -> None:
+        payload = dict(deepcopy(RUN_MANIFEST), slug=7)
+        result = load(payload, RunManifest, strict=True)
+        assert result.value is None
+        assert result.problems == ("RunManifest.slug must be a string, not int",)
+
+    def test_a_null_is_not_a_string(self) -> None:
+        payload = dict(deepcopy(RUN_MANIFEST), created=None)
+        result = load(payload, RunManifest, strict=True)
+        assert result.value is None
+        assert result.problems == ("RunManifest.created must be a string, not NoneType",)
+
+    def test_a_blank_string_is_not_a_behaviour(self) -> None:
+        payload = deepcopy(RUN_MANIFEST)
+        payload["curds"][0]["behavior"] = "   "
+        result = load(payload, RunManifest, strict=True)
+        assert result.value is None
+        assert result.problems == (
+            "RunManifest.curds[1].behavior must be a non-empty string",
+        )
 
 
 class TestCurdBlockInvariants:
@@ -229,8 +349,9 @@ class TestCurdBlockInvariants:
         payload["waves"] = [slugs]
         result = load(payload, CurdBlock, strict=True)
         assert result.value is None
-        assert any(
-            f"exceeding the max of {MAX_WAVE_SIZE}" in problem for problem in result.problems
+        assert result.problems == (
+            f"CurdBlock: waves[1] has {MAX_WAVE_SIZE + 1} slugs, exceeding the max "
+            f"of {MAX_WAVE_SIZE}",
         )
 
     def test_wave_at_the_cap_is_accepted(self) -> None:
@@ -238,26 +359,33 @@ class TestCurdBlockInvariants:
         slugs = [f"curd-{index}" for index in range(MAX_WAVE_SIZE)]
         payload["curds"] = [_curd(slug, f"src/{slug}.py") for slug in slugs]
         payload["waves"] = [slugs]
-        assert load(payload, CurdBlock, strict=True).problems == []
+        assert load(payload, CurdBlock, strict=True).problems == ()
 
     def test_wave_referencing_an_unknown_slug_is_rejected(self) -> None:
         payload = deepcopy(CURD_BLOCK)
         payload["waves"] = [["schema-types", "no-such-curd"]]
         result = load(payload, CurdBlock, strict=True)
         assert result.value is None
-        assert any("no-such-curd" in problem for problem in result.problems)
+        assert result.problems == (
+            "CurdBlock: waves[1] references unknown slug 'no-such-curd'",
+        )
 
     def test_curd_below_the_surface_floor_is_a_merge_candidate(self) -> None:
         payload = deepcopy(CURD_BLOCK)
         payload["curds"][0]["est_edit_lines"] = MIN_CURD_SURFACE - 1
         result = load(payload, CurdBlock, strict=True)
         assert result.value is None
-        assert any("MERGE CANDIDATE" in problem for problem in result.problems)
+        assert result.problems == (
+            "CurdBlock.curds[1].est_edit_lines must be valid: "
+            f"est_edit_lines={MIN_CURD_SURFACE - 1} is below the surface floor of "
+            f"{MIN_CURD_SURFACE} -- this curd is a MERGE CANDIDATE: merge it into a "
+            "sibling curd rather than dispatch a fresh coder for it",
+        )
 
     def test_curd_at_the_surface_floor_is_accepted(self) -> None:
         payload = deepcopy(CURD_BLOCK)
         payload["curds"][0]["est_edit_lines"] = MIN_CURD_SURFACE
-        assert load(payload, CurdBlock, strict=True).problems == []
+        assert load(payload, CurdBlock, strict=True).problems == ()
 
     def test_curds_sharing_a_file_are_rejected(self) -> None:
         payload = deepcopy(CURD_BLOCK)
@@ -266,16 +394,38 @@ class TestCurdBlockInvariants:
         payload["waves"] = [["first", "second"]]
         result = load(payload, CurdBlock, strict=True)
         assert result.value is None
-        assert any("pairwise disjoint" in problem for problem in result.problems)
+        assert result.problems == (
+            f"CurdBlock: file {shared!r} appears in curd 'first' and curd 'second' "
+            "-- curd files must be pairwise disjoint",
+        )
 
     def test_unknown_decomposer_source_is_rejected(self) -> None:
         payload = deepcopy(CURD_BLOCK)
         payload["decomposer"]["source"] = "vibes"
         result = load(payload, CurdBlock, strict=True)
         assert result.value is None
+        assert result.problems == (
+            "CurdBlock.decomposer.source must be valid: 'vibes' is not a valid "
+            "DecomposerSource",
+        )
 
 
 class TestDecompositionInvariants:
+    def test_curds_need_no_run_lifecycle_fields(self) -> None:
+        """A decomposition is written before any run exists, so it has no id,
+        status, or retry_count to give -- demanding them would make the type
+        unable to read the artifact src/fanout/validate_decomposition.py
+        accepts."""
+        pre_run = {
+            key: value
+            for key, value in deepcopy(CURD_RECORD).items()
+            if key not in ("id", "status", "retry_count")
+        }
+        result = load({"curds": [pre_run], "wiring": []}, Decomposition, strict=True)
+        assert result.problems == ()
+        assert result.value is not None
+        assert result.value.curds[0].behavior == CURD_RECORD["behavior"]
+
     def test_parallel_decomposition_rejects_overlapping_curd_files(self) -> None:
         shared = dict(CURD_RECORD, id=2, files=CURD_RECORD["files"])
         result = load(
@@ -284,12 +434,17 @@ class TestDecompositionInvariants:
             strict=True,
         )
         assert result.value is None
-        assert any("file-disjoint" in problem for problem in result.problems)
+        assert result.problems == (
+            "Decomposition: file 'src/easy_cheese_schemas/manifest.py' appears in "
+            "curd 1 and curd 2 -- curds must be file-disjoint (move shared content "
+            "to seed or wiring)",
+        )
 
     def test_empty_curds_is_rejected(self) -> None:
         result = load({"curds": [], "wiring": []}, Decomposition, strict=True)
         assert result.value is None
-        assert any("curds" in problem for problem in result.problems)
+        assert result.problems == ("Decomposition.curds must be valid: Length of "
+                                   "'curds' must be >= 1: 0",)
 
 
 class TestPrPlanInvariants:
@@ -298,14 +453,70 @@ class TestPrPlanInvariants:
         payload["groups"][0]["branch"] = "claude/pypi\nrm -rf /"
         result = load(payload, PrPlan, strict=True)
         assert result.value is None
-        assert any("branch" in problem for problem in result.problems)
+        assert result.problems == (
+            "PrPlan.groups[1].branch contains characters unsafe for a git ref",
+        )
 
     def test_commit_that_is_not_a_hex_sha_is_rejected(self) -> None:
         payload = deepcopy(PR_PLAN)
         payload["groups"][0]["commits"] = ["HEAD~1"]
         result = load(payload, PrPlan, strict=True)
         assert result.value is None
-        assert any("commits" in problem for problem in result.problems)
+        assert result.problems == (
+            "PrPlan.groups[1].commits must be valid: commits[1] must be a hex SHA "
+            "(7-40 hex chars); got 'HEAD~1'",
+        )
+
+    def test_two_groups_claiming_one_branch_are_rejected(self) -> None:
+        """Two pull requests pushing the same ref would race each other."""
+        group = deepcopy(PR_PLAN["groups"][0])
+        result = load(
+            {"shape": "orthogonal_flat", "groups": [group, deepcopy(group)]},
+            PrPlan,
+            strict=True,
+        )
+        assert result.value is None
+        assert result.problems == (
+            "PrPlan: branch 'claude/pypi' is claimed by two groups -- the two pull "
+            "requests would race the same ref",
+        )
+
+    def test_single_shape_with_two_groups_is_rejected(self) -> None:
+        group = deepcopy(PR_PLAN["groups"][0])
+        result = load(
+            {"shape": "single", "groups": [group, dict(group, branch="claude/other")]},
+            PrPlan,
+            strict=True,
+        )
+        assert result.value is None
+        assert result.problems == (
+            "PrPlan: single shape must contain exactly one group, not 2",
+        )
+
+    def test_orthogonal_flat_group_off_main_is_rejected(self) -> None:
+        """Orthogonal PRs are independent only while every one of them branches
+        from main; a group based elsewhere is a stack in disguise."""
+        group = dict(deepcopy(PR_PLAN["groups"][0]), base="develop")
+        result = load(
+            {"shape": "orthogonal_flat", "groups": [group]}, PrPlan, strict=True
+        )
+        assert result.value is None
+        assert result.problems == (
+            "PrPlan: groups[1].base must be main for orthogonal_flat",
+        )
+
+    def test_distinct_branches_off_main_are_accepted(self) -> None:
+        group = deepcopy(PR_PLAN["groups"][0])
+        result = load(
+            {
+                "shape": "orthogonal_flat",
+                "groups": [group, dict(group, branch="claude/other")],
+            },
+            PrPlan,
+            strict=True,
+        )
+        assert result.problems == ()
+        assert result.value is not None
 
 
 class TestReadinessParity:
@@ -381,13 +592,16 @@ class TestPublicSurface:
         for name in (
             "CurdBlock",
             "CurdRecord",
+            "DecomposedCurd",
             "Decomposition",
             "ManifestLoadError",
             "PrPlan",
             "Readiness",
             "RunManifest",
+            "STAMP_KEY",
             "WiringRow",
             "classify_readiness",
+            "classify_stamp",
             "parse_mapping",
         ):
             assert name in easy_cheese_schemas.__all__
@@ -405,3 +619,27 @@ class TestPublicSurface:
             "load",
         ):
             assert name in easy_cheese_schemas.__all__
+
+
+class TestVendoredDependencyProvenance:
+    """The schema types must exercise the vendored attrs/cattrs — the same trees
+    build_pyz stages into the bundles — not whatever the host has installed, and
+    not the second copy inside ultracook.pyz. Which one wins is decided by the
+    repo-root conftest binding them before any per-suite conftest prepends a
+    .pyz, so pin it here rather than trusting import order."""
+
+    def test_attrs_stack_resolves_to_the_vendored_trees(self) -> None:
+        import attr
+        import attrs
+        import cattrs
+
+        vendor = str(REPO_ROOT / "vendor")
+        for module in (attr, attrs, cattrs):
+            assert module.__file__ is not None
+            assert module.__file__.startswith(vendor), (module.__name__, module.__file__)
+
+    def test_vendored_attrs_matches_the_version_recorded_in_vendor_readme(self) -> None:
+        import attrs
+
+        readme = (REPO_ROOT / "vendor" / "README.md").read_text(encoding="utf-8")
+        assert f"| attrs | {attrs.__version__} |" in readme

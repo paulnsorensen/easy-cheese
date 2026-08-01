@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from enum import Enum
 
+__all__ = ["Readiness", "classify_readiness"]
 
 class Readiness(str, Enum):
     READY = "ready for /age"

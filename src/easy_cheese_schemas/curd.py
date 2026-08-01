@@ -22,6 +22,15 @@ from attrs import Attribute, define, field, validators
 MAX_WAVE_SIZE = 4
 MIN_CURD_SURFACE = 25
 
+__all__ = [
+    "MAX_WAVE_SIZE",
+    "MIN_CURD_SURFACE",
+    "CurdBlock",
+    "Decomposer",
+    "DecomposerSource",
+    "PlannedCurd",
+]
+
 
 class DecomposerSource(str, Enum):
     """Which gate produced the block."""

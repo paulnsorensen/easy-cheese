@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+__all__ = ["ManifestLoadError", "parse_mapping"]
 
 class ManifestLoadError(Exception):
     """Raised when a manifest-like document cannot be loaded as a mapping."""

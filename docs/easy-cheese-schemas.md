@@ -16,6 +16,20 @@ It is not the enforcement path — not yet. In v0.1 the types are **derived from
 
 Also not published: easy-cheese's corpus and layout assumptions (`paths.py`) and the findings report grammar. Those are repo-internal and stay unversioned on purpose.
 
+## Not enforced in v0.1
+
+The types check field shape and the collection invariants below, but a document that satisfies them can still be rejected by `src/fanout/validate_*.py`, which enforces cross-field rules these types do not yet carry. Structuring cleanly is therefore necessary, not sufficient. Do not read a clean `Loaded` as "easy-cheese will accept this".
+
+Enforced here: required fields and their types, enum membership, curd file-disjointness, wiring DAG acyclicity and unknown `W<n>` references, wave size and curd surface floors, and the PR-plan shape rules.
+
+Not enforced here, and checked only by the validators:
+
+- **`agent_resolution` consistency** — exactly one accepted attempt; the resolved agent matching that attempt; attempt and resolved power meeting the request's `minimum_power`; prompt-only permission enforcement implying `degraded` and a read-only request; an unknown resolved power implying `degraded`; a preferred-exact acceptance carrying a null `fallback_reason` (and a non-preferred one carrying a reason).
+- **Phase-dependent requirements** — `phase` of `post_review_complete` or `pr_publish_complete` requiring `current_review` / `post_review`.
+- **Curd lifecycle** — a curd with `status: completed` requiring `review_context`.
+
+These are the accepted derivation gap described above, not oversights, and they are retired when the validators migrate onto these types.
+
 ## Usage
 
 `load` structures a raw mapping into one of the artifact types. It never raises: it returns a `Loaded` carrying the value (or `None`), the payload's `provenance`, and every problem it found, in the same `where.key must be ...` format easy-cheese's validators emit.
@@ -45,14 +59,18 @@ print(lenient.value)
 ```
 
 ```text
-Provenance.CURRENT []
+Provenance.CURRENT ()
 PrGroup(branch='feat/publish', title='Publish the schemas package', base='main', commits=['9f2c1ab'], body=None, depends_on=[])
 Provenance.FUTURE feat/publish
-Provenance.CURRENT ['PrGroup.body must be present; using default', "PrGroup.depends_on must be valid: 'NoneType' object is not iterable"]
+Provenance.CURRENT ('PrGroup.body must be present; using default', 'PrGroup.depends_on must be a list, not NoneType')
 PrGroup(branch='feat/publish', title='Publish the schemas package', base='main', commits=['9f2c1ab'], body=None, depends_on=[])
 ```
 
-Problems accumulate; `load` reports every one it found in a single pass rather than stopping at the first, because the callers reporting them to a human need the whole list.
+Problems accumulate; `load` reports every one it found in a single pass rather than stopping at the first, because the callers reporting them to a human need the whole list. `problems` is a `tuple[str, ...]` — `Loaded` is frozen, and a mutable list on a frozen carrier is an invitation to edit the evidence.
+
+Values are not type-coerced. A `str` where a `list[str]` belongs is a problem, not eight one-character paths; `"no"` where a `bool` belongs is a problem, not `True`. Reading a document is how you find out whether to trust it, so this layer reports the mismatch rather than papering over it.
+
+One case returns a value *and* problems: a `schema_version` stamp that is not an integer is recorded as a problem and the payload is treated as `UNSTAMPED`, because an untrustworthy stamp is not a reason to discard an otherwise readable document. Callers that gate on `value is not None` should check `problems` too.
 
 ## The `schema_version` contract
 

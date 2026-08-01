@@ -83,33 +83,40 @@ class TestStrictMode:
             strict=True,
         )
         assert result.value == Widget(name="gouda", count=2, tags=["aged"])
-        assert result.problems == []
+        assert result.problems == ()
 
     def test_malformed_payload_reports_every_problem_without_raising(self) -> None:
+        # Accumulates every problem in one pass rather than stopping at the
+        # first, and names each one exactly — the format is the contract.
         result = load({"count": "not-a-number"}, Widget, strict=True)
         assert result.value is None
-        assert "Widget.name is required" in result.problems
-        assert any(p.startswith("Widget.count must be valid") for p in result.problems)
+        assert result.problems == (
+            "Widget.name is required",
+            "Widget.count must be an integer, not str",
+        )
 
     def test_missing_optional_field_is_not_a_problem(self) -> None:
         result = load({"name": "gouda"}, Widget, strict=True)
         assert result.value == Widget(name="gouda")
-        assert result.problems == []
+        assert result.problems == ()
 
 
 class TestLenientMode:
     def test_gaps_are_defaulted_and_recorded_one_per_field(self) -> None:
         result = load({"name": "gouda"}, Widget, strict=False)
         assert result.value == Widget(name="gouda", count=3, tags=[])
-        assert result.problems == [
+        assert result.problems == (
             "Widget.count must be present; using default",
             "Widget.tags must be present; using default",
-        ]
+        )
 
     def test_unstructurable_field_falls_back_to_its_default(self) -> None:
         result = load({"name": "gouda", "count": "not-a-number"}, Widget, strict=False)
         assert result.value == Widget(name="gouda", count=3, tags=[])
-        assert any(p.startswith("Widget.count must be valid") for p in result.problems)
+        assert result.problems == (
+            "Widget.tags must be present; using default",
+            "Widget.count must be an integer, not str",
+        )
 
     def test_missing_required_field_reports_and_yields_no_value(self) -> None:
         result = load({}, Widget, strict=False)
@@ -133,7 +140,33 @@ class TestFutureStamp:
         assert result.provenance is Provenance.FUTURE
         assert result.value == Widget(name="gouda", count=2, tags=[])
         assert not hasattr(result.value, "rennet")
-        assert result.problems == []
+        assert result.problems == ()
+
+
+class TestLoadNeverRaises:
+    """`load` states the invariant unconditionally, so the hostile inputs that
+    reach it from a corpus document must come back as problems, not tracebacks."""
+
+    def test_non_attrs_class_is_reported_not_raised(self) -> None:
+        result = load({"a": 1}, dict, strict=False)
+        assert result.value is None
+        assert result.problems == ("dict is not a schema type",)
+
+    def test_non_mapping_payload_is_reported_not_raised(self) -> None:
+        result = load([1], Widget, strict=True)
+        assert result.value is None
+        assert result.problems == ("Widget must be a mapping, not list",)
+
+    def test_non_integer_stamp_keeps_the_value_and_records_the_problem(self) -> None:
+        # A stamp you cannot trust is not a reason to discard a readable
+        # document, so the value survives and provenance degrades to UNSTAMPED.
+        result = load({STAMP_KEY: "one", "name": "gouda"}, Widget, strict=True)
+        assert result.value == Widget(name="gouda")
+        assert result.provenance is Provenance.UNSTAMPED
+        assert result.problems == ("Widget.schema_version must be an integer",)
+
+    def test_bool_stamp_is_not_mistaken_for_version_one(self) -> None:
+        assert classify_stamp(True) is not Provenance.CURRENT
 
 
 class TestLoadedShape:

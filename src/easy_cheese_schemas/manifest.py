@@ -7,14 +7,17 @@ it. These types carry the shape src/fanout/validate_manifest.py enforces today,
 with each field's rule attached to the field rather than restated at every
 reader.
 
-The curd record here is the *run-manifest* entity (id / status / retry_count).
-It is a different concept from the spec-level curd block in `curd.py`, and the
-two deliberately do not share field names or types.
+The curd record here is the *run-manifest* entity: the decomposed curd plus
+its dispatch lifecycle (id / status / retry_count). It is a different concept
+from the spec-level curd block in `curd.py`, and the two deliberately do not
+share field names or types.
 """
 
 from __future__ import annotations
 
+import graphlib
 import re
+from collections.abc import Sequence
 from enum import Enum
 from typing import Any
 
@@ -37,6 +40,44 @@ _TWO_VERB_AND = re.compile(
     re.IGNORECASE,
 )
 _COMMAND_CHAIN = ("&&", "||", ";")
+
+# Exactly one number governs the linear/parallel split (src/fanout/mode.py).
+# It lives here rather than in decomposition.py because the run manifest owns
+# the same curd collection and enforces the same rule over it.
+PARALLEL_THRESHOLD = 2
+
+__all__ = [
+    "PARALLEL_THRESHOLD",
+    "AgentAttempt",
+    "AgentRequest",
+    "AgentResolution",
+    "AttemptResult",
+    "Baseline",
+    "BaselineGate",
+    "CurdRecord",
+    "DecomposedCurd",
+    "Effort",
+    "GateFailure",
+    "Isolation",
+    "PermissionEnforcement",
+    "Permissions",
+    "Phase",
+    "PlateLayout",
+    "PostReview",
+    "Power",
+    "RepairDispatch",
+    "ResolvedAgent",
+    "ResolvedPower",
+    "ReviewContext",
+    "RunManifest",
+    "Seed",
+    "SeedItem",
+    "SeedStatus",
+    "Topology",
+    "WiringRow",
+    "WiringType",
+    "WorkStatus",
+]
 
 
 class Phase(str, Enum):
@@ -193,6 +234,49 @@ def _single_command(instance: object, attribute: Attribute[Any], value: object) 
         )
 
 
+def reject_shared_curd_files(curds: Sequence[DecomposedCurd]) -> None:
+    """Two curds that can touch the same file cannot fan out in parallel.
+
+    A run-manifest curd is named by its `id`; a decomposition curd has no id
+    until a run exists, so it is named by its 1-based position.
+    """
+    owner: dict[str, object] = {}
+    for position, curd in enumerate(curds, start=1):
+        name = getattr(curd, "id", position)
+        for path in curd.files:
+            if path in owner:
+                raise ValueError(
+                    f"file {path!r} appears in curd {owner[path]} and curd "
+                    f"{name} -- curds must be file-disjoint (move shared "
+                    "content to seed or wiring)"
+                )
+            owner[path] = name
+
+
+def reject_unschedulable_wiring(wiring: Sequence[WiringRow]) -> None:
+    """Wiring rows are applied in dependency order, so the graph must be
+    acyclic and every W<n> dependency must exist. Dependencies outside the
+    wiring set -- typically curd ids -- are legitimate and ignored, matching
+    src/fanout/wiring.py."""
+    ids = {row.id for row in wiring}
+    errors = [
+        f"wiring {row.id}: depends_on references unknown id {dependency!r}"
+        for row in wiring
+        for dependency in row.depends_on
+        if _WIRING_ID_RE.match(dependency) and dependency not in ids
+    ]
+    sorter: graphlib.TopologicalSorter[str] = graphlib.TopologicalSorter()
+    for row in wiring:
+        sorter.add(row.id, *(d for d in row.depends_on if d in ids))
+    try:
+        sorter.prepare()
+    except graphlib.CycleError as exc:
+        path = " -> ".join(str(node) for node in exc.args[1])
+        errors.append(f"wiring DAG has cycle: {path}")
+    if errors:
+        raise ValueError("; ".join(errors))
+
+
 @define(frozen=True)
 class ReviewContext:
     """Exactly what a reviewer looked at, pinned so a later reader can prove a
@@ -221,15 +305,28 @@ class Seed:
 
 
 @define(frozen=True)
-class CurdRecord:
-    """A curd as the run manifest tracks it: one behaviour, one test target,
-    a disjoint file allowlist, and its dispatch lifecycle."""
+class DecomposedCurd:
+    """A curd as a decomposition describes it: one behaviour, one acceptance
+    criterion, one test target, and the files it may touch.
 
-    id: int = field(validator=validators.ge(1))
+    A decomposition is written before any run exists, so it carries no dispatch
+    lifecycle. src/fanout/curd.py draws the same line -- `behaviour_errors`
+    runs at every pipeline stage, `lifecycle_errors` (id / status /
+    retry_count) only for a run manifest.
+    """
+
     behavior: str = field(validator=_one_behaviour)
     acceptance_criterion: str = field(validator=_non_empty_string)
     files: list[str] = field(validator=_non_empty_string_list)
     test_target: str = field(validator=_single_command)
+
+
+@define(frozen=True)
+class CurdRecord(DecomposedCurd):
+    """A decomposed curd once a run manifest is tracking its dispatch: the same
+    content plus the lifecycle state a `--resume` reads."""
+
+    id: int = field(validator=validators.ge(1))
     status: WorkStatus
     # One retry, never more: a second failure is a decomposition problem, not a
     # flake.
@@ -375,3 +472,10 @@ class RunManifest:
     pr_plan: PrPlan | None = None
     phase_summary: str | None = None
     carry_forward: list[str] = field(factory=list, validator=_string_list)
+
+    def __attrs_post_init__(self) -> None:
+        # The collection rules the fan-out validator ends with: a manifest that
+        # passes every field rule can still describe an undispatchable run.
+        if len(self.curds) >= PARALLEL_THRESHOLD:
+            reject_shared_curd_files(self.curds)
+        reject_unschedulable_wiring(self.wiring)

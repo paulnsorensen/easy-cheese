@@ -21,6 +21,8 @@ BRANCH_RE = re.compile(r"^[A-Za-z0-9._/-]+$")
 # before SHA prefixes. Full SHA-1 is 40 hex chars.
 COMMIT_SHA_RE = re.compile(r"^[0-9a-fA-F]{7,40}$")
 
+__all__ = ["PrGroup", "PrPlan", "PrShape"]
+
 
 class PrShape(str, Enum):
     """Topology of the PR set a run publishes."""
@@ -82,3 +84,30 @@ class PrPlan:
 
     shape: PrShape
     groups: list[PrGroup] = field(validator=validators.min_len(1))
+
+    def __attrs_post_init__(self) -> None:
+        self._reject_duplicate_branches()
+        self._reject_shape_mismatch()
+
+    def _reject_duplicate_branches(self) -> None:
+        seen: set[str] = set()
+        for group in self.groups:
+            if group.branch in seen:
+                raise ValueError(
+                    f"branch {group.branch!r} is claimed by two groups -- the "
+                    "two pull requests would race the same ref"
+                )
+            seen.add(group.branch)
+
+    def _reject_shape_mismatch(self) -> None:
+        if self.shape is PrShape.SINGLE and len(self.groups) != 1:
+            raise ValueError(
+                f"single shape must contain exactly one group, not "
+                f"{len(self.groups)}"
+            )
+        if self.shape is PrShape.ORTHOGONAL_FLAT:
+            for index, group in enumerate(self.groups, start=1):
+                if group.base != "main":
+                    raise ValueError(
+                        f"groups[{index}].base must be main for orthogonal_flat"
+                    )

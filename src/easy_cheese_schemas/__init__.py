@@ -12,8 +12,10 @@ from __future__ import annotations
 from easy_cheese_schemas.compat import (
     MIN_READABLE,
     SCHEMA_VERSION,
+    STAMP_KEY,
     Loaded,
     Provenance,
+    classify_stamp,
     load,
 )
 from easy_cheese_schemas.curd import (
@@ -24,7 +26,11 @@ from easy_cheese_schemas.curd import (
     DecomposerSource,
     PlannedCurd,
 )
-from easy_cheese_schemas.decomposition import PARALLEL_THRESHOLD, Decomposition
+from easy_cheese_schemas.decomposition import (
+    PARALLEL_THRESHOLD,
+    DecomposedCurd,
+    Decomposition,
+)
 from easy_cheese_schemas.gates import Readiness, classify_readiness
 from easy_cheese_schemas.io import ManifestLoadError, parse_mapping
 from easy_cheese_schemas.manifest import (
@@ -67,6 +73,7 @@ __all__ = [
     "MIN_READABLE",
     "PARALLEL_THRESHOLD",
     "SCHEMA_VERSION",
+    "STAMP_KEY",
     "AgentAttempt",
     "AgentRequest",
     "AgentResolution",
@@ -75,6 +82,7 @@ __all__ = [
     "BaselineGate",
     "CurdBlock",
     "CurdRecord",
+    "DecomposedCurd",
     "Decomposer",
     "DecomposerSource",
     "Decomposition",
@@ -109,6 +117,7 @@ __all__ = [
     "WorkStatus",
     "__version__",
     "classify_readiness",
+    "classify_stamp",
     "load",
     "parse_mapping",
 ]

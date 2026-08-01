@@ -17,3 +17,11 @@ for _path in (REPO_ROOT / "src", REPO_ROOT / "vendor"):
     entry = str(_path)
     if entry not in sys.path:
         sys.path.insert(0, entry)
+
+# Bind the vendored dependencies now, while this path is still the only source.
+# The per-suite conftests prepend built .pyz bundles, and ultracook.pyz vendors
+# its own attr/ — without this, which copy the schema types exercise would
+# depend on which suite is running. tests/python/test_schemas_types.py guards it.
+import attr  # noqa: E402, F401
+import attrs  # noqa: E402, F401
+import cattrs  # noqa: E402, F401

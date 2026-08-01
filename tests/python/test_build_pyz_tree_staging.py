@@ -81,7 +81,7 @@ def test_schemas_stack_imports_and_round_trips_from_inside_the_zip(ultracook_pyz
         "    ecs.PrGroup,\n"
         "    strict=True,\n"
         ")\n"
-        "assert loaded.problems == [], loaded.problems\n"
+        "assert loaded.problems == (), loaded.problems\n"
         "assert loaded.provenance is ecs.Provenance.CURRENT\n"
         "assert loaded.value.branch == 'claude/pypi'\n"
         "assert loaded.value.commits == ['abc1234']\n"
