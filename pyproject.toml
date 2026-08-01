@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "easy-cheese-schemas"
+version = "0.1.0"
+description = "Shared document and manifest schemas for the easy-cheese agent workflow, with schema-version tolerance."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [{ name = "Paul Sorensen", email = "paulnsorensen@gmail.com" }]
+keywords = ["schema", "cattrs", "agents", "easy-cheese"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Software Development :: Libraries",
+]
+dependencies = ["attrs>=25.4.0", "cattrs>=26.1.0"]
+
+[project.urls]
+Homepage = "https://github.com/paulnsorensen/easy-cheese"
+Repository = "https://github.com/paulnsorensen/easy-cheese"
+Issues = "https://github.com/paulnsorensen/easy-cheese/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/easy_cheese_schemas"]
