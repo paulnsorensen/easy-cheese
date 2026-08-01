@@ -1,0 +1,6 @@
+phase: affinage
+next:
+  - cure
+  - done
+  - hold
+payload: {}

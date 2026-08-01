@@ -10,6 +10,7 @@ from pathlib import Path
 from types import ModuleType
 
 import pytest
+import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SHARED_SCRIPTS = REPO_ROOT / "shared" / "scripts"
@@ -31,9 +32,7 @@ def handoff_cli_mod() -> ModuleType:
 
 def _run(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, str(HANDOFF_CLI), *args],
-        capture_output=True,
-        text=True,
+        [sys.executable, str(HANDOFF_CLI), *args], capture_output=True, text=True
     )
 
 
@@ -196,6 +195,59 @@ class TestJsonMode:
         payload = json.loads(result.stdout)
         assert payload["next_skill"] == "cure"
         assert payload["artifact"] is None
+
+
+class TestEnvelope:
+    def test_yaml_frontmatter_round_trips(self, tmp_path: Path) -> None:
+        artifact = tmp_path / "handoff.md"
+        envelope = {
+            "contract_version": "cheese-handoff/v1",
+            "work_id": "wk_test",
+            "attempt_id": "wa_test",
+            "operation_id": "op_test",
+            "phase": "press",
+            "status": "ok",
+            "halt_reason": None,
+            "next": "age",
+            "artifact": str(artifact),
+            "payload": {"baseline": "abc123"},
+            "provenance": {"source": "press"},
+        }
+        rendered = _run(
+            "envelope-render", "--envelope", json.dumps(envelope), "--body", "# Report"
+        )
+        assert rendered.returncode == 0, rendered.stderr
+        frontmatter = rendered.stdout.removeprefix("---\n").split("\n---\n", 1)[0]
+        assert yaml.safe_load(frontmatter) == envelope
+        artifact.write_text(rendered.stdout, encoding="utf-8")
+
+        parsed = _run("envelope-parse", "--file", str(artifact))
+        assert parsed.returncode == 0, parsed.stderr
+        assert json.loads(parsed.stdout) == envelope
+
+    def test_parse_rejects_declared_path_mismatch(self, tmp_path: Path) -> None:
+        declared = tmp_path / "declared.md"
+        loaded = tmp_path / "loaded.md"
+        envelope = {
+            "contract_version": "cheese-handoff/v1",
+            "work_id": "wk_test",
+            "attempt_id": "wa_test",
+            "operation_id": "op_test",
+            "phase": "press",
+            "status": "ok",
+            "halt_reason": None,
+            "next": "age",
+            "artifact": str(declared),
+            "payload": {},
+            "provenance": {},
+        }
+        rendered = _run("envelope-render", "--envelope", json.dumps(envelope))
+        assert rendered.returncode == 0, rendered.stderr
+        loaded.write_text(rendered.stdout, encoding="utf-8")
+
+        parsed = _run("envelope-parse", "--file", str(loaded))
+        assert parsed.returncode == 2
+        assert "artifact path mismatch" in parsed.stderr
 
 
 class TestArgparse:

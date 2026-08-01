@@ -14,6 +14,7 @@ shell out for the canonical preamble logic without re-implementing it.
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
 import cli
@@ -77,6 +78,39 @@ def _cmd_dispatch(args: argparse.Namespace) -> None:
     cli.emit({"skill": skill, "args": dispatch_args})
 
 
+def _cmd_envelope_parse(args: argparse.Namespace) -> None:
+    path = Path(args.file)
+    if not path.is_file():
+        raise cli.CliError(f"file not found: {args.file}")
+    try:
+        envelope = handoff.parse_handoff(path.read_text(encoding="utf-8"), path)
+    except handoff.HandoffParseError as exc:
+        raise cli.CliError(str(exc)) from exc
+    cli.emit(envelope.as_mapping(), json_mode=True)
+
+
+def _contract_paths(pattern: str) -> list[Path]:
+    """Phase contracts from the nearest enclosing repo checkout.
+
+    Anchored on the working directory, not this module: inside a bundled .pyz
+    there is no repo layout around the module to walk up from. Fails loudly
+    rather than compiling an empty registry, which would validate nothing.
+    """
+    for root in (Path.cwd(), *Path.cwd().parents):
+        if paths := sorted(root.glob(pattern)):
+            return paths
+    raise cli.CliError(f"no phase contracts matched {pattern!r} under {Path.cwd()} or its parents")
+
+
+def _cmd_envelope_render(args: argparse.Namespace) -> None:
+    try:
+        contracts = handoff.assemble_transition_registry(_contract_paths(args.contracts_glob))
+        envelope = handoff.HandoffEnvelope.from_mapping(json.loads(args.envelope))
+        print(handoff.render_handoff(envelope, args.body, contracts=contracts))
+    except ValueError as exc:
+        raise cli.CliError(str(exc)) from exc
+
+
 def _setup(parser: argparse.ArgumentParser) -> None:
     parser.description = "Render, parse, and dispatch handoff preambles."
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -97,6 +131,20 @@ def _setup(parser: argparse.ArgumentParser) -> None:
     dispatch = sub.add_parser("dispatch", help="split a '/skill arg --flag' command")
     dispatch.add_argument("command", help="full dispatch string, e.g. '/age slug --hard'")
     dispatch.set_defaults(func=_cmd_dispatch)
+
+    envelope_parse = sub.add_parser("envelope-parse", help="parse a versioned JSON envelope")
+    envelope_parse.add_argument("--file", required=True)
+    envelope_parse.set_defaults(func=_cmd_envelope_parse)
+
+    envelope_render = sub.add_parser("envelope-render", help="render a versioned JSON envelope")
+    envelope_render.add_argument("--envelope", required=True, help="JSON envelope mapping")
+    envelope_render.add_argument("--body", default="")
+    envelope_render.add_argument(
+        "--contracts-glob",
+        default="skills/*/references/handoff-contract.yaml",
+        help="glob (relative to repo root) of phase contract YAML files",
+    )
+    envelope_render.set_defaults(func=_cmd_envelope_render)
 
 
 if __name__ == "__main__":

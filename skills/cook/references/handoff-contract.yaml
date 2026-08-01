@@ -1,0 +1,18 @@
+phase: cook
+next:
+  - mold
+  - cook
+  - press
+  - age
+  - done
+  - hold
+payload:
+  taste_test:
+    type: string
+    required: false
+  durable_flags:
+    type: string
+    required: false
+  baseline:
+    type: string
+    required: false

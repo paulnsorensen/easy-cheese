@@ -1,0 +1,15 @@
+phase: age
+next:
+  - cure
+  - done
+  - hold
+payload:
+  durable_flags:
+    type: string
+    required: false
+  baseline:
+    type: string
+    required: false
+  press_skipped:
+    type: boolean
+    required: false

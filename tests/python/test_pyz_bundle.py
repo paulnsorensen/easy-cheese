@@ -519,6 +519,30 @@ def test_common_bundle_carries_clis_plus_libs_not_skill_scripts(bundles: Path) -
     assert "validate_manifest.py" not in content
 
 
+@pytest.mark.parametrize("skill", ["age", "cure", "ultracook"])
+def test_committed_common_bundle_runs_without_site_packages(skill: str, tmp_path: Path) -> None:
+    """Every committed common.pyz must import cleanly with no ambient packages.
+
+    A module-scope `import yaml` in shared/scripts/handoff.py leaks into these
+    bundles, which vendor no yaml -- so `python3 -S -E` dies with
+    ModuleNotFoundError before argparse runs, breaking even the legacy
+    preamble paths that never parse YAML. Spec acceptance:
+    .hallouminate/wiki/specs/cross-skill-work-contract.md:315.
+    """
+    pyz = REPO_ROOT / "skills" / skill / "scripts" / "common.pyz"
+    assert pyz.exists(), f"committed bundle missing: {pyz}"
+    result = subprocess.run(
+        [sys.executable, "-S", "-E", str(pyz),
+         "read_handoff_slug", "--phase", "age", "--slug", "nope"],
+        cwd=str(tmp_path),
+        capture_output=True,
+        text=True,
+    )
+    combined = result.stdout + result.stderr
+    assert "ModuleNotFoundError" not in combined, combined
+    assert "artifact not found" in combined, combined
+
+
 def test_unknown_skill_name_still_errors() -> None:
     """build_pyz.py must exit non-zero for truly unknown skill names."""
     result = subprocess.run(
