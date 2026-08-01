@@ -2,6 +2,7 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import mermaid from 'astro-mermaid';
+import { cheeselordTheme } from '@cheeselord/design/starlight';
 import { sidebar } from './src/sidebar.mjs';
 
 export default defineConfig({
@@ -17,6 +18,7 @@ export default defineConfig({
     }),
     starlight({
       title: 'easy-cheese',
+      plugins: [cheeselordTheme({ flavor: 'easy-cheese' })],
       description:
         'Harness-agnostic Agent Skills (agentskills.io) — the cheese-making pipeline that ages raw curds into shippable wheels of code.',
       logo: {

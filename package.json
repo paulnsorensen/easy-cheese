@@ -12,6 +12,7 @@
   },
   "devDependencies": {
     "@astrojs/starlight": "^0.41.3",
+    "@cheeselord/design": "^0.1.0",
     "astro": "^7.1.0",
     "astro-mermaid": "^2.1.0",
     "mermaid": "^11.6.0",
