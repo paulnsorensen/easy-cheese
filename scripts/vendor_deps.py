@@ -51,10 +51,18 @@ def pinned_versions() -> dict[str, str]:
 
 
 def is_current() -> bool:
-    """True when vendor/ was built from the lock file as it stands now."""
-    if not STAMP.is_file():
+    """True when vendor/ holds every pinned distribution at its pinned version.
+
+    The stamp alone is not enough: it is ignored by git, so checking out a
+    branch that predates this layout deletes the tracked trees around it and
+    leaves a stamp vouching for an empty directory.
+    """
+    if not STAMP.is_file() or STAMP.read_text(encoding="utf-8").strip() != lock_digest():
         return False
-    return STAMP.read_text(encoding="utf-8").strip() == lock_digest()
+    return all(
+        (VENDOR_ROOT / f"{name}-{version}.dist-info").is_dir()
+        for name, version in pinned_versions().items()
+    )
 
 
 def require_populated(consumer: str) -> None:
