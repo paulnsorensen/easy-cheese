@@ -7,6 +7,7 @@ whatever the document claims, and the digest covers every other byte.
 
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 from typing import Any
 
@@ -220,15 +221,44 @@ def test_a_caller_cannot_hand_build_an_ok_projection_over_a_gate(
     assert "status" not in records.unstructure(built)
 
 
-def test_the_runtime_never_reaches_for_git() -> None:
-    sources = sorted(SRC.glob("*.py"))
-    assert [path.name for path in sources] == [
-        "canonical.py",
-        "projection.py",
-        "records.py",
-        "storage.py",
-    ]
-    for path in sources:
+# The spec reports durability as canonical-local, repo-snapshot, or published
+# and never commits or publishes; resolution, though, must read git to find a
+# sibling worktree's legacy note and to confirm a declared object resolves. So
+# the invariant is not "no git" but "no git that changes anything": read-only
+# inspection is allowed from an allowlist, and every mutating verb is banned
+# across the whole package, including modules added after this was written.
+READ_ONLY_GIT = {
+    ("git", "cat-file", "-e"),
+    ("git", "worktree", "list", "--porcelain"),
+}
+MUTATING_GIT = ("commit", "push", "add", "checkout", "reset", "rm", "tag", "merge")
+
+
+def test_the_runtime_never_reaches_for_a_git_mutation() -> None:
+    for path in sorted(SRC.glob("*.py")):
         text = path.read_text(encoding="utf-8")
-        assert "subprocess" not in text, path.name
-        assert "git " not in text.replace("# ", ""), path.name
+        for verb in MUTATING_GIT:
+            assert f'"git", "{verb}"' not in text, f"{path.name} mutates git: {verb}"
+            assert f"'git', '{verb}'" not in text, f"{path.name} mutates git: {verb}"
+        assert "git commit" not in text, path.name
+        assert "git push" not in text, path.name
+
+
+def test_every_git_invocation_in_the_runtime_is_on_the_read_only_allowlist() -> None:
+    """A new module cannot quietly add a git call: the argv literal has to be
+    named here, and the only two named are inspections."""
+    found: set[tuple[str, ...]] = set()
+    for path in sorted(SRC.glob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.List, ast.Tuple)):
+                continue
+            if not all(isinstance(e, ast.Constant) and isinstance(e.value, str) for e in node.elts):
+                continue
+            argv = tuple(e.value for e in node.elts)  # type: ignore[attr-defined]
+            if argv and argv[0] == "git":
+                found.add(argv[: len(argv) if argv[-1] != "-e" else 3])
+
+    unexpected = {argv for argv in found if argv[:3] not in {a[:3] for a in READ_ONLY_GIT}}
+    assert unexpected == set(), f"git argv not on the read-only allowlist: {unexpected}"
+    assert found, "expected the resolution path to inspect git"
