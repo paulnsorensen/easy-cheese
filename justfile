@@ -14,7 +14,7 @@ export PYTEST_DISABLE_PLUGIN_AUTOLOAD := "1"
 vendor:
     python3 scripts/vendor_deps.py
 
-# Run all tests (skill validators + melt + shared + fan-out suites + bash install tests + fan-out bats + JS)
+# Run all tests (skill validators + melt + shared + fan-out + wheypoint suites + bash + JS)
 test: vendor
     python3 .github/scripts/test_validate_skills.py -v
     python3 .github/scripts/test_validate_wiki.py
@@ -26,6 +26,7 @@ test: vendor
     python3 -m pytest tests/schemas/python -q
     python3 -m pytest tests/hard-cheese/python -q
     python3 -m pytest tests/pasteurize/python -q
+    python3 -m pytest tests/wheypoint/python -q
     node --test 'tests/js/**/*.test.mjs'
     bats tests/bash/test_install.bats
     bats tests/fanout/bash/test_pr_plan_to_branches.bats

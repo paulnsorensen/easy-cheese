@@ -33,6 +33,7 @@ import cattrs
 from attrs import define, field
 from cattrs.cols import list_structure_factory
 from cattrs.errors import AttributeValidationNote, IterableValidationNote
+from cattrs.gen import make_dict_structure_fn
 
 SCHEMA_VERSION = 1
 MIN_READABLE = 1  # N-1 tolerance; widens as the schema evolves
@@ -92,6 +93,21 @@ def _guarded_list(type_: Any, converter: cattrs.BaseConverter) -> Any:
     return hook
 
 
+def _guarded_class(type_: Any, converter: cattrs.BaseConverter) -> Any:
+    """cattrs asks ``field_name in obj`` before reading a field, so a *string*
+    payload answers with a substring test: every field name it does not happen
+    to contain reads as absent, and a class whose fields all have defaults
+    structures cleanly out of arbitrary text. Require an actual mapping first."""
+    structure = make_dict_structure_fn(type_, converter)
+
+    def hook(value: object, _type: Any = type_) -> Any:
+        if not isinstance(value, Mapping):
+            raise TypeError(f"must be an object, not {type(value).__name__}")
+        return structure(value, _type)
+
+    return hook
+
+
 # Default converter semantics: unknown keys are ignored, which is exactly what
 # a FUTURE-stamped payload needs.
 _converter = cattrs.Converter()
@@ -99,6 +115,7 @@ _converter.register_structure_hook(str, _exact(str, "a string"))
 _converter.register_structure_hook(bool, _exact(bool, "a boolean", boolean=True))
 _converter.register_structure_hook(int, _exact(int, "an integer"))
 _converter.register_structure_hook(float, _exact((int, float), "a number"))
+_converter.register_structure_hook_factory(attrs.has, _guarded_class)
 _converter.register_structure_hook_factory(
     lambda type_: get_origin(type_) is list, _guarded_list
 )

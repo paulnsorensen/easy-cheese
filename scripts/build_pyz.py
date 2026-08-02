@@ -71,6 +71,14 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
         "ground-check": "ground_check.py",
     },
     "cook": {"artifact-path": Shared("artifact_path.py"), "worktree": Shared("worktree.py")},
+    # All four subcommands are one module: wheypoint.py reads the subcommand off
+    # argv[0], the way hallouminate_setup.py already does for global|local|doctor.
+    "wheypoint": {
+        "commit": "wheypoint.py",
+        "resolve": "wheypoint.py",
+        "show": "wheypoint.py",
+        "lint": "wheypoint.py",
+    },
     "easy-cheese-setup": {
         "global": Shared("hallouminate_setup.py"),
         "local": Shared("hallouminate_setup.py"),
@@ -140,6 +148,9 @@ EXTRA_MODULES: dict[str, list[tuple[str, str]]] = {
 # Staging half a megabyte into every other bundle would be dead weight.
 PACKAGE_TREES: dict[str, list[Path]] = {
     "ultracook": [SRC_ROOT / "easy_cheese_schemas"],
+    # wheypoint's whole runtime is typed against the Wheypoint schemas, so it is
+    # the second real consumer rather than a bundle carrying dead weight.
+    "wheypoint": [SRC_ROOT / "easy_cheese_schemas"],
 }
 
 # Bundles that also carry easy_cheese_schemas' runtime deps -- attrs/cattrs are
@@ -149,7 +160,7 @@ PACKAGE_TREES: dict[str, list[Path]] = {
 # Read off the generated tree rather than listed by version here: a Dependabot
 # bump to requirements-vendor.txt changes the .dist-info directory names, and a
 # hard-coded list would turn every such PR into a build failure.
-VENDORED_DEP_BUNDLES = ("ultracook",)
+VENDORED_DEP_BUNDLES = ("ultracook", "wheypoint")
 
 
 def vendored_dep_trees() -> list[Path]:
