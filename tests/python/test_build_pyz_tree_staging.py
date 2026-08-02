@@ -99,6 +99,67 @@ def test_attrs_version_resolves_from_bundled_dist_info(ultracook_pyz: Path) -> N
     assert result.stdout.strip() == "26.1.0"
 
 
+@pytest.fixture(scope="module")
+def wheypoint_pyz(tmp_path_factory) -> Path:
+    out = tmp_path_factory.mktemp("tree-staging-wheypoint")
+    return build_pyz.build_bundle("wheypoint", out / "wheypoint.pyz")
+
+
+def test_the_wheypoint_bundle_carries_its_whole_runtime(wheypoint_pyz: Path) -> None:
+    """The continuity runtime is eight sibling modules plus two shared ones, all
+    reached through build_pyz's import scanner rather than a hand-kept list. A
+    module dropped from the scan would only surface as an ImportError at resume
+    time, which is the one moment the user cannot afford one."""
+    names = set(zipfile.ZipFile(wheypoint_pyz).namelist())
+    for module in (
+        "canonical.py",
+        "commit.py",
+        "legacy.py",
+        "lint.py",
+        "projection.py",
+        "records.py",
+        "resolve.py",
+        "storage.py",
+        "wheypoint.py",
+    ):
+        assert module in names, module
+    # The shared library it reuses rather than reimplements.
+    assert "paths.py" in names
+    assert "handoff.py" in names
+    # Schemas and vendored deps ride along, nested, exactly as for ultracook.
+    assert "easy_cheese_schemas/wheypoint.py" in names
+    assert "attr/_make.py" in names
+    assert "cattrs/converters.py" in names
+    assert "attrs-26.1.0.dist-info/METADATA" in names
+    assert not any(name.startswith("__pycache__") or "/__pycache__/" in name for name in names)
+
+
+def test_the_wheypoint_runtime_imports_from_inside_the_zip(wheypoint_pyz: Path) -> None:
+    """Acceptance: the bundle runs under -S with no ambient site packages. Every
+    module must resolve out of the archive, not the developer's checkout."""
+    result = _run_isolated(
+        wheypoint_pyz,
+        "import commit, resolve, lint, storage, projection, records, canonical\n"
+        "import easy_cheese_schemas as ecs\n"
+        "for mod in (commit, resolve, lint, storage, ecs):\n"
+        "    assert mod.__file__.startswith(sys.path[0]), (mod.__name__, mod.__file__)\n"
+        "assert commit.GENESIS_PARENT == 'genesis'\n"
+        "assert ecs.WheypointRecord is not None\n"
+        "print('ok')\n",
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout.strip() == "ok"
+
+
+def test_the_wheypoint_bundle_is_deterministic(tmp_path) -> None:
+    """Byte-equality against the committed artifact is CI's job (check_bundles.py
+    compares member CRCs, because zlib builds differ). What is verifiable
+    anywhere is that two builds of one source tree agree."""
+    first = build_pyz.build_bundle("wheypoint", tmp_path / "a.pyz")
+    second = build_pyz.build_bundle("wheypoint", tmp_path / "b.pyz")
+    assert first.read_bytes() == second.read_bytes()
+
+
 def test_tree_staging_stays_byte_deterministic(tmp_path: Path) -> None:
     """CI rebuilds every committed bundle and byte-compares it, so walking a
     nested tree must not leak filesystem ordering or mtimes into the archive."""

@@ -27,6 +27,12 @@ names -- which is what makes replay recognisable at all.
 Omission carries forward. A delta field left `None` means "unchanged", and the
 additive fields only ever add, so no protected entry, artifact link, or dossier
 fork can leave the record without an `EntryTransition` naming it.
+
+A delta whose `expected_revision_id` is `GENESIS_PARENT` is the one request with
+nothing to carry forward from: it *creates* the first record for a work id. It
+must therefore supply the semantic context itself, and it is refused outright
+once a record exists -- creation over a live record is exactly the erasure the
+carry-forward rules above exist to prevent.
 """
 
 from __future__ import annotations
@@ -48,6 +54,7 @@ from easy_cheese_schemas import (
 )
 
 import canonical
+import paths
 import projection as projection_mod
 import records
 import storage
@@ -57,6 +64,11 @@ import storage
 # which receipt quoted it. This placeholder holds that field open in between.
 _UNPINNED_DIGEST = f"{canonical.DIGEST_PREFIX}{'0' * 64}"
 _ID_HEX = 12
+# The parent a delta names when it is asking for the *first* record. Every
+# derived revision id is `rev-<12 hex>` (see `_revision_id`), so this sentinel
+# lives outside that namespace by construction: no hash can produce it, and no
+# real parent can be mistaken for it.
+GENESIS_PARENT = "genesis"
 _KIND_PREFIX = {
     EntryKind.DECISION: "d",
     EntryKind.QUESTION: "q",
@@ -84,6 +96,16 @@ class StaleParentError(CommitError):
     Distinct from the rest because it is the one failure a caller can act on:
     re-read the record, rebuild the delta against the revision that won, and
     submit again.
+    """
+
+
+class GenesisConflictError(CommitError):
+    """A genesis delta arrived for work that already has a record.
+
+    Also actionable, and the more dangerous of the two: creating from scratch
+    over a live record would drop every protected entry it carries, which is
+    precisely what this kernel exists to make impossible. The caller re-reads
+    the record and submits against its current revision instead.
     """
 
 
@@ -116,13 +138,28 @@ def commit(
             f"delta names work {delta.work_id!r} but the store holds "
             f"{store.work_id!r}"
         )
+    fingerprint = records.request_fingerprint(delta)
     with store.lock():
         current = store.read_record()
+        if delta.expected_revision_id == GENESIS_PARENT:
+            if current is not None:
+                raise GenesisConflictError(
+                    f"work {store.work_id!r} already holds revision "
+                    f"{current.revision_id!r}: a genesis delta creates the first "
+                    "record and never replaces a live one"
+                )
+            return _genesis(
+                store,
+                delta,
+                fingerprint=fingerprint,
+                repository=repository,
+                durability=durability,
+            )
         if current is None:
             raise CommitError(
-                f"work {store.work_id!r} has no record to apply a delta to"
+                f"work {store.work_id!r} has no record to apply a delta to; "
+                f"a first delta must name {GENESIS_PARENT!r} as its parent"
             )
-        fingerprint = records.request_fingerprint(delta)
         replay = _find_replay(store, delta, fingerprint)
         if replay is not None:
             return _replayed(store, replay, current)
@@ -295,23 +332,142 @@ def _apply(
         kept=kept,
         additions=additions,
     )
+    return _finish(
+        store,
+        delta,
+        draft,
+        parent_revision_id=current.revision_id,
+        fingerprint=fingerprint,
+        additions=[entry for kind in _ADDITION_FIELDS for entry in additions[kind]],
+        transitions=transitions,
+        preserved=preserved,
+        repository=repository,
+        durability=durability,
+    )
+
+
+def _genesis(
+    store: storage.WorkStore,
+    delta: WheypointDelta,
+    *,
+    fingerprint: str,
+    repository: RepositoryProvenance,
+    durability: Durability,
+) -> CommitResult:
+    """The first record for a work id, built from the delta alone.
+
+    There is no parent to carry anything forward from, so everything a record
+    needs has to be in the request: the semantic context it replaces, and the
+    provenance that names when it was captured. `project_key` is the one
+    exception -- it identifies the corpus the record is being written into, so
+    it is read from the environment that owns it rather than accepted from a
+    caller who could claim another project's identity.
+    """
+    missing = [
+        name
+        for name in ("orientation", "working_context", "next_action")
+        if getattr(delta, name) is None
+    ]
+    if missing:
+        raise CommitError(
+            "a genesis delta has no parent to carry state from, so it must "
+            f"carry {', '.join(missing)}"
+        )
+    if delta.compacted:
+        raise CommitError(
+            "a genesis delta cannot declare compaction: there is no current "
+            "revision to rehydrate from"
+        )
+    if delta.transitions:
+        raise CommitError("a genesis delta has no existing entries to transition")
+    created = (
+        delta.session_provenance.captured_at
+        if delta.session_provenance is not None
+        else None
+    )
+    if created is None:
+        raise CommitError(
+            "a genesis delta must carry session_provenance.captured_at: the "
+            "runtime derives the record's created time rather than reading a clock"
+        )
+
+    additions = {kind: _additions(delta, kind) for kind in _ADDITION_FIELDS}
+    revision_id = _revision_id(delta, fingerprint)
+    try:
+        draft = WheypointRecord(
+            schema_version=SCHEMA_VERSION,
+            work_id=store.work_id,
+            # A genesis record answers to its own work id: the runtime invents no
+            # second name for work whose caller has not given it one.
+            slug=store.work_id,
+            title=_title(delta.orientation or ""),
+            created=created,
+            project_key=paths.project_key(),
+            revision_id=revision_id,
+            revision_number=1,
+            revision_digest=_UNPINNED_DIGEST,
+            orientation=delta.orientation or "",
+            working_context=list(delta.working_context or []),
+            next_action=delta.next_action,
+            decisions=additions[EntryKind.DECISION],
+            questions=additions[EntryKind.QUESTION],
+            blockers=additions[EntryKind.BLOCKER],
+            artifact_links=list(delta.add_artifact_links or []),
+            decision_dossier=list(delta.decision_dossier or []),
+        )
+    except ValueError as exc:
+        raise CommitError(f"the delta does not produce a legal record: {exc}") from exc
+
+    return _finish(
+        store,
+        delta,
+        draft,
+        parent_revision_id=None,
+        fingerprint=fingerprint,
+        additions=[entry for kind in _ADDITION_FIELDS for entry in additions[kind]],
+        transitions=[],
+        preserved=[],
+        repository=repository,
+        durability=durability,
+    )
+
+
+def _title(orientation: str) -> str:
+    """The record's readable name: the first line of what the delta oriented on."""
+    return orientation.strip().splitlines()[0].strip()
+
+
+def _finish(
+    store: storage.WorkStore,
+    delta: WheypointDelta,
+    draft: WheypointRecord,
+    *,
+    parent_revision_id: str | None,
+    fingerprint: str,
+    additions: list[ProtectedEntry],
+    transitions: list[EntryTransition],
+    preserved: list[str],
+    repository: RepositoryProvenance,
+    durability: Durability,
+) -> CommitResult:
+    """Render the draft, write its receipt, and promote the triple."""
     projected, markdown = projection_mod.build_projection(
         draft, durability=durability
     )
     revision = WheypointRevision(
         schema_version=SCHEMA_VERSION,
         work_id=store.work_id,
-        parent_revision_id=current.revision_id,
-        revision_id=revision_id,
-        revision_number=number,
+        parent_revision_id=parent_revision_id,
+        revision_id=draft.revision_id,
+        revision_number=draft.revision_number,
         request_digest=fingerprint,
         record_digest=records.record_digest(draft),
-        applied_additions=[
-            entry for kind in _ADDITION_FIELDS for entry in additions[kind]
-        ],
+        applied_additions=additions,
         applied_transitions=transitions,
         preserved_entry_ids=preserved,
-        projection_path=store.relative_projection_path(number, revision_id),
+        projection_path=store.relative_projection_path(
+            draft.revision_number, draft.revision_id
+        ),
         projection_digest=projected.projection_digest,
         repository=repository,
         rehydrated_from_revision_id=delta.rehydrated_from_revision_id,
@@ -326,7 +482,6 @@ def _apply(
         markdown=markdown,
         replayed=False,
     )
-
 
 
 def _draft_record(

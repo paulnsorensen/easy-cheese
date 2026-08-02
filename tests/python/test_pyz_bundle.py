@@ -46,6 +46,7 @@ SKILL_SUBCOMMANDS = {
     "mold": ["artifact-path", "curd-count", "gate-graph", "render_html"],
     "briesearch": ["artifact-path", "ground-check"],
     "cook": ["artifact-path"],
+    "wheypoint": ["commit", "resolve", "show", "lint"],
     "age": ["html-report"],
     "hard-cheese": ["append-attempt", "freshness-check"],
     "pasteurize": ["debug-tag-sweep", "repro-rerun", "pasteurize-route"],

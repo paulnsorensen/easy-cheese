@@ -17,6 +17,8 @@ from easy_cheese_schemas import (
     EntryKind,
     EntryState,
     EntryTransition,
+    NextAction,
+    NextMove,
     ProposedEntry,
     ProtectedEntry,
     SessionProvenance,
@@ -547,3 +549,204 @@ def test_an_explicitly_emptied_field_replaces_while_an_omitted_one_carries(
         _delta(carried.record.revision_id, working_context=[]), store=store
     )
     assert emptied.record.working_context == []
+
+
+GENESIS_CAPTURED_AT = "2026-08-02T00:00:00Z"
+
+
+def _projection_files(store: storage.WorkStore) -> list[str]:
+    return sorted(path.name for path in store.projections_dir.glob("*.md"))
+
+
+def _genesis_delta(**overrides: object) -> WheypointDelta:
+    fields: dict[str, object] = {
+        "orientation": "Genesis orientation.\nA second line the title drops.",
+        "working_context": ["src/wheypoint/commit.py"],
+        "next_action": NextAction(
+            move=NextMove.COOK,
+            orientation="Write the wheypoint CLI.",
+            artifact=".cheese/cook/wheypoint-pyz-cli.md",
+        ),
+        "session_provenance": SessionProvenance(captured_at=GENESIS_CAPTURED_AT),
+    }
+    fields.update(overrides)
+    return _delta(commit.GENESIS_PARENT, **fields)
+
+
+def test_genesis_creates_the_first_record_when_the_store_is_empty(
+    store: storage.WorkStore,
+) -> None:
+    assert store.read_record() is None
+
+    result = commit.commit(
+        _genesis_delta(
+            add_decisions=[
+                ProposedEntry(kind=EntryKind.DECISION, summary="Genesis is a commit.")
+            ]
+        ),
+        store=store,
+    )
+
+    record = result.record
+    assert result.replayed is False
+    assert record.revision_number == 1
+    assert result.revision.revision_number == 1
+    assert result.revision.parent_revision_id is None
+    assert record.work_id == WORK_ID
+    # A genesis record answers to its own work id and takes its title from the
+    # first line of the orientation it was given.
+    assert record.slug == WORK_ID
+    assert record.title == "Genesis orientation."
+    assert record.created == GENESIS_CAPTURED_AT
+    assert record.project_key == "paulnsorensen-easy-cheese"
+    assert record.orientation == "Genesis orientation.\nA second line the title drops."
+    assert record.working_context == ["src/wheypoint/commit.py"]
+    assert [entry.summary for entry in record.decisions] == ["Genesis is a commit."]
+    assert result.revision.applied_additions == list(record.decisions)
+    assert result.revision.preserved_entry_ids == []
+    assert result.revision.applied_transitions == []
+
+    revision_id = result.revision.revision_id
+    assert record.revision_id == revision_id
+    assert re.fullmatch(r"rev-[0-9a-f]{12}", revision_id)
+    assert _revision_files(store) == [f"1-{revision_id}.json"]
+    assert _projection_files(store) == [f"1-{revision_id}.md"]
+    assert store.read_record() == record
+    assert store.read_revision(1, revision_id) == result.revision
+    assert store.recover().problems == ()
+
+
+def test_a_genesis_delta_against_a_live_record_promotes_nothing(
+    store: storage.WorkStore, make_promotion: Callable[..., Promotion]
+) -> None:
+    """The anti-wipe guard: creation over a live record would drop every
+    protected entry it carries, so it is refused before anything is written."""
+    seed = _seed(store, make_promotion, gating=True)
+    before_record = store.record_path.read_bytes()
+    before_revisions = _revision_files(store)
+    before_projections = _projection_files(store)
+
+    with pytest.raises(commit.GenesisConflictError) as raised:
+        commit.commit(_genesis_delta(), store=store)
+
+    assert seed.record.revision_id in str(raised.value)
+    assert store.record_path.read_bytes() == before_record
+    assert _revision_files(store) == before_revisions
+    assert _projection_files(store) == before_projections
+    assert store.read_record() == seed.record
+
+
+def test_a_first_delta_against_an_empty_store_must_name_genesis(
+    store: storage.WorkStore,
+) -> None:
+    with pytest.raises(commit.CommitError, match="'genesis'"):
+        commit.commit(
+            _delta("rev-000000000001", orientation="There is no parent yet."),
+            store=store,
+        )
+
+    assert store.read_record() is None
+    assert not store.revisions_dir.exists()
+
+
+def test_a_genesis_delta_cannot_declare_compaction(store: storage.WorkStore) -> None:
+    with pytest.raises(commit.CommitError, match="cannot declare compaction"):
+        commit.commit(
+            _genesis_delta(
+                compacted=True, rehydrated_from_revision_id="rev-000000000001"
+            ),
+            store=store,
+        )
+
+    assert store.read_record() is None
+
+
+def test_a_genesis_delta_cannot_carry_transitions(store: storage.WorkStore) -> None:
+    with pytest.raises(commit.CommitError, match="no existing entries to transition"):
+        commit.commit(
+            _genesis_delta(
+                transitions=[
+                    EntryTransition(
+                        entry_id="d-ghost",
+                        action=TransitionAction.WITHDRAW,
+                        rationale="Nothing to withdraw.",
+                    )
+                ]
+            ),
+            store=store,
+        )
+
+    assert store.read_record() is None
+
+
+@pytest.mark.parametrize(
+    "missing", ["orientation", "working_context", "next_action"]
+)
+def test_a_genesis_delta_must_carry_the_state_it_has_no_parent_for(
+    store: storage.WorkStore, missing: str
+) -> None:
+    with pytest.raises(commit.CommitError, match=f"must carry .*{missing}"):
+        commit.commit(_genesis_delta(**{missing: None}), store=store)
+
+    assert store.read_record() is None
+    assert not store.revisions_dir.exists()
+
+
+def test_a_genesis_delta_must_carry_the_capture_time_it_is_created_at(
+    store: storage.WorkStore,
+) -> None:
+    with pytest.raises(commit.CommitError, match="session_provenance.captured_at"):
+        commit.commit(_genesis_delta(session_provenance=None), store=store)
+
+    assert store.read_record() is None
+
+
+def test_genesis_ids_are_derived_from_the_request_not_the_corpus(
+    tmp_path: Path, corpus_root: Path
+) -> None:
+    """Two independent corpora given the same genesis request agree on names."""
+    delta = _genesis_delta(
+        add_questions=[
+            ProposedEntry(kind=EntryKind.QUESTION, summary="Is genesis derived?")
+        ]
+    )
+    first = commit.commit(
+        delta, store=storage.WorkStore.open(WORK_ID, corpus_root=tmp_path / "a")
+    )
+    second = commit.commit(
+        delta, store=storage.WorkStore.open(WORK_ID, corpus_root=tmp_path / "b")
+    )
+
+    assert first.revision.revision_id == second.revision.revision_id
+    assert first.record.work_id == second.record.work_id
+    assert [entry.entry_id for entry in first.record.questions] == [
+        entry.entry_id for entry in second.record.questions
+    ]
+    assert first.revision.record_digest == second.revision.record_digest
+
+
+def test_a_normal_delta_applies_on_top_of_a_genesis_record(
+    store: storage.WorkStore,
+) -> None:
+    created = commit.commit(_genesis_delta(), store=store)
+
+    second = commit.commit(
+        _delta(
+            created.record.revision_id,
+            orientation="Wave 4 owns the CLI.",
+            add_decisions=[
+                ProposedEntry(kind=EntryKind.DECISION, summary="Four subcommands.")
+            ],
+        ),
+        store=store,
+    )
+
+    assert second.revision.parent_revision_id == created.revision.revision_id
+    assert second.record.revision_number == 2
+    assert second.record.orientation == "Wave 4 owns the CLI."
+    # Everything genesis established that the delta did not speak to carries.
+    assert second.record.created == created.record.created
+    assert second.record.slug == created.record.slug
+    assert second.record.title == created.record.title
+    assert store.read_record() == second.record
+    assert store.recover().problems == ()
