@@ -17,6 +17,7 @@ git-tracking axis (`skills/cheese/references/formatting.md:103`).
 - [architecture/](./architecture/index.md) — architecture
 - [specs/](./specs/index.md) — specs
 - [architecture](./architecture.md) — Architecture of easy-cheese
+- [docs-mermaid-rendering](./docs-mermaid-rendering.md) — Docs Mermaid rendering
 - [domain-model](./domain-model.md) — Easy-cheese domain model
 - [fanout-engine-entities](./fanout-engine-entities.md) — Fan-out engine entities
 - [log](./log.md) — Ingest Log

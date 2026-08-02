@@ -9,6 +9,11 @@
 // redundant "Overview -> #_top" entry duplicating the skill link above it.
 const TOC_TITLE_SLUG = '_top';
 
+// Anchor links carry this class so the site stylesheet can indent them
+// under their skill link; the entries stay siblings rather than a group so
+// the skill name renders once (a group label would repeat the current link).
+export const ANCHOR_CLASS = 'sidebar-h2-anchor';
+
 // ADR-002 scopes the TOC to skill pages (route `/skills/<name>/`), not the
 // skills index (`/skills/`) or other pages with h2s (README, Install, ...).
 export function isSkillPageHref(href) {
@@ -21,9 +26,9 @@ export function injectToc(sidebar, tocItems, isActive) {
 	);
 
 	function walk(entries) {
-		return entries.map((entry) => {
+		return entries.flatMap((entry) => {
 			if (entry.type === 'group') {
-				return { ...entry, entries: walk(entry.entries) };
+				return [{ ...entry, entries: walk(entry.entries) }];
 			}
 			if (
 				entry.type === 'link' &&
@@ -31,25 +36,19 @@ export function injectToc(sidebar, tocItems, isActive) {
 				isSkillPageHref(entry.href) &&
 				h2Headings.length > 0
 			) {
-				return {
-					type: 'group',
-					label: entry.label,
-					collapsed: false,
-					badge: undefined,
-					entries: [
-						entry,
-						...h2Headings.map((heading) => ({
-							type: 'link',
-							label: heading.text,
-							href: `${entry.href}#${heading.slug}`,
-							isCurrent: false,
-							badge: undefined,
-							attrs: {},
-						})),
-					],
-				};
+				return [
+					entry,
+					...h2Headings.map((heading) => ({
+						type: 'link',
+						label: heading.text,
+						href: `${entry.href}#${heading.slug}`,
+						isCurrent: false,
+						badge: undefined,
+						attrs: { class: ANCHOR_CLASS, 'aria-label': `${entry.label}: ${heading.text}` },
+					})),
+				];
 			}
-			return entry;
+			return [entry];
 		});
 	}
 

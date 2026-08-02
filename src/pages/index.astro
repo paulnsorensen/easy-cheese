@@ -1,0 +1,287 @@
+---
+import Header from '@cheeselord/design/components/Header.astro';
+import '@cheeselord/design/styles/cheeselord.css';
+import '@cheeselord/design/styles/flavors/easy-cheese.css';
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const title = '🧀 easy-cheese';
+const description =
+  "Harness-agnostic Agent Skills — the cheese-making pipeline for code review, implementation, refactoring, and PR rescue.";
+const canonicalUrl = new URL(`${base}/`, Astro.site).toString();
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta name="theme-color" content="#1d1713" />
+    <link rel="icon" type="image/svg+xml" href={`${base}/favicon.svg`} />
+    <link rel="canonical" href={canonicalUrl} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonicalUrl} />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary" />
+  </head>
+  <body>
+    <Header project="easy-cheese" projectHref={`${base}/`}>
+      <nav class="top" slot="actions" aria-label="Site">
+        <a href={`${base}/skills/`}>skills</a>
+        <a href={`${base}/install/`}>install</a>
+        <a href="https://github.com/paulnsorensen/easy-cheese">github</a>
+      </nav>
+    </Header>
+    <main>
+      <div class="wrap">
+        <div>
+          <p class="eyebrow">agent skills · harness-agnostic</p>
+          <h1>Don't know what to do? Just <em>cheese</em> it.</h1>
+          <p class="lede">
+            A toolkit of portable Agent Skills built around <code>SKILL.md</code>, ready for any
+            compatible harness to load. One command reads whatever you're holding — an idea, a spec,
+            a stack trace, a PR — announces its routing, and dispatches the right workflow. No agent
+            definitions, no harness-specific compiled bundles, no repo-wide MCP requirement.
+          </p>
+          <p class="ctas">
+            <a class="btn btn-fill" href={`${base}/install/`}>get the skills</a>
+            <a class="btn btn-ghost" href={`${base}/skills/`}>browse the catalogue →</a>
+          </p>
+          <p class="meta"><code>npx skills@latest add paulnsorensen/easy-cheese --all</code> · markdown · MIT</p>
+        </div>
+        <div class="term-box">
+          <figure class="term">
+            <figcaption><span class="term-dots" aria-hidden="true">● ● ●</span> ~/work — /cheese</figcaption>
+            <pre><b>$ /cheese</b> "exports hang past 50k rows"
+
+<i>Intent</i>  debug a runtime defect
+<i>Reason</i>  symptom in hand, no spec yet
+<i>Target</i>  /pasteurize → /cook → /press
+        → /age → /cure
+
+dispatching /pasteurize --auto …
+<b>✓</b> repro loop   scripts/repro_export.sh
+<b>✓</b> root cause   unbatched writes in
+               export_csv()
+→ handing off to /cook --auto</pre>
+          </figure>
+        </div>
+      </div>
+      <section class="band" aria-label="The pipeline">
+        <div class="wrap band-wrap">
+          <h2>~/easy-cheese · the make</h2>
+          <div class="steps">
+            <div><strong>/mold</strong><p>shape a fuzzy idea into a grounded spec through dialogue</p></div>
+            <div><strong>/cook</strong><p>implement it — one focused coder, or a fan of fresh-context agents</p></div>
+            <div><strong>/press</strong><p>harden the change with coverage, assertion, and boundary checks</p></div>
+            <div><strong>/age</strong><p>review the diff across ten staff-engineer dimensions</p></div>
+            <div><strong>/cure</strong><p>fix the findings that matter, validate, ready the branch</p></div>
+            <div><strong>/plate</strong><p>final gate — write, commit, and publish the PR</p></div>
+          </div>
+          <p class="more">
+            <code>/cheese</code> routes you in; <code>/pasteurize</code> debugs, <code>/briesearch</code> researches, <code>/melt</code> untangles conflicts, <code>/wheypoint</code> checkpoints. <a href={`${base}/skills/`}>Sixteen skills, one vocabulary →</a>
+          </p>
+        </div>
+      </section>
+    </main>
+    <footer>
+      <div class="wrap">
+        <span>cheese your code 🧀</span>
+        <span>MIT · agent-skills spec</span>
+      </div>
+    </footer>
+  </body>
+</html>
+
+<style>
+  html,
+  body {
+    height: 100%;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+  }
+  main {
+    flex: 1;
+  }
+  footer {
+    margin-block-start: 0;
+  }
+
+  .top {
+    display: flex;
+    gap: 1.4rem;
+    font-size: 0.8rem;
+  }
+  .top a {
+    color: var(--dim);
+    text-decoration: none;
+  }
+  .top a:hover {
+    color: var(--gold);
+  }
+
+  .lede code,
+  .more code {
+    font-size: 0.9em;
+    color: var(--bone);
+  }
+
+  .ctas {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.8rem;
+    margin-block-start: 2.2rem;
+  }
+  .btn {
+    font-size: 0.8rem;
+    letter-spacing: 0.04em;
+    padding: 0.7rem 1.15rem;
+    border: 1px solid var(--gold);
+    text-decoration: none;
+  }
+  .btn-fill {
+    background: var(--gold);
+    color: var(--cellar);
+  }
+  .btn-fill:hover {
+    background: oklch(from var(--gold) calc(l - 0.07) c h);
+  }
+  .btn-ghost {
+    color: var(--gold);
+  }
+  .btn-ghost:hover {
+    background: oklch(from var(--gold) l c h / 8%);
+  }
+  .meta {
+    margin-block-start: 1.4rem;
+    font-size: 0.72rem;
+    color: var(--dim);
+  }
+
+  /* the artifact: an elevated terminal panel on the gouda field */
+  .term-box {
+    display: grid;
+    place-items: center;
+  }
+  .term {
+    margin: 0;
+    inline-size: min(26rem, 100%);
+    border-radius: 0.6rem;
+    overflow: hidden;
+    border: 1px solid var(--hairline);
+    background: var(--panel);
+    box-shadow: 0 1.4rem 3rem oklch(0% 0 0 / 40%);
+  }
+  .term figcaption {
+    display: flex;
+    gap: 0.9rem;
+    padding: 0.55rem 0.9rem;
+    background: oklch(from var(--cellar) calc(l - 0.015) c h);
+    border-block-end: 1px solid var(--hairline);
+    font-size: 0.68rem;
+    letter-spacing: 0.06em;
+    color: var(--dim);
+  }
+  .term-dots {
+    letter-spacing: 0.18em;
+    color: oklch(from var(--gold) l c h / 65%);
+  }
+  .term pre {
+    margin: 0;
+    padding: 1.1rem 1.2rem 1.3rem;
+    font-family: var(--mono);
+    font-size: 0.76rem;
+    line-height: 1.75;
+    color: var(--bone);
+    white-space: pre;
+    overflow-x: auto;
+  }
+  .term pre b {
+    font-weight: 500;
+    color: var(--gold);
+  }
+  .term pre i {
+    font-style: normal;
+    color: var(--dim);
+  }
+
+  .band {
+    background: var(--panel);
+    border-block-start: 1px solid var(--hairline);
+  }
+  .band .wrap {
+    display: block;
+    padding-block: 3.2rem 3.6rem;
+  }
+  .band h2 {
+    margin: 0 0 2rem;
+    font-size: 0.72rem;
+    font-weight: 400;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--dim);
+  }
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.8rem 2.4rem;
+    counter-reset: step;
+  }
+  .steps > div {
+    counter-increment: step;
+  }
+  .steps strong {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 500;
+  }
+  .steps strong::before {
+    content: counter(step, decimal-leading-zero) ' ';
+    color: oklch(from var(--gold) l c h / 55%);
+    font-weight: 400;
+  }
+  .steps p {
+    margin: 0.45rem 0 0;
+    font-size: 0.82rem;
+    line-height: 1.6;
+    color: var(--dim);
+    text-wrap: pretty;
+  }
+  .more {
+    margin: 2.4rem 0 0;
+    font-size: 0.82rem;
+    line-height: 1.7;
+    color: var(--dim);
+    max-width: 44rem;
+  }
+  .more a {
+    color: var(--gold);
+  }
+
+  @media (max-width: 56rem) {
+    .steps {
+      grid-template-columns: 1fr;
+      gap: 1.4rem;
+    }
+    .term {
+      inline-size: 100%;
+    }
+    .top {
+      gap: 1rem;
+    }
+  }
+  @media (max-width: 34rem) {
+    body :global(.cheeselord-header) {
+      flex-wrap: wrap;
+      row-gap: 0.15rem;
+    }
+    .top {
+      flex-basis: 100%;
+    }
+  }
+</style>

@@ -1,7 +1,6 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
-import mermaid from 'astro-mermaid';
 import { cheeselordTheme } from '@cheeselord/design/starlight';
 import { sidebar } from './src/sidebar.mjs';
 
@@ -10,24 +9,15 @@ export default defineConfig({
   base: '/easy-cheese',
   output: 'static',
   integrations: [
-    mermaid({
-      autoTheme: true,
-      mermaidConfig: {
-        flowchart: { curve: 'basis' },
-      },
-    }),
     starlight({
-      title: 'easy-cheese',
+      title: '🧀 easy-cheese',
       plugins: [cheeselordTheme({ flavor: 'easy-cheese' })],
       description:
         'Harness-agnostic Agent Skills (agentskills.io) — the cheese-making pipeline that ages raw curds into shippable wheels of code.',
-      logo: {
-        src: './public/favicon.svg',
-        alt: 'easy-cheese',
-      },
       sidebar,
       components: {
         Sidebar: './src/components/Sidebar.astro',
+        SiteTitle: './src/components/SiteTitle.astro',
       },
       customCss: ['./src/styles/cheese.css'],
       social: [

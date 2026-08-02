@@ -31,10 +31,6 @@ ROOT_DOC_MAP = {
     "CODE_OF_CONDUCT.md": "code-of-conduct/",
 }
 
-AUTHORED_DOCS = {
-    "index.md",
-}
-
 
 @dataclass(frozen=True)
 class GeneratedPage:
@@ -505,7 +501,7 @@ def emit_sidebar(
     for skill in skills:
         skill_items.append(_sidebar_link(skill))
 
-    start_items = [{"label": "Home", "slug": ""}]
+    start_items = [{"label": "Home", "link": "/"}]
     if install:
         start_items.append({"label": "Install", "slug": "install"})
     sidebar = [
@@ -528,8 +524,6 @@ def emit_sidebar(
 def clean_generated_docs() -> None:
     CONTENT_ROOT.mkdir(parents=True, exist_ok=True)
     for child in CONTENT_ROOT.iterdir():
-        if child.name in AUTHORED_DOCS:
-            continue
         if child.is_dir():
             shutil.rmtree(child)
         else:
