@@ -11,7 +11,10 @@ The order of the checks is the contract:
    against its declared parent, so an identical resubmission finds the receipt
    it already produced and returns it -- even when the record has since moved
    on. Only a *different* request against a parent that is no longer current is
-   a conflict, and a conflict promotes nothing.
+   a conflict, and a conflict promotes nothing. The one receipt that is *not* a
+   replay is one the record has not caught up to: a complete pair whose parent
+   is still the current revision is an interrupted promotion, and the retry
+   finishes it instead of reporting a save no reader can serve.
 2. **Lineage before application.** The parent the record names has to be a
    complete immutable revision whose digest the record still quotes; a chain
    that cannot be walked backwards is not extended forwards.
@@ -142,10 +145,16 @@ def commit(
         )
     fingerprint = records.request_fingerprint(delta)
     with store.lock():
-        current = store.read_record()
+        try:
+            current = store.read_record()
+        except ValueError as exc:
+            raise CommitError(
+                f"{storage.RECORD_FILENAME} for work {store.work_id!r} cannot be "
+                f"read, so no delta can be applied to it: {exc}"
+            ) from exc
         if delta.expected_revision_id == GENESIS_PARENT:
+            replay = _find_replay(store, delta, fingerprint)
             if current is not None:
-                replay = _find_replay(store, delta, fingerprint)
                 if replay is not None:
                     return _replayed(store, replay, current)
                 raise GenesisConflictError(
@@ -153,20 +162,16 @@ def commit(
                     f"{current.revision_id!r}: a genesis delta creates the first "
                     "record and never replaces a live one"
                 )
-            # No record, but the history it pointed at can still be on disk.
-            # Keying the guard on the record alone would let one lost file turn
-            # genesis into a second lineage, leaving every revision behind it
-            # unreachable -- the same erasure, reached the long way round.
-            orphaned = store.recover().latest_complete
-            if orphaned is not None:
-                raise GenesisConflictError(
-                    f"work {store.work_id!r} has no "
-                    f"{storage.RECORD_FILENAME}, but revision "
-                    f"{orphaned.revision.revision_id!r} (number "
-                    f"{orphaned.revision.revision_number}) is complete on disk: "
-                    "a genesis delta creates the first record and never orphans "
-                    "existing history"
-                )
+            if replay is None:
+                # No record, but the history it pointed at can still be on
+                # disk. Keying the guard on the record alone would let one lost
+                # file turn genesis into a second lineage, leaving every
+                # revision behind it unreachable -- the same erasure, reached
+                # the long way round.
+                _refuse_over_existing_history(store)
+            # `replay is not None` here means this genesis already wrote its
+            # pair and died before the record swap. `_genesis` re-derives the
+            # identical triple and `promote` settles the pointer onto it.
             return _genesis(
                 store,
                 delta,
@@ -180,8 +185,11 @@ def commit(
                 f"a first delta must name {GENESIS_PARENT!r} as its parent"
             )
         replay = _find_replay(store, delta, fingerprint)
-        if replay is not None:
+        if replay is not None and replay.parent_revision_id != current.revision_id:
             return _replayed(store, replay, current)
+        # A replay whose parent is still the current revision is not a replay:
+        # the record never moved onto it, so the promotion that wrote it never
+        # finished. Falling through re-derives the same triple and completes it.
         if delta.expected_revision_id != current.revision_id:
             raise StaleParentError(
                 f"delta expects revision {delta.expected_revision_id!r} but the "
@@ -197,6 +205,25 @@ def commit(
             repository=repository,
             durability=durability,
         )
+
+
+def _refuse_over_existing_history(store: storage.WorkStore) -> None:
+    """Refuse a genesis into a work directory that already holds revisions.
+
+    Completeness is the wrong question here: a store missing one half of every
+    pair still holds the work, and creating a second lineage beside it is the
+    erasure this guard exists to prevent. Any receipt or projection at all is
+    enough to refuse.
+    """
+    report = store.recover()
+    held = [file.path.name for file in report.complete] + list(report.incomplete)
+    if not held:
+        return
+    raise GenesisConflictError(
+        f"work {store.work_id!r} has no {storage.RECORD_FILENAME}, but its work "
+        f"directory still holds {'; '.join(held)}: a genesis delta creates the "
+        "first record and never orphans existing history"
+    )
 
 
 def _find_replay(

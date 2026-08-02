@@ -24,6 +24,7 @@ from easy_cheese_schemas import (
     WheypointRecord,
 )
 
+import projection
 import records
 import storage
 
@@ -246,6 +247,114 @@ def test_an_interrupted_promotion_can_be_finished_by_the_identical_retry(
     assert store.read_record() == promotion.record
 
 
+def test_the_identical_retry_over_a_complete_pair_moves_only_the_record(
+    store: storage.WorkStore, make_promotion: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The window between the projection rename and the record rename: the
+    immutable pair landed and the pointer did not. The retry finishes it by
+    writing record.json alone -- the immutable half is compared, not rewritten."""
+    real_replace = os.replace
+
+    def crash_on_record(src: Any, dst: Any) -> None:
+        if Path(dst).name == "record.json":
+            raise OSError("power loss")
+        real_replace(src, dst)
+
+    monkeypatch.setattr(os, "replace", crash_on_record)
+    promotion = make_promotion()
+    with pytest.raises(OSError):
+        store.promote(promotion.record, promotion.revision, promotion.markdown)
+    monkeypatch.setattr(os, "replace", real_replace)
+    assert not store.record_path.exists()
+    assert store.recover().latest_complete is not None
+    untouched = [
+        (path, path.read_bytes(), path.stat().st_mtime_ns)
+        for path in (
+            store.revision_path(1, "rev-0001"),
+            store.projection_path(1, "rev-0001"),
+        )
+    ]
+
+    store.promote(promotion.record, promotion.revision, promotion.markdown)
+
+    assert store.read_record() == promotion.record
+    assert store.recover().consistent
+    assert [
+        (path, path.read_bytes(), path.stat().st_mtime_ns)
+        for path, _, _ in untouched
+    ] == untouched
+
+
+def test_an_incomplete_pair_may_be_replaced_by_any_agreeing_triple_at_its_name(
+    store: storage.WorkStore, make_promotion: Any
+) -> None:
+    """What the overwrite is permitted to replace: a pair no reader can have
+    quoted. The abandoned receipt's own bytes are not binding -- an incomplete
+    pair carries no claim -- so the retry lands whatever agrees with itself."""
+    promotion = make_promotion()
+    store.revisions_dir.mkdir(parents=True, exist_ok=True)
+    store.revision_path(1, "rev-0001").write_bytes(
+        records.canonical_payload(
+            evolve(promotion.revision, preserved_entry_ids=["injected"])
+        )
+    )
+    assert store.recover().complete == ()
+
+    store.promote(promotion.record, promotion.revision, promotion.markdown)
+
+    assert store.read_revision(1, "rev-0001") == promotion.revision
+    assert store.read_record() == promotion.record
+    assert store.recover().consistent
+
+
+def test_a_complete_pair_is_refused_when_the_projection_is_what_changed(
+    store: storage.WorkStore, make_promotion: Any
+) -> None:
+    """The projection digest lives in the receipt, so different markdown is a
+    different receipt: re-promoting it at a settled name is a rewrite, and both
+    files stay exactly as the first promotion left them."""
+    promotion = make_promotion()
+    store.promote(promotion.record, promotion.revision, promotion.markdown)
+    before_receipt = store.revision_path(1, "rev-0001").read_bytes()
+    before_projection = store.projection_path(1, "rev-0001").read_text(
+        encoding="utf-8"
+    )
+
+    rewritten = promotion.markdown.replace(
+        "Implement the canonical record runtime.", "Ship it, no gates."
+    )
+    assert rewritten != promotion.markdown
+    reprojected = evolve(
+        promotion.revision,
+        projection_digest=projection.projection_digest_of_text(rewritten),
+    )
+
+    with pytest.raises(storage.StorageError, match="already exists"):
+        store.promote(promotion.record, reprojected, rewritten)
+
+    assert store.revision_path(1, "rev-0001").read_bytes() == before_receipt
+    assert store.projection_path(1, "rev-0001").read_text(
+        encoding="utf-8"
+    ) == before_projection
+
+
+def test_a_projection_no_receipt_names_is_reported_rather_than_unseen(
+    store: storage.WorkStore, make_promotion: Any
+) -> None:
+    """Half a store is still a store: a corpus salvaged into its readable half
+    alone holds real history, and scanning only receipts would report it clean."""
+    promotion = make_promotion()
+    store.promote(promotion.record, promotion.revision, promotion.markdown)
+    store.revision_path(1, "rev-0001").unlink()
+
+    report = store.recover()
+
+    assert report.complete == ()
+    assert report.incomplete == (
+        "1-rev-0001.md: no revision receipt names this projection",
+    )
+
+
 @pytest.mark.parametrize(
     "field",
     ["revision_id", "revision_number", "work_id", "record_digest", "projection_digest"],
@@ -340,6 +449,7 @@ def test_a_receipt_whose_filename_lies_about_its_identity_is_incomplete(
     report = store.recover()
     assert report.incomplete == (
         "1-rev-9999.json: filename does not match the revision identity inside it",
+        "1-rev-0001.md: no revision receipt names this projection",
     )
 
 

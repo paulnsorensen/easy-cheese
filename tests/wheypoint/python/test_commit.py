@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import threading
 from collections.abc import Callable
@@ -330,6 +331,85 @@ def test_identical_replay_against_the_same_parent_returns_the_existing_revision(
     assert store.read_record() == first.record
 
 
+def test_a_promotion_that_died_before_the_record_swap_is_finished_by_the_retry(
+    store: storage.WorkStore,
+    make_promotion: Callable[..., Promotion],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The quiet crash window: the pair landed, the record swap did not.
+
+    Treating the complete-but-unnamed pair as a replay would answer the retry
+    with `replayed: true` over the *stale* record -- the agent hands off
+    believing checkpoint two is saved while every reader serves checkpoint one,
+    and the next delta built on what it was handed is refused as stale-parent.
+    The retry must finish the promotion instead.
+    """
+    seed = _seed(store, make_promotion)
+    delta = _delta(seed.record.revision_id, orientation="Checkpoint two.")
+    real_replace = os.replace
+
+    def crash_on_record(src: object, dst: object) -> None:
+        if Path(str(dst)).name == storage.RECORD_FILENAME:
+            raise OSError("power loss")
+        real_replace(src, dst)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(os, "replace", crash_on_record)
+    with pytest.raises(OSError, match="power loss"):
+        commit.commit(delta, store=store)
+    monkeypatch.setattr(os, "replace", real_replace)
+
+    # Precisely the state the reviewer reproduced: two complete revisions,
+    # nothing reported incomplete, and record.json still naming the first.
+    crashed = store.recover()
+    assert [file.revision.revision_number for file in crashed.complete] == [1, 2]
+    assert crashed.incomplete == ()
+    assert store.read_record() == seed.record
+
+    result = commit.commit(delta, store=store)
+
+    assert result.replayed is False
+    assert result.revision.revision_number == 2
+    assert result.record.orientation == "Checkpoint two."
+    # The claim the caller is handed is the claim the store can serve.
+    assert store.read_record() == result.record
+    assert store.read_record().revision_id == result.revision.revision_id
+    assert store.recover().consistent
+
+    # And a delta built on the revision it returned is not stale.
+    third = commit.commit(
+        _delta(result.revision.revision_id, orientation="Checkpoint three."),
+        store=store,
+    )
+    assert third.revision.revision_number == 3
+    assert _revision_files(store) == [
+        f"1-{seed.record.revision_id}.json",
+        f"2-{result.revision.revision_id}.json",
+        f"3-{third.revision.revision_id}.json",
+    ]
+
+
+def test_a_replay_whose_record_has_moved_on_is_still_a_replay(
+    store: storage.WorkStore, make_promotion: Callable[..., Promotion]
+) -> None:
+    """The finishing path must not swallow the ordinary replay: a receipt the
+    record has already moved *past* is settled history, and re-promoting it
+    would roll the record backwards over everything since."""
+    seed = _seed(store, make_promotion)
+    delta = _delta(seed.record.revision_id, orientation="Checkpoint two.")
+    second = commit.commit(delta, store=store)
+    third = commit.commit(
+        _delta(second.revision.revision_id, orientation="Checkpoint three."),
+        store=store,
+    )
+
+    again = commit.commit(delta, store=store)
+
+    assert again.replayed is True
+    assert again.revision == second.revision
+    assert again.record == third.record
+    assert store.read_record() == third.record
+
+
 def test_a_changed_request_against_a_stale_parent_promotes_nothing(
     store: storage.WorkStore, make_promotion: Callable[..., Promotion]
 ) -> None:
@@ -653,6 +733,103 @@ def test_a_genesis_delta_never_orphans_history_whose_record_is_gone(
     assert _revision_files(store) == before_revisions
     assert _projection_files(store) == before_projections
     assert store.read_record() is None
+
+
+def test_a_genesis_delta_is_refused_over_receipts_whose_projections_are_gone(
+    store: storage.WorkStore, make_promotion: Callable[..., Promotion]
+) -> None:
+    """Completeness is not the question. A store holding only the receipts
+    still holds the work, and genesis beside it starts a second lineage that
+    nothing ever mentions."""
+    seed = _seed(store, make_promotion, gating=True)
+    store.record_path.unlink()
+    store.projection_path(1, seed.record.revision_id).unlink()
+    before_revisions = _revision_files(store)
+
+    with pytest.raises(commit.GenesisConflictError) as raised:
+        commit.commit(_genesis_delta(), store=store)
+
+    assert seed.record.revision_id in str(raised.value)
+    assert _revision_files(store) == before_revisions
+    assert _projection_files(store) == []
+    assert store.read_record() is None
+
+
+def test_a_genesis_delta_is_refused_over_projections_whose_receipts_are_gone(
+    store: storage.WorkStore, make_promotion: Callable[..., Promotion]
+) -> None:
+    """The salvage case: an operator copies the readable `projections/*.md` out
+    of a backup and not the opaque receipts, then starts the slug again. The
+    prior orientation, decisions and blockers are right there in the same
+    directory, so genesis over them is the erasure this guard exists for."""
+    seed = _seed(store, make_promotion, gating=True)
+    store.record_path.unlink()
+    store.revision_path(1, seed.record.revision_id).unlink()
+    orphan = f"1-{seed.record.revision_id}.md"
+
+    # A one-sided store is visible at all: the scan reports the readable half.
+    assert store.recover().incomplete == (
+        f"{orphan}: no revision receipt names this projection",
+    )
+
+    with pytest.raises(commit.GenesisConflictError) as raised:
+        commit.commit(_genesis_delta(), store=store)
+
+    assert seed.record.revision_id in str(raised.value)
+    assert _revision_files(store) == []
+    assert _projection_files(store) == [orphan]
+    assert store.read_record() is None
+
+
+def test_a_genesis_that_died_before_the_record_swap_is_finished_by_the_retry(
+    store: storage.WorkStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The guard above refuses genesis over any file at all, so the one genesis
+    that *may* land on its own pair is the retry of the request that wrote it:
+    the receipt names this exact request, and finishing it writes the record
+    the interrupted attempt was about to write."""
+    delta = _genesis_delta()
+    real_replace = os.replace
+
+    def crash_on_record(src: object, dst: object) -> None:
+        if Path(str(dst)).name == storage.RECORD_FILENAME:
+            raise OSError("power loss")
+        real_replace(src, dst)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(os, "replace", crash_on_record)
+    with pytest.raises(OSError, match="power loss"):
+        commit.commit(delta, store=store)
+    monkeypatch.setattr(os, "replace", real_replace)
+    assert store.read_record() is None
+    assert store.recover().latest_complete is not None
+
+    result = commit.commit(delta, store=store)
+
+    assert store.read_record() == result.record
+    assert store.recover().consistent
+    assert _revision_files(store) == [f"1-{result.revision.revision_id}.json"]
+    assert _projection_files(store) == [f"1-{result.revision.revision_id}.md"]
+
+
+def test_an_unreadable_record_is_named_rather_than_raised_as_a_decode_error(
+    store: storage.WorkStore, make_promotion: Callable[..., Promotion]
+) -> None:
+    """It already failed closed; it failed closed with a Python exception name.
+    The operator is told which file to look at instead."""
+    seed = _seed(store, make_promotion)
+    store.record_path.write_bytes(b"{ not json")
+
+    with pytest.raises(commit.CommitError, match=storage.RECORD_FILENAME):
+        commit.commit(
+            _delta(seed.record.revision_id, orientation="Over a broken record."),
+            store=store,
+        )
+
+    with pytest.raises(commit.CommitError, match=storage.RECORD_FILENAME):
+        commit.commit(_genesis_delta(), store=store)
+
+    assert _revision_files(store) == [f"1-{seed.record.revision_id}.json"]
+    assert store.record_path.read_bytes() == b"{ not json"
 
 
 def test_an_identical_genesis_replay_returns_the_original_revision(

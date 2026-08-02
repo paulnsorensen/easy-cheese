@@ -245,9 +245,13 @@ class WorkStore:
 
         A *complete* revision is never rewritten: if this number and id already
         name a receipt whose projection is present and hashes to what the
-        receipt claims, the promotion is refused before anything else is
-        considered, because no property of the incoming triple can make it
-        legal to rewrite a receipt a reader may already have quoted.
+        receipt claims, no property of the incoming triple can make it legal to
+        replace a receipt a reader may already have quoted -- with one
+        exception that replaces nothing. A retry that produces the *identical*
+        receipt bytes over that complete pair is the tail of an interrupted
+        promotion: the pair landed and the record swap did not. Finishing it
+        writes only `record.json`, so the immutable half is compared, never
+        touched.
 
         An incomplete pair left behind by an interrupted promotion is not that.
         `recover` reports it and never returns it as a revision, so nothing can
@@ -265,19 +269,29 @@ class WorkStore:
         projection_path = self.projection_path(
             revision.revision_number, revision.revision_id
         )
+        payload = records.canonical_payload(revision)
         if revision_path.exists():
             _, existing = self._inspect_revision(revision_path)
             if existing is not None:
-                raise StorageError(
-                    f"{revision_path.name} already exists and is immutable"
-                )
+                if records.canonical_payload(existing.revision) != payload:
+                    raise StorageError(
+                        f"{revision_path.name} already exists and is immutable"
+                    )
+                # Identical receipt, and `_inspect_revision` has already proved
+                # the projection beside it hashes to the digest that receipt
+                # declares -- which `_check_agreement` is about to prove of
+                # `markdown` too. The pair on disk is this promotion's pair, so
+                # all that is left of it is the pointer.
+                self._check_agreement(record, revision, markdown)
+                _write_atomic(self.record_path, records.canonical_payload(record))
+                return
 
         self._check_agreement(record, revision, markdown)
 
         self.revisions_dir.mkdir(parents=True, exist_ok=True)
         self.projections_dir.mkdir(parents=True, exist_ok=True)
 
-        _write_atomic(revision_path, records.canonical_payload(revision))
+        _write_atomic(revision_path, payload)
         _write_atomic(projection_path, markdown.encode("utf-8"))
         _write_atomic(self.record_path, records.canonical_payload(record))
 
@@ -335,16 +349,34 @@ class WorkStore:
     def _scan_revisions(self) -> tuple[list[RevisionFile], list[str]]:
         complete: list[RevisionFile] = []
         incomplete: list[str] = []
-        if not self.revisions_dir.is_dir():
-            return complete, incomplete
-        for path in sorted(self.revisions_dir.glob("*.json")):
-            reason, file = self._inspect_revision(path)
-            if file is not None:
-                complete.append(file)
-            else:
-                incomplete.append(f"{path.name}: {reason}")
+        receipts: set[str] = set()
+        if self.revisions_dir.is_dir():
+            for path in sorted(self.revisions_dir.glob("*.json")):
+                receipts.add(path.stem)
+                reason, file = self._inspect_revision(path)
+                if file is not None:
+                    complete.append(file)
+                else:
+                    incomplete.append(f"{path.name}: {reason}")
+        incomplete.extend(self._unclaimed_projections(receipts))
         complete.sort(key=lambda file: file.revision.revision_number)
         return complete, incomplete
+
+    def _unclaimed_projections(self, receipts: set[str]) -> list[str]:
+        """Projections no receipt on disk names.
+
+        A receipt and its projection share a filename stem, so a projection
+        with no `.json` beside it is half a promotion exactly as much as a
+        receipt with no `.md`. Scanning only the receipts would leave a store
+        holding a whole lineage in its readable half reporting nothing at all.
+        """
+        if not self.projections_dir.is_dir():
+            return []
+        return [
+            f"{path.name}: no revision receipt names this projection"
+            for path in sorted(self.projections_dir.glob("*.md"))
+            if path.stem not in receipts
+        ]
 
     def _inspect_revision(self, path: Path) -> tuple[str, RevisionFile | None]:
         try:
