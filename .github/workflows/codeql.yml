@@ -48,6 +48,14 @@ jobs:
         with:
           languages: ${{ matrix.language }}
           queries: security-and-quality
+          # Vendored third-party wheel trees (attrs, cattrs, typing_extensions)
+          # are committed so the .pyz bundles build hermetically. They are not
+          # our code to fix, and security-and-quality flags their
+          # version-guarded exports as undefined. Analysing them would bury real
+          # findings under third-party noise.
+          config: |
+            paths-ignore:
+              - vendor
 
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@7188fc363630916deb702c7fdcf4e481b751f97a # v4.37.1
