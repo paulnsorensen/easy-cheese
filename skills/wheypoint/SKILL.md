@@ -14,41 +14,16 @@ license: MIT
 
 - The conversation so far (the primary input).
 - Optional argument: a description of what the next session will focus on. When present, treat it as the lens and tailor the document to it. Drop state that does not serve that focus to a one-line pointer.
-- Optional verb `--join <slugA> <slugB>`: merge two existing handoff notes into one. Reads both notes from `.cheese/notes/` and writes a single merged note whose `parents:` lists both slugs.
-- Optional verb `--split`: fork the current thread into two resumable tracks. Writes two child notes, each with `parents: [<current-slug>]` and a distinct slug.
-
-```text
-/wheypoint                     -> one note with session/git/created auto-filled
-/wheypoint --join A B          -> one merged note, parents: [A, B]
-/wheypoint --split             -> two child notes, each parents: [<current>]
-```
 
 ## Flow
 
 1. **Derive a slug** from the task (e.g. `auth-retry-backoff`). Reuse an existing slug if this session already owns one under `.cheese/`.
 2. **Inventory what already exists.** List the `.cheese/` artifacts, specs, PRs, issues, commits, and diffs this session produced or touched. These get referenced, never re-summarised.
-3. **Write the handoff document** to `.cheese/notes/<slug>.md` with the slug header (`## Handoff slug`) and body (`## Document`) below. When a focus argument was given, apply it as the lens throughout: emphasise state and decisions that serve the focus, and compress everything else to a one-line pointer.
-4. **Redact** secrets on the way out (`## Redaction`).
-5. **Point at resumption.** End by telling the user how to resume with `/cheese --continue <slug>` from the original repo, and include an absolute clickable path to the handoff note so the user can find it from any working directory.
-
-### `--join <slugA> <slugB>`
-
-Merge two interrupted threads into one resumable note.
-
-1. Read both source notes from `.cheese/notes/<slugA>.md` and `.cheese/notes/<slugB>.md`.
-2. Derive a merged slug that names the joined effort.
-3. Write ONE note to `.cheese/notes/<merged-slug>.md` with `parents: [<slugA>, <slugB>]` and the usual auto-filled provenance (`session:` / `git:` / `created:` from the live session).
-4. In `## Document`, consolidate both sources' Goal / State / Key decisions by **reference**, not re-paste (per `## Do not duplicate`): point at each source note by path and capture only the merged picture and any conflicts to reconcile.
-5. Point at resumption as in the default flow.
-
-### `--split`
-
-Fork the current thread into two parallel tracks.
-
-1. Take the current thread's slug as the parent (derive it as in step 1 of the default flow).
-2. Choose two distinct child slugs, one per track.
-3. Write TWO notes, `.cheese/notes/<child-a>.md` and `.cheese/notes/<child-b>.md`, each with `parents: [<current-slug>]`, its own auto-filled provenance, and a `## Document` scoped to that track's slice of the work.
-4. Point at resumption for each child so both tracks can be resumed independently.
+3. **Rehydrate.** `python3 skills/wheypoint/scripts/wheypoint.pyz show --work-id <id>` (bundle fallback: `${CLAUDE_SKILL_DIR}/scripts/wheypoint.pyz`) returns the record. Mandatory after a compaction: a compaction-marked delta is rejected unless the revision it declares as rehydrated is the current one.
+4. **Build a semantic `WheypointDelta`**, not a rewritten document. `expected_revision_id` is the revision you rehydrated, or the genesis sentinel when this work has no record yet — that sentinel creates the first record, so there is no create step. Omitting a protected decision, question, blocker, or artifact link carries it forward; retiring one takes an explicit transition naming its entry ID, action, and rationale. A focus argument is the delta's lens.
+5. **Commit through the runtime.** Pipe the delta as JSON to `wheypoint.pyz commit`. It assigns the revision, derives `status:`, and writes the immutable revision plus the Markdown `WheypointProjection` at `.cheese/notes/<slug>.md` — a generated projection, never the authority: never hand-edit it, never resume from it. A rejected commit is a real failure: fix the delta and re-commit, never hand-write the note.
+6. **Redact** secrets on the way out (`## Redaction`).
+7. **Report durability.** State the durability the commit result reports (`canonical-local`, `repo-snapshot`, or `published`); never run a Git commit, push, or publish to raise it. Point at resumption per `## Handoff`.
 
 ## Handoff slug
 
@@ -67,9 +42,9 @@ baseline: none | <block — carries a recorded baseline block forward from an up
 <one-line orientation: where the session is and what is mid-flight>
 ```
 
-`mode:` is optional for backwards compatibility; omitted mode means `mode: single`. In `mode: single`, `next:` names the skill the cold reader should run, which is the machine-readable form of the suggested-skills section below. Use `done` only when the work is genuinely finished and the handoff is a record, not a baton. `/cheese --continue <slug>` scans `.cheese/notes/<slug>.md` and dispatches `next:` directly; `/cheese --continue <absolute-note-path>` reads that handoff file directly when the user is outside the original repo. When `next: affinage`, record the PR reference (`PR#<n>` or its URL) in `artifact:` so the resume dispatches `/affinage <pr>` explicitly rather than relying on branch auto-detection.
+`mode:` is optional for backwards compatibility; omitted mode means `mode: single`. In `mode: single`, `next:` names the skill the cold reader should run, which is the machine-readable form of the suggested-skills section below. Use `done` only when the work is genuinely finished and the handoff is a record, not a baton. `/cheese --continue <slug>` resolves the slug through `wheypoint.pyz resolve` and dispatches `next:` only from the validated current revision; an absolute note path resolves as an explicit path first. When `next: affinage`, record the PR reference (`PR#<n>` or its URL) in `artifact:` so the resume dispatches `/affinage <pr>` explicitly rather than relying on branch auto-detection.
 
-When the checkpointed session carries a recorded `baseline:` block, propagate it verbatim to the child note: it is settled state, not something the resumed phase should re-ask about or re-halt on. `--split` carries the block unchanged to each child note; `--join` merges the parents' baseline entries into their union — a settled-state merge that never re-opens a recorded entry. See [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md).
+When the checkpointed session carries a recorded `baseline:` block, carry it into the delta unchanged: it is settled state, not something the resumed phase should re-ask about or re-halt on. See [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md).
 
 ### Provenance fields
 
@@ -82,13 +57,15 @@ Four optional provenance fields sit between `artifact:` and the orientation line
   - When the harness is unknown or no log is accessible, omit the field. `<speculative>` the newest-mtime claude heuristic can bind the wrong `*.jsonl` when several live sessions share one cwd; the field is optional so a wrong bind is hand-correctable.
 - **`git: <branch>@<short-sha>`** — the branch and short commit at capture time. Use any callable, read-only git inspection capability the active harness exposes. CLI transports may run `git status --short --branch` for the branch and `git rev-parse --short HEAD` for the short SHA. Omit the field when git inspection is unavailable, outside a git repository, or either value cannot be determined.
 - **`created: <UTC ISO-8601>`** — the capture timestamp in UTC ISO-8601 (e.g. `2026-07-09T14:32:00Z`).
-- **`parents: [<slug>, ...]`** — lineage. Empty or absent for a fresh single-thread note. `--join` sets two or more source slugs; each `--split` child sets exactly the current slug.
+- **`parents: [<slug>, ...]`** — lineage. Empty or absent for a fresh single-thread note. The legacy note-level verbs `--join <slugA> <slugB>` (one merged note, `parents: [<slugA>, <slugB>]`) and `--split` (two child notes, each `parents: [<current-slug>]`) sit outside this continuity contract: they rewrite `.cheese/notes/` Markdown and commit no delta.
 
 ### `status:` values
 
+Status is **derived** by the runtime, never asserted by the author: an active human-blocking question or blocker derives `gated:` and requires a decision dossier, and no caller can force `ok`.
+
 - **`ok`** — the next step is unblocked; `/cheese --continue` auto-dispatches `next:`.
 - **`gated: <one-line decision>`** — work is fine, but the next step is blocked on a human decision. Name the decision in one line. On `/cheese --continue`, the reader surfaces the decision plus the body's open-questions/blockers and asks which direction (research / decide / build); it dispatches nothing until the user picks. Never collapse a gate into a bare actionable `next:` with `status: ok` — that is the misfire this contract exists to stop. Any open blocker in the body mandates `status: gated:`, not `status: ok`.
-- **`halt: <one-line reason>`** — a blocker stopped the work mid-flight; surface the reason, then dispatch the runnable `next:` (unchanged).
+- **`halt: <one-line reason>`** — legacy vocabulary, valid only in hand-written notes read through the legacy fallback, with unchanged semantics: surface the reason, then dispatch the runnable `next:`. The runtime never derives it and the derived set stays two-valued on purpose: `halt` records how the previous session ended, while derived status records whether continuation is blocked on a human, and a session can halt on an environment failure with nothing left to decide. That difference is deliberate, not a contradiction to close by adding `halt` to the derived set.
 
 ### `next:` values and semantics
 
@@ -220,17 +197,6 @@ Strip anything sensitive before writing: API keys, tokens, passwords, connection
 
 ## Handoff
 
-The handoff document is the only thing `/wheypoint` writes. No commits, PRs, or production-code edits. Use the host's read-only inspection capabilities plus a write capability scoped to `.cheese/notes/**`. End by showing the slug's orientation line, a normal Markdown link to the note, and repo-root-aware resumption commands. Keep the note link outside fenced code so it is clickable. The link line should match this shape: `Wheypoint dropped: [.cheese/notes/<slug>.md](<absolute-note-path>)`.
+`/wheypoint` writes only through `wheypoint.pyz commit`: the canonical record, its immutable revision, and the generated projection. No Git commits, pushes, PRs, or production-code edits — durability is reported, never automatically raised. Use the host's read-only inspection capabilities plus a write capability scoped to the durable corpus and `.cheese/notes/**`. The slug header keeps the shape `shared/scripts/handoff.py` parses and renders today; the continuity codec is additive, so `parse_handoff_slug()` and its callers are unchanged. End by showing the slug's orientation line, a normal Markdown link to the projection, and repo-root-aware resumption commands. Keep the note link outside fenced code so it is clickable. The link line should match this shape: `Wheypoint dropped: [.cheese/notes/<slug>.md](<absolute-note-path>)`.
 
-Resume from original repo:
-
-```bash
-cd <absolute-repo-path>
-/cheese --continue <slug>
-```
-
-Resume from anywhere:
-
-```bash
-/cheese --continue <absolute-repo-path>/.cheese/notes/<slug>.md
-```
+Resume from the original repo with `/cheese --continue <slug>` after `cd <absolute-repo-path>`, or from anywhere with `/cheese --continue <absolute-repo-path>/.cheese/notes/<slug>.md`.
