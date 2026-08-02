@@ -539,23 +539,38 @@ def _bundle_content(pyz: Path) -> dict[str, bytes]:
 
 @pytest.mark.parametrize("skill", [s for s in SKILL_SUBCOMMANDS if s != "common"])
 def test_committed_bundle_matches_source(bundles: Path, skill: str) -> None:
-    """Every committed skills/<skill>/scripts/<skill>.pyz must byte-match a fresh
-    build of the current source, because CI gates PRs with the same rebuild+diff.
+    """Every committed skills/<skill>/scripts/<skill>.pyz must carry the same
+    member content as a fresh build of the current source.
+
+    Compared by member content, not raw bytes, matching the gate CI actually
+    runs (`scripts/check_bundles.py`, which compares name/CRC/size and says so:
+    "Byte-for-byte reproducibility is deliberately not asserted"). Bundles are
+    ZIP_DEFLATED and two zlib builds compress identical input to different
+    bytes, so a raw-byte compare reports whoever last committed a bundle rather
+    than whether it is stale -- it fails for every contributor on zlib-ng, and
+    then fails in CI for the bundles they commit. Staleness is the signal worth
+    gating: a source edit that never made it into the committed bundle shows up
+    as changed/added/removed members here.
+
+    Byte determinism is still asserted, where it is actually true: two builds of
+    one source tree on one host must agree
+    (test_build_pyz_tree_staging.py::test_the_wheypoint_bundle_is_deterministic).
+
     common.pyz is excluded: it has no single canonical path (fanned out to each
     consumer in Wave 1+, not stored in skills/common/)."""
     committed = REPO_ROOT / "skills" / skill / "scripts" / f"{skill}.pyz"
     fresh = bundles / f"{skill}.pyz"
     assert committed.exists(), f"committed bundle missing: {committed}"
-    if committed.read_bytes() == fresh.read_bytes():
-        return
 
     have = _bundle_content(committed)
     want = _bundle_content(fresh)
     added = sorted(set(want) - set(have))
     removed = sorted(set(have) - set(want))
     changed = sorted(n for n in set(have) & set(want) if have[n] != want[n])
+    if not (added or removed or changed):
+        return
     raise AssertionError(
-        f"committed {skill}.pyz is stale or not byte-reproducible vs its source "
+        f"committed {skill}.pyz is stale vs its source "
         f"(changed={changed}, added={added}, removed={removed}). "
         f"Rebuild and commit it: python3 scripts/build_pyz.py"
     )
