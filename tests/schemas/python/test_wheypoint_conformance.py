@@ -16,7 +16,9 @@ import attrs
 import easy_cheese_schemas
 import pytest
 from easy_cheese_schemas import (
+    SCHEMA_VERSION,
     ProposedEntry,
+    Provenance,
     WheypointDelta,
     WheypointProjection,
     WheypointRecord,
@@ -29,6 +31,7 @@ from easy_cheese_schemas.wheypoint import (
     _ID_RE,
     _MAX_ID,
     _MAX_ITEMS,
+    _MAX_LEDGER,
     _MAX_TEXT,
 )
 
@@ -113,6 +116,7 @@ def delta(**overrides: Any) -> dict[str, Any]:
 def revision(**overrides: Any) -> dict[str, Any]:
     return merged(
         {
+            "schema_version": 1,
             "work_id": "wheypoint-continuity-kernel",
             "parent_revision_id": "rev-0002",
             "revision_id": "rev-0003",
@@ -135,6 +139,7 @@ def revision(**overrides: Any) -> dict[str, Any]:
 def projection(**overrides: Any) -> dict[str, Any]:
     return merged(
         {
+            "schema_version": 1,
             "work_id": "wheypoint-continuity-kernel",
             "revision_id": "rev-0003",
             "record_digest": DIGEST,
@@ -198,6 +203,31 @@ def test_the_four_types_are_frozen() -> None:
         value.work_id = "other"  # type: ignore[misc]
 
 
+def test_every_persisted_artifact_carries_its_own_vintage() -> None:
+    """A revision and a projection are separate immutable files, so each has to
+    say what it was written against: a receipt cannot inherit a vintage from a
+    record that has moved on since."""
+    for payload, cls in (
+        (record(), WheypointRecord),
+        (revision(), WheypointRevision),
+        (projection(), WheypointProjection),
+    ):
+        stamped = load(
+            merged(payload, {"schema_version": SCHEMA_VERSION}), cls, strict=True
+        )
+        assert stamped.provenance is Provenance.CURRENT
+        assert stamped.value is not None, stamped.problems
+
+        unstamped = load(
+            {key: value for key, value in payload.items() if key != "schema_version"},
+            cls,
+            strict=True,
+        )
+        assert unstamped.provenance is Provenance.UNSTAMPED
+        assert unstamped.value is None
+        assert blames(unstamped.problems, f"{cls.__name__}.schema_version")
+
+
 # --- the central bounds, tested directly ------------------------------------
 
 
@@ -229,9 +259,72 @@ def test_collection_bound_is_the_central_constant() -> None:
 
 
 def test_bounded_collections_of_entries_are_capped() -> None:
-    many = [entry(f"q{index}", blocks_continuation=False) for index in range(_MAX_ITEMS + 1)]
-    problems = refused(record(questions=many), WheypointRecord)
+    at_bound = [
+        entry(f"q{index}", blocks_continuation=False) for index in range(_MAX_ITEMS)
+    ]
+    structured(record(questions=at_bound), WheypointRecord)
+    problems = refused(
+        record(questions=[*at_bound, entry("qx", blocks_continuation=False)]),
+        WheypointRecord,
+    )
     assert blames(problems, "WheypointRecord.questions")
+    assert str(_MAX_ITEMS) in " ".join(problems)
+
+
+def largest_legal_record() -> dict[str, Any]:
+    """Every protected list at its cap, every question and blocker gating."""
+    return record(
+        decisions=[
+            entry(f"d{index}", kind="decision", blocks_continuation=False)
+            for index in range(_MAX_ITEMS)
+        ],
+        questions=[entry(f"q{index}") for index in range(_MAX_ITEMS)],
+        blockers=[entry(f"b{index}", kind="blocker") for index in range(_MAX_ITEMS)],
+        decision_dossier=dossier(),
+    )
+
+
+def test_the_largest_legal_record_round_trips_through_receipt_and_projection() -> None:
+    """The ledgers aggregate the three per-kind lists, so a record the schema
+    accepts must be describable by a receipt and a projection. A tighter ledger
+    bound would force the commit transaction to truncate the preservation
+    ledger, which is the silent drop of protected state this kernel prevents."""
+    value = structured(largest_legal_record(), WheypointRecord)
+    preserved = [
+        protected.entry_id
+        for protected in (*value.decisions, *value.questions, *value.blockers)
+    ]
+    assert len(preserved) == _MAX_LEDGER
+
+    receipt = structured(
+        revision(
+            preserved_entry_ids=preserved,
+            applied_additions=[
+                entry(f"n{index}", kind="decision", blocks_continuation=False)
+                for index in range(_MAX_LEDGER)
+            ],
+        ),
+        WheypointRevision,
+    )
+    assert receipt.preserved_entry_ids == preserved
+    assert len(receipt.applied_additions) == _MAX_LEDGER
+
+    gating = list(value.gating_entry_ids)
+    assert len(gating) == 2 * _MAX_ITEMS
+    view = structured(
+        projection(gating_entry_ids=gating, decision_dossier=dossier()),
+        WheypointProjection,
+    )
+    assert view.gating_entry_ids == gating
+    assert view.status is WheypointStatus.GATED
+
+
+def test_the_ledger_bound_is_the_central_aggregate_constant() -> None:
+    ids = [f"e{index}" for index in range(_MAX_LEDGER)]
+    structured(revision(preserved_entry_ids=ids), WheypointRevision)
+    problems = refused(revision(preserved_entry_ids=[*ids, "extra"]), WheypointRevision)
+    assert blames(problems, "WheypointRevision.preserved_entry_ids")
+    assert str(_MAX_LEDGER) in " ".join(problems)
 
 
 # --- acceptance 2: malformed identifiers, text, digests, provenance ---------
@@ -377,6 +470,27 @@ def test_entry_ids_are_unique_across_every_protected_list() -> None:
         WheypointRecord,
     )
     assert blames(problems, "WheypointRecord.blockers")
+
+
+def test_a_repeated_entry_id_is_blamed_on_the_list_it_appears_in() -> None:
+    problems = refused(
+        record(
+            decisions=[entry("x1", kind="decision", blocks_continuation=False)],
+            questions=[entry("x1", blocks_continuation=False)],
+        ),
+        WheypointRecord,
+    )
+    assert blames(problems, "WheypointRecord.questions")
+    assert not blames(problems, "WheypointRecord.blockers")
+    assert "'x1'" in " ".join(problems)
+
+    within_one_list = refused(
+        record(
+            decisions=[entry("d1", kind="decision", blocks_continuation=False)] * 2
+        ),
+        WheypointRecord,
+    )
+    assert blames(within_one_list, "WheypointRecord.decisions")
 
 
 @pytest.mark.parametrize("state", ["deleted", "gone", "", "ACTIVE"])
@@ -532,25 +646,40 @@ def test_a_stored_status_key_is_ignored_rather_than_trusted() -> None:
 
 
 @pytest.mark.parametrize(
-    ("questions", "blockers", "expected"),
+    ("questions", "blockers", "expected_gating"),
     [
-        ([], [], WheypointStatus.OK),
-        ([entry("q1", blocks_continuation=False)], [], WheypointStatus.OK),
-        ([entry("q1")], [], WheypointStatus.GATED),
-        ([], [entry("b1", kind="blocker")], WheypointStatus.GATED),
+        ([], [], ()),
+        ([entry("q1", blocks_continuation=False)], [], ()),
+        ([], [entry("b1", kind="blocker", blocks_continuation=False)], ()),
+        ([entry("q1")], [], ("q1",)),
+        ([], [entry("b1", kind="blocker")], ("b1",)),
+        ([entry("q1")], [entry("b1", kind="blocker")], ("q1", "b1")),
         (
             [entry("q1", state="resolved", rationale="answered")],
             [entry("b1", kind="blocker", state="withdrawn", rationale="moot")],
-            WheypointStatus.OK,
+            (),
+        ),
+        (
+            [
+                entry(
+                    "q1",
+                    state="superseded",
+                    rationale="folded into q2",
+                    superseded_by="q2",
+                ),
+                entry("q2", blocks_continuation=False),
+            ],
+            [],
+            (),
         ),
     ],
 )
 def test_record_status_is_derived_from_active_blocking_entries(
     questions: list[dict[str, Any]],
     blockers: list[dict[str, Any]],
-    expected: WheypointStatus,
+    expected_gating: tuple[str, ...],
 ) -> None:
-    gated = expected is WheypointStatus.GATED
+    gated = bool(expected_gating)
     value = structured(
         record(
             questions=questions,
@@ -559,8 +688,8 @@ def test_record_status_is_derived_from_active_blocking_entries(
         ),
         WheypointRecord,
     )
-    assert value.status is expected
-    assert bool(value.gating_entry_ids) is gated
+    assert value.gating_entry_ids == expected_gating
+    assert value.status is (WheypointStatus.GATED if gated else WheypointStatus.OK)
 
 
 def test_a_gated_record_requires_a_decision_dossier() -> None:

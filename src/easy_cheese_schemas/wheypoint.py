@@ -17,8 +17,11 @@ every reader to remember:
 * **Session evidence is provenance, not authority.** `SessionProvenance` records
   which harness wrote a revision. Nothing in this module selects on it.
 
-Every length, cardinality, and identifier rule reads one of the private
-constants below, so the bounds can be re-argued in one place.
+All three persisted artifacts -- record, revision, projection -- carry their own
+`schema_version`. A revision is immutable and its record is not, so a receipt
+written under version N stays a version-N document however far the record it
+describes has since moved; inheriting the stamp from the referencing record
+would report the reader's vintage rather than the writer's.
 """
 
 from __future__ import annotations
@@ -35,6 +38,10 @@ from attrs import Attribute, define, field, validators
 # cold reader as much as on the store.
 _MAX_TEXT = 2000
 _MAX_ITEMS = 64
+# A ledger is an aggregate over the three protected lists, not a peer of one of
+# them: a receipt has to be able to name every entry a legal record can hold,
+# and a delta may propose an addition of each kind.
+_MAX_LEDGER = 3 * _MAX_ITEMS
 _MAX_ID = 64
 _ID_RE = re.compile(rf"[a-z0-9][a-z0-9._-]{{0,{_MAX_ID - 1}}}")
 _DIGEST_RE = re.compile(r"sha256:[0-9a-f]{64}")
@@ -165,16 +172,27 @@ def _identifier(_instance: object, attribute: Attribute[Any], value: object) -> 
         )
 
 
-def _identifier_list(
-    instance: object, attribute: Attribute[Any], value: object
-) -> None:
-    _bounded_list(instance, attribute, value)
-    for index, item in enumerate(value, start=1):  # type: ignore[arg-type]
+def _each_identifier(attribute: Attribute[Any], value: list[Any]) -> None:
+    for index, item in enumerate(value, start=1):
         if not isinstance(item, str) or _ID_RE.fullmatch(item) is None:
             raise ValueError(
                 f"{attribute.name}[{index}] must be a lowercase identifier "
                 f"matching {_ID_RE.pattern}"
             )
+
+
+def _identifier_list(
+    instance: object, attribute: Attribute[Any], value: object
+) -> None:
+    _bounded_list(instance, attribute, value)
+    _each_identifier(attribute, value)  # type: ignore[arg-type]
+
+
+def _identifier_ledger(
+    instance: object, attribute: Attribute[Any], value: object
+) -> None:
+    _bounded_ledger(instance, attribute, value)
+    _each_identifier(attribute, value)  # type: ignore[arg-type]
 
 
 def _digest(_instance: object, attribute: Attribute[Any], value: object) -> None:
@@ -192,13 +210,24 @@ def _commit(_instance: object, attribute: Attribute[Any], value: object) -> None
         )
 
 
-def _bounded_list(_instance: object, attribute: Attribute[Any], value: object) -> None:
+def _list_within(attribute: Attribute[Any], value: object, limit: int) -> None:
     if not isinstance(value, list):
         raise ValueError(f"{attribute.name} must be a list")
-    if len(value) > _MAX_ITEMS:
+    if len(value) > limit:
         raise ValueError(
-            f"{attribute.name} must be at most {_MAX_ITEMS} items, not {len(value)}"
+            f"{attribute.name} must be at most {limit} items, not {len(value)}"
         )
+
+
+def _bounded_list(_instance: object, attribute: Attribute[Any], value: object) -> None:
+    _list_within(attribute, value, _MAX_ITEMS)
+
+
+def _bounded_ledger(
+    _instance: object, attribute: Attribute[Any], value: object
+) -> None:
+    """For a list that aggregates the per-kind lists rather than mirroring one."""
+    _list_within(attribute, value, _MAX_LEDGER)
 
 
 def _non_empty_bounded_list(
@@ -387,38 +416,41 @@ class RepositoryProvenance:
     commit: str | None = field(default=None, validator=validators.optional(_commit))
 
 
-def _entries_of(kind: EntryKind) -> Any:
-    """Each protected list owns one kind, so a reader counting blockers never
-    has to filter a mixed collection first."""
+def _protected_entries(kind: EntryKind, *preceding: str) -> Any:
+    """The rules every protected list carries.
+
+    Each list owns one kind, so a reader counting blockers never has to filter a
+    mixed collection first. Entry IDs address protected state across all three
+    lists, so a duplicate would make a transition ambiguous -- each list is
+    checked against the lists declared before it, which puts the blame on the
+    list the repeated id was actually found in.
+    """
 
     def rule(
-        _instance: object, attribute: Attribute[Any], value: list[ProtectedEntry]
+        instance: WheypointRecord,
+        attribute: Attribute[Any],
+        value: list[ProtectedEntry],
     ) -> None:
-        _bounded_list(_instance, attribute, value)
+        _bounded_list(instance, attribute, value)
+        seen = {
+            entry.entry_id
+            for name in preceding
+            for entry in getattr(instance, name)
+        }
         for entry in value:
             if entry.kind is not kind:
                 raise ValueError(
                     f"{attribute.name} must contain only {kind.value} entries, "
                     f"but {entry.entry_id!r} is a {entry.kind.value}"
                 )
+            if entry.entry_id in seen:
+                raise ValueError(
+                    f"{attribute.name} must not repeat an entry id already used "
+                    f"in this record: {entry.entry_id!r}"
+                )
+            seen.add(entry.entry_id)
 
     return rule
-
-
-def _unique_entry_ids(
-    instance: WheypointRecord, attribute: Attribute[Any], value: list[ProtectedEntry]
-) -> None:
-    """Entry IDs address protected state across all three lists, so a duplicate
-    would make a transition ambiguous."""
-    _entries_of(EntryKind.BLOCKER)(instance, attribute, value)
-    seen: set[str] = set()
-    for entry in (*instance.decisions, *instance.questions, *value):
-        if entry.entry_id in seen:
-            raise ValueError(
-                f"{attribute.name} must not repeat an entry id already used in "
-                f"this record: {entry.entry_id!r}"
-            )
-        seen.add(entry.entry_id)
 
 
 def _record_dossier(
@@ -466,9 +498,15 @@ class WheypointRecord:
     orientation: str = field(validator=_bounded_text)
     working_context: list[str] = field(validator=_bounded_text_list)
     next_action: NextAction
-    decisions: list[ProtectedEntry] = field(validator=_entries_of(EntryKind.DECISION))
-    questions: list[ProtectedEntry] = field(validator=_entries_of(EntryKind.QUESTION))
-    blockers: list[ProtectedEntry] = field(validator=_unique_entry_ids)
+    decisions: list[ProtectedEntry] = field(
+        validator=_protected_entries(EntryKind.DECISION)
+    )
+    questions: list[ProtectedEntry] = field(
+        validator=_protected_entries(EntryKind.QUESTION, "decisions")
+    )
+    blockers: list[ProtectedEntry] = field(
+        validator=_protected_entries(EntryKind.BLOCKER, "decisions", "questions")
+    )
     artifact_links: list[ArtifactLink] = field(validator=_bounded_list)
     decision_dossier: list[DecisionFork] = field(validator=_record_dossier)
 
@@ -581,6 +619,7 @@ class WheypointRevision:
     dropped rather than take the resulting record on faith.
     """
 
+    schema_version: int = field(validator=validators.ge(1))
     work_id: str = field(validator=_identifier)
     # Null exactly once, for the genesis revision.
     parent_revision_id: str | None = field(validator=validators.optional(_identifier))
@@ -588,11 +627,11 @@ class WheypointRevision:
     revision_number: int = field(validator=validators.ge(1))
     request_digest: str = field(validator=_digest)
     record_digest: str = field(validator=_digest)
-    applied_additions: list[ProtectedEntry] = field(validator=_bounded_list)
+    applied_additions: list[ProtectedEntry] = field(validator=_bounded_ledger)
     applied_transitions: list[EntryTransition] = field(
         validator=_one_transition_per_entry
     )
-    preserved_entry_ids: list[str] = field(validator=_identifier_list)
+    preserved_entry_ids: list[str] = field(validator=_identifier_ledger)
     projection_path: str = field(validator=_bounded_text)
     projection_digest: str = field(validator=_digest)
     repository: RepositoryProvenance
@@ -611,12 +650,13 @@ class WheypointProjection:
     writing the word.
     """
 
+    schema_version: int = field(validator=validators.ge(1))
     work_id: str = field(validator=_identifier)
     revision_id: str = field(validator=_identifier)
     record_digest: str = field(validator=_digest)
     projection_digest: str = field(validator=_digest)
     next_action: NextAction
-    gating_entry_ids: list[str] = field(validator=_identifier_list)
+    gating_entry_ids: list[str] = field(validator=_identifier_ledger)
     decision_dossier: list[DecisionFork] = field(validator=_projection_dossier)
     durability: Durability = Durability.CANONICAL_LOCAL
 
