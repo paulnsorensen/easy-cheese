@@ -12,6 +12,7 @@ import tomllib
 from pathlib import Path
 
 import pytest
+import vendor_deps
 from attrs import define, field
 from attrs.exceptions import FrozenInstanceError
 
@@ -185,16 +186,16 @@ class TestDistributionMetadata:
 
     def test_dependency_floors_match_the_vendored_versions(self) -> None:
         # The floors are only meaningful if something exercises them, and the
-        # suite runs against vendor/. Declaring a lower floor would be an
-        # untested claim, so the two must agree.
+        # suite runs against vendor/, which requirements-vendor.txt pins.
+        # Declaring a lower floor would be an untested claim, so the two must
+        # agree -- which is why a dependency bump lands here before it merges.
         import attrs
 
+        pins = vendor_deps.pinned_versions()
         deps = self._pyproject()["project"]["dependencies"]
-        assert f"attrs>={attrs.__version__}" in deps
-        assert "cattrs>=26.1.0" in deps
-
-        readme = (REPO_ROOT / "vendor" / "README.md").read_text(encoding="utf-8")
-        assert "| cattrs | 26.1.0 |" in readme
+        assert pins["attrs"] == attrs.__version__
+        assert f"attrs>={pins['attrs']}" in deps
+        assert f"cattrs>={pins['cattrs']}" in deps
 
     def test_version_matches_package(self) -> None:
         import easy_cheese_schemas

@@ -18,6 +18,7 @@ from types import ModuleType
 from typing import Any
 
 import pytest
+import vendor_deps
 
 from easy_cheese_schemas import gates, io, load
 from easy_cheese_schemas.curd import MAX_WAVE_SIZE, MIN_CURD_SURFACE, CurdBlock
@@ -661,8 +662,7 @@ class TestVendoredDependencyProvenance:
             assert module.__file__ is not None
             assert module.__file__.startswith(vendor), (module.__name__, module.__file__)
 
-    def test_vendored_attrs_matches_the_version_recorded_in_vendor_readme(self) -> None:
+    def test_vendored_attrs_matches_the_pinned_version(self) -> None:
         import attrs
 
-        readme = (REPO_ROOT / "vendor" / "README.md").read_text(encoding="utf-8")
-        assert f"| attrs | {attrs.__version__} |" in readme
+        assert vendor_deps.pinned_versions()["attrs"] == attrs.__version__
