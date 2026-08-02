@@ -16,7 +16,8 @@ on:
       - 'pyproject.toml'
       # Vendored deps are staged into ultracook.pyz, so a vendor bump makes the
       # committed bundles stale.
-      - 'vendor/**'
+      - 'requirements-vendor.txt'
+      - 'scripts/vendor_deps.py'
   push:
     branches: [main]
     # Keep the check on main too so stale bundles are visible after merges.
@@ -28,7 +29,8 @@ on:
       - 'scripts/check_bundles.py'
       - 'skills/*/scripts/*.pyz'
       - 'pyproject.toml'
-      - 'vendor/**'
+      - 'requirements-vendor.txt'
+      - 'scripts/vendor_deps.py'
 
 permissions:
   contents: read
@@ -51,6 +53,12 @@ jobs:
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
+
+      # vendor/ is generated, not committed, so the bundles cannot be rebuilt
+      # without it. Hash-pinned in requirements-vendor.txt, so this is
+      # deterministic — but, unlike the old committed tree, not offline.
+      - name: Vendor runtime dependencies
+        run: python3 scripts/vendor_deps.py
 
       - name: Build bundles
         run: python3 scripts/build_pyz.py

@@ -21,7 +21,13 @@ git clone https://github.com/paulnsorensen/easy-cheese.git
 cd easy-cheese
 pip install pyyaml==6.0.2 pytest==9.0.3   # validation + Python tests
 brew install bats-core shellcheck           # macOS — bash tests
+python3 scripts/vendor_deps.py              # unpack vendor/ (or: just vendor)
 ```
+
+`vendor/` holds the attrs/cattrs trees the Python suite imports and the `.pyz`
+bundles ship. It is generated from the hash-pinned `requirements-vendor.txt`
+rather than committed, so a fresh clone needs that last command once; re-run it
+whenever the pins change.
 
 ## Running tests
 

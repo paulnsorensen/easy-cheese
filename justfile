@@ -10,8 +10,12 @@ export PYTEST_DISABLE_PLUGIN_AUTOLOAD := "1"
 @default:
     just --list
 
+# Materialize vendor/ from requirements-vendor.txt (no-op when already current; needs network otherwise)
+vendor:
+    python3 scripts/vendor_deps.py
+
 # Run all tests (skill validators + melt + shared + fan-out suites + bash install tests + fan-out bats + JS)
-test:
+test: vendor
     python3 .github/scripts/test_validate_skills.py -v
     python3 .github/scripts/test_validate_wiki.py
     python3 .github/scripts/validate_skills.py
@@ -32,11 +36,11 @@ test-skill-overlap:
     cargo test --manifest-path tools/skill-overlap/Cargo.toml
 
 # Build self-contained .pyz bundles for shared-consuming skills (CI rebuilds on every push to main)
-bundle:
+bundle: vendor
     python3 scripts/build_pyz.py
 
 # Preview the exact tree a release ships (skills + .pyz only, no sources)
-release-preview:
+release-preview: vendor
     python3 scripts/stage_release.py --out .release-preview
     @echo "Staged release tree at .release-preview — inspect with: find .release-preview -type f"
 

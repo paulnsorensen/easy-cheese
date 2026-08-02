@@ -2,7 +2,9 @@
 # See: https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
 #
 # Python in .github/scripts/ (CI helpers) is pinned inline in workflows and
-# is not tracked here. The docs/ pip manifest is tracked below.
+# is not tracked here. The docs/ pip manifest is tracked below, as is the root,
+# which covers requirements-vendor.txt (the hash-pinned trees `just vendor`
+# unpacks into vendor/) and pyproject.toml's published dependency floors.
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -12,6 +14,15 @@ updates:
     open-pull-requests-limit: 5
     groups:
       actions-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      vendor-minor-and-patch:
         update-types: [minor, patch]
 
   - package-ecosystem: pip

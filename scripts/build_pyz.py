@@ -21,9 +21,10 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
+import vendor_deps
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = REPO_ROOT / "src"
-VENDOR_ROOT = REPO_ROOT / "vendor"
 SHARED_SCRIPTS = REPO_ROOT / "shared" / "scripts"
 SHARED_MODULES = {p.stem for p in SHARED_SCRIPTS.glob("*.py")}
 ZIP_TIMESTAMP = (1980, 1, 2, 0, 0, 0)
@@ -132,27 +133,33 @@ EXTRA_MODULES: dict[str, list[tuple[str, str]]] = {
 
 # Whole directory trees (and the odd single-file module) staged verbatim into a
 # bundle. The import scanner above only resolves flat sibling modules, so a real
-# package's membership is declared here rather than discovered. easy_cheese_schemas
-# needs its runtime deps vendored alongside it -- attrs/cattrs are pure-Python
-# wheels that zipimport can load, and their .dist-info dirs must ride along
-# because attrs.__version__ reads its own packaging metadata.
+# package's membership is declared here rather than discovered.
 #
-# Only ultracook carries them: it owns the fan-out validators a tracked follow-up
-# migrates onto these types, so it is the first real consumer. Staging half a
-# megabyte into every other bundle would be dead weight.
+# Only ultracook carries easy_cheese_schemas: it owns the fan-out validators a
+# tracked follow-up migrates onto these types, so it is the first real consumer.
+# Staging half a megabyte into every other bundle would be dead weight.
 PACKAGE_TREES: dict[str, list[Path]] = {
-    "ultracook": [
-        SRC_ROOT / "easy_cheese_schemas",
-        VENDOR_ROOT / "attr",
-        VENDOR_ROOT / "attrs",
-        VENDOR_ROOT / "attrs-26.1.0.dist-info",
-        VENDOR_ROOT / "cattr",
-        VENDOR_ROOT / "cattrs",
-        VENDOR_ROOT / "cattrs-26.1.0.dist-info",
-        VENDOR_ROOT / "typing_extensions.py",
-        VENDOR_ROOT / "typing_extensions-4.16.0.dist-info",
-    ],
+    "ultracook": [SRC_ROOT / "easy_cheese_schemas"],
 }
+
+# Bundles that also carry easy_cheese_schemas' runtime deps -- attrs/cattrs are
+# pure-Python wheels that zipimport can load, and their .dist-info dirs must ride
+# along because attrs.__version__ reads its own packaging metadata.
+#
+# Read off the generated tree rather than listed by version here: a Dependabot
+# bump to requirements-vendor.txt changes the .dist-info directory names, and a
+# hard-coded list would turn every such PR into a build failure.
+VENDORED_DEP_BUNDLES = ("ultracook",)
+
+
+def vendored_dep_trees() -> list[Path]:
+    """Every top-level entry `just vendor` unpacked, in a stable order."""
+    vendor_deps.require_populated("build_pyz")
+    return sorted(
+        path
+        for path in vendor_deps.VENDOR_ROOT.iterdir()
+        if path.name not in {"__pycache__", vendor_deps.STAMP.name}
+    )
 
 # The "common" bundle ships cross-cutting CLI entrypoints sourced from
 # shared/scripts/ (not src/<skill>/). It has no skill dir of its own; instead a
@@ -328,7 +335,10 @@ def build_bundle(skill: str, target: Path) -> Path:
                 shutil.copy(skill_dir / f"{name}.py", stage / f"{name}.py")
         for src_subdir, filename in EXTRA_MODULES.get(skill, []):
             shutil.copy(SRC_ROOT / src_subdir / filename, stage / filename)
-        for tree in PACKAGE_TREES.get(skill, []):
+        trees = list(PACKAGE_TREES.get(skill, []))
+        if skill in VENDORED_DEP_BUNDLES:
+            trees.extend(vendored_dep_trees())
+        for tree in trees:
             if tree.is_dir():
                 # __pycache__ is skipped: importing the package from source (the
                 # test suite does) would otherwise leak host-specific .pyc bytes

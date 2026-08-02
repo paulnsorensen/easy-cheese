@@ -48,3 +48,6 @@ src/content/docs/**
 
 # `just release-preview` staging output (hidden so validate_skills.py skips it)
 .release-preview/
+
+# `just vendor` output — extracted wheel trees rebuilt from requirements-vendor.txt
+/vendor/
