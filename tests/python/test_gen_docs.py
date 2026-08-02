@@ -478,7 +478,10 @@ class TestEmitSidebar:
             {"slug": "skills/age", "label": "/age"},
         ]
         start_group = next(g for g in sidebar if g["label"] == "Start")
-        assert {"label": "Install", "slug": "install"} in start_group["items"]
+        assert start_group["items"] == [
+            {"label": "Home", "link": "/"},
+            {"label": "Install", "slug": "install"},
+        ]
 
     def test_skill_entries_have_no_items_overview_or_collapsed(self, gen_docs, isolated_docs):
         skill = gen_docs.GeneratedPage("/age", "skills/age", "skills/age/SKILL.md")
@@ -520,10 +523,9 @@ class TestEmitSidebar:
 
 
 class TestCleanGeneratedDocs:
-    def test_preserves_authored_homepage_and_removes_generated_files(self, gen_docs, isolated_docs):
+    def test_removes_all_content_docs_files(self, gen_docs, isolated_docs):
         docs = isolated_docs / "src" / "content" / "docs"
         (docs / "skills").mkdir(parents=True)
-        (docs / "index.md").write_text("authored", encoding="utf-8")
         (docs / "install.md").write_text("generated", encoding="utf-8")
         (docs / "skills" / "age.md").write_text("generated", encoding="utf-8")
         sidebar = isolated_docs / "src" / "sidebar.mjs"
@@ -532,7 +534,6 @@ class TestCleanGeneratedDocs:
 
         gen_docs.clean_generated_docs()
 
-        assert (docs / "index.md").read_text(encoding="utf-8") == "authored"
         assert not (docs / "install.md").exists()
         assert not (docs / "skills").exists()
         assert not sidebar.exists()
@@ -541,7 +542,6 @@ class TestCleanGeneratedDocs:
 class TestMainGeneration:
     def test_main_writes_physical_starlight_tree_and_sidebar(self, gen_docs, isolated_docs):
         (isolated_docs / "src" / "content" / "docs").mkdir(parents=True)
-        (isolated_docs / "src" / "content" / "docs" / "index.md").write_text("authored", encoding="utf-8")
         (isolated_docs / "README.md").write_text(
             "# Title\n\n"
             "## Optional tools\n\ntools\n\n"
@@ -565,7 +565,6 @@ class TestMainGeneration:
         gen_docs.main()
 
         root = isolated_docs / "src" / "content" / "docs"
-        assert (root / "index.md").read_text(encoding="utf-8") == "authored"
         assert (root / "install.md").exists()
         assert (root / "skills" / "index.md").exists()
         assert (root / "skills" / "age.md").exists()
@@ -588,8 +587,6 @@ class TestMainGeneration:
         # the `.md`-only guard above missed).
         assert not re.search(r"\]\([^)]*references/[^)]*\)", generated_markdown)
         for page in root.rglob("*.md"):
-            if page == root / "index.md":
-                continue  # authored homepage, not generated
             _, page_body = gen_docs.parse_frontmatter(page.read_text(encoding="utf-8"))
             assert not page_body.lstrip().startswith("# "), page
 

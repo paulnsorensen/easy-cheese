@@ -3,6 +3,10 @@ import Header from '@cheeselord/design/components/Header.astro';
 import '@cheeselord/design/styles/cheeselord.css';
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const title = '🧀 easy-cheese';
+const description =
+  "Harness-agnostic Agent Skills — the cheese-making pipeline for code review, implementation, refactoring, and PR rescue.";
+const canonicalUrl = new URL(`${base}/`, Astro.site).toString();
 ---
 
 <!doctype html>
@@ -11,13 +15,16 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="dark" />
-    <title>🧀 easy-cheese</title>
-    <meta
-      name="description"
-      content="Harness-agnostic Agent Skills — the cheese-making pipeline for code review, implementation, refactoring, and PR rescue."
-    />
+    <title>{title}</title>
+    <meta name="description" content={description} />
     <meta name="theme-color" content="#1d1713" />
     <link rel="icon" type="image/svg+xml" href={`${base}/favicon.svg`} />
+    <link rel="canonical" href={canonicalUrl} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonicalUrl} />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary" />
   </head>
   <body>
     <Header project="easy-cheese" projectHref={`${base}/`}>
@@ -144,7 +151,6 @@ dispatching /pasteurize --auto …
     margin-block-start: 2.2rem;
   }
   .btn {
-    font-family: 'IBM Plex Mono', ui-monospace, monospace;
     font-size: 0.8rem;
     letter-spacing: 0.04em;
     padding: 0.7rem 1.15rem;
@@ -166,7 +172,6 @@ dispatching /pasteurize --auto …
   }
   .meta {
     margin-block-start: 1.4rem;
-    font-family: 'IBM Plex Mono', ui-monospace, monospace;
     font-size: 0.72rem;
     color: var(--dim);
   }
@@ -191,7 +196,6 @@ dispatching /pasteurize --auto …
     padding: 0.55rem 0.9rem;
     background: oklch(from var(--cellar) calc(l - 0.015) c h);
     border-block-end: 1px solid var(--hairline);
-    font-family: 'IBM Plex Mono', ui-monospace, monospace;
     font-size: 0.68rem;
     letter-spacing: 0.06em;
     color: var(--dim);
@@ -229,7 +233,6 @@ dispatching /pasteurize --auto …
   }
   .band h2 {
     margin: 0 0 2rem;
-    font-family: 'IBM Plex Mono', ui-monospace, monospace;
     font-size: 0.72rem;
     font-weight: 400;
     letter-spacing: 0.18em;
@@ -247,7 +250,6 @@ dispatching /pasteurize --auto …
   }
   .steps strong {
     display: block;
-    font-family: 'IBM Plex Mono', ui-monospace, monospace;
     font-size: 0.85rem;
     font-weight: 500;
   }

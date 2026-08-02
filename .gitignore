@@ -44,7 +44,6 @@ dist/
 src/sidebar.mjs
 src/content/docs/**
 !src/content/docs/
-!src/content/docs/index.md
 
 # `just release-preview` staging output (hidden so validate_skills.py skips it)
 .release-preview/

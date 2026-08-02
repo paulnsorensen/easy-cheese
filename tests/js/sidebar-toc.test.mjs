@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { injectToc, isSkillPageHref } from '../../src/components/sidebar-toc.mjs';
+import { injectToc, isSkillPageHref, ANCHOR_CLASS } from '../../src/components/sidebar-toc.mjs';
 
 const isActive = (entry) => entry.isCurrent;
 
@@ -35,7 +35,7 @@ test('active skill link with h2s gains indented sibling anchors excluding the sy
 		href: '/skills/age/#voice',
 		isCurrent: false,
 		badge: undefined,
-		attrs: { class: 'sidebar-h2-anchor' },
+		attrs: { class: ANCHOR_CLASS, 'aria-label': '/age: Voice' },
 	});
 	assert.deepEqual(entries[2], {
 		type: 'link',
@@ -43,7 +43,7 @@ test('active skill link with h2s gains indented sibling anchors excluding the sy
 		href: '/skills/age/#formatting',
 		isCurrent: false,
 		badge: undefined,
-		attrs: { class: 'sidebar-h2-anchor' },
+		attrs: { class: ANCHOR_CLASS, 'aria-label': '/age: Formatting' },
 	});
 	assert.ok(!entries.some((e) => e.href?.endsWith('#_top')));
 });

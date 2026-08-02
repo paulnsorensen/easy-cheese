@@ -12,7 +12,7 @@ const TOC_TITLE_SLUG = '_top';
 // Anchor links carry this class so the site stylesheet can indent them
 // under their skill link; the entries stay siblings rather than a group so
 // the skill name renders once (a group label would repeat the current link).
-const ANCHOR_CLASS = 'sidebar-h2-anchor';
+export const ANCHOR_CLASS = 'sidebar-h2-anchor';
 
 // ADR-002 scopes the TOC to skill pages (route `/skills/<name>/`), not the
 // skills index (`/skills/`) or other pages with h2s (README, Install, ...).
@@ -44,7 +44,7 @@ export function injectToc(sidebar, tocItems, isActive) {
 						href: `${entry.href}#${heading.slug}`,
 						isCurrent: false,
 						badge: undefined,
-						attrs: { class: ANCHOR_CLASS },
+						attrs: { class: ANCHOR_CLASS, 'aria-label': `${entry.label}: ${heading.text}` },
 					})),
 				];
 			}
