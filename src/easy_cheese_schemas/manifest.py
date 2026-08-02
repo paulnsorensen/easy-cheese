@@ -190,6 +190,11 @@ def _string_list(_instance: object, attribute: Attribute[Any], value: object) ->
             raise ValueError(f"{attribute.name}[{index}] must be a non-empty string")
 
 
+def _non_empty_list(_instance: object, attribute: Attribute[Any], value: object) -> None:
+    if not value:
+        raise ValueError(f"{attribute.name} must be a non-empty list")
+
+
 def _non_empty_string_list(
     instance: object, attribute: Attribute[Any], value: object
 ) -> None:
@@ -234,33 +239,46 @@ def _single_command(instance: object, attribute: Attribute[Any], value: object) 
         )
 
 
-def reject_shared_curd_files(curds: Sequence[DecomposedCurd]) -> None:
+def reject_shared_curd_files(
+    _instance: object, attribute: Attribute[Any], curds: Sequence[DecomposedCurd]
+) -> None:
     """Two curds that can touch the same file cannot fan out in parallel.
 
     A run-manifest curd is named by its `id`; a decomposition curd has no id
-    until a run exists, so it is named by its 1-based position.
+    until a run exists, so it is named by its 1-based position. Below
+    `PARALLEL_THRESHOLD` the collection runs as one linear unit and is trivially
+    disjoint, so the check does not apply.
+
+    This is a field validator rather than a `__attrs_post_init__` check so that
+    `load` can disable it while structuring and re-run it afterwards alongside
+    every other field rule -- a collection rule that raised from `__init__`
+    would truncate the problem list to itself.
     """
+    if len(curds) < PARALLEL_THRESHOLD:
+        return
     owner: dict[str, object] = {}
     for position, curd in enumerate(curds, start=1):
         name = getattr(curd, "id", position)
         for path in curd.files:
             if path in owner:
                 raise ValueError(
-                    f"file {path!r} appears in curd {owner[path]} and curd "
-                    f"{name} -- curds must be file-disjoint (move shared "
-                    "content to seed or wiring)"
+                    f"{attribute.name} must be file-disjoint: file {path!r} "
+                    f"appears in curd {owner[path]} and curd {name} (move "
+                    "shared content to seed or wiring)"
                 )
             owner[path] = name
 
 
-def reject_unschedulable_wiring(wiring: Sequence[WiringRow]) -> None:
+def reject_unschedulable_wiring(
+    _instance: object, attribute: Attribute[Any], wiring: Sequence[WiringRow]
+) -> None:
     """Wiring rows are applied in dependency order, so the graph must be
     acyclic and every W<n> dependency must exist. Dependencies outside the
     wiring set -- typically curd ids -- are legitimate and ignored, matching
     src/fanout/wiring.py."""
     ids = {row.id for row in wiring}
     errors = [
-        f"wiring {row.id}: depends_on references unknown id {dependency!r}"
+        f"{row.id} depends_on references unknown id {dependency!r}"
         for row in wiring
         for dependency in row.depends_on
         if _WIRING_ID_RE.match(dependency) and dependency not in ids
@@ -272,9 +290,11 @@ def reject_unschedulable_wiring(wiring: Sequence[WiringRow]) -> None:
         sorter.prepare()
     except graphlib.CycleError as exc:
         path = " -> ".join(str(node) for node in exc.args[1])
-        errors.append(f"wiring DAG has cycle: {path}")
+        errors.append(f"the dependency graph has cycle {path}")
     if errors:
-        raise ValueError("; ".join(errors))
+        raise ValueError(
+            f"{attribute.name} must be schedulable: " + "; ".join(errors)
+        )
 
 
 @define(frozen=True)
@@ -393,7 +413,7 @@ class AgentResolution:
     discount the result."""
 
     request: AgentRequest
-    attempts: list[AgentAttempt] = field(validator=validators.min_len(1))
+    attempts: list[AgentAttempt] = field(validator=_non_empty_list)
     resolved: ResolvedAgent
     # Null exactly when the first preferred agent type was accepted.
     fallback_reason: str | None
@@ -463,8 +483,11 @@ class RunManifest:
     host_capabilities: dict[str, bool] = field()
     agent_resolution: AgentResolution = field()
     seed: Seed = field()
-    curds: list[CurdRecord] = field()
-    wiring: list[WiringRow] = field()
+    # The collection rules the fan-out validator ends with, attached to the
+    # field each one reads: a manifest that passes every field rule can still
+    # describe an undispatchable run.
+    curds: list[CurdRecord] = field(validator=reject_shared_curd_files)
+    wiring: list[WiringRow] = field(validator=reject_unschedulable_wiring)
     plate_layout: PlateLayout | None = None
     current_review: ReviewContext | None = None
     post_review: PostReview | None = None
@@ -472,10 +495,3 @@ class RunManifest:
     pr_plan: PrPlan | None = None
     phase_summary: str | None = None
     carry_forward: list[str] = field(factory=list, validator=_string_list)
-
-    def __attrs_post_init__(self) -> None:
-        # The collection rules the fan-out validator ends with: a manifest that
-        # passes every field rule can still describe an undispatchable run.
-        if len(self.curds) >= PARALLEL_THRESHOLD:
-            reject_shared_curd_files(self.curds)
-        reject_unschedulable_wiring(self.wiring)

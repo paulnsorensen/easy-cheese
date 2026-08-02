@@ -13,7 +13,7 @@ import re
 from enum import Enum
 from typing import Any
 
-from attrs import Attribute, define, field, validators
+from attrs import Attribute, define, field
 
 BRANCH_RE = re.compile(r"^[A-Za-z0-9._/-]+$")
 # 7 is git's default short-SHA floor (`core.abbrev`); shorter values risk
@@ -46,6 +46,11 @@ def _string_list(_instance: object, attribute: Attribute[Any], value: object) ->
             raise ValueError(f"{attribute.name}[{index}] must be a non-empty string")
 
 
+def _non_empty_list(_instance: object, attribute: Attribute[Any], value: object) -> None:
+    if not value:
+        raise ValueError(f"{attribute.name} must be a non-empty list")
+
+
 def _git_ref(_instance: object, attribute: Attribute[Any], value: object) -> None:
     if not isinstance(value, str) or BRANCH_RE.match(value) is None:
         raise ValueError(
@@ -62,6 +67,43 @@ def _commit_shas(_instance: object, attribute: Attribute[Any], value: object) ->
                 f"{attribute.name}[{index}] must be a hex SHA (7-40 hex chars); "
                 f"got {commit!r}"
             )
+
+
+def _distinct_branches(
+    _instance: object, attribute: Attribute[Any], groups: list[PrGroup]
+) -> None:
+    """Two groups claiming one branch would race the same ref."""
+    seen: set[str] = set()
+    for group in groups:
+        if group.branch in seen:
+            raise ValueError(
+                f"{attribute.name} must be branch-distinct: {group.branch!r} is "
+                "claimed by two groups -- the two pull requests would race the "
+                "same ref"
+            )
+        seen.add(group.branch)
+
+
+def _matches_shape(
+    instance: PrPlan, attribute: Attribute[Any], groups: list[PrGroup]
+) -> None:
+    """The shape constrains the group set, so the rule lives on the field it
+    reads. It is a field validator rather than an `__attrs_post_init__` check
+    because `load` disables validators while structuring and re-runs them
+    afterwards; a rule that raised from `__init__` would truncate the problem
+    list to itself."""
+    if instance.shape is PrShape.SINGLE and len(groups) != 1:
+        raise ValueError(
+            f"{attribute.name} must be exactly one group for the single "
+            f"shape, not {len(groups)}"
+        )
+    if instance.shape is PrShape.ORTHOGONAL_FLAT:
+        for index, group in enumerate(groups, start=1):
+            if group.base != "main":
+                raise ValueError(
+                    f"{attribute.name}[{index}].base must be main for "
+                    "orthogonal_flat"
+                )
 
 
 @define(frozen=True)
@@ -83,31 +125,6 @@ class PrPlan:
     """The full publish plan: one shape, at least one group."""
 
     shape: PrShape
-    groups: list[PrGroup] = field(validator=validators.min_len(1))
-
-    def __attrs_post_init__(self) -> None:
-        self._reject_duplicate_branches()
-        self._reject_shape_mismatch()
-
-    def _reject_duplicate_branches(self) -> None:
-        seen: set[str] = set()
-        for group in self.groups:
-            if group.branch in seen:
-                raise ValueError(
-                    f"branch {group.branch!r} is claimed by two groups -- the "
-                    "two pull requests would race the same ref"
-                )
-            seen.add(group.branch)
-
-    def _reject_shape_mismatch(self) -> None:
-        if self.shape is PrShape.SINGLE and len(self.groups) != 1:
-            raise ValueError(
-                f"single shape must contain exactly one group, not "
-                f"{len(self.groups)}"
-            )
-        if self.shape is PrShape.ORTHOGONAL_FLAT:
-            for index, group in enumerate(self.groups, start=1):
-                if group.base != "main":
-                    raise ValueError(
-                        f"groups[{index}].base must be main for orthogonal_flat"
-                    )
+    groups: list[PrGroup] = field(
+        validator=[_non_empty_list, _distinct_branches, _matches_shape]
+    )

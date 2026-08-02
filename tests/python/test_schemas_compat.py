@@ -183,10 +183,18 @@ class TestDistributionMetadata:
     def test_python_floor_is_311(self) -> None:
         assert self._pyproject()["project"]["requires-python"] == ">=3.11"
 
-    def test_dependency_floors(self) -> None:
+    def test_dependency_floors_match_the_vendored_versions(self) -> None:
+        # The floors are only meaningful if something exercises them, and the
+        # suite runs against vendor/. Declaring a lower floor would be an
+        # untested claim, so the two must agree.
+        import attrs
+
         deps = self._pyproject()["project"]["dependencies"]
-        assert "attrs>=25.4.0" in deps
+        assert f"attrs>={attrs.__version__}" in deps
         assert "cattrs>=26.1.0" in deps
+
+        readme = (REPO_ROOT / "vendor" / "README.md").read_text(encoding="utf-8")
+        assert "| cattrs | 26.1.0 |" in readme
 
     def test_version_matches_package(self) -> None:
         import easy_cheese_schemas

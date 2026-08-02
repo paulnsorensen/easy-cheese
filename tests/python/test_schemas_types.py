@@ -214,7 +214,9 @@ class TestRunManifestFields:
         result = load(payload, RunManifest, strict=True)
         assert result.value is None
         assert result.problems == (
-            "RunManifest.phase must be valid: 'cheese_complete' is not a valid Phase",
+            "RunManifest.phase must be one of: gate_approved, seed_complete, "
+            "curds_complete, merge_complete, wiring_complete, final_merge_complete, "
+            "post_review_complete, pr_publish_complete",
         )
 
     def test_review_context_rejects_a_short_tree_oid(self) -> None:
@@ -247,9 +249,27 @@ class TestRunManifestCollectionRules:
         result = load(payload, RunManifest, strict=True)
         assert result.value is None
         assert result.problems == (
-            "RunManifest: file 'src/easy_cheese_schemas/manifest.py' appears in curd "
-            "1 and curd 2 -- curds must be file-disjoint (move shared content to "
-            "seed or wiring)",
+            "RunManifest.curds must be file-disjoint: file "
+            "'src/easy_cheese_schemas/manifest.py' appears in curd 1 and curd 2 "
+            "(move shared content to seed or wiring)",
+        )
+
+    def test_a_collection_rule_does_not_mask_a_field_problem(self) -> None:
+        """Collection rules used to run in __attrs_post_init__, which raises
+        inside __init__ and aborted the whole pass — so a manifest that broke a
+        field rule AND a collection rule reported only the collection one. Both
+        must surface, or the one-pass contract is a lie for exactly the
+        documents that need it most."""
+        payload = deepcopy(RUN_MANIFEST)
+        payload["slug"] = ""
+        payload["curds"] = [deepcopy(CURD_RECORD), dict(deepcopy(CURD_RECORD), id=2)]
+        result = load(payload, RunManifest, strict=True)
+        assert result.value is None
+        assert result.problems == (
+            "RunManifest.slug must be a non-empty string",
+            "RunManifest.curds must be file-disjoint: file "
+            "'src/easy_cheese_schemas/manifest.py' appears in curd 1 and curd 2 "
+            "(move shared content to seed or wiring)",
         )
 
     def test_wiring_cycle_is_rejected(self) -> None:
@@ -261,7 +281,10 @@ class TestRunManifestCollectionRules:
         ]
         result = load(payload, RunManifest, strict=True)
         assert result.value is None
-        assert result.problems == ("RunManifest: wiring DAG has cycle: W1 -> W2 -> W1",)
+        assert result.problems == (
+            "RunManifest.wiring must be schedulable: the dependency graph has cycle "
+            "W1 -> W2 -> W1",
+        )
 
     def test_wiring_depending_on_an_unknown_row_is_rejected(self) -> None:
         payload = deepcopy(RUN_MANIFEST)
@@ -269,7 +292,8 @@ class TestRunManifestCollectionRules:
         result = load(payload, RunManifest, strict=True)
         assert result.value is None
         assert result.problems == (
-            "RunManifest: wiring W1: depends_on references unknown id 'W9'",
+            "RunManifest.wiring must be schedulable: W1 depends_on references "
+            "unknown id 'W9'",
         )
 
     def test_a_curd_id_dependency_is_not_a_wiring_dependency(self) -> None:
@@ -350,8 +374,8 @@ class TestCurdBlockInvariants:
         result = load(payload, CurdBlock, strict=True)
         assert result.value is None
         assert result.problems == (
-            f"CurdBlock: waves[1] has {MAX_WAVE_SIZE + 1} slugs, exceeding the max "
-            f"of {MAX_WAVE_SIZE}",
+            f"CurdBlock.waves[1] must be at most {MAX_WAVE_SIZE} slugs wide, not "
+            f"{MAX_WAVE_SIZE + 1}",
         )
 
     def test_wave_at_the_cap_is_accepted(self) -> None:
@@ -367,7 +391,8 @@ class TestCurdBlockInvariants:
         result = load(payload, CurdBlock, strict=True)
         assert result.value is None
         assert result.problems == (
-            "CurdBlock: waves[1] references unknown slug 'no-such-curd'",
+            "CurdBlock.waves[1] must reference a declared curd slug, not "
+            "'no-such-curd'",
         )
 
     def test_curd_below_the_surface_floor_is_a_merge_candidate(self) -> None:
@@ -376,10 +401,10 @@ class TestCurdBlockInvariants:
         result = load(payload, CurdBlock, strict=True)
         assert result.value is None
         assert result.problems == (
-            "CurdBlock.curds[1].est_edit_lines must be valid: "
-            f"est_edit_lines={MIN_CURD_SURFACE - 1} is below the surface floor of "
-            f"{MIN_CURD_SURFACE} -- this curd is a MERGE CANDIDATE: merge it into a "
-            "sibling curd rather than dispatch a fresh coder for it",
+            "CurdBlock.curds[1].est_edit_lines must be at least the surface floor "
+            f"of {MIN_CURD_SURFACE}, not {MIN_CURD_SURFACE - 1} -- this curd is a "
+            "MERGE CANDIDATE: merge it into a sibling curd rather than dispatch a "
+            "fresh coder for it",
         )
 
     def test_curd_at_the_surface_floor_is_accepted(self) -> None:
@@ -395,8 +420,8 @@ class TestCurdBlockInvariants:
         result = load(payload, CurdBlock, strict=True)
         assert result.value is None
         assert result.problems == (
-            f"CurdBlock: file {shared!r} appears in curd 'first' and curd 'second' "
-            "-- curd files must be pairwise disjoint",
+            f"CurdBlock.curds must be pairwise file-disjoint: file {shared!r} "
+            "appears in curd 'first' and curd 'second'",
         )
 
     def test_unknown_decomposer_source_is_rejected(self) -> None:
@@ -405,8 +430,7 @@ class TestCurdBlockInvariants:
         result = load(payload, CurdBlock, strict=True)
         assert result.value is None
         assert result.problems == (
-            "CurdBlock.decomposer.source must be valid: 'vibes' is not a valid "
-            "DecomposerSource",
+            "CurdBlock.decomposer.source must be one of: mold, cook",
         )
 
 
@@ -435,16 +459,15 @@ class TestDecompositionInvariants:
         )
         assert result.value is None
         assert result.problems == (
-            "Decomposition: file 'src/easy_cheese_schemas/manifest.py' appears in "
-            "curd 1 and curd 2 -- curds must be file-disjoint (move shared content "
-            "to seed or wiring)",
+            "Decomposition.curds must be file-disjoint: file "
+            "'src/easy_cheese_schemas/manifest.py' appears in curd 1 and curd 2 "
+            "(move shared content to seed or wiring)",
         )
 
     def test_empty_curds_is_rejected(self) -> None:
         result = load({"curds": [], "wiring": []}, Decomposition, strict=True)
         assert result.value is None
-        assert result.problems == ("Decomposition.curds must be valid: Length of "
-                                   "'curds' must be >= 1: 0",)
+        assert result.problems == ("Decomposition.curds must be a non-empty list",)
 
 
 class TestPrPlanInvariants:
@@ -463,8 +486,8 @@ class TestPrPlanInvariants:
         result = load(payload, PrPlan, strict=True)
         assert result.value is None
         assert result.problems == (
-            "PrPlan.groups[1].commits must be valid: commits[1] must be a hex SHA "
-            "(7-40 hex chars); got 'HEAD~1'",
+            "PrPlan.groups[1].commits[1] must be a hex SHA (7-40 hex chars); "
+            "got 'HEAD~1'",
         )
 
     def test_two_groups_claiming_one_branch_are_rejected(self) -> None:
@@ -477,8 +500,8 @@ class TestPrPlanInvariants:
         )
         assert result.value is None
         assert result.problems == (
-            "PrPlan: branch 'claude/pypi' is claimed by two groups -- the two pull "
-            "requests would race the same ref",
+            "PrPlan.groups must be branch-distinct: 'claude/pypi' is claimed by two "
+            "groups -- the two pull requests would race the same ref",
         )
 
     def test_single_shape_with_two_groups_is_rejected(self) -> None:
@@ -490,7 +513,7 @@ class TestPrPlanInvariants:
         )
         assert result.value is None
         assert result.problems == (
-            "PrPlan: single shape must contain exactly one group, not 2",
+            "PrPlan.groups must be exactly one group for the single shape, not 2",
         )
 
     def test_orthogonal_flat_group_off_main_is_rejected(self) -> None:
@@ -502,7 +525,7 @@ class TestPrPlanInvariants:
         )
         assert result.value is None
         assert result.problems == (
-            "PrPlan: groups[1].base must be main for orthogonal_flat",
+            "PrPlan.groups[1].base must be main for orthogonal_flat",
         )
 
     def test_distinct_branches_off_main_are_accepted(self) -> None:

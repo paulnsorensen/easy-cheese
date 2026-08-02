@@ -15,7 +15,9 @@ with the wiring graph check.
 
 from __future__ import annotations
 
-from attrs import define, field, validators
+from typing import Any
+
+from attrs import Attribute, define, field
 
 from easy_cheese_schemas.manifest import (
     PARALLEL_THRESHOLD,
@@ -28,14 +30,18 @@ from easy_cheese_schemas.manifest import (
 __all__ = ["PARALLEL_THRESHOLD", "DecomposedCurd", "Decomposition"]
 
 
+def _non_empty_list(_instance: object, attribute: Attribute[Any], value: object) -> None:
+    if not value:
+        raise ValueError(f"{attribute.name} must be a non-empty list")
+
+
 @define(frozen=True)
 class Decomposition:
     """The curds and wiring rows a run was decomposed into."""
 
-    curds: list[DecomposedCurd] = field(validator=validators.min_len(1))
-    wiring: list[WiringRow] = field(factory=list)
-
-    def __attrs_post_init__(self) -> None:
-        if len(self.curds) >= PARALLEL_THRESHOLD:
-            reject_shared_curd_files(self.curds)
-        reject_unschedulable_wiring(self.wiring)
+    curds: list[DecomposedCurd] = field(
+        validator=[_non_empty_list, reject_shared_curd_files]
+    )
+    wiring: list[WiringRow] = field(
+        factory=list, validator=reject_unschedulable_wiring
+    )

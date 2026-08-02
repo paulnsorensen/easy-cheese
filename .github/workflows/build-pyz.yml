@@ -11,6 +11,7 @@ on:
       - 'src/**'
       - 'shared/scripts/**'
       - 'scripts/build_pyz.py'
+      - 'scripts/check_bundles.py'
       - 'skills/*/scripts/*.pyz'
       - 'pyproject.toml'
       # Vendored deps are staged into ultracook.pyz, so a vendor bump makes the
@@ -24,6 +25,7 @@ on:
       - 'src/**'
       - 'shared/scripts/**'
       - 'scripts/build_pyz.py'
+      - 'scripts/check_bundles.py'
       - 'skills/*/scripts/*.pyz'
       - 'pyproject.toml'
       - 'vendor/**'
@@ -53,18 +55,11 @@ jobs:
       - name: Build bundles
         run: python3 scripts/build_pyz.py
 
+      # Compares member CRCs, not raw bytes: ZIP_DEFLATED output varies between
+      # zlib builds, so a byte diff fails for contributors whose toolchain
+      # differs from whoever last committed. See scripts/check_bundles.py.
       - name: Check bundles are current
-        run: |-
-          set -euo pipefail
-          git add -- 'skills/*/scripts/*.pyz'
-          if git diff --cached --quiet; then
-            echo ".pyz bundles are current."
-            exit 0
-          fi
-          echo "::error::.pyz bundles are stale; run 'python3 scripts/build_pyz.py' and commit the generated skills/*/scripts/*.pyz files."
-          git diff --cached --name-only -- 'skills/*/scripts/*.pyz'
-          git diff --cached --stat -- 'skills/*/scripts/*.pyz'
-          exit 1
+        run: python3 scripts/check_bundles.py
 
       - name: Check bundled schema version matches pyproject
         run: |-

@@ -66,7 +66,11 @@ def _exact(
 
     def hook(value: object, _type: Any = None) -> Any:
         if isinstance(_type, type) and issubclass(_type, Enum):
-            return _type(value)
+            try:
+                return _type(value)
+            except ValueError:
+                allowed = ", ".join(str(member.value) for member in _type)
+                raise ValueError(f"must be one of: {allowed}") from None
         if isinstance(value, bool) is not boolean or not isinstance(value, expected):
             raise TypeError(f"must be {label}, not {type(value).__name__}")
         return value
@@ -318,9 +322,14 @@ def _segments(exc: BaseException) -> tuple[tuple[str | None, str], ...]:
 def _house(path: str, name: str | None, message: str) -> str:
     """Render one failure as ``where.key must be ...``. Validators and hooks
     already phrase the predicate; only the subject has to be replaced with the
-    full path."""
-    if name is not None and message.startswith(f"{name} "):
-        return f"{path}{message[len(name):]}"
+    full path. Three subject spellings are recognized: the bare attribute name,
+    the name with a list index appended (``carry_forward[2] must be ...``), and
+    attrs' own quoted form (``'retry_count' must be <= 1: 5``)."""
+    if name is not None:
+        if message.startswith((f"{name} ", f"{name}[")):
+            return f"{path}{message[len(name):]}"
+        if message.startswith(f"'{name}' "):
+            return f"{path}{message[len(name) + 2:]}"
     if message.startswith("must be"):
         return f"{path} {message}"
     return f"{path} must be valid: {message}"
