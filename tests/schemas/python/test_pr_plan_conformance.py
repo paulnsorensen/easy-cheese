@@ -91,9 +91,8 @@ def test_validator_and_type_agree(case: Case, pr_plan_validator: Validator) -> N
 
 
 def test_no_known_divergence_remains() -> None:
-    """PrPlan is the one contract the two sides describe identically. Asserted
-    rather than left to the empty-parameter skip below, so a divergence that
-    opens later has to be added to the table deliberately."""
+    """Asserted rather than left to the empty-parameter skip below, so a
+    divergence that opens later has to be added to the table deliberately."""
     assert divergent(CASES) == []
 
 

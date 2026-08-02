@@ -7,7 +7,6 @@ import sys
 import curd  # noqa: E402
 import wiring  # noqa: E402
 from manifest_io import ManifestLoadError, read_mapping_arg_or_stdin  # noqa: E402
-from mode import PARALLEL_THRESHOLD  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -40,10 +39,10 @@ def validate_manifest(manifest: dict) -> list[str]:
             continue
         errors.extend(curd.behaviour_errors(c))
 
-    # File-disjointness only matters when curds fan out in parallel; a linear
-    # (< PARALLEL_THRESHOLD) decomposition is one unit, trivially disjoint.
-    if len(curds) >= PARALLEL_THRESHOLD:
-        errors.extend(curd.disjoint_files_errors(curds))
+    # Runs at every curd count. Cross-curd collision is vacuous for a lone curd,
+    # but the per-curd `files` shape rules this also enforces are not — every
+    # curd must declare a non-empty list of string paths.
+    errors.extend(curd.disjoint_files_errors(curds))
 
     wiring_list = manifest.get("wiring", [])
     if not isinstance(wiring_list, list):

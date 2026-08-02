@@ -136,6 +136,8 @@ def validate_curd_block(block: Any) -> list[str]:
     if "curds" in block and not isinstance(curds_field, list):
         errors.append("block.curds must be a list")
         curds_field = []
+    elif isinstance(curds_field, list) and not curds_field:
+        errors.append("block.curds must be a non-empty list — a block with no curds is undispatchable")
     curds = [c for c in (curds_field or []) if isinstance(c, dict)]
     for index, curd in enumerate(curds_field or [], start=1):
         errors.extend(_curd_errors(curd, f"curds[{index}]"))
