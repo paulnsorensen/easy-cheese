@@ -1,0 +1,127 @@
+name: publish-pypi
+
+# Publish the easy-cheese-schemas package to PyPI when pyproject.toml's version
+# changes on main. release.yml cannot carry this: it force-retargets the version
+# tag onto an orphan `release` branch holding only SKILL.md + .pyz + metadata, so
+# no package source is reachable from the published tag. This fires on every
+# pyproject.toml touch and no-ops unless the declared version is new to PyPI.
+#
+# MANUAL PREREQUISITE (not automatable): before the first publish succeeds, the
+# repo owner must create a PyPI *pending publisher* naming the project
+# (easy-cheese-schemas), this repository, and this workflow's filename. The
+# pending publisher is keyed on the FILENAME -- renaming this file breaks
+# publishing until the publisher entry on PyPI is updated to match.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'pyproject.toml'
+  # Manual recovery when a publish fails after the version already landed.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: publish easy-cheese-schemas to pypi
+    # Never publish from a fork: a fork's pyproject.toml is unreviewed here, and
+    # its OIDC claims do not match the pending publisher anyway. The ref guard
+    # matters just as much -- workflow_dispatch lets anyone with write access
+    # pick a branch, and without it a manual run would publish source that never
+    # passed through main or review.
+    if: >-
+      github.repository == 'paulnsorensen/easy-cheese'
+      && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Trusted Publishing (OIDC). No PyPI token or password exists in this repo.
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Resolve version and check PyPI
+        id: version
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          import tomllib
+          import urllib.error
+          import urllib.request
+          from pathlib import Path
+
+          version = tomllib.loads(Path("pyproject.toml").read_text())["project"]["version"]
+          try:
+              with urllib.request.urlopen("https://pypi.org/pypi/easy-cheese-schemas/json", timeout=30) as resp:
+                  released = set(json.load(resp).get("releases", {}))
+          except urllib.error.HTTPError as exc:
+              if exc.code != 404:
+                  raise
+              # 404 = the project has never been published. This is the first release.
+              released = set()
+          publish = version not in released
+          print(f"pyproject.toml declares {version}; already on PyPI: {not publish}")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+              fh.write(f"version={version}\nshould_publish={str(publish).lower()}\n")
+          PY
+
+      # The conformance suite is the mandatory mitigation for shipping types
+      # derived from the still-live src/fanout validators. validate.yml runs on
+      # the same push but nothing makes this job wait for it, so a version bump
+      # merged next to a red suite would publish anyway. attrs/cattrs come from
+      # the committed vendor/ tree, so only pyyaml needs installing.
+      - name: Run schema conformance suite
+        if: steps.version.outputs.should_publish == 'true'
+        run: |
+          set -euo pipefail
+          pip install --no-cache-dir pytest==9.0.3 pyyaml==6.0.2
+          python3 -m pytest tests/schemas/python -q
+
+      - name: Build sdist and wheel
+        if: steps.version.outputs.should_publish == 'true'
+        run: |
+          set -euo pipefail
+          pip install --no-cache-dir build==1.5.0
+          python3 -m build
+
+      - name: Verify the sdist ships only the package
+        if: steps.version.outputs.should_publish == 'true'
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import sys
+          import tarfile
+          from pathlib import Path
+
+          sdist = next(Path("dist").glob("*.tar.gz"))
+          members = {n.split("/", 1)[1] for n in tarfile.open(sdist).getnames() if "/" in n}
+          stray = sorted(
+              m for m in members
+              if not m.startswith(("src/easy_cheese_schemas/", "docs/easy-cheese-schemas.md"))
+              and m not in {"LICENSE", "PKG-INFO", "pyproject.toml", ".gitignore"}
+          )
+          if stray:
+              print(f"::error::sdist would publish files outside the package: {stray}")
+              sys.exit(1)
+          print(f"sdist is package-only ({len(members)} members).")
+          PY
+
+      - name: Publish to PyPI
+        if: steps.version.outputs.should_publish == 'true'
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2

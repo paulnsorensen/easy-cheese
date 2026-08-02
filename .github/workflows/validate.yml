@@ -76,6 +76,9 @@ jobs:
       - name: Run fan-out script tests
         run: python3 -m pytest tests/fanout/python -q
 
+      - name: Run schema conformance tests
+        run: python3 -m pytest tests/schemas/python -q
+
   install-script:
     name: test install.sh (macOS)
     runs-on: macos-latest

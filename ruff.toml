@@ -1,2 +1,7 @@
+# Vendored third-party wheel trees. Not ours to lint, and not ours to fix --
+# typing_extensions guards names behind sys.version_info, which ruff reads as
+# F822 undefined-name-in-__all__.
+extend-exclude = ["vendor"]
+
 [lint]
 select = ["E4", "E7", "E9", "F"]

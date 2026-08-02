@@ -23,9 +23,15 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = REPO_ROOT / "src"
+VENDOR_ROOT = REPO_ROOT / "vendor"
 SHARED_SCRIPTS = REPO_ROOT / "shared" / "scripts"
 SHARED_MODULES = {p.stem for p in SHARED_SCRIPTS.glob("*.py")}
 ZIP_TIMESTAMP = (1980, 1, 2, 0, 0, 0)
+# Pinned so the compressed bytes depend only on the zlib build, never on
+# zipfile's default drifting. Compressed output still differs between stock
+# zlib and zlib-ng, so CI's rebuild is the authority on the committed bundles;
+# if that ever bites, switching this file back to ZIP_STORED is a one-liner.
+ZIP_COMPRESSLEVEL = 9
 
 
 @dataclass(frozen=True)
@@ -122,6 +128,30 @@ EXTRA_MODULES: dict[str, list[tuple[str, str]]] = {
         ("fanout", "review_surface.py"),
     ],
     "pasteurize": [("fanout", "pasteurize_route.py")],
+}
+
+# Whole directory trees (and the odd single-file module) staged verbatim into a
+# bundle. The import scanner above only resolves flat sibling modules, so a real
+# package's membership is declared here rather than discovered. easy_cheese_schemas
+# needs its runtime deps vendored alongside it -- attrs/cattrs are pure-Python
+# wheels that zipimport can load, and their .dist-info dirs must ride along
+# because attrs.__version__ reads its own packaging metadata.
+#
+# Only ultracook carries them: it owns the fan-out validators a tracked follow-up
+# migrates onto these types, so it is the first real consumer. Staging half a
+# megabyte into every other bundle would be dead weight.
+PACKAGE_TREES: dict[str, list[Path]] = {
+    "ultracook": [
+        SRC_ROOT / "easy_cheese_schemas",
+        VENDOR_ROOT / "attr",
+        VENDOR_ROOT / "attrs",
+        VENDOR_ROOT / "attrs-26.1.0.dist-info",
+        VENDOR_ROOT / "cattr",
+        VENDOR_ROOT / "cattrs",
+        VENDOR_ROOT / "cattrs-26.1.0.dist-info",
+        VENDOR_ROOT / "typing_extensions.py",
+        VENDOR_ROOT / "typing_extensions-4.16.0.dist-info",
+    ],
 }
 
 # The "common" bundle ships cross-cutting CLI entrypoints sourced from
@@ -262,12 +292,20 @@ def _dispatcher_source(sub_to_module: dict[str, str]) -> str:
 def _write_zipapp(source: Path, target: Path) -> None:
     with target.open("wb") as pyz:
         pyz.write(b"#!/usr/bin/env python3\n")
-        with zipfile.ZipFile(pyz, "w", compression=zipfile.ZIP_STORED) as archive:
-            for staged_file in sorted(source.iterdir(), key=lambda p: p.name):
-                info = zipfile.ZipInfo(staged_file.name, date_time=ZIP_TIMESTAMP)
+        with zipfile.ZipFile(pyz, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            staged = sorted(
+                (p.relative_to(source).as_posix(), p) for p in source.rglob("*") if p.is_file()
+            )
+            for name, staged_file in staged:
+                info = zipfile.ZipInfo(name, date_time=ZIP_TIMESTAMP)
                 info.create_system = 3
                 info.external_attr = 0o644 << 16
-                archive.writestr(info, staged_file.read_bytes())
+                archive.writestr(
+                    info,
+                    staged_file.read_bytes(),
+                    compress_type=zipfile.ZIP_DEFLATED,
+                    compresslevel=ZIP_COMPRESSLEVEL,
+                )
     target.chmod(0o755)
 
 
@@ -290,6 +328,14 @@ def build_bundle(skill: str, target: Path) -> Path:
                 shutil.copy(skill_dir / f"{name}.py", stage / f"{name}.py")
         for src_subdir, filename in EXTRA_MODULES.get(skill, []):
             shutil.copy(SRC_ROOT / src_subdir / filename, stage / filename)
+        for tree in PACKAGE_TREES.get(skill, []):
+            if tree.is_dir():
+                # __pycache__ is skipped: importing the package from source (the
+                # test suite does) would otherwise leak host-specific .pyc bytes
+                # into the archive and break the rebuild byte-compare.
+                shutil.copytree(tree, stage / tree.name, ignore=shutil.ignore_patterns("__pycache__"))
+            else:
+                shutil.copy(tree, stage / tree.name)
         (stage / "__main__.py").write_text(_dispatcher_source(sub_to_module), encoding="utf-8")
         _write_zipapp(stage, target)
     return target
