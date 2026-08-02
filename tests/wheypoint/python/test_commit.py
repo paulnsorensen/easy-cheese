@@ -636,6 +636,60 @@ def test_a_genesis_delta_against_a_live_record_promotes_nothing(
     assert store.read_record() == seed.record
 
 
+def test_a_genesis_delta_never_orphans_history_whose_record_is_gone(
+    store: storage.WorkStore, make_promotion: Callable[..., Promotion]
+) -> None:
+    """The anti-wipe guard keys on the history, not on record.json: a lost
+    record must not let genesis start a second lineage over live revisions."""
+    seed = _seed(store, make_promotion, gating=True)
+    store.record_path.unlink()
+    before_revisions = _revision_files(store)
+    before_projections = _projection_files(store)
+
+    with pytest.raises(commit.GenesisConflictError) as raised:
+        commit.commit(_genesis_delta(), store=store)
+
+    assert seed.record.revision_id in str(raised.value)
+    assert _revision_files(store) == before_revisions
+    assert _projection_files(store) == before_projections
+    assert store.read_record() is None
+
+
+def test_an_identical_genesis_replay_returns_the_original_revision(
+    store: storage.WorkStore,
+) -> None:
+    delta = _genesis_delta(
+        add_decisions=[
+            ProposedEntry(kind=EntryKind.DECISION, summary="Genesis is a commit.")
+        ]
+    )
+    first = commit.commit(delta, store=store)
+
+    second = commit.commit(delta, store=store)
+
+    assert second.replayed is True
+    assert second.revision == first.revision
+    assert second.record == first.record
+    revision_id = first.revision.revision_id
+    assert _revision_files(store) == [f"1-{revision_id}.json"]
+    assert _projection_files(store) == [f"1-{revision_id}.md"]
+
+
+def test_a_different_genesis_delta_over_a_live_record_still_conflicts(
+    store: storage.WorkStore,
+) -> None:
+    first = commit.commit(_genesis_delta(), store=store)
+
+    with pytest.raises(commit.GenesisConflictError) as raised:
+        commit.commit(
+            _genesis_delta(orientation="A different genesis entirely."), store=store
+        )
+
+    assert first.revision.revision_id in str(raised.value)
+    assert store.read_record() == first.record
+    assert _revision_files(store) == [f"1-{first.revision.revision_id}.json"]
+
+
 def test_a_first_delta_against_an_empty_store_must_name_genesis(
     store: storage.WorkStore,
 ) -> None:

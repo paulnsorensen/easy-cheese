@@ -216,6 +216,27 @@ def test_a_pinned_artifact_that_still_matches_lints_clean(
     assert report.codes == ()
 
 
+def test_an_interrupted_promotion_is_named_rather_than_reported_clean(
+    corpus_root, make_promotion
+) -> None:
+    """A half-written pair is invisible to the record checks, so lint reports
+    it directly: the operator has to be told the retry was interrupted."""
+    store = make_store(corpus_root)
+    promotion = make_promotion(1, "rev-0001")
+    store.promote(promotion.record, promotion.revision, promotion.markdown)
+    orphan = make_promotion(2, "rev-0002", parent="rev-0001")
+    store.revision_path(2, "rev-0002").write_bytes(
+        records.canonical_payload(orphan.revision)
+    )
+
+    report = check(store)
+
+    assert report.codes == (lint.LintCode.REVISION_INCOMPLETE,)
+    assert report.findings[0].detail == "2-rev-0002.json: projection file is missing"
+    assert report.record is not None
+    assert report.record.revision_id == "rev-0001"
+
+
 @pytest.mark.parametrize(
     "text",
     [

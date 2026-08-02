@@ -91,6 +91,10 @@ class RecoveryReport:
     def latest_complete(self) -> RevisionFile | None:
         return self.complete[-1] if self.complete else None
 
+    @property
+    def revision_ids(self) -> frozenset[str]:
+        return frozenset(file.revision.revision_id for file in self.complete)
+
 
 def file_digest(path: Path) -> str | None:
     """The digest of a file's bytes, or None when it is not there."""
@@ -214,7 +218,22 @@ class WorkStore:
 
     def revision_ids(self) -> frozenset[str]:
         """The ids of every complete immutable revision in this store."""
-        return frozenset(file.revision.revision_id for file in self.recover().complete)
+        return self.recover().revision_ids
+
+    def find_complete_revision(self, revision_id: str) -> WheypointRevision | None:
+        """The complete revision with this id, without knowing its number.
+
+        A revision id names at most one file, so this reads that one pair
+        rather than reconciling the whole store to answer a question about a
+        single receipt.
+        """
+        if not self.revisions_dir.is_dir():
+            return None
+        for path in sorted(self.revisions_dir.glob(f"*-{revision_id}.json")):
+            _, file = self._inspect_revision(path)
+            if file is not None:
+                return file.revision
+        return None
 
     def promote(
         self,
@@ -224,10 +243,16 @@ class WorkStore:
     ) -> None:
         """Write the immutable pair, then swap `record.json` in last.
 
-        A revision number and id name a file exactly once: if either immutable
-        file is already there, the promotion is refused before anything else
-        is considered, because no property of the incoming triple can make it
+        A *complete* revision is never rewritten: if this number and id already
+        name a receipt whose projection is present and hashes to what the
+        receipt claims, the promotion is refused before anything else is
+        considered, because no property of the incoming triple can make it
         legal to rewrite a receipt a reader may already have quoted.
+
+        An incomplete pair left behind by an interrupted promotion is not that.
+        `recover` reports it and never returns it as a revision, so nothing can
+        have quoted it, and re-promoting the same number and id over it is how
+        the interrupted attempt gets finished rather than a rewrite of history.
 
         The triple then has to agree before anything is written: a receipt that
         quotes a different record, or a projection that does not hash to the
@@ -240,9 +265,12 @@ class WorkStore:
         projection_path = self.projection_path(
             revision.revision_number, revision.revision_id
         )
-        for path in (revision_path, projection_path):
-            if path.exists():
-                raise StorageError(f"{path.name} already exists and is immutable")
+        if revision_path.exists():
+            _, existing = self._inspect_revision(revision_path)
+            if existing is not None:
+                raise StorageError(
+                    f"{revision_path.name} already exists and is immutable"
+                )
 
         self._check_agreement(record, revision, markdown)
 

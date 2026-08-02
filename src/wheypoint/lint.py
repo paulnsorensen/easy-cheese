@@ -35,6 +35,7 @@ class LintCode(str, Enum):
 
     RECORD_MISSING = "record-missing"
     STORE_INCONSISTENT = "store-inconsistent"
+    REVISION_INCOMPLETE = "revision-incomplete"
     PROJECTION_UNREADABLE = "projection-unreadable"
     PROJECTION_DIGEST_MISMATCH = "projection-digest-mismatch"
     PROJECTION_RECORD_MISMATCH = "projection-record-mismatch"
@@ -42,6 +43,21 @@ class LintCode(str, Enum):
     PROJECT_MISMATCH = "project-mismatch"
     GIT_OBJECT_MISSING = "git-object-missing"
     ARTIFACT_COVERAGE_INVALID = "artifact-coverage-invalid"
+
+
+# Findings that describe the store's surroundings rather than the authority of
+# the record being resumed. An interrupted promotion leaves an orphan no reader
+# can have quoted, and the retry overwrites it; blocking continuation on one
+# would strand a valid current record in exactly the crash it survived. The
+# spec gates automatic continuation on projection and record digests, the
+# parent chain, project identity, referenced Git objects, and required artifact
+# coverage -- an orphan is none of those, so it is reported, not enforced.
+ADVISORY_CODES = frozenset({LintCode.REVISION_INCOMPLETE})
+
+
+def gates_continuation(finding: LintFinding) -> bool:
+    """Whether this finding must stop automatic dispatch."""
+    return finding.code not in ADVISORY_CODES
 
 
 @define(frozen=True)
@@ -154,7 +170,10 @@ def lint_work(
                     f"no record at {store.record_path}",
                 )
             )
+        findings.extend(_incomplete_findings(recovery))
         return LintReport(findings=tuple(findings))
+
+    findings.extend(_incomplete_findings(recovery))
 
     if record.project_key != project_key:
         findings.append(
@@ -179,11 +198,21 @@ def lint_work(
         projection_report = _lint_current_projection(store, record, current)
         findings.extend(projection_report.findings)
         projection = projection_report.projection
-        findings.extend(_chain_findings(store, current))
+        findings.extend(_chain_findings(recovery, current))
         findings.extend(_git_findings(current, git_object_exists))
 
-    findings.extend(_coverage_findings(store, record, artifact_digest))
+    findings.extend(_coverage_findings(recovery, record, artifact_digest))
     return LintReport(findings=tuple(findings), record=record, projection=projection)
+
+
+def _incomplete_findings(
+    recovery: storage.RecoveryReport,
+) -> list[LintFinding]:
+    """Name every half-written pair: an interrupted promotion is not clean."""
+    return [
+        LintFinding(LintCode.REVISION_INCOMPLETE, detail)
+        for detail in recovery.incomplete
+    ]
 
 
 def _lint_current_projection(
@@ -224,11 +253,11 @@ def _lint_current_projection(
 
 
 def _chain_findings(
-    store: storage.WorkStore, current: WheypointRevision
+    recovery: storage.RecoveryReport, current: WheypointRevision
 ) -> list[LintFinding]:
     """Walk parents back to genesis; every step must be a local revision."""
     known = {
-        file.revision.revision_id: file.revision for file in store.recover().complete
+        file.revision.revision_id: file.revision for file in recovery.complete
     }
     findings: list[LintFinding] = []
     seen = {current.revision_id}
@@ -275,14 +304,14 @@ def _git_findings(
 
 
 def _coverage_findings(
-    store: storage.WorkStore,
+    recovery: storage.RecoveryReport,
     record: WheypointRecord,
     artifact_digest: Callable[[str], str | None],
 ) -> list[LintFinding]:
     report = records.coverage_report(
         record,
         artifact_digest=artifact_digest,
-        known_revision_ids=store.revision_ids(),
+        known_revision_ids=recovery.revision_ids,
     )
     return [
         LintFinding(

@@ -31,8 +31,10 @@ fork can leave the record without an `EntryTransition` naming it.
 A delta whose `expected_revision_id` is `GENESIS_PARENT` is the one request with
 nothing to carry forward from: it *creates* the first record for a work id. It
 must therefore supply the semantic context itself, and it is refused outright
-once a record exists -- creation over a live record is exactly the erasure the
-carry-forward rules above exist to prevent.
+once the store holds anything -- a live record, or complete revisions whose
+record has gone missing -- because creation over existing history is exactly the
+erasure the carry-forward rules above exist to prevent. Rule 1 still comes
+first: an identical genesis resubmission is a replay, not a conflict.
 """
 
 from __future__ import annotations
@@ -143,10 +145,27 @@ def commit(
         current = store.read_record()
         if delta.expected_revision_id == GENESIS_PARENT:
             if current is not None:
+                replay = _find_replay(store, delta, fingerprint)
+                if replay is not None:
+                    return _replayed(store, replay, current)
                 raise GenesisConflictError(
                     f"work {store.work_id!r} already holds revision "
                     f"{current.revision_id!r}: a genesis delta creates the first "
                     "record and never replaces a live one"
+                )
+            # No record, but the history it pointed at can still be on disk.
+            # Keying the guard on the record alone would let one lost file turn
+            # genesis into a second lineage, leaving every revision behind it
+            # unreachable -- the same erasure, reached the long way round.
+            orphaned = store.recover().latest_complete
+            if orphaned is not None:
+                raise GenesisConflictError(
+                    f"work {store.work_id!r} has no "
+                    f"{storage.RECORD_FILENAME}, but revision "
+                    f"{orphaned.revision.revision_id!r} (number "
+                    f"{orphaned.revision.revision_number}) is complete on disk: "
+                    "a genesis delta creates the first record and never orphans "
+                    "existing history"
                 )
             return _genesis(
                 store,
@@ -183,15 +202,28 @@ def commit(
 def _find_replay(
     store: storage.WorkStore, delta: WheypointDelta, fingerprint: str
 ) -> WheypointRevision | None:
-    """The receipt this exact request already produced against this parent."""
-    for file in store.recover().complete:
-        revision = file.revision
-        if (
-            revision.parent_revision_id == delta.expected_revision_id
-            and revision.request_digest == fingerprint
-        ):
-            return revision
-    return None
+    """The receipt this exact request already produced against this parent.
+
+    The receipt's id is a pure function of the request and its parent, so the
+    replay is looked up by name and then made to prove it: a file at that name
+    that does not quote this request against this parent is not a replay. A
+    genesis receipt records no parent at all, so the sentinel the delta names
+    is translated to the `None` the receipt actually carries.
+    """
+    parent = (
+        None
+        if delta.expected_revision_id == GENESIS_PARENT
+        else delta.expected_revision_id
+    )
+    revision = store.find_complete_revision(_revision_id(delta, fingerprint))
+    if revision is None:
+        return None
+    if (
+        revision.parent_revision_id != parent
+        or revision.request_digest != fingerprint
+    ):
+        return None
+    return revision
 
 
 def _replayed(

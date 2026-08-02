@@ -10,6 +10,7 @@ import pytest
 
 import canonical
 import records
+import lint
 import resolve as resolve_mod
 import storage
 
@@ -357,3 +358,36 @@ def test_a_legacy_miss_reports_every_worktree_probed(tmp_path: Path) -> None:
         str(start.resolve() / ".cheese" / "notes" / "cold-start.md"),
         str(sibling.resolve() / ".cheese" / "notes" / "cold-start.md"),
     )
+
+
+def test_an_orphaned_revision_is_reported_but_does_not_block_continuation(
+    corpus_root, make_record, make_promotion
+) -> None:
+    """An interrupted promotion leaves a revision file with no projection. No
+    reader can have quoted it and the identical retry overwrites it, so it is
+    surroundings, not authority: gating on it would strand a valid current
+    record in exactly the crash it just survived."""
+    store = seed(corpus_root, make_record, make_promotion, work_id="alpha", slug="alpha")
+    orphan = store.revision_path(2, "rev-0002")
+    orphan.write_text(store.revision_path(1, "rev-0001").read_text(), encoding="utf-8")
+
+    found = run("alpha", corpus_root)
+
+    codes = tuple(f.code for f in found.findings)
+    assert lint.LintCode.REVISION_INCOMPLETE in codes, codes
+    assert found.outcome is resolve_mod.ResolutionOutcome.AUTHORITATIVE
+    assert found.dispatchable is True
+
+
+def test_a_real_integrity_failure_still_blocks_continuation(
+    corpus_root, make_record, make_promotion
+) -> None:
+    """The advisory carve-out must not leak: tampering still gates."""
+    store = seed(corpus_root, make_record, make_promotion, work_id="alpha", slug="alpha")
+    path = store.projection_path(1, "rev-0001")
+    path.write_text(path.read_text(encoding="utf-8").replace("cook", "press"), encoding="utf-8")
+
+    found = run("alpha", corpus_root)
+
+    assert found.dispatchable is False
+    assert found.outcome is resolve_mod.ResolutionOutcome.GATED

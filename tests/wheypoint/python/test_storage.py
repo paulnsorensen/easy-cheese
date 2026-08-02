@@ -218,6 +218,34 @@ def test_a_promoted_revision_is_immutable(
     assert store.revision_path(1, "rev-0001").read_bytes() == original
 
 
+def test_an_interrupted_promotion_can_be_finished_by_the_identical_retry(
+    store: storage.WorkStore, make_promotion: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Nothing can have quoted an incomplete pair, so the retry that produces
+    the same revision id completes it instead of being refused forever."""
+    real_replace = os.replace
+
+    def crash_on_projection(src: Any, dst: Any) -> None:
+        if Path(dst).suffix == ".md":
+            raise OSError("power loss")
+        real_replace(src, dst)
+
+    monkeypatch.setattr(os, "replace", crash_on_projection)
+    promotion = make_promotion()
+    with pytest.raises(OSError):
+        store.promote(promotion.record, promotion.revision, promotion.markdown)
+    assert store.recover().complete == ()
+
+    monkeypatch.setattr(os, "replace", real_replace)
+    store.promote(promotion.record, promotion.revision, promotion.markdown)
+
+    report = store.recover()
+    assert report.incomplete == ()
+    assert [file.revision.revision_id for file in report.complete] == ["rev-0001"]
+    assert report.consistent
+    assert store.read_record() == promotion.record
+
+
 @pytest.mark.parametrize(
     "field",
     ["revision_id", "revision_number", "work_id", "record_digest", "projection_digest"],

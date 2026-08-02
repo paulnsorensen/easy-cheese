@@ -273,8 +273,9 @@ def _validate(
         findings=findings,
         searched=searched,
     )
-    if findings:
-        return _gate(resolution, f"{len(findings)} validation failure(s)")
+    gating = tuple(f for f in findings if lint.gates_continuation(f))
+    if gating:
+        return _gate(resolution, f"{len(gating)} validation failure(s)")
     if (
         expected_revision_id is not None
         and expected_revision_id != report.record.revision_id
