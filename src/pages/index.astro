@@ -1,7 +1,6 @@
 ---
 import Header from '@cheeselord/design/components/Header.astro';
 import '@cheeselord/design/styles/cheeselord.css';
-import hero from '../assets/hero.svg';
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 ---
@@ -11,37 +10,80 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="color-scheme" content="dark" />
+    <meta name="color-scheme" content="light" />
     <title>🧀 easy-cheese</title>
     <meta
       name="description"
       content="Harness-agnostic Agent Skills — the cheese-making pipeline for code review, implementation, refactoring, and PR rescue."
     />
-    <meta name="theme-color" content="#0b0e0c" />
+    <meta name="theme-color" content="#f8f2e4" />
     <link rel="icon" type="image/svg+xml" href={`${base}/favicon.svg`} />
   </head>
   <body>
-    <Header project="easy-cheese" projectHref={`${base}/`} />
+    <Header project="easy-cheese" projectHref={`${base}/`}>
+      <nav class="top" slot="actions" aria-label="Site">
+        <a href={`${base}/skills/`}>skills</a>
+        <a href={`${base}/install/`}>install</a>
+        <a href="https://github.com/paulnsorensen/easy-cheese">github</a>
+      </nav>
+    </Header>
     <main>
       <div class="wrap">
         <div>
-          <p class="eyebrow">Don't know what to do?</p>
-          <h1>Just <em>cheese</em> it.</h1>
-          <nav class="cellar" aria-label="Documentation">
-            <div class="cellar-head">~/easy-cheese · agent skills</div>
-            <a href={`${base}/install/`}><strong>install</strong> <span>one command, every wheel</span> <i aria-hidden="true">→</i></a>
-            <a href={`${base}/skills/`}><strong>skills</strong> <span>the catalogue — triggers, inputs, outputs</span> <i aria-hidden="true">→</i></a>
-            <a href={`${base}/readme/`}><strong>readme</strong> <span>long-form overview, scope, credits</span> <i aria-hidden="true">→</i></a>
-            <a href="https://github.com/paulnsorensen/easy-cheese"><strong>github</strong> <span>source &amp; releases</span> <i aria-hidden="true">→</i></a>
-          </nav>
+          <p class="eyebrow">agent skills · harness-agnostic</p>
+          <h1>Don't know what to do? Just <em>cheese</em> it.</h1>
+          <p class="lede">
+            A toolkit of portable Agent Skills — self-contained <code>SKILL.md</code> files any
+            compatible harness can load. One command reads whatever you're holding — an idea, a
+            spec, a stack trace, a PR — announces its routing, and dispatches the right workflow.
+            No agents, no compiled bundles, no MCP requirement.
+          </p>
+          <p class="ctas">
+            <a class="btn btn-fill" href={`${base}/install/`}>get the skills</a>
+            <a class="btn btn-ghost" href={`${base}/skills/`}>browse the catalogue →</a>
+          </p>
+          <p class="meta"><code>npx skills@latest add paulnsorensen/easy-cheese --all</code> · markdown · MIT</p>
         </div>
-        <div class="wedge-box">
-          <img class="wedge" src={hero.src} width="320" height="320" alt="" />
+        <div class="term-box">
+          <figure class="term">
+            <figcaption><span class="term-dots" aria-hidden="true">● ● ●</span> ~/work — /cheese</figcaption>
+            <pre><b>$ /cheese</b> "exports hang past 50k rows"
+
+<i>Intent</i>  debug a runtime defect
+<i>Reason</i>  symptom in hand, no spec yet
+<i>Target</i>  /pasteurize → /cook → /press
+        → /age → /cure
+
+dispatching /pasteurize --auto …
+<b>✓</b> repro loop   scripts/repro_export.sh
+<b>✓</b> root cause   unbatched writes in
+               export_csv()
+→ handing off to /cook --auto</pre>
+          </figure>
         </div>
       </div>
+      <section class="band" aria-label="The pipeline">
+        <div class="wrap band-wrap">
+          <h2>~/easy-cheese · the make</h2>
+          <div class="steps">
+            <div><strong>/mold</strong><p>shape a fuzzy idea into a grounded spec through dialogue</p></div>
+            <div><strong>/cook</strong><p>implement it — one focused coder, or a fan of fresh-context agents</p></div>
+            <div><strong>/press</strong><p>harden the change with coverage, assertion, and boundary checks</p></div>
+            <div><strong>/age</strong><p>review the diff across ten staff-engineer dimensions</p></div>
+            <div><strong>/cure</strong><p>fix the findings that matter, validate, ready the branch</p></div>
+            <div><strong>/plate</strong><p>final gate — write, commit, and publish the PR</p></div>
+          </div>
+          <p class="more">
+            <code>/cheese</code> routes you in; <code>/pasteurize</code> debugs, <code>/briesearch</code> researches, <code>/melt</code> untangles conflicts, <code>/wheypoint</code> checkpoints. <a href={`${base}/skills/`}>Sixteen skills, one vocabulary →</a>
+          </p>
+        </div>
+      </section>
     </main>
     <footer>
-      <div class="wrap"><span>cheese your code 🧀</span></div>
+      <div class="wrap">
+        <span>cheese your code 🧀</span>
+        <span>MIT · agent-skills spec</span>
+      </div>
     </footer>
   </body>
 </html>
@@ -54,25 +96,205 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
   body {
     display: flex;
     flex-direction: column;
+    /* per-site color variation: warm paper daylight replaces the cellar dark */
+    --cellar: oklch(96.5% 0.019 90);
+    --panel: oklch(93% 0.023 88);
+    --bone: oklch(33% 0.042 55);
+    --dim: oklch(51% 0.035 65);
+    --gold: oklch(53% 0.16 40);
+    --hairline: oklch(from var(--bone) l c h / 18%);
+    /* same fleck texture, but the cellar's dark ceiling glow becomes daylight */
+    background:
+      radial-gradient(circle 2px at 18% 22%, oklch(from var(--gold) l c h / 22%) 99%, transparent),
+      radial-gradient(circle 1.5px at 82% 12%, oklch(from var(--bone) l c h / 10%) 99%, transparent),
+      radial-gradient(circle 1.5px at 68% 78%, oklch(from var(--bone) l c h / 8%) 99%, transparent),
+      radial-gradient(circle 2px at 8% 82%, oklch(from var(--bone) l c h / 7%) 99%, transparent),
+      radial-gradient(circle 1.5px at 92% 55%, oklch(from var(--gold) l c h / 12%) 99%, transparent),
+      radial-gradient(ellipse 60rem 40rem at 50% -10%, oklch(99% 0.03 95 / 65%), transparent),
+      var(--cellar);
   }
   main {
     flex: 1;
   }
-  .wedge-box {
+  footer {
+    margin-block-start: 0;
+  }
+
+  .top {
+    display: flex;
+    gap: 1.4rem;
+    font-size: 0.8rem;
+  }
+  .top a {
+    color: var(--dim);
+    text-decoration: none;
+  }
+  .top a:hover {
+    color: var(--gold);
+  }
+
+  .lede code,
+  .more code {
+    font-size: 0.9em;
+    color: var(--bone);
+  }
+
+  .ctas {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.8rem;
+    margin-block-start: 2.2rem;
+  }
+  .btn {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.8rem;
+    letter-spacing: 0.04em;
+    padding: 0.7rem 1.15rem;
+    border: 1px solid var(--gold);
+    text-decoration: none;
+  }
+  .btn-fill {
+    background: var(--gold);
+    color: var(--cellar);
+  }
+  .btn-fill:hover {
+    background: oklch(from var(--gold) calc(l - 0.07) c h);
+  }
+  .btn-ghost {
+    color: var(--gold);
+  }
+  .btn-ghost:hover {
+    background: oklch(from var(--gold) l c h / 8%);
+  }
+  .meta {
+    margin-block-start: 1.4rem;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.72rem;
+    color: var(--dim);
+  }
+
+  /* the artifact: a cellar-dark terminal on the paper page */
+  .term-box {
     display: grid;
     place-items: center;
   }
-  .wedge {
-    inline-size: min(19rem, 80%);
-    block-size: auto;
-    filter: drop-shadow(0 0 3.5rem oklch(from var(--gold) l c h / 18%));
+  .term {
+    margin: 0;
+    inline-size: min(26rem, 100%);
+    border-radius: 0.6rem;
+    overflow: hidden;
+    border: 1px solid oklch(30% 0.02 120);
+    background: oklch(19.5% 0.01 140);
+    box-shadow: 0 1.4rem 3rem oklch(from var(--bone) l c h / 22%);
   }
+  .term figcaption {
+    display: flex;
+    gap: 0.9rem;
+    padding: 0.55rem 0.9rem;
+    background: oklch(16.9% 0.007 156);
+    border-block-end: 1px solid oklch(91% 0.021 95 / 12%);
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.06em;
+    color: oklch(61% 0.02 95);
+  }
+  .term-dots {
+    letter-spacing: 0.18em;
+    color: oklch(73.5% 0.13 78 / 65%);
+  }
+  .term pre {
+    margin: 0;
+    padding: 1.1rem 1.2rem 1.3rem;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.76rem;
+    line-height: 1.75;
+    color: oklch(91% 0.021 95);
+    white-space: pre;
+    overflow-x: auto;
+  }
+  .term pre b {
+    font-weight: 500;
+    color: oklch(73.5% 0.13 78);
+  }
+  .term pre i {
+    font-style: normal;
+    color: oklch(61% 0.02 95);
+  }
+
+  .band {
+    background: var(--panel);
+    border-block-start: 1px solid var(--hairline);
+  }
+  .band .wrap {
+    display: block;
+    padding-block: 3.2rem 3.6rem;
+  }
+  .band h2 {
+    margin: 0 0 2rem;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.72rem;
+    font-weight: 400;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--dim);
+  }
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.8rem 2.4rem;
+    counter-reset: step;
+  }
+  .steps > div {
+    counter-increment: step;
+  }
+  .steps strong {
+    display: block;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.85rem;
+    font-weight: 500;
+  }
+  .steps strong::before {
+    content: counter(step, decimal-leading-zero) ' ';
+    color: oklch(from var(--gold) l c h / 55%);
+    font-weight: 400;
+  }
+  .steps p {
+    margin: 0.45rem 0 0;
+    font-size: 0.82rem;
+    line-height: 1.6;
+    color: var(--dim);
+    text-wrap: pretty;
+  }
+  .more {
+    margin: 2.4rem 0 0;
+    font-size: 0.82rem;
+    line-height: 1.7;
+    color: var(--dim);
+    max-width: 44rem;
+  }
+  .more a {
+    color: var(--gold);
+  }
+
   @media (max-width: 56rem) {
-    .wedge-box {
-      order: -1;
+    .steps {
+      grid-template-columns: 1fr;
+      gap: 1.4rem;
     }
-    .wedge {
-      inline-size: min(12rem, 60%);
+    .term {
+      inline-size: 100%;
+    }
+    .top {
+      gap: 1rem;
+    }
+  }
+  @media (max-width: 34rem) {
+    body :global(.cheeselord-header) {
+      flex-wrap: wrap;
+      row-gap: 0.15rem;
+    }
+    .top {
+      flex-basis: 100%;
     }
   }
 </style>
