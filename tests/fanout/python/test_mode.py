@@ -120,14 +120,16 @@ class TestCli:
 
 class TestSingleSourceOfTruth:
     """Acceptance #3, grep-proof: the old five-curd gate is gone from both
-    consumers, and each reads PARALLEL_THRESHOLD rather than a private number."""
+    consumers, and neither carries a private threshold number."""
 
-    def test_validate_decomposition_reads_the_constant(self) -> None:
+    def test_validate_decomposition_gates_on_no_curd_count(self) -> None:
+        """The only count it rules on is "at least one" — file-shape checks now
+        run at every count — so it reads no threshold, imported or private."""
         src = (REPO_ROOT / "src" / "fanout" / "validate_decomposition.py").read_text(
             encoding="utf-8"
         )
-        assert "from mode import PARALLEL_THRESHOLD" in src
-        assert "PARALLEL_THRESHOLD" in src
+        assert "from mode import PARALLEL_THRESHOLD" not in src
+        assert "CURD_THRESHOLD" not in src
         # Old five-curd hard gate and its message must be gone.
         assert "requires at least 5" not in src
         assert "< 5" not in src

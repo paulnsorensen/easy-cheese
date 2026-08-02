@@ -140,6 +140,18 @@ class TestMalformedShapes:
         errors = curd_block.validate_curd_block(block)
         assert "block.curds must be a list" in errors
 
+    def test_empty_curds_list_rejected(self) -> None:
+        # Present-but-empty is not the same as present: a block with no curds
+        # satisfies the required-key check yet dispatches nothing.
+        errors = curd_block.validate_curd_block(_block(curds=[], waves=[]))
+        assert any("block.curds must be a non-empty list" in e for e in errors), errors
+
+    def test_curds_not_a_list_does_not_also_report_emptiness(self) -> None:
+        block = _block(curds=[], waves=[])
+        block["curds"] = "oops"
+        errors = curd_block.validate_curd_block(block)
+        assert errors == ["block.curds must be a list"]
+
     def test_curd_entry_not_a_mapping(self) -> None:
         block = _block(curds=["oops"], waves=[])
         errors = curd_block.validate_curd_block(block)

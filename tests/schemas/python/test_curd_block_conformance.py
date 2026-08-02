@@ -1,8 +1,9 @@
 """CurdBlock: src/fanout/curd_block.py vs easy_cheese_schemas.CurdBlock.
 
-One divergence remains, and it is the only row in this suite judged a defect in
-the *validator* rather than a rule the types have not caught up to yet: an
-empty `curds` list passes `validate_curd_block` while `CurdBlock` refuses it.
+No divergence remains. The last one — an empty `curds` list passing
+`validate_curd_block` while `CurdBlock` refused it — was judged a defect in the
+*validator* rather than a rule the types had not caught up to, and was fixed
+there; the row below now pins agreement.
 """
 
 from __future__ import annotations
@@ -23,7 +24,6 @@ from schema_conformance import (
     divergent,
     ids,
     planned_curd,
-    stricter,
 )
 
 ALPHA = planned_curd("alpha", ["src/alpha.ts"])
@@ -72,12 +72,7 @@ CASES: list[Case] = [
     agreed_invalid("missing seed key", curd_block([curd_without("seed")], [["alpha"]])),
     agreed_invalid("waves as a bare string", curd_block([ALPHA], "alpha")),
     agreed_invalid("curd files as a bare string", solo(files="src/alpha.ts")),
-    stricter(
-        "block with no curds",
-        curd_block([], []),
-        "validator gap to fix in the migration: validate_curd_block only checks "
-        "that the curds key is present, so an empty, undispatchable block passes",
-    ),
+    agreed_invalid("block with no curds", curd_block([], [])),
 ]
 
 
@@ -88,6 +83,12 @@ def test_divergence_table_is_honest() -> None:
 @pytest.mark.parametrize("case", agreeing(CASES), ids=ids(agreeing(CASES)))
 def test_validator_and_type_agree(case: Case, curd_block_validator: Validator) -> None:
     assert_conforms(case, curd_block_validator, CurdBlock)
+
+
+def test_no_known_divergence_remains() -> None:
+    """Asserted rather than left to the empty-parameter skip below, so a
+    divergence that opens later has to be added to the table deliberately."""
+    assert divergent(CASES) == []
 
 
 @pytest.mark.parametrize("case", divergent(CASES), ids=ids(divergent(CASES)))

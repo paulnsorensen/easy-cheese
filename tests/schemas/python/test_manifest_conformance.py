@@ -153,6 +153,8 @@ CASES: list[Case] = [
     agreed_invalid("curd files as a bare string", first_curd(files="src/a.ts")),
     # --- collection invariants both sides carry -----------------------------
     agreed_invalid("two curds claiming the same file", shared_curd_files()),
+    agreed_invalid("lone curd missing files", lone_curd_without("files")),
+    agreed_invalid("lone curd with empty files", lone_curd(files=[])),
     agreed_invalid(
         "wiring depends_on an unknown W-id", top(wiring=[wiring_row("W1", ["W9"])])
     ),
@@ -175,16 +177,6 @@ CASES: list[Case] = [
         "host_capabilities with a non-bool value",
         top(host_capabilities={"gh": "yes"}),
         "the validator does not check host_capabilities values are booleans",
-    ),
-    stricter(
-        "lone curd missing files",
-        lone_curd_without("files"),
-        "the validator only requires files below PARALLEL_THRESHOLD curds",
-    ),
-    stricter(
-        "lone curd with empty files",
-        lone_curd(files=[]),
-        "the validator only requires files below PARALLEL_THRESHOLD curds",
     ),
     # --- LOOSER: only the validator rejects ---------------------------------
     looser(

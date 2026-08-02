@@ -24,7 +24,6 @@ from schema_conformance import (
     curd_records,
     divergent,
     ids,
-    stricter,
     wiring_row,
 )
 
@@ -90,15 +89,9 @@ CASES: list[Case] = [
             curd_records(1), [wiring_row("W1", ["W2"]), wiring_row("W2", ["W1"])]
         ),
     ),
-    stricter(
-        "lone curd missing files",
-        decomposition(lone_curd_without("files")),
-        "the validator only requires files below PARALLEL_THRESHOLD curds",
-    ),
-    stricter(
-        "lone curd with files as a bare string",
-        decomposition(lone_curd(files="src/a.ts")),
-        "the validator only type-checks files below PARALLEL_THRESHOLD curds",
+    agreed_invalid("lone curd missing files", decomposition(lone_curd_without("files"))),
+    agreed_invalid(
+        "lone curd with files as a bare string", decomposition(lone_curd(files="src/a.ts"))
     ),
 ]
 
@@ -112,6 +105,12 @@ def test_validator_and_type_agree(
     case: Case, decomposition_validator: Validator
 ) -> None:
     assert_conforms(case, decomposition_validator, Decomposition)
+
+
+def test_no_known_divergence_remains() -> None:
+    """Asserted rather than left to the empty-parameter skip below, so a
+    divergence that opens later has to be added to the table deliberately."""
+    assert divergent(CASES) == []
 
 
 @pytest.mark.parametrize("case", divergent(CASES), ids=ids(divergent(CASES)))
