@@ -536,6 +536,18 @@ def test_malformed_or_ambiguous_wrappers_are_rejected(
     assert detail in (found.detail or "")
 
 
+def test_unresolvable_absolute_legacy_path_is_an_error(tmp_path: Path) -> None:
+    loop = tmp_path / "loop"
+    loop.symlink_to(loop)
+
+    found = resolve_mod.resolve_legacy(
+        str(loop / ".cheese" / "notes" / "wrapped.md"), start=tmp_path
+    )
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.ERROR
+    assert "could not be resolved" in (found.detail or "")
+
+
 def _resolve_legacy_artifact(tmp_path: Path, artifact: str) -> resolve_mod.Resolution:
     start = tmp_path / "start"
     start.mkdir()

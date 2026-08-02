@@ -40,7 +40,6 @@ from easy_cheese_schemas import (
 )
 
 import legacy as legacy_mod
-import handoff  # noqa: F401 - keep the shared parser in the portable bundle
 import lint
 import paths
 import records

@@ -106,8 +106,8 @@ def wheypoint_pyz(tmp_path_factory) -> Path:
 
 
 def test_the_wheypoint_bundle_carries_its_whole_runtime(wheypoint_pyz: Path) -> None:
-    """The continuity runtime is eight sibling modules plus two shared ones, all
-    reached through build_pyz's import scanner rather than a hand-kept list. A
+    """The continuity runtime is eight sibling modules plus one shared module,
+    all reached through build_pyz's import scanner rather than a hand-kept list. A
     module dropped from the scan would only surface as an ImportError at resume
     time, which is the one moment the user cannot afford one."""
     names = set(zipfile.ZipFile(wheypoint_pyz).namelist())
@@ -125,7 +125,6 @@ def test_the_wheypoint_bundle_carries_its_whole_runtime(wheypoint_pyz: Path) -> 
         assert module in names, module
     # The shared library it reuses rather than reimplements.
     assert "paths.py" in names
-    assert "handoff.py" in names
     # Schemas and vendored deps ride along, nested, exactly as for ultracook.
     assert "easy_cheese_schemas/wheypoint.py" in names
     assert "attr/_make.py" in names

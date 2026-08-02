@@ -300,7 +300,12 @@ def find_legacy_note(
     """Find one legacy note by safe slug or exact absolute note path."""
     reference = Path(slug).expanduser()
     if reference.is_absolute():
-        path = reference.resolve()
+        try:
+            path = reference.resolve()
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise LegacyLookupError(
+                "absolute legacy reference could not be resolved"
+            ) from exc
         if (
             path.parent.name != NOTES_DIR_PARTS[1]
             or path.parent.parent.name != NOTES_DIR_PARTS[0]
