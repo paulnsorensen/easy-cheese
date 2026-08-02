@@ -56,6 +56,154 @@ class LegacyNote:
     path: Path
 
 
+
+@define(frozen=True)
+class LegacyHandoffSlug:
+    """Decoded legacy handoff metadata, kept separate from the shared parser."""
+
+    status: str
+    halt_reason: str | None
+    next_skill: str
+    artifact: str | None
+    orientation: str
+    mode: str = "single"
+    session: str | None = None
+    git: str | None = None
+    created: str | None = None
+    parents: str | None = None
+    baseline: str | None = None
+    taste_test: str | None = None
+    durable_flags: str | None = None
+
+    def is_halt(self) -> bool:
+        return self.status == "halt"
+
+    def is_gated(self) -> bool:
+        return self.status == "gated"
+
+
+class LegacyDecodeError(ValueError):
+    """Raised when a legacy note wrapper or preamble is malformed."""
+
+
+_HEADER_RE = re.compile(r"^(?P<key>[a-z][a-z0-9_]*):\s*(?P<value>.*?)\s*$")
+_FENCE_RE = re.compile(r"^(?P<marker>\x60{3,}|~{3,})(?:text)?\s*$")
+_ALLOWED_HEADER_KEYS = frozenset(
+    {
+        "status",
+        "next",
+        "artifact",
+        "mode",
+        "session",
+        "git",
+        "created",
+        "parents",
+        "baseline",
+        "taste_test",
+        "durable_flags",
+    }
+)
+
+
+def _parse_legacy_status(value: str) -> tuple[str, str | None]:
+    if value == "ok":
+        return "ok", None
+    for status in ("halt", "gated"):
+        if value == status:
+            return status, None
+        prefix = f"{status}:"
+        if value.startswith(prefix):
+            reason = value[len(prefix) :].strip()
+            if not reason:
+                raise LegacyDecodeError(f"{status} status requires a reason")
+            return status, reason
+    raise LegacyDecodeError(
+        "status must be 'ok', 'halt: <reason>', or 'gated: <reason>'"
+    )
+
+
+def _unwrap_legacy_note(text: str) -> str:
+    lines = text.splitlines()
+    first = next((index for index, line in enumerate(lines) if line.strip()), None)
+    if first is None or lines[first].strip() != "## Handoff slug":
+        return text
+    index = first + 1
+    while index < len(lines) and not lines[index].strip():
+        index += 1
+    if index >= len(lines):
+        raise LegacyDecodeError("handoff wrapper fence is missing")
+    match = _FENCE_RE.fullmatch(lines[index].strip())
+    if match is None:
+        raise LegacyDecodeError("handoff wrapper needs a backtick or tilde fence")
+    marker = match.group("marker")
+    index += 1
+    close = None
+    for candidate in range(index, len(lines)):
+        if lines[candidate].strip() == marker:
+            close = candidate
+            break
+    if close is None:
+        raise LegacyDecodeError("handoff wrapper fence is not closed")
+    if any(line.strip() == "## Handoff slug" for line in lines[close + 1 :]):
+        raise LegacyDecodeError("legacy note contains multiple handoff wrappers")
+    return "\n".join(lines[index:close])
+
+
+def _parse_legacy_header(text: str) -> LegacyHandoffSlug:
+    values: dict[str, str] = {}
+    orientation: str | None = None
+    for line in text.splitlines():
+        match = _HEADER_RE.fullmatch(line)
+        if match is None:
+            orientation = line.strip()
+            if not orientation:
+                raise LegacyDecodeError("orientation line must be non-empty")
+            break
+        key = match.group("key")
+        if key not in _ALLOWED_HEADER_KEYS:
+            if orientation is None:
+                raise LegacyDecodeError(f"unknown handoff key {key!r}")
+            break
+        if key in values:
+            raise LegacyDecodeError(f"duplicate '{key}:' line in handoff preamble")
+        value = match.group("value")
+        if key != "artifact" and not value:
+            raise LegacyDecodeError(f"'{key}:' line requires a value")
+        values[key] = value
+    missing = [key for key in ("status", "next", "artifact") if key not in values]
+    if missing:
+        raise LegacyDecodeError("handoff preamble missing " + ", ".join(missing))
+    if orientation is None:
+        raise LegacyDecodeError("orientation line missing after keyed preamble lines")
+    status, halt_reason = _parse_legacy_status(values["status"])
+    next_skill = values["next"].lstrip("/")
+    if not next_skill:
+        raise LegacyDecodeError("'next:' line requires a value")
+    mode = values.get("mode", "single")
+    if mode not in {"single", "parallel"}:
+        raise LegacyDecodeError("mode must be 'single' or 'parallel'")
+    return LegacyHandoffSlug(
+        status=status,
+        halt_reason=halt_reason,
+        next_skill=next_skill,
+        artifact=values["artifact"] or None,
+        orientation=orientation,
+        mode=mode,
+        session=values.get("session"),
+        git=values.get("git"),
+        created=values.get("created"),
+        parents=values.get("parents"),
+        baseline=values.get("baseline"),
+        taste_test=values.get("taste_test"),
+        durable_flags=values.get("durable_flags"),
+    )
+
+
+def _parse_legacy_note(text: str) -> LegacyHandoffSlug:
+    """Decode a raw preamble or a historical handoff wrapper."""
+    return _parse_legacy_header(_unwrap_legacy_note(text))
+
+
 @define(frozen=True)
 class WorktreeScan:
     """The worktrees to search, and why the list may be short."""
@@ -149,7 +297,34 @@ def worktree_roots(start: Path | str, *, run: Runner | None = None) -> WorktreeS
 def find_legacy_note(
     slug: str, *, start: Path | str, run: Runner | None = None
 ) -> LegacyLookup:
-    """Find `<worktree>/.cheese/notes/<slug>.md` across every worktree."""
+    """Find one legacy note by safe slug or exact absolute note path."""
+    reference = Path(slug).expanduser()
+    if reference.is_absolute():
+        try:
+            path = reference.resolve()
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise LegacyLookupError(
+                "absolute legacy reference could not be resolved"
+            ) from exc
+        if (
+            path.parent.name != NOTES_DIR_PARTS[1]
+            or path.parent.parent.name != NOTES_DIR_PARTS[0]
+            or path.suffix != ".md"
+            or _SLUG_RE.fullmatch(path.stem) is None
+        ):
+            raise LegacyLookupError(
+                "absolute legacy reference must be a .cheese/notes/<slug>.md path"
+            )
+        searched = (str(path),)
+        if path.is_file():
+            root = path.parent.parent.parent
+            return LegacyLookup(
+                outcome=LegacyOutcome.FOUND,
+                matches=(LegacyNote(worktree=root, path=path),),
+                searched=searched,
+            )
+        return LegacyLookup(outcome=LegacyOutcome.NOT_FOUND, searched=searched)
+
     if _SLUG_RE.fullmatch(slug) is None:
         raise LegacyLookupError(
             f"slug {slug!r} must be a single path segment matching "

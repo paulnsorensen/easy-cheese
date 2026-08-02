@@ -1,10 +1,13 @@
 """Turn a reference into something it is safe to continue from -- or a refusal.
 
-Three lookups, in one fixed order, and no others:
+Authoritative lookup has one fixed precedence, followed only by the legacy
+fallback:
 
 1. an explicit path to a projection document;
 2. an exact work id in the project's XDG corpus;
-3. a *unique* slug in that corpus.
+3. a *unique* slug in that corpus;
+4. a safe legacy slug or exact `.cheese/notes/<slug>.md` path after an
+   authoritative miss.
 
 A slug is an alias, not an identity, so two work ids answering to one slug is an
 ambiguity that names both. Nothing here breaks a tie by modification time,
@@ -18,9 +21,8 @@ longer exists, a stale coverage claim, an open question -- comes back `gated`
 or `error`, which is the whole point: the caller has no branch that dispatches
 on a checkpoint it could not verify.
 
-Legacy notes resolve through `resolve_legacy`, deliberately as a separate call:
-they are a documented fallback a caller opts into, never something the
-authoritative path silently degrades into.
+Legacy notes use the private Wheypoint compatibility parser. They remain
+non-authoritative context and never become dispatchable.
 """
 
 from __future__ import annotations
@@ -37,7 +39,6 @@ from easy_cheese_schemas import (
     WheypointStatus,
 )
 
-import handoff
 import legacy as legacy_mod
 import lint
 import paths
@@ -76,7 +77,7 @@ class Resolution:
     matches: tuple[str, ...] = field(default=())
     searched: tuple[str, ...] = field(default=())
     legacy_note: Path | None = None
-    legacy_slug: handoff.HandoffSlug | None = None
+    legacy_slug: legacy_mod.LegacyHandoffSlug | None = None
     detail: str | None = None
 
     @property
@@ -98,7 +99,7 @@ def resolve(
     git_object_exists: Callable[[str], bool] | None = None,
     artifact_digest: Callable[[str], str | None] | None = None,
 ) -> Resolution:
-    """Resolve `ref` as a path, then an exact work id, then a unique slug."""
+    """Resolve an authoritative reference, then fall back to one legacy note."""
     root = Path(workspace_root) if workspace_root is not None else Path.cwd()
     checks = _Checks(
         corpus_root=(
@@ -112,22 +113,42 @@ def resolve(
     )
 
     if not ref.strip():
-        return Resolution(
-            ResolutionOutcome.ERROR, detail="reference is empty"
-        )
+        return Resolution(ResolutionOutcome.ERROR, detail="reference is empty")
     if _is_path_ref(ref):
-        return _resolve_path(ref, checks)
-    if _IDENTIFIER_RE.fullmatch(ref) is None:
-        return Resolution(
+        authoritative = _resolve_path(ref, checks)
+        if authoritative.outcome not in {
+            ResolutionOutcome.NOT_FOUND,
             ResolutionOutcome.ERROR,
-            detail=(
-                f"reference {ref!r} is neither a path nor an identifier matching "
-                f"{_IDENTIFIER_RE.pattern}"
-            ),
-        )
-    if (checks.work_root / ref / storage.RECORD_FILENAME).is_file():
-        return _validate(ref, ResolutionSource.WORK_ID, checks)
-    return _resolve_slug(ref, checks)
+        } or not _is_legacy_path_ref(ref):
+            return authoritative
+    else:
+        if _IDENTIFIER_RE.fullmatch(ref) is None:
+            return Resolution(
+                ResolutionOutcome.ERROR,
+                detail=(
+                    f"reference {ref!r} is neither a path nor an identifier matching "
+                    f"{_IDENTIFIER_RE.pattern}"
+                ),
+            )
+        if (checks.work_root / ref / storage.RECORD_FILENAME).is_file():
+            return _validate(ref, ResolutionSource.WORK_ID, checks)
+        authoritative = _resolve_slug(ref, checks)
+
+    if authoritative.outcome is ResolutionOutcome.NOT_FOUND or _is_legacy_path_ref(ref):
+        legacy = resolve_legacy(ref, start=root)
+        if legacy.outcome is not ResolutionOutcome.NOT_FOUND:
+            return legacy
+    return authoritative
+
+
+def _is_legacy_path_ref(ref: str) -> bool:
+    path = Path(ref).expanduser()
+    return (
+        path.is_absolute()
+        and path.parent.name == legacy_mod.NOTES_DIR_PARTS[1]
+        and path.parent.parent.name == legacy_mod.NOTES_DIR_PARTS[0]
+        and path.suffix == ".md"
+    )
 
 
 @define(frozen=True)
@@ -304,12 +325,7 @@ def resolve_legacy(
     start: Path | str,
     run: legacy_mod.Runner | None = None,
 ) -> Resolution:
-    """The explicit legacy fallback: one `.cheese/notes/<slug>.md`, or nothing.
-
-    A legacy note never becomes authoritative -- `dispatchable` stays false --
-    and a note whose declared artifact does not resolve in its own worktree is
-    gated rather than followed.
-    """
+    """Resolve a legacy note as untrusted, non-dispatchable context."""
     try:
         lookup = legacy_mod.find_legacy_note(slug, start=start, run=run)
     except legacy_mod.LegacyLookupError as exc:
@@ -336,10 +352,10 @@ def resolve_legacy(
             detail=lookup.error,
         )
     try:
-        slug_block = handoff.parse_handoff_slug(
+        slug_block = legacy_mod._parse_legacy_note(
             note.path.read_text(encoding="utf-8")
         )
-    except (handoff.HandoffParseError, OSError) as exc:
+    except (legacy_mod.LegacyDecodeError, OSError) as exc:
         return Resolution(
             ResolutionOutcome.ERROR,
             source=ResolutionSource.LEGACY,
@@ -354,12 +370,42 @@ def resolve_legacy(
         legacy_slug=slug_block,
         searched=lookup.searched,
     )
-    if slug_block.artifact and not (note.worktree / slug_block.artifact).exists():
-        return _gate(
-            found,
-            f"declared artifact {slug_block.artifact!r} does not resolve under "
-            f"{note.worktree}",
-        )
+    if slug_block.artifact:
+        artifact = Path(slug_block.artifact)
+        worktree = note.worktree.resolve()
+        if artifact.is_absolute():
+            return _gate(
+                found,
+                f"declared artifact {slug_block.artifact!r} must be a "
+                f"repo-relative regular file under {worktree}",
+            )
+        candidate = worktree / artifact
+        try:
+            resolved_artifact = candidate.resolve(strict=True)
+        except (OSError, RuntimeError, ValueError):
+            return _gate(
+                found,
+                f"declared artifact {slug_block.artifact!r} does not resolve to "
+                f"an existing regular file under {worktree}",
+            )
+        try:
+            resolved_artifact.relative_to(worktree)
+        except ValueError:
+            return _gate(
+                found,
+                f"declared artifact {slug_block.artifact!r} resolves outside "
+                f"legacy worktree {worktree}",
+            )
+        if not resolved_artifact.is_file():
+            return _gate(
+                found,
+                f"declared artifact {slug_block.artifact!r} must be an existing "
+                "regular file",
+            )
     if slug_block.is_halt():
-        return _gate(found, f"legacy note halts: {slug_block.halt_reason}")
+        reason = slug_block.halt_reason or "halt status"
+        return _gate(found, f"legacy note halts: {reason}")
+    if slug_block.is_gated():
+        reason = slug_block.halt_reason or "gated status"
+        return _gate(found, f"legacy note is gated: {reason}")
     return found
