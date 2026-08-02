@@ -421,3 +421,200 @@ def test_a_real_integrity_failure_still_blocks_continuation(
 
     assert found.dispatchable is False
     assert found.outcome is resolve_mod.ResolutionOutcome.GATED
+
+WRAPPED_NOTE = """## Handoff slug
+
+~~~text
+status: ok
+next: mold
+mode: single
+artifact: .cheese/notes/context.md
+session: codex:test-session
+git: branch@deadbeef
+created: 2026-08-02T00:00:00Z
+parents: [parent]
+baseline: none
+Resume the parent protocol.
+~~~
+
+## Document
+body
+"""
+
+
+def test_real_wrapped_legacy_note_decodes_additive_header(tmp_path: Path) -> None:
+    start = tmp_path / "start"
+    start.mkdir()
+    note = start / ".cheese" / "notes" / "wrapped.md"
+    note.parent.mkdir(parents=True)
+    note.write_text(WRAPPED_NOTE, encoding="utf-8")
+    (start / ".cheese" / "notes" / "context.md").write_text("context\n", encoding="utf-8")
+
+    found = resolve_mod.resolve_legacy(
+        "wrapped", start=start, run=fake_runner(porcelain(start))
+    )
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.LEGACY
+    assert found.legacy_slug is not None
+    assert found.legacy_slug.next_skill == "mold"
+    assert found.legacy_slug.mode == "single"
+    assert found.legacy_slug.session == "codex:test-session"
+    assert found.legacy_slug.parents == "[parent]"
+
+
+def test_normal_resolve_falls_back_to_a_legacy_slug(tmp_path: Path) -> None:
+    start = tmp_path / "start"
+    start.mkdir()
+    note = start / ".cheese" / "notes" / "wrapped.md"
+    note.parent.mkdir(parents=True)
+    note.write_text(WRAPPED_NOTE, encoding="utf-8")
+
+    (start / ".cheese" / "notes" / "context.md").write_text("context\n", encoding="utf-8")
+    found = resolve_mod.resolve("wrapped", workspace_root=start)
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.LEGACY
+    assert found.legacy_note == note
+    assert not found.dispatchable
+
+
+def test_absolute_legacy_path_resolves_exact_note_without_worktree_scan(tmp_path: Path) -> None:
+    start = tmp_path / "start"
+    start.mkdir()
+    note = start / ".cheese" / "notes" / "wrapped.md"
+    note.parent.mkdir(parents=True)
+    note.write_text(WRAPPED_NOTE, encoding="utf-8")
+
+    (start / ".cheese" / "notes" / "context.md").write_text("context\n", encoding="utf-8")
+    found = resolve_mod.resolve(str(note), workspace_root=tmp_path / "elsewhere")
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.LEGACY
+    assert found.legacy_note == note
+    assert found.searched == (str(note),)
+
+
+def test_wrapped_gated_status_blocks_legacy_resume(tmp_path: Path) -> None:
+    start = tmp_path / "start"
+    start.mkdir()
+    note = start / ".cheese" / "notes" / "gated.md"
+    note.parent.mkdir(parents=True)
+    note.write_text(WRAPPED_NOTE.replace("status: ok", "status: gated: decide"), encoding="utf-8")
+
+    found = resolve_mod.resolve_legacy(
+        "gated", start=start, run=fake_runner(porcelain(start))
+    )
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.GATED
+    assert "gated" in (found.detail or "")
+    assert not found.dispatchable
+
+
+@pytest.mark.parametrize(
+    ("body", "detail"),
+    [
+        (
+            "## Handoff slug\n\n~~~text\nstatus: ok\nnext: mold\nartifact: \n",
+            "handoff wrapper fence is not closed",
+        ),
+        (WRAPPED_NOTE + "\n## Handoff slug\n", "multiple handoff wrappers"),
+    ],
+)
+def test_malformed_or_ambiguous_wrappers_are_rejected(
+    tmp_path: Path, body: str, detail: str
+) -> None:
+    start = tmp_path / "start"
+    start.mkdir()
+    note = start / ".cheese" / "notes" / "bad.md"
+    note.parent.mkdir(parents=True)
+    note.write_text(body, encoding="utf-8")
+
+    found = resolve_mod.resolve_legacy(
+        "bad", start=start, run=fake_runner(porcelain(start))
+    )
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.ERROR
+    assert found.legacy_note == note
+    assert detail in (found.detail or "")
+
+
+def _resolve_legacy_artifact(tmp_path: Path, artifact: str) -> resolve_mod.Resolution:
+    start = tmp_path / "start"
+    start.mkdir()
+    note = start / ".cheese" / "notes" / "artifact.md"
+    note.parent.mkdir(parents=True)
+    note.write_text(
+        WRAPPED_NOTE.replace(
+            "artifact: .cheese/notes/context.md", f"artifact: {artifact}"
+        ),
+        encoding="utf-8",
+    )
+    return resolve_mod.resolve_legacy(
+        "artifact", start=start, run=fake_runner(porcelain(start))
+    )
+
+
+def test_legacy_artifact_absolute_path_is_gated(tmp_path: Path) -> None:
+    external = tmp_path / "outside.txt"
+    external.write_text("outside\n", encoding="utf-8")
+
+    found = _resolve_legacy_artifact(tmp_path, str(external))
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.GATED
+    assert "repo-relative" in (found.detail or "")
+
+
+def test_legacy_artifact_traversal_escape_is_gated(tmp_path: Path) -> None:
+    (tmp_path / "outside.txt").write_text("outside\n", encoding="utf-8")
+
+    found = _resolve_legacy_artifact(tmp_path, "../outside.txt")
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.GATED
+    assert "outside" in (found.detail or "")
+
+
+def test_legacy_artifact_symlink_escape_is_gated(tmp_path: Path) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret.txt").write_text("secret\n", encoding="utf-8")
+    start = tmp_path / "start"
+    start.mkdir()
+    (start / "link").symlink_to(outside, target_is_directory=True)
+
+    note = start / ".cheese" / "notes" / "artifact.md"
+    note.parent.mkdir(parents=True)
+    note.write_text(
+        WRAPPED_NOTE.replace(
+            "artifact: .cheese/notes/context.md", "artifact: link/secret.txt"
+        ),
+        encoding="utf-8",
+    )
+    found = resolve_mod.resolve_legacy(
+        "artifact", start=start, run=fake_runner(porcelain(start))
+    )
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.GATED
+    assert "outside" in (found.detail or "")
+
+
+def test_legacy_artifact_directory_is_gated(tmp_path: Path) -> None:
+    found = _resolve_legacy_artifact(tmp_path, ".cheese/notes")
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.GATED
+    assert "regular file" in (found.detail or "")
+
+
+def test_repo_relative_regular_legacy_artifact_is_accepted(tmp_path: Path) -> None:
+    start = tmp_path / "start"
+    start.mkdir()
+    context = start / ".cheese" / "notes" / "context.md"
+    context.parent.mkdir(parents=True)
+    context.write_text("context\n", encoding="utf-8")
+    note = context.parent / "artifact.md"
+    note.write_text(WRAPPED_NOTE, encoding="utf-8")
+
+    found = resolve_mod.resolve_legacy(
+        "artifact", start=start, run=fake_runner(porcelain(start))
+    )
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.LEGACY
+    assert found.detail is None
+    assert not found.dispatchable

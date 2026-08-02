@@ -65,6 +65,27 @@ def test_resolution_runs_through_the_runtime_rather_than_by_hand() -> None:
     assert ".cheese/notes/" in body
 
 
+
+def test_legacy_resolution_requires_an_informed_resume_gate() -> None:
+    body = _read(CONTINUE_RESUME).lower()
+    assert "a `legacy` result is non-authoritative" in body
+    assert "separate informed trust gate" in body
+    assert "untrusted context" in body
+    assert "live message that explicitly directs manual resume" in body
+    assert "normal `/wheypoint` flow" in body
+
+
+def test_legacy_runtime_gates_cannot_be_waived_by_manual_resume() -> None:
+    body = _read(CONTINUE_RESUME).lower()
+    assert "any runtime `gated` outcome from a legacy `halt` or `gated` status" in body
+    assert "a live directive cannot waive that runtime gate" in body
+    assert (
+        "manual resume answers only that trust gate" in body
+        and "clean runtime `legacy` result with `status: ok`" in body
+    )
+    assert "never this halt gate or any other runtime integrity gate" in body
+    assert "explicit permission to dispatch the next phase" not in body
+
 def test_the_documented_command_set_is_exactly_the_four_the_spec_fixes() -> None:
     """Documented across the continuity docs as a whole: /wheypoint owns the
     write path (commit, show), the resume flow owns the read path (resolve,
