@@ -10,13 +10,13 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="color-scheme" content="light" />
+    <meta name="color-scheme" content="dark" />
     <title>🧀 easy-cheese</title>
     <meta
       name="description"
       content="Harness-agnostic Agent Skills — the cheese-making pipeline for code review, implementation, refactoring, and PR rescue."
     />
-    <meta name="theme-color" content="#f8f2e4" />
+    <meta name="theme-color" content="#1d1713" />
     <link rel="icon" type="image/svg+xml" href={`${base}/favicon.svg`} />
   </head>
   <body>
@@ -96,21 +96,19 @@ dispatching /pasteurize --auto …
   body {
     display: flex;
     flex-direction: column;
-    /* per-site color variation: warm paper daylight replaces the cellar dark */
-    --cellar: oklch(96.5% 0.019 90);
-    --panel: oklch(93% 0.023 88);
-    --bone: oklch(33% 0.042 55);
-    --dim: oklch(51% 0.035 65);
-    --gold: oklch(53% 0.16 40);
-    --hairline: oklch(from var(--bone) l c h / 18%);
-    /* same fleck texture, but the cellar's dark ceiling glow becomes daylight */
+    /* per-site color variation: the gouda cellar — espresso field, caramel accent
+       (mirrors --cl-ink / --cl-amber in the easy-cheese docs flavor) */
+    --cellar: oklch(17.5% 0.012 65);
+    --panel: oklch(20.5% 0.016 68);
+    --gold: oklch(71% 0.14 64);
+    /* same fleck texture, but the green-cast ceiling glow goes caramel-warm */
     background:
       radial-gradient(circle 2px at 18% 22%, oklch(from var(--gold) l c h / 22%) 99%, transparent),
       radial-gradient(circle 1.5px at 82% 12%, oklch(from var(--bone) l c h / 10%) 99%, transparent),
       radial-gradient(circle 1.5px at 68% 78%, oklch(from var(--bone) l c h / 8%) 99%, transparent),
       radial-gradient(circle 2px at 8% 82%, oklch(from var(--bone) l c h / 7%) 99%, transparent),
       radial-gradient(circle 1.5px at 92% 55%, oklch(from var(--gold) l c h / 12%) 99%, transparent),
-      radial-gradient(ellipse 60rem 40rem at 50% -10%, oklch(99% 0.03 95 / 65%), transparent),
+      radial-gradient(ellipse 60rem 40rem at 50% -10%, oklch(29% 0.03 66 / 55%), transparent),
       var(--cellar);
   }
   main {
@@ -173,7 +171,7 @@ dispatching /pasteurize --auto …
     color: var(--dim);
   }
 
-  /* the artifact: a cellar-dark terminal on the paper page */
+  /* the artifact: an elevated terminal panel on the gouda field */
   .term-box {
     display: grid;
     place-items: center;
@@ -183,24 +181,24 @@ dispatching /pasteurize --auto …
     inline-size: min(26rem, 100%);
     border-radius: 0.6rem;
     overflow: hidden;
-    border: 1px solid oklch(30% 0.02 120);
-    background: oklch(19.5% 0.01 140);
-    box-shadow: 0 1.4rem 3rem oklch(from var(--bone) l c h / 22%);
+    border: 1px solid var(--hairline);
+    background: var(--panel);
+    box-shadow: 0 1.4rem 3rem oklch(0% 0 0 / 40%);
   }
   .term figcaption {
     display: flex;
     gap: 0.9rem;
     padding: 0.55rem 0.9rem;
-    background: oklch(16.9% 0.007 156);
-    border-block-end: 1px solid oklch(91% 0.021 95 / 12%);
+    background: oklch(from var(--cellar) calc(l - 0.015) c h);
+    border-block-end: 1px solid var(--hairline);
     font-family: 'IBM Plex Mono', ui-monospace, monospace;
     font-size: 0.68rem;
     letter-spacing: 0.06em;
-    color: oklch(61% 0.02 95);
+    color: var(--dim);
   }
   .term-dots {
     letter-spacing: 0.18em;
-    color: oklch(73.5% 0.13 78 / 65%);
+    color: oklch(from var(--gold) l c h / 65%);
   }
   .term pre {
     margin: 0;
@@ -208,17 +206,17 @@ dispatching /pasteurize --auto …
     font-family: 'IBM Plex Mono', ui-monospace, monospace;
     font-size: 0.76rem;
     line-height: 1.75;
-    color: oklch(91% 0.021 95);
+    color: var(--bone);
     white-space: pre;
     overflow-x: auto;
   }
   .term pre b {
     font-weight: 500;
-    color: oklch(73.5% 0.13 78);
+    color: var(--gold);
   }
   .term pre i {
     font-style: normal;
-    color: oklch(61% 0.02 95);
+    color: var(--dim);
   }
 
   .band {
