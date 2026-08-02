@@ -347,6 +347,24 @@ class TestValidateManifestE2E:
         errors = validate_decomposition.validate_manifest(_manifest(curds=curds))
         assert len(errors) >= 3
 
+    def test_lone_curd_missing_files_rejected(
+        self, validate_decomposition: ModuleType
+    ) -> None:
+        # File shape is checked at every curd count, not just parallel-eligible
+        # ones — a lone curd with no allowlist is as undispatchable as any other.
+        curds = _curds(1)
+        del curds[0]["files"]
+        errors = validate_decomposition.validate_manifest(_manifest(curds=curds))
+        assert any("missing or empty 'files'" in e for e in errors), errors
+
+    def test_lone_curd_with_files_as_a_bare_string_rejected(
+        self, validate_decomposition: ModuleType
+    ) -> None:
+        curds = _curds(1)
+        curds[0]["files"] = "src/feature_0.ts"
+        errors = validate_decomposition.validate_manifest(_manifest(curds=curds))
+        assert any("missing or empty 'files'" in e for e in errors), errors
+
     def test_curds_must_be_a_list(self, validate_decomposition: ModuleType) -> None:
         manifest = _manifest()
         manifest["curds"] = "not a list"
