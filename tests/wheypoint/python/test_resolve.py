@@ -62,6 +62,18 @@ def test_an_exact_work_id_beats_another_record_holding_that_slug(
     assert found.work_id == "alpha"
 
 
+
+def test_a_work_id_ending_in_md_is_not_treated_as_a_path(
+    corpus_root, make_record, make_promotion
+) -> None:
+    seed(corpus_root, make_record, make_promotion, work_id="alpha.md", slug="beta")
+
+    found = run("alpha.md", corpus_root)
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.AUTHORITATIVE
+    assert found.source is resolve_mod.ResolutionSource.WORK_ID
+    assert found.work_id == "alpha.md"
+
 def test_an_explicit_path_beats_the_corpus_lookups(
     corpus_root, make_record, make_promotion
 ) -> None:
@@ -89,6 +101,24 @@ def test_a_unique_slug_resolves_when_no_work_id_matches(
     assert found.record is not None
     assert found.projection is not None
     assert found.dispatchable
+
+
+def test_a_slug_ending_in_md_is_not_treated_as_a_path(
+    corpus_root, make_record, make_promotion
+) -> None:
+    seed(
+        corpus_root,
+        make_record,
+        make_promotion,
+        work_id="work-0001",
+        slug="kernel.md",
+    )
+
+    found = run("kernel.md", corpus_root)
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.AUTHORITATIVE
+    assert found.source is resolve_mod.ResolutionSource.SLUG
+    assert found.work_id == "work-0001"
 
 
 @pytest.mark.parametrize("newer", ["work-0001", "work-0002"])

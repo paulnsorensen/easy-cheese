@@ -107,10 +107,20 @@ def git_object_exists_in(root: Path | str) -> Callable[[str], bool]:
 
 
 def artifact_digest_in(root: Path | str) -> Callable[[str], str | None]:
-    """Digest an artifact path as the record writes it: relative to `root`."""
+    """Digest a regular artifact file contained by `root`."""
+    resolved_root = Path(root).resolve()
 
     def digest(path: str) -> str | None:
-        return storage.file_digest(Path(root) / path)
+        candidate = Path(path)
+        if candidate.is_absolute() or ".." in candidate.parts:
+            return None
+        try:
+            resolved = (resolved_root / candidate).resolve()
+            if not resolved.is_relative_to(resolved_root) or not resolved.is_file():
+                return None
+            return storage.file_digest(resolved)
+        except (OSError, RuntimeError):
+            return None
 
     return digest
 

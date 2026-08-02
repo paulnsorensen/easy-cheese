@@ -393,10 +393,10 @@ class WorkStore:
         projection_path = self.projection_path(
             revision.revision_number, revision.revision_id
         )
-        digest = file_digest(projection_path)
-        if digest is None:
+        try:
+            text = projection_path.read_text(encoding="utf-8")
+        except OSError:
             return "projection file is missing", None
-        text = projection_path.read_text(encoding="utf-8")
         if projection_mod.projection_digest_of_text(text) != revision.projection_digest:
             return "projection digest mismatch", None
         return "", RevisionFile(

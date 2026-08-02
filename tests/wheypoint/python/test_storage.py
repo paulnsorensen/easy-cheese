@@ -470,6 +470,50 @@ def test_a_tampered_projection_breaks_its_pair(
     assert report.incomplete == ("1-rev-0001.json: projection digest mismatch",)
 
 
+def test_recovery_reads_each_projection_once(
+    store: storage.WorkStore, make_promotion: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    promotion = make_promotion()
+    store.promote(promotion.record, promotion.revision, promotion.markdown)
+    projection_path = store.projection_path(1, "rev-0001")
+    real_read_bytes = Path.read_bytes
+    real_read_text = Path.read_text
+    reads = 0
+
+    def count_read_bytes(path: Path) -> bytes:
+        nonlocal reads
+        if path == projection_path:
+            reads += 1
+        return real_read_bytes(path)
+
+    def count_read_text(path: Path, *args: Any, **kwargs: Any) -> str:
+        nonlocal reads
+        if path == projection_path:
+            reads += 1
+        return real_read_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_bytes", count_read_bytes)
+    monkeypatch.setattr(Path, "read_text", count_read_text)
+
+    assert store.recover().latest_complete is not None
+    assert reads == 1
+
+
+def test_an_unreadable_projection_is_incomplete(
+    store: storage.WorkStore, make_promotion: Any
+) -> None:
+    promotion = make_promotion()
+    store.promote(promotion.record, promotion.revision, promotion.markdown)
+    path = store.projection_path(1, "rev-0001")
+    path.unlink()
+    path.mkdir()
+
+    report = store.recover()
+
+    assert report.complete == ()
+    assert report.incomplete == ("1-rev-0001.json: projection file is missing",)
+
+
 def test_a_tampered_record_is_reported_against_its_receipt(
     store: storage.WorkStore, make_promotion: Any
 ) -> None:

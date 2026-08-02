@@ -86,7 +86,7 @@ class Resolution:
 
 
 def _is_path_ref(ref: str) -> bool:
-    return "/" in ref or ref.startswith("~") or ref.endswith(".md")
+    return "/" in ref or ref.startswith("~")
 
 
 def resolve(

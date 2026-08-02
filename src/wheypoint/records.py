@@ -28,12 +28,12 @@ import attrs
 from attrs import define, field
 from easy_cheese_schemas import (
     EntryState,
+    EntryTransition,
     ProtectedEntry,
     WheypointDelta,
     WheypointRecord,
     load,
 )
-from easy_cheese_schemas.wheypoint import EntryTransition
 
 import canonical
 

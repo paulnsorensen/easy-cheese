@@ -13,9 +13,9 @@ from __future__ import annotations
 from typing import Any
 
 import attrs
-import easy_cheese_schemas
 import pytest
 from easy_cheese_schemas import (
+    __all__ as schema_exports,
     SCHEMA_VERSION,
     ProposedEntry,
     Provenance,
@@ -183,14 +183,13 @@ def blames(problems: tuple[str, ...], path: str) -> bool:
 
 
 def test_the_four_types_are_public_exports() -> None:
-    for name in (
-        "WheypointRecord",
-        "WheypointDelta",
-        "WheypointRevision",
-        "WheypointProjection",
+    for exported in (
+        WheypointRecord,
+        WheypointDelta,
+        WheypointRevision,
+        WheypointProjection,
     ):
-        assert name in easy_cheese_schemas.__all__
-        exported = getattr(easy_cheese_schemas, name)
+        assert exported.__name__ in schema_exports
         assert exported.__module__ == "easy_cheese_schemas.wheypoint"
         assert attrs.has(exported)
         assert exported.__attrs_attrs__ is not None

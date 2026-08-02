@@ -267,6 +267,41 @@ def test_artifact_digest_in_hashes_relative_paths(tmp_path: Path) -> None:
     assert digest("cook/absent.md") is None
 
 
+def test_artifact_digest_in_rejects_absolute_paths(tmp_path: Path) -> None:
+    root = tmp_path / "root"
+    root.mkdir()
+    outside = tmp_path / "outside.md"
+    outside.write_text("body", encoding="utf-8")
+
+    assert lint.artifact_digest_in(root)(str(outside)) is None
+
+
+def test_artifact_digest_in_rejects_parent_traversal(tmp_path: Path) -> None:
+    root = tmp_path / "root"
+    root.mkdir()
+    (tmp_path / "outside.md").write_text("body", encoding="utf-8")
+
+    assert lint.artifact_digest_in(root)("../outside.md") is None
+
+
+def test_artifact_digest_in_rejects_symlink_escapes(tmp_path: Path) -> None:
+    root = tmp_path / "root"
+    root.mkdir()
+    outside = tmp_path / "outside.md"
+    outside.write_text("body", encoding="utf-8")
+    (root / "link.md").symlink_to(outside)
+
+    assert lint.artifact_digest_in(root)("link.md") is None
+
+
+def test_artifact_digest_in_rejects_non_regular_paths(tmp_path: Path) -> None:
+    root = tmp_path / "root"
+    root.mkdir()
+    (root / "reports").mkdir()
+
+    assert lint.artifact_digest_in(root)("reports") is None
+
+
 @pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
 def test_git_object_exists_in_answers_from_a_real_repository(tmp_path: Path) -> None:
     env = {
