@@ -505,7 +505,7 @@ def emit_sidebar(
     for skill in skills:
         skill_items.append(_sidebar_link(skill))
 
-    start_items = [{"label": "Home", "slug": ""}]
+    start_items = [{"label": "Home", "link": "/easy-cheese/"}]
     if install:
         start_items.append({"label": "Install", "slug": "install"})
     sidebar = [

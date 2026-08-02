@@ -1,0 +1,78 @@
+---
+import Header from '@cheeselord/design/components/Header.astro';
+import '@cheeselord/design/styles/cheeselord.css';
+import hero from '../assets/hero.svg';
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>🧀 easy-cheese</title>
+    <meta
+      name="description"
+      content="Harness-agnostic Agent Skills — the cheese-making pipeline for code review, implementation, refactoring, and PR rescue."
+    />
+    <meta name="theme-color" content="#0b0e0c" />
+    <link rel="icon" type="image/svg+xml" href={`${base}/favicon.svg`} />
+  </head>
+  <body>
+    <Header project="easy-cheese" projectHref={`${base}/`} />
+    <main>
+      <div class="wrap">
+        <div>
+          <p class="eyebrow">Don't know what to do?</p>
+          <h1>Just <em>cheese</em> it.</h1>
+          <nav class="cellar" aria-label="Documentation">
+            <div class="cellar-head">~/easy-cheese · agent skills</div>
+            <a href={`${base}/install/`}><strong>install</strong> <span>one command, every wheel</span> <i aria-hidden="true">→</i></a>
+            <a href={`${base}/skills/`}><strong>skills</strong> <span>the catalogue — triggers, inputs, outputs</span> <i aria-hidden="true">→</i></a>
+            <a href={`${base}/readme/`}><strong>readme</strong> <span>long-form overview, scope, credits</span> <i aria-hidden="true">→</i></a>
+            <a href="https://github.com/paulnsorensen/easy-cheese"><strong>github</strong> <span>source &amp; releases</span> <i aria-hidden="true">→</i></a>
+          </nav>
+        </div>
+        <div class="wedge-box">
+          <img class="wedge" src={hero.src} width="320" height="320" alt="" />
+        </div>
+      </div>
+    </main>
+    <footer>
+      <div class="wrap"><span>cheese your code 🧀</span></div>
+    </footer>
+  </body>
+</html>
+
+<style>
+  html,
+  body {
+    height: 100%;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+  }
+  main {
+    flex: 1;
+  }
+  .wedge-box {
+    display: grid;
+    place-items: center;
+  }
+  .wedge {
+    inline-size: min(19rem, 80%);
+    block-size: auto;
+    filter: drop-shadow(0 0 3.5rem oklch(from var(--gold) l c h / 18%));
+  }
+  @media (max-width: 56rem) {
+    .wedge-box {
+      order: -1;
+    }
+    .wedge {
+      inline-size: min(12rem, 60%);
+    }
+  }
+</style>

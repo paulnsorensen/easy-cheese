@@ -17,17 +17,14 @@ export default defineConfig({
       },
     }),
     starlight({
-      title: 'easy-cheese',
+      title: '🧀 easy-cheese',
       plugins: [cheeselordTheme({ flavor: 'easy-cheese' })],
       description:
         'Harness-agnostic Agent Skills (agentskills.io) — the cheese-making pipeline that ages raw curds into shippable wheels of code.',
-      logo: {
-        src: './public/favicon.svg',
-        alt: 'easy-cheese',
-      },
       sidebar,
       components: {
         Sidebar: './src/components/Sidebar.astro',
+        SiteTitle: './src/components/SiteTitle.astro',
       },
       customCss: ['./src/styles/cheese.css'],
       social: [
