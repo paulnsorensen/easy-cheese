@@ -1,6 +1,7 @@
 ---
 import Header from '@cheeselord/design/components/Header.astro';
 import '@cheeselord/design/styles/cheeselord.css';
+import '@cheeselord/design/styles/flavors/easy-cheese.css';
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 const title = '🧀 easy-cheese';
@@ -40,10 +41,10 @@ const canonicalUrl = new URL(`${base}/`, Astro.site).toString();
           <p class="eyebrow">agent skills · harness-agnostic</p>
           <h1>Don't know what to do? Just <em>cheese</em> it.</h1>
           <p class="lede">
-            A toolkit of portable Agent Skills — self-contained <code>SKILL.md</code> files any
-            compatible harness can load. One command reads whatever you're holding — an idea, a
-            spec, a stack trace, a PR — announces its routing, and dispatches the right workflow.
-            No agents, no compiled bundles, no MCP requirement.
+            A toolkit of portable Agent Skills built around <code>SKILL.md</code>, ready for any
+            compatible harness to load. One command reads whatever you're holding — an idea, a spec,
+            a stack trace, a PR — announces its routing, and dispatches the right workflow. No agent
+            definitions, no harness-specific compiled bundles, no repo-wide MCP requirement.
           </p>
           <p class="ctas">
             <a class="btn btn-fill" href={`${base}/install/`}>get the skills</a>
@@ -103,20 +104,6 @@ dispatching /pasteurize --auto …
   body {
     display: flex;
     flex-direction: column;
-    /* per-site color variation: the gouda cellar — espresso field, caramel accent
-       (mirrors --cl-ink / --cl-amber in the easy-cheese docs flavor) */
-    --cellar: oklch(17.5% 0.012 65);
-    --panel: oklch(20.5% 0.016 68);
-    --gold: oklch(71% 0.14 64);
-    /* same fleck texture, but the green-cast ceiling glow goes caramel-warm */
-    background:
-      radial-gradient(circle 2px at 18% 22%, oklch(from var(--gold) l c h / 22%) 99%, transparent),
-      radial-gradient(circle 1.5px at 82% 12%, oklch(from var(--bone) l c h / 10%) 99%, transparent),
-      radial-gradient(circle 1.5px at 68% 78%, oklch(from var(--bone) l c h / 8%) 99%, transparent),
-      radial-gradient(circle 2px at 8% 82%, oklch(from var(--bone) l c h / 7%) 99%, transparent),
-      radial-gradient(circle 1.5px at 92% 55%, oklch(from var(--gold) l c h / 12%) 99%, transparent),
-      radial-gradient(ellipse 60rem 40rem at 50% -10%, oklch(29% 0.03 66 / 55%), transparent),
-      var(--cellar);
   }
   main {
     flex: 1;
@@ -207,7 +194,7 @@ dispatching /pasteurize --auto …
   .term pre {
     margin: 0;
     padding: 1.1rem 1.2rem 1.3rem;
-    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-family: var(--mono);
     font-size: 0.76rem;
     line-height: 1.75;
     color: var(--bone);

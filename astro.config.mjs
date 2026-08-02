@@ -1,7 +1,6 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
-import mermaid from 'astro-mermaid';
 import { cheeselordTheme } from '@cheeselord/design/starlight';
 import { sidebar } from './src/sidebar.mjs';
 
@@ -10,12 +9,6 @@ export default defineConfig({
   base: '/easy-cheese',
   output: 'static',
   integrations: [
-    mermaid({
-      autoTheme: true,
-      mermaidConfig: {
-        flowchart: { curve: 'basis' },
-      },
-    }),
     starlight({
       title: '🧀 easy-cheese',
       plugins: [cheeselordTheme({ flavor: 'easy-cheese' })],
