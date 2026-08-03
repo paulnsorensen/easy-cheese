@@ -79,15 +79,18 @@ The workflow skills compose into one pipeline, ordered
 | `/age` | Ten-dimension review → severity-grouped findings |
 | `/cure` | Apply selected findings as focused fixes |
 | `/plate` | Write and verify final artifacts, validate, commit, and publish one PR or a stack |
-| `/ultracook` | Pipeline a spec in fresh-context isolation; parallel mode fans file-disjoint curds → PRs |
+| `/ultracook` | Retired (PR #317) — a compatibility redirect to `/cook`. The fresh-context isolation and file-disjoint parallel fan it once ran now live in `/cook`'s fan pathway |
 
 Workflow skills call source-code backends directly through the shared
 `skills/cheese/references/code-intelligence-routing.md` contract. The retired
 code-intelligence wrapper skills previously sat beneath the pipeline; their
-policy now lives in that shared reference. `/ultracook` chains cook → press →
-age → cure non-interactively in fresh-context isolation; its parallel mode
+policy now lives in that shared reference. `/cook`'s fan pathway — which
+absorbed the now-retired `/ultracook` (PR #316 moved ownership; PR #317
+retired the entry point to a redirect stub) — chains cook → press → age →
+cure non-interactively in fresh-context isolation; its parallel mode
 (formerly `/cheese-factory`) fans file-disjoint curds through `src/fanout/`
-into reviewable PRs (`AGENTS.md:42-49`).
+into reviewable PRs (`AGENTS.md:42-49`; see
+[architecture/ultracook-agent-topology](./architecture/ultracook-agent-topology.md)).
 
 ## Portability is the design center
 

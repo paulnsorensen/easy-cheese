@@ -67,9 +67,11 @@ A gate prevents silent dispatch; it does **not** mean the agent halts
 after the user chooses (`skills/cheese/references/handoff-gate.md:7`).
 
 `--auto` propagates through the chain to skip these gates for autonomous
-runs. `/ultracook` runs the chain
-`cook → press → age → cure → age → cure → age` (all `--auto`), capped at
-**two cure passes** (`skills/cook/SKILL.md:132`).
+runs. `/cook`'s `--auto` mode runs the chain
+`cook → press → age → cure → age → cure → age`, capped at
+**two cure passes** (`skills/cook/SKILL.md:134`). This chain — and the
+parallel fan pathway — was absorbed from the now-retired `/ultracook`
+(PR #316 moved ownership; PR #317 retired the entry point).
 
 
 ## Plate is the final writing gate
@@ -85,7 +87,7 @@ For every new PR, an explicit topology choice is authoritative. Otherwise `/plat
 selects a single PR without asking only for one cohesive review unit; it recommends a
 stack and asks when the work has independently reviewable ordered layers, and asks when
 review shape is genuinely ambiguous. The policy uses cohesion and stable layer
-boundaries, not line or file counts. Parallel `/ultracook --open-pr` runs that policy
+boundaries, not line or file counts. `/cook`'s parallel fan pathway (`--open-pr`) runs that policy
 before seed or worker commits, records `plate_layout` in its manifest and PR plan, and
 reuses the resolution at terminal publication. A supplied plan cannot override an
 explicit choice. Existing PR updates preserve detected topology. A stack runs the write,
