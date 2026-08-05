@@ -155,8 +155,11 @@ When the gate ends, print:
 ```
 Hard-cheese artifact: .cheese/hard-cheese/<slug>.md
 Status: PASS | FAILED | LOGGED | ERROR
+Score: <n>/5 (<SOLO level>, pass ≥ <passing-score>)
 Attempts: <n>
 ```
+
+The `Score` line reports the latest judged attempt. Omit it when no attempt was judged — LOGGED mode, or an ERROR run with no scored attempts.
 
 Followed by:
 
