@@ -8,6 +8,7 @@ distribution floors declared in pyproject.toml.
 
 from __future__ import annotations
 
+from copy import deepcopy
 import tomllib
 from pathlib import Path
 
@@ -19,12 +20,66 @@ from attrs.exceptions import FrozenInstanceError
 from easy_cheese_schemas import (
     MIN_READABLE,
     SCHEMA_VERSION,
+    EvidenceOrigin,
+    GateMode,
+    GateProducer,
+    GateReceipt,
     Loaded,
     Provenance,
     compat,
     load,
 )
 from easy_cheese_schemas.compat import STAMP_KEY, classify_stamp
+
+
+GATE_PAYLOAD: dict[str, object] = {
+    STAMP_KEY: SCHEMA_VERSION,
+    "work_id": "work-compat",
+    "project_key": "easy-cheese",
+    "producer": "press",
+    "disposition": "red",
+    "spec_ref": None,
+    "spec_sha256": None,
+    "guard_receipt_refs": [],
+    "contracts": [
+        {
+            "acceptance_id": "AC-11",
+            "interface": "GateReceipt",
+            "seam": "press gate",
+            "expected_failure": "unsafe shape is rejected",
+            "mode": "tracer",
+            "contract_source": "inferred",
+        }
+    ],
+    "baseline_checks": [
+        {
+            "id": "baseline",
+            "argv": ["python", "-m", "pytest"],
+            "cwd": ".",
+            "observed_exit_code": 0,
+        }
+    ],
+    "cases": [
+        {
+            "id": "unsafe-shape",
+            "acceptance_ids": ["AC-11"],
+            "curd": None,
+            "seam": "press gate",
+            "argv": ["python", "-m", "pytest"],
+            "cwd": ".",
+            "kind": "behavior",
+            "origin": "adopted",
+            "expected_witness": ["shape rejected"],
+            "observed_exit_code": 2,
+            "observed_witness": "shape rejected",
+        }
+    ],
+    "protected_files": [
+        {"path": "src/easy_cheese_schemas/gates.py", "sha256": "b" * 64}
+    ],
+    "not_applicable_reason": None,
+}
+
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -74,6 +129,49 @@ class TestProvenanceThroughLoad:
     def test_future_stamp(self) -> None:
         result = load({STAMP_KEY: SCHEMA_VERSION + 1, "name": "a"}, Widget, strict=True)
         assert result.provenance is Provenance.FUTURE
+
+
+class TestGateReceiptCompatibility:
+    def test_strict_load_normalizes_problems_to_a_tuple(self) -> None:
+        result = load(deepcopy(GATE_PAYLOAD), GateReceipt, strict=True)
+
+        assert result.provenance is Provenance.CURRENT
+        assert result.problems == ()
+        assert isinstance(result.problems, tuple)
+        assert result.value is not None
+        assert result.value.producer is GateProducer.PRESS
+        assert result.value.contracts[0].mode is GateMode.TRACER
+        assert result.value.cases[0].origin is EvidenceOrigin.ADOPTED
+
+    def test_future_receipt_keeps_value_and_ignores_additive_fields(self) -> None:
+        payload = deepcopy(GATE_PAYLOAD)
+        payload[STAMP_KEY] = SCHEMA_VERSION + 1
+        payload["future_key"] = "ignored"
+
+        result = load(payload, GateReceipt, strict=True)
+
+        assert result.provenance is Provenance.FUTURE
+        assert result.problems == ()
+        assert result.value is not None
+        assert not hasattr(result.value, "future_key")
+        assert result.value.to_dict()["contracts"][0]["mode"] == "tracer"
+
+    def test_malformed_receipt_problems_are_deterministic_and_accumulated(self) -> None:
+        payload = deepcopy(GATE_PAYLOAD)
+        payload["work_id"] = 7
+        payload["contracts"][0]["mode"] = "not-a-mode"
+        payload["guard_receipt_refs"] = ("prior",)
+
+        first = load(payload, GateReceipt, strict=True)
+        second = load(payload, GateReceipt, strict=True)
+
+        assert first.value is None
+        assert first.problems == second.problems
+        assert first.problems == (
+            "GateReceipt.work_id must be a string, not int",
+            "GateReceipt.guard_receipt_refs must be a list, not tuple",
+            "GateReceipt.contracts[1].mode must be one of: tracer, contract-matrix",
+        )
 
 
 class TestStrictMode:

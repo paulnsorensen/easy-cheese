@@ -167,6 +167,45 @@ class TestGateProseSync:
         assert len(self._checklist_labels()) == len(gate_graph.GATE_MODEL.by_kind("gate"))
 
 
+class TestGateTopology:
+    def test_taste_gate_routes_through_decomposer(
+        self, gate_graph: ModuleType
+    ) -> None:
+        taste_id = gate_graph.gate_id("Fork taste test passed:")
+        outgoing = [
+            edge.dst for edge in gate_graph.GATE_MODEL.edges if edge.src == taste_id
+        ]
+        assert outgoing == [gate_graph.DECOMPOSER.id]
+        assert gate_graph.DECOMPOSER.id in gate_graph.GATE_MODEL.ids()
+        assert [
+            edge.dst
+            for edge in gate_graph.GATE_MODEL.edges
+            if edge.src == gate_graph.DECOMPOSER.id
+        ] == [gate_graph.HANDSHAKE.id]
+        assert not any(
+            edge.src == taste_id and edge.dst == gate_graph.HANDSHAKE.id
+            for edge in gate_graph.GATE_MODEL.edges
+        )
+
+    def test_other_coherence_gates_feed_handshake_directly(
+        self, gate_graph: ModuleType
+    ) -> None:
+        taste_id = gate_graph.gate_id("Fork taste test passed:")
+        other_gate_ids = {
+            node.id
+            for node in gate_graph.GATE_MODEL.by_kind("gate")
+            if node.id != taste_id
+        }
+        direct_edges = [
+            edge
+            for edge in gate_graph.GATE_MODEL.edges
+            if edge.src in other_gate_ids
+        ]
+        assert {edge.src for edge in direct_edges} == other_gate_ids
+        assert {edge.dst for edge in direct_edges} == {gate_graph.HANDSHAKE.id}
+        assert len(direct_edges) == len(other_gate_ids)
+
+
 class TestPortability:
     """No hardcoded consumer corpus name in mold's runtime source. ADRs resolve
     `repo:<their-repo>:wiki` dynamically; a literal `easy-cheese:wiki` baked into

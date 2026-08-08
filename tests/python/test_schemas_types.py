@@ -25,6 +25,18 @@ from easy_cheese_schemas.curd import MAX_WAVE_SIZE, MIN_CURD_SURFACE, CurdBlock
 from easy_cheese_schemas.decomposition import Decomposition
 from easy_cheese_schemas.manifest import Phase, RunManifest
 from easy_cheese_schemas.pr_plan import PrPlan
+from easy_cheese_schemas.gates import (
+    BaselineCheck,
+    EvidenceOrigin,
+    GateDisposition,
+    GateMode,
+    GateProducer,
+    GateReceipt,
+    ProtectedFile,
+    RedCase,
+    RedKind,
+    TestContract as GateTestContract,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -147,6 +159,73 @@ PR_PLAN: dict[str, Any] = {
             "commits": ["abc1234"],
         }
     ],
+}
+
+
+GATE_DIGEST = "a" * 64
+
+GATE_RED: dict[str, Any] = {
+    "schema_version": 1,
+    "work_id": "work-outer-tdd",
+    "project_key": "easy-cheese",
+    "producer": "cut",
+    "disposition": "red",
+    "spec_ref": ".cheese/specs/outer-tdd-gates.md",
+    "spec_sha256": GATE_DIGEST,
+    "guard_receipt_refs": [],
+    "contracts": [
+        {
+            "acceptance_id": "AC-4",
+            "interface": "GateReceipt",
+            "seam": "red-gate validate --state red",
+            "expected_failure": "the outer tracer assertion fails",
+            "mode": "tracer",
+            "contract_source": "approved",
+        }
+    ],
+    "baseline_checks": [
+        {
+            "id": "baseline",
+            "argv": ["python", "-m", "pytest", "tests/test_outer.py"],
+            "cwd": ".",
+            "observed_exit_code": 0,
+        }
+    ],
+    "cases": [
+        {
+            "id": "AC-4-tracer",
+            "acceptance_ids": ["AC-4"],
+            "curd": "gate-receipt-schema",
+            "seam": "red-gate validate --state red",
+            "argv": ["python", "-m", "pytest", "tests/test_outer.py", "-k", "AC-4"],
+            "cwd": ".",
+            "kind": "behavior",
+            "origin": "generated",
+            "expected_witness": ["assertion failed: expected outer behavior"],
+            "observed_exit_code": 1,
+            "observed_witness": "assertion failed: expected outer behavior",
+        }
+    ],
+    "protected_files": [
+        {
+            "path": "tests/test_outer.py",
+            "sha256": GATE_DIGEST,
+        }
+    ],
+    "phase_token_ref": None,
+    "phase_token_sha256": None,
+    "not_applicable_reason": None,
+}
+
+GATE_NOT_APPLICABLE: dict[str, Any] = {
+    **deepcopy(GATE_RED),
+    "disposition": "not-applicable",
+    "guard_receipt_refs": [],
+    "contracts": [],
+    "baseline_checks": [],
+    "cases": [],
+    "protected_files": [],
+    "not_applicable_reason": "appearance-only change",
 }
 
 
@@ -543,6 +622,220 @@ class TestPrPlanInvariants:
         assert result.value is not None
 
 
+class TestGateReceiptShapes:
+    def test_red_receipt_preserves_per_contract_modes_and_plain_dict_output(self) -> None:
+        payload = deepcopy(GATE_RED)
+        payload["contracts"].append(
+            {
+                "acceptance_id": "AC-4-matrix",
+                "interface": "GateReceipt",
+                "seam": "red-gate validate --state red",
+                "expected_failure": "the contract matrix assertion fails",
+                "mode": "contract-matrix",
+                "contract_source": "approved",
+            }
+        )
+        payload["cases"].append(
+            {
+                "id": "AC-4-matrix",
+                "acceptance_ids": ["AC-4-matrix"],
+                "curd": "gate-receipt-schema",
+                "seam": "red-gate validate --state red",
+                "argv": ["python", "-m", "pytest", "tests/test_outer.py", "-k", "matrix"],
+                "cwd": ".",
+                "kind": "contract",
+                "origin": "generated",
+                "expected_witness": ["assertion failed: contract matrix"],
+                "observed_exit_code": 1,
+                "observed_witness": "assertion failed: contract matrix",
+            }
+        )
+
+        result = load(payload, GateReceipt, strict=True)
+
+        assert result.problems == ()
+        assert result.value is not None
+        assert [contract.mode for contract in result.value.contracts] == [
+            GateMode.TRACER,
+            GateMode.CONTRACT_MATRIX,
+        ]
+        assert not hasattr(result.value, "mode")
+        assert result.value.to_dict() == payload
+
+    def test_not_applicable_receipt_is_a_closed_shape(self) -> None:
+        result = load(deepcopy(GATE_NOT_APPLICABLE), GateReceipt, strict=True)
+
+        assert result.problems == ()
+        assert result.value is not None
+        assert result.value.disposition is GateDisposition.NOT_APPLICABLE
+        assert result.value.not_applicable_reason == "appearance-only change"
+        assert result.value.contracts == []
+        assert result.value.baseline_checks == []
+        assert result.value.cases == []
+        assert result.value.protected_files == []
+        assert result.value.guard_receipt_refs == []
+
+    @pytest.mark.parametrize(
+        ("field_name", "replacement"),
+        [
+            ("guard_receipt_refs", ["prior-receipt"]),
+            ("contracts", [deepcopy(GATE_RED["contracts"][0])]),
+            ("baseline_checks", [deepcopy(GATE_RED["baseline_checks"][0])]),
+            ("cases", [deepcopy(GATE_RED["cases"][0])]),
+            ("protected_files", [deepcopy(GATE_RED["protected_files"][0])]),
+            ("not_applicable_reason", ""),
+        ],
+    )
+    def test_not_applicable_rejects_open_red_evidence(
+        self, field_name: str, replacement: Any
+    ) -> None:
+        payload = deepcopy(GATE_NOT_APPLICABLE)
+        payload[field_name] = replacement
+
+        result = load(payload, GateReceipt, strict=True)
+
+        assert result.value is None
+        assert any(field_name in problem for problem in result.problems)
+
+    @pytest.mark.parametrize(
+        ("field_name", "replacement"),
+        [
+            ("phase_token_ref", ".cheese/cut/work.phase.json"),
+            ("phase_token_sha256", GATE_DIGEST),
+        ],
+    )
+    def test_phase_token_ref_and_digest_must_travel_together(
+        self, field_name: str, replacement: str
+    ) -> None:
+        payload = deepcopy(GATE_RED)
+        payload[field_name] = replacement
+
+        result = load(payload, GateReceipt, strict=True)
+
+        assert result.value is None
+        assert any("must be provided together" in problem for problem in result.problems)
+
+
+    @pytest.mark.parametrize(
+        ("field_name", "expected_problem"),
+        [
+            ("contracts", "GateReceipt.contracts must be a non-empty list for RED"),
+            (
+                "baseline_checks",
+                "GateReceipt.baseline_checks must be a non-empty list for RED",
+            ),
+            ("cases", "GateReceipt.cases must be a non-empty list for RED"),
+            (
+                "protected_files",
+                "GateReceipt.protected_files must be a non-empty list for RED",
+            ),
+        ],
+    )
+    def test_red_receipt_requires_each_evidence_collection(
+        self, field_name: str, expected_problem: str
+    ) -> None:
+        payload = deepcopy(GATE_RED)
+        payload[field_name] = []
+
+        result = load(payload, GateReceipt, strict=True)
+
+        assert result.value is None
+        assert result.problems == (expected_problem,)
+
+    @pytest.mark.parametrize(
+        ("mutation", "expected_problem"),
+        [
+            (
+                "schema_version",
+                "GateReceipt.schema_version must be an integer, not bool",
+            ),
+            ("work_id", "GateReceipt.work_id must be a string, not int"),
+            (
+                "baseline_argv",
+                "GateReceipt.baseline_checks[1].argv must be a list, not str",
+            ),
+            (
+                "guard_refs",
+                "GateReceipt.guard_receipt_refs must be a list, not tuple",
+            ),
+            (
+                "case_cwd",
+                "GateReceipt.cases[1].cwd must be a project-relative path",
+            ),
+            (
+                "protected_digest",
+                "GateReceipt.protected_files[1].sha256 must be a 64-character "
+                "hexadecimal digest",
+            ),
+            (
+                "receipt_mode",
+                "GateReceipt.mode is not supported; mode belongs to each TestContract",
+            ),
+        ],
+    )
+    def test_strict_loading_rejects_unsafe_shapes_without_coercion(
+        self, mutation: str, expected_problem: str
+    ) -> None:
+        payload = deepcopy(GATE_RED)
+        if mutation == "schema_version":
+            payload["schema_version"] = True
+        elif mutation == "work_id":
+            payload["work_id"] = 7
+        elif mutation == "baseline_argv":
+            payload["baseline_checks"][0]["argv"] = "python -m pytest"
+        elif mutation == "guard_refs":
+            payload["guard_receipt_refs"] = ("prior-receipt",)
+        elif mutation == "case_cwd":
+            payload["cases"][0]["cwd"] = "../outside"
+        elif mutation == "receipt_mode":
+            payload["mode"] = "tracer"
+        else:
+            payload["protected_files"][0]["sha256"] = "not-a-digest"
+
+        result = load(payload, GateReceipt, strict=True)
+
+        assert result.value is None
+        assert expected_problem in result.problems
+
+
+class TestGateReceiptTypes:
+    def test_nested_types_and_enum_values_are_public(self) -> None:
+        contract = GateTestContract(
+            acceptance_id="AC-4",
+            interface="GateReceipt",
+            seam="red-gate validate --state red",
+            expected_failure="outer witness",
+            mode=GateMode.TRACER,
+            contract_source="approved",
+        )
+        baseline = BaselineCheck(
+            id="baseline",
+            argv=["python", "-m", "pytest"],
+            cwd=".",
+            observed_exit_code=0,
+        )
+        case = RedCase(
+            id="case",
+            acceptance_ids=["AC-4"],
+            curd=None,
+            seam="red-gate validate --state red",
+            argv=["python", "-m", "pytest"],
+            cwd=".",
+            kind=RedKind.BEHAVIOR,
+            origin=EvidenceOrigin.ADOPTED,
+            expected_witness=["outer witness"],
+            observed_exit_code=1,
+            observed_witness="outer witness",
+        )
+        protected = ProtectedFile(path="tests/test_outer.py", sha256=GATE_DIGEST)
+
+        assert contract.mode is GateMode.TRACER
+        assert baseline.observed_exit_code == 0
+        assert case.origin is EvidenceOrigin.ADOPTED
+        assert protected.sha256 == GATE_DIGEST
+        assert GateProducer.PRESS.value == "press"
+
+
 class TestReadinessParity:
     """The port must agree with shared/scripts/gates.py on all 32 inputs."""
 
@@ -614,6 +907,16 @@ class TestPublicSurface:
         import easy_cheese_schemas
 
         for name in (
+            "BaselineCheck",
+            "EvidenceOrigin",
+            "GateDisposition",
+            "GateMode",
+            "GateProducer",
+            "GateReceipt",
+            "ProtectedFile",
+            "RedCase",
+            "RedKind",
+            "TestContract",
             "CurdBlock",
             "CurdRecord",
             "DecomposedCurd",

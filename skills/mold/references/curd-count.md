@@ -6,20 +6,22 @@ and stays out of the conversation's token budget.
 
 ## What it answers
 
-Whether to recommend `/cook` for the *(recommended)* slot in the Handoff
-menu, and which internal wave-plan **mode** to signal alongside it: parallel
-curd fan-out or the linear chain. `/cook` is the uniform recommendation —
-`/ultracook` is retired as a top-level skill choice.
+Gate applicability selects the immediate handoff. A `red-required` spec
+recommends `/cut`; Cut's receipt then unlocks Cook. A closed
+`not-applicable` spec and a legacy spec without a declaration recommend
+`/cook`. Mold-produced specs are marked with `source: mold-handshake` or
+`source: agent-mini-spec`; their `gate_applicability.ui_surface` is mandatory.
+The digest also records the eventual Cook wave-plan mode: parallel curd
+fan-out, a linear chain, or no mode hint.
 
-`/cook --auto` is a user-opt-in alternative the menu always offers in the
-non-decomposable low/medium branch, but it is never a *recommended* pick: per
-existing mold rules, "Never pre-select; auto mode is opt-in" — so the script
-does not consider it.
+The recommendation names the skill only. `--auto` remains a user-selected
+menu choice, while the digest's `handoff.command` preserves the executable
+automatic route when the user selects it.
 
 A decomposition of `PARALLEL_THRESHOLD` (2) or more curds signals a parallel
-wave-plan; below that, the choice between plain `/cook` and a linear-mode
-`/cook` is driven by the shape-check's blast-radius verdict. The decomposer
-stays authoritative — the count is a pre-dispatch hint, not the mode gate.
+Cook wave-plan; below that, high blast radius signals a linear chain. The
+decomposer stays authoritative—the count is a pre-dispatch hint, not the mode
+gate. `/ultracook` is retired as a top-level skill choice.
 
 ## Procedure
 
@@ -34,8 +36,8 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/mold.pyz curd-count "$SPEC" \
 
 Pass the `--blast-radius` value verbatim from the shape-check verdict line
 (see `shape-check.md`). If shape-check was skipped or its verdict was `[?]`,
-omit the flag — the recommendation will degrade to `/cook` for sub-threshold
-specs.
+omit the flag; applicability still selects `/cut` or `/cook`, while
+sub-threshold specs receive no Cook mode hint.
 
 ## Signals counted
 
@@ -55,17 +57,24 @@ thoroughly a spec was written, the more likely it mis-recommended fan-out.
 
 ## Decision rule
 
-The script always recommends `/cook` for the *(recommended)* slot and names
-the internal `mode` signal alongside it. `--auto` variants (`/cook --auto`,
-etc.) are user-opt-in alternatives surfaced by the Handoff menu — the script
-never recommends them, because "Never pre-select; auto mode is opt-in" is an
-existing mold rule.
+| Gate applicability | `recommended_skill` | `handoff` |
+| --- | --- | --- |
+| `red-required` | `/cut` | `command: ["/cut", "--auto", "<spec-path>"]` |
+| closed `not-applicable` | `/cook` | `null` |
+| no declaration (legacy) | `/cook` | `null` |
 
-| `candidate_curds` | `blast_radius` | `recommended_skill` (always `/cook`) | `mode` |
-| --- | --- | --- | --- |
-| ≥ 2 (`PARALLEL_THRESHOLD`) | any | `/cook` | `parallel` |
-| < 2 | `high` | `/cook` | `linear` |
-| < 2 | `medium`, `low`, or unknown | `/cook` | `null` |
+For a Mold provenance marker, the parser also requires
+`ui_surface: browser | non-browser | not-applicable`. `browser` validates
+both the interface and outer seam in every Test Contract; `non-browser` is
+explicit and does not infer applicability from prose. The unmarked approved v1
+spec and other legacy specs remain consumable by Cut without this field.
+The independent Cook mode signal follows the curd count and blast radius:
+
+| `candidate_curds` | `blast_radius` | `mode` |
+| --- | --- | --- |
+| ≥ 2 (`PARALLEL_THRESHOLD`) | any | `parallel` |
+| < 2 | `high` | `linear` |
+| < 2 | `medium`, `low`, or unknown | `null` |
 
 ## Digest shape
 
@@ -78,14 +87,15 @@ existing mold rule.
   "signals": {"goals": 7, "quality_gates": 6, "decisions": 3},
   "threshold": 2,
   "decomposable": true,
-  "recommended_skill": "/cook",
+  "recommended_skill": "/cut",
+  "handoff": {
+    "next": "cut",
+    "command": ["/cut", "--auto", "<spec-path>"],
+    "spec_ref": "<spec-path>",
+    "metadata": {"gate_applicability": {"disposition": "red-required", "work_class": "behavior", "ui_surface": "non-browser"}}
+  },
   "mode": "parallel",
-  "rationale": "7 candidate curds >= 2 threshold; parallel fan-out",
-  "notes": [
-    "Count is a signal, not a verdict.",
-    "candidate_curds = goals only; acceptance-criteria / quality-gate count does not drive it (issue #111).",
-    "Confirm curd independence (criterion 4: file-disjoint) before /cook fans out in parallel waves."
-  ]
+  "rationale": "red-required outer gate precedes 7 candidate curds >= 2 threshold; parallel fan-out"
 }
 ```
 
@@ -101,11 +111,8 @@ curds back into the linear chain; the dispatched skill is `/cook` either way.
 ## When tilth / Python is unavailable
 
 The script depends only on the Python 3 stdlib. If the host has no `python3`,
-mold falls back to the pre-script Handoff: blast-radius alone recommends
-`/cook` and signals a parallel or linear wave-plan (high blast radius signals
-linear mode; low or medium recommends `/cook` with no mode) for the
-*(recommended)* slot, and a parallel wave-plan appears in the option list
-with a manual "if this spec decomposes into 2+ independent curds, the
-decomposer will fan it out" tagline. `/cook --auto` stays where it always
-lives — as a user-opt-in alternative in the non-decomposable low/medium menu,
-never the recommended pick. Say the substitution out loud.
+Mold must still read the spec's `gate_applicability` declaration and render the
+same immediate route: `red-required` to Cut, closed `not-applicable` to Cook,
+and legacy specs to Cook. Blast radius may supply the Cook mode hint. The
+`--auto` form remains an explicit user menu choice. Say the degraded
+substitution out loud.

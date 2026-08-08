@@ -1,0 +1,435 @@
+"""Behavioral tests for Mold's applicability and fork-taste gate."""
+
+from __future__ import annotations
+
+import hashlib
+import importlib.util
+import json
+import sys
+from pathlib import Path
+from types import ModuleType
+
+import pytest
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+TASTE_SOURCE = REPO_ROOT / "src" / "mold" / "taste_test.py"
+
+
+@pytest.fixture(scope="module")
+def taste() -> ModuleType:
+    spec = importlib.util.spec_from_file_location("mold_taste_test", TASTE_SOURCE)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+DRAFT = """# Draft
+
+## Approach
+F-1 outer tracer; F-2 browser seam
+
+## Interface sketches
+F-1 outer tracer; F-2 browser seam
+
+## Acceptance
+F-1 outer tracer; F-2 browser seam
+
+## Test Contracts
+F-1 outer tracer; F-2 browser seam
+"""
+LEDGER = [
+    {
+        "id": "F-1",
+        "decision": "outer tracer",
+        "status": "settled",
+        "consequential": True,
+    },
+    {
+        "id": "F-2",
+        "decision": "browser seam",
+        "status": "settled",
+        "consequential": True,
+    },
+    {"id": "F-open", "decision": "not chosen", "status": "open", "consequential": True},
+    {
+        "id": "F-minor",
+        "decision": "cosmetic",
+        "status": "settled",
+        "consequential": False,
+    },
+]
+
+
+def verdict(taste: ModuleType, draft: str = DRAFT) -> dict[str, object]:
+    return {
+        "draft_sha256": taste.draft_sha256(draft),
+        "verdict": "pass",
+        "forks": [
+            {
+                "id": "F-1",
+                "decision": "outer tracer",
+                "reflected_in": list(taste.REFLECTIONS),
+            },
+            {
+                "id": "F-2",
+                "decision": "browser seam",
+                "reflected_in": list(taste.REFLECTIONS),
+            },
+        ],
+        "contradictions": [],
+        "orphaned_decisions": [],
+        "unsupported_assumptions": [],
+        "acceptance_gaps": [],
+    }
+
+
+def red_spec() -> str:
+    return """---
+source: mold-handshake
+gate_applicability:
+  disposition: red-required
+  work_class: behavior
+  ui_surface: non-browser
+---
+# A behavior
+
+## Acceptance
+- AC-1: WHEN called THE SYSTEM SHALL return the result
+- AC-2: WHEN empty THE SYSTEM SHALL reject the input
+
+## Test Contracts
+| Acceptance ID | Interface | Outer seam | Deterministic expected failure | Mode | Interface version | Matrix rows |
+| --- | --- | --- | --- | --- | --- | --- |
+| AC-1 | public call | existing service boundary | assert result is returned | tracer | | |
+| AC-2 | public call | existing service boundary | assert empty input is rejected | contract-matrix | v1 | empty<br>non-empty |
+"""
+
+
+def test_pass_requires_digest_and_every_settled_consequential_fork(
+    taste: ModuleType,
+) -> None:
+    result = taste.taste_test(DRAFT, LEDGER, verdict(taste))
+    assert result.passed
+    assert result.draft_sha256 == hashlib.sha256(DRAFT.encode()).hexdigest()
+    gate = taste.decomposition_gate(result)
+    assert gate.allowed and not gate.halted
+
+
+def test_taste_gate_blocks_source_less_draft_without_ui_surface(
+    taste: ModuleType,
+) -> None:
+    draft = (
+        """---
+gate_applicability:
+  disposition: red-required
+  work_class: behavior
+---
+"""
+        + DRAFT
+    )
+    result = taste.taste_test(draft, LEDGER, verdict(taste, draft))
+    assert not result.passed
+    assert (
+        "gate-applicability:gate-applicability-ui-surface-required"
+        in result.acceptance_gaps
+    )
+
+
+def test_taste_gate_requires_applicability_for_mold_handshake_source(
+    taste: ModuleType,
+) -> None:
+    draft = "---\nsource: mold-handshake\n---\n" + DRAFT
+    result = taste.taste_test(draft, LEDGER, verdict(taste, draft))
+    assert not result.passed
+    assert (
+        "gate-applicability:gate-applicability-declaration-required"
+        in result.acceptance_gaps
+    )
+
+
+def test_taste_gate_requires_applicability_for_agent_mini_spec_source(
+    taste: ModuleType,
+) -> None:
+    draft = "---\nsource: agent-mini-spec\n---\n" + DRAFT
+    result = taste.taste_test(draft, LEDGER, verdict(taste, draft))
+    assert not result.passed
+    assert (
+        "gate-applicability:gate-applicability-declaration-required"
+        in result.acceptance_gaps
+    )
+
+
+def test_taste_gate_keeps_missing_applicability_compatibility_for_legacy_spec(
+    taste: ModuleType,
+) -> None:
+    draft = "---\nslug: legacy-spec\n---\n" + DRAFT
+    result = taste.taste_test(draft, LEDGER, verdict(taste, draft))
+    assert result.passed
+
+
+def test_each_settled_fork_requires_all_reflection_locations(
+    taste: ModuleType,
+) -> None:
+    partial = verdict(taste)
+    forks = partial["forks"]
+    assert isinstance(forks, list)
+    first = forks[0]
+    assert isinstance(first, dict)
+    first["reflected_in"] = ["approach"]
+    result = taste.taste_test(DRAFT, LEDGER, partial)
+    assert not result.passed
+    assert {
+        "missing-reflection:F-1:interface",
+        "missing-reflection:F-1:acceptance",
+        "missing-reflection:F-1:test-contract",
+    } <= set(result.acceptance_gaps)
+
+
+def test_missing_reviewer_fork_reopens_the_named_ledger_fork(
+    taste: ModuleType,
+) -> None:
+    partial = verdict(taste)
+    forks = partial["forks"]
+    assert isinstance(forks, list)
+    del forks[0]
+    result = taste.taste_test(DRAFT, LEDGER, partial)
+    assert result.reopened_forks == ("F-1",)
+
+
+def test_fresh_context_verdict_is_required(taste: ModuleType) -> None:
+    with pytest.raises(TypeError):
+        taste.taste_test(DRAFT, LEDGER)
+    with pytest.raises(TypeError):
+        taste.validate_fork_taste(DRAFT, LEDGER)
+    with pytest.raises(taste.TasteTestError):
+        taste.taste_test(DRAFT, LEDGER, None)
+
+
+def test_cli_requires_verdict_file(taste: ModuleType, tmp_path: Path) -> None:
+    draft = tmp_path / "draft.md"
+    ledger = tmp_path / "ledger.json"
+    draft.write_text(DRAFT, encoding="utf-8")
+    ledger.write_text(json.dumps(LEDGER), encoding="utf-8")
+    with pytest.raises(SystemExit) as exc_info:
+        taste.main(["--draft", str(draft), "--ledger", str(ledger)])
+    assert exc_info.value.code == 2
+
+
+def test_stale_digest_is_a_blocker_before_decomposition(taste: ModuleType) -> None:
+    stale = verdict(taste)
+    stale["draft_sha256"] = "0" * 64
+    result = taste.taste_test(DRAFT, LEDGER, stale)
+    assert not result.passed
+    assert "stale-draft-digest" in result.acceptance_gaps
+    assert not taste.decomposition_gate(result).allowed
+
+
+def test_partial_verdict_shape_is_rejected(taste: ModuleType) -> None:
+    partial = verdict(taste)
+    del partial["acceptance_gaps"]
+    with pytest.raises(taste.TasteTestError, match="invalid-verdict-shape"):
+        taste.taste_test(DRAFT, LEDGER, partial)
+
+
+def test_contradictions_orphans_assumptions_and_gaps_reject_pass(
+    taste: ModuleType,
+) -> None:
+    blocked = verdict(taste)
+    blocked["contradictions"] = ["F-1 chooses two incompatible seams"]
+    blocked["orphaned_decisions"] = ["F-orphan"]
+    blocked["unsupported_assumptions"] = ["the browser is always available"]
+    blocked["acceptance_gaps"] = ["AC-2 has no witness"]
+    result = taste.taste_test(DRAFT, LEDGER, blocked)
+    assert not result.passed
+    assert result.reopened_forks == ("F-1",)
+    assert not taste.decomposition_gate(result).allowed
+
+
+def test_third_failed_verdict_halts_after_two_corrections(taste: ModuleType) -> None:
+    blocked = verdict(taste)
+    blocked["verdict"] = "fail"
+    blocked["acceptance_gaps"] = ["named fork needs correction"]
+    result = taste.taste_test(DRAFT, LEDGER, blocked)
+    assert not taste.decomposition_gate(result, correction_round=0).halted
+    assert not taste.decomposition_gate(result, correction_round=1).halted
+    final = taste.decomposition_gate(result, correction_round=2)
+    assert final.halted and not final.allowed
+
+
+def test_applicability_requires_complete_contracts_and_allows_closed_na(
+    taste: ModuleType,
+) -> None:
+    applicability = taste.parse_gate_applicability(red_spec())
+    assert isinstance(applicability, taste.RedRequired)
+    assert [contract.acceptance_id for contract in applicability.contracts] == [
+        "AC-1",
+        "AC-2",
+    ]
+    matrix = applicability.contracts[1]
+    assert matrix.interface_version == "v1"
+    assert matrix.matrix_rows == ("empty", "non-empty")
+
+    not_applicable = taste.parse_gate_applicability(
+        """---
+gate_applicability:
+  disposition: not-applicable
+  work_class: docs-only
+  reason: documentation-only change
+---
+# Docs
+"""
+    )
+    assert isinstance(not_applicable, taste.NotApplicable)
+    assert not not_applicable.contracts
+
+
+@pytest.mark.parametrize(
+    ("replacement", "problem"),
+    [
+        (
+            "| contract-matrix | v1 | empty<br>non-empty |",
+            "contract-matrix-interface-version-required",
+        ),
+        (
+            "| contract-matrix | v1 | empty<br>empty |",
+            "contract-matrix-rows-not-unique",
+        ),
+    ],
+)
+def test_contract_matrix_requires_versioned_unique_declared_rows(
+    taste: ModuleType,
+    replacement: str,
+    problem: str,
+) -> None:
+    if "interface-version" in problem:
+        replacement = "| contract-matrix | | empty<br>non-empty |"
+    spec = red_spec().replace(
+        "| contract-matrix | v1 | empty<br>non-empty |",
+        replacement,
+    )
+
+    with pytest.raises(taste.ApplicabilityError, match=problem):
+        taste.parse_gate_applicability(spec)
+
+
+def test_appearance_only_stays_not_applicable_with_explicit_surface(
+    taste: ModuleType,
+) -> None:
+    spec = """---
+source: mold-handshake
+gate_applicability:
+  disposition: not-applicable
+  work_class: appearance-only
+  ui_surface: not-applicable
+  reason: visual-only change
+---
+# Appearance
+"""
+    applicability = taste.parse_gate_applicability(spec)
+    assert isinstance(applicability, taste.NotApplicable)
+    assert applicability.ui_surface == "not-applicable"
+
+
+def test_not_applicable_allows_acceptance_ids_without_test_contracts(
+    taste: ModuleType,
+) -> None:
+    spec = """---
+gate_applicability:
+  disposition: not-applicable
+  work_class: docs-only
+  reason: documentation-only change
+---
+# Docs
+
+## Acceptance Criteria
+- AC-1: The guide describes the new command.
+"""
+    assert isinstance(taste.parse_gate_applicability(spec), taste.NotApplicable)
+
+
+def test_not_applicable_rejects_even_an_empty_test_contract_section(
+    taste: ModuleType,
+) -> None:
+    spec = """---
+gate_applicability:
+  disposition: not-applicable
+  work_class: docs-only
+  reason: documentation-only change
+---
+# Docs
+
+## Acceptance Criteria
+- AC-1: The guide describes the new command.
+
+## Test Contracts
+"""
+    with pytest.raises(
+        taste.ApplicabilityError, match="not-applicable-cannot-carry-test-contracts"
+    ):
+        taste.parse_gate_applicability(spec)
+
+
+def test_red_required_rejects_contracts_without_stable_acceptance_ids(
+    taste: ModuleType,
+) -> None:
+    spec = red_spec().replace("- AC-1:", "- first:").replace("- AC-2:", "- second:")
+    with pytest.raises(taste.ApplicabilityError, match="acceptance-ids-required"):
+        taste.parse_gate_applicability(spec)
+
+
+def test_strict_ui_mode_blocks_missing_surface(taste: ModuleType) -> None:
+    spec = red_spec().replace("  ui_surface: non-browser\n", "")
+    with pytest.raises(taste.ApplicabilityError, match="ui-surface-required"):
+        taste.parse_gate_applicability(spec, require_ui_surface=True)
+
+
+def test_browser_ui_requires_named_browser_interface_and_outer_seam(
+    taste: ModuleType,
+) -> None:
+    spec = red_spec().replace("ui_surface: non-browser", "ui_surface: browser")
+    spec = spec.replace("existing service boundary", "internal helper")
+    with pytest.raises(taste.ApplicabilityError, match="browser-e2e-seam"):
+        taste.parse_gate_applicability(spec)
+
+
+def test_valid_browser_ui_surface_passes_with_browser_interface_and_seam(
+    taste: ModuleType,
+) -> None:
+    spec = red_spec().replace("ui_surface: non-browser", "ui_surface: browser")
+    spec = spec.replace("public call", "existing browser interface")
+    spec = spec.replace("existing service boundary", "existing browser E2E outer seam")
+    applicability = taste.parse_gate_applicability(spec)
+    assert isinstance(applicability, taste.RedRequired)
+    assert applicability.ui_surface == "browser"
+
+
+def test_explicit_non_browser_behavior_remains_valid_and_prose_does_not_reclassify(
+    taste: ModuleType,
+) -> None:
+    spec = red_spec() + "\nFunctional UI is ordinary behavior with a browser seam.\n"
+    applicability = taste.parse_gate_applicability(spec)
+    assert isinstance(applicability, taste.RedRequired)
+    assert applicability.ui_surface == "non-browser"
+
+
+def test_legacy_spec_without_ui_surface_remains_compatible(taste: ModuleType) -> None:
+    spec = red_spec().replace("source: mold-handshake\n", "")
+    spec = spec.replace("  ui_surface: non-browser\n", "")
+    applicability = taste.parse_gate_applicability(spec)
+    assert isinstance(applicability, taste.RedRequired)
+    assert applicability.ui_surface is None
+
+
+def test_red_required_handoff_preserves_pointer_and_metadata(taste: ModuleType) -> None:
+    applicability = taste.parse_gate_applicability(red_spec())
+    metadata = {"spec_sha256": "abc", "taste_sha256": "def"}
+    handoff = taste.auto_handoff("artifact://specs/a.md", applicability, metadata)
+    assert handoff["command"] == ["/cut", "--auto", "artifact://specs/a.md"]
+    assert handoff["spec_ref"] == "artifact://specs/a.md"
+    assert handoff["metadata"]["spec_sha256"] == "abc"
+    assert handoff["metadata"]["taste_sha256"] == "def"
+    assert handoff["metadata"]["gate_applicability"]["disposition"] == "red-required"
+    assert handoff["metadata"]["gate_applicability"]["ui_surface"] == "non-browser"
+    assert metadata == {"spec_sha256": "abc", "taste_sha256": "def"}

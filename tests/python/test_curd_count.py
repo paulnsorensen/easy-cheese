@@ -87,6 +87,44 @@ slug: one-coherent-refactor
 - digest schema unchanged
 """
 
+SPEC_RED_REQUIRED = """\
+---
+source: mold-handshake
+gate_applicability:
+  disposition: red-required
+  work_class: behavior
+  ui_surface: non-browser
+---
+
+# Behavior spec
+
+## Goals
+- Add observable behavior
+
+## Acceptance
+- AC-1: WHEN invoked THE SYSTEM SHALL return the result
+
+## Test Contracts
+| Acceptance ID | Interface referent | Outermost stable seam | Expected failure | Mode |
+| --- | --- | --- | --- | --- |
+| AC-1 | public call | existing service boundary | assert result is returned | tracer |
+"""
+SPEC_NOT_APPLICABLE = """\
+---
+source: mold-handshake
+gate_applicability:
+  disposition: not-applicable
+  work_class: docs-only
+  ui_surface: not-applicable
+  reason: documentation-only change
+---
+
+# Documentation spec
+
+## Acceptance Criteria
+- AC-1: The guide describes the new command.
+"""
+
 
 class TestExtractSection:
     def test_returns_none_when_heading_missing(self, curd_count: ModuleType) -> None:
@@ -244,6 +282,63 @@ class TestAnalyze:
         spec = self._write(tmp_path, "small.md", SPEC_SMALL)
         digest = curd_count.analyze(spec, None)
         assert digest["recommended_skill"] == "/cook"
+
+    def test_red_required_spec_routes_through_cut(
+        self, curd_count: ModuleType, tmp_path: Path
+    ) -> None:
+        spec = self._write(tmp_path, "behavior.md", SPEC_RED_REQUIRED)
+        digest = curd_count.analyze(spec, "medium")
+        assert digest["recommended_skill"] == "/cut"
+        assert digest["handoff"]["command"] == ["/cut", "--auto", str(spec)]
+
+
+    def test_new_mold_spec_without_ui_surface_is_blocked(
+        self, curd_count: ModuleType, tmp_path: Path
+    ) -> None:
+        body = SPEC_RED_REQUIRED.replace("  ui_surface: non-browser\n", "")
+        spec = self._write(tmp_path, "missing-ui.md", body)
+        with pytest.raises(curd_count.SpecReadError, match="ui-surface-required"):
+            curd_count.analyze(spec, "medium")
+
+    def test_browser_ui_without_browser_e2e_seam_is_blocked(
+        self, curd_count: ModuleType, tmp_path: Path
+    ) -> None:
+        body = SPEC_RED_REQUIRED.replace(
+            "  ui_surface: non-browser", "  ui_surface: browser"
+        )
+        body = body.replace("existing service boundary", "internal helper")
+        spec = self._write(tmp_path, "browser-missing-seam.md", body)
+        with pytest.raises(curd_count.SpecReadError, match="browser-e2e-seam"):
+            curd_count.analyze(spec, "medium")
+
+    def test_valid_browser_ui_carries_surface_in_cut_handoff(
+        self, curd_count: ModuleType, tmp_path: Path
+    ) -> None:
+        body = SPEC_RED_REQUIRED.replace(
+            "  ui_surface: non-browser", "  ui_surface: browser"
+        )
+        body = body.replace("public call", "existing browser interface")
+        body = body.replace("existing service boundary", "existing browser E2E outer seam")
+        spec = self._write(tmp_path, "browser.md", body)
+        digest = curd_count.analyze(spec, "medium")
+        assert digest["handoff"]["metadata"]["gate_applicability"]["ui_surface"] == "browser"
+
+    def test_unmarked_legacy_spec_without_ui_surface_remains_a_cut_candidate(
+        self, curd_count: ModuleType, tmp_path: Path
+    ) -> None:
+        body = SPEC_RED_REQUIRED.replace("source: mold-handshake\n", "")
+        body = body.replace("  ui_surface: non-browser\n", "")
+        spec = self._write(tmp_path, "legacy.md", body)
+        digest = curd_count.analyze(spec, "medium")
+        assert digest["recommended_skill"] == "/cut"
+
+    def test_not_applicable_spec_with_acceptance_ids_routes_to_cook(
+        self, curd_count: ModuleType, tmp_path: Path
+    ) -> None:
+        spec = self._write(tmp_path, "docs.md", SPEC_NOT_APPLICABLE)
+        digest = curd_count.analyze(spec, "low")
+        assert digest["recommended_skill"] == "/cook"
+        assert digest["handoff"] is None
 
     def test_candidate_curds_counts_goals_not_gates(
         self, curd_count: ModuleType, tmp_path: Path

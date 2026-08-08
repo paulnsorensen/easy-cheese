@@ -1,5 +1,7 @@
 import json
+import os
 import re
+import subprocess
 from pathlib import Path
 
 
@@ -31,3 +33,41 @@ def test_install_sh_fallback_matches_top_level_skills() -> None:
     fallback = sorted(f"./skills/{name}" for name in match.group(1).split())
 
     assert fallback == expected
+
+
+def test_cut_is_listed_once_in_plugin_manifest() -> None:
+    manifest = json.loads(
+        (REPO_ROOT / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8")
+    )
+    assert manifest["skills"].count("./skills/cut") == 1
+
+
+def test_installer_fallback_installs_cut_from_unrelated_cwd(tmp_path: Path) -> None:
+    log = tmp_path / "gh.log"
+    gh = tmp_path / "gh"
+    gh.write_text(
+        '#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> "$STUB_LOG"\n',
+        encoding="utf-8",
+    )
+    gh.chmod(0o755)
+
+    env = os.environ.copy()
+    env.update({"EC_GH": str(gh), "STUB_LOG": str(log)})
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            f"source {REPO_ROOT / 'scripts' / 'install.sh'}; ec_install_skills claude-code",
+        ],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    installs = [
+        line
+        for line in log.read_text(encoding="utf-8").splitlines()
+        if line.startswith("skill install ")
+    ]
+    assert any(" cut " in f" {line} " and "--force" in line for line in installs)

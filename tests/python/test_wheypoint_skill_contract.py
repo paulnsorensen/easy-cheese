@@ -149,3 +149,18 @@ def test_split_and_join_are_marked_outside_the_continuity_contract() -> None:
     assert "--join" in body and "--split" in body, "the legacy verbs still exist elsewhere"
     assert "outside this continuity contract" in body
     assert "commit no delta" in body
+
+def test_cut_is_first_class_and_resume_preserves_receipt_and_flags() -> None:
+    wheypoint = _read(WHEYPOINT)
+    cheese = _read(CHEESE)
+    resume = _read(CONTINUE_RESUME)
+    corpus = "\n".join((wheypoint, cheese, resume))
+
+    assert "next: mold | cut | cook" in wheypoint
+    assert "culture -> mold -> cut -> cook -> press -> age -> cure -> plate" in corpus
+    assert "next: cut" in corpus
+    assert "GateReceipt" in corpus
+    for flag in ("mode:", "--auto", "--hard", "--open-pr", "--safe"):
+        assert flag in corpus
+    assert "continue: press-corrective-cook" in corpus
+    assert "not a global Press-to-Cook dispatch" in corpus

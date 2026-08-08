@@ -140,9 +140,10 @@ class TestUltracookPhaseChain:
         # Fan pathway: the two-table wave-fan topology (per-curd, post-merge).
         fan_idx = body.find("## Fan pathway")
         assert fan_idx != -1, "cook must document `## Fan pathway`"
-        fan_section = body[fan_idx:]
-        assert "plan" in fan_section and "cook(CurdPlan)" in fan_section
-        assert "press → age → cure → age" in fan_section
+        fan_section = " ".join(body[fan_idx:].split())
+        assert "plan" in fan_section
+        assert "cook(CurdPlan) → reviewer(age)" in fan_section
+        assert "one global `/press → /age → /cure` chain" in fan_section
 
     def test_propagates_auto_through_every_phase(self) -> None:
         body = _skill_corpus("cook")
@@ -298,16 +299,14 @@ def _mold_high_blast_handoff_menu() -> str:
 
 
 class TestMoldHighBlastHandoff:
-    def test_offers_ultracook(self) -> None:
-        # /ultracook retired; its fresh-context-isolation pipeline is now
-        # /cook --auto, offered directly in the high-blast-radius branch.
+    def test_routes_high_blast_by_gate_disposition(self) -> None:
+        body = _skill_corpus("mold")
         menu = _mold_high_blast_handoff_menu()
-        assert "/cook --auto" in menu, (
-            "mold's handoff must offer /cook --auto for high-blast-radius specs"
-        )
-        assert "fresh-context isolation" in menu.lower(), (
-            "mold's high-blast branch must offer fresh-context isolation"
-        )
+        assert "recommended_skill: /cut" in body
+        assert "/cut --auto <spec-path>" in body
+        assert "fresh-context isolation" in menu.lower()
+        assert "Active RED continues" in menu
+        assert "closed N/A skips Press" in menu
 
     def test_offers_continue_flow(self) -> None:
         body = _skill_corpus("mold")
@@ -317,35 +316,30 @@ class TestMoldHighBlastHandoff:
 
 
 # ---------------------------------------------------------------------------
-# /mold — low/medium-blast-radius handoff offers a non-recommended /ultracook
+# /mold — low/medium-blast-radius handoff follows gate disposition
 # ---------------------------------------------------------------------------
 
 
 def _mold_low_medium_handoff_menu() -> str:
     """The option list under mold's non-decomposable low/medium handoff branch.
 
-    Sliced from the branch header to the section's closing rationale paragraph
-    so assertions target the menu options themselves, not the surrounding
-    prose (which also references /cook --auto).
+    Sliced from the branch header to the section's closing mode paragraph so
+    assertions target the menu options rather than surrounding route prose.
     """
     body = _skill_corpus("mold")
     start = body.index("**Non-decomposable, low- or medium-blast-radius specs")
-    end = body.index("The internal `mode` signal", start)
+    end = body.index("`mode: parallel|linear`", start)
     return body[start:end]
 
 
 class TestMoldLowMediumHandoff:
-    def test_offers_ultracook_option(self) -> None:
-        # /ultracook retired; its merged replacement is /cook --auto,
-        # offered alongside plain /cook in this branch's own option list.
+    def test_routes_low_medium_by_gate_disposition(self) -> None:
+        body = _skill_corpus("mold")
         menu = _mold_low_medium_handoff_menu()
-        assert "/cook <spec-path>" in menu, (
-            "mold's low/medium handoff menu must offer plain /cook"
-        )
-        assert "/cook --auto <spec-path>" in menu, (
-            "mold's low/medium handoff menu must offer /cook --auto as the "
-            "auto-review option that replaced the standalone /ultracook choice"
-        )
+        assert "Auto choices use `/cut --auto <spec-path>`" in body
+        assert "Auto choices use `/cook --auto <spec-path>`" in body
+        assert "**Implement the spec**" in menu
+        assert "**Implement and auto-review**" in menu
 
     # test_states_fast_path_cost removed: the fast-path-cost description was
     # specific to a standalone /ultracook menu option that no longer exists —
@@ -353,19 +347,14 @@ class TestMoldLowMediumHandoff:
     # /cook's own `### Mode selection` section (see TestUltracookModeGate),
     # not in mold's menu prose.
 
-    def test_cook_keeps_recommended_slot(self) -> None:
-        # Menu-addition, not recommendation-flip: /cook stays recommended
-        # (the flip was the explicitly rejected direction).
+    def test_manual_implementation_keeps_recommended_slot(self) -> None:
         menu = _mold_low_medium_handoff_menu()
         recommended = [ln for ln in menu.splitlines() if "*(recommended)*" in ln]
         assert len(recommended) == 1, (
             "the low/medium menu must mark exactly one recommended option"
         )
-        assert "/cook <spec-path>" in recommended[0], (
-            "/cook must remain the recommended low/medium option"
-        )
-        assert "/ultracook" not in recommended[0], (
-            "the /ultracook option must stay non-recommended"
+        assert "**Implement the spec**" in recommended[0], (
+            "manual implementation must remain the recommended low/medium option"
         )
 
 

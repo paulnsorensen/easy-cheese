@@ -148,8 +148,8 @@ class TestOutputShape:
         assert isinstance(result["exit_message"], str)
         assert result["exit_message"]
 
-    def test_action_is_one_of_four(self, phase_decision: ModuleType) -> None:
-        valid = {"spawn", "stop", "stop_early", "halt"}
+    def test_action_is_one_of_five(self, phase_decision: ModuleType) -> None:
+        valid = {"spawn", "stop", "stop_early", "clean_complete", "halt"}
         for idx, status, nxt in [
             (0, "ok", None),
             (6, "ok", None),

@@ -8,13 +8,11 @@ deterministic verdict naming the next phase to spawn (or the reason to stop).
 
 `decide()` walks a **phase table** — an ordered list of phase names. The phase
 that runs after index `i` is `table[i + 1]`; the last entry is terminal
-(`next_phase=None`). Three tables ship:
-
-- `LINEAR_TABLE` — the fixed 7-phase chain for linear mode.
-- `PARALLEL_CURD` — the per-curd pipeline ending in a final age pass.
-- `PARALLEL_POSTMERGE` — the merged-diff pass ending in a final age pass.
-
-Any `status` beginning with `halt` short-circuits to `action=halt`. In linear mode, a nonterminal age that reports `next: done` triggers `action=stop_early`. On the parallel-curd table the same signal triggers `action=clean_complete`: the curd is finished and the first age's bound review context becomes its final review identity — safe because the merged diff is re-reviewed by the post-merge sequence. The parallel-postmerge table is the last review before publication, so it ignores the early signal and always runs through cure and final age.
+(terminal `next_phase=None`). Six tables ship: the RED-required linear chain,
+fan per-curd and post-merge chains, plus matching `not-applicable-*` chains.
+Fan per-curd chains never
+include Press; the post-merge chain owns the single global Press after the
+complete receipt has validated GREEN.
 
 Inputs:
 
@@ -44,13 +42,19 @@ import cli
 # A phase table is an ordered list of phase names; the phase that runs after
 # index i is table[i + 1], and the last entry is terminal.
 LINEAR_TABLE: list[str] = ["cook", "press", "age", "cure", "age", "cure", "age"]
-PARALLEL_CURD: list[str] = ["cook", "press", "age", "cure", "age"]
+PARALLEL_CURD: list[str] = ["cook", "age", "cure", "age"]
 PARALLEL_POSTMERGE: list[str] = ["press", "age", "cure", "age"]
+NOT_APPLICABLE_LINEAR: list[str] = ["cook", "age", "cure", "age", "cure", "age"]
+NOT_APPLICABLE_CURD: list[str] = ["cook", "age", "cure", "age"]
+NOT_APPLICABLE_POSTMERGE: list[str] = ["age", "cure", "age"]
 
 TABLES: dict[str, list[str]] = {
     "linear": LINEAR_TABLE,
     "parallel-curd": PARALLEL_CURD,
     "parallel-postmerge": PARALLEL_POSTMERGE,
+    "not-applicable-linear": NOT_APPLICABLE_LINEAR,
+    "not-applicable-curd": NOT_APPLICABLE_CURD,
+    "not-applicable-postmerge": NOT_APPLICABLE_POSTMERGE,
 }
 
 
@@ -122,7 +126,7 @@ def decide(
                     "diff is clean at medium+ severity floor"
                 ),
             }
-        if table is PARALLEL_CURD:
+        if table in (PARALLEL_CURD, NOT_APPLICABLE_CURD):
             return {
                 "action": "clean_complete",
                 "next_phase": None,
@@ -141,12 +145,13 @@ def decide(
 
 
 def _cmd_decide(args: argparse.Namespace) -> None:
+    table = TABLES[args.table]
     verdict = decide(
         args.phase_index,
         args.status,
         args.next,
-        table=TABLES[args.table],
-        allow_early_stop=args.table == "linear",
+        table=table,
+        allow_early_stop=table in (LINEAR_TABLE, NOT_APPLICABLE_LINEAR),
     )
     cli.emit(verdict, json_mode=True)
 
@@ -175,8 +180,8 @@ def _setup(parser: argparse.ArgumentParser) -> None:
         choices=sorted(TABLES),
         default="linear",
         help=(
-            "Which phase table to walk: linear (7-phase chain), parallel-curd "
-            "(per curd in its worktree), or parallel-postmerge (merged diff)."
+            "Which receipt-specific table to walk: linear, fan per-curd "
+            "(without Press), fan post-merge (global Press), or N/A."
         ),
     )
     parser.set_defaults(func=_cmd_decide)

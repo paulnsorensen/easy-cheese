@@ -4,13 +4,35 @@ Single source of truth for how `/cook`, `/press`, `/cure`, and `/ultracook` trea
 
 ## Baseline capture ownership
 
-Baseline capture is frame-owned, not per-cook:
+The protected outer RED has one pre-oracle baseline owner: `/cut`.
 
-- **`/cook`'s fan pathway** — captures the broad-gate baseline once per run, before any curd cooks, and hands it down to curd cooks via dispatch. A curd never captures its own baseline. The hand-down happens before Seed, writing the classified result into `.cheese/ultracook/<slug>/manifest.yaml`'s `baseline:` block, then reaching each curd's `cook` dispatch through `../../ultracook/references/curd-prompt.md`'s `{baseline}` field.
-  Documented example: `python3 skills/ultracook/scripts/ultracook.pyz baseline`.
-- **Bare `/cook` (no frame)** — captures lazily, on the first red broad gate, from the pre-change tree (`git stash` or a clean worktree checkout), classifies the failures, then proceeds with the classified result.
+- **`/cut`** runs the broad project quality-gate commands on the exact tree
+  before writing any protected RED oracle. It freezes each command's `id`,
+  argv, project-relative cwd, and observed exit in the candidate's canonical
+  `baseline_checks`; `red-gate issue` carries those entries into the
+  `GateReceipt` and the Cut→Cook handoff.
+- **`/cook`** never captures its own outer RED baseline, replaces it, or
+  lazily recaptures it. GateReceipt preflight consumes Cut's frozen
+  `baseline_checks` exactly; a current-gate run compares against that evidence.
+- Receipt validation may replay baseline argv after the oracle exists. Cut
+  therefore selects baseline argv that exclude protected RED-oracle paths or
+  remain green when those paths are present; replay must not turn the
+  intentional RED into a baseline failure.
 
-Frame capture and the gate re-run happen in the same environment (same worktree, same toolchain) to minimize signature drift from environment-sensitive flakes.
+The frozen baseline and every current-gate run use the same worktree and
+toolchain. If the baseline cannot be captured before the oracle, Cut halts (or
+must run the same commands against an exact frozen pre-oracle tree); it never
+substitutes an empty baseline.
+
+### Quality-debt comparison snapshot
+
+This separate snapshot feeds `src/fanout/baseline.py::classify()`; it never
+replaces the outer receipt. Fan mode records it once in
+`.cheese/ultracook/<slug>/manifest.yaml`'s `baseline:` block before any curd
+cooks. Bare Cook (no frame) with no baseline yet lazily captures the same
+failure records from the pre-change tree. Run the tested classifier through
+`python3 skills/ultracook/scripts/ultracook.pyz baseline`; do not classify by
+eye.
 
 ## Classification taxonomy
 
@@ -18,12 +40,26 @@ Classification is deterministic and computed by the tested helper `src/fanout/ba
 
 `FailureRecord = {suite, test_id, signature}`, where `signature` is the first line of the failure message, whitespace-normalized.
 
+### Intentional outer RED exclusion
+
+Before classification, remove only the current failure record(s) that match a
+receipt `RedCase`'s declared seam/case and expected witness. This narrow
+exclusion is required because the protected oracle is intentionally failing
+after the frozen baseline was captured; it is not inherited debt and must not
+be dispatched to Pasteurize. Do not remove any other current failure, and do
+not add the excluded case to the frozen baseline.
+
 - **identical** — same test, same signature as baseline.
 - **new** — not in baseline.
 - **changed** — same test, different signature. Treated as `new`.
 - **resolved** — in baseline, now green. Recorded for the summary; not a failure.
 
 ## Three-way gate policy
+
+The canonical pre-Cut evidence lives in `GateReceipt.baseline_checks` and is
+immutable. The handoff `baseline:` block is only the Cook comparison summary
+(including identical/new/changed/resolved records and any repair dispatch);
+it never replaces or truncates the receipt evidence.
 
 - **Identical, outside the cooked contract** — record in the handoff's `baseline:` block, continue; never halt, never fix silently.
 - **New or changed** — the cook fixes it: up to **2 fix rounds per gate**, with a no-progress check. The same failure signature appearing twice consecutively halts early. Collateral repairs (files outside the cooked contract) are allowed freely; record each one in the report's Files-changed with reason `collateral repair: <one line>`.

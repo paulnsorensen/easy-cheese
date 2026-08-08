@@ -28,6 +28,40 @@ def ultracook_pyz(tmp_path_factory) -> Path:
     return build_pyz.build_bundle("ultracook", out / "ultracook.pyz")
 
 
+@pytest.fixture(scope="module")
+def cut_pyz(tmp_path_factory) -> Path:
+    out = tmp_path_factory.mktemp("tree-staging-cut")
+    return build_pyz.build_bundle("cut", out / "cut.pyz")
+
+
+def test_cut_tree_staging_keeps_schema_and_helpers_nested(cut_pyz: Path) -> None:
+    names = set(zipfile.ZipFile(cut_pyz).namelist())
+    assert "red_gate.py" in names
+    assert "gate_receipts.py" in names
+    assert "easy_cheese_schemas/gates.py" in names
+    assert "easy_cheese_schemas/compat.py" in names
+    assert "attrs-26.1.0.dist-info/METADATA" in names
+    assert "cattrs/converters.py" in names
+    assert "gates.py" not in names
+
+
+def test_cut_red_gate_cli_runs_from_isolated_bundle(cut_pyz: Path) -> None:
+    result = subprocess.run(
+        [sys.executable, "-S", "-I", str(cut_pyz), "red-gate"],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 2, result.stdout + result.stderr
+    usage = result.stdout + result.stderr
+    assert all(command in usage for command in ("contracts", "issue", "validate"))
+
+
+def test_cut_bundle_is_byte_deterministic(tmp_path: Path) -> None:
+    first = build_pyz.build_bundle("cut", tmp_path / "a" / "cut.pyz")
+    second = build_pyz.build_bundle("cut", tmp_path / "b" / "cut.pyz")
+    assert first.read_bytes() == second.read_bytes()
+
+
 def _run_isolated(pyz: Path, code: str) -> subprocess.CompletedProcess[str]:
     """Run `code` on an interpreter with site-packages disabled (-S) and the
     environment ignored (-I), with only the bundle on sys.path. Anything that
