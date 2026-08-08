@@ -47,6 +47,9 @@
 - [skill-size-ratchet-002](./skill-size-ratchet-002.md) — ADR: No tokenizer dependency in the skill-size gate
 - [skill-size-ratchet-003](./skill-size-ratchet-003.md) — ADR: Ratchet skill size and reference structure against a recorded baseline
 - [starlight-docs-cutover-001](./starlight-docs-cutover-001.md) — ADR: Starlight docs cutover
+- [wheypoint-continuity-kernel-001](./wheypoint-continuity-kernel-001.md) — Wheypoint continuity authority
+- [wheypoint-continuity-kernel-002](./wheypoint-continuity-kernel-002.md) — Dedicated Wheypoint runtime boundary
+- [wheypoint-continuity-kernel-003](./wheypoint-continuity-kernel-003.md) — Immutable Wheypoint updates and resolution
 - [wheypoint-provenance-schema-001](./wheypoint-provenance-schema-001.md) — ADR: wheypoint provenance as additive header fields with join/split verbs
 - [workflow-contract-milknado-seam-001](./workflow-contract-milknado-seam-001.md) — ADR: CurdPlan is the semantic work authority
 - [workflow-contract-milknado-seam-002](./workflow-contract-milknado-seam-002.md) — ADR: Agents write slim views and hosts normalize canonical contracts

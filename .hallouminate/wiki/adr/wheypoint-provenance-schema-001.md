@@ -4,6 +4,10 @@ Status: accepted (2026-07-09)
 Spec: session-convergence-wheypoint (dotfiles session; `/home/paul/Dev/dotfiles`)
 Ships in: `skills/wheypoint/SKILL.md`
 
+## Supersession
+
+<certain> As of 2026-08-02, [wheypoint-continuity-kernel-001](./wheypoint-continuity-kernel-001.md) supersedes this ADR's projection-authority, optional-parent dispatch, and new split/join decisions. Session, Git, creation, and parent fields remain legacy provenance inputs, but the typed Wheypoint record is authoritative and every declared lineage reference must resolve before automatic dispatch.
+
 ## Context
 
 Interrupted or parallel agent-session threads could not be converged into resumable artifacts. `/wheypoint` handoff notes carried no machine-readable lineage — no session id, git anchor, creation time, or parentage — so joining two threads or forking one was untracked hand-work. The header schema stopped at `status / next / mode / artifact` + the orientation line.

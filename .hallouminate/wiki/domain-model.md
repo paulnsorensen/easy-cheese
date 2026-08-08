@@ -1,44 +1,48 @@
-# Easy-cheese domain model
+# Easy Cheese domain model
 
-The workflow-continuity model distinguishes a user's durable work item from branch/worktree executions, queued phase directives, and evidence passed between phases. The approved contract is [Cross-skill work contract](./specs/cross-skill-work-contract.md).
+<certain> Easy Cheese separates semantic work contracts, workflow continuity, and physical execution. CurdPlan is the semantic work authority. WheypointRecord is the continuity authority. CurdRecord and Milknado plan v2 remain physical/runtime state.
 
 ## Workflow continuity
 
-**WorkRecord** — persisted continuity record for one user work item across conversations, phases, branches, and worktrees.
-_Avoid_: session, latest note
-_Code_: `shared/scripts/work.py`
+**WheypointRecord** - the living durable continuity authority for one work item across conversations, phases, branches, and worktrees.
+_Avoid_: WorkRecord, session, latest note
+_Code_: `src/easy_cheese_schemas/wheypoint.py:484`
 
-**WorkAttempt** — one branch/worktree execution belonging to a WorkRecord; it owns tentative execution context, phase progress, and artifact links.
+**WheypointDelta** - a revision-checked semantic update that adds or explicitly transitions protected record state; omission carries state forward.
+_Avoid_: note rewrite, implicit deletion
+_Code_: `src/easy_cheese_schemas/wheypoint.py:569`
+
+**WheypointRevision** - an immutable resulting record and receipt for one accepted delta, including parent, preservation, provenance, and projection evidence.
+_Avoid_: mutable checkpoint, latest file
+_Code_: `src/easy_cheese_schemas/wheypoint.py:613`
+
+**WheypointProjection** - generated Markdown for human reading and continuation handoff; it is never the continuity authority.
+_Avoid_: authoritative note, continuity database
+_Code_: `src/easy_cheese_schemas/wheypoint.py:645`
+
+**WorkAttempt** - one future branch/worktree execution belonging to a WheypointRecord; it owns tentative execution context, phase progress, and artifact links.
 _Avoid_: session, Hard Cheese attempt
-_Code_: `shared/scripts/work.py`
+_Code_: NEW ENTITY
 
-**WorkTask** — ordered phase directive created by `next: tasks`; it has deterministic identity, binds to a claiming WorkAttempt, and remains nonterminal until completed or explicitly abandoned.
+**WorkTask** - one future ordered phase directive claimed by a WorkAttempt and kept nonterminal until completed or explicitly abandoned.
 _Avoid_: phase name, background session
-_Code_: `shared/scripts/work.py`
+_Code_: NEW ENTITY
 
-**AttemptStatePatch** — revision-checked explicit lifecycle transition for a WorkAttempt, distinct from curated context edits.
+**AttemptStatePatch** - one future revision-checked lifecycle transition for a WorkAttempt, distinct from curated WheypointDelta context updates.
 _Avoid_: implicit unblock, status field edit
-_Code_: `shared/scripts/work.py`
+_Code_: NEW ENTITY
 
-**WorktreeKey** — local identity derived from a Git worktree-specific Git directory; it groups active or paused WorkAttempts for deterministic continuation.
+**WorktreeKey** - local identity derived from a Git worktree-specific Git directory; it groups future active or paused WorkAttempts for deterministic continuation.
 _Avoid_: branch key, cwd key
-_Code_: `shared/scripts/paths.py`
+_Code_: NEW ENTITY
 
-**HandoffEnvelope** — versioned cross-phase JSON metadata surrounding a phase-owned Markdown report.
-_Avoid_: positional status header, unrestricted YAML document
-_Code_: `shared/scripts/handoff.py`
+**HandoffEnvelope** - a future versioned cross-phase metadata envelope surrounding a phase-owned Markdown report.
+_Avoid_: WheypointProjection, unrestricted metadata document
+_Code_: NEW ENTITY
 
-**PhaseContract** — a human-authored YAML declaration of a source phase's payload schema and permitted outgoing transitions; it is compiled at build time.
-_Avoid_: universal payload schema, runtime YAML dependency
-_Code_: `skills/<phase>/references/handoff-contract.yaml`
-
-**Global transition registry** — build-assembled validation model containing every globally addressable workflow phase, destination-only contracts, and reserved control outcomes, independent of current harness installation.
-_Avoid_: local availability list
-_Code_: compiled into `skills/cheese/scripts/cheese.pyz`
-
-**Repo-local work snapshot** — optional portable copy of a WorkRecord under `.cheese/work/`; imported or exported explicitly and never a second authority.
+**Repo-local Wheypoint snapshot** - an optional portable copy of a WheypointRecord; it is exported explicitly and never becomes a second authority.
 _Avoid_: automatic mirror, co-authoritative record
-_Code_: `shared/scripts/work.py`
+_Code_: NEW ENTITY
 
 ## Semantic work contracts
 
@@ -120,7 +124,7 @@ _Code_: NEW ENTITY
 
 **source_curd_ref** - physical-item provenance containing semantic curd ID and digest.
 _Avoid_: Milknado node ID
-_Code_: NEW ENTITY
+_Code_: NEW ENTITY<<<<<<< ours
 
 ## Outside-in RED gating
 
@@ -155,3 +159,12 @@ _Code_: `CorrectiveRoute` in `src/fanout/press_route.py:25-31`
 **Gate applicability** - Mold's explicit closed classification of requested work as `red-required` behavior or a named `not-applicable` non-behavior class.
 _Avoid_: filename heuristic, inferred docs-only, UI exemption
 _Code_: `GateApplicability` in `src/mold/taste_test.py:180`
+
+||||||| original
+_Code_: NEW ENTITY
+
+
+=======
+_Code_: NEW ENTITY
+
+>>>>>>> theirs
