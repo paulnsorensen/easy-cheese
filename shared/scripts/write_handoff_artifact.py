@@ -148,8 +148,8 @@ def write_artifact(
 
     cheese_root = (root / ".cheese").resolve()
     target = cheese_root / phase / f"{slug}.md"
-    # Nested phase subdirs are allowed (factory chains write to subdirs); a
-    # `..` or absolute escape out of .cheese/ is not.
+    # Phase names are validated against the compiled registry and therefore
+    # select exactly one directory beneath .cheese/.
     if cheese_root not in target.resolve().parents:
         raise cli.CliError(f"--phase must stay under .cheese/: {phase!r}")
     target_dir = target.parent
@@ -253,7 +253,7 @@ def _setup(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--root",
         default=None,
-        help="repo root (default: cwd); .cheese/<phase|next>/<slug>.md is written under this",
+        help="repo root (default: cwd); .cheese/<phase>/<slug>.md is written under this",
     )
     parser.set_defaults(func=_cmd_write)
 
