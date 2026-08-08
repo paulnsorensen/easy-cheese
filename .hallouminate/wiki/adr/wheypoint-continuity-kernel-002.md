@@ -2,7 +2,7 @@
 
 <certain> The Wheypoint kernel exposes one dedicated portable runtime while preserving existing shared handoff and path APIs.[^spec]
 
-### ADR-002: Ship a dedicated wheypoint.pyz [status: accepted]
+## ADR-002: Ship a dedicated wheypoint.pyz [status: accepted]
 
 - **Context:** <certain> Before PR #384, main had no Wheypoint bundle, the vendored dependency bundle list named only `ultracook`, and existing consumers called `parse_handoff_slug()` directly.[^code]
 - **Decision:** Build `skills/wheypoint/scripts/wheypoint.pyz` with stable JSON `commit`, `resolve`, `show`, and `lint` commands. Stage the private Wheypoint runtime, `easy_cheese_schemas`, and currently vendored attrs/cattrs dependencies into it. Reuse `project_corpus_root()` without changing its semantics.
@@ -19,4 +19,3 @@
 [^code]: `scripts/build_pyz.py:83-90,162-175`, `src/wheypoint/wheypoint.py:47-263`, and `shared/scripts/paths.py:223-225`, verified 2026-08-08.
 
 [^python-version]: `.github/workflows/build-pyz.yml:52-55` pins bundle builds to Python 3.12; local `just check` comparison observed 2026-08-02.
-

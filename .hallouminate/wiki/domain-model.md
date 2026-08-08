@@ -161,8 +161,10 @@ _Avoid_: filename heuristic, inferred docs-only, UI exemption
 _Code_: `GateApplicability` in `src/mold/taste_test.py:180`
 
 ||||||| original
+_Code_: NEW ENTITY
+
 
 =======
-
+_Code_: NEW ENTITY
 
 >>>>>>> theirs
