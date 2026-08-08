@@ -20,6 +20,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+from contextlib import suppress
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -258,10 +259,8 @@ def _stage_copy(
                 f"expected {expected}, got {actual}"
             )
     except BaseException:
-        try:
+        with suppress(FileNotFoundError):
             temporary.unlink()
-        except FileNotFoundError:
-            pass
         raise
     return temporary
 
@@ -287,9 +286,8 @@ def _rollback(
             errors.append(f"{plan.target}: {exc}")
     for directory in reversed(created_dirs):
         try:
-            directory.rmdir()
-        except FileNotFoundError:
-            pass
+            with suppress(FileNotFoundError):
+                directory.rmdir()
         except OSError as exc:
             errors.append(f"{directory}: {exc}")
     if errors:
@@ -300,10 +298,8 @@ def _rollback(
 
 def _discard_temporary(paths: list[Path]) -> None:
     for path in paths:
-        try:
+        with suppress(FileNotFoundError):
             path.unlink()
-        except FileNotFoundError:
-            pass
 
 
 def _commit_copy_set(plans: list[_CopyPlan], root: Path) -> None:

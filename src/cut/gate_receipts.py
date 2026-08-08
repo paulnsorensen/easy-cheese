@@ -34,7 +34,7 @@ class ValidationResult:
 
     @property
     def diagnostics(self) -> tuple[str, ...]:
-        """Alias used by command consumers that call failures diagnostics."""
+        """Return problems under the command-facing diagnostics name."""
         return self.problems
 
     def to_dict(self) -> dict[str, Any]:

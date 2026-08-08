@@ -35,7 +35,8 @@ def cut_pyz(tmp_path_factory) -> Path:
 
 
 def test_cut_tree_staging_keeps_schema_and_helpers_nested(cut_pyz: Path) -> None:
-    names = set(zipfile.ZipFile(cut_pyz).namelist())
+    with zipfile.ZipFile(cut_pyz) as archive:
+        names = set(archive.namelist())
     assert "red_gate.py" in names
     assert "gate_receipts.py" in names
     assert "easy_cheese_schemas/gates.py" in names

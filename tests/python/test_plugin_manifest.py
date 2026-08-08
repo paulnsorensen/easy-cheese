@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -57,7 +58,7 @@ def test_installer_fallback_installs_cut_from_unrelated_cwd(tmp_path: Path) -> N
         [
             "bash",
             "-c",
-            f"source {REPO_ROOT / 'scripts' / 'install.sh'}; ec_install_skills claude-code",
+            f"source {shlex.quote(str(REPO_ROOT / 'scripts' / 'install.sh'))}; ec_install_skills claude-code",
         ],
         cwd=tmp_path,
         env=env,
