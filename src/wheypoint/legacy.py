@@ -301,6 +301,8 @@ def find_legacy_note(
     reference = Path(slug).expanduser()
     if reference.is_absolute():
         try:
+            path = reference.resolve(strict=True)
+        except FileNotFoundError:
             path = reference.resolve()
         except (OSError, RuntimeError, ValueError) as exc:
             raise LegacyLookupError(
