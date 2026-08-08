@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import subprocess
+import sys
 import venv
 from importlib.util import find_spec
 from pathlib import Path
@@ -155,8 +156,16 @@ def test_conformance_resource_api_is_bounded_and_returns_fresh_values() -> None:
 def test_installed_wheel_exposes_exact_bundled_fixtures(tmp_path: Path) -> None:
     wheel_dir = tmp_path / "dist"
     subprocess.run(
-        ["uv", "build", "--wheel", "--out-dir", str(wheel_dir)],
-        cwd=REPO_ROOT,
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "wheel",
+            "--no-deps",
+            "--wheel-dir",
+            str(wheel_dir),
+            str(REPO_ROOT),
+        ],
         check=True,
         capture_output=True,
         text=True,
