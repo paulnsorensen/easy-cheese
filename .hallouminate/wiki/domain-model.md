@@ -121,3 +121,37 @@ _Code_: NEW ENTITY
 **source_curd_ref** - physical-item provenance containing semantic curd ID and digest.
 _Avoid_: Milknado node ID
 _Code_: NEW ENTITY
+
+## Outside-in RED gating
+
+**GateReceipt** - the strict phase-neutral evidence envelope that binds approved work, contract mode, witness disposition, runner argv, protected-file digests, and producer provenance across Cut, Cook, and Press.
+_Avoid_: red test file, cut receipt, press receipt, editable handoff
+_Code_: `src/easy_cheese_schemas/gates.py`
+
+**TestContract** - Mold-owned executable intent for one acceptance criterion, naming its stable public interface, outer seam, deterministic expected failure, and tracer-or-matrix mode.
+_Avoid_: acceptance prose, generated test, test case
+_Code_: `src/easy_cheese_schemas/gates.py`
+
+**Cut** - the pre-implementation gate that canonicalizes Test Contracts, adopts or authors the outer test, proves RED, protects evidence by digest, and issues a GateReceipt without committing the red-only state.
+_Avoid_: test-writing phase, pre-Cook commit, fixture generator
+_Code_: `src/cut/red_gate.py`
+
+**Tracer** - the smallest deterministic causal witness that crosses the approved outer seam for one acceptance criterion.
+_Avoid_: unit test, smoke test, contract matrix
+_Code_: `mode == "tracer"` in `src/easy_cheese_schemas/gates.py`
+
+**Contract matrix** - the complete uniquely identified behavior rows for a ratified and versioned public API, schema, or protocol.
+_Avoid_: parameterized test, many tracers, arbitrary public function tests
+_Code_: `mode == "contract-matrix"` in `src/easy_cheese_schemas/gates.py`
+
+**Protected oracle** - the Cut-authored or adopted test and fixture set whose path-safe digests are fixed in the GateReceipt and must remain untouched until final GREEN validation.
+_Avoid_: staged test commit, read-only checkout, mutable test plan
+_Code_: `protected_files` in `src/easy_cheese_schemas/gates.py`
+
+**Corrective continuation** - a Press-owned bounded return to Cook carrying a producer-`press` GateReceipt for an in-contract production failure exposed by a Press-authored attack.
+_Avoid_: Press-to-Cook route, Press production edit, retry
+_Code_: `CorrectiveRoute` in `src/fanout/press_route.py:25-31`
+
+**Gate applicability** - Mold's explicit closed classification of requested work as `red-required` behavior or a named `not-applicable` non-behavior class.
+_Avoid_: filename heuristic, inferred docs-only, UI exemption
+_Code_: `GateApplicability` in `src/mold/taste_test.py:180`

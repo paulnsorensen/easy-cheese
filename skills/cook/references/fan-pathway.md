@@ -136,8 +136,15 @@ and proceed; `none` is never a blocker and never changes the typed contract.
 | Stage | Chain | Canonical handoff |
 | --- | --- | --- |
 | Planner | `planner-request → PlannerResult → validated CurdPlan` | `PlannerResult` |
-| Per curd | `cook(CurdPlan) → review → confirmed diagnosis → cure(CurdPlan, bindings)` | `CurdResult` + `CureDiagnosisBinding` |
-| Post-merge | `press → age → cure → age` over the merged typed results | final `CurdResult` |
+| Per curd | `cook(CurdPlan) → reviewer(age) → confirmed diagnosis → cure(CurdPlan, bindings) → reviewer(final age)` | `CurdResult` + `CureDiagnosisBinding` |
+| Post-merge | `red-gate validate <receipt> --state green → press → age → cure → age` over the merged typed results | final `CurdResult` |
+| Per curd, closed N/A | `coder(cook) → reviewer(age) → coder(cure) → reviewer(final age)` | `not-applicable-curd` |
+| Post-merge, closed N/A | `age → cure → age` | `not-applicable-postmerge` |
+
+Per-curd workers replay the whole Cut RED but own incomplete implementation
+slices: they never run Press or claim whole-receipt GREEN while sibling cases
+remain RED. After wiring and merge, the orchestrator validates the complete
+receipt GREEN, then runs the one global Press → Age/Cure chain.
 
 The per-curd chain may end early when a review returns a clean completion, but
 the host still records one normalized result and keeps the plan's dependency
@@ -145,9 +152,7 @@ closure consistent. A failed review never jumps directly to Cure: the host
 must materialize and confirm a diagnosis, then bind it to the exact curd.
 Only a terminal age with `next: done` is publishable.
 
-The dispatch-count estimate shown at the `/cook` gate is derived from the
-validated plan, the selected waves, and the review/diagnosis callbacks. Wiring
-dispatches are not counted until they are represented by typed evidence.
+**Projected dispatch count.** The upper bound `/cook` shows at the decompose gate is receipt-specific. RED-required: 1 seed + 4 × curds + 4 post-merge = `5 + 4 × curds`. Closed N/A: 1 seed + 4 × curds + 3 post-merge = `4 + 4 × curds`. A first-age `clean_complete` shortens a RED curd to 2 dispatches and an N/A curd to 2. Wiring dispatches are excluded because wiring rows live in the manifest, not the curd block.
 
 ## Recovery and aggregate gates
 
@@ -159,23 +164,55 @@ dispatches are not counted until they are represented by typed evidence.
   gates over the merged tree. Distinguish a real cross-curd conflict (curds
   passed individually but collide in aggregate) from harmless generated drift
   the post-merge Cure can absorb. Never auto-resolve a real conflict.
+- **Compute the verdict** — normalize each typed `CurdResult`; a halted result stops, while a clean first review finalizes that curd without Cure. After wiring and merge, `red-gate validate <receipt> --state green` must succeed before the global post-merge chain.
+
+## Protected oracle propagation
+
+Cut finishes before Seed but does not commit a RED-only change. Before every
+Seed or curd dispatch, propagate its canonical receipt and protected files from
+the orchestrator tree into the isolated worktree:
+
+- Harness-agnostic creation: `python3 skills/ultracook/scripts/ultracook.pyz
+  worktree create --slug <id> --base <orchestrator-branch> --receipt
+  .cheese/cut/<slug>.json`.
+- Native worktree isolation: make the worker's first action `python3
+  <orchestrator-root>/skills/ultracook/scripts/ultracook.pyz worktree inherit
+  --repo <orchestrator-root> --path <worktree-path> --receipt
+  .cheese/cut/<slug>.json`, before RED replay or any edit.
+
+Both forms validate every source digest, reject escaping/symlink paths, copy the
+receipt plus all protected files, and report the inherited paths. A mismatch or
+missing path halts back to Cut; do not dispatch the worker. Every worker
+replays the inherited receipt RED before production edits. A curd worker owns
+only an incomplete implementation slice: it MUST NOT edit, stage, or commit
+inherited oracle files; it MUST NOT run Press or claim whole-receipt GREEN
+while sibling cases remain RED. The orchestrator retains those uncommitted
+files and includes them with the completed implementation at the final
+parent-owned Plate step. This preserves the no RED-only commit rule while
+giving Seed and every curd the exact same oracle.
 
 ## Worktree harvest and teardown
 
-- Give each curd its own worktree. When the host lacks a native isolated
-  sub-agent primitive, create it with
-  `python3 skills/ultracook/scripts/ultracook.pyz worktree create --slug <id>
-  --base <orchestrator-branch>`; it returns `{path, branch}`.
-- Harvest by cherry-picking each curd branch onto the orchestrator branch with
-  `python3 skills/ultracook/scripts/ultracook.pyz worktree harvest --branch
-  <curd-branch> --onto <orchestrator-branch>`. On conflict, invoke `/melt`; if
-  it cannot resolve, fall back to per-curd PRs.
-- Harvest uses the shared object store, so it needs no `git fetch`; on conflict,
-  invoke `/melt` and fall back to per-curd PRs if structural resolution fails.
-- Tear down every worktree with
-  `python3 skills/ultracook/scripts/ultracook.pyz worktree teardown --path
-  <worktree-path> --branch <curd-branch>`. `/cook` owns teardown; a completed
-  run leaks no worktree-agent branch or stray worktree directory.
+- Give each curd its own worktree; when the host lacks a native worktree-isolated sub-agent primitive, create it first with `python3 skills/ultracook/scripts/ultracook.pyz worktree create --slug <id> --base <orchestrator-branch>` (returns `{path, branch}`).
+  Pass `--receipt .cheese/cut/<slug>.json` for a red-required run; omitting it is
+  valid only for a closed not-applicable or legacy gate.
+- Per-curd workers create no Press receipts. There is no child Press oracle to
+  reverse-harvest; any global Press receipt is created only after merge and
+  complete-receipt GREEN validation.
+- Per curd, run the receipt-specific sequential chain and persist one normalized
+  `CurdResult`; per-curd workers never create Press receipts.
+- After every curd returns, harvest commits and tear down each curd worktree.
+- Harvest with `python3 skills/ultracook/scripts/ultracook.pyz worktree harvest
+  --branch <curd-branch> --onto <orchestrator-branch>`. On conflict, invoke
+  `/melt`; if it cannot resolve, fall back to per-curd PRs.
+  The worktrees share one object store, so this needs no `git fetch`.
+- Tear down with `python3 skills/ultracook/scripts/ultracook.pyz worktree
+  teardown --path <worktree-path> --branch <curd-branch>`. A completed run
+  leaves no `worktree-agent-*` branch or stray worker directory.
+- Run wiring in dependency order, validate the complete receipt GREEN, then run
+  the one global `press → age → cure → age` integration pass.
+- `/cook` alone performs harvest and dispatches `/plate` at the end, never
+  mid-run.
 
 After each wave, persist the typed `PlannerResult`, `CurdResult` values,
 diagnosis bindings, and gate evidence in the handoff artifact. These records

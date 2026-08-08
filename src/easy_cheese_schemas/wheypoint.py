@@ -82,6 +82,7 @@ class NextMove(str, Enum):
     /wheypoint handoff slug already publishes."""
 
     MOLD = "mold"
+    CUT = "cut"
     COOK = "cook"
     PRESS = "press"
     AGE = "age"

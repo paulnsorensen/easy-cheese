@@ -71,6 +71,7 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
         "curd-count": "curd-count.py",
         "gate-graph": "gate-graph.py",
         "render_html": Shared("html_report_cli.py"),
+        "taste-test": "taste_test.py",
     },
     "briesearch": {
         "artifact-path": Shared("artifact_path.py"),
@@ -80,6 +81,7 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
         "artifact-path": Shared("artifact_path.py"),
         "worktree": Shared("worktree.py"),
     },
+    "cut": {"red-gate": "red_gate.py"},
     # All four subcommands are one module: wheypoint.py reads the subcommand off
     # argv[0], the way hallouminate_setup.py already does for global|local|doctor.
     "wheypoint": {
@@ -106,6 +108,10 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
         "debug-tag-sweep": "debug-tag-sweep.py",
         "repro-rerun": "repro-rerun.py",
         "pasteurize-route": "fanout/pasteurize_route_cli.py",
+    },
+    "press": {
+        "press-route": "fanout/press_route_cli.py",
+        "red-gate": "cut/red_gate.py",
     },
     # /ultracook drives the fan-out engine (formerly /cheese-factory); its
     # sources live in the mode-neutral src/fanout/ dir (see SRC_DIRS).
@@ -137,6 +143,7 @@ SRC_DIRS: dict[str, str] = {"ultracook": "fanout"}
 # vendored into both the mold and ultracook bundles.
 EXTRA_MODULES: dict[str, list[tuple[str, str]]] = {
     "mold": [("fanout", "mode.py")],
+    "cut": [("mold", "taste_test.py")],
     "age": [
         ("fanout", "age_route.py"),
         ("fanout", "review_surface.py"),
@@ -146,33 +153,33 @@ EXTRA_MODULES: dict[str, list[tuple[str, str]]] = {
         ("fanout", "review_surface.py"),
     ],
     "pasteurize": [("fanout", "pasteurize_route.py")],
+    "press": [
+        ("fanout", "press_route.py"),
+        ("cut", "gate_receipts.py"),
+        ("mold", "taste_test.py"),
+    ],
 }
 
 # Whole directory trees (and the odd single-file module) staged verbatim into a
 # bundle. The import scanner above only resolves flat sibling modules, so a real
 # package's membership is declared here rather than discovered.
 #
-# The Cook fan path and Cure's copied common bundle execute against the same
-# typed workflow package as the rest of the phase runtime.  Keep the package
-# tree on the owning bundles; legacy root-level phase modules below remain only
-# the common-bundle boundary used by existing shared CLIs.
+# Bundles that execute typed workflow or GateReceipt contracts carry the complete
+# easy_cheese_schemas package and its vendored attrs/cattrs dependencies. Keep
+# ownership explicit so each consumer imports the canonical implementation.
 PACKAGE_TREES: dict[str, list[Path]] = {
     "common": [SRC_ROOT / "easy_cheese_schemas"],
     "cook": [SRC_ROOT / "easy_cheese_schemas"],
+    "cut": [SRC_ROOT / "easy_cheese_schemas"],
+    "press": [SRC_ROOT / "easy_cheese_schemas"],
     "ultracook": [SRC_ROOT / "easy_cheese_schemas"],
     # wheypoint's whole runtime is typed against the Wheypoint schemas, so it is
-    # also a real consumer rather than a bundle carrying dead weight.
+    # another real consumer rather than a bundle carrying dead weight.
     "wheypoint": [SRC_ROOT / "easy_cheese_schemas"],
 }
 
-# Bundles that also carry easy_cheese_schemas' runtime deps -- attrs/cattrs are
-# pure-Python wheels that zipimport can load, and their .dist-info dirs must ride
-# along because attrs.__version__ reads its own packaging metadata.
-#
-# Read off the generated tree rather than listed by version here: a Dependabot
-# bump to requirements-vendor.txt changes the .dist-info directory names, and a
-# hard-coded list would turn every such PR into a build failure.
-VENDORED_DEP_BUNDLES = ("common", "cook", "ultracook", "wheypoint")
+
+VENDORED_DEP_BUNDLES = ("common", "cook", "cut", "press", "ultracook", "wheypoint")
 
 
 def vendored_dep_trees() -> list[Path]:
@@ -460,10 +467,10 @@ def main(argv: list[str]) -> int:
     )
     parser.add_argument("skills", nargs="*", help="Skills to build (default: all).")
     args = parser.parse_args(argv[1:])
-    # Consumer-only skills (age/cure/press) have no own bundle but receive
-    # common.pyz, so they are valid targets even though they are not in SKILLS.
+    # Consumer-only skills (age/cure) have no own bundle but receive common.pyz,
+    # so they are valid targets even though they are not in SKILLS.
     known = {*SKILLS, COMMON, *COMMON_CONSUMERS}
-    unknown = [s for s in args.skills if s not in known]
+    unknown = [skill for skill in args.skills if skill not in known]
     if unknown:
         parser.error(
             f"unknown skill(s): {', '.join(unknown)}; known: {', '.join(sorted(known))}"

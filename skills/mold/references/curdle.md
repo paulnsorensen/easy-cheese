@@ -36,12 +36,17 @@ Cross-cutting house style and citation form: [`formatting.md`](../../cheese/refe
 ---
 slug: <slug>
 status: draft
+source: mold-handshake
 created: <YYYY-MM-DD>
 confidence: <low | medium | high>
 gates_overridden: []   # list of unchecked handshake items if `curdle anyway` was used
 agent_introduced_scope: []   # terms in the spec the user did not type — each approved per `handshake.md` § Agent-introduced scope (audit trail; downstream skills trust this list)
 entity_referent_bindings: []   # list of binding records {noun, verdict, referent, citation, note} for identity/ownership-role nouns bound to code referents or marked NEW ENTITY — each resolved per `handshake.md` § Entity-referent binding (audit trail; downstream skills trust this list)
----
+gate_applicability:
+  disposition: red-required | not-applicable
+  work_class: behavior | docs-only | refactor-only | test-only | appearance-only
+  ui_surface: browser | non-browser | not-applicable
+  reason: <required only for not-applicable>
 
 # <Title>
 
@@ -75,8 +80,22 @@ WHEN <trigger> THE SYSTEM SHALL <response>
 ```
 If the trigger cannot be stated precisely (e.g. pure internal utilities with no external event), use prose with a `[prose-fallback]` marker.
 
-- WHEN <trigger> THE SYSTEM SHALL <response>
-- WHEN <trigger> THE SYSTEM SHALL <response>
+- AC-1: WHEN <trigger> THE SYSTEM SHALL <response>
+- AC-2: WHEN <trigger> THE SYSTEM SHALL <response>
+
+## Test Contracts
+
+Every numbered Acceptance ID appears exactly once in this table.
+`expected_failure` names a deterministic witness and expected red assertion;
+`mode` is `tracer` or `contract-matrix`. The seam is the outer boundary that
+proves the behavior. A matrix names its ratified interface version and every
+unique row identity, separated by `<br>`; a tracer leaves those cells blank.
+Add one row for each criterion.
+
+| Acceptance ID | Interface referent | Outermost stable seam | Expected failure | Mode | Interface version | Matrix rows |
+| --- | --- | --- | --- | --- | --- | --- |
+| AC-1 | <public interface> | <existing outer seam> | <witness and expected red assertion> | tracer | | |
+| AC-2 | <public interface> | <existing outer seam> | <witness and expected red assertion> | contract-matrix | <ratified version> | <row 1><br><row 2> |
 
 ## Interface sketches
 ```pseudocode
@@ -103,6 +122,14 @@ If the trigger cannot be stated precisely (e.g. pure internal utilities with no 
 <one footnote definition per cited source; include only when out-of-scope evidence was cited above per `../../cheese/references/formatting.md` § Citations>
 ```
 
+`source: mold-handshake` marks the strict Mold production path. Every new
+behavior declaration must set `ui_surface` to `browser` or `non-browser`;
+closed non-behavior declarations, including `appearance-only`, set it to
+`not-applicable`. A browser declaration is valid only when every Test Contract
+names an existing browser/E2E interface and outer seam. Specs without this
+provenance marker remain legacy-compatible for Cut, including the approved v1
+spec.
+
 ## Issue template
 
 ```markdown
@@ -119,7 +146,7 @@ parent_spec: <slug>
 <why this exists, in 1–3 sentences>
 
 ## Acceptance
-- <bullet — verifiable outcome>
+- AC-1: <bullet — verifiable outcome>
 
 ## Notes
 - <optional caveat or pointer>
@@ -231,7 +258,7 @@ This is the runtime home of the **Durable writes** coherence gate (`handshake.md
 
 ## Pre-approval typed planner dispatch
 
-Run this procedure on dialogue-state draft text before the two-key handshake. It prepares the typed plan that the handshake approves; Curdle later persists the host-validated artifacts.
+Before this procedure, run the digest-bound fresh-context fork taste test on the dialogue-state draft. It must pass; failures reopen only named forks, with two correction rounds. Then run the procedure on the draft before the two-key handshake. It prepares the typed plan that the handshake approves; Curdle later persists the host-validated artifacts.
 
 1. **Dispatch** a fresh-context planner on a `PlannerRequest` built from the current draft spec text. The planner returns a `PlannerResultWriterView`; it does not own contract versions, identifiers, digests, lineage, or evidence references.
 2. **Validate and normalize** the writer view on the host. The normal selected path is the typed `PlannerResult` containing a typed `CurdPlan`; reject malformed or wrong-kind output before approval.
@@ -248,5 +275,6 @@ After writing, suggest the next step inline. **Never auto-invoke.**
 
 | Artifact | Suggested next step |
 | --- | --- |
+| Red-required Spec | `/cut --auto <durable spec pointer>` (preserve gate and taste metadata) |
 | Spec | `/cook <spec-path>` |
 | Issues | Paste each into your tracker, or `gh issue create --body-file <path>` |

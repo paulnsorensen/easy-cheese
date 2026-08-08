@@ -24,6 +24,8 @@ from easy_cheese_schemas import (
     WheypointRecord,
     WheypointRevision,
     WheypointStatus,
+    NextAction,
+    NextMove,
     load,
 )
 from easy_cheese_schemas.wheypoint import (
@@ -739,3 +741,19 @@ def test_an_unknown_durability_level_is_rejected() -> None:
 def test_an_unknown_next_move_is_rejected() -> None:
     problems = refused(record(next_action=next_action(move="vibes")), WheypointRecord)
     assert blames(problems, "WheypointRecord.next_action.move")
+
+def test_cut_round_trips_through_record_and_projection_with_receipt_pointer() -> None:
+    receipt = ".cheese/cut/widget.json"
+    payload = record(next_action=next_action(move="cut", artifact=receipt))
+
+    value = structured(payload, WheypointRecord)
+    assert isinstance(value.next_action, NextAction)
+    assert value.next_action.move is NextMove.CUT
+    assert value.next_action.artifact == receipt
+
+    projected = structured(
+        projection(next_action=next_action(move="cut", artifact=receipt)),
+        WheypointProjection,
+    )
+    assert projected.next_action.move is NextMove.CUT
+    assert projected.next_action.artifact == receipt

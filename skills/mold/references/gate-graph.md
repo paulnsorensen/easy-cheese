@@ -61,3 +61,18 @@ node it feeds the handshake and is kept in lockstep with the `handshake.md`
 checklist. It makes the most consequential lean — narrowing scope via `Non-goals`
 — a first-class, testable gate rather than a prose-only check (ADR-002). The
 audit procedure lives in `handshake.md` § Non-goals audit.
+
+## Fork taste decomposition gate
+
+`fork_taste_test_passed` is the only edge into the curd-block decomposer. Mold
+must hash the exact draft, then accept a strict `ForkTasteVerdict` whose
+coverage names every settled consequential decision exactly once. The verdict
+has no stale digest, missing reflection, contradiction, orphan, unsupported
+assumption, or acceptance gap; a semantic `pass` carrying blockers is also a
+failure. A failure returns only its named fork ids for reopening. The initial
+verdict and two corrective rounds are the complete budget; the third failure
+halts before decomposition and before the two-key handshake.
+
+The corresponding automatic red-gate handoff is `/cut --auto <durable spec
+pointer>`. It passes the durable pointer and the approved applicability,
+contract, and taste metadata unchanged.

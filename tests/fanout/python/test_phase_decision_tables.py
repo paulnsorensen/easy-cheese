@@ -35,10 +35,29 @@ class TestTableShapes:
         ]
 
     def test_parallel_curd_table(self, phase_decision: ModuleType) -> None:
-        assert phase_decision.PARALLEL_CURD == ["cook", "press", "age", "cure", "age"]
+        assert phase_decision.PARALLEL_CURD == ["cook", "age", "cure", "age"]
 
     def test_parallel_postmerge_table(self, phase_decision: ModuleType) -> None:
         assert phase_decision.PARALLEL_POSTMERGE == ["press", "age", "cure", "age"]
+
+    def test_not_applicable_tables_omit_press(
+        self, phase_decision: ModuleType
+    ) -> None:
+        assert phase_decision.NOT_APPLICABLE_LINEAR == [
+            "cook",
+            "age",
+            "cure",
+            "age",
+            "cure",
+            "age",
+        ]
+        assert phase_decision.NOT_APPLICABLE_CURD == [
+            "cook",
+            "age",
+            "cure",
+            "age",
+        ]
+        assert phase_decision.NOT_APPLICABLE_POSTMERGE == ["age", "cure", "age"]
 
     def test_default_table_is_linear(self, phase_decision: ModuleType) -> None:
         # Calling decide without a table must behave exactly like linear mode.
@@ -47,35 +66,35 @@ class TestTableShapes:
 
 
 class TestParallelCurdTable:
-    def test_cook_spawns_press(self, phase_decision: ModuleType) -> None:
+    def test_cook_spawns_age(self, phase_decision: ModuleType) -> None:
         r = phase_decision.decide(0, "ok", table=phase_decision.PARALLEL_CURD)
         assert r["action"] == "spawn"
-        assert r["next_phase"] == "press"
+        assert r["next_phase"] == "age"
 
     def test_age_spawns_cure(self, phase_decision: ModuleType) -> None:
-        r = phase_decision.decide(2, "ok", "cure", table=phase_decision.PARALLEL_CURD)
+        r = phase_decision.decide(1, "ok", "cure", table=phase_decision.PARALLEL_CURD)
         assert r["action"] == "spawn"
         assert r["next_phase"] == "cure"
 
     def test_cure_spawns_final_age(self, phase_decision: ModuleType) -> None:
-        r = phase_decision.decide(3, "ok", table=phase_decision.PARALLEL_CURD)
+        r = phase_decision.decide(2, "ok", table=phase_decision.PARALLEL_CURD)
         assert r["action"] == "spawn"
         assert r["next_phase"] == "age"
 
     def test_final_age_is_publishable_only_when_done(self, phase_decision: ModuleType) -> None:
-        done = phase_decision.decide(4, "ok", "done", table=phase_decision.PARALLEL_CURD)
+        done = phase_decision.decide(3, "ok", "done", table=phase_decision.PARALLEL_CURD)
         assert done["action"] == "stop"
-        blocked = phase_decision.decide(4, "ok", "cure", table=phase_decision.PARALLEL_CURD)
+        blocked = phase_decision.decide(3, "ok", "cure", table=phase_decision.PARALLEL_CURD)
         assert blocked["action"] == "halt"
 
     def test_index_past_end_raises(self, phase_decision: ModuleType) -> None:
         with pytest.raises(phase_decision.cli.CliError):
-            phase_decision.decide(5, "ok", table=phase_decision.PARALLEL_CURD)
+            phase_decision.decide(4, "ok", table=phase_decision.PARALLEL_CURD)
 
     def test_first_age_next_done_clean_completes(self, phase_decision: ModuleType) -> None:
         # A clean first age ends the curd: its bound review context becomes
         # the final review identity; cure and final age are skipped.
-        r = phase_decision.decide(2, "ok", "done", table=phase_decision.PARALLEL_CURD)
+        r = phase_decision.decide(1, "ok", "done", table=phase_decision.PARALLEL_CURD)
         assert r["action"] == "clean_complete"
         assert r["next_phase"] is None
         assert "review context" in r["exit_message"]
@@ -84,24 +103,56 @@ class TestParallelCurdTable:
     def test_first_age_next_done_normalised_clean_completes(
         self, phase_decision: ModuleType, nxt: str
     ) -> None:
-        r = phase_decision.decide(2, "ok", nxt, table=phase_decision.PARALLEL_CURD)
+        r = phase_decision.decide(1, "ok", nxt, table=phase_decision.PARALLEL_CURD)
         assert r["action"] == "clean_complete"
 
     def test_first_age_with_no_next_still_spawns_cure(self, phase_decision: ModuleType) -> None:
         # Clean-complete requires a positive done signal, never a missing field.
-        r = phase_decision.decide(2, "ok", table=phase_decision.PARALLEL_CURD)
+        r = phase_decision.decide(1, "ok", table=phase_decision.PARALLEL_CURD)
         assert r["action"] == "spawn"
         assert r["next_phase"] == "cure"
 
     def test_cure_with_next_done_still_spawns_final_age(self, phase_decision: ModuleType) -> None:
         # Only age phases may clean-complete; a stray done from cure spawns on.
-        r = phase_decision.decide(3, "ok", "done", table=phase_decision.PARALLEL_CURD)
+        r = phase_decision.decide(2, "ok", "done", table=phase_decision.PARALLEL_CURD)
         assert r["action"] == "spawn"
         assert r["next_phase"] == "age"
 
     def test_halt_short_circuits(self, phase_decision: ModuleType) -> None:
         r = phase_decision.decide(1, "halt: boom", table=phase_decision.PARALLEL_CURD)
         assert r["action"] == "halt"
+
+
+
+class TestNotApplicableTables:
+    def test_linear_cook_spawns_age(self, phase_decision: ModuleType) -> None:
+        result = phase_decision.decide(
+            0, "ok", table=phase_decision.NOT_APPLICABLE_LINEAR
+        )
+        assert result["next_phase"] == "age"
+
+    def test_curd_first_age_can_clean_complete(
+        self, phase_decision: ModuleType
+    ) -> None:
+        result = phase_decision.decide(
+            1,
+            "ok",
+            "done",
+            table=phase_decision.NOT_APPLICABLE_CURD,
+        )
+        assert result["action"] == "clean_complete"
+
+    def test_postmerge_age_still_spawns_cure(
+        self, phase_decision: ModuleType
+    ) -> None:
+        result = phase_decision.decide(
+            0,
+            "ok",
+            "done",
+            table=phase_decision.NOT_APPLICABLE_POSTMERGE,
+        )
+        assert result["action"] == "spawn"
+        assert result["next_phase"] == "cure"
 
 
 class TestParallelPostmergeTable:
@@ -141,7 +192,7 @@ class TestCliTableFlag:
 
     def test_parallel_curd_final_age_terminal(self) -> None:
         result = self._run(
-            "--phase-index", "4", "--status", "ok", "--next", "done",
+            "--phase-index", "3", "--status", "ok", "--next", "done",
             "--table", "parallel-curd",
         )
         assert result.returncode == 0
@@ -156,7 +207,7 @@ class TestCliTableFlag:
 
     def test_parallel_curd_first_age_done_clean_completes(self) -> None:
         result = self._run(
-            "--phase-index", "2", "--status", "ok", "--next", "done",
+            "--phase-index", "1", "--status", "ok", "--next", "done",
             "--table", "parallel-curd",
         )
         assert result.returncode == 0
@@ -173,6 +224,18 @@ class TestCliTableFlag:
         decision = json.loads(result.stdout)
         assert decision["action"] == "spawn"
         assert decision["next_phase"] == "cure"
+
+    def test_not_applicable_table_skips_press(self) -> None:
+        result = self._run(
+            "--phase-index",
+            "0",
+            "--status",
+            "ok",
+            "--table",
+            "not-applicable-linear",
+        )
+        assert result.returncode == 0
+        assert json.loads(result.stdout)["next_phase"] == "age"
 
     def test_default_table_is_linear(self) -> None:
         result = self._run("--phase-index", "6", "--status", "ok", "--next", "done")

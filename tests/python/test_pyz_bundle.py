@@ -5,6 +5,7 @@ imports from inside the zip — no sys.path traversal, and no other skill's code
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -43,13 +44,15 @@ SKILL_SUBCOMMANDS = {
         "pr_plan_to_branches",
     ],
     "affinage": ["pr-status"],
-    "mold": ["artifact-path", "curd-count", "gate-graph", "render_html"],
+    "mold": ["artifact-path", "curd-count", "gate-graph", "render_html", "taste-test"],
     "briesearch": ["artifact-path", "ground-check"],
     "cook": ["artifact-path"],
+    "cut": ["red-gate"],
     "wheypoint": ["commit", "resolve", "show", "lint"],
     "age": ["html-report"],
     "hard-cheese": ["append-attempt", "freshness-check"],
     "pasteurize": ["debug-tag-sweep", "repro-rerun", "pasteurize-route"],
+    "press": ["press-route"],
     "common": [
         "slugify",
         "write_handoff_artifact",
@@ -144,21 +147,27 @@ def test_unknown_subcommand_is_rejected(bundles: Path, skill: str) -> None:
     assert "usage" in result.stderr.lower()
 
 
-def test_melt_subcommand_executes_with_forwarded_args(bundles: Path, tmp_path: Path) -> None:
+def test_melt_subcommand_executes_with_forwarded_args(
+    bundles: Path, tmp_path: Path
+) -> None:
     """A real subcommand runs end-to-end through the bundle: proves argv forwarding,
     the shared git_utils import resolving, and correct routing."""
     conflict = tmp_path / "f.txt"
     conflict.write_text(
         "before\n<<<<<<< HEAD\nOURS_LINE\n=======\nTHEIRS_LINE\n>>>>>>> branch\nafter\n"
     )
-    result = _run(bundles / "melt.pyz", "conflict-pick", str(conflict), "--theirs", "--dry-run")
+    result = _run(
+        bundles / "melt.pyz", "conflict-pick", str(conflict), "--theirs", "--dry-run"
+    )
     assert result.returncode == 0, result.stderr
     assert "THEIRS_LINE" in result.stdout
     assert "OURS_LINE" not in result.stdout
     assert "<<<<<<<" not in result.stdout
 
 
-def test_ultracook_routing_is_subcommand_specific(bundles: Path, tmp_path: Path) -> None:
+def test_ultracook_routing_is_subcommand_specific(
+    bundles: Path, tmp_path: Path
+) -> None:
     empty = tmp_path / "empty.json"
     empty.write_text("{}")
     manifest = _run(bundles / "ultracook.pyz", "validate_manifest", str(empty))
@@ -184,7 +193,9 @@ def test_bundle_carries_only_its_own_skill(bundles: Path) -> None:
     affinage = set(zipfile.ZipFile(bundles / "affinage.pyz").namelist())
     assert "pr_status.py" in affinage
     assert "age_route.py" in affinage  # affinage's own age-route subcommand
-    assert "manifest_io.py" in affinage  # age-route's own import, not cross-skill vendoring
+    assert (
+        "manifest_io.py" in affinage
+    )  # age-route's own import, not cross-skill vendoring
     # review-surface (affinage's own subcommand) imports both, so they vendor in by design.
     assert "git_utils.py" in affinage
     assert "cli.py" in affinage
@@ -198,8 +209,46 @@ def test_ultracook_bundle_contains_entity_modules(bundles: Path) -> None:
     The local-sibling-bundling feature in build_pyz must stage them so that
     validate_decomposition and validate_manifest can import them inside the .pyz."""
     cf = set(zipfile.ZipFile(bundles / "ultracook.pyz").namelist())
-    assert "curd.py" in cf, f"curd.py missing from ultracook bundle; contents: {sorted(cf)}"
-    assert "wiring.py" in cf, f"wiring.py missing from ultracook bundle; contents: {sorted(cf)}"
+    assert "curd.py" in cf, (
+        f"curd.py missing from ultracook bundle; contents: {sorted(cf)}"
+    )
+    assert "wiring.py" in cf, (
+        f"wiring.py missing from ultracook bundle; contents: {sorted(cf)}"
+    )
+
+
+def test_cut_bundle_carries_red_gate_and_schema_runtime(bundles: Path) -> None:
+    names = set(zipfile.ZipFile(bundles / "cut.pyz").namelist())
+    assert {"red_gate.py", "gate_receipts.py"}.issubset(names)
+    assert "easy_cheese_schemas/__init__.py" in names
+    assert "easy_cheese_schemas/gates.py" in names
+    assert "attrs-26.1.0.dist-info/METADATA" in names
+    assert "cattrs/converters.py" in names
+    assert "taste_test.py" in names
+
+
+def test_cut_bundle_exposes_red_gate_subcommands(bundles: Path) -> None:
+    result = _run(bundles / "cut.pyz", "red-gate")
+    assert result.returncode == 2
+    usage = result.stdout + result.stderr
+    assert all(
+        command in usage for command in ("contracts", "begin", "issue", "validate")
+    )
+
+
+def test_press_bundle_loads_router_and_requires_phase_token(bundles: Path) -> None:
+    result = _run(
+        bundles / "press.pyz",
+        "press-route",
+        stdin='{"outcome": "green", "current_receipt": "press-cut.json"}',
+    )
+
+    assert result.returncode == 1
+    assert (
+        result.stderr.strip()
+        == "ERROR: request must contain exactly outcome, current_receipt, "
+        "phase_token_ref, and phase_token_sha256"
+    )
 
 
 def test_ultracook_baseline_classifies_failures_via_stdin(bundles: Path) -> None:
@@ -211,7 +260,7 @@ def test_ultracook_baseline_classifies_failures_via_stdin(bundles: Path) -> None
     )
     result = _run(bundles / "ultracook.pyz", "baseline", stdin=payload)
     assert result.returncode == 0, result.stderr
-    import json
+
     classification = json.loads(result.stdout)
     assert classification["new"] == [{"suite": "s", "test_id": "t", "signature": "x"}]
     assert classification["identical"] == []
@@ -243,7 +292,10 @@ def test_ultracook_baseline_rejects_wrong_typed_value(bundles: Path) -> None:
 
 # Pinned env so the resolved corpus path is deterministic and does not depend on
 # the test host's git remote or real XDG dirs.
-_CORPUS_ENV = {"EASY_CHEESE_HOME": "/tmp/ec-corpus", "EASY_CHEESE_PROJECT": "demo-project"}
+_CORPUS_ENV = {
+    "EASY_CHEESE_HOME": "/tmp/ec-corpus",
+    "EASY_CHEESE_PROJECT": "demo-project",
+}
 
 
 @pytest.mark.parametrize("skill", ARTIFACT_PATH_SKILLS)
@@ -261,7 +313,13 @@ def test_artifact_path_specs_matches_paths_module(bundles: Path, skill: str) -> 
                 os.environ.pop(k, None)
             else:
                 os.environ[k] = v
-    result = _run(bundles / f"{skill}.pyz", "artifact-path", "specs", "demo-slug", extra_env=_CORPUS_ENV)
+    result = _run(
+        bundles / f"{skill}.pyz",
+        "artifact-path",
+        "specs",
+        "demo-slug",
+        extra_env=_CORPUS_ENV,
+    )
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == expected
 
@@ -270,7 +328,11 @@ def test_artifact_path_research_returns_corpus_root(bundles: Path) -> None:
     """research resolves to the bare project corpus root; briesearch composes the
     nested research/<slug>/<slug>.md layout on top of it."""
     result = _run(
-        bundles / "briesearch.pyz", "artifact-path", "research", "demo-slug", extra_env=_CORPUS_ENV
+        bundles / "briesearch.pyz",
+        "artifact-path",
+        "research",
+        "demo-slug",
+        extra_env=_CORPUS_ENV,
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "/tmp/ec-corpus/demo-project"
@@ -284,23 +346,47 @@ def test_artifact_path_research_returns_root_and_ignores_slug(bundles: Path) -> 
     appending the slug for research, that change must be deliberate, not silent."""
     # A slug that validate_slug would reject is accepted on the research path because
     # the shim never validates it; the output is the same bare root either way.
-    bad = _run(bundles / "briesearch.pyz", "artifact-path", "research", "Bad_Slug", extra_env=_CORPUS_ENV)
+    bad = _run(
+        bundles / "briesearch.pyz",
+        "artifact-path",
+        "research",
+        "Bad_Slug",
+        extra_env=_CORPUS_ENV,
+    )
     assert bad.returncode == 0, bad.stderr
     assert bad.stdout.strip() == "/tmp/ec-corpus/demo-project"
     # The slug is not appended to the path for research (contrast with specs).
     assert "Bad_Slug" not in bad.stdout
-    other = _run(bundles / "briesearch.pyz", "artifact-path", "research", "totally-different-slug", extra_env=_CORPUS_ENV)
+    other = _run(
+        bundles / "briesearch.pyz",
+        "artifact-path",
+        "research",
+        "totally-different-slug",
+        extra_env=_CORPUS_ENV,
+    )
     assert other.stdout.strip() == bad.stdout.strip()
 
 
 def test_artifact_path_rejects_bad_slug(bundles: Path) -> None:
-    result = _run(bundles / "mold.pyz", "artifact-path", "specs", "Bad_Slug", extra_env=_CORPUS_ENV)
+    result = _run(
+        bundles / "mold.pyz",
+        "artifact-path",
+        "specs",
+        "Bad_Slug",
+        extra_env=_CORPUS_ENV,
+    )
     assert result.returncode == 1
     assert "kebab-case" in result.stderr
 
 
 def test_artifact_path_rejects_unknown_phase(bundles: Path) -> None:
-    result = _run(bundles / "mold.pyz", "artifact-path", "nonsense", "demo-slug", extra_env=_CORPUS_ENV)
+    result = _run(
+        bundles / "mold.pyz",
+        "artifact-path",
+        "nonsense",
+        "demo-slug",
+        extra_env=_CORPUS_ENV,
+    )
     assert result.returncode == 1
     assert "unknown phase" in result.stderr
 
@@ -345,21 +431,31 @@ def test_ground_check_passes_grounded_report(bundles: Path, tmp_path: Path) -> N
     """A fully-cited report whose only absence claim is hedged (speculating +
     'searched') is clean — the gate enforces grounding, it does not forbid
     well-grounded negatives."""
-    result = _run(bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, _GROUNDED_REPORT)))
+    result = _run(
+        bundles / "briesearch.pyz",
+        "ground-check",
+        str(_write(tmp_path, _GROUNDED_REPORT)),
+    )
     assert result.returncode == 0, result.stderr
     assert "grounding ok" in result.stderr
 
 
-def test_ground_check_rejects_nonlabel_confidence(bundles: Path, tmp_path: Path) -> None:
+def test_ground_check_rejects_nonlabel_confidence(
+    bundles: Path, tmp_path: Path
+) -> None:
     """Confidence must be one of the three exact labels. A synonym like 'high' is a
     silent confidence drift the cap rules can't reason about — fail it."""
     body = _GROUNDED_REPORT.replace("| certain |", "| high |")
-    result = _run(bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body)))
+    result = _run(
+        bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body))
+    )
     assert result.returncode == 1, result.stderr
     assert "CONFIDENCE" in result.stderr
 
 
-def test_ground_check_absence_advisory_does_not_fail(bundles: Path, tmp_path: Path) -> None:
+def test_ground_check_absence_advisory_does_not_fail(
+    bundles: Path, tmp_path: Path
+) -> None:
     """A cited, certain absence claim with no ruling-out phrase is surfaced as an
     ADVISORY (feeds the synthesis-fidelity self-check) but does NOT fail the gate:
     observed-vs-inferred absence is not decidable from text, so it is flagged for
@@ -368,7 +464,9 @@ def test_ground_check_absence_advisory_does_not_fail(bundles: Path, tmp_path: Pa
         "| No broader sandbox knob was found in the config reference searched | [^s1] | vendor docs | 2026-06-01 | speculating | only config.toml checked |",
         "| Codex does not expose a global sandbox knob | [^s1] | vendor docs | 2026-06-01 | certain | |",
     )
-    result = _run(bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body)))
+    result = _run(
+        bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body))
+    )
     assert result.returncode == 0, result.stderr
     assert "ADVISORY" in result.stderr
     assert "ABSENCE" in result.stderr
@@ -383,7 +481,9 @@ def test_ground_check_no_table_is_error(bundles: Path, tmp_path: Path) -> None:
     assert "no evidence table" in result.stderr
 
 
-def test_ground_check_accepts_url_and_raw_path_citations(bundles: Path, tmp_path: Path) -> None:
+def test_ground_check_accepts_url_and_raw_path_citations(
+    bundles: Path, tmp_path: Path
+) -> None:
     """A verifiable citation is a footnote, URL, path:line, OR a raw-capture path —
     not just the footnote form the headline test uses. Locks all marker branches so a
     narrowed citation regex (e.g. footnote-only) fails loudly instead of rejecting
@@ -394,7 +494,9 @@ def test_ground_check_accepts_url_and_raw_path_citations(bundles: Path, tmp_path
         "| A holds | https://example.com/a | certain |\n"
         "| B holds | raw/01-example.md#L3-8 | certain |\n"
     )
-    result = _run(bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body)))
+    result = _run(
+        bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body))
+    )
     assert result.returncode == 0, result.stderr
     assert "grounding ok" in result.stderr
 
@@ -412,14 +514,18 @@ def test_ground_check_scans_every_table(bundles: Path, tmp_path: Path) -> None:
         "| Y holds | naming a source in prose | certain |\n\n"
         "## References\n[^s1]: https://example.com (fetched 2026-06-01).\n"
     )
-    result = _run(bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body)))
+    result = _run(
+        bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body))
+    )
     assert result.returncode == 1, result.stderr
     assert "CITATION" in result.stderr
     assert "Y holds" in result.stderr
     assert "2 table(s)" in result.stderr
 
 
-def test_ground_check_reads_source_column_in_three_col_table(bundles: Path, tmp_path: Path) -> None:
+def test_ground_check_reads_source_column_in_three_col_table(
+    bundles: Path, tmp_path: Path
+) -> None:
     """The real deep-report artifact uses | Claim | Source | Confidence |. The gate must
     map the Source column as the evidence column: a claim whose Claim cell has no
     citation but whose Source cell does must PASS. Locks the Source≡Evidence mapping —
@@ -430,7 +536,9 @@ def test_ground_check_reads_source_column_in_three_col_table(bundles: Path, tmp_
         "| Claim | Source | Confidence |\n| --- | --- | --- |\n"
         "| Z holds | https://example.com/z | certain |\n"
     )
-    result = _run(bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body)))
+    result = _run(
+        bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body))
+    )
     assert result.returncode == 0, result.stderr
 
 
@@ -448,12 +556,16 @@ def test_ground_check_absence_guard_flags_inferred_absence_without_false_positiv
         "| The knob was not found in the two references searched | [^s1] | certain |\n\n"
         "## References\n[^s1]: https://example.com (fetched 2026-06-01).\n"
     )
-    result = _run(bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body)))
+    result = _run(
+        bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body))
+    )
     assert result.returncode == 0, result.stderr
     assert result.stderr.count("ADVISORY") == 1
 
 
-def test_ground_check_rejects_numeric_ratio_as_citation(bundles: Path, tmp_path: Path) -> None:
+def test_ground_check_rejects_numeric_ratio_as_citation(
+    bundles: Path, tmp_path: Path
+) -> None:
     """The inline path:line citation marker must require a real, alpha-led file
     extension. A numeric ratio/timestamp/verse ('4.5:1', '3.30:15') is <word>.<digit>:<digit>
     shaped and would satisfy a loose `\\.\\w+:\\d+` matcher, letting an un-cited prose
@@ -464,13 +576,17 @@ def test_ground_check_rejects_numeric_ratio_as_citation(bundles: Path, tmp_path:
         "| Claim | Evidence | Confidence |\n| --- | --- | --- |\n"
         "| WCAG AA needs a 4.5:1 contrast ratio | the 4.5:1 ratio is recommended | certain |\n"
     )
-    result = _run(bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body)))
+    result = _run(
+        bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body))
+    )
     assert result.returncode == 1, result.stderr
     assert "CITATION" in result.stderr
     assert "contrast ratio" in result.stderr
 
 
-def test_ground_check_flags_short_row_as_malformed(bundles: Path, tmp_path: Path) -> None:
+def test_ground_check_flags_short_row_as_malformed(
+    bundles: Path, tmp_path: Path
+) -> None:
     """A data row with fewer cells than the header's column count can't be graded —
     the evidence/confidence cells it claims to have are missing. The gate must fail it
     as MALFORMED rather than index past the row's end or skip it silently, so a
@@ -481,7 +597,9 @@ def test_ground_check_flags_short_row_as_malformed(bundles: Path, tmp_path: Path
         "| A holds | [^s1] |\n\n"
         "## References\n[^s1]: https://example.com (fetched 2026-06-01).\n"
     )
-    result = _run(bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body)))
+    result = _run(
+        bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body))
+    )
     assert result.returncode == 1, result.stderr
     assert "MALFORMED" in result.stderr
 
@@ -501,7 +619,9 @@ def test_bundle_build_is_byte_deterministic(tmp_path: Path) -> None:
         assert result.returncode == 0, result.stderr
 
     for skill in SKILL_SUBCOMMANDS:
-        assert (first / f"{skill}.pyz").read_bytes() == (second / f"{skill}.pyz").read_bytes()
+        assert (first / f"{skill}.pyz").read_bytes() == (
+            second / f"{skill}.pyz"
+        ).read_bytes()
 
 
 def test_common_slugify_executes_end_to_end(bundles: Path, tmp_path: Path) -> None:
@@ -515,7 +635,7 @@ def test_common_slugify_executes_end_to_end(bundles: Path, tmp_path: Path) -> No
         "--json",
     )
     assert result.returncode == 0, result.stderr
-    import json
+
     payload = json.loads(result.stdout)
     assert payload["slug"] == "fix-off-by-one-error"
 
@@ -525,8 +645,15 @@ def test_common_bundle_carries_clis_plus_libs_not_skill_scripts(bundles: Path) -
     paths, cli, etc.) but must NOT carry any skill-specific script."""
     content = set(zipfile.ZipFile(bundles / "common.pyz").namelist())
     # All COMMON_SUBCOMMANDS must be present as module files
-    for sub in ["slugify", "write_handoff_artifact", "read_handoff_slug",
-                "findings_cli", "gates_cli", "paths_cli", "handoff_cli"]:
+    for sub in [
+        "slugify",
+        "write_handoff_artifact",
+        "read_handoff_slug",
+        "findings_cli",
+        "gates_cli",
+        "paths_cli",
+        "handoff_cli",
+    ]:
         assert f"{sub}.py" in content, f"{sub}.py missing from common.pyz"
     # Skill scripts must not be present
     assert "conflict_pick.py" not in content
@@ -688,11 +815,14 @@ def test_local_skill_modules_finds_libs_and_excludes_subcommands() -> None:
     in ultracook's registered scripts imports it anymore."""
     local = build_pyz._local_skill_modules("ultracook")
     assert local == {"curd", "wiring", "age_route"}, local
-    assert "validate_decomposition" not in local  # registered subcommand, not a local lib
+    assert (
+        "validate_decomposition" not in local
+    )  # registered subcommand, not a local lib
     assert "validate_manifest" not in local
     assert "schema" not in local  # shared module (shared/scripts), not src/fanout
     assert "review_surface" not in local  # dropped with the review-surface subcommand
     assert "review_surface_cli" not in local
+
 
 def test_age_bundle_exposes_html_report_help(bundles: Path) -> None:
     """age.pyz should expose the new html-report subcommand and its CLI surface."""
@@ -707,7 +837,9 @@ def test_age_bundle_exposes_html_report_help(bundles: Path) -> None:
     assert "--out-dir" in help_text
 
 
-def test_age_bundle_html_report_runs_from_inside_bundle(bundles: Path, tmp_path: Path) -> None:
+def test_age_bundle_html_report_runs_from_inside_bundle(
+    bundles: Path, tmp_path: Path
+) -> None:
     """Smoke-run html-report end-to-end so a module-name collision (the age
     entrypoint shadowing the shared html_report renderer) can't hide behind a
     --help-only check that never reaches render_document."""
@@ -722,7 +854,14 @@ def test_age_bundle_html_report_runs_from_inside_bundle(bundles: Path, tmp_path:
         encoding="utf-8",
     )
     result = _run(
-        age_pyz, "html-report", "--report", str(report), "--slug", "demo", "--out-dir", str(tmp_path)
+        age_pyz,
+        "html-report",
+        "--report",
+        str(report),
+        "--slug",
+        "demo",
+        "--out-dir",
+        str(tmp_path),
     )
     assert result.returncode == 0, result.stdout + result.stderr
     out_html = tmp_path / "age-demo.html"

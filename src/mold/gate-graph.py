@@ -31,12 +31,11 @@ from pathlib import Path
 RENDER_TARGETS = ("dot", "svg", "png", "mermaid")
 BINARY_TARGETS = {"svg", "png"}
 
-
 @dataclass(frozen=True)
 class Node:
     id: str
     label: str
-    kind: str  # "mode" | "gate" | "terminal" | "handshake"
+    kind: str  # "mode" | "gate" | "decomposer" | "terminal" | "handshake"
 
 
 @dataclass(frozen=True)
@@ -72,7 +71,7 @@ def gate_id(checklist_label: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", head.strip().lower()).strip("-")
 
 
-# The 13 coherence-checklist gates, verbatim from handshake.md's checklist (the
+# The 14 coherence-checklist gates, verbatim from handshake.md's checklist (the
 # text before each colon is the gate's name; gate_id() slugs it). Order matches
 # the prose so a diff between the two is legible.
 COHERENCE_GATES: tuple[str, ...] = (
@@ -89,6 +88,7 @@ COHERENCE_GATES: tuple[str, ...] = (
     "Quality gates specified (≥1 runnable command)",
     "Reproduction loop captured if Diagnose ran (or [BLOCKED] if no loop is possible)",
     "Durable writes: ADR + domain-model targets resolved and the write, read-back, and completion-record protocol committed for the atomic step (or loud fallback noted)",
+    "Fork taste test passed: fresh-context verdict covers every settled consequential decision before decomposition",
 )
 
 MODES: tuple[Node, ...] = (
@@ -101,20 +101,29 @@ MODES: tuple[Node, ...] = (
 )
 
 HANDSHAKE = Node("handshake", "Two-key handshake", "handshake")
+DECOMPOSER = Node("decomposer", "Curd-block decomposer", "decomposer")
 CURDLE = Node("curdle", "Curdle (extract spec)", "terminal")
 
 
 def _build_model() -> GateModel:
     gates = tuple(_gate(label) for label in COHERENCE_GATES)
-    nodes = (*MODES, *gates, HANDSHAKE, CURDLE)
+    nodes = (*MODES, *gates, DECOMPOSER, HANDSHAKE, CURDLE)
     edges = (
         Edge("explore", "ground"),
         Edge("ground", "shape"),
         Edge("shape", "sketch"),
         Edge("sketch", "grill"),
         Edge("diagnose", "shape"),
-        # every gate feeds the handshake; the handshake unlocks curdle.
-        *(Edge(g.id, "handshake") for g in gates),
+        # Taste must pass before the curd-block decomposer; every other gate
+        # feeds the handshake directly.
+        *(
+            Edge(
+                gate.id,
+                DECOMPOSER.id if gate.id == "fork-taste-test-passed" else HANDSHAKE.id,
+            )
+            for gate in gates
+        ),
+        Edge(DECOMPOSER.id, HANDSHAKE.id),
         Edge("grill", "handshake"),
         Edge("handshake", "curdle", "both keys"),
     )

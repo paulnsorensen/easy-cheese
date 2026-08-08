@@ -10,25 +10,24 @@ metadata: {dispatches-agents: true}
 Two modes, by analogy to `/culture`:
 
 1. **User-invoked full ceremony (default).** The user typed `/mold` (or `/cheese` routed an explicit fuzzy-design ask straight here). Runs the full Explore/Ground/Shape/Sketch/Grill/Diagnose dialogue and the two-key handshake before any spec is written; the Flow below describes it.
-2. **Agent-invoked mini-spec mode.** `/cheese` calls into `/mold` at tier 1 of its escalation (`skills/cheese/SKILL.md` § Escalation) when the cook fast-path checks all pass and a spec must materialise before `/cook --auto` runs. No dialogue, no handshake. See `## Agent-invoked mini-spec mode` below.
+2. **Agent-invoked mini-spec mode.** `/cheese` calls into `/mold` at tier 1 of its escalation (`skills/cheese/SKILL.md` § Escalation) when the cook fast-path checks all pass and a spec must materialise before the gate-applicability route runs. No dialogue, no handshake. See `## Agent-invoked mini-spec mode` below.
 
 ## Flow
 
-1. **Bounds pass** — before routing, run one Explore-style bounds round for *every* input shape: map the problem's edges to candidate goals and **non-goals**, asking the user rather than assuming. Open the per-round decision ledger (`Decided / Asking / [AGENT-DECIDED]`; see `## Rules`). Tier it — a clear input gets a single fast confirm, not a full A/B/C/D menu — but never skip it. When the dialogue reveals full-spec-sized work, warn to upgrade tier (harness-detected: claude `/model opus` + `/effort`; codex/OMP equivalent; generic fallback) before continuing.
-2. **Route** — pick the *secondary* mode from the input shape (see `references/modes.md`) and announce it in one line. If the user's framing rests on a false premise or a loaded assumption, name it before routing.
-3. **Dialogue** — build shared understanding: every consequential fork is the user's to pick, surfaced as a choice, never settled for them. Contribute full depth (options, edge cases, evidence) to inform each question, never to replace asking it. Ground every critical claim via the selected source-code search/read backend, a Validate Cycle (`references/validate-cycle.md`), or — for an ungrillable design unknown — a Prototype Cycle (`references/prototype-cycle.md`); both are sub-agent-spawnable mid-dialogue, in parallel, context-bounded (soft backstop of 10). Track and resolve contradictions across turns before continuing. After 3 consecutive fork questions, or on "what forks are left?", render the decision map (`## Rules` § Decision map).
-4. **Sketch** — for any feature touching >1 module or a new public interface, run the shape check (`references/shape-check.md`) on the touched symbols, then lock seams in pseudocode signatures before talking spec content. While the code is open, bind every identity/ownership-role noun to a code referent per `references/handshake.md` § Entity-referent binding — a search hit of a *different* referent is an alias, not a pass.
-5. **Plan for approval** — once the draft spec and any pre-Curdle follow-up disposition are complete, dispatch a typed `PlannerRequest` and validate its `PlannerResultWriterView`. Normalize it on the host and persist only the typed `PlannerResult` and `CurdPlan` artifacts. The legacy `CurdBlock`/`Decomposition` projection is migration-only: request it explicitly and require a lossless projection or `UnsupportedProjection`. Present the typed plan's semantic curds and waves at the handshake. See `references/curdle.md` § "Pre-approval typed planner dispatch".
+1. **Bounds pass** — map every input's goals and **non-goals** before routing; ask the user rather than assume. Open the `Decided / Asking / [AGENT-DECIDED]` ledger. Clear work gets one fast confirm; full-spec work gets an upgrade-tier warning.
+2. **Route** — choose the secondary mode from `references/modes.md`, announce it, and correct false premises first.
+3. **Dialogue** — consequential forks are the user's to pick. Supply options, trade-offs, and evidence before asking; ground critical claims through code, the [Validate Cycle](references/validate-cycle.md), or a [Prototype Cycle](references/prototype-cycle.md). Resolve contradictions and render the decision map after three consecutive fork questions or on request.
+4. **Sketch** — for work spanning modules or adding a public interface, run `references/shape-check.md`, bind identity/role nouns to code referents, and lock seams as pseudocode signatures.
+5. **Plan for approval** — first run the fresh-context fork-coherence taste test from `src/mold/taste_test.py` and persist its digest-bound pass. A failure reopens only named forks; halt after the third failed verdict. Only then dispatch a typed `PlannerRequest` and validate its `PlannerResultWriterView`; retry an invalid result once and stop before the handshake if it remains invalid. Normalize it on the host and persist only the typed `PlannerResult` and `CurdPlan` artifacts. The legacy `CurdBlock`/`Decomposition` projection is migration-only: request it explicitly and require a lossless projection or `UnsupportedProjection`. Present the typed plan's semantic curds and waves at the handshake. See `references/curdle.md` § "Pre-approval typed planner dispatch".
 6. **Two-key handshake** — both the user (explicit verb) and the agent (coherence self-check) must agree to the draft spec and displayed typed plan before extraction. Neither key changes or disappears. See `references/handshake.md`.
 7. **Curdle** — resolve the durable spec path with `SPEC=$(python3 shared/scripts/artifact_path.py specs <slug>)` (bundle-only host fallback: `python3 skills/mold/scripts/mold.pyz artifact-path specs <slug>`). Phase one writes every local artifact and write-ahead prepared state *before any external call*: the approved spec at `"$SPEC"`, the host-validated `PlannerResult` and `CurdPlan`, any local issue drafts, and the session's non-obvious decisions as durable ADRs. Phase two then publishes approved follow-ups, retains prepared recovery state when an external capability is unavailable or publication fails, and reconciles their state and references into the durable spec before any handoff.
-8. **Count and hand off** — only after phase-two publication attempts and reconciliation finish, run `python3 skills/mold/scripts/mold.pyz curd-count "$SPEC" --blast-radius <low|medium|high>` for the recommended downstream skill (procedure in `references/curd-count.md`), then prompt via `## Handoff`. Never dispatch before the user selects; after a non-stop selection, run the selected skill immediately.
+8. **Count and hand off** — after reconciliation, run [`mold.pyz curd-count`](references/curd-count.md), then prompt via `## Handoff`; dispatch only the user's non-stop selection.
 
-Portability reference: [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
-The handoff blocks below are the portable contract; slash commands are host renderings, not the control model.
+Portability: [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md). Prefer bundled/repo-local helpers; slash commands are host renderings, not the control model.
 
 ## Follow-up candidates
 
-Every non-goal and explicit dialogue deferral enters the session's follow-up candidate set, logged as `[FOLLOW-UP?]`. When candidates exist, the pre-Curdle disposition batch must complete before the two-key handshake can pass; omit it when none exist. Ledger notation, dialogue-state semantics, and Curdle-ordering detail: `references/handshake.md` § Follow-up disposition.
+Every non-goal and explicit dialogue deferral becomes a `[FOLLOW-UP?]` follow-up candidate. Dispose of the set before the two-key handshake; details: `references/handshake.md` § Follow-up disposition.
 
 ## Modes
 
@@ -45,7 +44,7 @@ Full mode definitions, exit criteria, and user knobs: `references/modes.md`. Tri
 
 ## Agent-invoked mini-spec mode
 
-`/cheese`'s tier-1 escalation calls into `/mold` to produce a spec without a user-facing dialogue, once the cook fast-path checks have already passed at the call site. The mode skips the Flow above entirely: derive a slug, write the mini-spec, and return the resolved spec path so `/cheese` can dispatch `/cook --auto <spec-path>`.
+`/cheese`'s tier-1 escalation calls into `/mold` to produce a spec without a user-facing dialogue, once the cook fast-path checks have already passed at the call site. The mode skips the Flow above entirely: derive a slug, write the mini-spec, parse its declared gate applicability, and return the resolved spec path with `/cut --auto <spec-path>` for `red-required` or `/cook --auto <spec-path>` for a closed `not-applicable` disposition.
 
 The two-key handshake does not fire in this mode; the agent-introduced-scope check still runs implicitly — every distinguishing noun in the mini-spec must come from the user's input or the tier-2 `/culture`/`/briesearch` synthesis, never a silent agent addition.
 
@@ -66,11 +65,48 @@ Optional tools accelerate the work but never block the dialogue. When evidence i
 
 ## Sub-agent context gate
 
-`/mold` keeps the dialogue, contradictions, approval state, and the two-key handshake in the parent context — those never delegate. Offloading heavy work to a read-only sub-agent is the **default**: `explorer` for code reads and shape checks, `researcher` for deep `/briesearch`. Spawn one whenever the work would flood the conversation with raw evidence or graph output. Triggers, digest constraints, and the inline fallback: `references/context-budget.md`.
+`/mold` owns dialogue, contradictions, and approval state. Delegate evidence-heavy reads or graphs to a fresh-context `explorer`, and external research to a `researcher`; see `references/context-budget.md`.
 
 ### Gate graph
 
-Mold's gate state machine is one machine-readable model, rendered via `python3 skills/mold/scripts/mold.pyz gate-graph --render dot|svg|png|mermaid`. `dot`/`mermaid` need no binary; `svg`/`png` use Graphviz `dot` when present and degrade to mermaid. A test keeps its gate nodes in lockstep with the `handshake.md` coherence checklist, so a gate cannot be dropped from prose. Details: `references/gate-graph.md`.
+`python3 skills/mold/scripts/mold.pyz gate-graph --render dot|svg|png|mermaid` renders one gate model. Text targets need no binary; image targets degrade to mermaid without Graphviz. Tests keep gate nodes aligned with the handshake checklist. `fork_taste_test_passed` requires a fresh-context verdict with matching digest and complete ledger coverage; see `references/gate-graph.md`.
+
+### Gate applicability and Test Contracts
+
+Every Mold-produced spec carries a provenance marker in frontmatter:
+
+```yaml
+source: mold-handshake | agent-mini-spec
+```
+
+Every spec declares `gate_applicability`:
+
+```yaml
+gate_applicability:
+  disposition: red-required | not-applicable
+  work_class: behavior | docs-only | refactor-only | test-only | appearance-only
+  ui_surface: browser | non-browser | not-applicable
+```
+
+`ui_surface` is a required machine-readable field on the new Mold production
+path. `browser` means functional browser/E2E behavior and requires every Test
+Contract to name an existing browser/E2E interface and outer seam. `non-browser`
+means ordinary behavior without a browser/E2E seam and is never inferred from
+contract prose. `not-applicable` is required for closed non-behavior classes,
+including appearance-only, and keeps their disposition N/A.
+
+`red-required` requires `behavior` plus a complete `## Test Contracts` table:
+each stable acceptance ID exactly once, with `interface`, outer `seam`,
+deterministic `expected_failure`, and `tracer` or `contract-matrix` mode.
+A contract-matrix row also declares a non-empty ratified interface version and
+the complete, unique matrix row identities; tracer rows leave both fields
+blank. `not-applicable` requires a closed non-behavior class, reason, and no
+contracts. Mold never infers applicability. Specs without a Mold provenance
+marker remain legacy-compatible for Cut and may omit `ui_surface`.
+
+### Fork taste gate
+
+`mold.pyz taste-test` binds the verdict to the draft SHA256 and every settled consequential ledger fork. Stale/partial coverage or any blocker fails; failures reopen named forks only, with two correction rounds. Approved `red-required` specs hand off unchanged metadata and durable pointer to `/cut --auto`.
 
 ## Approval gate
 
@@ -86,20 +122,18 @@ If any gate is unmet or the typed plan remains invalid after one retry, propose 
 
 ## Handoff
 
-**Pipeline:** culture → **[mold]** → cook → press → age → cure → plate
+**Pipeline:** culture → **[mold]** → cut → cook → press → age → cure → plate
 
-After Curdle's phase two finishes, run the curd-count script (procedure and `--blast-radius` rules in [`references/curd-count.md`](references/curd-count.md)), then render the branch menu below and prompt via the shared handoff gate. Never pre-select an autonomous option.
+After Curdle's phase two finishes, run `curd-count`, then prompt through the shared handoff gate ([policy](../cheese/references/handoff-gate.md)). Approved `red-required` behavior recommends `/cut --auto <durable spec pointer>` with unchanged applicability, contract, taste metadata, and any in-scope `--hard`; `/cook` is the synchronous no-receipt fallback. Never pre-select.
 
-Read the JSON digest. `/cook` is the uniform *(recommended)* option; the digest's `mode` field (`parallel`, `linear`, or `null`) is orientation-only — it explains why a branch recommends the autonomous chain and is never rendered as a skill name. Ask via the shared handoff gate ([`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md)), leading each option with the verb and the skill command (spec path plus any in-scope `--hard`) as backing detail.
-
-The three blast-radius branches — decomposable, non-decomposable high-blast-radius, and non-decomposable low/medium — each render a fixed menu keyed off the digest's `decomposable`, `candidate_curds`, `verdict`, and `mode` fields. Menu wording, the recommended/manual/stop options per branch, and `mode`'s role in choosing the branch: `references/handoff-menus.md`.
+The digest's `mode` is orientation, not a skill. Render the fixed blast-radius menu from `decomposable`, `candidate_curds`, `verdict`, and `mode`; see `references/handoff-menus.md`.
 
 ## Rules
 
 - Dialogue first; artifacts are the by-product.
-- **Tiered lettered options.** Consequential forks (scope, approach, non-goals, interface/seam, trade-offs) go to the user as `A/B/C/D` choices via the question transport at `../cheese/references/ask-user-question.md` — never resolved silently. Minor mechanical calls are logged `[AGENT-DECIDED]` inline with a one-line vetoable alternative (ADR-003). A fork is valid only after its depth was contributed in-dialogue first. **Visible-prose gate (hard):** every structured question MUST be preceded, same visible turn, by prose naming the fork, weighing options, and citing evidence — never in a thinking block, never straight from the user's message to the picker. **One open picker:** never emit a second structured question before the first is answered.
-- **Per-round decision ledger.** Each dialogue round prints `Decided / Asking / [AGENT-DECIDED]`. At curdle the ledger persists to the ADR(s) (`references/adr.md`) plus a one-line minor decision-log on the spec; no separate ledger file (ADR-004).
-- **Decision map.** After 3 consecutive fork questions, or on "what forks are left?", render a compact map from the ledger: Done forks (from `Decided`), remaining-before-curdle forks split into required (`references/handshake.md` § Mandatory gates) vs optional, and a one-line curdle-readiness verdict (ready, or blocked naming the unmet gate). It renders existing state — not a new artifact, file, or script.
+- **Tiered lettered options.** Consequential forks use `A/B/C/D` choices via the question transport at `../cheese/references/ask-user-question.md`; never decide them silently. Minor mechanics use `[AGENT-DECIDED]` with a vetoable alternative. A fork is valid only after its depth was contributed in-dialogue first. Precede every structured question with visible prose weighing the fork and evidence, and keep one open picker.
+- **Decision ledger.** Each round prints `Decided / Asking / [AGENT-DECIDED]`. Curdle persists consequential decisions to [ADRs](references/adr.md) and minor ones to the spec. The taste verdict names every settled consequential entry exactly once.
+- **Decision map.** After three consecutive fork questions, or on request, show done forks, required and optional remaining forks, and a ready/blocked verdict. It renders ledger state; it creates no artifact.
 - Do not implement code.
 - Do not write production files before the approval gate.
 - Do not silently settle uncertain claims.

@@ -31,7 +31,7 @@ Prepend the standard resumable slug to the top of the file so `/cheese --continu
 
 ```markdown
 status: ok | gated: <one-line decision> | halt: <one-line reason>
-next: mold | cook | press | age | cure | affinage | briesearch | culture | hold | tasks | done
+next: mold | cut | cook | press | age | cure | affinage | briesearch | culture | hold | tasks | done
 mode: single | parallel
 artifact: <path-to-richer-report, or PR ref (PR#<n> / URL) when next: affinage, else none>
 session: <harness>:<session-id>      # optional; auto-filled provenance
@@ -43,21 +43,18 @@ baseline: none | <block — carries a recorded baseline block forward from an up
 ```
 
 `mode:` is optional for backwards compatibility; omitted mode means `mode: single`. In `mode: single`, `next:` names the skill the cold reader should run, which is the machine-readable form of the suggested-skills section below. Use `done` only when the work is genuinely finished and the handoff is a record, not a baton. `/cheese --continue <slug>` resolves the slug through `wheypoint.pyz resolve` and dispatches `next:` only from the validated current revision; an absolute note path resolves as an explicit path first. When `next: affinage`, record the PR reference (`PR#<n>` or its URL) in `artifact:` so the resume dispatches `/affinage <pr>` explicitly rather than relying on branch auto-detection.
+Pipeline: `culture -> mold -> cut -> cook -> press -> age -> cure -> plate`. Mold `red-required` checkpoints use `next: cut`; Cut success uses `next: cook` with the authoritative GateReceipt in `artifact:`. Resume preserves `mode:`, `--hard`, `--open-pr`, `--safe`, and explicit `--auto`. Press corrective work remains `continue: press-corrective-cook`, not a global Press-to-Cook dispatch.
 
 When the checkpointed session carries a recorded `baseline:` block, carry it into the delta unchanged: it is settled state, not something the resumed phase should re-ask about or re-halt on. See [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md).
 
 ### Provenance fields
 
-Four optional provenance fields sit between `artifact:` and the orientation line. Auto-fill each one from the live session; never take a user-supplied value. All four are optional and additive: a note carrying none of them is valid, and every consumer treats a pre-provenance note (none of these keys) as valid. Placement rule: the orientation line stays the first non-key line, so it must follow whichever of these fields are present.
+These optional fields precede the orientation line and come only from the live session; pre-provenance notes remain valid.
 
-- **`session: <harness>:<session-id>`** — the current session's harness and id, read from the per-harness source map:
-  - **claude** — the newest `*.jsonl` in the encoded-cwd projects dir (`~/.claude/projects/<encoded-cwd>/`); its basename (minus `.jsonl`) is the session id.
-  - **codex** — the `payload.cwd` field in the rollout meta line of the active rollout log.
-  - **opencode** — the matching row in the `session` table.
-  - When the harness is unknown or no log is accessible, omit the field. `<speculative>` the newest-mtime claude heuristic can bind the wrong `*.jsonl` when several live sessions share one cwd; the field is optional so a wrong bind is hand-correctable.
-- **`git: <branch>@<short-sha>`** — the branch and short commit at capture time. Use any callable, read-only git inspection capability the active harness exposes. CLI transports may run `git status --short --branch` for the branch and `git rev-parse --short HEAD` for the short SHA. Omit the field when git inspection is unavailable, outside a git repository, or either value cannot be determined.
-- **`created: <UTC ISO-8601>`** — the capture timestamp in UTC ISO-8601 (e.g. `2026-07-09T14:32:00Z`).
-- **`parents: [<slug>, ...]`** — lineage. Empty or absent for a fresh single-thread note. The legacy note-level verbs `--join <slugA> <slugB>` (one merged note, `parents: [<slugA>, <slugB>]`) and `--split` (two child notes, each `parents: [<current-slug>]`) sit outside this continuity contract: they rewrite `.cheese/notes/` Markdown and commit no delta.
+- **`session: <harness>:<session-id>`** — active Claude JSONL id, Codex rollout id, or OpenCode session row. Omit when unavailable; Claude's newest-mtime heuristic is `<speculative>`.
+- **`git: <branch>@<short-sha>`** — branch and short commit from a callable, read-only git inspection capability (`git status --short --branch`; `git rev-parse --short HEAD`). Omit the field when git inspection is unavailable, outside git, or incomplete.
+- **`created: <UTC ISO-8601>`** — UTC capture time.
+- **`parents: [<slug>, ...]`** — lineage. Legacy `--join` writes `parents: [<slugA>, <slugB>]`; `--split` children write `parents: [<current-slug>]`. Both remain outside this continuity contract: they rewrite `.cheese/notes/` Markdown and commit no delta.
 
 ### `status:` values
 
@@ -69,9 +66,9 @@ Status is **derived** by the runtime, never asserted by the author: an active hu
 
 ### `next:` values and semantics
 
-Single-value `next:` is one of the pipeline phases (`mold | cook | press | age | cure | affinage`), a read-only kickoff (`briesearch | culture`), `hold`, `tasks` (with `mode: parallel`), or `done`.
+Single-value `next:` is one of the pipeline phases (`mold | cut | cook | press | age | cure | affinage`), a read-only kickoff (`briesearch | culture`), `hold`, `tasks` (with `mode: parallel`), or `done`.
 
-- **`mold` / `cook` / `press` / `age` / `cure`** — the pipeline phases. Which one fits the session state (and the mid-phase resume case, e.g. `/cook` interrupted) is defined by the `## Suggested skills` mapping table below, which owns these semantics.
+- **`mold` / `cut` / `cook` / `press` / `age` / `cure`** — the pipeline phases. Which one fits the session state (and the mid-phase resume case, e.g. `/cook` interrupted) is defined by the `## Suggested skills` mapping table below, which owns these semantics.
 - **`affinage`** — PR has review comments or failing CI. Record the PR reference in `artifact:` (`PR#<n>` or URL) so the resume dispatches `/affinage <pr>` explicitly.
 - **`briesearch | culture`** — read-only, low-risk next moves. Under `status: ok`, `/cheese --continue` auto-dispatches them directly (frictionless research/think kickoff), deriving any dispatch argument (e.g. `briesearch`'s question) from the orientation line. A move that needs a human decision belongs in `status: gated:`.
 - **`hold`** — restore orientation and wait for instruction; dispatch nothing. For compacting or stringing context along when no action is implied. Distinct from `done` (work finished, record only).
@@ -158,6 +155,7 @@ Pick the next move from where the session actually is, name it as an easy-cheese
 | Next step blocked on a human decision | surface the decision, ask direction | — (set `status: gated:`) |
 | Compacting or stringing along, no action implied | restore orientation, wait | `hold` |
 | Approved spec, not yet implemented | `/cook <spec-path>` | `cook` |
+| Approved `red-required` spec, not yet outer-tested | `/cut <spec-path>` | `cut` |
 | Code written, not yet hardened or reviewed | `/press <slug>` then `/age` | `press` |
 | Implementation done, review wanted now | `/age <ref>` | `age` |
 | Review findings in hand, fixes not applied | `/cure <slug>` | `cure` |
@@ -177,6 +175,7 @@ The opening line ("`/wheypoint` captures just enough state for a cold reader to 
 | `next: culture` | agenda + open-thread state |
 | `next: cure` | findings artifact ref |
 | `next: cook` / `press` / `age` | spec/slug pointers per existing conventions |
+| `next: cut` | approved spec and GateReceipt handoff pointers |
 | `next: hold` / `done` | orientation only |
 
 **`status: gated:` overrides the "just enough state" compression rule for gated notes.** Every open fork gets its own `## Decision dossier` entry — options considered, evidence as `file:line` citations, what each option breaks, and any prior leaning from the session — instead of the one-line decision the compression default would otherwise leave. A resumed session with a consequential fork rebuilds its prose weighing from this dossier; see [`../cheese/references/ask-user-question.md`](../cheese/references/ask-user-question.md) § When to structure for why an undiscussed design fork needs that weighing rather than a structured confirm.

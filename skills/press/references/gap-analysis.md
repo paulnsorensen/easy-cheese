@@ -1,54 +1,121 @@
-# Gap analysis
+# Press adversarial gap analysis
 
-## What counts as a gap
+## Ownership boundary
 
-| Gap type | Symptom | Example |
+Press is not a second first-coverage phase. Cut owns the protected outer
+oracle; Cook owns the implementation and the inner RED→GREEN loop. Press
+attacks the approved contract after Cook and writes only tests, fixtures, or
+test-only harness support. A gap that needs production implementation becomes
+an in-contract RED evidence receipt and a bounded corrective Cook request.
+
+## What Press may expose
+
+| Gap type | Evidence | Action |
 | --- | --- | --- |
-| Spec uncovered | A spec bullet has no executable test | "Returns 401 on missing token" with no test for that path |
-| Weak assertion | Test passes for the wrong reason | `expect(result).toBeTruthy()` instead of `expect(result).toEqual(expected)` |
-| Missing boundary | Edge case not exercised | empty input, null, max-length, off-by-one, concurrent access |
-| Integration seam | Cooked code crosses a boundary that is mocked or untested | filesystem write, subprocess, network call, time-dependent logic |
-| Error path | Happy path tested, failure path not | What happens when the dependency throws? |
+| In-contract defect | The approved seam fails on an adversarial input or transition | Preserve the identical failing test and digest; issue through `red-gate issue` as `producer: press` |
+| Invalid evidence | Receipt is stale, malformed, witness-inconsistent, unchained, or has incomplete guards | Stop without a repair action |
+| Production mutation | Any production path changes during a Press-owned interval | Stop without gated evidence |
+| Out-of-contract behavior | A desired behavior is not in the approved Test Contracts | Record a review follow-up; do not implement it |
 
-## Mapping changed behaviour to tests
+## Evidence sequence
 
-For each function or module touched by the cooked diff:
+At every Press entry and post-Cook resume:
 
-1. Find existing tests through semantic caller search, following the [shared routing contract](../../cheese/references/code-intelligence-routing.md). With tilth:
-   ```
-   tilth_search(queries: [{query: "<changed-symbol>", kind: "callers"}], scope: "**/*.test.*")
-   ```
-2. Read the test bodies to verify they actually exercise the new behaviour, not just the symbol's existence.
-3. List any spec bullet without a corresponding test.
+1. Replay the original Cut receipt GREEN with `red-gate validate`.
+2. Verify all protected oracle digests and capture every production-path digest.
+3. Run the same adversarial attack without changing its test or fixture digest.
+4. Compare the production snapshot at the next `Continue`, `Dispatch`, or
+   `Stop` boundary. Any difference is `production_changed`.
+5. For an in-contract RED, issue canonical evidence only through
+   `red-gate issue`; guard the original Cut receipt and every prior Press
+   receipt.
+
+The failing-test digest is part of the evidence chain. A corrective Cook may
+change production to make the attack GREEN, but it may not rewrite or weaken
+the attack, its expected witness, its protected oracle, or its prior guards.
 
 ## Priority order
 
-**Hard floor — every changed behaviour gets a hardening test.** Before working through the priority list, lock each behaviour in the cooked diff with an executable test that would fail on regression. Even a 3-line off-by-one fix gets a `test_off_by_one_at_boundary`. If press cannot produce a stable hardening test for a changed behaviour, readiness is `blocked`.
+Press closes only adversarial gaps in the approved Cook contract:
 
-Then address remaining gaps in this order — stop when the time-budget runs out:
+1. Receipt and guard integrity.
+2. Protected oracle and production-tree immutability.
+3. Boundary, invalid-input, state-transition, integration, and error-path
+   attacks that belong to the approved seam.
+4. Assertion sensitivity: the attack must fail for the wrong value, state, or
+   error, not merely because a command exited.
 
-1. **Spec compliance:** every promised behaviour has executable coverage.
-2. **Assertion strength:** tests fail for wrong values, wrong errors, or wrong state.
-3. **Boundary behaviour:** empty, missing, malformed, minimal, maximum.
-4. **Integration seams:** filesystem, subprocess, network, time, dependency failure when in scope.
-5. **Happy path regression:** the primary user path still passes.
+Cut/Cook own first coverage. Do not manufacture one hardening test per changed
+behavior, and do not add tests for untouched or out-of-contract code.
 
-Mapping to readiness:
+## Repair bound and readiness
 
-- **`blocked`** — false premise on the cooked contract, hard floor unmet (a changed behaviour has no stable hardening test press can write), an unfixable level-1/2 gap inside cooked scope, or spinning wheels (three attempts at one gap without green).
-- **`follow-up recommended`** — hard floor met. Only level-4/5 gaps remain, plus out-of-scope findings and untouched-code coverage. Cooked contract is review-safe; follow-ups are documented for post-review attention.
-- **`ready for /age`** — hard floor met. Levels 1-3 closed on cooked scope.
+The packaged boundary derives repair state and production integrity from the
+named canonical receipt plus the current one-use phase token; the request
+cannot provide a repair counter or production verdict:
 
-Spinning-wheels cap: count test-edit + run cycles per gap. On the third failed attempt without green, mark readiness `blocked` with reason `spinning: <gap-description>` and stop.
+```json
+{
+  "outcome": "in_contract_red",
+  "current_receipt": ".cheese/press/outer-tdd-gates.attempt-1.json",
+  "phase_token_ref": ".cheese/press/outer-tdd-gates.attempt-1.phase.json",
+  "phase_token_sha256": "<64 lowercase hex characters>"
+}
+```
 
-## When to fix vs follow-up
+The current receipt is always the receipt for the observation being routed:
+P1 uses `.attempt-1.json`, P2 uses `.attempt-2.json`, and P3 uses
+`.attempt-3.json`. Each attempt has its own `.plan.json`, `.phase.json`, and
+`candidates/<slug>.attempt-N.json` paths; never reuse or overwrite an earlier
+attempt's artifact.
+Every new phase plan must repeat the exact `production_paths` bound by the
+current receipt's phase token. The route boundary rejects narrower, broader,
+or otherwise different roots before deriving production changes.
+
+Invoke it from the project root, using the current attempt's route request:
+
+```sh
+python3 "${CLAUDE_SKILL_DIR}/scripts/press.pyz" press-route \
+  .cheese/press/outer-tdd-gates.attempt-1.route.json
+```
+
+The boundary replays the current receipt, resolves every transitive
+`guard_receipt_refs`, requires canonical encoding for the current phase token,
+requires its `production_paths` to equal those bound by the current receipt,
+and reconciles the authoritative journal with all immutable matching Press
+receipts. It rejects missing, malformed, cyclic, symlinked, escaping, stale,
+reused, journal-divergent, cross-work/spec/project, or production-mutating
+evidence.
+The current Press RED is the observation being routed, so it is excluded from
+`completed_cycles`; the original Cut receipt yields `completed_cycles=0` for
+P1, and the first and second earlier Press receipts yield
+`completed_cycles=1` and `2` for P2 and P3.
+
+The packaged boundary then applies that derived count:
+
+- GREEN returns `Dispatch("/age")`.
+- An in-contract RED at `completed_cycles=0` or `1` returns
+  `Continue("press-corrective-cook")`.
+- The third RED at `completed_cycles=2` returns
+  `Stop("third-red", gated_evidence=True)` before issuing another receipt.
+- Invalid evidence and production changes stop with `gated_evidence=False`.
+
+Only a valid GREEN result or a complete gated third-RED evidence chain is
+review-ready. Invalid evidence or a production mutation is blocked. Existing
+baseline-aware project-gate behavior remains compatible: failures identical to
+the Cook handoff's recorded baseline do not become new Press findings, while
+new or changed failures remain blocking.
+
+## When to fix vs follow up
 
 | Situation | Action |
 | --- | --- |
-| Hardening test exposes a bug in cooked code | Fix it now (corrective fix only — no new behaviour). |
-| Hardening test exposes a bug outside cooked scope | Document it in the press report; do not fix. |
-| Coverage gap is in code that cook did not touch | Document it in the press report; do not add tests. |
+| Approved adversarial test exposes a defect in cooked behavior | Preserve the RED receipt and request the fresh bounded corrective Cook |
+| Evidence chain, digest, or production snapshot is invalid | Stop and report the exact integrity failure |
+| Attack targets behavior outside approved contracts | Document it for `/age`; do not edit production or continue |
 
-## Hard rule — never weaken assertions
+## Hard rule — preserve evidence
 
-If a hardening test reveals that an existing test passes for the wrong reason, **strengthen the existing test**. Do not delete it, do not loosen its assertion, do not skip it. If you must skip it temporarily, the press report says exactly which test and why, and recommends a follow-up issue.
+Never weaken the attack to obtain GREEN. Never hand-write a receipt, bypass
+`red-gate issue`, drop a guard, reset a digest, change the attack between
+replays, or turn a Press-owned continuation into a global Cook dispatch.

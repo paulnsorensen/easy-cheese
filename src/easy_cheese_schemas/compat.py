@@ -109,7 +109,8 @@ def _guarded_class(type_: Any, converter: cattrs.BaseConverter) -> Any:
 
 
 # Default converter semantics: unknown keys are ignored, which is exactly what
-# a FUTURE-stamped payload needs.
+# a FUTURE-stamped payload needs. Schema types may explicitly reject a
+# semantically misplaced key before it reaches this additive-field boundary.
 _converter = cattrs.Converter()
 _converter.register_structure_hook(str, _exact(str, "a string"))
 _converter.register_structure_hook(bool, _exact(bool, "a boolean", boolean=True))
@@ -189,13 +190,26 @@ def load(raw: dict[str, Any], cls: type[T], *, strict: bool) -> Loaded[T]:
         problems.append(f"{where}.{STAMP_KEY} must be an integer")
         stamp = None
     provenance = classify_stamp(stamp)
+    forbidden = tuple(
+        field_name
+        for field_name in getattr(cls, "__schema_forbidden_fields__", ())
+        if field_name in raw
+    )
+    problems.extend(
+        f"{where}.{field_name} is not supported; mode belongs to each TestContract"
+        for field_name in forbidden
+    )
 
     if strict:
         value, failures = _structure(dict(raw), cls, where)
         problems.extend(message for _, message in failures)
+        if forbidden:
+            value = None
         return Loaded(value, provenance, tuple(problems))
 
     value, gaps = _best_effort(raw, cls, where)
+    if forbidden:
+        value = None
     return Loaded(value, provenance, tuple(problems + gaps))
 
 

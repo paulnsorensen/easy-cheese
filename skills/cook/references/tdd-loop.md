@@ -1,30 +1,79 @@
-# The TDD loop: cut → implement → taste-test
+# The TDD loop: preflight → inner RED → implement → taste-test
 
-The cook skill runs a sequential TDD discipline. Each phase has a clear exit before the next starts.
+Cook runs a sequential TDD discipline. The outer GateReceipt boundary must
+complete before the inner implementation loop starts, and each phase has a
+clear exit before the next starts.
 
-## Cut — failing tests first
+## Preflight — canonical outer receipt
 
-When the change adds or modifies behaviour, write the test before the implementation.
+`GateReceipt` is the sole outer-oracle authority. Before any production
+mutation, Cook must either receive a canonical receipt or synchronously invoke
+Cut and consume the receipt Cut returns. A synchronous Cut invocation returns
+to this preflight exactly once; it never recursively dispatches Cook.
 
-**Cut must report:**
+The preflight verifies, in order:
 
-- Test files added or changed.
-- The spec requirement each test covers.
-- The observed red failure for each new behaviour.
-- Whether existing tests were touched and why (only allowed for related-fixture or shared-helper updates — never to weaken assertions).
+1. The receipt loads canonically and names the same `spec_ref`, `work_id`, and
+   sanitized `project_key` as the Cook invocation.
+2. Every protected-file hash and the complete guard graph are valid. Guards
+   retain matching work/spec/project identity, valid RED disposition, and the
+   required transitive Cut ancestry.
+3. For RED evidence, Cook executes
+   `red-gate validate <receipt> --state red` before the first production edit.
+   The active case and every transitive guard must pass replay and structural
+   validation.
 
-If a test cannot be made to fail for the expected reason, **stop and fix the test before cooking**. A test that passes against unimplemented code is a false-positive factory.
+If the receipt is absent or invalid, invoke Cut before production, passing any
+user or Pasteurize reproduction for normalization. Cut's issued evidence
+`producer: cut` and adopted cases retain `origin: adopted`. Cook must not
+hand-write, replace, or mutate the returned outer oracle or any receipt-owned
+file.
+
+Closed `not-applicable` receipts retain identity and structural validation,
+skip only outer RED replay, then continue with the requested
+docs/refactor/test/appearance work through the appropriate non-behavior
+implementation and verification path. N/A never means no requested work. No
+invalid receipt is allowed to fall through into inner TDD.
+
+## Inner TDD — failing tests first
+
+When the change adds or modifies behavior, write an inner failing test before
+the implementation. This is Cook's vertical loop, not Cut's protected outer
+tracer: Cut owns the outer RED evidence and Cook must never rewrite it.
+
+For behavior changes, the inner TDD loop is the only stage allowed to mutate
+production. Closed N/A work instead uses its declared non-behavior
+implementation path after preflight; it may edit only the requested surface.
+Both paths must never change receipt-protected files, the outer oracle, or their digests.
+
+If an inner test cannot fail for the expected reason, **stop and fix the test
+before implementing**. A test that passes against unimplemented code is a
+false-positive factory.
 
 ## Implement — minimal green
 
-Implement the smallest production change that turns the cut tests green.
+For behavior work, implement the smallest production change that turns the
+inner tests green. For closed N/A work, implement the requested
+docs/refactor/test/appearance change through its non-behavior path and verify
+that path instead of replaying RED.
 
 **Implement must:**
 
 - Use existing dependencies and project patterns.
-- Run the narrowest useful test (the new cut tests) plus relevant wider gates (lint, typecheck, build).
-- Preserve strong assertions written by cut.
-- Stop and ask if implementation reveals a design decision the spec did not answer.
+- Run the narrowest useful inner test plus relevant wider gates (lint,
+  typecheck, build).
+- Preserve every protected assertion and outer receipt digest.
+- Stop and ask if implementation reveals a design decision the spec did not
+  answer.
+
+Before handing off to Press, Cook runs
+`red-gate validate <receipt> --state green` for an active RED receipt and
+requires the active case and every transitive guard GREEN before handing off to
+Press. For closed N/A, complete the requested non-behavior verification and
+taste-test, then hand off directly to Age; N/A has no Test Contracts for Press
+to attack.
+A corrective Cook (`correction = true`) is scoped to the active Press RED
+receipt and may not weaken, replace, or bypass any transitive guard.
 
 If cook reports partial or skipped work, **stop and resolve before taste-test**.
 
@@ -38,7 +87,12 @@ After cook says "I completed all the changes", run a taste test before press. Th
 
 **Who runs it.**
 
-- **Top-level `/cook`**: resolve the fresh-context taste-test through `../../cheese/references/agent-resolution.md`, requesting a read-only `reviewer` at `powerful` / `high`. Pass `{spec/contract, diff, cut-test list, any locked/user-approved decisions}`; it returns the per-lens verdict below, not a full `/age` report. A general worker may qualify only under the shared prompt-only read-only degradation.
+- **Top-level `/cook`**: resolve the fresh-context taste-test through
+  `../../cheese/references/agent-resolution.md`, requesting a read-only
+  `reviewer` at `powerful` / `high`. Pass
+  `{spec/contract, GateReceipt, diff, inner-test list, any locked/user-approved decisions}`;
+  it returns the per-lens verdict below, not a full `/age` report. A general
+  worker may qualify only under the shared prompt-only read-only degradation.
 - **Coder-nested `/cook`**: when the active coder cannot dispatch, run the inline self-check and record `taste_test: deferred-to-orchestrator`; the orchestrator must resolve and run the authoritative reviewer before accepting the handoff.
 
 **Lenses.** Inline or dispatched, the taste-test returns `pass | revise | escalate` per lens (`halt` for Locked-decision):

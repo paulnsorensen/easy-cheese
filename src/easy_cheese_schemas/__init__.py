@@ -31,7 +31,20 @@ from easy_cheese_schemas.decomposition import (
     DecomposedCurd,
     Decomposition,
 )
-from easy_cheese_schemas.gates import Readiness, classify_readiness
+from easy_cheese_schemas.gates import (
+    BaselineCheck,
+    EvidenceOrigin,
+    GateDisposition,
+    GateMode,
+    GateProducer,
+    GateReceipt,
+    ProtectedFile,
+    Readiness,
+    RedCase,
+    RedKind,
+    TestContract,
+    classify_readiness,
+)
 from easy_cheese_schemas.io import ManifestLoadError, parse_mapping
 from easy_cheese_schemas.manifest import (
     AgentAttempt,
@@ -220,6 +233,16 @@ from easy_cheese_schemas.workflow import (
 __version__ = "1.0.0"
 
 __all__ = [
+    "BaselineCheck",
+    "EvidenceOrigin",
+    "GateDisposition",
+    "GateMode",
+    "GateProducer",
+    "GateReceipt",
+    "ProtectedFile",
+    "RedCase",
+    "RedKind",
+    "TestContract",
     "MAX_WAVE_SIZE",
     "MIN_CURD_SURFACE",
     "MIN_READABLE",

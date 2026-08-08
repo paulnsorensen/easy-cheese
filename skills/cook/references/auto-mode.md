@@ -2,9 +2,30 @@
 
 Full mechanics for `--auto`, the autonomous-pipeline switch: the per-step chain, the two-cure-pass cap's enforcement, early-stop conditions, the fan-pathway no-chain isolation directive, and the final-report template. `SKILL.md`'s `## Auto mode` keeps the one-paragraph summary and the publishable-gate rule; this file is everything downstream of that summary.
 
+## Cook entry preflight
+
+`--auto` uses the same `cook(spec_ref, receipt? = null, correction = false)`
+contract as manual Cook; it never bypasses the canonical GateReceipt boundary.
+Before any production mutation, Cook verifies the same spec/work/project
+identity, protected-file hashes, and guard graph, then runs
+`red-gate validate <receipt> --state red`. An absent or invalid receipt
+synchronously invokes `/cut`, consumes the returned receipt exactly once, and
+does not recursively hand off from Cut back to Cook. Adopted reproductions
+remain `producer: cut` with case `origin: adopted`.
+
+Closed `not-applicable` receipts retain identity and structural validation but
+skip RED replay and production work; Cook returns promptly. Once inner TDD
+completes, Cook runs `red-gate validate <receipt> --state green` and requires
+the active case plus every transitive guard GREEN before invoking `/press`.
+When `correction = true`, only the active Press RED receipt is in scope;
+transitive guards remain immutable and cannot be weakened or bypassed.
+
 ## What auto mode does
 
-1. After the package-ready report, invoke `/press <slug> --auto`; append `--open-pr` so terminal `/plate` may publish a new PR.
+1. After Cook's completed GateReceipt preflight, inner implementation, and
+   `red-gate validate <receipt> --state green` for active and transitive
+   guards, write the package-ready report and invoke `/press <slug> --auto`;
+   append `--open-pr` so terminal `/plate` may publish a new PR.
 2. `/press --auto` runs its hardening pass and, if readiness is `ready for /age` or `follow-up recommended`, invokes `/age <slug> --auto`. Both states mean the cooked contract is sound and every changed behaviour has a hardening test; documented follow-ups are review-safe. Only `blocked` stops auto — blocked criteria: defined once in [`../../press/references/gap-analysis.md`](../../press/references/gap-analysis.md).
 3. `/age <slug> --auto` writes the report and invokes `/cure <slug> --auto --stake medium+`.
 4. `/cure --auto --stake medium+` bypasses the selection gate, applies every finding of `blocker`, `high`, or `medium` severity plus every cheap (contained-fix) `Low`, then invokes `/age --scope <touched-paths> --auto` for verification.
@@ -26,7 +47,18 @@ In every early-stop case, surface the report from the failing skill and tell the
 
 ## No-chain isolation directive
 
-Each phase's existing `--auto` contract chains forward in-session — `/cook --auto` invokes `/press --auto`, which invokes `/age --auto`, and so on. When `/cook` is running as its own fan-pathway orchestrator (`fan-pathway.md`), that default is overridden for every per-curd or post-merge dispatch: each phase sub-agent runs only its own phase, writes its handoff slug, and stops — it never chains forward to the next phase itself, even though its own `--auto` contract documents that behavior. The fan-pathway orchestrator loop (`fan-pathway.md`'s `## Deterministic phase loop`) owns deciding and dispatching what runs next, exactly as the retired `/ultracook` orchestrator once did.
+Each phase's existing `--auto` contract chains forward in-session —
+`/cook --auto` invokes `/press --auto`, which invokes `/age --auto`, and so
+on. Cook's synchronous Cut preflight is the exception: it returns a receipt
+to the current Cook call and never chains Cook recursively. When `/cook` is
+running as its own fan-pathway orchestrator (`fan-pathway.md`), that default
+is overridden for every per-curd or post-merge dispatch: each phase sub-agent
+runs only its own phase, writes its handoff slug, and stops — it never chains
+forward to the next phase itself, even though its own `--auto` contract
+documents that behavior. The fan-pathway orchestrator loop
+(`fan-pathway.md`'s `## Deterministic phase loop`) owns deciding and
+dispatching what runs next, exactly as the retired `/ultracook` orchestrator
+once did.
 
 The override travels in the spawn prompt as an explicit no-chain directive, carried over verbatim from `/ultracook`'s original wording: "Do not chain forward to the next phase even though your auto-mode contract documents that. Write your handoff slug and stop. `/cook`'s fan pathway is driving the chain. Run in the foreground — do not background yourself, spawn detached processes, or defer work to a later session. If you cannot complete the phase within your context window, write a partial slug with `status: halt: <reason>` and stop; do not silently timeout."
 

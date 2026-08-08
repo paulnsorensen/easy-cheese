@@ -6,100 +6,141 @@ metadata: {dispatches-agents: true}
 ---
 
 # /cook
+## Contract
+
+`cook(spec_ref, receipt? = null, correction = false) -> handoff(next = press | age)`.
+`GateReceipt` is the sole outer-oracle authority: hold a canonical receipt
+before any production mutation, bound to the same `spec_ref`, canonical
+`work_id`, and sanitized `project_key`. An absent or invalid receipt
+synchronously invokes `/cut` exactly once; a user or Pasteurize reproduction
+retains `producer: cut` and `origin: adopted`.
+Every newly issued receipt also carries the exact pre-oracle
+`phase_token_ref`/`phase_token_sha256`; validation treats that pair as part of
+the receipt identity evidence. Cook never recreates or substitutes a token.
+
+For an active RED receipt, run `red-gate validate <receipt> --state red` before
+editing and keep the outer oracle immutable. The single-coder path and the
+post-merge fan path validate the complete receipt GREEN, including every
+transitive guard, before the global Press. Fan curd workers replay RED only:
+they never run Press or claim whole-receipt GREEN while sibling cases remain
+RED. `correction = true` is scoped to the active Press RED receipt and may not
+weaken any transitive guard.
+Closed N/A receipts retain identity and structural validation, skip only outer
+RED replay, and run requested docs/refactor/test/appearance work through its
+non-behavior path; N/A never means no requested work.
+
+## Packaged validator
+
+Resolve `red-gate ...` through
+[`../cut/references/gate-workflow.md`](../cut/references/gate-workflow.md)
+§ Packaged command resolution: installed sibling `cut.pyz` first, then the
+source-checkout bundle. A bare executable is not on PATH.
+
+## GateReceipt preflight
+
+1. Resolve the approved spec without mutating production.
+2. When the receipt is absent or fails canonical loading, synchronously invoke
+   `/cut` and consume its returned receipt exactly once; Cut never dispatches
+   Cook back into this call.
+3. For a valid RED receipt, run
+   `red-gate validate <receipt> --state red`; no production path may run before
+   it succeeds. Consume the receipt's frozen pre-Cut broad-gate
+   `baseline_checks` exactly; do not overwrite them or capture a replacement.
+   Baseline argv must exclude protected RED-oracle paths or remain green with
+   the oracle present, because validation replays them after oracle creation.
+4. For closed N/A, retain identity and structural validation, skip only outer
+   RED replay, then route the requested work through its non-behavior
+   implementation and verification path. Do not treat N/A as no work.
 
 ## Inputs
 
-Accept one of:
+Accept a pasted spec/issue, focused acceptance criteria, or an unambiguous task.
+Read explicit spec paths verbatim. Resolve a bare slug with `SPEC=$(python3
+shared/scripts/artifact_path.py specs <slug>)`; packaged fallback:
+`python3 ${CLAUDE_SKILL_DIR}/scripts/cook.pyz artifact-path specs <slug>`.
 
-- A spec path. When explicit, read it verbatim wherever it points.
-- A bare slug. Resolve it to the durable spec path with `SPEC=$(python3 shared/scripts/artifact_path.py specs <slug>)`, then read `"$SPEC"`. If you're on a host that only exposes the packaged helper, `python3 ${CLAUDE_SKILL_DIR}/scripts/cook.pyz artifact-path specs <slug>` is the fallback. The resolver anchors specs at the per-project durable corpus (see `../cheese/references/formatting.md` § Corpus location); this is the form `/ultracook` uses when chaining.
-- A pasted spec or issue.
-- A focused implementation request with acceptance criteria.
-- A clear, unambiguous task — single-file fix, named bug, well-scoped tweak — even without a spec.
-
-Optional flags:
-- `--auto` — autonomous mode: skip every handoff gate and chain `/press → /age → /cure` (see `## Auto mode` below; full selection/cap rules in `references/auto-mode.md`).
-- `--hard` — propagate through `/press → /age → /cure → /plate`; `/plate` fires `/hard-cheese` after its final artifact-writing gate.
-- `--open-pr` — propagate to terminal `/plate`, which follows its explicit-choice and review-shape policy for a new PR.
-- `--resume <slug>` — resume a crashed **fan** run from its typed handoff and referenced artifacts (full mechanics in `references/fan-pathway.md` § --resume).
+Flags: `--auto` chains `/press → /age → /cure`; `--hard` propagates through
+`/plate`; `--open-pr` lets terminal `/plate` publish; `--resume <slug>` resumes
+a typed fan handoff and its referenced artifacts. Their policies live in
+`references/auto-mode.md`, `references/fan-pathway.md`, and
+`../cheese/references/formatting.md`.
 
 ### Standalone fast-path
 
-`/cook` runs without `/mold` when the task is unambiguous. Treat a request as unambiguous when **all three** are present or trivially derivable:
-
-1. **Inputs/outputs are clear.** "Tail returns wrong byte count when file ends without newline" ✓; "make tail better" ✗.
-2. **Scope is bounded.** A named function, a single failing test, a specific call site, or a small region of one or two files.
-3. **Verification is obvious.** A failing test that can be made to pass, or a runnable command whose output should change in a stated way.
-
-When the fast-path applies, derive a slug from the task (e.g. `tail-trailing-newline`), treat **Contract** as a one-sentence restatement of the request, and proceed directly to **Cut** without a spec round-trip. Route to `/mold` only when one of the three checks fails — silent ambiguity is the cardinal sin.
+`/cook` bypasses `/mold` only when inputs/outputs and scope are clear and verification is obvious: a named bug/callsite in one or two files with a failing test or runnable expected-output check. Derive a slug, restate the **Contract**, then run GateReceipt preflight. Any failed ambiguity check routes to `/mold`.
 
 ## Flow
 
-1. **Contract** — confirm behaviour, non-goals, likely scope, quality gates. For standalone fast-path tasks, the contract is the user's request restated in one sentence. If `.cheese/glossary/<slug>.md` exists, read it before implementation so naming follows the resolved canonical terms.
-2. **Cut** — write failing tests for the changed behaviour. See `references/tdd-loop.md`.
-3. **Implement** — make the cut tests pass with the smallest production change.
-4. **Taste-test** — check spec drift, readability, scope, plus three fresh-context lenses (production path, wired callers, locked-decision). Dispatch the fresh-context `reviewer` for multi-file or public-surface diffs; keep the inline check otherwise. Two-round cap. Cost gate, reviewer-model pin, and the coder-nested degrade live in `references/tdd-loop.md`.
-5. **Hand off** — produce the package-ready report (`references/package-report.md`), write the handoff slug (`## Handoff slug` below), and prompt the next step via the shared handoff gate (see `## Handoff` below). The default chain is `/press` → `/age` → `/cure`.
+1. **Contract** — confirm behaviour, non-goals, scope, gates, and applicability.
+2. **GateReceipt preflight** — obtain a canonical receipt; invoke Cut once when
+   missing or invalid.
+3. **Replay RED** — run `red-gate validate <receipt> --state red`; closed N/A
+   skips only outer RED replay after identity/structural validation, then
+   follows the non-behavior implementation/verification path.
+4. **Implement** — behavior changes use inner RED → GREEN; closed N/A work
+   uses its requested non-behavior implementation path. Only the applicable
+   path may mutate its requested surface. Never mutate receipt-protected files
+   or the outer oracle.
+5. **Validate GREEN** — the single-coder and post-merge fan paths run
+   `red-gate validate <receipt> --state green` for the complete receipt and
+   every transitive guard; fan curd workers do not issue this whole-receipt
+   validation. For closed N/A, verify the requested non-behavior path.
+6. **Taste-test** — fresh-context review for multi-file/public-surface diffs;
+   otherwise inline. Two-round cap; details: `references/tdd-loop.md`.
+7. **Hand off** — write the package report and slug. An active RED receipt
+   proceeds `/press → /age → /cure`; a closed N/A receipt has no adversarial
+   contract for Press and proceeds directly `/age → /cure`.
 
 ## Fan pathway
 
-`/cook`'s single pathway routes a spec through one of three shapes, gated on
-whether a typed planner result is already available.
+`/cook` routes a spec through one of three shapes, gated on whether a typed
+planner result is already available. Every shape runs GateReceipt preflight.
+Cut runs before Seed when needed; protected-oracle propagation gives Seed and
+every curd the same protected oracle before RED replay. The complete topology
+lives in [`references/fan-pathway.md`](references/fan-pathway.md).
 
-**Fast-path.** When the curd-count `hint = 1` and blast radius is low or medium,
-skip the planner/decomposer in [`decomposer.md`](../cheese/references/decomposer.md)
-and use the ordinary single-coder path.
+**Fast path.** When the curd-count hint is `1` with low or medium blast radius,
+use the ordinary single-coder path.
 
-**(a) Curded spec.** If the spec already carries a typed `PlannerResult` or
-`CurdPlan`, load it, call `validate_curd_plan`, and continue to the wave fan-out
-below. A prior decomposition is input evidence only; the validated plan is the
-semantic authority.
+**Curded.** Load the typed `PlannerResult` or `CurdPlan`, run
+`validate_curd_plan`, and treat that plan as semantic authority. Active RED
+curds run `cook(CurdPlan) → reviewer(age) → cure(CurdPlan, binding) →
+reviewer(final age)` without Press or whole-receipt GREEN claims. After wiring,
+validate the complete receipt GREEN, then run one global
+`/press → /age → /cure` chain. Closed N/A bypasses Press.
 
-At the executable fan boundary, call `plan` for a `PlannerResult` when needed,
-then call `validate_curd_plan` before the first worker dispatch. Pass that
-validated plan to `cook`; resolve artifacts with `resolve_artifact`, normalize
-writer observations into exactly one `CurdResult` per selected curd, and require
-`bind_diagnosis` to produce a confirmed per-curd binding before Cure. The host,
-not an agent view, owns identity, version, digest, coverage, disposition, and
-provenance. The full canonical thread is in
-[`references/fan-pathway.md`](references/fan-pathway.md).
+Worktree cleanup uses `python3 skills/ultracook/scripts/ultracook.pyz worktree teardown`; the fan-pathway reference owns its arguments and lifecycle.
 
-**(b) Un-curded, small.** Ordinary single-coder Cut → Implement → Taste-test,
-unchanged from today's `/cook` (`## Flow` above). Sizing signal: `/mold`'s
-curd-count hint is advisory; otherwise use AC count and edit-site estimate. Per
-the spec's cook-gate row: "un-curded (typed plan, else AC count and edit-site
-estimate) | single vs fan vs decompose-first; wave plan; transport".
+**Un-curded.** Small work stays single-coder. Big work asks
+"12 ACs -> 5 curds, 2 waves, up to 25 agent dispatches. Go?" unless `--auto`.
+Waves remain capped at four. Legacy decomposition is a lossless projection
+only, never live workflow state.
+Sizing and decomposition follow
+[`decomposer.md`](../cheese/references/decomposer.md).
 
-**(c) Un-curded, big.** Build a typed `PlannerRequest` from the spec and
-dispatch the planner through `easy_cheese_schemas.plan`. The planner must return
-a `PlannerResultWriterView` that materializes into a `PlannerResult` with a
-`CurdPlan`; validate it with `validate_curd_plan`, show the dependency-respecting
-wave plan plus the projected dispatch count, and ask the user with the exact
-phrasing "12 ACs -> 5 curds, 2 waves, up to 30 agent dispatches. Go?" unless
-`--auto` is set. The count is an upper bound derived from the validated plan
-and excludes wiring until wiring has typed evidence.
-
-**Wave cap.** Waves are capped at `<=4` curds, enforced by `MAX_WAVE_SIZE` in
-`src/fanout/curd_block.py` — cited, not reimplemented here. If a legacy
-decomposer must be called at an integration boundary, project the validated
-`CurdPlan` with `project_curd_block` and reject `UnsupportedProjection`; never
-promote that projection back into live workflow state.
-
-Read [`references/fan-pathway.md`](references/fan-pathway.md) before orchestrating a wave-fan run — it owns the existing-handoffs guard, mode selection, the publication-topology preflight, the milknado seam, phase-chain topology, the deterministic phase loop, worker-exhaustion/aggregate-gate recovery, worktree harvest and teardown, `--resume <slug>`, and resolution provenance.
-
-After fan harvest, enforce worktree teardown and verify that no
-`worktree-agent-*` branch or directory leaks.
-
-A terminal age is **publishable only with `next: done`**; `next: cure` or a missing `next` halts — this applies to both fan-pathway tables ([`references/fan-pathway.md`](references/fan-pathway.md)) and the single-coder `--auto` chain's terminal age (`## Auto mode` below).
+Before orchestrating, read
+[`references/fan-pathway.md`](references/fan-pathway.md). It owns sizing,
+topology, oracle transfer, deterministic phase execution, recovery, resume,
+Milknado integration, worktree teardown, and resolution provenance. Propagate
+`--auto` through dispatched phases when active.
 
 ## Baseline capture
 
-Before any curd cooks, `/cook` captures the run's broad-gate baseline once, in the orchestrator's own tree, right after mode selection. Full capture steps, classification, hand-down, and the repair pathway: [`references/quality-gates.md`](references/quality-gates.md).
+Cut owns the outer baseline: it runs broad gates on the pre-oracle tree and
+freezes `baseline_checks` in the receipt before the protected RED oracle.
+Cook validates and consumes that evidence; it never recaptures or replaces it.
 
-For source changes, call the selected backend directly and follow [`code-intelligence-routing.md`](../cheese/references/code-intelligence-routing.md), including search → fresh bounded read → stale-safe write.
+Fan mode records its separate quality-debt comparison before any curd cooks;
+bare mode records it on the pre-change tree. Neither replaces Cut's receipt.
+Exact capture, classification, intentional-RED exclusion, and
+`manifest.yaml` rules live in
+[`references/quality-gates.md`](references/quality-gates.md).
 
-Portability: [`harness-portability.md`](../cheese/references/harness-portability.md);
-slash commands are host renderings, not the control model.
+For source changes, follow
+[`code-intelligence-routing.md`](../cheese/references/code-intelligence-routing.md)
+and [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md).
+`slash commands are host renderings, not the control model`; invoke the
+equivalent installed capability.
 
 ## Quality gates
 
@@ -107,13 +148,17 @@ Run existing project commands only — the most relevant tests for the touched a
 
 Gate failures are baseline-aware. Policy, the classification taxonomy, and the `baseline:` block shape are the shared reference [`references/quality-gates.md`](references/quality-gates.md); every downstream phase links there instead of restating it.
 
+## Output
+
+House style: [`../cheese/references/formatting.md`](../cheese/references/formatting.md). Report files, reasons, checks, risks, and next skill using the authoritative [`references/package-report.md`](references/package-report.md).
+
 ## Handoff slug
 
 Write a minimum-shape handoff slug at the top of `.cheese/cook/<slug>.md` — same file as the report, no second file — so downstream phases (and cook's own fan pathway when orchestrating a wave) can resume or chain without re-reading it. Schema:
 
 ```markdown
 status: ok | halt: <one-line reason>
-next: mold | cook | press | age | done
+next: mold | cut | cook | press | age | done
 artifact: <path-to-richer-report-if-any>
 taste_test: inline-pass | dispatched-pass | revised | deferred-to-orchestrator
 durable_flags: none | <one line per flag: what durable knowledge changed -> target wiki page>
@@ -139,30 +184,39 @@ still the validated `CurdPlan` and normalized `CurdResult`.
 In a fan run, read each phase's handoff slug file from disk; never infer the
 handoff from stdout.
 
-`next:` names the next runnable phase — `press` (standard chain), `age` (press skipped), `cook` (rerun after a blocker), `mold` (spec needs another pass) — or `done` only for true terminal completion, never a blocked-but-resumable halt; `halt:` reasons follow the package-report stop conditions. The orientation line is one factual sentence. Omit `taste_test:` when the cost gate didn't warrant one.
+`next:` is the next runnable phase: `press` after RED-required work, `age` after
+closed N/A, `cook` after a blocker, `mold` after a spec failure, or `done` only
+at true completion. Never send contractless N/A to Press. Omit `taste_test:`
+when its cost gate did not apply.
 
-`durable_flags:` is a conservative gate, default `none`. Add one line per architecture/protocol/convention/rationale delta (`<what changed> -> <target wiki page>`); mechanical and test-only changes stay `none`. Cook records flags only — the publish-boundary writer (cure/plate/affinage) reads them as its write-back candidates.
-
-`baseline:` is written only when the `## Quality gates` capture rule above ran and recorded at least one identical-to-baseline failure; omit it otherwise. Block shape: [`references/quality-gates.md`](references/quality-gates.md) § Baseline block shape.
+`durable_flags:` defaults to `none`; record only durable
+architecture/protocol/convention/rationale changes and their target wiki page.
+`baseline:` summarizes Cook's optional comparison when current broad gates
+contain baseline-identical debt or new/changed failures. It never replaces the
+receipt's canonical pre-Cut `baseline_checks`; use
+[`references/quality-gates.md`](references/quality-gates.md) § Baseline block
+shape.
 
 ## Handoff
 
-**Pipeline:** culture → mold → **[cook]** → press → age → cure → plate
+**Pipeline:** culture → mold → **[cut]** → cook → press → age → cure → plate
 
-After the package-ready report and handoff slug are on disk, ask via the shared handoff gate in [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md) (its **Standard forward-step menu**): lead each option with the verb, backed by the skill command (with any in-scope `--hard`):
+After the package-ready report and handoff slug are on disk, ask via the shared handoff gate in [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md) (its **Standard forward-step menu**). For an active RED receipt, lead each option with the verb and use:
 
 - **Harden tests before review** *(recommended)* — `/press <slug>`.
 - **Plate it** — `/press <slug> --auto --open-pr`: run the remaining review chain, then `/plate` resolves topology and publishes.
-- **Checkpoint & stop** — `/wheypoint`: write a resumable handoff and pause.
-- **Stop** — dispatch none; leave further hardening for later.
 
-Pre-select **Harden tests before review** when the diff added new behaviour or touched untested seams. To skip straight to review, reply `other: /age <slug>`; manual chaining works via each step's own gate. Never dispatch before selection; run the selected command immediately.
+For closed N/A, Press is structurally inapplicable. Set `next: age` and replace those options with **Review the change** *(recommended)* — `/age <slug>` and **Plate it** — `/age <slug> --auto --open-pr`.
 
-When invoked with `--auto`, skip this gate entirely and proceed straight into the auto-mode chain (see `## Auto mode` below).
+Both menus retain **Checkpoint & stop** — `/wheypoint` and **Stop** — dispatch none. Never dispatch before selection; run the selected command immediately. When invoked with `--auto`, skip this gate and take the receipt-specific route directly.
 
 ## Auto mode
 
-`--auto` is the autonomous-pipeline switch: skip every gate and chain forward without asking between steps. It runs `/press --auto → /age --auto → /cure --auto --stake medium+`, capped at **two cure passes total** — pass 1 fixes the initial findings, pass 2 fixes anything the re-age surfaces, then the chain stops regardless of remaining findings. `/cook` itself never invokes `/plate`; `/cure` dispatches it at the chain terminal (existing PR always, new PR only with `--open-pr`).
+`--auto` never bypasses GateReceipt preflight or applicable validation. Active
+RED runs `/press --auto → /age --auto → /cure --auto --stake medium+`; closed
+N/A skips Press and runs `/age --auto → /cure --auto --stake medium+`. Both
+routes cap Cure at two passes. Cook never invokes `/plate`; terminal Cure owns
+publication.
 
 Auto mode stops early when: a quality gate fails new or changed against baseline and the fix rounds exhaust, the no-progress check trips, or the fix is design-shaped; `/press` returns `blocked`; a cure pass cannot apply any finding; or two cure passes complete (success path). Every early stop surfaces the failing skill's report and states the cap reached or the blocker hit — never a silent downgrade.
 
@@ -194,3 +248,4 @@ uses a coder, taste-test uses a reviewer, and harvest and plate stay parent-owne
 | Decompose the spec | planner, general | write (manifest only), fresh-context | powerful | high | compatible planner, then general |
 
 The handoff carries the `agent_resolution` block.
+A terminal Age is publishable only with `next: done`; `next: cure` or a missing `next` halts.
