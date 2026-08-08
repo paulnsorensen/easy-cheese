@@ -109,25 +109,20 @@ reviewer(final age)` without Press or whole-receipt GREEN claims. After wiring,
 validate the complete receipt GREEN, then run one global
 `/press → /age → /cure` chain. Closed N/A bypasses Press.
 
-At the executable boundary, use `plan` when a plan is absent,
-`resolve_artifact` for evidence, one normalized `CurdResult` per selected curd,
-and a confirmed `bind_diagnosis` result before Cure. The host owns identity,
-version, digest, coverage, disposition, and provenance.
+Worktree cleanup uses `python3 skills/ultracook/scripts/ultracook.pyz worktree teardown`; the fan-pathway reference owns its arguments and lifecycle.
 
-**Un-curded.** Small work stays on the single-coder path. Big work dispatches a
-typed `PlannerRequest`, validates the returned plan, and shows its waves and
-upper-bound dispatch count unless `--auto` is set. Waves remain capped at four.
-Legacy decomposition is an explicit lossless projection only; never promote it
-back into live workflow state.
+**Un-curded.** Small work stays single-coder. Big work asks
+"12 ACs -> 5 curds, 2 waves, up to 25 agent dispatches. Go?" unless `--auto`.
+Waves remain capped at four. Legacy decomposition is a lossless projection
+only, never live workflow state.
 Sizing and decomposition follow
 [`decomposer.md`](../cheese/references/decomposer.md).
 
 Before orchestrating, read
 [`references/fan-pathway.md`](references/fan-pathway.md). It owns sizing,
 topology, oracle transfer, deterministic phase execution, recovery, resume,
-Milknado integration, worktree teardown, and resolution provenance. Pass
-`--auto` through dispatched phases when active. A terminal Age is publishable
-only with `next: done`; `next: cure` or a missing `next` halts.
+Milknado integration, worktree teardown, and resolution provenance. Propagate
+`--auto` through dispatched phases when active.
 
 ## Baseline capture
 
@@ -253,5 +248,4 @@ uses a coder, taste-test uses a reviewer, and harvest and plate stay parent-owne
 | Decompose the spec | planner, general | write (manifest only), fresh-context | powerful | high | compatible planner, then general |
 
 The handoff carries the `agent_resolution` block.
-A terminal Age is publishable only with `next: done`; `next: cure` or a missing
-`next` halts.
+A terminal Age is publishable only with `next: done`; `next: cure` or a missing `next` halts.
