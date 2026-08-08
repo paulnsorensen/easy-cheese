@@ -99,58 +99,35 @@ Cut runs before Seed when needed; protected-oracle propagation gives Seed and
 every curd the same protected oracle before RED replay. The complete topology
 lives in [`references/fan-pathway.md`](references/fan-pathway.md).
 
-**Fast-path.** When the curd-count `hint = 1` and blast radius is low or medium,
-skip the planner/decomposer in [`decomposer.md`](../cheese/references/decomposer.md)
-and use the ordinary single-coder path.
+**Fast path.** When the curd-count hint is `1` with low or medium blast radius,
+use the ordinary single-coder path.
 
-**(a) Curded spec.** If the spec already carries a typed `PlannerResult` or
-`CurdPlan`, load it, call `validate_curd_plan`, and continue to the wave fan-out
-below. A prior decomposition is input evidence only; the validated plan is the
-semantic authority.
-Active RED fan curds run `coder(cook) → reviewer(age) → coder(cure) →
+**Curded.** Load the typed `PlannerResult` or `CurdPlan`, run
+`validate_curd_plan`, and treat that plan as semantic authority. Active RED
+curds run `cook(CurdPlan) → reviewer(age) → cure(CurdPlan, binding) →
 reviewer(final age)` without Press or whole-receipt GREEN claims. After wiring,
 validate the complete receipt GREEN, then run one global
 `/press → /age → /cure` chain. Closed N/A bypasses Press.
 
-At the executable fan boundary, call `plan` for a `PlannerResult` when needed,
-then call `validate_curd_plan` before the first worker dispatch. Pass that
-validated plan to `cook`; resolve artifacts with `resolve_artifact`, normalize
-writer observations into exactly one `CurdResult` per selected curd, and require
-`bind_diagnosis` to produce a confirmed per-curd binding before Cure. The host,
-not an agent view, owns identity, version, digest, coverage, disposition, and
-provenance. The full canonical thread is in
-[`references/fan-pathway.md`](references/fan-pathway.md).
-The reference owns mode selection, sizing, topology, oracle transfer,
-deterministic phase execution, recovery, worktree lifecycle, resume, and
-resolution provenance.
+At the executable boundary, use `plan` when a plan is absent,
+`resolve_artifact` for evidence, one normalized `CurdResult` per selected curd,
+and a confirmed `bind_diagnosis` result before Cure. The host owns identity,
+version, digest, coverage, disposition, and provenance.
 
-**(b) Un-curded, small.** Ordinary single-coder Cut → Implement → Taste-test,
-unchanged from today's `/cook` (`## Flow` above). Sizing signal: `/mold`'s
-curd-count hint is advisory; otherwise use AC count and edit-site estimate. Per
-the spec's cook-gate row: "un-curded (typed plan, else AC count and edit-site
-estimate) | single vs fan vs decompose-first; wave plan; transport".
+**Un-curded.** Small work stays on the single-coder path. Big work dispatches a
+typed `PlannerRequest`, validates the returned plan, and shows its waves and
+upper-bound dispatch count unless `--auto` is set. Waves remain capped at four.
+Legacy decomposition is an explicit lossless projection only; never promote it
+back into live workflow state.
+Sizing and decomposition follow
+[`decomposer.md`](../cheese/references/decomposer.md).
 
-**(c) Un-curded, big.** Build a typed `PlannerRequest` from the spec and
-dispatch the planner through `easy_cheese_schemas.plan`. The planner must return
-a `PlannerResultWriterView` that materializes into a `PlannerResult` with a
-`CurdPlan`; validate it with `validate_curd_plan`, show the dependency-respecting
-wave plan plus the projected dispatch count, and ask the user with the exact
-phrasing "12 ACs -> 5 curds, 2 waves, up to 30 agent dispatches. Go?" unless
-`--auto` is set. The count is an upper bound derived from the validated plan
-and excludes wiring until wiring has typed evidence.
-
-**Wave cap.** Waves are capped at `<=4` curds, enforced by `MAX_WAVE_SIZE` in
-`src/fanout/curd_block.py` — cited, not reimplemented here. If a legacy
-decomposer must be called at an integration boundary, project the validated
-`CurdPlan` with `project_curd_block` and reject `UnsupportedProjection`; never
-promote that projection back into live workflow state.
-
-Read [`references/fan-pathway.md`](references/fan-pathway.md) before orchestrating a wave-fan run — it owns the existing-handoffs guard, mode selection, the publication-topology preflight, the milknado seam, phase-chain topology, the deterministic phase loop, worker-exhaustion/aggregate-gate recovery, worktree harvest and teardown, `--resume <slug>`, and resolution provenance.
-
-After fan harvest, enforce worktree teardown and verify that no
-`worktree-agent-*` branch or directory leaks.
-
-A terminal age is **publishable only with `next: done`**; `next: cure` or a missing `next` halts — this applies to both fan-pathway tables ([`references/fan-pathway.md`](references/fan-pathway.md)) and the single-coder `--auto` chain's terminal age (`## Auto mode` below).
+Before orchestrating, read
+[`references/fan-pathway.md`](references/fan-pathway.md). It owns sizing,
+topology, oracle transfer, deterministic phase execution, recovery, resume,
+Milknado integration, worktree teardown, and resolution provenance. Pass
+`--auto` through dispatched phases when active. A terminal Age is publishable
+only with `next: done`; `next: cure` or a missing `next` halts.
 
 ## Baseline capture
 
@@ -276,3 +253,5 @@ uses a coder, taste-test uses a reviewer, and harvest and plate stay parent-owne
 | Decompose the spec | planner, general | write (manifest only), fresh-context | powerful | high | compatible planner, then general |
 
 The handoff carries the `agent_resolution` block.
+A terminal Age is publishable only with `next: done`; `next: cure` or a missing
+`next` halts.
