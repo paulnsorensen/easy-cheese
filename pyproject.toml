@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "easy-cheese-schemas"
-version = "0.1.0"
+version = "1.0.0"
 description = "Shared document and manifest schemas for the easy-cheese agent workflow, with schema-version tolerance."
 readme = "docs/easy-cheese-schemas.md"
 license = "MIT"
@@ -13,7 +13,7 @@ requires-python = ">=3.11"
 authors = [{ name = "Paul Sorensen", email = "paulnsorensen@gmail.com" }]
 keywords = ["schema", "cattrs", "agents", "easy-cheese"]
 classifiers = [
-  "Development Status :: 3 - Alpha",
+  "Development Status :: 5 - Production/Stable",
   "Intended Audience :: Developers",
   "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
@@ -35,6 +35,7 @@ Issues = "https://github.com/paulnsorensen/easy-cheese/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/easy_cheese_schemas"]
+exclude = ["src/easy_cheese_schemas/_phase_registry_compiler.py"]
 
 # Hatchling's default sdist walks the filesystem honouring .gitignore, which
 # would ship the whole repo -- including untracked scratch and the vendored

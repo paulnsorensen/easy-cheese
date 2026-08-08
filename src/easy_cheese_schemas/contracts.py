@@ -1,0 +1,1676 @@
+from __future__ import annotations
+
+import re
+from collections.abc import Callable
+from enum import Enum
+from typing import Any
+
+from attrs import Attribute, define, field, validators
+
+_attrs_field = field
+
+MAX_CONTRACT_BYTES = 8 * 1024 * 1024
+MAX_CONTRACT_DEPTH = 64
+MAX_ARTIFACT_BYTES = 16 * 1024 * 1024
+MAX_COLLECTION_ITEMS = 256
+MAX_CONTEXT_ITEMS = 32
+MAX_SCOPE_PATHS = 64
+MAX_TEXT_LENGTH = 4096
+MAX_CONTEXT_TEXT_LENGTH = 8192
+
+_DIGEST_RE = re.compile(r"sha256:[0-9a-f]{64}")
+_VERSION_RE = re.compile(r"(?:0|[1-9][0-9]*)")
+_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}")
+_MEDIA_TYPE_RE = re.compile(
+    r"[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+(?:;[^\r\n]+)?"
+)
+_URI_RE = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:.+")
+
+Validator = Callable[[object, Attribute, object], None]
+
+
+class IdentityAction(str, Enum):
+    NEW = "new"
+    RETAIN = "retain"
+    DERIVE = "derive"
+
+
+class EvidenceKind(str, Enum):
+    SOURCE = "source"
+    REVIEW = "review"
+    DIAGNOSIS = "diagnosis"
+    VERIFICATION = "verification"
+    RUNTIME = "runtime"
+
+
+class PlannerRequestKind(str, Enum):
+    DECOMPOSE = "decompose"
+    REMEDIATE = "remediate"
+    REPLAN = "replan"
+
+
+class PlannerDisposition(str, Enum):
+    COMPLETE = "complete"
+    PARTIAL = "partial"
+    NO_WORK = "no_work"
+    BLOCKED = "blocked"
+    INVALID = "invalid"
+    EXECUTOR_FAILURE = "executor_failure"
+
+
+class UncertaintyScope(str, Enum):
+    OMITTED_WORK = "omitted_work"
+    EMITTED_WORK = "emitted_work"
+    DEPENDENCY = "dependency"
+    SHARED_CONSTRAINT = "shared_constraint"
+
+
+class ReviewDisposition(str, Enum):
+    CLEAN = "clean"
+    FINDINGS = "findings"
+    BLOCKED = "blocked"
+    INVALID = "invalid"
+    EXECUTOR_FAILURE = "executor_failure"
+
+
+class ReviewSeverity(str, Enum):
+    CRITICAL = "critical"
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+
+
+class CoverageDisposition(str, Enum):
+    COVERED = "covered"
+    NOT_COVERED = "not_covered"
+
+
+class DiagnosisDisposition(str, Enum):
+    CONFIRMED = "confirmed"
+    INCONCLUSIVE = "inconclusive"
+    NOT_REPRODUCED = "not_reproduced"
+    BLOCKED = "blocked"
+    INVALID = "invalid"
+    EXECUTOR_FAILURE = "executor_failure"
+
+
+class ReproductionDisposition(str, Enum):
+    REPRODUCED = "reproduced"
+    NOT_REPRODUCED = "not_reproduced"
+    BLOCKED = "blocked"
+
+
+class HypothesisDisposition(str, Enum):
+    CONFIRMED = "confirmed"
+    REJECTED = "rejected"
+    UNRESOLVED = "unresolved"
+
+
+class CriterionDisposition(str, Enum):
+    PASSED = "passed"
+    FAILED = "failed"
+    BLOCKED = "blocked"
+    SKIPPED = "skipped"
+
+
+class CurdDisposition(str, Enum):
+    PASSED = "passed"
+    FAILED = "failed"
+    BLOCKED = "blocked"
+    SKIPPED = "skipped"
+
+
+class WriterViewKind(str, Enum):
+    CURD_PLAN = "curd_plan"
+    PLANNER_RESULT = "planner_result"
+    REVIEW_RESULT = "review_result"
+    DIAGNOSIS_RESULT = "diagnosis_result"
+    CURD_RESULT = "curd_result"
+
+
+def _bounded_string(
+    _instance: object, attribute: Attribute[Any], value: object
+) -> None:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{attribute.name} must be a non-empty string")
+    if len(value) > MAX_TEXT_LENGTH:
+        raise ValueError(
+            f"{attribute.name} must be at most {MAX_TEXT_LENGTH} characters"
+        )
+_bounded_string.__schema_constraints__ = {
+    "minLength": 1,
+    "maxLength": MAX_TEXT_LENGTH,
+}
+
+
+def _context_string(
+    _instance: object, attribute: Attribute[Any], value: object
+) -> None:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{attribute.name} must be a non-empty string")
+    if len(value) > MAX_CONTEXT_TEXT_LENGTH:
+        raise ValueError(
+            f"{attribute.name} must be at most {MAX_CONTEXT_TEXT_LENGTH} characters"
+        )
+_context_string.__schema_constraints__ = {
+    "minLength": 1,
+    "maxLength": MAX_CONTEXT_TEXT_LENGTH,
+}
+
+
+def _optional_string(
+    instance: object, attribute: Attribute[Any], value: object
+) -> None:
+    if value is not None:
+        _bounded_string(instance, attribute, value)
+_optional_string.__schema_constraints__ = _bounded_string.__schema_constraints__
+
+
+def _identifier(_instance: object, attribute: Attribute[Any], value: object) -> None:
+    if not isinstance(value, str) or _ID_RE.fullmatch(value) is None:
+        raise ValueError(
+            f"{attribute.name} must be an opaque identifier matching {_ID_RE.pattern}"
+        )
+
+_identifier.__schema_constraints__ = {
+    "pattern": _ID_RE.pattern,
+    "minLength": 1,
+    "maxLength": 128,
+}
+
+def _optional_identifier(
+    instance: object, attribute: Attribute[Any], value: object
+) -> None:
+    if value is not None:
+        _identifier(instance, attribute, value)
+
+
+_optional_identifier.__schema_constraints__ = _identifier.__schema_constraints__
+def _digest(_instance: object, attribute: Attribute[Any], value: object) -> None:
+    if not isinstance(value, str) or _DIGEST_RE.fullmatch(value) is None:
+        raise ValueError(
+            f"{attribute.name} must be sha256: followed by 64 lowercase hexadecimal characters"
+        )
+
+_digest.__schema_constraints__ = {"pattern": _DIGEST_RE.pattern}
+
+def _positive_integer(
+    _instance: object, attribute: Attribute[Any], value: object
+) -> None:
+    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+        raise ValueError(f"{attribute.name} must be a positive integer")
+
+
+_positive_integer.__schema_constraints__ = {"minimum": 1}
+def _artifact_size(
+    instance: object, attribute: Attribute[Any], value: object
+) -> None:
+    _non_negative_integer(instance, attribute, value)
+    assert isinstance(value, int)
+    if value > MAX_ARTIFACT_BYTES:
+        raise ValueError(
+            f"{attribute.name} must be at most {MAX_ARTIFACT_BYTES} bytes"
+        )
+
+
+_artifact_size.__schema_constraints__ = {
+    "minimum": 0,
+    "maximum": MAX_ARTIFACT_BYTES,
+}
+def _non_negative_integer(
+    _instance: object, attribute: Attribute[Any], value: object
+) -> None:
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise ValueError(f"{attribute.name} must be a non-negative integer")
+
+
+_non_negative_integer.__schema_constraints__ = {"minimum": 0}
+ 
+def _version_component(
+    _instance: object, attribute: Attribute[Any], value: object
+) -> None:
+    if not isinstance(value, str) or _VERSION_RE.fullmatch(value) is None:
+        raise ValueError(
+            f"{attribute.name} version component must be a canonical decimal string"
+        )
+
+
+_version_component.__schema_constraints__ = {
+    "pattern": _VERSION_RE.pattern,
+    "minLength": 1,
+}
+def _tuple_sequence(value: object) -> tuple[object, ...]:
+    if isinstance(value, tuple):
+        return value
+    if isinstance(value, list):
+        return tuple(value)
+    raise TypeError("collection fields must be provided as a list or tuple")
+
+
+def _uri(_instance: object, attribute: Attribute[Any], value: object) -> None:
+    if not isinstance(value, str) or _URI_RE.fullmatch(value) is None:
+        raise ValueError(f"{attribute.name} must be an absolute URI")
+
+
+_uri.__schema_constraints__ = {"pattern": _URI_RE.pattern, "minLength": 1}
+
+
+def _optional_uri(instance: object, attribute: Attribute[Any], value: object) -> None:
+    if value is not None:
+        _uri(instance, attribute, value)
+
+
+_optional_uri.__schema_constraints__ = _uri.__schema_constraints__
+
+
+def _media_type(_instance: object, attribute: Attribute[Any], value: object) -> None:
+    if not isinstance(value, str) or _MEDIA_TYPE_RE.fullmatch(value) is None:
+        raise ValueError(f"{attribute.name} must be a valid media type")
+
+
+_media_type.__schema_constraints__ = {
+    "pattern": _MEDIA_TYPE_RE.pattern,
+    "minLength": 3,
+}
+
+
+def _scope_path(_instance: object, attribute: Attribute[Any], value: object) -> None:
+    _bounded_string(_instance, attribute, value)
+    assert isinstance(value, str)
+    if value.startswith("/") or value in {".", ".."} or ".." in value.split("/"):
+        raise ValueError(f"{attribute.name} must be a repository-relative path")
+
+
+_scope_path.__schema_constraints__ = _bounded_string.__schema_constraints__
+def _list_of(
+    expected: type,
+    *,
+    non_empty: bool = False,
+    limit: int = MAX_COLLECTION_ITEMS,
+) -> Validator:
+    def validate(_instance: object, attribute: Attribute[Any], value: object) -> None:
+        if not isinstance(value, tuple):
+            raise ValueError(f"{attribute.name} must be a list")
+        if non_empty and not value:
+            raise ValueError(f"{attribute.name} must be a non-empty list")
+        if len(value) > limit:
+            raise ValueError(f"{attribute.name} must be at most {limit} items")
+        for index, item in enumerate(value, start=1):
+            if not isinstance(item, expected):
+                raise ValueError(
+                    f"{attribute.name}[{index}] must be {expected.__name__}"
+                )
+
+    validate.__schema_constraints__ = {
+        "maxItems": limit,
+        **({"minItems": 1} if non_empty else {}),
+    }
+    return validate
+
+
+def _string_list(
+    *,
+    non_empty: bool = False,
+    limit: int = MAX_COLLECTION_ITEMS,
+    path: bool = False,
+    item_validator: Validator | None = None,
+) -> Validator:
+    if item_validator is not None and path:
+        raise ValueError("path and item_validator cannot be combined")
+    element_validator = item_validator or (_scope_path if path else _bounded_string)
+
+    def validate(instance: object, attribute: Attribute[Any], value: object) -> None:
+        if not isinstance(value, tuple):
+            raise ValueError(f"{attribute.name} must be a list")
+        if non_empty and not value:
+            raise ValueError(f"{attribute.name} must be a non-empty list")
+        if len(value) > limit:
+            raise ValueError(f"{attribute.name} must be at most {limit} items")
+        seen: set[str] = set()
+        for index, item in enumerate(value, start=1):
+            item_attribute = _ListItemAttribute(f"{attribute.name}[{index}]")
+            element_validator(instance, item_attribute, item)
+            assert isinstance(item, str)
+            if item in seen:
+                raise ValueError(
+                    f"{attribute.name} must not contain duplicate {item!r}"
+                )
+            seen.add(item)
+
+    validate.__schema_constraints__ = {
+        "maxItems": limit,
+        "uniqueItems": True,
+        **({"minItems": 1} if non_empty else {}),
+    }
+    validate.__schema_item_constraints__ = getattr(
+        element_validator, "__schema_constraints__", {}
+    )
+    return validate
+
+
+def _identifier_list(
+    *,
+    non_empty: bool = False,
+    limit: int = MAX_COLLECTION_ITEMS,
+) -> Validator:
+    return _string_list(
+        non_empty=non_empty,
+        limit=limit,
+        item_validator=_identifier,
+    )
+
+
+def _uri_list(
+    *,
+    non_empty: bool = False,
+    limit: int = MAX_COLLECTION_ITEMS,
+) -> Validator:
+    return _string_list(
+        non_empty=non_empty,
+        limit=limit,
+        item_validator=_uri,
+    )
+
+
+def _context_string_list(
+    *,
+    non_empty: bool = False,
+    limit: int = MAX_COLLECTION_ITEMS,
+) -> Validator:
+    return _string_list(
+        non_empty=non_empty,
+        limit=limit,
+        item_validator=_context_string,
+    )
+
+
+class _ListItemAttribute:
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+
+def _unique_by(attribute_name: str, values: tuple[object, ...]) -> str | None:
+    seen: set[object] = set()
+    for value in values:
+        item = getattr(value, attribute_name)
+        if item in seen:
+            return str(item)
+        seen.add(item)
+    return None
+
+
+@define(frozen=True)
+class ContractVersion:
+    schema_uri: str = field(validator=_uri)
+    major: str = field(validator=_version_component)
+    minor: str = field(validator=_version_component)
+
+
+@define(frozen=True)
+class SourceLocation:
+    artifact_id: str = field(validator=_identifier)
+    path: str = field(validator=_scope_path)
+    start_line: int = field(validator=_positive_integer)
+    end_line: int = field(validator=_positive_integer)
+    start_column: int | None = field(
+        default=None, validator=validators.optional(_positive_integer)
+    )
+    end_column: int | None = field(
+        default=None, validator=validators.optional(_positive_integer)
+    )
+
+    @end_column.validator
+    def _validate_bounds(self, _attribute: Attribute[Any], _value: object) -> None:
+        if self.end_line < self.start_line:
+            raise ValueError("end_line must not precede start_line")
+        if self.end_column is not None and self.start_column is None:
+            raise ValueError("end_column requires start_column")
+        if (
+            self.start_line == self.end_line
+            and self.start_column is not None
+            and self.end_column is not None
+            and self.end_column < self.start_column
+        ):
+            raise ValueError("end_column must not precede start_column")
+
+
+@define(frozen=True)
+class ArtifactRef:
+    artifact_id: str = field(validator=_identifier)
+    role: str = field(validator=_identifier)
+    uri: str = field(validator=_uri)
+    digest: str = field(validator=_digest)
+    size_bytes: int = field(validator=_artifact_size)
+    media_type: str = field(validator=_media_type)
+    schema_uri: str | None = field(default=None, validator=_optional_uri)
+
+
+@define(frozen=True)
+class EvidenceRef:
+    evidence_id: str = field(validator=_identifier)
+    kind: EvidenceKind = field(validator=validators.instance_of(EvidenceKind))
+    artifact: ArtifactRef = field(validator=validators.instance_of(ArtifactRef))
+    location: SourceLocation | None = field(
+        default=None,
+        validator=validators.optional(validators.instance_of(SourceLocation)),
+    )
+    summary: str | None = field(default=None, validator=_optional_string)
+
+    @summary.validator
+    def _validate_location(self, _attribute: Attribute[Any], _value: object) -> None:
+        if (
+            self.location is not None
+            and self.location.artifact_id != self.artifact.artifact_id
+        ):
+            raise ValueError("location.artifact_id must match artifact.artifact_id")
+
+
+@define(frozen=True)
+class SourcePlanRef:
+    plan_id: str = field(validator=_identifier)
+    revision: int = field(validator=_positive_integer)
+    digest: str = field(validator=_digest)
+
+
+@define(frozen=True)
+class SourceCurdRef:
+    curd_id: str = field(validator=_identifier)
+    digest: str = field(validator=_digest)
+
+
+@define(frozen=True)
+class IdentityLineage:
+    identity_action: IdentityAction = field(
+        validator=validators.instance_of(IdentityAction)
+    )
+    source_curd_ids: tuple[str, ...] = field(
+        factory=tuple,
+        converter=_tuple_sequence,
+        validator=_identifier_list(limit=MAX_CONTEXT_ITEMS),
+    )
+
+    @source_curd_ids.validator
+    def _validate_action(self, _attribute: Attribute[Any], _value: object) -> None:
+        count = len(self.source_curd_ids)
+        if self.identity_action is IdentityAction.NEW and count:
+            raise ValueError("new lineage must not name source curds")
+        if self.identity_action is IdentityAction.RETAIN and count != 1:
+            raise ValueError("retain lineage must name exactly one source curd")
+        if self.identity_action is IdentityAction.DERIVE and not count:
+            raise ValueError("derive lineage must name at least one source curd")
+
+
+@define(frozen=True)
+class BoundedScope:
+    paths: tuple[str, ...] = field(
+        factory=tuple,
+        converter=_tuple_sequence,
+        validator=_string_list(non_empty=True, limit=MAX_SCOPE_PATHS, path=True),
+    )
+    excluded_paths: tuple[str, ...] = field(
+        factory=tuple,
+        converter=_tuple_sequence,
+        validator=_string_list(limit=MAX_SCOPE_PATHS, path=True),
+    )
+
+    @excluded_paths.validator
+    def _validate_exclusions(self, _attribute: Attribute[Any], _value: object) -> None:
+        if set(self.paths) & set(self.excluded_paths):
+            raise ValueError("paths and excluded_paths must not overlap")
+        if len(self.paths) + len(self.excluded_paths) > MAX_SCOPE_PATHS:
+            raise ValueError(
+                f"scope must contain at most {MAX_SCOPE_PATHS} included and excluded paths"
+            )
+
+
+@define(frozen=True)
+class BoundedContext:
+    shared_inputs: tuple[ArtifactRef, ...] = field(
+        factory=tuple,
+        converter=_tuple_sequence,
+        validator=_list_of(ArtifactRef, limit=MAX_CONTEXT_ITEMS),
+    )
+    constraints: tuple[str, ...] = field(
+        factory=tuple,
+        converter=_tuple_sequence,
+        validator=_context_string_list(limit=MAX_CONTEXT_ITEMS),
+    )
+    invariants: tuple[str, ...] = field(
+        factory=tuple,
+        converter=_tuple_sequence,
+        validator=_context_string_list(limit=MAX_CONTEXT_ITEMS),
+    )
+
+    @invariants.validator
+    def _validate_context(self, _attribute: Attribute[Any], _value: object) -> None:
+        if not (self.shared_inputs or self.constraints or self.invariants):
+            raise ValueError("bounded context must not be empty")
+        duplicate = _unique_by("artifact_id", self.shared_inputs)
+        if duplicate is not None:
+            raise ValueError(f"shared_inputs artifact_id {duplicate!r} must be unique")
+
+
+@define(frozen=True)
+class Criterion:
+    criterion_id: str = field(validator=_identifier)
+    description: str = field(validator=_bounded_string)
+    check: str = field(validator=_bounded_string)
+
+
+@define(frozen=True)
+class SemanticCurd:
+    curd_id: str = field(validator=_identifier)
+    outcome: str = field(validator=_bounded_string)
+    scope: BoundedScope = field(validator=validators.instance_of(BoundedScope))
+    inputs: tuple[ArtifactRef, ...] = field(
+        converter=_tuple_sequence, validator=_list_of(ArtifactRef)
+    )
+    outputs: tuple[str, ...] = field(
+        converter=_tuple_sequence, validator=_string_list(non_empty=True)
+    )
+    dependencies: tuple[str, ...] = field(
+        converter=_tuple_sequence, validator=_identifier_list()
+    )
+    criteria: tuple[Criterion, ...] = field(
+        converter=_tuple_sequence, validator=_list_of(Criterion, non_empty=True)
+    )
+    lineage: IdentityLineage = field(validator=validators.instance_of(IdentityLineage))
+
+    @lineage.validator
+    def _validate_curd(self, _attribute: Attribute[Any], _value: object) -> None:
+        if self.curd_id in self.dependencies:
+            raise ValueError("dependencies must not contain the curd's own curd_id")
+        duplicate_input = _unique_by("artifact_id", self.inputs)
+        if duplicate_input is not None:
+            raise ValueError(f"inputs artifact_id {duplicate_input!r} must be unique")
+        duplicate_criterion = _unique_by("criterion_id", self.criteria)
+        if duplicate_criterion is not None:
+            raise ValueError(
+                f"criterion_id {duplicate_criterion!r} must be unique within a curd"
+            )
+        if (
+            self.lineage.identity_action is IdentityAction.RETAIN
+            and self.lineage.source_curd_ids != (self.curd_id,)
+        ):
+            raise ValueError(f"retain lineage must preserve curd_id {self.curd_id!r}")
+
+
+def _validate_plan_curds(
+    _instance: object, attribute: Attribute[Any], value: object
+) -> None:
+    _list_of(SemanticCurd, non_empty=True)(_instance, attribute, value)
+    assert isinstance(value, tuple)
+    duplicate_curd = _unique_by("curd_id", value)
+    if duplicate_curd is not None:
+        raise ValueError(f"curd_id {duplicate_curd!r} must be unique")
+
+    curd_ids = {curd.curd_id for curd in value}
+    criterion_ids: set[str] = set()
+    for index, curd in enumerate(value, start=1):
+        for dependency in curd.dependencies:
+            if dependency not in curd_ids:
+                raise ValueError(
+                    f"curds[{index}].dependencies references undeclared curd "
+                    f"{dependency!r}"
+                )
+        for item in curd.criteria:
+            if item.criterion_id in criterion_ids:
+                raise ValueError(
+                    f"criterion_id {item.criterion_id!r} must be unique across the plan"
+                )
+            criterion_ids.add(item.criterion_id)
+
+    dependencies = {curd.curd_id: curd.dependencies for curd in value}
+    visiting: set[str] = set()
+    visited: set[str] = set()
+
+    def visit(curd_id: str) -> None:
+        if curd_id in visiting:
+            raise ValueError("curd dependencies must be acyclic")
+        if curd_id in visited:
+            return
+        visiting.add(curd_id)
+        for dependency in dependencies[curd_id]:
+            visit(dependency)
+        visiting.remove(curd_id)
+        visited.add(curd_id)
+
+    for curd_id in dependencies:
+        visit(curd_id)
+
+_validate_plan_curds.__schema_constraints__ = {
+    "maxItems": MAX_COLLECTION_ITEMS,
+    "minItems": 1,
+    "uniqueItems": True,
+}
+
+@define(frozen=True)
+class CurdPlan:
+    contract_version: ContractVersion = field(
+        validator=validators.instance_of(ContractVersion)
+    )
+    plan_id: str = field(validator=_identifier)
+    revision: int = field(validator=_positive_integer)
+    digest: str = field(validator=_digest)
+    objective: str = field(validator=_context_string)
+    curds: tuple[SemanticCurd, ...] = field(
+        converter=_tuple_sequence, validator=_validate_plan_curds
+    )
+    context: BoundedContext | None = field(
+        default=None,
+        validator=validators.optional(validators.instance_of(BoundedContext)),
+    )
+    parent_plan_ref: SourcePlanRef | None = field(
+        default=None,
+        validator=validators.optional(validators.instance_of(SourcePlanRef)),
+    )
+
+    @parent_plan_ref.validator
+    def _validate_parent(self, _attribute: Attribute[Any], _value: object) -> None:
+        if (
+            self.parent_plan_ref is not None
+            and self.parent_plan_ref.plan_id == self.plan_id
+        ):
+            raise ValueError("parent_plan_ref must identify a different plan")
+
+
+@define(frozen=True)
+class PlannerUncertainty:
+    description: str = field(validator=_bounded_string)
+    scope: UncertaintyScope = field(validator=validators.instance_of(UncertaintyScope))
+    evidence: tuple[EvidenceRef, ...] = field(
+        factory=tuple,
+        converter=_tuple_sequence,
+        validator=_list_of(EvidenceRef),
+    )
+
+
+@define(frozen=True)
+class PlannerRequest:
+    contract_version: ContractVersion = field(
+        validator=validators.instance_of(ContractVersion)
+    )
+    request_id: str = field(validator=_identifier)
+    kind: PlannerRequestKind = field(
+        validator=validators.instance_of(PlannerRequestKind)
+    )
+    objective: str = field(validator=_context_string)
+    evidence: tuple[EvidenceRef, ...] = field(
+        factory=tuple,
+        converter=_tuple_sequence,
+        validator=_list_of(EvidenceRef),
+    )
+    source_plan_ref: SourcePlanRef | None = field(
+        default=None,
+        validator=validators.optional(validators.instance_of(SourcePlanRef)),
+    )
+
+    @source_plan_ref.validator
+    def _validate_kind(self, _attribute: Attribute[Any], _value: object) -> None:
+        if (
+            self.kind is PlannerRequestKind.DECOMPOSE
+            and self.source_plan_ref is not None
+        ):
+            raise ValueError("decompose request must not name a source plan")
+        if (
+            self.kind is not PlannerRequestKind.DECOMPOSE
+            and self.source_plan_ref is None
+        ):
+            raise ValueError(f"{self.kind.value} request must name a source plan")
+        if self.kind is PlannerRequestKind.REMEDIATE and not self.evidence:
+            raise ValueError("remediate request must carry evidence")
+
+
+def _validate_planner_disposition(
+    disposition: PlannerDisposition,
+    plan: object | None,
+    unresolved_work: tuple[Any, ...],
+    reason: str | None,
+    *,
+    label: str,
+) -> None:
+    if disposition is PlannerDisposition.COMPLETE:
+        if plan is None:
+            raise ValueError(f"complete {label} must carry a plan")
+        if unresolved_work:
+            raise ValueError(f"complete {label} must not carry unresolved work")
+        if reason:
+            raise ValueError(f"complete {label} must not include a reason")
+        return
+    if disposition is PlannerDisposition.PARTIAL:
+        if plan is None:
+            raise ValueError(f"partial {label} must carry a plan")
+        if not unresolved_work:
+            raise ValueError(f"partial {label} must describe omitted work")
+        if any(
+            item.scope is not UncertaintyScope.OMITTED_WORK
+            for item in unresolved_work
+        ):
+            raise ValueError(
+                f"partial {label} uncertainty must concern omitted work only"
+            )
+        if reason:
+            raise ValueError(f"partial {label} must not include a reason")
+        return
+    if plan is not None:
+        raise ValueError(f"{disposition.value} {label} must not carry a plan")
+    if disposition is PlannerDisposition.BLOCKED and not unresolved_work:
+        raise ValueError(f"blocked {label} must describe unresolved work")
+    if (
+        disposition
+        in {
+            PlannerDisposition.NO_WORK,
+            PlannerDisposition.INVALID,
+            PlannerDisposition.EXECUTOR_FAILURE,
+        }
+        and unresolved_work
+    ):
+        raise ValueError(
+            f"{disposition.value} {label} must not carry unresolved work"
+        )
+    if not reason:
+        raise ValueError(f"{disposition.value} {label} must include a reason")
+
+
+@define(frozen=True)
+class PlannerResult:
+    contract_version: ContractVersion = field(
+        validator=validators.instance_of(ContractVersion)
+    )
+    request_id: str = field(validator=_identifier)
+    disposition: PlannerDisposition = field(
+        validator=validators.instance_of(PlannerDisposition)
+    )
+    plan: CurdPlan | None = field(
+        default=None, validator=validators.optional(validators.instance_of(CurdPlan))
+    )
+    unresolved_work: tuple[PlannerUncertainty, ...] = field(
+        factory=tuple,
+        converter=_tuple_sequence,
+        validator=_list_of(PlannerUncertainty),
+    )
+    reason: str | None = field(default=None, validator=_optional_string)
+
+    @reason.validator
+    def _validate_disposition(self, _attribute: Attribute[Any], _value: object) -> None:
+        _validate_planner_disposition(
+            self.disposition,
+            self.plan,
+            self.unresolved_work,
+            self.reason,
+            label="planner result",
+        )
+
+
+@define(frozen=True)
+class ReviewRequest:
+    contract_version: ContractVersion = field(
+        validator=validators.instance_of(ContractVersion)
+    )
+    review_id: str = field(validator=_identifier)
+    subject: ArtifactRef = field(validator=validators.instance_of(ArtifactRef))
+    coverage_targets: tuple[str, ...] = field(
+        converter=_tuple_sequence,
+        validator=_identifier_list(non_empty=True),
+    )
+    evidence: tuple[EvidenceRef, ...] = field(
+        factory=tuple,
+        converter=_tuple_sequence,
+        validator=_list_of(EvidenceRef),
+    )
+
+
+@define(frozen=True)
+class ReviewCoverage:
+    target: str = field(validator=_identifier)
+    disposition: CoverageDisposition = field(
+        validator=validators.instance_of(CoverageDisposition)
+    )
+    reason: str | None = field(default=None, validator=_optional_string)
+
+    @reason.validator
+    def _validate_disposition(self, _attribute: Attribute[Any], _value: object) -> None:
+        if self.disposition is CoverageDisposition.NOT_COVERED and not self.reason:
+            raise ValueError("not_covered review coverage must include a reason")
+        if self.disposition is CoverageDisposition.COVERED and self.reason is not None:
+            raise ValueError("covered review coverage must not include a reason")
+
+
+@define(frozen=True)
+class ReviewFinding:
+    finding_id: str = field(validator=_identifier)
+    severity: ReviewSeverity = field(validator=validators.instance_of(ReviewSeverity))
+    summary: str = field(validator=_bounded_string)
+    evidence: tuple[EvidenceRef, ...] = field(
+        converter=_tuple_sequence,
+        validator=_list_of(EvidenceRef, non_empty=True),
+    )
+    location: SourceLocation | None = field(
+        default=None,
+        validator=validators.optional(validators.instance_of(SourceLocation)),
+    )
+
+
+@define(frozen=True)
+class ReviewResult:
+    contract_version: ContractVersion = field(
+        validator=validators.instance_of(ContractVersion)
+    )
+    review_id: str = field(validator=_identifier)
+    disposition: ReviewDisposition = field(
+        validator=validators.instance_of(ReviewDisposition)
+    )
+    findings: tuple[ReviewFinding, ...] = field(
+        converter=_tuple_sequence, validator=_list_of(ReviewFinding)
+    )
+    coverage: tuple[ReviewCoverage, ...] = field(
+        converter=_tuple_sequence, validator=_list_of(ReviewCoverage)
+    )
+    reason: str | None = field(default=None, validator=_optional_string)
+
+    @reason.validator
+    def _validate_disposition(self, _attribute: Attribute[Any], _value: object) -> None:
+        duplicate_target = _unique_by("target", self.coverage)
+        if duplicate_target is not None:
+            raise ValueError(f"coverage target {duplicate_target!r} must be unique")
+        duplicate_finding = _unique_by("finding_id", self.findings)
+        if duplicate_finding is not None:
+            raise ValueError(f"finding_id {duplicate_finding!r} must be unique")
+
+        if self.disposition is ReviewDisposition.CLEAN:
+            if self.findings:
+                raise ValueError("clean review result must not include findings")
+            if not self.coverage or any(
+                row.disposition is not CoverageDisposition.COVERED
+                for row in self.coverage
+            ):
+                raise ValueError("clean review result requires complete coverage")
+            return
+        if self.disposition is ReviewDisposition.FINDINGS:
+            if not self.findings:
+                raise ValueError(
+                    "findings review result must include at least one finding"
+                )
+            if not self.coverage:
+                raise ValueError("findings review result requires a coverage ledger")
+            return
+        if (
+            self.disposition
+            in {
+                ReviewDisposition.BLOCKED,
+                ReviewDisposition.INVALID,
+                ReviewDisposition.EXECUTOR_FAILURE,
+            }
+            and self.findings
+        ):
+            raise ValueError(
+                f"{self.disposition.value} review result must not include findings"
+            )
+        if not self.reason:
+            raise ValueError(
+                f"{self.disposition.value} review result must include a reason"
+            )
+
+
+@define(frozen=True)
+class DiagnosisRequest:
+    contract_version: ContractVersion = field(
+        validator=validators.instance_of(ContractVersion)
+    )
+    diagnosis_id: str = field(validator=_identifier)
+    symptom: str = field(validator=_context_string)
+    subject: ArtifactRef = field(validator=validators.instance_of(ArtifactRef))
+    evidence: tuple[EvidenceRef, ...] = field(
+        factory=tuple,
+        converter=_tuple_sequence,
+        validator=_list_of(EvidenceRef),
+    )
+
+
+@define(frozen=True)
+class Reproduction:
+    status: ReproductionDisposition = field(
+        validator=validators.instance_of(ReproductionDisposition)
+    )
+    steps: tuple[str, ...] = field(
+        converter=_tuple_sequence, validator=_string_list(non_empty=True)
+    )
+    observed: str | None = field(default=None, validator=_optional_string)
+    evidence: tuple[EvidenceRef, ...] = field(
+        factory=tuple,
+        converter=_tuple_sequence,
+        validator=_list_of(EvidenceRef),
+    )
+
+    @evidence.validator
+    def _validate_status(self, _attribute: Attribute[Any], _value: object) -> None:
+        if self.status is ReproductionDisposition.REPRODUCED:
+            if self.observed is None:
+                raise ValueError("reproduced result must describe what was observed")
+            if not self.evidence:
+                raise ValueError("reproduced result must include evidence")
+        if self.status is ReproductionDisposition.BLOCKED and self.observed is None:
+            raise ValueError("blocked reproduction must explain the blocker")
+
+
+@define(frozen=True)
+class DiagnosisHypothesis:
+    hypothesis_id: str = field(validator=_identifier)
+    statement: str = field(validator=_bounded_string)
+    disposition: HypothesisDisposition = field(
+        validator=validators.instance_of(HypothesisDisposition)
+    )
+    evidence: tuple[EvidenceRef, ...] = field(
+        factory=tuple,
+        converter=_tuple_sequence,
+        validator=_list_of(EvidenceRef),
+    )
+
+    @evidence.validator
+    def _validate_disposition(self, _attribute: Attribute[Any], _value: object) -> None:
+        if (
+            self.disposition is not HypothesisDisposition.UNRESOLVED
+            and not self.evidence
+        ):
+            raise ValueError(
+                f"{self.disposition.value} hypothesis must include evidence"
+            )
+
+
+@define(frozen=True)
+class DiagnosisCause:
+    summary: str = field(validator=_bounded_string)
+    evidence: tuple[EvidenceRef, ...] = field(
+        converter=_tuple_sequence,
+        validator=_list_of(EvidenceRef, non_empty=True),
+    )
+    location: SourceLocation | None = field(
+        default=None,
+        validator=validators.optional(validators.instance_of(SourceLocation)),
+    )
+
+
+@define(frozen=True)
+class DiagnosisResult:
+    contract_version: ContractVersion = field(
+        validator=validators.instance_of(ContractVersion)
+    )
+    diagnosis_id: str = field(validator=_identifier)
+    disposition: DiagnosisDisposition = field(
+        validator=validators.instance_of(DiagnosisDisposition)
+    )
+    symptom: str = field(validator=_context_string)
+    reproduction: Reproduction = field(validator=validators.instance_of(Reproduction))
+    hypotheses: tuple[DiagnosisHypothesis, ...] = field(
+        converter=_tuple_sequence, validator=_list_of(DiagnosisHypothesis)
+    )
+    confirmed_cause: DiagnosisCause | None = field(
+        default=None,
+        validator=validators.optional(validators.instance_of(DiagnosisCause)),
+    )
+    regression_seam: SourceLocation | None = field(
+        default=None,
+        validator=validators.optional(validators.instance_of(SourceLocation)),
+    )
+    unresolved_evidence: tuple[EvidenceRef, ...] = field(
+        factory=tuple,
+        converter=_tuple_sequence,
+        validator=_list_of(EvidenceRef),
+    )
+    reason: str | None = field(default=None, validator=_optional_string)
+
+    @reason.validator
+    def _validate_disposition(self, _attribute: Attribute[Any], _value: object) -> None:
+        duplicate = _unique_by("hypothesis_id", self.hypotheses)
+        if duplicate is not None:
+            raise ValueError(f"hypothesis_id {duplicate!r} must be unique")
+
+        if self.disposition is DiagnosisDisposition.CONFIRMED:
+            if self.reproduction.status is not ReproductionDisposition.REPRODUCED:
+                raise ValueError("confirmed diagnosis requires a reproduced symptom")
+            if self.confirmed_cause is None:
+                raise ValueError("confirmed diagnosis must include a confirmed cause")
+            if self.regression_seam is None:
+                raise ValueError("confirmed diagnosis must identify a regression seam")
+            return
+        if self.confirmed_cause is not None:
+            raise ValueError(
+                f"{self.disposition.value} diagnosis must not include a confirmed cause"
+            )
+        if self.regression_seam is not None:
+            raise ValueError(
+                f"{self.disposition.value} diagnosis must not identify a regression seam"
+            )
+        if self.disposition is DiagnosisDisposition.INCONCLUSIVE:
+            if not self.unresolved_evidence:
+                raise ValueError(
+                    "inconclusive diagnosis must include unresolved evidence"
+                )
+            return
+        if self.disposition is DiagnosisDisposition.NOT_REPRODUCED:
+            if self.reproduction.status is not ReproductionDisposition.NOT_REPRODUCED:
+                raise ValueError(
+                    "not_reproduced diagnosis requires a not_reproduced result"
+                )
+            return
+        if not self.reason:
+            raise ValueError(
+                f"{self.disposition.value} diagnosis must include a reason"
+            )
+
+
+@define(frozen=True)
+class CriterionResult:
+    criterion_id: str = field(validator=_identifier)
+    disposition: CriterionDisposition = field(
+        validator=validators.instance_of(CriterionDisposition)
+    )
+    evidence: tuple[EvidenceRef, ...] = field(
+        factory=tuple,
+        converter=_tuple_sequence,
+        validator=_list_of(EvidenceRef),
+    )
+    reason: str | None = field(default=None, validator=_optional_string)
+
+    @reason.validator
+    def _validate_disposition(self, _attribute: Attribute[Any], _value: object) -> None:
+        if (
+            self.disposition
+            in {
+                CriterionDisposition.PASSED,
+                CriterionDisposition.FAILED,
+            }
+            and not self.evidence
+        ):
+            raise ValueError(
+                f"{self.disposition.value} criterion result must include evidence"
+            )
+        if (
+            self.disposition
+            in {
+                CriterionDisposition.BLOCKED,
+                CriterionDisposition.SKIPPED,
+            }
+            and not self.reason
+        ):
+            raise ValueError(
+                f"{self.disposition.value} criterion result must include a reason"
+            )
+
+
+def derive_curd_disposition(rows: tuple[CriterionResult, ...]) -> CurdDisposition:
+    dispositions = {row.disposition for row in rows}
+    if CriterionDisposition.FAILED in dispositions:
+        return CurdDisposition.FAILED
+    if CriterionDisposition.BLOCKED in dispositions:
+        return CurdDisposition.BLOCKED
+    if dispositions == {CriterionDisposition.SKIPPED}:
+        return CurdDisposition.SKIPPED
+    if CriterionDisposition.SKIPPED in dispositions:
+        return CurdDisposition.BLOCKED
+    return CurdDisposition.PASSED
+
+
+@define(frozen=True)
+class CurdResult:
+    contract_version: ContractVersion = field(
+        validator=validators.instance_of(ContractVersion)
+    )
+    result_id: str = field(validator=_identifier)
+    source_plan_ref: SourcePlanRef = field(
+        validator=validators.instance_of(SourcePlanRef)
+    )
+    source_curd_ref: SourceCurdRef = field(
+        validator=validators.instance_of(SourceCurdRef)
+    )
+    disposition: CurdDisposition = field(
+        validator=validators.instance_of(CurdDisposition)
+    )
+    expected_criterion_ids: tuple[str, ...] = field(
+        converter=_tuple_sequence, validator=_identifier_list(non_empty=True)
+    )
+    criterion_results: tuple[CriterionResult, ...] = field(
+        converter=_tuple_sequence, validator=_list_of(CriterionResult, non_empty=True)
+    )
+    deliverables: tuple[ArtifactRef, ...] = field(
+        factory=tuple,
+        converter=_tuple_sequence,
+        validator=_list_of(ArtifactRef),
+    )
+    unresolved_work: tuple[str, ...] = field(
+        factory=tuple, converter=_tuple_sequence, validator=_string_list()
+    )
+    runtime_refs: tuple[str, ...] = field(
+        factory=tuple, converter=_tuple_sequence, validator=_string_list()
+    )
+
+    @runtime_refs.validator
+    def _validate_result(self, _attribute: Attribute[Any], _value: object) -> None:
+        result_ids = [row.criterion_id for row in self.criterion_results]
+        if len(result_ids) != len(set(result_ids)):
+            raise ValueError("criterion_results must contain one row per criterion_id")
+        if set(result_ids) != set(self.expected_criterion_ids):
+            raise ValueError(
+                "criterion_results must cover expected_criterion_ids exactly"
+            )
+        derived = derive_curd_disposition(self.criterion_results)
+        if self.disposition is not derived:
+            raise ValueError(
+                f"disposition must be {derived.value} for the supplied criterion_results"
+            )
+        duplicate = _unique_by("artifact_id", self.deliverables)
+        if duplicate is not None:
+            raise ValueError(f"deliverables artifact_id {duplicate!r} must be unique")
+        if self.disposition is CurdDisposition.PASSED and self.unresolved_work:
+            raise ValueError("passed curd result must not include unresolved work")
+
+
+@define(frozen=True)
+class PhaseDestination:
+    destination: str = field(validator=_identifier)
+    payload_schema_uri: str = field(validator=_uri)
+
+
+@define(frozen=True)
+class PhaseContract:
+    contract_version: ContractVersion = field(
+        validator=validators.instance_of(ContractVersion)
+    )
+    source: str = field(validator=_identifier)
+    input_schema_uris: tuple[str, ...] = field(
+        converter=_tuple_sequence, validator=_uri_list(non_empty=True)
+    )
+    outputs: tuple[PhaseDestination, ...] = field(
+        converter=_tuple_sequence, validator=_list_of(PhaseDestination, non_empty=True)
+    )
+
+    @outputs.validator
+    def _validate_routes(self, _attribute: Attribute[Any], _value: object) -> None:
+        routes = {
+            (route.destination, route.payload_schema_uri) for route in self.outputs
+        }
+        if len(routes) != len(self.outputs):
+            raise ValueError("outputs must not contain duplicate routes")
+
+
+@define(frozen=True)
+class UnsupportedProjection:
+    target: str = field(validator=_identifier)
+    curd_id: str | None = field(validator=_optional_identifier)
+    field: str = field(validator=_identifier)
+    reason: str = _attrs_field(validator=_bounded_string)
+
+
+@define(frozen=True)
+class CriterionWriterView:
+    description: str = field(validator=_bounded_string)
+    check: str = field(validator=_bounded_string)
+
+
+@define(frozen=True)
+class SourceLocationWriterView:
+    path: str = field(validator=_scope_path)
+    start_line: int = field(validator=_positive_integer)
+    end_line: int = field(validator=_positive_integer)
+    start_column: int | None = field(
+        default=None, validator=validators.optional(_positive_integer)
+    )
+    end_column: int | None = field(
+        default=None, validator=validators.optional(_positive_integer)
+    )
+
+    @end_column.validator
+    def _validate_bounds(self, _attribute: Attribute[Any], _value: object) -> None:
+        if self.end_line < self.start_line:
+            raise ValueError("end_line must not precede start_line")
+        if self.end_column is not None and self.start_column is None:
+            raise ValueError("end_column requires start_column")
+        if (
+            self.start_line == self.end_line
+            and self.start_column is not None
+            and self.end_column is not None
+            and self.end_column < self.start_column
+        ):
+            raise ValueError("end_column must not precede start_column")
+
+
+@define(frozen=True)
+class BoundedContextWriterView:
+    shared_input_keys: tuple[str, ...] = field(
+        factory=tuple,
+        converter=_tuple_sequence,
+        validator=_identifier_list(limit=MAX_CONTEXT_ITEMS),
+    )
+    constraints: tuple[str, ...] = field(
+        factory=tuple,
+        converter=_tuple_sequence,
+        validator=_context_string_list(limit=MAX_CONTEXT_ITEMS),
+    )
+    invariants: tuple[str, ...] = field(
+        factory=tuple,
+        converter=_tuple_sequence,
+        validator=_context_string_list(limit=MAX_CONTEXT_ITEMS),
+    )
+
+    @invariants.validator
+    def _validate_context(self, _attribute: Attribute[Any], _value: object) -> None:
+        if not (self.shared_input_keys or self.constraints or self.invariants):
+            raise ValueError("bounded context must not be empty")
+
+
+@define(frozen=True)
+class SemanticCurdWriterView:
+    key: str = field(validator=_identifier)
+    outcome: str = field(validator=_bounded_string)
+    scope: BoundedScope = field(validator=validators.instance_of(BoundedScope))
+    outputs: tuple[str, ...] = field(
+        converter=_tuple_sequence, validator=_string_list(non_empty=True)
+    )
+    criteria: tuple[CriterionWriterView, ...] = field(
+        converter=_tuple_sequence,
+        validator=_list_of(CriterionWriterView, non_empty=True),
+    )
+    input_keys: tuple[str, ...] = field(
+        factory=tuple, converter=_tuple_sequence, validator=_identifier_list()
+    )
+    dependencies: tuple[str, ...] = field(
+        factory=tuple, converter=_tuple_sequence, validator=_identifier_list()
+    )
+
+
+@define(frozen=True)
+class CurdPlanWriterView:
+    objective: str = field(validator=_context_string)
+    curds: tuple[SemanticCurdWriterView, ...] = field(
+        converter=_tuple_sequence,
+        validator=_list_of(SemanticCurdWriterView, non_empty=True),
+    )
+    context: BoundedContextWriterView | None = field(
+        default=None,
+        validator=validators.optional(validators.instance_of(BoundedContextWriterView)),
+    )
+
+
+@define(frozen=True)
+class PlannerUncertaintyWriterView:
+    description: str = field(validator=_bounded_string)
+    scope: UncertaintyScope = field(validator=validators.instance_of(UncertaintyScope))
+    evidence_keys: tuple[str, ...] = field(
+        factory=tuple, converter=_tuple_sequence, validator=_identifier_list()
+    )
+
+
+@define(frozen=True)
+class PlannerResultWriterView:
+    disposition: PlannerDisposition = field(
+        validator=validators.instance_of(PlannerDisposition)
+    )
+    plan: CurdPlanWriterView | None = field(
+        default=None,
+        validator=validators.optional(validators.instance_of(CurdPlanWriterView)),
+    )
+    unresolved_work: tuple[PlannerUncertaintyWriterView, ...] = field(
+        factory=tuple,
+        converter=_tuple_sequence,
+        validator=_list_of(PlannerUncertaintyWriterView),
+    )
+    reason: str | None = field(default=None, validator=_optional_string)
+
+    @reason.validator
+    def _validate_disposition(self, _attribute: Attribute[Any], _value: object) -> None:
+        _validate_planner_disposition(
+            self.disposition,
+            self.plan,
+            self.unresolved_work,
+            self.reason,
+            label="planner writer view",
+        )
+
+
+@define(frozen=True)
+class ReviewFindingWriterView:
+    severity: ReviewSeverity = field(validator=validators.instance_of(ReviewSeverity))
+    summary: str = field(validator=_bounded_string)
+    evidence_keys: tuple[str, ...] = field(
+        converter=_tuple_sequence, validator=_identifier_list(non_empty=True)
+    )
+    location: SourceLocationWriterView | None = field(
+        default=None,
+        validator=validators.optional(validators.instance_of(SourceLocationWriterView)),
+    )
+
+
+@define(frozen=True)
+class ReviewResultWriterView:
+    disposition: ReviewDisposition = field(
+        validator=validators.instance_of(ReviewDisposition)
+    )
+    findings: tuple[ReviewFindingWriterView, ...] = field(
+        converter=_tuple_sequence, validator=_list_of(ReviewFindingWriterView)
+    )
+    reason: str | None = field(default=None, validator=_optional_string)
+
+    @reason.validator
+    def _validate_disposition(self, _attribute: Attribute[Any], _value: object) -> None:
+        if self.disposition is ReviewDisposition.CLEAN and self.findings:
+            raise ValueError("clean review writer view must not include findings")
+        if self.disposition is ReviewDisposition.FINDINGS and not self.findings:
+            raise ValueError(
+                "findings review writer view must include at least one finding"
+            )
+        if (
+            self.disposition
+            in {
+                ReviewDisposition.BLOCKED,
+                ReviewDisposition.INVALID,
+                ReviewDisposition.EXECUTOR_FAILURE,
+            }
+            and self.findings
+        ):
+            raise ValueError(
+                f"{self.disposition.value} review writer view must not include findings"
+            )
+        if (
+            self.disposition
+            in {
+                ReviewDisposition.BLOCKED,
+                ReviewDisposition.INVALID,
+                ReviewDisposition.EXECUTOR_FAILURE,
+            }
+            and not self.reason
+        ):
+            raise ValueError(
+                f"{self.disposition.value} review writer view must include a reason"
+            )
+
+
+@define(frozen=True)
+class ReproductionWriterView:
+    status: ReproductionDisposition = field(
+        validator=validators.instance_of(ReproductionDisposition)
+    )
+    steps: tuple[str, ...] = field(
+        converter=_tuple_sequence, validator=_string_list(non_empty=True)
+    )
+    observed: str | None = field(default=None, validator=_optional_string)
+    evidence_keys: tuple[str, ...] = field(
+        factory=tuple, converter=_tuple_sequence, validator=_identifier_list()
+    )
+
+    @evidence_keys.validator
+    def _validate_status(self, _attribute: Attribute[Any], _value: object) -> None:
+        if self.status is ReproductionDisposition.REPRODUCED:
+            if self.observed is None:
+                raise ValueError(
+                    "reproduced writer result must describe what was observed"
+                )
+            if not self.evidence_keys:
+                raise ValueError("reproduced writer result must include evidence")
+        if self.status is ReproductionDisposition.BLOCKED and self.observed is None:
+            raise ValueError("blocked writer reproduction must explain the blocker")
+
+
+@define(frozen=True)
+class DiagnosisHypothesisWriterView:
+    statement: str = field(validator=_bounded_string)
+    disposition: HypothesisDisposition = field(
+        validator=validators.instance_of(HypothesisDisposition)
+    )
+    evidence_keys: tuple[str, ...] = field(
+        factory=tuple, converter=_tuple_sequence, validator=_identifier_list()
+    )
+
+    @evidence_keys.validator
+    def _validate_disposition(self, _attribute: Attribute[Any], _value: object) -> None:
+        if (
+            self.disposition is not HypothesisDisposition.UNRESOLVED
+            and not self.evidence_keys
+        ):
+            raise ValueError(
+                f"{self.disposition.value} hypothesis must include evidence"
+            )
+
+
+@define(frozen=True)
+class DiagnosisCauseWriterView:
+    summary: str = field(validator=_bounded_string)
+    evidence_keys: tuple[str, ...] = field(
+        converter=_tuple_sequence, validator=_identifier_list(non_empty=True)
+    )
+    location: SourceLocationWriterView | None = field(
+        default=None,
+        validator=validators.optional(validators.instance_of(SourceLocationWriterView)),
+    )
+
+
+@define(frozen=True)
+class DiagnosisResultWriterView:
+    disposition: DiagnosisDisposition = field(
+        validator=validators.instance_of(DiagnosisDisposition)
+    )
+    reproduction: ReproductionWriterView = field(
+        validator=validators.instance_of(ReproductionWriterView)
+    )
+    hypotheses: tuple[DiagnosisHypothesisWriterView, ...] = field(
+        converter=_tuple_sequence, validator=_list_of(DiagnosisHypothesisWriterView)
+    )
+    confirmed_cause: DiagnosisCauseWriterView | None = field(
+        default=None,
+        validator=validators.optional(validators.instance_of(DiagnosisCauseWriterView)),
+    )
+    regression_seam: SourceLocationWriterView | None = field(
+        default=None,
+        validator=validators.optional(validators.instance_of(SourceLocationWriterView)),
+    )
+    unresolved_evidence_keys: tuple[str, ...] = field(
+        factory=tuple, converter=_tuple_sequence, validator=_identifier_list()
+    )
+    reason: str | None = field(default=None, validator=_optional_string)
+
+    @reason.validator
+    def _validate_disposition(self, _attribute: Attribute[Any], _value: object) -> None:
+        if self.disposition is DiagnosisDisposition.CONFIRMED:
+            if self.reproduction.status is not ReproductionDisposition.REPRODUCED:
+                raise ValueError(
+                    "confirmed diagnosis writer view requires a reproduced symptom"
+                )
+            if self.confirmed_cause is None:
+                raise ValueError(
+                    "confirmed diagnosis writer view must include a confirmed cause"
+                )
+            if self.regression_seam is None:
+                raise ValueError(
+                    "confirmed diagnosis writer view must identify a regression seam"
+                )
+            return
+        if self.confirmed_cause is not None:
+            raise ValueError(
+                f"{self.disposition.value} diagnosis writer view must not include "
+                "a confirmed cause"
+            )
+        if self.regression_seam is not None:
+            raise ValueError(
+                f"{self.disposition.value} diagnosis writer view must not identify "
+                "a regression seam"
+            )
+        if self.disposition is DiagnosisDisposition.INCONCLUSIVE:
+            if not self.unresolved_evidence_keys:
+                raise ValueError(
+                    "inconclusive diagnosis writer view must include unresolved evidence"
+                )
+            return
+        if self.disposition is DiagnosisDisposition.NOT_REPRODUCED:
+            if self.reproduction.status is not ReproductionDisposition.NOT_REPRODUCED:
+                raise ValueError(
+                    "not_reproduced diagnosis writer view requires a "
+                    "not_reproduced result"
+                )
+            return
+        if not self.reason:
+            raise ValueError(
+                f"{self.disposition.value} diagnosis writer view must include a reason"
+            )
+
+
+@define(frozen=True)
+class CriterionResultWriterView:
+    disposition: CriterionDisposition = field(
+        validator=validators.instance_of(CriterionDisposition)
+    )
+    evidence_keys: tuple[str, ...] = field(
+        factory=tuple, converter=_tuple_sequence, validator=_identifier_list()
+    )
+    reason: str | None = field(default=None, validator=_optional_string)
+
+    @reason.validator
+    def _validate_disposition(self, _attribute: Attribute[Any], _value: object) -> None:
+        if (
+            self.disposition
+            in {
+                CriterionDisposition.PASSED,
+                CriterionDisposition.FAILED,
+            }
+            and not self.evidence_keys
+        ):
+            raise ValueError(
+                f"{self.disposition.value} criterion result must include evidence"
+            )
+        if (
+            self.disposition
+            in {
+                CriterionDisposition.BLOCKED,
+                CriterionDisposition.SKIPPED,
+            }
+            and not self.reason
+        ):
+            raise ValueError(
+                f"{self.disposition.value} criterion result must include a reason"
+            )
+
+
+@define(frozen=True)
+class DeliverableWriterView:
+    role: str = field(validator=_identifier)
+    path: str = field(validator=_scope_path)
+    media_type: str = field(validator=_media_type)
+
+
+@define(frozen=True)
+class CurdResultWriterView:
+    criterion_results: tuple[CriterionResultWriterView, ...] = field(
+        converter=_tuple_sequence,
+        validator=_list_of(CriterionResultWriterView, non_empty=True),
+    )
+    deliverables: tuple[DeliverableWriterView, ...] = field(
+        factory=tuple,
+        converter=_tuple_sequence,
+        validator=_list_of(DeliverableWriterView),
+    )
+    unresolved_work: tuple[str, ...] = field(
+        factory=tuple, converter=_tuple_sequence, validator=_string_list()
+    )
+
+
+WriterPayload = (
+    CurdPlanWriterView
+    | PlannerResultWriterView
+    | ReviewResultWriterView
+    | DiagnosisResultWriterView
+    | CurdResultWriterView
+)
+
+_WRITER_PAYLOAD_TYPES: dict[WriterViewKind, type] = {
+    WriterViewKind.CURD_PLAN: CurdPlanWriterView,
+    WriterViewKind.PLANNER_RESULT: PlannerResultWriterView,
+    WriterViewKind.REVIEW_RESULT: ReviewResultWriterView,
+    WriterViewKind.DIAGNOSIS_RESULT: DiagnosisResultWriterView,
+    WriterViewKind.CURD_RESULT: CurdResultWriterView,
+}
+
+
+@define(frozen=True)
+class AgentWriterView:
+    kind: WriterViewKind = field(validator=validators.instance_of(WriterViewKind))
+    payload: WriterPayload = field()
+
+    @payload.validator
+    def _validate_payload(self, _attribute: Attribute[Any], value: object) -> None:
+        expected = _WRITER_PAYLOAD_TYPES[self.kind]
+        if not isinstance(value, expected):
+            raise ValueError(
+                f"{self.kind.value} writer view payload must be {expected.__name__}"
+            )
+
+
+__all__ = [
+    "MAX_ARTIFACT_BYTES",
+    "MAX_COLLECTION_ITEMS",
+    "MAX_CONTEXT_ITEMS",
+    "MAX_CONTEXT_TEXT_LENGTH",
+    "MAX_CONTRACT_BYTES",
+    "MAX_CONTRACT_DEPTH",
+    "MAX_SCOPE_PATHS",
+    "MAX_TEXT_LENGTH",
+    "derive_curd_disposition",
+    "CurdDisposition",
+    "AgentWriterView",
+    "ArtifactRef",
+    "BoundedContext",
+    "BoundedContextWriterView",
+    "BoundedScope",
+    "ContractVersion",
+    "CoverageDisposition",
+    "Criterion",
+    "CriterionDisposition",
+    "CriterionResult",
+    "CriterionResultWriterView",
+    "CriterionWriterView",
+    "CurdPlan",
+    "CurdPlanWriterView",
+    "CurdResult",
+    "CurdResultWriterView",
+    "DeliverableWriterView",
+    "DiagnosisCause",
+    "DiagnosisCauseWriterView",
+    "DiagnosisDisposition",
+    "DiagnosisHypothesis",
+    "DiagnosisHypothesisWriterView",
+    "DiagnosisRequest",
+    "DiagnosisResult",
+    "DiagnosisResultWriterView",
+    "EvidenceKind",
+    "EvidenceRef",
+    "HypothesisDisposition",
+    "IdentityAction",
+    "IdentityLineage",
+    "PhaseContract",
+    "PhaseDestination",
+    "PlannerDisposition",
+    "PlannerRequest",
+    "PlannerRequestKind",
+    "PlannerResult",
+    "PlannerResultWriterView",
+    "PlannerUncertainty",
+    "PlannerUncertaintyWriterView",
+    "Reproduction",
+    "ReproductionDisposition",
+    "ReproductionWriterView",
+    "ReviewCoverage",
+    "ReviewDisposition",
+    "ReviewFinding",
+    "ReviewFindingWriterView",
+    "ReviewRequest",
+    "ReviewResult",
+    "ReviewResultWriterView",
+    "ReviewSeverity",
+    "SemanticCurd",
+    "SemanticCurdWriterView",
+    "SourceCurdRef",
+    "SourceLocation",
+    "SourceLocationWriterView",
+    "SourcePlanRef",
+    "UncertaintyScope",
+    "UnsupportedProjection",
+    "WriterPayload",
+    "WriterViewKind",
+]

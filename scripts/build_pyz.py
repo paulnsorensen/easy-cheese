@@ -26,6 +26,11 @@ import vendor_deps
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = REPO_ROOT / "src"
 SHARED_SCRIPTS = REPO_ROOT / "shared" / "scripts"
+
+PHASE_REGISTRY_MODULE = "_compiled_phase_registry.py"
+PHASE_REGISTRY_SOURCE = SRC_ROOT / "easy_cheese_schemas" / PHASE_REGISTRY_MODULE
+PHASE_CONTRACT_SOURCE = SRC_ROOT / "easy_cheese_schemas" / "phase_contracts.py"
+SCHEMA_CATALOG_SOURCE = SRC_ROOT / "easy_cheese_schemas" / "_schema_catalog.py"
 SHARED_MODULES = {p.stem for p in SHARED_SCRIPTS.glob("*.py")}
 ZIP_TIMESTAMP = (1980, 1, 2, 0, 0, 0)
 # Pinned so the compressed bytes depend only on the zlib build, never on
@@ -42,6 +47,7 @@ class Shared:
     that registers it — no per-skill copy to keep in sync."""
 
     filename: str
+
 
 # skill -> {subcommand: source}. A plain string names a src/<skill>/ script;
 # Shared(...) names a shared/scripts/ module reused across skills. Subcommands
@@ -70,7 +76,10 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
         "artifact-path": Shared("artifact_path.py"),
         "ground-check": "ground_check.py",
     },
-    "cook": {"artifact-path": Shared("artifact_path.py"), "worktree": Shared("worktree.py")},
+    "cook": {
+        "artifact-path": Shared("artifact_path.py"),
+        "worktree": Shared("worktree.py"),
+    },
     # All four subcommands are one module: wheypoint.py reads the subcommand off
     # argv[0], the way hallouminate_setup.py already does for global|local|doctor.
     "wheypoint": {
@@ -143,13 +152,16 @@ EXTRA_MODULES: dict[str, list[tuple[str, str]]] = {
 # bundle. The import scanner above only resolves flat sibling modules, so a real
 # package's membership is declared here rather than discovered.
 #
-# Only ultracook carries easy_cheese_schemas: it owns the fan-out validators a
-# tracked follow-up migrates onto these types, so it is the first real consumer.
-# Staging half a megabyte into every other bundle would be dead weight.
+# The Cook fan path and Cure's copied common bundle execute against the same
+# typed workflow package as the rest of the phase runtime.  Keep the package
+# tree on the owning bundles; legacy root-level phase modules below remain only
+# the common-bundle boundary used by existing shared CLIs.
 PACKAGE_TREES: dict[str, list[Path]] = {
+    "common": [SRC_ROOT / "easy_cheese_schemas"],
+    "cook": [SRC_ROOT / "easy_cheese_schemas"],
     "ultracook": [SRC_ROOT / "easy_cheese_schemas"],
     # wheypoint's whole runtime is typed against the Wheypoint schemas, so it is
-    # the second real consumer rather than a bundle carrying dead weight.
+    # also a real consumer rather than a bundle carrying dead weight.
     "wheypoint": [SRC_ROOT / "easy_cheese_schemas"],
 }
 
@@ -160,7 +172,7 @@ PACKAGE_TREES: dict[str, list[Path]] = {
 # Read off the generated tree rather than listed by version here: a Dependabot
 # bump to requirements-vendor.txt changes the .dist-info directory names, and a
 # hard-coded list would turn every such PR into a build failure.
-VENDORED_DEP_BUNDLES = ("ultracook", "wheypoint")
+VENDORED_DEP_BUNDLES = ("common", "cook", "ultracook", "wheypoint")
 
 
 def vendored_dep_trees() -> list[Path]:
@@ -171,6 +183,7 @@ def vendored_dep_trees() -> list[Path]:
         for path in vendor_deps.VENDOR_ROOT.iterdir()
         if path.name not in {"__pycache__", vendor_deps.STAMP.name}
     )
+
 
 # The "common" bundle ships cross-cutting CLI entrypoints sourced from
 # shared/scripts/ (not src/<skill>/). It has no skill dir of its own; instead a
@@ -191,6 +204,39 @@ COMMON_SUBCOMMANDS: dict[str, str] = {
 COMMON_CONSUMERS: frozenset[str] = frozenset({"cure", "age", "ultracook"})
 
 _CACHE: dict[str, Path] = {}
+
+
+def _phase_compiler():
+    """Load the source-only compiler without importing the generated module."""
+    package_entry = str(SRC_ROOT / "easy_cheese_schemas")
+    if package_entry not in sys.path:
+        sys.path.insert(0, package_entry)
+    from _phase_registry_compiler import compile_phase_files_to_source
+
+    return compile_phase_files_to_source
+
+
+def _compiled_phase_registry_source() -> str:
+    """Compile authored phase YAML into the portable runtime data module."""
+    declarations = sorted(REPO_ROOT.glob("skills/*/phase-contract.yaml"))
+    return _phase_compiler()(declarations)
+
+
+def _checked_in_phase_registry_bytes(expected_source: str) -> bytes:
+    """Require the tracked generated projection to match the YAML authority."""
+    expected = expected_source.encode("utf-8")
+    try:
+        actual = PHASE_REGISTRY_SOURCE.read_bytes()
+    except FileNotFoundError as exc:
+        raise RuntimeError(
+            f"checked-in phase registry is missing: {PHASE_REGISTRY_SOURCE}"
+        ) from exc
+    if actual != expected:
+        raise RuntimeError(
+            "checked-in phase registry is stale; regenerate "
+            "src/easy_cheese_schemas/_compiled_phase_registry.py"
+        )
+    return actual
 
 
 def _module_name(filename: str) -> str:
@@ -263,7 +309,11 @@ def _local_skill_modules(skill: str) -> set[str]:
             continue
         resolved.add(name)
         for imp in _imported_top_names(skill_dir / f"{name}.py"):
-            if imp not in registered and imp not in resolved and (skill_dir / f"{imp}.py").exists():
+            if (
+                imp not in registered
+                and imp not in resolved
+                and (skill_dir / f"{imp}.py").exists()
+            ):
                 frontier.add(imp)
     return resolved
 
@@ -278,14 +328,18 @@ def needed_shared(skill: str) -> set[str]:
         for name in _local_skill_modules(skill):
             frontier |= _imported_top_names(skill_dir / f"{name}.py") & SHARED_MODULES
     for src_subdir, filename in EXTRA_MODULES.get(skill, []):
-        frontier |= _imported_top_names(SRC_ROOT / src_subdir / filename) & SHARED_MODULES
+        frontier |= (
+            _imported_top_names(SRC_ROOT / src_subdir / filename) & SHARED_MODULES
+        )
     resolved: set[str] = set()
     while frontier:
         module = frontier.pop()
         if module in resolved:
             continue
         resolved.add(module)
-        frontier |= (_imported_top_names(SHARED_SCRIPTS / f"{module}.py") & SHARED_MODULES) - resolved
+        frontier |= (
+            _imported_top_names(SHARED_SCRIPTS / f"{module}.py") & SHARED_MODULES
+        ) - resolved
     return resolved
 
 
@@ -312,7 +366,9 @@ def _write_zipapp(source: Path, target: Path) -> None:
         pyz.write(b"#!/usr/bin/env python3\n")
         with zipfile.ZipFile(pyz, "w", compression=zipfile.ZIP_DEFLATED) as archive:
             staged = sorted(
-                (p.relative_to(source).as_posix(), p) for p in source.rglob("*") if p.is_file()
+                (p.relative_to(source).as_posix(), p)
+                for p in source.rglob("*")
+                if p.is_file()
             )
             for name, staged_file in staged:
                 info = zipfile.ZipInfo(name, date_time=ZIP_TIMESTAMP)
@@ -332,6 +388,10 @@ def build_bundle(skill: str, target: Path) -> Path:
     target.parent.mkdir(parents=True, exist_ok=True)
     files = _files(skill)
     sub_to_module = {sub: _module_name(_filename(src)) for sub, src in files.items()}
+    registry_bytes = None
+    if skill in {COMMON, "cook", "ultracook", "wheypoint"}:
+        registry_source = _compiled_phase_registry_source()
+        registry_bytes = _checked_in_phase_registry_bytes(registry_source)
     with tempfile.TemporaryDirectory() as td:
         stage = Path(td)
         for module in sorted(needed_shared(skill)):
@@ -339,7 +399,10 @@ def build_bundle(skill: str, target: Path) -> Path:
                 continue  # already staged below as a subcommand (common bundle)
             shutil.copy(SHARED_SCRIPTS / f"{module}.py", stage / f"{module}.py")
         for source in files.values():
-            shutil.copy(_source_path(skill, source), stage / f"{_module_name(_filename(source))}.py")
+            shutil.copy(
+                _source_path(skill, source),
+                stage / f"{_module_name(_filename(source))}.py",
+            )
         if skill != COMMON:
             skill_dir = _src_dir(skill)
             for name in sorted(_local_skill_modules(skill)):
@@ -354,10 +417,26 @@ def build_bundle(skill: str, target: Path) -> Path:
                 # __pycache__ is skipped: importing the package from source (the
                 # test suite does) would otherwise leak host-specific .pyc bytes
                 # into the archive and break the rebuild byte-compare.
-                shutil.copytree(tree, stage / tree.name, ignore=shutil.ignore_patterns("__pycache__"))
+                shutil.copytree(
+                    tree,
+                    stage / tree.name,
+                    ignore=shutil.ignore_patterns(
+                        "__pycache__", "_phase_registry_compiler.py"
+                    ),
+                )
             else:
                 shutil.copy(tree, stage / tree.name)
-        (stage / "__main__.py").write_text(_dispatcher_source(sub_to_module), encoding="utf-8")
+        if registry_bytes is not None:
+            if skill == COMMON:
+                shutil.copy(PHASE_CONTRACT_SOURCE, stage / "phase_contracts.py")
+                shutil.copy(SCHEMA_CATALOG_SOURCE, stage / "_schema_catalog.py")
+                (stage / PHASE_REGISTRY_MODULE).write_bytes(registry_bytes)
+            else:
+                package_registry = stage / "easy_cheese_schemas" / PHASE_REGISTRY_MODULE
+                package_registry.write_bytes(registry_bytes)
+        (stage / "__main__.py").write_text(
+            _dispatcher_source(sub_to_module), encoding="utf-8"
+        )
         _write_zipapp(stage, target)
     return target
 
@@ -386,7 +465,9 @@ def main(argv: list[str]) -> int:
     known = {*SKILLS, COMMON, *COMMON_CONSUMERS}
     unknown = [s for s in args.skills if s not in known]
     if unknown:
-        parser.error(f"unknown skill(s): {', '.join(unknown)}; known: {', '.join(sorted(known))}")
+        parser.error(
+            f"unknown skill(s): {', '.join(unknown)}; known: {', '.join(sorted(known))}"
+        )
     targets = args.skills or [*SKILLS, COMMON]
     real = [s for s in targets if s in SKILLS]  # only skills that ship their own .pyz
     want_common = COMMON in targets or any(s in COMMON_CONSUMERS for s in targets)
@@ -400,7 +481,9 @@ def main(argv: list[str]) -> int:
         return 0
 
     for skill in real:
-        print(f"deployed {build_bundle(skill, REPO_ROOT / 'skills' / skill / 'scripts' / f'{skill}.pyz')}")
+        print(
+            f"deployed {build_bundle(skill, REPO_ROOT / 'skills' / skill / 'scripts' / f'{skill}.pyz')}"
+        )
     if want_common:
         # Build once, then fan the same artifact out to each consuming skill so
         # every skill ships self-contained — common has no skill dir of its own.

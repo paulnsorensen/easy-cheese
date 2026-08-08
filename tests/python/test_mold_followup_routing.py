@@ -230,11 +230,11 @@ def test_mold_handoff_waits_for_followup_reconciliation() -> None:
     )
 
 
-def test_mold_decomposes_before_two_key_approval_and_persists_the_block() -> None:
+def test_mold_plans_before_two_key_approval_and_persists_typed_artifacts() -> None:
     flow = _section(MOLD, "Flow")
     _assert_in_order(
         flow,
-        "5. **Decompose for approval**",
+        "5. **Plan for approval**",
         "6. **Two-key handshake**",
         "7. **Curdle**",
     )
@@ -242,21 +242,21 @@ def test_mold_decomposes_before_two_key_approval_and_persists_the_block() -> Non
     approval = _section(MOLD, "Approval gate")
     _assert_in_order(
         approval,
-        "validated curd block",
+        "validated typed `CurdPlan`",
         "`N curds / M waves`",
         "both keys pass",
     )
 
-    procedure = _section(CURDLE, "Pre-approval decomposer dispatch (curd block)")
+    procedure = _section(CURDLE, "Pre-approval typed planner dispatch")
     _assert_in_order(
         procedure,
         "before the two-key handshake",
         "1. **Dispatch**",
-        "2. **Validate**",
+        "2. **Validate and normalize**",
         "`N curds / M waves`",
-        "persist the same approved curd block",
+        "persist the approved spec, typed `PlannerResult`, and typed `CurdPlan`",
     )
-    assert "Do not re-dispatch" in procedure
+    assert "Do not regenerate or mutate" in procedure
 
 
 def test_mold_never_hardcodes_transient_spec_paths() -> None:

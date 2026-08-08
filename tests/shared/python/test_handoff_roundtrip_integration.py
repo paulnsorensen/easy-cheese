@@ -4,15 +4,14 @@ The skill-scripts spec wires together three scripts that the SKILL.md prose
 for /cook, /press, /age, /cure invokes in sequence:
 
     slugify.py from-task → emits {slug, path}
-    write_handoff_artifact.py --slug <slug> --next <phase> → writes .cheese/<next>/<slug>.md
+    write_handoff_artifact.py --slug <slug> --phase <source> --next <destination>
     read_handoff_slug.py --phase <phase> --slug <slug> → parses the same artifact
 
 Per-script unit tests cover each piece in isolation, but never exercise the
 seam where one script's output flows into the next via subprocess. These
 hardening tests catch drift at the seam — e.g. a slug shape that slugify
-accepts but write_handoff rejects, or a preamble shape write emits that
-read cannot parse back. The contract is the four-line preamble (status,
-next, artifact, orientation) plus the on-disk path `.cheese/<next>/<slug>.md`.
+accepts but write_handoff rejects, or a writer/reader phase mismatch. The
+contract is the four-line preamble plus `.cheese/<source>/<slug>.md`.
 """
 
 from __future__ import annotations
@@ -70,6 +69,8 @@ class TestSlugifyToWriterRoundTrip:
             slug,
             "--status",
             "ok",
+            "--phase",
+            "cook",
             "--next",
             "press",
             "--artifact",
@@ -82,7 +83,7 @@ class TestSlugifyToWriterRoundTrip:
         # Writer prints the final path on stdout.
         written = Path(write_proc.stdout.strip())
         assert written.name == f"{slug}.md"
-        assert written.parent.name == "press"
+        assert written.parent.name == "cook"
 
 
 class TestWriterToReaderRoundTrip:
@@ -103,6 +104,7 @@ class TestWriterToReaderRoundTrip:
         slug: str,
         status: str,
         next_phase: str,
+        phase: str,
         artifact: str,
         orientation: str,
     ) -> dict[str, object]:
@@ -112,6 +114,8 @@ class TestWriterToReaderRoundTrip:
             slug,
             "--status",
             status,
+            "--phase",
+            phase,
             "--next",
             next_phase,
             "--artifact",
@@ -123,7 +127,7 @@ class TestWriterToReaderRoundTrip:
         assert write_proc.returncode == 0, write_proc.stderr
 
         read_proc = _run(
-            READER, "--phase", next_phase, "--slug", slug, cwd=tmp_path
+            READER, "--phase", phase, "--slug", slug, cwd=tmp_path
         )
         assert read_proc.returncode == 0, read_proc.stderr
         return json.loads(read_proc.stdout)
@@ -133,6 +137,7 @@ class TestWriterToReaderRoundTrip:
             tmp_path,
             slug="cook-to-press",
             status="ok",
+            phase="cook",
             next_phase="press",
             artifact=".cheese/cook/cook-to-press.md",
             orientation="implemented widget",
@@ -157,6 +162,7 @@ class TestWriterToReaderRoundTrip:
             tmp_path,
             slug="halt-with-colon",
             status="halt: spinning: gap-3-flaky-seam",
+            phase="press",
             next_phase="age",
             artifact=".cheese/press/halt-with-colon.md",
             orientation="three attempts on same gap",
@@ -173,6 +179,7 @@ class TestWriterToReaderRoundTrip:
             tmp_path,
             slug="chain-head",
             status="ok",
+            phase="cook",
             next_phase="press",
             artifact="",
             orientation="first phase in the chain",
@@ -187,6 +194,7 @@ class TestWriterToReaderRoundTrip:
             tmp_path,
             slug="punct-orientation",
             status="ok",
+            phase="press",
             next_phase="age",
             artifact=".cheese/press/punct-orientation.md",
             orientation=orientation,
@@ -219,6 +227,8 @@ class TestThreeScriptChain:
             slug,
             "--status",
             "ok",
+            "--phase",
+            "cook",
             "--next",
             "press",
             "--artifact",
@@ -228,8 +238,7 @@ class TestThreeScriptChain:
             cwd=tmp_path,
         )
         assert write_proc.returncode == 0, write_proc.stderr
-
-        read_proc = _run(READER, "--phase", "press", "--slug", slug, cwd=tmp_path)
+        read_proc = _run(READER, "--phase", "cook", "--slug", slug, cwd=tmp_path)
         assert read_proc.returncode == 0, read_proc.stderr
         payload = json.loads(read_proc.stdout)
         # The slug-derived artifact lives on disk and parses back cleanly.

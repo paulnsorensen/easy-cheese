@@ -94,7 +94,7 @@ If the trigger cannot be stated precisely (e.g. pure internal utilities with no 
 - <runnable command>: <expected result>
 
 ## Curds
-<the validated curd block approved at the two-key handshake>
+<the host-validated typed CurdPlan approved at the two-key handshake>
 
 ## Reproduction (Diagnose only)
 <failing test, curl, replay command, etc.>
@@ -229,17 +229,17 @@ This is the runtime home of the **Durable writes** coherence gate (`handshake.md
 
 **Loud fallback.** When hallouminate is unavailable and the resolver degrades to a file backend (`docs/adr/…`, `docs/domain-model*`, or the XDG corpus), say so in one visible line — never let a write silently go to files when the author expected the wiki. Absent-plugin degrade contract: [`../../cheese/references/optional-plugins.md`](../../cheese/references/optional-plugins.md).
 
-## Pre-approval decomposer dispatch (curd block)
+## Pre-approval typed planner dispatch
 
-Run this procedure on dialogue-state draft text before the two-key handshake. It prepares approval input; Curdle later persists that exact approved input.
+Run this procedure on dialogue-state draft text before the two-key handshake. It prepares the typed plan that the handshake approves; Curdle later persists the host-validated artifacts.
 
-1. **Dispatch** a fresh-context `decomposer` sub-agent on the current draft spec text (source: mold). Read [`../../cheese/references/decomposer.md`](../../cheese/references/decomposer.md) for the locked curd-block schema first — do not invent the schema from memory. It returns a curd block.
-2. **Validate** the returned block with `src/fanout/curd_block.py::validate_curd_block`. On failure, retry the dispatch once.
-3. **Still invalid after the retry** — stop before the two-key handshake. Do not approve or embed an invalid block: a broken decomposer output must never corrupt the spec.
-4. **On success**, count the block's `curds` and `waves`, then show `N curds / M waves` with the final approval request. The validated block is part of what both handshake keys approve.
-5. **During Curdle phase one**, persist the same approved curd block as `## Curds` after `## Quality gates` (or the natural equivalent section for this spec's shape). Do not re-dispatch, regenerate, or mutate it after approval.
+1. **Dispatch** a fresh-context planner on a `PlannerRequest` built from the current draft spec text. The planner returns a `PlannerResultWriterView`; it does not own contract versions, identifiers, digests, lineage, or evidence references.
+2. **Validate and normalize** the writer view on the host. The normal selected path is the typed `PlannerResult` containing a typed `CurdPlan`; reject malformed or wrong-kind output before approval.
+3. **Still invalid after one retry** — stop before the two-key handshake. Do not approve or persist an invalid plan.
+4. **On success**, count semantic curds and waves from the typed `CurdPlan`, then show `N curds / M waves` with the final approval request. The typed plan is part of what both handshake keys approve.
+5. **During Curdle phase one**, persist the approved spec, typed `PlannerResult`, and typed `CurdPlan` after `## Quality gates` (or the natural equivalent section for this spec's shape). Do not regenerate or mutate them after approval.
 
-The pre-approval dispatch produces dialogue state, not a durable artifact or external publication. The two-key handshake still gates every write, and the dispatch does not depend on any external publication capability.
+The legacy `CurdBlock`/`Decomposition` projection is not the normal path. Use it only when an explicit migration consumer requests it; the projection must be lossless or return `UnsupportedProjection`. Never invoke the legacy curd-block decomposer or persist its block as the selected production artifact.
 
 ## Hand-off
 

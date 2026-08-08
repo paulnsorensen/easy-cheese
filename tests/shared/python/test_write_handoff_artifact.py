@@ -48,13 +48,14 @@ class TestPreambleRoundTrip:
         target = writer.write_artifact(
             slug="my-task",
             status="ok",
+            phase="press",
             next_skill="age",
             artifact=".cheese/press/my-task.md",
             orientation="implemented widget",
             body=None,
             root=tmp_path,
         )
-        assert target == tmp_path / ".cheese" / "age" / "my-task.md"
+        assert target == tmp_path / ".cheese" / "press" / "my-task.md"
         slug = handoff_mod.parse_handoff_slug(target.read_text(encoding="utf-8"))
         assert slug.status == "ok"
         assert slug.halt_reason is None
@@ -70,6 +71,7 @@ class TestPreambleRoundTrip:
         target = writer.write_artifact(
             slug="blocked",
             status="halt: tests failed",
+            phase="age",
             next_skill="cure",
             artifact=".cheese/age/blocked.md",
             orientation="three findings remain",
@@ -89,14 +91,14 @@ class TestPathTraversalRejected:
     ) -> None:
         with pytest.raises(writer.cli.CliError):
             writer.write_artifact(
-                slug=bad_slug, status="ok", next_skill="age", artifact="",
-                orientation="x", body=None, root=tmp_path,
+                slug=bad_slug, status="ok", phase="age", next_skill="done",
+                artifact="", orientation="x", body=None, root=tmp_path,
             )
 
     def test_traversal_phase_rejected(self, writer: ModuleType, tmp_path: Path) -> None:
         with pytest.raises(writer.cli.CliError):
             writer.write_artifact(
-                slug="ok-slug", status="ok", next_skill="age", artifact="",
+                slug="ok-slug", status="ok", next_skill="done", artifact="",
                 orientation="x", body=None, root=tmp_path, phase="../etc",
             )
 
@@ -106,11 +108,13 @@ class TestRerunOverwrite:
         # os.replace (not os.rename) must overwrite an existing artifact cleanly
         # on a re-run — the cross-platform atomic-overwrite contract.
         common = {
-            "slug": "rerun", "status": "ok", "next_skill": "age", "artifact": "",
+            "slug": "rerun", "status": "ok", "phase": "press",
+            "next_skill": "age", "artifact": "",
             "body": None, "root": tmp_path,
         }
-        writer.write_artifact(orientation="first pass", **common)
-        target = writer.write_artifact(orientation="second pass", **common)
+        target = writer.write_artifact(orientation="first pass", **common)
+        rewritten = writer.write_artifact(orientation="second pass", **common)
+        assert rewritten == target
         assert "second pass" in target.read_text(encoding="utf-8")
         assert "first pass" not in target.read_text(encoding="utf-8")
 
@@ -203,6 +207,7 @@ class TestOptionalKeyedLines:
             durable_flags="keyed-line contract -> handoff-contract",
         )
         slug = handoff_mod.parse_handoff_slug(target.read_text(encoding="utf-8"))
+        assert target == tmp_path / ".cheese" / "age" / "flagged.md"
         assert slug.durable_flags == "keyed-line contract -> handoff-contract"
         assert slug.orientation == "reviewed widget"
 
@@ -326,7 +331,8 @@ class TestBodyFile:
                 str(WRITER_CLI),
                 "--slug", "with-body",
                 "--status", "ok",
-                "--next", "age",
+                "--phase", "age",
+                "--next", "cure",
                 "--artifact", "",
                 "--orientation", "demo",
                 "--body-file", str(body_src),
@@ -342,25 +348,22 @@ class TestBodyFile:
 
         content = target.read_text(encoding="utf-8")
         lines = content.splitlines()
-        # Preamble parses cleanly off the top.
         slug = handoff_mod.parse_handoff_slug(content)
         assert slug.orientation == "demo"
-        assert slug.artifact is None  # empty artifact
-
-        # Line 5 must be blank, then body verbatim.
+        assert slug.artifact is None
         assert lines[4] == ""
         assert "\n".join(lines[5:]) + ("\n" if content.endswith("\n") else "") == body_text
 
 
 class TestCliErrors:
     def test_missing_required_flag_exits_2(self, tmp_path: Path) -> None:
-        # Drop --orientation; argparse should reject with exit code 2.
         result = subprocess.run(
             [
                 sys.executable,
                 str(WRITER_CLI),
                 "--slug", "x",
                 "--status", "ok",
+                "--phase", "age",
                 "--next", "age",
                 "--artifact", "",
                 "--root", str(tmp_path),
@@ -371,6 +374,24 @@ class TestCliErrors:
         assert result.returncode == 2
         assert "orientation" in result.stderr.lower()
 
+    def test_missing_phase_flag_exits_2(self, tmp_path: Path) -> None:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WRITER_CLI),
+                "--slug", "x",
+                "--status", "ok",
+                "--next", "age",
+                "--artifact", "",
+                "--orientation", "demo",
+                "--root", str(tmp_path),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 2
+        assert "phase" in result.stderr.lower()
+
     def test_missing_body_file_exits_2(self, tmp_path: Path) -> None:
         result = subprocess.run(
             [
@@ -378,6 +399,7 @@ class TestCliErrors:
                 str(WRITER_CLI),
                 "--slug", "x",
                 "--status", "ok",
+                "--phase", "age",
                 "--next", "age",
                 "--artifact", "",
                 "--orientation", "demo",
@@ -390,24 +412,22 @@ class TestCliErrors:
         assert result.returncode == 2
         assert "body-file" in result.stderr.lower()
 
-
 class TestPathDerivation:
-    def test_path_is_under_root_dot_cheese_next(
+    def test_path_is_under_root_dot_cheese_phase(
         self, writer: ModuleType, tmp_path: Path
     ) -> None:
         target = writer.write_artifact(
             slug="curd-7",
             status="ok",
-            next_skill="ultracook/skill-scripts/curds",
+            phase="age",
+            next_skill="done",
             artifact="",
             orientation="curd 7 done",
             body=None,
             root=tmp_path,
         )
-        # Nested next paths should be honored (fan-out writes to subdirs).
-        assert target == tmp_path / ".cheese" / "ultracook" / "skill-scripts" / "curds" / "curd-7.md"
+        assert target == tmp_path / ".cheese" / "age" / "curd-7.md"
         assert target.is_file()
-
 
 class TestPhaseFlag:
     """`--phase` names this phase's own directory; `--next` stays as preamble-only."""
@@ -461,22 +481,20 @@ class TestPhaseFlag:
         assert slug.next_skill == "cure"
         assert slug.artifact == ".cheese/press/phase-flag.md"
 
-    def test_phase_omitted_falls_back_to_next(
+    def test_phase_is_required_for_direct_call(
         self, writer: ModuleType, tmp_path: Path
     ) -> None:
-        # Backward compatibility: callers that have not migrated still get the
-        # legacy "write to next-phase directory" shape so existing chains keep
-        # working until they update their invocations.
-        target = writer.write_artifact(
-            slug="legacy",
-            status="ok",
-            next_skill="age",
-            artifact="",
-            orientation="cook done",
-            body=None,
-            root=tmp_path,
-        )
-        assert target == tmp_path / ".cheese" / "age" / "legacy.md"
+        with pytest.raises(writer.cli.CliError, match="--phase must be non-empty"):
+            writer.write_artifact(
+                slug="legacy",
+                status="ok",
+                next_skill="done",
+                artifact="",
+                orientation="phase is required",
+                body=None,
+                root=tmp_path,
+                phase="",
+            )
 
 
 class TestAtomicRename:
@@ -498,7 +516,8 @@ class TestAtomicRename:
             writer.write_artifact(
                 slug="never",
                 status="ok",
-                next_skill="age",
+                phase="age",
+                next_skill="done",
                 artifact="",
                 orientation="will not land",
                 body=None,

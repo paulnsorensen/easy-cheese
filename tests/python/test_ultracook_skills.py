@@ -141,7 +141,7 @@ class TestUltracookPhaseChain:
         fan_idx = body.find("## Fan pathway")
         assert fan_idx != -1, "cook must document `## Fan pathway`"
         fan_section = body[fan_idx:]
-        assert "coder(cook) → coder(press) → reviewer(age) → coder(cure) → reviewer(final age)" in fan_section
+        assert "plan" in fan_section and "cook(CurdPlan)" in fan_section
         assert "press → age → cure → age" in fan_section
 
     def test_propagates_auto_through_every_phase(self) -> None:
@@ -1202,24 +1202,26 @@ class TestNextContractV2BackwardCompatible:
         )
 
 
-class TestUltracookDeterministicPhaseLoop:
-    """The phase loop must invoke the deterministic helpers — read_handoff_slug
-    for slug parsing and phase_decision for the next-action verdict — so the
-    orchestrator never judges phase transitions by eye."""
+class TestCookCanonicalPhaseLoop:
+    """The live fan loop must use the typed workflow boundary, not legacy phase state."""
 
-    def test_read_handoff_slug_referenced(self) -> None:
+    def test_canonical_workflow_helpers_referenced(self) -> None:
         body = _skill_corpus("cook")
-        assert "read_handoff_slug" in body, (
-            "cook must reference read_handoff_slug in the phase loop so "
-            "slug parsing is deterministic, not eyeballed"
-        )
+        for helper in (
+            "plan",
+            "validate_curd_plan",
+            "cook",
+            "cure",
+            "bind_diagnosis",
+            "resolve_artifact",
+            "normalize_agent_output",
+        ):
+            assert helper in body, f"cook must name canonical helper {helper}"
 
-    def test_phase_decision_referenced(self) -> None:
+    def test_legacy_phase_execution_is_not_referenced(self) -> None:
         body = _skill_corpus("cook")
-        assert "phase_decision" in body, (
-            "cook must reference phase_decision in the phase loop so "
-            "the next-action verdict is deterministic"
-        )
+        for legacy in ("preflight_contracts", "phase_decision", "manifest_update"):
+            assert legacy not in body, f"cook must not execute legacy helper {legacy}"
 
 
 # ---------------------------------------------------------------------------
@@ -1283,31 +1285,25 @@ class TestUltracookModeGate:
         )
 
 
-class TestUltracookParallelTopology:
-    """Wave-fan mechanics use typed fresh-context phase agents in one curd
-    worktree, then repeat review and final age over the merged diff."""
+class TestCookTypedTopology:
+    """Wave-fan mechanics execute typed plan waves and preserve final reviews."""
 
-    def test_parallel_mode_section_present(self) -> None:
-        # Retired /ultracook's `## Parallel mode` heading is now /cook's
-        # `## Fan pathway` — same mechanics, new home, legitimate rename.
+    def test_fan_path_section_present(self) -> None:
         body = _skill("cook")
         assert "## Fan pathway" in body
 
     def test_per_curd_pipeline_documented(self) -> None:
         body = _skill_corpus("cook")
-        # Per-curd pipeline uses the parallel-curd phase table.
-        assert "parallel-curd" in body, (
-            "the fan pathway must run each curd on the parallel-curd phase table"
-        )
+        assert "cook(CurdPlan)" in body
+        assert "confirmed diagnosis" in body.lower()
+        assert "CureDiagnosisBinding" in body
 
     def test_post_merge_final_age_documented(self) -> None:
         body = _skill_corpus("cook")
         body_lower = body.lower()
-        assert "parallel-postmerge" in body, (
-            "the fan pathway must use the parallel-postmerge table"
-        )
-        assert "reviewer(final age)" in body_lower
-        assert "post-merge" in body_lower or "merged diff" in body_lower
+        assert "post-merge" in body_lower
+        assert "press → age → cure → age" in body
+        assert "terminal age" in body_lower
 
 
 class TestUltracookWorktreeLifecycle:
@@ -1383,10 +1379,10 @@ class TestUltracookAgentResolution:
 
     def test_typed_phase_roles_documented(self) -> None:
         body = _skill_corpus("cook").lower()
-        assert "planner/general" in body
-        assert "coder(cook)" in body
-        assert "reviewer(age)" in body
-        assert "parent ownership for harvest and plate" in body
+        assert "plan the spec" in body
+        assert "cook, press, cure" in body
+        assert "every age pass" in body
+        assert "harvest and plate" in body
 
     def test_terminal_age_gate_documented(self) -> None:
         body = _skill("cook").lower()
@@ -1394,16 +1390,12 @@ class TestUltracookAgentResolution:
         assert "`next: cure` or a missing `next` halts" in body
 
 
-class TestUltracookRecoveryPaths:
-    """The fan pathway surfaces a worker-exhaustion recovery path and an
-    aggregate-gate failure path (issue #194, acceptance #7)."""
+class TestCookRecoveryPaths:
+    """The typed fan pathway preserves worker-exhaustion and aggregate gates."""
 
     def test_worker_exhaustion_recovery(self) -> None:
         body = _skill_corpus("cook")
         body_lower = body.lower()
-        assert "#194" in body or "194" in body, (
-            "cook must cite issue #194 for the recovery paths"
-        )
         assert "exhaust" in body_lower and "retry" in body_lower, (
             "the fan pathway must document worker-exhaustion recovery (retry once)"
         )
@@ -1422,20 +1414,18 @@ class TestUltracookRecoveryPaths:
         )
 
 
-class TestUltracookOutputContract:
-    """Behavioural output stays stable while resolution provenance exposes topology."""
+class TestCookOutputContract:
+    """Typed output preserves provenance and final-summary visibility."""
 
     def test_output_contract_accounts_for_resolution_provenance(self) -> None:
         body = _skill_corpus("cook").lower()
-        assert "behavioral output" in body
+        assert "typed" in body
         assert "resolution provenance" in body
         assert "topology" in body
 
 
-class TestUltracookResume:
-    """--resume brings ultracook up to spec with the retired cheese-factory:
-    the Inputs list advertises it, the Topology advances the manifest at every
-    phase boundary, and a dedicated section drives the resume flow."""
+class TestCookResume:
+    """--resume reloads typed planner evidence rather than legacy phase state."""
 
     def test_inputs_list_resume_flag(self) -> None:
         body = _skill("ultracook")
@@ -1443,81 +1433,38 @@ class TestUltracookResume:
             "Inputs must advertise the --resume <slug> flag"
         )
 
-    def test_topology_advances_manifest_at_phase_boundaries(self) -> None:
+    def test_typed_handoff_is_revalidated(self) -> None:
         body = _skill_corpus("cook")
-        # Every schema phase past the decomposer scaffold must be emitted by a
-        # manifest_update set-phase call threaded into the topology prose.
-        for phase in (
-            "seed_complete",
-            "curds_complete",
-            "merge_complete",
-            "wiring_complete",
-            "final_merge_complete",
-            "post_review_complete",
-            "pr_publish_complete",
+        assert "## --resume <slug>" in body
+        assert "PlannerResult" in body and "CurdPlan" in body
+        assert "resolve_artifact" in body
+        assert "validate_curd_plan" in body
+
+    def test_legacy_phase_state_is_not_live_authority(self) -> None:
+        body = _skill_corpus("cook")
+        assert "manifest_update" not in body
+        assert "phase_decision" not in body
+
+
+class TestCureCanonicalPathway:
+    """The installed Cure route consumes Cook's typed outputs directly."""
+
+    def test_cure_uses_canonical_contracts(self) -> None:
+        body = _skill_corpus("cure")
+        for helper in (
+            "PlannerResult",
+            "CurdPlan",
+            "validate_curd_plan",
+            "resolve_artifact",
+            "normalize_agent_output",
+            "CurdResult",
+            "DiagnosisResult",
+            "bind_diagnosis",
+            "CureDiagnosisBinding",
         ):
-            assert f"set-phase --manifest <path> --phase {phase}" in body or (
-                f"--phase {phase}" in body and "manifest_update set-phase" in body
-            ), f"topology must advance the manifest to {phase}"
-        assert "manifest_update set-curd-status" in body, (
-            "per-curd status must be recorded via set-curd-status"
-        )
-        assert "manifest_update set-wiring-status" in body, (
-            "per-wiring status must be recorded via set-wiring-status"
-        )
+            assert helper in body, f"cure must name canonical contract {helper}"
 
-    def test_resume_section_present(self) -> None:
-        body = _skill_corpus("cook")
-        assert "## --resume <slug>" in body, "a dedicated --resume section must exist"
-        assert "git cat-file -e" in body, (
-            "resume must verify recorded commit SHAs still exist (rebase guard)"
-        )
-        assert "phase_summary" in body and "carry_forward" in body, (
-            "resume must read phase_summary/carry_forward for cross-seam continuity"
-        )
-
-    def test_phase_strings_agree_across_writer_reader_and_schema(self) -> None:
-        # The whole point of --resume: a phase string written by the topology
-        # (wave-fan mechanics) prose must round-trip through the reader
-        # section and the schema enum. Drift in any one of the three (edit
-        # one place, forget the others) silently breaks resume.
-        import json
-        import re
-
-        body = _skill_corpus("cook")
-        schema_path = SKILLS_DIR / "ultracook" / "references" / "manifest-schema.json"
-        schema_enum = json.loads(_read(schema_path))["properties"]["phase"]["enum"]
-
-        # cook's heading is `### --resume <slug>` inline in SKILL.md, or
-        # `## --resume <slug>` in the routed fan-pathway.md reference file
-        # (one level shallower once it's a standalone file's own heading).
-        for heading in ("\n### --resume <slug>", "\n## --resume <slug>"):
-            parts = body.split(heading, 1)
-            if len(parts) == 2:
-                resume_section = parts[1]
-                break
-        else:
-            raise AssertionError("cook corpus must carry a `--resume <slug>` heading")
-        # Accept either ASCII `->` (cook's convention) or the original
-        # unicode `→` — the arrow glyph isn't the guarantee under test.
-        arrow_span = re.search(
-            r"`([a-z_]+(?: (?:->|→) [a-z_]+)+)`", resume_section
-        )
-        assert arrow_span, "resume section must list the ordered phase enum"
-        reader_enum = [
-            p.strip() for p in re.split(r" -> | → ", arrow_span.group(1))
-        ]
-
-        # Writer: every `--phase <X>` the wave-fan-mechanics prose (before
-        # the reader section) tells the orchestrator to set.
-        topology = body.split("\n### --resume <slug>", 1)[0]
-        writer_phases = set(re.findall(r"--phase ([a-z_]+)", topology))
-
-        assert reader_enum == schema_enum, (
-            "reader arrow-list must match the schema phase enum exactly (order + members)"
-        )
-        assert writer_phases == set(schema_enum) - {"gate_approved"}, (
-            "the wave-fan mechanics must write every schema phase past the "
-            f"decomposer scaffold (gate_approved); writer={sorted(writer_phases)} "
-            f"schema={schema_enum}"
-        )
+    def test_cure_rejects_legacy_phase_state(self) -> None:
+        body = _skill_corpus("cure")
+        assert "phase manifest" not in body
+        assert "manifest_update" not in body
