@@ -17,4 +17,4 @@
 
 [^spec]: `/home/paul/.local/share/cheese/paulnsorensen-easy-cheese/specs/wheypoint-continuity-kernel.md`, approved 2026-08-02.
 [^bugs]: GitHub issues 371-378 and 320. <https://github.com/paulnsorensen/easy-cheese/issues>
-[^legacy]: `.hallouminate/wiki/adr/wheypoint-provenance-schema-001.md`.
+[^legacy]: [wheypoint-provenance-schema-001](./wheypoint-provenance-schema-001.md).

@@ -1,4 +1,4 @@
-# Easy-cheese domain model
+# Easy Cheese domain model
 
 <certain> Easy Cheese separates semantic work contracts, workflow continuity, and physical execution. CurdPlan is the semantic work authority. WheypointRecord is the continuity authority. CurdRecord and Milknado plan v2 remain physical/runtime state.
 

@@ -6,7 +6,7 @@ Ships in: `skills/wheypoint/SKILL.md`
 
 ## Supersession
 
-<certain> As of 2026-08-02, `adr/wheypoint-continuity-kernel-001.md` supersedes this ADR's projection-authority, optional-parent dispatch, and new split/join decisions. Session, Git, creation, and parent fields remain legacy provenance inputs, but the typed Wheypoint record is authoritative and every declared lineage reference must resolve before automatic dispatch.
+<certain> As of 2026-08-02, [wheypoint-continuity-kernel-001](./wheypoint-continuity-kernel-001.md) supersedes this ADR's projection-authority, optional-parent dispatch, and new split/join decisions. Session, Git, creation, and parent fields remain legacy provenance inputs, but the typed Wheypoint record is authoritative and every declared lineage reference must resolve before automatic dispatch.
 
 ## Context
 
