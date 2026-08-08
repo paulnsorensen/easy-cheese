@@ -43,4 +43,10 @@
 - [skill-size-ratchet-003](./skill-size-ratchet-003.md) — ADR: Ratchet skill size and reference structure against a recorded baseline
 - [starlight-docs-cutover-001](./starlight-docs-cutover-001.md) — ADR: Starlight docs cutover
 - [wheypoint-provenance-schema-001](./wheypoint-provenance-schema-001.md) — ADR: wheypoint provenance as additive header fields with join/split verbs
+- [workflow-contract-milknado-seam-001](./workflow-contract-milknado-seam-001.md) — ADR: CurdPlan is the semantic work authority
+- [workflow-contract-milknado-seam-002](./workflow-contract-milknado-seam-002.md) — ADR: Agents write slim views and hosts normalize canonical contracts
+- [workflow-contract-milknado-seam-003](./workflow-contract-milknado-seam-003.md) — ADR: The planner owns semantic decomposition
+- [workflow-contract-milknado-seam-004](./workflow-contract-milknado-seam-004.md) — ADR: Executors consume CurdPlan and return criterion-led CurdResult
+- [workflow-contract-milknado-seam-005](./workflow-contract-milknado-seam-005.md) — ADR: Payload schemas and transition routing remain separate
+- [workflow-contract-milknado-seam-006](./workflow-contract-milknado-seam-006.md) — ADR: Easy Cheese proves the core seam before Milknado adoption
 <!-- HALLOUMINATE:INDEX-END -->

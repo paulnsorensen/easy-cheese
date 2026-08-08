@@ -21,7 +21,7 @@ Optional flags:
 - `--auto` — autonomous mode: skip every handoff gate and chain `/press → /age → /cure` (see `## Auto mode` below; full selection/cap rules in `references/auto-mode.md`).
 - `--hard` — propagate through `/press → /age → /cure → /plate`; `/plate` fires `/hard-cheese` after its final artifact-writing gate.
 - `--open-pr` — propagate to terminal `/plate`, which follows its explicit-choice and review-shape policy for a new PR.
-- `--resume <slug>` — resume a crashed **fan** run from its manifest (full mechanics: `references/fan-pathway.md` § --resume).
+- `--resume <slug>` — resume a crashed **fan** run from its typed handoff and referenced artifacts (full mechanics in `references/fan-pathway.md` § --resume).
 
 ### Standalone fast-path
 
@@ -43,17 +43,52 @@ When the fast-path applies, derive a slug from the task (e.g. `tail-trailing-new
 
 ## Fan pathway
 
-`/cook`'s single pathway routes a spec through one of three shapes, gated on whether the spec already carries a decomposition.
+`/cook`'s single pathway routes a spec through one of three shapes, gated on
+whether a typed planner result is already available.
 
-**(a) Curded spec.** If the spec already carries an embedded `curds:`/`waves:` block (produced by `/mold`'s curdle step, or a sibling curd's prior decomposition), skip straight to wave fan-out below — the decomposition is already locked, no fresh decompose pass runs.
+**Fast-path.** When the curd-count `hint = 1` and blast radius is low or medium,
+skip the planner/decomposer in [`decomposer.md`](../cheese/references/decomposer.md)
+and use the ordinary single-coder path.
 
-**(b) Un-curded, small.** Ordinary single-coder Cut → Implement → Taste-test, unchanged from today's `/cook` (`## Flow` above). Sizing signal: `/mold`'s curd-count hint is advisory; otherwise use AC count and edit-site estimate. Per the spec's cook-gate row: "un-curded (curd block, else AC count and edit-site estimate) | single vs fan vs decompose-first; wave plan; transport".
+**(a) Curded spec.** If the spec already carries a typed `PlannerResult` or
+`CurdPlan`, load it, call `validate_curd_plan`, and continue to the wave fan-out
+below. A prior decomposition is input evidence only; the validated plan is the
+semantic authority.
 
-**(c) Un-curded, big.** Dispatch the decomposer per `../cheese/references/decomposer.md` (the locked curd-block schema — do not use `../ultracook/references/decomposer-prompt.md`, which produces the incompatible legacy manifest schema) against the spec text to produce a `curd_block`-schema block (`curds[]`, `waves[]`, `decomposer{}`), then validate it with `src/fanout/curd_block.py::validate_curd_block`. Gate with the user by showing the wave plan plus a projected agent-dispatch count — exact phrasing: "12 ACs -> 5 curds, 2 waves, up to 30 agent dispatches. Go?" — unless `--auto` is set. The count is an upper bound, `5 + 5 x curds`, excluding wiring; the derivation lives in `references/fan-pathway.md` § Phase-chain topology.
+At the executable fan boundary, call `plan` for a `PlannerResult` when needed,
+then call `validate_curd_plan` before the first worker dispatch. Pass that
+validated plan to `cook`; resolve artifacts with `resolve_artifact`, normalize
+writer observations into exactly one `CurdResult` per selected curd, and require
+`bind_diagnosis` to produce a confirmed per-curd binding before Cure. The host,
+not an agent view, owns identity, version, digest, coverage, disposition, and
+provenance. The full canonical thread is in
+[`references/fan-pathway.md`](references/fan-pathway.md).
 
-**Wave cap.** Waves are capped at `<=4` curds, enforced by `MAX_WAVE_SIZE` in `src/fanout/curd_block.py` — cited, not reimplemented here.
+**(b) Un-curded, small.** Ordinary single-coder Cut → Implement → Taste-test,
+unchanged from today's `/cook` (`## Flow` above). Sizing signal: `/mold`'s
+curd-count hint is advisory; otherwise use AC count and edit-site estimate. Per
+the spec's cook-gate row: "un-curded (typed plan, else AC count and edit-site
+estimate) | single vs fan vs decompose-first; wave plan; transport".
+
+**(c) Un-curded, big.** Build a typed `PlannerRequest` from the spec and
+dispatch the planner through `easy_cheese_schemas.plan`. The planner must return
+a `PlannerResultWriterView` that materializes into a `PlannerResult` with a
+`CurdPlan`; validate it with `validate_curd_plan`, show the dependency-respecting
+wave plan plus the projected dispatch count, and ask the user with the exact
+phrasing "12 ACs -> 5 curds, 2 waves, up to 30 agent dispatches. Go?" unless
+`--auto` is set. The count is an upper bound derived from the validated plan
+and excludes wiring until wiring has typed evidence.
+
+**Wave cap.** Waves are capped at `<=4` curds, enforced by `MAX_WAVE_SIZE` in
+`src/fanout/curd_block.py` — cited, not reimplemented here. If a legacy
+decomposer must be called at an integration boundary, project the validated
+`CurdPlan` with `project_curd_block` and reject `UnsupportedProjection`; never
+promote that projection back into live workflow state.
 
 Read [`references/fan-pathway.md`](references/fan-pathway.md) before orchestrating a wave-fan run — it owns the existing-handoffs guard, mode selection, the publication-topology preflight, the milknado seam, phase-chain topology, the deterministic phase loop, worker-exhaustion/aggregate-gate recovery, worktree harvest and teardown, `--resume <slug>`, and resolution provenance.
+
+After fan harvest, enforce worktree teardown and verify that no
+`worktree-agent-*` branch or directory leaks.
 
 A terminal age is **publishable only with `next: done`**; `next: cure` or a missing `next` halts — this applies to both fan-pathway tables ([`references/fan-pathway.md`](references/fan-pathway.md)) and the single-coder `--auto` chain's terminal age (`## Auto mode` below).
 
@@ -63,36 +98,14 @@ Before any curd cooks, `/cook` captures the run's broad-gate baseline once, in t
 
 For source changes, call the selected backend directly and follow [`code-intelligence-routing.md`](../cheese/references/code-intelligence-routing.md), including search → fresh bounded read → stale-safe write.
 
-Portability reference: [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
-The handoff blocks below are the portable contract; slash commands are host renderings, not the control model.
-
-## Preferred tools and fallbacks
-
-| Need | Prefer | Fallback |
-| --- | --- | --- |
-| Diffs | `delta` | plain `git diff` |
-| GitHub context | `gh` | local git history or user-provided links |
-| Merge assistance | mergiraf | manual conflict resolution with tests |
-| Task commands | `just`, package scripts | direct documented commands |
-| Code navigation | semantic symbol search, then caller search | LSP or bounded native search; report precision loss |
-| Read before edit | fresh bounded read from the write backend family | another snapshot-capable bounded read; re-read if anchors are incompatible |
-
-Falling back, mention any loss of precision that affects risk.
+Portability: [`harness-portability.md`](../cheese/references/harness-portability.md);
+slash commands are host renderings, not the control model.
 
 ## Quality gates
 
 Run existing project commands only — the most relevant tests for the touched area, plus lint/type/build if defined. Never remove, skip, or weaken unrelated tests to make the change pass.
 
 Gate failures are baseline-aware. Policy, the classification taxonomy, and the `baseline:` block shape are the shared reference [`references/quality-gates.md`](references/quality-gates.md); every downstream phase links there instead of restating it.
-
-## Output
-
-House style and citations: [`../cheese/references/formatting.md`](../cheese/references/formatting.md). Authoritative report shape: [`references/package-report.md`](references/package-report.md); the bullets below sketch it:
-
-- Files changed and why.
-- Tests or checks run.
-- Remaining risks or skipped checks.
-- Suggested next skill: usually `/press` → `/age` → `/cure`.
 
 ## Handoff slug
 
@@ -107,6 +120,24 @@ durable_flags: none | <one line per flag: what durable knowledge changed -> targ
 baseline: none | <block — shape in references/quality-gates.md § Baseline block shape>
 <one-line orientation: what cook changed>
 ```
+
+When this handoff is emitted for the typed fan result, use the canonical
+boundary writer and carry the result schema explicitly:
+
+```text
+python3 shared/scripts/write_handoff_artifact.py \
+  --slug <slug> --status <status> --phase cook --next age \
+  --artifact <artifact-path> --orientation "<one-line orientation>" \
+  --payload-schema https://schemas.easy-cheese.dev/curd-result
+```
+
+For a deliberate replan handoff, use `--next mold` with the
+`https://schemas.easy-cheese.dev/planner-request` payload instead. These
+`phase`/`next` values route the legacy handoff file only; the live fan state is
+still the validated `CurdPlan` and normalized `CurdResult`.
+
+In a fan run, read each phase's handoff slug file from disk; never infer the
+handoff from stdout.
 
 `next:` names the next runnable phase — `press` (standard chain), `age` (press skipped), `cook` (rerun after a blocker), `mold` (spec needs another pass) — or `done` only for true terminal completion, never a blocked-but-resumable halt; `halt:` reasons follow the package-report stop conditions. The orientation line is one factual sentence. Omit `taste_test:` when the cost gate didn't warrant one.
 
@@ -154,13 +185,12 @@ Iron Law, Red Flags, and the TDD Rationalization table live in
 
 ## Agent resolution
 
-Resolve implementation and taste-test dispatches through [`../cheese/references/agent-resolution.md`](../cheese/references/agent-resolution.md).
+Resolve through
+[`agent-resolution.md`](../cheese/references/agent-resolution.md). Implementation
+uses a coder, taste-test uses a reviewer, and harvest and plate stay parent-owned.
 
 | Work | Preferred types | Permissions/isolation | Minimum power | Effort | Fallback |
 | --- | --- | --- | --- | --- | --- |
-| Implement the contract | coder | write, isolated-worktree | default | high | compatible coder, then general |
-| Fresh-context taste-test | reviewer | read-only, fresh-context | powerful | high | compatible reviewer, then general |
 | Decompose the spec | planner, general | write (manifest only), fresh-context | powerful | high | compatible planner, then general |
-| Harvest and plate | parent | parent-owned repository state | powerful | high | no fallback; halt |
 
-The canonical cook handoff and package report carry the shared `agent_resolution` block.
+The handoff carries the `agent_resolution` block.

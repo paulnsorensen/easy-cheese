@@ -16,23 +16,63 @@ file inside the target directory and are then ``os.replace``'d into place
 (atomic overwrite on POSIX and Windows alike), so readers never observe a
 half-written file.
 
-``--phase`` names *this* phase's own directory and is the on-disk path
-authority. ``--next`` is preamble-content only — it tells the *next* phase
-where the chain should go, but does not influence where this artifact lands.
-For backward compatibility, ``--phase`` is optional: when omitted, the path
-falls back to ``.cheese/<next>/<slug>.md`` (the legacy "write the next phase's
-input" shape, kept so existing tests and callers do not break mid-rollout).
+``--phase`` is mandatory and names *this* phase's own directory. The value is
+validated against the generated phase registry before any output directory or
+file is created. ``--next`` is preamble-content only — it tells the *next*
+phase where the chain should go, but does not influence where this artifact
+lands.
 """
-
-from __future__ import annotations
 
 import argparse
 import contextlib
+import os
+import sys
+import tempfile
 from pathlib import Path
 
 import cli
 import handoff
 
+try:
+    from easy_cheese_schemas.phase_contracts import (
+        COMPILED_TRANSITION_REGISTRY,
+        TransitionError,
+        validate_transition,
+    )
+except ModuleNotFoundError as exc:
+    if exc.name != "easy_cheese_schemas":
+        raise
+    try:
+        # common.pyz stages the public runtime modules at its top level.
+        from phase_contracts import (
+            COMPILED_TRANSITION_REGISTRY,
+            TransitionError,
+            validate_transition,
+        )
+    except ModuleNotFoundError as top_level_exc:
+        if top_level_exc.name != "phase_contracts":
+            raise
+        package_dir = Path(__file__).resolve().parents[2] / "src" / "easy_cheese_schemas"
+        sys.path.insert(0, str(package_dir))
+        from phase_contracts import (
+            COMPILED_TRANSITION_REGISTRY,
+            TransitionError,
+            validate_transition,
+        )
+
+
+def _validate_transition(
+    source: str, destination: str, payload_schema_uri: str | None
+) -> None:
+    try:
+        validate_transition(
+            COMPILED_TRANSITION_REGISTRY,
+            source=source,
+            destination=destination,
+            payload_schema_uri=payload_schema_uri,
+        )
+    except TransitionError as exc:
+        raise cli.CliError(str(exc)) from exc
 
 def _render_preamble(
     *,
@@ -47,7 +87,7 @@ def _render_preamble(
     """Render the preamble via handoff.render_handoff_slug (single SSOT)."""
     # Parse status into (status_kind, halt_reason).
     if status.startswith("halt:"):
-        halt_reason = status[len("halt:"):].strip()
+        halt_reason = status[len("halt:") :].strip()
         status_kind = "halt"
     else:
         halt_reason = None
@@ -87,33 +127,31 @@ def write_artifact(
     orientation: str,
     body: str | None,
     root: Path,
-    phase: str | None = None,
+    phase: str,
+    payload_schema_uri: str | None = None,
     taste_test: str | None = None,
     durable_flags: str | None = None,
     baseline: str | None = None,
 ) -> Path:
-    """Write the artifact atomically; return the final path.
-
-    The on-disk path is ``.cheese/<phase>/<slug>.md`` when ``phase`` is given;
-    otherwise it falls back to ``.cheese/<next_skill>/<slug>.md`` (legacy).
-    ``next_skill`` always lands in the preamble's ``next:`` field regardless,
-    so callers can decouple "where this report lives" from "what runs next".
-    """
+    """Write the artifact atomically; return the final path."""
     if not slug:
         raise cli.CliError("--slug must be non-empty")
     if not next_skill:
         raise cli.CliError("--next must be non-empty")
+    if not phase:
+        raise cli.CliError("--phase must be non-empty")
     if not orientation:
         raise cli.CliError("--orientation must be non-empty")
     _reject_traversal("--slug", slug)
+    _reject_traversal("--phase", phase)
+    _validate_transition(phase, next_skill, payload_schema_uri)
 
-    path_dir = phase if phase else next_skill
     cheese_root = (root / ".cheese").resolve()
-    target = cheese_root / path_dir / f"{slug}.md"
-    # Nested path_dir subdirs are allowed (factory chains write to subdirs); a
-    # `..` or absolute escape out of .cheese/ is not.
+    target = cheese_root / phase / f"{slug}.md"
+    # Phase names are validated against the compiled registry and therefore
+    # select exactly one directory beneath .cheese/.
     if cheese_root not in target.resolve().parents:
-        raise cli.CliError(f"--phase/--next must stay under .cheese/: {path_dir!r}")
+        raise cli.CliError(f"--phase must stay under .cheese/: {phase!r}")
     target_dir = target.parent
     target_dir.mkdir(parents=True, exist_ok=True)
 
@@ -128,16 +166,24 @@ def write_artifact(
     )
     contents = _build_contents(preamble=preamble, body=body)
 
-    tmp = target.with_name(target.name + ".tmp")
+    fd, tmp_name = tempfile.mkstemp(
+        prefix=f".{target.name}.",
+        suffix=".tmp",
+        dir=target_dir,
+    )
     try:
-        tmp.write_text(contents, encoding="utf-8")
-        tmp.replace(target)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            fd = -1
+            handle.write(contents)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp_name, target)
     except BaseException:
-        # Atomic-rename contract: clean up the tmp on failure so callers never
-        # see a half-written sibling. swallow tmp-cleanup errors — the real
-        # failure is the one we're propagating.
+        if fd != -1:
+            with contextlib.suppress(OSError):
+                os.close(fd)
         with contextlib.suppress(FileNotFoundError):
-            tmp.unlink()
+            os.unlink(tmp_name)
         raise
     return target
 
@@ -160,6 +206,7 @@ def _cmd_write(args: argparse.Namespace) -> None:
         body=body,
         root=root,
         phase=args.phase,
+        payload_schema_uri=args.payload_schema,
         taste_test=args.taste_test,
         durable_flags=args.durable_flags,
         baseline=args.baseline,
@@ -171,7 +218,9 @@ def _setup(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--slug", required=True, help="artifact slug (filename stem)")
     parser.add_argument("--status", required=True, help="'ok' or 'halt: <reason>'")
     parser.add_argument("--next", required=True, help="next skill name or 'done'")
-    parser.add_argument("--artifact", required=True, help="path to prior artifact (may be empty)")
+    parser.add_argument(
+        "--artifact", required=True, help="path to prior artifact (may be empty)"
+    )
     parser.add_argument("--orientation", required=True, help="one-line orientation")
     parser.add_argument(
         "--taste-test",
@@ -188,20 +237,23 @@ def _setup(parser: argparse.ArgumentParser) -> None:
         default=None,
         help="optional baseline: keyed preamble line (omitted when absent)",
     )
-    parser.add_argument("--body-file", default=None, help="optional path to body content")
+    parser.add_argument(
+        "--body-file", default=None, help="optional path to body content"
+    )
     parser.add_argument(
         "--phase",
+        required=True,
+        help="name of THIS phase's own directory under .cheese/ (path authority)",
+    )
+    parser.add_argument(
+        "--payload-schema",
         default=None,
-        help=(
-            "name of THIS phase's own directory under .cheese/ "
-            "(path authority). Optional for backward compatibility; "
-            "when omitted, falls back to --next."
-        ),
+        help="payload schema URI for transition validation",
     )
     parser.add_argument(
         "--root",
         default=None,
-        help="repo root (default: cwd); .cheese/<phase|next>/<slug>.md is written under this",
+        help="repo root (default: cwd); .cheese/<phase>/<slug>.md is written under this",
     )
     parser.set_defaults(func=_cmd_write)
 

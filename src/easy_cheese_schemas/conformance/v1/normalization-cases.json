@@ -1,0 +1,445 @@
+{
+  "$schema": "https://schemas.easy-cheese.dev/conformance/v1/normalization-cases",
+  "fixture_version": "1.0",
+  "cases": [
+    {
+      "name": "curd-plan-host-identity-digest-and-provenance",
+      "operation": "normalize_agent_output",
+      "writer_view": {
+        "kind": "curd_plan",
+        "payload": {
+          "objective": "Normalize the shared plan",
+          "curds": [
+            {
+              "key": "runtime",
+              "outcome": "Implement deterministic normalization",
+              "scope": {
+                "paths": [
+                  "src/runtime.py"
+                ]
+              },
+              "outputs": [
+                "Normalized runtime"
+              ],
+              "criteria": [
+                {
+                  "description": "Normalization is deterministic",
+                  "check": "pytest tests/test_runtime.py"
+                }
+              ],
+              "input_keys": [
+                "spec"
+              ]
+            }
+          ]
+        }
+      },
+      "host_invocation": {
+        "contract_version": {
+          "schema_uri": "https://schemas.easy-cheese.dev/curd-plan",
+          "major": "1",
+          "minor": "0"
+        },
+        "plan_id": "plan-normalized",
+        "revision": 2,
+        "artifacts": {
+          "spec": {
+            "artifact_id": "artifact-spec",
+            "role": "source",
+            "uri": "repo://specs/workflow.md",
+            "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "size_bytes": 128,
+            "media_type": "text/markdown"
+          }
+        }
+      },
+      "expected_canonical_output": {
+        "contract_version": {
+          "schema_uri": "https://schemas.easy-cheese.dev/curd-plan",
+          "major": "1",
+          "minor": "0"
+        },
+        "plan_id": "plan-normalized",
+        "revision": 2,
+        "digest": "sha256:84d7a040e4b86d47a1ff635ed43b56d54c23d2bffc79cd69201f35be6ea3be33",
+        "objective": "Normalize the shared plan",
+        "curds": [
+          {
+            "curd_id": "plan-normalized/curd/1",
+            "outcome": "Implement deterministic normalization",
+            "scope": {
+              "paths": [
+                "src/runtime.py"
+              ],
+              "excluded_paths": []
+            },
+            "inputs": [
+              {
+                "artifact_id": "artifact-spec",
+                "role": "source",
+                "uri": "repo://specs/workflow.md",
+                "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size_bytes": 128,
+                "media_type": "text/markdown",
+                "schema_uri": null
+              }
+            ],
+            "outputs": [
+              "Normalized runtime"
+            ],
+            "dependencies": [],
+            "criteria": [
+              {
+                "criterion_id": "plan-normalized/curd/1/criterion/1",
+                "description": "Normalization is deterministic",
+                "check": "pytest tests/test_runtime.py"
+              }
+            ],
+            "lineage": {
+              "identity_action": "new",
+              "source_curd_ids": []
+            }
+          }
+        ],
+        "context": null,
+        "parent_plan_ref": null
+      },
+      "stable": {
+        "digest": "sha256:84d7a040e4b86d47a1ff635ed43b56d54c23d2bffc79cd69201f35be6ea3be33",
+        "identity": {
+          "plan_id": "plan-normalized",
+          "revision": 2,
+          "curd_ids": [
+            "plan-normalized/curd/1"
+          ],
+          "criterion_ids": [
+            "plan-normalized/curd/1/criterion/1"
+          ]
+        },
+        "provenance": {
+          "input_artifact_ids": [
+            "artifact-spec"
+          ]
+        }
+      }
+    },
+    {
+      "name": "review-result-host-identity-provenance-and-coverage",
+      "operation": "normalize_agent_output",
+      "writer_view": {
+        "kind": "review_result",
+        "payload": {
+          "disposition": "findings",
+          "findings": [
+            {
+              "severity": "high",
+              "summary": "Unknown fields are not rejected",
+              "evidence_keys": [
+                "review-log"
+              ],
+              "location": {
+                "path": "src/runtime.py",
+                "start_line": 40,
+                "end_line": 42
+              }
+            }
+          ]
+        }
+      },
+      "host_invocation": {
+        "contract_version": {
+          "schema_uri": "https://schemas.easy-cheese.dev/review-result",
+          "major": "1",
+          "minor": "0"
+        },
+        "review_id": "review-normalized",
+        "evidence": {
+          "review-log": {
+            "evidence_id": "evidence-review-log",
+            "kind": "review",
+            "artifact": {
+              "artifact_id": "artifact-review-log",
+              "role": "review",
+              "uri": "repo://evidence/review-log.json",
+              "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "size_bytes": 64,
+              "media_type": "application/json"
+            },
+            "summary": "The failing review trace"
+          }
+        },
+        "coverage": [
+          {
+            "target": "correctness",
+            "disposition": "covered"
+          },
+          {
+            "target": "security",
+            "disposition": "covered"
+          }
+        ]
+      },
+      "expected_canonical_output": {
+        "contract_version": {
+          "schema_uri": "https://schemas.easy-cheese.dev/review-result",
+          "major": "1",
+          "minor": "0"
+        },
+        "review_id": "review-normalized",
+        "disposition": "findings",
+        "findings": [
+          {
+            "finding_id": "review-normalized/finding/1",
+            "severity": "high",
+            "summary": "Unknown fields are not rejected",
+            "evidence": [
+              {
+                "evidence_id": "evidence-review-log",
+                "kind": "review",
+                "artifact": {
+                  "artifact_id": "artifact-review-log",
+                  "role": "review",
+                  "uri": "repo://evidence/review-log.json",
+                  "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "size_bytes": 64,
+                  "media_type": "application/json",
+                  "schema_uri": null
+                },
+                "location": null,
+                "summary": "The failing review trace"
+              }
+            ],
+            "location": {
+              "artifact_id": "artifact-review-log",
+              "path": "src/runtime.py",
+              "start_line": 40,
+              "end_line": 42,
+              "start_column": null,
+              "end_column": null
+            }
+          }
+        ],
+        "coverage": [
+          {
+            "target": "correctness",
+            "disposition": "covered",
+            "reason": null
+          },
+          {
+            "target": "security",
+            "disposition": "covered",
+            "reason": null
+          }
+        ],
+        "reason": null
+      },
+      "stable": {
+        "identity": {
+          "review_id": "review-normalized",
+          "finding_ids": [
+            "review-normalized/finding/1"
+          ]
+        },
+        "provenance": {
+          "finding_evidence_ids": [
+            "evidence-review-log"
+          ],
+          "location_artifact_ids": [
+            "artifact-review-log"
+          ]
+        },
+        "coverage": {
+          "targets": [
+            "correctness",
+            "security"
+          ],
+          "dispositions": [
+            "covered",
+            "covered"
+          ]
+        }
+      }
+    },
+    {
+      "name": "curd-result-host-identity-provenance-and-criterion-coverage",
+      "operation": "normalize_agent_output",
+      "writer_view": {
+        "kind": "curd_result",
+        "payload": {
+          "criterion_results": [
+            {
+              "disposition": "passed",
+              "evidence_keys": [
+                "test-log"
+              ]
+            },
+            {
+              "disposition": "blocked",
+              "reason": "The dependent service was unavailable"
+            }
+          ],
+          "deliverables": [
+            {
+              "role": "result",
+              "path": "artifacts/result.json",
+              "media_type": "application/json"
+            }
+          ],
+          "unresolved_work": [
+            "Run the service-backed criterion"
+          ]
+        }
+      },
+      "host_invocation": {
+        "contract_version": {
+          "schema_uri": "https://schemas.easy-cheese.dev/curd-result",
+          "major": "1",
+          "minor": "0"
+        },
+        "result_id": "result-normalized",
+        "source_plan_ref": {
+          "plan_id": "plan-normalized",
+          "revision": 2,
+          "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        },
+        "source_curd_ref": {
+          "curd_id": "plan-normalized/curd/1",
+          "digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        },
+        "expected_criterion_ids": [
+          "criterion-runtime",
+          "criterion-service"
+        ],
+        "evidence": {
+          "test-log": {
+            "evidence_id": "evidence-test-log",
+            "kind": "verification",
+            "artifact": {
+              "artifact_id": "artifact-test-log",
+              "role": "verification",
+              "uri": "repo://evidence/test-log.json",
+              "digest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+              "size_bytes": 96,
+              "media_type": "application/json"
+            },
+            "summary": "The deterministic test log"
+          }
+        },
+        "deliverables": {
+          "artifacts/result.json": {
+            "artifact_id": "artifact-result",
+            "role": "result",
+            "uri": "repo://artifacts/result.json",
+            "digest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            "size_bytes": 48,
+            "media_type": "application/json"
+          }
+        },
+        "runtime_refs": [
+          "milknado:node-42"
+        ]
+      },
+      "expected_canonical_output": {
+        "contract_version": {
+          "schema_uri": "https://schemas.easy-cheese.dev/curd-result",
+          "major": "1",
+          "minor": "0"
+        },
+        "result_id": "result-normalized",
+        "source_plan_ref": {
+          "plan_id": "plan-normalized",
+          "revision": 2,
+          "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        },
+        "source_curd_ref": {
+          "curd_id": "plan-normalized/curd/1",
+          "digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        },
+        "disposition": "blocked",
+        "expected_criterion_ids": [
+          "criterion-runtime",
+          "criterion-service"
+        ],
+        "criterion_results": [
+          {
+            "criterion_id": "criterion-runtime",
+            "disposition": "passed",
+            "evidence": [
+              {
+                "evidence_id": "evidence-test-log",
+                "kind": "verification",
+                "artifact": {
+                  "artifact_id": "artifact-test-log",
+                  "role": "verification",
+                  "uri": "repo://evidence/test-log.json",
+                  "digest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                  "size_bytes": 96,
+                  "media_type": "application/json",
+                  "schema_uri": null
+                },
+                "location": null,
+                "summary": "The deterministic test log"
+              }
+            ],
+            "reason": null
+          },
+          {
+            "criterion_id": "criterion-service",
+            "disposition": "blocked",
+            "evidence": [],
+            "reason": "The dependent service was unavailable"
+          }
+        ],
+        "deliverables": [
+          {
+            "artifact_id": "artifact-result",
+            "role": "result",
+            "uri": "repo://artifacts/result.json",
+            "digest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            "size_bytes": 48,
+            "media_type": "application/json",
+            "schema_uri": null
+          }
+        ],
+        "unresolved_work": [
+          "Run the service-backed criterion"
+        ],
+        "runtime_refs": [
+          "milknado:node-42"
+        ]
+      },
+      "stable": {
+        "identity": {
+          "result_id": "result-normalized",
+          "source_plan_id": "plan-normalized",
+          "source_curd_id": "plan-normalized/curd/1"
+        },
+        "provenance": {
+          "criterion_evidence_ids": [
+            "evidence-test-log"
+          ],
+          "deliverable_artifact_ids": [
+            "artifact-result"
+          ],
+          "runtime_refs": [
+            "milknado:node-42"
+          ]
+        },
+        "coverage": {
+          "expected_criterion_ids": [
+            "criterion-runtime",
+            "criterion-service"
+          ],
+          "criterion_result_ids": [
+            "criterion-runtime",
+            "criterion-service"
+          ],
+          "dispositions": [
+            "passed",
+            "blocked"
+          ]
+        }
+      }
+    }
+  ]
+}

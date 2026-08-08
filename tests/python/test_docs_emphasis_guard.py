@@ -99,16 +99,13 @@ def test_harness_portability_reference_is_linked_from_workflow_docs():
 
 
     portable_examples = {
-        # /ultracook retired to a stub; its own portable-example CLI
-        # invocations (phase_decision, validate_decomposition, mode,
-        # milknado, worktree create/harvest/teardown) now live inside
-        # cook/SKILL.md's `## Fan pathway`, merged into cook's own entry.
+        # /ultracook retired to a stub; portable mode, tracking, and worktree
+        # commands now live one hop under cook's fan-pathway reference. Legacy
+        # phase-state and decomposition commands are intentionally not live.
         REPO_ROOT / "skills/cook/SKILL.md": (
             "shared/scripts/artifact_path.py",
             "shared/scripts/read_handoff_slug.py",
-            "python3 skills/ultracook/scripts/ultracook.pyz phase_decision",
             "fallback",
-            "python3 skills/ultracook/scripts/ultracook.pyz validate_decomposition",
             "python3 skills/ultracook/scripts/ultracook.pyz mode",
             "python3 skills/ultracook/scripts/ultracook.pyz milknado",
             "python3 skills/ultracook/scripts/ultracook.pyz worktree create",

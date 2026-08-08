@@ -1,10 +1,24 @@
 # /cook — Fan pathway mechanics
 
-Full mechanics for `/cook`'s wave-fan pathway: the existing-handoffs guard, mode selection, publication-topology preflight, the milknado seam, phase-chain topology, the deterministic phase loop, worker-exhaustion/aggregate-gate recovery, worktree harvest and teardown, `--resume <slug>`, and resolution provenance. `SKILL.md`'s `## Fan pathway` keeps the three-shape gate (a/b/c) and the wave cap; this file is everything downstream of that gate.
+Full mechanics for `/cook`'s wave-fan pathway: the existing-handoffs guard,
+typed planner-to-Cook-to-Cure execution, mode selection, publication topology,
+the optional milknado seam, worktree harvest, recovery, and resolution
+provenance. `SKILL.md` keeps the three-shape gate and wave cap; this file owns
+the executable pathway after that gate.
+
+The semantic authority is always the canonical `PlannerResult` and its
+validated `CurdPlan`. A handoff file records resumable evidence, but legacy
+manifest state is not live workflow state and is never read to decide which
+phase to execute.
 
 ## Existing handoffs guard
 
-Before dispatching the decomposer for an un-curded big spec, check whether any of `.cheese/cook/<slug>.md`, `.cheese/press/<slug>.md`, `.cheese/age/<slug>.md`, `.cheese/cure/<slug>.md` already exist. If any do, stop — print only the ones present — and tell the user to either run `/cheese --continue <slug>` to resume from the latest phase or `rm` the listed files to start fresh. Never wipe an existing handoff silently:
+Before dispatching the planner for an un-curded big spec, check whether any of
+`.cheese/cook/<slug>.md`, `.cheese/press/<slug>.md`,
+`.cheese/age/<slug>.md`, or `.cheese/cure/<slug>.md` already exists. If any do,
+stop — print only the ones present — and tell the user to either run
+`/cheese --continue <slug>` to resume from the latest typed handoff or remove
+the listed files to start fresh. Never wipe an existing handoff silently:
 
 ```
 Slug `<slug>` has existing handoffs:
@@ -12,99 +26,195 @@ Slug `<slug>` has existing handoffs:
   .cheese/press/<slug>.md    (when present)
   .cheese/age/<slug>.md      (when present)
   .cheese/cure/<slug>.md     (when present)
-Use `/cheese --continue <slug>` to resume from the latest phase, or
-`rm` the listed files to start fresh.
+Use `/cheese --continue <slug>` to resume from the latest typed handoff, or
+remove the listed files to start fresh.
 ```
+
+Read a handoff with
+`python3 shared/scripts/read_handoff_slug.py <path>`; the installed fallback is
+the matching `common.pyz read_handoff_slug` command.
+
+## Canonical planner → Cook → Cure steel thread
+
+The live fan route has one typed path. Do not dispatch the legacy curd-block
+decomposer as the semantic planner, hand raw mappings between phases, or
+invent a preflight helper:
+
+1. Build a `PlannerRequest` from the authored spec and dispatch the planner
+   through `easy_cheese_schemas.plan`. The planner output is a
+   `PlannerResultWriterView`; `plan` materializes it into one `PlannerResult`.
+   If `PlannerResult.plan` is absent, stop before any worker dispatch and
+   preserve the failure in the handoff.
+2. Take `planner_result.plan`, call
+   `easy_cheese_schemas.validate_curd_plan`, and use that returned `CurdPlan`
+   for every subsequent operation. Validation is the preflight: it completes
+   before the first Cook writer, reviewer, or diagnosis dispatch.
+3. Schedule `CurdPlan.curds` in dependency-respecting topological waves. A
+   blocked prerequisite produces a deterministic blocked `CurdResult` for its
+   dependents; declaration order is never a substitute for the plan's
+   dependency graph.
+4. Call `easy_cheese_schemas.cook` with the validated plan. The host resolves
+   every `ArtifactRef` with `resolve_artifact`, and finalizes exactly one
+   `CurdResult` per selected curd through `normalize_agent_output`. Writer
+   output is observation-only: the host owns identity, digests, provenance,
+   dispositions, and coverage. Executor or normalization failure still yields
+   a host-finalized blocked result rather than zero results.
+5. A failed review is a host-controlled Review → Diagnosis transition. The
+   diagnosis callback returns a `DiagnosisResultWriterView`; the canonical
+   normalizer produces a `DiagnosisResult`. Only a confirmed result may cross
+   into Cure. Bind it to the exact source plan and curd with
+   `easy_cheese_schemas.bind_diagnosis(plan, curd, diagnosis_result)`.
+6. Call `easy_cheese_schemas.cure` with the same validated `CurdPlan` and the
+   complete tuple or mapping of `CureDiagnosisBinding` values. Cure validates
+   each binding's plan reference, curd reference, digest, and confirmed
+   disposition before dispatch, then repeats artifact resolution and
+   host-owned `CurdResult` normalization. A diagnosis from another plan or
+   curd is never accepted.
+
+The direct `plan` → `cook` → `bind_diagnosis` → `cure` calls above are the
+canonical steel thread. `run_workflow` is the typed convenience entrypoint
+when a host needs one call, with `phase="cook"` or `phase="cure"` and the same
+binding requirements; it is not a separate semantic path.
 
 ## Mode selection
 
-Whether a decomposed spec wave-fans or stays a single dispatch is a deterministic rule, not a deliberation. `src/fanout/mode.py` is the single source of truth: `PARALLEL_THRESHOLD = 2`, and `select_mode(curds)` returns `"parallel"` when `len(curds) >= PARALLEL_THRESHOLD`, else `"linear"`. The same check runs from the shell as `python3 skills/ultracook/scripts/ultracook.pyz mode --count <curd-count>` — `mode` is still one of the `.pyz`'s live subcommands (alongside `baseline`, `phase_decision`, `worktree`, `milknado`, `validate_decomposition`, `validate_manifest`, `manifest_update`, `wiring_topo_sort`) even though the skill that used to own the CLI is retired. There is one threshold in the tree: the selector, `validate_decomposition` (`python3 skills/ultracook/scripts/ultracook.pyz validate_decomposition <manifest>`, re-run on validation failure, max 2 retries — validates the manifest-level `seed[]`/`curds[]`/`wiring[]` shape, distinct from `curd_block.py`'s spec-level `curds`/`waves` schema above), and `/mold`'s curd-count hint all read it. A 1-curd spec runs the single-coder path — `select_mode` calls this linear mode (no wave-fan); 2 or more curds selects parallel mode and always wave-fans.
+Whether a validated plan wave-fans or stays in linear mode is deterministic,
+not a deliberation. `src/fanout/mode.py` is the single source of truth:
+`PARALLEL_THRESHOLD = 2`, and `select_mode(curds)` returns `"parallel"` when
+`len(curds) >= PARALLEL_THRESHOLD` (2 or more curds), otherwise `"linear"`.
+The same selector is exposed for the installed route as
+`python3 skills/ultracook/scripts/ultracook.pyz mode --count <curd-count>`.
+The count comes from the validated `CurdPlan`, never from a legacy phase file.
 
-**No-curd-block fallback.** `select_mode_from_score(score)`, also in `src/fanout/mode.py`, is the fallback for a PR or fresh branch with no handoff — no curd block at all. It returns `"linear"` at `score <= DECOMPOSE_FIRST_THRESHOLD` (250) and `"decompose-first"` above it, and it never returns `"parallel"` for any input. The same check runs from the shell as `python3 skills/ultracook/scripts/ultracook.pyz mode --score <score>`. With no curd block there is no file-disjointness proof, so fanning coders is unsafe at any size — a large no-handoff branch triggers the decomposer, not blind parallelism. Curd count stays authoritative whenever a curd block exists: `PARALLEL_THRESHOLD` and `select_mode(curds)` above are unchanged, and the score fallback fires only when no curd block is present. The underlying principle: coders write, reviewers and debuggers read. File-disjointness exists to stop two writers colliding; read-only fan-out carries no such constraint, which is why the age ladder and the pasteurize policy need no curd block, and why `/cook` cannot fan without one.
+**No-plan fallback.** `select_mode_from_score(score)` is only a fallback for a
+PR or fresh branch with no planner handoff. It returns `"linear"` at
+`score <= DECOMPOSE_FIRST_THRESHOLD` (250) and `"decompose-first"` above it;
+it never returns `"parallel"` without a validated plan and disjointness proof.
 
-**Fast-path.** When `/mold`'s curd-count hint = 1 and blast radius is low or medium, skip the decomposer spawn entirely and go straight to the single-coder path — the hint is trusted only to skip work in this indivisible case, never to pick parallel; the decomposer remains authoritative for hint >= 2 or absent.
+**Fast path.** When `/mold`'s curd-count hint = 1 and the blast radius is low
+or medium, skip the decomposer spawn entirely and use the single-coder path:
+the 1-curd spec runs in linear mode. The hint is trusted only to skip work,
+never to pick parallel or bypass `validate_curd_plan`.
 
 ## Publication topology preflight
 
-When the selected mode is `parallel`, `--open-pr` is present, and no PR exists, dispatch `/plate` in topology-preflight mode against `.cheese/ultracook/<slug>/manifest.yaml` **before Phase 1 seed or any worker commit** — before **Seed (coder).** runs (`## Worktree harvest and teardown` below). Apply `/plate`'s review-shape policy: preserve an explicit user choice, persist `single` without asking for one cohesive review unit, or ask once when stacked is recommended or shape is ambiguous — do not ask twice. Read back `plate_layout: single | stacked` and re-run `validate_manifest`. Existing PRs preserve detected topology; runs without `--open-pr` do not preflight because their workers remain commit-only.
+When the selected mode is `parallel`, `--open-pr` is present, and no PR exists,
+run `/plate` in topology-preflight mode before the first planner or worker
+dispatch. Apply `/plate`'s review-shape policy: preserve an explicit choice,
+persist `single` without asking for one cohesive review unit. Ask once only when
+stacked is recommended or shape is ambiguous; record `plate_layout` in the typed
+handoff evidence, read it back, and do not ask twice. Do not use a legacy manifest to make this
+decision. Existing PRs preserve their detected topology; runs without
+`--open-pr` remain commit-only.
+
+This decision completes before Phase 1 seed or any worker commit.
+
+**Seed (coder).** After topology is fixed, prepare only files shared by two or
+more curds; do not hide curd-owned behavior in the seed.
 
 ## Milknado seam
 
-Before running any curd, probe which of three roles the available toolset supports (`src/fanout/milknado.py::probe`, exposed as `python3 skills/ultracook/scripts/ultracook.pyz milknado --tools "<available tool names>"`):
+Before running any curd, probe which of three roles the available toolset
+supports (`src/fanout/milknado.py::probe`, exposed as
+`python3 skills/ultracook/scripts/ultracook.pyz milknado --tools "<available
+tool names>"`):
 
-- **`engine`** — both `milknado_todo_claim` and `milknado_node_verify` are present. milknado owns the DAG, per-node worktrees, and **verify-until-green** (it re-runs the project gates itself until they pass); `/cook` spawns the phase agent per claimed node instead of managing worktrees directly.
-- **`tracker`** — only `milknado_todo_add` is present. milknado records curd status but doesn't run curds; `/cook` still owns native fan-out.
-- **`none`** — no milknado tools. Native fan-out end to end: `/cook` owns worktrees itself, and **curds self-verify** by running the project gates once, in-worker.
+- **`engine`** — both `milknado_todo_claim` and `milknado_node_verify` are
+  present. Milknado owns the DAG, per-node worktrees, and verify-until-green;
+  `/cook` dispatches the typed curd operation for each claimed node.
+- **`tracker`** — only `milknado_todo_add` is present. Milknado records typed
+  curd status but does not run curds; `/cook` still owns native fan-out.
+- **`none`** — no milknado tools. Native fan-out owns worktrees end to end,
+  and curds self-verify once in-worker.
 
-This parity difference is deliberate: native curds self-verify (gates run once, in-worker); milknado, when present, does verify-until-green (re-runs gates until green). See [`../../cheese/references/optional-plugins.md`](../../cheese/references/optional-plugins.md) for the detect-and-degrade contract — announce milknado's absence once and proceed; `none` is never a blocker.
+This parity difference is deliberate: native curds self-verify once, while
+milknado (when present) verifies until green. Announce milknado's absence once
+and proceed; `none` is never a blocker and never changes the typed contract.
 
 ## Phase-chain topology
 
-| Stage | Chain | `phase_decision --table` |
+| Stage | Chain | Canonical handoff |
 | --- | --- | --- |
-| Per curd | `coder(cook) → coder(press) → reviewer(age) → coder(cure) → reviewer(final age)` | `parallel-curd` |
-| Post-merge, once, over the merged diff | `press → age → cure → age` | `parallel-postmerge` |
+| Planner | `planner-request → PlannerResult → validated CurdPlan` | `PlannerResult` |
+| Per curd | `cook(CurdPlan) → review → confirmed diagnosis → cure(CurdPlan, bindings)` | `CurdResult` + `CureDiagnosisBinding` |
+| Post-merge | `press → age → cure → age` over the merged typed results | final `CurdResult` |
 
-This is not the old 7-spawn linear `/ultracook` chain (`cook → press → age → cure → age → cure → age`, table `linear` in `src/fanout/phase_decision.py`) run verbatim — that table still backs the single-coder path's own `--auto` chain (`auto-mode.md`) — the fan pathway's own topology is the two tables above. The per-curd table can end early: a first age reporting `next: done` **clean-completes** the curd (`action=clean_complete`) and skips cure and the final age, because nothing has touched the tree since that review and the post-merge pass re-covers the merged diff anyway. The post-merge table never short-circuits on that signal — it is the last review before publication, so cure and final age always run, and only a final-age `next: done` is publishable; `next: cure` or a missing `next` halts.
+The per-curd chain may end early when a review returns a clean completion, but
+the host still records one normalized result and keeps the plan's dependency
+closure consistent. A failed review never jumps directly to Cure: the host
+must materialize and confirm a diagnosis, then bind it to the exact curd.
+Only a terminal age with `next: done` is publishable.
 
-**Projected dispatch count.** The upper bound `/cook`'s decompose gate shows the user (`SKILL.md` § Fan pathway (c)) is derived from the two tables above: 1 seed `coder` + 5 × curds (the per-curd chain, shortened to 3 by a first-age `clean_complete`) + 4 (the post-merge chain) = `5 + 5 × curds`. Wiring dispatches are not counted — wiring rows live in the manifest, not the curd block, so they are unknown at gate time.
+The dispatch-count estimate shown at the `/cook` gate is derived from the
+validated plan, the selected waves, and the review/diagnosis callbacks. Wiring
+dispatches are not counted until they are represented by typed evidence.
 
-## Deterministic phase loop
+## Recovery and aggregate gates
 
-Between dispatches, `/cook`'s fan-pathway orchestrator decides the next action mechanically:
-
-1. **Parse the slug** — `python3 shared/scripts/read_handoff_slug.py --phase <phase> --slug <slug>` (the same helper `/age`'s own flow calls, e.g. `skills/age/SKILL.md`) → JSON `{status, next, artifact, orientation, halt_reason}`. Never infer success from a sub-agent's last line of stdout — read the file.
-2. **Compute the verdict** — `python3 skills/ultracook/scripts/ultracook.pyz phase_decision --phase-index <i> --status <status> [--next <next>] --table parallel-curd|parallel-postmerge` (`src/fanout/phase_decision.py`) → JSON `{action, next_phase, exit_message}`. `action=halt` surfaces the reason and stops; `action=clean_complete` (per-curd table only) records the first age's review context as final and skips ahead; `action=spawn` dispatches `next_phase`.
-
-## Worker exhaustion and aggregate-gate recovery
-
-- **Worker exhaustion.** A curd worker that runs out of context or turns writes a partial `status: halt: <reason>` slug. Retry that curd **once** with the error folded into its context; if it halts again, mark it failed, keep harvesting the rest, and report the failed curd in the final summary — never silently drop it.
-- **Aggregate-gate cross-curd conflict vs. drift.** After harvesting all curds, run the project gates over the merged tree. On failure, distinguish a **real cross-curd conflict** (curds passed individually but collide in aggregate — a decomposer error → halt and surface it) from **harmless drift** (a formatter or generated-file delta the post-merge cure pass can absorb → continue). Never auto-resolve a real conflict.
-
-(ported from the retired `/ultracook`'s recovery-paths section, issue #194)
+- **Worker exhaustion.** A worker that runs out of context or turns writes a
+  partial typed handoff with `status: halt: <reason>`. Retry that curd once
+  with the error folded into context; if it halts again, host-finalize its
+  blocked `CurdResult`, keep harvesting the rest, and report the curd.
+- **Aggregate-gate conflict.** After all waves are harvested, run the project
+  gates over the merged tree. Distinguish a real cross-curd conflict (curds
+  passed individually but collide in aggregate) from harmless generated drift
+  the post-merge Cure can absorb. Never auto-resolve a real conflict.
 
 ## Worktree harvest and teardown
 
-- Give each curd its own worktree; when the host lacks a native worktree-isolated sub-agent primitive, create it first with `python3 skills/ultracook/scripts/ultracook.pyz worktree create --slug <id> --base <orchestrator-branch>` (returns `{path, branch}`).
-- Harvest by cherry-picking each curd branch onto the orchestrator branch: `python3 skills/ultracook/scripts/ultracook.pyz worktree harvest --branch <curd-branch> --onto <orchestrator-branch>` — the parent and sub-agent share one `.git` object store, so this needs **no `git fetch`**. On conflict, invoke `/melt`; if it cannot resolve, fall back to per-curd PRs.
-- Tear down every worktree after harvest: `python3 skills/ultracook/scripts/ultracook.pyz worktree teardown --path <worktree-path> --branch <curd-branch>`. `/cook`'s fan pathway owns teardown — worktrees leak otherwise. A completed run leaks nothing: no `worktree-agent-*` branch (the one exempt case is the repair pathway's own `worktree-agent-repair-*` branch, `skills/plate/SKILL.md`, which has an independent lifecycle) and no stray `.claude/worktrees/agent-*` directory.
+- Give each curd its own worktree. When the host lacks a native isolated
+  sub-agent primitive, create it with
+  `python3 skills/ultracook/scripts/ultracook.pyz worktree create --slug <id>
+  --base <orchestrator-branch>`; it returns `{path, branch}`.
+- Harvest by cherry-picking each curd branch onto the orchestrator branch with
+  `python3 skills/ultracook/scripts/ultracook.pyz worktree harvest --branch
+  <curd-branch> --onto <orchestrator-branch>`. On conflict, invoke `/melt`; if
+  it cannot resolve, fall back to per-curd PRs.
+- Harvest uses the shared object store, so it needs no `git fetch`; on conflict,
+  invoke `/melt` and fall back to per-curd PRs if structural resolution fails.
+- Tear down every worktree with
+  `python3 skills/ultracook/scripts/ultracook.pyz worktree teardown --path
+  <worktree-path> --branch <curd-branch>`. `/cook` owns teardown; a completed
+  run leaks no worktree-agent branch or stray worktree directory.
 
-**Wave-fan mechanics, in order** (baseline capture through publication; each step's literal `manifest_update set-phase` call is given so the phase-string writer/reader/schema round-trip stays exact):
-
-- Capture the run's broad-gate baseline once, in the orchestrator's own tree, before Seed (see `SKILL.md`'s `## Baseline capture` and [`quality-gates.md`](quality-gates.md)).
-- **Seed (coder).** Dispatch a `coder` for shared types/interfaces in an isolated worktree, commit via `/plate` in commit-only mode, then `manifest_update set-phase --manifest <path> --phase seed_complete`.
-- Per curd (`## Worktree harvest and teardown`, `## Phase-chain topology` above): run the five sequential dispatches; mark each curd `running` then `completed`/`failed`; after all curds return, `manifest_update set-phase --manifest <path> --phase curds_complete`.
-- Harvest and tear down every curd; `manifest_update set-phase --manifest <path> --phase merge_complete`.
-- Run wiring tasks topo-sorted (`ultracook.pyz wiring_topo_sort`), dispatching a `coder` sequentially within each wave; `manifest_update set-phase --manifest <path> --phase wiring_complete` then immediately `manifest_update set-phase --manifest <path> --phase final_merge_complete` (wiring commits land directly on the orchestrator branch in this flow, so the two markers coincide).
-- Run the post-merge integration pass (`## Phase-chain topology` above); `manifest_update set-phase --manifest <path> --phase post_review_complete`.
-- `/cook` itself alone performs harvest and, at the very end, dispatches `/plate` — never mid-run; `manifest_update set-phase --manifest <path> --phase pr_publish_complete` after `/plate` verifies publication.
-
-Every `set-phase` call above uses the same `manifest_update` CLI (`src/fanout/manifest_update.py`), atomic and re-validated against the schema: `manifest_update set-phase --manifest <path> --phase <phase-name>`, `manifest_update set-curd-status --manifest <path> --curd <id> --status running|completed|failed [--commit-sha <sha> --base-commit <sha> --reviewed-tree-oid <oid> --diff-hash sha256:<hex> --scope <path> ...]`, and `manifest_update set-wiring-status --manifest <path> --wiring <id> --status running|completed|failed [--commit-sha <sha>]`.
+After each wave, persist the typed `PlannerResult`, `CurdResult` values,
+diagnosis bindings, and gate evidence in the handoff artifact. These records
+are for recovery and publication provenance; they do not become a second
+workflow state machine.
 
 ## --resume <slug>
 
-`--resume <slug>` is the sanctioned re-entry into a crashed wave-fan run. It reads `.cheese/ultracook/<slug>/manifest.yaml` (path unchanged from the retired `/ultracook`) and continues from where the crash left off:
+`--resume <slug>` re-enters a crashed wave-fan run by loading the latest typed
+handoff (`.cheese/cook/<slug>.md` and its referenced artifacts). If the
+handoff or its referenced `PlannerResult`/`CurdPlan` is missing, malformed,
+stale, or cannot be resolved by `resolve_artifact`, fail fast. Re-run
+`validate_curd_plan` before selecting the next dependency wave, and verify
+every retained commit or artifact reference still exists. Resume only curds
+whose typed result is incomplete; never infer progress from an old phase name.
 
-1. **Load the manifest.** If missing, fail fast: `"no manifest at .cheese/ultracook/<slug>/manifest.yaml — nothing to resume"`. Optionally re-check its shape with `python3 skills/ultracook/scripts/ultracook.pyz validate_manifest <path>`.
-2. **Rebase guard.** For every non-null `commit_sha` recorded on a completed seed item, curd, or wiring row, run `git cat-file -e <sha>` (the schema permits `commit_sha: null` on a `completed` row — skip those). If any recorded SHA is gone, fail fast and name the missing SHA — resuming onto rewritten history would harvest the wrong tree. This guard is orchestrator prose, not new engine code; there is no auto-recovery.
-3. **Restore continuity.** Read `phase_summary` and `carry_forward` from the manifest — the cross-seam continuity a resumed orchestrator reasons from, since a fresh spawn has no conversation history.
-4. **Pick up at the next incomplete phase.** Read the `phase` field, one of the ordered enum in `skills/ultracook/references/manifest-schema.json`: `gate_approved -> seed_complete -> curds_complete -> merge_complete -> wiring_complete -> final_merge_complete -> post_review_complete -> pr_publish_complete`. Continue from the next incomplete phase, skipping every curd/wiring row already `completed`. Report `Resuming <slug> from phase <next-phase>`. If `phase` is already `pr_publish_complete`, the run is done — report and stop.
-
-A bare re-run (no `--resume`) that finds an existing manifest stops and tells the user to pass `--resume <slug>` to continue or `rm -r .cheese/ultracook/<slug>/` to start fresh — never wipe an existing manifest silently.
+A bare re-run (no `--resume`) that finds an existing handoff stops and tells
+the user to resume or remove it; it never silently wipes typed evidence.
 
 ## Resolution provenance and the output contract
 
-Every phase and curd dispatch resolves against the typed-role table in `SKILL.md`'s `## Agent resolution` section and the shared protocol in [`../../cheese/references/agent-resolution.md`](../../cheese/references/agent-resolution.md):
+Every planner, curd, review, diagnosis, and Cure dispatch resolves against the
+typed-role table in `SKILL.md`'s `## Agent resolution` section and the shared
+protocol in [`../../cheese/references/agent-resolution.md`](../../cheese/references/agent-resolution.md):
 
 | Work | Preferred types |
 | --- | --- |
-| Decompose the spec | planner, general |
+| Plan the spec | planner, general |
 | Cook, press, cure, seed, or wiring | coder |
 | Every age pass | reviewer |
 | Harvest and plate | parent |
 
-The resolver filters for required capabilities/tools/permissions/isolation first, then picks minimum power and maximum specificity; a prompt-only read-only general fallback may continue with `degraded: true`, while a missing required tool or write permission halts. Typed-role shorthand, ported verbatim from the retired `/ultracook`'s Rules: planner/general for decomposition, coder for cook/press/cure/seed/wiring, reviewer for every age, and parent ownership for harvest and plate. Every phase's handoff slug and the fan pathway's own summary carry the resulting `agent_resolution` block, so role, fallback, and degradation stay visible rather than implicit.
+The resolver filters required capabilities, tools, permissions, and isolation
+first, then picks minimum power and maximum specificity. A prompt-only
+read-only general fallback may continue with `degraded: true`; a missing
+required tool or write permission halts. Every handoff and final summary
+carries the resulting `agent_resolution` block so role, fallback, and
+degradation stay visible.
 
-A terminal age is **publishable only with `next: done`**; `next: cure` or a missing `next` halts as not publishable — this applies at the end of both the per-curd table and the post-merge table above, and to the single-coder `--auto` chain's own terminal age (`auto-mode.md`).
-
-The fan pathway and the single-coder path keep the same behavioral output and final-summary shape (`SKILL.md`'s `## Handoff slug`, `## Output`); required `agent_resolution` provenance records the selected role, fallback, and topology regardless of which pathway ran.
+The fan pathway and single-coder path keep the same final-summary shape
+(`SKILL.md`'s `## Handoff slug`, `## Output`). A terminal age is publishable
+only with `next: done`; `next: cure` or a missing `next` is not publishable.

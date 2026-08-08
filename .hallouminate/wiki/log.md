@@ -40,4 +40,6 @@
 - 2026-07-28 · 68af0b0391e6bbd2 · merged · log.md · final .agents naming settled: python-authoring (H1 "Authoring Python") and skill-authoring, both with name matching their directory, both now validated and linted.
 
 
+
 - 2026-08-02 · wiki-harvest · curated · architecture.md, workflow-invariants.md · corrected stale present-tense framing that listed `/ultracook` as an active pipeline skill. `/ultracook` was retired to a redirect stub (PR #317) with fan-path ownership moved to `/cook` (PR #316): the pipeline-table row and auto-chain prose now attribute the fan pathway and the `cook → press → age → cure → age → cure → age` `--auto` chain to `/cook`, and the stale `skills/cook/SKILL.md:132` citation was corrected to `:134`. Aligns the two foundational pages with architecture/ultracook-agent-topology.md, fanout-engine-entities.md, and this log.
+- 2026-08-06 · ea414a8dc98ddb4e · new-page · architecture/workflow-contract-map.md · recovered planner/curdler ownership, distinguished current CurdBlock behavior from target CurdPlan contracts, recorded Cook/Cure and Age/Pasteurize seams as design work, and ordered schema self-consumption before Milknado import.

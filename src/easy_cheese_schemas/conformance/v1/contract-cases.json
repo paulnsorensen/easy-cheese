@@ -1,0 +1,831 @@
+{
+  "$schema": "https://schemas.easy-cheese.dev/conformance/v1/contract-cases",
+  "fixture_version": "1.0",
+  "cases": [
+    {
+      "name": "canonical-curd-plan-supported",
+      "operation": "validate_contract",
+      "schema_uri": "https://schemas.easy-cheese.dev/curd-plan",
+      "supported_version": {
+        "schema_uri": "https://schemas.easy-cheese.dev/curd-plan",
+        "major": "1",
+        "minor": "0"
+      },
+      "input": {
+        "contract_version": {
+          "schema_uri": "https://schemas.easy-cheese.dev/curd-plan",
+          "major": "1",
+          "minor": "0"
+        },
+        "plan_id": "plan-conformance",
+        "revision": 1,
+        "digest": "sha256:c239ddb3c5af90e1c3ff0086eb6c63500a670df7d2c39b0d044bef5d0b3ffb3e",
+        "objective": "Prove the shared contract",
+        "curds": [
+          {
+            "curd_id": "curd-runtime",
+            "outcome": "Validate the runtime contract",
+            "scope": {
+              "paths": [
+                "src/runtime.py"
+              ]
+            },
+            "inputs": [],
+            "outputs": [
+              "Validated runtime"
+            ],
+            "dependencies": [],
+            "criteria": [
+              {
+                "criterion_id": "criterion-runtime",
+                "description": "The supported contract is accepted",
+                "check": "pytest tests/test_runtime.py"
+              }
+            ],
+            "lineage": {
+              "identity_action": "new"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "status": "accept",
+        "value": {
+          "type": "CurdPlan",
+          "plan_id": "plan-conformance",
+          "revision": 1,
+          "curd_ids": [
+            "curd-runtime"
+          ],
+          "criterion_ids": [
+            "criterion-runtime"
+          ]
+        }
+      }
+    },
+    {
+      "name": "canonical-curd-plan-unknown-field",
+      "operation": "validate_contract",
+      "schema_uri": "https://schemas.easy-cheese.dev/curd-plan",
+      "supported_version": {
+        "schema_uri": "https://schemas.easy-cheese.dev/curd-plan",
+        "major": "1",
+        "minor": "0"
+      },
+      "input": {
+        "contract_version": {
+          "schema_uri": "https://schemas.easy-cheese.dev/curd-plan",
+          "major": "1",
+          "minor": "0"
+        },
+        "plan_id": "plan-conformance",
+        "revision": 1,
+        "digest": "sha256:0bc49c181328fe8482029ba95eee09607dee822622adb297a92bbb3554dbb2e7",
+        "objective": "Prove the shared contract",
+        "curds": [
+          {
+            "curd_id": "curd-runtime",
+            "outcome": "Validate the runtime contract",
+            "scope": {
+              "paths": [
+                "src/runtime.py"
+              ],
+              "surprise": true
+            },
+            "inputs": [],
+            "outputs": [
+              "Validated runtime"
+            ],
+            "dependencies": [],
+            "criteria": [
+              {
+                "criterion_id": "criterion-runtime",
+                "description": "Unknown fields reject",
+                "check": "pytest tests/test_runtime.py"
+              }
+            ],
+            "lineage": {
+              "identity_action": "new"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "status": "reject",
+        "error_type": "ContractValidationError",
+        "message": "$.curds[0].scope contains unknown fields: surprise"
+      }
+    },
+    {
+      "name": "canonical-curd-plan-unsupported-major",
+      "operation": "validate_contract",
+      "schema_uri": "https://schemas.easy-cheese.dev/curd-plan",
+      "supported_version": {
+        "schema_uri": "https://schemas.easy-cheese.dev/curd-plan",
+        "major": "1",
+        "minor": "0"
+      },
+      "input": {
+        "contract_version": {
+          "schema_uri": "https://schemas.easy-cheese.dev/curd-plan",
+          "major": "2",
+          "minor": "0"
+        },
+        "plan_id": "plan-major",
+        "revision": 1,
+        "digest": "sha256:47bb203e5d2708ad78865e8fb87233553c51ca134a7bb8ca9eabdde012b636ec",
+        "objective": "Reject an unsupported major",
+        "curds": [
+          {
+            "curd_id": "curd-major",
+            "outcome": "Reject the major",
+            "scope": {
+              "paths": [
+                "src/runtime.py"
+              ]
+            },
+            "inputs": [],
+            "outputs": [
+              "Typed rejection"
+            ],
+            "dependencies": [],
+            "criteria": [
+              {
+                "criterion_id": "criterion-major",
+                "description": "The unsupported major rejects",
+                "check": "pytest tests/test_runtime.py"
+              }
+            ],
+            "lineage": {
+              "identity_action": "new"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "status": "reject",
+        "error_type": "ContractValidationError",
+        "message": "unsupported contract major 2; supported major is 1"
+      }
+    },
+    {
+      "name": "canonical-curd-plan-future-minor",
+      "operation": "validate_contract",
+      "schema_uri": "https://schemas.easy-cheese.dev/curd-plan",
+      "supported_version": {
+        "schema_uri": "https://schemas.easy-cheese.dev/curd-plan",
+        "major": "1",
+        "minor": "0"
+      },
+      "input": {
+        "contract_version": {
+          "schema_uri": "https://schemas.easy-cheese.dev/curd-plan",
+          "major": "1",
+          "minor": "1"
+        },
+        "plan_id": "plan-minor",
+        "revision": 1,
+        "digest": "sha256:b135d8faca2b39c83f917732fc8250bf07d0788d076d9cf7958e9f64c153765e",
+        "objective": "Reject a future minor",
+        "curds": [
+          {
+            "curd_id": "curd-minor",
+            "outcome": "Reject the minor",
+            "scope": {
+              "paths": [
+                "src/runtime.py"
+              ]
+            },
+            "inputs": [],
+            "outputs": [
+              "Typed rejection"
+            ],
+            "dependencies": [],
+            "criteria": [
+              {
+                "criterion_id": "criterion-minor",
+                "description": "The future minor rejects",
+                "check": "pytest tests/test_runtime.py"
+              }
+            ],
+            "lineage": {
+              "identity_action": "new"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "status": "reject",
+        "error_type": "ContractValidationError",
+        "message": "future contract minor 1; supported minor is 0"
+      }
+    },
+    {
+      "name": "canonical-curd-plan-invariant-unknown-dependency",
+      "operation": "validate_contract",
+      "schema_uri": "https://schemas.easy-cheese.dev/curd-plan",
+      "supported_version": {
+        "schema_uri": "https://schemas.easy-cheese.dev/curd-plan",
+        "major": "1",
+        "minor": "0"
+      },
+      "input": {
+        "contract_version": {
+          "schema_uri": "https://schemas.easy-cheese.dev/curd-plan",
+          "major": "1",
+          "minor": "0"
+        },
+        "plan_id": "plan-invariant",
+        "revision": 1,
+        "digest": "sha256:51bd57e2d87bd7191cdb1abd99b35e57a262044df37c45addc692376d5d1bacd",
+        "objective": "Reject invalid dependencies",
+        "curds": [
+          {
+            "curd_id": "curd-invariant",
+            "outcome": "Reject an unknown dependency",
+            "scope": {
+              "paths": [
+                "src/runtime.py"
+              ]
+            },
+            "inputs": [],
+            "outputs": [
+              "Typed rejection"
+            ],
+            "dependencies": [
+              "curd-missing"
+            ],
+            "criteria": [
+              {
+                "criterion_id": "criterion-invariant",
+                "description": "Unknown dependencies reject",
+                "check": "pytest tests/test_runtime.py"
+              }
+            ],
+            "lineage": {
+              "identity_action": "new"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "status": "reject",
+        "error_type": "ContractValidationError",
+        "message": "$ is invalid: curds[1].dependencies references undeclared curd 'curd-missing'"
+      }
+    },
+    {
+      "name": "planner-partial-exposes-only-executable-curds",
+      "operation": "normalize_agent_output",
+      "input": {
+        "writer_view": {
+          "kind": "planner_result",
+          "payload": {
+            "disposition": "partial",
+            "plan": {
+              "objective": "Ship the executable runtime work",
+              "curds": [
+                {
+                  "key": "runtime",
+                  "outcome": "Implement the runtime",
+                  "scope": {
+                    "paths": [
+                      "src/runtime.py"
+                    ]
+                  },
+                  "outputs": [
+                    "Runtime implementation"
+                  ],
+                  "criteria": [
+                    {
+                      "description": "Runtime behavior passes",
+                      "check": "pytest tests/test_runtime.py"
+                    }
+                  ]
+                }
+              ]
+            },
+            "unresolved_work": [
+              {
+                "description": "The CLI work remains unplanned",
+                "scope": "omitted_work",
+                "evidence_keys": [
+                  "review"
+                ]
+              }
+            ]
+          }
+        },
+        "host_invocation": {
+          "versions": {
+            "https://schemas.easy-cheese.dev/planner-result": {
+              "schema_uri": "https://schemas.easy-cheese.dev/planner-result",
+              "major": "1",
+              "minor": "0"
+            },
+            "https://schemas.easy-cheese.dev/curd-plan": {
+              "schema_uri": "https://schemas.easy-cheese.dev/curd-plan",
+              "major": "1",
+              "minor": "0"
+            }
+          },
+          "request_id": "request-partial",
+          "plan": {
+            "plan_id": "plan-partial"
+          },
+          "evidence": {
+            "review": {
+              "evidence_id": "evidence-review",
+              "kind": "review",
+              "artifact": {
+                "artifact_id": "artifact-review",
+                "role": "review",
+                "uri": "repo://evidence/review.json",
+                "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size_bytes": 42,
+                "media_type": "application/json"
+              },
+              "summary": "CLI ownership is unresolved"
+            }
+          }
+        }
+      },
+      "expected": {
+        "status": "accept",
+        "value": {
+          "type": "PlannerResult",
+          "disposition": "partial",
+          "request_id": "request-partial",
+          "plan_id": "plan-partial",
+          "curd_ids": [
+            "plan-partial/curd/1"
+          ],
+          "uncertainty_scopes": [
+            "omitted_work"
+          ]
+        }
+      }
+    },
+    {
+      "name": "planner-shared-uncertainty-is-blocked",
+      "operation": "normalize_agent_output",
+      "input": {
+        "writer_view": {
+          "kind": "planner_result",
+          "payload": {
+            "disposition": "blocked",
+            "unresolved_work": [
+              {
+                "description": "File ownership cannot be assigned",
+                "scope": "shared_constraint",
+                "evidence_keys": [
+                  "review"
+                ]
+              }
+            ],
+            "reason": "Resolve file ownership before planning"
+          }
+        },
+        "host_invocation": {
+          "contract_version": {
+            "schema_uri": "https://schemas.easy-cheese.dev/planner-result",
+            "major": "1",
+            "minor": "0"
+          },
+          "request_id": "request-blocked",
+          "evidence": {
+            "review": {
+              "evidence_id": "evidence-review",
+              "kind": "review",
+              "artifact": {
+                "artifact_id": "artifact-review",
+                "role": "review",
+                "uri": "repo://evidence/review.json",
+                "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size_bytes": 42,
+                "media_type": "application/json"
+              },
+              "summary": "Two curds claim the same file"
+            }
+          }
+        }
+      },
+      "expected": {
+        "status": "accept",
+        "value": {
+          "type": "PlannerResult",
+          "disposition": "blocked",
+          "request_id": "request-blocked",
+          "plan_id": null,
+          "curd_ids": [],
+          "uncertainty_scopes": [
+            "shared_constraint"
+          ]
+        }
+      }
+    },
+    {
+      "name": "curd-result-exact-criterion-coverage",
+      "operation": "validate_contract",
+      "schema_uri": "https://schemas.easy-cheese.dev/curd-result",
+      "supported_version": {
+        "schema_uri": "https://schemas.easy-cheese.dev/curd-result",
+        "major": "1",
+        "minor": "0"
+      },
+      "input": {
+        "contract_version": {
+          "schema_uri": "https://schemas.easy-cheese.dev/curd-result",
+          "major": "1",
+          "minor": "0"
+        },
+        "result_id": "result-runtime",
+        "source_plan_ref": {
+          "plan_id": "plan-conformance",
+          "revision": 1,
+          "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "source_curd_ref": {
+          "curd_id": "curd-runtime",
+          "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "disposition": "blocked",
+        "expected_criterion_ids": [
+          "criterion-runtime",
+          "criterion-cli"
+        ],
+        "criterion_results": [
+          {
+            "criterion_id": "criterion-runtime",
+            "disposition": "passed",
+            "evidence": [
+              {
+                "evidence_id": "evidence-runtime",
+                "kind": "verification",
+                "artifact": {
+                  "artifact_id": "artifact-runtime",
+                  "role": "verification",
+                  "uri": "repo://evidence/runtime.json",
+                  "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "size_bytes": 32,
+                  "media_type": "application/json"
+                },
+                "summary": "Runtime verification passed"
+              }
+            ]
+          },
+          {
+            "criterion_id": "criterion-cli",
+            "disposition": "blocked",
+            "reason": "The CLI dependency was not started"
+          }
+        ],
+        "deliverables": [],
+        "unresolved_work": [
+          "Start the CLI dependency"
+        ],
+        "runtime_refs": []
+      },
+      "expected": {
+        "status": "accept",
+        "value": {
+          "type": "CurdResult",
+          "result_id": "result-runtime",
+          "disposition": "blocked",
+          "expected_criterion_ids": [
+            "criterion-runtime",
+            "criterion-cli"
+          ],
+          "criterion_result_ids": [
+            "criterion-runtime",
+            "criterion-cli"
+          ]
+        }
+      }
+    },
+    {
+      "name": "curd-result-missing-criterion-row",
+      "operation": "validate_contract",
+      "schema_uri": "https://schemas.easy-cheese.dev/curd-result",
+      "supported_version": {
+        "schema_uri": "https://schemas.easy-cheese.dev/curd-result",
+        "major": "1",
+        "minor": "0"
+      },
+      "input": {
+        "contract_version": {
+          "schema_uri": "https://schemas.easy-cheese.dev/curd-result",
+          "major": "1",
+          "minor": "0"
+        },
+        "result_id": "result-incomplete",
+        "source_plan_ref": {
+          "plan_id": "plan-conformance",
+          "revision": 1,
+          "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "source_curd_ref": {
+          "curd_id": "curd-runtime",
+          "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "disposition": "passed",
+        "expected_criterion_ids": [
+          "criterion-runtime",
+          "criterion-cli"
+        ],
+        "criterion_results": [
+          {
+            "criterion_id": "criterion-runtime",
+            "disposition": "passed",
+            "evidence": [
+              {
+                "evidence_id": "evidence-runtime",
+                "kind": "verification",
+                "artifact": {
+                  "artifact_id": "artifact-runtime",
+                  "role": "verification",
+                  "uri": "repo://evidence/runtime.json",
+                  "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "size_bytes": 32,
+                  "media_type": "application/json"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "status": "reject",
+        "error_type": "ContractValidationError",
+        "message": "$ is invalid: criterion_results must cover expected_criterion_ids exactly"
+      }
+    },
+    {
+      "name": "artifact-repository-resolution-success",
+      "operation": "resolve_artifact",
+      "input": {
+        "source": {
+          "path": "fixtures/input.txt",
+          "content": "trusted input"
+        },
+        "artifact": {
+          "artifact_id": "artifact-input",
+          "role": "source",
+          "uri": "repo://fixtures/input.txt",
+          "digest": "sha256:ec181d66f3195970310491929f04640fac08d456277fe015c6f4fb00f2b5ee84",
+          "size_bytes": 13,
+          "media_type": "text/plain"
+        }
+      },
+      "expected": {
+        "status": "accept",
+        "value": {
+          "type": "ResolvedAgentArtifact",
+          "role": "source",
+          "media_type": "text/plain",
+          "content": "trusted input"
+        }
+      }
+    },
+    {
+      "name": "artifact-uri-policy-rejection",
+      "operation": "resolve_artifact",
+      "input": {
+        "artifact": {
+          "artifact_id": "artifact-policy",
+          "role": "source",
+          "uri": "ftp://example.test/input.txt",
+          "digest": "sha256:ec181d66f3195970310491929f04640fac08d456277fe015c6f4fb00f2b5ee84",
+          "size_bytes": 13,
+          "media_type": "text/plain"
+        }
+      },
+      "expected": {
+        "status": "reject",
+        "error_type": "ArtifactResolutionError",
+        "message": "unsupported artifact URI scheme: ftp"
+      }
+    },
+    {
+      "name": "artifact-digest-integrity-rejection",
+      "operation": "resolve_artifact",
+      "input": {
+        "source": {
+          "path": "fixtures/input.txt",
+          "content": "trusted input"
+        },
+        "artifact": {
+          "artifact_id": "artifact-integrity",
+          "role": "source",
+          "uri": "repo://fixtures/input.txt",
+          "digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "size_bytes": 13,
+          "media_type": "text/plain"
+        }
+      },
+      "expected": {
+        "status": "reject",
+        "error_type": "ArtifactResolutionError",
+        "message": "artifact digest mismatch: expected sha256:0000000000000000000000000000000000000000000000000000000000000000, got sha256:ec181d66f3195970310491929f04640fac08d456277fe015c6f4fb00f2b5ee84"
+      }
+    },
+    {
+      "name": "artifact-schema-rejection",
+      "operation": "resolve_artifact",
+      "input": {
+        "source": {
+          "path": "fixtures/input.json",
+          "content": "{\"value\":1}"
+        },
+        "artifact": {
+          "artifact_id": "artifact-schema",
+          "role": "source",
+          "uri": "repo://fixtures/input.json",
+          "digest": "sha256:48208f9428d64634bd8e28ff345bf0eab60d53c18fa2fbdb0b9bc1e84df2b5f6",
+          "size_bytes": 11,
+          "media_type": "application/json",
+          "schema_uri": "https://schemas.easy-cheese.dev/phase-contract"
+        }
+      },
+      "expected": {
+        "status": "reject",
+        "error_type": "ArtifactResolutionError",
+        "message": "artifact schema mismatch: https://schemas.easy-cheese.dev/phase-contract"
+      }
+    },
+    {
+      "name": "registered-transition-accepted",
+      "operation": "validate_transition",
+      "input": {
+        "source": "mold",
+        "destination": "cook",
+        "payload_schema_uri": "https://schemas.easy-cheese.dev/curd-plan"
+      },
+      "expected": {
+        "status": "accept",
+        "value": {
+          "type": "CompiledTransition",
+          "source": "mold",
+          "destination": "cook",
+          "payload_schema_uri": "https://schemas.easy-cheese.dev/curd-plan"
+        }
+      }
+    },
+    {
+      "name": "registered-transition-rejected",
+      "operation": "validate_transition",
+      "input": {
+        "source": "mold",
+        "destination": "cure",
+        "payload_schema_uri": "https://schemas.easy-cheese.dev/curd-plan"
+      },
+      "expected": {
+        "status": "reject",
+        "error_type": "TransitionError",
+        "message": "transition mold -> cure is not declared"
+      }
+    },
+    {
+      "name": "legacy-curd-block-lossless-boundary",
+      "operation": "project_legacy",
+      "target": "curd_block",
+      "schema_uri": "https://schemas.easy-cheese.dev/curd-plan",
+      "supported_version": {
+        "schema_uri": "https://schemas.easy-cheese.dev/curd-plan",
+        "major": "1",
+        "minor": "0"
+      },
+      "input": {
+        "contract_version": {
+          "schema_uri": "https://schemas.easy-cheese.dev/curd-plan",
+          "major": "1",
+          "minor": "0"
+        },
+        "plan_id": "plan-legacy",
+        "revision": 1,
+        "digest": "sha256:71bf69d59d13276a1e93982d40c338dad7efa61150d5afe335733b8f933be5b8",
+        "objective": "Project otherwise representable curd fields",
+        "curds": [
+          {
+            "curd_id": "legacy-runtime",
+            "outcome": "Implement the legacy runtime",
+            "scope": {
+              "paths": [
+                "src/legacy.py"
+              ]
+            },
+            "inputs": [],
+            "outputs": [
+              "Legacy runtime"
+            ],
+            "dependencies": [],
+            "criteria": [
+              {
+                "criterion_id": "legacy-runtime-check",
+                "description": "Legacy runtime passes",
+                "check": "pytest tests/test_legacy.py"
+              }
+            ],
+            "lineage": {
+              "identity_action": "new"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "status": "accept",
+        "value": {
+          "type": "UnsupportedProjection",
+          "target": "CurdBlock",
+          "curd_id": null,
+          "field": "objective",
+          "reason": "CurdBlock cannot express plan objective"
+        }
+      }
+    },
+    {
+      "name": "legacy-projection-typed-unsupported-dependency",
+      "operation": "project_legacy",
+      "target": "curd_block",
+      "schema_uri": "https://schemas.easy-cheese.dev/curd-plan",
+      "supported_version": {
+        "schema_uri": "https://schemas.easy-cheese.dev/curd-plan",
+        "major": "1",
+        "minor": "0"
+      },
+      "input": {
+        "contract_version": {
+          "schema_uri": "https://schemas.easy-cheese.dev/curd-plan",
+          "major": "1",
+          "minor": "0"
+        },
+        "plan_id": "plan-legacy-dependency",
+        "revision": 1,
+        "digest": "sha256:32dfeec48e99b686d13d83cbecd7d689ac5c874bff60b3a224c2984ac95557bf",
+        "objective": "Preserve semantic dependencies",
+        "curds": [
+          {
+            "curd_id": "legacy-base",
+            "outcome": "Build the base",
+            "scope": {
+              "paths": [
+                "src/base.py"
+              ]
+            },
+            "inputs": [],
+            "outputs": [
+              "Base runtime"
+            ],
+            "dependencies": [],
+            "criteria": [
+              {
+                "criterion_id": "legacy-base-check",
+                "description": "Base runtime passes",
+                "check": "pytest tests/test_base.py"
+              }
+            ],
+            "lineage": {
+              "identity_action": "new"
+            }
+          },
+          {
+            "curd_id": "legacy-child",
+            "outcome": "Build the child",
+            "scope": {
+              "paths": [
+                "src/child.py"
+              ]
+            },
+            "inputs": [],
+            "outputs": [
+              "Child runtime"
+            ],
+            "dependencies": [
+              "legacy-base"
+            ],
+            "criteria": [
+              {
+                "criterion_id": "legacy-child-check",
+                "description": "Child runtime passes",
+                "check": "pytest tests/test_child.py"
+              }
+            ],
+            "lineage": {
+              "identity_action": "new"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "status": "accept",
+        "value": {
+          "type": "UnsupportedProjection",
+          "target": "CurdBlock",
+          "curd_id": "legacy-child",
+          "field": "dependencies",
+          "reason": "CurdBlock cannot express semantic dependencies"
+        }
+      }
+    }
+  ]
+}

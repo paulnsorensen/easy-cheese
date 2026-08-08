@@ -1,0 +1,10 @@
+contract_version:
+  schema_uri: https://schemas.easy-cheese.dev/phase-contract
+  major: "1"
+  minor: "0"
+source: mold
+input_schema_uris:
+  - https://schemas.easy-cheese.dev/planner-request
+outputs:
+  - destination: cook
+    payload_schema_uri: https://schemas.easy-cheese.dev/curd-plan

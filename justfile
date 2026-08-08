@@ -82,7 +82,7 @@ ci: lint-md lint-yaml lint-sh test docs-build
 # Install docs build dependencies
 docs-install:
     corepack pnpm install --frozen-lockfile
-    python3 -m venv .venv
+    python3 -m venv --clear .venv
     .venv/bin/python -m pip install --no-cache-dir pyyaml==6.0.2
 
 # Build the docs site (output: dist/)

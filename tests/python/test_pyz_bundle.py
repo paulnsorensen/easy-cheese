@@ -67,6 +67,19 @@ SKILL_SUBCOMMANDS = {
 # paths.artifact_path / paths.project_corpus_root.
 ARTIFACT_PATH_SKILLS = ("mold", "ultracook", "briesearch", "cook")
 
+# Cook owns the planner-to-curd execution bundle; Cure consumes the same
+# runtime through the common artifact fanned into skills/cure/scripts/.
+TYPED_RUNTIME_BUNDLES = ("common", "cook", "ultracook", "wheypoint")
+REQUIRED_WORKFLOW_MODULES = (
+    "easy_cheese_schemas/__init__.py",
+    "easy_cheese_schemas/artifacts.py",
+    "easy_cheese_schemas/contracts.py",
+    "easy_cheese_schemas/planner.py",
+    "easy_cheese_schemas/schema_runtime.py",
+    "easy_cheese_schemas/workflow.py",
+    "easy_cheese_schemas/_schema_catalog.py",
+)
+
 
 @pytest.fixture(scope="module")
 def bundles(tmp_path_factory) -> Path:
@@ -518,8 +531,80 @@ def test_common_bundle_carries_clis_plus_libs_not_skill_scripts(bundles: Path) -
     # Skill scripts must not be present
     assert "conflict_pick.py" not in content
     assert "validate_manifest.py" not in content
+    assert "_phase_registry_compiler.py" not in content
+    assert "phase_contracts.py" in content
+    assert "_compiled_phase_registry.py" in content
+    assert (
+        zipfile.ZipFile(bundles / "common.pyz").read("_compiled_phase_registry.py")
+        == (REPO_ROOT / "src" / "easy_cheese_schemas" / "_compiled_phase_registry.py").read_bytes()
+    )
 
 
+
+
+@pytest.mark.parametrize("skill", TYPED_RUNTIME_BUNDLES)
+def test_typed_runtime_modules_are_shipped_without_compiler(
+    bundles: Path, skill: str
+) -> None:
+    content = set(zipfile.ZipFile(bundles / f"{skill}.pyz").namelist())
+    missing = sorted(set(REQUIRED_WORKFLOW_MODULES) - content)
+    assert not missing, f"{skill}.pyz missing canonical runtime modules: {missing}"
+    assert not any(
+        name.rsplit("/", 1)[-1] == "_phase_registry_compiler.py" for name in content
+    ), f"{skill}.pyz must not ship the source-only phase compiler"
+
+
+@pytest.mark.parametrize("skill", sorted(SKILL_SUBCOMMANDS))
+def test_no_runtime_bundle_ships_phase_registry_compiler(
+    bundles: Path, skill: str
+) -> None:
+    content = set(zipfile.ZipFile(bundles / f"{skill}.pyz").namelist())
+    assert not any(
+        name.rsplit("/", 1)[-1] == "_phase_registry_compiler.py" for name in content
+    ), f"{skill}.pyz leaked the source-only phase compiler"
+
+
+@pytest.mark.parametrize("skill", ("common", "cook"))
+def test_cook_and_cure_installed_paths_expose_canonical_workflow_api(
+    bundles: Path, skill: str
+) -> None:
+    """Import the shipped packages, not the repository source tree.
+
+    Cure receives common.pyz, while Cook receives cook.pyz.  Both must expose
+    the same canonical planner/Cook/Cure seam and its typed boundary helpers.
+    """
+    code = (
+        "import sys;"
+        "sys.path[:0] = sys.argv[1:];"
+        "import easy_cheese_schemas as schemas;"
+        "from easy_cheese_schemas import "
+        "CurdPlan, CurdResult, DiagnosisResult, PlannerResult, "
+        "bind_diagnosis, cook, cure, materialize_planner_result, "
+        "normalize_agent_output, resolve_artifact, run_workflow, "
+        "schema_bytes, validate_curd_plan;"
+        "assert all(callable(item) for item in ("
+        "bind_diagnosis, cook, cure, materialize_planner_result, "
+        "normalize_agent_output, resolve_artifact, run_workflow, "
+        "validate_curd_plan));"
+        "assert schema_bytes(CurdPlan);"
+        "assert schemas.supported_version_for(PlannerResult) is not None;"
+        "assert CurdResult.__name__ == 'CurdResult';"
+        "assert DiagnosisResult.__name__ == 'DiagnosisResult';"
+        "print('ok')"
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-S",
+            "-c",
+            code,
+            str(bundles / f"{skill}.pyz"),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert result.stdout == "ok\n"
 def test_unknown_skill_name_still_errors() -> None:
     """build_pyz.py must exit non-zero for truly unknown skill names."""
     result = subprocess.run(
