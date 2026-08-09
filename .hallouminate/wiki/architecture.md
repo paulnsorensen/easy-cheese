@@ -41,10 +41,11 @@ from a `SKILL.md`, `../../cheese/references/<file>.md` from a
 
 Skills that depend on `shared/scripts/` ship a pre-bundled `.pyz` so the
 shared helpers are self-contained at install time — invoked as
-`python3 ${CLAUDE_SKILL_DIR}/scripts/<skill>.pyz <subcommand>`
-(`skills/mold/SKILL.md:22`). Bundles exist for affinage, briesearch,
-cook, melt, mold, and ultracook; `build-pyz.yml` rebuilds them on
-every relevant push to `main`.
+`python3 skills/<skill>/scripts/<skill>.pyz <subcommand>`
+(`skills/mold/SKILL.md:23`). The authoritative bundle roster is the
+`SKILLS` dict in `scripts/build_pyz.py`; see
+[tooling](./tooling.md) for the current list and for why the committed
+bundles are a *checked* artifact rather than a CI-regenerated one.
 
 
 
@@ -66,14 +67,16 @@ this repo, and the CI ratchet live in
 ## The cheese pipeline
 
 The workflow skills compose into one pipeline, ordered
-**culture → mold → cook → press → age → cure → plate**
-(`skills/mold/SKILL.md:125`, `skills/cook/SKILL.md:90`):
+**culture → mold → cut → cook → press → age → cure → plate**
+(`skills/mold/SKILL.md:125`, `skills/cook/SKILL.md:202`,
+`skills/cut/SKILL.md:183`):
 
 | Skill | Role in the pipeline |
 |---|---|
 | `/cheese` | Front door — classifies input, routes to the right skill |
 | `/culture` | No-write thinking / exploration |
 | `/mold` | Converge a fuzzy idea into an approved spec |
+| `/cut` | Outside-in RED evidence — prove the approved behavior fails at its declared seam, then freeze that oracle in a `GateReceipt` |
 | `/cook` | TDD-disciplined implementation of a spec |
 | `/press` | Adversarial test hardening |
 | `/age` | Ten-dimension review → severity-grouped findings |

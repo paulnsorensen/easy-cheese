@@ -7,7 +7,7 @@ guiding rule: one local gate (`just check`), mirrored read-only in CI
 ## `just check` vs `just ci`
 
 `just check` is the local pre-flight; `just ci` is the same gate without
-autofixes (`justfile:62-65`). Run `just check` before any commit, push,
+autofixes (`justfile:77,80`). Run `just check` before any commit, push,
 PR, or hand-off (`AGENTS.md:7`).
 
 | | `just check` | `just ci` |
@@ -23,15 +23,33 @@ The `test` recipe runs the skill + wiki validator self-tests and
 validators (`test_validate_skills.py`, `test_validate_wiki.py`,
 `validate_skills.py`, `validate_wiki.py`), the pytest suites
 (`tests/python`, `tests/shared/python`, `tests/fanout/python`,
-`tests/hard-cheese/python`, `tests/pasteurize/python`), the JS suite
-(`node --test tests/js`), and the bats suites
-(`tests/bash/test_install.bats`, the fan-out bats)
-(`justfile:14-26`).
+`tests/schemas/python`, `tests/hard-cheese/python`,
+`tests/pasteurize/python`, `tests/wheypoint/python`), the JS suite
+(`node --test tests/js`), the bats suites
+(`tests/bash/test_install.bats`, the fan-out bats), and
+`just test-skill-overlap` (`justfile:17-33`).
 
-Note the markdownlint globs are `skills/**/*.md` and `*.md`
-(`justfile:42-47`) — files outside those globs (for example this wiki
-under `.hallouminate/wiki/`) are not linted by the gate, so keep their
-markdown clean by hand.
+`test-skill-overlap` is the one leg of the gate that is not Python, JS,
+or bash: it is `cargo test` against `tools/skill-overlap/`
+(`justfile:36-37`), so a machine without a Rust toolchain cannot run
+`just check` to completion even though everything else in the repo is
+Python-and-markdown. It is deliberately model-free — the analyzer's
+model artifacts are never fetched during the gate.
+
+Note the markdownlint globs are `skills/**/*.md`, `.agents/**/*.md`, and
+`*.md` (`justfile:52-58`) — files outside those globs (for example this
+wiki under `.hallouminate/wiki/`) are not linted by the gate, so keep
+their markdown clean by hand. `validate_wiki.py` does run over the wiki
+in `just test`, but its checks are structural only — single leading H1,
+kebab-case stem, index markers present, and index entries and files
+resolving to each other in both directions. Frontmatter and lifecycle
+checks are deliberately *not* there (a separate seam, issue #206), and
+discovery is hardcoded to `.hallouminate/wiki/` rather than read from
+`config.toml` corpus paths
+([adr/hallouminate-wiring-stack-004](./adr/hallouminate-wiring-stack-004.md)).
+So a wiki page can be committed with broken links, stale citations, or —
+as PR #398 proved — literal merge-conflict markers, and still pass the
+gate.
 
 ## Validators
 
@@ -74,11 +92,33 @@ markdown clean by hand.
 
 Skills that consume `shared/scripts/` ship a pre-built `.pyz` so the
 shared helpers are self-contained at install time, invoked as
-`python3 ${CLAUDE_SKILL_DIR}/scripts/<skill>.pyz <subcommand>`
-(`skills/mold/SKILL.md:22`). Bundles exist for affinage, briesearch,
-cook, melt, mold, and ultracook. `just bundle` rebuilds them locally
-(`scripts/build_pyz.py`); `build-pyz.yml` rebuilds and commits them on
-every relevant push to `main` (`justfile:28-30`).
+`python3 skills/<skill>/scripts/<skill>.pyz <subcommand>`
+(`skills/mold/SKILL.md:23`). The roster is the `SKILLS` dict in
+`scripts/build_pyz.py`: affinage, age, briesearch, cook, cut,
+easy-cheese-setup, hard-cheese, melt, mold, pasteurize, press,
+ultracook, and wheypoint each ship their own bundle, and a shared
+`common.pyz` is additionally fanned into age, cure, and ultracook
+(`COMMON_CONSUMERS`) so a consumer-only skill is still self-contained
+after install.
+
+**The bundles are committed artifacts, and CI only checks them — it does
+not regenerate them.** `build-pyz.yml` runs with `permissions: contents:
+read`, builds into a scratch tree, and then runs
+`scripts/check_bundles.py`; there is no commit step. Change anything
+under `src/`, `shared/scripts/`, or the vendored deps without running
+`just bundle` and the PR goes red rather than being silently fixed up.
+The `bundle` recipe's own comment still says "CI rebuilds on every push
+to main" (`justfile:39`) — that comment is stale; the workflow is the
+authority.
+
+`check_bundles.py` compares member CRCs, not raw bytes, because
+`ZIP_DEFLATED` output differs between zlib and zlib-ng builds — a
+byte-level comparison would fail for every contributor whose toolchain
+differs from whoever last committed the bundles.
+
+`just bundle` depends on `just vendor`: `vendor/` is generated from
+hash-pinned `requirements-vendor.txt` rather than committed, so a bundle
+rebuild is deterministic but **not** offline.
 
 ## CI workflows
 
@@ -87,9 +127,12 @@ Under `.github/workflows/`:
 | Workflow | Trigger | Does |
 |---|---|---|
 | `validate.yml` | push main, all PRs | frontmatter validation, pytest, install.sh bats + smoke, lint |
-| `build-pyz.yml` | push main (`src/**`, `shared/scripts/**`, build script) | rebuild + commit `.pyz` bundles |
+| `build-pyz.yml` | PRs + push main (`src/**`, `shared/scripts/**`, build script, vendored deps, the bundles themselves) | rebuild into scratch and **verify** committed `.pyz` bundles are current — never commits |
 | `release.yml` | tag `v[0-9]*` | stage slim tree, force-push `release` branch, GitHub release |
+| `publish-pypi.yml` | push main touching `pyproject.toml`, dispatch | publish `easy-cheese-schemas` to PyPI |
 | `docs.yml` | push/PR on docs paths, dispatch | `pnpm run docs:build` (Astro/Starlight), deploy Pages on main |
+| `docs-retry.yml` | `docs` workflow_run failure | auto re-run failed `docs` jobs on main, up to 3 attempts |
+| `skill-overlap.yml` | PRs on `skills/**/*.md` + tools, weekly cron, dispatch | semantic skill-overlap ratchet (`calibrate` / `report` / `check`) |
 | `codeql.yml` | PRs, push main, weekly | CodeQL on python + actions |
 | `dependency-review.yml` | PRs to main | block vulnerable / disallowed-license deps |
 | `scorecard.yml` | push main, weekly | OpenSSF Scorecard → SARIF |

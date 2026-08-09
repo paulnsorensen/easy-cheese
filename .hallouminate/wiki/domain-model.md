@@ -124,7 +124,7 @@ _Code_: NEW ENTITY
 
 **source_curd_ref** - physical-item provenance containing semantic curd ID and digest.
 _Avoid_: Milknado node ID
-_Code_: NEW ENTITY<<<<<<< ours
+_Code_: NEW ENTITY
 
 ## Outside-in RED gating
 
@@ -159,12 +159,3 @@ _Code_: `CorrectiveRoute` in `src/fanout/press_route.py:25-31`
 **Gate applicability** - Mold's explicit closed classification of requested work as `red-required` behavior or a named `not-applicable` non-behavior class.
 _Avoid_: filename heuristic, inferred docs-only, UI exemption
 _Code_: `GateApplicability` in `src/mold/taste_test.py:180`
-
-||||||| original
-_Code_: NEW ENTITY
-
-
-=======
-_Code_: NEW ENTITY
-
->>>>>>> theirs
