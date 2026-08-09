@@ -7,16 +7,20 @@ contracts, not conventions.
 ## Pipeline ordering
 
 The canonical order is fixed
-(`skills/mold/SKILL.md:125`, `skills/cook/SKILL.md:90`):
+(`skills/mold/SKILL.md:125`, `skills/cut/SKILL.md:183`,
+`skills/cook/SKILL.md:202`, `skills/press/SKILL.md:211`):
 
 ```text
-culture → mold → cook → press → age → cure → plate
+culture → mold → cut → cook → press → age → cure → plate
 ```
 
 - **culture** — no-write thinking; never edits code, never the gate.
 - **mold** — converges a fuzzy idea into an approved spec at the durable
   XDG corpus path (`$XDG_DATA_HOME/cheese/<project>/specs/<slug>.md`,
   resolved by `shared/scripts/paths.py`; `skills/cheese/references/formatting.md:103`).
+- **cut** — proves the approved behavior RED at its declared outer seam
+  and issues the `GateReceipt`; it is test-side only and never
+  implements the behavior (`skills/cut/SKILL.md:9-13`).
 - **cook** — TDD-disciplined implementation of that spec.
 - **press** — adversarial test hardening of the cooked diff.
 - **age** — ten-dimension review producing a findings report.
@@ -27,6 +31,27 @@ Skipping forward is allowed (e.g. cook → age, skipping press) but the
 relative order never inverts: you do not cure before age, or press before
 cook. Each phase hands off through a gate (below), and writes a handoff
 slug the next phase reads.
+
+**Cut is the one phase you cannot skip by starting later.** Every other
+phase is entered by choosing it; Cut is entered either way. `/cook` opens
+with a GateReceipt preflight and, when the receipt is absent or fails
+canonical loading, synchronously invokes `/cut` itself and consumes the
+returned receipt exactly once — so "just run `/cook`" still pays for the
+RED evidence (`skills/cook/SKILL.md:39-47,75-77`). `--auto` does not
+buy an exemption either (`skills/cook/SKILL.md:215`). The receipt, not
+the phase order, is the authority: `GateReceipt` is phase-neutral and
+Cut, Cook, and Press all produce or consume the same envelope
+(`src/easy_cheese_schemas/gates.py`; [adr/outer-tdd-gates-001](./adr/outer-tdd-gates-001.md)).
+
+Gotcha: the pipeline string is duplicated in each skill's footer, and
+after PR #396 only mold, cut, cook, and press print the eight-phase form
+— culture, age, cure, and affinage still print the pre-Cut seven-phase
+string (`skills/culture/SKILL.md:61`, `skills/age/SKILL.md:107`,
+`skills/cure/SKILL.md:120`, `skills/affinage/SKILL.md:97`).
+<speculative>Unintentional lag rather than a deliberate scoping —
+nothing in the outer-TDD ADR set carves those four out.</speculative>
+Read the order from mold/cut/cook/press, not from whichever footer you
+happen to be in.
 
 ## The two-key handshake (mold's curdle gate)
 
@@ -69,9 +94,19 @@ after the user chooses (`skills/cheese/references/handoff-gate.md:7`).
 `--auto` propagates through the chain to skip these gates for autonomous
 runs. `/cook`'s `--auto` mode runs the chain
 `cook → press → age → cure → age → cure → age`, capped at
-**two cure passes** (`skills/cook/SKILL.md:134`). This chain — and the
+**two cure passes** (`skills/cook/SKILL.md:215-221`,
+`skills/cook/references/auto-mode.md:32`). This chain — and the
 parallel fan pathway — was absorbed from the now-retired `/ultracook`
 (PR #316 moved ownership; PR #317 retired the entry point).
+
+Since PR #396 the chain is **receipt-shaped, not fixed**: an active RED
+receipt runs `press → age → cure`, while a closed
+`not-applicable` receipt skips Press entirely and runs `age → cure`
+(`skills/cook/SKILL.md:207-217`). Press is not being "skipped for speed"
+— a closed N/A receipt has no adversarial contract for Press to attack,
+so the phase is structurally inapplicable rather than optional. Do not
+read a missing Press step in an auto run as a dropped gate; read the
+receipt.
 
 
 ## Plate is the final writing gate
