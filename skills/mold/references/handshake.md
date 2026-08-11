@@ -6,6 +6,8 @@ Curdle (artifact extraction) requires **both** keys. Neither is optional.
 
 The user must express explicit extraction intent: `curdle`, `ship it`, `extract`, or `that's enough`. A clear affirmative such as `ok let's go`, `sounds good`, or `go ahead` also turns the key when it directly answers an agent's extraction question.
 
+Key matching is case-insensitive and whitespace-tolerant: compare the trimmed, case-folded reply (`reply.strip().casefold()`) against each accepted key's case-folded form, so `Curdle`, `CURDLE`, and `  cUrDlE  ` all turn the key exactly as `curdle` does. Never demand an exact-case respelling or burn a round on capitalization alone. Normalization affects only spelling — it does not widen the gate: unrelated prose that merely mentions a key approves nothing, and both handshake keys must still turn.
+
 Do not infer the key from unrelated or ambiguous approval; ask explicitly when the context does not establish that the user is approving Curdle.
 
 ## Agent key — coherence self-check

@@ -64,6 +64,23 @@ def test_user_key_allows_contextual_affirmations_without_inference() -> None:
     assert "unrelated or ambiguous approval" in section
 
 
+def test_user_key_matching_is_case_insensitive_and_whitespace_tolerant() -> None:
+    """gh#394: capitalization ceremony must never bounce an otherwise-valid key."""
+    section = _section(HANDSHAKE, "User key")
+    assert "case-insensitive" in section
+    assert "whitespace-tolerant" in section
+    assert "reply.strip().casefold()" in section
+    assert "`CURDLE`" in section
+    assert "cUrDlE" in section
+    for phrase in (
+        "exact-case respelling",
+        "unrelated prose that merely mentions a key approves nothing",
+        "both handshake keys must still turn",
+    ):
+        assert phrase.casefold() in section.casefold(), phrase
+    assert "reply exactly" not in section.casefold()
+
+
 def test_candidate_collection_is_non_committing_dialogue_state() -> None:
     _assert_phrases(
         MOLD,
