@@ -1,6 +1,6 @@
 # Cross-skill work contract
 
-Status: approved; YAML serialization restoration accepted 2026-07-27
+Status: approved; YAML serialization restoration accepted 2026-07-27; persistence format for continuity records superseded by [wheypoint-continuity-kernel-004](../adr/wheypoint-continuity-kernel-004.md) (canonical JSON, 2026-08-11)
 Source: promoted from the Mold artifact at `$XDG_DATA_HOME/cheese/paulnsorensen-easy-cheese/specs/cross-skill-work-contract.md`
 
 This specification makes one `WorkRecord` the deterministic continuation authority for a user work item. Phase artifacts become validated, operation-scoped evidence around that record. Persisted runtime state and human-authored phase contracts use YAML; the released `cheese.pyz` bundles pinned pure-Python PyYAML and its license so users install no libraries separately.
