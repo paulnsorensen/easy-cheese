@@ -167,6 +167,7 @@ from easy_cheese_schemas.contracts import (
     ReviewDisposition,
     ReviewFinding,
     ReviewFindingWriterView,
+    ReviewKind,
     ReviewRequest,
     ReviewResult,
     ReviewResultWriterView,
@@ -230,7 +231,7 @@ from easy_cheese_schemas.workflow import (
     run_workflow,
 )
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 __all__ = [
     "BaselineCheck",
@@ -386,6 +387,7 @@ __all__ = [
     "ReviewDisposition",
     "ReviewFinding",
     "ReviewFindingWriterView",
+    "ReviewKind",
     "ReviewRequest",
     "ReviewResult",
     "ReviewResultWriterView",
