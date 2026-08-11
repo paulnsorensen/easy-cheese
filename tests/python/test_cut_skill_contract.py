@@ -9,10 +9,14 @@ GateReceipt JSON: ``red-gate issue`` remains the writer boundary.
 from __future__ import annotations
 
 import importlib.util
+import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
+
+import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -285,3 +289,91 @@ No interaction or data behavior changes.
     assert plan.disposition.value == "not-applicable"
     assert plan.contracts == ()
     assert plan.not_applicable_reason == "appearance-only work item"
+
+
+_MOLD_TEMPLATE_SPEC = """---
+slug: template-agreement
+status: approved
+source: mold-handshake
+gate_applicability:
+  disposition: red-required
+  work_class: behavior
+  ui_surface: non-browser
+---
+
+# Template agreement
+
+## Problem
+One paragraph.
+
+## Goals
+- One bullet.
+
+## Acceptance
+
+- AC-1: WHEN the caller sends a request THE SYSTEM SHALL return the result
+- AC-2: WHEN the input is empty THE SYSTEM SHALL reject the request
+
+## Test Contracts
+
+| Acceptance ID | Interface referent | Outermost stable seam | Expected failure | Mode | Interface version | Matrix rows |
+| --- | --- | --- | --- | --- | --- | --- |
+| AC-1 | public call | existing service boundary | assert result is returned | tracer | | |
+| AC-2 | public call | existing service boundary | assert empty input is rejected | contract-matrix | v1 | empty<br>non-empty |
+"""
+
+
+def test_mold_template_spec_passes_red_gate_contracts(tmp_path: Path) -> None:
+    """gh#401: Mold and Cut must agree on the emitted/accepted spec schema.
+
+    Instantiates the declared shape of mold's curdle.md § Spec template
+    (frontmatter declaration, Acceptance IDs, and Test Contracts columns
+    copied verbatim) and proves Cook preflight's exact command accepts it.
+    Editing the template means editing this fixture with it.
+    """
+    spec = tmp_path / "template.md"
+    spec.write_text(_MOLD_TEMPLATE_SPEC, encoding="utf-8")
+    plan = red_gate.parse_gate_applicability(spec)
+    assert plan.disposition.value == "red"
+    assert [contract.acceptance_id for contract in plan.contracts] == ["AC-1", "AC-2"]
+    assert all(contract.contract_source == "approved" for contract in plan.contracts)
+
+    import build_pyz
+
+    bundle = build_pyz.cached_bundle("cut")
+    proc = subprocess.run(
+        [sys.executable, str(bundle), "red-gate", "contracts", str(spec)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["disposition"] == "red"
+    assert [row["acceptance_id"] for row in payload["contracts"]] == ["AC-1", "AC-2"]
+
+
+def test_undeclared_spec_without_ids_gets_actionable_regeneration_error(
+    tmp_path: Path,
+) -> None:
+    """gh#401: a spec minted by a pre-schema Mold (no declaration, no AC IDs)
+    must fail with an error that routes the operator to regeneration, not a
+    dead end."""
+    spec = tmp_path / "pre-schema.md"
+    spec.write_text(
+        """# Pre-schema behavior
+
+## Goals
+- Narrative goal.
+
+## Required cases
+- Narrative case with no stable acceptance ID.
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(red_gate.GateValidationError) as excinfo:
+        red_gate.parse_gate_applicability(spec)
+    message = " ".join(excinfo.value.problems)
+    assert "regenerate" in message
+    assert "/mold" in message
+    assert "gate_applicability" in message
