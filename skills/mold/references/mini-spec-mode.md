@@ -45,6 +45,9 @@ verification: <one-line: the obvious check>
 ## Provenance (tier 2 only)
 - culture: <one-line synthesis of what /culture concluded>
 - briesearch: <one-line synthesis>; artifact: research/<slug>/<slug>.md
+
+## Timing
+<rendered by `mold.pyz timing render` per `../../cheese/references/artifact-timing.md`>
 ```
 
 `source: agent-mini-spec` marks the strict Mold production path. New behavior

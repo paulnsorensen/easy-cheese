@@ -81,3 +81,5 @@ ADRs are a phase-one Curdle by-product. Write them **after** both handshake keys
 pass, in the same local atomic step as the durable spec and before any external
 follow-up publication. They never substitute for the spec's own `## Decisions`
 line: the ADR is the long form; the Decisions bullet is the index entry.
+
+Each written ADR appends the rendered phase section from [`../../cheese/references/artifact-timing.md`](../../cheese/references/artifact-timing.md). This records the shared Mold run that produced it; the section does not replace the decision timing rule above.

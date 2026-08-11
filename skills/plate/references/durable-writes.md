@@ -28,6 +28,8 @@ target, essential contents, and expected revision. Emit one completion row per
 item in the exact shape `{target, backend, verified}`. `verified` is true only
 after successful read-back.
 
+For each human-readable easy-cheese workflow artifact in the inventory, verify the applicable [`../../cheese/references/artifact-timing.md`](../../cheese/references/artifact-timing.md) timestamp or `## Timing` section during read-back. Typed machine artifacts and ordinary product documentation remain governed by their own schemas.
+
 Halt before `just check`, staging, commit, push, or PR creation when a required
 write is missing, a write call failed, or read-back cannot verify it. Optional
 write failures are reported but never silently promoted to complete.

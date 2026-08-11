@@ -147,6 +147,8 @@ frozen `baseline_checks` exactly and must not overwrite or recapture them.
 The orientation line may explain the selected contracts and runner. A blocked
 attempt uses `halt: <reason>` and does not claim `next: cook`.
 
+Append the timestamped phase ledger required by [`../cheese/references/artifact-timing.md`](../cheese/references/artifact-timing.md). Include baseline, oracle-write, RED replay, receipt issue, handoff write, and total phases; preserve the halt phase on failure.
+
 ## Discipline
 
 **Iron Law:** No successful Cut RED receipt without a GREEN baseline and a

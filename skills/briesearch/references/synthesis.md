@@ -79,6 +79,7 @@ Before finalizing a deep report (`research/<slug>/<slug>.md`), run the mechanica
 ## Output shape
 
 Cross-cutting house style and citation form: [`../../cheese/references/formatting.md`](../../cheese/references/formatting.md).
+Deep reports, and any short form persisted as an artifact, append the section required by [`../../cheese/references/artifact-timing.md`](../../cheese/references/artifact-timing.md) before `## References`.
 
 Short form (always returned to the caller):
 
@@ -103,6 +104,8 @@ Short form (always returned to the caller):
 ### Searched, empty
 <one line per routed source that ran and returned nothing usable, naming the query/filters that came up dry (e.g. "Tavily `basic`, time_range=month, \"<query>\" → 0 results above score 0.5"). This is the provenance for any `don't know` or lowered cap — proof the search ran. Omit the section only when no routed source came back empty.>
 
+## Timing
+<rendered by the shared timing helper when this output is persisted>
 ## References
 [^source-1]: <absolute URL or `.cheese/...` path> (fetched <YYYY-MM-DD>).
 [^source-2]: <absolute URL or `.cheese/...` path> (fetched <YYYY-MM-DD>).

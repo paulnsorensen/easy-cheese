@@ -65,6 +65,7 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
         "post-reply": "post-reply.py",
         "age-route": "fanout/age_route_cli.py",
         "review-surface": "fanout/review_surface_cli.py",
+        "timing": Shared("timing.py"),
     },
     "mold": {
         "artifact-path": Shared("artifact_path.py"),
@@ -72,16 +73,22 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
         "gate-graph": "gate-graph.py",
         "render_html": Shared("html_report_cli.py"),
         "taste-test": "taste_test.py",
+        "timing": Shared("timing.py"),
     },
     "briesearch": {
         "artifact-path": Shared("artifact_path.py"),
         "ground-check": "ground_check.py",
+        "timing": Shared("timing.py"),
     },
     "cook": {
         "artifact-path": Shared("artifact_path.py"),
         "worktree": Shared("worktree.py"),
+        "timing": Shared("timing.py"),
     },
-    "cut": {"red-gate": "red_gate.py"},
+    "cut": {
+        "red-gate": "red_gate.py",
+        "timing": Shared("timing.py"),
+    },
     # All four subcommands are one module: wheypoint.py reads the subcommand off
     # argv[0], the way hallouminate_setup.py already does for global|local|doctor.
     "wheypoint": {
@@ -89,6 +96,7 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
         "resolve": "wheypoint.py",
         "show": "wheypoint.py",
         "lint": "wheypoint.py",
+        "timing": Shared("timing.py"),
     },
     "easy-cheese-setup": {
         "global": Shared("hallouminate_setup.py"),
@@ -99,19 +107,23 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
         "html-report": "age-html-report.py",
         "age-route": "fanout/age_route_cli.py",
         "review-surface": "fanout/review_surface_cli.py",
+        "timing": Shared("timing.py"),
     },
     "hard-cheese": {
         "append-attempt": "append-attempt.py",
         "freshness-check": "freshness-check.py",
+        "timing": Shared("timing.py"),
     },
     "pasteurize": {
         "debug-tag-sweep": "debug-tag-sweep.py",
         "repro-rerun": "repro-rerun.py",
         "pasteurize-route": "fanout/pasteurize_route_cli.py",
+        "timing": Shared("timing.py"),
     },
     "press": {
         "press-route": "fanout/press_route_cli.py",
         "red-gate": "cut/red_gate.py",
+        "timing": Shared("timing.py"),
     },
     # /ultracook drives the fan-out engine (formerly /cheese-factory); its
     # sources live in the mode-neutral src/fanout/ dir (see SRC_DIRS).
@@ -130,6 +142,7 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
         "pr_plan_to_branches": "pr_plan_to_branches.py",
         "age-route": "fanout/age_route_cli.py",
         "curd-block": "fanout/curd_block.py",
+        "timing": Shared("timing.py"),
     },
 }
 
@@ -206,6 +219,7 @@ COMMON_SUBCOMMANDS: dict[str, str] = {
     "paths_cli": "paths_cli.py",
     "handoff_cli": "handoff_cli.py",
     "render_html": "html_report_cli.py",
+    "timing": "timing.py",
 }
 # Wave 1: consumer skills receive common.pyz
 COMMON_CONSUMERS: frozenset[str] = frozenset({"cure", "age", "ultracook"})

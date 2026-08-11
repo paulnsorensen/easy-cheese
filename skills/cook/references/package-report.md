@@ -4,6 +4,8 @@ Before opening a PR or handing off to `/age`, cook produces a package-ready repo
 
 Cross-cutting house style and citation form: [`formatting.md`](../../cheese/references/formatting.md). This file owns the package-report shape; formatting.md owns the voice rules and the footnote primitive. Quality-gate failure handling (baseline classification, the three-way policy, the `baseline:` block) is owned by [`quality-gates.md`](quality-gates.md) — this file only shapes how that policy renders in the report.
 
+Capture the full Cook run and report write through [`../../cheese/references/artifact-timing.md`](../../cheese/references/artifact-timing.md). The handoff artifact always includes the rendered `## Timing` section, including on a halt.
+
 ## Output shape
 
 ```markdown
@@ -37,6 +39,9 @@ Cross-cutting house style and citation form: [`formatting.md`](../../cheese/refe
 - /press <slug>   — harden tests and check coverage
 - /age <slug>     — review the diff
 - /cure <slug>    — apply selected age findings (after /age)
+
+## Timing
+<rendered by the shared timing helper>
 ```
 
 ## Honesty rules

@@ -29,6 +29,9 @@ Read this alongside `SKILL.md § Output` for a concrete rendering of the report 
 ## Next step
 <when press was skipped, lead with>: Hardening was skipped for this diff — run `/press <slug>` before curing, or continue reviewing as-is.
 Auto-fixing the recommended set via `/cure` (or the selection prompt on a reason to ask / `--safe`).
+
+## Timing
+<rendered by the shared timing helper>
 ```
 
 ## Full skeleton (with placeholders)
@@ -82,4 +85,7 @@ press: skipped
 ## Next step
 <when press was skipped, lead with>: Hardening was skipped for this diff — run `/press <slug>` before curing, or continue reviewing as-is.
 Auto-fixing the recommended set via `/cure` (or the selection prompt on a reason to ask / `--safe`).
+
+## Timing
+<rendered by the shared timing helper>
 ```

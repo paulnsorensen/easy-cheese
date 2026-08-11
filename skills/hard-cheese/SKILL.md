@@ -113,6 +113,8 @@ The attempt log uses a 6-column markdown table (written by `append-attempt`):
 
 Attempts append; nothing is overwritten within a single invocation. If a re-invocation finds the artifact stale (HEAD moved), new attempt rows are appended below the prior ones — the trail is cumulative.
 
+The native `timestamp` column satisfies [`../cheese/references/artifact-timing.md`](../cheese/references/artifact-timing.md) for this append-only audit format. Keep attempt timestamps helper-authored; do not append a separate `## Timing` section that would break the table tail consumed by `append-attempt`.
+
 ## Sub-agent contract — fresh judge
 
 - **Fresh context, every invocation.** Same-context judging is biased toward the code it helped write.

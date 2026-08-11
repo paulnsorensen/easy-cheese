@@ -83,11 +83,11 @@ Call source-code backends directly according to the shared [`code-intelligence-r
 
 ## Output
 
-Cross-cutting house style and citation form: [`../cheese/references/formatting.md`](../cheese/references/formatting.md). This section owns the findings-report shape; formatting.md owns the voice rules and the footnote primitive.
+Cross-cutting house style and citation form: [`../cheese/references/formatting.md`](../cheese/references/formatting.md). Capture and render the mandatory timing section through [`../cheese/references/artifact-timing.md`](../cheese/references/artifact-timing.md). This section owns the findings-report shape; formatting.md owns the voice rules and footnote primitive.
 
 Write to `.cheese/age/<slug>.md` with a minimum handoff slug at the top — `status`, `next`, `artifact`, `durable_flags`, `baseline`, one-line orientation. `press: skipped` is the first body line after the blank separator when a cook artifact exists but no press report does; omit it otherwise.
 
-Body, in order: `# Age Report — <slug>`; `## Orientation` (1-2 sentences); `## Press findings` (omit unless a press report exists); `## Wiki context` (omit unless hallouminate grounding hit); severity sections (`**[dim:sev]** path:line — claim`, then `location: <tier> · fix-cost-now: <tier> · fix-cost-later: <tier> · confidence: <tier>`, then `recommendation: <action>`); `## Confidence`; `## Next step`. See `references/report-example.md` for the full skeleton plus a worked instantiation.
+Body, in order: `# Age Report — <slug>`; `## Orientation` (1-2 sentences); `## Press findings` (omit unless a press report exists); `## Wiki context` (omit unless hallouminate grounding hit); severity sections (`**[dim:sev]** path:line — claim`, then `location: <tier> · fix-cost-now: <tier> · fix-cost-later: <tier> · confidence: <tier>`, then `recommendation: <action>`); `## Confidence`; `## Next step`; `## Timing`. See `references/report-example.md` for the full skeleton plus a worked instantiation.
 
 Empty severity sections are omitted entirely. When ten or more `low` findings exist, collapse the `## Low` section to a single line:
 

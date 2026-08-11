@@ -4,6 +4,8 @@ Use this reference for any artifact a skill writes to `.cheese/` — specs, find
 
 The citation primitive is the standard markdown `[^name]` footnote, which renders natively in GitHub and the easy-cheese Starlight docs site.
 
+Every human-readable workflow artifact also follows the shared [`artifact-timing.md`](artifact-timing.md) contract. Ordinary reports render `## Timing`; native append-only or generated formats retain the timestamp field named there.
+
 ## Reader model
 
 Write for an engineer who picks the report up cold. They know the major skills exist, they have the diff or the spec open in another tab, and they have not memorised which function lives in which file. Every claim must read top-to-bottom for that reader.

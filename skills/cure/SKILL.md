@@ -115,6 +115,8 @@ in `.cheese/cure/<slug>.md`, record `Applied`, `Deferred`, `Checks`, and
 `Re-review` sections with finding IDs, evidence, residual risk, and the next
 `/age --scope <touched-path>` or `/plate` step.
 
+Append [`artifact-timing.md`](../cheese/references/artifact-timing.md); installed Cure uses `common.pyz timing`.
+
 ## Handoff
 
 **Pipeline:** culture → mold → cook → press → age → **[cure]** → plate

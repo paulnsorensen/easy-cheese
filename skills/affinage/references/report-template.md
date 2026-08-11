@@ -59,6 +59,9 @@ Read this when writing `.cheese/affinage/pr-<n>.md` — the worked example for e
 
 ## Next step
 Auto-fixing the recommended set via `/cure`; drafted replies are held for the reply-approval gate before posting (`--auto` posts directly). Replies post before terminal `/plate` publishes cure's fixes. On a reason to ask / `--safe`, the cure-selection prompt renders inline — pick findings to cure or `none` to stop.
+
+## Timing
+<rendered by the shared timing helper at the durable stopping point>
 ```
 
 Empty severity sections are omitted entirely. `## Needs-investigation` and `## Reviewer-rejected` are omitted when no items land there.

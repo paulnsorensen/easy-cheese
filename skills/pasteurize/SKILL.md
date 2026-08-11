@@ -197,7 +197,9 @@ follow_up: <architectural follow-up note, or "none">
 <one-line orientation: what pasteurize converged on>
 ```
 
-`status: ok` when the regression test is green, the original repro no longer reproduces, and cleanup is done. `status: halt: <reason>` when any early-stop condition fires — see [Early-stop conditions](#early-stop-conditions) below. `next:` is `cook` for the standard chain, `mold` if the diagnosis itself recommends an architectural spec instead of a per-bug fix, or `done` if the bug was caused outside the repo and no follow-up is needed.
+`status: ok` requires a green regression test, a cleared repro, and cleanup. `status: halt: <reason>` marks an [early stop](#early-stop-conditions). `next:` is `cook`, `mold` for an architectural spec, or `done` for an external cause needing no follow-up.
+
+Append [`artifact-timing.md`](../cheese/references/artifact-timing.md).
 
 ## Handoff
 

@@ -56,6 +56,8 @@ These optional fields precede the orientation line and come only from the live s
 - **`created: <UTC ISO-8601>`** — UTC capture time.
 - **`parents: [<slug>, ...]`** — lineage. Legacy `--join` writes `parents: [<slugA>, <slugB>]`; `--split` children write `parents: [<current-slug>]`. Both remain outside this continuity contract: they rewrite `.cheese/notes/` Markdown and commit no delta.
 
+The runtime-authored `created:` field satisfies the wall-clock requirement in [`../cheese/references/artifact-timing.md`](../cheese/references/artifact-timing.md) for this generated projection. Do not append `## Timing`: immutable revision data remains the authority, and projection shape stays parser-owned.
+
 ### `status:` values
 
 Status is **derived** by the runtime, never asserted by the author: an active human-blocking question or blocker derives `gated:` and requires a decision dossier, and no caller can force `ok`.

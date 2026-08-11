@@ -48,7 +48,7 @@ Exact CLI invocations, exit-code hints, and grading rationale for steps 2, 3, 6,
 4. **Fetch comments.** Inline threads: `gh api repos/<owner>/<repo>/pulls/<pr>/comments` (REST; no thread-resolution state, so skip `position: null` comments unless `--include-outdated`). Review bodies: `gh api repos/<owner>/<repo>/pulls/<pr>/reviews`, filtered to non-empty bodies, deduped against inline comments via `pull_request_review_id`.
 5. **Skip already-replied threads.** A thread last-commented by the resolved GitHub handle (§Rules) is already answered — skip it; the footer renders as `agent on behalf of <handle>`.
 6. **Grade through the age lens.** Classify each input (comment, CI failure, or fresh `/age` finding) by dimension — code/claim, or check type/failure for CI — per `../age/references/dimensions.md`, and by severity (base + location + compounding, same rubric as `/age`); ignore reviewer-asserted urgency (`CHANGES_REQUESTED` is metadata, never a severity bump). Bucket into severity sections (contained fixes), `## Needs-investigation` (needs out-of-diff evidence), or `## Reviewer-rejected` (wrong/ungrounded, or a lot of follow-up work). Full bucketing criteria: `references/flow-details.md`.
-7. **Write report** to `.cheese/affinage/pr-<n>.md`: four-line handoff slug, then the age-format body plus two extra sections. See `## Output`.
+7. **Write report** to `.cheese/affinage/pr-<n>.md`: four-line handoff slug, then `## Timing`, the age-format body, and the Affinage-specific sections. See `## Output`.
 8. **Act or ask** — per §Handoff.
 9. **Draft non-cure replies, then gate before posting** (whenever grading produced these items, with or without `/cure`). Never post blind — requires the reply-approval gate (§Handoff), or `--auto`. Draft per `references/flow-details.md`; post approved ones via `affinage.pyz post-reply`. CI-sourced (`from-check:<job>`) and fresh-review (`from-age:<dimension>`) findings get no reply.
 10. **Post-cure reply posting** (only when `/cure` ran). Once `/cure` returns, read `.cheese/cure/pr-<n>.md`'s `### Applied`/`### Deferred` and post per-finding replies via `affinage.pyz post-reply`: **Applied** (`from-comment:<id>`) → `"Fixed — <applied summary>."`; **Deferred** (`from-comment:<id>`) → `"Attempted fix reverted — <reason>."`
@@ -81,7 +81,7 @@ Call source-code search/read backends per [`code-intelligence-routing.md`](../ch
 
 ## Output
 
-Write to `.cheese/affinage/pr-<n>.md`: the four-line handoff slug, then the age-style body plus two extra sections (`## PR status` and the same severity / `## Needs-investigation` / `## Reviewer-rejected` shape `/age` uses). Full annotated template: `references/report-template.md`.
+Write to `.cheese/affinage/pr-<n>.md`: the four-line handoff slug, then `## Timing`, `## PR status`, and the same severity / `## Needs-investigation` / `## Reviewer-rejected` shape `/age` uses. Capture and render timing through [`../cheese/references/artifact-timing.md`](../cheese/references/artifact-timing.md), rerendering after cure/reply phases at the durable stopping point. Full annotated template: `references/report-template.md`.
 
 ```markdown
 status: ok | halt: <one-line reason>

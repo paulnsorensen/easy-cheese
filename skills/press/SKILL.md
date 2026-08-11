@@ -191,6 +191,8 @@ action: continue | dispatch | stop
 <one-line orientation>
 ```
 
+Append the timestamped phase ledger required by [`../cheese/references/artifact-timing.md`](../cheese/references/artifact-timing.md). Include evidence load, protect/begin, attack, issue/route, report write, corrective wait when applicable, and total; terminal RED and invalid-evidence stops retain the stop phase.
+
 Project the router action without inventing a runnable phase:
 
 | router action | status | next | action |
