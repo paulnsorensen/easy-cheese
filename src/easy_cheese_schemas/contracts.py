@@ -65,6 +65,11 @@ class UncertaintyScope(str, Enum):
     SHARED_CONSTRAINT = "shared_constraint"
 
 
+class ReviewKind(str, Enum):
+    TASTE_TEST = "taste_test"
+    AGE = "age"
+
+
 class ReviewDisposition(str, Enum):
     CLEAN = "clean"
     FINDINGS = "findings"
@@ -817,6 +822,9 @@ class ReviewRequest:
         factory=tuple,
         converter=_tuple_sequence,
         validator=_list_of(EvidenceRef),
+    )
+    review_kind: ReviewKind | None = field(
+        default=None, validator=validators.optional(validators.instance_of(ReviewKind))
     )
 
 

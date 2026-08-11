@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "easy-cheese-schemas"
-version = "1.0.0"
+version = "1.1.0"
 description = "Shared document and manifest schemas for the easy-cheese agent workflow, with schema-version tolerance."
 readme = "docs/easy-cheese-schemas.md"
 license = "MIT"

@@ -49,6 +49,7 @@ from easy_cheese_schemas.contracts import (
     ReviewCoverage,
     ReviewDisposition,
     ReviewFinding,
+    ReviewKind,
     ReviewRequest,
     ReviewResult,
     ReviewFindingWriterView,
@@ -471,6 +472,7 @@ def test_review_request_and_result_accept_typed_evidence() -> None:
         coverage_targets=["correctness"],
         evidence=[evidence()],
     )
+    assert request.review_kind is None
     finding = ReviewFinding(
         finding_id="finding-1",
         severity=ReviewSeverity.HIGH,
@@ -495,6 +497,36 @@ def test_review_request_and_result_accept_typed_evidence() -> None:
     assert result.coverage == (
         ReviewCoverage("correctness", CoverageDisposition.COVERED),
     )
+
+
+
+def test_review_request_accepts_typed_review_kind_and_rejects_invalid_values() -> None:
+    request = ReviewRequest(
+        contract_version=VERSION,
+        review_id="review-1",
+        subject=artifact(),
+        coverage_targets=["correctness"],
+        review_kind=ReviewKind.AGE,
+    )
+    assert request.review_kind is ReviewKind.AGE
+
+    request = ReviewRequest(
+        contract_version=VERSION,
+        review_id="review-1",
+        subject=artifact(),
+        coverage_targets=["correctness"],
+        review_kind=ReviewKind.TASTE_TEST,
+    )
+    assert request.review_kind is ReviewKind.TASTE_TEST
+
+    with pytest.raises(TypeError, match="'review_kind' must be"):
+        ReviewRequest(
+            contract_version=VERSION,
+            review_id="review-1",
+            subject=artifact(),
+            coverage_targets=["correctness"],
+            review_kind="not_a_review_kind",  # type: ignore[arg-type]
+        )
 
 
 def test_confirmed_diagnosis_requires_reproduction_cause_and_regression_seam() -> None:
