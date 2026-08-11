@@ -206,9 +206,13 @@ COMMON_SUBCOMMANDS: dict[str, str] = {
     "paths_cli": "paths_cli.py",
     "handoff_cli": "handoff_cli.py",
     "render_html": "html_report_cli.py",
+    "severity": "severity.py",
+    "artifact-path": "artifact_path.py",
 }
-# Wave 1: consumer skills receive common.pyz
-COMMON_CONSUMERS: frozenset[str] = frozenset({"cure", "age", "ultracook"})
+# Waves 1-2: consumer skills receive common.pyz. Membership is driven by the
+# skill docs: every skill whose SKILL.md/references invoke a shared/scripts
+# CLI must ship the bundle that carries it (test_skill_doc_invocations.py).
+COMMON_CONSUMERS: frozenset[str] = frozenset({"cure", "age", "ultracook", "cook"})
 
 _CACHE: dict[str, Path] = {}
 

@@ -8,7 +8,10 @@ Scans every code span and fenced block in ``skills/**/*.md`` and checks:
 - ``${CLAUDE_SKILL_DIR}``-relative bundle paths resolve from the doc's own
   skill directory (cross-skill references use ``../<skill>/scripts/``);
 - ``python3 shared/scripts/<file>.py`` invocations target a module with a
-  ``__main__`` entry point.
+  ``__main__`` entry point, AND the doc's own skill ships that module inside
+  one of its bundles — shared scripts are compiled from this repo into each
+  consuming skill's .pyz precisely so installed skills never depend on the
+  cheese checkout being present.
 
 Guards the doc-rot class where a documented command dies at import or dispatch
 before doing anything (cheese continue-resume fallback, age dimensions
@@ -46,6 +49,18 @@ def _dispatchers() -> dict[str, set[str]]:
     return subcommands
 
 
+def _shipped_modules() -> dict[str, set[str]]:
+    """Skill name -> union of .py member basenames across its shipped bundles."""
+    modules: dict[str, set[str]] = {}
+    for pyz in SKILLS.glob("*/scripts/*.pyz"):
+        skill = pyz.parts[-3]
+        with zipfile.ZipFile(pyz) as archive:
+            modules.setdefault(skill, set()).update(
+                Path(name).name for name in archive.namelist() if name.endswith(".py")
+            )
+    return modules
+
+
 def _command_texts(doc: Path) -> list[tuple[int, str]]:
     """(lineno, text) for each inline code span and fenced-block line."""
     texts: list[tuple[int, str]] = []
@@ -63,6 +78,7 @@ def _command_texts(doc: Path) -> list[tuple[int, str]]:
 
 def _doc_problems() -> list[str]:
     dispatchers = _dispatchers()
+    shipped = _shipped_modules()
     problems: list[str] = []
     for doc in sorted(SKILLS.glob("**/*.md")):
         skill = doc.relative_to(SKILLS).parts[0]
@@ -90,9 +106,16 @@ def _doc_problems() -> list[str]:
                 path = REPO_ROOT / "shared" / "scripts" / script
                 if not path.is_file():
                     problems.append(f"{where}: shared/scripts/{script} does not exist")
-                elif "__main__" not in path.read_text(encoding="utf-8"):
+                    continue
+                if "__main__" not in path.read_text(encoding="utf-8"):
                     problems.append(
                         f"{where}: shared/scripts/{script} has no __main__ entry point"
+                    )
+                if script not in shipped.get(skill, set()):
+                    problems.append(
+                        f"{where}: shared/scripts/{script} is invoked but no bundle "
+                        f"in skills/{skill}/scripts/ ships it — the source path only "
+                        "exists in the cheese checkout"
                     )
     return problems
 
