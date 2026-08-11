@@ -50,6 +50,7 @@
 - [wheypoint-continuity-kernel-001](./wheypoint-continuity-kernel-001.md) — Wheypoint continuity authority
 - [wheypoint-continuity-kernel-002](./wheypoint-continuity-kernel-002.md) — Dedicated Wheypoint runtime boundary
 - [wheypoint-continuity-kernel-003](./wheypoint-continuity-kernel-003.md) — Immutable Wheypoint updates and resolution
+- [wheypoint-continuity-kernel-004](./wheypoint-continuity-kernel-004.md) — Canonical JSON persistence for Wheypoint records
 - [wheypoint-provenance-schema-001](./wheypoint-provenance-schema-001.md) — ADR: wheypoint provenance as additive header fields with join/split verbs
 - [workflow-contract-milknado-seam-001](./workflow-contract-milknado-seam-001.md) — ADR: CurdPlan is the semantic work authority
 - [workflow-contract-milknado-seam-002](./workflow-contract-milknado-seam-002.md) — ADR: Agents write slim views and hosts normalize canonical contracts
