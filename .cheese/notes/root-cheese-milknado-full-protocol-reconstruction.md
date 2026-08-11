@@ -1,16 +1,16 @@
 ## Handoff slug
 
 ~~~text
-status: gated: finalize record fields, package and versioning, persistence, and Wheypoint integrity before spec approval
+status: ok
 next: mold
 mode: single
 artifact: .cheese/notes/root-cheese-milknado-decision-audit.md
-session: codex:019fb751-d863-7d62-a3db-78e8e3dd1453
+session: codex:019fbc9c-05fc-74e0-a76d-b6680c30b857
 git: checkpoint/root-cheese-milknado-orchestration@4690aed
-created: 2026-08-01T08:51:33Z
+created: 2026-08-01T21:15:41Z
 parents: [root-cheese-milknado-orchestration, wheypoint-root-cheese-context-loss-audit]
 baseline: none
-<certain> This is the full reconstruction checkpoint for the Root Cheese and Milknado protocol, recovery slice, shared Pydantic contract, and Wheypoint integrity incident; resume by reading this file before any narrower artifact.
+<certain> The full reconstruction remains the durable design record; resume by specifying the PyPI and bundle bootstrap first, then the minimal Wheypoint continuity kernel.
 ~~~
 
 ## Document
@@ -729,4 +729,77 @@ runtime validation and reconciliation
 - <certain> The current full note is normally ignored by Git and requires an explicit later preservation step.
 - <certain> Current session: codex:019fb751-d863-7d62-a3db-78e8e3dd1453.
 - <certain> Current session automatically compacted at 2026-08-01T08:16:48Z.
+- <certain> No secrets, tokens, passwords, or sensitive values are included.
+
+## Iteration cut: package first, continuity second
+
+### State
+
+- <certain> The design dialogue reached its practical context limit before spec extraction or implementation.
+- <certain> No implementation spec, production Pydantic package, schema corpus, PyPI release, or runtime adapter exists yet.
+- <certain> The complete unresolved backlog above remains preserved but is deferred unless an item blocks the two selected slices.
+- <certain> This section supersedes the earlier implementation ordering and suggested-skills sequence at lines 714-720 without deleting their history.
+
+### Selected implementation order
+
+1. <certain> First, establish the Easy Cheese-owned Python package on PyPI and the standalone bundle path.
+2. <certain> Second, implement the minimal safety-first Wheypoint continuity kernel.
+3. <certain> Third, return to the bounded executor-recovery kernel.
+4. <certain> Planner, review, rich CurdResult, the full Milknado adapter, advanced continuation, split/join, task lifecycle, and migration remain later slices.
+
+### Step 1: PyPI and bundling bootstrap
+
+- <certain> Easy Cheese owns one versioned Python contract package that Milknado will import; Milknado will not maintain parallel public Pydantic models.
+- <certain> Pydantic v2 remains the canonical contract-authoring source for cross-runtime models; generated JSON Schema 2020-12, fixtures, and pure-Python model validators derive from it.
+- <certain> Persisted WorkRecord and Handoff frontmatter remains schema-bounded YAML followed by Markdown. CLI requests and responses remain JSON.
+- <certain> cheese.pyz vendors the exact pinned pure-Python PyYAML package and its license, excludes native extensions and package metadata, and bundles generated validators without requiring Pydantic or a generic JSON Schema runtime.
+- <certain> The July 26 JSON-persistence implementation-gap direction is superseded by the accepted July 27 YAML-restoration ADR.
+- <don't know> The package name, distribution layout, first version, publication workflow, and compatibility declaration still belong in the narrow Step 1 mold spec.
+
+Verification target:
+
+- <certain> A clean environment installs and imports the built package.
+- <certain> python3 -S executes cheese.pyz, loads the compiled phase registry, round-trips bounded YAML WorkRecord and Handoff documents, and validates representative JSON contract fixtures without ambient packages.
+- <certain> The release archive contains the pinned pure-Python YAML package and license, generated validators, and no native extension, bytecode cache, or package metadata.
+- <certain> just check is green before publication.
+
+### Step 2: minimal Wheypoint continuity kernel
+
+- <certain> Implement only WorkRecord, WorkDelta, immutable WorkRevision, and a generated Markdown Wheypoint projection.
+- <certain> WorkRevision absorbs the proposed CompactionRecord receipt for this slice; the applied delta and stable entry transitions provide the preservation ledger.
+- <certain> WorkRecord is the sole living authority. The Markdown note is a cold-reader projection and never a second mutable authority.
+- <certain> WorkDelta carries an expected revision plus explicit additions and transitions. Omission never deletes protected state.
+- <certain> Stable runtime-owned IDs cover protected decisions, questions, blockers, artifacts, work, and revisions.
+- <certain> Persist canonical records under the accepted XDG work root using bounded YAML and Markdown; an optional repo-local snapshot is explicit and non-authoritative.
+- <certain> Defer WorkAttempt, WorkTask, ContinuationAssessment, ContinuationDecision, ContinuationRecord, split/join, cross-WorkRecord convergence, and history garbage collection.
+
+Verification target:
+
+- <certain> A regression fixture based on the July 29 full note and July 31 narrowed replacement proves that omitted protected decisions survive same-slug compaction.
+- <certain> Stale revisions reject before persistence; identical replay returns the committed revision; changed replay content conflicts.
+- <certain> Generated status: ok is rejected when unresolved human forks remain; gated projections require a decision dossier.
+- <certain> A detected model-context compaction blocks a new durable update until WorkRecord state is rehydrated.
+- <certain> /cheese --continue resolves the current WorkRevision projection without relying on mtime, session identity, or a mutable slug as authority.
+- <certain> just check is green.
+
+### Later executor-recovery slice
+
+- <certain> The later bounded family remains OperationInvocation, OperationCheckpoint, OperationOutcome, RecoveryRequest, and RecoveryResult.
+- <certain> Recovery uses a runtime-private journal behind recover(RecoveryRequest) -> RecoveryResult.
+- <certain> predecessor_invocation_id is the natural recovery idempotency key; V1 has no separate recovery request ID or public RecoveryRecord.
+- <certain> The wider protocol and Milknado requirements remain preserved above and must be linked from later specs rather than silently discarded.
+
+### Immediate next move
+
+- <certain> Resume /mold to extract a narrow Step 1 PyPI-and-bundling spec with no continuity or recovery implementation mixed into it.
+- <certain> After Step 1 receives both mold approval keys, extract and approve a separate Step 2 continuity-kernel spec.
+- <certain> Use /cook only after each narrow spec independently passes the two-key approval gate.
+
+### Environment update
+
+- <certain> Repository: /home/paul/Dev/easy-cheese.
+- <certain> Branch: checkpoint/root-cheese-milknado-orchestration at 4690aed.
+- <certain> Tracking branch: origin/checkpoint/root-cheese-milknado-orchestration.
+- <certain> Working state before this Wheypoint update: modified tracked .cheese/notes/root-cheese-milknado-orchestration.md and untracked .claude/.
+- <certain> Current session: codex:019fbc9c-05fc-74e0-a76d-b6680c30b857.
 - <certain> No secrets, tokens, passwords, or sensitive values are included.
