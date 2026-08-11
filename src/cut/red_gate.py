@@ -577,7 +577,12 @@ def _parse_spec(spec: Path | str) -> _ContractPlan:
             for acceptance_id, statement in criteria.items():
                 contracts.append(_infer_contract(acceptance_id, statement))
         else:
-            problems.append("legacy spec has no acceptance IDs to infer")
+            problems.append(
+                "spec declares no gate_applicability and its Acceptance section "
+                "has no stable acceptance IDs (AC-n); regenerate it with the "
+                "current /mold Curdle template or add the declaration and "
+                "Test Contracts"
+            )
     elif disposition_value == GateDisposition.RED.value:
         problems.append("red-required spec is missing its Test Contracts table")
 
