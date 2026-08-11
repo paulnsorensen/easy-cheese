@@ -4,9 +4,9 @@ Curdle (artifact extraction) requires **both** keys. Neither is optional.
 
 ## User key
 
-The user must express explicit extraction intent: `curdle`, `ship it`, `extract`, or `that's enough`. A clear affirmative such as `ok let's go`, `sounds good`, or `go ahead` also turns the key when it directly answers an agent's extraction question.
+The user key is explicit extraction intent — approval to write the spec. The direct form is the word `curdle`; `ship it`, `extract`, or `that's enough` work the same, and a clear affirmative such as `ok let's go`, `sounds good`, or `go ahead` also turns the key when it directly answers an agent's extraction question.
 
-Do not infer the key from unrelated or ambiguous approval; ask explicitly when the context does not establish that the user is approving Curdle.
+Judge the key by intent, never by spelling: capitalization, surrounding whitespace, or punctuation never invalidate an otherwise-clear approval, and never demand an exact respelling or a magic string. Do not infer the key from unrelated or ambiguous approval; ask explicitly when the context does not establish that the user is approving Curdle.
 
 ## Agent key — coherence self-check
 

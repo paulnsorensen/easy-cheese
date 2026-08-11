@@ -64,6 +64,19 @@ def test_user_key_allows_contextual_affirmations_without_inference() -> None:
     assert "unrelated or ambiguous approval" in section
 
 
+def test_user_key_matching_is_case_insensitive_and_whitespace_tolerant() -> None:
+    """gh#394: the key is approval intent — spelling ceremony never bounces it."""
+    section = _section(HANDSHAKE, "User key")
+    for phrase in (
+        "approval to write the spec",
+        "by intent, never by spelling",
+        "capitalization, surrounding whitespace, or punctuation never invalidate",
+        "never demand an exact respelling",
+    ):
+        assert phrase.casefold() in section.casefold(), phrase
+    assert "reply exactly" not in section.casefold()
+
+
 def test_candidate_collection_is_non_committing_dialogue_state() -> None:
     _assert_phrases(
         MOLD,
