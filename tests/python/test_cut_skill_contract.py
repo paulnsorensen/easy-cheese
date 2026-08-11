@@ -9,7 +9,9 @@ GateReceipt JSON: ``red-gate issue`` remains the writer boundary.
 from __future__ import annotations
 
 import importlib.util
+import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -285,3 +287,70 @@ No interaction or data behavior changes.
     assert plan.disposition.value == "not-applicable"
     assert plan.contracts == ()
     assert plan.not_applicable_reason == "appearance-only work item"
+
+
+_LEGACY_MOLD_SPEC = """---
+slug: retry-backoff-tuning
+status: approved
+---
+
+# Retry backoff tuning
+
+## Problem
+Immediate retries cause storms.
+
+## Goals
+- Retries back off exponentially with jitter.
+
+## Required cases
+- `retry.send` waits exponentially longer between attempts.
+- `retry.send` stops after three attempts and surfaces the final error.
+- A successful attempt short-circuits the remaining retries.
+
+## Approach
+Wrap the transport send in a bounded backoff helper.
+"""
+
+
+def test_mold_legacy_required_cases_spec_infers_contracts(tmp_path: Path) -> None:
+    """gh#401: an approved legacy Mold spec (narrative Goals + Required cases,
+    no acceptance IDs, no declaration, no Test Contracts table) must still
+    parse into an executable red plan."""
+    spec = tmp_path / "legacy-mold.md"
+    spec.write_text(_LEGACY_MOLD_SPEC, encoding="utf-8")
+    plan = red_gate.parse_gate_applicability(spec)
+    assert plan.disposition.value == "red"
+    assert [contract.acceptance_id for contract in plan.contracts] == [
+        "AC-1",
+        "AC-2",
+        "AC-3",
+    ]
+    assert all(contract.contract_source == "inferred" for contract in plan.contracts)
+    assert plan.contracts[0].interface == "retry.send"
+    assert all(
+        contract.seam and contract.expected_failure for contract in plan.contracts
+    )
+
+
+def test_mold_legacy_spec_passes_red_gate_contracts_cli(tmp_path: Path) -> None:
+    """gh#401 integration: the exact Cook-preflight command must succeed on
+    the legacy Mold shape through the built cut bundle."""
+    import build_pyz
+
+    spec = tmp_path / "legacy-mold.md"
+    spec.write_text(_LEGACY_MOLD_SPEC, encoding="utf-8")
+    bundle = build_pyz.cached_bundle("cut")
+    proc = subprocess.run(
+        [sys.executable, str(bundle), "red-gate", "contracts", str(spec)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["disposition"] == "red"
+    assert [row["acceptance_id"] for row in payload["contracts"]] == [
+        "AC-1",
+        "AC-2",
+        "AC-3",
+    ]

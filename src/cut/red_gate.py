@@ -336,6 +336,36 @@ def _acceptance_criteria(text: str) -> dict[str, str]:
     return criteria
 
 
+def _required_cases(text: str) -> dict[str, str]:
+    """Criteria synthesized from the legacy Mold ``Required cases`` shape:
+    narrative top-level bullets with no stable acceptance IDs. Ordinal IDs
+    keep re-parses of the same spec deterministic."""
+    lines = text.splitlines()
+    start: int | None = None
+    level = 0
+    for index, line in enumerate(lines):
+        match = _HEADING.match(line)
+        if match and match.group(2).strip().lower() == "required cases":
+            start, level = index + 1, len(match.group(1))
+            break
+    if start is None:
+        return {}
+    selected = lines[start:]
+    for index, line in enumerate(selected):
+        match = _HEADING.match(line)
+        if match and len(match.group(1)) <= level:
+            selected = selected[:index]
+            break
+    criteria: dict[str, str] = {}
+    for line in selected:
+        if not line.startswith(("- ", "* ")):
+            continue
+        statement = line[2:].strip()
+        if statement:
+            criteria[f"AC-{len(criteria) + 1}"] = statement
+    return criteria
+
+
 def _pipe_cells(line: str) -> list[str]:
     value = line.strip()
     if value.startswith("|"):
@@ -573,6 +603,8 @@ def _parse_spec(spec: Path | str) -> _ContractPlan:
                         f"Test Contracts row {row_number} is invalid: {exc}"
                     )
     elif declaration is None:
+        if not criteria:
+            criteria = _required_cases(text)
         if criteria:
             for acceptance_id, statement in criteria.items():
                 contracts.append(_infer_contract(acceptance_id, statement))
