@@ -67,12 +67,15 @@ def test_user_key_allows_contextual_affirmations_without_inference() -> None:
 def test_user_key_matching_is_case_insensitive_and_whitespace_tolerant() -> None:
     """gh#394: capitalization ceremony must never bounce an otherwise-valid key."""
     section = _section(HANDSHAKE, "User key")
-    assert "case-insensitive" in section
-    assert "whitespace-tolerant" in section
-    assert "reply.strip().casefold()" in section
-    assert "`CURDLE`" in section
-    assert "cUrDlE" in section
     for phrase in (
+        "approval to write the spec",
+        "by intent, never by spelling",
+        "case-insensitive",
+        "whitespace-tolerant",
+        "reply.strip().casefold()",
+        "`CURDLE`",
+        "cUrDlE",
+        "capitalization, surrounding whitespace, or punctuation never invalidate",
         "exact-case respelling",
         "unrelated prose that merely mentions a key approves nothing",
         "both handshake keys must still turn",
