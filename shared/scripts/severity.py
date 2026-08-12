@@ -122,7 +122,7 @@ def _cmd_compute(args: argparse.Namespace) -> None:
         )
     except RubricError as exc:
         raise cli.CliError(str(exc)) from exc
-    cli.emit(result)
+    cli.emit(result, stdout=args.stdout)
 
 
 def _cmd_bucket(args: argparse.Namespace) -> None:
@@ -130,7 +130,7 @@ def _cmd_bucket(args: argparse.Namespace) -> None:
         result = bucket_fix_cost_now(file_count=args.files, module_count=args.modules)
     except RubricError as exc:
         raise cli.CliError(str(exc)) from exc
-    cli.emit(result)
+    cli.emit(result, stdout=args.stdout)
 
 
 def _setup(parser: argparse.ArgumentParser) -> None:
@@ -151,4 +151,4 @@ def _setup(parser: argparse.ArgumentParser) -> None:
 
 
 if __name__ == "__main__":
-    cli.run(_setup)
+    raise SystemExit(cli.run(_setup))

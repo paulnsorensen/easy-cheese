@@ -6,12 +6,12 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-from types import ModuleType
 
 import pytest
 import yaml
 
 import build_pyz
+from easy_cheese_schemas.wiring_graph import compute_waves
 
 BUNDLE = build_pyz.cached_bundle("ultracook")
 
@@ -33,46 +33,43 @@ def _run_cli(*args: str) -> subprocess.CompletedProcess:
 
 
 class TestComputeWaves:
-    def test_linear_chain(self, wiring_topo_sort: ModuleType) -> None:
+    def test_linear_chain(self) -> None:
         # W1 <- W2 <- W3 must serialize into three single-item waves.
-        wiring = _wiring(("W1", []), ("W2", ["W1"]), ("W3", ["W2"]))
-        assert wiring_topo_sort.compute_waves(wiring) == [["W1"], ["W2"], ["W3"]]
+        wiring = [("W1", []), ("W2", ["W1"]), ("W3", ["W2"])]
+        assert compute_waves(wiring) == [["W1"], ["W2"], ["W3"]]
 
-    def test_branching_dag(self, wiring_topo_sort: ModuleType) -> None:
+    def test_branching_dag(self) -> None:
         # Two independent children of W1 must land in the same second wave —
         # the whole point of waves is to surface parallelism for dispatch.
-        wiring = _wiring(("W1", []), ("W2", ["W1"]), ("W3", ["W1"]))
-        assert wiring_topo_sort.compute_waves(wiring) == [["W1"], ["W2", "W3"]]
+        wiring = [("W1", []), ("W2", ["W1"]), ("W3", ["W1"])]
+        assert compute_waves(wiring) == [["W1"], ["W2", "W3"]]
 
-    def test_empty_wiring_returns_empty(self, wiring_topo_sort: ModuleType) -> None:
-        assert wiring_topo_sort.compute_waves([]) == []
+    def test_empty_wiring_returns_empty(self) -> None:
+        assert compute_waves([]) == []
 
-    def test_cycle_raises_cli_error(self, wiring_topo_sort: ModuleType) -> None:
+    def test_cycle_raises_value_error(self) -> None:
         # A->B->A would deadlock the dispatcher — fail loudly with the cycle
         # ids so the operator can locate it without re-running.
-        wiring = _wiring(("W1", ["W2"]), ("W2", ["W1"]))
-        with pytest.raises(wiring_topo_sort.cli.CliError) as exc_info:
-            wiring_topo_sort.compute_waves(wiring)
-        msg = str(exc_info.value)
-        assert "cycle detected" in msg
-        assert "W1" in msg and "W2" in msg
+        wiring = [("W1", ["W2"]), ("W2", ["W1"])]
+        with pytest.raises(ValueError, match=r"the dependency graph has cycle W1 -> W2 -> W1"):
+            compute_waves(wiring)
 
-    def test_self_loop_is_ignored(self, wiring_topo_sort: ModuleType) -> None:
+    def test_self_loop_is_ignored(self) -> None:
         # A wiring item depending on itself is meaningless, not a cycle —
         # strip it so the dispatcher can still make progress.
-        wiring = _wiring(("W1", ["W1"]))
-        assert wiring_topo_sort.compute_waves(wiring) == [["W1"]]
+        wiring = [("W1", ["W1"])]
+        assert compute_waves(wiring) == [["W1"]]
 
-    def test_unknown_dep_treated_as_satisfied(self, wiring_topo_sort: ModuleType) -> None:
+    def test_unknown_dep_treated_as_satisfied(self) -> None:
         # `depends_on` legitimately references curds too; deps outside the
         # wiring set must not block topo sort.
-        wiring = _wiring(("W1", ["curd-3"]))
-        assert wiring_topo_sort.compute_waves(wiring) == [["W1"]]
+        wiring = [("W1", ["curd-3"])]
+        assert compute_waves(wiring) == [["W1"]]
 
-    def test_wave_ordering_is_deterministic(self, wiring_topo_sort: ModuleType) -> None:
+    def test_wave_ordering_is_deterministic(self) -> None:
         # IDs within a wave are sorted so output is stable across runs.
-        wiring = _wiring(("W3", []), ("W1", []), ("W2", []))
-        assert wiring_topo_sort.compute_waves(wiring) == [["W1", "W2", "W3"]]
+        wiring = [("W3", []), ("W1", []), ("W2", [])]
+        assert compute_waves(wiring) == [["W1", "W2", "W3"]]
 
 
 class TestCLI:
@@ -124,7 +121,8 @@ class TestCLI:
         _write_manifest(manifest, _wiring(("W1", ["W2"]), ("W2", ["W1"])))
         result = _run_cli("--manifest", str(manifest))
         assert result.returncode == 2
-        assert "cycle detected" in result.stderr
+        assert "the dependency graph has cycle W1 -> W2 -> W1" in result.stderr
+
 
     def test_missing_manifest_flag_exits_two(self, tmp_path: Path) -> None:
         # argparse's own missing-required-arg path also exits 2; check that

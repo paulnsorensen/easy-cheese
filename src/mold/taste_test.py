@@ -23,7 +23,7 @@ WORK_CLASSES = frozenset(
     {"behavior", "docs-only", "refactor-only", "test-only", "appearance-only"}
 )
 NON_BEHAVIOR_CLASSES = frozenset(WORK_CLASSES - {"behavior"})
-CONTRACT_MODES = frozenset({"tracer", "contract-matrix"})
+CONTRACT_MODES = frozenset({"tracer", "contract-matrix", "guard"})
 UI_SURFACES = frozenset({"browser", "non-browser", "not-applicable"})
 NEW_MOLD_SOURCES = frozenset({"agent-mini-spec", "mold-handshake"})
 BROWSER_MARKER = re.compile(
@@ -126,7 +126,7 @@ class TestContract:
                 )
         elif self.interface_version is not None or self.matrix_rows:
             raise ApplicabilityError(
-                f"tracer-cannot-carry-matrix-metadata:{self.acceptance_id}"
+                f"non-matrix-cannot-carry-matrix-metadata:{self.acceptance_id}"
             )
 
     def to_dict(self) -> dict[str, Any]:

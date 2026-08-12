@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from enum import Enum
 from typing import Any
 
@@ -27,6 +27,55 @@ _MEDIA_TYPE_RE = re.compile(
 _URI_RE = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:.+")
 
 Validator = Callable[[object, Attribute, object], None]
+
+
+def contract(slug: str) -> Callable[[type], type]:
+    """Mark a contract class with its canonical schema slug."""
+    if not slug:
+        raise ValueError("contract slug must not be empty")
+
+    def decorate(cls: type) -> type:
+        setattr(cls, "__contract_slug__", slug)
+        return cls
+
+    return decorate
+
+
+def schema_constraints(
+    *rules: Mapping[str, object], **simple: object
+) -> Callable[[object], object]:
+    """Attach JSON Schema constraints to a validator or attrs model."""
+    declarations = (*map(dict, rules), *([simple] if simple else []))
+
+    def decorate(target: object) -> object:
+        if isinstance(target, type):
+            setattr(target, "__schema_constraints__", declarations)
+        else:
+            merged = {
+                key: value
+                for declaration in declarations
+                for key, value in declaration.items()
+            }
+            setattr(target, "__schema_constraints__", merged)
+        return target
+
+    return decorate
+
+
+def _if_equals(
+    field_name: str, value: str, then: Mapping[str, object]
+) -> dict[str, object]:
+    return {
+        "if": {
+            "properties": {field_name: {"const": value}},
+            "required": [field_name],
+        },
+        "then": dict(then),
+    }
+
+
+def _without(*field_names: str) -> dict[str, object]:
+    return {"not": {"required": list(field_names)}}
 
 
 class IdentityAction(str, Enum):
@@ -133,6 +182,7 @@ class WriterViewKind(str, Enum):
     CURD_RESULT = "curd_result"
 
 
+@schema_constraints(minLength=1, maxLength=MAX_TEXT_LENGTH)
 def _bounded_string(
     _instance: object, attribute: Attribute[Any], value: object
 ) -> None:
@@ -142,12 +192,9 @@ def _bounded_string(
         raise ValueError(
             f"{attribute.name} must be at most {MAX_TEXT_LENGTH} characters"
         )
-_bounded_string.__schema_constraints__ = {
-    "minLength": 1,
-    "maxLength": MAX_TEXT_LENGTH,
-}
 
 
+@schema_constraints(minLength=1, maxLength=MAX_CONTEXT_TEXT_LENGTH)
 def _context_string(
     _instance: object, attribute: Attribute[Any], value: object
 ) -> None:
@@ -157,32 +204,25 @@ def _context_string(
         raise ValueError(
             f"{attribute.name} must be at most {MAX_CONTEXT_TEXT_LENGTH} characters"
         )
-_context_string.__schema_constraints__ = {
-    "minLength": 1,
-    "maxLength": MAX_CONTEXT_TEXT_LENGTH,
-}
 
 
+@schema_constraints(_bounded_string.__schema_constraints__)
 def _optional_string(
     instance: object, attribute: Attribute[Any], value: object
 ) -> None:
     if value is not None:
         _bounded_string(instance, attribute, value)
-_optional_string.__schema_constraints__ = _bounded_string.__schema_constraints__
 
 
+@schema_constraints(pattern=_ID_RE.pattern, minLength=1, maxLength=128)
 def _identifier(_instance: object, attribute: Attribute[Any], value: object) -> None:
     if not isinstance(value, str) or _ID_RE.fullmatch(value) is None:
         raise ValueError(
             f"{attribute.name} must be an opaque identifier matching {_ID_RE.pattern}"
         )
 
-_identifier.__schema_constraints__ = {
-    "pattern": _ID_RE.pattern,
-    "minLength": 1,
-    "maxLength": 128,
-}
 
+@schema_constraints(_identifier.__schema_constraints__)
 def _optional_identifier(
     instance: object, attribute: Attribute[Any], value: object
 ) -> None:
@@ -190,15 +230,15 @@ def _optional_identifier(
         _identifier(instance, attribute, value)
 
 
-_optional_identifier.__schema_constraints__ = _identifier.__schema_constraints__
+@schema_constraints(pattern=_DIGEST_RE.pattern)
 def _digest(_instance: object, attribute: Attribute[Any], value: object) -> None:
     if not isinstance(value, str) or _DIGEST_RE.fullmatch(value) is None:
         raise ValueError(
             f"{attribute.name} must be sha256: followed by 64 lowercase hexadecimal characters"
         )
 
-_digest.__schema_constraints__ = {"pattern": _DIGEST_RE.pattern}
 
+@schema_constraints(minimum=1)
 def _positive_integer(
     _instance: object, attribute: Attribute[Any], value: object
 ) -> None:
@@ -206,7 +246,7 @@ def _positive_integer(
         raise ValueError(f"{attribute.name} must be a positive integer")
 
 
-_positive_integer.__schema_constraints__ = {"minimum": 1}
+@schema_constraints(minimum=0, maximum=MAX_ARTIFACT_BYTES)
 def _artifact_size(
     instance: object, attribute: Attribute[Any], value: object
 ) -> None:
@@ -218,10 +258,7 @@ def _artifact_size(
         )
 
 
-_artifact_size.__schema_constraints__ = {
-    "minimum": 0,
-    "maximum": MAX_ARTIFACT_BYTES,
-}
+@schema_constraints(minimum=0)
 def _non_negative_integer(
     _instance: object, attribute: Attribute[Any], value: object
 ) -> None:
@@ -229,8 +266,8 @@ def _non_negative_integer(
         raise ValueError(f"{attribute.name} must be a non-negative integer")
 
 
-_non_negative_integer.__schema_constraints__ = {"minimum": 0}
  
+@schema_constraints(pattern=_VERSION_RE.pattern, minLength=1)
 def _version_component(
     _instance: object, attribute: Attribute[Any], value: object
 ) -> None:
@@ -240,10 +277,6 @@ def _version_component(
         )
 
 
-_version_component.__schema_constraints__ = {
-    "pattern": _VERSION_RE.pattern,
-    "minLength": 1,
-}
 def _tuple_sequence(value: object) -> tuple[object, ...]:
     if isinstance(value, tuple):
         return value
@@ -252,33 +285,31 @@ def _tuple_sequence(value: object) -> tuple[object, ...]:
     raise TypeError("collection fields must be provided as a list or tuple")
 
 
+@schema_constraints(pattern=_URI_RE.pattern, minLength=1)
 def _uri(_instance: object, attribute: Attribute[Any], value: object) -> None:
     if not isinstance(value, str) or _URI_RE.fullmatch(value) is None:
         raise ValueError(f"{attribute.name} must be an absolute URI")
 
 
-_uri.__schema_constraints__ = {"pattern": _URI_RE.pattern, "minLength": 1}
 
 
+@schema_constraints(_uri.__schema_constraints__)
 def _optional_uri(instance: object, attribute: Attribute[Any], value: object) -> None:
     if value is not None:
         _uri(instance, attribute, value)
 
 
-_optional_uri.__schema_constraints__ = _uri.__schema_constraints__
 
 
+@schema_constraints(pattern=_MEDIA_TYPE_RE.pattern, minLength=3)
 def _media_type(_instance: object, attribute: Attribute[Any], value: object) -> None:
     if not isinstance(value, str) or _MEDIA_TYPE_RE.fullmatch(value) is None:
         raise ValueError(f"{attribute.name} must be a valid media type")
 
 
-_media_type.__schema_constraints__ = {
-    "pattern": _MEDIA_TYPE_RE.pattern,
-    "minLength": 3,
-}
 
 
+@schema_constraints(_bounded_string.__schema_constraints__)
 def _scope_path(_instance: object, attribute: Attribute[Any], value: object) -> None:
     _bounded_string(_instance, attribute, value)
     assert isinstance(value, str)
@@ -286,7 +317,6 @@ def _scope_path(_instance: object, attribute: Attribute[Any], value: object) -> 
         raise ValueError(f"{attribute.name} must be a repository-relative path")
 
 
-_scope_path.__schema_constraints__ = _bounded_string.__schema_constraints__
 def _list_of(
     expected: type,
     *,
@@ -411,6 +441,15 @@ class ContractVersion:
     minor: str = field(validator=_version_component)
 
 
+_SOURCE_LOCATION_SCHEMA_CONSTRAINTS = (
+    {
+        "if": {"required": ["end_column"]},
+        "then": {"required": ["start_column"]},
+    },
+)
+
+
+@schema_constraints(*_SOURCE_LOCATION_SCHEMA_CONSTRAINTS)
 @define(frozen=True)
 class SourceLocation:
     artifact_id: str = field(validator=_identifier)
@@ -483,6 +522,27 @@ class SourceCurdRef:
     digest: str = field(validator=_digest)
 
 
+@schema_constraints(
+    _if_equals(
+        "identity_action",
+        "new",
+        {"properties": {"source_curd_ids": {"maxItems": 0}}},
+    ),
+    _if_equals(
+        "identity_action",
+        "retain",
+        {
+            "properties": {
+                "source_curd_ids": {"minItems": 1, "maxItems": 1}
+            }
+        },
+    ),
+    _if_equals(
+        "identity_action",
+        "derive",
+        {"properties": {"source_curd_ids": {"minItems": 1}}},
+    ),
+)
 @define(frozen=True)
 class IdentityLineage:
     identity_action: IdentityAction = field(
@@ -528,6 +588,31 @@ class BoundedScope:
             )
 
 
+_BOUNDED_CONTEXT_SCHEMA_CONSTRAINTS = (
+    {
+        "anyOf": [
+            {
+                "properties": {"shared_inputs": {"minItems": 1}},
+                "required": ["shared_inputs"],
+            },
+            {
+                "properties": {"shared_input_keys": {"minItems": 1}},
+                "required": ["shared_input_keys"],
+            },
+            {
+                "properties": {"constraints": {"minItems": 1}},
+                "required": ["constraints"],
+            },
+            {
+                "properties": {"invariants": {"minItems": 1}},
+                "required": ["invariants"],
+            },
+        ]
+    },
+)
+
+
+@schema_constraints(*_BOUNDED_CONTEXT_SCHEMA_CONSTRAINTS)
 @define(frozen=True)
 class BoundedContext:
     shared_inputs: tuple[ArtifactRef, ...] = field(
@@ -600,6 +685,11 @@ class SemanticCurd:
             raise ValueError(f"retain lineage must preserve curd_id {self.curd_id!r}")
 
 
+@schema_constraints(
+    maxItems=MAX_COLLECTION_ITEMS,
+    minItems=1,
+    uniqueItems=True,
+)
 def _validate_plan_curds(
     _instance: object, attribute: Attribute[Any], value: object
 ) -> None:
@@ -643,12 +733,8 @@ def _validate_plan_curds(
     for curd_id in dependencies:
         visit(curd_id)
 
-_validate_plan_curds.__schema_constraints__ = {
-    "maxItems": MAX_COLLECTION_ITEMS,
-    "minItems": 1,
-    "uniqueItems": True,
-}
 
+@contract("curd-plan")
 @define(frozen=True)
 class CurdPlan:
     contract_version: ContractVersion = field(
@@ -690,6 +776,19 @@ class PlannerUncertainty:
     )
 
 
+@contract("planner-request")
+@schema_constraints(
+    _if_equals("kind", "decompose", _without("source_plan_ref")),
+    _if_equals(
+        "kind",
+        "remediate",
+        {
+            "required": ["source_plan_ref", "evidence"],
+            "properties": {"evidence": {"minItems": 1}},
+        },
+    ),
+    _if_equals("kind", "replan", {"required": ["source_plan_ref"]}),
+)
 @define(frozen=True)
 class PlannerRequest:
     contract_version: ContractVersion = field(
@@ -777,6 +876,73 @@ def _validate_planner_disposition(
         raise ValueError(f"{disposition.value} {label} must include a reason")
 
 
+_PLANNER_RESULT_SCHEMA_CONSTRAINTS = (
+    _if_equals(
+        "disposition",
+        "complete",
+        {
+            "required": ["plan"],
+            "properties": {"unresolved_work": {"maxItems": 0}},
+            **_without("reason"),
+        },
+    ),
+    _if_equals(
+        "disposition",
+        "partial",
+        {
+            "required": ["plan"],
+            "properties": {
+                "unresolved_work": {
+                    "minItems": 1,
+                    "items": {
+                        "properties": {"scope": {"const": "omitted_work"}}
+                    },
+                }
+            },
+            **_without("reason"),
+        },
+    ),
+    _if_equals(
+        "disposition",
+        "blocked",
+        {
+            "properties": {"unresolved_work": {"minItems": 1}},
+            "required": ["reason"],
+            **_without("plan"),
+        },
+    ),
+    _if_equals(
+        "disposition",
+        "no_work",
+        {
+            "properties": {"unresolved_work": {"maxItems": 0}},
+            "required": ["reason"],
+            **_without("plan"),
+        },
+    ),
+    _if_equals(
+        "disposition",
+        "invalid",
+        {
+            "properties": {"unresolved_work": {"maxItems": 0}},
+            "required": ["reason"],
+            **_without("plan"),
+        },
+    ),
+    _if_equals(
+        "disposition",
+        "executor_failure",
+        {
+            "properties": {"unresolved_work": {"maxItems": 0}},
+            "required": ["reason"],
+            **_without("plan"),
+        },
+    ),
+)
+
+
+@schema_constraints(*_PLANNER_RESULT_SCHEMA_CONSTRAINTS)
+@contract("planner-result")
 @define(frozen=True)
 class PlannerResult:
     contract_version: ContractVersion = field(
@@ -807,6 +973,7 @@ class PlannerResult:
         )
 
 
+@contract("review-request")
 @define(frozen=True)
 class ReviewRequest:
     contract_version: ContractVersion = field(
@@ -828,6 +995,10 @@ class ReviewRequest:
     )
 
 
+@schema_constraints(
+    _if_equals("disposition", "covered", _without("reason")),
+    _if_equals("disposition", "not_covered", {"required": ["reason"]}),
+)
 @define(frozen=True)
 class ReviewCoverage:
     target: str = field(validator=_identifier)
@@ -859,6 +1030,50 @@ class ReviewFinding:
     )
 
 
+_REVIEW_RESULT_TERMINAL_SCHEMA_CONSTRAINTS = tuple(
+    _if_equals(
+        "disposition",
+        disposition,
+        {
+            "properties": {"findings": {"maxItems": 0}},
+            "required": ["reason"],
+        },
+    )
+    for disposition in ("blocked", "invalid", "executor_failure")
+)
+
+
+@schema_constraints(
+    _if_equals(
+        "disposition",
+        "clean",
+        {
+            "required": ["coverage"],
+            "properties": {
+                "findings": {"maxItems": 0},
+                "coverage": {
+                    "minItems": 1,
+                    "items": {
+                        "properties": {"disposition": {"const": "covered"}}
+                    },
+                },
+            },
+        },
+    ),
+    _if_equals(
+        "disposition",
+        "findings",
+        {
+            "required": ["coverage"],
+            "properties": {
+                "findings": {"minItems": 1},
+                "coverage": {"minItems": 1},
+            },
+        },
+    ),
+    *_REVIEW_RESULT_TERMINAL_SCHEMA_CONSTRAINTS,
+)
+@contract("review-result")
 @define(frozen=True)
 class ReviewResult:
     contract_version: ContractVersion = field(
@@ -920,6 +1135,7 @@ class ReviewResult:
             )
 
 
+@contract("diagnosis-request")
 @define(frozen=True)
 class DiagnosisRequest:
     contract_version: ContractVersion = field(
@@ -935,6 +1151,23 @@ class DiagnosisRequest:
     )
 
 
+def _reproduction_schema_constraints(
+    evidence_field: str,
+) -> tuple[dict[str, object], ...]:
+    return (
+        _if_equals(
+            "status",
+            "reproduced",
+            {
+                "required": ["observed", evidence_field],
+                "properties": {evidence_field: {"minItems": 1}},
+            },
+        ),
+        _if_equals("status", "blocked", {"required": ["observed"]}),
+    )
+
+
+@schema_constraints(*_reproduction_schema_constraints("evidence"))
 @define(frozen=True)
 class Reproduction:
     status: ReproductionDisposition = field(
@@ -961,6 +1194,23 @@ class Reproduction:
             raise ValueError("blocked reproduction must explain the blocker")
 
 
+def _diagnosis_hypothesis_schema_constraints(
+    evidence_field: str,
+) -> tuple[dict[str, object], ...]:
+    return tuple(
+        _if_equals(
+            "disposition",
+            disposition,
+            {
+                "required": [evidence_field],
+                "properties": {evidence_field: {"minItems": 1}},
+            },
+        )
+        for disposition in ("confirmed", "rejected")
+    )
+
+
+@schema_constraints(*_diagnosis_hypothesis_schema_constraints("evidence"))
 @define(frozen=True)
 class DiagnosisHypothesis:
     hypothesis_id: str = field(validator=_identifier)
@@ -998,6 +1248,59 @@ class DiagnosisCause:
     )
 
 
+def _diagnosis_result_schema_constraints(
+    unresolved_field: str,
+) -> tuple[dict[str, object], ...]:
+    without_result = _without("confirmed_cause", "regression_seam")
+    return (
+        _if_equals(
+            "disposition",
+            "confirmed",
+            {
+                "required": ["confirmed_cause", "regression_seam"],
+                "properties": {
+                    "reproduction": {
+                        "properties": {"status": {"const": "reproduced"}},
+                        "required": ["status"],
+                    }
+                },
+            },
+        ),
+        _if_equals(
+            "disposition",
+            "inconclusive",
+            {
+                **without_result,
+                "required": [unresolved_field],
+                "properties": {unresolved_field: {"minItems": 1}},
+            },
+        ),
+        _if_equals(
+            "disposition",
+            "not_reproduced",
+            {
+                **without_result,
+                "properties": {
+                    "reproduction": {
+                        "properties": {"status": {"const": "not_reproduced"}},
+                        "required": ["status"],
+                    }
+                },
+            },
+        ),
+        *(
+            _if_equals(
+                "disposition",
+                disposition,
+                {**without_result, "required": ["reason"]},
+            )
+            for disposition in ("blocked", "invalid", "executor_failure")
+        ),
+    )
+
+
+@schema_constraints(*_diagnosis_result_schema_constraints("unresolved_evidence"))
+@contract("diagnosis-result")
 @define(frozen=True)
 class DiagnosisResult:
     contract_version: ContractVersion = field(
@@ -1067,6 +1370,31 @@ class DiagnosisResult:
             )
 
 
+def _criterion_result_schema_constraints(
+    evidence_field: str,
+) -> tuple[dict[str, object], ...]:
+    return (
+        *(
+            _if_equals(
+                "disposition",
+                disposition,
+                {
+                    "required": [evidence_field],
+                    "properties": {evidence_field: {"minItems": 1}},
+                },
+            )
+            for disposition in ("passed", "failed")
+        ),
+        *(
+            _if_equals(
+                "disposition", disposition, {"required": ["reason"]}
+            )
+            for disposition in ("blocked", "skipped")
+        ),
+    )
+
+
+@schema_constraints(*_criterion_result_schema_constraints("evidence"))
 @define(frozen=True)
 class CriterionResult:
     criterion_id: str = field(validator=_identifier)
@@ -1119,6 +1447,14 @@ def derive_curd_disposition(rows: tuple[CriterionResult, ...]) -> CurdDispositio
     return CurdDisposition.PASSED
 
 
+@contract("curd-result")
+@schema_constraints(
+    _if_equals(
+        "disposition",
+        "passed",
+        {"properties": {"unresolved_work": {"maxItems": 0}}},
+    )
+)
 @define(frozen=True)
 class CurdResult:
     contract_version: ContractVersion = field(
@@ -1179,6 +1515,7 @@ class PhaseDestination:
     payload_schema_uri: str = field(validator=_uri)
 
 
+@contract("phase-contract")
 @define(frozen=True)
 class PhaseContract:
     contract_version: ContractVersion = field(
@@ -1215,6 +1552,7 @@ class CriterionWriterView:
     check: str = field(validator=_bounded_string)
 
 
+@schema_constraints(*_SOURCE_LOCATION_SCHEMA_CONSTRAINTS)
 @define(frozen=True)
 class SourceLocationWriterView:
     path: str = field(validator=_scope_path)
@@ -1242,6 +1580,7 @@ class SourceLocationWriterView:
             raise ValueError("end_column must not precede start_column")
 
 
+@schema_constraints(*_BOUNDED_CONTEXT_SCHEMA_CONSTRAINTS)
 @define(frozen=True)
 class BoundedContextWriterView:
     shared_input_keys: tuple[str, ...] = field(
@@ -1308,6 +1647,7 @@ class PlannerUncertaintyWriterView:
     )
 
 
+@schema_constraints(*_PLANNER_RESULT_SCHEMA_CONSTRAINTS)
 @define(frozen=True)
 class PlannerResultWriterView:
     disposition: PlannerDisposition = field(
@@ -1348,6 +1688,19 @@ class ReviewFindingWriterView:
     )
 
 
+@schema_constraints(
+    _if_equals(
+        "disposition",
+        "clean",
+        {"properties": {"findings": {"maxItems": 0}}},
+    ),
+    _if_equals(
+        "disposition",
+        "findings",
+        {"properties": {"findings": {"minItems": 1}}},
+    ),
+    *_REVIEW_RESULT_TERMINAL_SCHEMA_CONSTRAINTS,
+)
 @define(frozen=True)
 class ReviewResultWriterView:
     disposition: ReviewDisposition = field(
@@ -1392,6 +1745,7 @@ class ReviewResultWriterView:
             )
 
 
+@schema_constraints(*_reproduction_schema_constraints("evidence_keys"))
 @define(frozen=True)
 class ReproductionWriterView:
     status: ReproductionDisposition = field(
@@ -1418,6 +1772,9 @@ class ReproductionWriterView:
             raise ValueError("blocked writer reproduction must explain the blocker")
 
 
+@schema_constraints(
+    *_diagnosis_hypothesis_schema_constraints("evidence_keys")
+)
 @define(frozen=True)
 class DiagnosisHypothesisWriterView:
     statement: str = field(validator=_bounded_string)
@@ -1451,6 +1808,9 @@ class DiagnosisCauseWriterView:
     )
 
 
+@schema_constraints(
+    *_diagnosis_result_schema_constraints("unresolved_evidence_keys")
+)
 @define(frozen=True)
 class DiagnosisResultWriterView:
     disposition: DiagnosisDisposition = field(
@@ -1520,6 +1880,7 @@ class DiagnosisResultWriterView:
             )
 
 
+@schema_constraints(*_criterion_result_schema_constraints("evidence_keys"))
 @define(frozen=True)
 class CriterionResultWriterView:
     disposition: CriterionDisposition = field(
@@ -1596,6 +1957,48 @@ _WRITER_PAYLOAD_TYPES: dict[WriterViewKind, type] = {
 }
 
 
+@schema_constraints(
+    {
+        "oneOf": [
+            {
+                "properties": {
+                    "kind": {"const": "curd_plan"},
+                    "payload": {"$ref": "#/$defs/CurdPlanWriterView"},
+                },
+                "required": ["kind", "payload"],
+            },
+            {
+                "properties": {
+                    "kind": {"const": "planner_result"},
+                    "payload": {"$ref": "#/$defs/PlannerResultWriterView"},
+                },
+                "required": ["kind", "payload"],
+            },
+            {
+                "properties": {
+                    "kind": {"const": "review_result"},
+                    "payload": {"$ref": "#/$defs/ReviewResultWriterView"},
+                },
+                "required": ["kind", "payload"],
+            },
+            {
+                "properties": {
+                    "kind": {"const": "diagnosis_result"},
+                    "payload": {"$ref": "#/$defs/DiagnosisResultWriterView"},
+                },
+                "required": ["kind", "payload"],
+            },
+            {
+                "properties": {
+                    "kind": {"const": "curd_result"},
+                    "payload": {"$ref": "#/$defs/CurdResultWriterView"},
+                },
+                "required": ["kind", "payload"],
+            },
+        ]
+    }
+)
+@contract("agent-writer-view")
 @define(frozen=True)
 class AgentWriterView:
     kind: WriterViewKind = field(validator=validators.instance_of(WriterViewKind))

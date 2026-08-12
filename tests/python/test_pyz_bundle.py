@@ -668,6 +668,20 @@ def test_common_bundle_carries_clis_plus_libs_not_skill_scripts(bundles: Path) -
 
 
 
+@pytest.mark.parametrize("skill", tuple(build_pyz.PACKAGE_TREES))
+def test_bundle_stages_checked_in_schema_catalog_bytes(
+    bundles: Path, skill: str
+) -> None:
+    expected = (
+        REPO_ROOT / "src" / "easy_cheese_schemas" / "_schema_catalog.py"
+    ).read_bytes()
+    with zipfile.ZipFile(bundles / f"{skill}.pyz") as archive:
+        package_catalog = archive.read("easy_cheese_schemas/_schema_catalog.py")
+        assert package_catalog == expected
+        if skill == "common":
+            assert archive.read("_schema_catalog.py") == expected
+
+
 
 @pytest.mark.parametrize("skill", TYPED_RUNTIME_BUNDLES)
 def test_typed_runtime_modules_are_shipped_without_compiler(
@@ -689,6 +703,9 @@ def test_no_runtime_bundle_ships_phase_registry_compiler(
     assert not any(
         name.rsplit("/", 1)[-1] == "_phase_registry_compiler.py" for name in content
     ), f"{skill}.pyz leaked the source-only phase compiler"
+    assert not any(
+        name.rsplit("/", 1)[-1] == "_schema_catalog_compiler.py" for name in content
+    ), f"{skill}.pyz leaked the schema catalog compiler"
 
 
 @pytest.mark.parametrize("skill", ("common", "cook"))

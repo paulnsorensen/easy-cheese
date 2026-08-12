@@ -214,13 +214,13 @@ class TestCmdClassify:
             "current": [_record("unit", "test_a", "AssertionError: boom")],
         }
         monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
-        baseline._cmd_classify(argparse.Namespace())
+        baseline._cmd_classify(argparse.Namespace(stdout=sys.stdout))
         emitted = json.loads(capsys.readouterr().out)
         assert emitted == baseline.classify(payload["baseline"], payload["current"])
 
     def test_missing_keys_default_to_empty_lists(self, monkeypatch, capsys) -> None:
         monkeypatch.setattr(sys, "stdin", io.StringIO("{}"))
-        baseline._cmd_classify(argparse.Namespace())
+        baseline._cmd_classify(argparse.Namespace(stdout=sys.stdout))
         emitted = json.loads(capsys.readouterr().out)
         assert emitted == {"identical": [], "new": [], "changed": [], "resolved": []}
 

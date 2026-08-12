@@ -285,6 +285,23 @@ gate_applicability:
     assert not not_applicable.contracts
 
 
+def test_applicability_keeps_green_guards_outside_cut_contracts(
+    taste: ModuleType,
+) -> None:
+    spec = red_spec().replace(
+        "| AC-2 | public call | existing service boundary | assert empty input is rejected | contract-matrix | v1 | empty<br>non-empty |",
+        "| AC-2 | public call | existing service boundary | existing behavior remains byte-identical | guard | | |",
+    )
+
+    applicability = taste.parse_gate_applicability(spec)
+
+    assert isinstance(applicability, taste.RedRequired)
+    assert [contract.mode for contract in applicability.contracts] == [
+        "tracer",
+        "guard",
+    ]
+
+
 @pytest.mark.parametrize(
     ("replacement", "problem"),
     [

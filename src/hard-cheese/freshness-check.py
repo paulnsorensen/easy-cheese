@@ -26,14 +26,12 @@ from __future__ import annotations
 import argparse
 import re
 import subprocess
-import sys
 from pathlib import Path
 from typing import TypedDict
 
 # cli is co-staged in the bundled .pyz alongside this module
 import cli
 
-STATES = ("previously_passed", "stale", "new")
 EXIT_FOR_STATE = {"previously_passed": 0, "stale": 2, "new": 3}
 MIN_PASSING_SCORE = 1
 MAX_PASSING_SCORE = 5
@@ -199,7 +197,7 @@ def _sha_matches(recorded: str, diff_head: str) -> bool:
     return diff_head.startswith(recorded) or recorded.startswith(diff_head)
 
 
-def _cmd_check(args: argparse.Namespace) -> None:
+def _cmd_check(args: argparse.Namespace) -> int:
     slug = (args.slug or "").strip()
     if not slug:
         raise cli.CliError("--slug must not be empty")
@@ -212,10 +210,10 @@ def _cmd_check(args: argparse.Namespace) -> None:
         passing_score=args.passing_score,
     )
     if args.json_mode:
-        cli.emit(result, json_mode=True)
+        cli.emit(result, json_mode=True, stdout=args.stdout)
     else:
-        cli.emit(result["state"])
-    sys.exit(EXIT_FOR_STATE[result["state"]])
+        cli.emit(result["state"], stdout=args.stdout)
+    return EXIT_FOR_STATE[result["state"]]
 
 
 def _passing_score(value: str) -> int:
@@ -251,4 +249,4 @@ def _setup(parser: argparse.ArgumentParser) -> None:
 
 
 if __name__ == "__main__":
-    cli.run(_setup)
+    raise SystemExit(cli.run(_setup))

@@ -186,7 +186,7 @@ def cmd_set_phase(args: argparse.Namespace) -> None:
         _commit(path, data, original)
 
     _with_flock(lock, _body)
-    cli.emit(f"phase set to {args.phase}")
+    cli.emit(f"phase set to {args.phase}", stdout=args.stdout)
 
 
 def _find_curd(data: dict[str, Any], curd_id: int) -> dict[str, Any]:
@@ -227,7 +227,7 @@ def cmd_set_curd_status(args: argparse.Namespace) -> None:
         _commit(path, data, original)
 
     _with_flock(lock, _body)
-    cli.emit(f"curd {args.curd} status set to {args.status}")
+    cli.emit(f"curd {args.curd} status set to {args.status}", stdout=args.stdout)
 
 
 def cmd_set_post_review(args: argparse.Namespace) -> None:
@@ -258,7 +258,7 @@ def cmd_set_post_review(args: argparse.Namespace) -> None:
         _commit(path, data, original)
 
     _with_flock(lock, _body)
-    cli.emit("post-merge review identity recorded")
+    cli.emit("post-merge review identity recorded", stdout=args.stdout)
 
 
 def _find_wiring(data: dict[str, Any], wiring_id: str) -> dict[str, Any]:
@@ -286,7 +286,7 @@ def cmd_set_wiring_status(args: argparse.Namespace) -> None:
         _commit(path, data, original)
 
     _with_flock(lock, _body)
-    cli.emit(f"wiring {args.wiring} status set to {args.status}")
+    cli.emit(f"wiring {args.wiring} status set to {args.status}", stdout=args.stdout)
 
 
 def cmd_check_files(args: argparse.Namespace) -> None:
@@ -311,17 +311,15 @@ def cmd_check_files(args: argparse.Namespace) -> None:
             stale[str(entry.get("id"))] = missing
 
     if args.json_mode:
-        cli.emit(stale, json_mode=True)
+        cli.emit(stale, json_mode=True, stdout=args.stdout)
         return
     if not stale:
-        cli.emit("all curd files present in the working tree")
+        cli.emit("all curd files present in the working tree", stdout=args.stdout)
         return
     for curd_id, missing in stale.items():
-        cli.emit(
-            f"curd {curd_id}: not found in working tree — {', '.join(missing)} "
-            "(may be new files the curd creates, or a stale decomposition path; "
-            "pass this along as dispatch context)"
-        )
+        cli.emit(f"curd {curd_id}: not found in working tree — {', '.join(missing)} "
+        "(may be new files the curd creates, or a stale decomposition path; "
+        "pass this along as dispatch context)", stdout=args.stdout)
 
 
 # ----- argparse wiring -----------------------------------------------------
@@ -377,4 +375,4 @@ def _setup(parser: argparse.ArgumentParser) -> None:
 
 
 if __name__ == "__main__":
-    cli.run(_setup)
+    raise SystemExit(cli.run(_setup))

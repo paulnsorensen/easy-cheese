@@ -55,11 +55,6 @@ def wiring() -> ModuleType:
 
 
 @pytest.fixture(scope="session")
-def wiring_topo_sort() -> ModuleType:
-    return importlib.import_module("wiring_topo_sort")
-
-
-@pytest.fixture(scope="session")
 def manifest_update() -> ModuleType:
     return importlib.import_module("manifest_update")
 

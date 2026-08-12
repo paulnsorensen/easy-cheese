@@ -53,7 +53,7 @@ def _cmd(args: argparse.Namespace) -> None:
     if args.runs < 1:
         raise cli.CliError(f"--runs must be >= 1, got {args.runs}")
     verdict = rerun(args.cmd, args.runs)
-    cli.emit(verdict, json_mode=args.json_mode)
+    cli.emit(verdict, json_mode=args.json_mode, stdout=args.stdout)
 
 
 def _setup(parser: argparse.ArgumentParser) -> None:
@@ -68,4 +68,4 @@ def _setup(parser: argparse.ArgumentParser) -> None:
 
 
 if __name__ == "__main__":
-    cli.run(_setup)
+    raise SystemExit(cli.run(_setup))

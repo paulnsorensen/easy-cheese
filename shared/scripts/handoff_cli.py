@@ -43,7 +43,7 @@ def _cmd_render(args: argparse.Namespace) -> None:
         durable_flags=args.durable_flags,
     )
     try:
-        print(handoff.render_handoff_slug(slug))
+        print(handoff.render_handoff_slug(slug), file=args.stdout)
     except ValueError as exc:
         raise cli.CliError(str(exc)) from exc
 
@@ -56,17 +56,15 @@ def _cmd_parse(args: argparse.Namespace) -> None:
         slug = handoff.parse_handoff_slug(path.read_text(encoding="utf-8"))
     except handoff.HandoffParseError as exc:
         raise cli.CliError(str(exc)) from exc
-    cli.emit(
-        {
-            "status": slug.status,
-            "halt_reason": slug.halt_reason,
-            "next_skill": slug.next_skill,
-            "artifact": slug.artifact,
-            "orientation": slug.orientation,
-            "taste_test": slug.taste_test,
-            "durable_flags": slug.durable_flags,
-        }
-    )
+    cli.emit({
+        "status": slug.status,
+        "halt_reason": slug.halt_reason,
+        "next_skill": slug.next_skill,
+        "artifact": slug.artifact,
+        "orientation": slug.orientation,
+        "taste_test": slug.taste_test,
+        "durable_flags": slug.durable_flags,
+    }, stdout=args.stdout)
 
 
 def _cmd_dispatch(args: argparse.Namespace) -> None:
@@ -74,7 +72,7 @@ def _cmd_dispatch(args: argparse.Namespace) -> None:
         skill, dispatch_args = handoff.parse_skill_dispatch(args.command)
     except ValueError as exc:
         raise cli.CliError(str(exc)) from exc
-    cli.emit({"skill": skill, "args": dispatch_args})
+    cli.emit({"skill": skill, "args": dispatch_args}, stdout=args.stdout)
 
 
 def _setup(parser: argparse.ArgumentParser) -> None:
@@ -100,4 +98,4 @@ def _setup(parser: argparse.ArgumentParser) -> None:
 
 
 if __name__ == "__main__":
-    cli.run(_setup)
+    raise SystemExit(cli.run(_setup))

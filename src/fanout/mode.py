@@ -56,12 +56,12 @@ def _cmd_select(args: object) -> None:
     if args.count is not None:
         if args.count < 0:
             raise cli.CliError(f"invalid --count {args.count}: must be zero or greater")
-        cli.emit(select_mode(range(args.count)), json_mode=args.json_mode)
+        cli.emit(select_mode(range(args.count)), json_mode=args.json_mode, stdout=args.stdout)
         return
     score = args.score
     if not math.isfinite(score) or score < 0:
         raise cli.CliError(f"invalid --score {score}: must be zero or greater and finite")
-    cli.emit(select_mode_from_score(score), json_mode=args.json_mode)
+    cli.emit(select_mode_from_score(score), json_mode=args.json_mode, stdout=args.stdout)
 
 
 def _setup(parser) -> None:
@@ -86,4 +86,4 @@ def _setup(parser) -> None:
 
 
 if __name__ == "__main__":
-    cli.run(_setup)
+    raise SystemExit(cli.run(_setup))

@@ -111,7 +111,7 @@ def _cmd_classify(args: argparse.Namespace) -> None:
     except (json.JSONDecodeError, AttributeError) as exc:
         raise cli.CliError("expected a JSON object with baseline/current on stdin") from exc
     result = classify(baseline_arg, current_arg)
-    cli.emit(result, json_mode=True)
+    cli.emit(result, json_mode=True, stdout=args.stdout)
 
 
 def _setup(parser: argparse.ArgumentParser) -> None:
@@ -120,4 +120,4 @@ def _setup(parser: argparse.ArgumentParser) -> None:
 
 
 if __name__ == "__main__":
-    cli.run(_setup)
+    raise SystemExit(cli.run(_setup))

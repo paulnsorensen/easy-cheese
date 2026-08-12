@@ -26,7 +26,7 @@ def _load_findings(report_path: str) -> list:
 def _cmd_render_table(args: argparse.Namespace) -> None:
     items = _load_findings(args.report)
     table = findings.render_selection_table(items)
-    cli.emit(table, full=args.full, json_mode=args.json_mode)
+    cli.emit(table, full=args.full, json_mode=args.json_mode, stdout=args.stdout)
 
 
 def _cmd_parse_selection(args: argparse.Namespace) -> None:
@@ -35,7 +35,7 @@ def _cmd_parse_selection(args: argparse.Namespace) -> None:
         ids = findings.parse_selection(args.selection, items)
     except findings.SelectionError as exc:
         raise cli.CliError(str(exc)) from exc
-    cli.emit(ids, full=args.full, json_mode=args.json_mode)
+    cli.emit(ids, full=args.full, json_mode=args.json_mode, stdout=args.stdout)
 
 
 def _setup(parser: argparse.ArgumentParser) -> None:
@@ -52,4 +52,4 @@ def _setup(parser: argparse.ArgumentParser) -> None:
 
 
 if __name__ == "__main__":
-    cli.run(_setup)
+    raise SystemExit(cli.run(_setup))
