@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import importlib
 import json
+import subprocess
+import sys
+from pathlib import Path
 
 import pytest
 
@@ -22,6 +26,8 @@ from easy_cheese_schemas.schema_runtime import (
 )
 
 SCHEMA_ROOT = "https://schemas.easy-cheese.dev"
+ROOT = Path(__file__).resolve().parents[3]
+
 PLAN_SCHEMA = f"{SCHEMA_ROOT}/curd-plan"
 
 
@@ -98,6 +104,64 @@ def writer_plan() -> dict[str, object]:
     }
 
 
+def test_runtime_marker_collection_rejects_duplicate_slugs() -> None:
+    contracts = importlib.import_module("easy_cheese_schemas.contracts")
+    runtime = importlib.import_module("easy_cheese_schemas.schema_runtime")
+    original_slug = contracts.CurdPlan.__contract_slug__
+    try:
+        contracts.CurdPlan.__contract_slug__ = "curd-result"
+        with pytest.raises(
+            ValueError, match=r"duplicate contract marker 'curd-result'"
+        ):
+            runtime._collect_marked_contracts()
+    finally:
+        contracts.CurdPlan.__contract_slug__ = original_slug
+
+
+def test_runtime_schema_resolution_rejects_unmarked_contract_in_clean_import() -> None:
+    code = """
+import importlib
+import sys
+
+sys.path[:0] = ["vendor", "src"]
+
+contracts = importlib.import_module("easy_cheese_schemas.contracts")
+catalog = importlib.import_module("easy_cheese_schemas._schema_catalog")
+runtime = importlib.import_module("easy_cheese_schemas.schema_runtime")
+contract = contracts.CurdPlan
+original_slug = contract.__contract_slug__
+original_uris = catalog.REGISTERED_CONTRACT_SCHEMA_URIS
+try:
+    delattr(contract, "__contract_slug__")
+    catalog.REGISTERED_CONTRACT_SCHEMA_URIS = frozenset(
+        uri
+        for uri in original_uris
+        if uri != "https://schemas.easy-cheese.dev/curd-plan"
+    )
+    runtime = importlib.reload(runtime)
+    try:
+        runtime.schema_bytes(contract)
+    except KeyError as exc:
+        assert exc.args == ("unregistered contract type CurdPlan",)
+    else:
+        raise AssertionError("unmarked contract resolved through schema_bytes")
+finally:
+    contract.__contract_slug__ = original_slug
+    catalog.REGISTERED_CONTRACT_SCHEMA_URIS = original_uris
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, (
+        f"isolated marker probe failed:\nstdout={result.stdout}\n"
+        f"stderr={result.stderr}"
+    )
+
+
 def test_registered_schemas_are_deterministic_draft_2020_12() -> None:
     assert set(REGISTERED_CONTRACT_SCHEMA_URIS) == {
         f"{SCHEMA_ROOT}/agent-writer-view",
@@ -121,6 +185,8 @@ def test_registered_schemas_are_deterministic_draft_2020_12() -> None:
         assert schema["$id"] == uri
         assert payload.endswith(b"\n")
 
+
+
     plan_schema = json.loads(first[PLAN_SCHEMA])
     assert plan_schema["$defs"]["ContractVersion"]["properties"]["schema_uri"] == {
         "const": PLAN_SCHEMA,
@@ -140,6 +206,13 @@ def test_registered_schemas_are_deterministic_draft_2020_12() -> None:
     assert plan_schema["$defs"]["CurdPlan"]["properties"]["curds"]["minItems"] == 1
     assert plan_schema["$defs"]["CurdPlan"]["properties"]["curds"]["maxItems"] == 256
     assert plan_schema["$defs"]["CurdPlan"]["properties"]["curds"]["uniqueItems"] is True
+
+
+@pytest.mark.parametrize("schema_uri", sorted(REGISTERED_CONTRACT_SCHEMA_URIS))
+def test_registered_schema_matches_pre_migration_golden(schema_uri: str) -> None:
+    golden = Path(__file__).with_name("goldens") / f"{schema_uri.rsplit('/', 1)[-1]}.json"
+
+    assert schema_bytes(schema_uri) == golden.read_bytes()
 
 
 def test_registered_schema_registry_is_immutable_and_private_authority_is_not_public() -> None:

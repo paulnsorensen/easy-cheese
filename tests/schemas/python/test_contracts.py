@@ -202,6 +202,16 @@ def curd_result(
     )
 
 
+@pytest.mark.parametrize("slug", [1, " \t\n"])
+def test_contract_rejects_invalid_slugs_at_decorator_construction(
+    slug: object,
+) -> None:
+    with pytest.raises(
+        ValueError, match=r"^contract slug must be a non-empty string$"
+    ):
+        contract_module.contract(slug)  # type: ignore[arg-type]
+
+
 def test_canonical_contracts_are_deeply_frozen() -> None:
     paths = ["src/curd-1.py"]
     scope = BoundedScope(paths=paths)
