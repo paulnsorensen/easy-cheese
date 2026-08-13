@@ -78,6 +78,42 @@ gate_applicability:
     assert [contract["mode"] for contract in contracts] == ["tracer", "contract-matrix"]
 
 
+def test_contract_plan_excludes_green_guards(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    spec = tmp_path / "guarded.md"
+    spec.write_text(
+        """---
+source: mold-handshake
+gate_applicability:
+  disposition: red-required
+  work_class: behavior
+  ui_surface: non-browser
+---
+# Guarded behavior
+
+## Acceptance
+- AC-1: new behavior.
+- AC-2: existing behavior remains unchanged.
+
+## Test Contracts
+| Acceptance | Interface | Seam | Expected failure | Mode |
+| --- | --- | --- | --- | --- |
+| AC-1 | `api.new` | public API | new behavior is absent | tracer |
+| AC-2 | `api.existing` | committed snapshot | existing behavior changes | guard |
+""",
+        encoding="utf-8",
+    )
+
+    code, payload, error = _run_contracts(spec, capsys)
+
+    assert code == 0, error
+    assert payload is not None
+    assert [contract["acceptance_id"] for contract in payload["contracts"]] == [
+        "AC-1"
+    ]
+
+
 def test_approved_contract_row_can_cover_multiple_acceptance_ids(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

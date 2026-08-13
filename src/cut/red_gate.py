@@ -487,6 +487,7 @@ def _parse_declared_spec(path: Path) -> _ContractPlan:
             matrix_rows=list(contract.matrix_rows),
         )
         for contract in applicability.contracts
+        if contract.mode != "guard"
     )
     return _ContractPlan(
         GateDisposition.RED,
