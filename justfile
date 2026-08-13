@@ -69,6 +69,10 @@ lint-yaml:
 lint-py-fix:
     uvx ruff check --fix .
 
+# Check for unused Python code with the pinned Vulture baseline
+lint-dead:
+    uvx --from vulture==2.14 vulture
+
 # Regenerate .github/skill-budgets.json (size/structure ratchet) after shrinking a skill
 update-skill-budgets:
     python3 .github/scripts/validate_skills.py --write-budgets
@@ -77,7 +81,7 @@ update-skill-budgets:
 check: lint-md-fix lint-yaml-fix lint-yaml lint-py-fix lint-sh test docs-build
 
 # CI-mode verification (no autofixes)
-ci: lint-md lint-yaml lint-sh test docs-build
+ci: lint-md lint-yaml lint-sh lint-dead test docs-build
 
 # Install docs build dependencies
 docs-install:
