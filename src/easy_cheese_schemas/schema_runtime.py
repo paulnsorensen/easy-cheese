@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
 import types
 from collections.abc import Callable, Mapping
@@ -10,19 +11,10 @@ from typing import Any, Union, get_args, get_origin, get_type_hints
 
 import attrs
 from easy_cheese_schemas._schema_catalog import (
-    AGENT_WRITER_VIEW_SCHEMA_URI,
-    CURD_PLAN_SCHEMA_URI,
-    CURD_RESULT_SCHEMA_URI,
-    DIAGNOSIS_REQUEST_SCHEMA_URI,
-    DIAGNOSIS_RESULT_SCHEMA_URI,
-    PHASE_CONTRACT_SCHEMA_URI,
-    PLANNER_REQUEST_SCHEMA_URI,
-    PLANNER_RESULT_SCHEMA_URI,
     REGISTERED_CONTRACT_SCHEMA_URIS,
-    REVIEW_REQUEST_SCHEMA_URI,
-    REVIEW_RESULT_SCHEMA_URI,
     SCHEMA_ROOT,
 )
+import easy_cheese_schemas.contracts as contract_models
 
 from easy_cheese_schemas.contracts import (
     AgentWriterView,
@@ -39,7 +31,6 @@ from easy_cheese_schemas.contracts import (
     DiagnosisCauseWriterView,
     DiagnosisHypothesis,
     DiagnosisHypothesisWriterView,
-    DiagnosisRequest,
     DiagnosisResult,
     DiagnosisResultWriterView,
     EvidenceRef,
@@ -47,8 +38,6 @@ from easy_cheese_schemas.contracts import (
     IdentityLineage,
     MAX_CONTRACT_BYTES,
     MAX_CONTRACT_DEPTH,
-    PhaseContract,
-    PlannerRequest,
     PlannerResult,
     PlannerResultWriterView,
     PlannerUncertainty,
@@ -57,7 +46,6 @@ from easy_cheese_schemas.contracts import (
     ReviewCoverage,
     ReviewFinding,
     ReviewFindingWriterView,
-    ReviewRequest,
     ReviewResult,
     ReviewResultWriterView,
     SemanticCurd,
@@ -78,9 +66,29 @@ class _RegisteredContract:
     supported_version: ContractVersion | None
 
 
+def _collect_marked_contracts() -> tuple[tuple[str, type], ...]:
+    pairs: list[tuple[str, type]] = []
+    for value in vars(contract_models).values():
+        if not inspect.isclass(value):
+            continue
+        slug = getattr(value, "__contract_slug__", None)
+        if slug is None:
+            continue
+        if not isinstance(slug, str) or not slug:
+            raise ValueError("contract marker must be a non-empty string")
+        pairs.append((slug, value))
+
+    pairs.sort(key=lambda item: item[0])
+    for previous, current in zip(pairs, pairs[1:]):
+        if previous[0] == current[0]:
+            raise ValueError(f"duplicate contract marker {current[0]!r}")
+    return tuple(pairs)
+
+
+_MARKED_CONTRACTS = _collect_marked_contracts()
 _REGISTERED_CONTRACTS = tuple(
     _RegisteredContract(
-        schema_uri,
+        schema_uri := f"{SCHEMA_ROOT}/{slug}",
         contract,
         (
             ContractVersion(schema_uri=schema_uri, major="1", minor="0")
@@ -88,19 +96,12 @@ _REGISTERED_CONTRACTS = tuple(
             else None
         ),
     )
-    for schema_uri, contract in (
-        (AGENT_WRITER_VIEW_SCHEMA_URI, AgentWriterView),
-        (CURD_PLAN_SCHEMA_URI, CurdPlan),
-        (CURD_RESULT_SCHEMA_URI, CurdResult),
-        (DIAGNOSIS_REQUEST_SCHEMA_URI, DiagnosisRequest),
-        (DIAGNOSIS_RESULT_SCHEMA_URI, DiagnosisResult),
-        (PHASE_CONTRACT_SCHEMA_URI, PhaseContract),
-        (PLANNER_REQUEST_SCHEMA_URI, PlannerRequest),
-        (PLANNER_RESULT_SCHEMA_URI, PlannerResult),
-        (REVIEW_REQUEST_SCHEMA_URI, ReviewRequest),
-        (REVIEW_RESULT_SCHEMA_URI, ReviewResult),
-    )
+    for slug, contract in _MARKED_CONTRACTS
 )
+if frozenset(entry.schema_uri for entry in _REGISTERED_CONTRACTS) != (
+    REGISTERED_CONTRACT_SCHEMA_URIS
+):
+    raise RuntimeError("generated schema catalog is stale")
 MigrationStep = Callable[[Mapping[str, object]], Mapping[str, object]]
 
 # The catalog currently has no historical minor shape with a documented,
@@ -191,326 +192,6 @@ _REPOSITORY_RELATIVE_PATH_PATTERN = (
 )
 
 
-def _if_equals(
-    field: str, value: str, then: dict[str, object]
-) -> dict[str, object]:
-    return {
-        "if": {
-            "properties": {field: {"const": value}},
-            "required": [field],
-        },
-        "then": then,
-    }
-
-
-def _without(*fields: str) -> dict[str, object]:
-    return {"not": {"required": list(fields)}}
-
-
-def _model_constraints(name: str) -> list[dict[str, object]]:
-    constraints: list[dict[str, object]] = []
-
-    if name in {"SourceLocation", "SourceLocationWriterView"}:
-        constraints.append(
-            {
-                "if": {"required": ["end_column"]},
-                "then": {"required": ["start_column"]},
-            }
-        )
-
-    if name in {"IdentityLineage"}:
-        constraints.extend(
-            (
-                _if_equals("identity_action", "new", {
-                    "properties": {"source_curd_ids": {"maxItems": 0}},
-                }),
-                _if_equals("identity_action", "retain", {
-                    "properties": {
-                        "source_curd_ids": {"minItems": 1, "maxItems": 1}
-                    },
-                }),
-                _if_equals("identity_action", "derive", {
-                    "properties": {"source_curd_ids": {"minItems": 1}},
-                }),
-            )
-        )
-
-    if name in {"BoundedContext", "BoundedContextWriterView"}:
-        constraints.append(
-            {
-                "anyOf": [
-                    {
-                        "properties": {"shared_inputs": {"minItems": 1}},
-                        "required": ["shared_inputs"],
-                    },
-                    {
-                        "properties": {"shared_input_keys": {"minItems": 1}},
-                        "required": ["shared_input_keys"],
-                    },
-                    {
-                        "properties": {"constraints": {"minItems": 1}},
-                        "required": ["constraints"],
-                    },
-                    {
-                        "properties": {"invariants": {"minItems": 1}},
-                        "required": ["invariants"],
-                    },
-                ]
-            }
-        )
-
-    if name == "PlannerRequest":
-        constraints.extend(
-            (
-                _if_equals("kind", "decompose", _without("source_plan_ref")),
-                _if_equals("kind", "remediate", {
-                    "required": ["source_plan_ref", "evidence"],
-                    "properties": {"evidence": {"minItems": 1}},
-                }),
-                _if_equals("kind", "replan", {"required": ["source_plan_ref"]}),
-            )
-        )
-
-    if name in {"PlannerResult", "PlannerResultWriterView"}:
-        constraints.extend(
-            (
-                _if_equals("disposition", "complete", {
-                    "required": ["plan"],
-                    "properties": {"unresolved_work": {"maxItems": 0}},
-                    **_without("reason"),
-                }),
-                _if_equals("disposition", "partial", {
-                    "required": ["plan"],
-                    "properties": {
-                        "unresolved_work": {
-                            "minItems": 1,
-                            "items": {
-                                "properties": {
-                                    "scope": {"const": "omitted_work"}
-                                }
-                            },
-                        },
-                    },
-                    **_without("reason"),
-                }),
-                _if_equals("disposition", "blocked", {
-                    "properties": {"unresolved_work": {"minItems": 1}},
-                    "required": ["reason"],
-                    **_without("plan"),
-                }),
-                _if_equals("disposition", "no_work", {
-                    "properties": {"unresolved_work": {"maxItems": 0}},
-                    "required": ["reason"],
-                    **_without("plan"),
-                }),
-                _if_equals("disposition", "invalid", {
-                    "properties": {"unresolved_work": {"maxItems": 0}},
-                    "required": ["reason"],
-                    **_without("plan"),
-                }),
-                _if_equals("disposition", "executor_failure", {
-                    "properties": {"unresolved_work": {"maxItems": 0}},
-                    "required": ["reason"],
-                    **_without("plan"),
-                }),
-            )
-        )
-
-    if name == "ReviewCoverage":
-        constraints.extend(
-            (
-                _if_equals("disposition", "covered", _without("reason")),
-                _if_equals("disposition", "not_covered", {"required": ["reason"]}),
-            )
-        )
-
-    if name == "ReviewResult":
-        constraints.extend(
-            (
-                _if_equals("disposition", "clean", {
-                    "required": ["coverage"],
-                    "properties": {
-                        "findings": {"maxItems": 0},
-                        "coverage": {
-                            "minItems": 1,
-                            "items": {
-                                "properties": {
-                                    "disposition": {"const": "covered"}
-                                }
-                            },
-                        },
-                    },
-                }),
-                _if_equals("disposition", "findings", {
-                    "required": ["coverage"],
-                    "properties": {
-                        "findings": {"minItems": 1},
-                        "coverage": {"minItems": 1},
-                    },
-                }),
-            )
-        )
-    elif name == "ReviewResultWriterView":
-        constraints.extend(
-            (
-                _if_equals("disposition", "clean", {
-                    "properties": {"findings": {"maxItems": 0}}
-                }),
-                _if_equals("disposition", "findings", {
-                    "properties": {"findings": {"minItems": 1}}
-                }),
-            )
-        )
-    if name in {"ReviewResult", "ReviewResultWriterView"}:
-        for disposition in ("blocked", "invalid", "executor_failure"):
-            constraints.append(
-                _if_equals(
-                    "disposition",
-                    disposition,
-                    {
-                        "properties": {"findings": {"maxItems": 0}},
-                        "required": ["reason"],
-                    },
-                )
-            )
-
-    if name in {"Reproduction", "ReproductionWriterView"}:
-        evidence_field = "evidence_keys" if name.endswith("WriterView") else "evidence"
-        constraints.extend(
-            (
-                _if_equals("status", "reproduced", {
-                    "required": ["observed", evidence_field],
-                    "properties": {evidence_field: {"minItems": 1}},
-                }),
-                _if_equals("status", "blocked", {"required": ["observed"]}),
-            )
-        )
-
-    if name in {"DiagnosisHypothesis", "DiagnosisHypothesisWriterView"}:
-        evidence_field = "evidence_keys" if name.endswith("WriterView") else "evidence"
-        for disposition in ("confirmed", "rejected"):
-            constraints.append(
-                _if_equals(
-                    "disposition",
-                    disposition,
-                    {
-                        "required": [evidence_field],
-                        "properties": {evidence_field: {"minItems": 1}},
-                    },
-                )
-            )
-
-    if name in {"DiagnosisResult", "DiagnosisResultWriterView"}:
-        constraints.append(
-            _if_equals("disposition", "confirmed", {
-                "required": ["confirmed_cause", "regression_seam"],
-                "properties": {
-                    "reproduction": {
-                        "properties": {"status": {"const": "reproduced"}},
-                        "required": ["status"],
-                    }
-                },
-            })
-        )
-        for disposition in (
-            "inconclusive",
-            "not_reproduced",
-            "blocked",
-            "invalid",
-            "executor_failure",
-        ):
-            then: dict[str, object] = {
-                **_without("confirmed_cause", "regression_seam")
-            }
-            if disposition == "inconclusive":
-                unresolved_field = (
-                    "unresolved_evidence_keys"
-                    if name.endswith("WriterView")
-                    else "unresolved_evidence"
-                )
-                then["required"] = [unresolved_field]
-                then["properties"] = {unresolved_field: {"minItems": 1}}
-            elif disposition == "not_reproduced":
-                then["properties"] = {
-                    "reproduction": {
-                        "properties": {"status": {"const": "not_reproduced"}},
-                        "required": ["status"],
-                    }
-                }
-            else:
-                then["required"] = ["reason"]
-            constraints.append(_if_equals("disposition", disposition, then))
-    if name in {"CriterionResult", "CriterionResultWriterView"}:
-        evidence_field = "evidence_keys" if name.endswith("WriterView") else "evidence"
-        for disposition in ("passed", "failed"):
-            constraints.append(
-                _if_equals(
-                    "disposition",
-                    disposition,
-                    {
-                        "required": [evidence_field],
-                        "properties": {evidence_field: {"minItems": 1}},
-                    },
-                )
-            )
-        for disposition in ("blocked", "skipped"):
-            constraints.append(
-                _if_equals("disposition", disposition, {"required": ["reason"]})
-            )
-
-    if name == "CurdResult":
-        constraints.append(
-            _if_equals(
-                "disposition",
-                "passed",
-                {"properties": {"unresolved_work": {"maxItems": 0}}},
-            )
-        )
-
-    if name == "AgentWriterView":
-        constraints.append(
-            {
-                "oneOf": [
-                    {
-                        "properties": {
-                            "kind": {"const": "curd_plan"},
-                            "payload": {"$ref": "#/$defs/CurdPlanWriterView"},
-                        },
-                        "required": ["kind", "payload"],
-                    },
-                    {
-                        "properties": {
-                            "kind": {"const": "planner_result"},
-                            "payload": {"$ref": "#/$defs/PlannerResultWriterView"},
-                        },
-                        "required": ["kind", "payload"],
-                    },
-                    {
-                        "properties": {
-                            "kind": {"const": "review_result"},
-                            "payload": {"$ref": "#/$defs/ReviewResultWriterView"},
-                        },
-                        "required": ["kind", "payload"],
-                    },
-                    {
-                        "properties": {
-                            "kind": {"const": "diagnosis_result"},
-                            "payload": {"$ref": "#/$defs/DiagnosisResultWriterView"},
-                        },
-                        "required": ["kind", "payload"],
-                    },
-                    {
-                        "properties": {
-                            "kind": {"const": "curd_result"},
-                            "payload": {"$ref": "#/$defs/CurdResultWriterView"},
-                        },
-                        "required": ["kind", "payload"],
-                    },
-                ]
-            }
-        )
-
-    return constraints
 
 
 def _contract_version_definition(
@@ -614,9 +295,9 @@ def _definition(type_: type, definitions: dict[str, object]) -> dict[str, object
     }
     if required:
         schema["required"] = required
-    model_constraints = _model_constraints(name)
+    model_constraints = getattr(type_, "__schema_constraints__", ())
     if model_constraints:
-        schema["allOf"] = model_constraints
+        schema["allOf"] = list(model_constraints)
     definitions[name] = schema
     return reference
 

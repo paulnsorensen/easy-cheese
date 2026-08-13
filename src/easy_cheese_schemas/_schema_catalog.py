@@ -1,8 +1,8 @@
-"""Dependency-free canonical contract schema catalogue."""
+"""Generated dependency-free canonical contract schema catalogue."""
 
 from __future__ import annotations
 
-SCHEMA_ROOT = "https://schemas.easy-cheese.dev"
+SCHEMA_ROOT = 'https://schemas.easy-cheese.dev'
 AGENT_WRITER_VIEW_SCHEMA_URI = f"{SCHEMA_ROOT}/agent-writer-view"
 CURD_PLAN_SCHEMA_URI = f"{SCHEMA_ROOT}/curd-plan"
 CURD_RESULT_SCHEMA_URI = f"{SCHEMA_ROOT}/curd-result"

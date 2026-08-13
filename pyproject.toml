@@ -35,7 +35,10 @@ Issues = "https://github.com/paulnsorensen/easy-cheese/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/easy_cheese_schemas"]
-exclude = ["src/easy_cheese_schemas/_phase_registry_compiler.py"]
+exclude = [
+  "src/easy_cheese_schemas/_phase_registry_compiler.py",
+  "src/easy_cheese_schemas/_schema_catalog_compiler.py",
+]
 
 # Hatchling's default sdist walks the filesystem honouring .gitignore, which
 # would ship the whole repo -- including untracked scratch and the vendored
@@ -48,4 +51,22 @@ only-include = [
   "src/easy_cheese_schemas",
   "docs/easy-cheese-schemas.md",
   "LICENSE",
+]
+[tool.vulture]
+min_confidence = 60
+ignore_decorators = ["@contract*", "@schema_constraints*", "@*.validator"]
+paths = [
+  "src",
+  "shared/scripts",
+  "scripts",
+  ".github/scripts",
+  "tests",
+  "vulture_whitelist.py",
+]
+exclude = [
+  "src/easy_cheese_schemas/_compiled_phase_registry.py",
+  "src/easy_cheese_schemas/_schema_catalog.py",
+  "vendor/",
+  "build/",
+  "dist/",
 ]
