@@ -15,7 +15,6 @@ share field names or types.
 
 from __future__ import annotations
 
-import graphlib
 import re
 from collections.abc import Sequence
 from enum import Enum
@@ -24,6 +23,7 @@ from typing import Any
 from attrs import Attribute, define, field, validators
 
 from easy_cheese_schemas.pr_plan import PrPlan
+from easy_cheese_schemas.wiring_graph import cycle_errors
 
 _OID_RE = re.compile(r"(?:[0-9A-Fa-f]{40}|[0-9A-Fa-f]{64})")
 _DIFF_HASH_RE = re.compile(r"sha256:[0-9A-Fa-f]{64}")
@@ -272,10 +272,7 @@ def reject_shared_curd_files(
 def reject_unschedulable_wiring(
     _instance: object, attribute: Attribute[Any], wiring: Sequence[WiringRow]
 ) -> None:
-    """Wiring rows are applied in dependency order, so the graph must be
-    acyclic and every W<n> dependency must exist. Dependencies outside the
-    wiring set -- typically curd ids -- are legitimate and ignored, matching
-    src/fanout/wiring.py."""
+    """Wiring rows must form an acyclic graph with known W<n> dependencies."""
     ids = {row.id for row in wiring}
     errors = [
         f"{row.id} depends_on references unknown id {dependency!r}"
@@ -283,14 +280,7 @@ def reject_unschedulable_wiring(
         for dependency in row.depends_on
         if _WIRING_ID_RE.match(dependency) and dependency not in ids
     ]
-    sorter: graphlib.TopologicalSorter[str] = graphlib.TopologicalSorter()
-    for row in wiring:
-        sorter.add(row.id, *(d for d in row.depends_on if d in ids))
-    try:
-        sorter.prepare()
-    except graphlib.CycleError as exc:
-        path = " -> ".join(str(node) for node in exc.args[1])
-        errors.append(f"the dependency graph has cycle {path}")
+    errors.extend(cycle_errors((row.id, row.depends_on) for row in wiring))
     if errors:
         raise ValueError(
             f"{attribute.name} must be schedulable: " + "; ".join(errors)
