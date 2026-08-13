@@ -166,17 +166,34 @@ class TestRun:
         runner = _write_runner(
             tmp_path,
             """
-            def _cmd(args): cli.emit({"ok": True}, json_mode=args.json_mode)
+            def _cmd(args): cli.emit({"ok": True}, json_mode=args.json_mode, stdout=args.stdout)
             def _setup(p):
                 sub = p.add_subparsers(dest="cmd", required=True)
                 q = sub.add_parser("go")
                 q.set_defaults(func=_cmd)
-            cli.run(_setup)
+            raise SystemExit(cli.run(_setup))
             """.strip()
         )
         result = subprocess.run([sys.executable, str(runner), "go", "--json"], capture_output=True, text=True)
         assert result.returncode == 0
         assert json.loads(result.stdout) == {"ok": True}
+
+    def test_injects_argv_and_stdout(self, cli: ModuleType) -> None:
+        from io import StringIO
+
+        output = StringIO()
+
+        def _cmd(args: argparse.Namespace) -> int:
+            cli.emit({"ok": True}, json_mode=args.json_mode, stdout=args.stdout)
+            return 7
+
+        def _setup(parser: argparse.ArgumentParser) -> None:
+            sub = parser.add_subparsers(dest="cmd", required=True)
+            sub.add_parser("go").set_defaults(func=_cmd)
+
+        status = cli.run(_setup, argv=("go", "--json"), stdout=output)
+        assert status == 7
+        assert json.loads(output.getvalue()) == {"ok": True}
 
     def test_cli_error_exits_two_with_stderr(self, tmp_path: Path) -> None:
         runner = _write_runner(
@@ -187,7 +204,7 @@ class TestRun:
                 sub = p.add_subparsers(dest="cmd", required=True)
                 q = sub.add_parser("go")
                 q.set_defaults(func=_cmd)
-            cli.run(_setup)
+            raise SystemExit(cli.run(_setup))
             """.strip()
         )
         result = subprocess.run([sys.executable, str(runner), "go"], capture_output=True, text=True)
@@ -204,7 +221,7 @@ class TestRun:
                 sub = p.add_subparsers(dest="cmd", required=True)
                 q = sub.add_parser("go")
                 q.set_defaults(func=_cmd)
-            cli.run(_setup)
+            raise SystemExit(cli.run(_setup))
             """.strip()
         )
         result = subprocess.run([sys.executable, str(runner), "go"], capture_output=True, text=True)
@@ -219,7 +236,7 @@ class TestRun:
             """
             def _setup(p):
                 p.add_subparsers(dest="cmd")
-            cli.run(_setup)
+            raise SystemExit(cli.run(_setup))
             """.strip()
         )
         result = subprocess.run([sys.executable, str(runner)], capture_output=True, text=True)
@@ -232,7 +249,7 @@ class TestRun:
             """
             def _setup(p):
                 p.add_subparsers(dest="cmd")
-            cli.run(_setup)
+            raise SystemExit(cli.run(_setup))
             """.strip()
         )
         result = subprocess.run([sys.executable, str(runner), "--help"], capture_output=True, text=True)

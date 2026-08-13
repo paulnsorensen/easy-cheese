@@ -120,6 +120,7 @@ class TestInProcessClassify:
             has_open_level_4_or_5=False,
             any_spinning=False,
             json_mode=True,
+            stdout=sys.stdout,
         )
         gates_cli._cmd_classify(ns)
         payload = json.loads(capsys.readouterr().out)

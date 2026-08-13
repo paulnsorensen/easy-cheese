@@ -35,6 +35,7 @@ def _cmd(args: argparse.Namespace) -> None:
             "baseline": slug.baseline,
         },
         json_mode=True,
+        stdout=args.stdout,
     )
 
 
@@ -45,4 +46,4 @@ def _setup(parser: argparse.ArgumentParser) -> None:
 
 
 if __name__ == "__main__":
-    cli.run(_setup)
+    raise SystemExit(cli.run(_setup))

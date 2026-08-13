@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from io import StringIO
 from pathlib import Path
 from types import ModuleType
 
@@ -156,6 +157,20 @@ class TestStateStale:
         result = _run_cli(repo, "strict", "--passing-score", "4")
         assert result.returncode == 2
         assert result.stdout.strip() == "stale"
+
+    def test_in_process_returns_status_and_injected_output(
+        self, repo: Path, freshness_check: ModuleType, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        _write_log(repo, "feat-e", _table_log("feat-e", "abc123" * 7))
+        output = StringIO()
+        status = freshness_check.cli.run(
+            freshness_check._setup,
+            argv=("--slug", "feat-e", "--cheese-root", str(repo / ".cheese"), "--repo-root", str(repo)),
+            stdout=output,
+        )
+        assert status == 2
+        assert output.getvalue() == "stale\n"
+        assert capsys.readouterr().out == ""
 
 
 class TestAppendAttemptIntegration:

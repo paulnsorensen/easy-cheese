@@ -33,10 +33,7 @@ def _from_task(args: argparse.Namespace) -> None:
             f"{artifact} already exists; rephrase --task for a distinct slug "
             "or remove the existing spec"
         )
-    cli.emit(
-        {"slug": slug, "path": str(artifact)},
-        json_mode=args.json_mode,
-    )
+    cli.emit({"slug": slug, "path": str(artifact)}, json_mode=args.json_mode, stdout=args.stdout)
 
 
 def _setup(parser: argparse.ArgumentParser) -> None:
@@ -53,4 +50,4 @@ def _setup(parser: argparse.ArgumentParser) -> None:
 
 
 if __name__ == "__main__":
-    cli.run(_setup)
+    raise SystemExit(cli.run(_setup))

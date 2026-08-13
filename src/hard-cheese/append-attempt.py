@@ -143,7 +143,7 @@ def _cmd_append(args: argparse.Namespace) -> None:
         artifact_str = str(rel)
     except ValueError:
         artifact_str = str(target)
-    cli.emit({"slug": slug, "artifact": artifact_str, "appended": True}, json_mode=args.json_mode)
+    cli.emit({"slug": slug, "artifact": artifact_str, "appended": True}, json_mode=args.json_mode, stdout=args.stdout)
 
 
 def _setup(parser: argparse.ArgumentParser) -> None:
@@ -156,4 +156,4 @@ def _setup(parser: argparse.ArgumentParser) -> None:
 
 
 if __name__ == "__main__":
-    cli.run(_setup)
+    raise SystemExit(cli.run(_setup))

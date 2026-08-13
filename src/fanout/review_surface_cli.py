@@ -103,7 +103,7 @@ def _cmd_score(args: argparse.Namespace) -> None:
             weights_source = args.config
     rows = _numstat_rows(args.repo, args.diff_args)
     result = score(rows, weights=weights, weights_source=weights_source)
-    cli.emit(result, json_mode=True)
+    cli.emit(result, json_mode=True, stdout=args.stdout)
 
 
 def _setup(parser: argparse.ArgumentParser) -> None:
@@ -123,4 +123,4 @@ def _setup(parser: argparse.ArgumentParser) -> None:
 
 
 if __name__ == "__main__":
-    cli.run(_setup)
+    raise SystemExit(cli.run(_setup))

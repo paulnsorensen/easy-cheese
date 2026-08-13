@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import argparse
 import os
-import sys
 from pathlib import Path
 
 import cli  # noqa: E402
@@ -69,7 +68,7 @@ def sweep(root: Path, tags: tuple[str, ...]) -> dict:
     return {"files": hits, "total": total}
 
 
-def _run(args: argparse.Namespace) -> None:
+def _run(args: argparse.Namespace) -> int:
     root = args.root.resolve()
     if not root.exists():
         raise cli.CliError(f"root does not exist: {args.root}")
@@ -83,16 +82,17 @@ def _run(args: argparse.Namespace) -> None:
     result = sweep(root, tags)
 
     if args.json_mode:
-        cli.emit(result, json_mode=True)
+        cli.emit(result, json_mode=True, stdout=args.stdout)
     else:
         cli.emit(
             result["files"] or ["(clean)"],
             limit=args.limit,
             full=args.full,
+            stdout=args.stdout,
         )
-        print(f"total: {result['total']}")
+        print(f"total: {result['total']}", file=args.stdout)
 
-    sys.exit(1 if result["total"] else 0)
+    return 1 if result["total"] else 0
 
 
 def _setup(parser: argparse.ArgumentParser) -> None:
@@ -106,4 +106,4 @@ def _setup(parser: argparse.ArgumentParser) -> None:
 
 
 if __name__ == "__main__":
-    cli.run(_setup)
+    raise SystemExit(cli.run(_setup))

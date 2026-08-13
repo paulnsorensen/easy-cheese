@@ -26,6 +26,7 @@ def _cmd_classify(args: argparse.Namespace) -> None:
     cli.emit(
         {"press_status": args.press_status, "readiness": verdict.value},
         json_mode=args.json_mode,
+        stdout=args.stdout,
     )
 
 
@@ -43,4 +44,4 @@ def _setup(parser: argparse.ArgumentParser) -> None:
 
 
 if __name__ == "__main__":
-    cli.run(_setup)
+    raise SystemExit(cli.run(_setup))

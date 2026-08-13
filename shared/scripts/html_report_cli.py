@@ -36,7 +36,7 @@ def _cmd_render(args: argparse.Namespace) -> None:
     document = html_report.render(src.read_text(encoding="utf-8"), title=args.title)
     out_path = Path(tempfile.gettempdir()) / f"{args.out_name}.html"
     out_path.write_text(document, encoding="utf-8")
-    cli.emit(str(out_path))
+    cli.emit(str(out_path), stdout=args.stdout)
 
 
 def _setup(parser: argparse.ArgumentParser) -> None:
@@ -48,4 +48,4 @@ def _setup(parser: argparse.ArgumentParser) -> None:
 
 
 if __name__ == "__main__":
-    cli.run(_setup)
+    raise SystemExit(cli.run(_setup))
