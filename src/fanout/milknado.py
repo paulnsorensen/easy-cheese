@@ -63,7 +63,7 @@ def probe(tools=None) -> str | None:
 def _cmd_probe(args: argparse.Namespace) -> None:
     tools = _split(args.tools) if args.tools is not None else None
     role = probe(tools)
-    cli.emit("none" if role is None else role, json_mode=args.json_mode)
+    cli.emit("none" if role is None else role, json_mode=args.json_mode, stdout=args.stdout)
 
 
 def _setup(parser: argparse.ArgumentParser) -> None:
@@ -80,4 +80,4 @@ def _setup(parser: argparse.ArgumentParser) -> None:
 
 
 if __name__ == "__main__":
-    cli.run(_setup)
+    raise SystemExit(cli.run(_setup))

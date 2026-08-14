@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from io import StringIO
 from pathlib import Path
 from types import ModuleType
 
@@ -42,6 +43,20 @@ class TestExitCodes:
         result = _run("--root", str(tmp_path))
         assert result.returncode == 1
         assert "bug.py" in result.stdout
+
+    def test_in_process_returns_status_and_injected_output(
+        self, debug_tag_sweep: ModuleType, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        (tmp_path / "bug.py").write_text("needle\n")
+        output = StringIO()
+        status = debug_tag_sweep.cli.run(
+            debug_tag_sweep._setup,
+            argv=("--root", str(tmp_path), "--tags", "needle"),
+            stdout=output,
+        )
+        assert status == 1
+        assert output.getvalue() == "bug.py\ntotal: 1\n"
+        assert capsys.readouterr().out == ""
 
     def test_missing_root_exits_two(self) -> None:
         result = _run("--root", "/nonexistent/path/xyz-q-9-z")

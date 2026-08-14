@@ -55,10 +55,10 @@ def _run(args: argparse.Namespace) -> None:
     except ValueError as exc:
         raise cli.CliError(str(exc)) from exc
     if args.json_mode:
-        cli.emit({"waves": waves}, json_mode=True)
+        cli.emit({"waves": waves}, json_mode=True, stdout=args.stdout)
         return
     for index, wave in enumerate(waves, start=1):
-        print(f"wave {index}: {', '.join(wave)}")
+        print(f"wave {index}: {', '.join(wave)}", file=args.stdout)
 
 
 def _setup(parser: argparse.ArgumentParser) -> None:
@@ -67,4 +67,4 @@ def _setup(parser: argparse.ArgumentParser) -> None:
 
 
 if __name__ == "__main__":
-    cli.run(_setup)
+    raise SystemExit(cli.run(_setup))

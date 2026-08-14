@@ -148,7 +148,7 @@ def _cmd_html_report(args: argparse.Namespace) -> None:
     )
     out_path = out_dir / f"age-{args.slug}.html"
     out_path.write_text(document, encoding="utf-8")
-    cli.emit(str(out_path))
+    cli.emit(str(out_path), stdout=args.stdout)
 
 
 def _setup(parser: argparse.ArgumentParser) -> None:
@@ -162,4 +162,4 @@ def _setup(parser: argparse.ArgumentParser) -> None:
 
 
 if __name__ == "__main__":
-    cli.run(_setup)
+    raise SystemExit(cli.run(_setup))

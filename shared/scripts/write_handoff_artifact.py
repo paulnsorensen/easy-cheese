@@ -211,7 +211,7 @@ def _cmd_write(args: argparse.Namespace) -> None:
         durable_flags=args.durable_flags,
         baseline=args.baseline,
     )
-    cli.emit(str(target))
+    cli.emit(str(target), stdout=args.stdout)
 
 
 def _setup(parser: argparse.ArgumentParser) -> None:
@@ -259,4 +259,4 @@ def _setup(parser: argparse.ArgumentParser) -> None:
 
 
 if __name__ == "__main__":
-    cli.run(_setup)
+    raise SystemExit(cli.run(_setup))

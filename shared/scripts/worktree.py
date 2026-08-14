@@ -547,6 +547,7 @@ def _cmd_create(args: argparse.Namespace) -> None:
     cli.emit(
         create(args.slug, args.base, repo=args.repo, receipt=args.receipt),
         json_mode=True,
+        stdout=args.stdout,
     )
 
 def _cmd_inherit(args: argparse.Namespace) -> None:
@@ -557,7 +558,7 @@ def _cmd_inherit(args: argparse.Namespace) -> None:
         expected_producer="cut",
         overwrite=True,
     )
-    cli.emit({"path": args.path, "inherited": inherited}, json_mode=True)
+    cli.emit({"path": args.path, "inherited": inherited}, json_mode=True, stdout=args.stdout)
 
 
 def _cmd_harvest_oracle(args: argparse.Namespace) -> None:
@@ -568,17 +569,17 @@ def _cmd_harvest_oracle(args: argparse.Namespace) -> None:
         expected_producer="press",
         overwrite=False,
     )
-    cli.emit({"path": args.path, "inherited": inherited}, json_mode=True)
+    cli.emit({"path": args.path, "inherited": inherited}, json_mode=True, stdout=args.stdout)
 
 
 def _cmd_harvest(args: argparse.Namespace) -> None:
     picked = harvest(args.branch, args.onto, repo=args.repo)
-    cli.emit({"picked": picked}, json_mode=True)
+    cli.emit({"picked": picked}, json_mode=True, stdout=args.stdout)
 
 
 def _cmd_teardown(args: argparse.Namespace) -> None:
     teardown(args.path, args.branch, repo=args.repo)
-    cli.emit({"removed": args.path, "deleted_branch": args.branch}, json_mode=True)
+    cli.emit({"removed": args.path, "deleted_branch": args.branch}, json_mode=True, stdout=args.stdout)
 
 
 def _setup(parser: argparse.ArgumentParser) -> None:
@@ -628,4 +629,4 @@ def _setup(parser: argparse.ArgumentParser) -> None:
 
 
 if __name__ == "__main__":
-    cli.run(_setup)
+    raise SystemExit(cli.run(_setup))

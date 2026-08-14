@@ -35,7 +35,12 @@ def _git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
 
 
 def _ns(repo: str, config: str | None = None, diff_args: list[str] | None = None) -> argparse.Namespace:
-    return argparse.Namespace(repo=repo, config=config, diff_args=diff_args or ["HEAD"])
+    return argparse.Namespace(
+        repo=repo,
+        config=config,
+        diff_args=diff_args or ["HEAD"],
+        stdout=sys.stdout,
+    )
 
 
 def _stub_run_git(monkeypatch: pytest.MonkeyPatch, stdout: str) -> None:

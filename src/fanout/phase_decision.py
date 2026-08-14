@@ -153,7 +153,7 @@ def _cmd_decide(args: argparse.Namespace) -> None:
         table=table,
         allow_early_stop=table in (LINEAR_TABLE, NOT_APPLICABLE_LINEAR),
     )
-    cli.emit(verdict, json_mode=True)
+    cli.emit(verdict, json_mode=True, stdout=args.stdout)
 
 
 def _setup(parser: argparse.ArgumentParser) -> None:
@@ -188,4 +188,4 @@ def _setup(parser: argparse.ArgumentParser) -> None:
 
 
 if __name__ == "__main__":
-    cli.run(_setup)
+    raise SystemExit(cli.run(_setup))

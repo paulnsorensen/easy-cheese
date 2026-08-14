@@ -37,7 +37,7 @@ def _cmd_slugify(args: argparse.Namespace) -> None:
     slug = paths.slugify(args.text)
     if not slug:
         raise cli.CliError(f"slugify produced an empty slug from {args.text!r}")
-    cli.emit(slug, json_mode=args.json_mode)
+    cli.emit(slug, json_mode=args.json_mode, stdout=args.stdout)
 
 
 def _cmd_validate(args: argparse.Namespace) -> None:
@@ -56,7 +56,7 @@ def _cmd_existing(args: argparse.Namespace) -> None:
         )
     found = paths.existing_artifacts(args.slug, root=args.root, phases=(args.phase,))
     items = [str(p) for p in found.values()]
-    cli.emit(items, limit=args.limit, full=args.full, json_mode=args.json_mode)
+    cli.emit(items, limit=args.limit, full=args.full, json_mode=args.json_mode, stdout=args.stdout)
 
 
 def _cmd_list(args: argparse.Namespace) -> None:
@@ -70,9 +70,9 @@ def _cmd_list(args: argparse.Namespace) -> None:
         raise cli.CliError(str(exc)) from exc
     if args.json_mode:
         shown = entries if (args.full or args.limit is None) else entries[: args.limit]
-        cli.emit(shown, json_mode=True)
+        cli.emit(shown, json_mode=True, stdout=args.stdout)
     else:
-        cli.emit([e["slug"] for e in entries], limit=args.limit, full=args.full)
+        cli.emit([e["slug"] for e in entries], limit=args.limit, full=args.full, stdout=args.stdout)
 
 
 def _cmd_resolve(args: argparse.Namespace) -> None:
@@ -85,7 +85,7 @@ def _cmd_resolve(args: argparse.Namespace) -> None:
         )
     except ValueError as exc:
         raise cli.CliError(str(exc)) from exc
-    cli.emit(result, json_mode=True)
+    cli.emit(result, json_mode=True, stdout=args.stdout)
 
 
 def _setup(parser: argparse.ArgumentParser) -> None:
@@ -145,4 +145,4 @@ def _setup(parser: argparse.ArgumentParser) -> None:
 
 
 if __name__ == "__main__":
-    cli.run(_setup)
+    raise SystemExit(cli.run(_setup))
