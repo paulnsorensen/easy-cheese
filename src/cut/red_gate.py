@@ -1414,10 +1414,26 @@ def _snapshot(
                 if entry.is_symlink():
                     resolved_target = path.resolve(strict=False)
                     if resolved_target.is_dir():
-                        report(
-                            f"{label} does not support directory symlink: {relative}"
-                        )
-                        continue
+                        try:
+                            target_relative = resolved_target.relative_to(root)
+                        except ValueError:
+                            snapshot_visible = False
+                        else:
+                            target_key = target_relative.as_posix()
+                            snapshot_visible = all(
+                                part not in _EXCLUDED_SNAPSHOT_DIRS
+                                for part in target_relative.parts
+                            ) and all(
+                                target_key != ignored
+                                and not target_key.startswith(f"{ignored}/")
+                                for ignored in ignored_keys
+                            )
+                        if not snapshot_visible:
+                            report(
+                                f"{label} does not support directory symlink "
+                                f"outside project snapshot: {relative}"
+                            )
+                            continue
                     target = _symlink_target_fingerprint(path)
                     snapshot[relative] = (
                         f"symlink:{os.readlink(entry.path)}:mode:{mode:o}:target:{target}"
