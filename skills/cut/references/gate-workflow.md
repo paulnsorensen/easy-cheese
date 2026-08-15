@@ -112,8 +112,10 @@ For each selected behavior curd:
    test-side file is a Cut refusal. Test-side files become `ProtectedFile`
    claims with their SHA-256 digests; declared production roots remain frozen
    throughout Cut.
-   Directory symlinks are unsupported and halt phase snapshotting rather than
-   following a tree outside the project.
+   Snapshot-visible directory symlinks whose targets resolve inside the project
+   are fingerprinted without traversal; target contents remain bound through
+   their canonical paths. Symlinks to external or excluded trees halt phase
+   snapshotting.
 6. Set `producer: cut`, `disposition: red`, `guard_receipt_refs: []`, and copy
    the exact phase-token ref, digest, baseline commands, and observed zero exits.
    Preserve the spec digest, project key, contract provenance, case origin, and
