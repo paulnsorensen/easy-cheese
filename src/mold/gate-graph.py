@@ -133,7 +133,7 @@ def _build_model() -> GateModel:
 GATE_MODEL = _build_model()
 
 
-def coherence_checklist() -> tuple[str, ...]:
+def coherence_checklist() -> tuple[str, ...]:  # noqa: V103
     """The checklist labels the model is built from — the rigor-parity anchor."""
     return COHERENCE_GATES
 
