@@ -136,6 +136,10 @@ _Code_: `src/easy_cheese_schemas/gates.py`
 _Avoid_: acceptance prose, generated test, test case
 _Code_: `src/easy_cheese_schemas/gates.py`
 
+**Guard contract** - a Mold-authored Test Contract deliberately classified `mode: "guard"` (alongside `tracer` and `contract-matrix`) for an acceptance criterion that is intentionally guarded rather than RED-tested; Cut excludes guard-mode rows when it builds the canonical RED plan, so a valid guard plan does not halt before Cook for lacking a tracer command. This mode never reaches `GateMode` (`gates.py`), which still only carries `tracer`/`contract-matrix` — guard contracts are filtered out upstream of the canonical `TestContract`/`GateReceipt` object.
+_Avoid_: untested contract, skipped acceptance criterion, tracer-required row
+_Code_: `CONTRACT_MODES` in `src/mold/taste_test.py:26`; excluded in `_parse_declared_spec` at `src/cut/red_gate.py:490`
+
 **Cut** - the pre-implementation gate that canonicalizes Test Contracts, adopts or authors the outer test, proves RED, protects evidence by digest, and issues a GateReceipt without committing the red-only state.
 _Avoid_: test-writing phase, pre-Cook commit, fixture generator
 _Code_: `src/cut/red_gate.py`
