@@ -1743,3 +1743,25 @@ def test_source_probe_quarantines_inherited_json_shadow(
     assert run.returncode == 1
     assert run.assertion_origin is True
     assert run.output.splitlines()[-1] == "AssertionError: json shadow witness"
+
+
+def test_probe_patches_the_console_seam_this_pytest_actually_calls() -> None:
+    import cut_assertion_probe
+
+    pytest_stub = ModuleType("pytest_stub")
+    pytest_stub.console_main = lambda: 0
+
+    config_with_console_main = ModuleType("config_with_console_main")
+    config_with_console_main._console_main = lambda: 0
+    modern_seam = cut_assertion_probe._pytest_console_seam(
+        pytest_stub, config_with_console_main
+    )
+    assert modern_seam == (config_with_console_main, "_console_main")
+    assert getattr(*modern_seam) is config_with_console_main._console_main
+
+    config_without_console_main = ModuleType("config_without_console_main")
+    legacy_seam = cut_assertion_probe._pytest_console_seam(
+        pytest_stub, config_without_console_main
+    )
+    assert legacy_seam == (pytest_stub, "console_main")
+    assert getattr(*legacy_seam) is pytest_stub.console_main

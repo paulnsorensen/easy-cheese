@@ -89,6 +89,16 @@ class TestEmitDict:
         cli.emit({"k": 1}, json_mode=True)
         assert json.loads(capsys.readouterr().out) == {"k": 1}
 
+    def test_writes_only_to_injected_stdout(
+        self, cli: ModuleType, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        from io import StringIO
+
+        output = StringIO()
+        cli.emit({"a": 1}, stdout=output)
+        assert json.loads(output.getvalue()) == {"a": 1}
+        assert capsys.readouterr().out == ""
+
 
 class TestEmitListNoLimit:
     def test_no_footer_when_limit_unset(self, cli: ModuleType, capsys: pytest.CaptureFixture[str]) -> None:
