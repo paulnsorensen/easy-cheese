@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 import subprocess
 import sys
 from pathlib import Path
+from types import ModuleType, SimpleNamespace
 
 import pytest
 import yaml
 
 import build_pyz
+from easy_cheese_schemas import manifest
 from easy_cheese_schemas.wiring_graph import compute_waves
 
 BUNDLE = build_pyz.cached_bundle("ultracook")
@@ -30,6 +33,21 @@ def _run_cli(*args: str) -> subprocess.CompletedProcess:
         capture_output=True,
         text=True,
     )
+
+
+def test_manifest_and_fanout_share_cycle_wording(wiring: ModuleType) -> None:
+    rows = [
+        manifest.WiringRow("W1", "config_entry", "a", ["W2"], "pending"),
+        manifest.WiringRow("W2", "config_entry", "b", ["W1"], "pending"),
+    ]
+    with pytest.raises(ValueError) as raised:
+        manifest.reject_unschedulable_wiring(None, SimpleNamespace(name="wiring"), rows)
+    expected = "the dependency graph has cycle W1 -> W2 -> W1"
+    fanout_errors = wiring.graph_errors(
+        [{"id": "W1", "depends_on": ["W2"]}, {"id": "W2", "depends_on": ["W1"]}]
+    )
+    assert str(raised.value) == f"wiring must be schedulable: {expected}"
+    assert fanout_errors == [expected]
 
 
 class TestComputeWaves:
@@ -70,6 +88,13 @@ class TestComputeWaves:
         # IDs within a wave are sorted so output is stable across runs.
         wiring = [("W3", []), ("W1", []), ("W2", [])]
         assert compute_waves(wiring) == [["W1", "W2", "W3"]]
+
+    def test_shared_with_bundled_wiring_topo_sort(self) -> None:
+        # src/fanout/wiring_topo_sort.py re-binds this name from
+        # easy_cheese_schemas.wiring_graph; an identity check proves the
+        # fanout CLI truly consumes the shared implementation, not a fork.
+        module = importlib.import_module("wiring_topo_sort")
+        assert module.compute_waves is compute_waves
 
 
 class TestCLI:

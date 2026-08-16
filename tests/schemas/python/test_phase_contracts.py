@@ -34,6 +34,7 @@ DECLARATIONS = (
     REPO_ROOT / "skills" / "press" / "phase-contract.yaml",
 )
 
+
 def _load(name: str, path: Path) -> ModuleType:
     spec = importlib.util.spec_from_file_location(name, path)
     assert spec is not None and spec.loader is not None
@@ -61,7 +62,9 @@ def test_phase_declarations_compile_to_embedded_registry_deterministically() -> 
 
     forward = compile_phase_declarations(declarations)
     reverse = compile_phase_declarations(reversed(declarations))
-    assert forward.to_json() == reverse.to_json() == COMPILED_TRANSITION_REGISTRY.to_json()
+    assert (
+        forward.to_json() == reverse.to_json() == COMPILED_TRANSITION_REGISTRY.to_json()
+    )
 
 
 def test_phase_declarations_use_canonical_registered_schema_ids() -> None:
@@ -71,10 +74,11 @@ def test_phase_declarations_use_canonical_registered_schema_ids() -> None:
     assert mold["contract_version"]["schema_uri"] == PHASE_CONTRACT_SCHEMA_URI
     assert mold["input_schema_uris"] == [PLANNER_REQUEST_SCHEMA_URI]
     for declaration in declarations:
-        assert declaration["contract_version"]["schema_uri"] == PHASE_CONTRACT_SCHEMA_URI
+        assert (
+            declaration["contract_version"]["schema_uri"] == PHASE_CONTRACT_SCHEMA_URI
+        )
         assert all(
-            uri.startswith(canonical)
-            for uri in declaration["input_schema_uris"]
+            uri.startswith(canonical) for uri in declaration["input_schema_uris"]
         )
         assert all(
             route["payload_schema_uri"].startswith(canonical)
@@ -162,7 +166,6 @@ def test_checked_in_registry_projection_matches_build_generator() -> None:
     ).read_text(encoding="utf-8") == build_pyz._compiled_phase_registry_source()
 
 
-
 def _write_phase_yaml(path: Path, source: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
@@ -198,13 +201,15 @@ def test_build_compiler_is_clean_bootstrap_safe_and_fresh_per_call(
 
     first = build_pyz._compiled_phase_registry_source()
     declaration.write_text(
-        declaration.read_text(encoding="utf-8").replace("source: smoke", "source: fresh"),
+        declaration.read_text(encoding="utf-8").replace(
+            "source: smoke", "source: fresh"
+        ),
         encoding="utf-8",
     )
     second = build_pyz._compiled_phase_registry_source()
 
-    assert "source\": \"smoke\"" in first
-    assert "source\": \"fresh\"" in second
+    assert 'source": "smoke"' in first
+    assert 'source": "fresh"' in second
     assert first != second
 
 
@@ -233,9 +238,9 @@ def test_checked_in_catalog_projection_matches_build_generator() -> None:
         sys.path.insert(0, str(scripts))
     build_pyz = _load("schema_catalog_build_pyz", scripts / "build_pyz.py")
 
-    assert (
-        REPO_ROOT / "src" / "easy_cheese_schemas" / "_schema_catalog.py"
-    ).read_text(encoding="utf-8") == build_pyz._compiled_schema_catalog_source()
+    assert (REPO_ROOT / "src" / "easy_cheese_schemas" / "_schema_catalog.py").read_text(
+        encoding="utf-8"
+    ) == build_pyz._compiled_schema_catalog_source()
 
 
 def test_schema_catalog_compilation_is_fresh_per_call(
@@ -250,18 +255,33 @@ def test_schema_catalog_compilation_is_fresh_per_call(
     staged.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
     monkeypatch.setattr(build_pyz, "SCHEMA_CONTRACT_SOURCE", staged)
 
-    first = build_pyz._compiled_schema_catalog_source()
+    first_source = build_pyz._compiled_schema_catalog_source()
     staged.write_text(
         staged.read_text(encoding="utf-8").replace(
             '@contract("curd-plan")', '@contract("fresh-plan")', 1
         ),
         encoding="utf-8",
     )
-    second = build_pyz._compiled_schema_catalog_source()
+    second_source = build_pyz._compiled_schema_catalog_source()
 
-    assert "curd-plan" in first
-    assert "fresh-plan" in second
-    assert first != second
+    checked_in: dict[str, object] = {}
+    first: dict[str, object] = {}
+    second: dict[str, object] = {}
+    exec(
+        (REPO_ROOT / "src" / "easy_cheese_schemas" / "_schema_catalog.py").read_text(
+            encoding="utf-8"
+        ),
+        checked_in,
+    )
+    exec(first_source, first)
+    exec(second_source, second)
+    canonical = checked_in["REGISTERED_CONTRACT_SCHEMA_URIS"]
+    assert isinstance(canonical, frozenset)
+    assert first["REGISTERED_CONTRACT_SCHEMA_URIS"] == canonical
+    assert second["REGISTERED_CONTRACT_SCHEMA_URIS"] == (
+        canonical - {f"{first['SCHEMA_ROOT']}/curd-plan"}
+        | {f"{first['SCHEMA_ROOT']}/fresh-plan"}
+    )
 
 
 def test_bundle_build_rejects_stale_checked_in_catalog(
@@ -333,6 +353,7 @@ def test_direct_phase_runtime_smoke_under_python_s() -> None:
     )
     assert result.stdout == "ok\n"
 
+
 def test_compile_rejects_duplicate_source() -> None:
     declaration = _declarations()[0]
 
@@ -349,6 +370,7 @@ def test_compile_rejects_duplicate_output_route() -> None:
 
     with pytest.raises(ValueError, match="duplicate output transitions"):
         compile_phase_declarations([declaration])
+
 
 def test_parse_phase_yaml_rejects_duplicate_authority_fields() -> None:
     with pytest.raises(ValueError, match=r"duplicate field 'major'"):
@@ -576,6 +598,7 @@ def test_writer_never_follows_preplaced_predictable_tmp_symlink(
     assert target.exists()
     assert sentinel.read_text(encoding="utf-8") == "untouched"
     assert predictable_tmp.is_symlink()
+
 
 def test_unregistered_legacy_age_route_preserves_phase_path(
     writer: ModuleType, tmp_path: Path
