@@ -14,6 +14,7 @@ neither this script nor its test mutates the repo's working copy.
 from __future__ import annotations
 
 import argparse
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -22,6 +23,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import build_pyz  # noqa: E402  (sibling module in scripts/)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+_RELATIVE_MARKDOWN_LINK = re.compile(
+    r"\[[^\]]*\]\((?!https?://|mailto:|#)([^)\s#]+\.md)(?:#[^)\s]*)?\)"
+)
 
 # Allowlist, not denylist: new dev scaffolding added to the repo stays out of
 # releases by default. `skills` ships wholesale (post-build); metadata files
@@ -76,6 +80,21 @@ def stage(out: Path) -> Path:
     return out
 
 
+def _verify_skill_references(skills: Path) -> None:
+    root = skills.resolve()
+    missing: list[str] = []
+    for metadata in sorted(skills.glob("*/SKILL.md")):
+        body = metadata.read_text(encoding="utf-8")
+        for target in _RELATIVE_MARKDOWN_LINK.findall(body):
+            resolved = (metadata.parent / target).resolve()
+            if not resolved.is_relative_to(root) or not resolved.is_file():
+                missing.append(f"{metadata.relative_to(skills.parent)} -> {target}")
+    if missing:
+        raise SystemExit(
+            "stage_release: missing skill reference: " + ", ".join(missing)
+        )
+
+
 def _verify(out: Path) -> None:
     """Fail loud if the staged tree is wrong — a broken release should never get
     silently published (the v0.5.1 failure mode)."""
@@ -87,6 +106,8 @@ def _verify(out: Path) -> None:
         pyz = skills / skill / "scripts" / f"{skill}.pyz"
         if not pyz.is_file():
             raise SystemExit(f"stage_release: missing bundle {pyz}")
+
+    _verify_skill_references(skills)
 
     stray = sorted(str(p.relative_to(out)) for p in skills.rglob("*.py"))
     if stray:

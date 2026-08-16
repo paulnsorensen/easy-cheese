@@ -18,6 +18,9 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 import build_pyz  # noqa: E402
 import stage_release  # noqa: E402
 from ref_extraction import relative_md_refs  # noqa: E402
+WHEYPOINT_DELTA_CONTRACT = (
+    Path("skills") / "wheypoint" / "references" / "delta-contract.md"
+)
 
 
 @pytest.fixture(scope="module")
@@ -56,6 +59,12 @@ def test_top_level_metadata_present(staged: Path) -> None:
     assert (staged / "LICENSE").is_file()
 
 
+
+
+def test_wheypoint_delta_contract_ships(staged: Path) -> None:
+    assert (staged / WHEYPOINT_DELTA_CONTRACT).is_file(), (
+        "delta contract reference missing"
+    )
 @pytest.mark.parametrize("danger", ["/", str(REPO_ROOT), str(REPO_ROOT.parent)])
 def test_stage_refuses_to_wipe_dangerous_paths(danger: str) -> None:
     """rmtree on --out must never touch the filesystem root, the repo, or an
@@ -70,6 +79,23 @@ def test_verify_rejects_missing_bundle(tmp_path: Path) -> None:
     (fake / "skills" / "affinage").mkdir(parents=True)
     (fake / "skills" / "affinage" / "SKILL.md").write_text("# affinage\n")
     with pytest.raises(SystemExit, match="missing bundle"):
+        stage_release._verify(fake)
+
+
+def test_verify_rejects_a_missing_skill_reference(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = tmp_path / "tree"
+    skill = fake / "skills" / "wheypoint"
+    (skill / "scripts").mkdir(parents=True)
+    (skill / "SKILL.md").write_text(
+        "# wheypoint\n\n[Delta contract](references/delta-contract.md)\n",
+        encoding="utf-8",
+    )
+    (skill / "scripts" / "wheypoint.pyz").write_bytes(b"bundle")
+    monkeypatch.setattr(build_pyz, "SKILLS", ("wheypoint",))
+
+    with pytest.raises(SystemExit, match="missing skill reference"):
         stage_release._verify(fake)
 
 
