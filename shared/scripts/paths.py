@@ -484,7 +484,7 @@ class WikiProbe(NamedTuple):
     """
 
     corpus: str | None
-    reachable: bool
+    reachable: bool  # noqa: V107
 
 
 def _wiki_corpus(list_corpora: Callable[[], list[str]] | None) -> WikiProbe:

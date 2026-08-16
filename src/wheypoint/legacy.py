@@ -68,7 +68,7 @@ class LegacyHandoffSlug:
     orientation: str
     mode: str = "single"
     session: str | None = None
-    git: str | None = None
+    git: str | None = None  # noqa: V107
     created: str | None = None
     parents: str | None = None
     baseline: str | None = None
