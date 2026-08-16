@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import io
 import json
+import subprocess
+import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -32,6 +34,142 @@ import wheypoint
 from conftest import WORK_ID, Promotion
 
 CAPTURED_AT = "2026-08-02T00:00:00Z"
+REPO_ROOT = Path(__file__).resolve().parents[3]
+BUNDLE = REPO_ROOT / "skills" / "wheypoint" / "scripts" / "wheypoint.pyz"
+DELTA_CONTRACT = (
+    REPO_ROOT / "skills" / "wheypoint" / "references" / "delta-contract.md"
+)
+
+
+def test_bundled_commit_help_advertises_the_delta_schema() -> None:
+    run = subprocess.run(
+        [sys.executable, str(BUNDLE), "commit", "--help"],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert run.returncode == 0
+    assert "--schema" in run.stdout, "schema contract missing"
+
+
+def test_bundled_commit_schema_describes_the_complete_delta_contract() -> None:
+    run = subprocess.run(
+        [sys.executable, str(BUNDLE), "commit", "--schema"],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert run.returncode == 0, "schema contract missing"
+    payload = json.loads(run.stdout)
+    assert payload["ok"] is True
+    assert payload["command"] == "commit"
+
+    schema = payload["schema"]
+    assert schema["title"] == "WheypointDelta"
+    assert schema["required"] == ["work_id", "expected_revision_id"]
+    assert set(schema["properties"]) == {
+        "work_id",
+        "expected_revision_id",
+        "orientation",
+        "working_context",
+        "next_action",
+        "decision_dossier",
+        "add_decisions",
+        "add_questions",
+        "add_blockers",
+        "add_artifact_links",
+        "transitions",
+        "compacted",
+        "rehydrated_from_revision_id",
+        "session_provenance",
+    }
+    assert schema["$defs"]["Identifier"] == {
+        "type": "string",
+        "pattern": "^(?:[a-z0-9][a-z0-9._-]{0,63})$",
+        "maxLength": 64,
+    }
+    assert schema["$defs"]["NextMove"]["enum"] == [
+        "mold",
+        "cut",
+        "cook",
+        "press",
+        "age",
+        "cure",
+        "affinage",
+        "briesearch",
+        "culture",
+        "hold",
+        "tasks",
+        "done",
+    ]
+    assert schema["$defs"]["EntryKind"]["enum"] == [
+        "decision",
+        "question",
+        "blocker",
+    ]
+    assert schema["$defs"]["TransitionAction"]["enum"] == [
+        "resolve",
+        "supersede",
+        "withdraw",
+    ]
+    assert {
+        "NextAction",
+        "ProposedEntry",
+        "ArtifactLink",
+        "EntryTransition",
+        "DecisionFork",
+        "DossierOption",
+        "SessionProvenance",
+        "GenesisSessionProvenance",
+    } <= schema["$defs"].keys()
+    for field, definition in (
+        ("add_decisions", "DecisionEntry"),
+        ("add_questions", "QuestionEntry"),
+        ("add_blockers", "BlockerEntry"),
+    ):
+        items = schema["properties"][field]["anyOf"][0]["items"]
+        assert items == {"$ref": f"#/$defs/{definition}"}
+
+    contract = schema["x-wheypoint-contract"]
+    assert contract["genesis"] == {
+        "sentinel": "genesis",
+        "required": [
+            "orientation",
+            "working_context",
+            "next_action",
+            "session_provenance.captured_at",
+        ],
+        "forbidden": ["compacted: true", "non-empty transitions"],
+    }
+    assert contract["omitted_or_null"] == "carry forward unchanged"
+    assert contract["empty_list"] == "replace with no items"
+    assert contract["invariants"] == [
+        "add_decisions, add_questions, and add_blockers accept only their matching entry kind",
+        "decision entries cannot block continuation",
+        "a record with a gating question or blocker requires a non-empty decision_dossier",
+        "each transition names one active existing entry at most once; supersede also names its successor",
+    ]
+    assert contract["limits"] == {"text_characters": 2000, "list_items": 64}
+
+
+def test_shipped_delta_examples_are_structurally_valid() -> None:
+    sections = DELTA_CONTRACT.read_text(encoding="utf-8").split("```json\n")[1:]
+    assert len(sections) == 2
+
+    examples = [
+        records.structure(json.loads(section.split("\n```", 1)[0]), WheypointDelta)
+        for section in sections
+    ]
+    assert examples[0].expected_revision_id == commit.GENESIS_PARENT
+    assert examples[0].session_provenance is not None
+    assert examples[0].session_provenance.captured_at == "2026-08-15T21:35:33Z"
+    assert examples[1].expected_revision_id == "rev-0123456789ab"
+    assert examples[1].working_context == []
+    assert len(examples[1].transitions or []) == 1
 
 
 def _run(
@@ -95,6 +233,10 @@ def test_commit_creates_the_first_record_from_a_genesis_delta_on_stdin(
     assert payload["status"] == "ok"
     revision_id = payload["revision_id"]
     assert payload["projection_path"] == f"projections/1-{revision_id}.md"
+    expected_projection = store.projection_path(1, revision_id).resolve()
+    assert "projection_absolute_path" in payload, "canonical projection path missing"
+    assert Path(payload["projection_absolute_path"]) == expected_projection
+    assert expected_projection.is_file()
     assert payload["record"]["revision_id"] == revision_id
     assert payload["record"]["title"] == "Wave 4 owns the CLI."
     assert payload["record"]["created"] == CAPTURED_AT

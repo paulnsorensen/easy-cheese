@@ -39,6 +39,7 @@ from typing import Any, TextIO
 from easy_cheese_schemas import WheypointDelta
 
 import commit as commit_mod
+import delta_contract
 import lint as lint_mod
 import records
 import resolve as resolve_mod
@@ -70,7 +71,13 @@ class _Parser(argparse.ArgumentParser):
 
 def _parser(command: str) -> _Parser:
     parser = _Parser(prog=f"wheypoint.pyz {command}")
-    if command == "resolve":
+    if command == "commit":
+        parser.add_argument(
+            "--schema",
+            action="store_true",
+            help="print the WheypointDelta JSON contract instead of committing stdin",
+        )
+    elif command == "resolve":
         parser.add_argument(
             "--ref",
             required=True,
@@ -100,6 +107,8 @@ def _maybe(obj: object) -> dict[str, Any] | None:
 
 
 def _run_commit(args: argparse.Namespace, stdin: TextIO) -> dict[str, Any]:
+    if args.schema:
+        return {"schema": delta_contract.wheypoint_delta_json_schema()}
     try:
         payload = json.loads(stdin.read())
     except ValueError as exc:
@@ -127,6 +136,11 @@ def _run_commit(args: argparse.Namespace, stdin: TextIO) -> dict[str, Any]:
         "parent_revision_id": result.revision.parent_revision_id,
         "status": result.record.status.value,
         "projection_path": result.revision.projection_path,
+        "projection_absolute_path": str(
+            store.projection_path(
+                result.revision.revision_number, result.revision.revision_id
+            ).resolve()
+        ),
         "record": records.unstructure(result.record),
         "revision": records.unstructure(result.revision),
         "markdown": result.markdown,
