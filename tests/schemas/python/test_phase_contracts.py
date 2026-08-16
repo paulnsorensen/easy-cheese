@@ -227,6 +227,90 @@ def test_bundle_build_rejects_stale_checked_in_registry(
     assert build_pyz._checked_in_phase_registry_bytes("current") == expected
 
 
+def test_checked_in_catalog_projection_matches_build_generator() -> None:
+    scripts = REPO_ROOT / "scripts"
+    if str(scripts) not in sys.path:
+        sys.path.insert(0, str(scripts))
+    build_pyz = _load("schema_catalog_build_pyz", scripts / "build_pyz.py")
+
+    assert (
+        REPO_ROOT / "src" / "easy_cheese_schemas" / "_schema_catalog.py"
+    ).read_text(encoding="utf-8") == build_pyz._compiled_schema_catalog_source()
+
+
+def test_schema_catalog_compilation_is_fresh_per_call(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    scripts = REPO_ROOT / "scripts"
+    if str(scripts) not in sys.path:
+        sys.path.insert(0, str(scripts))
+    build_pyz = _load("schema_catalog_build_fresh", scripts / "build_pyz.py")
+    source = REPO_ROOT / "src" / "easy_cheese_schemas" / "contracts.py"
+    staged = tmp_path / "contracts.py"
+    staged.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+    monkeypatch.setattr(build_pyz, "SCHEMA_CONTRACT_SOURCE", staged)
+
+    first = build_pyz._compiled_schema_catalog_source()
+    staged.write_text(
+        staged.read_text(encoding="utf-8").replace(
+            '@contract("curd-plan")', '@contract("fresh-plan")', 1
+        ),
+        encoding="utf-8",
+    )
+    second = build_pyz._compiled_schema_catalog_source()
+
+    assert "curd-plan" in first
+    assert "fresh-plan" in second
+    assert first != second
+
+
+def test_bundle_build_rejects_stale_checked_in_catalog(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    scripts = REPO_ROOT / "scripts"
+    if str(scripts) not in sys.path:
+        sys.path.insert(0, str(scripts))
+    build_pyz = _load("schema_catalog_build_stale", scripts / "build_pyz.py")
+    source = REPO_ROOT / "src" / "easy_cheese_schemas" / "contracts.py"
+    staged = tmp_path / "contracts.py"
+    staged.write_text(
+        source.read_text(encoding="utf-8").replace(
+            '@contract("curd-plan")', '@contract("fresh-plan")', 1
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(build_pyz, "SCHEMA_CONTRACT_SOURCE", staged)
+    target = tmp_path / "cook.pyz"
+
+    with pytest.raises(RuntimeError, match="checked-in schema catalog is stale"):
+        build_pyz.build_bundle("cook", target)
+
+    assert not target.exists()
+
+
+def test_unrelated_bundle_skips_schema_catalog_validation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    scripts = REPO_ROOT / "scripts"
+    if str(scripts) not in sys.path:
+        sys.path.insert(0, str(scripts))
+    build_pyz = _load("schema_catalog_build_unrelated", scripts / "build_pyz.py")
+
+    def unexpected_catalog_call(*_args: object, **_kwargs: object) -> None:
+        pytest.fail("unrelated bundles must not validate the schema catalog")
+
+    monkeypatch.setattr(
+        build_pyz, "_compiled_schema_catalog_source", unexpected_catalog_call
+    )
+    monkeypatch.setattr(
+        build_pyz, "_checked_in_schema_catalog_bytes", unexpected_catalog_call
+    )
+    target = tmp_path / "melt.pyz"
+
+    assert build_pyz.build_bundle("melt", target) == target
+    assert target.is_file()
+
+
 def test_direct_phase_runtime_smoke_under_python_s() -> None:
     code = (
         "import sys;"

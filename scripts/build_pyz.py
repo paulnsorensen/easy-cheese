@@ -20,6 +20,7 @@ import tempfile
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
+from types import ModuleType
 
 import vendor_deps
 
@@ -31,6 +32,7 @@ PHASE_REGISTRY_MODULE = "_compiled_phase_registry.py"
 PHASE_REGISTRY_SOURCE = SRC_ROOT / "easy_cheese_schemas" / PHASE_REGISTRY_MODULE
 PHASE_CONTRACT_SOURCE = SRC_ROOT / "easy_cheese_schemas" / "phase_contracts.py"
 SCHEMA_CATALOG_SOURCE = SRC_ROOT / "easy_cheese_schemas" / "_schema_catalog.py"
+SCHEMA_CONTRACT_SOURCE = SRC_ROOT / "easy_cheese_schemas" / "contracts.py"
 SHARED_MODULES = {p.stem for p in SHARED_SCRIPTS.glob("*.py")}
 ZIP_TIMESTAMP = (1980, 1, 2, 0, 0, 0)
 # Pinned so the compressed bytes depend only on the zlib build, never on
@@ -229,6 +231,56 @@ def _compiled_phase_registry_source() -> str:
     return _phase_compiler()(declarations)
 
 
+def _schema_catalog_compiler():
+    """Load the source-only catalog compiler without runtime projections."""
+    package_entry = str(SRC_ROOT / "easy_cheese_schemas")
+    if package_entry not in sys.path:
+        sys.path.insert(0, package_entry)
+    from _schema_catalog_compiler import collect, render
+
+    return collect, render
+
+
+def _schema_contract_module() -> ModuleType:
+    """Load a fresh contracts module so every build sees current markers."""
+    vendor_deps.require_populated("schema catalog compiler")
+    vendor_entry = str(vendor_deps.VENDOR_ROOT)
+    if vendor_entry not in sys.path:
+        sys.path.insert(0, vendor_entry)
+    module = ModuleType("_build_schema_contracts")
+    module.__file__ = str(SCHEMA_CONTRACT_SOURCE)
+    sys.modules[module.__name__] = module
+    source = SCHEMA_CONTRACT_SOURCE.read_bytes()
+    exec(
+        compile(source, str(SCHEMA_CONTRACT_SOURCE), "exec"),
+        module.__dict__,
+    )
+    return module
+
+
+def _compiled_schema_catalog_source() -> str:
+    """Compile the marker-derived schema catalog from the live contracts."""
+    collect, render = _schema_catalog_compiler()
+    return render(collect(_schema_contract_module()))
+
+
+def _checked_in_schema_catalog_bytes(expected_source: str) -> bytes:
+    """Require the tracked generated catalog to match the marker authority."""
+    expected = expected_source.encode("utf-8")
+    try:
+        actual = SCHEMA_CATALOG_SOURCE.read_bytes()
+    except FileNotFoundError as exc:
+        raise RuntimeError(
+            f"checked-in schema catalog is missing: {SCHEMA_CATALOG_SOURCE}"
+        ) from exc
+    if actual != expected:
+        raise RuntimeError(
+            "checked-in schema catalog is stale; regenerate "
+            "src/easy_cheese_schemas/_schema_catalog.py"
+        )
+    return actual
+
+
 def _checked_in_phase_registry_bytes(expected_source: str) -> bytes:
     """Require the tracked generated projection to match the YAML authority."""
     expected = expected_source.encode("utf-8")
@@ -392,13 +444,17 @@ def _write_zipapp(source: Path, target: Path) -> None:
 
 def build_bundle(skill: str, target: Path) -> Path:
     """Build ``skill``'s bundle at ``target`` (a .pyz path). Returns it."""
-    target.parent.mkdir(parents=True, exist_ok=True)
     files = _files(skill)
     sub_to_module = {sub: _module_name(_filename(src)) for sub, src in files.items()}
+    catalog_bytes: bytes | None = None
+    if skill in PACKAGE_TREES:
+        catalog_source = _compiled_schema_catalog_source()
+        catalog_bytes = _checked_in_schema_catalog_bytes(catalog_source)
     registry_bytes = None
     if skill in {COMMON, "cook", "ultracook", "wheypoint"}:
         registry_source = _compiled_phase_registry_source()
         registry_bytes = _checked_in_phase_registry_bytes(registry_source)
+    target.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as td:
         stage = Path(td)
         for module in sorted(needed_shared(skill)):
@@ -428,15 +484,28 @@ def build_bundle(skill: str, target: Path) -> Path:
                     tree,
                     stage / tree.name,
                     ignore=shutil.ignore_patterns(
-                        "__pycache__", "_phase_registry_compiler.py"
+                        "__pycache__",
+                        "_phase_registry_compiler.py",
+                        "_schema_catalog_compiler.py",
                     ),
                 )
             else:
                 shutil.copy(tree, stage / tree.name)
+        if skill == COMMON:
+            catalog_paths = (
+                stage / "_schema_catalog.py",
+                stage / "easy_cheese_schemas" / "_schema_catalog.py",
+            )
+        elif skill in PACKAGE_TREES:
+            catalog_paths = (stage / "easy_cheese_schemas" / "_schema_catalog.py",)
+        else:
+            catalog_paths = ()
+        if catalog_bytes is not None:
+            for catalog_path in catalog_paths:
+                catalog_path.write_bytes(catalog_bytes)
         if registry_bytes is not None:
             if skill == COMMON:
                 shutil.copy(PHASE_CONTRACT_SOURCE, stage / "phase_contracts.py")
-                shutil.copy(SCHEMA_CATALOG_SOURCE, stage / "_schema_catalog.py")
                 (stage / PHASE_REGISTRY_MODULE).write_bytes(registry_bytes)
             else:
                 package_registry = stage / "easy_cheese_schemas" / PHASE_REGISTRY_MODULE
