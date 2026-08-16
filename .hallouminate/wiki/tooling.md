@@ -15,9 +15,31 @@ PR, or hand-off (`AGENTS.md:7`).
 | markdown | `lint-md-fix` (autofix) | `lint-md` (check only) |
 | yaml | `lint-yaml-fix` + `lint-yaml` | `lint-yaml` |
 | python | `lint-py-fix` (`uvx ruff check --fix .`) | — |
+| dead code | — | `lint-dead` (`uvx vulture`, pinned baseline) |
 | shell | `lint-sh` (`shellcheck scripts/install.sh`) | `lint-sh` |
 | tests | `test` | `test` |
 | docs | `docs-build` (`pnpm run docs:build` → Astro/Starlight) | `docs-build` |
+
+Three gaps this asymmetry has bitten:
+
+- **`just check` green ≠ CI green.** Vulture (`lint-dead`) runs only in
+  `just ci` and the GitHub "lint markdown, yaml, python" job — `check`
+  never runs it, so dead-code findings surface first in CI. Vulture
+  counts `getattr(x, "name")`/`hasattr(x, "name")` string literals as
+  reads, but a `getattr(module, variable)` read is invisible to it; give
+  such attributes one literal read (a stronger assertion usually works)
+  or whitelist them in `vulture_whitelist.py`.
+- **`lint-yaml-fix` (in `check`, not `ci`) restyles `pnpm-lock.yaml`**
+  into `? key : value` complex-key form. CI's `yamllint` accepts the
+  committed pnpm-native form, so that churn is never required — leave it
+  uncommitted.
+- **CI pins `pytest==9.0.3`** (`validate.yml`) while dev environments
+  track newer pytest (9.1+). Code that touches pytest internals — the
+  cut assertion probe's console seam, for example — must feature-detect:
+  pytest 9.1 moved `pytest.__main__`'s entry to the private
+  `_pytest.config._console_main`; older releases call the public
+  `pytest.console_main`. A dev-green/CI-red split on native-runner tests
+  is usually this version skew.
 
 The `test` recipe runs the skill + wiki validator self-tests and
 validators (`test_validate_skills.py`, `test_validate_wiki.py`,
