@@ -322,6 +322,19 @@ def _runner_main_origin(runner: str) -> str:
     return spec.origin
 
 
+def _pytest_console_seam(
+    pytest_module: ModuleType, pytest_config: ModuleType
+) -> tuple[ModuleType, str]:
+    """Return (module, attr) that this interpreter's pytest.__main__ calls.
+
+    pytest >= 9.1 routes __main__ through the private _pytest.config._console_main;
+    older releases call the public pytest.console_main.
+    """
+    if hasattr(pytest_config, "_console_main"):
+        return pytest_config, "_console_main"
+    return pytest_module, "console_main"
+
+
 def _run_pytest(
     args: list[str],
     descriptor: int,
@@ -335,21 +348,25 @@ def _run_pytest(
     observation = _Observation("pytest")
     pytest.hookimpl(hookwrapper=True)(_PytestAssertionProbe.pytest_runtest_makereport)
     sys.argv = [_runner_main_origin("pytest"), *args]
-    original_console_main = pytest_config._console_main
+    seam_module, seam_attr = _pytest_console_seam(pytest, pytest_config)
+    original_console_main = getattr(seam_module, seam_attr)
     returncode = 0
 
     def probe_console_main() -> int:
         nonlocal returncode
-        pytest_config._console_main = original_console_main
+        setattr(seam_module, seam_attr, original_console_main)
         main_module = sys.modules.get("__main__")
-        if main_module is not None:
-            main_module._console_main = original_console_main
+        if (
+            main_module is not None
+            and getattr(main_module, seam_attr, None) is probe_console_main
+        ):
+            setattr(main_module, seam_attr, original_console_main)
         returncode = int(
             pytest.main(args, plugins=[_PytestAssertionProbe(observation)])
         )
         return returncode
 
-    pytest_config._console_main = probe_console_main
+    setattr(seam_module, seam_attr, probe_console_main)
     try:
         runpy.run_module(
             "pytest.__main__",
@@ -360,13 +377,13 @@ def _run_pytest(
     except SystemExit as error:
         returncode = error.code if isinstance(error.code, int) else 1
     finally:
-        pytest_config._console_main = original_console_main
+        setattr(seam_module, seam_attr, original_console_main)
         main_module = sys.modules.get("__main__")
         if (
             main_module is not None
-            and getattr(main_module, "_console_main", None) is probe_console_main
+            and getattr(main_module, seam_attr, None) is probe_console_main
         ):
-            main_module._console_main = original_console_main
+            setattr(main_module, seam_attr, original_console_main)
     return returncode if observation.emit(descriptor) else 126
 
 
