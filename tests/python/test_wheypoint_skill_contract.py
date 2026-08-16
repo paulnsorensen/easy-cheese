@@ -19,6 +19,7 @@ SKILLS_DIR = REPO_ROOT / "skills"
 WHEYPOINT = SKILLS_DIR / "wheypoint" / "SKILL.md"
 CHEESE = SKILLS_DIR / "cheese" / "SKILL.md"
 CONTINUE_RESUME = SKILLS_DIR / "cheese" / "references" / "continue-resume.md"
+DELTA_CONTRACT = SKILLS_DIR / "wheypoint" / "references" / "delta-contract.md"
 
 # The spec fixes the command set at exactly four. Genesis is a delta whose
 # expected_revision_id is the sentinel, so a `create` command must never appear.
@@ -104,6 +105,39 @@ def test_the_genesis_sentinel_is_documented_as_the_way_work_starts() -> None:
     body = _read(WHEYPOINT)
     assert "genesis" in body.lower()
     assert "expected_revision_id" in body
+
+
+def test_delta_contract_is_shipped_and_linked_from_the_flow() -> None:
+    assert DELTA_CONTRACT.is_file(), "delta contract reference missing"
+    skill = _read(WHEYPOINT)
+    contract = _read(DELTA_CONTRACT)
+
+    assert "[WheypointDelta JSON contract](references/delta-contract.md)" in skill
+    for required in (
+        '"expected_revision_id": "genesis"',
+        '"expected_revision_id": "rev-0123456789ab"',
+        "[a-z0-9][a-z0-9._-]{0,63}",
+        "Omitted or `null`",
+        "`[]`",
+        "session_provenance.captured_at",
+        "sha256:<64 lowercase hex>",
+    ):
+        assert required in contract
+
+
+def test_handoff_reports_the_canonical_projection_instead_of_a_local_note() -> None:
+    body = _read(WHEYPOINT)
+
+    assert "projection_absolute_path" in body, "canonical projection path missing"
+    assert (
+        "writes the immutable revision plus the Markdown `WheypointProjection` "
+        "at `.cheese/notes/<slug>.md`"
+    ) not in body
+    assert (
+        "write capability scoped to the durable corpus and `.cheese/notes/**`"
+        not in body
+    )
+    assert "<absolute-repo-path>/.cheese/notes/<slug>.md" not in body
 
 
 @pytest.mark.parametrize(
