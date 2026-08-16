@@ -1753,11 +1753,15 @@ def test_probe_patches_the_console_seam_this_pytest_actually_calls() -> None:
 
     config_with_console_main = ModuleType("config_with_console_main")
     config_with_console_main._console_main = lambda: 0
-    assert cut_assertion_probe._pytest_console_seam(
+    modern_seam = cut_assertion_probe._pytest_console_seam(
         pytest_stub, config_with_console_main
-    ) == (config_with_console_main, "_console_main")
+    )
+    assert modern_seam == (config_with_console_main, "_console_main")
+    assert getattr(*modern_seam) is config_with_console_main._console_main
 
     config_without_console_main = ModuleType("config_without_console_main")
-    assert cut_assertion_probe._pytest_console_seam(
+    legacy_seam = cut_assertion_probe._pytest_console_seam(
         pytest_stub, config_without_console_main
-    ) == (pytest_stub, "console_main")
+    )
+    assert legacy_seam == (pytest_stub, "console_main")
+    assert getattr(*legacy_seam) is pytest_stub.console_main
