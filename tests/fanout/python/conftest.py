@@ -79,12 +79,12 @@ def phase_decision() -> ModuleType:
     return importlib.import_module("phase_decision")
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="session")  # noqa: V103
 def uc_dir() -> Path:
     return UC_DIR
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="session")  # noqa: V103
 def references_dir() -> Path:
     return REFERENCES_DIR
 

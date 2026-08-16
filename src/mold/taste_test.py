@@ -913,7 +913,7 @@ def decomposition_gate(
     )
 
 
-def require_decomposition(
+def require_decomposition(  # noqa: V103
     verdict: ForkTasteVerdict, *, correction_round: int = 0
 ) -> None:
     result = decomposition_gate(verdict, correction_round=correction_round)

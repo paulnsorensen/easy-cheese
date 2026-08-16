@@ -41,7 +41,7 @@ class Stop:
     """Stop Press, optionally preserving a valid third-RED evidence chain."""
 
     reason: str
-    gated_evidence: bool
+    gated_evidence: bool  # noqa: V107
 
 
 Action: TypeAlias = Continue | Dispatch | Stop

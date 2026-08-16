@@ -434,8 +434,8 @@ def _write_zipapp(source: Path, target: Path) -> None:
             )
             for name, staged_file in staged:
                 info = zipfile.ZipInfo(name, date_time=ZIP_TIMESTAMP)
-                info.create_system = 3
-                info.external_attr = 0o644 << 16
+                info.create_system = 3  # noqa: V101
+                info.external_attr = 0o644 << 16  # noqa: V101
                 archive.writestr(
                     info,
                     staged_file.read_bytes(),

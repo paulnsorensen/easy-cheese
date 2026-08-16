@@ -162,7 +162,7 @@ def parse_skill_dispatch(dispatch: str) -> tuple[str, list[str]]:
     return match.group("skill"), args
 
 
-def propagate_flags(source_flags: list[str], *, in_auto_chain: bool) -> list[str]:
+def propagate_flags(source_flags: list[str], *, in_auto_chain: bool) -> list[str]:  # noqa: V103
     """Return the subset of source flags that survive the propagation rules."""
     result: list[str] = []
     for flag in source_flags:

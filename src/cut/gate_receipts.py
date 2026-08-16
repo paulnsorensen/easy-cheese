@@ -32,7 +32,7 @@ class ValidationResult:
     problems: tuple[str, ...] = ()
     receipt: GateReceipt | None = None
 
-    @property
+    @property  # noqa: V106
     def diagnostics(self) -> tuple[str, ...]:
         """Return problems under the command-facing diagnostics name."""
         return self.problems

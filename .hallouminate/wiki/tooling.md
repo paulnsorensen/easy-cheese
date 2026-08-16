@@ -15,20 +15,25 @@ PR, or hand-off (`AGENTS.md:7`).
 | markdown | `lint-md-fix` (autofix) | `lint-md` (check only) |
 | yaml | `lint-yaml-fix` + `lint-yaml` | `lint-yaml` |
 | python | `lint-py-fix` (`uvx ruff check --fix .`) | — |
-| dead code | — | `lint-dead` (`uvx vulture`, pinned baseline) |
+| dead code | `lint-py-dead-code` (owner-qualified Vulture classifier) | `lint-py-dead-code` |
 | shell | `lint-sh` (`shellcheck scripts/install.sh`) | `lint-sh` |
 | tests | `test` | `test` |
 | docs | `docs-build` (`pnpm run docs:build` → Astro/Starlight) | `docs-build` |
 
-Three gaps this asymmetry has bitten:
+**Vulture is whitelist-free.** `scripts/check_dead_code.py` wraps
+Vulture 2.16's scan and accepts findings only in narrow,
+owner-qualified categories (schema-owned enum members/attrs fields,
+exact stdlib callback overrides, autouse pytest fixtures); everything
+else fails the gate. `lint-py-dead-code` runs in both `check` and `ci`,
+so there is no local/CI skew. Twenty findings outside those categories
+carry local `# noqa: V1xx` comments instead of a checked-in symbol
+list. Vulture counts `getattr(x, "name")`/`hasattr(x, "name")` string
+literals as reads, but a `getattr(module, variable)` read is invisible
+to it; give such attributes one literal read (a stronger assertion
+usually works) or a local `# noqa`.
 
-- **`just check` green ≠ CI green.** Vulture (`lint-dead`) runs only in
-  `just ci` and the GitHub "lint markdown, yaml, python" job — `check`
-  never runs it, so dead-code findings surface first in CI. Vulture
-  counts `getattr(x, "name")`/`hasattr(x, "name")` string literals as
-  reads, but a `getattr(module, variable)` read is invisible to it; give
-  such attributes one literal read (a stronger assertion usually works)
-  or whitelist them in `vulture_whitelist.py`.
+Two gaps the remaining asymmetry has bitten:
+
 - **`lint-yaml-fix` (in `check`, not `ci`) restyles `pnpm-lock.yaml`**
   into `? key : value` complex-key form. CI's `yamllint` accepts the
   committed pnpm-native form, so that churn is never required — leave it
