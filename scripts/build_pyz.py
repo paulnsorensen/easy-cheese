@@ -145,7 +145,9 @@ SRC_DIRS: dict[str, str] = {"ultracook": "fanout"}
 # vendored into both the mold and ultracook bundles.
 EXTRA_MODULES: dict[str, list[tuple[str, str]]] = {
     "mold": [("fanout", "mode.py")],
-    "cut": [("mold", "taste_test.py")],
+    "cut": [
+        ("mold", "taste_test.py"),
+    ],
     "age": [
         ("fanout", "age_route.py"),
         ("fanout", "review_surface.py"),
@@ -157,6 +159,7 @@ EXTRA_MODULES: dict[str, list[tuple[str, str]]] = {
     "pasteurize": [("fanout", "pasteurize_route.py")],
     "press": [
         ("fanout", "press_route.py"),
+        ("cut", "cut_assertion_probe.py"),
         ("cut", "gate_receipts.py"),
         ("mold", "taste_test.py"),
     ],
