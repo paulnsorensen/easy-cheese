@@ -95,6 +95,8 @@ entity, only the algorithm is shared. The parallel-eligibility gate
 a linear `/cook` run) stays in `validate_decomposition.py` because it is
 pipeline policy, not a fact about whether a curd is valid.
 
+The Wiring node's graph algorithm is shared the same way: `easy_cheese_schemas/wiring_graph.py` (`cycle_errors`, `compute_waves`) is the single cycle-detection and wave-scheduling implementation behind `src/fanout/wiring.py::graph_errors`, `src/fanout/wiring_topo_sort.py`, and `easy_cheese_schemas/manifest.py`'s schema-level wiring validation — three call sites, one dependency-graph implementation, replacing three independent graph implementations that had drifted in behavior and cycle-message wording (PR #414). As with `disjoint_errors`, only the algorithm moved; each caller keeps its own invariant surface (`graph_errors` stays the Wiring node's always-on layer, `wiring_topo_sort.py` keeps the fan-out CLI's error translation and deterministic wave ordering).
+
 **The validators are deliberately NOT merged.** `validate_decomposition.py`
 and `validate_manifest.py` stay as leaf/composite validators that
 *compose* the entity modules — `validate_manifest.py:17-18` already

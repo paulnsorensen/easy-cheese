@@ -60,6 +60,8 @@ flowchart LR
 
 <certain> ReviewResult has typed findings and a coverage ledger; an empty finding list is clean only with complete coverage.
 
+<certain> ReviewRequest carries an optional `review_kind` discriminator (`taste_test` | `age`) so a downstream consumer can distinguish review families on the wire instead of inferring type from context. Added as an additive minor-version field ahead of a Milknado `easy-cheese-schemas` pin, deliberately before a 1.x pin makes such an addition need cross-repo coordination.[^review-kind]
+
 <certain> DiagnosisResult has symptom, reproduction, hypotheses, optional confirmed cause, regression seam, and unresolved evidence. A diagnosis without a confirmed cause does not dispatch Cure work.
 
 <certain> Cook and Cure consume CurdPlan directly after transport resolution. CurdResult has exactly one row per criterion and one result per semantic curd.
@@ -107,5 +109,6 @@ flowchart LR
 [^milknado]: `/home/paul/Dev/milknado/pyproject.toml:5-24`; `/home/paul/Dev/milknado/src/milknado/domains/batching/change.py:32-40,74-77`.
 [^old-adr]: [Cross-skill handoff ADR](../adr/cross-skill-work-contract-002.md); [bundled YAML runtime ADR](../adr/cross-skill-work-contract-003.md).
 [^roadmap-format]: `/home/paul/.agents/skills/wiki-roadmap/SKILL.md:27-39`; `.github/scripts/validate_wiki.py:48-57`.
+[^review-kind]: `src/easy_cheese_schemas/contracts.py:68-70,811-828` (`ReviewKind`, `ReviewRequest.review_kind`); PR #405.
 
 _Source: approved workflow-contract-milknado-seam Mold, 2026-08-07._
