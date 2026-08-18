@@ -1,0 +1,9 @@
+repos:
+  - repo: local
+    hooks:
+      - id: bundle-currency
+        name: bundle-currency
+        entry: python3 scripts/check_bundles.py
+        language: system
+        files: '^(src/|shared/|skills/[^/]+/phase-contract\.yaml$)'
+        pass_filenames: false

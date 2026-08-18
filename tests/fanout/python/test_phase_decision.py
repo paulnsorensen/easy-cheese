@@ -7,6 +7,7 @@ from the conftest fixture; the CLI tests invoke the built ultracook.pyz directly
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -18,6 +19,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
 import build_pyz  # noqa: E402
 
 BUNDLE = build_pyz.cached_bundle("ultracook")
+SRC_FANOUT = Path(__file__).resolve().parents[3] / "src" / "fanout"
+SHARED_SCRIPTS = Path(__file__).resolve().parents[3] / "shared" / "scripts"
 
 
 class TestSpawnPhases:
@@ -166,10 +169,10 @@ class TestOutputShape:
 
 
 def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
+    env = {**os.environ, "PYTHONPATH": os.pathsep.join([str(SRC_FANOUT), str(SHARED_SCRIPTS)])}
     return subprocess.run(
-        [sys.executable, str(BUNDLE), "phase_decision", *args],
-        capture_output=True,
-        text=True,
+        [sys.executable, str(SRC_FANOUT / "phase_decision.py"), *args],
+        capture_output=True, text=True, env=env,
     )
 
 

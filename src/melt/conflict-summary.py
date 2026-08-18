@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ships-as: melt.pyz conflict-summary
 """Conflict summary script for melt skill.
 
 Default output is terse and LLM-oriented: one line of metadata per file,

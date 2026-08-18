@@ -1,3 +1,4 @@
+# ships-as: affinage.pyz age-route age.pyz age-route
 """CLI entry point for age_route.route -- JSON in (arg path or stdin), JSON out.
 
 Split from age_route.py so that module stays a pure function with zero I/O

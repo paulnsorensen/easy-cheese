@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ships-as: mold.pyz taste-test cut.pyz (module) press.pyz (module)
 """Mold's strict applicability, contract, and fork-coherence taste gate.
 
 This module is deliberately stdlib-only: the Mold bundle validates the approved

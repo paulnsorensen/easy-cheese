@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ships-as: pasteurize.pyz repro-rerun
 """Re-run a repro command N times and emit a structured verdict.
 
 Confirmation-bias killer for /pasteurize: instead of the skill freelancing a

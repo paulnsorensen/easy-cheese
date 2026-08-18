@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import multiprocessing
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -14,6 +15,8 @@ import yaml
 import build_pyz
 
 BUNDLE = build_pyz.cached_bundle("ultracook")
+SRC_FANOUT = Path(__file__).resolve().parents[3] / "src" / "fanout"
+SHARED_SCRIPTS = Path(__file__).resolve().parents[3] / "shared" / "scripts"
 
 
 def _curds(n: int = 5) -> list[dict]:
@@ -76,10 +79,15 @@ def _write_fixture(tmp_path: Path) -> Path:
 
 
 def _run_cli(*args: str) -> subprocess.CompletedProcess:
+    env = {
+        **os.environ,
+        "PYTHONPATH": os.pathsep.join(
+            [str(SRC_FANOUT), str(SRC_FANOUT.parent), str(SHARED_SCRIPTS)]
+        ),
+    }
     return subprocess.run(
-        [sys.executable, str(BUNDLE), "manifest_update", *args],
-        capture_output=True,
-        text=True,
+        [sys.executable, str(SRC_FANOUT / "manifest_update.py"), *args],
+        capture_output=True, text=True, env=env,
     )
 
 
@@ -375,11 +383,16 @@ class TestCheckFiles:
 
 def _worker(args: tuple[str, int]) -> tuple[int, str]:
     manifest_path, curd_id = args
+    env = {
+        **os.environ,
+        "PYTHONPATH": os.pathsep.join(
+            [str(SRC_FANOUT), str(SRC_FANOUT.parent), str(SHARED_SCRIPTS)]
+        ),
+    }
     result = subprocess.run(
         [
             sys.executable,
-            str(BUNDLE),
-            "manifest_update",
+            str(SRC_FANOUT / "manifest_update.py"),
             "set-curd-status",
             "--manifest",
             manifest_path,
@@ -390,6 +403,7 @@ def _worker(args: tuple[str, int]) -> tuple[int, str]:
         ],
         capture_output=True,
         text=True,
+        env=env,
     )
     return (result.returncode, result.stderr)
 

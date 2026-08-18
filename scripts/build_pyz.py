@@ -14,10 +14,12 @@ from __future__ import annotations
 
 import argparse
 import ast
+import functools
 import shutil
 import sys
 import tempfile
 import zipfile
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
@@ -33,6 +35,7 @@ PHASE_REGISTRY_SOURCE = SRC_ROOT / "easy_cheese_schemas" / PHASE_REGISTRY_MODULE
 PHASE_CONTRACT_SOURCE = SRC_ROOT / "easy_cheese_schemas" / "phase_contracts.py"
 SCHEMA_CATALOG_SOURCE = SRC_ROOT / "easy_cheese_schemas" / "_schema_catalog.py"
 SCHEMA_CONTRACT_SOURCE = SRC_ROOT / "easy_cheese_schemas" / "contracts.py"
+SCRIPT_MAP_SOURCE = SRC_ROOT / "PYTHON_SCRIPTS.md"
 SHARED_MODULES = {p.stem for p in SHARED_SCRIPTS.glob("*.py")}
 ZIP_TIMESTAMP = (1980, 1, 2, 0, 0, 0)
 # Pinned so the compressed bytes depend only on the zlib build, never on
@@ -72,7 +75,6 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
         "artifact-path": Shared("artifact_path.py"),
         "curd-count": "curd-count.py",
         "gate-graph": "gate-graph.py",
-        "render_html": Shared("html_report_cli.py"),
         "taste-test": "taste_test.py",
     },
     "briesearch": {
@@ -113,25 +115,18 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
     },
     "press": {
         "press-route": "fanout/press_route_cli.py",
-        "red-gate": "cut/red_gate.py",
     },
     # /ultracook drives the fan-out engine (formerly /cheese-factory); its
     # sources live in the mode-neutral src/fanout/ dir (see SRC_DIRS).
     "ultracook": {
-        "artifact-path": Shared("artifact_path.py"),
         "baseline": "baseline.py",
-        "phase_decision": "phase_decision.py",
         "mode": "mode.py",
         "worktree": Shared("worktree.py"),
         "milknado": "milknado.py",
         "validate_decomposition": "validate_decomposition.py",
         "validate_manifest": "validate_manifest.py",
         "validate_pr_plan": "validate_pr_plan.py",
-        "manifest_update": "manifest_update.py",
-        "wiring_topo_sort": "wiring_topo_sort.py",
         "pr_plan_to_branches": "pr_plan_to_branches.py",
-        "age-route": "fanout/age_route_cli.py",
-        "curd-block": "fanout/curd_block.py",
     },
 }
 
@@ -157,6 +152,7 @@ EXTRA_MODULES: dict[str, list[tuple[str, str]]] = {
     "pasteurize": [("fanout", "pasteurize_route.py")],
     "press": [
         ("fanout", "press_route.py"),
+        ("cut", "red_gate.py"),
         ("cut", "gate_receipts.py"),
         ("mold", "taste_test.py"),
     ],
@@ -181,7 +177,7 @@ PACKAGE_TREES: dict[str, list[Path]] = {
 }
 
 
-VENDORED_DEP_BUNDLES = ("common", "cook", "cut", "press", "ultracook", "wheypoint")
+VENDORED_DEP_BUNDLES = tuple(PACKAGE_TREES)
 
 
 def vendored_dep_trees() -> list[Path]:
@@ -200,31 +196,45 @@ def vendored_dep_trees() -> list[Path]:
 # stays self-contained after `gh skill install`.
 COMMON = "common"
 COMMON_SUBCOMMANDS: dict[str, str] = {
-    "slugify": "slugify.py",
     "write_handoff_artifact": "write_handoff_artifact.py",
     "read_handoff_slug": "read_handoff_slug.py",
     "findings_cli": "findings_cli.py",
     "gates_cli": "gates_cli.py",
-    "paths_cli": "paths_cli.py",
-    "handoff_cli": "handoff_cli.py",
-    "render_html": "html_report_cli.py",
 }
 # Wave 1: consumer skills receive common.pyz
-COMMON_CONSUMERS: frozenset[str] = frozenset({"cure", "age", "ultracook"})
+COMMON_CONSUMERS: frozenset[str] = frozenset({"cure", "age", "ultracook", "cook"})
 
+# Bundles that ship the compiled phase registry data module.
+PHASE_REGISTRY_CONSUMERS: frozenset[str] = frozenset(
+    {COMMON, "cook", "ultracook", "wheypoint"}
+)
 _CACHE: dict[str, Path] = {}
+
+
+@contextmanager
+def _scoped_sys_path(entry: str):
+    """Add ``entry`` to sys.path for the duration of the block, removing it
+    afterward unless it was already present (in which case it is left alone)."""
+    added = entry not in sys.path
+    if added:
+        sys.path.insert(0, entry)
+    try:
+        yield
+    finally:
+        if added:
+            sys.path.remove(entry)
 
 
 def _phase_compiler():
     """Load the source-only compiler without importing the generated module."""
     package_entry = str(SRC_ROOT / "easy_cheese_schemas")
-    if package_entry not in sys.path:
-        sys.path.insert(0, package_entry)
-    from _phase_registry_compiler import compile_phase_files_to_source
+    with _scoped_sys_path(package_entry):
+        from _phase_registry_compiler import compile_phase_files_to_source
 
     return compile_phase_files_to_source
 
 
+@functools.cache
 def _compiled_phase_registry_source() -> str:
     """Compile authored phase YAML into the portable runtime data module."""
     declarations = sorted(REPO_ROOT.glob("skills/*/phase-contract.yaml"))
@@ -234,9 +244,8 @@ def _compiled_phase_registry_source() -> str:
 def _schema_catalog_compiler():
     """Load the source-only catalog compiler without runtime projections."""
     package_entry = str(SRC_ROOT / "easy_cheese_schemas")
-    if package_entry not in sys.path:
-        sys.path.insert(0, package_entry)
-    from _schema_catalog_compiler import collect, render
+    with _scoped_sys_path(package_entry):
+        from _schema_catalog_compiler import collect, render
 
     return collect, render
 
@@ -245,19 +254,18 @@ def _schema_contract_module() -> ModuleType:
     """Load a fresh contracts module so every build sees current markers."""
     vendor_deps.require_populated("schema catalog compiler")
     vendor_entry = str(vendor_deps.VENDOR_ROOT)
-    if vendor_entry not in sys.path:
-        sys.path.insert(0, vendor_entry)
     module = ModuleType("_build_schema_contracts")
     module.__file__ = str(SCHEMA_CONTRACT_SOURCE)
-    sys.modules[module.__name__] = module
     source = SCHEMA_CONTRACT_SOURCE.read_bytes()
-    exec(
-        compile(source, str(SCHEMA_CONTRACT_SOURCE), "exec"),
-        module.__dict__,
-    )
+    with _scoped_sys_path(vendor_entry):
+        exec(
+            compile(source, str(SCHEMA_CONTRACT_SOURCE), "exec"),
+            module.__dict__,
+        )
     return module
 
 
+@functools.cache
 def _compiled_schema_catalog_source() -> str:
     """Compile the marker-derived schema catalog from the live contracts."""
     collect, render = _schema_catalog_compiler()
@@ -300,6 +308,128 @@ def _checked_in_phase_registry_bytes(expected_source: str) -> bytes:
 
 def _module_name(filename: str) -> str:
     return Path(filename).stem.replace("-", "_")
+
+
+def _render_script_map() -> str:
+    """Deterministic markdown table: one row per (bundle, subcommand, source
+    path), compiled from SKILLS, COMMON_SUBCOMMANDS, EXTRA_MODULES, and
+    PACKAGE_TREES."""
+    rows: list[tuple[str, str, str]] = []
+    for skill, subs in SKILLS.items():
+        for sub, source in subs.items():
+            path = _source_path(skill, source).relative_to(REPO_ROOT).as_posix()
+            rows.append((skill, sub, path))
+    for sub, filename in COMMON_SUBCOMMANDS.items():
+        path = (SHARED_SCRIPTS / filename).relative_to(REPO_ROOT).as_posix()
+        rows.append((COMMON, sub, path))
+    for skill, extras in EXTRA_MODULES.items():
+        for src_subdir, filename in extras:
+            path = (SRC_ROOT / src_subdir / filename).relative_to(REPO_ROOT).as_posix()
+            rows.append((skill, "-", path))
+    for skill, trees in PACKAGE_TREES.items():
+        for tree in trees:
+            rows.append((skill, "-", tree.relative_to(REPO_ROOT).as_posix()))
+    rows.sort()
+    lines = [
+        "# Python script map",
+        "",
+        "Generated by `scripts/build_pyz.py`. Do not edit by hand.",
+        "",
+        "| Bundle | Subcommand | Source |",
+        "| --- | --- | --- |",
+    ]
+    lines.extend(f"| {bundle} | {sub} | {path} |" for bundle, sub, path in rows)
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _checked_in_script_map_bytes(expected_source: str) -> bytes:
+    """Require the tracked script map to match the registry authority."""
+    expected = expected_source.encode("utf-8")
+    try:
+        actual = SCRIPT_MAP_SOURCE.read_bytes()
+    except FileNotFoundError as exc:
+        raise RuntimeError(
+            f"checked-in script map is missing: {SCRIPT_MAP_SOURCE}"
+        ) from exc
+    if actual != expected:
+        raise RuntimeError(
+            "checked-in script map is stale; regenerate src/PYTHON_SCRIPTS.md"
+        )
+    return actual
+
+
+def _guards_import_error(handlers: list[ast.ExceptHandler]) -> bool:
+    guard_names = {"ImportError", "ModuleNotFoundError"}
+
+    def names(expr: ast.expr | None) -> list[str]:
+        if isinstance(expr, ast.Name):
+            return [expr.id]
+        if isinstance(expr, ast.Tuple):
+            return [e.id for e in expr.elts if isinstance(e, ast.Name)]
+        return []
+
+    return any(guard_names & set(names(h.type)) for h in handlers)
+
+
+class _UnguardedImportVisitor(ast.NodeVisitor):
+    """Collects absolute-import top names, skipping imports inside a
+    try/except ImportError (or ModuleNotFoundError) block and inside the
+    matching except handler's body — both sides of a deliberate flat-vs-
+    package import fallback are optional, not a bundling gap."""
+
+    def __init__(self) -> None:
+        self.names: set[str] = set()
+
+    def visit_Import(self, node: ast.Import) -> None:
+        self.names.update(alias.name.split(".")[0] for alias in node.names)
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        if node.level == 0 and node.module:
+            self.names.add(node.module.split(".")[0])
+
+    def visit_Try(self, node: ast.Try) -> None:
+        if not _guards_import_error(node.handlers):
+            for stmt in node.body:
+                self.visit(stmt)
+        for handler in node.handlers:
+            if not _guards_import_error([handler]):
+                self.visit(handler)
+        for stmt in [*node.orelse, *node.finalbody]:
+            self.visit(stmt)
+
+
+def _unguarded_imports(path: Path) -> set[str]:
+    visitor = _UnguardedImportVisitor()
+    visitor.visit(ast.parse(path.read_text(encoding="utf-8")))
+    return visitor.names
+
+
+def _check_import_closure(skill: str, stage: Path) -> None:
+    """Fail loudly if a staged first-party script imports something the
+    bundle doesn't ship, module-level or from inside a function body.
+    Imports guarded by try/except ImportError (or ModuleNotFoundError) are
+    deliberately optional and exempt. Vendored dependency trees are
+    resolution targets, not scan subjects — their own optional lazy imports
+    are upstream's business."""
+    resolvable = set(sys.stdlib_module_names)
+    resolvable |= {p.stem for p in stage.glob("*.py")}
+    resolvable |= {p.name for p in stage.iterdir() if p.is_dir()}
+    vendored_stage_names: set[str] = set()
+    if skill in VENDORED_DEP_BUNDLES:
+        vendored_stage_names = {tree.name for tree in vendored_dep_trees()}
+        resolvable |= {
+            tree.stem if tree.is_file() else tree.name for tree in vendored_dep_trees()
+        }
+    problems = [
+        f"unresolved import {name!r} in {path.relative_to(stage)}"
+        for path in sorted(stage.rglob("*.py"))
+        if path.relative_to(stage).parts[0] not in vendored_stage_names
+        for name in sorted(_unguarded_imports(path))
+        if name not in resolvable
+    ]
+    if problems:
+        raise RuntimeError("; ".join(problems))
 
 
 def _src_dir(skill: str) -> Path:
@@ -451,7 +581,7 @@ def build_bundle(skill: str, target: Path) -> Path:
         catalog_source = _compiled_schema_catalog_source()
         catalog_bytes = _checked_in_schema_catalog_bytes(catalog_source)
     registry_bytes = None
-    if skill in {COMMON, "cook", "ultracook", "wheypoint"}:
+    if skill in PHASE_REGISTRY_CONSUMERS:
         registry_source = _compiled_phase_registry_source()
         registry_bytes = _checked_in_phase_registry_bytes(registry_source)
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -513,6 +643,7 @@ def build_bundle(skill: str, target: Path) -> Path:
         (stage / "__main__.py").write_text(
             _dispatcher_source(sub_to_module), encoding="utf-8"
         )
+        _check_import_closure(skill, stage)
         _write_zipapp(stage, target)
     return target
 
@@ -536,6 +667,7 @@ def main(argv: list[str]) -> int:
     )
     parser.add_argument("skills", nargs="*", help="Skills to build (default: all).")
     args = parser.parse_args(argv[1:])
+    _checked_in_script_map_bytes(_render_script_map())
     # Consumer-only skills (age/cure) have no own bundle but receive common.pyz,
     # so they are valid targets even though they are not in SKILLS.
     known = {*SKILLS, COMMON, *COMMON_CONSUMERS}

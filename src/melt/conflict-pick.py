@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ships-as: melt.pyz conflict-pick
 """
 Pick ours or theirs for conflict hunks.
 For file types not handled by mergiraf (shell scripts, config files, etc.).

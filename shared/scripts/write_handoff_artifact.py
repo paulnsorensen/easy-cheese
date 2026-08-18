@@ -1,3 +1,4 @@
+# ships-as: common.pyz write_handoff_artifact
 """Write a handoff artifact (handoff preamble + optional body) atomically.
 
 CLI:

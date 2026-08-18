@@ -1,3 +1,4 @@
+# ships-as: pasteurize.pyz pasteurize-route
 """CLI entry point for pasteurize_route.size_pasteurize_fanout -- JSON in
 (arg path or stdin), JSON out.
 

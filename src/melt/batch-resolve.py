@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ships-as: melt.pyz batch-resolve
 """Batch conflict resolution using mergiraf.
 
 Default output is terse: one line per file plus a one-line summary.

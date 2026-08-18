@@ -1,3 +1,4 @@
+# ships-as: common.pyz findings_cli
 """CLI wrapper around shared/scripts/findings.py.
 
 Two subcommands:

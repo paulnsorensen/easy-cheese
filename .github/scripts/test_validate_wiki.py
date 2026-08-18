@@ -133,6 +133,27 @@ class ValidateWikiTest(unittest.TestCase):
         rc, _, err = self._run()
         self.assertEqual(rc, 0, err)
 
+    def test_frontmatter_before_h1_passes(self) -> None:
+        # Mold-handshook specs open with YAML frontmatter; the H1 requirement
+        # applies to the first line after the closed block.
+        self._write_valid_wiki()
+        self._write(
+            f"{WIKI}/topic-one.md",
+            "---\nsource: mold-handshake\nslug: topic-one\n---\n\n# Topic one\n\nbody\n",
+        )
+        rc, _, err = self._run()
+        self.assertEqual(rc, 0, err)
+
+    def test_unclosed_frontmatter_fails_h1_check(self) -> None:
+        self._write_valid_wiki()
+        self._write(
+            f"{WIKI}/topic-one.md",
+            "---\nsource: mold-handshake\n\n# Topic one\n",
+        )
+        rc, _, err = self._run()
+        self.assertEqual(rc, 1)
+        self.assertIn("not a single '# ' H1", err)
+
     def test_non_kebab_stem_fails(self) -> None:
         self._write_valid_wiki()
         self._write(f"{WIKI}/Bad_Stem.md", "# Bad stem\n")

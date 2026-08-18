@@ -30,11 +30,12 @@ def test_schema_types_come_from_src() -> None:
 
 
 def test_validators_come_from_the_built_bundle(bundle: Path) -> None:
+    # curd_block is absent: demoted to a direct src/ module when its dead
+    # ultracook registration was pruned (spec pyz-pipeline-contracts).
     for name in (
         "validate_manifest",
         "validate_decomposition",
         "validate_pr_plan",
-        "curd_block",
     ):
         module = importlib.import_module(name)
         assert module.__file__ is not None

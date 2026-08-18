@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ships-as: cook.pyz worktree ultracook.pyz worktree
 """Shared worktree floor for isolated sub-agent/worktree dispatch: create, harvest, teardown. Used by /ultracook's parallel-mode fan-out and by the repair-worktree pathway (skills/cook/references/quality-gates.md § Repair pathway).
 
 On Claude Code the native `Agent(isolation:"worktree")` primitive creates the
