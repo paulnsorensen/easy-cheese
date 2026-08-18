@@ -37,6 +37,12 @@
 - [plate-publication-boundary-001](./plate-publication-boundary-001.md) — ADR: plate owns the commit-to-PR publication boundary
 - [post-pr-wiki-writeback-001](./post-pr-wiki-writeback-001.md) — ADR: curdle wiki writes enforced by gate node + read-back verify, not a Stop-hook
 - [post-pr-wiki-writeback-002](./post-pr-wiki-writeback-002.md) — ADR: post-PR learnings write-back reuses wiki-ingest, not the personal wiki-curator skill
+- [pyz-pipeline-contracts-001](./pyz-pipeline-contracts-001.md) — ADR: Bundle builds verify the staged import closure, including function-body imports  [status: accepted]
+- [pyz-pipeline-contracts-002](./pyz-pipeline-contracts-002.md) — ADR: Bundle currency is enforced locally by just check and a scoped prek hook  [status: accepted]
+- [pyz-pipeline-contracts-003](./pyz-pipeline-contracts-003.md) — ADR: Script locations are published as a generated, gated map plus per-source banners  [status: accepted]
+- [pyz-pipeline-contracts-004](./pyz-pipeline-contracts-004.md) — ADR: The subcommand registry is pruned to the prose-referenced set with strict two-way equality  [status: accepted]
+- [pyz-pipeline-contracts-005](./pyz-pipeline-contracts-005.md) — ADR: cook joins COMMON_CONSUMERS so its documented common.pyz fallback ships  [status: accepted]
+- [pyz-pipeline-contracts-006](./pyz-pipeline-contracts-006.md) — ADR: The Astro site source moves out of src/ to website/, leaving src/ purely Python  [status: accepted]
 - [skill-docs-single-page-001](./skill-docs-single-page-001.md) — ADR-001: Fold skill references into one docs page instead of separate sub-pages  [status: accepted]
 - [skill-docs-single-page-002](./skill-docs-single-page-002.md) — ADR-002: Left-nav heading TOC is h2-only, via a custom Starlight Sidebar override  [status: accepted]
 - [skill-overlap-ratchet-001](./skill-overlap-ratchet-001.md) — ADR: Own the Snowflake overlap analyzer in easy-cheese
