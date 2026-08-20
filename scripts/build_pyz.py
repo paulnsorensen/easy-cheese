@@ -393,7 +393,17 @@ def _guards_import_error(handlers: list[ast.ExceptHandler]) -> bool:
             return [e.id for e in expr.elts if isinstance(e, ast.Name)]
         return []
 
-    return any(guard_names & set(names(h.type)) for h in handlers)
+    def is_raise_only(handler: ast.ExceptHandler) -> bool:
+        return (
+            len(handler.body) == 1
+            and isinstance(handler.body[0], ast.Raise)
+            and handler.body[0].exc is None
+        )
+
+    return any(
+        guard_names & set(names(h.type)) and not is_raise_only(h)
+        for h in handlers
+    )
 
 
 class _UnguardedImportVisitor(ast.NodeVisitor):
