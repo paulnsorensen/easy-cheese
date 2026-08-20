@@ -205,6 +205,7 @@ class _Run:
 
 
 _PROBE_EVENT_ERROR = "assertion probe event missing or invalid"
+_PROBE_OUTPUT_TAIL_CHARS = 256
 
 
 @dataclass(frozen=True)
@@ -214,38 +215,59 @@ class _ProbeCommand:
 
 
 _ASSERTION_PROBE_IMPORT_ROOT = str(Path(cut_assertion_probe.__file__).resolve().parent)
+_PARENT_RUNTIME_PATH = tuple(sys.path)
+_PARENT_TRUSTED_PREFIXES = tuple(
+    Path(prefix).resolve()
+    for prefix in (
+        sys.prefix,
+        sys.base_prefix,
+        sys.exec_prefix,
+        sys.base_exec_prefix,
+    )
+    if prefix
+)
 
 
+# ``-S`` is the startup boundary: no sitecustomize/usercustomize code runs
+# before this bootstrap loads the canonical worker.  Parent-supplied paths are
+# restored only after that import, so target imports retain their contract.
 _ASSERTION_PROBE_BOOTSTRAP = (
     "import sys\n"
     "root = sys.argv.pop(1)\n"
+    "target_executable = sys.argv.pop(1)\n"
+    "target_prefix = sys.argv.pop(1)\n"
+    "target_exec_prefix = sys.argv.pop(1)\n"
+    "target_base_prefix = sys.argv.pop(1)\n"
+    "target_base_exec_prefix = sys.argv.pop(1)\n"
+    "trusted_count = int(sys.argv.pop(1))\n"
+    "trusted_path = sys.argv[1:1 + trusted_count]\n"
+    "del sys.argv[1:1 + trusted_count]\n"
+    "target_count = int(sys.argv.pop(1))\n"
+    "target_path = sys.argv[1:1 + target_count]\n"
+    "del sys.argv[1:1 + target_count]\n"
     "runner = sys.argv[2]\n"
-    "if runner == 'pytest':\n"
-    "    import pytest\n"
-    "elif runner == 'unittest':\n"
-    "    import unittest\n"
-    "startup_path = list(sys.path)\n"
-    "startup_modules = set(sys.modules)\n"
+    "base_modules = set(sys.modules)\n"
     "missing = object()\n"
     "prior_probe = sys.modules.pop('cut_assertion_probe', missing)\n"
-    "prefixes = tuple(\n"
-    "    prefix\n"
-    "    for prefix in (sys.prefix, sys.base_prefix, sys.exec_prefix, sys.base_exec_prefix)\n"
-    "    if prefix\n"
-    ")\n"
-    "trusted_path = tuple(\n"
-    "    path\n"
-    "    for path in startup_path\n"
-    "    if path and any(\n"
-    "        path == prefix or path.startswith(prefix + '/')\n"
-    "        for prefix in prefixes\n"
-    "    )\n"
-    ")\n"
     "sys.path[:] = [root, *trusted_path]\n"
+    "startup_modules = base_modules\n"
     "try:\n"
     "    worker = __import__('cut_assertion_probe')\n"
+    "    sys.executable = target_executable\n"
+    "    sys.prefix = target_prefix\n"
+    "    sys.exec_prefix = target_exec_prefix\n"
+    "    sys.base_prefix = target_base_prefix\n"
+    "    sys.base_exec_prefix = target_base_exec_prefix\n"
+    "    worker_modules = set(sys.modules) - base_modules\n"
+    "    if runner == 'pytest':\n"
+    "        sys.path[:] = target_path\n"
+    "        import pytest\n"
+    "    elif runner == 'unittest':\n"
+    "        import unittest\n"
+    "    runner_modules = (set(sys.modules) - base_modules) - worker_modules\n"
+    "    startup_modules = base_modules | runner_modules\n"
     "finally:\n"
-    "    sys.path[:] = startup_path\n"
+    "    sys.path[:] = target_path\n"
     "    for name in list(sys.modules):\n"
     "        if name not in startup_modules:\n"
     "            del sys.modules[name]\n"
@@ -785,22 +807,63 @@ def _resolve_spec_reference(
     return path, None
 
 
-def _resolved_executable_name(executable: str, cwd: Path | None) -> str:
+def _lexical_executable_path(executable: str, cwd: Path | None) -> Path | None:
     if cwd is None:
-        return ""
+        return None
     try:
         path = Path(executable)
         if path.is_absolute() or len(path.parts) > 1:
-            candidate = path if path.is_absolute() else cwd / path
-            return candidate.resolve(strict=False).name.lower().removesuffix(".exe")
+            return path if path.is_absolute() else cwd / path
         located = shutil.which(executable)
-        return (
-            Path(located).resolve(strict=False).name.lower().removesuffix(".exe")
-            if located
-            else ""
-        )
-    except (OSError, RuntimeError):
-        return ""
+        return Path(located) if located else None
+    except (OSError, RuntimeError, ValueError):
+        return None
+
+
+def _resolved_executable_path(executable: str, cwd: Path | None) -> Path | None:
+    candidate = _lexical_executable_path(executable, cwd)
+    if candidate is None:
+        return None
+    try:
+        return candidate.resolve(strict=True)
+    except (OSError, RuntimeError, ValueError):
+        return None
+
+
+def _resolved_executable_name(executable: str, cwd: Path | None) -> str:
+    path = _resolved_executable_path(executable, cwd)
+    return path.name.lower().removesuffix(".exe") if path is not None else ""
+
+
+def _executable_identity(path: Path | None) -> tuple[int, int] | None:
+    if path is None:
+        return None
+    try:
+        info = path.stat()
+    except OSError:
+        return None
+    if not stat.S_ISREG(info.st_mode):
+        return None
+    return info.st_dev, info.st_ino
+
+
+# A PATH alias or symlink is trusted only when it resolves to this exact
+# interpreter file identity; a basename is never evidence of provenance.
+_TRUSTED_INTERPRETER_PATH = _resolved_executable_path(sys.executable, Path.cwd())
+_TRUSTED_INTERPRETER_IDENTITY = _executable_identity(_TRUSTED_INTERPRETER_PATH)
+
+
+def _is_trusted_interpreter(executable: str, cwd: Path) -> bool:
+    candidate = _resolved_executable_path(executable, cwd)
+    candidate_identity = _executable_identity(candidate)
+    trusted_identity = _TRUSTED_INTERPRETER_IDENTITY
+    if candidate_identity is None or trusted_identity is None:
+        return False
+    if candidate_identity == trusted_identity:
+        return True
+    if candidate_identity[1] != 0 and trusted_identity[1] != 0:
+        return False
+    return candidate == _TRUSTED_INTERPRETER_PATH
 
 
 def _validate_argv(
@@ -1116,48 +1179,121 @@ def _run(
     return _Run(completed.returncode, "\n".join(output_parts).strip())
 
 
+# Snapshot the parent environment before spawning; the child never reconstructs
+# its target path by importing site or consulting its startup path.
+def _probe_paths(executable: str, cwd: Path) -> tuple[list[str], list[str]]:
+    parent_paths = [path for path in _PARENT_RUNTIME_PATH if path]
+    trusted_paths = []
+    lexical_executable = _lexical_executable_path(executable, cwd)
+    resolved_executable = _resolved_executable_path(executable, cwd)
+    lexical_prefix = (
+        lexical_executable.parent.parent if lexical_executable is not None else None
+    )
+    resolved_prefix = (
+        resolved_executable.parent.parent if resolved_executable is not None else None
+    )
+    for path in parent_paths:
+        try:
+            resolved = Path(path).resolve()
+        except (OSError, RuntimeError, ValueError):
+            continue
+        if not any(
+            resolved == prefix or prefix in resolved.parents
+            for prefix in _PARENT_TRUSTED_PREFIXES
+        ):
+            continue
+        if (
+            lexical_prefix is not None
+            and resolved_prefix is not None
+            and resolved.is_relative_to(resolved_prefix)
+        ):
+            projected = lexical_prefix / resolved.relative_to(resolved_prefix)
+            try:
+                if projected.resolve() == resolved:
+                    trusted_paths.append(str(projected))
+                    continue
+            except (OSError, RuntimeError, ValueError):
+                pass
+        trusted_paths.append(path)
+    inherited_paths = os.environ.get("PYTHONPATH", "")
+    target_paths = [] if os.environ.get("PYTHONSAFEPATH") else [""]
+    if inherited_paths:
+        target_paths.extend(inherited_paths.split(os.pathsep))
+    target_paths.extend(parent_paths)
+    return trusted_paths, target_paths
+
+
+def _python_case_runner(argv: list[str], cwd: Path) -> str | None:
+    if not argv or not isinstance(argv[0], str):
+        return None
+    if not _is_trusted_interpreter(argv[0], cwd):
+        return None
+    if len(argv) >= 3 and argv[1] == "-c":
+        return "code"
+    if len(argv) >= 3 and argv[1:3] == ["-m", "pytest"]:
+        return "pytest"
+    if len(argv) >= 3 and argv[1:3] == ["-m", "unittest"]:
+        return "unittest"
+    if len(argv) >= 2 and isinstance(argv[1], str) and argv[1].endswith(".py"):
+        return "script"
+    return None
+
+
 def _python_case_command(
     argv: list[str],
     cwd: Path,
     probe_fd: int,
 ) -> _ProbeCommand | None:
-    executable_names = {
-        Path(argv[0]).name.lower().removesuffix(".exe"),
-        _resolved_executable_name(argv[0], cwd),
-    }
-    if not any(name.startswith("python") for name in executable_names):
+    runner = _python_case_runner(argv, cwd)
+    trusted_interpreter = _TRUSTED_INTERPRETER_PATH
+    target_executable = _lexical_executable_path(argv[0], cwd) if argv else None
+    if runner is None or trusted_interpreter is None or target_executable is None:
         return None
+    trusted_paths, target_paths = _probe_paths(argv[0], cwd)
+    safe_path_args = ["-P"] if os.environ.get("PYTHONSAFEPATH") else []
     prefix = [
-        argv[0],
+        str(trusted_interpreter),
+        "-E",
+        "-S",
+        *safe_path_args,
         "-c",
         _ASSERTION_PROBE_BOOTSTRAP,
         _ASSERTION_PROBE_IMPORT_ROOT,
+        str(target_executable),
+        sys.prefix,
+        sys.exec_prefix,
+        sys.base_prefix,
+        sys.base_exec_prefix,
+        str(len(trusted_paths)),
+        *trusted_paths,
+        str(len(target_paths)),
+        *target_paths,
         str(probe_fd),
     ]
-    if len(argv) >= 3 and argv[1] == "-c":
+    if runner == "code":
         return _ProbeCommand(
-            [*prefix, "code", argv[0], argv[2], *argv[3:]],
-            "code",
+            [*prefix, runner, argv[0], argv[2], *argv[3:]],
+            runner,
         )
-    if len(argv) >= 3 and argv[1:3] == ["-m", "pytest"]:
+    if runner in {"pytest", "unittest"}:
         return _ProbeCommand(
-            [*prefix, "pytest", argv[0], *argv[3:]],
-            "pytest",
+            [*prefix, runner, argv[0], *argv[3:]],
+            runner,
         )
-    if len(argv) >= 3 and argv[1:3] == ["-m", "unittest"]:
-        return _ProbeCommand(
-            [*prefix, "unittest", argv[0], *argv[3:]],
-            "unittest",
-        )
-    if len(argv) >= 2 and argv[1].endswith(".py"):
-        return _ProbeCommand(
-            [*prefix, "script", argv[0], argv[1], *argv[2:]],
-            "script",
-        )
-    return None
+    return _ProbeCommand(
+        [*prefix, runner, argv[0], argv[1], *argv[2:]],
+        runner,
+    )
 
 
 def _run_case(argv: list[str], cwd: Path) -> _Run:
+    if _python_case_runner(argv, cwd) is None:
+        return _Run(
+            127,
+            "",
+            "unsupported assertion-proof runner profile; use direct Python, "
+            "python -m pytest, or python -m unittest",
+        )
     try:
         read_fd, write_fd = os.pipe()
     except OSError as exc:
@@ -1220,6 +1356,20 @@ def _looks_harness_failure(run: _Run) -> bool:
     if any(marker in output for marker in markers):
         return True
     return "traceback (most recent call last)" in output
+
+def _safe_probe_output_tail(output: str) -> str:
+    rendered = ascii(output)
+    if len(rendered) <= _PROBE_OUTPUT_TAIL_CHARS:
+        return rendered
+    return "..." + rendered[-(_PROBE_OUTPUT_TAIL_CHARS - 3) :]
+
+
+def _probe_event_problem(run: _Run) -> str:
+    reason = run.error or _PROBE_EVENT_ERROR
+    return (
+        f"{reason} (exit {run.returncode}; "
+        f"output tail: {_safe_probe_output_tail(run.output)})"
+    )
 
 
 def _canonical_witness(output: str, expected: Sequence[str]) -> str:
@@ -1290,7 +1440,8 @@ def _replay_cases(
         runs[case.id] = run
         if run.error == _PROBE_EVENT_ERROR:
             problems.append(
-                f"{label}.cases[{index}] failed in the harness: {run.error}"
+                f"{label}.cases[{index}] failed in the harness: "
+                f"{_probe_event_problem(run)}"
             )
         elif desired == "red":
             if run.returncode == 0:
