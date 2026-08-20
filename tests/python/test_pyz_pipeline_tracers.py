@@ -229,3 +229,37 @@ def test_missing_bundle_from_index_fails_currency_check(tmp_path: Path) -> None:
     )
     detail = f"exit={recipe.returncode}\n{_output(recipe)}"
     assert recipe.returncode != 0 and "stale" in _output(recipe), detail
+
+
+WITNESS_IMPORT_CLOSURE = (
+    "On main, staging a script whose function-body imports an undeclared "
+    "cross-directory module builds cleanly; the closure gate must exit "
+    "nonzero naming the unresolved module and its importer"
+)
+
+
+def test_import_closure_gate(tmp_path: Path) -> None:
+    sandbox = tmp_path / "project"
+    _copy_project_subset(
+        sandbox,
+        dirs=("scripts", "src", "shared", "vendor"),
+        files=("requirements-vendor.txt",),
+    )
+    probe = sandbox / "src" / "melt" / "batch-resolve.py"
+    probe.write_text(
+        probe.read_text(encoding="utf-8")
+        + "\n\ndef _cut_red_tracer_probe():\n    import wiring_topo_sort\n",
+        encoding="utf-8",
+    )
+    proc = _run(
+        [sys.executable, "scripts/build_pyz.py", "--out-dir", str(tmp_path / "out"), "melt"],
+        cwd=sandbox,
+    )
+    detail = f"exit={proc.returncode}\n{_output(proc)}"
+    assert proc.returncode != 0, f"{WITNESS_IMPORT_CLOSURE}\n{detail}"
+    assert "wiring_topo_sort" in _output(proc), f"{WITNESS_IMPORT_CLOSURE}\n{detail}"
+    assert "batch_resolve" in _output(proc) or "batch-resolve" in _output(proc), (
+        f"{WITNESS_IMPORT_CLOSURE}\n{detail}"
+    )
+
+

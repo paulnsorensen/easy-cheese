@@ -58,6 +58,157 @@ def bundles(tmp_path_factory) -> Path:
     return out
 
 
+def _write_closure_stage(tmp_path: Path, source: str) -> Path:
+    stage = tmp_path / "stage"
+    stage.mkdir()
+    (stage / "entry.py").write_text(source, encoding="utf-8")
+    return stage
+
+
+def test_import_closure_rejects_unresolved_fallbacks(tmp_path: Path) -> None:
+    stage = _write_closure_stage(
+        tmp_path,
+        "try:\n    import definitely_missing\n"
+        "except ImportError:\n    import also_missing\n",
+    )
+    with pytest.raises(RuntimeError, match="definitely_missing|also_missing"):
+        build_pyz._check_import_closure("melt", stage)
+
+
+def test_import_closure_rejects_unstaged_source_package(tmp_path: Path) -> None:
+    stage = _write_closure_stage(tmp_path, "from melt import nonexistent\n")
+    with pytest.raises(RuntimeError, match="melt.nonexistent"):
+        build_pyz._check_import_closure("melt", stage)
+
+
+def test_import_closure_accepts_resolving_fallback(tmp_path: Path) -> None:
+    stage = _write_closure_stage(
+        tmp_path,
+        "try:\n    import definitely_missing\n"
+        "except ImportError:\n    import staged_helper\n",
+    )
+    (stage / "staged_helper.py").write_text("VALUE = 1\n", encoding="utf-8")
+    build_pyz._check_import_closure("melt", stage)
+
+
+def test_import_closure_rejects_dotted_import_into_flat_module(tmp_path: Path) -> None:
+    stage = _write_closure_stage(tmp_path, "import helper.missing\n")
+    (stage / "helper.py").write_text("VALUE = 1\n", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="helper.missing"):
+        build_pyz._check_import_closure("melt", stage)
+
+
+def test_import_closure_rejects_dotted_import_even_with_matching_from_import(
+    tmp_path: Path,
+) -> None:
+    stage = _write_closure_stage(
+        tmp_path, "import helper.VALUE\nfrom helper import VALUE\n"
+    )
+    (stage / "helper.py").write_text("VALUE = 1\n", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="helper.VALUE"):
+        build_pyz._check_import_closure("melt", stage)
+
+
+def test_import_closure_rejects_missing_export_from_staged_child_module(
+    tmp_path: Path,
+) -> None:
+    stage = _write_closure_stage(tmp_path, "from pkg.sub import missing\n")
+    (stage / "pkg").mkdir()
+    (stage / "pkg" / "__init__.py").write_text("\n", encoding="utf-8")
+    (stage / "pkg" / "sub.py").write_text("VALUE = 1\n", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="pkg.sub.missing"):
+        build_pyz._check_import_closure("melt", stage)
+
+
+def test_import_closure_accepts_export_from_staged_child_module(tmp_path: Path) -> None:
+    stage = _write_closure_stage(tmp_path, "from pkg.sub import VALUE\n")
+    (stage / "pkg").mkdir()
+    (stage / "pkg" / "__init__.py").write_text("\n", encoding="utf-8")
+    (stage / "pkg" / "sub.py").write_text("VALUE = 1\n", encoding="utf-8")
+    build_pyz._check_import_closure("melt", stage)
+
+
+def test_import_closure_rejects_unreachable_flat_module_export(tmp_path: Path) -> None:
+    stage = _write_closure_stage(tmp_path, "from helper import VALUE\n")
+    (stage / "helper.py").write_text(
+        "if False:\n"
+        "    VALUE = 1\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(RuntimeError, match="helper.VALUE"):
+        build_pyz._check_import_closure("melt", stage)
+
+
+def test_import_closure_rejects_branch_only_flat_module_export(tmp_path: Path) -> None:
+    stage = _write_closure_stage(tmp_path, "from helper import VALUE\n")
+    (stage / "helper.py").write_text(
+        "if condition:\n"
+        "    VALUE = 1\n"
+        "else:\n"
+        "    OTHER = 1\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(RuntimeError, match="helper.VALUE"):
+        build_pyz._check_import_closure("melt", stage)
+
+
+def test_import_closure_rejects_missing_flat_module_export(tmp_path: Path) -> None:
+    stage = _write_closure_stage(tmp_path, "from helper import missing\n")
+    (stage / "helper.py").write_text("VALUE = 1\n", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="helper.missing"):
+        build_pyz._check_import_closure("melt", stage)
+
+
+def test_import_closure_accepts_flat_module_export(tmp_path: Path) -> None:
+    stage = _write_closure_stage(tmp_path, "from helper import VALUE\n")
+    (stage / "helper.py").write_text("VALUE = 1\n", encoding="utf-8")
+    build_pyz._check_import_closure("melt", stage)
+
+
+def test_import_closure_accepts_conditional_flat_module_export(tmp_path: Path) -> None:
+    stage = _write_closure_stage(tmp_path, "from helper import GateValidationError\n")
+    (stage / "helper.py").write_text(
+        "try:\n"
+        "    from optional_dependency import GateValidationError\n"
+        "except ImportError:\n"
+        "    class GateValidationError(Exception):\n"
+        "        pass\n",
+        encoding="utf-8",
+    )
+    build_pyz._check_import_closure("melt", stage)
+
+
+def test_import_closure_accepts_host_and_optional_imports(tmp_path: Path) -> None:
+    stage = _write_closure_stage(
+        tmp_path,
+        "import pytest\n"
+        "try:\n    import optional_dependency\n"
+        "except ImportError:\n    raise RuntimeError('optional')\n",
+    )
+    build_pyz._check_import_closure("melt", stage)
+
+
+def test_import_closure_uses_the_bundle_runtime_branch(tmp_path: Path) -> None:
+    stage = _write_closure_stage(
+        tmp_path,
+        "_BUNDLE_PATH = object()\n"
+        "if _BUNDLE_PATH is not None:\n"
+        "    import cut_assertion_probe\n"
+        "else:\n"
+        "    from cut import cut_assertion_probe\n",
+    )
+    (stage / "cut_assertion_probe.py").write_text("VALUE = 1\n", encoding="utf-8")
+
+    build_pyz._check_import_closure("cut", stage)
+    result = subprocess.run(
+        [sys.executable, "entry.py"],
+        cwd=stage,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+
+
 def test_default_batch_derives_schema_catalog_once(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1033,3 +1184,6 @@ def test_press_bundle_carries_and_imports_assertion_probe(bundles: Path) -> None
     combined = result.stdout + result.stderr
     assert result.returncode == 2, combined
     assert "ModuleNotFoundError" not in combined
+
+
+
