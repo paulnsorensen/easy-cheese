@@ -8,6 +8,7 @@ no tracer ever mutates the project.
 
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 import sys
@@ -83,3 +84,81 @@ def test_script_map_gate(tmp_path: Path) -> None:
     detail = f"exit={proc.returncode}\n{_output(proc)}"
     assert proc.returncode != 0, f"{WITNESS_SCRIPT_MAP}\n{detail}"
     assert "PYTHON_SCRIPTS.md" in _output(proc), f"{WITNESS_SCRIPT_MAP}\n{detail}"
+
+
+WITNESS_IMPORT_CLOSURE = (
+    "On main, staging a script whose function-body imports an undeclared "
+    "cross-directory module builds cleanly; the closure gate must exit "
+    "nonzero naming the unresolved module and its importer"
+)
+WITNESS_BUNDLE_CURRENCY = (
+    "On main just check passes with a stale bundle because check_bundles.py "
+    "is not wired into the recipe"
+)
+
+
+def test_import_closure_gate(tmp_path: Path) -> None:
+    sandbox = tmp_path / "project"
+    _copy_project_subset(
+        sandbox,
+        dirs=("scripts", "src", "shared", "vendor"),
+        files=("requirements-vendor.txt",),
+    )
+    probe = sandbox / "src" / "melt" / "batch-resolve.py"
+    probe.write_text(
+        probe.read_text(encoding="utf-8")
+        + "\n\ndef _cut_red_tracer_probe():\n    import wiring_topo_sort\n",
+        encoding="utf-8",
+    )
+    proc = _run(
+        [sys.executable, "scripts/build_pyz.py", "--out-dir", str(tmp_path / "out"), "melt"],
+        cwd=sandbox,
+    )
+    detail = f"exit={proc.returncode}\n{_output(proc)}"
+    assert proc.returncode != 0, f"{WITNESS_IMPORT_CLOSURE}\n{detail}"
+    assert "wiring_topo_sort" in _output(proc), f"{WITNESS_IMPORT_CLOSURE}\n{detail}"
+    assert "batch_resolve" in _output(proc) or "batch-resolve" in _output(proc), (
+        f"{WITNESS_IMPORT_CLOSURE}\n{detail}"
+    )
+
+
+def test_bundle_currency_wired_into_check(tmp_path: Path) -> None:
+    sandbox = tmp_path / "project"
+    _copy_project_subset(
+        sandbox,
+        dirs=("scripts", "src", "shared", "skills", "vendor"),
+        files=("requirements-vendor.txt", "justfile"),
+    )
+    git = ["git", "-c", "user.email=cut@tracer", "-c", "user.name=cut", "-c", "commit.gpgsign=false"]
+    assert _run([*git, "init", "-q"], cwd=sandbox).returncode == 0
+    assert _run([*git, "add", "-A", "-f"], cwd=sandbox).returncode == 0
+    assert _run([*git, "commit", "-q", "-m", "base"], cwd=sandbox).returncode == 0
+
+    match = re.search(
+        r"^check:(.*)$",
+        (sandbox / "justfile").read_text(encoding="utf-8"),
+        re.M,
+    )
+    assert match is not None, WITNESS_BUNDLE_CURRENCY
+    deps = match.group(1).split()
+    detail = f"check deps={deps}"
+    assert "bundle" in deps and "check-bundles" in deps, (
+        f"{WITNESS_BUNDLE_CURRENCY}\n{detail}"
+    )
+    assert deps.index("bundle") < deps.index("check-bundles"), (
+        f"{WITNESS_BUNDLE_CURRENCY}\n{detail}"
+    )
+
+    stale_source = sandbox / "src" / "melt" / "batch-resolve.py"
+    stale_source.write_text(
+        stale_source.read_text(encoding="utf-8") + "\n# cut tracer staleness probe\n",
+        encoding="utf-8",
+    )
+    rebuild = _run([sys.executable, "scripts/build_pyz.py", "melt"], cwd=sandbox)
+    assert rebuild.returncode == 0, f"{WITNESS_BUNDLE_CURRENCY}\n{_output(rebuild)}"
+
+    recipe = _run([sys.executable, "scripts/check_bundles.py"], cwd=sandbox)
+    detail = f"exit={recipe.returncode}\n{_output(recipe)}"
+    assert recipe.returncode != 0 and "stale" in _output(recipe), (
+        f"{WITNESS_BUNDLE_CURRENCY}\n{detail}"
+    )

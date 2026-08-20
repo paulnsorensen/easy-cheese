@@ -205,6 +205,9 @@ COMMON_SUBCOMMANDS: dict[str, str] = {
 # Wave 1: consumer skills receive common.pyz
 COMMON_CONSUMERS: frozenset[str] = frozenset({"cure", "age", "ultracook", "cook"})
 
+# Host-only imports that staged scripts may load at runtime, but bundles do not ship.
+HOST_IMPORTS: frozenset[str] = frozenset({"pytest", "_pytest"})
+
 # Bundles that ship the compiled phase registry data module.
 PHASE_REGISTRY_CONSUMERS: frozenset[str] = frozenset(
     {COMMON, "cook", "ultracook", "wheypoint"}
@@ -372,6 +375,103 @@ def _checked_in_script_map_bytes(expected_source: str) -> bytes:
 
 
 
+def _guards_import_error(handlers: list[ast.ExceptHandler]) -> bool:
+    guard_names = {"ImportError", "ModuleNotFoundError"}
+
+    def names(expr: ast.expr | None) -> list[str]:
+        if isinstance(expr, ast.Name):
+            return [expr.id]
+        if isinstance(expr, ast.Tuple):
+            return [e.id for e in expr.elts if isinstance(e, ast.Name)]
+        return []
+
+    def is_raise_only(handler: ast.ExceptHandler) -> bool:
+        return (
+            len(handler.body) == 1
+            and isinstance(handler.body[0], ast.Raise)
+            and handler.body[0].exc is None
+        )
+
+    return any(
+        guard_names & set(names(h.type)) and not is_raise_only(h)
+        for h in handlers
+    )
+
+
+class _UnguardedImportVisitor(ast.NodeVisitor):
+    """Collects absolute-import top names, skipping imports inside a
+    try/except ImportError (or ModuleNotFoundError) block and inside the
+    matching except handler's body — both sides of a deliberate flat-vs-
+    package import fallback are optional, not a bundling gap."""
+
+    def __init__(self) -> None:
+        self.names: set[str] = set()
+
+    def visit_Import(self, node: ast.Import) -> None:
+        self.names.update(alias.name.split(".")[0] for alias in node.names)
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        if node.level == 0 and node.module:
+            self.names.add(node.module.split(".")[0])
+
+    def visit_Try(self, node: ast.Try) -> None:
+        if not _guards_import_error(node.handlers):
+            for stmt in node.body:
+                self.visit(stmt)
+        for handler in node.handlers:
+            if not _guards_import_error([handler]):
+                self.visit(handler)
+        for stmt in [*node.orelse, *node.finalbody]:
+            self.visit(stmt)
+
+
+def _layout_packages(skill: str) -> set[str]:
+    """src/ directory names that exist as packages in a checkout, not in the zip."""
+    names = {SRC_DIRS.get(skill, skill)}
+    names.update(subdir for subdir, _ in EXTRA_MODULES.get(skill, []))
+    names.discard("")
+    return names
+
+
+@functools.cache
+def _unguarded_imports_text(source: str) -> frozenset[str]:
+    visitor = _UnguardedImportVisitor()
+    visitor.visit(ast.parse(source))
+    return frozenset(visitor.names)
+
+
+def _unguarded_imports(path: Path) -> set[str]:
+    return set(_unguarded_imports_text(path.read_text(encoding="utf-8")))
+
+
+def _check_import_closure(skill: str, stage: Path) -> None:
+    """Fail loudly if a staged first-party script imports something the
+    bundle doesn't ship, module-level or from inside a function body.
+    Imports guarded by try/except ImportError (or ModuleNotFoundError) are
+    deliberately optional and exempt. Host runners (pytest) and source-checkout
+    package names (`from cut import ...` behind `_BUNDLE_PATH`) are allowlisted.
+    Vendored dependency trees are resolution targets, not scan subjects."""
+    resolvable = set(sys.stdlib_module_names)
+    resolvable |= {p.stem for p in stage.glob("*.py")}
+    resolvable |= {p.name for p in stage.iterdir() if p.is_dir()}
+    resolvable |= HOST_IMPORTS
+    resolvable |= _layout_packages(skill)
+    vendored_stage_names: set[str] = set()
+    if skill in VENDORED_DEP_BUNDLES:
+        trees = vendored_dep_trees()
+        vendored_stage_names = {tree.name for tree in trees}
+        resolvable |= {tree.stem if tree.is_file() else tree.name for tree in trees}
+    problems = [
+        f"[{skill}] unresolved import {name!r} in {path.relative_to(stage)}"
+        for path in sorted(stage.rglob("*.py"))
+        if path.relative_to(stage).parts[0] not in vendored_stage_names
+        for name in sorted(_unguarded_imports(path))
+        if name not in resolvable
+    ]
+    if problems:
+        raise RuntimeError("; ".join(problems))
+
+
 def _src_dir(skill: str) -> Path:
     """The src/ subdir a skill's scripts live in (usually the skill name)."""
     return SRC_ROOT / SRC_DIRS.get(skill, skill)
@@ -409,15 +509,20 @@ def _source_path(skill: str, source: str | Shared) -> Path:
     return _src_dir(skill) / source
 
 
-def _imported_top_names(path: Path) -> set[str]:
-    tree = ast.parse(path.read_text(encoding="utf-8"))
+@functools.cache
+def _imported_top_names_text(source: str) -> frozenset[str]:
+    tree = ast.parse(source)
     names: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             names.update(alias.name.split(".")[0] for alias in node.names)
         elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
             names.add(node.module.split(".")[0])
-    return names
+    return frozenset(names)
+
+
+def _imported_top_names(path: Path) -> set[str]:
+    return set(_imported_top_names_text(path.read_text(encoding="utf-8")))
 
 
 def _local_skill_modules(skill: str) -> set[str]:
@@ -591,6 +696,7 @@ def _build_bundle(
         (stage / "__main__.py").write_text(
             _dispatcher_source(sub_to_module), encoding="utf-8"
         )
+        _check_import_closure(skill, stage)
         _write_zipapp(stage, target)
     return target
 
