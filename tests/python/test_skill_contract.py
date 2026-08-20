@@ -2,8 +2,8 @@
 
 Asserts strict equality between skill-markdown `<bundle>.pyz <subcommand>`
 references and the build_pyz registries (AC-2), the ships-as banner on every
-individually registered source file (AC-7), and a pure-Python src/ tree after
-the Astro site moves to website/ (AC-8). Derived from build_pyz.SKILLS — there
+individually registered source file (AC-7), and a Python-plus-docs src/ tree
+after the Astro site moves to website/ (AC-8). Derived from build_pyz.SKILLS — there
 is no hand-copied registry here.
 """
 
@@ -32,7 +32,6 @@ WITNESS_SRC_PURITY = (
 )
 
 _REFERENCE = re.compile(r"\b([a-z][a-z0-9_-]*)\.pyz\s+([A-Za-z_][A-Za-z0-9_-]*)")
-_BANNER = re.compile(r"^# ships-as: \S+\.pyz")
 _BANNER_WINDOW = 5
 
 
@@ -47,40 +46,46 @@ def registered_subcommands() -> frozenset[tuple[str, str]]:
     return frozenset(pairs)
 
 
-def referenced_subcommands() -> frozenset[tuple[str, str]]:
-    """Every (bundle, subcommand) invocation referenced in skills/**/*.md."""
+def referenced_invocations() -> frozenset[tuple[str, str, str]]:
+    """Every (skill, bundle, subcommand) invocation in skills/**/*.md."""
     bundles = {*build_pyz.SKILLS, build_pyz.COMMON}
     referenced = set()
-    for markdown in sorted((REPO_ROOT / "skills").rglob("*.md")):
+    skills_root = REPO_ROOT / "skills"
+    for markdown in sorted(skills_root.rglob("*.md")):
+        skill = markdown.relative_to(skills_root).parts[0]
         for match in _REFERENCE.finditer(markdown.read_text(encoding="utf-8")):
             if match.group(1) in bundles:
-                referenced.add((match.group(1), match.group(2)))
+                referenced.add((skill, match.group(1), match.group(2)))
     return frozenset(referenced)
 
 
-def registered_source_files() -> frozenset[Path]:
-    """Every individually registered source file the registries name.
+def referenced_subcommands() -> frozenset[tuple[str, str]]:
+    """Every (bundle, subcommand) invocation referenced in skills/**/*.md."""
+    return frozenset(
+        (bundle, subcommand)
+        for _, bundle, subcommand in referenced_invocations()
+    )
 
-    SKILLS and COMMON_SUBCOMMANDS entries resolve through build_pyz's own
-    staging resolution; EXTRA_MODULES entries are src/-relative. PACKAGE_TREES
-    stage whole directories and are deliberately out of scope: only files the
-    registries name one-by-one carry a ships-as banner.
-    """
-    files = {
-        build_pyz._source_path(skill, source)
-        for skill, subs in build_pyz.SKILLS.items()
-        for source in subs.values()
-    }
-    files |= {
-        build_pyz._source_path(build_pyz.COMMON, source)
-        for source in build_pyz.COMMON_SUBCOMMANDS.values()
-    }
-    files |= {
-        build_pyz.SRC_ROOT / src_subdir / filename
-        for entries in build_pyz.EXTRA_MODULES.values()
-        for src_subdir, filename in entries
-    }
-    return frozenset(files)
+
+def registered_source_banners() -> dict[Path, tuple[str, ...]]:
+    """Exact ships-as entries for every individually registered source file."""
+    entries: dict[Path, list[str]] = {}
+
+    def add(source: Path, entry: str) -> None:
+        entries.setdefault(source, []).append(entry)
+
+    for skill, subcommands in build_pyz.SKILLS.items():
+        for subcommand, source in subcommands.items():
+            add(build_pyz._source_path(skill, source), f"{skill}.pyz {subcommand}")
+    for subcommand, source in build_pyz.COMMON_SUBCOMMANDS.items():
+        add(
+            build_pyz._source_path(build_pyz.COMMON, source),
+            f"{build_pyz.COMMON}.pyz {subcommand}",
+        )
+    for skill, modules in build_pyz.EXTRA_MODULES.items():
+        for src_subdir, filename in modules:
+            add(build_pyz.SRC_ROOT / src_subdir / filename, f"{skill}.pyz (module)")
+    return {source: tuple(values) for source, values in entries.items()}
 
 
 def _fmt(pairs: frozenset[tuple[str, str]]) -> str:
@@ -99,17 +104,31 @@ def test_registry_equals_prose() -> None:
     assert not unreferenced and not unregistered, f"{WITNESS_EQUALITY}\n{detail}"
 
 
+def test_common_consumers_cover_references() -> None:
+    referenced = {
+        skill
+        for skill, bundle, _ in referenced_invocations()
+        if bundle == build_pyz.COMMON
+    }
+    missing = referenced - build_pyz.COMMON_CONSUMERS
+    detail = "\n".join(f"  {skill}" for skill in sorted(missing))
+    assert not missing, f"common.pyz references from non-consumers:\n{detail}"
+
+
 def test_source_banners() -> None:
-    missing = []
-    for source in sorted(registered_source_files()):
+    mismatches = []
+    for source, entries in sorted(registered_source_banners().items()):
+        expected = f"# ships-as: {' '.join(entries)}"
         head = source.read_text(encoding="utf-8").splitlines()[:_BANNER_WINDOW]
-        if not any(_BANNER.match(line) for line in head):
-            missing.append(source.relative_to(REPO_ROOT).as_posix())
-    detail = "\n".join(f"  {path}" for path in missing)
-    assert not missing, f"{WITNESS_BANNERS}\nmissing ships-as banner:\n{detail}"
+        actual = next((line for line in head if line.startswith("# ships-as:")), None)
+        if actual != expected:
+            path = source.relative_to(REPO_ROOT).as_posix()
+            mismatches.append(f"  {path}: expected {expected!r}, got {actual!r}")
+    detail = "\n".join(mismatches)
+    assert not mismatches, f"{WITNESS_BANNERS}\nships-as mismatch:\n{detail}"
 
 
-def test_src_is_pure_python() -> None:
+def test_src_contains_only_python_and_docs() -> None:
     src = REPO_ROOT / "src"
     offenders = [path.relative_to(REPO_ROOT).as_posix() for path in src.rglob("*.astro")]
     for name in ("components", "pages", "styles", "content", "sidebar.mjs", "content.config.ts"):
