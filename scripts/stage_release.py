@@ -66,11 +66,12 @@ def stage(out: Path) -> Path:
         if src.exists():
             _copy(src, out / rel)
 
-    # Build each bundle directly into the staged skill dir — the only scripts a
-    # released skill ships. Sources stay in the repo's src/ + shared/, unshipped.
+    # Validate the checked-in catalog once, then reuse its immutable bytes for
+    # every schema-carrying bundle in this release batch.
+    catalog_bytes = build_pyz._schema_catalog_bytes_for(list(build_pyz.SKILLS))
     for skill in build_pyz.SKILLS:
         target = out / "skills" / skill / "scripts" / f"{skill}.pyz"
-        build_pyz.build_bundle(skill, target)
+        build_pyz._build_bundle(skill, target, schema_catalog_bytes=catalog_bytes)
 
     _verify(out)
     return out

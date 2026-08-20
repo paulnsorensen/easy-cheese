@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import inspect
 import json
 import types
 from collections.abc import Callable, Mapping
@@ -66,26 +65,7 @@ class _RegisteredContract:
     supported_version: ContractVersion | None
 
 
-def _collect_marked_contracts() -> tuple[tuple[str, type], ...]:
-    pairs: list[tuple[str, type]] = []
-    for value in vars(contract_models).values():
-        if not inspect.isclass(value):
-            continue
-        slug = getattr(value, "__contract_slug__", None)
-        if slug is None:
-            continue
-        if not isinstance(slug, str) or not slug:
-            raise ValueError("contract marker must be a non-empty string")
-        pairs.append((slug, value))
-
-    pairs.sort(key=lambda item: item[0])
-    for previous, current in zip(pairs, pairs[1:]):
-        if previous[0] == current[0]:
-            raise ValueError(f"duplicate contract marker {current[0]!r}")
-    return tuple(pairs)
-
-
-_MARKED_CONTRACTS = _collect_marked_contracts()
+_MARKED_CONTRACTS = contract_models._registered_contracts()
 _REGISTERED_CONTRACTS = tuple(
     _RegisteredContract(
         schema_uri := f"{SCHEMA_ROOT}/{slug}",

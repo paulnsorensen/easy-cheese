@@ -28,17 +28,41 @@ _URI_RE = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:.+")
 
 Validator = Callable[[object, Attribute, object], None]
 
+_CONTRACT_MARKER = "__contract_slug__"
+
+
+def _validate_contract_slug(slug: object) -> str:
+    if not isinstance(slug, str) or not slug.strip():
+        raise ValueError("contract slug must be a non-empty string")
+    return slug
+
 
 def contract(slug: str) -> Callable[[type], type]:
     """Mark a contract class with its canonical schema slug."""
-    if not isinstance(slug, str) or not slug.strip():
-        raise ValueError("contract slug must be a non-empty string")
+    validated_slug = _validate_contract_slug(slug)
 
     def decorate(cls: type) -> type:
-        setattr(cls, "__contract_slug__", slug)
+        setattr(cls, _CONTRACT_MARKER, validated_slug)
         return cls
 
     return decorate
+
+
+def _registered_contracts() -> tuple[tuple[str, type], ...]:
+    """Return marked contract classes in deterministic slug order."""
+    pairs: list[tuple[str, type]] = []
+    for value in globals().values():
+        if not isinstance(value, type):
+            continue
+        slug = getattr(value, _CONTRACT_MARKER, None)
+        if slug is None:
+            continue
+        pairs.append((_validate_contract_slug(slug), value))
+    pairs.sort(key=lambda pair: pair[0])
+    for previous, current in zip(pairs, pairs[1:]):
+        if previous[0] == current[0]:
+            raise ValueError(f"duplicate contract marker {current[0]!r}")
+    return tuple(pairs)
 
 
 def schema_constraints(
