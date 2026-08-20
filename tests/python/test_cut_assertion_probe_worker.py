@@ -253,6 +253,166 @@ def test_pytest_ignores_expected_xfail_and_observes_real_failure(
     assert event["assertion_origin"] is False
 
 
+
+def test_unittest_preserves_explicit_custom_runner_and_observes_assertion(
+    tmp_path: Path,
+) -> None:
+    script = tmp_path / "custom_runner.py"
+    sentinel = tmp_path / "custom-runner.txt"
+    script.write_text(
+        "from pathlib import Path\n"
+        "import unittest\n"
+        f"sentinel = Path({str(sentinel)!r})\n"
+        "class CustomRunner:\n"
+        "    def __init__(self, *args, **kwargs):\n"
+        "        del args, kwargs\n"
+        "        sentinel.write_text('custom', encoding='utf-8')\n"
+        "    def run(self, test):\n"
+        "        result = unittest.TestResult()\n"
+        "        test(result)\n"
+        "        return result\n"
+        "class FailingTest(unittest.TestCase):\n"
+        "    def test_assertion(self):\n"
+        "        self.assertEqual('expected', 'actual')\n"
+        "if __name__ == '__main__':\n"
+        "    unittest.main(testRunner=CustomRunner)\n",
+        encoding="utf-8",
+    )
+    read_fd, write_fd = os.pipe()
+    try:
+        with pytest.raises(SystemExit) as raised:
+            cut_assertion_probe._run_direct(
+                "script",
+                str(script),
+                [],
+                write_fd,
+                sys.executable,
+            )
+    finally:
+        os.close(write_fd)
+    try:
+        event = json.loads(os.read(read_fd, cut_assertion_probe.MAX_EVENT_BYTES + 1))
+    finally:
+        os.close(read_fd)
+
+    assert raised.value.code == 1
+    assert event["assertion_origin"] is True
+    assert sentinel.read_text(encoding="utf-8") == "custom"
+
+
+def test_unittest_restores_result_methods_for_exit_false(tmp_path: Path) -> None:
+    script = tmp_path / "exit_false.py"
+    sentinel = tmp_path / "exit-false-result.txt"
+    script.write_text(
+        "from pathlib import Path\n"
+        "import unittest\n"
+        f"sentinel = Path({str(sentinel)!r})\n"
+        "class CustomRunner:\n"
+        "    def run(self, test):\n"
+        "        self.result = unittest.TestResult()\n"
+        "        test(self.result)\n"
+        "        return self.result\n"
+        "class FailingTest(unittest.TestCase):\n"
+        "    def test_assertion(self):\n"
+        "        self.assertEqual('expected', 'actual')\n"
+        "if __name__ == '__main__':\n"
+        "    runner = CustomRunner()\n"
+        "    program = unittest.main(testRunner=runner, exit=False)\n"
+        "    sentinel.write_text(\n"
+        "        f'{program.result is runner.result}:'\n"
+        "        f'{\"addFailure\" in vars(runner.result)}',\n"
+        "        encoding='utf-8',\n"
+        "    )\n",
+        encoding="utf-8",
+    )
+    read_fd, write_fd = os.pipe()
+    try:
+        returncode = cut_assertion_probe._run_direct(
+            "script",
+            str(script),
+            [],
+            write_fd,
+            sys.executable,
+        )
+    finally:
+        os.close(write_fd)
+    try:
+        event = json.loads(os.read(read_fd, cut_assertion_probe.MAX_EVENT_BYTES + 1))
+    finally:
+        os.close(read_fd)
+
+    assert returncode == 0
+    assert event["assertion_origin"] is True
+    assert sentinel.read_text(encoding="utf-8") == "True:False"
+
+
+def test_unittest_observes_custom_runner_default_result(tmp_path: Path) -> None:
+    script = tmp_path / "default_result_runner.py"
+    script.write_text(
+        "import unittest\n"
+        "class CustomRunner:\n"
+        "    def __init__(self, *args, **kwargs):\n"
+        "        del args, kwargs\n"
+        "    def run(self, test):\n"
+        "        while isinstance(test, unittest.TestSuite):\n"
+        "            test = next(iter(test))\n"
+        "        return test.run()\n"
+        "class FailingTest(unittest.TestCase):\n"
+        "    def test_assertion(self):\n"
+        "        self.assertEqual('expected', 'actual')\n"
+        "if __name__ == '__main__':\n"
+        "    unittest.main(testRunner=CustomRunner)\n",
+        encoding="utf-8",
+    )
+    read_fd, write_fd = os.pipe()
+    try:
+        with pytest.raises(SystemExit) as raised:
+            cut_assertion_probe._run_direct(
+                "script",
+                str(script),
+                [],
+                write_fd,
+                sys.executable,
+            )
+    finally:
+        os.close(write_fd)
+    try:
+        event = json.loads(os.read(read_fd, cut_assertion_probe.MAX_EVENT_BYTES + 1))
+    finally:
+        os.close(read_fd)
+
+    assert raised.value.code == 1
+    assert event["assertion_origin"] is True
+
+
+def test_direct_uncaught_exception_emits_exactly_one_event(tmp_path: Path) -> None:
+    script = tmp_path / "uncaught.py"
+    script.write_text("raise RuntimeError('uncaught witness')\n", encoding="utf-8")
+    read_fd, write_fd = os.pipe()
+    try:
+        with pytest.raises(RuntimeError, match="uncaught witness"):
+            cut_assertion_probe._run_direct(
+                "script",
+                str(script),
+                [],
+                write_fd,
+                sys.executable,
+            )
+    finally:
+        os.close(write_fd)
+    try:
+        payload = os.read(read_fd, cut_assertion_probe.MAX_EVENT_BYTES + 1)
+        remaining = os.read(read_fd, 1)
+    finally:
+        os.close(read_fd)
+
+    assert payload.count(b"\n") == 1
+    assert remaining == b""
+    assert cut_assertion_probe.ProbeEvent.decode(payload, "script") == (
+        cut_assertion_probe.ProbeEvent("script", False)
+    )
+
+
 def test_unittest_observes_runner_native_global_argv(tmp_path: Path) -> None:
     unittest_main = importlib.util.find_spec("unittest.__main__")
     assert unittest_main is not None and unittest_main.origin is not None

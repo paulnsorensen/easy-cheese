@@ -725,6 +725,126 @@ def test_issue_rejects_builtin_named_non_assertion(
     assert not receipt_path.exists()
 
 
+def test_rejects_misleading_python_executable_before_probe_fd(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    fake = tmp_path / "python3"
+    fake.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+    fake.chmod(0o755)
+    command = [str(fake), "-c", "raise AssertionError('outer witness')"]
+
+    def unexpected_pipe() -> tuple[int, int]:
+        raise AssertionError("probe FD must not be created for an untrusted interpreter")
+
+    with monkeypatch.context() as probe_patch:
+        probe_patch.setattr(red_gate.os, "pipe", unexpected_pipe)
+        run = red_gate._run_case(command, tmp_path)
+    assert (
+        run.returncode,
+        run.error,
+        run.assertion_origin,
+    ) == (
+        127,
+        "unsupported assertion-proof runner profile; use direct Python, "
+        "python -m pytest, or python -m unittest",
+        False,
+    )
+
+    candidate = _candidate(tmp_path, command=command)
+    candidate["cases"][0]["observed_exit_code"] = 127
+    receipt_path = _receipt_path(tmp_path, "misleading-python.receipt.json")
+    with pytest.raises(red_gate.GateValidationError) as raised:
+        _issue(candidate, receipt_path)
+    assert raised.value.problems == (
+        "GateReceipt.cases[1] failed in the harness, not its declared witness: "
+        "unsupported assertion-proof runner profile; use direct Python, "
+        "python -m pytest, or python -m unittest",
+        "GateReceipt.cases[1] observed witness claim disagrees with replay",
+    )
+    assert not receipt_path.exists()
+
+
+def test_probe_executes_trusted_interpreter_after_validating_alias(
+    tmp_path: Path,
+) -> None:
+    alias = tmp_path / "python-alias"
+    alias.symlink_to(sys.executable)
+
+    command = red_gate._python_case_command(
+        [str(alias), "-c", "raise AssertionError('alias witness')"],
+        tmp_path,
+        19,
+    )
+
+    assert command is not None
+    assert command.argv[0] == str(red_gate._TRUSTED_INTERPRETER_PATH)
+    assert command.argv[1:3] == ["-E", "-S"]
+    assert command.argv.count(str(alias)) == 2
+
+
+def test_probe_ignores_pythonhome_before_bootstrap(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PYTHONHOME", str(tmp_path / "untrusted-home"))
+
+    run = red_gate._run_case(
+        [sys.executable, "-c", "raise AssertionError('pythonhome witness')"],
+        tmp_path,
+    )
+
+    assert (run.returncode, run.error, run.assertion_origin) == (1, None, True)
+    assert run.output.splitlines()[-1] == "AssertionError: pythonhome witness"
+
+
+def test_sitecustomize_cannot_produce_accepted_probe_event(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "sitecustomize.py").write_text(
+        "import os, sys\n"
+        "event = b'{\"assertion_origin\":true,\"complete\":true,\"event\":"
+        "\"cut.assertion-origin\",\"runner\":\"script\",\"schema_version\":1}\\n'\n"
+        "for value in sys.argv[1:]:\n"
+        "    try:\n"
+        "        descriptor = int(value)\n"
+        "    except ValueError:\n"
+        "        continue\n"
+        "    try:\n"
+        "        os.write(descriptor, event)\n"
+        "    except OSError:\n"
+        "        continue\n"
+        "    os._exit(1)\n",
+        encoding="utf-8",
+    )
+    target = tmp_path / "exit.py"
+    target.write_text(
+        "print('outer witness')\nraise SystemExit(1)\n",
+        encoding="utf-8",
+    )
+    inherited = os.environ.get("PYTHONPATH")
+    pythonpath = [str(tmp_path)]
+    if inherited:
+        pythonpath.append(inherited)
+    monkeypatch.setenv("PYTHONPATH", os.pathsep.join(pythonpath))
+
+    command = [sys.executable, str(target)]
+    run = red_gate._run_case(command, tmp_path)
+    assert (run.returncode, run.error, run.assertion_origin) == (1, None, False)
+
+    candidate = _candidate(tmp_path, command=command)
+    receipt_path = _receipt_path(tmp_path, "sitecustomize.receipt.json")
+    with pytest.raises(red_gate.GateValidationError) as raised:
+        _issue(candidate, receipt_path)
+    assert raised.value.problems == (
+        "GateReceipt.cases[1] failed without assertion-origin evidence",
+    )
+    assert not receipt_path.exists()
+
+
 def _native_context_source() -> str:
     return (
         "import __main__, cut_assertion_probe, dataclasses, json, pathlib, "
@@ -736,6 +856,8 @@ def _native_context_source() -> str:
         "builtins_value = main.get('__builtins__'); "
         "print('OBS ' + repr(("
         "sys.flags.safe_path, sys.path[0], sys.argv, sys.orig_argv, "
+        "sys.executable, sys.prefix, sys.exec_prefix, "
+        "sys.base_prefix, sys.base_exec_prefix, "
         "__main__.__name__, "
         "getattr(getattr(__main__, '__spec__', None), 'name', None), "
         "'__file__' in main, main.get('__file__'), "
@@ -1687,6 +1809,38 @@ def test_run_case_reports_missing_probe_event_as_harness_error(
     assert run.error == "assertion probe event missing or invalid"
     assert red_gate._looks_harness_failure(run)
 
+
+def test_missing_probe_event_validation_problem_has_bounded_context(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    discarded_prefix = "discarded-prefix"
+    marker = "probe-context"
+    output = discarded_prefix + "x" * 300 + marker + "-outer witness-suffix"
+    command = [
+        sys.executable,
+        "-c",
+        f"import os, sys; sys.stdout.write({output!r}); "
+        "sys.stdout.flush(); os._exit(23)",
+    ]
+    receipt_path = _receipt_path(tmp_path)
+
+    candidate = _candidate(tmp_path, command=command)
+    candidate["cases"][0]["observed_exit_code"] = 23
+    with pytest.raises(red_gate.GateValidationError) as raised:
+        _issue(candidate, receipt_path)
+
+    expected_tail = "..." + output[-252:] + "'"
+    expected_problem = (
+        "GateReceipt.cases[1] failed in the harness: "
+        "assertion probe event missing or invalid "
+        f"(exit 23; output tail: {expected_tail})"
+    )
+    assert raised.value.problems == (expected_problem,)
+    assert len(expected_tail) == 256
+    assert marker in expected_problem
+    assert discarded_prefix not in expected_problem
 
 def test_source_probe_uses_canonical_worker_over_cwd_shadow(
     tmp_path: Path,
