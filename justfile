@@ -36,6 +36,14 @@ test: vendor
 test-skill-overlap:
     cargo test --manifest-path tools/skill-overlap/Cargo.toml
 
+# Verify staged .pyz bundles against the index (local check/pre-commit)
+check-bundles:
+    python3 scripts/check_bundles.py --against index
+
+# Verify rebuilt .pyz bundles match HEAD (CI)
+check-bundles-ci:
+    python3 scripts/check_bundles.py --against head
+
 # Build self-contained .pyz bundles for shared-consuming skills (CI rebuilds on every push to main)
 bundle: vendor
     python3 scripts/build_pyz.py
@@ -74,10 +82,10 @@ update-skill-budgets:
     python3 .github/scripts/validate_skills.py --write-budgets
 
 # Full local check with autofixes
-check: lint-md-fix lint-yaml-fix lint-yaml lint-py-fix lint-sh test docs-build
+check: lint-md-fix lint-yaml-fix lint-yaml lint-py-fix lint-sh test bundle check-bundles docs-build
 
 # CI-mode verification (no autofixes)
-ci: lint-md lint-yaml lint-sh test docs-build
+ci: lint-md lint-yaml lint-sh test bundle check-bundles-ci docs-build
 
 # Install docs build dependencies
 docs-install:
