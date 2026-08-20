@@ -3,8 +3,8 @@
 Converts an already-written Markdown report artifact into ONE self-contained,
 offline, byte-deterministic themed HTML file in the OS temp dir.
 
-    python3 .../common.pyz render_html \\
-        --in <md-file> --title <str> --out-name <name>
+This helper is not registered as a ``common.pyz`` subcommand; repository
+callers run the source module directly.
 
 Reads ``--in`` (the source Markdown artifact), renders it via
 ``html_report.render``, and writes ``<tempdir>/<out-name>.html``. Emits the

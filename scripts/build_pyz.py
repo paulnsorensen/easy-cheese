@@ -14,10 +14,12 @@ from __future__ import annotations
 
 import argparse
 import ast
+import functools
 import shutil
 import sys
 import tempfile
 import zipfile
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
@@ -33,6 +35,7 @@ PHASE_REGISTRY_SOURCE = SRC_ROOT / "easy_cheese_schemas" / PHASE_REGISTRY_MODULE
 PHASE_CONTRACT_SOURCE = SRC_ROOT / "easy_cheese_schemas" / "phase_contracts.py"
 SCHEMA_CATALOG_SOURCE = SRC_ROOT / "easy_cheese_schemas" / "_schema_catalog.py"
 SCHEMA_CONTRACT_SOURCE = SRC_ROOT / "easy_cheese_schemas" / "contracts.py"
+SCRIPT_MAP_SOURCE = SRC_ROOT / "PYTHON_SCRIPTS.md"
 SHARED_MODULES = {p.stem for p in SHARED_SCRIPTS.glob("*.py")}
 ZIP_TIMESTAMP = (1980, 1, 2, 0, 0, 0)
 # Pinned so the compressed bytes depend only on the zlib build, never on
@@ -72,7 +75,6 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
         "artifact-path": Shared("artifact_path.py"),
         "curd-count": "curd-count.py",
         "gate-graph": "gate-graph.py",
-        "render_html": Shared("html_report_cli.py"),
         "taste-test": "taste_test.py",
     },
     "briesearch": {
@@ -113,25 +115,18 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
     },
     "press": {
         "press-route": "fanout/press_route_cli.py",
-        "red-gate": "cut/red_gate.py",
     },
     # /ultracook drives the fan-out engine (formerly /cheese-factory); its
     # sources live in the mode-neutral src/fanout/ dir (see SRC_DIRS).
     "ultracook": {
-        "artifact-path": Shared("artifact_path.py"),
         "baseline": "baseline.py",
-        "phase_decision": "phase_decision.py",
         "mode": "mode.py",
         "worktree": Shared("worktree.py"),
         "milknado": "milknado.py",
         "validate_decomposition": "validate_decomposition.py",
         "validate_manifest": "validate_manifest.py",
         "validate_pr_plan": "validate_pr_plan.py",
-        "manifest_update": "manifest_update.py",
-        "wiring_topo_sort": "wiring_topo_sort.py",
         "pr_plan_to_branches": "pr_plan_to_branches.py",
-        "age-route": "fanout/age_route_cli.py",
-        "curd-block": "fanout/curd_block.py",
     },
 }
 
@@ -145,9 +140,7 @@ SRC_DIRS: dict[str, str] = {"ultracook": "fanout"}
 # vendored into both the mold and ultracook bundles.
 EXTRA_MODULES: dict[str, list[tuple[str, str]]] = {
     "mold": [("fanout", "mode.py")],
-    "cut": [
-        ("mold", "taste_test.py"),
-    ],
+    "cut": [("mold", "taste_test.py")],
     "age": [
         ("fanout", "age_route.py"),
         ("fanout", "review_surface.py"),
@@ -160,6 +153,7 @@ EXTRA_MODULES: dict[str, list[tuple[str, str]]] = {
     "press": [
         ("fanout", "press_route.py"),
         ("cut", "cut_assertion_probe.py"),
+        ("cut", "red_gate.py"),
         ("cut", "gate_receipts.py"),
         ("mold", "taste_test.py"),
     ],
@@ -184,7 +178,7 @@ PACKAGE_TREES: dict[str, list[Path]] = {
 }
 
 
-VENDORED_DEP_BUNDLES = ("common", "cook", "cut", "press", "ultracook", "wheypoint")
+VENDORED_DEP_BUNDLES = tuple(PACKAGE_TREES)
 
 
 def vendored_dep_trees() -> list[Path]:
@@ -203,31 +197,46 @@ def vendored_dep_trees() -> list[Path]:
 # stays self-contained after `gh skill install`.
 COMMON = "common"
 COMMON_SUBCOMMANDS: dict[str, str] = {
-    "slugify": "slugify.py",
     "write_handoff_artifact": "write_handoff_artifact.py",
     "read_handoff_slug": "read_handoff_slug.py",
     "findings_cli": "findings_cli.py",
     "gates_cli": "gates_cli.py",
-    "paths_cli": "paths_cli.py",
-    "handoff_cli": "handoff_cli.py",
-    "render_html": "html_report_cli.py",
 }
 # Wave 1: consumer skills receive common.pyz
-COMMON_CONSUMERS: frozenset[str] = frozenset({"cure", "age", "ultracook"})
+COMMON_CONSUMERS: frozenset[str] = frozenset({"cure", "age", "ultracook", "cook"})
 
+# Bundles that ship the compiled phase registry data module.
+PHASE_REGISTRY_CONSUMERS: frozenset[str] = frozenset(
+    {COMMON, "cook", "ultracook", "wheypoint"}
+)
 _CACHE: dict[str, Path] = {}
+_BATCH_CATALOG_BYTES: bytes | None = None
+
+
+@contextmanager
+def _scoped_sys_path(entry: str):
+    """Add ``entry`` to sys.path for the duration of the block, removing it
+    afterward unless it was already present (in which case it is left alone)."""
+    added = entry not in sys.path
+    if added:
+        sys.path.insert(0, entry)
+    try:
+        yield
+    finally:
+        if added:
+            sys.path.remove(entry)
 
 
 def _phase_compiler():
     """Load the source-only compiler without importing the generated module."""
     package_entry = str(SRC_ROOT / "easy_cheese_schemas")
-    if package_entry not in sys.path:
-        sys.path.insert(0, package_entry)
-    from _phase_registry_compiler import compile_phase_files_to_source
+    with _scoped_sys_path(package_entry):
+        from _phase_registry_compiler import compile_phase_files_to_source
 
     return compile_phase_files_to_source
 
 
+@functools.cache
 def _compiled_phase_registry_source() -> str:
     """Compile authored phase YAML into the portable runtime data module."""
     declarations = sorted(REPO_ROOT.glob("skills/*/phase-contract.yaml"))
@@ -237,9 +246,8 @@ def _compiled_phase_registry_source() -> str:
 def _schema_catalog_compiler():
     """Load the source-only catalog compiler without runtime projections."""
     package_entry = str(SRC_ROOT / "easy_cheese_schemas")
-    if package_entry not in sys.path:
-        sys.path.insert(0, package_entry)
-    from _schema_catalog_compiler import collect, render
+    with _scoped_sys_path(package_entry):
+        from _schema_catalog_compiler import collect, render
 
     return collect, render
 
@@ -248,19 +256,18 @@ def _schema_contract_module() -> ModuleType:
     """Load a fresh contracts module so every build sees current markers."""
     vendor_deps.require_populated("schema catalog compiler")
     vendor_entry = str(vendor_deps.VENDOR_ROOT)
-    if vendor_entry not in sys.path:
-        sys.path.insert(0, vendor_entry)
     module = ModuleType("_build_schema_contracts")
     module.__file__ = str(SCHEMA_CONTRACT_SOURCE)
-    sys.modules[module.__name__] = module
     source = SCHEMA_CONTRACT_SOURCE.read_bytes()
-    exec(
-        compile(source, str(SCHEMA_CONTRACT_SOURCE), "exec"),
-        module.__dict__,
-    )
+    with _scoped_sys_path(vendor_entry):
+        exec(
+            compile(source, str(SCHEMA_CONTRACT_SOURCE), "exec"),
+            module.__dict__,
+        )
     return module
 
 
+@functools.cache
 def _compiled_schema_catalog_source() -> str:
     """Compile the marker-derived schema catalog from the live contracts."""
     collect, render = _schema_catalog_compiler()
@@ -282,18 +289,13 @@ def _checked_in_generated_file_bytes(
             f"checked-in {artifact_name} is missing: {source}"
         ) from exc
     if actual != expected:
-        try:
-            regeneration_target = source.relative_to(REPO_ROOT)
-        except ValueError:
-            regeneration_target = source
         raise RuntimeError(
-            f"checked-in {artifact_name} is stale; regenerate {regeneration_target}"
+            f"checked-in {artifact_name} is stale; regenerate {source}"
         )
     return actual
 
 
 def _checked_in_schema_catalog_bytes(expected_source: str) -> bytes:
-    """Validate the checked-in schema catalog against its live authority."""
     return _checked_in_generated_file_bytes(
         expected_source,
         SCHEMA_CATALOG_SOURCE,
@@ -302,7 +304,6 @@ def _checked_in_schema_catalog_bytes(expected_source: str) -> bytes:
 
 
 def _checked_in_phase_registry_bytes(expected_source: str) -> bytes:
-    """Validate the checked-in phase registry against its YAML authority."""
     return _checked_in_generated_file_bytes(
         expected_source,
         PHASE_REGISTRY_SOURCE,
@@ -319,6 +320,56 @@ def _schema_catalog_bytes_for(skills: list[str]) -> bytes | None:
 
 def _module_name(filename: str) -> str:
     return Path(filename).stem.replace("-", "_")
+
+
+def _render_script_map() -> str:
+    """Deterministic markdown table: one row per (bundle, subcommand, source
+    path), compiled from SKILLS, COMMON_SUBCOMMANDS, EXTRA_MODULES, and
+    PACKAGE_TREES."""
+    rows: list[tuple[str, str, str]] = []
+    for skill, subs in SKILLS.items():
+        for sub, source in subs.items():
+            path = _source_path(skill, source).relative_to(REPO_ROOT).as_posix()
+            rows.append((skill, sub, path))
+    for sub, filename in COMMON_SUBCOMMANDS.items():
+        path = (SHARED_SCRIPTS / filename).relative_to(REPO_ROOT).as_posix()
+        rows.append((COMMON, sub, path))
+    for skill, extras in EXTRA_MODULES.items():
+        for src_subdir, filename in extras:
+            path = (SRC_ROOT / src_subdir / filename).relative_to(REPO_ROOT).as_posix()
+            rows.append((skill, "-", path))
+    for skill, trees in PACKAGE_TREES.items():
+        for tree in trees:
+            rows.append((skill, "-", tree.relative_to(REPO_ROOT).as_posix()))
+    rows.sort()
+    lines = [
+        "# Python script map",
+        "",
+        "Generated by `scripts/build_pyz.py`. Do not edit by hand.",
+        "",
+        "| Bundle | Subcommand | Source |",
+        "| --- | --- | --- |",
+    ]
+    lines.extend(f"| {bundle} | {sub} | {path} |" for bundle, sub, path in rows)
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _checked_in_script_map_bytes(expected_source: str) -> bytes:
+    """Require the tracked script map to match the registry authority."""
+    expected = expected_source.encode("utf-8")
+    try:
+        actual = SCRIPT_MAP_SOURCE.read_bytes()
+    except FileNotFoundError as exc:
+        raise RuntimeError(
+            f"checked-in script map is missing: {SCRIPT_MAP_SOURCE}"
+        ) from exc
+    if actual != expected:
+        raise RuntimeError(
+            "checked-in script map is stale; regenerate src/PYTHON_SCRIPTS.md"
+        )
+    return actual
+
 
 
 def _src_dir(skill: str) -> Path:
@@ -465,14 +516,20 @@ def _build_bundle(
     skill: str,
     target: Path,
     *,
-    schema_catalog_bytes: bytes | None,
+    schema_catalog_bytes: bytes | None = None,
 ) -> Path:
-    """Build ``skill`` with catalog bytes validated by the batch boundary."""
+    """Build ``skill``'s bundle at ``target`` (a .pyz path). Returns it."""
     files = _files(skill)
     sub_to_module = {sub: _module_name(_filename(src)) for sub, src in files.items()}
     catalog_bytes = schema_catalog_bytes
+    if catalog_bytes is None and skill in PACKAGE_TREES:
+        catalog_bytes = (
+            _BATCH_CATALOG_BYTES
+            if _BATCH_CATALOG_BYTES is not None
+            else _schema_catalog_bytes_for([skill])
+        )
     registry_bytes = None
-    if skill in {COMMON, "cook", "ultracook", "wheypoint"}:
+    if skill in PHASE_REGISTRY_CONSUMERS:
         registry_source = _compiled_phase_registry_source()
         registry_bytes = _checked_in_phase_registry_bytes(registry_source)
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -539,12 +596,7 @@ def _build_bundle(
 
 
 def build_bundle(skill: str, target: Path) -> Path:
-    """Build one bundle after deriving and validating its generated catalog."""
-    return _build_bundle(
-        skill,
-        target,
-        schema_catalog_bytes=_schema_catalog_bytes_for([skill]),
-    )
+    return _build_bundle(skill, target)
 
 
 def cached_bundle(skill: str) -> Path:
@@ -566,6 +618,7 @@ def main(argv: list[str]) -> int:
     )
     parser.add_argument("skills", nargs="*", help="Skills to build (default: all).")
     args = parser.parse_args(argv[1:])
+    _checked_in_script_map_bytes(_render_script_map())
     # Consumer-only skills (age/cure) have no own bundle but receive common.pyz,
     # so they are valid targets even though they are not in SKILLS.
     known = {*SKILLS, COMMON, *COMMON_CONSUMERS}
@@ -578,48 +631,25 @@ def main(argv: list[str]) -> int:
     real = [s for s in targets if s in SKILLS]  # only skills that ship their own .pyz
     want_common = COMMON in targets or any(s in COMMON_CONSUMERS for s in targets)
     consumers = _common_consumers(targets, explicit=bool(args.skills))
-    batch_skills = [*real, COMMON] if want_common else real
-    catalog_bytes = _schema_catalog_bytes_for(batch_skills)
+    global _BATCH_CATALOG_BYTES
+    _BATCH_CATALOG_BYTES = _schema_catalog_bytes_for([*real, COMMON] if want_common else real)
 
     if args.out_dir is not None:
         for skill in real:
-            print(
-                "built",
-                _build_bundle(
-                    skill,
-                    args.out_dir / f"{skill}.pyz",
-                    schema_catalog_bytes=catalog_bytes,
-                ),
-            )
+            print(f"built {build_bundle(skill, args.out_dir / f'{skill}.pyz')}")
         if want_common:
-            print(
-                "built",
-                _build_bundle(
-                    COMMON,
-                    args.out_dir / "common.pyz",
-                    schema_catalog_bytes=catalog_bytes,
-                ),
-            )
+            print(f"built {build_bundle(COMMON, args.out_dir / 'common.pyz')}")
         return 0
 
     for skill in real:
         print(
-            "deployed",
-            _build_bundle(
-                skill,
-                REPO_ROOT / "skills" / skill / "scripts" / f"{skill}.pyz",
-                schema_catalog_bytes=catalog_bytes,
-            ),
+            f"deployed {build_bundle(skill, REPO_ROOT / 'skills' / skill / 'scripts' / f'{skill}.pyz')}"
         )
     if want_common:
         # Build once, then fan the same artifact out to each consuming skill so
         # every skill ships self-contained — common has no skill dir of its own.
         with tempfile.TemporaryDirectory() as td:
-            common = _build_bundle(
-                COMMON,
-                Path(td) / "common.pyz",
-                schema_catalog_bytes=catalog_bytes,
-            )
+            common = build_bundle(COMMON, Path(td) / "common.pyz")
             for consumer in sorted(consumers):
                 dest = REPO_ROOT / "skills" / consumer / "scripts" / "common.pyz"
                 dest.parent.mkdir(parents=True, exist_ok=True)

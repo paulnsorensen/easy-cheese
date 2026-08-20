@@ -185,7 +185,7 @@ def _write_phase_yaml(path: Path, source: str) -> None:
     )
 
 
-def test_build_compiler_is_clean_bootstrap_safe_and_fresh_per_call(
+def test_build_compiler_is_clean_bootstrap_safe_and_memoized_per_process(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     scripts = REPO_ROOT / "scripts"
@@ -204,8 +204,13 @@ def test_build_compiler_is_clean_bootstrap_safe_and_fresh_per_call(
     second = build_pyz._compiled_phase_registry_source()
 
     assert "source\": \"smoke\"" in first
-    assert "source\": \"fresh\"" in second
-    assert first != second
+    # The compile is memoized once per process (spec pyz-pipeline-contracts):
+    # a same-process YAML edit is invisible until the cache is cleared.
+    assert second == first
+    build_pyz._compiled_phase_registry_source.cache_clear()
+    third = build_pyz._compiled_phase_registry_source()
+    assert "source\": \"fresh\"" in third
+    assert third != first
 
 
 @pytest.mark.parametrize(
@@ -273,7 +278,7 @@ def test_checked_in_catalog_projection_matches_build_generator() -> None:
     ).read_text(encoding="utf-8") == build_pyz._compiled_schema_catalog_source()
 
 
-def test_schema_catalog_compilation_is_fresh_per_call(
+def test_schema_catalog_compilation_is_memoized_per_process(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     scripts = REPO_ROOT / "scripts"
@@ -295,8 +300,13 @@ def test_schema_catalog_compilation_is_fresh_per_call(
     second = build_pyz._compiled_schema_catalog_source()
 
     assert "curd-plan" in first
-    assert "fresh-plan" in second
-    assert first != second
+    # Memoized once per process (spec pyz-pipeline-contracts): the edit is
+    # invisible until the cache is cleared.
+    assert second == first
+    build_pyz._compiled_schema_catalog_source.cache_clear()
+    third = build_pyz._compiled_schema_catalog_source()
+    assert "fresh-plan" in third
+    assert third != first
 
 
 def test_bundle_build_rejects_stale_checked_in_catalog(

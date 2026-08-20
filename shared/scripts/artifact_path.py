@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ships-as: mold.pyz artifact-path briesearch.pyz artifact-path cook.pyz artifact-path
 """Resolve a durable-corpus artifact path for a prose-driven skill.
 
 Thin CLI over ``paths.py`` so a skill can ask for the on-disk home of an
@@ -15,8 +16,8 @@ Exit 2 on bad args; nonzero on a paths validation error (unknown phase, or a bad
 slug on non-research phases).
 
 Shared source: build_pyz.py registers this one file as the ``artifact-path``
-subcommand across the skills that need it (mold, briesearch, cook,
-ultracook) and auto-vendors ``paths`` alongside it.
+subcommand across the skills that need it (mold, briesearch, and cook) and
+auto-vendors ``paths`` alongside it.
 """
 
 from __future__ import annotations

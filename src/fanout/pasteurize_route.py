@@ -1,3 +1,4 @@
+# ships-as: pasteurize.pyz (module)
 """Pure /pasteurize fan-out sizing policy.
 
 Spec: deterministic-fanout-sizing.md `### 5. /pasteurize -- the signal is

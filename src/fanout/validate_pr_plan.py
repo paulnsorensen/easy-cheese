@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ships-as: ultracook.pyz validate_pr_plan
 """Validate an /ultracook fan-out PR plan document.
 
 The plan's canonical on-disk format is YAML (see ``manifest_io``), but this

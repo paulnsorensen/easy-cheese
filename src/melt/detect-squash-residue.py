@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ships-as: melt.pyz detect-squash-residue
 """Detect squash-merge residue before running the conflict cascade.
 
 When a PR is squash-merged into the base branch, the local branch retains the
