@@ -37,16 +37,24 @@ def _sorter(
     return sorter
 
 
-def _cycle_message(exc: graphlib.CycleError) -> str:
-    path = " -> ".join(str(node) for node in exc.args[1])
-    return f"the dependency graph has cycle {path}"
+class WiringCycleError(ValueError):
+    """A wiring cycle with canonical path and deterministic ID detail."""
+
+    def __init__(self, cycle_path: Sequence[str]) -> None:
+        self.cycle_path = tuple(cycle_path)
+        self.cycle_ids = tuple(sorted(set(self.cycle_path)))
+        path = " -> ".join(self.cycle_path)
+        super().__init__(f"the dependency graph has cycle {path}")
 
 
-def _prepare(sorter: graphlib.TopologicalSorter[str]) -> str | None:
+def _prepare(
+    sorter: graphlib.TopologicalSorter[str],
+) -> WiringCycleError | None:
     try:
         sorter.prepare()
     except graphlib.CycleError as exc:
-        return _cycle_message(exc)
+        cycle_path = tuple(str(node) for node in exc.args[1])
+        return WiringCycleError(cycle_path)
     return None
 
 
@@ -57,8 +65,8 @@ def cycle_errors(nodes: WiringGraph) -> list[str]:
     (usually curd IDs) and do not participate in cycle detection.
     """
     normalised = _normalise(nodes)
-    message = _prepare(_sorter(normalised, include_self=True))
-    return [] if message is None else [message]
+    error = _prepare(_sorter(normalised, include_self=True))
+    return [] if error is None else [str(error)]
 
 
 def compute_waves(nodes: WiringGraph) -> list[list[str]]:
@@ -71,9 +79,9 @@ def compute_waves(nodes: WiringGraph) -> list[list[str]]:
     """
     normalised = _normalise(nodes)
     sorter = _sorter(normalised, include_self=False)
-    message = _prepare(sorter)
-    if message is not None:
-        raise ValueError(message)
+    error = _prepare(sorter)
+    if error is not None:
+        raise error
 
     waves: list[list[str]] = []
     while ready := sorted(sorter.get_ready()):
@@ -82,4 +90,4 @@ def compute_waves(nodes: WiringGraph) -> list[list[str]]:
     return waves
 
 
-__all__ = ["WiringGraph", "compute_waves", "cycle_errors"]
+__all__ = ["WiringCycleError", "WiringGraph", "compute_waves", "cycle_errors"]

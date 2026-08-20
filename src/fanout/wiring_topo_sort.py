@@ -15,7 +15,7 @@ from typing import Any
 
 import cli  # cli is co-staged in the bundled .pyz alongside this module
 from manifest_io import ManifestLoadError, parse_mapping  # noqa: E402
-from easy_cheese_schemas.wiring_graph import compute_waves
+from easy_cheese_schemas.wiring_graph import WiringCycleError, compute_waves
 
 
 def _load_manifest(path: Path) -> dict[str, Any]:
@@ -52,8 +52,8 @@ def _run(args: argparse.Namespace) -> None:
         waves = compute_waves(
             (str(item["id"]), item.get("depends_on", [])) for item in wiring
         )
-    except ValueError as exc:
-        raise cli.CliError(str(exc)) from exc
+    except WiringCycleError as exc:
+        raise cli.CliError(f"cycle detected: {', '.join(exc.cycle_ids)}") from exc
     if args.json_mode:
         cli.emit({"waves": waves}, json_mode=True, stdout=args.stdout)
         return

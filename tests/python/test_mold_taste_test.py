@@ -294,12 +294,61 @@ def test_applicability_keeps_green_guards_outside_cut_contracts(
     )
 
     applicability = taste.parse_gate_applicability(spec)
-
     assert isinstance(applicability, taste.RedRequired)
-    assert [contract.mode for contract in applicability.contracts] == [
-        "tracer",
-        "guard",
-    ]
+    assert [
+        (contract.acceptance_id, contract.mode)
+        for contract in applicability.contracts
+    ] == [("AC-1", "tracer"), ("AC-2", "guard")]
+
+
+def test_guard_only_red_required_is_rejected_before_cut_handoff(
+    taste: ModuleType,
+) -> None:
+    spec = red_spec()
+    spec = spec.replace(
+        "| AC-1 | public call | existing service boundary | assert result is returned | tracer | | |",
+        "| AC-1 | public call | existing service boundary | existing behavior remains byte-identical | guard | | |",
+    ).replace(
+        "| AC-2 | public call | existing service boundary | assert empty input is rejected | contract-matrix | v1 | empty<br>non-empty |",
+        "| AC-2 | public call | existing service boundary | existing behavior remains byte-identical | guard | | |",
+    )
+
+    with pytest.raises(taste.ApplicabilityError) as error:
+        taste.parse_gate_applicability(spec)
+    assert error.value.problems == (taste.RED_REQUIRED_EXECUTABLE_PROBLEM,)
+    guard = taste.TestContract(
+        acceptance_id="AC-1",
+        interface="public call",
+        seam="committed snapshot",
+        expected_failure="existing behavior changes",
+        mode="guard",
+    )
+    with pytest.raises(taste.ApplicabilityError) as constructor_error:
+        taste.RedRequired("behavior", (guard,))
+    assert constructor_error.value.problems == (
+        taste.RED_REQUIRED_EXECUTABLE_PROBLEM,
+    )
+
+
+    result = taste.taste_test(
+        spec,
+        [],
+        {
+            "draft_sha256": taste.draft_sha256(spec),
+            "verdict": "pass",
+            "forks": [],
+            "contradictions": [],
+            "orphaned_decisions": [],
+            "unsupported_assumptions": [],
+            "acceptance_gaps": [],
+        },
+    )
+    assert result.acceptance_gaps == (
+        f"gate-applicability:{taste.RED_REQUIRED_EXECUTABLE_PROBLEM}",
+    )
+    gate = taste.decomposition_gate(result)
+    assert not gate.allowed
+    assert gate.reopened_forks == ()
 
 
 @pytest.mark.parametrize(
