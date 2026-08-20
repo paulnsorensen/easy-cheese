@@ -97,6 +97,37 @@ def bundles(tmp_path_factory) -> Path:
     return out
 
 
+def test_default_batch_derives_schema_catalog_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    compiled_calls = 0
+    validated_calls = 0
+    compile_catalog = build_pyz._compiled_schema_catalog_source
+    validate_catalog = build_pyz._checked_in_schema_catalog_bytes
+
+    def compile_once() -> str:
+        nonlocal compiled_calls
+        compiled_calls += 1
+        return compile_catalog()
+
+    def validate_once(source: str) -> bytes:
+        nonlocal validated_calls
+        validated_calls += 1
+        return validate_catalog(source)
+
+    monkeypatch.setattr(build_pyz, "_compiled_schema_catalog_source", compile_once)
+    monkeypatch.setattr(build_pyz, "_checked_in_schema_catalog_bytes", validate_once)
+
+    assert build_pyz.main(["build_pyz.py", "--out-dir", str(tmp_path)]) == 0
+    assert {
+        skill
+        for skill in [*build_pyz.SKILLS, build_pyz.COMMON]
+        if skill in build_pyz.PACKAGE_TREES
+    } == {"common", "cook", "cut", "press", "ultracook", "wheypoint"}
+    assert compiled_calls == 1
+    assert validated_calls == 1
+
+
 def _run(
     pyz: Path,
     *args: str,

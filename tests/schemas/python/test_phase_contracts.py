@@ -208,23 +208,58 @@ def test_build_compiler_is_clean_bootstrap_safe_and_fresh_per_call(
     assert first != second
 
 
-def test_bundle_build_rejects_stale_checked_in_registry(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    ("source_name", "artifact_name"),
+    [
+        ("_schema_catalog.py", "schema catalog"),
+        ("_compiled_phase_registry.py", "phase registry"),
+    ],
+)
+def test_checked_in_generated_file_bytes_covers_missing_stale_and_matching(
+    tmp_path: Path,
+    source_name: str,
+    artifact_name: str,
 ) -> None:
     scripts = REPO_ROOT / "scripts"
     if str(scripts) not in sys.path:
         sys.path.insert(0, str(scripts))
-    build_pyz = _load("phase_contract_build_stale", scripts / "build_pyz.py")
-    generated = tmp_path / "_compiled_phase_registry.py"
+    build_pyz = _load(
+        f"generated_file_validator_{artifact_name.replace(' ', '_')}",
+        scripts / "build_pyz.py",
+    )
+    generated = tmp_path / source_name
+    validate = build_pyz._checked_in_generated_file_bytes
+
+    with pytest.raises(RuntimeError) as missing:
+        validate(
+            "current",
+            generated,
+            artifact_name=artifact_name,
+        )
+    assert str(missing.value) == f"checked-in {artifact_name} is missing: {generated}"
+
     generated.write_bytes(b"stale")
-    monkeypatch.setattr(build_pyz, "PHASE_REGISTRY_SOURCE", generated)
+    with pytest.raises(RuntimeError) as stale:
+        validate(
+            "current",
+            generated,
+            artifact_name=artifact_name,
+        )
+    assert (
+        str(stale.value)
+        == f"checked-in {artifact_name} is stale; regenerate {generated}"
+    )
 
-    with pytest.raises(RuntimeError, match="checked-in phase registry is stale"):
-        build_pyz._checked_in_phase_registry_bytes("current")
-
-    expected = "current".encode("utf-8")
+    expected = b"current"
     generated.write_bytes(expected)
-    assert build_pyz._checked_in_phase_registry_bytes("current") == expected
+    assert (
+        validate(
+            "current",
+            generated,
+            artifact_name=artifact_name,
+        )
+        == expected
+    )
 
 
 def test_checked_in_catalog_projection_matches_build_generator() -> None:
