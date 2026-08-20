@@ -2861,7 +2861,9 @@ mod tests {
     #[test]
     fn load_roots_rejects_absolute_manifest_paths() {
         let repo = temp_dir("absolute-root-repo");
+        let repo = repo.path();
         let outside = temp_dir("absolute-root-outside");
+        let outside = outside.path();
         let manifest = repo.join("manifest.json");
         fs::write(
             &manifest,
@@ -2869,16 +2871,14 @@ mod tests {
         )
         .unwrap();
 
-        let error = load_roots(&repo, &manifest).unwrap_err();
+        let error = load_roots(repo, &manifest).unwrap_err();
         assert!(error.contains("relative"), "{error}");
-
-        let _ = fs::remove_dir_all(repo);
-        let _ = fs::remove_dir_all(outside);
     }
 
     #[test]
     fn load_roots_rejects_parent_manifest_paths() {
         let repo = temp_dir("parent-root-repo");
+        let repo = repo.path();
         let manifest = repo.join("manifest.json");
         fs::write(
             &manifest,
@@ -2886,49 +2886,45 @@ mod tests {
         )
         .unwrap();
 
-        let error = load_roots(&repo, &manifest).unwrap_err();
+        let error = load_roots(repo, &manifest).unwrap_err();
         assert!(error.contains("parent"), "{error}");
-
-        let _ = fs::remove_dir_all(repo);
     }
 
     #[cfg(unix)]
     #[test]
     fn markdown_files_rejects_directory_symlink_escape() {
         let repo = temp_dir("directory-symlink-repo");
+        let repo = repo.path();
         let root = repo.join("skills/example");
         fs::create_dir_all(&root).unwrap();
         let outside = temp_dir("directory-symlink-outside");
+        let outside = outside.path();
         fs::write(outside.join("secret.md"), "secret").unwrap();
-        std::os::unix::fs::symlink(&outside, root.join("escape")).unwrap();
+        std::os::unix::fs::symlink(outside, root.join("escape")).unwrap();
 
         let mut paths = Vec::new();
-        let error = markdown_files(&repo, &root, &mut paths).unwrap_err();
+        let error = markdown_files(repo, &root, &mut paths).unwrap_err();
         assert!(error.contains("symlink"), "{error}");
         assert!(paths.is_empty());
-
-        let _ = fs::remove_dir_all(repo);
-        let _ = fs::remove_dir_all(outside);
     }
 
     #[cfg(unix)]
     #[test]
     fn markdown_files_rejects_markdown_symlink_escape() {
         let repo = temp_dir("file-symlink-repo");
+        let repo = repo.path();
         let root = repo.join("skills/example");
         fs::create_dir_all(&root).unwrap();
         let outside = temp_dir("file-symlink-outside");
+        let outside = outside.path();
         let secret = outside.join("secret.md");
         fs::write(&secret, "secret").unwrap();
         std::os::unix::fs::symlink(&secret, root.join("escape.md")).unwrap();
 
         let mut paths = Vec::new();
-        let error = markdown_files(&repo, &root, &mut paths).unwrap_err();
+        let error = markdown_files(repo, &root, &mut paths).unwrap_err();
         assert!(error.contains("symlink"), "{error}");
         assert!(paths.is_empty());
-
-        let _ = fs::remove_dir_all(repo);
-        let _ = fs::remove_dir_all(outside);
     }
 
     #[test]
@@ -2959,12 +2955,14 @@ mod tests {
     #[test]
     fn frontmatter_advisory_below_floor_is_suppressed() {
         let root_a = temp_dir("frontmatter-floor-a");
+        let root_a = root_a.path();
         fs::write(
             root_a.join("SKILL.md"),
             "---\nname: alpha\ndescription: the quick fox jumps\n---\nBody\n",
         )
         .unwrap();
         let root_b = temp_dir("frontmatter-floor-b");
+        let root_b = root_b.path();
         fs::write(
             root_b.join("SKILL.md"),
             "---\nname: beta\ndescription: the slow turtle walks\n---\nBody\n",
@@ -2972,7 +2970,7 @@ mod tests {
         .unwrap();
 
         let results = frontmatter_advisories(
-            &[root_a.clone(), root_b.clone()],
+            &[root_a.to_path_buf(), root_b.to_path_buf()],
             &std::env::temp_dir(),
             0.3,
         )
@@ -2981,9 +2979,6 @@ mod tests {
             results.is_empty(),
             "near-zero-score pair should be suppressed by the floor: {results:?}"
         );
-
-        let _ = fs::remove_dir_all(root_a);
-        let _ = fs::remove_dir_all(root_b);
     }
 
     #[test]
@@ -3323,6 +3318,7 @@ mod tests {
     #[test]
     fn graph_dedupes_target_reachable_by_link_and_backtick_reference() {
         let repo = temp_dir("intro-graph");
+        let repo = repo.path();
         let a = repo.join("a.md");
         let references = repo.join("references");
         let b = references.join("b.md");
@@ -3330,15 +3326,14 @@ mod tests {
         fs::write(&a, "# A\n[B](references/b.md) and `references/b.md`\n").unwrap();
         fs::write(&b, "# B\n").unwrap();
         let documents = vec![
-            parse_document(&a, &repo, &TokenCounter::Test).unwrap(),
-            parse_document(&b, &repo, &TokenCounter::Test).unwrap(),
+            parse_document(&a, repo, &TokenCounter::Test).unwrap(),
+            parse_document(&b, repo, &TokenCounter::Test).unwrap(),
         ];
-        let (edges, _) = graph(&documents, &[], &repo);
+        let (edges, _) = graph(&documents, &[], repo);
         assert_eq!(
             edges["a.md"],
             BTreeSet::from(["references/b.md".to_owned()])
         );
-        let _ = fs::remove_dir_all(repo);
     }
 
     #[test]
@@ -4212,10 +4207,11 @@ mod tests {
         ))
     }
 
-    fn temp_dir(name: &str) -> PathBuf {
-        let path = temp_path(name);
-        fs::create_dir_all(&path).unwrap();
-        path
+    fn temp_dir(name: &str) -> tempfile::TempDir {
+        tempfile::Builder::new()
+            .prefix(&format!("skill-overlap-{}-{name}-", std::process::id()))
+            .tempdir()
+            .unwrap()
     }
 
     #[test]
