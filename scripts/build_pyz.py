@@ -19,6 +19,7 @@ import shutil
 import sys
 import tempfile
 import zipfile
+from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -205,6 +206,9 @@ COMMON_SUBCOMMANDS: dict[str, str] = {
 # Wave 1: consumer skills receive common.pyz
 COMMON_CONSUMERS: frozenset[str] = frozenset({"cure", "age", "ultracook", "cook"})
 
+# Host-only imports that staged scripts may load at runtime, but bundles do not ship.
+HOST_IMPORTS: frozenset[str] = frozenset({"pytest", "_pytest"})
+
 # Bundles that ship the compiled phase registry data module.
 PHASE_REGISTRY_CONSUMERS: frozenset[str] = frozenset(
     {COMMON, "cook", "ultracook", "wheypoint"}
@@ -372,6 +376,236 @@ def _checked_in_script_map_bytes(expected_source: str) -> bytes:
 
 
 
+def _is_import_error_handler(handler: ast.ExceptHandler) -> bool:
+    guard_names = {"ImportError", "ModuleNotFoundError"}
+    if isinstance(handler.type, ast.Name):
+        names = {handler.type.id}
+    elif isinstance(handler.type, ast.Tuple):
+        names = {item.id for item in handler.type.elts if isinstance(item, ast.Name)}
+    else:
+        names = set()
+    return bool(guard_names & names)
+
+
+class _ImportVisitor(ast.NodeVisitor):
+    """Collect runtime imports, ImportError fallbacks, and bundle-only branches."""
+
+    def __init__(self) -> None:
+        self.imports: set[tuple[str, bool]] = set()
+        self.alternatives: list[tuple[_ImportVisitor, ...]] = []
+
+    @classmethod
+    def from_statements(cls, statements: list[ast.stmt]) -> _ImportVisitor:
+        visitor = cls()
+        for statement in statements:
+            visitor.visit(statement)
+        return visitor
+
+    def visit_Import(self, node: ast.Import) -> None:
+        self.imports.update((alias.name, False) for alias in node.names)
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        if node.level != 0 or not node.module:
+            return
+        if "." in node.module:
+            self.imports.update(
+                (
+                    node.module
+                    if alias.name == "*"
+                    else f"{node.module}.{alias.name}",
+                    alias.name != "*",
+                )
+                for alias in node.names
+            )
+            return
+        self.imports.update(
+            (
+                node.module if alias.name == "*" else f"{node.module}.{alias.name}",
+                True,
+            )
+            for alias in node.names
+        )
+
+    def visit_If(self, node: ast.If) -> None:
+        test = node.test
+        if (
+            isinstance(test, ast.Compare)
+            and isinstance(test.left, ast.Name)
+            and test.left.id == "_BUNDLE_PATH"
+            and len(test.ops) == 1
+            and len(test.comparators) == 1
+            and isinstance(test.comparators[0], ast.Constant)
+            and test.comparators[0].value is None
+            and isinstance(test.ops[0], (ast.Is, ast.IsNot))
+        ):
+            branch = node.body if isinstance(test.ops[0], ast.IsNot) else node.orelse
+            for statement in branch:
+                self.visit(statement)
+            return
+        self.generic_visit(node)
+
+    def visit_Try(self, node: ast.Try) -> None:
+        guarded = [
+            handler for handler in node.handlers if _is_import_error_handler(handler)
+        ]
+        if not guarded:
+            self.generic_visit(node)
+            return
+        self.alternatives.append(
+            (
+                self.from_statements(node.body),
+                *(self.from_statements(handler.body) for handler in guarded),
+            )
+        )
+        for handler in node.handlers:
+            if handler not in guarded:
+                self.visit(handler)
+        for statement in (*node.orelse, *node.finalbody):
+            self.visit(statement)
+
+
+@functools.cache
+def _imports_text(source: str) -> _ImportVisitor:
+    visitor = _ImportVisitor()
+    visitor.visit(ast.parse(source))
+    return visitor
+
+
+def _unresolved_imports(
+    visitor: _ImportVisitor,
+    resolves: Callable[[str, bool], bool],
+) -> set[str]:
+    unresolved = {
+        name
+        for name, from_import in visitor.imports
+        if not resolves(name, from_import)
+    }
+    for alternatives in visitor.alternatives:
+        branch_problems = [
+            _unresolved_imports(branch, resolves) for branch in alternatives
+        ]
+        if all(branch_problems):
+            unresolved.update(set().union(*branch_problems))
+    return unresolved
+
+
+def _module_target_names(target: ast.AST | None) -> set[str]:
+    if isinstance(target, ast.Name):
+        return {target.id}
+    if isinstance(target, (ast.List, ast.Tuple)):
+        return set().union(*map(_module_target_names, target.elts))
+    return set()
+
+
+def _definite_module_bindings(statements: list[ast.stmt]) -> set[str]:
+    def sequence(nodes: list[ast.stmt]) -> set[str]:
+        bindings: set[str] = set()
+        for node in nodes:
+            bindings.update(statement(node))
+        return bindings
+
+    def statement(node: ast.stmt) -> set[str]:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            return {node.name}
+        if isinstance(node, ast.Import):
+            return {alias.asname or alias.name.split(".")[0] for alias in node.names}
+        if isinstance(node, ast.ImportFrom):
+            return {a.asname or a.name for a in node.names if a.name != "*"}
+        if isinstance(node, ast.Assign):
+            return set().union(*(_module_target_names(target) for target in node.targets))
+        if isinstance(node, (ast.AnnAssign, ast.AugAssign)):
+            return _module_target_names(node.target)
+        if isinstance(node, ast.If):
+            if isinstance(node.test, ast.Constant) and type(node.test.value) is bool:
+                return sequence(node.body if node.test.value else node.orelse)
+            if node.orelse:
+                return sequence(node.body) & sequence(node.orelse)
+            return set()
+        if isinstance(node, ast.Try):
+            normal = sequence(node.body) | sequence(node.orelse)
+            paths = [normal] + [
+                sequence(h.body) | ({h.name} if h.name else set())
+                for h in node.handlers
+            ]
+            return set.intersection(*paths) | sequence(node.finalbody)
+        if isinstance(node, (ast.With, ast.AsyncWith)):
+            return sequence(node.body) | set().union(
+                *(_module_target_names(i.optional_vars) for i in node.items)
+            )
+        return set()
+
+    return sequence(statements)
+
+
+def _check_import_closure(skill: str, stage: Path) -> None:
+    """Fail when a staged script has no viable runtime import path."""
+    resolvable = set(sys.stdlib_module_names) | HOST_IMPORTS
+
+    vendored_stage_names: set[str] = set()
+    if skill in VENDORED_DEP_BUNDLES:
+        trees = vendored_dep_trees()
+        vendored_stage_names = {tree.name for tree in trees}
+        resolvable |= {tree.stem if tree.is_file() else tree.name for tree in trees}
+
+    @functools.cache
+    def exports(module: Path) -> set[str]:
+        tree = ast.parse(module.read_text(encoding="utf-8"))
+        return _definite_module_bindings(tree.body)
+
+    def resolves(name: str, from_import: bool) -> bool:
+        parts = name.split(".")
+        if parts[0] in resolvable or parts[0] in vendored_stage_names:
+            return True
+        if from_import and len(parts) >= 2:
+            imported = stage.joinpath(*parts[:-1])
+            module = imported.with_suffix(".py")
+            if module.is_file():
+                return parts[-1] in exports(module)
+            package_init = imported / "__init__.py"
+            if package_init.is_file():
+                child = imported / parts[-1]
+                return (
+                    child.with_suffix(".py").is_file()
+                    or child.is_dir()
+                    or parts[-1] in exports(package_init)
+                )
+        package = stage / parts[0]
+        if package.is_dir():
+            if len(parts) == 1:
+                return (package / "__init__.py").is_file()
+            current = package
+            for part in parts[1:-1]:
+                current = current / part
+                if not current.is_dir() or not (current / "__init__.py").is_file():
+                    return False
+            leaf = parts[-1]
+            child = current / leaf
+            if child.with_suffix(".py").is_file() or child.is_dir():
+                return True
+            init = current / "__init__.py"
+            return init.is_file() and leaf in exports(init)
+        flat = stage / f"{parts[0]}.py"
+        if flat.is_file():
+            return len(parts) == 1 or (
+                from_import and len(parts) == 2 and parts[1] in exports(flat)
+            )
+        return False
+
+    problems = [
+        f"[{skill}] unresolved import {name!r} in {path.relative_to(stage)}"
+        for path in sorted(stage.rglob("*.py"))
+        if path.relative_to(stage).parts[0] not in vendored_stage_names
+        for name in sorted(
+            _unresolved_imports(
+                _imports_text(path.read_text(encoding="utf-8")),
+                resolves,
+            )
+        )
+    ]
+    if problems:
+        raise RuntimeError("; ".join(problems))
+
+
 def _src_dir(skill: str) -> Path:
     """The src/ subdir a skill's scripts live in (usually the skill name)."""
     return SRC_ROOT / SRC_DIRS.get(skill, skill)
@@ -409,15 +643,20 @@ def _source_path(skill: str, source: str | Shared) -> Path:
     return _src_dir(skill) / source
 
 
-def _imported_top_names(path: Path) -> set[str]:
-    tree = ast.parse(path.read_text(encoding="utf-8"))
+@functools.cache
+def _imported_top_names_text(source: str) -> frozenset[str]:
+    tree = ast.parse(source)
     names: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             names.update(alias.name.split(".")[0] for alias in node.names)
         elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
             names.add(node.module.split(".")[0])
-    return names
+    return frozenset(names)
+
+
+def _imported_top_names(path: Path) -> set[str]:
+    return set(_imported_top_names_text(path.read_text(encoding="utf-8")))
 
 
 def _local_skill_modules(skill: str) -> set[str]:
@@ -591,6 +830,7 @@ def _build_bundle(
         (stage / "__main__.py").write_text(
             _dispatcher_source(sub_to_module), encoding="utf-8"
         )
+        _check_import_closure(skill, stage)
         _write_zipapp(stage, target)
     return target
 
