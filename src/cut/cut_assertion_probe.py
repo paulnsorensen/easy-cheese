@@ -343,13 +343,8 @@ def _run_pytest(
 ) -> int:
     _set_native_path0(str(Path.cwd().resolve()))
     _set_original_argv(original_argv0, ["-m", "pytest", *args])
-    try:
-        import pytest
-        import _pytest.config as pytest_config
-    except ImportError as exc:
-        raise RuntimeError(
-            "pytest is required to observe pytest assertion origins"
-        ) from exc
+    import pytest
+    import _pytest.config as pytest_config
 
     observation = _Observation("pytest")
     pytest.hookimpl(hookwrapper=True)(_PytestAssertionProbe.pytest_runtest_makereport)

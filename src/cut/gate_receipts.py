@@ -1,4 +1,4 @@
-# ships-as: press.pyz (module)
+# ships-as: cut.pyz (module) press.pyz (module)
 """Shared public types for the Cut red-gate helper.
 
 The receipt records themselves live in :mod:`easy_cheese_schemas.gates`.  This

@@ -207,6 +207,11 @@ COMMON_SUBCOMMANDS: dict[str, str] = {
 # Wave 1: consumer skills receive common.pyz
 COMMON_CONSUMERS: frozenset[str] = frozenset({"cure", "age", "ultracook", "cook"})
 
+# Host-only imports that a staged script may load at runtime (test runner, etc.)
+# and src/ package names that exist only in a source checkout, never as a staged
+# flat module. The closure gate treats both as resolved.
+HOST_IMPORTS: frozenset[str] = frozenset({"pytest", "_pytest"})
+
 # Bundles that ship the compiled phase registry data module.
 PHASE_REGISTRY_CONSUMERS: frozenset[str] = frozenset(
     {COMMON, "cook", "ultracook", "wheypoint"}
@@ -402,30 +407,44 @@ class _UnguardedImportVisitor(ast.NodeVisitor):
             self.visit(stmt)
 
 
-def _unguarded_imports(path: Path) -> set[str]:
+def _layout_packages(skill: str) -> set[str]:
+    """src/ directory names that exist as packages in a checkout, not in the zip."""
+    names = {SRC_DIRS.get(skill, skill)}
+    names.update(subdir for subdir, _ in EXTRA_MODULES.get(skill, []))
+    names.discard("")
+    return names
+
+
+@functools.cache
+def _unguarded_imports_text(source: str) -> frozenset[str]:
     visitor = _UnguardedImportVisitor()
-    visitor.visit(ast.parse(path.read_text(encoding="utf-8")))
-    return visitor.names
+    visitor.visit(ast.parse(source))
+    return frozenset(visitor.names)
+
+
+def _unguarded_imports(path: Path) -> set[str]:
+    return set(_unguarded_imports_text(path.read_text(encoding="utf-8")))
 
 
 def _check_import_closure(skill: str, stage: Path) -> None:
     """Fail loudly if a staged first-party script imports something the
     bundle doesn't ship, module-level or from inside a function body.
     Imports guarded by try/except ImportError (or ModuleNotFoundError) are
-    deliberately optional and exempt. Vendored dependency trees are
-    resolution targets, not scan subjects — their own optional lazy imports
-    are upstream's business."""
+    deliberately optional and exempt. Host runners (pytest) and source-checkout
+    package names (`from cut import ...` behind `_BUNDLE_PATH`) are allowlisted.
+    Vendored dependency trees are resolution targets, not scan subjects."""
     resolvable = set(sys.stdlib_module_names)
     resolvable |= {p.stem for p in stage.glob("*.py")}
     resolvable |= {p.name for p in stage.iterdir() if p.is_dir()}
+    resolvable |= HOST_IMPORTS
+    resolvable |= _layout_packages(skill)
     vendored_stage_names: set[str] = set()
     if skill in VENDORED_DEP_BUNDLES:
-        vendored_stage_names = {tree.name for tree in vendored_dep_trees()}
-        resolvable |= {
-            tree.stem if tree.is_file() else tree.name for tree in vendored_dep_trees()
-        }
+        trees = vendored_dep_trees()
+        vendored_stage_names = {tree.name for tree in trees}
+        resolvable |= {tree.stem if tree.is_file() else tree.name for tree in trees}
     problems = [
-        f"unresolved import {name!r} in {path.relative_to(stage)}"
+        f"[{skill}] unresolved import {name!r} in {path.relative_to(stage)}"
         for path in sorted(stage.rglob("*.py"))
         if path.relative_to(stage).parts[0] not in vendored_stage_names
         for name in sorted(_unguarded_imports(path))
@@ -472,15 +491,20 @@ def _source_path(skill: str, source: str | Shared) -> Path:
     return _src_dir(skill) / source
 
 
-def _imported_top_names(path: Path) -> set[str]:
-    tree = ast.parse(path.read_text(encoding="utf-8"))
+@functools.cache
+def _imported_top_names_text(source: str) -> frozenset[str]:
+    tree = ast.parse(source)
     names: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             names.update(alias.name.split(".")[0] for alias in node.names)
         elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
             names.add(node.module.split(".")[0])
-    return names
+    return frozenset(names)
+
+
+def _imported_top_names(path: Path) -> set[str]:
+    return set(_imported_top_names_text(path.read_text(encoding="utf-8")))
 
 
 def _local_skill_modules(skill: str) -> set[str]:

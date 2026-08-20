@@ -8,6 +8,7 @@ no tracer ever mutates the project.
 
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 import sys
@@ -131,9 +132,20 @@ def test_bundle_currency_wired_into_check(tmp_path: Path) -> None:
     assert _run([*git, "add", "-A", "-f"], cwd=sandbox).returncode == 0
     assert _run([*git, "commit", "-q", "-m", "base"], cwd=sandbox).returncode == 0
 
-    dry_run = _run(["just", "-n", "check"], cwd=sandbox)
-    detail = f"exit={dry_run.returncode}\n{_output(dry_run)}"
-    assert "check_bundles.py" in _output(dry_run), f"{WITNESS_BUNDLE_CURRENCY}\n{detail}"
+    match = re.search(
+        r"^check:(.*)$",
+        (sandbox / "justfile").read_text(encoding="utf-8"),
+        re.M,
+    )
+    assert match is not None, WITNESS_BUNDLE_CURRENCY
+    deps = match.group(1).split()
+    detail = f"check deps={deps}"
+    assert "bundle" in deps and "check-bundles" in deps, (
+        f"{WITNESS_BUNDLE_CURRENCY}\n{detail}"
+    )
+    assert deps.index("bundle") < deps.index("check-bundles"), (
+        f"{WITNESS_BUNDLE_CURRENCY}\n{detail}"
+    )
 
     stale_source = sandbox / "src" / "melt" / "batch-resolve.py"
     stale_source.write_text(
@@ -143,7 +155,7 @@ def test_bundle_currency_wired_into_check(tmp_path: Path) -> None:
     rebuild = _run([sys.executable, "scripts/build_pyz.py", "melt"], cwd=sandbox)
     assert rebuild.returncode == 0, f"{WITNESS_BUNDLE_CURRENCY}\n{_output(rebuild)}"
 
-    recipe = _run(["just", "check-bundles"], cwd=sandbox)
+    recipe = _run([sys.executable, "scripts/check_bundles.py"], cwd=sandbox)
     detail = f"exit={recipe.returncode}\n{_output(recipe)}"
     assert recipe.returncode != 0 and "stale" in _output(recipe), (
         f"{WITNESS_BUNDLE_CURRENCY}\n{detail}"

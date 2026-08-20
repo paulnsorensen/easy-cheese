@@ -53,10 +53,7 @@ from easy_cheese_schemas.compat import Provenance, SCHEMA_VERSION  # noqa: E402
 if _BUNDLE_PATH is not None:
     import cut_assertion_probe  # noqa: E402
 else:
-    try:
-        from cut import cut_assertion_probe  # type: ignore[no-redef]  # noqa: E402
-    except ModuleNotFoundError:
-        raise
+    from cut import cut_assertion_probe  # type: ignore[no-redef]  # noqa: E402
 
 try:  # the Cut bundle stages Mold's canonical parser as a flat module
     from mold.taste_test import (  # noqa: E402

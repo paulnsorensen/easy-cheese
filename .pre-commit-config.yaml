@@ -3,7 +3,7 @@ repos:
     hooks:
       - id: bundle-currency
         name: bundle-currency
-        entry: python3 scripts/check_bundles.py
+        entry: bash -c 'python3 scripts/build_pyz.py && python3 scripts/check_bundles.py --against index'
         language: system
         files: '^(src/|shared/|skills/[^/]+/phase-contract\.yaml$)'
         pass_filenames: false

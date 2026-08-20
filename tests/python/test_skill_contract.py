@@ -30,9 +30,13 @@ WITNESS_SRC_PURITY = (
     "On main the assertion that src/ contains no Astro sources fails: "
     "src/components/Sidebar.astro exists"
 )
+WITNESS_COMMON_CONSUMERS = (
+    "a common.pyz markdown reference must name a COMMON_CONSUMERS skill"
+)
 
 _REFERENCE = re.compile(r"\b([a-z][a-z0-9_-]*)\.pyz\s+([A-Za-z_][A-Za-z0-9_-]*)")
-_BANNER = re.compile(r"^# ships-as: \S+\.pyz")
+_BANNER = re.compile(r"^# ships-as:")
+_BANNER_BUNDLES = re.compile(r"([a-z][a-z0-9_-]*)\.pyz")
 _BANNER_WINDOW = 5
 
 
@@ -87,6 +91,36 @@ def _fmt(pairs: frozenset[tuple[str, str]]) -> str:
     return "\n".join(f"  {bundle}.pyz {sub}" for bundle, sub in sorted(pairs))
 
 
+def _banner_bundles(source: Path) -> frozenset[str]:
+    for line in source.read_text(encoding="utf-8").splitlines()[:_BANNER_WINDOW]:
+        if _BANNER.match(line):
+            return frozenset(_BANNER_BUNDLES.findall(line))
+    return frozenset()
+
+
+def _staged_bundles(source: Path) -> frozenset[str]:
+    bundles: set[str] = set()
+    for skill, subs in build_pyz.SKILLS.items():
+        for src in subs.values():
+            if build_pyz._source_path(skill, src) == source:
+                bundles.add(skill)
+    for src in build_pyz.COMMON_SUBCOMMANDS.values():
+        if build_pyz._source_path(build_pyz.COMMON, src) == source:
+            bundles.add(build_pyz.COMMON)
+    for skill, entries in build_pyz.EXTRA_MODULES.items():
+        for src_subdir, filename in entries:
+            if build_pyz.SRC_ROOT / src_subdir / filename == source:
+                bundles.add(skill)
+    for skill in build_pyz.SKILLS:
+        skill_dir = build_pyz._src_dir(skill)
+        if (
+            source.parent == skill_dir
+            and source.stem in build_pyz._local_skill_modules(skill)
+        ):
+            bundles.add(skill)
+    return frozenset(bundles)
+
+
 def test_registry_equals_prose() -> None:
     registered = registered_subcommands()
     referenced = referenced_subcommands()
@@ -99,14 +133,39 @@ def test_registry_equals_prose() -> None:
     assert not unreferenced and not unregistered, f"{WITNESS_EQUALITY}\n{detail}"
 
 
+def test_common_consumers_cover_prose() -> None:
+    consumers: set[str] = set()
+    skills_root = REPO_ROOT / "skills"
+    for markdown in sorted(skills_root.rglob("*.md")):
+        if re.search(
+            r"\bcommon\.pyz\s+[A-Za-z_]",
+            markdown.read_text(encoding="utf-8"),
+        ):
+            consumers.add(markdown.relative_to(skills_root).parts[0])
+    missing = consumers - build_pyz.COMMON_CONSUMERS
+    detail = "\n".join(f"  {skill}" for skill in sorted(missing))
+    assert not missing, f"{WITNESS_COMMON_CONSUMERS}\n{detail}"
+
+
 def test_source_banners() -> None:
     missing = []
+    drifted = []
     for source in sorted(registered_source_files()):
-        head = source.read_text(encoding="utf-8").splitlines()[:_BANNER_WINDOW]
-        if not any(_BANNER.match(line) for line in head):
-            missing.append(source.relative_to(REPO_ROOT).as_posix())
-    detail = "\n".join(f"  {path}" for path in missing)
-    assert not missing, f"{WITNESS_BANNERS}\nmissing ships-as banner:\n{detail}"
+        claimed = _banner_bundles(source)
+        rel = source.relative_to(REPO_ROOT).as_posix()
+        if not claimed:
+            missing.append(rel)
+            continue
+        staged = _staged_bundles(source)
+        if claimed != staged:
+            drifted.append(
+                f"  {rel}: banner={sorted(claimed)} staged={sorted(staged)}"
+            )
+    detail = "\n".join(
+        ["missing ships-as banner:", *(f"  {path}" for path in missing)]
+        + (["banner/stage mismatch:", *drifted] if drifted else [])
+    )
+    assert not missing and not drifted, f"{WITNESS_BANNERS}\n{detail}"
 
 
 def test_src_is_pure_python() -> None:
