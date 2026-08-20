@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ships-as: briesearch.pyz ground-check
 """Lint a /briesearch synthesis report for grounding violations.
 
 A synthesis must not assert a claim its own evidence does not support. This is

@@ -1,3 +1,4 @@
+# ships-as: common.pyz read_handoff_slug
 """Read the handoff preamble from a .cheese/<phase>/<slug>.md artifact.
 
 Emits JSON with keys: status, next, artifact, orientation, halt_reason,

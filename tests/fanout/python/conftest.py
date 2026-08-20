@@ -22,6 +22,7 @@ import build_pyz  # noqa: E402
 
 _BUNDLE = build_pyz.cached_bundle("ultracook")
 sys.path.insert(0, str(_BUNDLE))
+sys.path.append(str(REPO_ROOT / "src" / "fanout"))
 
 
 @pytest.fixture(scope="session")

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ships-as: mold.pyz artifact-path briesearch.pyz artifact-path cook.pyz artifact-path
 """Resolve a durable-corpus artifact path for a prose-driven skill.
 
 Thin CLI over ``paths.py`` so a skill can ask for the on-disk home of an

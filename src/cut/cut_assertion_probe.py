@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ships-as: press.pyz (module)
 """Observe assertion failures inside supported Python test runners."""
 
 from __future__ import annotations

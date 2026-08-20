@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ships-as: ultracook.pyz validate_decomposition
 """Validate an /ultracook fan-out decomposition manifest. Exit 0 on success, 1 on errors (one per line on stderr)."""
 from __future__ import annotations
 

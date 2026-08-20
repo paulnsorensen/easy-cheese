@@ -1,3 +1,4 @@
+# ships-as: age.pyz (module) affinage.pyz (module)
 """Pure git-derived, code-weighted review-surface scorer.
 
 Spec: deterministic-fanout-sizing.md `### 1. review_surface` and

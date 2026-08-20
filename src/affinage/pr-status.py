@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ships-as: affinage.pyz pr-status
 """Fetch PR status (build + merge) for /affinage grading.
 
 Returns JSON on stdout:

@@ -15,6 +15,7 @@ and silent drift, so it wires each side to the copy that actually matters:
 from __future__ import annotations
 
 import importlib
+import importlib.util
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -60,4 +61,13 @@ def pr_plan_validator() -> Validator:
 
 @pytest.fixture(scope="session")
 def curd_block_validator() -> Validator:
-    return importlib.import_module("curd_block").validate_curd_block
+    # curd_block was demoted to a direct src/ module: its dead ultracook
+    # registration was pruned (spec pyz-pipeline-contracts), so the bundle no
+    # longer stages it. Load it straight from source, isolated from sys.path.
+    spec = importlib.util.spec_from_file_location(
+        "curd_block_src", REPO_ROOT / "src" / "fanout" / "curd_block.py"
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.validate_curd_block

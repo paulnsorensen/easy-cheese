@@ -1,3 +1,4 @@
+# ships-as: common.pyz gates_cli
 """CLI wrapper for shared/scripts/gates.py.
 
 Subcommands:

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ships-as: hard-cheese.pyz freshness-check
 """Decide whether a /hard-cheese attempt for <slug> is fresh, stale, or new.
 
 Replaces the LLM-judged "did this already pass?" confirmation-bias step at the

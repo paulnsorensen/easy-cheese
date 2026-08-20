@@ -1,3 +1,4 @@
+# ships-as: age.pyz (module) affinage.pyz (module)
 """Pure age/affinage sizing router.
 
 Spec: deterministic-fanout-sizing.md `### 2. Reviewer ladder` and

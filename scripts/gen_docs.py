@@ -14,8 +14,8 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SKILLS_DIR = REPO_ROOT / "skills"
-CONTENT_ROOT = REPO_ROOT / "src" / "content" / "docs"
-SIDEBAR_PATH = REPO_ROOT / "src" / "sidebar.mjs"
+CONTENT_ROOT = REPO_ROOT / "website" / "content" / "docs"
+SIDEBAR_PATH = REPO_ROOT / "website" / "sidebar.mjs"
 REPO_URL = "https://github.com/paulnsorensen/easy-cheese"
 EDIT_URL_BASE = f"{REPO_URL}/edit/main/"
 LICENSE_URL = f"{REPO_URL}/blob/main/LICENSE"

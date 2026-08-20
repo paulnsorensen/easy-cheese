@@ -1,3 +1,4 @@
+# ships-as: easy-cheese-setup.pyz global easy-cheese-setup.pyz local easy-cheese-setup.pyz doctor
 """Register/repair the cheese-durable hallouminate corpus (ADR cheese-corpus-setup).
 
 Writes the ~/.config/hallouminate/config.toml [[corpus]] block that points

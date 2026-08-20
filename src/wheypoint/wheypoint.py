@@ -1,3 +1,4 @@
+# ships-as: wheypoint.pyz commit wheypoint.pyz resolve wheypoint.pyz show wheypoint.pyz lint
 """The four commands the bundle exposes: commit, resolve, show, lint.
 
 This module is a mouth, not a brain. Every decision it reports was made by

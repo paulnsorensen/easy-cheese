@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ships-as: pasteurize.pyz debug-tag-sweep
 """Scan a tree for /pasteurize instrumentation tags and emit a deterministic verdict.
 
 Exit codes (spec):
