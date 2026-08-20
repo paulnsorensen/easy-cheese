@@ -12,7 +12,7 @@ import pytest
 import yaml
 
 import build_pyz
-from easy_cheese_schemas.wiring_graph import compute_waves
+from easy_cheese_schemas.wiring_graph import WiringCycleError, compute_waves, cycle_errors
 
 BUNDLE = build_pyz.cached_bundle("ultracook")
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -54,12 +54,17 @@ class TestComputeWaves:
     def test_empty_wiring_returns_empty(self) -> None:
         assert compute_waves([]) == []
 
-    def test_cycle_raises_value_error(self) -> None:
-        # A->B->A would deadlock the dispatcher — fail loudly with the cycle
-        # ids so the operator can locate it without re-running.
+    def test_cycle_raises_typed_error_with_canonical_detail(self) -> None:
+        # The shared graph keeps its canonical path and exposes typed IDs so
+        # boundary adapters do not need to parse the error string.
         wiring = [("W1", ["W2"]), ("W2", ["W1"])]
-        with pytest.raises(ValueError, match=r"the dependency graph has cycle W1 -> W2 -> W1"):
+        with pytest.raises(WiringCycleError) as raised:
             compute_waves(wiring)
+        error = raised.value
+        assert error.cycle_path == ("W1", "W2", "W1")
+        assert error.cycle_ids == ("W1", "W2")
+        assert str(error) == "the dependency graph has cycle W1 -> W2 -> W1"
+        assert cycle_errors(wiring) == [str(error)]
 
     def test_self_loop_is_ignored(self) -> None:
         # A wiring item depending on itself is meaningless, not a cycle —
@@ -123,12 +128,13 @@ class TestCLI:
         assert result.returncode == 2
         assert "manifest not found" in result.stderr
 
-    def test_cycle_exits_two(self, tmp_path: Path) -> None:
+    def test_cycle_exits_two_with_legacy_error(self, tmp_path: Path) -> None:
         manifest = tmp_path / "manifest.yaml"
-        _write_manifest(manifest, _wiring(("W1", ["W2"]), ("W2", ["W1"])))
+        _write_manifest(manifest, _wiring(("W2", ["W1"]), ("W1", ["W2"])))
         result = _run_cli("--manifest", str(manifest))
         assert result.returncode == 2
-        assert "the dependency graph has cycle W1 -> W2 -> W1" in result.stderr
+        assert result.stdout == ""
+        assert result.stderr == "ERROR: cycle detected: W1, W2\n"
 
 
     def test_missing_manifest_flag_exits_two(self, tmp_path: Path) -> None:

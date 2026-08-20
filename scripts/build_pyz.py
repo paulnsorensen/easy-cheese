@@ -280,38 +280,54 @@ def _compiled_schema_catalog_source() -> str:
     return render(collect(_schema_contract_module()))
 
 
-def _checked_in_schema_catalog_bytes(expected_source: str) -> bytes:
-    """Require the tracked generated catalog to match the marker authority."""
+def _checked_in_generated_file_bytes(
+    expected_source: str,
+    source: Path,
+    *,
+    artifact_name: str,
+) -> bytes:
+    """Require a tracked generated file to match its source authority."""
     expected = expected_source.encode("utf-8")
     try:
-        actual = SCHEMA_CATALOG_SOURCE.read_bytes()
+        actual = source.read_bytes()
     except FileNotFoundError as exc:
         raise RuntimeError(
-            f"checked-in schema catalog is missing: {SCHEMA_CATALOG_SOURCE}"
+            f"checked-in {artifact_name} is missing: {source}"
         ) from exc
     if actual != expected:
+        try:
+            regeneration_target = source.relative_to(REPO_ROOT)
+        except ValueError:
+            regeneration_target = source
         raise RuntimeError(
-            "checked-in schema catalog is stale; regenerate "
-            "src/easy_cheese_schemas/_schema_catalog.py"
+            f"checked-in {artifact_name} is stale; regenerate {regeneration_target}"
         )
     return actual
+
+
+def _checked_in_schema_catalog_bytes(expected_source: str) -> bytes:
+    """Validate the checked-in schema catalog against its live authority."""
+    return _checked_in_generated_file_bytes(
+        expected_source,
+        SCHEMA_CATALOG_SOURCE,
+        artifact_name="schema catalog",
+    )
 
 
 def _checked_in_phase_registry_bytes(expected_source: str) -> bytes:
-    """Require the tracked generated projection to match the YAML authority."""
-    expected = expected_source.encode("utf-8")
-    try:
-        actual = PHASE_REGISTRY_SOURCE.read_bytes()
-    except FileNotFoundError as exc:
-        raise RuntimeError(
-            f"checked-in phase registry is missing: {PHASE_REGISTRY_SOURCE}"
-        ) from exc
-    if actual != expected:
-        raise RuntimeError(
-            "checked-in phase registry is stale; regenerate "
-            "src/easy_cheese_schemas/_compiled_phase_registry.py"
-        )
-    return actual
+    """Validate the checked-in phase registry against its YAML authority."""
+    return _checked_in_generated_file_bytes(
+        expected_source,
+        PHASE_REGISTRY_SOURCE,
+        artifact_name="phase registry",
+    )
+
+
+def _schema_catalog_bytes_for(skills: list[str]) -> bytes | None:
+    """Derive and validate the checked-in catalog once for a build batch."""
+    if not any(skill in PACKAGE_TREES for skill in skills):
+        return None
+    return _checked_in_schema_catalog_bytes(_compiled_schema_catalog_source())
 
 
 def _module_name(filename: str) -> str:
@@ -599,14 +615,16 @@ def _write_zipapp(source: Path, target: Path) -> None:
     target.chmod(0o755)
 
 
-def build_bundle(skill: str, target: Path) -> Path:
-    """Build ``skill``'s bundle at ``target`` (a .pyz path). Returns it."""
+def _build_bundle(
+    skill: str,
+    target: Path,
+    *,
+    schema_catalog_bytes: bytes | None,
+) -> Path:
+    """Build ``skill`` with catalog bytes validated by the batch boundary."""
     files = _files(skill)
     sub_to_module = {sub: _module_name(_filename(src)) for sub, src in files.items()}
-    catalog_bytes: bytes | None = None
-    if skill in PACKAGE_TREES:
-        catalog_source = _compiled_schema_catalog_source()
-        catalog_bytes = _checked_in_schema_catalog_bytes(catalog_source)
+    catalog_bytes = schema_catalog_bytes
     registry_bytes = None
     if skill in PHASE_REGISTRY_CONSUMERS:
         registry_source = _compiled_phase_registry_source()
@@ -675,6 +693,15 @@ def build_bundle(skill: str, target: Path) -> Path:
     return target
 
 
+def build_bundle(skill: str, target: Path) -> Path:
+    """Build one bundle after deriving and validating its generated catalog."""
+    return _build_bundle(
+        skill,
+        target,
+        schema_catalog_bytes=_schema_catalog_bytes_for([skill]),
+    )
+
+
 def cached_bundle(skill: str) -> Path:
     """Build ``skill``'s bundle once per process (to a temp dir) and reuse it.
     Used by the test conftests so the suite imports from the bundled artifact."""
@@ -707,23 +734,48 @@ def main(argv: list[str]) -> int:
     real = [s for s in targets if s in SKILLS]  # only skills that ship their own .pyz
     want_common = COMMON in targets or any(s in COMMON_CONSUMERS for s in targets)
     consumers = _common_consumers(targets, explicit=bool(args.skills))
+    batch_skills = [*real, COMMON] if want_common else real
+    catalog_bytes = _schema_catalog_bytes_for(batch_skills)
 
     if args.out_dir is not None:
         for skill in real:
-            print(f"built {build_bundle(skill, args.out_dir / f'{skill}.pyz')}")
+            print(
+                "built",
+                _build_bundle(
+                    skill,
+                    args.out_dir / f"{skill}.pyz",
+                    schema_catalog_bytes=catalog_bytes,
+                ),
+            )
         if want_common:
-            print(f"built {build_bundle(COMMON, args.out_dir / 'common.pyz')}")
+            print(
+                "built",
+                _build_bundle(
+                    COMMON,
+                    args.out_dir / "common.pyz",
+                    schema_catalog_bytes=catalog_bytes,
+                ),
+            )
         return 0
 
     for skill in real:
         print(
-            f"deployed {build_bundle(skill, REPO_ROOT / 'skills' / skill / 'scripts' / f'{skill}.pyz')}"
+            "deployed",
+            _build_bundle(
+                skill,
+                REPO_ROOT / "skills" / skill / "scripts" / f"{skill}.pyz",
+                schema_catalog_bytes=catalog_bytes,
+            ),
         )
     if want_common:
         # Build once, then fan the same artifact out to each consuming skill so
         # every skill ships self-contained — common has no skill dir of its own.
         with tempfile.TemporaryDirectory() as td:
-            common = build_bundle(COMMON, Path(td) / "common.pyz")
+            common = _build_bundle(
+                COMMON,
+                Path(td) / "common.pyz",
+                schema_catalog_bytes=catalog_bytes,
+            )
             for consumer in sorted(consumers):
                 dest = REPO_ROOT / "skills" / consumer / "scripts" / "common.pyz"
                 dest.parent.mkdir(parents=True, exist_ok=True)

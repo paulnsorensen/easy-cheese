@@ -25,6 +25,54 @@ def staged(tmp_path_factory) -> Path:
     return stage_release.stage(tmp_path_factory.mktemp("release") / "tree")
 
 
+def test_release_batch_derives_and_reuses_schema_catalog_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    compiled_calls = 0
+    validated_calls = 0
+    validated_catalog: bytes | None = None
+    catalog_values: list[bytes | None] = []
+    compile_catalog = build_pyz._compiled_schema_catalog_source
+    validate_catalog = build_pyz._checked_in_schema_catalog_bytes
+    build_bundle = build_pyz._build_bundle
+
+    def compile_once() -> str:
+        nonlocal compiled_calls
+        compiled_calls += 1
+        return compile_catalog()
+
+    def validate_once(source: str) -> bytes:
+        nonlocal validated_calls, validated_catalog
+        validated_calls += 1
+        validated_catalog = validate_catalog(source)
+        return validated_catalog
+
+    def build_with_catalog(
+        skill: str,
+        target: Path,
+        *,
+        schema_catalog_bytes: bytes | None = None,
+    ) -> Path:
+        catalog_values.append(schema_catalog_bytes)
+        return build_bundle(
+            skill,
+            target,
+            schema_catalog_bytes=schema_catalog_bytes,
+        )
+
+    monkeypatch.setattr(build_pyz, "_compiled_schema_catalog_source", compile_once)
+    monkeypatch.setattr(build_pyz, "_checked_in_schema_catalog_bytes", validate_once)
+    monkeypatch.setattr(build_pyz, "_build_bundle", build_with_catalog)
+
+    stage_release.stage(tmp_path / "release")
+
+    assert compiled_calls == 1
+    assert validated_calls == 1
+    assert len(catalog_values) == len(build_pyz.SKILLS)
+    assert validated_catalog == build_pyz.SCHEMA_CATALOG_SOURCE.read_bytes()
+    assert all(value is validated_catalog for value in catalog_values)
+
+
 def test_every_skill_ships_its_bundle(staged: Path) -> None:
     for skill in build_pyz.SKILLS:
         pyz = staged / "skills" / skill / "scripts" / f"{skill}.pyz"

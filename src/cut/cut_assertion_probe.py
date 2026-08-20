@@ -11,9 +11,10 @@ import json
 import os
 import runpy
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from types import ModuleType
+from types import MethodType, ModuleType
 from typing import Any
 
 EVENT_KIND = "cut.assertion-origin"
@@ -80,16 +81,12 @@ class ProbeEvent:
 class _Observation:
     runner: str
     assertion_origin: bool = False
-    emitted: bool = False
 
     def observe(self, exception_type: type[BaseException]) -> None:
         if issubclass(exception_type, AssertionError):
             self.assertion_origin = True
 
     def emit(self, descriptor: int) -> bool:
-        if self.emitted:
-            return True
-        self.emitted = True
         payload = ProbeEvent(self.runner, self.assertion_origin).encode()
         try:
             written = os.write(descriptor, payload)
@@ -105,38 +102,91 @@ class _Observation:
 def _install_unittest_probe(
     unittest_module: ModuleType,
     observation: _Observation,
-) -> Any:
-    class ProbeTextTestResult(unittest_module.TextTestResult):
-        def addFailure(
-            self,
-            test: Any,
-            err: tuple[Any, ...],
-        ) -> None:
-            observation.observe(err[0])
-            super().addFailure(test, err)
+) -> Callable[..., Any]:
+    def observe_result(result: Any) -> Callable[[], None]:
+        missing = object()
+        originals: list[tuple[str, object]] = []
 
-        def addError(
-            self,
-            test: Any,
-            err: tuple[Any, ...],
+        def wrap_result_method(
+            method_name: str,
+            error_index: int,
         ) -> None:
-            observation.observe(err[0])
-            super().addError(test, err)
+            original_method = getattr(result, method_name, None)
+            if original_method is None:
+                return
+            originals.append((method_name, vars(result).get(method_name, missing)))
 
-        def addSubTest(
-            self,
-            test: Any,
-            subtest: Any,
-            err: tuple[Any, ...] | None,
-        ) -> None:
-            if err is not None:
-                observation.observe(err[0])
-            super().addSubTest(test, subtest, err)
+            def observed_method(
+                _result: Any,
+                *args: Any,
+                **kwargs: Any,
+            ) -> Any:
+                error = (
+                    args[error_index]
+                    if len(args) > error_index
+                    else kwargs.get("err")
+                )
+                if error is not None:
+                    observation.observe(error[0])
+                return original_method(*args, **kwargs)
 
-    class ProbeTextTestRunner(unittest_module.TextTestRunner):
-        def __init__(self, *args: Any, **kwargs: Any) -> None:
-            kwargs.setdefault("resultclass", ProbeTextTestResult)
-            super().__init__(*args, **kwargs)
+            setattr(result, method_name, MethodType(observed_method, result))
+
+        wrap_result_method("addFailure", 1)
+        wrap_result_method("addError", 1)
+        wrap_result_method("addSubTest", 2)
+
+        def restore_result() -> None:
+            for method_name, original in reversed(originals):
+                if original is missing:
+                    delattr(result, method_name)
+                else:
+                    setattr(result, method_name, original)
+
+        return restore_result
+
+    original_run_tests = unittest_module.TestProgram.runTests
+    original_test_case_run = unittest_module.TestCase.run
+
+    def probe_test_case_run(
+        test_case: Any,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        result = args[0] if args else kwargs.get("result")
+        if result is None:
+            original_factory = test_case.defaultTestResult
+            missing = object()
+            previous_factory = vars(test_case).get("defaultTestResult", missing)
+            result_restorers: list[Callable[[], None]] = []
+
+            def probe_default_result(_test_case: Any) -> Any:
+                created = original_factory()
+                result_restorers.append(observe_result(created))
+                return created
+
+            test_case.defaultTestResult = MethodType(probe_default_result, test_case)
+            try:
+                return original_test_case_run(test_case, *args, **kwargs)
+            finally:
+                for restore_result in reversed(result_restorers):
+                    restore_result()
+                if previous_factory is missing:
+                    del test_case.defaultTestResult
+                else:
+                    test_case.defaultTestResult = previous_factory
+        restore_result = observe_result(result)
+        try:
+            return original_test_case_run(test_case, *args, **kwargs)
+        finally:
+            restore_result()
+
+    def probe_run_tests(program: Any) -> Any:
+        unittest_module.TestCase.run = probe_test_case_run
+        try:
+            return original_run_tests(program)
+        finally:
+            unittest_module.TestCase.run = original_test_case_run
 
     original_init = unittest_module.TestProgram.__init__
 
@@ -145,9 +195,11 @@ def _install_unittest_probe(
         *args: Any,
         **kwargs: Any,
     ) -> None:
-        if kwargs.get("testRunner") is None:
-            kwargs["testRunner"] = ProbeTextTestRunner
-        original_init(self, *args, **kwargs)
+        unittest_module.TestProgram.runTests = probe_run_tests
+        try:
+            original_init(self, *args, **kwargs)
+        finally:
+            unittest_module.TestProgram.runTests = original_run_tests
 
     unittest_module.TestProgram.__init__ = probe_test_program_init
     return original_init
@@ -163,7 +215,7 @@ def _stdlib_unittest(module: object) -> ModuleType | None:
         return None
     if not all(
         getattr(module, name, None) is not None
-        for name in ("TestProgram", "TextTestResult", "TextTestRunner")
+        for name in ("TestCase", "TestProgram")
     ):
         return None
     return module
@@ -259,7 +311,6 @@ def _run_direct(
     original_argv0: str | None = None,
 ) -> int:
     observation = _Observation(runner)
-    original_hook = sys.excepthook
     original_import = builtins.__import__
     original_test_program_inits: dict[ModuleType, Any] = {}
 
@@ -284,17 +335,7 @@ def _run_direct(
 
     instrument(sys.modules.get("unittest"))
 
-    def observe_uncaught(
-        exception_type: type[BaseException],
-        error: BaseException,
-        traceback: Any,
-    ) -> None:
-        observation.observe(exception_type)
-        observation.emit(descriptor)
-        original_hook(exception_type, error, traceback)
-
     builtins.__import__ = import_with_probe
-    sys.excepthook = observe_uncaught
     try:
         if runner == "code":
             _run_code(target, args, original_argv0)
@@ -310,7 +351,6 @@ def _run_direct(
         raise
     finally:
         builtins.__import__ = original_import
-        sys.excepthook = original_hook
         for unittest_module, original_init in original_test_program_inits.items():
             unittest_module.TestProgram.__init__ = original_init
     return 0 if observation.emit(descriptor) else 126

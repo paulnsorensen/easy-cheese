@@ -6,34 +6,18 @@ runtime imports only the generated ``_schema_catalog`` projection.
 
 from __future__ import annotations
 
-import inspect
 import re
 from types import ModuleType
 from typing import Sequence
 
 SCHEMA_ROOT = "https://schemas.easy-cheese.dev"
-_MARKER = "__contract_slug__"
 _IDENTIFIER_RE = re.compile(r"[^A-Za-z0-9]+")
 
 
 def collect(module: ModuleType) -> tuple[tuple[str, str], ...]:
-    """Collect marked contract classes from ``module`` in slug order."""
-    pairs: list[tuple[str, str]] = []
-    for value in vars(module).values():
-        if not inspect.isclass(value):
-            continue
-        slug = getattr(value, _MARKER, None)
-        if slug is None:
-            continue
-        if not isinstance(slug, str) or not slug:
-            raise ValueError("contract marker must be a non-empty string")
-        pairs.append((slug, value.__name__))
-
-    pairs.sort()
-    for previous, current in zip(pairs, pairs[1:]):
-        if previous[0] == current[0]:
-            raise ValueError(f"duplicate contract marker {current[0]!r}")
-    return tuple(pairs)
+    """Project marked contract classes into ``(slug, class name)`` pairs."""
+    entries = module._registered_contracts()
+    return tuple((slug, contract.__name__) for slug, contract in entries)
 
 
 def _constant_name(slug: str) -> str:
@@ -46,9 +30,6 @@ def _constant_name(slug: str) -> str:
 def render(pairs: Sequence[tuple[str, str]]) -> str:
     """Render deterministic, dependency-free catalog source for ``pairs``."""
     ordered = tuple(sorted(pairs))
-    slugs = [slug for slug, _class_name in ordered]
-    if len(slugs) != len(set(slugs)):
-        raise ValueError("duplicate contract marker")
     constants = [(_constant_name(slug), slug) for slug, _class_name in ordered]
     names = [name for name, _slug in constants]
     if len(names) != len(set(names)):

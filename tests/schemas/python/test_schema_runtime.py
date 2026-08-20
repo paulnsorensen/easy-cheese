@@ -8,11 +8,16 @@ from pathlib import Path
 
 import pytest
 
+from easy_cheese_schemas._schema_catalog_compiler import (
+    collect as collect_schema_markers,
+    render as render_schema_catalog,
+)
 from easy_cheese_schemas.contracts import (
     MAX_CONTRACT_BYTES,
     MAX_CONTRACT_DEPTH,
     ContractVersion,
     CurdPlan,
+    contract,
 )
 from easy_cheese_schemas.schema_runtime import (
     REGISTERED_CONTRACT_SCHEMA_URIS,
@@ -104,18 +109,67 @@ def writer_plan() -> dict[str, object]:
     }
 
 
-def test_runtime_marker_collection_rejects_duplicate_slugs() -> None:
+def test_marker_authority_rejects_duplicate_slugs() -> None:
     contracts = importlib.import_module("easy_cheese_schemas.contracts")
-    runtime = importlib.import_module("easy_cheese_schemas.schema_runtime")
     original_slug = contracts.CurdPlan.__contract_slug__
     try:
         contracts.CurdPlan.__contract_slug__ = "curd-result"
         with pytest.raises(
             ValueError, match=r"duplicate contract marker 'curd-result'"
         ):
-            runtime._collect_marked_contracts()
+            contracts._registered_contracts()
     finally:
         contracts.CurdPlan.__contract_slug__ = original_slug
+
+
+@pytest.mark.parametrize("slug", ["", "  ", 7])
+def test_contract_rejects_invalid_markers(slug: object) -> None:
+    with pytest.raises(
+        ValueError, match="contract slug must be a non-empty string"
+    ):
+        contract(slug)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("slug", ["", " \t", object()])
+def test_marker_authority_rejects_invalid_registered_markers(slug: object) -> None:
+    contracts = importlib.import_module("easy_cheese_schemas.contracts")
+    original_slug = contracts.CurdPlan.__contract_slug__
+    try:
+        contracts.CurdPlan.__contract_slug__ = slug
+        with pytest.raises(
+            ValueError, match="contract slug must be a non-empty string"
+        ):
+            contracts._registered_contracts()
+    finally:
+        contracts.CurdPlan.__contract_slug__ = original_slug
+
+
+def test_runtime_and_compiler_project_one_marker_authority() -> None:
+    contracts = importlib.import_module("easy_cheese_schemas.contracts")
+    runtime = importlib.import_module("easy_cheese_schemas.schema_runtime")
+    entries = contracts._registered_contracts()
+
+    assert entries == tuple(sorted(entries, key=lambda entry: entry[0]))
+    assert runtime._MARKED_CONTRACTS == entries
+    assert collect_schema_markers(contracts) == tuple(
+        (slug, contract_type.__name__) for slug, contract_type in entries
+    )
+
+
+def test_compiler_retains_constant_name_collision_validation() -> None:
+    with pytest.raises(
+        ValueError, match="contract markers produce duplicate constants"
+    ):
+        render_schema_catalog((("a-b", "First"), ("a_b", "Second")))
+
+
+def test_generated_catalog_bytes_match_compiler_projection() -> None:
+    contracts = importlib.import_module("easy_cheese_schemas.contracts")
+    generated = ROOT / "src" / "easy_cheese_schemas" / "_schema_catalog.py"
+
+    assert generated.read_bytes() == render_schema_catalog(
+        collect_schema_markers(contracts)
+    ).encode("utf-8")
 
 
 def test_runtime_schema_resolution_rejects_unmarked_contract_in_clean_import() -> None:

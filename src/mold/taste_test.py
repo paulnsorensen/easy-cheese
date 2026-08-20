@@ -25,6 +25,10 @@ WORK_CLASSES = frozenset(
 )
 NON_BEHAVIOR_CLASSES = frozenset(WORK_CLASSES - {"behavior"})
 CONTRACT_MODES = frozenset({"tracer", "contract-matrix", "guard"})
+EXECUTABLE_CONTRACT_MODES = frozenset({"tracer", "contract-matrix"})
+RED_REQUIRED_EXECUTABLE_PROBLEM = (
+    "red-required-needs-executable-test-contracts"
+)
 UI_SURFACES = frozenset({"browser", "non-browser", "not-applicable"})
 NEW_MOLD_SOURCES = frozenset({"agent-mini-spec", "mold-handshake"})
 BROWSER_MARKER = re.compile(
@@ -157,6 +161,10 @@ class RedRequired:
             raise ApplicabilityError("red-required-work-class-must-be-behavior")
         if not self.contracts:
             raise ApplicabilityError("red-required-needs-test-contracts")
+        if not any(
+            contract.mode in EXECUTABLE_CONTRACT_MODES for contract in self.contracts
+        ):
+            raise ApplicabilityError(RED_REQUIRED_EXECUTABLE_PROBLEM)
 
 
 @dataclass(frozen=True)
@@ -655,6 +663,10 @@ def parse_gate_applicability(
             problems.append("red-required-work-class-must-be-behavior")
         if not contracts:
             problems.append("red-required-needs-test-contracts")
+        elif not any(
+            contract.mode in EXECUTABLE_CONTRACT_MODES for contract in contracts
+        ):
+            problems.append(RED_REQUIRED_EXECUTABLE_PROBLEM)
         if ui_surface == "not-applicable":
             problems.append("red-required-ui-surface-must-be-browser-or-non-browser")
         if ui_surface == "browser":
