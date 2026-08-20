@@ -58,13 +58,22 @@ common.pyz fallback for cook that is never built).
 
 Six settled decisions, one per fork:
 
-1. import-closure-check — after staging each bundle, AST-scan every staged file and
-   assert each absolute import (module-level AND function-body) resolves to stdlib, a
-   staged module, or a vendored dependency; unresolved imports fail the build naming
-   the module and importer.
+1. import-closure-check — after staging each bundle, AST-scan every staged Python file
+   and apply one resolution policy to module-level and function-body imports. An import
+   resolves only when it is in the interpreter stdlib, a vendored package copied into
+   the stage, or a source-layout module/package actually copied into that stage; merely
+   existing under `src/` or `shared/` is not enough. Host-provided names are an explicit
+   allowlist for test/development runners and resolve as runtime-provided dependencies.
+   An intentionally optional import is valid when its `ImportError` handler only raises;
+   an import fallback is valid only when at least one alternative resolves under this
+   same policy. A fallback with no resolving alternative, an unstaged source-layout
+   import, or any other unresolved import fails the build naming the module and importer.
 2. currency-enforcement — wire scripts/check_bundles.py into `just check` and add a
-   prek pre-commit hook scoped to src/**, shared/**, and skills/*/phase-contract.yaml
-   so stale bundles fail before CI.
+   prek pre-commit hook scoped to the complete bundle-producing input set below.
+   The hook compares rebuilt member manifests with the staged-index blobs (not the
+   working tree or HEAD), so a source and its correctly staged bundle pass while a
+   staged source change with a stale indexed bundle fails before CI. Its trigger/input
+   set is the build-pyz workflow set plus authored phase-contract YAML, listed below.
 3. discoverability-surfaces — generate src/PYTHON_SCRIPTS.md (subcommand → source
    file → bundle table compiled from SKILLS, COMMON_SUBCOMMANDS, EXTRA_MODULES,
    PACKAGE_TREES) with a build_pyz staleness gate exactly like the schema catalog;
@@ -81,7 +90,9 @@ Six settled decisions, one per fork:
    test also asserts common.pyz prose references imply consumer membership.
 6. restructure-shape — move the Astro site source out of src/ to website/ via the
    srcDir config key (components, pages, styles, content, sidebar.mjs,
-   content.config.ts), leaving src/ purely Python.
+   content.config.ts). `src/` contains Python source files plus the required
+   `PYTHON_SCRIPTS.md` and `README.md` documentation; it contains no Astro/site
+   source files (components, pages, styles, content, or site config).
 
 ## Decisions
 
@@ -103,8 +114,11 @@ In scripts/build_pyz.py (import-closure-check, discoverability-surfaces, cook-co
 
 ```python
 def _verify_import_closure(stage: Path, skill: str) -> None:
-    """Raise RuntimeError listing every absolute import in staged files,
-    module-level and function-body, not resolved by stdlib, stage, or vendor."""
+    """Raise RuntimeError for staged module-level or function-body imports that
+    are not stdlib, vendored, actually staged source-layout modules, or explicitly
+    host-provided. A raise-only ImportError handler marks an import as optional;
+    fallback imports require at least one resolving runtime alternative. Report the
+    importer and unresolved name."""
 
 def _render_script_map() -> str:
     """Deterministic markdown for src/PYTHON_SCRIPTS.md: one row per (bundle,
@@ -131,41 +145,49 @@ def test_source_banners(): ...                 every registered source opens wit
 ```
 
 In the justfile and prek config (currency-enforcement): a `check-bundles` recipe running
-python3 scripts/check_bundles.py, added to the `check` dependency chain, plus a local
-prek hook `bundle-currency` scoped to files matching src/, shared/, and
-skills/*/phase-contract.yaml.
+`python3 scripts/check_bundles.py`, added to the `check` dependency chain, plus a local
+prek hook `bundle-currency` scoped to authored `skills/*/phase-contract.yaml` plus
+every bundle-producing input in
+`.github/workflows/build-pyz.yml`: `.github/workflows/build-pyz.yml`, `src/**`,
+`shared/scripts/**`, `scripts/build_pyz.py`, `scripts/check_bundles.py`,
+`skills/*/scripts/*.pyz`,
+`pyproject.toml`, `requirements-vendor.txt`, and `scripts/vendor_deps.py`. The hook
+must read the staged index and compare rebuilt member manifests with indexed bundle
+blobs, never the unstaged working tree.
 
 In astro.config.mjs (restructure-shape): `srcDir: './website'` — site sources move to
-website/, and src/ is pure Python.
+website/; `src/` retains Python sources plus `PYTHON_SCRIPTS.md` and `README.md`,
+and contains no Astro/site source or site configuration.
 
 ## Test Contracts
 
 | acceptance id | interface | seam | expected_failure | mode |
 | --- | --- | --- | --- | --- |
-| AC-1 | python3 scripts/build_pyz.py (import-closure-check) | build subprocess exit code and stderr | On main, staging a script whose function-body imports an undeclared cross-directory module builds cleanly; the closure gate must exit nonzero naming the unresolved module and its importer | tracer |
+| AC-1 | python3 scripts/build_pyz.py (import-closure-check) | isolated staged fixture, build exit code and stderr | Positive: stdlib, vendored, explicitly host-provided, and actually staged source-layout imports build; a raise-only `ImportError` guard permits an intentionally optional import; a fallback with one resolving alternative builds. Negative: a fallback with no resolving alternative or a function-body import whose source-layout module was not staged exits nonzero naming the unresolved name and importer | tracer |
 | AC-2 | pytest tests/python/test_skill_contract.py (contract-strictness) | pytest run against build_pyz registries and skills markdown | On main the equality assertion fails: 12 registered subcommands, including press.pyz red-gate, have no skill-markdown reference | tracer |
 | AC-3 | python3 skills/cook/scripts/common.pyz read_handoff_slug (cook-common-consumer) | bundle-dispatch subprocess on a bundle-only layout | On main the invocation fails because skills/cook/scripts/common.pyz is never built; after cook joins COMMON_CONSUMERS it resolves and exits 0 on --help | tracer |
 | AC-4 | python3 skills/press/scripts/press.pyz red-gate (contract-strictness) | dispatcher usage-rejection exit code | On main press.pyz red-gate dispatches successfully; asserting exit 2 usage-rejection fails until the dead registration is pruned | tracer |
 | AC-5 | python3 scripts/build_pyz.py (discoverability-surfaces) | build gate RuntimeError on stale generated file | On main no src/PYTHON_SCRIPTS.md exists; the gate must fail the build until the checked-in map byte-matches the registries | tracer |
-| AC-6 | just check (currency-enforcement) | recipe exit code with a deliberately stale committed bundle | On main just check passes with a stale bundle because check_bundles.py is not wired into the recipe | tracer |
+| AC-6 | just check + `prek run bundle-currency` (currency-enforcement) | staged-index fixture with rebuilt bundle manifests | Positive executable case: build every affected bundle, `git add` the source and generated `.pyz`, then run the hook and assert exit 0. Negative executable case: change and stage one bundle-producing input without restaging its generated `.pyz`, run the same hook, and assert nonzero with the stale bundle path; the hook must compare indexed blobs, not unstaged files or HEAD | tracer |
 | AC-7 | pytest banner assertion in test_skill_contract.py (discoverability-surfaces) | pytest run over registered source files | On main the banner test fails: src/age/age-html-report.py has no ships-as header line | tracer |
-| AC-8 | pytest src purity assertion (restructure-shape) | pytest run over src/ tree contents | On main the assertion that src/ contains no Astro sources fails: src/components/Sidebar.astro exists | tracer |
+| AC-8 | pytest src layout assertion (restructure-shape) | pytest run over `src/` tree contents | Positive: Python sources plus `src/PYTHON_SCRIPTS.md` and `src/README.md` are accepted. Negative: any Astro/site source or site config under `src/` (for example `components/Sidebar.astro`) fails the assertion; the site sources must be under `website/` | tracer |
 
 ## Acceptance
 
-- AC-1: builds fail with a named unresolved import for any staged module gap, covering function-body imports (import-closure-check).
+- AC-1: closure resolution accepts stdlib, vendored, explicitly host-provided, and actually staged source-layout imports. Raise-only `ImportError` handlers mark intentionally optional imports; fallback imports require at least one resolving alternative. Unstaged source-layout imports and fallbacks without a resolving alternative fail with the module and importer named (import-closure-check).
 - AC-2: skill-markdown references and build_pyz registries are provably equal both directions (contract-strictness); the SKILL_SUBCOMMANDS hand copy is gone.
 - AC-3: cook ships common.pyz and the documented fallback resolves (cook-common-consumer).
 - AC-4: pruned dead subcommands, press red-gate first, are rejected by the dispatcher (contract-strictness).
 - AC-5: src/PYTHON_SCRIPTS.md exists, is generated, and stale copies fail the build (discoverability-surfaces).
-- AC-6: just check fails on stale bundles locally; the prek hook fires on the scoped paths (currency-enforcement).
+- AC-6: `just check` fails on stale bundles, and executable prek coverage passes for correctly staged source/bundle pairs but rejects a staged source change against a stale indexed bundle. The hook compares staged-index blobs and covers every bundle-producing workflow input (currency-enforcement).
 - AC-7: every registered source file carries the ships-as banner (discoverability-surfaces).
-- AC-8: src/ contains only Python after the site moves to website/ (restructure-shape).
+- AC-8: `src/` contains Python sources plus `PYTHON_SCRIPTS.md` and `README.md`, no Astro/site sources or site config, after the site moves to `website/` (restructure-shape).
 
 ## Quality gates
 
 - `just check` — vendor, tests, lint, and (new) bundle currency.
-- `python3 scripts/build_pyz.py && python3 scripts/check_bundles.py` — build with closure + map gates, then currency.
+- `python3 scripts/build_pyz.py && python3 scripts/check_bundles.py --against index` — build with closure + map gates, then local staged-index currency.
+- `prek run bundle-currency --files <staged-inputs>` — executable staged-index success and stale-rejection fixtures; the hook must inspect indexed blobs.
 - `pytest tests/python/test_skill_contract.py tests/python/test_pyz_bundle.py` — contract equality, banners, dispatcher behavior.
 - `npm run build` (Astro) — site builds from website/ after restructure-shape.
 
