@@ -180,12 +180,162 @@ def test_ultracook_bundle_contains_entity_modules(bundles: Path) -> None:
 
 def test_cut_bundle_carries_red_gate_and_schema_runtime(bundles: Path) -> None:
     names = set(zipfile.ZipFile(bundles / "cut.pyz").namelist())
-    assert {"red_gate.py", "gate_receipts.py"}.issubset(names)
+    assert {"cut_assertion_probe.py", "gate_receipts.py", "red_gate.py"}.issubset(names)
     assert "easy_cheese_schemas/__init__.py" in names
     assert "easy_cheese_schemas/gates.py" in names
     assert "attrs-26.1.0.dist-info/METADATA" in names
     assert "cattrs/converters.py" in names
     assert "taste_test.py" in names
+
+
+def test_cut_bundle_runs_assertion_probe_without_source_imports(
+    bundles: Path,
+    tmp_path: Path,
+) -> None:
+    read_fd, write_fd = os.pipe()
+    environment = os.environ.copy()
+    environment["PYTHONPATH"] = str(bundles / "cut.pyz")
+    try:
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "cut_assertion_probe",
+                str(write_fd),
+                "code",
+                sys.executable,
+                "import sys; "
+                "assert sys.path[0] == ''; "
+                "raise AssertionError('outer witness')",
+            ],
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+            shell=False,
+            pass_fds=(write_fd,),
+            env=environment,
+            timeout=30,
+        )
+    finally:
+        os.close(write_fd)
+    try:
+        event = json.loads(os.read(read_fd, 513))
+    finally:
+        os.close(read_fd)
+
+    assert result.returncode == 1
+    assert "AssertionError: outer witness" in result.stderr
+    assert event == {
+        "assertion_origin": True,
+        "complete": True,
+        "event": "cut.assertion-origin",
+        "runner": "code",
+        "schema_version": 1,
+    }
+
+
+def test_source_red_gate_uses_package_probe_over_top_level_shadow(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "cut_assertion_probe.py").write_text(
+        "raise RuntimeError('top-level probe shadow')\n",
+        encoding="utf-8",
+    )
+    environment = os.environ.copy()
+    environment["PYTHONPATH"] = os.pathsep.join(
+        [
+            str(tmp_path),
+            str(REPO_ROOT / "src"),
+            str(REPO_ROOT / "shared" / "scripts"),
+            str(REPO_ROOT / "vendor"),
+        ]
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import cut.red_gate; print(cut.red_gate.cut_assertion_probe.__name__)",
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        env=environment,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "cut.cut_assertion_probe"
+
+
+def test_cut_bundle_ignores_adjacent_probe_shadow(
+    bundles: Path,
+    tmp_path: Path,
+) -> None:
+    pyz = tmp_path / "cut.pyz"
+    pyz.write_bytes((bundles / "cut.pyz").read_bytes())
+    (tmp_path / "cut_assertion_probe.py").write_text(
+        "raise RuntimeError('adjacent probe shadow')\n",
+        encoding="utf-8",
+    )
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    environment = os.environ.copy()
+    environment.pop("PYTHONPATH", None)
+    environment["PYTHONPATH"] = str(pyz)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import red_gate; print(red_gate.cut_assertion_probe.__file__)",
+        ],
+        cwd=run_dir,
+        capture_output=True,
+        text=True,
+        env=environment,
+    )
+    origin = result.stdout.strip()
+
+    assert result.returncode == 0, result.stderr
+    assert origin.startswith(f"{pyz}{os.sep}")
+    assert origin.endswith(f"{os.sep}cut_assertion_probe.py")
+
+
+def test_cut_bundle_probe_child_ignores_cwd_shadow(
+    bundles: Path,
+    tmp_path: Path,
+) -> None:
+    pyz = tmp_path / "cut.pyz"
+    pyz.write_bytes((bundles / "cut.pyz").read_bytes())
+    (tmp_path / "cut_assertion_probe.py").write_text(
+        "TARGET_LOCAL = True\n",
+        encoding="utf-8",
+    )
+    environment = os.environ.copy()
+    environment.pop("PYTHONPATH", None)
+    environment["PYTHONPATH"] = str(pyz)
+    child_source = (
+        "import cut_assertion_probe; "
+        "assert cut_assertion_probe.TARGET_LOCAL is True; "
+        "raise AssertionError('bundle child witness')"
+    )
+    parent_source = (
+        "import pathlib, red_gate, sys; "
+        f"run = red_gate._run_case([sys.executable, '-c', {child_source!r}], "
+        "pathlib.Path.cwd()); "
+        "assert run.error is None, run.output; "
+        "assert run.returncode == 1, run; "
+        "assert run.assertion_origin is True"
+    )
+
+    result = subprocess.run(
+        [sys.executable, "-P", "-c", parent_source],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        env=environment,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_cut_bundle_exposes_red_gate_subcommands(bundles: Path) -> None:
@@ -607,9 +757,10 @@ def test_common_bundle_carries_clis_plus_libs_not_skill_scripts(bundles: Path) -
     assert "_compiled_phase_registry.py" in content
     assert (
         zipfile.ZipFile(bundles / "common.pyz").read("_compiled_phase_registry.py")
-        == (REPO_ROOT / "src" / "easy_cheese_schemas" / "_compiled_phase_registry.py").read_bytes()
+        == (
+            REPO_ROOT / "src" / "easy_cheese_schemas" / "_compiled_phase_registry.py"
+        ).read_bytes()
     )
-
 
 
 @pytest.mark.parametrize("skill", tuple(build_pyz.PACKAGE_TREES))
@@ -624,7 +775,6 @@ def test_bundle_stages_checked_in_schema_catalog_bytes(
         assert package_catalog == expected
         if skill == "common":
             assert archive.read("_schema_catalog.py") == expected
-
 
 
 @pytest.mark.parametrize("skill", TYPED_RUNTIME_BUNDLES)
@@ -693,6 +843,8 @@ def test_cook_and_cure_installed_paths_expose_canonical_workflow_api(
         check=True,
     )
     assert result.stdout == "ok\n"
+
+
 def test_unknown_skill_name_still_errors() -> None:
     """build_pyz.py must exit non-zero for truly unknown skill names."""
     result = subprocess.run(
@@ -839,3 +991,14 @@ def test_age_bundle_carries_html_report_and_findings_imports(bundles: Path) -> N
     content = set(zipfile.ZipFile(age_pyz).namelist())
     assert "html_report.py" in content
     assert "findings.py" in content
+
+
+def test_press_bundle_carries_and_imports_assertion_probe(bundles: Path) -> None:
+    press_pyz = bundles / "press.pyz"
+    names = set(zipfile.ZipFile(press_pyz).namelist())
+    assert "cut_assertion_probe.py" in names
+
+    result = _run(press_pyz, "red-gate")
+    combined = result.stdout + result.stderr
+    assert result.returncode == 2, combined
+    assert "ModuleNotFoundError" not in combined

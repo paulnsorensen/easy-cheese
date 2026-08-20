@@ -27,10 +27,17 @@ from types import SimpleNamespace
 from typing import Any, Literal
 
 # A source checkout does not install ``src`` as a package when this file is
-# invoked directly.  Bundled execution already has the package on sys.path.
-_SOURCE_ROOT = Path(__file__).resolve().parents[1]
-if str(_SOURCE_ROOT) not in sys.path:
-    sys.path.insert(0, str(_SOURCE_ROOT))
+# invoked directly.  Bundled execution imports from the archive itself; adding
+# its containing directory would let adjacent files shadow archive members.
+_MODULE_PATH = Path(__file__).resolve()
+_BUNDLE_PATH = next(
+    (parent for parent in _MODULE_PATH.parents if parent.suffix == ".pyz"),
+    None,
+)
+if _BUNDLE_PATH is None:
+    _SOURCE_ROOT = _MODULE_PATH.parents[1]
+    if str(_SOURCE_ROOT) not in sys.path:
+        sys.path.insert(0, str(_SOURCE_ROOT))
 
 from easy_cheese_schemas import (  # noqa: E402
     GateDisposition,
@@ -42,6 +49,11 @@ from easy_cheese_schemas import (  # noqa: E402
     load as strict_load,
 )
 from easy_cheese_schemas.compat import Provenance, SCHEMA_VERSION  # noqa: E402
+
+try:  # bundled zipapp stages the probe as a flat sibling
+    import cut_assertion_probe  # noqa: E402
+except ModuleNotFoundError:  # pragma: no cover - source checkout package path
+    from cut import cut_assertion_probe  # type: ignore[no-redef]  # noqa: E402
 
 try:  # the Cut bundle stages Mold's canonical parser as a flat module
     from mold.taste_test import (  # noqa: E402
@@ -191,68 +203,56 @@ class _Run:
     assertion_origin: bool = False
 
 
-_PYTHON_ASSERTION_WRAPPER = """\
-import os
-import runpy
-import sys
-import unittest
-import traceback
-from pathlib import Path
+_PROBE_EVENT_ERROR = "assertion probe event missing or invalid"
 
-fd = int(sys.argv[1])
-mode = sys.argv[2]
-target = sys.argv[3]
-args = sys.argv[4:]
 
-original_add_failure = unittest.TestResult.addFailure
+@dataclass(frozen=True)
+class _ProbeCommand:
+    argv: list[str]
+    runner: str
 
-def add_failure(self, test, error):
-    try:
-        assertion = issubclass(error[0], AssertionError)
-    except (IndexError, TypeError):
-        assertion = False
-    if assertion:
-        os.write(fd, b"assertion\\n")
-    return original_add_failure(self, test, error)
 
-unittest.TestResult.addFailure = add_failure
-try:
-    if mode == "code":
-        sys.argv = ["-c", *args]
-        namespace = {"__name__": "__main__", "__package__": None}
-        exec(compile(target, "<string>", "exec"), namespace)
-    elif mode == "unittest":
-        sys.argv = ["python -m unittest", *args]
-        runpy.run_module("unittest", run_name="__main__", alter_sys=True)
-    else:
-        sys.argv = [target, *args]
-        sys.path[0] = str(Path(target).resolve().parent)
-        runpy.run_path(target, run_name="__main__")
-except AssertionError:
-    os.write(fd, b"assertion\\n")
-    traceback.print_exc()
-    raise SystemExit(1)
-"""
+_ASSERTION_PROBE_IMPORT_ROOT = str(Path(cut_assertion_probe.__file__).resolve().parent)
 
-_PYTEST_ASSERTION_WRAPPER = """\
-import os
-import sys
 
-import pytest
-
-fd = int(sys.argv[1])
-
-class AssertionProbe:
-    def pytest_runtest_logreport(self, report):
-        if report.when != "call" or not report.failed:
-            return
-        crash = getattr(report.longrepr, "reprcrash", None)
-        message = getattr(crash, "message", "")
-        if message.startswith("AssertionError") or message.startswith("assert "):
-            os.write(fd, b"assertion\\n")
-
-raise SystemExit(pytest.main(sys.argv[2:], plugins=[AssertionProbe()]))
-"""
+_ASSERTION_PROBE_BOOTSTRAP = (
+    "import sys\n"
+    "root = sys.argv.pop(1)\n"
+    "runner = sys.argv[2]\n"
+    "if runner == 'pytest':\n"
+    "    import pytest\n"
+    "elif runner == 'unittest':\n"
+    "    import unittest\n"
+    "startup_path = list(sys.path)\n"
+    "startup_modules = set(sys.modules)\n"
+    "missing = object()\n"
+    "prior_probe = sys.modules.pop('cut_assertion_probe', missing)\n"
+    "prefixes = tuple(\n"
+    "    prefix\n"
+    "    for prefix in (sys.prefix, sys.base_prefix, sys.exec_prefix, sys.base_exec_prefix)\n"
+    "    if prefix\n"
+    ")\n"
+    "trusted_path = tuple(\n"
+    "    path\n"
+    "    for path in startup_path\n"
+    "    if path and any(\n"
+    "        path == prefix or path.startswith(prefix + '/')\n"
+    "        for prefix in prefixes\n"
+    "    )\n"
+    ")\n"
+    "sys.path[:] = [root, *trusted_path]\n"
+    "try:\n"
+    "    worker = __import__('cut_assertion_probe')\n"
+    "finally:\n"
+    "    sys.path[:] = startup_path\n"
+    "    for name in list(sys.modules):\n"
+    "        if name not in startup_modules:\n"
+    "            del sys.modules[name]\n"
+    "    sys.modules.pop('cut_assertion_probe', None)\n"
+    "    if prior_probe is not missing:\n"
+    "        sys.modules['cut_assertion_probe'] = prior_probe\n"
+    "raise SystemExit(worker.main(sys.argv[1:]))\n"
+)
 
 
 @dataclass
@@ -1074,7 +1074,13 @@ def _safe_cwd(root: Path, cwd: str, label: str, problems: list[str]) -> Path | N
     return path
 
 
-def _run(argv: list[str], cwd: Path) -> _Run:
+def _run(
+    argv: list[str],
+    cwd: Path,
+    *,
+    env: Mapping[str, str] | None = None,
+    pass_fds: tuple[int, ...] = (),
+) -> _Run:
     try:
         completed = subprocess.run(
             argv,
@@ -1083,6 +1089,8 @@ def _run(argv: list[str], cwd: Path) -> _Run:
             text=True,
             shell=False,
             timeout=120,
+            env=env,
+            pass_fds=pass_fds,
         )
     except subprocess.TimeoutExpired as exc:
         parts = (
@@ -1099,48 +1107,44 @@ def _run(argv: list[str], cwd: Path) -> _Run:
     return _Run(completed.returncode, "\n".join(output_parts).strip())
 
 
-def _python_case_command(argv: list[str], cwd: Path, probe_fd: int) -> list[str] | None:
+def _python_case_command(
+    argv: list[str],
+    cwd: Path,
+    probe_fd: int,
+) -> _ProbeCommand | None:
     executable_names = {
         Path(argv[0]).name.lower().removesuffix(".exe"),
         _resolved_executable_name(argv[0], cwd),
     }
     if not any(name.startswith("python") for name in executable_names):
         return None
-    prefix = [argv[0], "-c"]
+    prefix = [
+        argv[0],
+        "-c",
+        _ASSERTION_PROBE_BOOTSTRAP,
+        _ASSERTION_PROBE_IMPORT_ROOT,
+        str(probe_fd),
+    ]
     if len(argv) >= 3 and argv[1] == "-c":
-        return [
-            *prefix,
-            _PYTHON_ASSERTION_WRAPPER,
-            str(probe_fd),
+        return _ProbeCommand(
+            [*prefix, "code", argv[0], argv[2], *argv[3:]],
             "code",
-            argv[2],
-            *argv[3:],
-        ]
+        )
     if len(argv) >= 3 and argv[1:3] == ["-m", "pytest"]:
-        return [
-            *prefix,
-            _PYTEST_ASSERTION_WRAPPER,
-            str(probe_fd),
-            *argv[3:],
-        ]
+        return _ProbeCommand(
+            [*prefix, "pytest", argv[0], *argv[3:]],
+            "pytest",
+        )
     if len(argv) >= 3 and argv[1:3] == ["-m", "unittest"]:
-        return [
-            *prefix,
-            _PYTHON_ASSERTION_WRAPPER,
-            str(probe_fd),
+        return _ProbeCommand(
+            [*prefix, "unittest", argv[0], *argv[3:]],
             "unittest",
-            "unittest",
-            *argv[3:],
-        ]
+        )
     if len(argv) >= 2 and argv[1].endswith(".py"):
-        return [
-            *prefix,
-            _PYTHON_ASSERTION_WRAPPER,
-            str(probe_fd),
+        return _ProbeCommand(
+            [*prefix, "script", argv[0], argv[1], *argv[2:]],
             "script",
-            argv[1],
-            *argv[2:],
-        ]
+        )
     return None
 
 
@@ -1160,46 +1164,32 @@ def _run_case(argv: list[str], cwd: Path) -> _Run:
             "python -m pytest, or python -m unittest",
         )
 
-    output = ""
-    error: str | None = None
-    returncode = 127
     try:
-        completed = subprocess.run(
-            command,
-            cwd=str(cwd),
-            capture_output=True,
-            text=True,
-            shell=False,
-            timeout=120,
+        run = _run(
+            command.argv,
+            cwd,
             pass_fds=(write_fd,),
         )
-        output_parts = [
-            part.rstrip() for part in (completed.stdout, completed.stderr) if part
-        ]
-        output = "\n".join(output_parts).strip()
-        returncode = completed.returncode
-    except subprocess.TimeoutExpired as exc:
-        parts = (
-            part.decode(errors="replace") if isinstance(part, bytes) else part
-            for part in (exc.stdout, exc.stderr)
-            if part
-        )
-        output = "\n".join(parts).strip()
-        returncode = 124
-        error = "command timed out"
-    except (OSError, subprocess.SubprocessError) as exc:
-        error = str(exc)
     finally:
         os.close(write_fd)
 
     os.set_blocking(read_fd, False)
     try:
-        probe = os.read(read_fd, 4096)
+        probe = os.read(read_fd, cut_assertion_probe.MAX_EVENT_BYTES + 1)
     except BlockingIOError:
         probe = b""
     finally:
         os.close(read_fd)
-    return _Run(returncode, output, error, b"assertion\n" in probe)
+    event = cut_assertion_probe.ProbeEvent.decode(probe, command.runner)
+    error = run.error
+    if event is None and error is None:
+        error = _PROBE_EVENT_ERROR
+    return _Run(
+        run.returncode,
+        run.output,
+        error,
+        event.assertion_origin if event is not None else False,
+    )
 
 
 def _looks_harness_failure(run: _Run) -> bool:
@@ -1289,7 +1279,11 @@ def _replay_cases(
             continue
         run = _run_case(case.argv, cwd)
         runs[case.id] = run
-        if desired == "red":
+        if run.error == _PROBE_EVENT_ERROR:
+            problems.append(
+                f"{label}.cases[{index}] failed in the harness: {run.error}"
+            )
+        elif desired == "red":
             if run.returncode == 0:
                 problems.append(f"{label}.cases[{index}] did not fail RED (exit 0)")
             elif _looks_harness_failure(run):

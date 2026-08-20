@@ -2445,18 +2445,7 @@ fn analyze(args: AnalyzeArgs) -> Result<(), String> {
         calibration: report_calibration,
         reviewed_calibration: reviewed,
     };
-    if let Some(parent) = args.json_out.parent() {
-        fs::create_dir_all(parent).map_err(ioerr)?;
-    }
-    if let Some(parent) = args.markdown_out.parent() {
-        fs::create_dir_all(parent).map_err(ioerr)?;
-    }
-    fs::write(
-        &args.json_out,
-        serde_json::to_string_pretty(&report).map_err(|error| error.to_string())?,
-    )
-    .map_err(ioerr)?;
-    fs::write(&args.markdown_out, markdown(&report)).map_err(ioerr)?;
+    write_report_outputs(&report, &args.json_out, &args.markdown_out)?;
     let blocked = classified
         .iter()
         .filter(|(_, disposition)| *disposition == FindingDisposition::Unaccepted)
@@ -2547,6 +2536,26 @@ fn lexical_strings(left: &str, right: &str) -> f32 {
             / ((left_tokens.len() * right_tokens.len()) as f32).sqrt()
     }
 }
+fn write_report_outputs(
+    report: &Report,
+    json_out: &Path,
+    markdown_out: &Path,
+) -> Result<(), String> {
+    if let Some(parent) = json_out.parent() {
+        fs::create_dir_all(parent).map_err(ioerr)?;
+    }
+    if let Some(parent) = markdown_out.parent() {
+        fs::create_dir_all(parent).map_err(ioerr)?;
+    }
+    fs::write(
+        json_out,
+        serde_json::to_string_pretty(report).map_err(|error| error.to_string())?,
+    )
+    .map_err(ioerr)?;
+    fs::write(markdown_out, markdown(report)).map_err(ioerr)?;
+    Ok(())
+}
+
 fn markdown(report: &Report) -> String {
     let mut out = format!("# Skill overlap report\n\nMode: `{}`\n\n", report.mode);
     out.push_str("## Trends\n\n| Lane | Graph class | Disposition | Current findings | Baseline findings | Current token estimate | Baseline token estimate |\n| --- | --- | --- | ---: | ---: | ---: | ---: |\n");
@@ -2861,7 +2870,9 @@ mod tests {
     #[test]
     fn load_roots_rejects_absolute_manifest_paths() {
         let repo = temp_dir("absolute-root-repo");
+        let repo = repo.path();
         let outside = temp_dir("absolute-root-outside");
+        let outside = outside.path();
         let manifest = repo.join("manifest.json");
         fs::write(
             &manifest,
@@ -2869,16 +2880,14 @@ mod tests {
         )
         .unwrap();
 
-        let error = load_roots(&repo, &manifest).unwrap_err();
+        let error = load_roots(repo, &manifest).unwrap_err();
         assert!(error.contains("relative"), "{error}");
-
-        let _ = fs::remove_dir_all(repo);
-        let _ = fs::remove_dir_all(outside);
     }
 
     #[test]
     fn load_roots_rejects_parent_manifest_paths() {
         let repo = temp_dir("parent-root-repo");
+        let repo = repo.path();
         let manifest = repo.join("manifest.json");
         fs::write(
             &manifest,
@@ -2886,49 +2895,45 @@ mod tests {
         )
         .unwrap();
 
-        let error = load_roots(&repo, &manifest).unwrap_err();
+        let error = load_roots(repo, &manifest).unwrap_err();
         assert!(error.contains("parent"), "{error}");
-
-        let _ = fs::remove_dir_all(repo);
     }
 
     #[cfg(unix)]
     #[test]
     fn markdown_files_rejects_directory_symlink_escape() {
         let repo = temp_dir("directory-symlink-repo");
+        let repo = repo.path();
         let root = repo.join("skills/example");
         fs::create_dir_all(&root).unwrap();
         let outside = temp_dir("directory-symlink-outside");
+        let outside = outside.path();
         fs::write(outside.join("secret.md"), "secret").unwrap();
-        std::os::unix::fs::symlink(&outside, root.join("escape")).unwrap();
+        std::os::unix::fs::symlink(outside, root.join("escape")).unwrap();
 
         let mut paths = Vec::new();
-        let error = markdown_files(&repo, &root, &mut paths).unwrap_err();
+        let error = markdown_files(repo, &root, &mut paths).unwrap_err();
         assert!(error.contains("symlink"), "{error}");
         assert!(paths.is_empty());
-
-        let _ = fs::remove_dir_all(repo);
-        let _ = fs::remove_dir_all(outside);
     }
 
     #[cfg(unix)]
     #[test]
     fn markdown_files_rejects_markdown_symlink_escape() {
         let repo = temp_dir("file-symlink-repo");
+        let repo = repo.path();
         let root = repo.join("skills/example");
         fs::create_dir_all(&root).unwrap();
         let outside = temp_dir("file-symlink-outside");
+        let outside = outside.path();
         let secret = outside.join("secret.md");
         fs::write(&secret, "secret").unwrap();
         std::os::unix::fs::symlink(&secret, root.join("escape.md")).unwrap();
 
         let mut paths = Vec::new();
-        let error = markdown_files(&repo, &root, &mut paths).unwrap_err();
+        let error = markdown_files(repo, &root, &mut paths).unwrap_err();
         assert!(error.contains("symlink"), "{error}");
         assert!(paths.is_empty());
-
-        let _ = fs::remove_dir_all(repo);
-        let _ = fs::remove_dir_all(outside);
     }
 
     #[test]
@@ -2959,12 +2964,14 @@ mod tests {
     #[test]
     fn frontmatter_advisory_below_floor_is_suppressed() {
         let root_a = temp_dir("frontmatter-floor-a");
+        let root_a = root_a.path();
         fs::write(
             root_a.join("SKILL.md"),
             "---\nname: alpha\ndescription: the quick fox jumps\n---\nBody\n",
         )
         .unwrap();
         let root_b = temp_dir("frontmatter-floor-b");
+        let root_b = root_b.path();
         fs::write(
             root_b.join("SKILL.md"),
             "---\nname: beta\ndescription: the slow turtle walks\n---\nBody\n",
@@ -2972,7 +2979,7 @@ mod tests {
         .unwrap();
 
         let results = frontmatter_advisories(
-            &[root_a.clone(), root_b.clone()],
+            &[root_a.to_path_buf(), root_b.to_path_buf()],
             &std::env::temp_dir(),
             0.3,
         )
@@ -2981,9 +2988,6 @@ mod tests {
             results.is_empty(),
             "near-zero-score pair should be suppressed by the floor: {results:?}"
         );
-
-        let _ = fs::remove_dir_all(root_a);
-        let _ = fs::remove_dir_all(root_b);
     }
 
     #[test]
@@ -3323,6 +3327,7 @@ mod tests {
     #[test]
     fn graph_dedupes_target_reachable_by_link_and_backtick_reference() {
         let repo = temp_dir("intro-graph");
+        let repo = repo.path();
         let a = repo.join("a.md");
         let references = repo.join("references");
         let b = references.join("b.md");
@@ -3330,15 +3335,14 @@ mod tests {
         fs::write(&a, "# A\n[B](references/b.md) and `references/b.md`\n").unwrap();
         fs::write(&b, "# B\n").unwrap();
         let documents = vec![
-            parse_document(&a, &repo, &TokenCounter::Test).unwrap(),
-            parse_document(&b, &repo, &TokenCounter::Test).unwrap(),
+            parse_document(&a, repo, &TokenCounter::Test).unwrap(),
+            parse_document(&b, repo, &TokenCounter::Test).unwrap(),
         ];
-        let (edges, _) = graph(&documents, &[], &repo);
+        let (edges, _) = graph(&documents, &[], repo);
         assert_eq!(
             edges["a.md"],
             BTreeSet::from(["references/b.md".to_owned()])
         );
-        let _ = fs::remove_dir_all(repo);
     }
 
     #[test]
@@ -3418,6 +3422,83 @@ mod tests {
             )
             .directly_linked
         );
+    }
+
+    // Finding 31 (PR #322): when a directed path exists both ways between two
+    // endpoints, `directed_distance` must report the *minimum* of the two, not
+    // whichever direction happened to resolve first. The regressed code took
+    // `a->b` or else `b->a`; here `a->b` is 2 hops (a->c->b) and `b->a` is 1 hop
+    // (b->a), so the minimum is 1. If the min collapses back to the first
+    // direction this asserts 2 and fails loudly.
+    #[test]
+    fn graph_class_directed_distance_takes_minimum_of_both_directions() {
+        let documents = vec![
+            Document {
+                path: "a.md".into(),
+                refs: vec!["c.md".to_owned()],
+                sections: vec![],
+            },
+            Document {
+                path: "b.md".into(),
+                refs: vec!["a.md".to_owned()],
+                sections: vec![],
+            },
+            Document {
+                path: "c.md".into(),
+                refs: vec!["b.md".to_owned()],
+                sections: vec![],
+            },
+        ];
+        let roots = vec![PathBuf::from("")];
+        let (edges, owner) = graph(&documents, &roots, Path::new(""));
+        let forward_edges = forward_adjacency(&edges);
+        let undirected_edges = undirected_adjacency(&edges);
+        let left = test_chunk("a.md", &["A", "Body"], 1, "a");
+        let right = test_chunk("b.md", &["B", "Body"], 1, "b");
+        assert_eq!(distances(&forward_edges, "a.md", "b.md"), Some(2));
+        assert_eq!(distances(&forward_edges, "b.md", "a.md"), Some(1));
+        let class = graph_class(
+            &edges,
+            &forward_edges,
+            &undirected_edges,
+            &owner,
+            &left,
+            &right,
+        );
+        assert_eq!(class.directed_distance, Some(1));
+    }
+
+    // Finding 31 (PR #322): the report writer must create the output parents
+    // before `fs::write`, so an analysis that runs into a fresh `--json-out`
+    // directory does not fail loudly after all the expensive work is done.
+    // Extracted into `write_report_outputs` so the fail-loud guard is testable
+    // without `--features model`. Removing either `create_dir_all` makes the
+    // subsequent write to a non-existent parent fail and this test panic.
+    #[test]
+    fn write_report_outputs_creates_missing_parent_directories() {
+        let base = temp_dir("write-report-outputs");
+        let json_out = base.join("nested/json/report.json");
+        let markdown_out = base.join("other/md/report.md");
+        let report = Report {
+            format: 1,
+            detector: detector("lock"),
+            mode: "report".into(),
+            findings: vec![],
+            duplicate_components: vec![],
+            frontmatter: vec![],
+            trends: Trends { groups: vec![] },
+            calibration: None,
+            reviewed_calibration: None,
+        };
+        write_report_outputs(&report, &json_out, &markdown_out).unwrap();
+        assert!(json_out.exists());
+        assert!(markdown_out.exists());
+        let written: Report =
+            serde_json::from_str(&fs::read_to_string(&json_out).unwrap()).unwrap();
+        assert_eq!(written.mode, "report");
+        assert!(written.findings.is_empty());
+        assert!(!fs::read_to_string(&markdown_out).unwrap().is_empty());
+        let _ = fs::remove_dir_all(base);
     }
 
     #[test]
@@ -4212,10 +4293,11 @@ mod tests {
         ))
     }
 
-    fn temp_dir(name: &str) -> PathBuf {
-        let path = temp_path(name);
-        fs::create_dir_all(&path).unwrap();
-        path
+    fn temp_dir(name: &str) -> tempfile::TempDir {
+        tempfile::Builder::new()
+            .prefix(&format!("skill-overlap-{}-{name}-", std::process::id()))
+            .tempdir()
+            .unwrap()
     }
 
     #[test]

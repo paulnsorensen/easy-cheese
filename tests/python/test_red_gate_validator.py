@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import importlib.util
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -666,6 +668,208 @@ def test_issue_accepts_python_module_pytest_assertion_origin(
     )
 
     assert receipt.cases[0].observed_exit_code == 1
+
+
+def test_issue_accepts_plain_script_uncaught_assertion_origin(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    script = tmp_path / "candidate.py"
+    script.write_text(
+        "raise AssertionError('outer witness')\n",
+        encoding="utf-8",
+    )
+    receipt_path = _receipt_path(tmp_path, "plain-script.receipt.json")
+
+    receipt = _issue(
+        _candidate(tmp_path, command=[sys.executable, str(script)]),
+        receipt_path,
+    )
+
+    assert receipt_path.exists()
+    assert receipt.cases[0].observed_exit_code == 1
+    assert receipt.cases[0].observed_witness == "outer witness"
+
+
+def test_issue_rejects_builtin_named_non_assertion(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    script = tmp_path / "fake_assertion.py"
+    script.write_text(
+        "FakeAssertionError = type('AssertionError', (Exception,), {})\n"
+        "FakeAssertionError.__module__ = 'builtins'\n"
+        "print(f'TYPE {FakeAssertionError.__module__}.{FakeAssertionError.__name__}')\n"
+        "raise FakeAssertionError('outer witness')\n",
+        encoding="utf-8",
+    )
+    command = [sys.executable, str(script)]
+    run = red_gate._run_case(command, tmp_path)
+    assert (
+        run.returncode,
+        run.error,
+        run.assertion_origin,
+    ) == (1, None, False)
+    assert "TYPE builtins.AssertionError" in run.output
+
+    receipt_path = _receipt_path(tmp_path, "fake-assertion.receipt.json")
+    with pytest.raises(red_gate.GateValidationError) as raised:
+        _issue(_candidate(tmp_path, command=command), receipt_path)
+
+    assert any(
+        problem.endswith("failed in the harness, not its declared witness")
+        for problem in raised.value.problems
+    )
+    assert not receipt_path.exists()
+
+
+def _native_context_source() -> str:
+    return (
+        "import __main__, cut_assertion_probe, dataclasses, json, pathlib, "
+        "sys, unittest; "
+        "main = vars(__main__); loader = getattr(__main__, '__loader__', None); "
+        "main_console = getattr(__main__, '_console_main', None); "
+        "config_module = sys.modules.get('_pytest.config'); "
+        "config_console = getattr(config_module, '_console_main', None); "
+        "builtins_value = main.get('__builtins__'); "
+        "print('OBS ' + repr(("
+        "sys.flags.safe_path, sys.path[0], sys.argv, sys.orig_argv, "
+        "__main__.__name__, "
+        "getattr(getattr(__main__, '__spec__', None), 'name', None), "
+        "'__file__' in main, main.get('__file__'), "
+        "type(loader).__module__, type(loader).__qualname__, "
+        "getattr(loader, 'name', getattr(loader, '__name__', None)), "
+        "'__cached__' in main, main.get('__cached__'), "
+        "getattr(__main__, '__package__', None), "
+        "'__builtins__' in main, type(builtins_value).__name__, "
+        "'_console_main' in main, "
+        "getattr(main_console, '__module__', None), "
+        "getattr(main_console, '__name__', None), "
+        "(main_console is config_console) if main_console is not None else None, "
+        "getattr(json, 'TARGET_LOCAL', False), "
+        "getattr(cut_assertion_probe, 'TARGET_LOCAL', False), "
+        "getattr(dataclasses, 'TARGET_LOCAL', False), "
+        "getattr(pathlib, 'TARGET_LOCAL', False), "
+        "getattr(unittest, 'TARGET_LOCAL', False)"
+        "))); "
+        "raise AssertionError('matrix witness')"
+    )
+
+
+def _matrix_command(profile: str, tmp_path: Path, source: str) -> list[str]:
+    if profile == "code":
+        return [sys.executable, "-c", source]
+    if profile == "script":
+        target = tmp_path / "matrix_script.py"
+        target.write_text(source, encoding="utf-8")
+        return [sys.executable, str(target)]
+    if profile == "pytest":
+        target = tmp_path / "tests" / "test_matrix.py"
+        target.parent.mkdir()
+        target.write_text(f"def test_matrix():\n    {source}\n", encoding="utf-8")
+        return [sys.executable, "-m", "pytest", str(target), "-q"]
+    target = tmp_path / "tests" / "test_matrix_unittest.py"
+    target.parent.mkdir(exist_ok=True)
+    target.write_text(
+        "import unittest\n\n"
+        "class MatrixTest(unittest.TestCase):\n"
+        "    def test_matrix(self):\n"
+        f"        {source}\n",
+        encoding="utf-8",
+    )
+    return [
+        sys.executable,
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        str(target.parent),
+        "-p",
+        "test_matrix_unittest.py",
+    ]
+
+
+def _observed_matrix_value(output: str, prefix: str = "OBS ") -> tuple[object, ...]:
+    for line in output.splitlines():
+        if line.startswith(prefix):
+            value = ast.literal_eval(line[len(prefix) :])
+            assert isinstance(value, tuple)
+            return value
+    raise AssertionError(f"missing {prefix!r} observation in {output!r}")
+
+
+@pytest.mark.parametrize("safe_mode", [False, True], ids=["safe-off", "safe-on"])
+@pytest.mark.parametrize("profile", ["code", "script", "pytest", "unittest"])
+def test_probe_replays_native_context_in_both_safe_modes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    safe_mode: bool,
+    profile: str,
+) -> None:
+    shadow = tmp_path / "shadow"
+    shadow.mkdir()
+    if profile in {"code", "script"}:
+        for module_name in ("dataclasses", "pathlib"):
+            (shadow / f"{module_name}.py").write_text(
+                "TARGET_LOCAL = True\n",
+                encoding="utf-8",
+            )
+    if profile != "pytest":
+        (shadow / "json.py").write_text(
+            "TARGET_LOCAL = True\n",
+            encoding="utf-8",
+        )
+    if profile in {"code", "script"}:
+        (shadow / "unittest.py").write_text(
+            "TARGET_LOCAL = True\n",
+            encoding="utf-8",
+        )
+    (shadow / "cut_assertion_probe.py").write_text(
+        "TARGET_LOCAL = True\n",
+        encoding="utf-8",
+    )
+    environment = os.environ.copy()
+    inherited_pythonpath = os.environ.get("PYTHONPATH")
+    pythonpath = [
+        str(REPO_ROOT / "src"),
+        str(shadow),
+        str(REPO_ROOT / "shared" / "scripts"),
+        str(REPO_ROOT / "vendor"),
+    ]
+    if inherited_pythonpath:
+        pythonpath.append(inherited_pythonpath)
+    environment["PYTHONPATH"] = os.pathsep.join(pythonpath)
+    if safe_mode:
+        environment["PYTHONSAFEPATH"] = "1"
+    else:
+        environment.pop("PYTHONSAFEPATH", None)
+    command = _matrix_command(profile, tmp_path, _native_context_source())
+
+    native = subprocess.run(
+        command,
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        env=environment,
+    )
+    assert native.returncode == 1, native.stdout + native.stderr
+    native_observation = _observed_matrix_value(native.stdout + native.stderr)
+
+    monkeypatch.setenv("PYTHONPATH", environment["PYTHONPATH"])
+    if "PYTHONSAFEPATH" in environment:
+        monkeypatch.setenv("PYTHONSAFEPATH", environment["PYTHONSAFEPATH"])
+    else:
+        monkeypatch.delenv("PYTHONSAFEPATH", raising=False)
+    replay = red_gate._run_case(command, tmp_path)
+    assert (
+        replay.returncode,
+        replay.error,
+        replay.assertion_origin,
+    ) == (1, None, True), replay.output
+    replay_observation = _observed_matrix_value(replay.output)
+    assert replay_observation == native_observation
 
 
 def test_issue_rejects_an_unsupported_assertion_proof_runner_without_executing_it(
@@ -1470,3 +1674,72 @@ def test_issue_cli_has_no_tokenless_issuance_form(
 
     assert code == 1
     assert "--token <token>" in capsys.readouterr().err
+
+
+def test_run_case_reports_missing_probe_event_as_harness_error(
+    tmp_path: Path,
+) -> None:
+    run = red_gate._run_case(
+        [sys.executable, "-c", "import os; os._exit(1)"],
+        tmp_path,
+    )
+
+    assert run.error == "assertion probe event missing or invalid"
+    assert red_gate._looks_harness_failure(run)
+
+
+def test_source_probe_uses_canonical_worker_over_cwd_shadow(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "cut_assertion_probe.py").write_text(
+        "TARGET_LOCAL = True\n",
+        encoding="utf-8",
+    )
+    run = red_gate._run_case(
+        [
+            sys.executable,
+            "-c",
+            (
+                f"import sys, cut_assertion_probe; "
+                f"assert sys.flags.safe_path is {sys.flags.safe_path!r}; "
+                "assert cut_assertion_probe.TARGET_LOCAL is True; "
+                "raise AssertionError('source bootstrap witness')"
+            ),
+        ],
+        tmp_path,
+    )
+
+    assert run.error is None
+    assert run.returncode == 1
+    assert run.assertion_origin is True
+    assert run.output.splitlines()[-1] == "AssertionError: source bootstrap witness"
+
+
+def test_source_probe_quarantines_inherited_json_shadow(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("PYTHONPATH", str(tmp_path))
+    (tmp_path / "json.py").write_text(
+        "TARGET_LOCAL = True\n",
+        encoding="utf-8",
+    )
+
+    run = red_gate._run_case(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import json; "
+                "assert json.TARGET_LOCAL is True; "
+                "raise AssertionError('json shadow witness')"
+            ),
+        ],
+        tmp_path,
+    )
+
+    assert run.error is None
+    assert run.returncode == 1
+    assert run.assertion_origin is True
+    assert run.output.splitlines()[-1] == "AssertionError: json shadow witness"
