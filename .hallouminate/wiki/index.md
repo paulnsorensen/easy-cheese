@@ -18,10 +18,11 @@ git-tracking axis (`skills/cheese/references/formatting.md:103`).
 - [specs/](./specs/index.md) — specs
 - [architecture](./architecture.md) — Architecture of easy-cheese
 - [docs-mermaid-rendering](./docs-mermaid-rendering.md) — Docs Mermaid rendering
-- [domain-model](./domain-model.md) — Easy-cheese domain model
+- [domain-model](./domain-model.md) — Easy Cheese domain model
 - [fanout-engine-entities](./fanout-engine-entities.md) — Fan-out engine entities
 - [log](./log.md) — Ingest Log
 - [post-pr-wiki-writeback](./post-pr-wiki-writeback.md) — Post-PR wiki write-back — plan and followups
+- [red-gate-environment-gotchas](./red-gate-environment-gotchas.md) — red-gate environment gotchas
 - [skill-parity-analysis](./skill-parity-analysis.md) — Skill-parity analysis
 - [skill-size-budget](./skill-size-budget.md) — Skill size budget
 - [spec-workflow-comparison](./spec-workflow-comparison.md) — Spec / brainstorm-to-spec workflow comparison
