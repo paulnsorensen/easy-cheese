@@ -3477,8 +3477,8 @@ mod tests {
     #[test]
     fn write_report_outputs_creates_missing_parent_directories() {
         let base = temp_dir("write-report-outputs");
-        let json_out = base.join("nested/json/report.json");
-        let markdown_out = base.join("other/md/report.md");
+        let json_out = base.path().join("nested/json/report.json");
+        let markdown_out = base.path().join("other/md/report.md");
         let report = Report {
             format: 1,
             detector: detector("lock"),
