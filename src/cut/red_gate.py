@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ships-as: cut.pyz red-gate press.pyz (module)
 """Parse, issue, and replay outside-in RED gate receipts.
 
 The helper deliberately accepts only argv arrays.  Receipt files are read with

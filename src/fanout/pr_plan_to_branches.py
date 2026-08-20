@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ships-as: ultracook.pyz pr_plan_to_branches
 """Convert a fan-out pr-plan to branch / cherry-pick / PR-create commands.
 
 Reads the plan (YAML or JSON) from a path argument or stdin and prints one shell

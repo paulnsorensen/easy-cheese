@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ships-as: mold.pyz gate-graph
 """Render mold's gate state machine from one in-memory model.
 
 `GATE_MODEL` is the single source of truth for mold's gate flow: the six modes,

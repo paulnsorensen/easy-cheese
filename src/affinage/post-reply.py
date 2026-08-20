@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ships-as: affinage.pyz post-reply
 """Post a reply to a GitHub PR thread or PR conversation with the mandatory
 "agent on behalf of <handle>" attribution suffix appended.
 

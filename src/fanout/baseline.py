@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ships-as: ultracook.pyz baseline
 """Classify a current test-failure list against a stored baseline.
 
 Deterministic classifier for /ultracook's baseline-aware quality gate (#298):

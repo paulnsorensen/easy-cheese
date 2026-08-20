@@ -22,53 +22,14 @@ import build_pyz  # noqa: E402
 import paths  # noqa: E402
 
 SKILL_SUBCOMMANDS = {
-    "melt": [
-        "batch-resolve",
-        "conflict-pick",
-        "conflict-summary",
-        "detect-squash-residue",
-        "lockfile-resolve",
-    ],
-    "ultracook": [
-        "artifact-path",
-        "baseline",
-        "phase_decision",
-        "mode",
-        "worktree",
-        "milknado",
-        "validate_decomposition",
-        "validate_manifest",
-        "validate_pr_plan",
-        "manifest_update",
-        "wiring_topo_sort",
-        "pr_plan_to_branches",
-    ],
-    "affinage": ["pr-status"],
-    "mold": ["artifact-path", "curd-count", "gate-graph", "render_html", "taste-test"],
-    "briesearch": ["artifact-path", "ground-check"],
-    "cook": ["artifact-path"],
-    "cut": ["red-gate"],
-    "wheypoint": ["commit", "resolve", "show", "lint"],
-    "age": ["html-report"],
-    "hard-cheese": ["append-attempt", "freshness-check"],
-    "pasteurize": ["debug-tag-sweep", "repro-rerun", "pasteurize-route"],
-    "press": ["press-route"],
-    "common": [
-        "slugify",
-        "write_handoff_artifact",
-        "read_handoff_slug",
-        "findings_cli",
-        "gates_cli",
-        "paths_cli",
-        "handoff_cli",
-        "render_html",
-    ],
+    **{skill: list(subs) for skill, subs in build_pyz.SKILLS.items()},
+    "common": list(build_pyz.COMMON_SUBCOMMANDS),
 }
 
 # Every skill that registers the durable-corpus resolver shim. One shared source
 # (shared/scripts/artifact_path.py) backs them all; each must agree with
 # paths.artifact_path / paths.project_corpus_root.
-ARTIFACT_PATH_SKILLS = ("mold", "ultracook", "briesearch", "cook")
+ARTIFACT_PATH_SKILLS = ("mold", "briesearch", "cook")
 
 # Cook owns the planner-to-curd execution bundle; Cure consumes the same
 # runtime through the common artifact fanned into skills/cure/scripts/.
@@ -805,37 +766,20 @@ def test_bundle_build_is_byte_deterministic(tmp_path: Path) -> None:
         ).read_bytes()
 
 
-def test_common_slugify_executes_end_to_end(bundles: Path, tmp_path: Path) -> None:
-    """slugify subcommand in common.pyz (slugify.py from-task) resolves imports and dispatches."""
-    result = _run(
-        bundles / "common.pyz",
-        "slugify",
-        "from-task",
-        "--task",
-        "Fix the off-by-one error",
-        "--json",
-    )
-    assert result.returncode == 0, result.stderr
-
-    payload = json.loads(result.stdout)
-    assert payload["slug"] == "fix-off-by-one-error"
-
-
 def test_common_bundle_carries_clis_plus_libs_not_skill_scripts(bundles: Path) -> None:
     """common.pyz contains shared CLI entrypoints and their shared deps (handoff,
     paths, cli, etc.) but must NOT carry any skill-specific script."""
     content = set(zipfile.ZipFile(bundles / "common.pyz").namelist())
     # All COMMON_SUBCOMMANDS must be present as module files
     for sub in [
-        "slugify",
         "write_handoff_artifact",
         "read_handoff_slug",
         "findings_cli",
         "gates_cli",
-        "paths_cli",
-        "handoff_cli",
     ]:
         assert f"{sub}.py" in content, f"{sub}.py missing from common.pyz"
+    for sub in ["slugify", "paths_cli", "handoff_cli", "html_report_cli"]:
+        assert f"{sub}.py" not in content, f"{sub}.py should not be in common.pyz"
     # Skill scripts must not be present
     assert "conflict_pick.py" not in content
     assert "validate_manifest.py" not in content
@@ -1005,16 +949,15 @@ def test_no_orphan_committed_bundles():
 
 def test_local_skill_modules_finds_libs_and_excludes_subcommands() -> None:
     """build_pyz._local_skill_modules discovers local src/<skill>/ library modules a
-    registered script imports (curd/wiring/age_route), and EXCLUDES registered
-    subcommands and shared modules. Unit-locks the discovery the bundle-content test
-    only covers end-to-end — a regression that stopped excluding registered names or
-    stopped finding the siblings would fail here with a precise diff. age_route is
-    discovered here (not via EXTRA_MODULES) because ultracook's src dir is aliased to
-    src/fanout/, where age_route.py lives alongside age_route_cli.py. review_surface
-    is absent: ultracook dropped the review-surface subcommand (no caller), so nothing
-    in ultracook's registered scripts imports it anymore."""
+    registered script imports (curd/wiring), and EXCLUDES registered subcommands
+    and shared modules. Unit-locks the discovery the bundle-content test only
+    covers end-to-end — a regression that stopped excluding registered names or
+    stopped finding the siblings would fail here with a precise diff. age_route and
+    review_surface are absent: ultracook dropped the age-route and review-surface
+    subcommands (dead registrations), so nothing in ultracook's registered scripts
+    imports either module anymore."""
     local = build_pyz._local_skill_modules("ultracook")
-    assert local == {"curd", "wiring", "age_route"}, local
+    assert local == {"curd", "wiring"}, local
     assert (
         "validate_decomposition" not in local
     )  # registered subcommand, not a local lib

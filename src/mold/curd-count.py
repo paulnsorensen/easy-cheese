@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ships-as: mold.pyz curd-count
 """Count candidate curds in a mold-generated spec and recommend the next skill.
 
 Reads a mold-generated spec — the path `mold.pyz artifact-path specs <slug>`

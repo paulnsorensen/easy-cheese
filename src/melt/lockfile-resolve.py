@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ships-as: melt.pyz lockfile-resolve
 """
 Lockfile conflict resolution.
 Takes one side and regenerates the lockfile from the manifest.

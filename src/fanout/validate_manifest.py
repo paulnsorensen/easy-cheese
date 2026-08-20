@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ships-as: ultracook.pyz validate_manifest
 """Validate an /ultracook fan-out run manifest.
 
 This is the structural companion to `validate_decomposition.py`: it verifies

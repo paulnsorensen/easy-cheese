@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ships-as: age.pyz html-report
 """Render an /age markdown report into one self-contained, offline HTML file.
 
 Findings are grouped by severity (blocker → high → medium → low); each finding's

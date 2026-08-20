@@ -1,3 +1,4 @@
+# ships-as: affinage.pyz review-surface age.pyz review-surface
 """CLI entry point for review_surface.score -- runs git, prints JSON.
 
 Split from review_surface.py so that module stays a pure function with zero

@@ -1,3 +1,4 @@
+# ships-as: press.pyz press-route
 """JSON CLI wrapper for the receipt-derived Press route."""
 
 from __future__ import annotations

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ships-as: ultracook.pyz milknado
 """Probe the milknado engine seam for /ultracook parallel mode.
 
 Three roles, keyed on which milknado MCP tools are present in the agent's

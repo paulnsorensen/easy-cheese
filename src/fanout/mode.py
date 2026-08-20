@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ships-as: ultracook.pyz mode mold.pyz (module)
 """Canonical thresholds and the two mode selectors for /cook's fan-out gate.
 
 Two selectors, chosen by whether a curd block exists:

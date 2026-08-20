@@ -1,3 +1,4 @@
+# ships-as: press.pyz (module)
 """Validated boundary router for the Press adversarial gate."""
 
 from __future__ import annotations

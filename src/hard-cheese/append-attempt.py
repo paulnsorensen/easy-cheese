@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ships-as: hard-cheese.pyz append-attempt
 """Atomically append an attempt row to `.cheese/hard-cheese/<slug>.md`.
 
 Spec: skill-scripts Wave 2 — confirmation-bias killer for /hard-cheese.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -14,6 +15,9 @@ import build_pyz
 from easy_cheese_schemas.wiring_graph import WiringCycleError, compute_waves, cycle_errors
 
 BUNDLE = build_pyz.cached_bundle("ultracook")
+REPO_ROOT = Path(__file__).resolve().parents[3]
+SRC_FANOUT = REPO_ROOT / "src" / "fanout"
+SHARED_SCRIPTS = REPO_ROOT / "shared" / "scripts"
 
 
 def _wiring(*entries: tuple[str, list[str]]) -> list[dict]:
@@ -25,10 +29,20 @@ def _write_manifest(path: Path, wiring: list[dict]) -> None:
 
 
 def _run_cli(*args: str) -> subprocess.CompletedProcess:
+    env = {
+        **os.environ,
+        "PYTHONPATH": os.pathsep.join(
+            [
+                str(SRC_FANOUT),
+                str(SHARED_SCRIPTS),
+                str(REPO_ROOT / "src"),
+                str(REPO_ROOT / "vendor"),
+            ]
+        ),
+    }
     return subprocess.run(
-        [sys.executable, str(BUNDLE), "wiring_topo_sort", *args],
-        capture_output=True,
-        text=True,
+        [sys.executable, str(SRC_FANOUT / "wiring_topo_sort.py"), *args],
+        capture_output=True, text=True, env=env,
     )
 
 
