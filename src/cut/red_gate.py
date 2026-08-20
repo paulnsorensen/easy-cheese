@@ -58,6 +58,7 @@ try:  # the Cut bundle stages Mold's canonical parser as a flat module
     from mold.taste_test import (  # noqa: E402
         ApplicabilityError as MoldApplicabilityError,
         NotApplicable as MoldNotApplicable,
+        RED_REQUIRED_EXECUTABLE_PROBLEM,
         is_new_mold_spec,
         parse_gate_applicability as parse_mold_gate_applicability,
     )
@@ -65,6 +66,7 @@ except ModuleNotFoundError:  # pragma: no cover - bundled import path
     from taste_test import (  # type: ignore[no-redef]  # noqa: E402
         ApplicabilityError as MoldApplicabilityError,
         NotApplicable as MoldNotApplicable,
+        RED_REQUIRED_EXECUTABLE_PROBLEM,
         is_new_mold_spec,
         parse_gate_applicability as parse_mold_gate_applicability,
     )
@@ -489,6 +491,14 @@ def _parse_declared_spec(path: Path) -> _ContractPlan:
         for contract in applicability.contracts
         if contract.mode != "guard"
     )
+    if not contracts:
+        return _ContractPlan(
+            GateDisposition.RED,
+            applicability.work_class,
+            (),
+            None,
+            (RED_REQUIRED_EXECUTABLE_PROBLEM,),
+        )
     return _ContractPlan(
         GateDisposition.RED,
         applicability.work_class,

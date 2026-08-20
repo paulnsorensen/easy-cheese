@@ -109,9 +109,56 @@ gate_applicability:
 
     assert code == 0, error
     assert payload is not None
-    assert [contract["acceptance_id"] for contract in payload["contracts"]] == [
-        "AC-1"
+    assert payload["disposition"] == "red"
+    assert [
+        (contract["acceptance_id"], contract["mode"])
+        for contract in payload["contracts"]
+    ] == [("AC-1", "tracer")]
+
+
+def test_guard_only_red_required_is_rejected_with_one_actionable_problem(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    spec = tmp_path / "guard-only.md"
+    spec.write_text(
+        """---
+source: mold-handshake
+gate_applicability:
+  disposition: red-required
+  work_class: behavior
+  ui_surface: non-browser
+---
+# Guard-only behavior
+
+## Acceptance
+- AC-1: existing behavior remains unchanged.
+- AC-2: another preservation invariant remains unchanged.
+
+## Test Contracts
+| Acceptance | Interface | Seam | Expected failure | Mode |
+| --- | --- | --- | --- | --- |
+| AC-1 | `api.existing` | committed snapshot | existing behavior changes | guard |
+| AC-2 | `api.other` | committed snapshot | another behavior changes | guard |
+""",
+        encoding="utf-8",
+    )
+
+    plan = red_gate._parse_spec(spec)
+    assert plan.disposition is red_gate.GateDisposition.RED
+    assert plan.contracts == ()
+    assert plan.problems == (red_gate.RED_REQUIRED_EXECUTABLE_PROBLEM,)
+
+    code, payload, error = _run_contracts(spec, capsys)
+
+    assert code == 1
+    assert payload is None
+    assert error.splitlines() == [
+        f"ERROR: {red_gate.RED_REQUIRED_EXECUTABLE_PROBLEM}"
     ]
+
+    with pytest.raises(red_gate.GateValidationError) as failure:
+        red_gate.parse_gate_applicability(spec)
+    assert failure.value.problems == (red_gate.RED_REQUIRED_EXECUTABLE_PROBLEM,)
 
 
 def test_approved_contract_row_can_cover_multiple_acceptance_ids(
