@@ -28,7 +28,9 @@ Before validation or publication, `/plate` inventories promised artifacts and du
 implementation learnings. It routes durable knowledge through the consumer repo's
 hallouminate writer when available, otherwise uses the tracked ADR/domain-model fallback,
 then reads every required output back and records `{target, backend, verified}`.[^3]
-An unverified required write halts the transaction. For a stack, `/plate` selects and
+An unverified required write halts the transaction. Staging additionally sweeps
+uncommitted `.hallouminate/wiki/` paths into the commit, so wiki writes made earlier in
+the session ship with the publication instead of being stranded locally. For a stack, `/plate` selects and
 creates or adopts provider lineage, then runs the write, validation, named-stage, commit,
 and verification transaction separately for each layer before submitting the chain.[^5]
 Shared durable writes live on the bottom/common branch or an explicit wiring branch.

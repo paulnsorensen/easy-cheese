@@ -139,7 +139,11 @@ stack machinery below. Any other branch uses the policy above unchanged.
 3. **Inspect** — read status, diff, and recent log; verify the intended file
    set.
 4. **Stage** — add named files only. Never stage the whole tree. Keep transient
-   `.cheese/` reports unstaged; include tracked wiki/docs writes.
+   `.cheese/` reports unstaged; include tracked wiki/docs writes. When the repo
+   has a hallouminate wiki, sweep `git status` for uncommitted
+   `.hallouminate/wiki/` paths — including writes from earlier in the session —
+   and stage them unless gitignored. Wiki updates ship with this publication,
+   never after it.
 5. **Commit** — use a Conventional Commit message focused on why. Do not amend
    unless explicitly requested and do not bypass hooks.
 6. **Verify** — inspect status and the committed file set.
@@ -185,6 +189,10 @@ type(scope): short description
 
 Optional body when the rationale needs it.
 ```
+
+Write the message BLUF and newscaster-flat: the subject states the change up
+front, the optional body carries only the facts a reviewer needs, and nothing
+else — short, concise, no narrative prose, tone, or slang.
 
 Allowed types: `feat`, `fix`, `refactor`, `chore`, `docs`, `test`,
 `style`. If a hook fails, fix it, re-run the writing and quality gates when

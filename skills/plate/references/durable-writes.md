@@ -10,6 +10,11 @@ files, ADR/domain-model decisions, release notes, and implementation-time
 architecture, convention, protocol, or gotcha knowledge. Classify each item as
 required or optional and tracked or transient.
 
+When the repository has a hallouminate wiki, also sweep `git status` for
+uncommitted `.hallouminate/wiki/` paths and add each (unless gitignored) as a
+required tracked artifact — wiki writes from earlier in the session ship with
+this publication, not after it.
+
 ## Backend cascade
 
 1. When the consumer repository exposes a hallouminate wiki, invoke the explicit
