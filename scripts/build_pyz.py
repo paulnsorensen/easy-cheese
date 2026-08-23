@@ -85,6 +85,8 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
     "cook": {
         "artifact-path": Shared("artifact_path.py"),
         "worktree": Shared("worktree.py"),
+        "normalize": "normalize.py",
+        "validate": "validate.py",
     },
     "cut": {"red-gate": "red_gate.py"},
     # All four subcommands are one module: wheypoint.py reads the subcommand off
@@ -216,7 +218,7 @@ COMMON_SUBCOMMANDS: dict[str, str] = {
     "render_html": "html_report_cli.py",
 }
 # Wave 1: consumer skills receive common.pyz
-COMMON_CONSUMERS: frozenset[str] = frozenset({"cure", "age", "ultracook"})
+COMMON_CONSUMERS: frozenset[str] = frozenset({"cure", "age", "ultracook", "cook"})
 
 _CACHE: dict[str, Path] = {}
 
