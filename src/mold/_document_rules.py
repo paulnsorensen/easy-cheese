@@ -1,0 +1,111 @@
+"""Generated dependency-free mold-spec document rules; edit the
+@document_contract models in contracts.py instead."""
+
+from __future__ import annotations
+
+DOCUMENT_RULES = {   'mold-spec': {   'cross_field_rules': [   {   'description': 'Every '
+                                                                 'Acceptance '
+                                                                 'ID must '
+                                                                 'appear '
+                                                                 'exactly once '
+                                                                 'in the Test '
+                                                                 'Contracts '
+                                                                 'table.',
+                                                  'rule_id': 'ac-coverage-exactly-once'},
+                                              {   'description': 'Tracer rows '
+                                                                 'must leave '
+                                                                 'Interface '
+                                                                 'version and '
+                                                                 'Matrix rows '
+                                                                 'blank.',
+                                                  'rule_id': 'tracer-row-blank-matrix-cells'},
+                                              {   'description': 'Contract-matrix '
+                                                                 'rows require '
+                                                                 'both '
+                                                                 'Interface '
+                                                                 'version and '
+                                                                 'Matrix rows.',
+                                                  'rule_id': 'contract-matrix-row-requires-both'},
+                                              {   'description': 'gate_applicability.disposition=not-applicable '
+                                                                 'requires a '
+                                                                 'reason and '
+                                                                 'zero Test '
+                                                                 'Contracts '
+                                                                 'rows.',
+                                                  'rule_id': 'not-applicable-closed-class'}],
+                     'sections': [   {   'name': 'Problem',
+                                         'optional': False,
+                                         'table': None},
+                                     {   'name': 'Goals',
+                                         'optional': False,
+                                         'table': None},
+                                     {   'name': 'Non-goals',
+                                         'optional': False,
+                                         'table': None},
+                                     {   'name': 'Deferred follow-ups',
+                                         'optional': True,
+                                         'table': None},
+                                     {   'name': 'Approach',
+                                         'optional': False,
+                                         'table': None},
+                                     {   'name': 'Decisions',
+                                         'optional': False,
+                                         'table': None},
+                                     {   'name': 'Acceptance',
+                                         'optional': False,
+                                         'table': None},
+                                     {   'name': 'Test Contracts',
+                                         'optional': False,
+                                         'table': {   'columns': [   'Acceptance '
+                                                                     'ID',
+                                                                     'Interface '
+                                                                     'referent',
+                                                                     'Outermost '
+                                                                     'stable '
+                                                                     'seam',
+                                                                     'Expected '
+                                                                     'failure',
+                                                                     'Mode',
+                                                                     'Interface '
+                                                                     'version',
+                                                                     'Matrix '
+                                                                     'rows'],
+                                                      'per_row': [   'tracer '
+                                                                     'rows '
+                                                                     'leave '
+                                                                     'Interface '
+                                                                     'version '
+                                                                     'and '
+                                                                     'Matrix '
+                                                                     'rows '
+                                                                     'blank',
+                                                                     'contract-matrix '
+                                                                     'rows '
+                                                                     'require '
+                                                                     'both '
+                                                                     'Interface '
+                                                                     'version '
+                                                                     'and '
+                                                                     'Matrix '
+                                                                     'rows']}},
+                                     {   'name': 'Interface sketches',
+                                         'optional': False,
+                                         'table': None},
+                                     {   'name': 'Risks',
+                                         'optional': False,
+                                         'table': None},
+                                     {   'name': 'Open questions',
+                                         'optional': False,
+                                         'table': None},
+                                     {   'name': 'Quality gates',
+                                         'optional': False,
+                                         'table': None},
+                                     {   'name': 'Curds',
+                                         'optional': False,
+                                         'table': None},
+                                     {   'name': 'Reproduction',
+                                         'optional': True,
+                                         'table': None},
+                                     {   'name': 'References',
+                                         'optional': True,
+                                         'table': None}]}}

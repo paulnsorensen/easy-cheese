@@ -44,7 +44,14 @@ SKILL_SUBCOMMANDS = {
         "pr_plan_to_branches",
     ],
     "affinage": ["pr-status"],
-    "mold": ["artifact-path", "curd-count", "gate-graph", "render_html", "taste-test"],
+    "mold": [
+        "artifact-path",
+        "curd-count",
+        "gate-graph",
+        "render_html",
+        "taste-test",
+        "validate-spec",
+    ],
     "briesearch": ["artifact-path", "ground-check"],
     "cook": ["artifact-path"],
     "cut": ["red-gate"],
@@ -1090,3 +1097,38 @@ def test_press_bundle_carries_and_imports_assertion_probe(bundles: Path) -> None
     combined = result.stdout + result.stderr
     assert result.returncode == 2, combined
     assert "ModuleNotFoundError" not in combined
+
+
+def test_document_rules_drift_gate_fails_when_projection_is_stale(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """AC-3: the build fails when the decorated document models changed but the
+    checked-in src/mold/_document_rules.py projection is stale."""
+    live_source = build_pyz._compiled_document_rules_source()
+
+    def mutated_source() -> str:
+        return live_source + "\nDRIFTED = True\n"
+
+    monkeypatch.setattr(build_pyz, "_compiled_document_rules_source", mutated_source)
+    with pytest.raises(RuntimeError, match="document rules is stale"):
+        build_pyz._document_rules_bytes_for(["mold"])
+
+
+def test_document_rules_regeneration_is_byte_deterministic() -> None:
+    """AC-3: regeneration emits _document_rules.py deterministically via the
+    build compile-and-diff seam."""
+    first = build_pyz._compiled_document_rules_source()
+    second = build_pyz._compiled_document_rules_source()
+    assert first == second
+    assert build_pyz._document_rules_bytes_for(["mold"]) == first.encode("utf-8")
+    assert build_pyz._document_rules_bytes_for(["cut"]) is None
+
+
+SPEC_FORMAT_FIXTURES = REPO_ROOT / "tests" / "python" / "fixtures" / "spec_format"
+
+
+def test_mold_pyz_dispatches_validate_spec_end_to_end() -> None:
+    mold_pyz = build_pyz.cached_bundle("mold")
+    result = _run(mold_pyz, "validate-spec", str(SPEC_FORMAT_FIXTURES / "valid_spec.md"))
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "ERROR:" not in result.stderr

@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from collections.abc import Callable, Mapping
 from enum import Enum
-from typing import Any
+from typing import Any, ClassVar
 
 from attrs import Attribute, define, field, validators
 
@@ -62,6 +62,37 @@ def _registered_contracts() -> tuple[tuple[str, type], ...]:
     for previous, current in zip(pairs, pairs[1:]):
         if previous[0] == current[0]:
             raise ValueError(f"duplicate contract marker {current[0]!r}")
+    return tuple(pairs)
+
+
+_DOCUMENT_CONTRACT_MARKER = "__document_contract_slug__"
+
+
+def document_contract(slug: str) -> Callable[[type], type]:
+    """Mark a prose document-format contract class with its canonical schema slug."""
+    validated_slug = _validate_contract_slug(slug)
+
+    def decorate(cls: type) -> type:
+        setattr(cls, _DOCUMENT_CONTRACT_MARKER, validated_slug)
+        return cls
+
+    return decorate
+
+
+def _registered_document_contracts() -> tuple[tuple[str, type], ...]:
+    """Return marked document-contract classes in deterministic slug order."""
+    pairs: list[tuple[str, type]] = []
+    for value in globals().values():
+        if not isinstance(value, type):
+            continue
+        slug = getattr(value, _DOCUMENT_CONTRACT_MARKER, None)
+        if slug is None:
+            continue
+        pairs.append((_validate_contract_slug(slug), value))
+    pairs.sort(key=lambda pair: pair[0])
+    for previous, current in zip(pairs, pairs[1:]):
+        if previous[0] == current[0]:
+            raise ValueError(f"duplicate document contract marker {current[0]!r}")
     return tuple(pairs)
 
 
@@ -2037,6 +2068,234 @@ class AgentWriterView:
             )
 
 
+# --- mold-spec document format (skills-only-spec-format-enforcement) ---
+#
+# Declares the mold spec-template shape as decorated models beside the
+# existing @contract markers.  A build-only compiler in the
+# _schema_catalog_compiler family (_document_rules_compiler.py) projects
+# this declaration into the dependency-free src/mold/_document_rules.py,
+# consumed by the hand-rolled validate-spec CLI.
+
+
+@define(frozen=True)
+class TableRule:
+    """Column shape and per-row rule descriptions for a section's table."""
+
+    columns: tuple[str, ...] = field(converter=_tuple_sequence)
+    per_row: tuple[str, ...] = field(converter=_tuple_sequence, factory=tuple)
+
+
+@define(frozen=True)
+class Section:
+    """One declared spec-template section."""
+
+    name: str
+    optional: bool = False
+    table: TableRule | None = None
+
+
+@define(frozen=True)
+class CrossFieldRule:
+    """A named cross-field semantic rule enforced on MoldSpecDocument."""
+
+    rule_id: str
+    description: str
+
+
+class GateApplicabilityDisposition(str, Enum):
+    RED_REQUIRED = "red-required"
+    NOT_APPLICABLE = "not-applicable"
+
+
+class WorkClass(str, Enum):
+    BEHAVIOR = "behavior"
+    DOCS_ONLY = "docs-only"
+    REFACTOR_ONLY = "refactor-only"
+    TEST_ONLY = "test-only"
+    APPEARANCE_ONLY = "appearance-only"
+
+
+class UiSurface(str, Enum):
+    BROWSER = "browser"
+    NON_BROWSER = "non-browser"
+    NOT_APPLICABLE = "not-applicable"
+
+
+class SpecConfidence(str, Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+
+class TestContractMode(str, Enum):
+    TRACER = "tracer"
+    CONTRACT_MATRIX = "contract-matrix"
+
+
+@define(frozen=True)
+class GateApplicability:
+    disposition: GateApplicabilityDisposition = field(
+        validator=validators.instance_of(GateApplicabilityDisposition)
+    )
+    work_class: WorkClass = field(validator=validators.instance_of(WorkClass))
+    ui_surface: UiSurface = field(validator=validators.instance_of(UiSurface))
+    reason: str | None = field(default=None, validator=_optional_string)
+
+    @reason.validator
+    def _validate_not_applicable_reason(
+        self, _attribute: Attribute[Any], value: object
+    ) -> None:
+        if self.disposition is GateApplicabilityDisposition.NOT_APPLICABLE and not value:
+            raise ValueError(
+                "gate_applicability.reason is required when disposition is not-applicable"
+            )
+
+
+@define(frozen=True)
+class MoldSpecFrontmatter:
+    slug: str = field(validator=_identifier)
+    status: str = field(validator=_bounded_string)
+    source: str = field(validator=_bounded_string)
+    created: str = field(validator=_bounded_string)
+    confidence: SpecConfidence = field(validator=validators.instance_of(SpecConfidence))
+    gate_applicability: GateApplicability = field(
+        validator=validators.instance_of(GateApplicability)
+    )
+    gates_overridden: tuple[str, ...] = field(
+        factory=tuple, converter=_tuple_sequence, validator=_string_list()
+    )
+    agent_introduced_scope: tuple[str, ...] = field(
+        factory=tuple, converter=_tuple_sequence, validator=_string_list()
+    )
+    entity_referent_bindings: tuple[Mapping[str, object], ...] = field(
+        factory=tuple, converter=_tuple_sequence, validator=_list_of(Mapping)
+    )
+
+
+@define(frozen=True)
+class TestContractRow:
+    acceptance_id: str = field(validator=_identifier)
+    interface_referent: str = field(validator=_bounded_string)
+    outermost_stable_seam: str = field(validator=_bounded_string)
+    expected_failure: str = field(validator=_bounded_string)
+    mode: TestContractMode = field(validator=validators.instance_of(TestContractMode))
+    interface_version: str = field(default="", validator=validators.instance_of(str))
+    matrix_rows: tuple[str, ...] = field(
+        factory=tuple, converter=_tuple_sequence, validator=_string_list()
+    )
+
+    @matrix_rows.validator
+    def _validate_mode_cells(self, _attribute: Attribute[Any], value: object) -> None:
+        if self.mode is TestContractMode.TRACER:
+            if self.interface_version or value:
+                raise ValueError(
+                    f"Test Contracts row {self.acceptance_id} is tracer mode and must "
+                    "leave Interface version and Matrix rows blank"
+                )
+        elif not self.interface_version or not value:
+            raise ValueError(
+                f"Test Contracts row {self.acceptance_id} is contract-matrix mode and "
+                "requires both Interface version and Matrix rows"
+            )
+
+
+TEST_CONTRACT_COLUMNS: tuple[str, ...] = (
+    "Acceptance ID",
+    "Interface referent",
+    "Outermost stable seam",
+    "Expected failure",
+    "Mode",
+    "Interface version",
+    "Matrix rows",
+)
+
+TEST_CONTRACT_TABLE_RULE = TableRule(
+    columns=TEST_CONTRACT_COLUMNS,
+    per_row=(
+        "tracer rows leave Interface version and Matrix rows blank",
+        "contract-matrix rows require both Interface version and Matrix rows",
+    ),
+)
+
+MOLD_SPEC_SECTIONS: tuple[Section, ...] = (
+    Section("Problem"),
+    Section("Goals"),
+    Section("Non-goals"),
+    Section("Deferred follow-ups", optional=True),
+    Section("Approach"),
+    Section("Decisions"),
+    Section("Acceptance"),
+    Section("Test Contracts", table=TEST_CONTRACT_TABLE_RULE),
+    Section("Interface sketches"),
+    Section("Risks"),
+    Section("Open questions"),
+    Section("Quality gates"),
+    Section("Curds"),
+    Section("Reproduction", optional=True),
+    Section("References", optional=True),
+)
+
+MOLD_SPEC_CROSS_FIELD_RULES: tuple[CrossFieldRule, ...] = (
+    CrossFieldRule(
+        rule_id="ac-coverage-exactly-once",
+        description="Every Acceptance ID must appear exactly once in the Test Contracts table.",
+    ),
+    CrossFieldRule(
+        rule_id="tracer-row-blank-matrix-cells",
+        description="Tracer rows must leave Interface version and Matrix rows blank.",
+    ),
+    CrossFieldRule(
+        rule_id="contract-matrix-row-requires-both",
+        description="Contract-matrix rows require both Interface version and Matrix rows.",
+    ),
+    CrossFieldRule(
+        rule_id="not-applicable-closed-class",
+        description="gate_applicability.disposition=not-applicable requires a reason and zero Test Contracts rows.",
+    ),
+)
+
+
+@document_contract("mold-spec")
+@define(frozen=True)
+class MoldSpecDocument:
+    frontmatter: MoldSpecFrontmatter = field(
+        validator=validators.instance_of(MoldSpecFrontmatter)
+    )
+    acceptance_ids: tuple[str, ...] = field(
+        factory=tuple, converter=_tuple_sequence, validator=_identifier_list()
+    )
+    test_contract_rows: tuple[TestContractRow, ...] = field(
+        factory=tuple, converter=_tuple_sequence, validator=_list_of(TestContractRow)
+    )
+
+    sections: ClassVar[tuple[Section, ...]] = MOLD_SPEC_SECTIONS
+    cross_field_rules: ClassVar[tuple[CrossFieldRule, ...]] = MOLD_SPEC_CROSS_FIELD_RULES
+
+    @test_contract_rows.validator
+    def _validate_ac_coverage(self, _attribute: Attribute[Any], value: object) -> None:
+        assert isinstance(value, tuple)
+        counts: dict[str, int] = {}
+        for row in value:
+            counts[row.acceptance_id] = counts.get(row.acceptance_id, 0) + 1
+        missing = [ac for ac in self.acceptance_ids if counts.get(ac, 0) != 1]
+        duplicated = sorted(ac for ac, count in counts.items() if count > 1)
+        unexpected = sorted(ac for ac in counts if ac not in self.acceptance_ids)
+        if missing or duplicated or unexpected:
+            raise ValueError(
+                "Test Contracts table must cover every Acceptance ID exactly once: "
+                f"missing={missing} duplicated={duplicated} unexpected={unexpected}"
+            )
+        if (
+            self.frontmatter.gate_applicability.disposition
+            is GateApplicabilityDisposition.NOT_APPLICABLE
+            and value
+        ):
+            raise ValueError(
+                "gate_applicability.disposition=not-applicable requires zero "
+                "Test Contracts rows"
+            )
+
+
 __all__ = [
     "MAX_ARTIFACT_BYTES",
     "MAX_COLLECTION_ITEMS",
@@ -2062,6 +2321,7 @@ __all__ = [
     "CriterionWriterView",
     "CurdPlan",
     "CurdPlanWriterView",
+    "CrossFieldRule",
     "CurdResult",
     "CurdResultWriterView",
     "DeliverableWriterView",
@@ -2075,9 +2335,13 @@ __all__ = [
     "DiagnosisResultWriterView",
     "EvidenceKind",
     "EvidenceRef",
+    "GateApplicability",
+    "GateApplicabilityDisposition",
     "HypothesisDisposition",
     "IdentityAction",
     "IdentityLineage",
+    "MoldSpecDocument",
+    "MoldSpecFrontmatter",
     "PhaseContract",
     "PhaseDestination",
     "PlannerDisposition",
@@ -2098,14 +2362,22 @@ __all__ = [
     "ReviewResult",
     "ReviewResultWriterView",
     "ReviewSeverity",
+    "Section",
     "SemanticCurd",
     "SemanticCurdWriterView",
     "SourceCurdRef",
     "SourceLocation",
     "SourceLocationWriterView",
     "SourcePlanRef",
+    "SpecConfidence",
+    "TableRule",
+    "TestContractMode",
+    "TestContractRow",
+    "UiSurface",
     "UncertaintyScope",
     "UnsupportedProjection",
+    "WorkClass",
     "WriterPayload",
     "WriterViewKind",
+    "document_contract",
 ]

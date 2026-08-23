@@ -33,6 +33,8 @@ PHASE_REGISTRY_SOURCE = SRC_ROOT / "easy_cheese_schemas" / PHASE_REGISTRY_MODULE
 PHASE_CONTRACT_SOURCE = SRC_ROOT / "easy_cheese_schemas" / "phase_contracts.py"
 SCHEMA_CATALOG_SOURCE = SRC_ROOT / "easy_cheese_schemas" / "_schema_catalog.py"
 SCHEMA_CONTRACT_SOURCE = SRC_ROOT / "easy_cheese_schemas" / "contracts.py"
+DOCUMENT_RULES_MODULE = "_document_rules.py"
+DOCUMENT_RULES_SOURCE = SRC_ROOT / "mold" / DOCUMENT_RULES_MODULE
 SHARED_MODULES = {p.stem for p in SHARED_SCRIPTS.glob("*.py")}
 ZIP_TIMESTAMP = (1980, 1, 2, 0, 0, 0)
 # Pinned so the compressed bytes depend only on the zlib build, never on
@@ -74,6 +76,7 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
         "gate-graph": "gate-graph.py",
         "render_html": Shared("html_report_cli.py"),
         "taste-test": "taste_test.py",
+        "validate-spec": "validate-spec.py",
     },
     "briesearch": {
         "artifact-path": Shared("artifact_path.py"),
@@ -267,6 +270,22 @@ def _compiled_schema_catalog_source() -> str:
     return render(collect(_schema_contract_module()))
 
 
+def _document_rules_compiler():
+    """Load the source-only document-rules compiler without runtime projections."""
+    package_entry = str(SRC_ROOT / "easy_cheese_schemas")
+    if package_entry not in sys.path:
+        sys.path.insert(0, package_entry)
+    from _document_rules_compiler import collect, render
+
+    return collect, render
+
+
+def _compiled_document_rules_source() -> str:
+    """Compile the marker-derived mold-spec document rules from the live contracts."""
+    collect, render = _document_rules_compiler()
+    return render(collect(_schema_contract_module()))
+
+
 def _checked_in_generated_file_bytes(
     expected_source: str,
     source: Path,
@@ -310,11 +329,27 @@ def _checked_in_phase_registry_bytes(expected_source: str) -> bytes:
     )
 
 
+def _checked_in_document_rules_bytes(expected_source: str) -> bytes:
+    """Validate the checked-in mold-spec document rules against their live authority."""
+    return _checked_in_generated_file_bytes(
+        expected_source,
+        DOCUMENT_RULES_SOURCE,
+        artifact_name="document rules",
+    )
+
+
 def _schema_catalog_bytes_for(skills: list[str]) -> bytes | None:
     """Derive and validate the checked-in catalog once for a build batch."""
     if not any(skill in PACKAGE_TREES for skill in skills):
         return None
     return _checked_in_schema_catalog_bytes(_compiled_schema_catalog_source())
+
+
+def _document_rules_bytes_for(skills: list[str]) -> bytes | None:
+    """Derive and validate the checked-in document rules once for a build batch."""
+    if "mold" not in skills:
+        return None
+    return _checked_in_document_rules_bytes(_compiled_document_rules_source())
 
 
 def _module_name(filename: str) -> str:
@@ -466,6 +501,7 @@ def _build_bundle(
     target: Path,
     *,
     schema_catalog_bytes: bytes | None,
+    document_rules_bytes: bytes | None = None,
 ) -> Path:
     """Build ``skill`` with catalog bytes validated by the batch boundary."""
     files = _files(skill)
@@ -508,6 +544,7 @@ def _build_bundle(
                         "__pycache__",
                         "_phase_registry_compiler.py",
                         "_schema_catalog_compiler.py",
+                        "_document_rules_compiler.py",
                     ),
                 )
             else:
@@ -531,6 +568,8 @@ def _build_bundle(
             else:
                 package_registry = stage / "easy_cheese_schemas" / PHASE_REGISTRY_MODULE
                 package_registry.write_bytes(registry_bytes)
+        if skill == "mold" and document_rules_bytes is not None:
+            (stage / DOCUMENT_RULES_MODULE).write_bytes(document_rules_bytes)
         (stage / "__main__.py").write_text(
             _dispatcher_source(sub_to_module), encoding="utf-8"
         )
@@ -544,6 +583,7 @@ def build_bundle(skill: str, target: Path) -> Path:
         skill,
         target,
         schema_catalog_bytes=_schema_catalog_bytes_for([skill]),
+        document_rules_bytes=_document_rules_bytes_for([skill]),
     )
 
 
@@ -580,6 +620,7 @@ def main(argv: list[str]) -> int:
     consumers = _common_consumers(targets, explicit=bool(args.skills))
     batch_skills = [*real, COMMON] if want_common else real
     catalog_bytes = _schema_catalog_bytes_for(batch_skills)
+    document_rules_bytes = _document_rules_bytes_for(batch_skills)
 
     if args.out_dir is not None:
         for skill in real:
@@ -589,6 +630,7 @@ def main(argv: list[str]) -> int:
                     skill,
                     args.out_dir / f"{skill}.pyz",
                     schema_catalog_bytes=catalog_bytes,
+                    document_rules_bytes=document_rules_bytes,
                 ),
             )
         if want_common:
@@ -598,6 +640,7 @@ def main(argv: list[str]) -> int:
                     COMMON,
                     args.out_dir / "common.pyz",
                     schema_catalog_bytes=catalog_bytes,
+                    document_rules_bytes=document_rules_bytes,
                 ),
             )
         return 0
@@ -609,6 +652,7 @@ def main(argv: list[str]) -> int:
                 skill,
                 REPO_ROOT / "skills" / skill / "scripts" / f"{skill}.pyz",
                 schema_catalog_bytes=catalog_bytes,
+                document_rules_bytes=document_rules_bytes,
             ),
         )
     if want_common:
@@ -619,6 +663,7 @@ def main(argv: list[str]) -> int:
                 COMMON,
                 Path(td) / "common.pyz",
                 schema_catalog_bytes=catalog_bytes,
+                document_rules_bytes=document_rules_bytes,
             )
             for consumer in sorted(consumers):
                 dest = REPO_ROOT / "skills" / consumer / "scripts" / "common.pyz"
