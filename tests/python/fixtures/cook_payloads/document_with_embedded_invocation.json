@@ -1,0 +1,28 @@
+{
+  "kind": "curd_plan",
+  "payload": {
+    "objective": "Ship the approved behavior",
+    "curds": [
+      {
+        "key": "runtime",
+        "outcome": "Implement strict validation",
+        "scope": {"paths": ["src/runtime.py"]},
+        "outputs": ["Validated contract"],
+        "criteria": [
+          {
+            "description": "Unknown fields reject",
+            "check": "uv run pytest tests/test_runtime.py"
+          }
+        ]
+      }
+    ]
+  },
+  "invocation": {
+    "plan_id": "curdplan-cook-cli-normalize-1",
+    "contract_version": {
+      "schema_uri": "https://schemas.easy-cheese.dev/curd-plan",
+      "major": "1",
+      "minor": "0"
+    }
+  }
+}

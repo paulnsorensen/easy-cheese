@@ -53,7 +53,7 @@ SKILL_SUBCOMMANDS = {
         "validate-spec",
     ],
     "briesearch": ["artifact-path", "ground-check"],
-    "cook": ["artifact-path"],
+    "cook": ["artifact-path", "worktree", "normalize", "validate"],
     "cut": ["red-gate"],
     "wheypoint": ["commit", "resolve", "show", "lint"],
     "age": ["html-report"],
@@ -1124,7 +1124,20 @@ def test_document_rules_regeneration_is_byte_deterministic() -> None:
     assert build_pyz._document_rules_bytes_for(["cut"]) is None
 
 
+def test_cook_joins_common_consumers_and_ships_common_pyz(bundles: Path) -> None:
+    """AC-7: after a build, COMMON_CONSUMERS contains cook and the committed
+    skills/cook/scripts/common.pyz matches the freshly built bundles/common.pyz
+    member for member."""
+    assert "cook" in build_pyz.COMMON_CONSUMERS
+    committed = REPO_ROOT / "skills" / "cook" / "scripts" / "common.pyz"
+    assert committed.is_file()
+    have = _bundle_content(committed)
+    want = _bundle_content(bundles / "common.pyz")
+    assert have == want
+
+
 SPEC_FORMAT_FIXTURES = REPO_ROOT / "tests" / "python" / "fixtures" / "spec_format"
+COOK_PAYLOAD_FIXTURES = REPO_ROOT / "tests" / "python" / "fixtures" / "cook_payloads"
 
 
 def test_mold_pyz_dispatches_validate_spec_end_to_end() -> None:
@@ -1132,3 +1145,50 @@ def test_mold_pyz_dispatches_validate_spec_end_to_end() -> None:
     result = _run(mold_pyz, "validate-spec", str(SPEC_FORMAT_FIXTURES / "valid_spec.md"))
     assert result.returncode == 0, result.stdout + result.stderr
     assert "ERROR:" not in result.stderr
+
+
+def test_cook_pyz_dispatches_normalize_end_to_end() -> None:
+    cook_pyz = build_pyz.cached_bundle("cook")
+    rejected = _run(
+        cook_pyz,
+        "normalize",
+        str(COOK_PAYLOAD_FIXTURES / "host_owned_writer_view.json"),
+        "--invocation",
+        str(COOK_PAYLOAD_FIXTURES / "clean_invocation.json"),
+    )
+    assert rejected.returncode == 1, rejected.stdout + rejected.stderr
+    assert "host-owned field" in rejected.stderr
+
+    accepted = _run(
+        cook_pyz,
+        "normalize",
+        str(COOK_PAYLOAD_FIXTURES / "clean_writer_view.json"),
+        "--invocation",
+        str(COOK_PAYLOAD_FIXTURES / "clean_invocation.json"),
+    )
+    assert accepted.returncode == 0, accepted.stdout + accepted.stderr
+    canonical = json.loads(accepted.stdout)
+    assert canonical["value"]["plan_id"] == "curdplan-cook-cli-normalize-1"
+    assert canonical["digest"].startswith("sha256:")
+
+
+def test_cook_pyz_dispatches_validate_end_to_end() -> None:
+    cook_pyz = build_pyz.cached_bundle("cook")
+    rejected = _run(
+        cook_pyz,
+        "validate",
+        str(COOK_PAYLOAD_FIXTURES / "nonconforming_writer_view.json"),
+        "--schema",
+        "agent-writer-view",
+    )
+    assert rejected.returncode == 1, rejected.stdout + rejected.stderr
+    assert "$.kind" in rejected.stderr
+
+    accepted = _run(
+        cook_pyz,
+        "validate",
+        str(COOK_PAYLOAD_FIXTURES / "conforming_writer_view.json"),
+        "--schema",
+        "agent-writer-view",
+    )
+    assert accepted.returncode == 0, accepted.stdout + accepted.stderr
