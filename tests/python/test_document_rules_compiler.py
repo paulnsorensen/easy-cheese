@@ -7,6 +7,8 @@ import re
 import sys
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCHEMAS_ROOT = REPO_ROOT / "src" / "easy_cheese_schemas"
 GENERATED = REPO_ROOT / "src" / "mold" / "_document_rules.py"
@@ -99,16 +101,19 @@ def test_ac_coverage_validator_rejects_missing_and_duplicate_ids() -> None:
         frontmatter=frontmatter, acceptance_ids=("AC-1",), test_contract_rows=(row,)
     )
 
-    try:
+    with pytest.raises(ValueError, match="AC-2"):
         contracts.MoldSpecDocument(
             frontmatter=frontmatter,
             acceptance_ids=("AC-1", "AC-2"),
             test_contract_rows=(row,),
         )
-    except ValueError as exc:
-        assert "AC-2" in str(exc)
-    else:
-        raise AssertionError("missing acceptance id must be rejected")
+
+
+def test_document_rules_compiler_render_rejects_duplicate_slugs() -> None:
+    with pytest.raises(ValueError, match="duplicate slugs"):
+        compiler.render(
+            [("mold-spec", contracts.MoldSpecDocument), ("mold-spec", contracts.MoldSpecDocument)]
+        )
 
 
 def test_document_rules_compiler_is_deterministic_and_matches_checked_in_file() -> None:
@@ -129,8 +134,35 @@ def test_generated_document_rules_module_imports_only_stdlib_names() -> None:
         elif isinstance(node, ast.ImportFrom):
             if node.module:
                 names.add(node.module.split(".")[0])
+    assert names == {"__future__"}
     assert names <= set(sys.stdlib_module_names)
 
     namespace: dict[str, object] = {}
     exec(compile(source, str(GENERATED), "exec"), namespace)
-    assert namespace["DOCUMENT_RULES"]["mold-spec"]["sections"]
+    rules = namespace["DOCUMENT_RULES"]["mold-spec"]
+    assert {section["name"] for section in rules["sections"]} == set(
+        _curdle_template_section_headings()
+    )
+    assert {rule["rule_id"] for rule in rules["cross_field_rules"]} == {
+        "ac-coverage-exactly-once",
+        "tracer-row-blank-matrix-cells",
+        "contract-matrix-row-requires-both",
+        "not-applicable-closed-class",
+    }
+    assert set(rules["enums"]) == {
+        "mode",
+        "gate_applicability_disposition",
+        "work_class",
+        "ui_surface",
+    }
+
+
+def test_generated_document_rules_module_has_no_wrapped_string_fragments() -> None:
+    """Regression for the implicit-string-concatenation CodeQL alerts: pprint
+    must not wrap a string literal across lines (quote-then-newline-then-quote)."""
+    lines = GENERATED.read_text(encoding="utf-8").splitlines()
+    non_blank = [line for line in lines if line.strip()]
+    for current, following in zip(non_blank, non_blank[1:]):
+        assert not (current.rstrip().endswith("'") and following.strip().startswith("'")), (
+            f"wrapped string fragment: {current!r} -> {following!r}"
+        )

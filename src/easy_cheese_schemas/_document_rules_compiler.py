@@ -37,6 +37,10 @@ def _rule_data(rule: object) -> dict[str, str]:
     return {"rule_id": rule.rule_id, "description": rule.description}
 
 
+def _enum_data(cls: type) -> dict[str, list[str]]:
+    return {name: list(values) for name, values in cls.enums.items()}
+
+
 def render(pairs: Sequence[tuple[str, type]]) -> str:
     """Render deterministic, dependency-free document-rules source for ``pairs``."""
     ordered = tuple(sorted(pairs, key=lambda pair: pair[0]))
@@ -50,6 +54,7 @@ def render(pairs: Sequence[tuple[str, type]]) -> str:
             "cross_field_rules": [
                 _rule_data(rule) for rule in cls.cross_field_rules
             ],
+            "enums": _enum_data(cls),
         }
         for slug, cls in ordered
     }
@@ -59,6 +64,6 @@ def render(pairs: Sequence[tuple[str, type]]) -> str:
         "@document_contract models in contracts.py instead.\"\"\"\n\n"
         "from __future__ import annotations\n\n"
         "DOCUMENT_RULES = "
-        + pprint.pformat(document_rules, indent=4, sort_dicts=True)
+        + pprint.pformat(document_rules, indent=4, sort_dicts=True, width=161)
         + "\n"
     )

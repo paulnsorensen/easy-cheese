@@ -1,14 +1,20 @@
 #!/usr/bin/env python3
 """Curdle-time SAP-posture validator for mold-produced specs.
 
-Lenient syntax repair (never inventing meaning): heading case, heading
-trailing punctuation, table cell whitespace, fence dialect (``` vs ~~~).
-Strict semantic rejection: every mandatory section present; Test Contracts
-table has the seven declared columns; every Acceptance ID appears exactly
-once in the table and vice versa; tracer rows leave Interface
-version/Matrix rows blank; contract-matrix rows require both; gate
-applicability coherence (not-applicable needs a reason and zero contract
-rows, red-required needs at least one).
+Lenient acceptance (nothing is rewritten): heading case, heading trailing
+punctuation, table cell whitespace, and fence dialect (``` vs ~~~) do not
+affect validation; fenced code blocks are invisible to heading and table
+detection regardless of dialect.
+
+Strict semantic rejection: every mandatory section present with no duplicate
+tracked heading; Test Contracts table has the seven declared columns and a
+'---' delimiter row, and every row matches the column count; every
+Acceptance ID appears exactly once in the table and vice versa; Mode is
+drawn from its closed enum set; tracer rows leave Interface version/Matrix
+rows blank; contract-matrix rows require both; frontmatter gate_applicability
+must be present and parseable, with disposition/work_class/ui_surface drawn
+from their closed enum sets; not-applicable requires a reason and zero
+Test Contracts rows.
 
 Rules are consumed from the generated, dependency-free ``_document_rules``
 projection (built from the ``@document_contract("mold-spec")`` models in
@@ -23,16 +29,38 @@ import re
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _document_rules import DOCUMENT_RULES  # noqa: E402
+try:
+    from _document_rules import DOCUMENT_RULES
+except ImportError:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from _document_rules import DOCUMENT_RULES
 
 RULES = DOCUMENT_RULES["mold-spec"]
 SECTIONS = RULES["sections"]
+ENUMS = RULES["enums"]
 _TEST_CONTRACTS_SECTION = next(s for s in SECTIONS if s["name"] == "Test Contracts")
 TABLE_COLUMNS: tuple[str, ...] = tuple(_TEST_CONTRACTS_SECTION["table"]["columns"])
+_AC_ID_COL = TABLE_COLUMNS.index("Acceptance ID")
+_MODE_COL = TABLE_COLUMNS.index("Mode")
+_INTERFACE_VERSION_COL = TABLE_COLUMNS.index("Interface version")
+_MATRIX_ROWS_COL = TABLE_COLUMNS.index("Matrix rows")
+
+_CROSS_FIELD_RULE_IDS = {rule["rule_id"] for rule in RULES["cross_field_rules"]}
+
+
+def _rule_id(rule_id: str) -> str:
+    assert rule_id in _CROSS_FIELD_RULE_IDS, f"undeclared cross-field rule id: {rule_id}"
+    return rule_id
+
+
+AC_COVERAGE_RULE = _rule_id("ac-coverage-exactly-once")
+TRACER_ROW_RULE = _rule_id("tracer-row-blank-matrix-cells")
+CONTRACT_MATRIX_ROW_RULE = _rule_id("contract-matrix-row-requires-both")
+NOT_APPLICABLE_RULE = _rule_id("not-applicable-closed-class")
 
 HEADING_RE = re.compile(r"^##(?!#)\s+(.+?)\s*$")
 ACCEPTANCE_ID_RE = re.compile(r"^-\s*(AC-\d+)\s*:")
+DELIMITER_CELL_RE = re.compile(r"^:?-+:?$")
 
 
 def _canonical_heading(raw: str) -> str:
@@ -87,19 +115,50 @@ def _parse_yaml_block(lines: list[str]) -> dict[str, object]:
     return data
 
 
-def _find_sections(body: str) -> dict[str, list[str]]:
-    """Map canonical heading name -> section content lines (lenient heading match)."""
+def _fence_mask(lines: list[str]) -> list[bool]:
+    """True for lines that open, close, or sit inside a fenced code block
+    (``` or ~~~, either dialect)."""
+    mask = [False] * len(lines)
+    delimiter: str | None = None
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if delimiter is not None:
+            mask[i] = True
+            if stripped.startswith(delimiter):
+                delimiter = None
+            continue
+        if stripped.startswith("```") or stripped.startswith("~~~"):
+            delimiter = stripped[:3]
+            mask[i] = True
+    return mask
+
+
+def _find_sections(body: str) -> tuple[dict[str, list[str]], list[str]]:
+    """Map canonical heading name -> section content lines (lenient heading
+    match), plus the list of canonical names that appear more than once.
+    Fenced lines are invisible to both heading and content detection."""
     lines = body.splitlines()
+    fenced = _fence_mask(lines)
     headings: list[tuple[int, str]] = []
     for lineno, line in enumerate(lines):
+        if fenced[lineno]:
+            continue
         match = HEADING_RE.match(line)
         if match:
             headings.append((lineno, _canonical_heading(match.group(1))))
     found: dict[str, list[str]] = {}
+    duplicates: list[str] = []
     for idx, (lineno, name) in enumerate(headings):
         end = headings[idx + 1][0] if idx + 1 < len(headings) else len(lines)
-        found[name] = lines[lineno + 1 : end]
-    return found
+        content = [
+            line
+            for offset, line in enumerate(lines[lineno + 1 : end])
+            if not fenced[lineno + 1 + offset]
+        ]
+        if name in found:
+            duplicates.append(name)
+        found[name] = content
+    return found, duplicates
 
 
 def _parse_table(content_lines: list[str]) -> list[list[str]] | None:
@@ -129,7 +188,13 @@ def validate(path: Path) -> list[str]:
     errors: list[str] = []
     text = path.read_text(encoding="utf-8")
     frontmatter, body = _split_frontmatter(text)
-    found_sections = _find_sections(body)
+    found_sections, duplicate_headings = _find_sections(body)
+
+    for name in sorted(set(duplicate_headings)):
+        errors.append(
+            f"ERROR: duplicate-heading '## {name}' heading appears more than once "
+            f"in {path}"
+        )
 
     for section in SECTIONS:
         if section["optional"]:
@@ -151,7 +216,7 @@ def validate(path: Path) -> list[str]:
                 f"Contracts section of {path}"
             )
         else:
-            header, data_rows = parsed[0], parsed[2:] if len(parsed) > 1 else []
+            header = parsed[0]
             if tuple(header) != TABLE_COLUMNS:
                 errors.append(
                     f"ERROR: test-contracts-table-shape Test Contracts table columns "
@@ -159,72 +224,116 @@ def validate(path: Path) -> list[str]:
                     f"in {path}"
                 )
             else:
-                rows = [row for row in data_rows if len(row) == len(TABLE_COLUMNS)]
+                delimiter_row = parsed[1]
+                if not delimiter_row or not all(
+                    DELIMITER_CELL_RE.match(cell) for cell in delimiter_row
+                ):
+                    errors.append(
+                        f"ERROR: test-contracts-table-shape Test Contracts table is "
+                        f"missing its '---' delimiter row in {path}"
+                    )
+                    candidate_rows = parsed[1:]
+                else:
+                    candidate_rows = parsed[2:]
+                for row in candidate_rows:
+                    if len(row) != len(TABLE_COLUMNS):
+                        errors.append(
+                            f"ERROR: test-contracts-table-shape Test Contracts row "
+                            f"{row} has {len(row)} cells, expected {len(TABLE_COLUMNS)} "
+                            f"in {path}"
+                        )
+                    else:
+                        rows.append(row)
 
     acceptance_lines = found_sections.get(_canonical_heading("Acceptance"), [])
     declared_ids = _acceptance_ids(acceptance_lines)
 
     counts: dict[str, int] = {}
     for row in rows:
-        acceptance_id = row[0]
+        acceptance_id = row[_AC_ID_COL]
         counts[acceptance_id] = counts.get(acceptance_id, 0) + 1
 
     for acceptance_id in declared_ids:
         count = counts.get(acceptance_id, 0)
         if count == 0:
             errors.append(
-                f"ERROR: ac-coverage-exactly-once acceptance ID '{acceptance_id}' is "
+                f"ERROR: {AC_COVERAGE_RULE} acceptance ID '{acceptance_id}' is "
                 f"absent from the Test Contracts table in {path}"
             )
         elif count > 1:
             errors.append(
-                f"ERROR: ac-coverage-exactly-once acceptance ID '{acceptance_id}' "
+                f"ERROR: {AC_COVERAGE_RULE} acceptance ID '{acceptance_id}' "
                 f"appears {count} times in the Test Contracts table in {path}"
             )
     for acceptance_id in sorted(set(counts) - set(declared_ids)):
         errors.append(
-            f"ERROR: ac-coverage-exactly-once acceptance ID '{acceptance_id}' appears "
+            f"ERROR: {AC_COVERAGE_RULE} acceptance ID '{acceptance_id}' appears "
             f"in the Test Contracts table but is not declared in Acceptance in {path}"
         )
 
     for row in rows:
-        acceptance_id, mode, interface_version, matrix_rows = row[0], row[4], row[5], row[6]
+        acceptance_id = row[_AC_ID_COL]
+        mode = row[_MODE_COL]
+        interface_version = row[_INTERFACE_VERSION_COL]
+        matrix_rows = row[_MATRIX_ROWS_COL]
+        if mode not in ENUMS["mode"]:
+            errors.append(
+                f"ERROR: mode-closed-class Test Contracts row '{acceptance_id}' has "
+                f"unknown Mode '{mode}' in {path}"
+            )
+            continue
         if mode == "tracer":
             if interface_version or matrix_rows:
                 errors.append(
-                    f"ERROR: tracer-row-blank-matrix-cells Test Contracts row "
+                    f"ERROR: {TRACER_ROW_RULE} Test Contracts row "
                     f"'{acceptance_id}' is tracer mode and must leave Interface "
                     f"version and Matrix rows blank in {path}"
                 )
         elif mode == "contract-matrix":
             if not interface_version or not matrix_rows:
                 errors.append(
-                    f"ERROR: contract-matrix-row-requires-both Test Contracts row "
+                    f"ERROR: {CONTRACT_MATRIX_ROW_RULE} Test Contracts row "
                     f"'{acceptance_id}' is contract-matrix mode and requires both "
                     f"Interface version and Matrix rows in {path}"
                 )
 
     gate_applicability = frontmatter.get("gate_applicability")
-    if isinstance(gate_applicability, dict):
+    if not isinstance(gate_applicability, dict):
+        errors.append(
+            f"ERROR: gate-applicability-required frontmatter gate_applicability is "
+            f"missing or unparseable in {path}"
+        )
+    else:
         disposition = gate_applicability.get("disposition")
+        work_class = gate_applicability.get("work_class")
+        ui_surface = gate_applicability.get("ui_surface")
         reason = gate_applicability.get("reason")
+        if disposition not in ENUMS["gate_applicability_disposition"]:
+            errors.append(
+                f"ERROR: gate-applicability-closed-class gate_applicability.disposition "
+                f"'{disposition}' is not a recognized disposition in {path}"
+            )
+        if work_class not in ENUMS["work_class"]:
+            errors.append(
+                f"ERROR: gate-applicability-closed-class gate_applicability.work_class "
+                f"'{work_class}' is not a recognized work class in {path}"
+            )
+        if ui_surface not in ENUMS["ui_surface"]:
+            errors.append(
+                f"ERROR: gate-applicability-closed-class gate_applicability.ui_surface "
+                f"'{ui_surface}' is not a recognized UI surface in {path}"
+            )
         if disposition == "not-applicable":
             if not reason:
                 errors.append(
-                    f"ERROR: not-applicable-closed-class gate_applicability.reason is "
+                    f"ERROR: {NOT_APPLICABLE_RULE} gate_applicability.reason is "
                     f"required when disposition is not-applicable in {path}"
                 )
             if rows:
                 errors.append(
-                    f"ERROR: not-applicable-closed-class gate_applicability.disposition="
+                    f"ERROR: {NOT_APPLICABLE_RULE} gate_applicability.disposition="
                     f"not-applicable requires zero Test Contracts rows in {path}"
                 )
-        elif disposition == "red-required" and not rows:
-            errors.append(
-                f"ERROR: gate-applicability-red-required-needs-contracts "
-                f"gate_applicability.disposition=red-required requires at least one "
-                f"Test Contracts row in {path}"
-            )
 
     return errors
 

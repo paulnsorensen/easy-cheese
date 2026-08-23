@@ -38,6 +38,7 @@ packages = ["src/easy_cheese_schemas"]
 exclude = [
   "src/easy_cheese_schemas/_phase_registry_compiler.py",
   "src/easy_cheese_schemas/_schema_catalog_compiler.py",
+  "src/easy_cheese_schemas/_document_rules_compiler.py",
 ]
 
 # Hatchling's default sdist walks the filesystem honouring .gitignore, which

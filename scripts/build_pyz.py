@@ -273,9 +273,14 @@ def _compiled_schema_catalog_source() -> str:
 def _document_rules_compiler():
     """Load the source-only document-rules compiler without runtime projections."""
     package_entry = str(SRC_ROOT / "easy_cheese_schemas")
-    if package_entry not in sys.path:
+    added = package_entry not in sys.path
+    if added:
         sys.path.insert(0, package_entry)
-    from _document_rules_compiler import collect, render
+    try:
+        from _document_rules_compiler import collect, render
+    finally:
+        if added:
+            sys.path.remove(package_entry)
 
     return collect, render
 

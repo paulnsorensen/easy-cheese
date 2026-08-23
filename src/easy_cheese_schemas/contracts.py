@@ -2235,6 +2235,15 @@ MOLD_SPEC_SECTIONS: tuple[Section, ...] = (
     Section("References", optional=True),
 )
 
+MOLD_SPEC_ENUMS: dict[str, tuple[str, ...]] = {
+    "mode": tuple(mode.value for mode in TestContractMode),
+    "gate_applicability_disposition": tuple(
+        disposition.value for disposition in GateApplicabilityDisposition
+    ),
+    "work_class": tuple(work_class.value for work_class in WorkClass),
+    "ui_surface": tuple(ui_surface.value for ui_surface in UiSurface),
+}
+
 MOLD_SPEC_CROSS_FIELD_RULES: tuple[CrossFieldRule, ...] = (
     CrossFieldRule(
         rule_id="ac-coverage-exactly-once",
@@ -2270,6 +2279,7 @@ class MoldSpecDocument:
 
     sections: ClassVar[tuple[Section, ...]] = MOLD_SPEC_SECTIONS
     cross_field_rules: ClassVar[tuple[CrossFieldRule, ...]] = MOLD_SPEC_CROSS_FIELD_RULES
+    enums: ClassVar[dict[str, tuple[str, ...]]] = MOLD_SPEC_ENUMS
 
     @test_contract_rows.validator
     def _validate_ac_coverage(self, _attribute: Attribute[Any], value: object) -> None:
