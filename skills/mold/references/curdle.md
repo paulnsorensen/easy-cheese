@@ -130,6 +130,83 @@ names an existing browser/E2E interface and outer seam. Specs without this
 provenance marker remain legacy-compatible for Cut, including the approved v1
 spec.
 
+### Current mold-spec schema (generated)
+
+The `mold-spec` document contract enforced by `validate-spec` (`shape-check.md`), refreshed by `scripts/render_generated_regions.py` from the `@document_contract("mold-spec")` model in `src/easy_cheese_schemas/contracts.py`. Do not hand-edit the generated region.
+
+<!-- BEGIN GENERATED: mold-spec-schema -->
+document mold-spec {
+  section "Problem"
+  section "Goals"
+  section "Non-goals"
+  section "Deferred follow-ups"?
+  section "Approach"
+  section "Decisions"
+  section "Acceptance"
+  section "Test Contracts" {
+    columns: ['Acceptance ID', 'Interface referent', 'Outermost stable seam', 'Expected failure', 'Mode', 'Interface version', 'Matrix rows']
+    per_row: ['tracer rows leave Interface version and Matrix rows blank', 'contract-matrix rows require both Interface version and Matrix rows']
+  }
+  section "Interface sketches"
+  section "Risks"
+  section "Open questions"
+  section "Quality gates"
+  section "Curds"
+  section "Reproduction"?
+  section "References"?
+}
+
+rule ac-coverage-exactly-once: "Every Acceptance ID must appear exactly once in the Test Contracts table."
+rule tracer-row-blank-matrix-cells: "Tracer rows must leave Interface version and Matrix rows blank."
+rule contract-matrix-row-requires-both: "Contract-matrix rows require both Interface version and Matrix rows."
+rule not-applicable-closed-class: "gate_applicability.disposition=not-applicable requires a reason and zero Test Contracts rows."
+
+type GateApplicability {
+  disposition GateApplicabilityDisposition
+  work_class WorkClass
+  ui_surface UiSurface
+  reason str | None
+}
+
+type MoldSpecDocument {
+  frontmatter MoldSpecFrontmatter
+  acceptance_ids tuple[str, ...]
+  test_contract_rows tuple[TestContractRow, ...]
+}
+
+type MoldSpecFrontmatter {
+  slug str
+  status str
+  source str
+  created str
+  confidence SpecConfidence
+  gate_applicability GateApplicability
+  gates_overridden tuple[str, ...]
+  agent_introduced_scope tuple[str, ...]
+  entity_referent_bindings tuple[Mapping[str, object], ...]
+}
+
+type TestContractRow {
+  acceptance_id str
+  interface_referent str
+  outermost_stable_seam str
+  expected_failure str
+  mode TestContractMode
+  interface_version str
+  matrix_rows tuple[str, ...]
+}
+
+enum GateApplicabilityDisposition = "red-required" | "not-applicable"
+
+enum SpecConfidence = "low" | "medium" | "high"
+
+enum TestContractMode = "tracer" | "contract-matrix"
+
+enum UiSurface = "browser" | "non-browser" | "not-applicable"
+
+enum WorkClass = "behavior" | "docs-only" | "refactor-only" | "test-only" | "appearance-only"
+<!-- END GENERATED -->
+
 ## Issue template
 
 ```markdown

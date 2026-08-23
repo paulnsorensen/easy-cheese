@@ -20,6 +20,7 @@ test: vendor
     python3 .github/scripts/test_validate_wiki.py
     python3 .github/scripts/validate_skills.py
     python3 .github/scripts/validate_wiki.py
+    python3 scripts/render_generated_regions.py --check
     python3 -m pytest tests/python -q
     python3 -m pytest tests/shared/python -q
     python3 -m pytest tests/fanout/python -q
