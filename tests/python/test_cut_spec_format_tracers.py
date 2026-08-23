@@ -25,6 +25,7 @@ FIXTURES = Path(__file__).resolve().parent / "fixtures" / "cut_spec_format"
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 import build_pyz  # noqa: E402
+import render_generated_regions as regen  # noqa: E402
 
 WITNESS_AC1 = (
     "dispatcher exits 2 with unknown-subcommand error because validate-spec is "
@@ -131,23 +132,29 @@ def test_ac3_document_rules_projection_exists_and_is_staged(mold_pyz: Path) -> N
 def test_ac4_generated_regions_present_in_both_instruction_surfaces() -> None:
     refresher = REPO_ROOT / "scripts" / "render_generated_regions.py"
     assert refresher.is_file(), f"{WITNESS_AC4} [missing refresh entrypoint]"
-    for surface in (
-        REPO_ROOT / "skills" / "mold" / "references" / "curdle.md",
-        REPO_ROOT / "skills" / "cook" / "references" / "writer-views.md",
+    for surface, tag, render in (
+        (regen.CURDLE_PATH, regen.MOLD_SPEC_TAG, regen.render_mold_spec_region),
+        (regen.WRITER_VIEWS_PATH, regen.WRITER_VIEWS_TAG, regen.render_writer_views_region),
     ):
         assert surface.is_file(), f"{WITNESS_AC4} [missing surface {surface.name}]"
         text = surface.read_text(encoding="utf-8")
         assert "BEGIN GENERATED" in text and "END GENERATED" in text, (
             f"{WITNESS_AC4} [no generated region in {surface.name}]"
         )
-        region = text.split("BEGIN GENERATED", 1)[1].split("END GENERATED", 1)[0]
-        assert region.strip().strip("->").strip(), (
+        assert regen.replace_region(text, tag, render()) == text, (
             f"{WITNESS_AC4} [empty generated region in {surface.name}]"
         )
 
 
 def test_ac5_cook_normalize_names_host_owned_field(cook_pyz: Path) -> None:
-    result = _run(cook_pyz, "normalize", str(FIXTURES / "writer_view_host_owned.json"))
+    invocation = FIXTURES.parent / "cook_payloads" / "clean_invocation.json"
+    result = _run(
+        cook_pyz,
+        "normalize",
+        str(FIXTURES / "writer_view_host_owned.json"),
+        "--invocation",
+        str(invocation),
+    )
     combined = result.stdout + result.stderr
     assert result.returncode == 1, f"{WITNESS_AC5} [rc={result.returncode}]"
     assert "plan_id" in combined, f"{WITNESS_AC5} [offending field not named]"
@@ -167,8 +174,9 @@ def test_ac6_cook_validate_structures_payload_against_catalog_contract(
     assert bad.returncode == 1, (
         f"{WITNESS_AC6} [rc={bad.returncode} on nonconforming payload]"
     )
-    assert (bad.stdout + bad.stderr).strip(), (
-        f"{WITNESS_AC6} [no structuring error printed]"
+    bad_combined = bad.stdout + bad.stderr
+    assert "kind" in bad_combined, (
+        f"{WITNESS_AC6} [offending field not named]"
     )
     ok = _run(
         cook_pyz,
@@ -208,6 +216,6 @@ def test_ac9_schema_intertwine_map_is_generated() -> None:
     intertwine = REPO_ROOT / "skills" / "cheese" / "references" / "schema-intertwine.md"
     assert intertwine.is_file(), f"{WITNESS_AC9} [schema-intertwine.md missing]"
     text = intertwine.read_text(encoding="utf-8")
-    assert "planner-result" in text, (
-        f"{WITNESS_AC9} [registered planner-result transition absent from the map]"
+    assert "| mold | 1.0 | planner-request | cook | curd-plan | CurdPlan |" in text, (
+        f"{WITNESS_AC9} [registered mold-to-cook transition absent from the map]"
     )

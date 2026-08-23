@@ -2,8 +2,8 @@
 
 Projects the mold-spec document contract and the cook writer-view payload
 shapes (both declared on the attrs models in
-``src/easy_cheese_schemas/contracts.py``) into compact, BAML-style type
-blocks, and joins the phase registry with the schema catalog and the
+``src/easy_cheese_schemas/contracts.py``) into compact, BAML-inspired type
+blocks (Python type syntax), and joins the phase registry with the schema catalog and the
 registered contract models into ``skills/cheese/references/schema-intertwine.md``.
 
 Running with no arguments refreshes every generated region in place. Pass
@@ -29,8 +29,8 @@ for _extra in (REPO_ROOT / "vendor", REPO_ROOT / "src"):
 import attrs  # noqa: E402
 
 from easy_cheese_schemas import contracts  # noqa: E402
-from easy_cheese_schemas import _compiled_phase_registry as phase_registry  # noqa: E402
-from easy_cheese_schemas import _schema_catalog as schema_catalog  # noqa: E402
+from easy_cheese_schemas import COMPILED_TRANSITION_REGISTRY  # noqa: E402
+from easy_cheese_schemas import REGISTERED_CONTRACT_SCHEMA_URIS  # noqa: E402
 
 CURDLE_PATH = REPO_ROOT / "skills" / "mold" / "references" / "curdle.md"
 WRITER_VIEWS_PATH = REPO_ROOT / "skills" / "cook" / "references" / "writer-views.md"
@@ -66,7 +66,7 @@ def _identifier_names(type_repr: str) -> list[str]:
 
 
 def _collect_reachable(roots: list[type], module: ModuleType) -> tuple[dict[str, tuple], dict[str, list[Enum]]]:
-    """BFS from ``roots`` over attrs classes and str Enums reachable via field types."""
+    """BFS from ``roots`` over attrs classes and Enums reachable via field types."""
     classes: dict[str, tuple] = {}
     enums: dict[str, list[Enum]] = {}
     to_visit = list(roots)
@@ -82,17 +82,23 @@ def _collect_reachable(roots: list[type], module: ModuleType) -> tuple[dict[str,
             for field in fields:
                 for name in _identifier_names(field.type or ""):
                     candidate = getattr(module, name, None)
-                    if not isinstance(candidate, type) or candidate.__name__ in seen:
+                    if not isinstance(candidate, type):
                         continue
                     if attrs.has(candidate) or issubclass(candidate, Enum):
-                        to_visit.append(candidate)
+                        if candidate.__name__ not in seen:
+                            to_visit.append(candidate)
+                    elif candidate.__module__ == module.__name__:
+                        raise ValueError(
+                            f"{cls.__name__}.{field.name} references "
+                            f"non-attrs, non-Enum class {candidate.__name__!r}"
+                        )
         elif issubclass(cls, Enum):
             enums[cls.__name__] = list(cls)
     return classes, enums
 
 
 def render_type_blocks(roots: list[type], module: ModuleType) -> str:
-    """Render BAML-style ``type``/``enum`` blocks for every class reachable from ``roots``."""
+    """Render compact ``type``/``enum`` blocks for every class reachable from ``roots``."""
     classes, enums = _collect_reachable(roots, module)
     lines: list[str] = []
     for name in sorted(classes):
@@ -129,7 +135,7 @@ def render_document_contract(slug: str, cls: type) -> str:
 
 
 def render_mold_spec_region() -> str:
-    document_contracts = dict(contracts._registered_document_contracts())
+    document_contracts = dict(contracts.registered_document_contracts())
     mold_spec = document_contracts["mold-spec"]
     return (
         render_document_contract("mold-spec", mold_spec)
@@ -139,7 +145,7 @@ def render_mold_spec_region() -> str:
 
 
 def render_writer_views_region() -> str:
-    roots = [contracts.AgentWriterView, *contracts._WRITER_PAYLOAD_TYPES.values()]
+    roots = [contracts.AgentWriterView, *contracts.writer_payload_types().values()]
     return render_type_blocks(roots, contracts)
 
 
@@ -148,10 +154,10 @@ def _slug_from_uri(uri: str) -> str:
 
 
 def render_schema_intertwine() -> str:
-    contract_slugs = {slug: cls.__name__ for slug, cls in contracts._registered_contracts()}
-    phases = phase_registry.PHASE_REGISTRY_DATA
+    contract_slugs = {slug: cls.__name__ for slug, cls in contracts.registered_contracts()}
+    phases = COMPILED_TRANSITION_REGISTRY.to_data()
     catalog_slugs = sorted(
-        _slug_from_uri(uri) for uri in schema_catalog.REGISTERED_CONTRACT_SCHEMA_URIS
+        _slug_from_uri(uri) for uri in REGISTERED_CONTRACT_SCHEMA_URIS
     )
 
     lines = [
