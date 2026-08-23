@@ -1125,10 +1125,15 @@ def test_document_rules_regeneration_is_byte_deterministic() -> None:
 
 
 def test_cook_joins_common_consumers_and_ships_common_pyz(bundles: Path) -> None:
-    """AC-7: after a build, COMMON_CONSUMERS contains cook and
-    skills/cook/scripts/common.pyz exists on the committed output tree."""
+    """AC-7: after a build, COMMON_CONSUMERS contains cook and the committed
+    skills/cook/scripts/common.pyz matches the freshly built bundles/common.pyz
+    member for member."""
     assert "cook" in build_pyz.COMMON_CONSUMERS
-    assert (REPO_ROOT / "skills" / "cook" / "scripts" / "common.pyz").is_file()
+    committed = REPO_ROOT / "skills" / "cook" / "scripts" / "common.pyz"
+    assert committed.is_file()
+    have = _bundle_content(committed)
+    want = _bundle_content(bundles / "common.pyz")
+    assert have == want
 
 
 SPEC_FORMAT_FIXTURES = REPO_ROOT / "tests" / "python" / "fixtures" / "spec_format"
@@ -1145,7 +1150,11 @@ def test_mold_pyz_dispatches_validate_spec_end_to_end() -> None:
 def test_cook_pyz_dispatches_normalize_end_to_end() -> None:
     cook_pyz = build_pyz.cached_bundle("cook")
     rejected = _run(
-        cook_pyz, "normalize", str(COOK_PAYLOAD_FIXTURES / "host_owned_writer_view.json")
+        cook_pyz,
+        "normalize",
+        str(COOK_PAYLOAD_FIXTURES / "host_owned_writer_view.json"),
+        "--invocation",
+        str(COOK_PAYLOAD_FIXTURES / "clean_invocation.json"),
     )
     assert rejected.returncode == 1, rejected.stdout + rejected.stderr
     assert "host-owned field" in rejected.stderr
@@ -1153,10 +1162,14 @@ def test_cook_pyz_dispatches_normalize_end_to_end() -> None:
     accepted = _run(
         cook_pyz,
         "normalize",
-        str(COOK_PAYLOAD_FIXTURES / "clean_writer_view_with_invocation.json"),
+        str(COOK_PAYLOAD_FIXTURES / "clean_writer_view.json"),
+        "--invocation",
+        str(COOK_PAYLOAD_FIXTURES / "clean_invocation.json"),
     )
     assert accepted.returncode == 0, accepted.stdout + accepted.stderr
-    assert json.loads(accepted.stdout)
+    canonical = json.loads(accepted.stdout)
+    assert canonical["value"]["plan_id"] == "curdplan-cook-cli-normalize-1"
+    assert canonical["digest"].startswith("sha256:")
 
 
 def test_cook_pyz_dispatches_validate_end_to_end() -> None:
@@ -1169,7 +1182,7 @@ def test_cook_pyz_dispatches_validate_end_to_end() -> None:
         "agent-writer-view",
     )
     assert rejected.returncode == 1, rejected.stdout + rejected.stderr
-    assert rejected.stderr.startswith("ERROR:")
+    assert "$.kind" in rejected.stderr
 
     accepted = _run(
         cook_pyz,
