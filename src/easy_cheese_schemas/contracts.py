@@ -65,6 +65,11 @@ def _registered_contracts() -> tuple[tuple[str, type], ...]:
     return tuple(pairs)
 
 
+def registered_contracts() -> tuple[tuple[str, type], ...]:
+    """Public accessor for marked contract classes in deterministic slug order."""
+    return _registered_contracts()
+
+
 _DOCUMENT_CONTRACT_MARKER = "__document_contract_slug__"
 
 
@@ -94,6 +99,11 @@ def _registered_document_contracts() -> tuple[tuple[str, type], ...]:
         if previous[0] == current[0]:
             raise ValueError(f"duplicate document contract marker {current[0]!r}")
     return tuple(pairs)
+
+
+def registered_document_contracts() -> tuple[tuple[str, type], ...]:
+    """Public accessor for marked document-contract classes in deterministic slug order."""
+    return _registered_document_contracts()
 
 
 def schema_constraints(
@@ -2010,6 +2020,11 @@ _WRITER_PAYLOAD_TYPES: dict[WriterViewKind, type] = {
     WriterViewKind.DIAGNOSIS_RESULT: DiagnosisResultWriterView,
     WriterViewKind.CURD_RESULT: CurdResultWriterView,
 }
+
+
+def writer_payload_types() -> dict[WriterViewKind, type]:
+    """Public accessor for the writer-view-kind to payload-type mapping."""
+    return dict(_WRITER_PAYLOAD_TYPES)
 
 
 @schema_constraints(

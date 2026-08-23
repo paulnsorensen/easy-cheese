@@ -139,6 +139,8 @@ The digest's `mode` is orientation, not a skill. Render the fixed blast-radius m
 - Do not silently settle uncertain claims.
 - Apply the shared voice kernel (lives at `../age/references/voice.md`): correct false premises, flag confidence as `certain | speculating | don't know` on each critical claim, steelman before dismissing, and put the design-shaping decisions to the user — depth informs each question, it never replaces asking it.
 
+The schema entanglement behind curdle's spec-template and cook's writer views — phase registry × schema catalog × models per transition — is documented in the generated [`../cheese/references/schema-intertwine.md`](../cheese/references/schema-intertwine.md).
+
 ## Agent resolution
 
 Resolve delegates through [`../cheese/references/agent-resolution.md`](../cheese/references/agent-resolution.md).

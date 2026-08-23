@@ -148,6 +148,8 @@ Run existing project commands only — the most relevant tests for the touched a
 
 Gate failures are baseline-aware. Policy, the classification taxonomy, and the `baseline:` block shape are the shared reference [`references/quality-gates.md`](references/quality-gates.md); every downstream phase links there instead of restating it.
 
+Writer-view payload schemas are generated inline in [`references/writer-views.md`](references/writer-views.md); `normalize`/`validate` CLIs structure agent-authored JSON against them before it reaches host-owned identifiers.
+
 ## Output
 
 House style: [`../cheese/references/formatting.md`](../cheese/references/formatting.md). Report files, reasons, checks, risks, and next skill using the authoritative [`references/package-report.md`](references/package-report.md).

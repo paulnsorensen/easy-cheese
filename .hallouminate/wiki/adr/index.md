@@ -53,6 +53,7 @@
 - [skill-size-ratchet-002](./skill-size-ratchet-002.md) — ADR: No tokenizer dependency in the skill-size gate
 - [skill-size-ratchet-003](./skill-size-ratchet-003.md) — ADR: Ratchet skill size and reference structure against a recorded baseline
 - [spec-format-enforcement-001](./spec-format-enforcement-001.md) — ADR: Mold spec format enforced by decorator-declared document contracts  [status: accepted]
+- [spec-format-enforcement-002](./spec-format-enforcement-002.md) — ADR: Schema awareness via in-place generated regions; phase registry unchanged  [status: accepted]
 - [starlight-docs-cutover-001](./starlight-docs-cutover-001.md) — ADR: Starlight docs cutover
 - [wheypoint-continuity-kernel-001](./wheypoint-continuity-kernel-001.md) — Wheypoint continuity authority
 - [wheypoint-continuity-kernel-002](./wheypoint-continuity-kernel-002.md) — Dedicated Wheypoint runtime boundary
