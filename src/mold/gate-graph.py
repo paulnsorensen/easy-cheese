@@ -71,7 +71,7 @@ def gate_id(checklist_label: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", head.strip().lower()).strip("-")
 
 
-# The 14 coherence-checklist gates, verbatim from handshake.md's checklist (the
+# The 15 coherence-checklist gates, verbatim from handshake.md's checklist (the
 # text before each colon is the gate's name; gate_id() slugs it). Order matches
 # the prose so a diff between the two is legible.
 COHERENCE_GATES: tuple[str, ...] = (
@@ -89,6 +89,7 @@ COHERENCE_GATES: tuple[str, ...] = (
     "Reproduction loop captured if Diagnose ran (or [BLOCKED] if no loop is possible)",
     "Durable writes: ADR + domain-model targets resolved and the write, read-back, and completion-record protocol committed for the atomic step (or loud fallback noted)",
     "Fork taste test passed: fresh-context verdict covers every settled consequential decision before decomposition",
+    "Spec format valid: validate-spec exits 0 on the draft",
 )
 
 MODES: tuple[Node, ...] = (

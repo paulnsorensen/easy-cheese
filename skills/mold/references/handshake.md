@@ -28,13 +28,14 @@ Coherence self-check before curdle:
 - [ ] Reproduction loop captured if Diagnose ran (or [BLOCKED] if no loop is possible)
 - [ ] Durable writes: ADR + domain-model targets resolved and the write, read-back, and completion-record protocol committed for the atomic step (or loud fallback noted)
 - [ ] Fork taste test passed: fresh-context verdict covers every settled consequential decision before decomposition
+- [ ] Spec format valid: validate-spec exits 0 on the draft
 ```
 
 If any box is unchecked, name it and propose the smallest move to fill it. The user can override with `curdle anyway`.
 
 The last box — **Durable writes** — is a *commitment* checked before the handshake, not a claim the write already happened: it asserts the ADR + domain-model targets are resolved and the write → read-back → completion-record protocol is locked in for the atomic-write step (`curdle.md` § Atomic write). The read-back verify and the visible completion record fire *during* that step, and the hallouminate-absent fallback is noted loud, never silent.
 
-These fourteen checklist items are the gates in mold's machine-readable gate model
+These fifteen checklist items are the gates in mold's machine-readable gate model
 (`gate-graph.md`). A passing `fork_taste_test_passed` verdict is the mandatory
 decomposition gate; stale, partial, contradictory, or blocker-bearing verdicts
 keep decomposition closed. A test asserts the checklist items here equal the
@@ -54,6 +55,7 @@ These are not soft suggestions — Curdle hard-blocks until they are addressed:
 - **Entity-referent binding:** every identity noun binds to a code referent or is marked NEW ENTITY; an ALIAS must be resolved, not just noted. Full procedure in § Entity-referent binding below.
 - **Non-goals audit:** every `Non-goals` bullet traces to a user-stated out-of-scope item or is marked `[AGENT-INTRODUCED]`. Full procedure in § Non-goals audit below.
 - **Fork taste test:** before decomposition, a fresh-context verdict must match the draft SHA256, cover every settled consequential decision exactly once, and carry no contradictions, orphaned decisions, unsupported assumptions, or acceptance gaps. The initial verdict plus two corrective rounds is the hard cap; the third failure halts.
+- **Spec format gate:** `validate-spec` must exit 0 on the draft before curdle extracts it — the handshake cannot extract a spec that fails validate-spec.
 - **UI surface classification:** every Mold-produced spec carries a provenance
   marker and an explicit `ui_surface` value under `gate_applicability`.
   `browser` requires an existing browser/E2E interface and outer seam for every

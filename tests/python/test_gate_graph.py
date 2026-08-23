@@ -584,6 +584,70 @@ class TestDurableWritesGatePresence:
         )
 
 
+class TestSpecFormatValidGatePresence:
+    """The `spec-format-valid` gate (curdle-gate-wiring) makes validate-spec a
+    lockstep-enforced coherence gate: the handshake cannot extract a spec that
+    fails validate-spec.
+
+    Like the non-goals and durable-writes gates, set-equality + count-equality
+    between prose and model are blind to a coordinated removal (drop the
+    checklist item AND the node together, N -> N-1 on both sides, still green).
+    These positive by-name assertions are the only catcher if this specific gate
+    vanishes.
+    """
+
+    SPEC_FORMAT_ID = "spec-format-valid"  # gate_id() slug of "Spec format valid:"
+    SPEC_FORMAT_DOT_ID = "spec_format_valid"  # _dot_id() form rendered in the .dot
+
+    def test_gate_node_exists_in_model_by_id(self, gate_graph: ModuleType) -> None:
+        gates = {n.id: n for n in gate_graph.GATE_MODEL.by_kind("gate")}
+        assert self.SPEC_FORMAT_ID in gates, (
+            "the spec-format-valid gate is missing from GATE_MODEL; set-equality "
+            "with prose stays green if the checklist item was dropped in lockstep, "
+            "so this by-name check is the only catcher"
+        )
+        node = gates[self.SPEC_FORMAT_ID]
+        assert node.kind == "gate"
+        assert "validate-spec" in node.label
+
+    def test_gate_renders_into_dot_with_edge_ordered_before_curdle(
+        self, gate_graph: ModuleType
+    ) -> None:
+        dot = gate_graph.to_dot()
+        node_line = next(
+            (
+                line
+                for line in dot.splitlines()
+                if line.strip().startswith(f"{self.SPEC_FORMAT_DOT_ID} [")
+            ),
+            None,
+        )
+        assert node_line is not None, f"{self.SPEC_FORMAT_DOT_ID} node absent from to_dot()"
+        assert 'kind="gate"' in node_line
+        lines = dot.splitlines()
+        gate_edge_idx = next(
+            i for i, line in enumerate(lines) if line.strip() == f"{self.SPEC_FORMAT_DOT_ID} -> handshake;"
+        )
+        curdle_edge_idx = next(
+            i for i, line in enumerate(lines) if 'handshake -> curdle [label="both keys"];' in line
+        )
+        assert gate_edge_idx < curdle_edge_idx, (
+            "the spec-format-valid gate's edge must be ordered before the handshake -> curdle edge"
+        )
+
+    def test_checklist_carries_the_spec_format_item(self, gate_graph: ModuleType) -> None:
+        body = HANDSHAKE.read_text(encoding="utf-8")
+        block = re.search(
+            r"```\nCoherence self-check before curdle:\n(.*?)```", body, re.DOTALL
+        )
+        assert block, "coherence self-check block not found in handshake.md"
+        labels = re.findall(r"^- \[ \] (.+?)\s*$", block.group(1), re.MULTILINE)
+        ids = {gate_graph.gate_id(label) for label in labels}
+        assert self.SPEC_FORMAT_ID in ids, (
+            "handshake.md coherence checklist dropped the Spec format valid gate item"
+        )
+
+
 class TestCommittedPyzFreshness:
     """The `gate_graph` fixture imports a FRESH rebuild of src/mold/ (via
     build_pyz.cached_bundle), and TestDotSnapshot compares mold.dot to that fresh
