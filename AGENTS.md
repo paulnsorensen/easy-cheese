@@ -24,6 +24,35 @@ Do NOT commit or push when `just check` fails. If CI fails, pull the branch loca
 
 This is a skills-only collection following the [Agent Skills spec](https://agentskills.io/specification). Every change either adds, edits, or supports a skill under `skills/<name>/`.
 
+## Skill Python bundle doctrine
+
+This is the target contract. Existing violations are migration work; do not expand
+them while enforcement is implemented separately.
+
+- A skill that executes Python ships exactly
+  `skills/<skill>/scripts/<skill>.pyz`; a skill with no Python ships no
+  `.pyz`. Skill prose invokes only its own archive—never loose source,
+  `common.pyz`, repository automation, or another skill's bundle.
+- Runtime Python lives under `src/`. Tests remain under `tests/`; repository
+  build, release, generation, and maintenance programs may live under
+  `scripts/`.
+- Published schemas live in `src/easy_cheese_schemas/`. All non-published
+  runtime code lives under `src/easy_cheese/`, split between
+  `skills/<python_skill_name>/` and `shared/`. Skill slugs remain kebab-case;
+  Python package segments use underscores.
+- Bundles may contain Python modules, bytecode, and immutable package resources.
+  Dependencies must be pure Python and zip-importable. Native extensions,
+  platform-specific libraries, required external executables, runtime
+  installation/downloads, and mandatory extraction are prohibited.
+- Each bundle contains only its entrypoints and transitive runtime closure:
+  required skill, shared, schema, and approved pure-Python dependency modules.
+  Whole-package or whole-tree inclusion requires explicit justification.
+- Checked-in `.pyz` files are generated deployment artifacts, never source of
+  truth. Python source never lives under `skills/`.
+
+The durable rationale and migration boundary live in
+[the skill Python bundle doctrine](.hallouminate/wiki/architecture/skill-python-bundle-doctrine.md).
+
 ### Workflow skills (the cheese pipeline)
 
 | Skill | Purpose |
