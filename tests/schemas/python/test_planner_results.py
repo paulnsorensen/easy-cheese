@@ -855,7 +855,7 @@ def test_replan_rejects_source_schema_version_mismatch() -> None:
 
     with pytest.raises(
         PlannerMaterializationError,
-        match="unsupported contract major 2",
+        match="unsupported contract version 2.0",
     ):
         materialize_planner_result(
             request(PlannerRequestKind.REPLAN, source_plan=source),

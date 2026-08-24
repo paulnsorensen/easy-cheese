@@ -66,4 +66,5 @@
 - [workflow-contract-milknado-seam-004](./workflow-contract-milknado-seam-004.md) — ADR: Executors consume CurdPlan and return criterion-led CurdResult
 - [workflow-contract-milknado-seam-005](./workflow-contract-milknado-seam-005.md) — ADR: Payload schemas and transition routing remain separate
 - [workflow-contract-milknado-seam-006](./workflow-contract-milknado-seam-006.md) — ADR: Easy Cheese proves the core seam before Milknado adoption
+- [writer-view-boundary-simplification-001](./writer-view-boundary-simplification-001.md) — ADR: Strict contract-version equality and a single cook CLI module  [status: accepted]
 <!-- HALLOUMINATE:INDEX-END -->

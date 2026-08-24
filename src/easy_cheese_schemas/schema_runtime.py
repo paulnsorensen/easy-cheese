@@ -3,9 +3,8 @@ from __future__ import annotations
 import hashlib
 import json
 import types
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from enum import Enum
-from types import MappingProxyType
 from typing import Any, Union, get_args, get_origin, get_type_hints
 
 import attrs
@@ -82,12 +81,6 @@ if frozenset(entry.schema_uri for entry in _REGISTERED_CONTRACTS) != (
     REGISTERED_CONTRACT_SCHEMA_URIS
 ):
     raise RuntimeError("generated schema catalog is stale")
-MigrationStep = Callable[[Mapping[str, object]], Mapping[str, object]]
-
-# The catalog currently has no historical minor shape with a documented,
-# lossless transform into 1.0.  Keep this registry explicit and immutable so a
-# future migration cannot silently become a version relabel.
-_MIGRATION_REGISTRY: Mapping[tuple[str, str, str], MigrationStep] = MappingProxyType({})
 _CANONICAL_SCHEMA_BY_WRITER_KIND = {
     WriterViewKind.CURD_PLAN: f"{SCHEMA_ROOT}/curd-plan",
     WriterViewKind.PLANNER_RESULT: f"{SCHEMA_ROOT}/planner-result",
@@ -631,57 +624,6 @@ def _artifact(
     return CanonicalArtifact(value, canonical_bytes(value), source_version)
 
 
-def _decimal_greater(left: str, right: str) -> bool:
-    return (len(left), left) > (len(right), right)
-
-
-
-
-def _migrate_payload(
-    data: Mapping[str, object],
-    schema_uri: str,
-    source: ContractVersion,
-    supported: ContractVersion,
-) -> Mapping[str, object]:
-    if source.minor == supported.minor:
-        return data
-    current = source.minor
-    migrated: Mapping[str, object] = data
-    while current != supported.minor:
-        candidates = [
-            (to_minor, step)
-            for (uri, from_minor, to_minor), step in _MIGRATION_REGISTRY.items()
-            if uri == schema_uri
-            and from_minor == current
-            and _decimal_greater(to_minor, current)
-            and not _decimal_greater(to_minor, supported.minor)
-        ]
-        if not candidates:
-            raise ContractValidationError(
-                f"missing migration edge for {schema_uri}: "
-                f"{current}->{supported.minor}"
-            )
-        to_minor, step = max(candidates, key=lambda item: (len(item[0]), item[0]))
-        candidate = step(MappingProxyType(dict(migrated)))
-        if not isinstance(candidate, Mapping):
-            raise ContractValidationError(
-                f"migration {current}->{to_minor} returned a non-object"
-            )
-        raw_version = candidate.get("contract_version")
-        next_version = _structure(raw_version, ContractVersion, "$.contract_version")
-        assert isinstance(next_version, ContractVersion)
-        if (
-            next_version.schema_uri != schema_uri
-            or next_version.major != source.major
-            or next_version.minor != to_minor
-        ):
-            raise ContractValidationError(
-                f"migration {current}->{to_minor} did not stamp its target version"
-            )
-        migrated = candidate
-        current = to_minor
-    return migrated
-
 def curd_plan_digest(plan: CurdPlan) -> str:
     if not isinstance(plan, CurdPlan):
         raise TypeError(f"curd_plan_digest expects CurdPlan, not {type(plan).__name__}")
@@ -706,20 +648,10 @@ def _validate_curd_plan_against(
         raise ContractValidationError(
             "contract_version.schema_uri does not match the registered CurdPlan"
         )
-    if source.major != supported.major:
+    if source != supported:
         raise ContractValidationError(
-            f"unsupported contract major {source.major}; "
-            f"supported major is {supported.major}"
-        )
-    if _decimal_greater(source.minor, supported.minor):
-        raise ContractValidationError(
-            f"future contract minor {source.minor}; "
-            f"supported minor is {supported.minor}"
-        )
-    if source.minor != supported.minor:
-        raise ContractValidationError(
-            f"missing migration edge for {registered.schema_uri}: "
-            f"{source.minor}->{supported.minor}"
+            f"unsupported contract version {source.major}.{source.minor} "
+            f"for {registered.schema_uri}; expected {supported.major}.{supported.minor}"
         )
     expected = curd_plan_digest(plan)
     if plan.digest != expected:
@@ -775,19 +707,13 @@ def validate_contract(
             raise ContractValidationError(
                 "contract_version.schema_uri does not match the registered contract"
             )
-        if source_version.major != supported_version.major:
+        if source_version.major != supported_version.major or (
+            source_version.minor != supported_version.minor
+        ):
             raise ContractValidationError(
-                f"unsupported contract major {source_version.major}; "
-                f"supported major is {supported_version.major}"
+                f"unsupported contract version {source_version.major}.{source_version.minor} "
+                f"for {schema_uri}; expected {supported_version.major}.{supported_version.minor}"
             )
-        if _decimal_greater(source_version.minor, supported_version.minor):
-            raise ContractValidationError(
-                f"future contract minor {source_version.minor}; "
-                f"supported minor is {supported_version.minor}"
-            )
-        data = _migrate_payload(
-            data, schema_uri, source_version, supported_version
-        )
     elif supported_version is not None:
         raise ContractValidationError(
             f"{contract.__name__} does not carry a contract version"

@@ -321,8 +321,8 @@ def test_validate_contract_rejects_unknown_fields_before_domain_execution() -> N
 @pytest.mark.parametrize(
     ("major", "minor", "message"),
     [
-        ("2", "0", "unsupported contract major 2"),
-        ("1", "2", "future contract minor 2"),
+        ("2", "0", "unsupported contract version 2.0 for .*; expected 1.0"),
+        ("1", "2", "unsupported contract version 1.2 for .*; expected 1.0"),
     ],
 )
 def test_validate_contract_rejects_unsupported_versions(
@@ -357,7 +357,9 @@ def test_validate_contract_rejects_supported_version_for_other_schema() -> None:
 def test_validate_contract_rejects_huge_future_minor_as_typed_error() -> None:
     huge_minor = "9" * 5_000
 
-    with pytest.raises(ContractValidationError, match=r"future contract minor 9"):
+    with pytest.raises(
+        ContractValidationError, match=r"unsupported contract version 1\.9+ for .*; expected 1\.0"
+    ):
         validate_contract(
             raw_plan(minor=huge_minor),
             PLAN_SCHEMA,

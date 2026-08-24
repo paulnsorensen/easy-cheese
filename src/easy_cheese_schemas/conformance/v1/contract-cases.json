@@ -165,7 +165,7 @@
       "expected": {
         "status": "reject",
         "error_type": "ContractValidationError",
-        "message": "unsupported contract major 2; supported major is 1"
+        "message": "unsupported contract version 2.0 for https://schemas.easy-cheese.dev/curd-plan; expected 1.0"
       }
     },
     {
@@ -217,7 +217,7 @@
       "expected": {
         "status": "reject",
         "error_type": "ContractValidationError",
-        "message": "future contract minor 1; supported minor is 0"
+        "message": "unsupported contract version 1.1 for https://schemas.easy-cheese.dev/curd-plan; expected 1.0"
       }
     },
     {
