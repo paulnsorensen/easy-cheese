@@ -53,3 +53,5 @@
 - 2026-08-23 · 95363c78068f772a · merged · architecture/workflow-contract-map.md · ingested durable orchestration ownership, ingress, review-correlation, and curd-identity details; newer accepted plan and schema decisions supersede conflicting July claims.
 - 2026-08-23 · 95363c78068f772a · merged · specs/milknado-executor-recovery.md · preserved append-only checkpoint history and self-contained terminal outcomes under the later locked recovery protocol.
 - 2026-08-23 · 95363c78068f772a · skipped-near-duplicate · — · omitted duplicate, superseded, unresolved, and transient handoff/environment material from the tracked July checkpoint.
+
+- 2026-08-24 · mold:enforceable-skill-boundaries · approved · specs/enforceable-skill-boundaries.md, adr/skill-boundary-protocol-001.md, adr/skill-boundary-normalization-002.md, adr/skill-bundle-authority-003.md, adr/legacy-adapter-lifecycle-004.md, domain-model.md, architecture/workflow-contract-map.md · recorded the nine-curd Mold → Cook boundary plan, pointer-last publication, BAML-informed generous writer ingress, strict canonical acceptance, layout-derived one-skill bundles, and exact sunset-bound legacy adapters.
