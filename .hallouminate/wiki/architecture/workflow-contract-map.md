@@ -40,6 +40,10 @@ flowchart LR
 | PhaseContract | Payload schema references and allowed destinations | Payload field definitions |
 | TransitionRegistry | Build-compiled global transition validation | Runtime capability availability |
 
+<certain> Root `$cheese` owns orchestration policy and intent; the selected executor owns runtime state. Human configuration outranks an agent request, which outranks executor defaults. Admission records the resolved execution choice and gates on projected cost across retries, reviews, remediation, checkpoints, and runtime capacity.[^checkpoint]
+
+<certain> Raw goals pass through semantic planning, physical planning, batching, and graph construction. An approved `CurdPlan` can enter Milknado directly, bypassing semantic decomposition and cross-curd batching.[^checkpoint]
+
 ## Planner semantics
 
 <certain> PlannerRequest discriminates `decompose`, `remediate`, and `replan`. PlannerResult dispositions are complete, partial, no_work, and blocked; invalid output and executor failure remain separate.
@@ -47,6 +51,8 @@ flowchart LR
 <certain> Partial means a fully executable plan plus unresolved omitted work. Uncertainty affecting emitted work, shared constraints, or dependencies makes the planner blocked.
 
 <certain> Semantic IDs are opaque and separate from digests. Replans retain plan identity, increment revision, and record retain/new/derive lineage. Remediation creates a child plan.
+
+<certain> A semantic curd change creates a derived curd identity. Physical placement, wave, batch, node, executor, or model changes do not change curd identity; Easy Cheese and Milknado identities remain separate namespaces.[^checkpoint]
 
 ## Agent and artifact boundary
 
@@ -59,6 +65,8 @@ flowchart LR
 ## Evidence and execution
 
 <certain> ReviewResult has typed findings and a coverage ledger; an empty finding list is clean only with complete coverage.
+
+<certain> Taste Test and Age are typed review variants. Review batches correlate items by stable identity rather than array position and preserve successful results when another item fails.[^checkpoint]
 
 <certain> DiagnosisResult has symptom, reproduction, hypotheses, optional confirmed cause, regression seam, and unresolved evidence. A diagnosis without a confirmed cause does not dispatch Cure work.
 
@@ -107,5 +115,6 @@ flowchart LR
 [^milknado]: `/home/paul/Dev/milknado/pyproject.toml:5-24`; `/home/paul/Dev/milknado/src/milknado/domains/batching/change.py:32-40,74-77`.
 [^old-adr]: [Cross-skill handoff ADR](../adr/cross-skill-work-contract-002.md); [bundled YAML runtime ADR](../adr/cross-skill-work-contract-003.md).
 [^roadmap-format]: `/home/paul/.agents/skills/wiki-roadmap/SKILL.md:27-39`; `.github/scripts/validate_wiki.py:48-57`.
+[^checkpoint]: `.cheese/notes/root-cheese-milknado-orchestration.md` at `d7bd4267871e6f5e360225a5ebed8e4eb9cd3fce`:37-65,94-103; ingested before tracked source removal on 2026-08-23.
 
-_Source: approved workflow-contract-milknado-seam Mold, 2026-08-07._
+_Source: approved workflow-contract-milknado-seam Mold, 2026-08-07; `.cheese/notes/root-cheese-milknado-orchestration.md` · Updated: 2026-08-23 · Supersedes: July checkpoint plan-ID and schema-substrate claims where they conflict with accepted August contracts._

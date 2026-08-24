@@ -62,6 +62,7 @@ These are the locked Step 3 decisions for the deferred executor-recovery slice �
 - <certain> Uncertain, failed, lost, or recovered execution never resumes the old harness session.
 - <certain> Checkpoints occur at explicit durable domain boundaries, not after every Ralph iteration.
 - <certain> Every checkpoint is a complete schema-valid snapshot rather than a delta.
+- <certain> Checkpoint history is append-only; every terminal outcome is self-contained, while retained checkpoint references preserve digest and provenance rather than reconstruction deltas.[^checkpoint]
 - <certain> The admitting runtime atomically assigns checkpoint identity and order, validates the snapshot, and computes its canonical digest.
 - <certain> Repeating identical checkpoint content returns the latest matching checkpoint.
 - <certain> Changed checkpoint content creates the next checkpoint.
@@ -88,3 +89,7 @@ Unresolved fork carried out of the checkpoint's decision dossier; the F002 spec 
 - <speculative> Option B offers the strongest reproducibility but adds update ceremony.
 - <certain> Option C conflicts with deterministic recovery and repeatable fixture validation.
 - <don't know> No prior user decision selects Option A versus B.
+
+[^checkpoint]: `.cheese/notes/root-cheese-milknado-orchestration.md` at `d7bd4267871e6f5e360225a5ebed8e4eb9cd3fce`:67-80; ingested before tracked source removal on 2026-08-23.
+
+_Source: protocol reconstruction checkpoint on PR #370; `.cheese/notes/root-cheese-milknado-orchestration.md` · Updated: 2026-08-23 · Supersedes: July tentative fencing and recovery forks with the locked lost-executor rules above._

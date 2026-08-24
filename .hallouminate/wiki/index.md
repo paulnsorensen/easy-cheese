@@ -15,6 +15,7 @@ git-tracking axis (`skills/cheese/references/formatting.md:103`).
 <!-- HALLOUMINATE:INDEX-START -->
 - [adr/](./adr/index.md) — adr
 - [architecture/](./architecture/index.md) — architecture
+- [gotchas/](./gotchas/index.md) — gotchas
 - [specs/](./specs/index.md) — specs
 - [architecture](./architecture.md) — Architecture of easy-cheese
 - [docs-mermaid-rendering](./docs-mermaid-rendering.md) — Docs Mermaid rendering
