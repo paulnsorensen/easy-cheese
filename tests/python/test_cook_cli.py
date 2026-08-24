@@ -162,6 +162,30 @@ def test_validate_rejects_unknown_schema_slug(capsys: pytest.CaptureFixture[str]
     assert "unknown schema slug" in captured.err
 
 
+def test_main_dispatches_via_argv1_when_argv0_is_not_a_verb(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = cook_cli.main(
+        [
+            "cook_cli.py",
+            "validate",
+            str(FIXTURES / "conforming_writer_view.json"),
+            "--schema",
+            "agent-writer-view",
+        ]
+    )
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert captured.err == ""
+
+
+def test_main_rejects_unknown_command(capsys: pytest.CaptureFixture[str]) -> None:
+    exit_code = cook_cli.main(["cook_cli.py", "bogus"])
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.err == "ERROR: expected a 'normalize' or 'validate' command\n"
+
+
 def test_validate_accepts_versioned_curd_plan_payload(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

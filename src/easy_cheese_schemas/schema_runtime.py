@@ -707,9 +707,7 @@ def validate_contract(
             raise ContractValidationError(
                 "contract_version.schema_uri does not match the registered contract"
             )
-        if source_version.major != supported_version.major or (
-            source_version.minor != supported_version.minor
-        ):
+        if source_version != supported_version:
             raise ContractValidationError(
                 f"unsupported contract version {source_version.major}.{source_version.minor} "
                 f"for {schema_uri}; expected {supported_version.major}.{supported_version.minor}"
