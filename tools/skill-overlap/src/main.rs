@@ -1591,44 +1591,40 @@ fn split_section(
         let target = 384usize
             .saturating_sub(payload_budget + synthetic_tokens)
             .max(1);
-        let mut target_candidates = Vec::new();
-        let mut cap_candidates = Vec::new();
-        let mut fallback_target_candidates = Vec::new();
-        let mut fallback_cap_candidates = Vec::new();
+        let mut candidates = Vec::new();
         for end in start + 1..=lines.len() {
             let body = join_split_lines(&lines[start..end]);
             let tokens = counter.count(&body)?;
             if tokens > cap {
                 break;
             }
-            if valid_cut(&lines, end) {
-                cap_candidates.push(end);
-                if tokens <= target {
-                    target_candidates.push(end);
+            let within_target = tokens <= target;
+            // Priority tier for this cut: a valid structural cut beats a list-group
+            // fallback, and staying within the soft `target` beats merely fitting `cap`.
+            let tier = if valid_cut(&lines, end) {
+                if within_target {
+                    3
+                } else {
+                    2
                 }
             } else if lines[start].list_group.is_some_and(|group| {
                 lines[end - 1].list_group == Some(group)
                     && lines.get(end).and_then(|line| line.list_group) == Some(group)
             }) {
-                fallback_cap_candidates.push(end);
-                if tokens <= target {
-                    fallback_target_candidates.push(end);
+                if within_target {
+                    1
+                } else {
+                    0
                 }
-            }
+            } else {
+                continue;
+            };
+            candidates.push((tier, end));
         }
-        let candidates = if !target_candidates.is_empty() {
-            &target_candidates
-        } else if !cap_candidates.is_empty() {
-            &cap_candidates
-        } else if !fallback_target_candidates.is_empty() {
-            &fallback_target_candidates
-        } else {
-            &fallback_cap_candidates
-        };
         let cut = candidates
-            .iter()
-            .copied()
-            .max_by_key(|cut| (boundary_rank(&lines, *cut), *cut))
+            .into_iter()
+            .max_by_key(|&(tier, end)| (tier, boundary_rank(&lines, end), end))
+            .map(|(_, end)| end)
             .ok_or("a complete structural unit exceeds the 480-token chunk cap")?;
         pieces.push(SplitPiece {
             body: join_split_lines(&lines[start..cut]),
@@ -1924,6 +1920,20 @@ fn endpoint_identity(chunk: &Chunk) -> String {
     .expect("endpoint identity is serializable")
 }
 
+/// Human-facing rendering of an endpoint for `DuplicateComponent.endpoints`.
+/// The JSON tuple from `endpoint_identity` stays reserved for identity/graph keys.
+fn endpoint_display(chunk: &Chunk) -> String {
+    let heading = chunk.endpoint.heading_path.join(" > ");
+    if heading.is_empty() {
+        format!("{} (part {})", chunk.endpoint.path, chunk.endpoint.part)
+    } else {
+        format!(
+            "{} > {} (part {})",
+            chunk.endpoint.path, heading, chunk.endpoint.part
+        )
+    }
+}
+
 fn identity(kind: FindingKind, a: &Chunk, b: &Chunk, lock_digest: Option<&str>) -> String {
     let (left, right) = if a.endpoint <= b.endpoint {
         (a, b)
@@ -2161,6 +2171,7 @@ fn duplicate_components<'a>(
     let findings = findings.into_iter().collect::<Vec<_>>();
     let mut adjacency = BTreeMap::<String, BTreeSet<String>>::new();
     let mut tokens = BTreeMap::<String, usize>::new();
+    let mut display = BTreeMap::<String, String>::new();
     let mut endpoints_by_finding = Vec::new();
     for finding in &findings {
         let left = endpoint_identity(&finding.left);
@@ -2175,6 +2186,8 @@ fn duplicate_components<'a>(
             .insert(left.clone());
         tokens.insert(left.clone(), finding.left.tokens);
         tokens.insert(right.clone(), finding.right.tokens);
+        display.insert(left.clone(), endpoint_display(&finding.left));
+        display.insert(right.clone(), endpoint_display(&finding.right));
         endpoints_by_finding.push((finding.id.clone(), left, right));
     }
     let mut visited = BTreeSet::new();
@@ -2207,8 +2220,20 @@ fn duplicate_components<'a>(
             .collect::<Vec<_>>();
         let redundant_tokens_estimate =
             member_tokens.iter().sum::<usize>() - member_tokens.iter().copied().max().unwrap_or(0);
+        // `endpoints` holds JSON identity tuples: keep them for the identity digest,
+        // but render human-readable endpoint strings for the report field.
+        let id = digest(endpoints.join("\n").as_bytes());
+        let endpoints = endpoints
+            .iter()
+            .map(|endpoint| {
+                display
+                    .get(endpoint)
+                    .cloned()
+                    .unwrap_or_else(|| endpoint.clone())
+            })
+            .collect::<Vec<_>>();
         components.push(DuplicateComponent {
-            id: digest(endpoints.join("\n").as_bytes()),
+            id,
             endpoints,
             finding_ids,
             redundant_tokens_estimate,
@@ -3747,6 +3772,42 @@ mod tests {
         assert_eq!(trend.current_estimated_duplicate_tokens, 30);
         let json = serde_json::to_value(&components[0]).unwrap();
         assert_eq!(json["redundant_tokens_estimate"], 30);
+    }
+
+    #[test]
+    fn component_endpoints_render_human_strings_not_json_identity() {
+        let left = test_chunk("skills/alpha/SKILL.md", &["Doc", "One"], 1, "lh");
+        let right = test_chunk("skills/beta/SKILL.md", &["Doc", "Two"], 1, "rh");
+        let mut finding = test_finding("f1", FindingKind::Exact, None, 5);
+        finding.left = left.clone();
+        finding.right = right.clone();
+
+        let components = duplicate_components([&finding]);
+        assert_eq!(components.len(), 1);
+        let endpoints = &components[0].endpoints;
+
+        // Human-facing endpoints must not be raw JSON identity tuples.
+        for endpoint in endpoints {
+            assert!(
+                !endpoint.starts_with('['),
+                "endpoint should be a human string, got JSON blob: {endpoint}"
+            );
+        }
+        assert!(endpoints
+            .iter()
+            .any(|e| e == "skills/alpha/SKILL.md > Doc > One (part 1)"));
+        assert!(endpoints
+            .iter()
+            .any(|e| e == "skills/beta/SKILL.md > Doc > Two (part 1)"));
+
+        // Identity is still derived from the JSON tuple, so `id` is unchanged by
+        // the display rendering.
+        let identity_id = digest(
+            [endpoint_identity(&left), endpoint_identity(&right)]
+                .join("\n")
+                .as_bytes(),
+        );
+        assert_eq!(components[0].id, identity_id);
     }
 
     #[test]
