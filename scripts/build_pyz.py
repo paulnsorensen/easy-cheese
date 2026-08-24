@@ -82,11 +82,13 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
         "artifact-path": Shared("artifact_path.py"),
         "ground-check": "ground_check.py",
     },
+    # normalize and validate are one module: cook_cli.py reads the verb off
+    # argv[0], the way wheypoint.py does for commit|resolve|show|lint.
     "cook": {
         "artifact-path": Shared("artifact_path.py"),
         "worktree": Shared("worktree.py"),
-        "normalize": "normalize.py",
-        "validate": "validate.py",
+        "normalize": "cook_cli.py",
+        "validate": "cook_cli.py",
     },
     "cut": {"red-gate": "red_gate.py"},
     # All four subcommands are one module: wheypoint.py reads the subcommand off

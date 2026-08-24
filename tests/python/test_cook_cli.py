@@ -15,12 +15,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "cook_payloads"
 
 sys.path.insert(0, str(REPO_ROOT / "src" / "cook"))
-import normalize  # noqa: E402
-import validate  # noqa: E402
+import cook_cli  # noqa: E402
 
 
 def test_normalize_rejects_host_owned_field(capsys: pytest.CaptureFixture[str]) -> None:
-    exit_code = normalize.main(
+    exit_code = cook_cli.main(
         [
             "normalize.py",
             str(FIXTURES / "host_owned_writer_view.json"),
@@ -36,7 +35,7 @@ def test_normalize_rejects_host_owned_field(capsys: pytest.CaptureFixture[str]) 
 def test_normalize_rejects_invocation_key_inside_document(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    exit_code = normalize.main(
+    exit_code = cook_cli.main(
         [
             "normalize.py",
             str(FIXTURES / "document_with_embedded_invocation.json"),
@@ -51,7 +50,7 @@ def test_normalize_rejects_invocation_key_inside_document(
 
 
 def test_normalize_rejects_deeply_nested_document(capsys: pytest.CaptureFixture[str]) -> None:
-    exit_code = normalize.main(
+    exit_code = cook_cli.main(
         [
             "normalize.py",
             str(FIXTURES / "deeply_nested_document.json"),
@@ -67,7 +66,7 @@ def test_normalize_rejects_deeply_nested_document(capsys: pytest.CaptureFixture[
 
 
 def test_normalize_rejects_duplicate_key_document(capsys: pytest.CaptureFixture[str]) -> None:
-    exit_code = normalize.main(
+    exit_code = cook_cli.main(
         [
             "normalize.py",
             str(FIXTURES / "duplicate_key_document.json"),
@@ -80,10 +79,10 @@ def test_normalize_rejects_duplicate_key_document(capsys: pytest.CaptureFixture[
     assert "duplicate field 'kind'" in captured.err
 
 
-def test_normalize_rejects_unsupported_contract_major(
+def test_normalize_rejects_unsupported_contract_version(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    exit_code = normalize.main(
+    exit_code = cook_cli.main(
         [
             "normalize.py",
             str(FIXTURES / "clean_writer_view.json"),
@@ -93,13 +92,14 @@ def test_normalize_rejects_unsupported_contract_major(
     )
     captured = capsys.readouterr()
     assert exit_code == 1
-    assert "unsupported contract major" in captured.err
+    assert "unsupported contract version 99.0" in captured.err
+    assert "expected" in captured.err
 
 
 def test_normalize_emits_canonical_json_for_clean_payload(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    exit_code = normalize.main(
+    exit_code = cook_cli.main(
         [
             "normalize.py",
             str(FIXTURES / "clean_writer_view.json"),
@@ -121,7 +121,7 @@ def test_normalize_emits_canonical_json_for_clean_payload(
 
 
 def test_validate_rejects_nonconforming_payload(capsys: pytest.CaptureFixture[str]) -> None:
-    exit_code = validate.main(
+    exit_code = cook_cli.main(
         [
             "validate.py",
             str(FIXTURES / "nonconforming_writer_view.json"),
@@ -135,7 +135,7 @@ def test_validate_rejects_nonconforming_payload(capsys: pytest.CaptureFixture[st
 
 
 def test_validate_accepts_conforming_payload(capsys: pytest.CaptureFixture[str]) -> None:
-    exit_code = validate.main(
+    exit_code = cook_cli.main(
         [
             "validate.py",
             str(FIXTURES / "conforming_writer_view.json"),
@@ -149,7 +149,7 @@ def test_validate_accepts_conforming_payload(capsys: pytest.CaptureFixture[str])
 
 
 def test_validate_rejects_unknown_schema_slug(capsys: pytest.CaptureFixture[str]) -> None:
-    exit_code = validate.main(
+    exit_code = cook_cli.main(
         [
             "validate.py",
             str(FIXTURES / "conforming_writer_view.json"),
@@ -162,6 +162,30 @@ def test_validate_rejects_unknown_schema_slug(capsys: pytest.CaptureFixture[str]
     assert "unknown schema slug" in captured.err
 
 
+def test_main_dispatches_via_argv1_when_argv0_is_not_a_verb(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = cook_cli.main(
+        [
+            "cook_cli.py",
+            "validate",
+            str(FIXTURES / "conforming_writer_view.json"),
+            "--schema",
+            "agent-writer-view",
+        ]
+    )
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert captured.err == ""
+
+
+def test_main_rejects_unknown_command(capsys: pytest.CaptureFixture[str]) -> None:
+    exit_code = cook_cli.main(["cook_cli.py", "bogus"])
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.err == "ERROR: expected a 'normalize' or 'validate' command\n"
+
+
 def test_validate_accepts_versioned_curd_plan_payload(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -169,7 +193,7 @@ def test_validate_accepts_versioned_curd_plan_payload(
     contract_version and digest; validate must accept it — the exact case the
     missing supported_version argument rejected, and the coherence contract
     between the two subcommands."""
-    exit_code = normalize.main(
+    exit_code = cook_cli.main(
         [
             "normalize.py",
             str(FIXTURES / "clean_writer_view.json"),
@@ -184,7 +208,7 @@ def test_validate_accepts_versioned_curd_plan_payload(
     payload_path = tmp_path / "curd-plan.json"
     payload_path.write_text(json.dumps(plan_value), encoding="utf-8")
 
-    exit_code = validate.main(
+    exit_code = cook_cli.main(
         ["validate.py", str(payload_path), "--schema", "curd-plan"]
     )
     captured = capsys.readouterr()
