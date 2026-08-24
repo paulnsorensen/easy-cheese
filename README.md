@@ -133,7 +133,7 @@ The artifact contracts the skills read and write — run manifests, decompositio
 pip install easy-cheese-schemas
 ```
 
-Stability policy, the `schema_version` contract, and the strictness tiers: [docs/easy-cheese-schemas.md](docs/easy-cheese-schemas.md).
+Stability policy, the `schema_version` contract, and the strictness tiers: [docs/easy-cheese-schemas.md](https://github.com/paulnsorensen/easy-cheese/blob/main/docs/easy-cheese-schemas.md).
 
 ## Optional tools
 
