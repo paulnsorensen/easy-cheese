@@ -1,13 +1,22 @@
 """Mold's declarative bundle commands and canonical producer boundary."""
 
+# Transitional shared modules are imported after a source-tree path fallback.
+# ruff: noqa: E402
+
 from __future__ import annotations
 
 import argparse
-import importlib
 import json
 import sys
 from pathlib import Path
 from typing import Any, Mapping
+
+_SHARED_SOURCE = Path(__file__).resolve().parents[4] / "shared" / "scripts"
+if _SHARED_SOURCE.is_dir() and str(_SHARED_SOURCE) not in sys.path:
+    sys.path.insert(0, str(_SHARED_SOURCE))
+
+import cli as _cli
+import html_report_cli as _html_report_cli
 
 from easy_cheese.shared.artifact_path import main as _artifact_path_main
 from easy_cheese.shared.bundle_commands import bundle_command, dispatch
@@ -21,13 +30,16 @@ from easy_cheese.shared.handoffs import (
     publish,
     publish_writer_text,
 )
+from easy_cheese.skills.mold.curd_count import main as _curd_count_main
 from easy_cheese.skills.mold.gate_graph import main as _gate_graph_main
-from easy_cheese.skills.mold.legacy_validate_spec import validate as _validate_spec
+from easy_cheese.skills.mold.taste_test import main as _taste_test_main
+from easy_cheese.skills.mold.validate_spec import validate as _validate_spec
 from easy_cheese_schemas.contracts import (
     AgentWriterView,
     ArtifactRef,
     ContractVersion,
 )
+from easy_cheese_schemas.schema_runtime import MAX_CONTRACT_BYTES
 
 
 def contract_publish(
@@ -56,6 +68,23 @@ def validate_spec(value: Any) -> Any:
 
 def _read_json(path: Path) -> object:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _read_writer_view(path: Path) -> str:
+    if path.stat().st_size > MAX_CONTRACT_BYTES:
+        raise HandoffError(
+            f"writer-view exceeds MAX_CONTRACT_BYTES ({MAX_CONTRACT_BYTES} bytes)"
+        )
+    with path.open("rb") as handle:
+        data = handle.read(MAX_CONTRACT_BYTES + 1)
+    if len(data) > MAX_CONTRACT_BYTES:
+        raise HandoffError(
+            f"writer-view exceeds MAX_CONTRACT_BYTES ({MAX_CONTRACT_BYTES} bytes)"
+        )
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise HandoffError("writer-view must be valid UTF-8 text") from exc
 
 
 def _version(value: object, label: str) -> ContractVersion:
@@ -152,7 +181,7 @@ def artifact_path_command(argv: list[str]) -> int:
 @bundle_command("curd-count")
 def curd_count_command(argv: list[str]) -> int:
     """Count a validated Mold spec's semantic curds."""
-    return importlib.import_module("curd_count").main(argv)
+    return _curd_count_main(argv)
 
 
 @bundle_command("gate-graph")
@@ -164,15 +193,13 @@ def gate_graph_command(argv: list[str]) -> int:
 @bundle_command("render_html")
 def render_html_command(argv: list[str]) -> int:
     """Render a Markdown artifact as a self-contained HTML report."""
-    cli = importlib.import_module("cli")
-    renderer = importlib.import_module("html_report_cli")
-    return cli.run(renderer._setup, argv=argv)
+    return _cli.run(_html_report_cli._setup, argv=argv)
 
 
 @bundle_command("taste-test")
 def taste_test_command(argv: list[str]) -> int:
     """Validate a digest-bound Mold fork-coherence verdict."""
-    return importlib.import_module("taste_test").main(argv)
+    return _taste_test_main(argv)
 
 
 @bundle_command("validate-spec")
@@ -201,7 +228,7 @@ def contract_command(argv: list[str]) -> int:
     if arguments.operation == "publish":
         invocation = invocation_from_mapping(_read_json(arguments.invocation))
         result = publish_writer_text(
-            arguments.writer_view.read_text(encoding="utf-8"),
+            _read_writer_view(arguments.writer_view),
             invocation,
             arguments.destination,
             arguments.operation_id,

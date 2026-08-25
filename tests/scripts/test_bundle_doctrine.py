@@ -11,6 +11,7 @@ from easy_cheese.shared.bundles import bundle_name, minimal_closure
 from scripts import build_pyz
 
 ROOT = Path(__file__).resolve().parents[2] / "src" / "easy_cheese"
+SHARED = Path(__file__).resolve().parents[2] / "shared" / "scripts"
 
 
 def _skill_root(tmp_path: Path, source: str, helper: str | None = None) -> Path:
@@ -26,13 +27,24 @@ def _skill_root(tmp_path: Path, source: str, helper: str | None = None) -> Path:
 
 
 def test_minimal_closure_excludes_unreachable_schema_and_other_skills():
-    closure = minimal_closure("mold", ROOT)
-    relative = {path.relative_to(ROOT.parent).as_posix() for path in closure}
+    closure = minimal_closure("mold", ROOT, SHARED)
+    relative = {
+        path.relative_to(ROOT.parent).as_posix()
+        for path in closure
+        if path.is_relative_to(ROOT.parent)
+    }
     assert "easy_cheese/skills/mold/commands.py" in relative
     assert "easy_cheese_schemas/handoff.py" in relative
     assert not any("easy_cheese/skills/cook" in name for name in relative)
     assert "easy_cheese_schemas/benchmarks.py" not in relative
     assert "easy_cheese_schemas/wheypoint.py" not in relative
+
+
+def test_minimal_closure_derives_flat_shared_runtime_from_static_imports():
+    closure = minimal_closure("cook", ROOT, SHARED)
+    shared = {path.name for path in closure if path.parent == SHARED}
+    assert {"cli.py", "findings_cli.py", "handoff.py", "paths.py"} <= shared
+    assert "artifact_path.py" not in shared
 
 
 def test_native_rejection(tmp_path):
@@ -82,6 +94,24 @@ def test_subprocess_isolation_uses_a_same_named_minimal_layout_bundle(tmp_path):
         text=True,
     )
     assert completed.returncode == 0, completed.stderr
+
+
+def test_layout_bundle_carries_canonical_schema_version(tmp_path):
+    archive = build_pyz.build_layout_bundle("mold", tmp_path / "mold.pyz")
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-S",
+            "-c",
+            "import easy_cheese_schemas; print(easy_cheese_schemas.__version__)",
+        ],
+        cwd=tmp_path,
+        env={"PATH": "", "PYTHONPATH": str(archive)},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "1.1.0"
 
 
 def test_archive_name_must_match_owner(tmp_path):

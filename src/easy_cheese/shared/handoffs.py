@@ -7,11 +7,14 @@ import hashlib
 import json
 import os
 import re
-import tempfile
+import stat
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
 from urllib.parse import unquote, urlsplit
+
+import easy_cheese_schemas
 
 from easy_cheese_schemas.artifacts import ArtifactResolutionError, resolve_artifact
 from easy_cheese_schemas.compat import load
@@ -37,6 +40,7 @@ from easy_cheese_schemas.phase_contracts import (
     validate_transition,
 )
 from easy_cheese_schemas.schema_runtime import (
+    MAX_CONTRACT_BYTES,
     canonical_bytes as _schema_canonical_bytes,
     normalize_agent_output,
     supported_version_for,
@@ -47,14 +51,17 @@ from easy_cheese_schemas.schema_runtime import (
 HANDOFF_VERSION = ContractVersion(HANDOFF_SCHEMA_URI, "1", "0")
 LEGACY_SOURCE_VERSION = ContractVersion(LEGACY_SCHEMA_URI, "1", "0")
 LEGACY_REMOVE_AFTER = (2, 0, 0)
-PACKAGE_VERSION = (1, 1, 0)
 _DIGEST_RE = re.compile(r"sha256:[0-9a-f]{64}")
 _OPERATION_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}")
-_FENCED_BLOCK_RE = re.compile(r"```(?:json)?\s*\n?(.*?)```", re.DOTALL | re.IGNORECASE)
+_FENCE_LINE_RE = re.compile(r"(?m)^[ \t]*```[^\n]*$")
 
 
 class HandoffError(ValueError):
     """Raised when a canonical boundary cannot be established or accepted."""
+
+
+def _package_version() -> tuple[int, ...]:
+    return tuple(int(part) for part in easy_cheese_schemas.__version__.split("."))
 
 
 @dataclass(frozen=True)
@@ -168,18 +175,26 @@ def _operation_paths(root: Path, operation_id: str) -> tuple[Path, Path, Path]:
             "operation_id must be 1-64 alphanumeric, '_' or '-' characters"
         )
     base = root.resolve()
-    paths = tuple(
-        base / directory / f"{operation_id}.json"
-        for directory in ("payloads", "receipts", "pointers")
-    )
-    return paths  # type: ignore[return-value]
+    paths: list[Path] = []
+    for directory in ("payloads", "receipts", "pointers"):
+        parent = base / directory
+        if parent.is_symlink():
+            raise HandoffError(f"operation directory must not be a symlink: {parent}")
+        parent.mkdir(parents=True, exist_ok=True)
+        if parent.is_symlink():
+            raise HandoffError(f"operation directory must not be a symlink: {parent}")
+        path = parent / f"{operation_id}.json"
+        if path.is_symlink():
+            raise HandoffError(f"operation artifact must not be a symlink: {path}")
+        paths.append(path)
+    return tuple(paths)
 
 
 def _ref(path: Path, role: str, data: bytes, schema_uri: str) -> ArtifactRef:
     return ArtifactRef(
         artifact_id=path.stem,
         role=role,
-        uri=path.resolve().as_uri(),
+        uri=path.absolute().as_uri(),
         digest=_digest(data),
         size_bytes=len(data),
         media_type="application/json",
@@ -187,18 +202,104 @@ def _ref(path: Path, role: str, data: bytes, schema_uri: str) -> ArtifactRef:
     )
 
 
-def _write_atomic(path: Path, data: bytes) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary = tempfile.mkstemp(prefix=path.name + ".", dir=path.parent)
+def _write_atomic_noclobber(
+    path: Path,
+    data: bytes,
+    *,
+    expected_root: Path | None = None,
+    expected_directories: Mapping[str, tuple[int, int]] | None = None,
+) -> bool:
+    """Publish a file only when absent; return whether this call won."""
+    if expected_root is not None or expected_directories is not None:
+        if expected_root is None or expected_directories is None:
+            raise TypeError("expected_root and expected_directories must be paired")
+        _assert_operation_identity(expected_root, expected_directories)
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    directory = os.open(path.parent, flags)
     try:
-        with os.fdopen(descriptor, "wb") as handle:
+        if expected_directories is not None:
+            expected_identity = expected_directories.get(path.parent.name)
+            metadata = os.fstat(directory)
+            actual_identity = metadata.st_dev, metadata.st_ino
+            if expected_identity != actual_identity:
+                raise HandoffError(
+                    f"operation directory changed during publication: {path.parent.name}"
+                )
+    except BaseException:
+        os.close(directory)
+        raise
+    temporary_name = f".{path.name}.{os.getpid()}.{uuid.uuid4().hex}"
+    descriptor = -1
+    try:
+        descriptor = os.open(
+            temporary_name,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+            0o600,
+            dir_fd=directory,
+        )
+        with os.fdopen(descriptor, "wb", closefd=True) as handle:
+            descriptor = -1
             handle.write(data)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(temporary, path)
+        try:
+            os.link(
+                temporary_name,
+                path.name,
+                src_dir_fd=directory,
+                dst_dir_fd=directory,
+                follow_symlinks=False,
+            )
+        except FileExistsError:
+            won = False
+        else:
+            won = True
+        if expected_root is not None and expected_directories is not None:
+            try:
+                _assert_operation_identity(expected_root, expected_directories)
+            except BaseException:
+                if won:
+                    try:
+                        os.unlink(path.name, dir_fd=directory)
+                    except FileNotFoundError:
+                        pass
+                raise
+        return won
     finally:
-        if os.path.exists(temporary):
-            os.unlink(temporary)
+        if descriptor >= 0:
+            os.close(descriptor)
+        try:
+            os.unlink(temporary_name, dir_fd=directory)
+        except FileNotFoundError:
+            pass
+        os.close(directory)
+
+
+def read_nofollow_file(directory: Path, name: str) -> bytes:
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    directory_fd = -1
+    file_fd = -1
+    try:
+        directory_fd = os.open(directory, flags)
+        file_fd = os.open(
+            name,
+            os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0),
+            dir_fd=directory_fd,
+        )
+        if not stat.S_ISREG(os.fstat(file_fd).st_mode):
+            raise HandoffError(f"artifact must be a regular file: {directory / name}")
+        with os.fdopen(file_fd, "rb", closefd=True) as handle:
+            file_fd = -1
+            return handle.read()
+    except OSError as exc:
+        raise HandoffError(
+            f"unable to read artifact without following symlinks: {directory / name}"
+        ) from exc
+    finally:
+        if file_fd >= 0:
+            os.close(file_fd)
+        if directory_fd >= 0:
+            os.close(directory_fd)
 
 
 def _file_path(uri: str) -> Path:
@@ -214,6 +315,8 @@ def _operation_root(pointer: HandoffPointer) -> Path:
     payload = _file_path(pointer.payload.uri)
     if payload.parent.name != "payloads" or payload.name != f"{pointer.operation_id}.json":
         raise HandoffError("payload reference escapes its operation root")
+    if payload.parent.is_symlink():
+        raise HandoffError("handoff operation directory must not be a symlink")
     return payload.parent.parent
 
 
@@ -226,7 +329,12 @@ def _verify_ref(
     role: str,
     schema_uri: str,
 ) -> bytes:
-    expected_path = (root / directory / f"{operation_id}.json").resolve()
+    directory_path = root / directory
+    if directory_path.is_symlink():
+        raise HandoffError(f"{role} operation directory must not be a symlink")
+    expected_path = directory_path / f"{operation_id}.json"
+    if expected_path.is_symlink():
+        raise HandoffError(f"{role} artifact must not be a symlink")
     if _file_path(reference.uri) != expected_path:
         raise HandoffError(f"{role} reference escapes its operation root")
     if (
@@ -236,10 +344,7 @@ def _verify_ref(
         or reference.media_type != "application/json"
     ):
         raise HandoffError(f"{role} reference metadata mismatch")
-    try:
-        data = expected_path.read_bytes()
-    except OSError as exc:
-        raise HandoffError(f"missing referenced artifact: {expected_path}") from exc
+    data = read_nofollow_file(directory_path, expected_path.name)
     if _digest(data) != reference.digest or len(data) != reference.size_bytes:
         raise HandoffError(f"corrupt referenced artifact: {expected_path}")
     return data
@@ -256,8 +361,8 @@ def pointer_from_mapping(value: Mapping[str, object]) -> HandoffPointer:
 
 def _load_pointer(path: Path) -> HandoffPointer:
     try:
-        data = path.read_bytes()
-        raw = json.loads(data)
+        data = read_nofollow_file(path.parent, path.name)
+        raw = json.loads(data, object_pairs_hook=_reject_duplicate_keys)
         if not isinstance(raw, Mapping):
             raise TypeError("pointer must be an object")
         pointer = pointer_from_mapping(raw)
@@ -266,6 +371,37 @@ def _load_pointer(path: Path) -> HandoffPointer:
         return pointer
     except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
         raise HandoffError("invalid existing handoff pointer") from exc
+
+
+def _directory_identity(path: Path) -> tuple[int, int]:
+    try:
+        metadata = path.stat(follow_symlinks=False)
+    except OSError as exc:
+        raise HandoffError(f"operation directory is unavailable: {path}") from exc
+    if not stat.S_ISDIR(metadata.st_mode):
+        raise HandoffError(f"operation path must be a directory: {path}")
+    return metadata.st_dev, metadata.st_ino
+
+
+def _assert_operation_identity(
+    root: Path, directories: Mapping[str, tuple[int, int]]
+) -> None:
+    if _directory_identity(root) != directories["root"]:
+        raise HandoffError("operation root changed during publication")
+    for name, identity in directories.items():
+        if name == "root":
+            continue
+        if _directory_identity(root / name) != identity:
+            raise HandoffError(f"operation directory changed during publication: {name}")
+
+
+def _reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON key: {key}")
+        result[key] = value
+    return result
 
 
 def _strip_comments(text: str) -> tuple[str, list[NormalizationAction]]:
@@ -445,8 +581,16 @@ def normalize_writer_text(
 ) -> tuple[AgentWriterView, tuple[NormalizationAction, ...]]:
     if not isinstance(text, str) or not text.strip():
         raise HandoffError("writer output must be non-empty text")
-    fenced = _FENCED_BLOCK_RE.findall(text)
-    candidates = fenced or [text.strip()]
+    try:
+        if len(text.encode("utf-8")) > MAX_CONTRACT_BYTES:
+            raise HandoffError(
+                f"writer output exceeds MAX_CONTRACT_BYTES ({MAX_CONTRACT_BYTES} bytes)"
+            )
+    except UnicodeEncodeError as exc:
+        raise HandoffError("writer output must be valid UTF-8 text") from exc
+    if _FENCE_LINE_RE.search(text):
+        raise HandoffError("writer output must not use fenced JSON wrappers")
+    candidates = [text.strip()]
     successes: list[tuple[AgentWriterView, tuple[NormalizationAction, ...]]] = []
     for candidate in candidates:
         actions: list[NormalizationAction] = []
@@ -461,7 +605,7 @@ def normalize_writer_text(
             actions.extend(found)
             repaired, found = _repair_closing_delimiters(repaired)
             actions.extend(found)
-            value = json.loads(repaired)
+            value = json.loads(repaired, object_pairs_hook=_reject_duplicate_keys)
             if isinstance(value, Mapping) and set(value) == {"curd_plan"}:
                 actions.append(NormalizationAction("writer_shorthand", "curd_plan"))
             successes.append((_writer_from_mapping(value), tuple(actions)))
@@ -476,7 +620,13 @@ def _plan_artifact_refs(plan: CurdPlan) -> tuple[ArtifactRef, ...]:
     refs = [reference for curd in plan.curds for reference in curd.inputs]
     if plan.context is not None:
         refs.extend(plan.context.shared_inputs)
-    return tuple(refs)
+    unique: list[ArtifactRef] = []
+    seen: set[ArtifactRef] = set()
+    for reference in refs:
+        if reference not in seen:
+            seen.add(reference)
+            unique.append(reference)
+    return tuple(unique)
 
 
 def _resolve_plan_artifacts(plan: CurdPlan, root: Path) -> None:
@@ -556,6 +706,13 @@ def _publish_canonical(
     payload_path, receipt_path, pointer_path = _operation_paths(
         invocation.root, operation_id
     )
+    operation_root = invocation.root.resolve()
+    directory_identities = {
+        "root": _directory_identity(operation_root),
+        "payloads": _directory_identity(payload_path.parent),
+        "receipts": _directory_identity(receipt_path.parent),
+        "pointers": _directory_identity(pointer_path.parent),
+    }
     canonical_digest = _digest(payload)
     if receipt is not None:
         _validate_receipt(receipt, payload)
@@ -563,6 +720,12 @@ def _publish_canonical(
 
     if pointer_path.exists():
         pointer = _load_pointer(pointer_path)
+        if pointer.operation_id != operation_id:
+            raise HandoffError("operation id does not match pointer")
+        if _operation_root(pointer) != invocation.root.resolve():
+            raise HandoffError("pointer operation root does not match invocation root")
+        if pointer.destination_phase != destination:
+            raise HandoffError("operation id conflicts with destination phase")
         if pointer.request_digest != invocation.request_digest:
             raise HandoffError("operation id conflicts with request digest")
         if pointer.payload.digest != canonical_digest:
@@ -577,21 +740,40 @@ def _publish_canonical(
         )
         if actual_receipt_digest != expected_receipt_digest:
             raise HandoffError("operation id conflicts with normalization receipt")
-        accepted = accept(pointer)
+        accepted = accept(pointer, invocation.root)
         return PublishedArtifact(pointer, accepted.canonical, accepted.normalization_receipt)
 
-    if payload_path.exists() and _digest(payload_path.read_bytes()) != canonical_digest:
+    if payload_path.exists() and _digest(
+        read_nofollow_file(payload_path.parent, payload_path.name)
+    ) != canonical_digest:
         raise HandoffError("prepared payload conflicts with operation id")
     if receipt_path.exists():
-        if receipt_bytes is None or _digest(receipt_path.read_bytes()) != _digest(
-            receipt_bytes
-        ):
+        if receipt_bytes is None or _digest(
+            read_nofollow_file(receipt_path.parent, receipt_path.name)
+        ) != _digest(receipt_bytes):
             raise HandoffError("prepared receipt conflicts with operation id")
 
     if not payload_path.exists():
-        _write_atomic(payload_path, payload)
+        _write_atomic_noclobber(
+            payload_path,
+            payload,
+            expected_root=operation_root,
+            expected_directories=directory_identities,
+        )
     if receipt_bytes is not None and not receipt_path.exists():
-        _write_atomic(receipt_path, receipt_bytes)
+        _write_atomic_noclobber(
+            receipt_path,
+            receipt_bytes,
+            expected_root=operation_root,
+            expected_directories=directory_identities,
+        )
+    _assert_operation_identity(operation_root, directory_identities)
+    if _digest(read_nofollow_file(payload_path.parent, payload_path.name)) != canonical_digest:
+        raise HandoffError("prepared payload conflicts with operation id")
+    if receipt_bytes is not None and _digest(
+        read_nofollow_file(receipt_path.parent, receipt_path.name)
+    ) != _digest(receipt_bytes):
+        raise HandoffError("prepared receipt conflicts with operation id")
     payload_ref = _ref(
         payload_path, "canonical-payload", payload, CURD_PLAN_SCHEMA_URI
     )
@@ -614,8 +796,38 @@ def _publish_canonical(
         payload_ref,
         receipt_ref,
     )
-    _write_atomic(pointer_path, canonical_bytes(pointer))
-    return PublishedArtifact(pointer, plan, receipt)
+    pointer_bytes = canonical_bytes(pointer)
+    _assert_operation_identity(operation_root, directory_identities)
+    accepted = accept(pointer, invocation.root)
+    if _write_atomic_noclobber(
+        pointer_path,
+        pointer_bytes,
+        expected_root=operation_root,
+        expected_directories=directory_identities,
+    ):
+        return PublishedArtifact(pointer, accepted.canonical, accepted.normalization_receipt)
+    winner = _load_pointer(pointer_path)
+    if winner.operation_id != operation_id:
+        raise HandoffError("operation id does not match winning pointer")
+    if _operation_root(winner) != invocation.root.resolve():
+        raise HandoffError("winning pointer operation root does not match invocation root")
+    if winner.destination_phase != destination:
+        raise HandoffError("operation id conflicts with winning destination phase")
+    if winner.request_digest != invocation.request_digest:
+        raise HandoffError("operation id conflicts with winning request digest")
+    if winner.payload.digest != canonical_digest:
+        raise HandoffError("operation id conflicts with winning canonical digest")
+    expected_receipt_digest = _digest(receipt_bytes) if receipt_bytes is not None else None
+    actual_receipt_digest = (
+        winner.normalization_receipt.digest
+        if winner.normalization_receipt is not None
+        else None
+    )
+    if actual_receipt_digest != expected_receipt_digest:
+        raise HandoffError("operation id conflicts with winning normalization receipt")
+    _assert_operation_identity(operation_root, directory_identities)
+    accepted = accept(winner, invocation.root)
+    return PublishedArtifact(winner, accepted.canonical, accepted.normalization_receipt)
 
 
 def publish(
@@ -676,9 +888,11 @@ def _accept_receipt(
     return artifact.value
 
 
-def accept(pointer: HandoffPointer) -> AcceptedArtifact:
+def accept(pointer: HandoffPointer, expected_root: Path) -> AcceptedArtifact:
     if not isinstance(pointer, HandoffPointer):
         raise HandoffError("accept requires a HandoffPointer")
+    if not isinstance(expected_root, Path):
+        raise TypeError("accept requires an expected operation root")
     if pointer.contract_version != HANDOFF_VERSION:
         raise HandoffError("handoff schema version mismatch")
     try:
@@ -700,6 +914,8 @@ def accept(pointer: HandoffPointer) -> AcceptedArtifact:
     if route is None:
         raise HandoffError("handoff route is not declared")
     operation_root = _operation_root(pointer)
+    if operation_root != expected_root.resolve():
+        raise HandoffError("handoff operation root does not match expected root")
     payload = _verify_ref(
         pointer.payload,
         root=operation_root,
@@ -734,7 +950,7 @@ def accept(pointer: HandoffPointer) -> AcceptedArtifact:
 def migrate(legacy_handoff: LegacyHandoff, operation_id: str) -> PublishedArtifact:
     if not isinstance(legacy_handoff, LegacyHandoff):
         raise TypeError("migrate requires a LegacyHandoff")
-    if PACKAGE_VERSION >= LEGACY_REMOVE_AFTER:
+    if _package_version() >= LEGACY_REMOVE_AFTER:
         raise HandoffError("legacy adapter sunset has passed")
     if legacy_handoff.source_schema_uri != LEGACY_SCHEMA_URI:
         raise HandoffError("legacy source schema URI mismatch")
@@ -786,5 +1002,6 @@ __all__ = [
     "normalize_writer_text",
     "pointer_from_mapping",
     "publish",
+    "read_nofollow_file",
     "publish_writer_text",
 ]

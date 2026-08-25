@@ -76,9 +76,9 @@ SKILL_SUBCOMMANDS = {
     "press": ["press-route"],
 }
 
-# Every skill that registers the durable-corpus resolver shim. One shared source
-# (shared/scripts/artifact_path.py) backs them all; each must agree with
-# paths.artifact_path / paths.project_corpus_root.
+# Every skill that registers the durable-corpus resolver. Legacy bundles use the
+# transitional CLI while layout bundles import the package-authoritative producer;
+# each must agree with paths.artifact_path / paths.project_corpus_root.
 ARTIFACT_PATH_SKILLS = ("mold", "ultracook", "briesearch", "cook")
 
 # Legacy bundles that execute the complete published schema runtime. Migrated
@@ -146,6 +146,7 @@ def _run(
     *args: str,
     extra_env: dict[str, str] | None = None,
     stdin: str | None = None,
+    cwd: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
     # Run from the bundle's own dir with PYTHONPATH stripped, so the only way an
     # import can resolve is from inside the .pyz itself.
@@ -155,7 +156,7 @@ def _run(
         env.update(extra_env)
     return subprocess.run(
         [sys.executable, str(pyz), *args],
-        cwd=str(pyz.parent),
+        cwd=str(cwd or pyz.parent),
         capture_output=True,
         text=True,
         env=env,
@@ -269,6 +270,16 @@ def test_cut_bundle_carries_red_gate_and_schema_runtime(bundles: Path) -> None:
     assert "attrs-26.1.0.dist-info/METADATA" in names
     assert "cattrs/converters.py" in names
     assert "taste_test.py" in names
+
+
+def test_mold_bundle_stages_package_owned_helpers_without_flat_duplicates(
+    bundles: Path,
+) -> None:
+    names = set(zipfile.ZipFile(bundles / "mold.pyz").namelist())
+    assert "easy_cheese/skills/mold/curd_count.py" in names
+    assert "easy_cheese/skills/mold/gate_graph.py" in names
+    assert "curd_count.py" not in names
+    assert "gate_graph.py" not in names
 
 
 def test_cut_bundle_runs_assertion_probe_without_source_imports(
@@ -583,6 +594,61 @@ def test_artifact_path_rejects_unknown_phase(bundles: Path) -> None:
     )
     assert result.returncode == 1
     assert "unknown phase" in result.stderr
+
+
+def test_artifact_path_matches_canonical_project_key_normalization(
+    bundles: Path, tmp_path: Path
+) -> None:
+    """Packaged resolution collapses separators and enforces the 96-byte key bound."""
+    env = {
+        "EASY_CHEESE_HOME": str(tmp_path / "corpus"),
+        "EASY_CHEESE_PROJECT": "Foo---Bar-" + ("x" * 120),
+    }
+    result = _run(bundles / "mold.pyz", "artifact-path", "specs", "demo", extra_env=env)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == str(
+        tmp_path / "corpus" / ("foo-bar-" + ("x" * 88)) / "specs" / "demo.md"
+    )
+
+
+def test_artifact_path_uses_git_root_when_remote_is_absent(
+    bundles: Path, tmp_path: Path
+) -> None:
+    """A nested checkout without origin still resolves to its Git-root identity."""
+    repo = tmp_path / "checkout"
+    nested = repo / "src" / "nested"
+    nested.mkdir(parents=True)
+    subprocess.run(["git", "init", "--quiet", str(repo)], check=True)
+    env = {"EASY_CHEESE_HOME": str(tmp_path / "corpus")}
+    result = _run(
+        bundles / "mold.pyz",
+        "artifact-path",
+        "specs",
+        "demo",
+        extra_env=env,
+        cwd=nested,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == str(tmp_path / "corpus" / "checkout" / "specs" / "demo.md")
+
+
+def test_artifact_path_entrypoints_have_one_corpus_producer() -> None:
+    """Packaged and transitional entrypoints must not grow a second path algorithm."""
+    packaged = (REPO_ROOT / "src/easy_cheese/shared/artifact_path.py").read_text()
+    canonical = (REPO_ROOT / "src/easy_cheese/shared/paths.py").read_text()
+    transitional = (REPO_ROOT / "shared/scripts/artifact_path.py").read_text()
+    legacy_paths = (REPO_ROOT / "shared/scripts/paths.py").read_text()
+    assert "from . import paths as _paths" in packaged
+    assert "def artifact_path(" in canonical
+    assert "def _sanitize_segment(" in canonical
+    assert "import paths" in transitional
+    assert "def _load_canonical()" in legacy_paths
+    assert "_canonical = _load_canonical()" in legacy_paths
+    for source in (packaged, transitional, legacy_paths):
+        assert "subprocess.run" not in source
+        assert "EASY_CHEESE_PROJECT" not in source
+        assert "EASY_CHEESE_HOME" not in source
+        assert "def _sanitize_segment" not in source
 
 
 # briesearch ground-check: the mechanical grounding gate behind issue #113. The
@@ -1083,7 +1149,7 @@ def test_document_rules_drift_gate_fails_when_projection_is_stale(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """AC-3: the build fails when the decorated document models changed but the
-    checked-in src/mold/_document_rules.py projection is stale."""
+    checked-in package _document_rules.py projection is stale."""
     live_source = build_pyz._compiled_document_rules_source()
 
     def mutated_source() -> str:

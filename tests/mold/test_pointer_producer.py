@@ -5,8 +5,11 @@ import subprocess
 import sys
 from pathlib import Path
 
-from easy_cheese.shared.handoffs import canonical_bytes
-from easy_cheese.skills.mold.commands import contract_publish, validate_spec
+import pytest
+
+from easy_cheese.shared.handoffs import HandoffError, canonical_bytes
+from easy_cheese_schemas.contracts import MAX_CONTRACT_BYTES
+from easy_cheese.skills.mold.commands import _read_writer_view, contract_publish, validate_spec
 from scripts import build_pyz
 from tests.schemas.python.test_handoff_contracts import (
     repaired_writer_text,
@@ -77,3 +80,10 @@ def test_isolated_mold_archive_exposes_every_declared_command(tmp_path):
         "validate-spec",
     ):
         assert command in completed.stdout
+
+
+def test_writer_view_read_is_bounded(tmp_path):
+    path = tmp_path / "writer.json"
+    path.write_bytes(b"x" * (MAX_CONTRACT_BYTES + 1))
+    with pytest.raises(HandoffError, match="MAX_CONTRACT_BYTES"):
+        _read_writer_view(path)

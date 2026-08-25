@@ -1,66 +1,36 @@
-"""Resolve durable and transient artifact paths for packaged skills."""
+"""Zip-safe artifact-path command delegating to the canonical path producer."""
 
 from __future__ import annotations
 
 import argparse
-import os
-import re
-import subprocess
 import sys
 from pathlib import Path
 
-PHASES = frozenset({
-    "cook", "press", "age", "cure", "specs", "notes", "hard",
-    "research", "ultracook", "pasteurize",
-})
-XDG_PHASES = frozenset({"specs", "research"})
-PHASE_DIRS = {"hard": "hard-cheese"}
-KEBAB_SLUG = re.compile(r"^(?!-)(?!.*--)[a-z0-9-]{1,64}(?<!-)$")
+from . import paths as _paths
+
+PHASES = _paths.PHASES
+XDG_PHASES = _paths.XDG_PHASES
+PHASE_DIRS = _paths.PHASE_DIRS
+KEBAB_SLUG = _paths.KEBAB_SLUG
+_sanitize_segment = _paths._sanitize_segment
+_slug_from_remote = _paths._slug_from_remote
+_git_identity = _paths._git_identity
+_corpus_home = _paths.corpus_home
 
 
 def _project_key() -> str:
-    override = os.environ.get("EASY_CHEESE_PROJECT", "").strip()
-    if override:
-        return re.sub(r"[^a-z0-9._-]+", "-", override.lower()).strip("-._") or "default"
-    try:
-        remote = subprocess.run(
-            ["git", "config", "--get", "remote.origin.url"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            check=False,
-        )
-        if remote.returncode == 0 and remote.stdout.strip():
-            value = remote.stdout.strip().removesuffix(".git")
-            value = value.rsplit(":", 1)[-1].rsplit("/", 2)[-2:]
-            return re.sub(r"[^a-z0-9._-]+", "-", "-".join(value).lower()).strip("-._") or "default"
-    except (OSError, subprocess.SubprocessError):
-        pass
-    return Path.cwd().name
-
-
-def _corpus_home() -> Path:
-    override = os.environ.get("EASY_CHEESE_HOME", "").strip()
-    if override and Path(override).is_absolute():
-        return Path(override)
-    xdg = os.environ.get("XDG_DATA_HOME", "").strip()
-    return (Path(xdg) if xdg and Path(xdg).is_absolute() else Path.home() / ".local" / "share") / "cheese"
+    """Compatibility alias for the canonical producer's project key."""
+    return _paths.project_key()
 
 
 def project_corpus_root() -> Path:
-    return _corpus_home() / _project_key()
+    """Compatibility alias for the canonical producer's corpus root."""
+    return _paths.project_corpus_root()
 
 
 def artifact_path(phase: str, slug: str) -> Path:
-    if phase not in PHASES:
-        raise ValueError(f"unknown phase {phase!r}; expected one of {sorted(PHASES)}")
-    if not isinstance(slug, str) or not KEBAB_SLUG.match(slug):
-        raise ValueError(
-            f"slug {slug!r} must be kebab-case, 1-64 chars, [a-z0-9-], "
-            "no leading/trailing hyphen, no double hyphens"
-        )
-    root = project_corpus_root() if phase in XDG_PHASES else Path(".cheese")
-    return root / PHASE_DIRS.get(phase, phase) / f"{slug}.md"
+    """Compatibility alias for the canonical producer's artifact path."""
+    return _paths.artifact_path(phase, slug)
 
 
 def main(argv: list[str]) -> int:
@@ -69,7 +39,11 @@ def main(argv: list[str]) -> int:
     parser.add_argument("slug")
     args = parser.parse_args(argv)
     try:
-        resolved = project_corpus_root() if args.phase == "research" else artifact_path(args.phase, args.slug)
+        resolved = (
+            project_corpus_root()
+            if args.phase == "research"
+            else artifact_path(args.phase, args.slug)
+        )
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

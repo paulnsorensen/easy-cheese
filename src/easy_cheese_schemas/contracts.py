@@ -2172,7 +2172,8 @@ class AgentWriterView:
 # Declares the mold spec-template shape as decorated models beside the
 # existing @contract markers.  A build-only compiler in the
 # _schema_catalog_compiler family (_document_rules_compiler.py) projects
-# this declaration into the dependency-free src/mold/_document_rules.py,
+# this declaration into the dependency-free
+# src/easy_cheese/skills/mold/_document_rules.py,
 # consumed by the hand-rolled validate-spec CLI.
 
 

@@ -119,14 +119,15 @@ def test_ac2_validate_spec_rejects_seeded_semantic_violations(mold_pyz: Path) ->
 
 def test_ac3_document_rules_projection_exists_and_is_staged(mold_pyz: Path) -> None:
     compiler = REPO_ROOT / "src" / "easy_cheese_schemas" / "_document_rules_compiler.py"
-    generated = REPO_ROOT / "src" / "mold" / "_document_rules.py"
+    generated = REPO_ROOT / "src" / "easy_cheese" / "skills" / "mold" / "_document_rules.py"
     assert compiler.is_file(), f"{WITNESS_AC3} [missing _document_rules_compiler.py]"
-    assert generated.is_file(), f"{WITNESS_AC3} [missing src/mold/_document_rules.py]"
+    assert generated.is_file(), f"{WITNESS_AC3} [missing package _document_rules.py]"
     with zipfile.ZipFile(mold_pyz) as bundle:
-        names = {Path(name).name for name in bundle.namelist()}
-    assert "_document_rules.py" in names, (
-        f"{WITNESS_AC3} [_document_rules.py not staged into mold.pyz]"
+        names = set(bundle.namelist())
+    assert "easy_cheese/skills/mold/_document_rules.py" in names, (
+        f"{WITNESS_AC3} [package _document_rules.py not staged into mold.pyz]"
     )
+    assert "_document_rules.py" not in names, f"{WITNESS_AC3} [dead root projection staged]"
 
 
 def test_ac4_generated_regions_present_in_both_instruction_surfaces() -> None:

@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import tarfile
+import zipfile
 from pathlib import Path
 
 from easy_cheese.shared.handoffs import canonical_bytes
@@ -32,8 +34,121 @@ def test_index_head_materialization_uses_the_requested_snapshot(tmp_path, monkey
     tracked.write_text("worktree", encoding="utf-8")
     monkeypatch.setattr(check_bundles, "REPO_ROOT", tmp_path)
 
-    assert (check_bundles.materialize_snapshot("HEAD") / "tracked.txt").read_text() == "head"
-    assert (check_bundles.materialize_snapshot("index") / "tracked.txt").read_text() == "index"
+    with check_bundles.materialize_snapshot("HEAD") as head:
+        assert (head / "tracked.txt").read_text() == "head"
+    with check_bundles.materialize_snapshot("index") as index:
+        assert (index / "tracked.txt").read_text() == "index"
+
+
+def test_snapshot_extraction_falls_back_when_data_filter_is_unavailable(tmp_path, monkeypatch):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    tracked = repo / "tracked.txt"
+    tracked.write_text("safe", encoding="utf-8")
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=repo, check=True)
+    subprocess.run(["git", "add", "tracked.txt"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "base"], cwd=repo, check=True)
+    monkeypatch.setattr(check_bundles, "REPO_ROOT", repo)
+    monkeypatch.setattr(tarfile, "data_filter", None, raising=False)
+
+    with check_bundles.materialize_snapshot("HEAD") as snapshot:
+        assert (snapshot / "tracked.txt").read_text() == "safe"
+
+
+def test_snapshot_currency_ignores_worktree_only_layout_changes(tmp_path, monkeypatch):
+    repo = tmp_path / "repo"
+    scripts = repo / "skills" / "mold" / "scripts"
+    scripts.mkdir(parents=True)
+    (scripts / "mold.pyz").write_bytes(b"head")
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=repo, check=True)
+    subprocess.run(["git", "add", "."], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "base"], cwd=repo, check=True)
+
+    # The staged index receives a doctrine violation, while the worktree
+    # removes it. Currency must inspect the selected tree, not live files.
+    (scripts / "common.pyz").write_bytes(b"index")
+    subprocess.run(["git", "add", "."], cwd=repo, check=True)
+    (scripts / "common.pyz").unlink()
+    monkeypatch.setattr(check_bundles, "REPO_ROOT", repo)
+
+    assert check_bundles.check_layout_currency(snapshot="HEAD") == ()
+    assert check_bundles.check_layout_currency(snapshot="index") == (
+        "skills/mold/scripts/common.pyz",
+    )
+
+
+def test_currency_rebuilds_from_selected_snapshot_not_live_sources(tmp_path, monkeypatch):
+    repo = tmp_path / "repo"
+    scripts = repo / "scripts"
+    bundle_dir = repo / "skills" / "mold" / "scripts"
+    scripts.mkdir(parents=True)
+    bundle_dir.mkdir(parents=True)
+    (repo / ".gitignore").write_text("/vendor/\n", encoding="utf-8")
+    (repo / "marker.txt").write_text("head", encoding="utf-8")
+    (scripts / "build_pyz.py").write_text(
+        "import pathlib, sys, zipfile\n"
+        "out = pathlib.Path(sys.argv[sys.argv.index('--out-dir') + 1]); out.mkdir(exist_ok=True)\n"
+        "with zipfile.ZipFile(out / 'mold.pyz', 'w') as z:\n"
+        "    z.writestr('marker', pathlib.Path('vendor/marker.txt').read_text())\n",
+        encoding="utf-8",
+    )
+    (repo / "requirements-vendor.txt").write_text("snapshot-lock\n", encoding="utf-8")
+    (scripts / "vendor_deps.py").write_text(
+        "import pathlib\n"
+        "vendor = pathlib.Path('vendor'); vendor.mkdir()\n"
+        "(vendor / 'marker.txt').write_text('snapshot')\n",
+        encoding="utf-8",
+    )
+    live_vendor = repo / "vendor"
+    live_vendor.mkdir()
+    (live_vendor / "marker.txt").write_text("live", encoding="utf-8")
+    with zipfile.ZipFile(bundle_dir / "mold.pyz", "w") as archive:
+        archive.writestr("marker", "snapshot")
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=repo, check=True)
+    subprocess.run(["git", "add", "."], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "base"], cwd=repo, check=True)
+
+    # Stage a coherent index snapshot, then make both source and bundle differ
+    # only in the live worktree. A live rebuild would report stale; HEAD must be
+    # green because its own source rebuild reproduces its committed archive.
+    (repo / "marker.txt").write_text("index", encoding="utf-8")
+    with zipfile.ZipFile(bundle_dir / "mold.pyz", "w") as archive:
+        archive.writestr("marker", "snapshot")
+    subprocess.run(["git", "add", "."], cwd=repo, check=True)
+    (repo / "marker.txt").write_text("worktree", encoding="utf-8")
+    with zipfile.ZipFile(bundle_dir / "mold.pyz", "w") as archive:
+        archive.writestr("marker", "worktree")
+    monkeypatch.setattr(check_bundles, "REPO_ROOT", repo)
+
+    assert check_bundles.main(["--against", "index"]) == 0
+
+
+def test_currency_reports_snapshot_rebuild_oserror_without_secondary_failure(
+    tmp_path, monkeypatch, capsys
+):
+    repo = tmp_path / "repo"
+    scripts = repo / "skills" / "mold" / "scripts"
+    scripts.mkdir(parents=True)
+    (scripts / "mold.pyz").write_bytes(b"bundle")
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.name", "test"], cwd=repo, check=True)
+    subprocess.run(["git", "add", "."], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "base"], cwd=repo, check=True)
+    monkeypatch.setattr(check_bundles, "REPO_ROOT", repo)
+
+    def fail(_root):
+        raise OSError("rebuild unavailable")
+
+    monkeypatch.setattr(check_bundles, "_rebuild_snapshot", fail)
+    assert check_bundles.main(["--against", "head"]) == 1
+    assert "could not rebuild selected snapshot bundles" in capsys.readouterr().out
 
 
 def test_stale_shell_closure_removes_replaced_archives_and_modules():

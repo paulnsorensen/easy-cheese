@@ -69,9 +69,13 @@ def stage(out: Path) -> Path:
     # Validate the checked-in catalog once, then reuse its immutable bytes for
     # every schema-carrying bundle in this release batch.
     catalog_bytes = build_pyz._schema_catalog_bytes_for(list(build_pyz.SKILLS))
+    document_rules_bytes = build_pyz._document_rules_bytes_for(list(build_pyz.SKILLS))
     for skill in build_pyz.SKILLS:
         target = out / "skills" / skill / "scripts" / f"{skill}.pyz"
-        build_pyz._build_bundle(skill, target, schema_catalog_bytes=catalog_bytes)
+        kwargs = {"schema_catalog_bytes": catalog_bytes}
+        if skill in {"mold", "cook"}:
+            kwargs["document_rules_bytes"] = document_rules_bytes
+        build_pyz.build_bundle(skill, target, **kwargs)
 
     _verify(out)
     return out

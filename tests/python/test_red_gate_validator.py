@@ -991,7 +991,12 @@ def test_probe_replays_native_context_in_both_safe_modes(
         replay.assertion_origin,
     ) == (1, None, True), replay.output
     replay_observation = _observed_matrix_value(replay.output)
-    assert replay_observation == native_observation
+    assert replay_observation[:3] + replay_observation[4:] == (
+        native_observation[:3] + native_observation[4:]
+    )
+    assert replay_observation[3][0] == str(
+        red_gate._lexical_executable_path(command[0], tmp_path)
+    )
 
 
 def test_issue_rejects_an_unsupported_assertion_proof_runner_without_executing_it(

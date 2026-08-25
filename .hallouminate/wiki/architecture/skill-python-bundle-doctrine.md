@@ -36,6 +36,10 @@ src/
 
 The `src` layout separates importable code from repository files and prevents accidental imports from the working directory.[^3]
 
+For migrated Mold runtime, package modules are authoritative. Files still required under `src/mold/` are thin compatibility entrypoints and are not copied into the Mold archive unless reachable. The generated document-rules projection lives only at `src/easy_cheese/skills/mold/_document_rules.py`.[^6]
+
+Corpus path computation is authoritative in `src/easy_cheese/shared/paths.py`; `shared/scripts/paths.py` is a transitional delegator. Both package-layout and legacy bundles stage that producer rather than maintaining a second resolver.[^7]
+
 ## Zip-safe runtime
 
 A skill archive may contain Python modules, bytecode, and immutable package resources. Bundled dependencies must be pure Python and zip-importable.
@@ -60,7 +64,11 @@ Minimal means both few artifacts and narrow contents:
 4. Only approved pure-Python third-party dependencies.
 5. No whole-package or whole-tree inclusion without explicit justification.
 
-The Mold and Cook build now derives reachable closure, rejects native and ambient dependencies, checks bundle currency against worktree/index/HEAD snapshots, and executes isolated archives in conformance tests. Remaining legacy bundles still require migration before these gates cover every Python skill.
+Mold and Cook command modules use static imports. `minimal_closure` walks those imports, including transitional shared scripts, so command declarations and runtime closure have one ownership path. Post-closure duplicate Mold helpers are prohibited and tested absent.[^8]
+
+Release staging calls the public layout-aware builder for Mold and Cook. The release test proves an isolated staged Mold-to-Cook contract round trip, not only command discovery.[^9]
+
+Bundle currency checks materialize the selected worktree, index, or HEAD snapshot, reconstruct vendor dependencies from that snapshot, rebuild with the snapshot's build script, and compare the rebuilt archives with the selected tree. Live worktree source or vendor state cannot contaminate index/HEAD checks.[^10]
 
 ## Superseded topology
 
@@ -71,5 +79,10 @@ The shared `common.pyz` topology is removed. Mold and Cook now use `src/easy_che
 [^3]: https://packaging.python.org/en/latest/discussions/src-layout-vs-flat-layout/
 [^4]: https://docs.python.org/3/library/zipimport.html
 [^5]: https://docs.python.org/3/library/importlib.resources.html
+[^6]: scripts/build_pyz.py:39-42
+[^7]: src/easy_cheese/shared/paths.py:1-591
+[^8]: src/easy_cheese/shared/bundles.py:82-132
+[^9]: tests/python/test_stage_release.py:110-166
+[^10]: scripts/check_bundles.py:55-190
 
-_Source: human-approved repository doctrine · Updated: 2026-08-24 · Supersedes: split runtime roots and shared common bundle topology_
+_Source: human-approved repository doctrine and PR #478 cure · Updated: 2026-08-24 · Supersedes: split runtime roots and shared common bundle topology_

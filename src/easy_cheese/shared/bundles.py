@@ -22,19 +22,6 @@ def _package_root(root: Path) -> Path:
     return candidate if candidate.exists() else root
 
 
-def discover_skills(root: Path) -> tuple[str, ...]:
-    skills = _package_root(root) / "skills"
-    if not skills.exists():
-        return ()
-    return tuple(
-        sorted(
-            path.name
-            for path in skills.iterdir()
-            if path.is_dir() and (path / "commands.py").is_file()
-        )
-    )
-
-
 def bundle_name(skill: str) -> str:
     if not skill or "/" in skill or "\\" in skill:
         raise ValueError("invalid skill name")
@@ -48,7 +35,7 @@ def _module_name(path: Path, source_root: Path) -> str:
     return ".".join(parts)
 
 
-def _modules(root: Path) -> dict[str, Path]:
+def _modules(root: Path, shared_root: Path | None = None) -> dict[str, Path]:
     source_root = root.parent
     modules: dict[str, Path] = {}
     for package in (root, source_root / "easy_cheese_schemas"):
@@ -58,6 +45,14 @@ def _modules(root: Path) -> dict[str, Path]:
             if path.name == "__init__.py":
                 continue
             modules[_module_name(path, source_root)] = path
+            if package.name == "easy_cheese_schemas" and path.parent == package:
+                # Source-checkout helpers have a flat fallback import for the
+                # schema package; resolve that alias to the packaged module so
+                # the closure does not vendor a second root-level copy.
+                modules.setdefault(path.stem, path)
+    if shared_root is not None and shared_root.is_dir():
+        for path in shared_root.glob("*.py"):
+            modules[path.stem] = path
     return modules
 
 
@@ -84,13 +79,15 @@ def _import_names(tree: ast.AST, module: str) -> tuple[str, ...]:
     return tuple(names)
 
 
-def minimal_closure(skill: str, root: Path) -> tuple[Path, ...]:
+def minimal_closure(
+    skill: str, root: Path, shared_root: Path | None = None
+) -> tuple[Path, ...]:
     """Resolve one skill's reachable internal pure-Python modules."""
     root = _package_root(root)
     entrypoint = root / "skills" / skill / "commands.py"
     if not entrypoint.is_file():
         raise ValueError(f"unknown Python skill: {skill}")
-    modules = _modules(root)
+    modules = _modules(root, shared_root)
     pending = [entrypoint]
     included: set[Path] = set()
     while pending:
@@ -100,7 +97,10 @@ def minimal_closure(skill: str, root: Path) -> tuple[Path, ...]:
         if path.suffix in _NATIVE_SUFFIXES:
             raise ValueError(f"native module in bundle: {path.name}")
         included.add(path)
-        module = _module_name(path, root.parent)
+        if shared_root is not None and path.parent == shared_root:
+            module = path.stem
+        else:
+            module = _module_name(path, root.parent)
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for name in _import_names(tree, module):
             if name.startswith("easy_cheese.skills.") and not name.startswith(
@@ -129,11 +129,7 @@ def minimal_closure(skill: str, root: Path) -> tuple[Path, ...]:
     return tuple(sorted(included))
 
 
-validate_closure = minimal_closure
-
 __all__ = [
     "bundle_name",
-    "discover_skills",
     "minimal_closure",
-    "validate_closure",
 ]

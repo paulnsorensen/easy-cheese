@@ -36,7 +36,9 @@ PHASE_CONTRACT_SOURCE = SRC_ROOT / "easy_cheese_schemas" / "phase_contracts.py"
 SCHEMA_CATALOG_SOURCE = SRC_ROOT / "easy_cheese_schemas" / "_schema_catalog.py"
 SCHEMA_CONTRACT_SOURCE = SRC_ROOT / "easy_cheese_schemas" / "contracts.py"
 DOCUMENT_RULES_MODULE = "_document_rules.py"
-DOCUMENT_RULES_SOURCE = SRC_ROOT / "mold" / DOCUMENT_RULES_MODULE
+DOCUMENT_RULES_SOURCE = (
+    SRC_ROOT / "easy_cheese" / "skills" / "mold" / DOCUMENT_RULES_MODULE
+)
 SHARED_MODULES = {p.stem for p in SHARED_SCRIPTS.glob("*.py")}
 ZIP_TIMESTAMP = (1980, 1, 2, 0, 0, 0)
 # Pinned so the compressed bytes depend only on the zlib build, never on
@@ -155,7 +157,7 @@ SRC_DIRS: dict[str, str] = {"ultracook": "fanout"}
 EXTRA_MODULES: dict[str, list[tuple[str, str]]] = {
     "mold": [("fanout", "mode.py")],
     "cut": [
-        ("mold", "taste_test.py"),
+        ("easy_cheese/skills/mold", "taste_test.py"),
     ],
     "age": [
         ("fanout", "age_route.py"),
@@ -170,7 +172,7 @@ EXTRA_MODULES: dict[str, list[tuple[str, str]]] = {
         ("fanout", "press_route.py"),
         ("cut", "cut_assertion_probe.py"),
         ("cut", "gate_receipts.py"),
-        ("mold", "taste_test.py"),
+        ("easy_cheese/skills/mold", "taste_test.py"),
     ],
 }
 
@@ -517,6 +519,15 @@ def _build_bundle(
             if module in sub_to_module.values():
                 continue  # already staged below as a shared subcommand
             shutil.copy(SHARED_SCRIPTS / f"{module}.py", stage / f"{module}.py")
+        if "paths" in needed_shared(skill):
+            package = stage / "easy_cheese" / "shared"
+            package.mkdir(parents=True, exist_ok=True)
+            for init in (stage / "easy_cheese" / "__init__.py", package / "__init__.py"):
+                init.write_text("", encoding="utf-8")
+            shutil.copy(
+                SRC_ROOT / "easy_cheese" / "shared" / "paths.py",
+                package / "paths.py",
+            )
         for source in files.values():
             shutil.copy(
                 _source_path(skill, source),
@@ -572,16 +583,31 @@ def _build_bundle(
     return target
 
 
-def build_bundle(skill: str, target: Path) -> Path:
+def build_bundle(
+    skill: str,
+    target: Path,
+    *,
+    schema_catalog_bytes: bytes | None = None,
+    document_rules_bytes: bytes | None = None,
+) -> Path:
     """Build one bundle from its owning layout."""
     if skill in {"mold", "cook"}:
-        return build_layout_bundle(skill, target)
-    return _build_bundle(
-        skill,
-        target,
-        schema_catalog_bytes=_schema_catalog_bytes_for([skill]),
-        document_rules_bytes=_document_rules_bytes_for([skill]),
-    )
+        return build_layout_bundle(
+            skill,
+            target,
+            schema_catalog_bytes=schema_catalog_bytes,
+            document_rules_bytes=document_rules_bytes,
+        )
+    kwargs = {
+        "schema_catalog_bytes": (
+            schema_catalog_bytes
+            if schema_catalog_bytes is not None
+            else _schema_catalog_bytes_for([skill])
+        )
+    }
+    if document_rules_bytes is not None:
+        kwargs["document_rules_bytes"] = document_rules_bytes
+    return _build_bundle(skill, target, **kwargs)
 
 
 def cached_bundle(skill: str) -> Path:
@@ -649,60 +675,6 @@ def main(argv: list[str]) -> int:
 LAYOUT_PACKAGE_ROOT = SRC_ROOT / "easy_cheese"
 _NATIVE_SUFFIXES = {".so", ".pyd", ".dylib"}
 
-def discover_python_skills(root: Path | None = None) -> tuple[str, ...]:
-    """Return skills owning Python under src/easy_cheese/skills."""
-    base = (root or LAYOUT_PACKAGE_ROOT) / "skills"
-    if not base.exists():
-        return ()
-    return tuple(
-        sorted(
-            path.name
-            for path in base.iterdir()
-            if path.is_dir() and any(path.rglob("*.py"))
-        )
-    )
-
-
-def _layout_modules(skill: str, root: Path | None = None) -> dict[str, Path]:
-    package_root = root or LAYOUT_PACKAGE_ROOT
-    base = package_root / "skills" / skill
-    if not base.exists():
-        raise ValueError(f"unknown Python skill: {skill}")
-    modules = {
-        f"easy_cheese.skills.{skill}.{path.stem}": path
-        for path in base.rglob("*.py")
-        if path.name != "__init__.py"
-    }
-    shared = package_root / "shared"
-    modules.update(
-        {
-            f"easy_cheese.shared.{path.stem}": path
-            for path in shared.rglob("*.py")
-            if path.name != "__init__.py"
-        }
-    )
-    schemas = package_root.parent / "easy_cheese_schemas"
-    if schemas.exists():
-        modules.update(
-            {
-                f"easy_cheese_schemas.{path.stem}": path
-                for path in schemas.rglob("*.py")
-                if path.name != "__init__.py"
-            }
-        )
-    return modules
-
-
-def validate_bundle_closure(
-    skill: str, root: Path | None = None
-) -> tuple[Path, ...]:
-    """Resolve one skill's reachable pure-Python closure."""
-    package_root = root or LAYOUT_PACKAGE_ROOT
-    if str(package_root.parent) not in sys.path:
-        sys.path.insert(0, str(package_root.parent))
-    from easy_cheese.shared.bundles import minimal_closure
-    return minimal_closure(skill, package_root)
-
 
 def _compile_layout_commands(skill: str, root: Path | None = None) -> dict[str, str]:
     """Compile command decorators from a layout skill entrypoint."""
@@ -730,7 +702,15 @@ def _compile_layout_commands(skill: str, root: Path | None = None) -> dict[str, 
         raise ValueError(f"no bundle commands declared for {skill}")
     compiled = dict(sorted(commands.items()))
     if package_root.resolve() == LAYOUT_PACKAGE_ROOT.resolve():
-        module = importlib.import_module(f"easy_cheese.skills.{skill}.commands")
+        shared_entry = str(SHARED_SCRIPTS)
+        added_shared = shared_entry not in sys.path
+        if added_shared:
+            sys.path.insert(0, shared_entry)
+        try:
+            module = importlib.import_module(f"easy_cheese.skills.{skill}.commands")
+        finally:
+            if added_shared:
+                sys.path.remove(shared_entry)
         from easy_cheese.shared.bundle_commands import (
             compile_bundle_commands,
             validate_generated_region,
@@ -822,6 +802,20 @@ def _copy_pure_python_dependencies(stage: Path, files: tuple[Path, ...]) -> None
         shutil.copy2(source, destination)
 
 
+def _schema_package_initializer(root: Path) -> str:
+    """Project only canonical version metadata into the isolated package."""
+    source = root.parent / "easy_cheese_schemas" / "__init__.py"
+    tree = ast.parse(source.read_text(encoding="utf-8"))
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id == "__version__"
+            for target in node.targets
+        ):
+            if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+                return f"__version__ = {node.value.value!r}\n"
+    raise RuntimeError(f"canonical schema package version is missing: {source}")
+
+
 def build_layout_bundle(
     skill: str,
     target: Path,
@@ -834,7 +828,12 @@ def build_layout_bundle(
     if target.name != f"{skill}.pyz":
         raise ValueError("archive name must match owning skill")
     root = root or LAYOUT_PACKAGE_ROOT
-    files = validate_bundle_closure(skill, root)
+    package_entry = str(root.parent)
+    if package_entry not in sys.path:
+        sys.path.insert(0, package_entry)
+    from easy_cheese.shared.bundles import minimal_closure
+
+    files = minimal_closure(skill, root, SHARED_SCRIPTS)
     if skill in {"mold", "cook"} and schema_catalog_bytes is None:
         schema_catalog_bytes = _checked_in_schema_catalog_bytes(
             _compiled_schema_catalog_source()
@@ -848,7 +847,10 @@ def build_layout_bundle(
     with tempfile.TemporaryDirectory() as td:
         stage = Path(td)
         for source in files:
-            relative = source.relative_to(root.parent)
+            if source.is_relative_to(SHARED_SCRIPTS):
+                relative = Path(source.name)
+            else:
+                relative = source.relative_to(root.parent)
             destination = stage / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, destination)
@@ -860,7 +862,12 @@ def build_layout_bundle(
             stage / "easy_cheese_schemas",
         ):
             package.mkdir(parents=True, exist_ok=True)
-            (package / "__init__.py").write_text("", encoding="utf-8")
+            if package.name == "easy_cheese_schemas":
+                (package / "__init__.py").write_text(
+                    _schema_package_initializer(root), encoding="utf-8"
+                )
+            else:
+                (package / "__init__.py").write_text("", encoding="utf-8")
         _copy_pure_python_dependencies(stage, files)
         schema_path = stage / "easy_cheese_schemas" / "_schema_catalog.py"
         if schema_catalog_bytes is not None:
@@ -868,30 +875,9 @@ def build_layout_bundle(
             schema_path.write_bytes(schema_catalog_bytes)
         (stage / "easy_cheese_schemas" / PHASE_REGISTRY_MODULE).write_bytes(registry_bytes)
         if skill == "mold" and document_rules_bytes is not None:
-            (stage / DOCUMENT_RULES_MODULE).write_bytes(document_rules_bytes)
-            compatibility = {
-                "curd_count.py": SRC_ROOT / "mold" / "curd-count.py",
-                "cli.py": SHARED_SCRIPTS / "cli.py",
-                "gate_graph.py": SRC_ROOT / "mold" / "gate-graph.py",
-                "html_report.py": SHARED_SCRIPTS / "html_report.py",
-                "html_report_cli.py": SHARED_SCRIPTS / "html_report_cli.py",
-                "mode.py": SRC_ROOT / "fanout" / "mode.py",
-                "taste_test.py": SRC_ROOT / "mold" / "taste_test.py",
-            }
-            for name, source in compatibility.items():
-                shutil.copy2(source, stage / name)
-        elif skill == "cook":
-            compatibility = {
-                "cli.py": SHARED_SCRIPTS / "cli.py",
-                "worktree.py": SHARED_SCRIPTS / "worktree.py",
-            }
-            for source in _files("cook").values():
-                if isinstance(source, Shared):
-                    compatibility[_filename(source)] = _source_path("cook", source)
-            for module in needed_shared("cook"):
-                compatibility[f"{module}.py"] = SHARED_SCRIPTS / f"{module}.py"
-            for name, source in compatibility.items():
-                shutil.copy2(source, stage / name)
+            (stage / "easy_cheese" / "skills" / "mold" / DOCUMENT_RULES_MODULE).write_bytes(
+                document_rules_bytes
+            )
         commands = _compile_layout_commands(skill, root)
         (stage / "__main__.py").write_text(
             "# bundle_command generated layout dispatcher\n"
