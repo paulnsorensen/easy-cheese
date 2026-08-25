@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -12,6 +13,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CUT_ROOT = REPO_ROOT / "src" / "cut"
+from scripts import build_pyz  # noqa: E402
 
 
 def _load_red_gate() -> ModuleType:
@@ -76,6 +78,29 @@ gate_applicability:
         "approved",
     ]
     assert [contract["mode"] for contract in contracts] == ["tracer", "contract-matrix"]
+
+
+def test_source_red_gate_loads_mold_parser_after_partial_bundle_package_cache(
+    tmp_path: Path,
+) -> None:
+    """A prior ultracook archive must not strand Cut's source import path."""
+    bundle = build_pyz.build_layout_bundle("cook", tmp_path / "cook.pyz")
+    source = REPO_ROOT / "src"
+    code = (
+        "import sys; "
+        f"sys.path.insert(0, {str(bundle)!r}); import easy_cheese; "
+        f"sys.path.insert(0, {str(source)!r}); "
+        "from cut import red_gate; "
+        "assert red_gate.RED_REQUIRED_EXECUTABLE_PROBLEM"
+    )
+    result = subprocess.run(
+        [sys.executable, "-S", "-c", code],
+        cwd=REPO_ROOT,
+        env={"PATH": ""},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_contract_plan_excludes_green_guards(

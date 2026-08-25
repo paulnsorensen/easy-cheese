@@ -49,12 +49,12 @@ def detect_squash_residue() -> ModuleType:
 
 @pytest.fixture(scope="session")
 def curd_count() -> ModuleType:
-    return importlib.import_module("curd_count")
+    return importlib.import_module("easy_cheese.skills.mold.curd_count")
 
 
 @pytest.fixture(scope="session")
 def gate_graph() -> ModuleType:
-    return importlib.import_module("gate_graph")
+    return importlib.import_module("easy_cheese.skills.mold.gate_graph")
 
 
 @pytest.fixture(scope="session")

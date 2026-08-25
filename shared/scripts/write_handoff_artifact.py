@@ -43,7 +43,7 @@ except ModuleNotFoundError as exc:
     if exc.name != "easy_cheese_schemas":
         raise
     try:
-        # common.pyz stages the public runtime modules at its top level.
+        # Same-named legacy bundles stage the public runtime modules at top level.
         from phase_contracts import (
             COMPILED_TRANSITION_REGISTRY,
             TransitionError,

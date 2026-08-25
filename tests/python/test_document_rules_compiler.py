@@ -11,7 +11,9 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCHEMAS_ROOT = REPO_ROOT / "src" / "easy_cheese_schemas"
-GENERATED = REPO_ROOT / "src" / "mold" / "_document_rules.py"
+GENERATED = (
+    REPO_ROOT / "src" / "easy_cheese" / "skills" / "mold" / "_document_rules.py"
+)
 CURDLE_MD = REPO_ROOT / "skills" / "mold" / "references" / "curdle.md"
 
 if str(SCHEMAS_ROOT) not in sys.path:

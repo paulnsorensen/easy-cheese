@@ -18,7 +18,7 @@ Two modes, by analogy to `/culture`:
 2. **Route** — choose the secondary mode from `references/modes.md`, announce it, and correct false premises first.
 3. **Dialogue** — consequential forks are the user's to pick. Supply options, trade-offs, and evidence before asking; ground critical claims through code, the [Validate Cycle](references/validate-cycle.md), or a [Prototype Cycle](references/prototype-cycle.md). Resolve contradictions and render the decision map after three consecutive fork questions or on request.
 4. **Sketch** — for work spanning modules or adding a public interface, run `references/shape-check.md`, bind identity/role nouns to code referents, and lock seams as pseudocode signatures.
-5. **Plan for approval** — first run the fresh-context fork-coherence taste test from `src/mold/taste_test.py` and persist its digest-bound pass. A failure reopens only named forks; halt after the third failed verdict. Only then dispatch a typed `PlannerRequest` and validate its `PlannerResultWriterView`; retry an invalid result once and stop before the handshake if it remains invalid. Normalize it on the host and persist only the typed `PlannerResult` and `CurdPlan` artifacts. The legacy `CurdBlock`/`Decomposition` projection is migration-only: request it explicitly and require a lossless projection or `UnsupportedProjection`. Present the typed plan's semantic curds and waves at the handshake. See `references/curdle.md` § "Pre-approval typed planner dispatch".
+5. **Plan for approval** — first run the fresh-context fork-coherence taste test from `src/easy_cheese/skills/mold/taste_test.py` and persist its digest-bound pass. The legacy `src/mold/taste_test.py` is a compatibility entrypoint. A failure reopens only named forks; halt after the third failed verdict. Only then dispatch a typed `PlannerRequest` and validate its `PlannerResultWriterView`; retry an invalid result once and stop before the handshake if it remains invalid. Normalize it on the host and persist only the typed `PlannerResult` and `CurdPlan` artifacts. The legacy `CurdBlock`/`Decomposition` projection is migration-only: request it explicitly and require a lossless projection or `UnsupportedProjection`. Present the typed plan's semantic curds and waves at the handshake. See `references/curdle.md` § "Pre-approval typed planner dispatch".
 6. **Two-key handshake** — both the user (explicit verb) and the agent (coherence self-check) must agree to the draft spec and displayed typed plan before extraction. Neither key changes or disappears. See `references/handshake.md`.
 7. **Curdle** — resolve the durable spec path with `SPEC=$(python3 shared/scripts/artifact_path.py specs <slug>)` (bundle-only host fallback: `python3 skills/mold/scripts/mold.pyz artifact-path specs <slug>`). Phase one writes every local artifact and write-ahead prepared state *before any external call*: the approved spec at `"$SPEC"`, the host-validated `PlannerResult` and `CurdPlan`, any local issue drafts, and the session's non-obvious decisions as durable ADRs. Phase two then publishes approved follow-ups, retains prepared recovery state when an external capability is unavailable or publication fails, and reconciles their state and references into the durable spec before any handoff.
 8. **Count and hand off** — after reconciliation, run [`mold.pyz curd-count`](references/curd-count.md), then prompt via `## Handoff`; dispatch only the user's non-stop selection.
@@ -120,6 +120,19 @@ If any gate is unmet or the typed plan remains invalid after one retry, propose 
 
 `/mold --hard` propagates `--hard` to `/cook` at handoff (any cook-flavoured option carries it forward). Mold runs no gate itself — the metacognitive vibecheck fires later, at `/cure`'s share-for-review boundary. See `skills/hard-cheese/SKILL.md` and `../hard-cheese/references/composition.md`.
 
+## Canonical Mold → Cook handoff
+
+Mold normalizes the closed writer view, validates its semantics, and publishes a receipt-bound `HandoffPointer` as the only Cook input. The pointer is written last after its payload and `NormalizationReceipt`; do not execute a bare payload.
+
+<!-- GENERATED BUNDLE COMMANDS:START -->
+- `artifact-path` — Resolve a durable or transient artifact path.
+- `contract` — Publish or migrate a canonical Mold-to-Cook handoff.
+- `curd-count` — Count a validated Mold spec's semantic curds.
+- `gate-graph` — Render the Mold handshake gate graph.
+- `render_html` — Render a Markdown artifact as a self-contained HTML report.
+- `taste-test` — Validate a digest-bound Mold fork-coherence verdict.
+- `validate-spec` — Validate a Mold specification.
+<!-- GENERATED BUNDLE COMMANDS:END -->
 ## Handoff
 
 **Pipeline:** culture → **[mold]** → cut → cook → press → age → cure → plate

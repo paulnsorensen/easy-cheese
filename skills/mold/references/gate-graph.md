@@ -1,11 +1,11 @@
 # The gate graph
 
-Mold's gate state machine has one canonical model: `src/mold/gate-graph.py`'s
-`GATE_MODEL` (bundled into `mold.pyz` as the `gate-graph` subcommand). Both render
-targets derive from that one model, so they cannot drift (ADR-001). The model
-doubles as the gate-prose-sync source: a test asserts the handshake
-coherence-checklist items equal the model's gate nodes, so a gate cannot be
-silently dropped from prose.
+Mold's gate state machine has one canonical model: `src/easy_cheese/skills/mold/gate_graph.py`'s
+`GATE_MODEL` (bundled into `mold.pyz` as the `gate-graph` subcommand). The legacy
+`src/mold/gate-graph.py` remains a compatibility entrypoint. Both render targets
+derive from the package model, so they cannot drift (ADR-001). The model doubles
+as the gate-prose-sync source: a test asserts the handshake coherence-checklist
+items equal the model's gate nodes, so a gate cannot be silently dropped from prose.
 
 ## Subcommand
 

@@ -53,8 +53,8 @@ WITNESS_AC6 = (
     "structuring error on the nonconforming fixture and exit 0 on the conforming one"
 )
 WITNESS_AC7 = (
-    "skills/cook/scripts/common.pyz is absent because COMMON_CONSUMERS excludes "
-    "cook; test asserts the file exists and the frozenset contains cook"
+    "shared commands must ship inside Cook's same-named archive without a "
+    "parallel common.pyz topology"
 )
 WITNESS_AC8 = (
     "COHERENCE_GATES carries no spec-format checklist entry so the rendered "
@@ -119,14 +119,15 @@ def test_ac2_validate_spec_rejects_seeded_semantic_violations(mold_pyz: Path) ->
 
 def test_ac3_document_rules_projection_exists_and_is_staged(mold_pyz: Path) -> None:
     compiler = REPO_ROOT / "src" / "easy_cheese_schemas" / "_document_rules_compiler.py"
-    generated = REPO_ROOT / "src" / "mold" / "_document_rules.py"
+    generated = REPO_ROOT / "src" / "easy_cheese" / "skills" / "mold" / "_document_rules.py"
     assert compiler.is_file(), f"{WITNESS_AC3} [missing _document_rules_compiler.py]"
-    assert generated.is_file(), f"{WITNESS_AC3} [missing src/mold/_document_rules.py]"
+    assert generated.is_file(), f"{WITNESS_AC3} [missing package _document_rules.py]"
     with zipfile.ZipFile(mold_pyz) as bundle:
-        names = {Path(name).name for name in bundle.namelist()}
-    assert "_document_rules.py" in names, (
-        f"{WITNESS_AC3} [_document_rules.py not staged into mold.pyz]"
+        names = set(bundle.namelist())
+    assert "easy_cheese/skills/mold/_document_rules.py" in names, (
+        f"{WITNESS_AC3} [package _document_rules.py not staged into mold.pyz]"
     )
+    assert "_document_rules.py" not in names, f"{WITNESS_AC3} [dead root projection staged]"
 
 
 def test_ac4_generated_regions_present_in_both_instruction_surfaces() -> None:
@@ -188,13 +189,12 @@ def test_ac6_cook_validate_structures_payload_against_catalog_contract(
     assert ok.returncode == 0, f"{WITNESS_AC6} [rc={ok.returncode} on conforming payload]"
 
 
-def test_ac7_cook_joins_common_consumers_and_ships_common_pyz() -> None:
-    assert "cook" in build_pyz.COMMON_CONSUMERS, (
-        f"{WITNESS_AC7} [COMMON_CONSUMERS excludes cook]"
+def test_ac7_cook_ships_shared_commands_in_its_own_archive() -> None:
+    assert "cook" in build_pyz.SHARED_COMMAND_CONSUMERS, WITNESS_AC7
+    assert (REPO_ROOT / "skills" / "cook" / "scripts" / "cook.pyz").is_file(), (
+        WITNESS_AC7
     )
-    assert (REPO_ROOT / "skills" / "cook" / "scripts" / "common.pyz").is_file(), (
-        f"{WITNESS_AC7} [skills/cook/scripts/common.pyz missing]"
-    )
+    assert not list(REPO_ROOT.glob("skills/*/scripts/common.pyz")), WITNESS_AC7
 
 
 def test_ac8_gate_graph_derives_spec_format_valid_before_curdle(

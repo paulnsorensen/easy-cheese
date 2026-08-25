@@ -28,6 +28,8 @@ test: vendor
     python3 -m pytest tests/hard-cheese/python -q
     python3 -m pytest tests/pasteurize/python -q
     python3 -m pytest tests/wheypoint/python -q
+    python3 -m pytest tests/mold tests/cook tests/scripts tests/conformance -q
+    python3 -m pytest tests/shared/test_legacy_handoffs.py -q
     node --test 'tests/js/**/*.test.mjs'
     bats tests/bash/test_install.bats
     bats tests/fanout/bash/test_pr_plan_to_branches.bats

@@ -34,6 +34,12 @@ def cut_pyz(tmp_path_factory) -> Path:
     return build_pyz.build_bundle("cut", out / "cut.pyz")
 
 
+@pytest.fixture(scope="module")
+def press_pyz(tmp_path_factory) -> Path:
+    out = tmp_path_factory.mktemp("tree-staging-press")
+    return build_pyz.build_bundle("press", out / "press.pyz")
+
+
 def test_cut_tree_staging_keeps_schema_and_helpers_nested(cut_pyz: Path) -> None:
     with zipfile.ZipFile(cut_pyz) as archive:
         names = set(archive.namelist())
@@ -46,6 +52,17 @@ def test_cut_tree_staging_keeps_schema_and_helpers_nested(cut_pyz: Path) -> None
     assert "gates.py" not in names
 
 
+def test_cut_and_press_stage_package_owned_taste_test_as_flat_runtime_module(
+    cut_pyz: Path, press_pyz: Path
+) -> None:
+    """Legacy source delegators must not be the runtime dependency of either bundle."""
+    for pyz in (cut_pyz, press_pyz):
+        with zipfile.ZipFile(pyz) as archive:
+            names = set(archive.namelist())
+        assert "taste_test.py" in names
+        assert "mold/taste_test.py" not in names
+
+
 def test_cut_red_gate_cli_runs_from_isolated_bundle(cut_pyz: Path) -> None:
     result = subprocess.run(
         [sys.executable, "-S", "-I", str(cut_pyz), "red-gate"],
@@ -55,6 +72,46 @@ def test_cut_red_gate_cli_runs_from_isolated_bundle(cut_pyz: Path) -> None:
     assert result.returncode == 2, result.stdout + result.stderr
     usage = result.stdout + result.stderr
     assert all(command in usage for command in ("contracts", "issue", "validate"))
+
+
+@pytest.mark.parametrize("pyz_name", ("cut", "press"))
+def test_cut_and_press_red_gate_run_mold_parser_from_isolated_bundle(
+    cut_pyz: Path,
+    press_pyz: Path,
+    tmp_path: Path,
+    pyz_name: str,
+) -> None:
+    """Cut and Press must execute Mold's package-owned parser without source paths."""
+    spec = tmp_path / "approved.md"
+    spec.write_text(
+        """---
+status: approved
+gate_applicability:
+  disposition: red-required
+  work_class: behavior
+---
+# Behavior
+
+## Acceptance Criteria
+- AC-1: `api.create` rejects an invalid request.
+
+## Test Contracts
+| Acceptance | Interface referent | Outermost stable seam | Expected failure | Mode |
+| --- | --- | --- | --- | --- |
+| AC-1 | `api.create` | `api.create` | invalid request is rejected | tracer |
+""",
+        encoding="utf-8",
+    )
+    pyz = cut_pyz if pyz_name == "cut" else press_pyz
+    result = subprocess.run(
+        [sys.executable, "-S", "-I", str(pyz), "red-gate", "contracts", str(spec)],
+        cwd=tmp_path,
+        env={"PATH": ""},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert '"disposition": "red"' in result.stdout
 
 
 def test_cut_bundle_is_byte_deterministic(tmp_path: Path) -> None:

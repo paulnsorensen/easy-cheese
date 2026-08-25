@@ -230,6 +230,15 @@ from easy_cheese_schemas.workflow import (
     plan,
     run_workflow,
 )
+from easy_cheese_schemas.handoff import (
+    HANDOFF_SCHEMA_URI,
+    LEGACY_SCHEMA_URI,
+    HandoffPointer,
+    NORMALIZATION_RECEIPT_SCHEMA_URI,
+    WRITER_VIEW_SCHEMA_URI,
+    NormalizationAction,
+    NormalizationReceipt,
+)
 
 __version__ = "1.1.0"
 
@@ -428,4 +437,11 @@ __all__ = [
     "validate_contract",
     "validate_curd_plan",
     "validate_transition",
+    "HANDOFF_SCHEMA_URI",
+    "LEGACY_SCHEMA_URI",
+    "NORMALIZATION_RECEIPT_SCHEMA_URI",
+    "WRITER_VIEW_SCHEMA_URI",
+    "HandoffPointer",
+    "NormalizationAction",
+    "NormalizationReceipt",
 ]

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import fcntl
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -54,22 +55,31 @@ if _BUNDLE_PATH is not None:
 else:
     from cut import cut_assertion_probe  # type: ignore[no-redef]  # noqa: E402
 
-try:  # the Cut bundle stages Mold's canonical parser as a flat module
-    from mold.taste_test import (  # noqa: E402
-        ApplicabilityError as MoldApplicabilityError,
-        NotApplicable as MoldNotApplicable,
-        RED_REQUIRED_EXECUTABLE_PROBLEM,
-        is_new_mold_spec,
-        parse_gate_applicability as parse_mold_gate_applicability,
+
+def _load_source_taste_test() -> Any:
+    """Load Mold's package module even if another archive cached ``easy_cheese``."""
+    source = _SOURCE_ROOT / "easy_cheese" / "skills" / "mold" / "taste_test.py"
+    spec = importlib.util.spec_from_file_location("_mold_taste_test_source", source)
+    if spec is None or spec.loader is None:
+        raise ModuleNotFoundError(f"cannot load Mold taste test: {source}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+try:  # source execution imports Mold's package-owned parser
+    from easy_cheese.skills.mold import taste_test as _mold_taste_test  # noqa: E402
+except ModuleNotFoundError:  # pragma: no cover - bundle stages it as a flat module
+    _mold_taste_test = (
+        _load_source_taste_test() if _BUNDLE_PATH is None else __import__("taste_test")
     )
-except ModuleNotFoundError:  # pragma: no cover - bundled import path
-    from taste_test import (  # type: ignore[no-redef]  # noqa: E402
-        ApplicabilityError as MoldApplicabilityError,
-        NotApplicable as MoldNotApplicable,
-        RED_REQUIRED_EXECUTABLE_PROBLEM,
-        is_new_mold_spec,
-        parse_gate_applicability as parse_mold_gate_applicability,
-    )
+
+MoldApplicabilityError = _mold_taste_test.ApplicabilityError
+MoldNotApplicable = _mold_taste_test.NotApplicable
+RED_REQUIRED_EXECUTABLE_PROBLEM = _mold_taste_test.RED_REQUIRED_EXECUTABLE_PROBLEM
+is_new_mold_spec = _mold_taste_test.is_new_mold_spec
+parse_mold_gate_applicability = _mold_taste_test.parse_gate_applicability
 
 try:  # direct script execution puts this directory on sys.path
     from gate_receipts import GateValidationError, ValidationResult  # noqa: E402
@@ -1253,9 +1263,12 @@ def _python_case_command(
     runner = _python_case_runner(argv, cwd)
     trusted_interpreter = _TRUSTED_INTERPRETER_PATH
     target_executable = _lexical_executable_path(argv[0], cwd) if argv else None
+    original_argv0 = target_executable
     if runner is None or trusted_interpreter is None or target_executable is None:
         return None
     trusted_paths, target_paths = _probe_paths(argv[0], cwd)
+    if original_argv0 is None:
+        original_argv0 = target_executable
     safe_path_args = ["-P"] if os.environ.get("PYTHONSAFEPATH") else []
     prefix = [
         str(trusted_interpreter),
@@ -1278,16 +1291,16 @@ def _python_case_command(
     ]
     if runner == "code":
         return _ProbeCommand(
-            [*prefix, runner, argv[0], argv[2], *argv[3:]],
+            [*prefix, runner, str(original_argv0), argv[2], *argv[3:]],
             runner,
         )
     if runner in {"pytest", "unittest"}:
         return _ProbeCommand(
-            [*prefix, runner, argv[0], *argv[3:]],
+            [*prefix, runner, str(original_argv0), *argv[3:]],
             runner,
         )
     return _ProbeCommand(
-        [*prefix, runner, argv[0], argv[1], *argv[2:]],
+        [*prefix, runner, str(original_argv0), argv[1], *argv[2:]],
         runner,
     )
 

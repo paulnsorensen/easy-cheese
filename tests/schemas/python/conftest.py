@@ -9,7 +9,8 @@ and silent drift, so it wires each side to the copy that actually matters:
   runs (same pattern as tests/fanout/python/conftest.py);
 * the attrs types come from src/, the source of truth the package publishes --
   imported here *before* the bundle joins sys.path, because the bundle vendors
-  its own copy of easy_cheese_schemas and would otherwise shadow it.
+  its own copies of easy_cheese and easy_cheese_schemas and would otherwise
+  shadow the source packages.
 """
 
 from __future__ import annotations
@@ -25,8 +26,9 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 # Import order is the contract: src/ and vendor/ are already on sys.path from
-# the repo-root conftest, so this binds easy_cheese_schemas to src/ for the
-# whole session.
+# the repo-root conftest, so this binds both source packages for the whole
+# session before the bundle can join sys.path.
+import easy_cheese  # noqa: E402, F401
 import easy_cheese_schemas  # noqa: E402, F401
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))

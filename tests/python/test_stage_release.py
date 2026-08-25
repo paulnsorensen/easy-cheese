@@ -6,7 +6,9 @@ These are the invariants that, when violated silently, shipped the empty v0.5.1.
 
 from __future__ import annotations
 
+import json
 import sys
+import subprocess
 import zipfile
 from pathlib import Path
 
@@ -18,6 +20,11 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 import build_pyz  # noqa: E402
 import stage_release  # noqa: E402
 from ref_extraction import relative_md_refs  # noqa: E402
+from easy_cheese.shared.handoffs import canonical_bytes  # noqa: E402
+from tests.schemas.python.test_handoff_contracts import (  # noqa: E402
+    repaired_writer_text,
+    writer_and_invocation,
+)
 
 
 @pytest.fixture(scope="module")
@@ -34,7 +41,7 @@ def test_release_batch_derives_and_reuses_schema_catalog_once(
     catalog_values: list[bytes | None] = []
     compile_catalog = build_pyz._compiled_schema_catalog_source
     validate_catalog = build_pyz._checked_in_schema_catalog_bytes
-    build_bundle = build_pyz._build_bundle
+    build_bundle = build_pyz.build_bundle
 
     def compile_once() -> str:
         nonlocal compiled_calls
@@ -52,17 +59,19 @@ def test_release_batch_derives_and_reuses_schema_catalog_once(
         target: Path,
         *,
         schema_catalog_bytes: bytes | None = None,
+        document_rules_bytes: bytes | None = None,
     ) -> Path:
         catalog_values.append(schema_catalog_bytes)
         return build_bundle(
             skill,
             target,
             schema_catalog_bytes=schema_catalog_bytes,
+            document_rules_bytes=document_rules_bytes,
         )
 
     monkeypatch.setattr(build_pyz, "_compiled_schema_catalog_source", compile_once)
     monkeypatch.setattr(build_pyz, "_checked_in_schema_catalog_bytes", validate_once)
-    monkeypatch.setattr(build_pyz, "_build_bundle", build_with_catalog)
+    monkeypatch.setattr(build_pyz, "build_bundle", build_with_catalog)
 
     stage_release.stage(tmp_path / "release")
 
@@ -80,6 +89,79 @@ def test_every_skill_ships_its_bundle(staged: Path) -> None:
         # A real zipapp, not an empty placeholder: it carries the dispatcher.
         with zipfile.ZipFile(pyz) as zf:
             assert "__main__.py" in zf.namelist()
+
+
+@pytest.mark.parametrize("skill", ["mold", "cook"])
+def test_staged_layout_bundles_dispatch_in_isolation(
+    staged: Path, skill: str, tmp_path: Path
+) -> None:
+    pyz = staged / "skills" / skill / "scripts" / f"{skill}.pyz"
+    result = subprocess.run(
+        [sys.executable, "-I", "-S", str(pyz), "--help"],
+        cwd=tmp_path,
+        env={"PATH": "", "PYTHONPATH": "/does/not/exist"},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "contract" in result.stdout
+
+
+def test_staged_mold_cook_contract_round_trip_is_isolated(
+    staged: Path, tmp_path: Path
+) -> None:
+    """Published staged Mold output must be consumable by staged Cook alone."""
+    writer, invocation = writer_and_invocation(tmp_path)
+    writer_path = tmp_path / "writer.jsonish"
+    invocation_path = tmp_path / "invocation.json"
+    writer_path.write_text(repaired_writer_text(writer), encoding="utf-8")
+    invocation_path.write_bytes(canonical_bytes(invocation.to_mapping()))
+    environment = {"PATH": "", "PYTHONPATH": "/does/not/exist"}
+    mold = staged / "skills" / "mold" / "scripts" / "mold.pyz"
+    cook = staged / "skills" / "cook" / "scripts" / "cook.pyz"
+
+    produced = subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            "-S",
+            str(mold),
+            "contract",
+            "publish",
+            "--writer-view",
+            str(writer_path),
+            "--invocation",
+            str(invocation_path),
+            "--operation-id",
+            "staged-round-trip",
+        ],
+        cwd=tmp_path,
+        env=environment,
+        capture_output=True,
+        text=True,
+    )
+    assert produced.returncode == 0, produced.stdout + produced.stderr
+    pointer_path = tmp_path / "pointers" / "staged-round-trip.json"
+    assert json.loads(produced.stdout) == json.loads(pointer_path.read_text())
+
+    consumed = subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            "-S",
+            str(cook),
+            "contract",
+            "accept",
+            "--pointer",
+            str(pointer_path),
+        ],
+        cwd=tmp_path,
+        env=environment,
+        capture_output=True,
+        text=True,
+    )
+    assert consumed.returncode == 0, consumed.stdout + consumed.stderr
+    assert json.loads(consumed.stdout)["plan_id"] == "plan-1"
 
 
 def test_skill_metadata_ships(staged: Path) -> None:

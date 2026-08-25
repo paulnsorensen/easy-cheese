@@ -158,4 +158,4 @@ _Code_: `CorrectiveRoute` in `src/fanout/press_route.py:25-31`
 
 **Gate applicability** - Mold's explicit closed classification of requested work as `red-required` behavior or a named `not-applicable` non-behavior class.
 _Avoid_: filename heuristic, inferred docs-only, UI exemption
-_Code_: `GateApplicability` in `src/mold/taste_test.py:180`
+_Code_: `GateApplicability` in `src/easy_cheese/skills/mold/taste_test.py:188`
