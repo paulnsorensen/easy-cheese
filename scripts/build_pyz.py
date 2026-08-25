@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import argparse
 import ast
+import importlib
+import importlib.util
 import shutil
 import sys
 import tempfile
@@ -91,7 +93,6 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
         "validate": "cook_cli.py",
     },
     "cut": {"red-gate": "red_gate.py"},
-    # All four subcommands are one module: wheypoint.py reads the subcommand off
     # argv[0], the way hallouminate_setup.py already does for global|local|doctor.
     "wheypoint": {
         "commit": "wheypoint.py",
@@ -122,6 +123,7 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
         "press-route": "fanout/press_route_cli.py",
         "red-gate": "cut/red_gate.py",
     },
+    "cure": {},
     # /ultracook drives the fan-out engine (formerly /cheese-factory); its
     # sources live in the mode-neutral src/fanout/ dir (see SRC_DIRS).
     "ultracook": {
@@ -180,7 +182,6 @@ EXTRA_MODULES: dict[str, list[tuple[str, str]]] = {
 # easy_cheese_schemas package and its vendored attrs/cattrs dependencies. Keep
 # ownership explicit so each consumer imports the canonical implementation.
 PACKAGE_TREES: dict[str, list[Path]] = {
-    "common": [SRC_ROOT / "easy_cheese_schemas"],
     "cook": [SRC_ROOT / "easy_cheese_schemas"],
     "cut": [SRC_ROOT / "easy_cheese_schemas"],
     "press": [SRC_ROOT / "easy_cheese_schemas"],
@@ -191,7 +192,7 @@ PACKAGE_TREES: dict[str, list[Path]] = {
 }
 
 
-VENDORED_DEP_BUNDLES = ("common", "cook", "cut", "press", "ultracook", "wheypoint")
+VENDORED_DEP_BUNDLES = ("cook", "cut", "press", "ultracook", "wheypoint")
 
 
 def vendored_dep_trees() -> list[Path]:
@@ -204,12 +205,7 @@ def vendored_dep_trees() -> list[Path]:
     )
 
 
-# The "common" bundle ships cross-cutting CLI entrypoints sourced from
-# shared/scripts/ (not src/<skill>/). It has no skill dir of its own; instead a
-# copy is fanned out into every consuming skill's scripts/ dir so each skill
-# stays self-contained after `gh skill install`.
-COMMON = "common"
-COMMON_SUBCOMMANDS: dict[str, str] = {
+SHARED_COMMANDS: dict[str, str] = {
     "slugify": "slugify.py",
     "write_handoff_artifact": "write_handoff_artifact.py",
     "read_handoff_slug": "read_handoff_slug.py",
@@ -219,8 +215,7 @@ COMMON_SUBCOMMANDS: dict[str, str] = {
     "handoff_cli": "handoff_cli.py",
     "render_html": "html_report_cli.py",
 }
-# Wave 1: consumer skills receive common.pyz
-COMMON_CONSUMERS: frozenset[str] = frozenset({"cure", "age", "ultracook", "cook"})
+SHARED_COMMAND_CONSUMERS = frozenset({"age", "cook", "cure", "ultracook"})
 
 _CACHE: dict[str, Path] = {}
 
@@ -349,7 +344,10 @@ def _checked_in_document_rules_bytes(expected_source: str) -> bytes:
 
 def _schema_catalog_bytes_for(skills: list[str]) -> bytes | None:
     """Derive and validate the checked-in catalog once for a build batch."""
-    if not any(skill in PACKAGE_TREES for skill in skills):
+    if not any(
+        skill in PACKAGE_TREES or skill in SHARED_COMMAND_CONSUMERS
+        for skill in skills
+    ):
         return None
     return _checked_in_schema_catalog_bytes(_compiled_schema_catalog_source())
 
@@ -371,18 +369,13 @@ def _src_dir(skill: str) -> Path:
 
 
 def _files(skill: str) -> dict[str, str | Shared]:
-    return COMMON_SUBCOMMANDS if skill == COMMON else SKILLS[skill]
-
-
-def _common_consumers(targets: list[str], *, explicit: bool) -> frozenset[str]:
-    """Which consumer skills receive common.pyz for this build request.
-
-    A full build (no explicit targets) or an explicit ``common`` build fans out
-    to every consumer; an explicit skill list fans only to the consumers named.
-    """
-    if not explicit or COMMON in targets:
-        return COMMON_CONSUMERS
-    return frozenset(s for s in targets if s in COMMON_CONSUMERS)
+    files = dict(SKILLS[skill])
+    if skill in SHARED_COMMAND_CONSUMERS:
+        for command, filename in SHARED_COMMANDS.items():
+            if command in files:
+                raise ValueError(f"shared command collides in {skill}: {command}")
+            files[command] = Shared(filename)
+    return files
 
 
 def _filename(source: str | Shared) -> str:
@@ -390,12 +383,12 @@ def _filename(source: str | Shared) -> str:
 
 
 def _source_path(skill: str, source: str | Shared) -> Path:
-    """Resolve a subcommand's source file. Shared() modules and every
-    common-bundle subcommand live in shared/scripts/; a plain string containing
+    """Resolve a subcommand's source file. Shared() modules live in
+    shared/scripts/; a plain string containing
     a path separator is src/-relative (a cross-skill source, e.g. a fanout/
     module bundled into age/affinage/ultracook); any other plain string in a
     real skill lives in src/<skill>/."""
-    if isinstance(source, Shared) or skill == COMMON:
+    if isinstance(source, Shared):
         return SHARED_SCRIPTS / _filename(source)
     if isinstance(source, str) and "/" in source:
         return SRC_ROOT / source
@@ -415,12 +408,10 @@ def _imported_top_names(path: Path) -> set[str]:
 
 def _local_skill_modules(skill: str) -> set[str]:
     """Non-registered local src/<skill>/*.py modules transitively imported by the skill."""
-    if skill == COMMON:
-        return set()
     skill_dir = _src_dir(skill)
-    registered = {_module_name(_filename(src)) for src in SKILLS[skill].values()}
+    registered = {_module_name(_filename(src)) for src in _files(skill).values()}
     frontier: set[str] = set()
-    for source in SKILLS[skill].values():
+    for source in _files(skill).values():
         for name in _imported_top_names(_source_path(skill, source)):
             if name not in registered and (skill_dir / f"{name}.py").exists():
                 frontier.add(name)
@@ -445,10 +436,9 @@ def needed_shared(skill: str) -> set[str]:
     frontier: set[str] = set()
     for source in _files(skill).values():
         frontier |= _imported_top_names(_source_path(skill, source)) & SHARED_MODULES
-    if skill != COMMON:
-        skill_dir = _src_dir(skill)
-        for name in _local_skill_modules(skill):
-            frontier |= _imported_top_names(skill_dir / f"{name}.py") & SHARED_MODULES
+    skill_dir = _src_dir(skill)
+    for name in _local_skill_modules(skill):
+        frontier |= _imported_top_names(skill_dir / f"{name}.py") & SHARED_MODULES
     for src_subdir, filename in EXTRA_MODULES.get(skill, []):
         frontier |= (
             _imported_top_names(SRC_ROOT / src_subdir / filename) & SHARED_MODULES
@@ -517,7 +507,7 @@ def _build_bundle(
     sub_to_module = {sub: _module_name(_filename(src)) for sub, src in files.items()}
     catalog_bytes = schema_catalog_bytes
     registry_bytes = None
-    if skill in {COMMON, "cook", "ultracook", "wheypoint"}:
+    if skill in SHARED_COMMAND_CONSUMERS | {"cook", "ultracook", "wheypoint"}:
         registry_source = _compiled_phase_registry_source()
         registry_bytes = _checked_in_phase_registry_bytes(registry_source)
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -525,17 +515,16 @@ def _build_bundle(
         stage = Path(td)
         for module in sorted(needed_shared(skill)):
             if module in sub_to_module.values():
-                continue  # already staged below as a subcommand (common bundle)
+                continue  # already staged below as a shared subcommand
             shutil.copy(SHARED_SCRIPTS / f"{module}.py", stage / f"{module}.py")
         for source in files.values():
             shutil.copy(
                 _source_path(skill, source),
                 stage / f"{_module_name(_filename(source))}.py",
             )
-        if skill != COMMON:
-            skill_dir = _src_dir(skill)
-            for name in sorted(_local_skill_modules(skill)):
-                shutil.copy(skill_dir / f"{name}.py", stage / f"{name}.py")
+        skill_dir = _src_dir(skill)
+        for name in sorted(_local_skill_modules(skill)):
+            shutil.copy(skill_dir / f"{name}.py", stage / f"{name}.py")
         for src_subdir, filename in EXTRA_MODULES.get(skill, []):
             shutil.copy(SRC_ROOT / src_subdir / filename, stage / filename)
         trees = list(PACKAGE_TREES.get(skill, []))
@@ -558,20 +547,17 @@ def _build_bundle(
                 )
             else:
                 shutil.copy(tree, stage / tree.name)
-        if skill == COMMON:
-            catalog_paths = (
-                stage / "_schema_catalog.py",
-                stage / "easy_cheese_schemas" / "_schema_catalog.py",
-            )
-        elif skill in PACKAGE_TREES:
+        if skill in PACKAGE_TREES:
             catalog_paths = (stage / "easy_cheese_schemas" / "_schema_catalog.py",)
+        elif skill in SHARED_COMMAND_CONSUMERS:
+            catalog_paths = (stage / "_schema_catalog.py",)
         else:
             catalog_paths = ()
         if catalog_bytes is not None:
             for catalog_path in catalog_paths:
                 catalog_path.write_bytes(catalog_bytes)
         if registry_bytes is not None:
-            if skill == COMMON:
+            if skill in SHARED_COMMAND_CONSUMERS and skill not in PACKAGE_TREES:
                 shutil.copy(PHASE_CONTRACT_SOURCE, stage / "phase_contracts.py")
                 (stage / PHASE_REGISTRY_MODULE).write_bytes(registry_bytes)
             else:
@@ -587,7 +573,9 @@ def _build_bundle(
 
 
 def build_bundle(skill: str, target: Path) -> Path:
-    """Build one bundle after deriving and validating its generated catalog."""
+    """Build one bundle from its owning layout."""
+    if skill in {"mold", "cook"}:
+        return build_layout_bundle(skill, target)
     return _build_bundle(
         skill,
         target,
@@ -615,71 +603,308 @@ def main(argv: list[str]) -> int:
     )
     parser.add_argument("skills", nargs="*", help="Skills to build (default: all).")
     args = parser.parse_args(argv[1:])
-    # Consumer-only skills (age/cure) have no own bundle but receive common.pyz,
-    # so they are valid targets even though they are not in SKILLS.
-    known = {*SKILLS, COMMON, *COMMON_CONSUMERS}
+    known = set(SKILLS)
     unknown = [skill for skill in args.skills if skill not in known]
     if unknown:
         parser.error(
             f"unknown skill(s): {', '.join(unknown)}; known: {', '.join(sorted(known))}"
         )
-    targets = args.skills or [*SKILLS, COMMON]
-    real = [s for s in targets if s in SKILLS]  # only skills that ship their own .pyz
-    want_common = COMMON in targets or any(s in COMMON_CONSUMERS for s in targets)
-    consumers = _common_consumers(targets, explicit=bool(args.skills))
-    batch_skills = [*real, COMMON] if want_common else real
-    catalog_bytes = _schema_catalog_bytes_for(batch_skills)
-    document_rules_bytes = _document_rules_bytes_for(batch_skills)
+    real = args.skills or list(SKILLS)
+    catalog_bytes = _schema_catalog_bytes_for(real)
+    document_rules_bytes = _document_rules_bytes_for(real)
 
     if args.out_dir is not None:
         for skill in real:
-            print(
-                "built",
-                _build_bundle(
+            target = args.out_dir / f"{skill}.pyz"
+            if skill in {"mold", "cook"}:
+                built = build_layout_bundle(skill, target, schema_catalog_bytes=catalog_bytes, document_rules_bytes=document_rules_bytes)
+            else:
+                built = _build_bundle(
                     skill,
-                    args.out_dir / f"{skill}.pyz",
+                    target,
                     schema_catalog_bytes=catalog_bytes,
                     document_rules_bytes=document_rules_bytes,
-                ),
-            )
-        if want_common:
-            print(
-                "built",
-                _build_bundle(
-                    COMMON,
-                    args.out_dir / "common.pyz",
-                    schema_catalog_bytes=catalog_bytes,
-                    document_rules_bytes=document_rules_bytes,
-                ),
-            )
+                )
+            print("built", built)
         return 0
 
     for skill in real:
-        print(
-            "deployed",
-            _build_bundle(
+        target = REPO_ROOT / "skills" / skill / "scripts" / f"{skill}.pyz"
+        if skill in {"mold", "cook"}:
+            built = build_layout_bundle(skill, target, schema_catalog_bytes=catalog_bytes, document_rules_bytes=document_rules_bytes)
+        else:
+            built = _build_bundle(
                 skill,
-                REPO_ROOT / "skills" / skill / "scripts" / f"{skill}.pyz",
-                schema_catalog_bytes=catalog_bytes,
-                document_rules_bytes=document_rules_bytes,
-            ),
-        )
-    if want_common:
-        # Build once, then fan the same artifact out to each consuming skill so
-        # every skill ships self-contained — common has no skill dir of its own.
-        with tempfile.TemporaryDirectory() as td:
-            common = _build_bundle(
-                COMMON,
-                Path(td) / "common.pyz",
+                target,
                 schema_catalog_bytes=catalog_bytes,
                 document_rules_bytes=document_rules_bytes,
             )
-            for consumer in sorted(consumers):
-                dest = REPO_ROOT / "skills" / consumer / "scripts" / "common.pyz"
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy(common, dest)
-                print(f"deployed {dest}")
+        print("deployed", built)
     return 0
+
+
+
+
+# Doctrine layout API for migrated skill packages.
+LAYOUT_PACKAGE_ROOT = SRC_ROOT / "easy_cheese"
+_NATIVE_SUFFIXES = {".so", ".pyd", ".dylib"}
+
+def discover_python_skills(root: Path | None = None) -> tuple[str, ...]:
+    """Return skills owning Python under src/easy_cheese/skills."""
+    base = (root or LAYOUT_PACKAGE_ROOT) / "skills"
+    if not base.exists():
+        return ()
+    return tuple(
+        sorted(
+            path.name
+            for path in base.iterdir()
+            if path.is_dir() and any(path.rglob("*.py"))
+        )
+    )
+
+
+def _layout_modules(skill: str, root: Path | None = None) -> dict[str, Path]:
+    package_root = root or LAYOUT_PACKAGE_ROOT
+    base = package_root / "skills" / skill
+    if not base.exists():
+        raise ValueError(f"unknown Python skill: {skill}")
+    modules = {
+        f"easy_cheese.skills.{skill}.{path.stem}": path
+        for path in base.rglob("*.py")
+        if path.name != "__init__.py"
+    }
+    shared = package_root / "shared"
+    modules.update(
+        {
+            f"easy_cheese.shared.{path.stem}": path
+            for path in shared.rglob("*.py")
+            if path.name != "__init__.py"
+        }
+    )
+    schemas = package_root.parent / "easy_cheese_schemas"
+    if schemas.exists():
+        modules.update(
+            {
+                f"easy_cheese_schemas.{path.stem}": path
+                for path in schemas.rglob("*.py")
+                if path.name != "__init__.py"
+            }
+        )
+    return modules
+
+
+def validate_bundle_closure(
+    skill: str, root: Path | None = None
+) -> tuple[Path, ...]:
+    """Resolve one skill's reachable pure-Python closure."""
+    package_root = root or LAYOUT_PACKAGE_ROOT
+    if str(package_root.parent) not in sys.path:
+        sys.path.insert(0, str(package_root.parent))
+    from easy_cheese.shared.bundles import minimal_closure
+    return minimal_closure(skill, package_root)
+
+
+def _compile_layout_commands(skill: str, root: Path | None = None) -> dict[str, str]:
+    """Compile command decorators from a layout skill entrypoint."""
+    package_root = root or LAYOUT_PACKAGE_ROOT
+    source = package_root / "skills" / skill / "commands.py"
+    tree = ast.parse(source.read_text(encoding="utf-8"))
+    commands: dict[str, str] = {}
+    for node in tree.body:
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        for decorator in node.decorator_list:
+            if (
+                isinstance(decorator, ast.Call)
+                and isinstance(decorator.func, ast.Name)
+                and decorator.func.id == "bundle_command"
+                and len(decorator.args) == 1
+                and isinstance(decorator.args[0], ast.Constant)
+                and isinstance(decorator.args[0].value, str)
+            ):
+                name = decorator.args[0].value
+                if name in commands:
+                    raise ValueError(f"duplicate command declaration: {name}")
+                commands[name] = node.name
+    if not commands:
+        raise ValueError(f"no bundle commands declared for {skill}")
+    compiled = dict(sorted(commands.items()))
+    if package_root.resolve() == LAYOUT_PACKAGE_ROOT.resolve():
+        module = importlib.import_module(f"easy_cheese.skills.{skill}.commands")
+        from easy_cheese.shared.bundle_commands import (
+            compile_bundle_commands,
+            validate_generated_region,
+        )
+
+        if compile_bundle_commands(module.__name__) != compiled:
+            raise ValueError(f"runtime command registry drift for {skill}")
+        guidance = REPO_ROOT / "skills" / skill
+        guidance /= (
+            "references/bundle-commands.md" if skill == "cook" else "SKILL.md"
+        )
+        validate_generated_region(
+            guidance.read_text(encoding="utf-8"), module.__name__
+        )
+    return compiled
+
+
+
+def _dependency_module_index(name: str) -> dict[str, tuple[Path, Path]]:
+    spec = importlib.util.find_spec(name)
+    if spec is None or spec.origin is None:
+        raise RuntimeError(f"approved dependency is unavailable: {name}")
+    origin = Path(spec.origin)
+    if origin.suffix in _NATIVE_SUFFIXES:
+        raise RuntimeError(f"approved dependency resolves to native code: {name}")
+    if not spec.submodule_search_locations:
+        return {name: (origin, Path(f"{name}.py"))}
+    package_root = Path(next(iter(spec.submodule_search_locations)))
+    modules: dict[str, tuple[Path, Path]] = {}
+    for source in sorted(package_root.rglob("*.py")):
+        if "__pycache__" in source.parts or "tests" in source.parts:
+            continue
+        relative = source.relative_to(package_root)
+        parts = relative.with_suffix("").parts
+        module_parts = (name, *parts[:-1]) if parts[-1] == "__init__" else (name, *parts)
+        modules[".".join(module_parts)] = (source, Path(name) / relative)
+    return modules
+
+
+def _source_imports(path: Path, module: str) -> set[str]:
+    package = module if path.name == "__init__.py" else module.rpartition(".")[0]
+    imports: set[str] = set()
+    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+        if isinstance(node, ast.Import):
+            imports.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            if node.level:
+                target = "." * node.level + (node.module or "")
+                imported = importlib.util.resolve_name(target, package)
+            else:
+                imported = node.module or ""
+            if imported:
+                imports.add(imported)
+                imports.update(f"{imported}.{alias.name}" for alias in node.names)
+    return imports
+
+
+def _copy_pure_python_dependencies(stage: Path, files: tuple[Path, ...]) -> None:
+    approved = {"attrs", "attr", "cattrs", "typing_extensions"}
+    indexes = {name: _dependency_module_index(name) for name in approved}
+    modules = {module: source for index in indexes.values() for module, source in index.items()}
+    pending: list[str] = []
+    for path in files:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                pending.extend(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                pending.append(node.module)
+                pending.extend(f"{node.module}.{alias.name}" for alias in node.names)
+    included: set[str] = set()
+    while pending:
+        imported = pending.pop()
+        root_name = imported.split(".", 1)[0]
+        if root_name not in approved:
+            continue
+        candidate = modules.get(imported)
+        if candidate is None:
+            continue
+        if imported in included:
+            continue
+        included.add(imported)
+        source, _destination = candidate
+        pending.extend(_source_imports(source, imported))
+    for module in sorted(included):
+        source, relative = modules[module]
+        destination = stage / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
+
+
+def build_layout_bundle(
+    skill: str,
+    target: Path,
+    root: Path | None = None,
+    *,
+    schema_catalog_bytes: bytes | None = None,
+    document_rules_bytes: bytes | None = None,
+) -> Path:
+    """Build one same-named archive from the layout-derived transitive closure."""
+    if target.name != f"{skill}.pyz":
+        raise ValueError("archive name must match owning skill")
+    root = root or LAYOUT_PACKAGE_ROOT
+    files = validate_bundle_closure(skill, root)
+    if skill in {"mold", "cook"} and schema_catalog_bytes is None:
+        schema_catalog_bytes = _checked_in_schema_catalog_bytes(
+            _compiled_schema_catalog_source()
+        )
+    if skill == "mold" and document_rules_bytes is None:
+        document_rules_bytes = _checked_in_document_rules_bytes(
+            _compiled_document_rules_source()
+        )
+    registry_bytes = _checked_in_phase_registry_bytes(_compiled_phase_registry_source())
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory() as td:
+        stage = Path(td)
+        for source in files:
+            relative = source.relative_to(root.parent)
+            destination = stage / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, destination)
+        for package in (
+            stage / "easy_cheese",
+            stage / "easy_cheese" / "shared",
+            stage / "easy_cheese" / "skills",
+            stage / "easy_cheese" / "skills" / skill,
+            stage / "easy_cheese_schemas",
+        ):
+            package.mkdir(parents=True, exist_ok=True)
+            (package / "__init__.py").write_text("", encoding="utf-8")
+        _copy_pure_python_dependencies(stage, files)
+        schema_path = stage / "easy_cheese_schemas" / "_schema_catalog.py"
+        if schema_catalog_bytes is not None:
+            schema_path.parent.mkdir(parents=True, exist_ok=True)
+            schema_path.write_bytes(schema_catalog_bytes)
+        (stage / "easy_cheese_schemas" / PHASE_REGISTRY_MODULE).write_bytes(registry_bytes)
+        if skill == "mold" and document_rules_bytes is not None:
+            (stage / DOCUMENT_RULES_MODULE).write_bytes(document_rules_bytes)
+            compatibility = {
+                "curd_count.py": SRC_ROOT / "mold" / "curd-count.py",
+                "cli.py": SHARED_SCRIPTS / "cli.py",
+                "gate_graph.py": SRC_ROOT / "mold" / "gate-graph.py",
+                "html_report.py": SHARED_SCRIPTS / "html_report.py",
+                "html_report_cli.py": SHARED_SCRIPTS / "html_report_cli.py",
+                "mode.py": SRC_ROOT / "fanout" / "mode.py",
+                "taste_test.py": SRC_ROOT / "mold" / "taste_test.py",
+            }
+            for name, source in compatibility.items():
+                shutil.copy2(source, stage / name)
+        elif skill == "cook":
+            compatibility = {
+                "cli.py": SHARED_SCRIPTS / "cli.py",
+                "worktree.py": SHARED_SCRIPTS / "worktree.py",
+            }
+            for source in _files("cook").values():
+                if isinstance(source, Shared):
+                    compatibility[_filename(source)] = _source_path("cook", source)
+            for module in needed_shared("cook"):
+                compatibility[f"{module}.py"] = SHARED_SCRIPTS / f"{module}.py"
+            for name, source in compatibility.items():
+                shutil.copy2(source, stage / name)
+        commands = _compile_layout_commands(skill, root)
+        (stage / "__main__.py").write_text(
+            "# bundle_command generated layout dispatcher\n"
+            "import sys\n"
+            f"COMMANDS = {commands!r}\n"
+            "from easy_cheese.shared.bundle_commands import dispatch\n"
+            "from easy_cheese.skills.%s import commands\n"
+            "raise SystemExit(dispatch(commands.__name__, sys.argv[1:], expected=COMMANDS))\n"
+            % skill,
+            encoding="utf-8",
+        )
+        _write_zipapp(stage, target)
+    return target
 
 
 if __name__ == "__main__":

@@ -2,7 +2,7 @@
 
 Every skill that executes Python ships at most one same-named `.pyz` and invokes Python only through that archive. Runtime source is organized as importable packages under `src/`; checked-in skill directories contain deployment artifacts, not Python source.
 
-This doctrine was approved on 2026-08-24. The repository does not yet conform fully; enforcement and migration belong to follow-up work rather than the doctrine-only change that introduced these rules.
+Implementation began with Mold and Cook: their runtime now follows the package layout and closure gates below, while unmigrated skills retain transitional source layouts. The repository therefore still does not conform fully.
 
 ## Skill deployment contract
 
@@ -60,11 +60,11 @@ Minimal means both few artifacts and narrow contents:
 4. Only approved pure-Python third-party dependencies.
 5. No whole-package or whole-tree inclusion without explicit justification.
 
-The build must eventually enforce dependency closure, reject native artifacts, verify bundle currency, and execute every bundled interface with repository paths, `PYTHONPATH`, and ambient site packages unavailable. Those gates are follow-up implementation work; this page establishes their target contract.
+The Mold and Cook build now derives reachable closure, rejects native and ambient dependencies, checks bundle currency against worktree/index/HEAD snapshots, and executes isolated archives in conformance tests. Remaining legacy bundles still require migration before these gates cover every Python skill.
 
 ## Superseded topology
 
-This doctrine supersedes the current split between `src/` and `shared/scripts/`, the multi-consumer `common.pyz`, cross-skill archive calls, and retained runtime ownership under the retired `ultracook` skill. Until migration lands, [[pyz-bundling-pipeline]] documents current behavior while this page defines the target.
+The shared `common.pyz` topology is removed. Mold and Cook now use `src/easy_cheese/skills/`, while unmigrated skills continue to use transitional `src/` and `shared/scripts/` sources; [[pyz-bundling-pipeline]] documents that remaining compatibility path.
 
 [^1]: https://agentskills.io/specification#file-references
 [^2]: https://packaging.python.org/en/latest/discussions/distribution-package-vs-import-package/

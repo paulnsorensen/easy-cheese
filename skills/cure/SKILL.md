@@ -38,7 +38,7 @@ slash commands are host renderings, not the control model.
    python3 shared/scripts/findings_cli.py parse-selection --report <path> --selection "<verb>"
    ```
 
-   If the host only ships the bundle, `python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz findings_cli parse-selection ...` is the fallback.
+   If the host only ships the bundle, `python3 ${CLAUDE_SKILL_DIR}/scripts/cure.pyz findings_cli parse-selection ...` is the fallback.
 3. **Apply** — fix one logical group at a time: re-confirm the anchor through
    a fresh bounded read, then invoke `easy_cheese_schemas.cure` with the
    validated plan and a `CureDiagnosisBinding` for every selected curd. Each
@@ -78,7 +78,7 @@ Applied requires its proving test green (Iron Law — see `references/cure-disci
      [--hard-floor-met] [--has-open-level-1-or-2] [--has-open-level-3] [--has-open-level-4-or-5] [--any-spinning]
    ```
 
-   If the host only ships the bundle, `python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz gates_cli classify ...` is the fallback.
+   If the host only ships the bundle, `python3 ${CLAUDE_SKILL_DIR}/scripts/cure.pyz gates_cli classify ...` is the fallback.
 
 ## Handoff slug
 

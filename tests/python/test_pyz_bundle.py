@@ -21,6 +21,17 @@ sys.path.insert(0, str(REPO_ROOT / "shared" / "scripts"))
 import build_pyz  # noqa: E402
 import paths  # noqa: E402
 
+SHARED_SUBCOMMANDS = [
+    "slugify",
+    "write_handoff_artifact",
+    "read_handoff_slug",
+    "findings_cli",
+    "gates_cli",
+    "paths_cli",
+    "handoff_cli",
+    "render_html",
+]
+
 SKILL_SUBCOMMANDS = {
     "melt": [
         "batch-resolve",
@@ -42,10 +53,11 @@ SKILL_SUBCOMMANDS = {
         "manifest_update",
         "wiring_topo_sort",
         "pr_plan_to_branches",
-    ],
+    ] + SHARED_SUBCOMMANDS,
     "affinage": ["pr-status"],
     "mold": [
         "artifact-path",
+        "contract",
         "curd-count",
         "gate-graph",
         "render_html",
@@ -53,23 +65,15 @@ SKILL_SUBCOMMANDS = {
         "validate-spec",
     ],
     "briesearch": ["artifact-path", "ground-check"],
-    "cook": ["artifact-path", "worktree", "normalize", "validate"],
+    "cook": ["artifact-path", "worktree", "normalize", "validate", "contract"]
+    + SHARED_SUBCOMMANDS,
     "cut": ["red-gate"],
     "wheypoint": ["commit", "resolve", "show", "lint"],
-    "age": ["html-report"],
+    "age": ["html-report"] + SHARED_SUBCOMMANDS,
+    "cure": SHARED_SUBCOMMANDS,
     "hard-cheese": ["append-attempt", "freshness-check"],
     "pasteurize": ["debug-tag-sweep", "repro-rerun", "pasteurize-route"],
     "press": ["press-route"],
-    "common": [
-        "slugify",
-        "write_handoff_artifact",
-        "read_handoff_slug",
-        "findings_cli",
-        "gates_cli",
-        "paths_cli",
-        "handoff_cli",
-        "render_html",
-    ],
 }
 
 # Every skill that registers the durable-corpus resolver shim. One shared source
@@ -77,9 +81,9 @@ SKILL_SUBCOMMANDS = {
 # paths.artifact_path / paths.project_corpus_root.
 ARTIFACT_PATH_SKILLS = ("mold", "ultracook", "briesearch", "cook")
 
-# Cook owns the planner-to-curd execution bundle; Cure consumes the same
-# runtime through the common artifact fanned into skills/cure/scripts/.
-TYPED_RUNTIME_BUNDLES = ("common", "cook", "ultracook", "wheypoint")
+# Legacy bundles that execute the complete published schema runtime. Migrated
+# layout bundles instead ship only their reachable typed boundary closure.
+TYPED_RUNTIME_BUNDLES = ("ultracook", "wheypoint")
 REQUIRED_WORKFLOW_MODULES = (
     "easy_cheese_schemas/__init__.py",
     "easy_cheese_schemas/artifacts.py",
@@ -126,11 +130,13 @@ def test_default_batch_derives_schema_catalog_once(
     monkeypatch.setattr(build_pyz, "_checked_in_schema_catalog_bytes", validate_once)
 
     assert build_pyz.main(["build_pyz.py", "--out-dir", str(tmp_path)]) == 0
-    assert {
-        skill
-        for skill in [*build_pyz.SKILLS, build_pyz.COMMON]
-        if skill in build_pyz.PACKAGE_TREES
-    } == {"common", "cook", "cut", "press", "ultracook", "wheypoint"}
+    assert set(build_pyz.PACKAGE_TREES) == {
+        "cook",
+        "cut",
+        "press",
+        "ultracook",
+        "wheypoint",
+    }
     assert compiled_calls == 1
     assert validated_calls == 1
 
@@ -812,10 +818,11 @@ def test_bundle_build_is_byte_deterministic(tmp_path: Path) -> None:
         ).read_bytes()
 
 
-def test_common_slugify_executes_end_to_end(bundles: Path, tmp_path: Path) -> None:
-    """slugify subcommand in common.pyz (slugify.py from-task) resolves imports and dispatches."""
+def test_own_bundle_slugify_executes_end_to_end(
+    bundles: Path, tmp_path: Path
+) -> None:
     result = _run(
-        bundles / "common.pyz",
+        bundles / "cure.pyz",
         "slugify",
         "from-task",
         "--task",
@@ -828,21 +835,13 @@ def test_common_slugify_executes_end_to_end(bundles: Path, tmp_path: Path) -> No
     assert payload["slug"] == "fix-off-by-one-error"
 
 
-def test_common_bundle_carries_clis_plus_libs_not_skill_scripts(bundles: Path) -> None:
-    """common.pyz contains shared CLI entrypoints and their shared deps (handoff,
-    paths, cli, etc.) but must NOT carry any skill-specific script."""
-    content = set(zipfile.ZipFile(bundles / "common.pyz").namelist())
-    # All COMMON_SUBCOMMANDS must be present as module files
-    for sub in [
-        "slugify",
-        "write_handoff_artifact",
-        "read_handoff_slug",
-        "findings_cli",
-        "gates_cli",
-        "paths_cli",
-        "handoff_cli",
-    ]:
-        assert f"{sub}.py" in content, f"{sub}.py missing from common.pyz"
+def test_own_bundle_carries_shared_clis_without_other_skill_scripts(
+    bundles: Path,
+) -> None:
+    content = set(zipfile.ZipFile(bundles / "cure.pyz").namelist())
+    for sub in SHARED_SUBCOMMANDS:
+        module = "html_report_cli" if sub == "render_html" else sub
+        assert f"{module}.py" in content, f"{module}.py missing from cure.pyz"
     # Skill scripts must not be present
     assert "conflict_pick.py" not in content
     assert "validate_manifest.py" not in content
@@ -850,7 +849,7 @@ def test_common_bundle_carries_clis_plus_libs_not_skill_scripts(bundles: Path) -
     assert "phase_contracts.py" in content
     assert "_compiled_phase_registry.py" in content
     assert (
-        zipfile.ZipFile(bundles / "common.pyz").read("_compiled_phase_registry.py")
+        zipfile.ZipFile(bundles / "cure.pyz").read("_compiled_phase_registry.py")
         == (
             REPO_ROOT / "src" / "easy_cheese_schemas" / "_compiled_phase_registry.py"
         ).read_bytes()
@@ -867,8 +866,6 @@ def test_bundle_stages_checked_in_schema_catalog_bytes(
     with zipfile.ZipFile(bundles / f"{skill}.pyz") as archive:
         package_catalog = archive.read("easy_cheese_schemas/_schema_catalog.py")
         assert package_catalog == expected
-        if skill == "common":
-            assert archive.read("_schema_catalog.py") == expected
 
 
 @pytest.mark.parametrize("skill", TYPED_RUNTIME_BUNDLES)
@@ -896,32 +893,19 @@ def test_no_runtime_bundle_ships_phase_registry_compiler(
     ), f"{skill}.pyz leaked the schema catalog compiler"
 
 
-@pytest.mark.parametrize("skill", ("common", "cook"))
-def test_cook_and_cure_installed_paths_expose_canonical_workflow_api(
-    bundles: Path, skill: str
+def test_cook_installed_path_exposes_canonical_handoff_api(
+    bundles: Path,
 ) -> None:
-    """Import the shipped packages, not the repository source tree.
-
-    Cure receives common.pyz, while Cook receives cook.pyz.  Both must expose
-    the same canonical planner/Cook/Cure seam and its typed boundary helpers.
-    """
+    """Import Cook's shipped boundary, not the repository source tree."""
     code = (
         "import sys;"
         "sys.path[:0] = sys.argv[1:];"
-        "import easy_cheese_schemas as schemas;"
-        "from easy_cheese_schemas import "
-        "CurdPlan, CurdResult, DiagnosisResult, PlannerResult, "
-        "bind_diagnosis, cook, cure, materialize_planner_result, "
-        "normalize_agent_output, resolve_artifact, run_workflow, "
-        "schema_bytes, validate_curd_plan;"
-        "assert all(callable(item) for item in ("
-        "bind_diagnosis, cook, cure, materialize_planner_result, "
-        "normalize_agent_output, resolve_artifact, run_workflow, "
-        "validate_curd_plan));"
+        "from easy_cheese.skills.cook.commands import contract_accept, execute;"
+        "from easy_cheese_schemas.contracts import CurdPlan, HandoffPointer;"
+        "from easy_cheese_schemas.schema_runtime import schema_bytes;"
+        "assert callable(contract_accept) and callable(execute);"
         "assert schema_bytes(CurdPlan);"
-        "assert schemas.supported_version_for(PlannerResult) is not None;"
-        "assert CurdResult.__name__ == 'CurdResult';"
-        "assert DiagnosisResult.__name__ == 'DiagnosisResult';"
+        "assert HandoffPointer.__name__ == 'HandoffPointer';"
         "print('ok')"
     )
     result = subprocess.run(
@@ -930,7 +914,7 @@ def test_cook_and_cure_installed_paths_expose_canonical_workflow_api(
             "-S",
             "-c",
             code,
-            str(bundles / f"{skill}.pyz"),
+            str(bundles / "cook.pyz"),
         ],
         capture_output=True,
         text=True,
@@ -956,7 +940,7 @@ def _bundle_content(pyz: Path) -> dict[str, bytes]:
         return {name: archive.read(name) for name in archive.namelist()}
 
 
-@pytest.mark.parametrize("skill", [s for s in SKILL_SUBCOMMANDS if s != "common"])
+@pytest.mark.parametrize("skill", sorted(SKILL_SUBCOMMANDS))
 def test_committed_bundle_matches_source(bundles: Path, skill: str) -> None:
     """Every committed skills/<skill>/scripts/<skill>.pyz must carry the same
     member content as a fresh build of the current source.
@@ -975,8 +959,7 @@ def test_committed_bundle_matches_source(bundles: Path, skill: str) -> None:
     one source tree on one host must agree
     (test_build_pyz_tree_staging.py::test_the_wheypoint_bundle_is_deterministic).
 
-    common.pyz is excluded: it has no single canonical path (fanned out to each
-    consumer in Wave 1+, not stored in skills/common/)."""
+    """
     committed = REPO_ROOT / "skills" / skill / "scripts" / f"{skill}.pyz"
     fresh = bundles / f"{skill}.pyz"
     assert committed.exists(), f"committed bundle missing: {committed}"
@@ -998,13 +981,10 @@ def test_committed_bundle_matches_source(bundles: Path, skill: str) -> None:
 def test_no_orphan_committed_bundles():
     """A skill dropped from build_pyz.SKILLS must not leave a stale committed
     .pyz behind — the build-pyz workflow only diffs bundles it rebuilds, so an
-    orphan would ship silently.
-    common.pyz is excluded: it fans out to consumer skills in Wave 1+ and has no
-    single committed path under skills/common/."""
+    orphan would ship silently."""
     committed = {
         p.relative_to(REPO_ROOT).as_posix()
         for p in REPO_ROOT.glob("skills/*/scripts/*.pyz")
-        if p.name != "common.pyz"
     }
     expected = {f"skills/{skill}/scripts/{skill}.pyz" for skill in build_pyz.SKILLS}
     assert committed == expected
@@ -1124,16 +1104,16 @@ def test_document_rules_regeneration_is_byte_deterministic() -> None:
     assert build_pyz._document_rules_bytes_for(["cut"]) is None
 
 
-def test_cook_joins_common_consumers_and_ships_common_pyz(bundles: Path) -> None:
-    """AC-7: after a build, COMMON_CONSUMERS contains cook and the committed
-    skills/cook/scripts/common.pyz matches the freshly built bundles/common.pyz
-    member for member."""
-    assert "cook" in build_pyz.COMMON_CONSUMERS
-    committed = REPO_ROOT / "skills" / "cook" / "scripts" / "common.pyz"
-    assert committed.is_file()
-    have = _bundle_content(committed)
-    want = _bundle_content(bundles / "common.pyz")
-    assert have == want
+def test_shared_command_consumers_ship_only_same_named_archives(
+    bundles: Path,
+) -> None:
+    for skill in build_pyz.SHARED_COMMAND_CONSUMERS:
+        assert (bundles / f"{skill}.pyz").is_file()
+        assert (
+            REPO_ROOT / "skills" / skill / "scripts" / f"{skill}.pyz"
+        ).is_file()
+    assert not list(REPO_ROOT.glob("skills/*/scripts/common.pyz"))
+    assert not (bundles / "common.pyz").exists()
 
 
 SPEC_FORMAT_FIXTURES = REPO_ROOT / "tests" / "python" / "fixtures" / "spec_format"

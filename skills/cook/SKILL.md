@@ -142,6 +142,9 @@ and [`../cheese/references/harness-portability.md`](../cheese/references/harness
 `slash commands are host renderings, not the control model`; invoke the
 equivalent installed capability.
 
+Cook accepts only a verified `HandoffPointer`. See
+[bundle commands](references/bundle-commands.md).
+
 ## Quality gates
 
 Run existing project commands only — the most relevant tests for the touched area, plus lint/type/build if defined. Never remove, skip, or weaken unrelated tests to make the change pass.

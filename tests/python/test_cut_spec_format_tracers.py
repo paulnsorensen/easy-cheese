@@ -53,8 +53,8 @@ WITNESS_AC6 = (
     "structuring error on the nonconforming fixture and exit 0 on the conforming one"
 )
 WITNESS_AC7 = (
-    "skills/cook/scripts/common.pyz is absent because COMMON_CONSUMERS excludes "
-    "cook; test asserts the file exists and the frozenset contains cook"
+    "shared commands must ship inside Cook's same-named archive without a "
+    "parallel common.pyz topology"
 )
 WITNESS_AC8 = (
     "COHERENCE_GATES carries no spec-format checklist entry so the rendered "
@@ -188,13 +188,12 @@ def test_ac6_cook_validate_structures_payload_against_catalog_contract(
     assert ok.returncode == 0, f"{WITNESS_AC6} [rc={ok.returncode} on conforming payload]"
 
 
-def test_ac7_cook_joins_common_consumers_and_ships_common_pyz() -> None:
-    assert "cook" in build_pyz.COMMON_CONSUMERS, (
-        f"{WITNESS_AC7} [COMMON_CONSUMERS excludes cook]"
+def test_ac7_cook_ships_shared_commands_in_its_own_archive() -> None:
+    assert "cook" in build_pyz.SHARED_COMMAND_CONSUMERS, WITNESS_AC7
+    assert (REPO_ROOT / "skills" / "cook" / "scripts" / "cook.pyz").is_file(), (
+        WITNESS_AC7
     )
-    assert (REPO_ROOT / "skills" / "cook" / "scripts" / "common.pyz").is_file(), (
-        f"{WITNESS_AC7} [skills/cook/scripts/common.pyz missing]"
-    )
+    assert not list(REPO_ROOT.glob("skills/*/scripts/common.pyz")), WITNESS_AC7
 
 
 def test_ac8_gate_graph_derives_spec_format_valid_before_curdle(

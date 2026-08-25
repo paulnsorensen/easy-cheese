@@ -1253,9 +1253,15 @@ def _python_case_command(
     runner = _python_case_runner(argv, cwd)
     trusted_interpreter = _TRUSTED_INTERPRETER_PATH
     target_executable = _lexical_executable_path(argv[0], cwd) if argv else None
+    original_argv0 = target_executable
+    parent_lexical = _lexical_executable_path(sys.executable, cwd)
+    if target_executable == parent_lexical and getattr(sys, "orig_argv", None):
+        original_argv0 = sys.orig_argv[0]
     if runner is None or trusted_interpreter is None or target_executable is None:
         return None
     trusted_paths, target_paths = _probe_paths(argv[0], cwd)
+    if original_argv0 is None:
+        original_argv0 = target_executable
     safe_path_args = ["-P"] if os.environ.get("PYTHONSAFEPATH") else []
     prefix = [
         str(trusted_interpreter),
@@ -1278,16 +1284,16 @@ def _python_case_command(
     ]
     if runner == "code":
         return _ProbeCommand(
-            [*prefix, runner, argv[0], argv[2], *argv[3:]],
+            [*prefix, runner, str(original_argv0), argv[2], *argv[3:]],
             runner,
         )
     if runner in {"pytest", "unittest"}:
         return _ProbeCommand(
-            [*prefix, runner, argv[0], *argv[3:]],
+            [*prefix, runner, str(original_argv0), *argv[3:]],
             runner,
         )
     return _ProbeCommand(
-        [*prefix, runner, argv[0], argv[1], *argv[2:]],
+        [*prefix, runner, str(original_argv0), argv[1], *argv[2:]],
         runner,
     )
 

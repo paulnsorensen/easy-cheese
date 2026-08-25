@@ -32,7 +32,7 @@ remove the listed files to start fresh.
 
 Read a handoff with
 `python3 shared/scripts/read_handoff_slug.py <path>`; the installed fallback is
-the matching `common.pyz read_handoff_slug` command.
+the matching `cook.pyz read_handoff_slug` command.
 
 ## Canonical planner → Cook → Cure steel thread
 

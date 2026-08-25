@@ -15,7 +15,7 @@ try:
         REGISTERED_CONTRACT_SCHEMA_URIS,
     )
 except ImportError:
-    # common.pyz stages these package modules at its top level.
+    # Same-named legacy bundles stage these package modules at top level.
     from _compiled_phase_registry import PHASE_REGISTRY_DATA
     from _schema_catalog import (
         CURD_PLAN_SCHEMA_URI,

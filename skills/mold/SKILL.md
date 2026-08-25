@@ -120,6 +120,19 @@ If any gate is unmet or the typed plan remains invalid after one retry, propose 
 
 `/mold --hard` propagates `--hard` to `/cook` at handoff (any cook-flavoured option carries it forward). Mold runs no gate itself — the metacognitive vibecheck fires later, at `/cure`'s share-for-review boundary. See `skills/hard-cheese/SKILL.md` and `../hard-cheese/references/composition.md`.
 
+## Canonical Mold → Cook handoff
+
+Mold normalizes the closed writer view, validates its semantics, and publishes a receipt-bound `HandoffPointer` as the only Cook input. The pointer is written last after its payload and `NormalizationReceipt`; do not execute a bare payload.
+
+<!-- GENERATED BUNDLE COMMANDS:START -->
+- `artifact-path` — Resolve a durable or transient artifact path.
+- `contract` — Publish or migrate a canonical Mold-to-Cook handoff.
+- `curd-count` — Count a validated Mold spec's semantic curds.
+- `gate-graph` — Render the Mold handshake gate graph.
+- `render_html` — Render a Markdown artifact as a self-contained HTML report.
+- `taste-test` — Validate a digest-bound Mold fork-coherence verdict.
+- `validate-spec` — Validate a Mold specification.
+<!-- GENERATED BUNDLE COMMANDS:END -->
 ## Handoff
 
 **Pipeline:** culture → **[mold]** → cut → cook → press → age → cure → plate
