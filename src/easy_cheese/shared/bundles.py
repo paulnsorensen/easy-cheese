@@ -11,8 +11,6 @@ _PACKAGE_NAME = "easy_cheese"
 _SCHEMAS_PACKAGE_NAME = "easy_cheese_schemas"
 _SKILLS_NAMESPACE = f"{_PACKAGE_NAME}.skills"
 _SKILLS_PREFIX = f"{_SKILLS_NAMESPACE}."
-_INIT_MODULE_NAME = "__init__"
-_INIT_NAME = f"{_INIT_MODULE_NAME}.py"
 _NATIVE_SUFFIXES = {".so", ".pyd", ".dylib"}
 _ALLOWED_UNBUNDLED_EXTERNAL_ROOTS = {
     "attr",
@@ -20,6 +18,7 @@ _ALLOWED_UNBUNDLED_EXTERNAL_ROOTS = {
     "cattrs",
     "typing_extensions",
 }
+# Bare names remain while schema sources retain common.pyz fallback imports.
 _GENERATED_MODULES = {
     "_compiled_phase_registry",
     "_schema_catalog",
@@ -30,35 +29,19 @@ _INTERNAL_ROOTS = frozenset({_PACKAGE_NAME, _SCHEMAS_PACKAGE_NAME})
 _STDLIB_MODULES = sys.stdlib_module_names
 
 
-def _package_root(root: Path) -> Path:
-    candidate = root / "src" / _PACKAGE_NAME
-    return candidate if candidate.exists() else root
-
-
 def _module_name(path: Path, source_root: Path) -> str:
-    parts = path.relative_to(source_root).with_suffix("").parts
-    if parts[-1] == _INIT_MODULE_NAME:
-        parts = parts[:-1]
-    return ".".join(parts)
+    return ".".join(path.relative_to(source_root).with_suffix("").parts)
 
 
-def _modules(root: Path, shared_root: Path | None = None) -> dict[str, Path]:
-    source_root = root.parent
+def _modules(source_root: Path) -> dict[str, Path]:
     modules: dict[str, Path] = {}
-    for package in (root, source_root / _SCHEMAS_PACKAGE_NAME):
-        if not package.exists():
+    for package_name in (_PACKAGE_NAME, _SCHEMAS_PACKAGE_NAME):
+        package = source_root / package_name
+        if not package.is_dir():
             continue
         for path in package.rglob("*.py"):
-            if path.name == _INIT_NAME:
-                continue
-            modules[_module_name(path, source_root)] = path
-            if package.name == _SCHEMAS_PACKAGE_NAME and path.parent == package:
-                # Source-checkout helpers have flat fallback imports. Resolve
-                # those aliases to packaged modules instead of vendoring copies.
-                modules.setdefault(path.stem, path)
-    if shared_root is not None and shared_root.is_dir():
-        for path in shared_root.glob("*.py"):
-            modules[path.stem] = path
+            if path.name != "__init__.py":
+                modules[_module_name(path, source_root)] = path
     return modules
 
 
@@ -87,12 +70,9 @@ def _import_names(path: Path, module: str) -> tuple[str, ...]:
 
 
 class _ClosureResolver:
-    def __init__(
-        self, root: Path, skill: str, shared_root: Path | None, entrypoint: Path
-    ) -> None:
-        self._root = root
-        self._shared_root = shared_root
-        self._modules = _modules(root, shared_root)
+    def __init__(self, source_root: Path, skill: str, entrypoint: Path) -> None:
+        self._source_root = source_root
+        self._modules = _modules(source_root)
         self._pending = [entrypoint]
         self._included: set[Path] = set()
         self._owner_namespace = f"{_SKILLS_NAMESPACE}.{skill}"
@@ -104,15 +84,11 @@ class _ClosureResolver:
             if path in self._included:
                 continue
             self._included.add(path)
-            module = self._module_name(path)
+            module = _module_name(path, self._source_root)
             for name in _import_names(path, module):
                 self._classify_import(path, name)
         return tuple(sorted(self._included))
 
-    def _module_name(self, path: Path) -> str:
-        if self._shared_root is not None and path.parent == self._shared_root:
-            return path.stem
-        return _module_name(path, self._root.parent)
 
     def _classify_import(self, path: Path, name: str) -> None:
         if self._is_cross_skill_import(name):
@@ -135,8 +111,7 @@ class _ClosureResolver:
             raise ValueError(f"unresolved internal dependency: {name}")
         stem = name.rsplit(".", 1)[-1]
         if any(
-            (path.parent / f"{stem}{suffix}").exists()
-            for suffix in _NATIVE_SUFFIXES
+            (path.parent / f"{stem}{suffix}").exists() for suffix in _NATIVE_SUFFIXES
         ):
             raise ValueError(f"native ambient dependency in bundle: {name}")
         raise ValueError(f"ambient dependency in bundle: {name}")
@@ -147,17 +122,10 @@ class _ClosureResolver:
         )
 
 
-def minimal_closure(
-    skill: str, root: Path, shared_root: Path | None = None
-) -> tuple[Path, ...]:
+def _resolve_bundle_sources(skill: str, source_root: Path) -> tuple[Path, ...]:
     """Resolve one skill's reachable internal pure-Python modules."""
-    root = _package_root(root)
-    entrypoint = root / "skills" / skill / "commands.py"
+    package_root = source_root / _PACKAGE_NAME
+    entrypoint = package_root / "skills" / skill / "commands.py"
     if not entrypoint.is_file():
         raise ValueError(f"unknown Python skill: {skill}")
-    return _ClosureResolver(root, skill, shared_root, entrypoint).resolve()
-
-
-__all__ = [
-    "minimal_closure",
-]
+    return _ClosureResolver(source_root, skill, entrypoint).resolve()
