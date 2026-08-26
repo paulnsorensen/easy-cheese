@@ -242,6 +242,21 @@ def test_bundle_carries_only_its_own_skill(bundles: Path) -> None:
     assert not (affinage & {"schema.py", "severity.py"})
 
 
+def test_briesearch_bundle_uses_packaged_import_closure(bundles: Path) -> None:
+    content = set(zipfile.ZipFile(bundles / "briesearch.pyz").namelist())
+    assert content == {
+        "__main__.py",
+        "easy_cheese/__init__.py",
+        "easy_cheese/shared/__init__.py",
+        "easy_cheese/shared/artifact_path.py",
+        "easy_cheese/shared/bundle_commands.py",
+        "easy_cheese/skills/__init__.py",
+        "easy_cheese/skills/briesearch/__init__.py",
+        "easy_cheese/skills/briesearch/commands.py",
+        "easy_cheese/skills/briesearch/ground_check.py",
+    }
+
+
 def test_ultracook_bundle_contains_entity_modules(bundles: Path) -> None:
     """curd.py and wiring.py are local library modules (not registered subcommands).
     The local-sibling-bundling feature in build_pyz must stage them so that
@@ -996,9 +1011,9 @@ def test_committed_bundle_matches_source(bundles: Path, skill: str) -> None:
 
 
 def test_no_orphan_committed_bundles():
-    """A skill dropped from build_pyz.SKILLS must not leave a stale committed
-    .pyz behind — the build-pyz workflow only diffs bundles it rebuilds, so an
-    orphan would ship silently.
+    """A skill dropped from both build registries must not leave a stale committed
+    .pyz behind—the build workflow only diffs bundles it rebuilds, so an orphan
+    would ship silently.
     common.pyz is excluded: it fans out to consumer skills in Wave 1+ and has no
     single committed path under skills/common/."""
     committed = {
@@ -1006,7 +1021,10 @@ def test_no_orphan_committed_bundles():
         for p in REPO_ROOT.glob("skills/*/scripts/*.pyz")
         if p.name != "common.pyz"
     }
-    expected = {f"skills/{skill}/scripts/{skill}.pyz" for skill in build_pyz.SKILLS}
+    expected = {
+        f"skills/{skill}/scripts/{skill}.pyz"
+        for skill in {*build_pyz.SKILLS, *build_pyz.APPLICATION_SKILLS}
+    }
     assert committed == expected
 
 

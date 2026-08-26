@@ -39,13 +39,14 @@ is referenced by sibling-relative path (`../cheese/references/<file>.md`
 from a `SKILL.md`, `../../cheese/references/<file>.md` from a
 `references/*.md`) (`README.md:53`).
 
-Skills that depend on `shared/scripts/` ship a pre-bundled `.pyz` so the
-shared helpers are self-contained at install time — invoked as
+Python skills ship a self-contained application archive invoked as
 `python3 skills/<skill>/scripts/<skill>.pyz <subcommand>`
-(`skills/mold/SKILL.md:23`). The authoritative bundle roster is the
-`SKILLS` dict in `scripts/build_pyz.py`; see
-[tooling](./tooling.md) for the current list and for why the committed
-bundles are a *checked* artifact rather than a CI-regenerated one.
+(`skills/mold/SKILL.md:23`). Migrated applications start at
+`src/easy_cheese/skills/<skill>/commands.py`; the builder copies their
+transitive imports while preserving package paths. `APPLICATION_SKILLS` in
+`scripts/build_pyz.py` discovers that layout. The legacy `SKILLS` registry
+remains only for skills awaiting migration. See [tooling](./tooling.md) for why
+committed bundles are checked artifacts rather than CI-regenerated output.
 
 
 
