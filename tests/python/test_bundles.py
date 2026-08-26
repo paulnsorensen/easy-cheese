@@ -274,6 +274,20 @@ def test_resolve_bundle_closure_rejects_native_approved_dependency(
         _resolve_bundle_closure("mold", source_root, dependency_root)
 
 
+def test_resolve_bundle_closure_rejects_native_package_initializer(
+    tmp_path: Path,
+) -> None:
+    source_root = _source_tree(tmp_path, "import cattrs\n")
+    native = tmp_path / "vendor" / "cattrs" / "__init__.pyd"
+    native.parent.mkdir(parents=True)
+    native.write_bytes(b"native")
+
+    with pytest.raises(
+        ValueError, match="native approved dependency in bundle: cattrs"
+    ):
+        _resolve_bundle_closure("mold", source_root, tmp_path / "vendor")
+
+
 def test_resolve_bundle_closure_rejects_ambient_vendored_dependency(
     tmp_path: Path,
 ) -> None:

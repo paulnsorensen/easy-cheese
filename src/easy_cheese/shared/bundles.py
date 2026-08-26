@@ -118,6 +118,8 @@ class _ModuleIndex:
         for suffix in _NATIVE_SUFFIXES:
             if base.with_suffix(suffix).is_file():
                 return True
+            if (base / f"__init__{suffix}").is_file():
+                return True
             if next(base.parent.glob(f"{base.name}.*{suffix}"), None) is not None:
                 return True
             if next(base.glob(f"__init__.*{suffix}"), None) is not None:
