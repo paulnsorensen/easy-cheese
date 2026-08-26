@@ -2,23 +2,28 @@
 
 from __future__ import annotations
 
+import ast
+import importlib.util
 import sys
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-
-from easy_cheese.shared.bundle_imports import _ImportReference, _import_references
 
 _PACKAGE_NAME = "easy_cheese"
 _SCHEMAS_PACKAGE_NAME = "easy_cheese_schemas"
 _SKILLS_NAMESPACE = f"{_PACKAGE_NAME}.skills"
 _SKILLS_PREFIX = f"{_SKILLS_NAMESPACE}."
 _NATIVE_SUFFIXES = {".so", ".pyd", ".dylib"}
-_APPROVED_DEPENDENCY_ROOTS = {
-    "attr",
-    "attrs",
-    "cattrs",
-    "typing_extensions",
+# These are distribution-level closures, not inferred third-party import graphs.
+# requirements-vendor.txt pins the exact versions this table describes.
+_VENDORED_CLOSURES = {
+    "attr": ("attr",),
+    "attrs": ("attr", "attrs"),
+    "cattrs": ("attr", "attrs", "cattrs", "typing_extensions"),
+    "typing_extensions": ("typing_extensions",),
 }
+_VENDORED_ROOTS = frozenset(
+    root for closure in _VENDORED_CLOSURES.values() for root in closure
+)
 # Bare names remain while schema sources retain common.pyz fallback imports.
 _GENERATED_MODULES = {
     "_compiled_phase_registry",
@@ -36,6 +41,13 @@ class _BundleSource:
     source: Path
     archive_path: PurePosixPath
     is_package: bool = False
+    scan_imports: bool = True
+
+
+@dataclass(frozen=True)
+class _ImportReference:
+    name: str
+    requires_module: bool
 
 
 class _ModuleIndex:
@@ -74,11 +86,16 @@ class _ModuleIndex:
     @classmethod
     def dependencies(cls, dependency_root: Path) -> _ModuleIndex:
         sources: list[_BundleSource] = []
-        for root_name in sorted(_APPROVED_DEPENDENCY_ROOTS):
+        for root_name in sorted(_VENDORED_ROOTS):
             module = dependency_root / f"{root_name}.py"
             if module.is_file():
                 sources.append(
-                    _BundleSource(root_name, module, PurePosixPath(module.name))
+                    _BundleSource(
+                        root_name,
+                        module,
+                        PurePosixPath(module.name),
+                        scan_imports=False,
+                    )
                 )
             package = dependency_root / root_name
             if not package.is_dir():
@@ -96,7 +113,8 @@ class _ModuleIndex:
                         ".".join(module_parts),
                         path,
                         PurePosixPath(*relative.parts),
-                        is_package,
+                        is_package=is_package,
+                        scan_imports=False,
                     )
                 )
         return cls(tuple(sources), native_root=dependency_root)
@@ -111,20 +129,60 @@ class _ModuleIndex:
         prefix = f"{package}."
         return any(module.startswith(prefix) for module in self._sources)
 
-    def has_native(self, module: str) -> bool:
+    def sources_for_roots(self, roots: tuple[str, ...]) -> tuple[_BundleSource, ...]:
+        return tuple(
+            source
+            for module, source in self._sources.items()
+            if any(module == root or module.startswith(f"{root}.") for root in roots)
+        )
+
+    def has_native(self, root: str) -> bool:
         if self._native_root is None:
             return False
-        base = self._native_root.joinpath(*module.split("."))
+        base = self._native_root / root
         for suffix in _NATIVE_SUFFIXES:
             if base.with_suffix(suffix).is_file():
                 return True
-            if (base / f"__init__{suffix}").is_file():
-                return True
             if next(base.parent.glob(f"{base.name}.*{suffix}"), None) is not None:
                 return True
-            if next(base.glob(f"__init__.*{suffix}"), None) is not None:
-                return True
-        return False
+        return base.is_dir() and any(
+            path.suffix in _NATIVE_SUFFIXES
+            for path in base.rglob("*")
+            if path.is_file()
+        )
+
+
+def _import_references(source: _BundleSource) -> tuple[_ImportReference, ...]:
+    tree = ast.parse(
+        source.source.read_text(encoding="utf-8"), filename=str(source.source)
+    )
+    package = source.module if source.is_package else source.module.rpartition(".")[0]
+    references: list[_ImportReference] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            references.extend(
+                _ImportReference(alias.name, True) for alias in node.names
+            )
+            continue
+        if not isinstance(node, ast.ImportFrom):
+            continue
+        if node.level:
+            target = "." * node.level + (node.module or "")
+            try:
+                imported = importlib.util.resolve_name(target, package)
+            except (ImportError, ValueError) as exc:
+                raise ValueError(f"invalid relative import in {source.module}") from exc
+        else:
+            imported = node.module or ""
+        if not imported:
+            continue
+        references.append(_ImportReference(imported, True))
+        references.extend(
+            _ImportReference(f"{imported}.{alias.name}", False)
+            for alias in node.names
+            if alias.name != "*"
+        )
+    return tuple(references)
 
 
 class _ImportPolicy:
@@ -139,19 +197,18 @@ class _ImportPolicy:
         self._owner_namespace = f"{_SKILLS_NAMESPACE}.{skill}"
         self._owner_prefix = f"{self._owner_namespace}."
 
-    def dependency_source(
+    def dependency_sources(
         self, importer: _BundleSource, reference: _ImportReference
-    ) -> _BundleSource | None:
+    ) -> tuple[_BundleSource, ...]:
         name = reference.name
-        # Ownership wins over lookup so another skill cannot enter this closure.
         if self._is_cross_skill_import(name):
             raise ValueError(f"cross-skill import in bundle: {name}")
         if candidate := self._sources.source_for(name):
-            return candidate
+            return (candidate,)
 
         root_name = name.split(".", 1)[0]
-        if root_name in _APPROVED_DEPENDENCY_ROOTS:
-            return self._approved_dependency(reference)
+        if root_name in _VENDORED_CLOSURES:
+            return self._vendored_sources(name, reference.requires_module)
         if self._has_adjacent_native(importer.source, name):
             raise ValueError(f"native ambient dependency in bundle: {name}")
 
@@ -159,30 +216,42 @@ class _ImportPolicy:
         if not reference.requires_module and (
             self._sources.contains(parent) or parent in _GENERATED_MODULES
         ):
-            return None
+            return ()
         if name in _GENERATED_MODULES or root_name in _STDLIB_MODULES:
-            return None
+            return ()
         if root_name in _INTERNAL_ROOTS:
-            # Package imports have descendants but no indexed initializer source.
             if self._sources.has_descendant(name):
-                return None
+                return ()
             raise ValueError(f"unresolved internal dependency: {name}")
         raise ValueError(f"ambient dependency in bundle: {name}")
 
-    def _approved_dependency(self, reference: _ImportReference) -> _BundleSource | None:
+    def _vendored_sources(
+        self, imported: str, requires_module: bool
+    ) -> tuple[_BundleSource, ...]:
         if self._dependencies is None:
-            return None
-        name = reference.name
-        if candidate := self._dependencies.source_for(name):
-            return candidate
-        if self._dependencies.has_native(name):
-            raise ValueError(f"native approved dependency in bundle: {name}")
-        parent = name.rpartition(".")[0]
-        if not reference.requires_module and self._dependencies.contains(parent):
-            return None
-        if self._dependencies.has_descendant(name):
-            return None
-        raise ValueError(f"approved dependency is unavailable: {name}")
+            return ()
+        root = imported.split(".", 1)[0]
+        closure = _VENDORED_CLOSURES[root]
+        if not (
+            self._dependencies.contains(root) or self._dependencies.has_descendant(root)
+        ):
+            raise ValueError(f"approved dependency is unavailable: {root}")
+        for required_root in closure:
+            if not (
+                self._dependencies.contains(required_root)
+                or self._dependencies.has_descendant(required_root)
+            ):
+                raise ValueError(f"approved dependency is unavailable: {required_root}")
+            if self._dependencies.has_native(required_root):
+                raise ValueError(
+                    f"native approved dependency in bundle: {required_root}"
+                )
+        if requires_module and not (
+            self._dependencies.contains(imported)
+            or self._dependencies.has_descendant(imported)
+        ):
+            raise ValueError(f"approved dependency is unavailable: {imported}")
+        return self._dependencies.sources_for_roots(closure)
 
     def _is_cross_skill_import(self, name: str) -> bool:
         return name.startswith(_SKILLS_PREFIX) and not (
@@ -212,12 +281,10 @@ class _ClosureResolver:
             if source in self._included:
                 continue
             self._included.add(source)
-            for reference in _import_references(
-                source.source, source.module, is_package=source.is_package
-            ):
-                dependency = self._policy.dependency_source(source, reference)
-                if dependency is not None:
-                    self._pending.append(dependency)
+            if not source.scan_imports:
+                continue
+            for reference in _import_references(source):
+                self._pending.extend(self._policy.dependency_sources(source, reference))
         return tuple(sorted(self._included, key=lambda source: source.archive_path))
 
 
@@ -240,7 +307,7 @@ def _resolve_bundle_sources(skill: str, source_root: Path) -> tuple[Path, ...]:
 def _resolve_bundle_closure(
     skill: str, source_root: Path, dependency_root: Path
 ) -> tuple[_BundleSource, ...]:
-    """Resolve archive paths for canonical and vendored Python sources."""
+    """Resolve archive paths for canonical and fixed vendored dependency trees."""
     sources = _ModuleIndex.canonical(source_root)
     dependencies = _ModuleIndex.dependencies(dependency_root)
     entrypoint = _entrypoint_source(skill, sources)
