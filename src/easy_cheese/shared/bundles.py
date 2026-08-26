@@ -1,4 +1,4 @@
-"""Layout-derived bundle closure validation."""
+"""Find the pure-Python sources one skill archive must contain."""
 
 from __future__ import annotations
 
@@ -29,26 +29,51 @@ _INTERNAL_ROOTS = frozenset({_PACKAGE_NAME, _SCHEMAS_PACKAGE_NAME})
 _STDLIB_MODULES = sys.stdlib_module_names
 
 
-def _module_name(path: Path, source_root: Path) -> str:
-    return ".".join(path.relative_to(source_root).with_suffix("").parts)
+# Build the index only from canonical source packages; never consult sys.path.
+class _SourceModules:
+    def __init__(self, source_root: Path) -> None:
+        self._source_root = source_root
+        self._paths = self._index()
 
+    def module_name(self, path: Path) -> str:
+        return ".".join(path.relative_to(self._source_root).with_suffix("").parts)
 
-def _modules(source_root: Path) -> dict[str, Path]:
-    modules: dict[str, Path] = {}
-    for package_name in (_PACKAGE_NAME, _SCHEMAS_PACKAGE_NAME):
-        package = source_root / package_name
-        if not package.is_dir():
-            continue
-        for path in package.rglob("*.py"):
-            if path.name != "__init__.py":
-                modules[_module_name(path, source_root)] = path
-    return modules
+    def source_for(self, module: str) -> Path | None:
+        return self._paths.get(module)
+
+    def contains(self, module: str) -> bool:
+        return module in self._paths
+
+    def has_descendant(self, package: str) -> bool:
+        prefix = f"{package}."
+        return any(module.startswith(prefix) for module in self._paths)
+
+    @staticmethod
+    def has_adjacent_native(importer: Path, module: str) -> bool:
+        stem = module.rsplit(".", 1)[-1]
+        return any(
+            (importer.parent / f"{stem}{suffix}").exists()
+            for suffix in _NATIVE_SUFFIXES
+        )
+
+    def _index(self) -> dict[str, Path]:
+        paths: dict[str, Path] = {}
+        for package_name in (_PACKAGE_NAME, _SCHEMAS_PACKAGE_NAME):
+            package = self._source_root / package_name
+            if not package.is_dir():
+                continue
+            for path in package.rglob("*.py"):
+                # The archive builder stages package initializers separately.
+                if path.name != "__init__.py":
+                    paths[self.module_name(path)] = path
+        return paths
 
 
 def _import_names(path: Path, module: str) -> tuple[str, ...]:
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     package = module.rpartition(".")[0]
     names: list[str] = []
+    # Walk nested scopes so deferred imports are bundled without executing the module.
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             names.extend(alias.name for alias in node.names)
@@ -69,50 +94,32 @@ def _import_names(path: Path, module: str) -> tuple[str, ...]:
     return tuple(names)
 
 
-class _ClosureResolver:
-    def __init__(self, source_root: Path, skill: str, entrypoint: Path) -> None:
-        self._source_root = source_root
-        self._modules = _modules(source_root)
-        self._pending = [entrypoint]
-        self._included: set[Path] = set()
+class _ImportPolicy:
+    def __init__(self, skill: str, sources: _SourceModules) -> None:
+        self._sources = sources
         self._owner_namespace = f"{_SKILLS_NAMESPACE}.{skill}"
         self._owner_prefix = f"{self._owner_namespace}."
 
-    def resolve(self) -> tuple[Path, ...]:
-        while self._pending:
-            path = self._pending.pop()
-            if path in self._included:
-                continue
-            self._included.add(path)
-            module = _module_name(path, self._source_root)
-            for name in _import_names(path, module):
-                self._classify_import(path, name)
-        return tuple(sorted(self._included))
-
-
-    def _classify_import(self, path: Path, name: str) -> None:
+    def dependency_source(self, importer: Path, name: str) -> Path | None:
+        # Ownership wins over lookup so another skill cannot enter this closure.
         if self._is_cross_skill_import(name):
             raise ValueError(f"cross-skill import in bundle: {name}")
-        candidate = self._modules.get(name)
-        if candidate is not None:
-            self._pending.append(candidate)
-            return
+        if candidate := self._sources.source_for(name):
+            return candidate
         parent = name.rpartition(".")[0]
-        if parent in self._modules or parent in _GENERATED_MODULES:
-            return
+        if self._sources.contains(parent) or parent in _GENERATED_MODULES:
+            return None
         root_name = name.split(".", 1)[0]
         if name in _GENERATED_MODULES or root_name in _STDLIB_MODULES:
-            return
+            return None
         if root_name in _ALLOWED_UNBUNDLED_EXTERNAL_ROOTS:
-            return
+            return None
         if root_name in _INTERNAL_ROOTS:
-            if any(module_name.startswith(name + ".") for module_name in self._modules):
-                return
+            # Package imports have descendants but no indexed initializer source.
+            if self._sources.has_descendant(name):
+                return None
             raise ValueError(f"unresolved internal dependency: {name}")
-        stem = name.rsplit(".", 1)[-1]
-        if any(
-            (path.parent / f"{stem}{suffix}").exists() for suffix in _NATIVE_SUFFIXES
-        ):
+        if self._sources.has_adjacent_native(importer, name):
             raise ValueError(f"native ambient dependency in bundle: {name}")
         raise ValueError(f"ambient dependency in bundle: {name}")
 
@@ -122,10 +129,38 @@ class _ClosureResolver:
         )
 
 
+class _ClosureResolver:
+    def __init__(
+        self,
+        sources: _SourceModules,
+        policy: _ImportPolicy,
+        entrypoint: Path,
+    ) -> None:
+        self._sources = sources
+        self._policy = policy
+        self._pending = [entrypoint]
+        self._included: set[Path] = set()
+
+    def resolve(self) -> tuple[Path, ...]:
+        while self._pending:
+            path = self._pending.pop()
+            if path in self._included:
+                continue
+            self._included.add(path)
+            module = self._sources.module_name(path)
+            for name in _import_names(path, module):
+                dependency = self._policy.dependency_source(path, name)
+                if dependency is not None:
+                    self._pending.append(dependency)
+        return tuple(sorted(self._included))
+
+
 def _resolve_bundle_sources(skill: str, source_root: Path) -> tuple[Path, ...]:
     """Resolve one skill's reachable internal pure-Python modules."""
     package_root = source_root / _PACKAGE_NAME
     entrypoint = package_root / "skills" / skill / "commands.py"
     if not entrypoint.is_file():
         raise ValueError(f"unknown Python skill: {skill}")
-    return _ClosureResolver(source_root, skill, entrypoint).resolve()
+    sources = _SourceModules(source_root)
+    policy = _ImportPolicy(skill, sources)
+    return _ClosureResolver(sources, policy, entrypoint).resolve()
