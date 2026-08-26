@@ -126,6 +126,24 @@ _Code_: NEW ENTITY
 _Avoid_: Milknado node ID
 _Code_: NEW ENTITY
 
+
+
+**HandoffPointer** - canonical JSON commit record for one cross-phase publication, revealed after referenced artifacts are durable.
+_Avoid_: bare payload, continuity envelope
+_Code_: NEW ENTITY
+
+**NormalizationReceipt** - typed evidence for an accepted non-strict writer normalization or exact legacy migration.
+_Avoid_: repair log, strict-path metadata
+_Code_: NEW ENTITY
+
+**PublishedArtifact** - producer result containing the canonical payload, pointer, and optional normalization receipt.
+_Avoid_: uncommitted payload
+_Code_: NEW ENTITY
+
+**AcceptedArtifact** - consumer result exposed only after pointer, route, reference, receipt, and payload validation.
+_Avoid_: parsed bare payload
+_Code_: NEW ENTITY
+
 ## Outside-in RED gating
 
 **GateReceipt** - the strict phase-neutral evidence envelope that binds approved work, contract mode, witness disposition, runner argv, protected-file digests, and producer provenance across Cut, Cook, and Press.

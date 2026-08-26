@@ -4,7 +4,7 @@
 
 ## Current implementation state
 
-<certain> The approved contracts are not implemented yet. Current Easy Cheese code still exposes CurdBlock, Decomposition, and CurdRecord, and current Cook, Cure, Age, and Pasteurize entry points retain their legacy shapes.[^current]
+<certain> Canonical decorator-derived contracts and the compiled transition registry are implemented. The uniform pointer gateway, layout-derived skill bundles, and Mold → Cook producer/consumer enforcement remain approved work; legacy CurdBlock, Decomposition, and CurdRecord surfaces still exist during migration.[^current]
 
 <certain> Milknado still owns a separate batch plan and has no easy-cheese-schemas dependency.[^milknado]
 
@@ -62,6 +62,10 @@ flowchart LR
 
 <certain> New contracts use Draft 2020-12 schemas generated from frozen attrs/cattrs models. Unsupported majors, future minors, and unknown fields reject before execution.
 
+
+
+<certain> The approved executable boundary is a canonical `HandoffPointer`. Producers publish payload and optional `NormalizationReceipt` before revealing the pointer; consumers validate every reference and route before exposing an `AcceptedArtifact`. Agent writer views may receive only bounded syntax recovery, while canonical artifacts and bare persisted inputs remain strict.[^boundary-spec]
+
 ## Evidence and execution
 
 <certain> ReviewResult has typed findings and a coverage ledger; an empty finding list is clean only with complete coverage.
@@ -109,6 +113,11 @@ flowchart LR
 - [Executor result ADR](../adr/workflow-contract-milknado-seam-004.md)
 - [Routing boundary ADR](../adr/workflow-contract-milknado-seam-005.md)
 - [Adoption-order ADR](../adr/workflow-contract-milknado-seam-006.md)
+- [Enforceable skill boundaries](../specs/enforceable-skill-boundaries.md)
+- [Pointer protocol ADR](../adr/skill-boundary-protocol-001.md)
+- [Normalization boundary ADR](../adr/skill-boundary-normalization-002.md)
+- [Bundle authority ADR](../adr/skill-bundle-authority-003.md)
+- [Legacy adapter lifecycle ADR](../adr/legacy-adapter-lifecycle-004.md)
 
 [^spec]: `/home/paul/.local/share/cheese/paulnsorensen-easy-cheese/specs/workflow-contract-milknado-seam.md`.
 [^current]: `src/easy_cheese_schemas/curd.py:132-148`; `src/easy_cheese_schemas/decomposition.py:39-43`; `src/easy_cheese_schemas/manifest.py:328-358`; `skills/cook/SKILL.md:44-56`; `skills/cure/SKILL.md:10-16`; `skills/pasteurize/SKILL.md:184-210`.
@@ -116,5 +125,6 @@ flowchart LR
 [^old-adr]: [Cross-skill handoff ADR](../adr/cross-skill-work-contract-002.md); [bundled YAML runtime ADR](../adr/cross-skill-work-contract-003.md).
 [^roadmap-format]: `/home/paul/.agents/skills/wiki-roadmap/SKILL.md:27-39`; `.github/scripts/validate_wiki.py:48-57`.
 [^checkpoint]: `.cheese/notes/root-cheese-milknado-orchestration.md` at `d7bd4267871e6f5e360225a5ebed8e4eb9cd3fce`:37-65,94-103; ingested before tracked source removal on 2026-08-23.
+[^boundary-spec]: `.cheese/specs/enforceable-skill-boundaries.md`.
 
-_Source: approved workflow-contract-milknado-seam Mold, 2026-08-07; `.cheese/notes/root-cheese-milknado-orchestration.md` · Updated: 2026-08-23 · Supersedes: July checkpoint plan-ID and schema-substrate claims where they conflict with accepted August contracts._
+_Source: approved workflow-contract-milknado-seam Mold, 2026-08-07; enforceable-skill-boundaries Mold, 2026-08-24 · Updated: 2026-08-24 · Supersedes: July checkpoint plan-ID and schema-substrate claims where they conflict with accepted August contracts._

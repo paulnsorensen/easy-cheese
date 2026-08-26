@@ -25,6 +25,7 @@
 - [hallouminate-wiring-stack-003](./hallouminate-wiring-stack-003.md) — ADR: liberal wiki grounding in mold/culture is prose guidance, not a coherence gate
 - [hallouminate-wiring-stack-004](./hallouminate-wiring-stack-004.md) — ADR: validate_wiki.py hardcodes .hallouminate/wiki/ discovery, ignoring config.toml corpus_paths
 - [hard-cheese-retained-001](./hard-cheese-retained-001.md) — ADR: hard-cheese retained despite local zero-use signal
+- [legacy-adapter-lifecycle-004](./legacy-adapter-lifecycle-004.md) — ADR: Legacy handoff adapters are exact, explicit, and temporary
 - [mold-follow-up-routing-001](./mold-follow-up-routing-001.md) — ADR: every non-goal enters a disposition batch before Curdle
 - [mold-follow-up-routing-002](./mold-follow-up-routing-002.md) — ADR: route follow-ups per deliverable unit instead of choosing one backlog
 - [mold-follow-up-routing-003](./mold-follow-up-routing-003.md) — ADR: publish follow-ups after the local Curdle write
@@ -37,12 +38,15 @@
 - [plate-publication-boundary-001](./plate-publication-boundary-001.md) — ADR: plate owns the commit-to-PR publication boundary
 - [post-pr-wiki-writeback-001](./post-pr-wiki-writeback-001.md) — ADR: curdle wiki writes enforced by gate node + read-back verify, not a Stop-hook
 - [post-pr-wiki-writeback-002](./post-pr-wiki-writeback-002.md) — ADR: post-PR learnings write-back reuses wiki-ingest, not the personal wiki-curator skill
-- [pyz-pipeline-contracts-001](./pyz-pipeline-contracts-001.md) — ADR: Bundle builds verify the staged import closure, including function-body imports  [status: accepted]
-- [pyz-pipeline-contracts-002](./pyz-pipeline-contracts-002.md) — ADR: Bundle currency is enforced locally by just check and a scoped prek hook  [status: accepted]
-- [pyz-pipeline-contracts-003](./pyz-pipeline-contracts-003.md) — ADR: Script locations are published as a generated, gated map plus per-source banners  [status: accepted]
-- [pyz-pipeline-contracts-004](./pyz-pipeline-contracts-004.md) — ADR: The subcommand registry is pruned to the prose-referenced set with strict two-way equality  [status: accepted]
-- [pyz-pipeline-contracts-005](./pyz-pipeline-contracts-005.md) — ADR: cook joins COMMON_CONSUMERS so its documented common.pyz fallback ships  [status: accepted]
-- [pyz-pipeline-contracts-006](./pyz-pipeline-contracts-006.md) — ADR: The Astro site source moves out of src/ to website/, leaving src/ purely Python  [status: accepted]
+- [pyz-pipeline-contracts-001](./pyz-pipeline-contracts-001.md) — ADR: Bundle builds verify the staged import closure, including function-body imports
+- [pyz-pipeline-contracts-002](./pyz-pipeline-contracts-002.md) — ADR: Bundle currency is enforced locally by just check and a scoped prek hook
+- [pyz-pipeline-contracts-003](./pyz-pipeline-contracts-003.md) — ADR: Script locations are published as a generated, gated map plus per-source banners
+- [pyz-pipeline-contracts-004](./pyz-pipeline-contracts-004.md) — ADR: The subcommand registry is pruned to the prose-referenced set with strict two-way equality
+- [pyz-pipeline-contracts-005](./pyz-pipeline-contracts-005.md) — ADR: cook joins COMMON_CONSUMERS so its documented common.pyz fallback ships
+- [pyz-pipeline-contracts-006](./pyz-pipeline-contracts-006.md) — ADR: The Astro site source moves out of src/ to website/, leaving src/ purely Python
+- [skill-boundary-normalization-002](./skill-boundary-normalization-002.md) — ADR: Generous writer ingress ends before canonical persistence
+- [skill-boundary-protocol-001](./skill-boundary-protocol-001.md) — ADR: Cross-skill execution starts from a canonical pointer
+- [skill-bundle-authority-003](./skill-bundle-authority-003.md) — ADR: Package layout and decorators define each skill bundle
 - [skill-docs-single-page-001](./skill-docs-single-page-001.md) — ADR-001: Fold skill references into one docs page instead of separate sub-pages  [status: accepted]
 - [skill-docs-single-page-002](./skill-docs-single-page-002.md) — ADR-002: Left-nav heading TOC is h2-only, via a custom Starlight Sidebar override  [status: accepted]
 - [skill-overlap-ratchet-001](./skill-overlap-ratchet-001.md) — ADR: Own the Snowflake overlap analyzer in easy-cheese
@@ -52,8 +56,8 @@
 - [skill-size-ratchet-001](./skill-size-ratchet-001.md) — ADR: Measure SKILL.md bodies in estimated tokens, not lines
 - [skill-size-ratchet-002](./skill-size-ratchet-002.md) — ADR: No tokenizer dependency in the skill-size gate
 - [skill-size-ratchet-003](./skill-size-ratchet-003.md) — ADR: Ratchet skill size and reference structure against a recorded baseline
-- [spec-format-enforcement-001](./spec-format-enforcement-001.md) — ADR: Mold spec format enforced by decorator-declared document contracts  [status: accepted]
-- [spec-format-enforcement-002](./spec-format-enforcement-002.md) — ADR: Schema awareness via in-place generated regions; phase registry unchanged  [status: accepted]
+- [spec-format-enforcement-001](./spec-format-enforcement-001.md) — ADR: Mold spec format enforced by decorator-declared document contracts
+- [spec-format-enforcement-002](./spec-format-enforcement-002.md) — ADR: Schema awareness via in-place generated regions; phase registry unchanged
 - [starlight-docs-cutover-001](./starlight-docs-cutover-001.md) — ADR: Starlight docs cutover
 - [wheypoint-continuity-kernel-001](./wheypoint-continuity-kernel-001.md) — Wheypoint continuity authority
 - [wheypoint-continuity-kernel-002](./wheypoint-continuity-kernel-002.md) — Dedicated Wheypoint runtime boundary
@@ -66,5 +70,5 @@
 - [workflow-contract-milknado-seam-004](./workflow-contract-milknado-seam-004.md) — ADR: Executors consume CurdPlan and return criterion-led CurdResult
 - [workflow-contract-milknado-seam-005](./workflow-contract-milknado-seam-005.md) — ADR: Payload schemas and transition routing remain separate
 - [workflow-contract-milknado-seam-006](./workflow-contract-milknado-seam-006.md) — ADR: Easy Cheese proves the core seam before Milknado adoption
-- [writer-view-boundary-simplification-001](./writer-view-boundary-simplification-001.md) — ADR: Strict contract-version equality and a single cook CLI module  [status: accepted]
+- [writer-view-boundary-simplification-001](./writer-view-boundary-simplification-001.md) — ADR: Strict contract-version equality and a single cook CLI module
 <!-- HALLOUMINATE:INDEX-END -->
