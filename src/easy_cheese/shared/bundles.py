@@ -158,9 +158,10 @@ class _ClosureResolver:
 def _resolve_bundle_sources(skill: str, source_root: Path) -> tuple[Path, ...]:
     """Resolve one skill's reachable internal pure-Python modules."""
     package_root = source_root / _PACKAGE_NAME
-    entrypoint = package_root / "skills" / skill / "commands.py"
+    package_name = skill.replace("-", "_")
+    entrypoint = package_root / "skills" / package_name / "commands.py"
     if not entrypoint.is_file():
         raise ValueError(f"unknown Python skill: {skill}")
     sources = _SourceModules(source_root)
-    policy = _ImportPolicy(skill, sources)
+    policy = _ImportPolicy(package_name, sources)
     return _ClosureResolver(sources, policy, entrypoint).resolve()

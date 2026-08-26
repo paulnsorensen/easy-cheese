@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
-"""Build one self-contained .pyz per skill: only that skill's scripts plus the
-shared/scripts modules they actually import.
+"""Build one self-contained .pyz application per Python skill.
 
-Sources live outside the shipped skill dirs — skill scripts in src/<skill>/, the
-shared library in shared/scripts/. Each bundle is assembled from just what the
-skill needs (shared deps computed by scanning imports) and deployed to
-skills/<skill>/scripts/<skill>.pyz. No skill ships another skill's code, and a
-shared module is vendored only into the bundles that import it — keeping the
-total shipped footprint O(scripts), not O(skills × scripts).
+Migrated skills start at ``src/easy_cheese/skills/<skill>/commands.py`` and
+carry their transitive first-party import closure with package paths intact.
+Unmigrated skills retain the flat ``src/<skill>/`` and ``shared/scripts/``
+staging path until their clean cutover. Archives deploy to
+``skills/<skill>/scripts/<skill>.pyz`` and never contain another skill's code.
 """
 
 from __future__ import annotations
@@ -27,6 +25,17 @@ import vendor_deps
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = REPO_ROOT / "src"
 SHARED_SCRIPTS = REPO_ROOT / "shared" / "scripts"
+APPLICATION_ROOT = SRC_ROOT / "easy_cheese" / "skills"
+APPLICATION_SKILLS = frozenset(
+    path.parent.name.replace("_", "-")
+    for path in APPLICATION_ROOT.glob("*/commands.py")
+)
+
+sys.path.insert(0, str(SRC_ROOT))
+try:
+    from easy_cheese.shared.bundles import _resolve_bundle_sources  # noqa: E402
+finally:
+    sys.path.remove(str(SRC_ROOT))
 
 PHASE_REGISTRY_MODULE = "_compiled_phase_registry.py"
 PHASE_REGISTRY_SOURCE = SRC_ROOT / "easy_cheese_schemas" / PHASE_REGISTRY_MODULE
@@ -78,10 +87,7 @@ SKILLS: dict[str, dict[str, str | Shared]] = {
         "taste-test": "taste_test.py",
         "validate-spec": "validate-spec.py",
     },
-    "briesearch": {
-        "artifact-path": Shared("artifact_path.py"),
-        "ground-check": "ground_check.py",
-    },
+
     # normalize and validate are one module: cook_cli.py reads the verb off
     # argv[0], the way wheypoint.py does for commit|resolve|show|lint.
     "cook": {
@@ -505,6 +511,51 @@ def _write_zipapp(source: Path, target: Path) -> None:
     target.chmod(0o755)
 
 
+def _build_application_bundle(skill: str, target: Path) -> Path:
+    sources = _resolve_bundle_sources(skill, SRC_ROOT)
+    package_files = set(sources)
+    for source in sources:
+        for parent in source.parents:
+            if parent == SRC_ROOT:
+                break
+            initializer = parent / "__init__.py"
+            if initializer.is_file():
+                package_files.add(initializer)
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory() as td:
+        stage = Path(td)
+        for source in sorted(package_files):
+            destination = stage / source.relative_to(SRC_ROOT)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(source, destination)
+        package = skill.replace("-", "_")
+        (stage / "__main__.py").write_text(
+            f"from easy_cheese.skills.{package}.commands import main\n"
+            "raise SystemExit(main())\n",
+            encoding="utf-8",
+        )
+        _write_zipapp(stage, target)
+    return target
+
+
+def _build_skill_bundle(
+    skill: str,
+    target: Path,
+    *,
+    schema_catalog_bytes: bytes | None,
+    document_rules_bytes: bytes | None = None,
+) -> Path:
+    if skill in APPLICATION_SKILLS:
+        return _build_application_bundle(skill, target)
+    return _build_bundle(
+        skill,
+        target,
+        schema_catalog_bytes=schema_catalog_bytes,
+        document_rules_bytes=document_rules_bytes,
+    )
+
+
 def _build_bundle(
     skill: str,
     target: Path,
@@ -588,7 +639,7 @@ def _build_bundle(
 
 def build_bundle(skill: str, target: Path) -> Path:
     """Build one bundle after deriving and validating its generated catalog."""
-    return _build_bundle(
+    return _build_skill_bundle(
         skill,
         target,
         schema_catalog_bytes=_schema_catalog_bytes_for([skill]),
@@ -617,14 +668,16 @@ def main(argv: list[str]) -> int:
     args = parser.parse_args(argv[1:])
     # Consumer-only skills (age/cure) have no own bundle but receive common.pyz,
     # so they are valid targets even though they are not in SKILLS.
-    known = {*SKILLS, COMMON, *COMMON_CONSUMERS}
+    known = {*SKILLS, *APPLICATION_SKILLS, COMMON, *COMMON_CONSUMERS}
     unknown = [skill for skill in args.skills if skill not in known]
     if unknown:
         parser.error(
             f"unknown skill(s): {', '.join(unknown)}; known: {', '.join(sorted(known))}"
         )
-    targets = args.skills or [*SKILLS, COMMON]
-    real = [s for s in targets if s in SKILLS]  # only skills that ship their own .pyz
+    targets = args.skills or [*SKILLS, *APPLICATION_SKILLS, COMMON]
+    real = [
+        skill for skill in targets if skill in SKILLS or skill in APPLICATION_SKILLS
+    ]
     want_common = COMMON in targets or any(s in COMMON_CONSUMERS for s in targets)
     consumers = _common_consumers(targets, explicit=bool(args.skills))
     batch_skills = [*real, COMMON] if want_common else real
@@ -635,7 +688,7 @@ def main(argv: list[str]) -> int:
         for skill in real:
             print(
                 "built",
-                _build_bundle(
+                _build_skill_bundle(
                     skill,
                     args.out_dir / f"{skill}.pyz",
                     schema_catalog_bytes=catalog_bytes,
@@ -657,7 +710,7 @@ def main(argv: list[str]) -> int:
     for skill in real:
         print(
             "deployed",
-            _build_bundle(
+            _build_skill_bundle(
                 skill,
                 REPO_ROOT / "skills" / skill / "scripts" / f"{skill}.pyz",
                 schema_catalog_bytes=catalog_bytes,
