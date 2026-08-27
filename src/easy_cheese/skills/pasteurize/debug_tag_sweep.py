@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 from pathlib import Path
 
 from easy_cheese.shared import cli  # noqa: E402
@@ -105,5 +106,9 @@ def _setup(parser: argparse.ArgumentParser) -> None:
     parser.set_defaults(func=_run)
 
 
+def main(argv: list[str] | None = None) -> int:
+    return cli.run(_setup, argv=argv)
+
+
 if __name__ == "__main__":
-    raise SystemExit(cli.run(_setup))
+    raise SystemExit(main(sys.argv[1:]))
