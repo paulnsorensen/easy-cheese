@@ -10,7 +10,7 @@ from types import ModuleType
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-SEVERITY_CLI = REPO_ROOT / "shared" / "scripts" / "severity.py"
+SEVERITY_CLI = REPO_ROOT / "src" / "easy_cheese" / "shared" / "severity.py"
 
 
 class TestBump:

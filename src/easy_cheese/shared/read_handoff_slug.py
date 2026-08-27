@@ -1,0 +1,47 @@
+"""Read the handoff preamble from a .cheese/<phase>/<slug>.md artifact.
+
+Emits JSON with keys: status, next, artifact, orientation, halt_reason,
+taste_test, durable_flags, baseline.
+
+    python3 shared/scripts/read_handoff_slug.py --phase age --slug foo
+    -> {"status": "ok", "next": "cure", ...}
+"""
+from __future__ import annotations
+
+import argparse
+
+from easy_cheese.shared import cli, handoff, paths
+
+
+def _cmd(args: argparse.Namespace) -> None:
+    artifact = paths.artifact_path(args.phase, args.slug)
+    if not artifact.is_file():
+        raise cli.CliError(f"artifact not found: {artifact}")
+    try:
+        slug = handoff.parse_handoff_slug(artifact.read_text(encoding="utf-8"))
+    except handoff.HandoffParseError as exc:
+        raise cli.CliError(f"malformed handoff preamble in {artifact}: {exc}") from exc
+    cli.emit(
+        {
+            "status": slug.status,
+            "next": slug.next_skill,
+            "artifact": slug.artifact,
+            "orientation": slug.orientation,
+            "halt_reason": slug.halt_reason,
+            "taste_test": slug.taste_test,
+            "durable_flags": slug.durable_flags,
+            "baseline": slug.baseline,
+        },
+        json_mode=True,
+        stdout=args.stdout,
+    )
+
+
+def _setup(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--phase", required=True, choices=sorted(paths.PHASES))
+    parser.add_argument("--slug", required=True)
+    parser.set_defaults(func=_cmd)
+
+
+if __name__ == "__main__":
+    raise SystemExit(cli.run(_setup))

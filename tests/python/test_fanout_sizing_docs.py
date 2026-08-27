@@ -9,14 +9,11 @@ policy, ...) makes the corresponding test fail.
 """
 
 import re
-import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
+from easy_cheese.shared.fanout import age_route, pasteurize_route
 
-sys.path.insert(0, str(ROOT))
-from src.fanout import age_route  # noqa: E402
-from src.fanout import pasteurize_route  # noqa: E402
+ROOT = Path(__file__).resolve().parents[2]
 
 AGE_SKILL = ROOT / "skills" / "age" / "SKILL.md"
 AGE_SUB_AGENT_GATE = ROOT / "skills" / "age" / "references" / "sub-agent-gate.md"
@@ -26,8 +23,8 @@ PASTEURIZE_SKILL = ROOT / "skills" / "pasteurize" / "SKILL.md"
 ROUTING_POLICY = ROOT / "skills" / "cheese" / "references" / "routing-policy.md"
 DECOMPOSER_DOC = ROOT / "skills" / "cheese" / "references" / "decomposer.md"
 PACKET_DOC = ROOT / "skills" / "age" / "references" / "packet.md"
-MODE_PY = ROOT / "src" / "fanout" / "mode.py"
-CURD_BLOCK_PY = ROOT / "src" / "fanout" / "curd_block.py"
+MODE_PY = ROOT / "src" / "easy_cheese" / "shared" / "fanout" / "mode.py"
+CURD_BLOCK_PY = ROOT / "src" / "easy_cheese" / "shared" / "fanout" / "curd_block.py"
 AFFINAGE_FLOW_DETAILS_DOC = ROOT / "skills" / "affinage" / "references" / "flow-details.md"
 AGE_FAN_OUT_DOC = ROOT / "skills" / "age" / "references" / "fan-out.md"
 COOK_FAN_PATHWAY_DOC = ROOT / "skills" / "cook" / "references" / "fan-pathway.md"

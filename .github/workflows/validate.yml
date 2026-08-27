@@ -64,14 +64,10 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install pytest + pyyaml
-        run: pip install --no-cache-dir pytest==9.0.3 pyyaml==6.0.2
-
-      # attrs/cattrs reach the suite through the generated vendor/ tree, the
-      # same bytes build_pyz stages into the bundles — never a pip-installed
-      # copy, which would decouple what the tests exercise from what ships.
-      - name: Vendor runtime dependencies
-        run: python3 scripts/vendor_deps.py
+      - name: Install test dependencies
+        run: |
+          pip install --no-cache-dir pytest==9.0.3 pyyaml==6.0.2
+          pip install --disable-pip-version-check --no-cache-dir --require-hashes --requirement requirements/runtime.txt
 
       - name: Run melt script tests
         run: python3 -m pytest tests/python -q

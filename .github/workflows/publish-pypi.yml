@@ -84,14 +84,13 @@ jobs:
       # The conformance suite is the mandatory mitigation for shipping types
       # derived from the still-live src/fanout validators. validate.yml runs on
       # the same push but nothing makes this job wait for it, so a version bump
-      # merged next to a red suite would publish anyway. attrs/cattrs come from
-      # the generated vendor/ tree, so only pyyaml needs installing.
+      # merged next to a red suite would publish anyway.
       - name: Run schema conformance suite
         if: steps.version.outputs.should_publish == 'true'
         run: |
           set -euo pipefail
           pip install --no-cache-dir pytest==9.0.3 pyyaml==6.0.2
-          python3 scripts/vendor_deps.py
+          pip install --no-cache-dir --require-hashes --requirement requirements/runtime.txt
           python3 -m pytest tests/schemas/python -q
 
       - name: Build sdist and wheel

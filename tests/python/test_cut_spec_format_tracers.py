@@ -53,8 +53,8 @@ WITNESS_AC6 = (
     "structuring error on the nonconforming fixture and exit 0 on the conforming one"
 )
 WITNESS_AC7 = (
-    "skills/cook/scripts/common.pyz is absent because COMMON_CONSUMERS excludes "
-    "cook; test asserts the file exists and the frozenset contains cook"
+    "legacy common.pyz is obsolete; test asserts Cook owns cook.pyz and no stale "
+    "common archive remains"
 )
 WITNESS_AC8 = (
     "COHERENCE_GATES carries no spec-format checklist entry so the rendered "
@@ -119,14 +119,14 @@ def test_ac2_validate_spec_rejects_seeded_semantic_violations(mold_pyz: Path) ->
 
 def test_ac3_document_rules_projection_exists_and_is_staged(mold_pyz: Path) -> None:
     compiler = REPO_ROOT / "src" / "easy_cheese_schemas" / "_document_rules_compiler.py"
-    generated = REPO_ROOT / "src" / "mold" / "_document_rules.py"
+    generated = REPO_ROOT / "src" / "easy_cheese" / "shared" / "document_rules.py"
     assert compiler.is_file(), f"{WITNESS_AC3} [missing _document_rules_compiler.py]"
-    assert generated.is_file(), f"{WITNESS_AC3} [missing src/mold/_document_rules.py]"
+    assert generated.is_file(), f"{WITNESS_AC3} [missing generated document rules]"
     with zipfile.ZipFile(mold_pyz) as bundle:
         names = {Path(name).name for name in bundle.namelist()}
-    assert "_document_rules.py" in names, (
-        f"{WITNESS_AC3} [_document_rules.py not staged into mold.pyz]"
-    )
+        assert "document_rules.py" in names, (
+            f"{WITNESS_AC3} [document_rules.py not staged into mold.pyz]"
+        )
 
 
 def test_ac4_generated_regions_present_in_both_instruction_surfaces() -> None:
@@ -188,12 +188,13 @@ def test_ac6_cook_validate_structures_payload_against_catalog_contract(
     assert ok.returncode == 0, f"{WITNESS_AC6} [rc={ok.returncode} on conforming payload]"
 
 
-def test_ac7_cook_joins_common_consumers_and_ships_common_pyz() -> None:
-    assert "cook" in build_pyz.COMMON_CONSUMERS, (
-        f"{WITNESS_AC7} [COMMON_CONSUMERS excludes cook]"
+def test_ac7_registered_skills_ship_same_named_archives() -> None:
+    assert "cook" in build_pyz.SKILLS, f"{WITNESS_AC7} [cook not registered]"
+    assert (REPO_ROOT / "skills" / "cook" / "scripts" / "cook.pyz").is_file(), (
+        f"{WITNESS_AC7} [skills/cook/scripts/cook.pyz missing]"
     )
-    assert (REPO_ROOT / "skills" / "cook" / "scripts" / "common.pyz").is_file(), (
-        f"{WITNESS_AC7} [skills/cook/scripts/common.pyz missing]"
+    assert not any(REPO_ROOT.glob("skills/*/scripts/common.pyz")), (
+        f"{WITNESS_AC7} [stale common.pyz remains]"
     )
 
 

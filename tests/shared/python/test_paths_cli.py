@@ -14,7 +14,7 @@ from types import ModuleType
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-SHARED_SCRIPTS = REPO_ROOT / "shared" / "scripts"
+SHARED_SCRIPTS = REPO_ROOT / "src" / "easy_cheese" / "shared"
 PATHS_CLI = SHARED_SCRIPTS / "paths_cli.py"
 
 

@@ -9,11 +9,11 @@ distribution floors declared in pyproject.toml.
 from __future__ import annotations
 
 from copy import deepcopy
+import re
 import tomllib
 from pathlib import Path
 
 import pytest
-import vendor_deps
 from attrs import define, field
 from attrs.exceptions import FrozenInstanceError
 
@@ -79,6 +79,11 @@ GATE_PAYLOAD: dict[str, object] = {
     ],
     "not_applicable_reason": None,
 }
+
+
+def _runtime_pins() -> dict[str, str]:
+    text = (REPO_ROOT / "requirements" / "runtime.txt").read_text()
+    return dict(re.findall(r"^([A-Za-z0-9_-]+)==([^ ]+)", text, re.MULTILINE))
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -282,14 +287,14 @@ class TestDistributionMetadata:
     def test_python_floor_is_311(self) -> None:
         assert self._pyproject()["project"]["requires-python"] == ">=3.11"
 
-    def test_dependency_floors_match_the_vendored_versions(self) -> None:
-        # The floors are only meaningful if something exercises them, and the
-        # suite runs against vendor/, which requirements-vendor.txt pins.
+    def test_dependency_floors_match_the_locked_versions(self) -> None:
+        # The floors are only meaningful if the suite exercises the locked
+        # runtime versions used to assemble the private wheelhouse.
         # Declaring a lower floor would be an untested claim, so the two must
         # agree -- which is why a dependency bump lands here before it merges.
         import attrs
 
-        pins = vendor_deps.pinned_versions()
+        pins = _runtime_pins()
         deps = self._pyproject()["project"]["dependencies"]
         assert pins["attrs"] == attrs.__version__
         assert f"attrs>={pins['attrs']}" in deps

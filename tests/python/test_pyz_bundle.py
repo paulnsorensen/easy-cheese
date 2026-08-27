@@ -1,25 +1,34 @@
-"""Each skill ships a self-contained <skill>.pyz containing only its own scripts
-plus the shared modules it imports. Every subcommand must dispatch and resolve its
-imports from inside the zip — no sys.path traversal, and no other skill's code.
-"""
+"""Each skill ships a self-contained Shiv archive assembled from wheel metadata."""
 
 from __future__ import annotations
 
 import json
+import importlib.util
 import os
+import shutil
 import subprocess
 import sys
 import zipfile
 from pathlib import Path
 
 import pytest
+from easy_cheese.shared import paths
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BUILD = REPO_ROOT / "scripts" / "build_pyz.py"
+SPEC_FORMAT_FIXTURES = REPO_ROOT / "tests" / "python" / "fixtures" / "spec_format"
+COOK_PAYLOAD_FIXTURES = REPO_ROOT / "tests" / "python" / "fixtures" / "cook_payloads"
 
-sys.path.insert(0, str(REPO_ROOT / "shared" / "scripts"))
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
 import build_pyz  # noqa: E402
-import paths  # noqa: E402
+import check_bundles  # noqa: E402
+
+pytestmark = pytest.mark.skipif(
+    importlib.util.find_spec("build") is None
+    or importlib.util.find_spec("pip") is None
+    or (shutil.which("shiv") is None and importlib.util.find_spec("shiv") is None),
+    reason="bundle integration requires requirements-build.txt",
+)
 
 SKILL_SUBCOMMANDS = {
     "melt": [
@@ -42,8 +51,11 @@ SKILL_SUBCOMMANDS = {
         "manifest_update",
         "wiring_topo_sort",
         "pr_plan_to_branches",
+        "age-route", "curd-block", "slugify", "write_handoff_artifact",
+        "read_handoff_slug", "findings_cli", "gates_cli", "paths_cli",
+        "handoff_cli", "render_html",
     ],
-    "affinage": ["pr-status"],
+    "affinage": ["pr-status", "post-reply", "age-route", "review-surface"],
     "mold": [
         "artifact-path",
         "curd-count",
@@ -53,23 +65,27 @@ SKILL_SUBCOMMANDS = {
         "validate-spec",
     ],
     "briesearch": ["artifact-path", "ground-check"],
-    "cook": ["artifact-path", "worktree", "normalize", "validate"],
+    "cook": [
+        "artifact-path", "age-route", "baseline", "milknado", "mode", "worktree",
+        "normalize", "validate", "slugify", "write_handoff_artifact",
+        "read_handoff_slug", "findings_cli", "gates_cli", "paths_cli",
+        "handoff_cli", "render_html",
+    ],
+    "cure": [
+        "slugify", "write_handoff_artifact", "read_handoff_slug", "findings_cli",
+        "gates_cli", "paths_cli", "handoff_cli", "render_html",
+    ],
     "cut": ["red-gate"],
     "wheypoint": ["commit", "resolve", "show", "lint"],
-    "age": ["html-report"],
+    "easy-cheese-setup": ["global", "local", "doctor"],
+    "age": [
+        "artifact-path", "html-report", "age-route", "review-surface", "severity",
+        "slugify", "write_handoff_artifact", "read_handoff_slug", "findings_cli",
+        "gates_cli", "paths_cli", "handoff_cli", "render_html",
+    ],
     "hard-cheese": ["append-attempt", "freshness-check"],
     "pasteurize": ["debug-tag-sweep", "repro-rerun", "pasteurize-route"],
-    "press": ["press-route"],
-    "common": [
-        "slugify",
-        "write_handoff_artifact",
-        "read_handoff_slug",
-        "findings_cli",
-        "gates_cli",
-        "paths_cli",
-        "handoff_cli",
-        "render_html",
-    ],
+    "press": ["press-route", "red-gate"],
 }
 
 # Every skill that registers the durable-corpus resolver shim. One shared source
@@ -77,9 +93,8 @@ SKILL_SUBCOMMANDS = {
 # paths.artifact_path / paths.project_corpus_root.
 ARTIFACT_PATH_SKILLS = ("mold", "ultracook", "briesearch", "cook")
 
-# Cook owns the planner-to-curd execution bundle; Cure consumes the same
-# runtime through the common artifact fanned into skills/cure/scripts/.
-TYPED_RUNTIME_BUNDLES = ("common", "cook", "ultracook", "wheypoint")
+# Schema-dependent runtime bundles carry the schema wheel and its pure-Python deps.
+TYPED_RUNTIME_BUNDLES = ("cook", "cure", "ultracook", "wheypoint")
 REQUIRED_WORKFLOW_MODULES = (
     "easy_cheese_schemas/__init__.py",
     "easy_cheese_schemas/artifacts.py",
@@ -104,35 +119,111 @@ def bundles(tmp_path_factory) -> Path:
     return out
 
 
-def test_default_batch_derives_schema_catalog_once(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    compiled_calls = 0
-    validated_calls = 0
-    compile_catalog = build_pyz._compiled_schema_catalog_source
-    validate_catalog = build_pyz._checked_in_schema_catalog_bytes
-
-    def compile_once() -> str:
-        nonlocal compiled_calls
-        compiled_calls += 1
-        return compile_catalog()
-
-    def validate_once(source: str) -> bytes:
-        nonlocal validated_calls
-        validated_calls += 1
-        return validate_catalog(source)
-
-    monkeypatch.setattr(build_pyz, "_compiled_schema_catalog_source", compile_once)
-    monkeypatch.setattr(build_pyz, "_checked_in_schema_catalog_bytes", validate_once)
-
+def test_default_batch_builds_every_registered_skill(tmp_path: Path) -> None:
     assert build_pyz.main(["build_pyz.py", "--out-dir", str(tmp_path)]) == 0
-    assert {
-        skill
-        for skill in [*build_pyz.SKILLS, build_pyz.COMMON]
-        if skill in build_pyz.PACKAGE_TREES
-    } == {"common", "cook", "cut", "press", "ultracook", "wheypoint"}
-    assert compiled_calls == 1
-    assert validated_calls == 1
+    expected = set(build_pyz.SKILLS)
+    assert len(expected) == 14
+    assert {path.stem for path in tmp_path.glob("*.pyz")} == expected
+    assert {path.name for path in tmp_path.glob("*.pyz")} == {f"{skill}.pyz" for skill in expected}
+
+
+def _zip_with_shiv_metadata(
+    *,
+    entry_point: str = "easy_cheese.commands:main",
+    build_id: str | None = None,
+    built_at: str = "1980-01-01 00:00:00",
+    interpreter: str = "/opt/python/bin/python3",
+    wrapper_import: str = "from easy_cheese import main",
+    record: bytes = b"easy_cheese/demo.py,sha256=old,1\n",
+) -> bytes:
+    from io import BytesIO
+
+    wrapper = f"#!{interpreter}\n{wrapper_import}\nmain()\n".encode()
+    members = {
+        "easy_cheese/demo.py": b"VALUE = 1\n",
+        "bin/demo": wrapper,
+        "easy_cheese-1.0.dist-info/RECORD": record,
+    }
+    if build_id is None:
+        import hashlib
+
+        digest = hashlib.sha256()
+        for name in sorted(members):
+            digest.update(members[name])
+            digest.update(name.encode())
+        build_id = digest.hexdigest()
+
+    data = BytesIO()
+    with zipfile.ZipFile(data, "w") as archive:
+        archive.writestr(
+            "environment.json",
+            json.dumps(
+                {
+                    "build_id": build_id,
+                    "built_at": built_at,
+                    "entry_point": entry_point,
+                    "reproducible": True,
+                }
+            ),
+        )
+        archive.writestr("site-packages/bin/demo", wrapper)
+        archive.writestr("site-packages/easy_cheese/demo.py", members["easy_cheese/demo.py"])
+        archive.writestr(
+            "site-packages/easy_cheese-1.0.dist-info/RECORD", record
+        )
+    return data.getvalue()
+
+
+def test_bundle_manifest_catches_execution_metadata_tampering() -> None:
+    baseline = check_bundles._manifest(_zip_with_shiv_metadata())
+    host_variation = check_bundles._manifest(
+        _zip_with_shiv_metadata(
+            built_at="2026-08-26 10:00:00",
+            interpreter="/usr/bin/python3",
+            record=b"easy_cheese/demo.py,sha256=new,1\n",
+        )
+    )
+    assert baseline == host_variation
+
+    tampered = check_bundles._manifest(
+        _zip_with_shiv_metadata(entry_point="evil.module:main")
+    )
+    assert tampered["environment.json"] != baseline["environment.json"]
+
+    wrapper_tampered = _zip_with_shiv_metadata(
+        wrapper_import="from evil import main"
+    )
+    assert check_bundles._manifest(wrapper_tampered)["site-packages/bin/demo"] != baseline[
+        "site-packages/bin/demo"
+    ]
+
+    with pytest.raises(ValueError, match="build_id does not match"):
+        check_bundles._manifest(_zip_with_shiv_metadata(build_id="tampered"))
+
+
+def test_bundle_manifest_preserves_wrapper_flags() -> None:
+    baseline = check_bundles._manifest(
+        _zip_with_shiv_metadata(interpreter="/opt/python/bin/python3 -I")
+    )
+    host_variation = check_bundles._manifest(
+        _zip_with_shiv_metadata(interpreter="/usr/bin/env python3 -I")
+    )
+    assert baseline == host_variation
+
+    flag_tampered = check_bundles._manifest(
+        _zip_with_shiv_metadata(interpreter="/usr/bin/env python3 -X")
+    )
+    assert flag_tampered["site-packages/bin/demo"] != baseline[
+        "site-packages/bin/demo"
+    ]
+
+
+def test_bundle_manifest_keeps_non_python_shebang_distinct() -> None:
+    python = check_bundles._manifest(_zip_with_shiv_metadata())
+    shell = check_bundles._manifest(
+        _zip_with_shiv_metadata(interpreter="/bin/sh")
+    )
+    assert shell["site-packages/bin/demo"] != python["site-packages/bin/demo"]
 
 
 def _run(
@@ -155,6 +246,31 @@ def _run(
         env=env,
         input=stdin,
     )
+
+
+def _bundle_members(pyz: Path) -> set[str]:
+    with zipfile.ZipFile(pyz) as archive:
+        return {
+            name.removeprefix("site-packages/")
+            for name in archive.namelist()
+            if name.startswith("site-packages/") and not name.startswith("site-packages/bin/")
+        }
+
+
+def _extract_site_packages(pyz: Path, root: Path) -> Path:
+    package_root = root / "site-packages"
+    with zipfile.ZipFile(pyz) as archive:
+        for name in archive.namelist():
+            if not name.startswith("site-packages/") or name.startswith("site-packages/bin/"):
+                continue
+            relative = Path(name.removeprefix("site-packages/"))
+            target = package_root / relative
+            if name.endswith("/"):
+                target.mkdir(parents=True, exist_ok=True)
+            else:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(archive.read(name))
+    return package_root
 
 
 @pytest.mark.parametrize(
@@ -217,82 +333,72 @@ def test_ultracook_routing_is_subcommand_specific(
     assert "shape must be one of single" in pr_plan.stderr
 
 
-def test_bundle_carries_only_its_own_skill(bundles: Path) -> None:
-    """The O(n) guarantee: a skill's bundle excludes other skills' scripts and any
-    shared module it does not import."""
-    melt = set(zipfile.ZipFile(bundles / "melt.pyz").namelist())
-    assert "conflict_pick.py" in melt
-    assert "git_utils.py" in melt  # the one shared module melt imports
-    assert "validate_manifest.py" not in melt  # ultracook's script
-    assert "pr_status.py" not in melt  # affinage's script
-    assert "manifest_io.py" not in melt  # shared module melt does not import
-    assert "severity.py" not in melt  # shared module no bundled skill imports
+def test_bundle_carries_only_its_own_skill_package(bundles: Path) -> None:
+    """Internal wheel metadata includes shared code without other skill apps."""
+    melt = _bundle_members(bundles / "melt.pyz")
+    assert "easy_cheese/skills/melt/conflict_pick.py" in melt
+    assert "easy_cheese/shared/git_utils.py" in melt
+    assert not any(name.startswith("easy_cheese/skills/affinage/") for name in melt)
+    assert not any(name.startswith("easy_cheese/skills/ultracook/") for name in melt)
 
-    affinage = set(zipfile.ZipFile(bundles / "affinage.pyz").namelist())
-    assert "pr_status.py" in affinage
-    assert "age_route.py" in affinage  # affinage's own age-route subcommand
-    assert (
-        "manifest_io.py" in affinage
-    )  # age-route's own import, not cross-skill vendoring
-    # review-surface (affinage's own subcommand) imports both, so they vendor in by design.
-    assert "git_utils.py" in affinage
-    assert "cli.py" in affinage
-    # Still excluded: shared modules nothing in affinage imports. This is the actual
-    # invariant -- carry what you import, nothing else -- so it is pinned both ways.
-    assert not (affinage & {"schema.py", "severity.py"})
+    affinage = _bundle_members(bundles / "affinage.pyz")
+    assert "easy_cheese/skills/affinage/pr_status.py" in affinage
+    assert "easy_cheese/shared/fanout/age_route.py" in affinage
+    assert not any(name.startswith("easy_cheese/skills/melt/") for name in affinage)
 
 
-def test_briesearch_bundle_uses_packaged_import_closure(bundles: Path) -> None:
-    content = set(zipfile.ZipFile(bundles / "briesearch.pyz").namelist())
-    assert content == {
-        "__main__.py",
-        "easy_cheese/__init__.py",
-        "easy_cheese/shared/__init__.py",
-        "easy_cheese/shared/artifact_path.py",
-        "easy_cheese/shared/bundle_commands.py",
-        "easy_cheese/skills/__init__.py",
-        "easy_cheese/skills/briesearch/__init__.py",
-        "easy_cheese/skills/briesearch/commands.py",
-        "easy_cheese/skills/briesearch/ground_check.py",
+def test_briesearch_bundle_uses_internal_distributions(bundles: Path) -> None:
+    content = {
+        name for name in _bundle_members(bundles / "briesearch.pyz")
+        if ".dist-info/" not in name
     }
+    assert "easy_cheese/skills/briesearch/commands.py" in content
+    assert "easy_cheese/shared/bundle_commands.py" in content
+    assert "easy_cheese_schemas/__init__.py" in content
+    assert not any(name.startswith("easy_cheese/skills/mold/") for name in content)
 
 
 def test_ultracook_bundle_contains_entity_modules(bundles: Path) -> None:
     """curd.py and wiring.py are local library modules (not registered subcommands).
     The local-sibling-bundling feature in build_pyz must stage them so that
     validate_decomposition and validate_manifest can import them inside the .pyz."""
-    cf = set(zipfile.ZipFile(bundles / "ultracook.pyz").namelist())
-    assert "curd.py" in cf, (
+    cf = _bundle_members(bundles / "ultracook.pyz")
+    assert "easy_cheese/shared/fanout/curd.py" in cf, (
         f"curd.py missing from ultracook bundle; contents: {sorted(cf)}"
     )
-    assert "wiring.py" in cf, (
+    assert "easy_cheese/shared/fanout/wiring.py" in cf, (
         f"wiring.py missing from ultracook bundle; contents: {sorted(cf)}"
     )
 
 
 def test_cut_bundle_carries_red_gate_and_schema_runtime(bundles: Path) -> None:
-    names = set(zipfile.ZipFile(bundles / "cut.pyz").namelist())
-    assert {"cut_assertion_probe.py", "gate_receipts.py", "red_gate.py"}.issubset(names)
+    names = _bundle_members(bundles / "cut.pyz")
+    assert {
+        "easy_cheese/shared/cut/cut_assertion_probe.py",
+        "easy_cheese/shared/cut/gate_receipts.py",
+        "easy_cheese/shared/cut/red_gate.py",
+    }.issubset(names)
     assert "easy_cheese_schemas/__init__.py" in names
     assert "easy_cheese_schemas/gates.py" in names
     assert "attrs-26.1.0.dist-info/METADATA" in names
     assert "cattrs/converters.py" in names
-    assert "taste_test.py" in names
+    assert "easy_cheese/shared/taste_test.py" in names
 
 
 def test_cut_bundle_runs_assertion_probe_without_source_imports(
     bundles: Path,
     tmp_path: Path,
 ) -> None:
+    package_root = _extract_site_packages(bundles / "cut.pyz", tmp_path / "bundle")
     read_fd, write_fd = os.pipe()
     environment = os.environ.copy()
-    environment["PYTHONPATH"] = str(bundles / "cut.pyz")
+    environment["PYTHONPATH"] = str(package_root)
     try:
         result = subprocess.run(
             [
                 sys.executable,
                 "-m",
-                "cut_assertion_probe",
+                "easy_cheese.shared.cut.cut_assertion_probe",
                 str(write_fd),
                 "code",
                 sys.executable,
@@ -338,15 +444,14 @@ def test_source_red_gate_uses_package_probe_over_top_level_shadow(
         [
             str(tmp_path),
             str(REPO_ROOT / "src"),
-            str(REPO_ROOT / "shared" / "scripts"),
-            str(REPO_ROOT / "vendor"),
         ]
     )
     result = subprocess.run(
         [
             sys.executable,
             "-c",
-            "import cut.red_gate; print(cut.red_gate.cut_assertion_probe.__name__)",
+            "from easy_cheese.shared.cut import red_gate; "
+            "print(red_gate.cut_assertion_probe.__name__)",
         ],
         cwd=tmp_path,
         capture_output=True,
@@ -355,7 +460,7 @@ def test_source_red_gate_uses_package_probe_over_top_level_shadow(
     )
 
     assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == "cut.cut_assertion_probe"
+    assert result.stdout.strip() == "easy_cheese.shared.cut.cut_assertion_probe"
 
 
 def test_cut_bundle_ignores_adjacent_probe_shadow(
@@ -364,6 +469,7 @@ def test_cut_bundle_ignores_adjacent_probe_shadow(
 ) -> None:
     pyz = tmp_path / "cut.pyz"
     pyz.write_bytes((bundles / "cut.pyz").read_bytes())
+    package_root = _extract_site_packages(pyz, tmp_path / "bundle")
     (tmp_path / "cut_assertion_probe.py").write_text(
         "raise RuntimeError('adjacent probe shadow')\n",
         encoding="utf-8",
@@ -372,13 +478,14 @@ def test_cut_bundle_ignores_adjacent_probe_shadow(
     run_dir.mkdir()
     environment = os.environ.copy()
     environment.pop("PYTHONPATH", None)
-    environment["PYTHONPATH"] = str(pyz)
+    environment["PYTHONPATH"] = str(package_root)
 
     result = subprocess.run(
         [
             sys.executable,
             "-c",
-            "import red_gate; print(red_gate.cut_assertion_probe.__file__)",
+            "from easy_cheese.shared.cut import red_gate; "
+            "print(red_gate.cut_assertion_probe.__file__)",
         ],
         cwd=run_dir,
         capture_output=True,
@@ -388,7 +495,7 @@ def test_cut_bundle_ignores_adjacent_probe_shadow(
     origin = result.stdout.strip()
 
     assert result.returncode == 0, result.stderr
-    assert origin.startswith(f"{pyz}{os.sep}")
+    assert origin.startswith(f"{package_root}{os.sep}")
     assert origin.endswith(f"{os.sep}cut_assertion_probe.py")
 
 
@@ -398,20 +505,21 @@ def test_cut_bundle_probe_child_ignores_cwd_shadow(
 ) -> None:
     pyz = tmp_path / "cut.pyz"
     pyz.write_bytes((bundles / "cut.pyz").read_bytes())
+    package_root = _extract_site_packages(pyz, tmp_path / "bundle")
     (tmp_path / "cut_assertion_probe.py").write_text(
         "TARGET_LOCAL = True\n",
         encoding="utf-8",
     )
     environment = os.environ.copy()
     environment.pop("PYTHONPATH", None)
-    environment["PYTHONPATH"] = str(pyz)
+    environment["PYTHONPATH"] = str(package_root)
     child_source = (
         "import cut_assertion_probe; "
         "assert cut_assertion_probe.TARGET_LOCAL is True; "
         "raise AssertionError('bundle child witness')"
     )
     parent_source = (
-        "import pathlib, red_gate, sys; "
+        "import pathlib, sys; from easy_cheese.shared.cut import red_gate; "
         f"run = red_gate._run_case([sys.executable, '-c', {child_source!r}], "
         "pathlib.Path.cwd()); "
         "assert run.error is None, run.output; "
@@ -827,70 +935,35 @@ def test_bundle_build_is_byte_deterministic(tmp_path: Path) -> None:
         ).read_bytes()
 
 
-def test_common_slugify_executes_end_to_end(bundles: Path, tmp_path: Path) -> None:
-    """slugify subcommand in common.pyz (slugify.py from-task) resolves imports and dispatches."""
-    result = _run(
-        bundles / "common.pyz",
-        "slugify",
-        "from-task",
-        "--task",
-        "Fix the off-by-one error",
-        "--json",
-    )
-    assert result.returncode == 0, result.stderr
-
-    payload = json.loads(result.stdout)
-    assert payload["slug"] == "fix-off-by-one-error"
+def test_skill_bundles_each_ship_shared_slugify(bundles: Path) -> None:
+    for skill in ("cook", "age", "cure", "ultracook"):
+        result = _run(
+            bundles / f"{skill}.pyz",
+            "slugify",
+            "from-task",
+            "--task",
+            "Fix the off-by-one error",
+            "--json",
+        )
+        assert result.returncode == 0, f"{skill}: {result.stderr}"
+        assert json.loads(result.stdout)["slug"] == "fix-off-by-one-error"
 
 
-def test_common_bundle_carries_clis_plus_libs_not_skill_scripts(bundles: Path) -> None:
-    """common.pyz contains shared CLI entrypoints and their shared deps (handoff,
-    paths, cli, etc.) but must NOT carry any skill-specific script."""
-    content = set(zipfile.ZipFile(bundles / "common.pyz").namelist())
-    # All COMMON_SUBCOMMANDS must be present as module files
-    for sub in [
-        "slugify",
-        "write_handoff_artifact",
-        "read_handoff_slug",
-        "findings_cli",
-        "gates_cli",
-        "paths_cli",
-        "handoff_cli",
-    ]:
-        assert f"{sub}.py" in content, f"{sub}.py missing from common.pyz"
-    # Skill scripts must not be present
-    assert "conflict_pick.py" not in content
-    assert "validate_manifest.py" not in content
-    assert "_phase_registry_compiler.py" not in content
-    assert "phase_contracts.py" in content
-    assert "_compiled_phase_registry.py" in content
-    assert (
-        zipfile.ZipFile(bundles / "common.pyz").read("_compiled_phase_registry.py")
-        == (
-            REPO_ROOT / "src" / "easy_cheese_schemas" / "_compiled_phase_registry.py"
-        ).read_bytes()
-    )
+def test_schema_wheel_is_staged_in_each_schema_dependent_bundle(bundles: Path) -> None:
+    expected = (REPO_ROOT / "src" / "easy_cheese_schemas" / "_schema_catalog.py").read_bytes()
+    for skill in TYPED_RUNTIME_BUNDLES:
+        with zipfile.ZipFile(bundles / f"{skill}.pyz") as archive:
+            assert archive.read("site-packages/easy_cheese_schemas/_schema_catalog.py") == expected
 
 
-@pytest.mark.parametrize("skill", tuple(build_pyz.PACKAGE_TREES))
-def test_bundle_stages_checked_in_schema_catalog_bytes(
-    bundles: Path, skill: str
-) -> None:
-    expected = (
-        REPO_ROOT / "src" / "easy_cheese_schemas" / "_schema_catalog.py"
-    ).read_bytes()
-    with zipfile.ZipFile(bundles / f"{skill}.pyz") as archive:
-        package_catalog = archive.read("easy_cheese_schemas/_schema_catalog.py")
-        assert package_catalog == expected
-        if skill == "common":
-            assert archive.read("_schema_catalog.py") == expected
+
 
 
 @pytest.mark.parametrize("skill", TYPED_RUNTIME_BUNDLES)
 def test_typed_runtime_modules_are_shipped_without_compiler(
     bundles: Path, skill: str
 ) -> None:
-    content = set(zipfile.ZipFile(bundles / f"{skill}.pyz").namelist())
+    content = _bundle_members(bundles / f"{skill}.pyz")
     missing = sorted(set(REQUIRED_WORKFLOW_MODULES) - content)
     assert not missing, f"{skill}.pyz missing canonical runtime modules: {missing}"
     assert not any(
@@ -902,7 +975,7 @@ def test_typed_runtime_modules_are_shipped_without_compiler(
 def test_no_runtime_bundle_ships_phase_registry_compiler(
     bundles: Path, skill: str
 ) -> None:
-    content = set(zipfile.ZipFile(bundles / f"{skill}.pyz").namelist())
+    content = _bundle_members(bundles / f"{skill}.pyz")
     assert not any(
         name.rsplit("/", 1)[-1] == "_phase_registry_compiler.py" for name in content
     ), f"{skill}.pyz leaked the source-only phase compiler"
@@ -911,15 +984,16 @@ def test_no_runtime_bundle_ships_phase_registry_compiler(
     ), f"{skill}.pyz leaked the schema catalog compiler"
 
 
-@pytest.mark.parametrize("skill", ("common", "cook"))
+@pytest.mark.parametrize("skill", ("cook", "cure"))
 def test_cook_and_cure_installed_paths_expose_canonical_workflow_api(
-    bundles: Path, skill: str
+    bundles: Path, tmp_path: Path, skill: str
 ) -> None:
     """Import the shipped packages, not the repository source tree.
 
-    Cure receives common.pyz, while Cook receives cook.pyz.  Both must expose
-    the same canonical planner/Cook/Cure seam and its typed boundary helpers.
+    Both bundles must expose the same canonical planner/Cook/Cure seam and its
+    typed boundary helpers.
     """
+    package_root = _extract_site_packages(bundles / f"{skill}.pyz", tmp_path / skill)
     code = (
         "import sys;"
         "sys.path[:0] = sys.argv[1:];"
@@ -945,7 +1019,7 @@ def test_cook_and_cure_installed_paths_expose_canonical_workflow_api(
             "-S",
             "-c",
             code,
-            str(bundles / f"{skill}.pyz"),
+            str(package_root),
         ],
         capture_output=True,
         text=True,
@@ -967,31 +1041,31 @@ def test_unknown_skill_name_still_errors() -> None:
 
 
 def _bundle_content(pyz: Path) -> dict[str, bytes]:
+    """Return source payload members, excluding Shiv-generated host metadata."""
     with zipfile.ZipFile(pyz) as archive:
-        return {name: archive.read(name) for name in archive.namelist()}
+        return {
+            name: archive.read(name)
+            for name in archive.namelist()
+            if name != "environment.json"
+            and not name.startswith("site-packages/bin/")
+            and not name.endswith(".dist-info/RECORD")
+        }
 
 
-@pytest.mark.parametrize("skill", [s for s in SKILL_SUBCOMMANDS if s != "common"])
+@pytest.mark.parametrize("skill", sorted(SKILL_SUBCOMMANDS))
 def test_committed_bundle_matches_source(bundles: Path, skill: str) -> None:
     """Every committed skills/<skill>/scripts/<skill>.pyz must carry the same
-    member content as a fresh build of the current source.
+    source payload members as a fresh build of the current source.
 
-    Compared by member content, not raw bytes, matching the gate CI actually
-    runs (`scripts/check_bundles.py`, which compares name/CRC/size and says so:
-    "Byte-for-byte reproducibility is deliberately not asserted"). Bundles are
-    ZIP_DEFLATED and two zlib builds compress identical input to different
-    bytes, so a raw-byte compare reports whoever last committed a bundle rather
-    than whether it is stale -- it fails for every contributor on zlib-ng, and
-    then fails in CI for the bundles they commit. Staleness is the signal worth
-    gating: a source edit that never made it into the committed bundle shows up
-    as changed/added/removed members here.
+    Shiv generates the bootstrap, environment metadata, console-script wrappers,
+    and RECORD entries from the host interpreter. Those members are excluded;
+    source and wheel metadata remain the staleness signal worth gating: a source
+    edit that never made it into the committed bundle shows up as changed, added,
+    or removed members here.
 
-    Byte determinism is still asserted, where it is actually true: two builds of
-    one source tree on one host must agree
-    (test_build_pyz_tree_staging.py::test_the_wheypoint_bundle_is_deterministic).
-
-    common.pyz is excluded: it has no single canonical path (fanned out to each
-    consumer in Wave 1+, not stored in skills/common/)."""
+    Byte determinism is still asserted separately: two builds of one source tree
+    on one host must agree
+    (test_build_pyz_tree_staging.py::test_bundle_build_is_byte_deterministic)."""
     committed = REPO_ROOT / "skills" / skill / "scripts" / f"{skill}.pyz"
     fresh = bundles / f"{skill}.pyz"
     assert committed.exists(), f"committed bundle missing: {committed}"
@@ -1013,40 +1087,24 @@ def test_committed_bundle_matches_source(bundles: Path, skill: str) -> None:
 def test_no_orphan_committed_bundles():
     """A skill dropped from both build registries must not leave a stale committed
     .pyz behind—the build workflow only diffs bundles it rebuilds, so an orphan
-    would ship silently.
-    common.pyz is excluded: it fans out to consumer skills in Wave 1+ and has no
-    single committed path under skills/common/."""
+    would ship silently. Every registered skill owns its same-named archive."""
     committed = {
         p.relative_to(REPO_ROOT).as_posix()
         for p in REPO_ROOT.glob("skills/*/scripts/*.pyz")
-        if p.name != "common.pyz"
     }
-    expected = {
-        f"skills/{skill}/scripts/{skill}.pyz"
-        for skill in {*build_pyz.SKILLS, *build_pyz.APPLICATION_SKILLS}
-    }
+    expected = {f"skills/{skill}/scripts/{skill}.pyz" for skill in build_pyz.SKILLS}
     assert committed == expected
 
 
-def test_local_skill_modules_finds_libs_and_excludes_subcommands() -> None:
-    """build_pyz._local_skill_modules discovers local src/<skill>/ library modules a
-    registered script imports (curd/wiring/age_route), and EXCLUDES registered
-    subcommands and shared modules. Unit-locks the discovery the bundle-content test
-    only covers end-to-end — a regression that stopped excluding registered names or
-    stopped finding the siblings would fail here with a precise diff. age_route is
-    discovered here (not via EXTRA_MODULES) because ultracook's src dir is aliased to
-    src/fanout/, where age_route.py lives alongside age_route_cli.py. review_surface
-    is absent: ultracook dropped the review-surface subcommand (no caller), so nothing
-    in ultracook's registered scripts imports it anymore."""
-    local = build_pyz._local_skill_modules("ultracook")
-    assert local == {"curd", "wiring", "age_route"}, local
-    assert (
-        "validate_decomposition" not in local
-    )  # registered subcommand, not a local lib
-    assert "validate_manifest" not in local
-    assert "schema" not in local  # shared module (shared/scripts), not src/fanout
-    assert "review_surface" not in local  # dropped with the review-surface subcommand
-    assert "review_surface_cli" not in local
+def test_application_metadata_declares_shared_internal_dependency(bundles: Path) -> None:
+    with zipfile.ZipFile(bundles / "briesearch.pyz") as archive:
+        metadata_name = next(
+            name
+            for name in archive.namelist()
+            if "easy_cheese_briesearch-" in name and name.endswith(".dist-info/METADATA")
+        )
+        metadata = archive.read(metadata_name).decode()
+    assert f"Requires-Dist: easy-cheese-shared=={build_pyz.VERSION}" in metadata
 
 
 def test_age_bundle_exposes_html_report_help(bundles: Path) -> None:
@@ -1101,15 +1159,15 @@ def test_age_bundle_carries_html_report_and_findings_imports(bundles: Path) -> N
     age_pyz = bundles / "age.pyz"
     assert age_pyz.exists(), f"age bundle missing: {age_pyz}"
 
-    content = set(zipfile.ZipFile(age_pyz).namelist())
-    assert "html_report.py" in content
-    assert "findings.py" in content
+    content = _bundle_members(age_pyz)
+    assert "easy_cheese/skills/age/age_html_report.py" in content
+    assert "easy_cheese/shared/findings.py" in content
 
 
 def test_press_bundle_carries_and_imports_assertion_probe(bundles: Path) -> None:
     press_pyz = bundles / "press.pyz"
-    names = set(zipfile.ZipFile(press_pyz).namelist())
-    assert "cut_assertion_probe.py" in names
+    names = _bundle_members(press_pyz)
+    assert "easy_cheese/shared/cut/cut_assertion_probe.py" in names
 
     result = _run(press_pyz, "red-gate")
     combined = result.stdout + result.stderr
@@ -1117,45 +1175,15 @@ def test_press_bundle_carries_and_imports_assertion_probe(bundles: Path) -> None
     assert "ModuleNotFoundError" not in combined
 
 
-def test_document_rules_drift_gate_fails_when_projection_is_stale(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """AC-3: the build fails when the decorated document models changed but the
-    checked-in src/mold/_document_rules.py projection is stale."""
-    live_source = build_pyz._compiled_document_rules_source()
-
-    def mutated_source() -> str:
-        return live_source + "\nDRIFTED = True\n"
-
-    monkeypatch.setattr(build_pyz, "_compiled_document_rules_source", mutated_source)
-    with pytest.raises(RuntimeError, match="document rules is stale"):
-        build_pyz._document_rules_bytes_for(["mold"])
+def test_document_rules_projection_matches_checked_in_source() -> None:
+    generated = REPO_ROOT / "src" / "easy_cheese" / "shared" / "document_rules.py"
+    assert build_pyz._compiled_document_rules_source() == generated.read_text(encoding="utf-8")
 
 
-def test_document_rules_regeneration_is_byte_deterministic() -> None:
-    """AC-3: regeneration emits _document_rules.py deterministically via the
-    build compile-and-diff seam."""
-    first = build_pyz._compiled_document_rules_source()
-    second = build_pyz._compiled_document_rules_source()
-    assert first == second
-    assert build_pyz._document_rules_bytes_for(["mold"]) == first.encode("utf-8")
-    assert build_pyz._document_rules_bytes_for(["cut"]) is None
-
-
-def test_cook_joins_common_consumers_and_ships_common_pyz(bundles: Path) -> None:
-    """AC-7: after a build, COMMON_CONSUMERS contains cook and the committed
-    skills/cook/scripts/common.pyz matches the freshly built bundles/common.pyz
-    member for member."""
-    assert "cook" in build_pyz.COMMON_CONSUMERS
-    committed = REPO_ROOT / "skills" / "cook" / "scripts" / "common.pyz"
-    assert committed.is_file()
-    have = _bundle_content(committed)
-    want = _bundle_content(bundles / "common.pyz")
-    assert have == want
-
-
-SPEC_FORMAT_FIXTURES = REPO_ROOT / "tests" / "python" / "fixtures" / "spec_format"
-COOK_PAYLOAD_FIXTURES = REPO_ROOT / "tests" / "python" / "fixtures" / "cook_payloads"
+def test_skill_archives_own_shared_commands_and_no_common_archive(bundles: Path) -> None:
+    for skill in ("cook", "age", "cure", "ultracook"):
+        assert "easy_cheese/shared/slugify.py" in _bundle_members(bundles / f"{skill}.pyz")
+    assert not any(REPO_ROOT.glob("skills/*/scripts/common.pyz"))
 
 
 def test_mold_pyz_dispatches_validate_spec_end_to_end() -> None:

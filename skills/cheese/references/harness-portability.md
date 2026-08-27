@@ -6,7 +6,7 @@ Use this reference when a skill needs to talk about host capabilities instead of
 
 Prefer repo-local or bundled helpers first:
 
-- `shared/scripts/*.py` for repo-wide helpers such as corpus path resolution, handoff artifact writing, and slug readers.
+- `src/easy_cheese/shared/*.py` for repo-wide helpers such as corpus path resolution, handoff artifact writing, and slug readers.
 - `skills/<skill>/scripts/*.pyz` for skill-specific helpers bundled with the repo.
 - `${CLAUDE_SKILL_DIR}/scripts/*` only when the host actually provides that environment variable.
 

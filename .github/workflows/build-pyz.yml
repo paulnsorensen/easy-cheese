@@ -9,28 +9,24 @@ on:
     paths:
       - '.github/workflows/build-pyz.yml'
       - 'src/**'
-      - 'shared/scripts/**'
       - 'scripts/build_pyz.py'
       - 'scripts/check_bundles.py'
       - 'skills/*/scripts/*.pyz'
       - 'pyproject.toml'
-      # Vendored deps are staged into ultracook.pyz, so a vendor bump makes the
-      # committed bundles stale.
-      - 'requirements-vendor.txt'
-      - 'scripts/vendor_deps.py'
+      - 'requirements-build.txt'
+      - 'requirements/**/*.txt'
   push:
     branches: [main]
     # Keep the check on main too so stale bundles are visible after merges.
     paths:
       - '.github/workflows/build-pyz.yml'
       - 'src/**'
-      - 'shared/scripts/**'
       - 'scripts/build_pyz.py'
       - 'scripts/check_bundles.py'
       - 'skills/*/scripts/*.pyz'
       - 'pyproject.toml'
-      - 'requirements-vendor.txt'
-      - 'scripts/vendor_deps.py'
+      - 'requirements-build.txt'
+      - 'requirements/**/*.txt'
 
 permissions:
   contents: read
@@ -54,43 +50,44 @@ jobs:
         with:
           python-version: "3.12"
 
-      # vendor/ is generated, not committed, so the bundles cannot be rebuilt
-      # without it. Hash-pinned in requirements-vendor.txt, so this is
-      # deterministic — but, unlike the old committed tree, not offline.
-      - name: Vendor runtime dependencies
-        run: python3 scripts/vendor_deps.py
+      - name: Install pinned build tooling
+        run: python3 -m pip install --disable-pip-version-check --no-cache-dir --requirement requirements-build.txt
+
+      - name: Install bundle-test dependencies
+        run: |
+          python3 -m pip install --no-cache-dir pytest==9.0.3 pyyaml==6.0.2
+          python3 -m pip install --no-cache-dir --require-hashes --requirement requirements/runtime.txt
 
       - name: Build bundles
         run: python3 scripts/build_pyz.py
 
-      # Compares member CRCs, not raw bytes: ZIP_DEFLATED output varies between
-      # zlib builds, so a byte diff fails for contributors whose toolchain
-      # differs from whoever last committed. See scripts/check_bundles.py.
+      # Compares canonical member content, not raw bytes: Shiv's ZIP metadata and
+      # interpreter paths can vary between toolchains. See scripts/check_bundles.py.
       - name: Check bundles are current
         run: python3 scripts/check_bundles.py
+
+      - name: Test bundle build and isolation contracts
+        run: python3 -m pytest tests/python/test_pyz_bundle.py tests/python/test_build_pyz_tree_staging.py -q
 
       - name: Check bundled schema version matches pyproject
         run: |-
           set -euo pipefail
           python3 - <<'PY'
-          import os
-          import subprocess
-          import sys
+          import re
           import tomllib
+          import zipfile
           from pathlib import Path
 
           declared = tomllib.loads(Path("pyproject.toml").read_text())["project"]["version"]
           bundle = Path("skills/ultracook/scripts/ultracook.pyz").resolve()
-          # Import from the bundle, not the source tree: run outside the repo root
-          # with only the .pyz on sys.path so src/ cannot shadow the vendored copy.
-          bundled = subprocess.run(
-              [sys.executable, "-c", "import easy_cheese_schemas as m; print(m.__version__)"],
-              cwd=bundle.parent,
-              env=os.environ | {"PYTHONPATH": str(bundle)},
-              capture_output=True,
-              text=True,
-              check=True,
-          ).stdout.strip()
+          # Shiv stores package wheels under site-packages/ rather than at the
+          # zipapp import root. Read the bundled source member directly, never src/.
+          with zipfile.ZipFile(bundle) as archive:
+              source = archive.read("site-packages/easy_cheese_schemas/__init__.py").decode()
+          match = re.search(r"^__version__ = [\\\"]([^\\\"]+)[\\\"]$", source, re.MULTILINE)
+          if match is None:
+              raise SystemExit("easy_cheese_schemas.__version__ is missing from ultracook.pyz")
+          bundled = match.group(1)
           if bundled != declared:
               print(f"::error::easy_cheese_schemas in ultracook.pyz is {bundled}, but pyproject.toml declares {declared}. Sync __version__ and rebuild the bundles.")
               raise SystemExit(1)

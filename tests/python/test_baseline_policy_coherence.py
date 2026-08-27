@@ -106,9 +106,9 @@ class TestBaselineCaptureExampleDispatches:
         # (and the documented example) now live under cook's own corpus --
         # SKILL.md or one of its references/*.md files.
         body = _cook_corpus()
-        assert "ultracook.pyz baseline" in body, (
+        assert "cook.pyz baseline" in body, (
             "cook's corpus (SKILL.md + references/*.md) must document the "
-            "`ultracook.pyz baseline` invocation this test then verifies "
+            "`cook.pyz baseline` invocation this test then verifies "
             "actually dispatches"
         )
 

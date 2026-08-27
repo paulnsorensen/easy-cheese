@@ -6,17 +6,13 @@ dispatcher with the same argv contract exercised here.
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
 import pytest
+from easy_cheese.skills.cook import cook_cli
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "cook_payloads"
-
-sys.path.insert(0, str(REPO_ROOT / "src" / "cook"))
-import cook_cli  # noqa: E402
-
 
 def test_normalize_rejects_host_owned_field(capsys: pytest.CaptureFixture[str]) -> None:
     exit_code = cook_cli.main(

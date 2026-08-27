@@ -3,33 +3,17 @@
 from __future__ import annotations
 
 import builtins
+import importlib.util
 import json
 import os
-import importlib.util
 import sys
 import subprocess
 from pathlib import Path
-from types import ModuleType
 import unittest
 
 import pytest
 
-CUT_ROOT = Path(__file__).resolve().parents[2] / "src" / "cut"
-
-
-def _load_probe() -> ModuleType:
-    spec = importlib.util.spec_from_file_location(
-        "cut_assertion_probe_under_test",
-        CUT_ROOT / "cut_assertion_probe.py",
-    )
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-cut_assertion_probe = _load_probe()
+from easy_cheese.shared.cut import cut_assertion_probe
 
 
 _MISSING = object()

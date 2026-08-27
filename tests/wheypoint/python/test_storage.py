@@ -24,9 +24,7 @@ from easy_cheese_schemas import (
     WheypointRecord,
 )
 
-import projection
-import records
-import storage
+from easy_cheese.skills.wheypoint import projection, records, storage
 
 WORK_ID = "work-0001"
 

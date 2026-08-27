@@ -55,9 +55,8 @@ source-checkout bundle. A bare executable is not on PATH.
 ## Inputs
 
 Accept a pasted spec/issue, focused acceptance criteria, or an unambiguous task.
-Read explicit spec paths verbatim. Resolve a bare slug with `SPEC=$(python3
-shared/scripts/artifact_path.py specs <slug>)`; packaged fallback:
-`python3 ${CLAUDE_SKILL_DIR}/scripts/cook.pyz artifact-path specs <slug>`.
+Read explicit spec paths verbatim. Resolve a bare slug with
+`SPEC=$(python3 ${CLAUDE_SKILL_DIR}/scripts/cook.pyz artifact-path specs <slug>)`.
 
 Flags: `--auto` chains `/press → /age → /cure`; `--hard` propagates through
 `/plate`; `--open-pr` lets terminal `/plate` publish; `--resume <slug>` resumes
@@ -109,7 +108,7 @@ reviewer(final age)` without Press or whole-receipt GREEN claims. After wiring,
 validate the complete receipt GREEN, then run one global
 `/press → /age → /cure` chain. Closed N/A bypasses Press.
 
-Worktree cleanup uses `python3 skills/ultracook/scripts/ultracook.pyz worktree teardown`; the fan-pathway reference owns its arguments and lifecycle.
+Worktree cleanup uses `python3 ${CLAUDE_SKILL_DIR}/scripts/cook.pyz worktree teardown`; the fan-pathway reference owns its arguments and lifecycle.
 
 **Un-curded.** Small work stays single-coder. Big work asks
 "12 ACs -> 5 curds, 2 waves, up to 25 agent dispatches. Go?" unless `--auto`.
@@ -172,7 +171,7 @@ When this handoff is emitted for the typed fan result, use the canonical
 boundary writer and carry the result schema explicitly:
 
 ```text
-python3 shared/scripts/write_handoff_artifact.py \
+python3 ${CLAUDE_SKILL_DIR}/scripts/cook.pyz write_handoff_artifact \
   --slug <slug> --status <status> --phase cook --next age \
   --artifact <artifact-path> --orientation "<one-line orientation>" \
   --payload-schema https://schemas.easy-cheese.dev/curd-result

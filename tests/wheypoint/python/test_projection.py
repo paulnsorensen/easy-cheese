@@ -21,10 +21,9 @@ from easy_cheese_schemas import (
     WheypointStatus,
 )
 
-import projection
-import records
+from easy_cheese.skills.wheypoint import projection, records
 
-SRC = Path(__file__).resolve().parents[3] / "src" / "wheypoint"
+SRC = Path(__file__).resolve().parents[3] / "src/easy_cheese/skills/wheypoint"
 
 
 def test_a_built_projection_derives_everything_from_the_record(

@@ -16,7 +16,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO_ROOT / "src" / "fanout"))
 
-import pasteurize_route  # noqa: E402
+from easy_cheese.shared.fanout import pasteurize_route  # noqa: E402
 
 
 class TestRegression:
@@ -138,7 +138,7 @@ class TestPurity:
     """Mirrors test_age_route.py::TestPurity -- no os/network/file I/O."""
 
     def test_module_has_no_io_imports(self) -> None:
-        src = (REPO_ROOT / "src" / "fanout" / "pasteurize_route.py").read_text(encoding="utf-8")
+        src = (REPO_ROOT / "src/easy_cheese/shared/fanout/pasteurize_route.py").read_text(encoding="utf-8")
         tree = ast.parse(src)
         banned = {"os", "sys", "socket", "subprocess", "requests", "urllib", "pathlib", "shutil"}
         imported = set()
@@ -150,5 +150,5 @@ class TestPurity:
         assert not (imported & banned), f"unexpected I/O-shaped imports: {imported & banned}"
 
     def test_module_parses_as_valid_python(self) -> None:
-        src = (REPO_ROOT / "src" / "fanout" / "pasteurize_route.py").read_text(encoding="utf-8")
+        src = (REPO_ROOT / "src/easy_cheese/shared/fanout/pasteurize_route.py").read_text(encoding="utf-8")
         ast.parse(src)  # raises SyntaxError if invalid

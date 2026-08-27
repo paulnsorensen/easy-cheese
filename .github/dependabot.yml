@@ -3,8 +3,7 @@
 #
 # Python in .github/scripts/ (CI helpers) is pinned inline in workflows and
 # is not tracked here. The docs/ pip manifest is tracked below, as is the root,
-# which covers requirements-vendor.txt (the hash-pinned trees `just vendor`
-# unpacks into vendor/) and pyproject.toml's published dependency floors.
+# which covers the runtime/build locks and pyproject.toml's published floors.
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -22,7 +21,7 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
     groups:
-      vendor-minor-and-patch:
+      runtime-minor-and-patch:
         update-types: [minor, patch]
 
   - package-ecosystem: pip

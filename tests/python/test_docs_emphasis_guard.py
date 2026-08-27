@@ -103,20 +103,18 @@ def test_harness_portability_reference_is_linked_from_workflow_docs():
         # commands now live one hop under cook's fan-pathway reference. Legacy
         # phase-state and decomposition commands are intentionally not live.
         REPO_ROOT / "skills/cook/SKILL.md": (
-            "shared/scripts/artifact_path.py",
-            "shared/scripts/read_handoff_slug.py",
-            "fallback",
-            "python3 skills/ultracook/scripts/ultracook.pyz mode",
-            "python3 skills/ultracook/scripts/ultracook.pyz milknado",
-            "python3 skills/ultracook/scripts/ultracook.pyz worktree create",
-            "python3 skills/ultracook/scripts/ultracook.pyz worktree harvest",
-            "python3 skills/ultracook/scripts/ultracook.pyz worktree teardown",
+            "cook.pyz artifact-path",
+            "cook.pyz read_handoff_slug",
+            "cook.pyz mode",
+            "cook.pyz milknado",
+            "cook.pyz worktree create",
+            "cook.pyz worktree harvest",
+            "cook.pyz worktree teardown",
         ),
         REPO_ROOT / "skills/age/SKILL.md": (
-            "shared/scripts/read_handoff_slug.py",
-            "shared/scripts/write_handoff_artifact.py",
-            "fallback",
-            "src/age/age-html-report.py",
+            "age.pyz read_handoff_slug",
+            "age.pyz write_handoff_artifact",
+            "age.pyz html-report",
         ),
         REPO_ROOT / "skills/affinage/SKILL.md": (
             "python3 skills/affinage/scripts/affinage.pyz pr-status",
@@ -127,8 +125,8 @@ def test_harness_portability_reference_is_linked_from_workflow_docs():
             "python3 skills/hard-cheese/scripts/hard-cheese.pyz append-attempt",
         ),
         REPO_ROOT / "skills/mold/SKILL.md": (
-            "python3 skills/mold/scripts/mold.pyz artifact-path",
-            "python3 skills/mold/scripts/mold.pyz gate-graph",
+            "mold.pyz artifact-path",
+            "mold.pyz gate-graph",
         ),
         REPO_ROOT / "skills/pasteurize/SKILL.md": (
             "python3 skills/pasteurize/scripts/pasteurize.pyz repro-rerun",
@@ -149,7 +147,6 @@ def test_harness_portability_reference_is_linked_from_workflow_docs():
     for path in (
         REPO_ROOT / "skills/affinage/SKILL.md",
         REPO_ROOT / "skills/hard-cheese/SKILL.md",
-        REPO_ROOT / "skills/mold/SKILL.md",
         REPO_ROOT / "skills/pasteurize/SKILL.md",
     ):
         assert "${CLAUDE_SKILL_DIR}/scripts/" not in path.read_text(encoding="utf-8"), path

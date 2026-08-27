@@ -5,25 +5,14 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any
 
-try:
-    from ._compiled_phase_registry import PHASE_REGISTRY_DATA
-    from ._schema_catalog import (
-        CURD_PLAN_SCHEMA_URI,
-        CURD_RESULT_SCHEMA_URI,
-        PHASE_CONTRACT_SCHEMA_URI,
-        PLANNER_REQUEST_SCHEMA_URI,
-        REGISTERED_CONTRACT_SCHEMA_URIS,
-    )
-except ImportError:
-    # common.pyz stages these package modules at its top level.
-    from _compiled_phase_registry import PHASE_REGISTRY_DATA
-    from _schema_catalog import (
-        CURD_PLAN_SCHEMA_URI,
-        CURD_RESULT_SCHEMA_URI,
-        PHASE_CONTRACT_SCHEMA_URI,
-        PLANNER_REQUEST_SCHEMA_URI,
-        REGISTERED_CONTRACT_SCHEMA_URIS,
-    )
+from ._compiled_phase_registry import PHASE_REGISTRY_DATA
+from ._schema_catalog import (
+    CURD_PLAN_SCHEMA_URI,
+    CURD_RESULT_SCHEMA_URI,
+    PHASE_CONTRACT_SCHEMA_URI,
+    PLANNER_REQUEST_SCHEMA_URI,
+    REGISTERED_CONTRACT_SCHEMA_URIS,
+)
 
 REGISTERED_SCHEMA_URIS = REGISTERED_CONTRACT_SCHEMA_URIS
 

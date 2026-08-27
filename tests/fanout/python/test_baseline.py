@@ -21,7 +21,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO_ROOT / "shared" / "scripts"))  # cli.py
 sys.path.insert(0, str(REPO_ROOT / "src" / "fanout"))
 
-import baseline  # noqa: E402
+from easy_cheese.shared.fanout import baseline  # noqa: E402
 
 
 def _record(suite: str, test_id: str, signature: str) -> baseline.FailureRecord:

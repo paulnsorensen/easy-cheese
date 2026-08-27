@@ -12,10 +12,9 @@ import sys
 from pathlib import Path
 
 import pytest
+from easy_cheese.shared.fanout import baseline
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "src" / "fanout"))
-import baseline  # noqa: E402
 
 SKILL = ROOT / "skills" / "cook" / "SKILL.md"
 TDD_LOOP = ROOT / "skills" / "cook" / "references" / "tdd-loop.md"

@@ -7,6 +7,7 @@ These are the invariants that, when violated silently, shipped the empty v0.5.1.
 from __future__ import annotations
 
 import sys
+import shutil
 import zipfile
 from pathlib import Path
 
@@ -20,57 +21,38 @@ import stage_release  # noqa: E402
 from ref_extraction import relative_md_refs  # noqa: E402
 
 
+def _copy_committed_bundles(destinations: dict[str, Path]) -> dict[str, Path]:
+    for skill, destination in destinations.items():
+        source = REPO_ROOT / "skills" / skill / "scripts" / f"{skill}.pyz"
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
+    return destinations
+
+
 @pytest.fixture(scope="module")
 def staged(tmp_path_factory) -> Path:
-    return stage_release.stage(tmp_path_factory.mktemp("release") / "tree")
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(build_pyz, "build_bundles", _copy_committed_bundles)
+    try:
+        yield stage_release.stage(tmp_path_factory.mktemp("release") / "tree")
+    finally:
+        monkeypatch.undo()
 
 
-def test_release_batch_derives_and_reuses_schema_catalog_once(
+def test_release_builds_all_skills_in_one_batch(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    compiled_calls = 0
-    validated_calls = 0
-    validated_catalog: bytes | None = None
-    catalog_values: list[bytes | None] = []
-    compile_catalog = build_pyz._compiled_schema_catalog_source
-    validate_catalog = build_pyz._checked_in_schema_catalog_bytes
-    build_bundle = build_pyz._build_bundle
+    batch_sizes: list[int] = []
 
-    def compile_once() -> str:
-        nonlocal compiled_calls
-        compiled_calls += 1
-        return compile_catalog()
+    def build_batch(destinations: dict[str, Path]) -> dict[str, Path]:
+        batch_sizes.append(len(destinations))
+        return _copy_committed_bundles(destinations)
 
-    def validate_once(source: str) -> bytes:
-        nonlocal validated_calls, validated_catalog
-        validated_calls += 1
-        validated_catalog = validate_catalog(source)
-        return validated_catalog
-
-    def build_with_catalog(
-        skill: str,
-        target: Path,
-        *,
-        schema_catalog_bytes: bytes | None = None,
-    ) -> Path:
-        catalog_values.append(schema_catalog_bytes)
-        return build_bundle(
-            skill,
-            target,
-            schema_catalog_bytes=schema_catalog_bytes,
-        )
-
-    monkeypatch.setattr(build_pyz, "_compiled_schema_catalog_source", compile_once)
-    monkeypatch.setattr(build_pyz, "_checked_in_schema_catalog_bytes", validate_once)
-    monkeypatch.setattr(build_pyz, "_build_bundle", build_with_catalog)
+    monkeypatch.setattr(build_pyz, "build_bundles", build_batch)
 
     stage_release.stage(tmp_path / "release")
 
-    assert compiled_calls == 1
-    assert validated_calls == 1
-    assert len(catalog_values) == len(build_pyz.SKILLS)
-    assert validated_catalog == build_pyz.SCHEMA_CATALOG_SOURCE.read_bytes()
-    assert all(value is validated_catalog for value in catalog_values)
+    assert batch_sizes == [len(build_pyz.SKILLS)]
 
 
 def test_every_skill_ships_its_bundle(staged: Path) -> None:

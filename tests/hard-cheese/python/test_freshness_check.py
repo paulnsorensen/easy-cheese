@@ -19,10 +19,7 @@ from types import ModuleType
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
-import build_pyz  # noqa: E402
-
-BUNDLE = build_pyz.cached_bundle("hard-cheese")
+BUNDLE = Path(__file__).resolve().parents[3] / "skills/hard-cheese/scripts/hard-cheese.pyz"
 
 
 # ---------- git fixture --------------------------------------------------- #

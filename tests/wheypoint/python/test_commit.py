@@ -29,9 +29,7 @@ from easy_cheese_schemas import (
     WheypointStatus,
 )
 
-import commit
-import records
-import storage
+from easy_cheese.skills.wheypoint import commit, records, storage
 
 from conftest import PLACEHOLDER_DIGEST, WORK_ID, Promotion
 

@@ -2,31 +2,13 @@
 
 from __future__ import annotations
 
-import importlib.util
 import json
-import sys
 from pathlib import Path
-from types import ModuleType
 
 import pytest
+from easy_cheese.shared.cut import red_gate
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-CUT_ROOT = REPO_ROOT / "src" / "cut"
-
-
-def _load_red_gate() -> ModuleType:
-    sys.path.insert(0, str(CUT_ROOT))
-    spec = importlib.util.spec_from_file_location(
-        "red_gate_contracts_under_test", CUT_ROOT / "red_gate.py"
-    )
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-red_gate = _load_red_gate()
 
 
 def _run_contracts(

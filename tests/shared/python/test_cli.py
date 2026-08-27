@@ -13,7 +13,7 @@ from types import ModuleType
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-CLI_PATH = REPO_ROOT / "shared" / "scripts" / "cli.py"
+CLI_PATH = REPO_ROOT / "src" / "easy_cheese" / "shared" / "cli.py"
 
 
 @pytest.fixture(scope="module")

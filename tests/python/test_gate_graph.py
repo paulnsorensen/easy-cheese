@@ -27,7 +27,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 HANDSHAKE = REPO_ROOT / "skills" / "mold" / "references" / "handshake.md"
 MOLD_DOT = REPO_ROOT / "skills" / "mold" / "scripts" / "mold.dot"
 MOLD_PYZ = REPO_ROOT / "skills" / "mold" / "scripts" / "mold.pyz"
-MOLD_SRC_DIR = REPO_ROOT / "src" / "mold"
+MOLD_SRC_DIR = REPO_ROOT / "src" / "easy_cheese" / "skills" / "mold"
 
 
 class TestToDot:

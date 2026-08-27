@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import importlib.util
 import itertools
+import re
 import sys
 from copy import deepcopy
 from pathlib import Path
@@ -18,7 +19,6 @@ from types import ModuleType
 from typing import Any
 
 import pytest
-import vendor_deps
 
 from easy_cheese_schemas import gates, io, load
 from easy_cheese_schemas.curd import MAX_WAVE_SIZE, MIN_CURD_SURFACE, CurdBlock
@@ -41,10 +41,15 @@ from easy_cheese_schemas.gates import (
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
+def _runtime_pins() -> dict[str, str]:
+    text = (REPO_ROOT / "requirements" / "runtime.txt").read_text()
+    return dict(re.findall(r"^([A-Za-z0-9_-]+)==([^ ]+)", text, re.MULTILINE))
+
+
 def _original(name: str) -> ModuleType:
     """Import shared/scripts/<name>.py under a private name, so the port is
     compared against the running implementation rather than a copy of it."""
-    path = REPO_ROOT / "shared" / "scripts" / f"{name}.py"
+    path = REPO_ROOT / "src" / "easy_cheese" / "shared" / f"{name}.py"
     spec = importlib.util.spec_from_file_location(f"_original_{name}", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -948,24 +953,19 @@ class TestPublicSurface:
             assert name in easy_cheese_schemas.__all__
 
 
-class TestVendoredDependencyProvenance:
-    """The schema types must exercise the vendored attrs/cattrs — the same trees
-    build_pyz stages into the bundles — not whatever the host has installed, and
-    not the second copy inside ultracook.pyz. Which one wins is decided by the
-    repo-root conftest binding them before any per-suite conftest prepends a
-    .pyz, so pin it here rather than trusting import order."""
+class TestLockedDependencyProvenance:
+    """The source suite exercises the runtime versions locked for bundles."""
 
-    def test_attrs_stack_resolves_to_the_vendored_trees(self) -> None:
+    def test_attrs_stack_does_not_resolve_from_a_repo_vendor_tree(self) -> None:
         import attr
         import attrs
         import cattrs
 
-        vendor = str(REPO_ROOT / "vendor")
         for module in (attr, attrs, cattrs):
             assert module.__file__ is not None
-            assert module.__file__.startswith(vendor), (module.__name__, module.__file__)
+            assert not module.__file__.startswith(str(REPO_ROOT / "vendor"))
 
-    def test_vendored_attrs_matches_the_pinned_version(self) -> None:
+    def test_attrs_matches_the_locked_version(self) -> None:
         import attrs
 
-        assert vendor_deps.pinned_versions()["attrs"] == attrs.__version__
+        assert _runtime_pins()["attrs"] == attrs.__version__

@@ -18,7 +18,7 @@ from types import ModuleType
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-SHARED_SCRIPTS = REPO_ROOT / "shared" / "scripts"
+SHARED_SCRIPTS = REPO_ROOT / "src" / "easy_cheese" / "shared"
 
 
 def _load(name: str, path: Path) -> ModuleType:

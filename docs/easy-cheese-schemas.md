@@ -12,13 +12,13 @@ Requires Python 3.11 or newer. cattrs floors at 3.10; 3.11+ skips the `exception
 
 It is the artifact vocabulary: the types an external producer or consumer needs to write or read an easy-cheese document without reimplementing its field rules.
 
-It is not the enforcement path — not yet. In v0.1 the types are **derived from** easy-cheese's existing hand-rolled validators (`src/fanout/validate_*.py`), which still run unchanged inside the repo. A conformance suite pins the two together: every fixture the validators accept must structure cleanly through these types, and every fixture they reject must fail to structure. Until the validators are migrated onto these types, treat that suite as the reason to trust them, and expect the derived-types arrangement to be retired rather than extended.
+It is not the enforcement path — not yet. In v0.1 the types are **derived from** easy-cheese's existing hand-rolled validators (`src/easy_cheese/shared/fanout/validate_*.py`), which still run unchanged inside the repo. A conformance suite pins the two together: every fixture the validators accept must structure cleanly through these types, and every fixture they reject must fail to structure. Until the validators are migrated onto these types, treat that suite as the reason to trust them, and expect the derived-types arrangement to be retired rather than extended.
 
 Also not published: easy-cheese's corpus and layout assumptions (`paths.py`) and the findings report grammar. Those are repo-internal and stay unversioned on purpose.
 
 ## Not enforced in v0.1
 
-The types check field shape and the collection invariants below, but a document that satisfies them can still be rejected by `src/fanout/validate_*.py`, which enforces cross-field rules these types do not yet carry. Structuring cleanly is therefore necessary, not sufficient. Do not read a clean `Loaded` as "easy-cheese will accept this".
+The types check field shape and the collection invariants below, but a document that satisfies them can still be rejected by `src/easy_cheese/shared/fanout/validate_*.py`, which enforces cross-field rules these types do not yet carry. Structuring cleanly is therefore necessary, not sufficient. Do not read a clean `Loaded` as "easy-cheese will accept this".
 
 Enforced here: required fields and their types, enum membership, curd file-disjointness, wiring DAG acyclicity and unknown `W<n>` references, wave size and curd surface floors, and the PR-plan shape rules.
 

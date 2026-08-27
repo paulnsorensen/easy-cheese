@@ -13,9 +13,9 @@ for source in (SRC_ROOT, SRC_ROOT / "fanout"):
     if value not in sys.path:
         sys.path.insert(0, value)
 
-from cut import red_gate  # noqa: E402
-import press_route  # noqa: E402
-import press_route_cli  # noqa: E402
+from easy_cheese.shared.cut import red_gate  # noqa: E402
+from easy_cheese.shared.fanout import press_route  # noqa: E402
+from easy_cheese.shared.fanout import press_route_cli  # noqa: E402
 
 
 def _digest(path: Path) -> str:

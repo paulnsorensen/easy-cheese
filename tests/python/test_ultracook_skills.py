@@ -1330,7 +1330,7 @@ class TestUltracookMilknadoSeam:
         assert "engine" in body_lower and "tracker" in body_lower, (
             "the milknado seam must name the engine and tracker roles"
         )
-        assert "ultracook.pyz milknado" in body, (
+        assert "cook.pyz milknado" in body, (
             "cook must invoke the deterministic milknado probe"
         )
 

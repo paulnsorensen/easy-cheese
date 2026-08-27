@@ -12,7 +12,7 @@ from types import ModuleType
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-SHARED = REPO_ROOT / "shared" / "scripts"
+SHARED = REPO_ROOT / "src" / "easy_cheese" / "shared"
 SLUGIFY_CLI = SHARED / "slugify.py"
 
 

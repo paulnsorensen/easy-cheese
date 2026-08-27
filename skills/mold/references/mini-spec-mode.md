@@ -3,7 +3,7 @@
 Read this when `/mold` is invoked in agent-invoked mini-spec mode (tier-1 escalation from `/cheese`, per `SKILL.md` § Agent-invoked mini-spec mode) — the full procedure, the mini-spec schema, and the `## Provenance` rules.
 
 1. **Derive slug** from the user's ask (kebab-case noun-phrase, ≤ 4 words).
-2. **Write the resolver-owned `<spec-path>`** with the mini-spec schema below. Resolve it via `python3 shared/scripts/artifact_path.py specs <slug>`; if you're on a host that only exposes the packaged helper, `python3 skills/mold/scripts/mold.pyz artifact-path specs <slug>` is the fallback. Never hardcode a repo-local spec path: the resolver anchors it at the durable corpus, matching the Curdle step.
+2. **Write the resolver-owned `<spec-path>`** with the mini-spec schema below. Resolve it via `python3 ${CLAUDE_SKILL_DIR}/../mold/scripts/mold.pyz artifact-path specs <slug>`. Never hardcode a repo-local spec path: the resolver anchors it at the durable corpus, matching the Curdle step.
 3. **Return the resolved spec path** to `/cheese`: `red-required` dispatches `/cut --auto <spec-path>`; closed `not-applicable` dispatches `/cook --auto <spec-path>`. Return the full resolver path, never a bare slug.
 
 The two-key handshake does not fire in this mode. The agent-introduced-scope check still runs implicitly: every distinguishing noun in the mini-spec must come from the user's input or from the tier-2 `/culture` / `/briesearch` synthesis recorded in `## Provenance`. Anything else is a silent agent addition and is forbidden — the mini-spec records only what the user asked for, not what the agent thinks they might have meant.

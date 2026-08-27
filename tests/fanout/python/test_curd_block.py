@@ -18,7 +18,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO_ROOT / "shared" / "scripts"))
 sys.path.insert(0, str(REPO_ROOT / "src" / "fanout"))
 
-import curd_block  # noqa: E402
+from easy_cheese.shared.fanout import curd_block  # noqa: E402
 
 
 def _curd(slug: str, files: list[str], est_edit_lines: int = curd_block.MIN_CURD_SURFACE) -> dict:
@@ -184,7 +184,7 @@ class TestMalformedShapes:
 def _curd_py_field_keys() -> set[str]:
     import ast
 
-    src = (REPO_ROOT / "src" / "fanout" / "curd.py").read_text(encoding="utf-8")
+    src = (REPO_ROOT / "src/easy_cheese/shared/fanout/curd.py").read_text(encoding="utf-8")
     tree = ast.parse(src)
     keys: set[str] = set()
     for node in ast.walk(tree):

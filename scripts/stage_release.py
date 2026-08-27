@@ -7,7 +7,7 @@ The release workflow commits this tree to the `release` branch and points the
 version tag at it, so `gh skill install` (which reads the git tree at the tag)
 pulls a minimal, self-contained skill: the dispatching .pyz, never the loose .py.
 
-Bundles are built straight into the staged tree via build_pyz.build_bundle, so
+Bundles are built straight into the staged tree via build_pyz.build_bundles, so
 neither this script nor its test mutates the repo's working copy.
 """
 
@@ -66,12 +66,12 @@ def stage(out: Path) -> Path:
         if src.exists():
             _copy(src, out / rel)
 
-    # Validate the checked-in catalog once, then reuse its immutable bytes for
-    # every schema-carrying bundle in this release batch.
-    catalog_bytes = build_pyz._schema_catalog_bytes_for(list(build_pyz.SKILLS))
-    for skill in build_pyz.SKILLS:
-        target = out / "skills" / skill / "scripts" / f"{skill}.pyz"
-        build_pyz._build_bundle(skill, target, schema_catalog_bytes=catalog_bytes)
+    build_pyz.build_bundles(
+        {
+            skill: out / "skills" / skill / "scripts" / f"{skill}.pyz"
+            for skill in build_pyz.SKILLS
+        }
+    )
 
     _verify(out)
     return out

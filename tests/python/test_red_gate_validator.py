@@ -4,33 +4,16 @@ from __future__ import annotations
 
 import ast
 import hashlib
-import importlib.util
 import json
 import os
 import subprocess
 import sys
 from pathlib import Path
-from types import ModuleType
 
 import pytest
+from easy_cheese.shared.cut import red_gate
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-CUT_ROOT = REPO_ROOT / "src" / "cut"
-
-
-def _load_red_gate() -> ModuleType:
-    sys.path.insert(0, str(CUT_ROOT))
-    spec = importlib.util.spec_from_file_location(
-        "red_gate_validator_under_test", CUT_ROOT / "red_gate.py"
-    )
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-red_gate = _load_red_gate()
 
 
 def _digest(path: Path) -> str:
@@ -781,7 +764,8 @@ def test_probe_executes_trusted_interpreter_after_validating_alias(
     assert command is not None
     assert command.argv[0] == str(red_gate._TRUSTED_INTERPRETER_PATH)
     assert command.argv[1:3] == ["-E", "-S"]
-    assert command.argv.count(str(alias)) == 2
+    assert str(alias) in command.argv
+    assert red_gate._native_original_argv0(alias, tmp_path) in command.argv
 
 
 def test_probe_ignores_pythonhome_before_bootstrap(

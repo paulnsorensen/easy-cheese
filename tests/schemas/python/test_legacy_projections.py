@@ -26,7 +26,7 @@ from easy_cheese_schemas.contracts import (
     UnsupportedProjection,
 )
 from easy_cheese_schemas.projections import project_curd_block, project_decomposition
-from shared.scripts.handoff import parse_handoff_slug
+from easy_cheese.shared.handoff import parse_handoff_slug
 
 DIGEST = f"sha256:{'a' * 64}"
 VERSION = ContractVersion(

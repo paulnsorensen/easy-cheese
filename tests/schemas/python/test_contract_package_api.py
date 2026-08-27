@@ -215,6 +215,7 @@ assert actual == json.loads(__import__("os").environ["EXPECTED_FIXTURES"])
     child_env = os.environ.copy()
     child_env["EXPECTED_FIXTURES"] = json.dumps(expected, sort_keys=True)
     child_env["PYTHONNOUSERSITE"] = "1"
+    child_env.pop("PYTHONPATH", None)
     completed = subprocess.run(
         [str(python), "-c", script],
         cwd=tmp_path,

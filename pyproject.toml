@@ -22,7 +22,7 @@ classifiers = [
   "Programming Language :: Python :: 3.13",
   "Topic :: Software Development :: Libraries",
 ]
-# Floors match the versions vendored under vendor/ and exercised by the suite.
+# Floors match the versions admitted by requirements/runtime.txt.
 # compat.py reaches cattrs.cols.list_structure_factory and the structural
 # AttributeValidationNote / IterableValidationNote, so a lower floor would be an
 # untested claim rather than a supported configuration.
@@ -58,7 +58,6 @@ min_confidence = 60
 ignore_decorators = ["@contract*", "@schema_constraints*", "@*.validator"]
 paths = [
   "src",
-  "shared/scripts",
   "scripts",
   ".github/scripts",
   "tests",
@@ -67,7 +66,6 @@ paths = [
 exclude = [
   "src/easy_cheese_schemas/_compiled_phase_registry.py",
   "src/easy_cheese_schemas/_schema_catalog.py",
-  "vendor/",
   "build/",
   "dist/",
 ]

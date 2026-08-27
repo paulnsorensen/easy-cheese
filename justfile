@@ -1,4 +1,5 @@
 set dotenv-load := true
+python := "uv run --no-project --with-requirements requirements/runtime.txt --with pytest==9.0.3 --with pyyaml==6.0.2 python3"
 
 # Keep pytest hermetic: only load plugins the suite declares, never whatever
 # third-party pytest plugins happen to be globally installed. Without this a
@@ -10,24 +11,20 @@ export PYTEST_DISABLE_PLUGIN_AUTOLOAD := "1"
 @default:
     just --list
 
-# Materialize vendor/ from requirements-vendor.txt (no-op when already current; needs network otherwise)
-vendor:
-    python3 scripts/vendor_deps.py
-
 # Run all tests (skill validators + melt + shared + fan-out + wheypoint suites + bash + JS)
-test: vendor
-    python3 .github/scripts/test_validate_skills.py -v
-    python3 .github/scripts/test_validate_wiki.py
-    python3 .github/scripts/validate_skills.py
-    python3 .github/scripts/validate_wiki.py
-    python3 scripts/render_generated_regions.py --check
-    python3 -m pytest tests/python -q
-    python3 -m pytest tests/shared/python -q
-    python3 -m pytest tests/fanout/python -q
-    python3 -m pytest tests/schemas/python -q
-    python3 -m pytest tests/hard-cheese/python -q
-    python3 -m pytest tests/pasteurize/python -q
-    python3 -m pytest tests/wheypoint/python -q
+test:
+    {{python}} .github/scripts/test_validate_skills.py -v
+    {{python}} .github/scripts/test_validate_wiki.py
+    {{python}} .github/scripts/validate_skills.py
+    {{python}} .github/scripts/validate_wiki.py
+    {{python}} scripts/render_generated_regions.py --check
+    {{python}} -m pytest tests/python -q
+    {{python}} -m pytest tests/shared/python -q
+    {{python}} -m pytest tests/fanout/python -q
+    {{python}} -m pytest tests/schemas/python -q
+    {{python}} -m pytest tests/hard-cheese/python -q
+    {{python}} -m pytest tests/pasteurize/python -q
+    {{python}} -m pytest tests/wheypoint/python -q
     node --test 'tests/js/**/*.test.mjs'
     bats tests/bash/test_install.bats
     bats tests/fanout/bash/test_pr_plan_to_branches.bats
@@ -37,12 +34,12 @@ test: vendor
 test-skill-overlap:
     cargo test --manifest-path tools/skill-overlap/Cargo.toml
 
-# Build self-contained .pyz bundles for shared-consuming skills (CI rebuilds on every push to main)
-bundle: vendor
+# Build one self-contained Shiv .pyz archive per Python skill
+bundle:
     python3 scripts/build_pyz.py
 
 # Preview the exact tree a release ships (skills + .pyz only, no sources)
-release-preview: vendor
+release-preview:
     python3 scripts/stage_release.py --out .release-preview
     @echo "Staged release tree at .release-preview — inspect with: find .release-preview -type f"
 

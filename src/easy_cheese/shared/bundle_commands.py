@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import inspect
 import re
+import runpy
 import sys
 from dataclasses import dataclass
 from typing import Callable, Sequence
@@ -91,6 +92,30 @@ def dispatch(
     return result
 
 
+def dispatch_modules(commands: dict[str, str], argv: Sequence[str]) -> int:
+    """Dispatch a legacy-style CLI module from a packaged application."""
+    choices = "|".join(sorted(commands))
+    if not argv or argv[0] in {"-h", "--help"}:
+        print(f"usage: <pyz> {{{choices}}} [args...]")
+        return 0 if argv else 2
+    name = argv[0]
+    module = commands.get(name)
+    if module is None:
+        print(f"usage: <pyz> {{{choices}}} [args...]", file=sys.stderr)
+        return 2
+    sys.argv = [name, *argv[1:]]
+    try:
+        runpy.run_module(module, run_name="__main__")
+    except SystemExit as exc:
+        if exc.code is None:
+            return 0
+        if isinstance(exc.code, int):
+            return exc.code
+        print(exc.code, file=sys.stderr)
+        return 1
+    return 0
+
+
 def guidance_source(module: str) -> str:
     lines = [_GUIDANCE_START]
     for command in registered_commands(module):
@@ -114,6 +139,7 @@ __all__ = [
     "bundle_command",
     "compile_bundle_commands",
     "dispatch",
+    "dispatch_modules",
     "guidance_source",
     "registered_commands",
     "validate_generated_region",

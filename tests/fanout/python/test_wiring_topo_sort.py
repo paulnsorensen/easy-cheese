@@ -10,10 +10,9 @@ from pathlib import Path
 import pytest
 import yaml
 
-import build_pyz
 from easy_cheese_schemas.wiring_graph import WiringCycleError, compute_waves, cycle_errors
 
-BUNDLE = build_pyz.cached_bundle("ultracook")
+BUNDLE = Path(__file__).resolve().parents[3] / "skills/ultracook/scripts/ultracook.pyz"
 
 
 def _wiring(*entries: tuple[str, list[str]]) -> list[dict]:

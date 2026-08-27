@@ -31,8 +31,8 @@ remove the listed files to start fresh.
 ```
 
 Read a handoff with
-`python3 shared/scripts/read_handoff_slug.py <path>`; the installed fallback is
-the matching `common.pyz read_handoff_slug` command.
+`python3 ${CLAUDE_SKILL_DIR}/../cook/scripts/cook.pyz read_handoff_slug <path>`;
+the matching `cook.pyz read_handoff_slug` command.
 
 ## Canonical planner → Cook → Cure steel thread
 
@@ -79,11 +79,11 @@ binding requirements; it is not a separate semantic path.
 ## Mode selection
 
 Whether a validated plan wave-fans or stays in linear mode is deterministic,
-not a deliberation. `src/fanout/mode.py` is the single source of truth:
+not a deliberation. `src/easy_cheese/shared/fanout/mode.py` is the single source of truth:
 `PARALLEL_THRESHOLD = 2`, and `select_mode(curds)` returns `"parallel"` when
 `len(curds) >= PARALLEL_THRESHOLD` (2 or more curds), otherwise `"linear"`.
 The same selector is exposed for the installed route as
-`python3 skills/ultracook/scripts/ultracook.pyz mode --count <curd-count>`.
+`python3 ${CLAUDE_SKILL_DIR}/../cook/scripts/cook.pyz mode --count <curd-count>`.
 The count comes from the validated `CurdPlan`, never from a legacy phase file.
 
 **No-plan fallback.** `select_mode_from_score(score)` is only a fallback for a
@@ -115,8 +115,8 @@ more curds; do not hide curd-owned behavior in the seed.
 ## Milknado seam
 
 Before running any curd, probe which of three roles the available toolset
-supports (`src/fanout/milknado.py::probe`, exposed as
-`python3 skills/ultracook/scripts/ultracook.pyz milknado --tools "<available
+supports (`src/easy_cheese/shared/fanout/milknado.py::probe`, exposed as
+`python3 ${CLAUDE_SKILL_DIR}/../cook/scripts/cook.pyz milknado --tools "<available
 tool names>"`):
 
 - **`engine`** — both `milknado_todo_claim` and `milknado_node_verify` are
@@ -172,11 +172,11 @@ Cut finishes before Seed but does not commit a RED-only change. Before every
 Seed or curd dispatch, propagate its canonical receipt and protected files from
 the orchestrator tree into the isolated worktree:
 
-- Harness-agnostic creation: `python3 skills/ultracook/scripts/ultracook.pyz
+- Harness-agnostic creation: `python3 ${CLAUDE_SKILL_DIR}/../cook/scripts/cook.pyz
   worktree create --slug <id> --base <orchestrator-branch> --receipt
   .cheese/cut/<slug>.json`.
 - Native worktree isolation: make the worker's first action `python3
-  <orchestrator-root>/skills/ultracook/scripts/ultracook.pyz worktree inherit
+  ${CLAUDE_SKILL_DIR}/../cook/scripts/cook.pyz worktree inherit
   --repo <orchestrator-root> --path <worktree-path> --receipt
   .cheese/cut/<slug>.json`, before RED replay or any edit.
 
@@ -193,7 +193,7 @@ giving Seed and every curd the exact same oracle.
 
 ## Worktree harvest and teardown
 
-- Give each curd its own worktree; when the host lacks a native worktree-isolated sub-agent primitive, create it first with `python3 skills/ultracook/scripts/ultracook.pyz worktree create --slug <id> --base <orchestrator-branch>` (returns `{path, branch}`).
+- Give each curd its own worktree; when the host lacks a native worktree-isolated sub-agent primitive, create it first with `python3 ${CLAUDE_SKILL_DIR}/../cook/scripts/cook.pyz worktree create --slug <id> --base <orchestrator-branch>` (returns `{path, branch}`).
   Pass `--receipt .cheese/cut/<slug>.json` for a red-required run; omitting it is
   valid only for a closed not-applicable or legacy gate.
 - Per-curd workers create no Press receipts. There is no child Press oracle to
@@ -202,11 +202,11 @@ giving Seed and every curd the exact same oracle.
 - Per curd, run the receipt-specific sequential chain and persist one normalized
   `CurdResult`; per-curd workers never create Press receipts.
 - After every curd returns, harvest commits and tear down each curd worktree.
-- Harvest with `python3 skills/ultracook/scripts/ultracook.pyz worktree harvest
+- Harvest with `python3 ${CLAUDE_SKILL_DIR}/../cook/scripts/cook.pyz worktree harvest
   --branch <curd-branch> --onto <orchestrator-branch>`. On conflict, invoke
   `/melt`; if it cannot resolve, fall back to per-curd PRs.
   The worktrees share one object store, so this needs no `git fetch`.
-- Tear down with `python3 skills/ultracook/scripts/ultracook.pyz worktree
+- Tear down with `python3 ${CLAUDE_SKILL_DIR}/../cook/scripts/cook.pyz worktree
   teardown --path <worktree-path> --branch <curd-branch>`. A completed run
   leaves no `worktree-agent-*` branch or stray worker directory.
 - Run wiring in dependency order, validate the complete receipt GREEN, then run
