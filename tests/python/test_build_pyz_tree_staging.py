@@ -230,6 +230,39 @@ def test_tree_staging_stays_byte_deterministic(tmp_path: Path) -> None:
     assert first.read_bytes() == second.read_bytes()
 
 
+def test_internal_wheel_normalization_ignores_compressor_and_member_order(
+    tmp_path: Path,
+) -> None:
+    members = {
+        "demo.py": b"VALUE = 1\n",
+        "demo-1.0.0.dist-info/METADATA": (
+            b"Metadata-Version: 2.1\nName: demo\nVersion: 1.0.0\n"
+        ),
+        "demo-1.0.0.dist-info/WHEEL": (
+            b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n"
+        ),
+        "demo-1.0.0.dist-info/RECORD": b"",
+    }
+    wheels = []
+    for name, compression, entries in (
+        ("a", zipfile.ZIP_DEFLATED, members.items()),
+        ("b", zipfile.ZIP_STORED, reversed(members.items())),
+    ):
+        wheel = tmp_path / name / "demo-1.0.0-py3-none-any.whl"
+        wheel.parent.mkdir()
+        with zipfile.ZipFile(wheel, "w", compression=compression) as archive:
+            for member, content in entries:
+                archive.writestr(member, content)
+        wheels.append(build_pyz._normalize_internal_wheel(wheel))
+
+    assert wheels[0].read_bytes() == wheels[1].read_bytes()
+    with zipfile.ZipFile(wheels[0]) as archive:
+        assert archive.read("demo.py") == members["demo.py"]
+        assert {item.compress_type for item in archive.infolist()} == {
+            zipfile.ZIP_STORED
+        }
+
+
 def test_builder_does_not_expose_a_custom_wheel_writer() -> None:
     assert not hasattr(build_pyz, "_wheel")
     assert not hasattr(build_pyz, "WHEEL_TIMESTAMP")
