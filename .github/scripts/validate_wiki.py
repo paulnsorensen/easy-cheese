@@ -18,11 +18,11 @@ import sys
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-SHARED_SCRIPTS = SCRIPT_DIR.parents[1] / "shared" / "scripts"
-if str(SHARED_SCRIPTS) not in sys.path:
-    sys.path.insert(0, str(SHARED_SCRIPTS))
+SOURCE_ROOT = SCRIPT_DIR.parents[1] / "src"
+if str(SOURCE_ROOT) not in sys.path:
+    sys.path.insert(0, str(SOURCE_ROOT))
 
-from paths import KEBAB_SLUG  # noqa: E402
+from easy_cheese.shared.paths import KEBAB_SLUG  # noqa: E402
 
 WIKI_ROOT = Path(".hallouminate/wiki")
 INDEX_START = "<!-- HALLOUMINATE:INDEX-START -->"

@@ -1,0 +1,6 @@
+attrs==26.1.0 --hash=sha256:c647aa4a12dfbad9333ca4e71fe62ddc36f4e63b2d260a37a8b83d2f043ac309
+cattrs==26.1.0 --hash=sha256:d1e0804c42639494d469d08d4f26d6b9de9b8ab26b446db7b5f8c2e97f7c3096
+easy-cheese-melt==1.1.0 --hash=sha256:ca12eb1e0299dc4ea4a367c96eb70fc420e0935a48949ffb166eea8fb823d3d2
+easy-cheese-schemas==1.1.0 --hash=sha256:8f3ca4c5c5446b7915aa09c98404ac8831877960ee3ed5cee891c04582151e97
+easy-cheese-shared==1.1.0 --hash=sha256:3477a81ec67abc7825ddee391f73b576ce053bab88b2cbc6cab86d63ae967ba7
+typing_extensions==4.16.0 --hash=sha256:481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8

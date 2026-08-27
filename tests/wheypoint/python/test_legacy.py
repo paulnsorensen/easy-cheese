@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-import legacy
+from easy_cheese.skills.wheypoint import legacy
 
 
 def write_note(root: Path, slug: str, body: str = "legacy body\n") -> Path:

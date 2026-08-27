@@ -1,0 +1,11 @@
+# Pure-Python runtime wheels admitted to the private Shiv wheelhouse. Native
+# extensions are rejected before packaging.
+#
+# Pinned with hashes so the wheelhouse is reproducible from this lock alone.
+#
+# pyproject.toml carries the published floors (attrs>=, cattrs>=); these pins are
+# the exact versions the bundle job exercises. Raising one means
+# raising the other when the floor is no longer an exercised claim.
+attrs==26.1.0 --hash=sha256:c647aa4a12dfbad9333ca4e71fe62ddc36f4e63b2d260a37a8b83d2f043ac309
+cattrs==26.1.0 --hash=sha256:d1e0804c42639494d469d08d4f26d6b9de9b8ab26b446db7b5f8c2e97f7c3096
+typing_extensions==4.16.0 --hash=sha256:481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8

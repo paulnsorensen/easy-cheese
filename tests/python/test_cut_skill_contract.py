@@ -8,18 +8,15 @@ GateReceipt JSON: ``red-gate issue`` remains the writer boundary.
 
 from __future__ import annotations
 
-import importlib.util
 import re
-import sys
 from pathlib import Path
-from types import ModuleType
 
+from easy_cheese.shared.cut import red_gate
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SKILL = REPO_ROOT / "skills" / "cut" / "SKILL.md"
 WORKFLOW = REPO_ROOT / "skills" / "cut" / "references" / "gate-workflow.md"
 PRESSURE = REPO_ROOT / "skills" / "cut" / "references" / "pressure-eval.md"
-CUT_ROOT = REPO_ROOT / "src" / "cut"
 
 
 def _frontmatter(path: Path) -> dict[str, str]:
@@ -53,19 +50,6 @@ def _section(path: Path, heading: str) -> str:
 
 def _flat(text: str) -> str:
     return " ".join(text.split())
-
-
-def _load_red_gate() -> ModuleType:
-    sys.path.insert(0, str(CUT_ROOT))
-    spec = importlib.util.spec_from_file_location("red_gate_cut_skill_contract", CUT_ROOT / "red_gate.py")
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-red_gate = _load_red_gate()
 
 
 def test_cut_frontmatter_is_first_class_and_triggerable() -> None:

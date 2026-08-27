@@ -1,24 +1,15 @@
-"""Shared pytest config for hard-cheese tests.
-
-Modules are imported from hard-cheese's built .pyz, and the CLI subprocess
-tests invoke that same bundle, so the suite verifies the bundled artifact.
-"""
+"""Shared pytest config for hard-cheese tests."""
 
 from __future__ import annotations
 
 import importlib
-import sys
 from pathlib import Path
 from types import ModuleType
 
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_ROOT / "scripts"))
-import build_pyz  # noqa: E402
-
-_BUNDLE = build_pyz.cached_bundle("hard-cheese")
-sys.path.insert(0, str(_BUNDLE))
+_BUNDLE = REPO_ROOT / "skills" / "hard-cheese" / "scripts" / "hard-cheese.pyz"
 
 
 @pytest.fixture(scope="session")
@@ -28,9 +19,9 @@ def bundle() -> Path:
 
 @pytest.fixture(scope="session")
 def append_attempt() -> ModuleType:
-    return importlib.import_module("append_attempt")
+    return importlib.import_module("easy_cheese.skills.hard_cheese.append_attempt")
 
 
 @pytest.fixture(scope="session")
 def freshness_check() -> ModuleType:
-    return importlib.import_module("freshness_check")
+    return importlib.import_module("easy_cheese.skills.hard_cheese.freshness_check")

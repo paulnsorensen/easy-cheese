@@ -20,9 +20,8 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO_ROOT / "src" / "fanout"))
 
-import cli  # noqa: E402
-import review_surface  # noqa: E402
-import review_surface_cli  # noqa: E402
+from easy_cheese.shared import cli  # noqa: E402
+from easy_cheese.shared.fanout import review_surface, review_surface_cli  # noqa: E402
 
 
 def _git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:

@@ -23,7 +23,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-SHARED = REPO_ROOT / "shared" / "scripts"
+SHARED = REPO_ROOT / "src" / "easy_cheese" / "shared"
 SLUGIFY = SHARED / "slugify.py"
 WRITER = SHARED / "write_handoff_artifact.py"
 READER = SHARED / "read_handoff_slug.py"

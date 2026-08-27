@@ -19,7 +19,7 @@ For `cook` and `mold` intents, `/cheese` runs cook's fast-path check (§ "Standa
 Before minting a new mini-spec for a tier-1 `cook` or `mold` dispatch, look for an existing spec that already covers the request. Specs land in the durable XDG corpus (`default_root_for_phase("specs")`), not repo-local, so probe there:
 
 - **hallouminate present** — `ground` the candidate spec text against the `cheese-durable` corpus for a near-duplicate (semantic match across every project's durable specs). Detect-and-degrade per [`optional-plugins.md`](optional-plugins.md).
-- **hallouminate absent** — fall back to `resolve_slug(candidate_slug, phase_hint="specs")` (the XDG-correct `difflib` resolver in `shared/scripts/paths.py`), and note the degrade once: name-based rather than semantic matching. This keeps slug-level dedup on the headless/cron path where hallouminate is routinely unavailable.
+- **hallouminate absent** — fall back to `resolve_slug(candidate_slug, phase_hint="specs")` (the XDG-correct `difflib` resolver in `src/easy_cheese/shared/paths.py`), and note the degrade once: name-based rather than semantic matching. This keeps slug-level dedup on the headless/cron path where hallouminate is routinely unavailable.
 
 Act on the result, do not guess:
 

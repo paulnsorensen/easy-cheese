@@ -14,7 +14,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 REFERENCES_DIR = REPO_ROOT / "skills" / "ultracook" / "references"
-SRC_FANOUT = REPO_ROOT / "src" / "fanout"
+SRC_FANOUT = REPO_ROOT / "src" / "easy_cheese" / "shared" / "fanout"
 
 
 class TestReferencesPresent:
@@ -78,6 +78,6 @@ class TestScriptsPresent:
 class TestSharedHelpersPresent:
     def test_shared_helpers_present(self) -> None:
         for helper in ("manifest_io.py", "schema.py", "cli.py", "worktree.py"):
-            assert (REPO_ROOT / "shared" / "scripts" / helper).is_file(), (
-                f"missing required shared helper: shared/scripts/{helper}"
+            assert (REPO_ROOT / "src" / "easy_cheese" / "shared" / helper).is_file(), (
+                f"missing required shared helper: easy_cheese/shared/{helper}"
             )

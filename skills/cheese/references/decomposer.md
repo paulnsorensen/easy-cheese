@@ -33,7 +33,7 @@ field names are locked and must not drift per-caller.
 
 ## Validator
 
-`src/fanout/curd_block.py` is the single source of truth for parsing and
+`src/easy_cheese/shared/fanout/curd_block.py` is the single source of truth for parsing and
 validating a curd block:
 
 - `validate_curd_block(block) -> list[str]` — every schema violation, empty
@@ -49,7 +49,7 @@ validating a curd block:
   `CurdBlockError` with every violation joined into one message on any
   failure. Never returns a falsy value in place of raising.
 
-This is a **distinct concept** from `src/fanout/curd.py`, which validates an
+This is a **distinct concept** from `src/easy_cheese/shared/fanout/curd.py`, which validates an
 `/ultracook` *run manifest*'s in-flight curd records (`behavior` /
 `acceptance_criterion` / `status` / `retry_count`) once a run already exists.
 The curd block here is the pre-run decomposition artifact; the two schemas

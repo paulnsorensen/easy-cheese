@@ -1,21 +1,8 @@
-"""Pytest config for the schema conformance suite (src/easy_cheese_schemas/).
-
-v0.1 ships two live descriptions of the same four artifact contracts: the
-hand-rolled validators in src/fanout/ and the attrs types in
-src/easy_cheese_schemas/. This suite is the only thing standing between them
-and silent drift, so it wires each side to the copy that actually matters:
-
-* the validators come from the built ultracook .pyz, the artifact /ultracook
-  runs (same pattern as tests/fanout/python/conftest.py);
-* the attrs types come from src/, the source of truth the package publishes --
-  imported here *before* the bundle joins sys.path, because the bundle vendors
-  its own copy of easy_cheese_schemas and would otherwise shadow it.
-"""
+"""Pytest config for schema and packaged-validator conformance."""
 
 from __future__ import annotations
 
 import importlib
-import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -24,16 +11,8 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
-# Import order is the contract: src/ and vendor/ are already on sys.path from
-# the repo-root conftest, so this binds easy_cheese_schemas to src/ for the
-# whole session.
 import easy_cheese_schemas  # noqa: E402, F401
-
-sys.path.insert(0, str(REPO_ROOT / "scripts"))
-import build_pyz  # noqa: E402
-
-_BUNDLE = build_pyz.cached_bundle("ultracook")
-sys.path.insert(0, str(_BUNDLE))
+_BUNDLE = REPO_ROOT / "skills" / "ultracook" / "scripts" / "ultracook.pyz"
 
 Validator = Callable[[dict[str, Any]], list[str]]
 
@@ -45,19 +24,27 @@ def bundle() -> Path:
 
 @pytest.fixture(scope="session")
 def run_manifest_validator() -> Validator:
-    return importlib.import_module("validate_manifest").validate_run_manifest
+    return importlib.import_module(
+        "easy_cheese.shared.fanout.validate_manifest"
+    ).validate_run_manifest
 
 
 @pytest.fixture(scope="session")
 def decomposition_validator() -> Validator:
-    return importlib.import_module("validate_decomposition").validate_manifest
+    return importlib.import_module(
+        "easy_cheese.shared.fanout.validate_decomposition"
+    ).validate_manifest
 
 
 @pytest.fixture(scope="session")
 def pr_plan_validator() -> Validator:
-    return importlib.import_module("validate_pr_plan").validate_pr_plan
+    return importlib.import_module(
+        "easy_cheese.shared.fanout.validate_pr_plan"
+    ).validate_pr_plan
 
 
 @pytest.fixture(scope="session")
 def curd_block_validator() -> Validator:
-    return importlib.import_module("curd_block").validate_curd_block
+    return importlib.import_module(
+        "easy_cheese.shared.fanout.curd_block"
+    ).validate_curd_block

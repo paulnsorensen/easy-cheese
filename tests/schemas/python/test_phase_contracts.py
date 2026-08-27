@@ -24,7 +24,7 @@ from easy_cheese_schemas.phase_contracts import (
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-SHARED_SCRIPTS = REPO_ROOT / "shared" / "scripts"
+SHARED_SCRIPTS = REPO_ROOT / "src" / "easy_cheese" / "shared"
 WRITER_PATH = SHARED_SCRIPTS / "write_handoff_artifact.py"
 DECLARATIONS = (
     REPO_ROOT / "skills" / "age" / "phase-contract.yaml",
@@ -323,50 +323,14 @@ def test_bundle_build_rejects_stale_checked_in_catalog(
     assert not target.exists()
 
 
-def test_unrelated_bundle_skips_schema_catalog_validation(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_every_bundle_validates_schema_catalog() -> None:
     scripts = REPO_ROOT / "scripts"
     if str(scripts) not in sys.path:
         sys.path.insert(0, str(scripts))
-    build_pyz = _load("schema_catalog_build_unrelated", scripts / "build_pyz.py")
-
-    def unexpected_catalog_call(*_args: object, **_kwargs: object) -> None:
-        pytest.fail("unrelated bundles must not validate the schema catalog")
-
-    monkeypatch.setattr(
-        build_pyz, "_compiled_schema_catalog_source", unexpected_catalog_call
-    )
-    monkeypatch.setattr(
-        build_pyz, "_checked_in_schema_catalog_bytes", unexpected_catalog_call
-    )
-    target = tmp_path / "melt.pyz"
-
-    assert build_pyz.build_bundle("melt", target) == target
-    assert target.is_file()
-
-
-def test_direct_phase_runtime_smoke_under_python_s() -> None:
-    code = (
-        "import sys;"
-        "sys.path[:0] = sys.argv[1:];"
-        "from phase_contracts import COMPILED_TRANSITION_REGISTRY as registry;"
-        "assert registry.phase('mold').source == 'mold';"
-        "print('ok')"
-    )
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-S",
-            "-c",
-            code,
-            str(REPO_ROOT / "src" / "easy_cheese_schemas"),
-        ],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    assert result.stdout == "ok\n"
+    build_pyz = _load("schema_catalog_build_all", scripts / "build_pyz.py")
+    assert build_pyz._schema_catalog_bytes_for(["melt"]) == (
+        REPO_ROOT / "src/easy_cheese_schemas/_schema_catalog.py"
+    ).read_bytes()
 
 def test_compile_rejects_duplicate_source() -> None:
     declaration = _declarations()[0]

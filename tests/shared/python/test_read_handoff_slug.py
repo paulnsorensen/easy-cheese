@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-SCRIPT = REPO_ROOT / "shared" / "scripts" / "read_handoff_slug.py"
+SCRIPT = REPO_ROOT / "src" / "easy_cheese" / "shared" / "read_handoff_slug.py"
 
 
 def _write_artifact(tmp_path: Path, phase: str, slug: str, body: str) -> Path:

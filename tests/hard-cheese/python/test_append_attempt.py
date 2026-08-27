@@ -25,9 +25,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
-import build_pyz  # noqa: E402
-
-BUNDLE = build_pyz.cached_bundle("hard-cheese")
+BUNDLE = Path(__file__).resolve().parents[3] / "skills/hard-cheese/scripts/hard-cheese.pyz"
 
 
 def _run(env_dir: Path, *args: str) -> subprocess.CompletedProcess[str]:

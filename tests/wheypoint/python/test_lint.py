@@ -17,10 +17,7 @@ from easy_cheese_schemas import (
     WheypointRecord,
 )
 
-import canonical
-import lint
-import records
-import storage
+from easy_cheese.skills.wheypoint import canonical, lint, records, storage
 
 PROJECT = "paulnsorensen-easy-cheese"
 

@@ -29,4 +29,4 @@ When two or more heavy units of work are independent, spawn one small sub-agent 
 
 ## Age router as fan-out predicate
 
-`/age` (and `/affinage` through it) no longer use a size-only threshold to decide fan-out — `skills/age/SKILL.md § Sub-agent context gate` calls `src/fanout/age_route.py`'s `route(score=...)` and forks per its `n` (1 / 2 / 5). This file's digest contract, selection rules, and delegation boundaries still apply unchanged to every worker the router spawns.
+`/age` (and `/affinage` through it) no longer use a size-only threshold to decide fan-out — `skills/age/SKILL.md § Sub-agent context gate` calls `src/easy_cheese/shared/fanout/age_route.py`'s `route(score=...)` and forks per its `n` (1 / 2 / 5). This file's digest contract, selection rules, and delegation boundaries still apply unchanged to every worker the router spawns.

@@ -20,8 +20,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO_ROOT / "src" / "fanout"))
 
-import age_route  # noqa: E402
-import age_route_cli  # noqa: E402
+from easy_cheese.shared.fanout import age_route, age_route_cli  # noqa: E402
 
 
 def _run(payload: dict, capsys: pytest.CaptureFixture[str]) -> tuple[int, str, str]:

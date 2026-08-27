@@ -75,3 +75,7 @@ def main(argv: list[str]) -> int:
         return 1
     print(resolved)
     return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

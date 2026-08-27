@@ -9,10 +9,10 @@ Use the shared handoff gate in [`../../cheese/references/handoff-gate.md`](../..
 1. Render the numbered selection table:
 
    ```
-   python3 shared/scripts/findings_cli.py render-table --report .cheese/age/<slug>.md
+   python3 ${CLAUDE_SKILL_DIR}/../age/scripts/age.pyz findings_cli render-table --report .cheese/age/<slug>.md
    ```
 
-   If the host only ships the bundle, `python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz findings_cli render-table --report .cheese/age/<slug>.md` is the fallback.
+   If the host only ships the bundle, `python3 ${CLAUDE_SKILL_DIR}/scripts/age.pyz findings_cli render-table --report .cheese/age/<slug>.md` is the fallback.
    Mark any sprawling/structural-fix row as *heavy*.
 2. Ask which findings to cure. Lead each option with the verb (what the user wants to *do* next); the underlying selection verb is the backing detail. Lead with the recommended composite, then present the same four severity-floor options below it, in the same most-inclusive-to-least order, so the gate is predictable across every run:
    - **Fix mediums-and-above plus cheap lows** *(recommended)* — equivalent to `all-medium, cheap` (the composite floor defined at **Compute the recommended set** under `SKILL.md § Handoff`). The cheap lows are the small valid nits that are cheaper to fix than to defer; sprawling/structural lows are left out.
@@ -25,10 +25,10 @@ Use the shared handoff gate in [`../../cheese/references/handoff-gate.md`](../..
    - **Pick findings to fix** — accept a free-text reply using the verbs from `../../cure/references/selection.md`; expand the verb to finding ids:
 
      ```
-     python3 shared/scripts/findings_cli.py parse-selection --report .cheese/age/<slug>.md --selection "<verb>"
+     python3 ${CLAUDE_SKILL_DIR}/../age/scripts/age.pyz findings_cli parse-selection --report .cheese/age/<slug>.md --selection "<verb>"
      ```
 
-     If the host only ships the bundle, `python3 ${CLAUDE_SKILL_DIR}/scripts/common.pyz findings_cli parse-selection ...` is the fallback.
+     If the host only ships the bundle, `python3 ${CLAUDE_SKILL_DIR}/scripts/age.pyz findings_cli parse-selection --report .cheese/age/<slug>.md --selection "<verb>"` is the fallback.
    - **Plate it** — apply the recommended composite via `/cure <slug> --auto --open-pr --stake medium+`; terminal `/plate` resolves topology and publishes. Carry `--hard`.
    - **Checkpoint & stop** — `/wheypoint`: write a resumable handoff and pause instead of curing now.
    - **Stop — leave the report for later** — equivalent to `none`.

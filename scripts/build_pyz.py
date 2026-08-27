@@ -1,239 +1,49 @@
 #!/usr/bin/env python3
-"""Build one self-contained .pyz application per Python skill.
-
-Migrated skills start at ``src/easy_cheese/skills/<skill>/commands.py`` and
-carry their transitive first-party import closure with package paths intact.
-Unmigrated skills retain the flat ``src/<skill>/`` and ``shared/scripts/``
-staging path until their clean cutover. Archives deploy to
-``skills/<skill>/scripts/<skill>.pyz`` and never contain another skill's code.
-"""
+"""Build one hash-locked Shiv archive per packaged Python skill."""
 
 from __future__ import annotations
 
 import argparse
-import ast
+import hashlib
+import importlib.util
+import json
+import os
+import re
 import shutil
+import subprocess
 import sys
 import tempfile
+import tomllib
 import zipfile
-from dataclasses import dataclass
+from email.parser import Parser
 from pathlib import Path
 from types import ModuleType
-
-import vendor_deps
+from typing import Iterable
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = REPO_ROOT / "src"
-SHARED_SCRIPTS = REPO_ROOT / "shared" / "scripts"
-APPLICATION_ROOT = SRC_ROOT / "easy_cheese" / "skills"
-APPLICATION_SKILLS = frozenset(
-    path.parent.name.replace("_", "-")
-    for path in APPLICATION_ROOT.glob("*/commands.py")
-)
-
-sys.path.insert(0, str(SRC_ROOT))
-try:
-    from easy_cheese.shared.bundles import _resolve_bundle_sources  # noqa: E402
-finally:
-    sys.path.remove(str(SRC_ROOT))
-
-PHASE_REGISTRY_MODULE = "_compiled_phase_registry.py"
-PHASE_REGISTRY_SOURCE = SRC_ROOT / "easy_cheese_schemas" / PHASE_REGISTRY_MODULE
-PHASE_CONTRACT_SOURCE = SRC_ROOT / "easy_cheese_schemas" / "phase_contracts.py"
-SCHEMA_CATALOG_SOURCE = SRC_ROOT / "easy_cheese_schemas" / "_schema_catalog.py"
-SCHEMA_CONTRACT_SOURCE = SRC_ROOT / "easy_cheese_schemas" / "contracts.py"
-DOCUMENT_RULES_MODULE = "_document_rules.py"
-DOCUMENT_RULES_SOURCE = SRC_ROOT / "mold" / DOCUMENT_RULES_MODULE
-SHARED_MODULES = {p.stem for p in SHARED_SCRIPTS.glob("*.py")}
-ZIP_TIMESTAMP = (1980, 1, 2, 0, 0, 0)
-# Pinned so the compressed bytes depend only on the zlib build, never on
-# zipfile's default drifting. Compressed output still differs between stock
-# zlib and zlib-ng, so CI's rebuild is the authority on the committed bundles;
-# if that ever bites, switching this file back to ZIP_STORED is a one-liner.
-ZIP_COMPRESSLEVEL = 9
-
-
-@dataclass(frozen=True)
-class Shared:
-    """A subcommand sourced from a shared/scripts/ module rather than a
-    src/<skill>/ script, so one file backs the subcommand across every skill
-    that registers it — no per-skill copy to keep in sync."""
-
-    filename: str
-
-
-# skill -> {subcommand: source}. A plain string names a src/<skill>/ script;
-# Shared(...) names a shared/scripts/ module reused across skills. Subcommands
-# keep each script's stem verbatim; the staged module name underscores it.
-SKILLS: dict[str, dict[str, str | Shared]] = {
-    "melt": {
-        "batch-resolve": "batch-resolve.py",
-        "conflict-pick": "conflict-pick.py",
-        "conflict-summary": "conflict-summary.py",
-        "detect-squash-residue": "detect-squash-residue.py",
-        "lockfile-resolve": "lockfile-resolve.py",
-    },
-    "affinage": {
-        "pr-status": "pr-status.py",
-        "post-reply": "post-reply.py",
-        "age-route": "fanout/age_route_cli.py",
-        "review-surface": "fanout/review_surface_cli.py",
-    },
-    "mold": {
-        "artifact-path": Shared("artifact_path.py"),
-        "curd-count": "curd-count.py",
-        "gate-graph": "gate-graph.py",
-        "render_html": Shared("html_report_cli.py"),
-        "taste-test": "taste_test.py",
-        "validate-spec": "validate-spec.py",
-    },
-
-    # normalize and validate are one module: cook_cli.py reads the verb off
-    # argv[0], the way wheypoint.py does for commit|resolve|show|lint.
-    "cook": {
-        "artifact-path": Shared("artifact_path.py"),
-        "worktree": Shared("worktree.py"),
-        "normalize": "cook_cli.py",
-        "validate": "cook_cli.py",
-    },
-    "cut": {"red-gate": "red_gate.py"},
-    # All four subcommands are one module: wheypoint.py reads the subcommand off
-    # argv[0], the way hallouminate_setup.py already does for global|local|doctor.
-    "wheypoint": {
-        "commit": "wheypoint.py",
-        "resolve": "wheypoint.py",
-        "show": "wheypoint.py",
-        "lint": "wheypoint.py",
-    },
-    "easy-cheese-setup": {
-        "global": Shared("hallouminate_setup.py"),
-        "local": Shared("hallouminate_setup.py"),
-        "doctor": Shared("hallouminate_setup.py"),
-    },
-    "age": {
-        "html-report": "age-html-report.py",
-        "age-route": "fanout/age_route_cli.py",
-        "review-surface": "fanout/review_surface_cli.py",
-    },
-    "hard-cheese": {
-        "append-attempt": "append-attempt.py",
-        "freshness-check": "freshness-check.py",
-    },
-    "pasteurize": {
-        "debug-tag-sweep": "debug-tag-sweep.py",
-        "repro-rerun": "repro-rerun.py",
-        "pasteurize-route": "fanout/pasteurize_route_cli.py",
-    },
-    "press": {
-        "press-route": "fanout/press_route_cli.py",
-        "red-gate": "cut/red_gate.py",
-    },
-    # /ultracook drives the fan-out engine (formerly /cheese-factory); its
-    # sources live in the mode-neutral src/fanout/ dir (see SRC_DIRS).
-    "ultracook": {
-        "artifact-path": Shared("artifact_path.py"),
-        "baseline": "baseline.py",
-        "phase_decision": "phase_decision.py",
-        "mode": "mode.py",
-        "worktree": Shared("worktree.py"),
-        "milknado": "milknado.py",
-        "validate_decomposition": "validate_decomposition.py",
-        "validate_manifest": "validate_manifest.py",
-        "validate_pr_plan": "validate_pr_plan.py",
-        "manifest_update": "manifest_update.py",
-        "wiring_topo_sort": "wiring_topo_sort.py",
-        "pr_plan_to_branches": "pr_plan_to_branches.py",
-        "age-route": "fanout/age_route_cli.py",
-        "curd-block": "fanout/curd_block.py",
-    },
-}
-
-# A skill whose scripts live in a src dir named differently from the skill.
-# /ultracook drives the neutral src/fanout/ engine rather than a src/ultracook/.
-SRC_DIRS: dict[str, str] = {"ultracook": "fanout"}
-
-# Cross-skill source modules a bundle needs beyond its own src dir, staged as
-# plain importable modules (not subcommands). mold/curd-count imports the
-# canonical PARALLEL_THRESHOLD from src/fanout/mode.py — one source file,
-# vendored into both the mold and ultracook bundles.
-EXTRA_MODULES: dict[str, list[tuple[str, str]]] = {
-    "mold": [("fanout", "mode.py")],
-    "cut": [
-        ("mold", "taste_test.py"),
-    ],
-    "age": [
-        ("fanout", "age_route.py"),
-        ("fanout", "review_surface.py"),
-    ],
-    "affinage": [
-        ("fanout", "age_route.py"),
-        ("fanout", "review_surface.py"),
-    ],
-    "pasteurize": [("fanout", "pasteurize_route.py")],
-    "press": [
-        ("fanout", "press_route.py"),
-        ("cut", "cut_assertion_probe.py"),
-        ("cut", "gate_receipts.py"),
-        ("mold", "taste_test.py"),
-    ],
-}
-
-# Whole directory trees (and the odd single-file module) staged verbatim into a
-# bundle. The import scanner above only resolves flat sibling modules, so a real
-# package's membership is declared here rather than discovered.
-#
-# Bundles that execute typed workflow or GateReceipt contracts carry the complete
-# easy_cheese_schemas package and its vendored attrs/cattrs dependencies. Keep
-# ownership explicit so each consumer imports the canonical implementation.
-PACKAGE_TREES: dict[str, list[Path]] = {
-    "common": [SRC_ROOT / "easy_cheese_schemas"],
-    "cook": [SRC_ROOT / "easy_cheese_schemas"],
-    "cut": [SRC_ROOT / "easy_cheese_schemas"],
-    "press": [SRC_ROOT / "easy_cheese_schemas"],
-    "ultracook": [SRC_ROOT / "easy_cheese_schemas"],
-    # wheypoint's whole runtime is typed against the Wheypoint schemas, so it is
-    # another real consumer rather than a bundle carrying dead weight.
-    "wheypoint": [SRC_ROOT / "easy_cheese_schemas"],
-}
-
-
-VENDORED_DEP_BUNDLES = ("common", "cook", "cut", "press", "ultracook", "wheypoint")
-
-
-def vendored_dep_trees() -> list[Path]:
-    """Every top-level entry `just vendor` unpacked, in a stable order."""
-    vendor_deps.require_populated("build_pyz")
-    return sorted(
-        path
-        for path in vendor_deps.VENDOR_ROOT.iterdir()
-        if path.name not in {"__pycache__", vendor_deps.STAMP.name}
+PACKAGE_ROOT = SRC_ROOT / "easy_cheese"
+SKILLS_ROOT = PACKAGE_ROOT / "skills"
+LOCK_ROOT = REPO_ROOT / "requirements" / "bundles"
+RUNTIME_LOCK = REPO_ROOT / "requirements" / "runtime.txt"
+SCHEMA_ROOT = SRC_ROOT / "easy_cheese_schemas"
+SCHEMA_CONTRACT_SOURCE = SCHEMA_ROOT / "contracts.py"
+SCHEMA_CATALOG_SOURCE = SCHEMA_ROOT / "_schema_catalog.py"
+PHASE_REGISTRY_SOURCE = SCHEMA_ROOT / "_compiled_phase_registry.py"
+DOCUMENT_RULES_SOURCE = PACKAGE_ROOT / "shared" / "document_rules.py"
+SOURCE_DATE_EPOCH = "315532800"
+NATIVE_SUFFIXES = {".so", ".pyd", ".dylib"}
+VERSION = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text())["project"]["version"]
+SKILLS = tuple(
+    sorted(
+        path.parent.name.replace("_", "-")
+        for path in SKILLS_ROOT.glob("*/commands.py")
     )
-
-
-# The "common" bundle ships cross-cutting CLI entrypoints sourced from
-# shared/scripts/ (not src/<skill>/). It has no skill dir of its own; instead a
-# copy is fanned out into every consuming skill's scripts/ dir so each skill
-# stays self-contained after `gh skill install`.
-COMMON = "common"
-COMMON_SUBCOMMANDS: dict[str, str] = {
-    "slugify": "slugify.py",
-    "write_handoff_artifact": "write_handoff_artifact.py",
-    "read_handoff_slug": "read_handoff_slug.py",
-    "findings_cli": "findings_cli.py",
-    "gates_cli": "gates_cli.py",
-    "paths_cli": "paths_cli.py",
-    "handoff_cli": "handoff_cli.py",
-    "render_html": "html_report_cli.py",
-}
-# Wave 1: consumer skills receive common.pyz
-COMMON_CONSUMERS: frozenset[str] = frozenset({"cure", "age", "ultracook", "cook"})
-
-_CACHE: dict[str, Path] = {}
+)
 
 
 def _phase_compiler():
-    """Load the source-only compiler without importing the generated module."""
-    package_entry = str(SRC_ROOT / "easy_cheese_schemas")
+    package_entry = str(SCHEMA_ROOT)
     if package_entry not in sys.path:
         sys.path.insert(0, package_entry)
     from _phase_registry_compiler import compile_phase_files_to_source
@@ -242,14 +52,11 @@ def _phase_compiler():
 
 
 def _compiled_phase_registry_source() -> str:
-    """Compile authored phase YAML into the portable runtime data module."""
-    declarations = sorted(REPO_ROOT.glob("skills/*/phase-contract.yaml"))
-    return _phase_compiler()(declarations)
+    return _phase_compiler()(sorted(REPO_ROOT.glob("skills/*/phase-contract.yaml")))
 
 
 def _schema_catalog_compiler():
-    """Load the source-only catalog compiler without runtime projections."""
-    package_entry = str(SRC_ROOT / "easy_cheese_schemas")
+    package_entry = str(SCHEMA_ROOT)
     if package_entry not in sys.path:
         sys.path.insert(0, package_entry)
     from _schema_catalog_compiler import collect, render
@@ -258,45 +65,29 @@ def _schema_catalog_compiler():
 
 
 def _schema_contract_module() -> ModuleType:
-    """Load a fresh contracts module so every build sees current markers."""
-    vendor_deps.require_populated("schema catalog compiler")
-    vendor_entry = str(vendor_deps.VENDOR_ROOT)
-    if vendor_entry not in sys.path:
-        sys.path.insert(0, vendor_entry)
     module = ModuleType("_build_schema_contracts")
     module.__file__ = str(SCHEMA_CONTRACT_SOURCE)
     sys.modules[module.__name__] = module
     source = SCHEMA_CONTRACT_SOURCE.read_bytes()
-    exec(
-        compile(source, str(SCHEMA_CONTRACT_SOURCE), "exec"),
-        module.__dict__,
-    )
+    exec(compile(source, str(SCHEMA_CONTRACT_SOURCE), "exec"), module.__dict__)
     return module
 
 
 def _compiled_schema_catalog_source() -> str:
-    """Compile the marker-derived schema catalog from the live contracts."""
     collect, render = _schema_catalog_compiler()
     return render(collect(_schema_contract_module()))
 
 
 def _document_rules_compiler():
-    """Load the source-only document-rules compiler without runtime projections."""
-    package_entry = str(SRC_ROOT / "easy_cheese_schemas")
-    added = package_entry not in sys.path
-    if added:
+    package_entry = str(SCHEMA_ROOT)
+    if package_entry not in sys.path:
         sys.path.insert(0, package_entry)
-    try:
-        from _document_rules_compiler import collect, render
-    finally:
-        if added:
-            sys.path.remove(package_entry)
+    from _document_rules_compiler import collect, render
 
     return collect, render
 
 
 def _compiled_document_rules_source() -> str:
-    """Compile the marker-derived mold-spec document rules from the live contracts."""
     collect, render = _document_rules_compiler()
     return render(collect(_schema_contract_module()))
 
@@ -307,433 +98,427 @@ def _checked_in_generated_file_bytes(
     *,
     artifact_name: str,
 ) -> bytes:
-    """Require a tracked generated file to match its source authority."""
-    expected = expected_source.encode("utf-8")
+    expected = expected_source.encode()
     try:
         actual = source.read_bytes()
     except FileNotFoundError as exc:
-        raise RuntimeError(
-            f"checked-in {artifact_name} is missing: {source}"
-        ) from exc
+        raise RuntimeError(f"checked-in {artifact_name} is missing: {source}") from exc
     if actual != expected:
-        try:
-            regeneration_target = source.relative_to(REPO_ROOT)
-        except ValueError:
-            regeneration_target = source
-        raise RuntimeError(
-            f"checked-in {artifact_name} is stale; regenerate {regeneration_target}"
-        )
+        target = source.relative_to(REPO_ROOT) if source.is_relative_to(REPO_ROOT) else source
+        raise RuntimeError(f"checked-in {artifact_name} is stale; regenerate {target}")
     return actual
 
 
 def _checked_in_schema_catalog_bytes(expected_source: str) -> bytes:
-    """Validate the checked-in schema catalog against its live authority."""
     return _checked_in_generated_file_bytes(
-        expected_source,
-        SCHEMA_CATALOG_SOURCE,
-        artifact_name="schema catalog",
+        expected_source, SCHEMA_CATALOG_SOURCE, artifact_name="schema catalog"
     )
 
 
 def _checked_in_phase_registry_bytes(expected_source: str) -> bytes:
-    """Validate the checked-in phase registry against its YAML authority."""
     return _checked_in_generated_file_bytes(
-        expected_source,
-        PHASE_REGISTRY_SOURCE,
-        artifact_name="phase registry",
+        expected_source, PHASE_REGISTRY_SOURCE, artifact_name="phase registry"
     )
 
 
 def _checked_in_document_rules_bytes(expected_source: str) -> bytes:
-    """Validate the checked-in mold-spec document rules against their live authority."""
     return _checked_in_generated_file_bytes(
-        expected_source,
-        DOCUMENT_RULES_SOURCE,
-        artifact_name="document rules",
+        expected_source, DOCUMENT_RULES_SOURCE, artifact_name="document rules"
     )
 
 
+def _validate_generated_runtime() -> None:
+    _checked_in_phase_registry_bytes(_compiled_phase_registry_source())
+    _checked_in_schema_catalog_bytes(_compiled_schema_catalog_source())
+    _checked_in_document_rules_bytes(_compiled_document_rules_source())
+
+
 def _schema_catalog_bytes_for(skills: list[str]) -> bytes | None:
-    """Derive and validate the checked-in catalog once for a build batch."""
-    if not any(skill in PACKAGE_TREES for skill in skills):
+    if not skills:
         return None
     return _checked_in_schema_catalog_bytes(_compiled_schema_catalog_source())
 
 
-def _document_rules_bytes_for(skills: list[str]) -> bytes | None:
-    """Derive and validate the checked-in document rules once for a build batch."""
-    if "mold" not in skills:
-        return None
-    return _checked_in_document_rules_bytes(_compiled_document_rules_source())
+def _normalize(name: str) -> str:
+    return re.sub(r"[-_.]+", "-", name).lower()
 
 
-def _module_name(filename: str) -> str:
-    return Path(filename).stem.replace("-", "_")
+def _wheel_metadata(path: Path) -> tuple[str, str, tuple[str, ...]]:
+    with zipfile.ZipFile(path) as archive:
+        members = [name for name in archive.namelist() if name.endswith(".dist-info/METADATA")]
+        if len(members) != 1:
+            raise ValueError(f"wheel has no unique METADATA: {path.name}")
+        metadata = Parser().parsestr(archive.read(members[0]).decode())
+    return metadata["Name"], metadata["Version"], tuple(metadata.get_all("Requires-Dist", []))
 
 
-def _src_dir(skill: str) -> Path:
-    """The src/ subdir a skill's scripts live in (usually the skill name)."""
-    return SRC_ROOT / SRC_DIRS.get(skill, skill)
+def validate_pure_wheel(path: Path) -> None:
+    """Reject wheels that are not platform-independent pure Python."""
+    if not re.fullmatch(r".+-py\d+(?:\.\d+)?-none-any\.whl", path.name):
+        raise ValueError(f"wheel is not py3-none-any: {path.name}")
+    with zipfile.ZipFile(path) as archive:
+        wheel_files = [name for name in archive.namelist() if name.endswith(".dist-info/WHEEL")]
+        if len(wheel_files) != 1:
+            raise ValueError(f"wheel has no unique WHEEL metadata: {path.name}")
+        wheel = archive.read(wheel_files[0]).decode()
+        if not re.search(r"(?im)^Root-Is-Purelib:\s*true\s*$", wheel):
+            raise ValueError(f"wheel is not Root-Is-Purelib: true: {path.name}")
+        native = [
+            name for name in archive.namelist()
+            if Path(name).suffix.lower() in NATIVE_SUFFIXES
+        ]
+        if native:
+            raise ValueError(f"wheel contains native members: {', '.join(native)}")
 
 
-def _files(skill: str) -> dict[str, str | Shared]:
-    return COMMON_SUBCOMMANDS if skill == COMMON else SKILLS[skill]
+def _build_environment() -> dict[str, str]:
+    environment = os.environ.copy()
+    environment.setdefault("SOURCE_DATE_EPOCH", SOURCE_DATE_EPOCH)
+    return environment
 
 
-def _common_consumers(targets: list[str], *, explicit: bool) -> frozenset[str]:
-    """Which consumer skills receive common.pyz for this build request.
-
-    A full build (no explicit targets) or an explicit ``common`` build fans out
-    to every consumer; an explicit skill list fans only to the consumers named.
-    """
-    if not explicit or COMMON in targets:
-        return COMMON_CONSUMERS
-    return frozenset(s for s in targets if s in COMMON_CONSUMERS)
-
-
-def _filename(source: str | Shared) -> str:
-    return source.filename if isinstance(source, Shared) else source
-
-
-def _source_path(skill: str, source: str | Shared) -> Path:
-    """Resolve a subcommand's source file. Shared() modules and every
-    common-bundle subcommand live in shared/scripts/; a plain string containing
-    a path separator is src/-relative (a cross-skill source, e.g. a fanout/
-    module bundled into age/affinage/ultracook); any other plain string in a
-    real skill lives in src/<skill>/."""
-    if isinstance(source, Shared) or skill == COMMON:
-        return SHARED_SCRIPTS / _filename(source)
-    if isinstance(source, str) and "/" in source:
-        return SRC_ROOT / source
-    return _src_dir(skill) / source
-
-
-def _imported_top_names(path: Path) -> set[str]:
-    tree = ast.parse(path.read_text(encoding="utf-8"))
-    names: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            names.update(alias.name.split(".")[0] for alias in node.names)
-        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
-            names.add(node.module.split(".")[0])
-    return names
-
-
-def _local_skill_modules(skill: str) -> set[str]:
-    """Non-registered local src/<skill>/*.py modules transitively imported by the skill."""
-    if skill == COMMON:
-        return set()
-    skill_dir = _src_dir(skill)
-    registered = {_module_name(_filename(src)) for src in SKILLS[skill].values()}
-    frontier: set[str] = set()
-    for source in SKILLS[skill].values():
-        for name in _imported_top_names(_source_path(skill, source)):
-            if name not in registered and (skill_dir / f"{name}.py").exists():
-                frontier.add(name)
-    resolved: set[str] = set()
-    while frontier:
-        name = frontier.pop()
-        if name in resolved:
-            continue
-        resolved.add(name)
-        for imp in _imported_top_names(skill_dir / f"{name}.py"):
-            if (
-                imp not in registered
-                and imp not in resolved
-                and (skill_dir / f"{imp}.py").exists()
-            ):
-                frontier.add(imp)
-    return resolved
-
-
-def needed_shared(skill: str) -> set[str]:
-    """Shared modules transitively imported by the skill's scripts and local modules."""
-    frontier: set[str] = set()
-    for source in _files(skill).values():
-        frontier |= _imported_top_names(_source_path(skill, source)) & SHARED_MODULES
-    if skill != COMMON:
-        skill_dir = _src_dir(skill)
-        for name in _local_skill_modules(skill):
-            frontier |= _imported_top_names(skill_dir / f"{name}.py") & SHARED_MODULES
-    for src_subdir, filename in EXTRA_MODULES.get(skill, []):
-        frontier |= (
-            _imported_top_names(SRC_ROOT / src_subdir / filename) & SHARED_MODULES
+def _require_build_frontend() -> None:
+    if importlib.util.find_spec("build") is None:
+        raise RuntimeError(
+            "PEP 517 build tooling is required; install requirements-build.txt"
         )
-    resolved: set[str] = set()
-    while frontier:
-        module = frontier.pop()
-        if module in resolved:
-            continue
-        resolved.add(module)
-        frontier |= (
-            _imported_top_names(SHARED_SCRIPTS / f"{module}.py") & SHARED_MODULES
-        ) - resolved
-    return resolved
 
 
-def _dispatcher_source(sub_to_module: dict[str, str]) -> str:
-    choices = "|".join(sorted(sub_to_module))
-    return (
-        "import runpy\n"
-        "import sys\n"
-        "\n"
-        f"SUBCOMMANDS = {sub_to_module!r}\n"
-        "\n"
-        "if len(sys.argv) < 2 or sys.argv[1] not in SUBCOMMANDS:\n"
-        f"    sys.stderr.write('usage: <pyz> {{{choices}}} [args...]\\n')\n"
-        "    sys.exit(2)\n"
-        "\n"
-        "_name = sys.argv[1]\n"
-        "sys.argv = [_name, *sys.argv[2:]]\n"
-        "runpy.run_module(SUBCOMMANDS[_name], run_name='__main__')\n"
+def _project_toml(name: str, *, dependencies: Iterable[str], script: str | None = None) -> str:
+    lines = [
+        "[build-system]",
+        'requires = ["hatchling"]',
+        'build-backend = "hatchling.build"',
+        "",
+        "[project]",
+        f'name = "{name}"',
+        f'version = "{VERSION}"',
+        'requires-python = ">=3.11"',
+        f"dependencies = {json.dumps(sorted(set(dependencies)))}",
+    ]
+    if script is not None:
+        lines.extend(("", "[project.scripts]", script))
+    lines.extend(("", "[tool.hatch.build.targets.wheel]", 'packages = ["src/easy_cheese"]'))
+    return "\n".join(lines) + "\n"
+
+
+def _copy_package_scaffold(project: Path) -> Path:
+    destination = project / "src" / "easy_cheese"
+    destination.mkdir(parents=True)
+    shutil.copy2(PACKAGE_ROOT / "__init__.py", destination / "__init__.py")
+    return destination
+
+
+def _build_project(project: Path, wheelhouse: Path) -> Path:
+    _require_build_frontend()
+    before = set(wheelhouse.glob("*.whl"))
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "build",
+            "--wheel",
+            "--no-isolation",
+            "--outdir",
+            str(wheelhouse),
+            str(project),
+        ],
+        cwd=REPO_ROOT,
+        env=_build_environment(),
+        check=True,
     )
+    built = set(wheelhouse.glob("*.whl")) - before
+    if len(built) != 1:
+        raise RuntimeError(f"PEP 517 build produced {len(built)} wheels for {project}")
+    wheel = built.pop()
+    validate_pure_wheel(wheel)
+    return wheel
 
 
-def _write_zipapp(source: Path, target: Path) -> None:
-    with target.open("wb") as pyz:
-        pyz.write(b"#!/usr/bin/env python3\n")
-        with zipfile.ZipFile(pyz, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-            staged = sorted(
-                (p.relative_to(source).as_posix(), p)
-                for p in source.rglob("*")
-                if p.is_file()
-            )
-            for name, staged_file in staged:
-                info = zipfile.ZipInfo(name, date_time=ZIP_TIMESTAMP)
-                info.create_system = 3
-                info.external_attr = 0o644 << 16
-                archive.writestr(
-                    info,
-                    staged_file.read_bytes(),
-                    compress_type=zipfile.ZIP_DEFLATED,
-                    compresslevel=ZIP_COMPRESSLEVEL,
-                )
+def _build_schema_wheel(wheelhouse: Path) -> Path:
+    _require_build_frontend()
+    before = set(wheelhouse.glob("*.whl"))
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "build",
+            "--wheel",
+            "--no-isolation",
+            "--outdir",
+            str(wheelhouse),
+            str(REPO_ROOT),
+        ],
+        cwd=REPO_ROOT,
+        env=_build_environment(),
+        check=True,
+    )
+    built = set(wheelhouse.glob("*.whl")) - before
+    if len(built) != 1:
+        raise RuntimeError(f"schema build produced {len(built)} wheels")
+    wheel = built.pop()
+    validate_pure_wheel(wheel)
+    return wheel
+
+
+def _build_shared_wheel(project_root: Path, wheelhouse: Path) -> Path:
+    project = project_root / "shared"
+    package = _copy_package_scaffold(project)
+    shutil.copytree(PACKAGE_ROOT / "shared", package / "shared")
+    (project / "pyproject.toml").write_text(
+        _project_toml(
+            "easy-cheese-shared",
+            dependencies=(f"easy-cheese-schemas=={VERSION}",),
+        ),
+        encoding="utf-8",
+    )
+    return _build_project(project, wheelhouse)
+
+
+def _build_skill_wheel(skill: str, project_root: Path, wheelhouse: Path) -> Path:
+    package_name = skill.replace("-", "_")
+    project = project_root / package_name
+    package = _copy_package_scaffold(project)
+    skills = package / "skills"
+    skills.mkdir()
+    shutil.copy2(SKILLS_ROOT / "__init__.py", skills / "__init__.py")
+    shutil.copytree(SKILLS_ROOT / package_name, skills / package_name)
+    (project / "pyproject.toml").write_text(
+        _project_toml(
+            f"easy-cheese-{skill}",
+            dependencies=(f"easy-cheese-shared=={VERSION}",),
+            script=f'"{skill}" = "easy_cheese.skills.{package_name}.commands:main"',
+        ),
+        encoding="utf-8",
+    )
+    return _build_project(project, wheelhouse)
+
+
+def _download_runtime_wheels(wheelhouse: Path) -> tuple[Path, ...]:
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "download",
+            "--dest",
+            str(wheelhouse),
+            "--only-binary=:all:",
+            "--require-hashes",
+            "--requirement",
+            str(RUNTIME_LOCK),
+        ],
+        cwd=REPO_ROOT,
+        check=True,
+    )
+    wheels = tuple(sorted(wheelhouse.glob("*.whl")))
+    for wheel in wheels:
+        validate_pure_wheel(wheel)
+    return wheels
+
+
+def build_wheelhouse(
+    wheelhouse: Path,
+    skills: Iterable[str] | None = None,
+) -> dict[str, Path]:
+    """Build the private pure-Python wheelhouse used by Shiv."""
+    selected = tuple(skills or SKILLS)
+    unknown = sorted(set(selected) - set(SKILLS))
+    if unknown:
+        raise ValueError(f"unknown skill(s): {', '.join(unknown)}")
+    _validate_generated_runtime()
+    wheelhouse.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="easy-cheese-projects-") as temporary:
+        projects = Path(temporary)
+        _download_runtime_wheels(wheelhouse)
+        schema = _build_schema_wheel(wheelhouse)
+        shared = _build_shared_wheel(projects, wheelhouse)
+        apps = {
+            f"easy-cheese-{skill}": _build_skill_wheel(skill, projects, wheelhouse)
+            for skill in selected
+        }
+    wheels = {
+        _normalize(_wheel_metadata(path)[0]): path
+        for path in sorted(wheelhouse.glob("*.whl"))
+    }
+    wheels[_normalize("easy-cheese-schemas")] = schema
+    wheels[_normalize("easy-cheese-shared")] = shared
+    wheels.update({_normalize(name): path for name, path in apps.items()})
+    return wheels
+
+
+def _resolved_requirements(skill: str, wheelhouse: Path) -> str:
+    report = wheelhouse.parent / f"{skill}-pip-report.json"
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "--dry-run",
+            "--ignore-installed",
+            "--no-index",
+            "--find-links",
+            str(wheelhouse),
+            "--only-binary=:all:",
+            "--report",
+            str(report),
+            f"easy-cheese-{skill}=={VERSION}",
+        ],
+        cwd=REPO_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    by_name = {
+        _normalize(_wheel_metadata(path)[0]): path
+        for path in wheelhouse.glob("*.whl")
+    }
+    resolved = json.loads(report.read_text())["install"]
+    lines = []
+    for item in resolved:
+        name = item["metadata"]["name"]
+        version = item["metadata"]["version"]
+        wheel = by_name.get(_normalize(name))
+        if wheel is None:
+            raise RuntimeError(f"pip resolved a wheel outside the private wheelhouse: {name}")
+        digest = hashlib.sha256(wheel.read_bytes()).hexdigest()
+        lines.append(f"{name}=={version} --hash=sha256:{digest}")
+    return "\n".join(sorted(lines, key=str.casefold)) + "\n"
+
+
+def _requirements_for(
+    skill: str,
+    wheelhouse: Path,
+    *,
+    update: bool,
+) -> Path:
+    expected = _resolved_requirements(skill, wheelhouse)
+    lock = LOCK_ROOT / f"{skill}.txt"
+    if update:
+        lock.parent.mkdir(parents=True, exist_ok=True)
+        lock.write_text(expected, encoding="utf-8")
+    elif not lock.is_file() or lock.read_text(encoding="utf-8") != expected:
+        raise RuntimeError(
+            f"bundle lock is stale: {lock.relative_to(REPO_ROOT)}; "
+            "run scripts/build_pyz.py --update-locks"
+        )
+    return lock
+
+
+def _shiv_command(skill: str, requirements: Path, target: Path, wheelhouse: Path) -> list[str]:
+    executable = shutil.which("shiv")
+    if executable:
+        command = [executable]
+    elif importlib.util.find_spec("shiv") is not None:
+        command = [sys.executable, "-m", "shiv"]
+    else:
+        raise RuntimeError("Shiv is required; install requirements-build.txt")
+    return command + [
+        "--output-file",
+        str(target),
+        "--console-script",
+        skill,
+        "--python",
+        "/usr/bin/env python3",
+        "--reproducible",
+        "--uncompressed",
+        "--no-index",
+        "--find-links",
+        str(wheelhouse),
+        "--only-binary=:all:",
+        "--require-hashes",
+        "--requirement",
+        str(requirements),
+    ]
+
+
+def _build_from_wheelhouse(
+    skill: str,
+    target: Path,
+    wheelhouse: Path,
+    *,
+    update_locks: bool,
+) -> Path:
+    requirements = _requirements_for(skill, wheelhouse, update=update_locks)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        _shiv_command(skill, requirements, target, wheelhouse),
+        cwd=REPO_ROOT,
+        env=_build_environment(),
+        check=True,
+    )
     target.chmod(0o755)
-
-
-def _build_application_bundle(skill: str, target: Path) -> Path:
-    sources = _resolve_bundle_sources(skill, SRC_ROOT)
-    package_files = set(sources)
-    for source in sources:
-        for parent in source.parents:
-            if parent == SRC_ROOT:
-                break
-            initializer = parent / "__init__.py"
-            if initializer.is_file():
-                package_files.add(initializer)
-
-    target.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory() as td:
-        stage = Path(td)
-        for source in sorted(package_files):
-            destination = stage / source.relative_to(SRC_ROOT)
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy(source, destination)
-        package = skill.replace("-", "_")
-        (stage / "__main__.py").write_text(
-            f"from easy_cheese.skills.{package}.commands import main\n"
-            "raise SystemExit(main())\n",
-            encoding="utf-8",
-        )
-        _write_zipapp(stage, target)
     return target
 
 
-def _build_skill_bundle(
-    skill: str,
-    target: Path,
+def build_bundles(
+    destinations: dict[str, Path],
     *,
-    schema_catalog_bytes: bytes | None,
-    document_rules_bytes: bytes | None = None,
-) -> Path:
-    if skill in APPLICATION_SKILLS:
-        return _build_application_bundle(skill, target)
-    return _build_bundle(
-        skill,
-        target,
-        schema_catalog_bytes=schema_catalog_bytes,
-        document_rules_bytes=document_rules_bytes,
-    )
-
-
-def _build_bundle(
-    skill: str,
-    target: Path,
-    *,
-    schema_catalog_bytes: bytes | None,
-    document_rules_bytes: bytes | None = None,
-) -> Path:
-    """Build ``skill`` with catalog bytes validated by the batch boundary."""
-    files = _files(skill)
-    sub_to_module = {sub: _module_name(_filename(src)) for sub, src in files.items()}
-    catalog_bytes = schema_catalog_bytes
-    registry_bytes = None
-    if skill in {COMMON, "cook", "ultracook", "wheypoint"}:
-        registry_source = _compiled_phase_registry_source()
-        registry_bytes = _checked_in_phase_registry_bytes(registry_source)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory() as td:
-        stage = Path(td)
-        for module in sorted(needed_shared(skill)):
-            if module in sub_to_module.values():
-                continue  # already staged below as a subcommand (common bundle)
-            shutil.copy(SHARED_SCRIPTS / f"{module}.py", stage / f"{module}.py")
-        for source in files.values():
-            shutil.copy(
-                _source_path(skill, source),
-                stage / f"{_module_name(_filename(source))}.py",
+    update_locks: bool = False,
+) -> dict[str, Path]:
+    unknown = sorted(set(destinations) - set(SKILLS))
+    if unknown:
+        raise ValueError(f"unknown skill(s): {', '.join(unknown)}")
+    with tempfile.TemporaryDirectory(prefix="easy-cheese-build-") as temporary:
+        wheelhouse = Path(temporary) / "wheelhouse"
+        build_wheelhouse(wheelhouse, destinations)
+        return {
+            skill: _build_from_wheelhouse(
+                skill,
+                target,
+                wheelhouse,
+                update_locks=update_locks,
             )
-        if skill != COMMON:
-            skill_dir = _src_dir(skill)
-            for name in sorted(_local_skill_modules(skill)):
-                shutil.copy(skill_dir / f"{name}.py", stage / f"{name}.py")
-        for src_subdir, filename in EXTRA_MODULES.get(skill, []):
-            shutil.copy(SRC_ROOT / src_subdir / filename, stage / filename)
-        trees = list(PACKAGE_TREES.get(skill, []))
-        if skill in VENDORED_DEP_BUNDLES:
-            trees.extend(vendored_dep_trees())
-        for tree in trees:
-            if tree.is_dir():
-                # __pycache__ is skipped: importing the package from source (the
-                # test suite does) would otherwise leak host-specific .pyc bytes
-                # into the archive and break the rebuild byte-compare.
-                shutil.copytree(
-                    tree,
-                    stage / tree.name,
-                    ignore=shutil.ignore_patterns(
-                        "__pycache__",
-                        "_phase_registry_compiler.py",
-                        "_schema_catalog_compiler.py",
-                        "_document_rules_compiler.py",
-                    ),
-                )
-            else:
-                shutil.copy(tree, stage / tree.name)
-        if skill == COMMON:
-            catalog_paths = (
-                stage / "_schema_catalog.py",
-                stage / "easy_cheese_schemas" / "_schema_catalog.py",
-            )
-        elif skill in PACKAGE_TREES:
-            catalog_paths = (stage / "easy_cheese_schemas" / "_schema_catalog.py",)
-        else:
-            catalog_paths = ()
-        if catalog_bytes is not None:
-            for catalog_path in catalog_paths:
-                catalog_path.write_bytes(catalog_bytes)
-        if registry_bytes is not None:
-            if skill == COMMON:
-                shutil.copy(PHASE_CONTRACT_SOURCE, stage / "phase_contracts.py")
-                (stage / PHASE_REGISTRY_MODULE).write_bytes(registry_bytes)
-            else:
-                package_registry = stage / "easy_cheese_schemas" / PHASE_REGISTRY_MODULE
-                package_registry.write_bytes(registry_bytes)
-        if skill == "mold" and document_rules_bytes is not None:
-            (stage / DOCUMENT_RULES_MODULE).write_bytes(document_rules_bytes)
-        (stage / "__main__.py").write_text(
-            _dispatcher_source(sub_to_module), encoding="utf-8"
-        )
-        _write_zipapp(stage, target)
-    return target
+            for skill, target in destinations.items()
+        }
 
 
-def build_bundle(skill: str, target: Path) -> Path:
-    """Build one bundle after deriving and validating its generated catalog."""
-    return _build_skill_bundle(
-        skill,
-        target,
-        schema_catalog_bytes=_schema_catalog_bytes_for([skill]),
-        document_rules_bytes=_document_rules_bytes_for([skill]),
-    )
+def build_bundle(skill: str, target: Path, *, update_locks: bool = False) -> Path:
+    return build_bundles({skill: target}, update_locks=update_locks)[skill]
+
+
+def _build_bundle(skill: str, target: Path, **_: object) -> Path:
+    """Compatibility wrapper for release staging and focused tests."""
+    return build_bundle(skill, target)
 
 
 def cached_bundle(skill: str) -> Path:
-    """Build ``skill``'s bundle once per process (to a temp dir) and reuse it.
-    Used by the test conftests so the suite imports from the bundled artifact."""
-    if skill not in _CACHE or not _CACHE[skill].exists():
-        out = Path(tempfile.mkdtemp(prefix=f"ec-pyz-{skill}-"))
-        _CACHE[skill] = build_bundle(skill, out / f"{skill}.pyz")
-    return _CACHE[skill]
+    if skill not in SKILLS:
+        raise ValueError(f"unknown skill: {skill}")
+    bundle = REPO_ROOT / "skills" / skill / "scripts" / f"{skill}.pyz"
+    if not bundle.is_file():
+        raise RuntimeError(f"checked-in bundle is missing: {bundle.relative_to(REPO_ROOT)}")
+    return bundle
 
 
 def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(description="Build per-skill .pyz bundles.")
-    parser.add_argument(
-        "--out-dir",
-        type=Path,
-        default=None,
-        help="Build bundles here instead of deploying into each skill's scripts/ dir.",
-    )
-    parser.add_argument("skills", nargs="*", help="Skills to build (default: all).")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--out-dir", type=Path)
+    parser.add_argument("--update-locks", action="store_true")
+    parser.add_argument("skills", nargs="*")
     args = parser.parse_args(argv[1:])
-    # Consumer-only skills (age/cure) have no own bundle but receive common.pyz,
-    # so they are valid targets even though they are not in SKILLS.
-    known = {*SKILLS, *APPLICATION_SKILLS, COMMON, *COMMON_CONSUMERS}
-    unknown = [skill for skill in args.skills if skill not in known]
+    selected = tuple(args.skills or SKILLS)
+    unknown = sorted(set(selected) - set(SKILLS))
     if unknown:
-        parser.error(
-            f"unknown skill(s): {', '.join(unknown)}; known: {', '.join(sorted(known))}"
+        parser.error(f"unknown skill(s): {', '.join(unknown)}")
+    destinations = {
+        skill: (
+            args.out_dir / f"{skill}.pyz"
+            if args.out_dir
+            else REPO_ROOT / "skills" / skill / "scripts" / f"{skill}.pyz"
         )
-    targets = args.skills or [*SKILLS, *APPLICATION_SKILLS, COMMON]
-    real = [
-        skill for skill in targets if skill in SKILLS or skill in APPLICATION_SKILLS
-    ]
-    want_common = COMMON in targets or any(s in COMMON_CONSUMERS for s in targets)
-    consumers = _common_consumers(targets, explicit=bool(args.skills))
-    batch_skills = [*real, COMMON] if want_common else real
-    catalog_bytes = _schema_catalog_bytes_for(batch_skills)
-    document_rules_bytes = _document_rules_bytes_for(batch_skills)
-
-    if args.out_dir is not None:
-        for skill in real:
-            print(
-                "built",
-                _build_skill_bundle(
-                    skill,
-                    args.out_dir / f"{skill}.pyz",
-                    schema_catalog_bytes=catalog_bytes,
-                    document_rules_bytes=document_rules_bytes,
-                ),
-            )
-        if want_common:
-            print(
-                "built",
-                _build_bundle(
-                    COMMON,
-                    args.out_dir / "common.pyz",
-                    schema_catalog_bytes=catalog_bytes,
-                    document_rules_bytes=document_rules_bytes,
-                ),
-            )
-        return 0
-
-    for skill in real:
-        print(
-            "deployed",
-            _build_skill_bundle(
-                skill,
-                REPO_ROOT / "skills" / skill / "scripts" / f"{skill}.pyz",
-                schema_catalog_bytes=catalog_bytes,
-                document_rules_bytes=document_rules_bytes,
-            ),
-        )
-    if want_common:
-        # Build once, then fan the same artifact out to each consuming skill so
-        # every skill ships self-contained — common has no skill dir of its own.
-        with tempfile.TemporaryDirectory() as td:
-            common = _build_bundle(
-                COMMON,
-                Path(td) / "common.pyz",
-                schema_catalog_bytes=catalog_bytes,
-                document_rules_bytes=document_rules_bytes,
-            )
-            for consumer in sorted(consumers):
-                dest = REPO_ROOT / "skills" / consumer / "scripts" / "common.pyz"
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy(common, dest)
-                print(f"deployed {dest}")
+        for skill in selected
+    }
+    try:
+        built = build_bundles(destinations, update_locks=args.update_locks)
+    except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+    for target in built.values():
+        print(f"built {target}")
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv))
+    raise SystemExit(main(sys.argv))

@@ -39,10 +39,8 @@ jobs:
           sudo install -m 755 "/tmp/gh_${ver}_linux_amd64/bin/gh" /usr/local/bin/gh
           gh --version
 
-      # Staging rebuilds every bundle, and ultracook.pyz carries the vendored
-      # attrs/cattrs trees, which are generated rather than committed.
-      - name: Vendor runtime dependencies
-        run: python3 scripts/vendor_deps.py
+      - name: Install pinned build tooling
+        run: python3 -m pip install --disable-pip-version-check --no-cache-dir --requirement requirements-build.txt
 
       - name: Stage shippable release tree
         run: python3 scripts/stage_release.py --out "$RUNNER_TEMP/release"

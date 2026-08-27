@@ -1,10 +1,4 @@
-"""Pytest config for the Wheypoint runtime suite (src/wheypoint/).
-
-The runtime modules are flat, like src/fanout/: each is imported by bare name
-so the same source runs from the repo and from the bundle wave 4 builds. They
-also import `paths` from shared/scripts the same way, so both directories go on
-sys.path here. `src/` and `vendor/` are already there from the repo-root
-conftest.
+"""Pytest config for the packaged Wheypoint runtime.
 
 The builders below assemble a *consistent* promotion -- record, revision, and
 rendered projection whose digests agree -- because every storage and recovery
@@ -13,16 +7,12 @@ assertion is about what happens when exactly one of those three is wrong.
 
 from __future__ import annotations
 
-import sys
 from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-for _entry in (REPO_ROOT / "src" / "wheypoint", REPO_ROOT / "shared" / "scripts"):
-    if str(_entry) not in sys.path:
-        sys.path.insert(0, str(_entry))
 
 from attrs import define, evolve  # noqa: E402
 from easy_cheese_schemas import (  # noqa: E402
@@ -40,9 +30,7 @@ from easy_cheese_schemas import (  # noqa: E402
     WheypointRevision,
 )
 
-import canonical  # noqa: E402
-import projection  # noqa: E402
-import records  # noqa: E402
+from easy_cheese.skills.wheypoint import canonical, projection, records  # noqa: E402
 
 PLACEHOLDER_DIGEST = "sha256:" + "0" * 64
 WORK_ID = "work-0001"

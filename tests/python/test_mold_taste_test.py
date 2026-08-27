@@ -12,7 +12,7 @@ from types import ModuleType
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-TASTE_SOURCE = REPO_ROOT / "src" / "mold" / "taste_test.py"
+TASTE_SOURCE = REPO_ROOT / "src" / "easy_cheese" / "shared" / "taste_test.py"
 
 
 @pytest.fixture(scope="module")

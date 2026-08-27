@@ -272,7 +272,7 @@ The `Avoid` column records the losing synonyms the Ground phase rejected in favo
 
 ## Domain model (cumulative by-product)
 
-In the same atomic step as the spec, ADRs, and per-slug glossary, merge the session's resolved terms — **with their Avoid synonyms** — into the project-level domain model resolved via `domain_model_target()` (`shared/scripts/paths.py`). Unlike the per-slug glossary (a branch-local handoff), the domain model is cumulative cross-session memory: it builds the project's ubiquitous language across every session. Context-specific terms only; general programming concepts never enter.
+In the same atomic step as the spec, ADRs, and per-slug glossary, merge the session's resolved terms — **with their Avoid synonyms** — into the project-level domain model resolved via `domain_model_target()` (`src/easy_cheese/shared/paths.py`). Unlike the per-slug glossary (a branch-local handoff), the domain model is cumulative cross-session memory: it builds the project's ubiquitous language across every session. Context-specific terms only; general programming concepts never enter.
 
 Merge, don't overwrite:
 - **New term** — append an entry.
@@ -326,7 +326,7 @@ Stage to a temp directory under `${TMPDIR}` first, then move into place. Never l
 
 This is the runtime home of the **Durable writes** coherence gate (`handshake.md` § Agent key). The gate locks the commitment before the handshake; this step honours it. For each durable write — every ADR and the domain-model merge — run:
 
-1. **Resolve** the target dynamically — the ADR resolution procedure in [`adr.md`](adr.md) § Resolution, the `domain_model_target()` function (`shared/scripts/paths.py`) for the model. Both yield `(backend, location)`.
+1. **Resolve** the target dynamically — the ADR resolution procedure in [`adr.md`](adr.md) § Resolution, the `domain_model_target()` function (`src/easy_cheese/shared/paths.py`) for the model. Both yield `(backend, location)`.
 2. **Write** to that target: `add_markdown` when the backend is `hallouminate`, a staged file write when it is `file`.
 3. **Read back** and confirm the entry landed: `ground` / `read_markdown` for the wiki backend, a re-read of the file for the file backend. A write that cannot be read back is a failure — fail loud, do not claim the write.
 4. **Record** it in the curdle completion record printed to the user: one line per durable write naming `<artifact> → <location> (<backend>)`.

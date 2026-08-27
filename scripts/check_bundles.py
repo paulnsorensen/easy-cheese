@@ -5,15 +5,13 @@ Run after `build_pyz.py` has rebuilt the working tree: this compares each
 rebuilt bundle against the copy committed at HEAD.
 
 The comparison is per-member name, CRC, and uncompressed size rather than raw
-bytes. Bundles are ZIP_DEFLATED, and two zlib builds compress identical input
-to different bytes -- observed on one machine across two CPython builds
-reporting the same zlib 1.3.1. A raw-byte diff would therefore fail for any
-contributor whose zlib differs from whoever last committed, which is noise, not
-staleness. Member CRCs still catch the signal this gate exists for: a source
-edit that never made it into the committed bundle.
+bytes. Shiv assembles deterministic wheel members, but ZIP metadata can vary
+between toolchains. A raw-byte diff would therefore fail for contributors whose
+runtime differs from whoever last committed, which is noise, not staleness.
+Member CRCs still catch the signal this gate exists for: a source edit that never
+made it into the committed bundle.
 
-Byte-for-byte reproducibility is deliberately not asserted; see the spec's
-accepted risk on ZIP_DEFLATED determinism.
+Committed common.pyz archives are rejected: each skill owns a same-named archive.
 """
 
 from __future__ import annotations
@@ -29,9 +27,20 @@ BUNDLE_GLOB = "skills/*/scripts/*.pyz"
 
 
 def _manifest(data: bytes) -> dict[str, tuple[int, int]]:
-    """Member name -> (CRC, uncompressed size). Compressed bytes are ignored."""
+    """Source member name -> (CRC, uncompressed size).
+
+    Shiv generates bootstrap metadata, console-script wrappers, and RECORD files
+    from the host interpreter, so those host-dependent members are not a source
+    staleness signal.
+    """
     with zipfile.ZipFile(io.BytesIO(data)) as archive:
-        return {i.filename: (i.CRC, i.file_size) for i in archive.infolist()}
+        return {
+            i.filename: (i.CRC, i.file_size)
+            for i in archive.infolist()
+            if i.filename != "environment.json"
+            and not i.filename.startswith("site-packages/bin/")
+            and not i.filename.endswith(".dist-info/RECORD")
+        }
 
 
 def _committed(path: Path) -> bytes | None:
@@ -58,6 +67,8 @@ def _describe(rebuilt: dict[str, tuple[int, int]], committed: dict[str, tuple[in
 
 def main() -> int:
     stale: list[str] = []
+    for path in sorted(REPO_ROOT.glob("skills/*/scripts/common.pyz")):
+        stale.append(f"  {path.relative_to(REPO_ROOT)} (obsolete shared bundle)")
     checked = 0
     for path in sorted(REPO_ROOT.glob(BUNDLE_GLOB)):
         relative = path.relative_to(REPO_ROOT)

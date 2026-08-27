@@ -135,7 +135,7 @@ Once the checklist is green and the slug is on disk, hand off to `/cook <slug> -
 
 ## Fan-out sizing
 
-`/pasteurize` fans zero agents today. `size_pasteurize_fanout(bug_shape, score, deterministic_repro)` in `src/fanout/pasteurize_route.py` is the sizing policy for when it does.
+`/pasteurize` fans zero agents today. Its future sizing policy is `size_pasteurize_fanout()` in `src/easy_cheese/shared/fanout/pasteurize_route.py`.
 
 The signal is inverted relative to review: a reviewer (`age_route.route`) reads a diff that exists — more diff, more agents. `size_pasteurize_fanout` instead reads the `review_surface` score **descending**, over the **suspect range** (last-known-good..HEAD), not over a diff under review — less evidence means more agents, because the search space is what gets fanned over.
 

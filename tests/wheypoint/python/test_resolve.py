@@ -8,11 +8,8 @@ from pathlib import Path
 
 import pytest
 
-import canonical
-import records
-import lint
-import resolve as resolve_mod
-import storage
+from easy_cheese.skills.wheypoint import canonical, lint, records, storage
+from easy_cheese.skills.wheypoint import resolve as resolve_mod
 
 PROJECT = "paulnsorensen-easy-cheese"
 NOTE = "status: ok\nnext: cook\nartifact: {artifact}\nPick the loop back up.\n"

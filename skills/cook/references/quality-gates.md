@@ -26,17 +26,17 @@ substitutes an empty baseline.
 
 ### Quality-debt comparison snapshot
 
-This separate snapshot feeds `src/fanout/baseline.py::classify()`; it never
+This separate snapshot feeds the bundled `baseline` classifier; it never
 replaces the outer receipt. Fan mode records it once in
 `.cheese/ultracook/<slug>/manifest.yaml`'s `baseline:` block before any curd
 cooks. Bare Cook (no frame) with no baseline yet lazily captures the same
 failure records from the pre-change tree. Run the tested classifier through
-`python3 skills/ultracook/scripts/ultracook.pyz baseline`; do not classify by
+`python3 ${CLAUDE_SKILL_DIR}/../cook/scripts/cook.pyz baseline`; do not classify by
 eye.
 
 ## Classification taxonomy
 
-Classification is deterministic and computed by the tested helper `src/fanout/baseline.py::classify()` — never agent-eyeballed.
+Classification is deterministic and computed by the tested bundled helper — never agent-eyeballed.
 
 `FailureRecord = {suite, test_id, signature}`, where `signature` is the first line of the failure message, whitespace-normalized.
 

@@ -83,7 +83,7 @@ After cook says "I completed all the changes", run a taste test before press. Th
 
 **Cost gate — where it runs.** Dispatch the fresh-context reviewer unless all four hold: single file AND no new public surface AND <~40 changed lines AND no risk flag — then run the coder self-check instead. Any one term failing routes to 1 fresh opus reviewer.
 
-**Risk flag** — one of the override categories in `src/fanout/age_route.py`'s `OVERRIDE_FLAGS` constant: auth/secrets/crypto/tenant isolation; payments/ledgers/irreversible effects; concurrency/idempotency/ordering/retries; schema/migration/protocol/public-API change; production-destructive ops; weak integration coverage around a global invariant. On a bundle-only host the same constant ships in the age bundle (`python3 ${CLAUDE_SKILL_DIR}/../age/scripts/age.pyz age-route` consumes the flags; see `skills/age/SKILL.md § Router call` for the exact vocabulary).
+**Risk flag** — one of the bundled age router's override categories: auth/secrets/crypto/tenant isolation; payments/ledgers/irreversible effects; concurrency/idempotency/ordering/retries; schema/migration/protocol/public-API change; production-destructive ops; weak integration coverage around a global invariant. `python3 ${CLAUDE_SKILL_DIR}/../cook/scripts/cook.pyz age-route` consumes the flags; see `skills/age/SKILL.md § Router call` for the exact vocabulary.
 
 **Who runs it.**
 

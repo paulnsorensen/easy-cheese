@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 #
-# Tests for src/fanout/pr_plan_to_branches.py.
+# Tests for the packaged pr_plan_to_branches module.
 #
 # Each shape (single, orthogonal_flat, stacked_linear, diamond_stack) gets
 # at least one test verifying:
@@ -13,9 +13,9 @@
 
 setup() {
     REPO_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/../../.." && pwd)"
-    SCRIPT="$REPO_ROOT/src/fanout/pr_plan_to_branches.py"
+    SCRIPT="$REPO_ROOT/src/easy_cheese/shared/fanout/pr_plan_to_branches.py"
     # Bundles run self-contained; raw-source tests shim shared/ + sibling scripts.
-    export PYTHONPATH="$REPO_ROOT/shared/scripts:$REPO_ROOT/src/fanout${PYTHONPATH:+:$PYTHONPATH}"
+    export PYTHONPATH="$REPO_ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
     PLAN_FILE="$BATS_TEST_TMPDIR/plan.yaml"
 }
 

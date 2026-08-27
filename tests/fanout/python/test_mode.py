@@ -14,16 +14,12 @@ from types import ModuleType
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_ROOT / "scripts"))
-import build_pyz  # noqa: E402
-
-BUNDLE = build_pyz.cached_bundle("ultracook")
+BUNDLE = REPO_ROOT / "skills/ultracook/scripts/ultracook.pyz"
 
 # Imported directly (not via the `mode` fixture) so DECOMPOSE_FIRST_THRESHOLD
 # is available at collection time for parametrize -- fixtures only resolve
 # during test execution.
-sys.path.insert(0, str(BUNDLE))
-import mode as _mode_module  # noqa: E402
+from easy_cheese.shared.fanout import mode as _mode_module  # noqa: E402
 
 
 class TestSelectMode:
@@ -125,7 +121,7 @@ class TestSingleSourceOfTruth:
     def test_validate_decomposition_gates_on_no_curd_count(self) -> None:
         """The only count it rules on is "at least one" — file-shape checks now
         run at every count — so it reads no threshold, imported or private."""
-        src = (REPO_ROOT / "src" / "fanout" / "validate_decomposition.py").read_text(
+        src = (REPO_ROOT / "src/easy_cheese/shared/fanout/validate_decomposition.py").read_text(
             encoding="utf-8"
         )
         assert "from mode import PARALLEL_THRESHOLD" not in src
@@ -135,7 +131,7 @@ class TestSingleSourceOfTruth:
         assert "< 5" not in src
 
     def test_curd_count_reads_the_constant(self) -> None:
-        src = (REPO_ROOT / "src" / "mold" / "curd-count.py").read_text(encoding="utf-8")
+        src = (REPO_ROOT / "src/easy_cheese/skills/mold/curd_count.py").read_text(encoding="utf-8")
         assert "PARALLEL_THRESHOLD" in src
         # No private threshold constant, no dead /cheese-factory target.
         assert "CURD_THRESHOLD = 5" not in src

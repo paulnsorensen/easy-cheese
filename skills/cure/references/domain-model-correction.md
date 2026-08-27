@@ -4,7 +4,7 @@ Read this before Flow step 6 (domain-model correction).
 
 After the cook's fixes land, correct the project domain model (ubiquitous language) for terms **touched by the cook's diff** (bounded — diff-touched terms only, never a free rewrite).
 
-Resolve the store with `domain_model_target()` (`shared/scripts/paths.py`, read-probe cascade wiki → docs → XDG; an existing model always wins).
+Resolve the store with `domain_model_target()` (`src/easy_cheese/shared/paths.py`, read-probe cascade wiki → docs → XDG; an existing model always wins).
 
 For a diff-touched entry whose definition or `_Code_:` referent no longer matches the code, update it and write a one-line change note per edit. Entry format:
 

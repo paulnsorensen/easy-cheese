@@ -1,6 +1,6 @@
 ---
 name: python-authoring
-description: Write, edit, refactor, or review Python in easy-cheese with concise stdlib-first code, Python 3.12, self-contained .pyz packaging, and repository test and validation conventions. Use for Python changes under src/, shared/scripts/, scripts/, .github/scripts/, or tests/, especially when the user asks for Pythonic, succinct, de-slopped, dataclass-based, CLI, validator, or bundled-helper code.
+description: Write, edit, refactor, or review Python in easy-cheese with concise stdlib-first code, Python 3.12, Shiv .pyz packaging, and repository test and validation conventions. Use for Python changes under src/, scripts/, .github/scripts/, or tests/, especially when the user asks for Pythonic, succinct, de-slopped, dataclass-based, CLI, validator, or bundled-helper code.
 ---
 
 # Authoring Python
@@ -22,7 +22,7 @@ This is a repository-local skill. Keep it under `.agents/skills/python-authoring
 ## Keep runtime code stdlib-first
 
 - Target Python 3.12. Use its language and typing features directly; do not add compatibility code for older versions.
-- Treat the standard library as the dependency budget for bundled helpers under `src/` and `shared/scripts/`. Do not add Pydantic, Requests, pandas, or another runtime dependency.
+- Treat the standard library as the default dependency budget for bundled helpers under `src/`. Any third-party runtime dependency must be pure Python, admitted to `requirements/runtime.txt`, and regenerated into every affected per-skill lock.
 - Reuse the existing JSON-first, optional-YAML manifest boundary instead of importing PyYAML into new bundled modules.
 - Treat configured third-party imports as surface-specific exceptions: PyYAML for existing validators, docs tooling, and manifest/test paths; pytest for tests. A new dependency requires an explicit package and CI decision.
 - Prefer `argparse`, `json`, `pathlib`, `tempfile`, `shutil`, `zipfile`, `collections`, `itertools`, and `contextlib` over hand-written equivalents.
@@ -38,11 +38,10 @@ This is a repository-local skill. Keep it under `.agents/skills/python-authoring
 
 ## Preserve skill package boundaries
 
-- Keep a skill-owned executable helper in its registered `src/<skill>/` source directory.
-- Move code to `shared/scripts/` only when multiple existing skills need the same behavior.
-- Register executable subcommands in `scripts/build_pyz.py` under `SKILLS`. Use `Shared(...)` for shared entry points and `EXTRA_MODULES` only for an explicit cross-skill source dependency.
-- Do not casually import another skill's internals. Each generated bundle must contain only its owning source plus explicitly registered local or shared dependencies.
-- Never edit `skills/<skill>/scripts/*.pyz` by hand. Run `just bundle` after changing `src/`, `shared/scripts/`, or bundle registration, and commit the regenerated bundle with its source when publication is in scope.
+- Keep skill runtime under `src/easy_cheese/skills/<skill_name>/` and declare its CLI surface in `commands.py`.
+- Move code to `src/easy_cheese/shared/` only when multiple existing skills need the same behavior; consume it through the `easy-cheese-shared` internal distribution.
+- Do not import another skill's internals. Wheel metadata, pip resolution, and hash-locked `requirements/bundles/<skill>.txt` files own runtime dependency closure.
+- Never edit `skills/<skill>/scripts/*.pyz` by hand. Install `requirements-build.txt`, then run `just bundle` after changing bundle inputs and commit the regenerated archives and locks.
 - Keep CLI modules thin: accept `argv`, return an integer status, print diagnostics to stderr, and propagate failure through a nonzero exit.
 - Keep `.github/scripts/` validators read-only. They inspect and report; they do not mutate the workspace.
 
@@ -61,7 +60,7 @@ This is a repository-local skill. Keep it under `.agents/skills/python-authoring
 
 - Test observable behavior and the reason it matters; do not add assertions that can pass when the implementation is broken.
 - Keep filesystem tests inside `tmp_path` or an equivalent temporary directory. Do not depend on user paths, repository-external state, network access, or auto-loaded pytest plugins.
-- For bundle changes, exercise the generated `.pyz` with repository imports unavailable and verify cross-skill code is absent unless explicitly registered.
+- For bundle changes, exercise the generated `.pyz` with repository imports unavailable and verify no other skill package is present.
 - Run the most focused affected tests first.
 - Run `just bundle` when bundle inputs changed.
 - Run `just check` as the final project gate.

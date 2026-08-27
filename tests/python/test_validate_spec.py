@@ -16,7 +16,9 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-VALIDATOR = REPO_ROOT / "src" / "mold" / "validate-spec.py"
+VALIDATOR = (
+    REPO_ROOT / "src" / "easy_cheese" / "skills" / "mold" / "validate_spec.py"
+)
 BASE_SPEC = (
     REPO_ROOT / "tests" / "python" / "fixtures" / "spec_format" / "valid_spec.md"
 ).read_text(encoding="utf-8")

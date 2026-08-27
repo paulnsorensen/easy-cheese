@@ -8,10 +8,7 @@ import sys
 from pathlib import Path
 from types import ModuleType
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
-import build_pyz  # noqa: E402
-
-BUNDLE = build_pyz.cached_bundle("pasteurize")
+BUNDLE = Path(__file__).resolve().parents[3] / "skills/pasteurize/scripts/pasteurize.pyz"
 
 
 class TestRerunFunction:

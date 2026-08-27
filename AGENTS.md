@@ -43,10 +43,11 @@ them while enforcement is implemented separately.
 - Bundles may contain Python modules, bytecode, and immutable package resources.
   Dependencies must be pure Python and zip-importable. Native extensions,
   platform-specific libraries, required external executables, runtime
-  installation/downloads, and mandatory extraction are prohibited.
-- Each bundle contains only its entrypoints and transitive runtime closure:
-  required skill, shared, schema, and approved pure-Python dependency modules.
-  Whole-package or whole-tree inclusion requires explicit justification.
+  installation/downloads, and caller-managed extraction are prohibited. Shiv's
+  transparent cache extraction is part of the archive runtime contract.
+- Each bundle contains its entrypoints and metadata-resolved runtime closure:
+  one skill distribution, the cohesive internal shared distribution, schemas,
+  and approved pure-Python dependencies. Other skill distributions are excluded.
 - Checked-in `.pyz` files are generated deployment artifacts, never source of
   truth. Python source never lives under `skills/`.
 

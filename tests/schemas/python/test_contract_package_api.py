@@ -4,7 +4,6 @@ import hashlib
 import json
 import os
 import subprocess
-import sys
 import venv
 from importlib.util import find_spec
 from pathlib import Path
@@ -157,12 +156,11 @@ def test_installed_wheel_exposes_exact_bundled_fixtures(tmp_path: Path) -> None:
     wheel_dir = tmp_path / "dist"
     subprocess.run(
         [
-            sys.executable,
-            "-m",
-            "pip",
-            "wheel",
-            "--no-deps",
-            "--wheel-dir",
+            "uv",
+            "build",
+            "--wheel",
+            "--no-config",
+            "--out-dir",
             str(wheel_dir),
             str(REPO_ROOT),
         ],
@@ -215,6 +213,7 @@ assert actual == json.loads(__import__("os").environ["EXPECTED_FIXTURES"])
     child_env = os.environ.copy()
     child_env["EXPECTED_FIXTURES"] = json.dumps(expected, sort_keys=True)
     child_env["PYTHONNOUSERSITE"] = "1"
+    child_env.pop("PYTHONPATH", None)
     completed = subprocess.run(
         [str(python), "-c", script],
         cwd=tmp_path,

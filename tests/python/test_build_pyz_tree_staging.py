@@ -1,17 +1,20 @@
 """A bundle must be able to carry whole package trees, not just flat modules.
 
-The published easy_cheese_schemas package and its vendored attrs/cattrs deps are
+The published easy_cheese_schemas package and its attrs/cattrs dependencies are
 real packages: nested dirs plus .dist-info metadata that attrs reads at import
-time. Flattening them would break both import and `attrs.__version__`, so these
-tests pin the archive layout, the compression settings CI byte-compares against,
-and -- the one that actually matters -- that a bare interpreter with no
-site-packages can import the whole stack straight out of the zip.
+time. Shiv stores those wheels under site-packages/ and extracts them before
+dispatch, so these tests pin the packaged layout, deterministic metadata, and
+the importable runtime members.
 """
 
 from __future__ import annotations
 
+import re
+import importlib.util
+import shutil
 import subprocess
 import sys
+import tempfile
 import zipfile
 from pathlib import Path
 
@@ -20,6 +23,13 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 import build_pyz  # noqa: E402
+
+pytestmark = pytest.mark.skipif(
+    importlib.util.find_spec("build") is None
+    or importlib.util.find_spec("pip") is None
+    or (shutil.which("shiv") is None and importlib.util.find_spec("shiv") is None),
+    reason="bundle integration requires requirements-build.txt",
+)
 
 
 @pytest.fixture(scope="module")
@@ -34,11 +44,20 @@ def cut_pyz(tmp_path_factory) -> Path:
     return build_pyz.build_bundle("cut", out / "cut.pyz")
 
 
+def _bundle_members(pyz: Path) -> set[str]:
+    with zipfile.ZipFile(pyz) as archive:
+        return {
+            name.removeprefix("site-packages/")
+            for name in archive.namelist()
+            if not name.startswith("site-packages/bin/")
+        }
+
+
 def test_cut_tree_staging_keeps_schema_and_helpers_nested(cut_pyz: Path) -> None:
-    with zipfile.ZipFile(cut_pyz) as archive:
-        names = set(archive.namelist())
-    assert "red_gate.py" in names
-    assert "gate_receipts.py" in names
+    names = _bundle_members(cut_pyz)
+    assert "easy_cheese/shared/cut/red_gate.py" in names
+    assert "easy_cheese/shared/cut/gate_receipts.py" in names
+    assert "easy_cheese/skills/cut/commands.py" in names
     assert "easy_cheese_schemas/gates.py" in names
     assert "easy_cheese_schemas/compat.py" in names
     assert "attrs-26.1.0.dist-info/METADATA" in names
@@ -64,26 +83,37 @@ def test_cut_bundle_is_byte_deterministic(tmp_path: Path) -> None:
 
 
 def _run_isolated(pyz: Path, code: str) -> subprocess.CompletedProcess[str]:
-    """Run `code` on an interpreter with site-packages disabled (-S) and the
-    environment ignored (-I), with only the bundle on sys.path. Anything that
-    imports here provably came out of the zip."""
-    return subprocess.run(
-        [
-            sys.executable,
-            "-S",
-            "-I",
-            "-c",
-            f"import sys; sys.path.insert(0, {str(pyz)!r})\n{code}",
-        ],
-        capture_output=True,
-        text=True,
-    )
+    """Extract Shiv's site-packages payload and run only against those members."""
+    with tempfile.TemporaryDirectory(prefix="easy-cheese-site-packages-") as root:
+        package_root = Path(root)
+        with zipfile.ZipFile(pyz) as archive:
+            for name in archive.namelist():
+                if not name.startswith("site-packages/"):
+                    continue
+                relative = Path(name.removeprefix("site-packages/"))
+                target = package_root / relative
+                if name.endswith("/"):
+                    target.mkdir(parents=True, exist_ok=True)
+                else:
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_bytes(archive.read(name))
+        return subprocess.run(
+            [
+                sys.executable,
+                "-S",
+                "-I",
+                "-c",
+                f"import sys; sys.path.insert(0, {str(package_root)!r})\n{code}",
+            ],
+            capture_output=True,
+            text=True,
+        )
 
 
 def test_package_trees_keep_their_nesting(ultracook_pyz: Path) -> None:
     """Staged dirs must land as nested archive members with posix separators;
     a flattened basename would collide across packages and break imports."""
-    names = set(zipfile.ZipFile(ultracook_pyz).namelist())
+    names = _bundle_members(ultracook_pyz)
     assert "easy_cheese_schemas/__init__.py" in names
     assert "easy_cheese_schemas/compat.py" in names
     assert "attr/_make.py" in names
@@ -141,11 +171,8 @@ def wheypoint_pyz(tmp_path_factory) -> Path:
 
 
 def test_the_wheypoint_bundle_carries_its_whole_runtime(wheypoint_pyz: Path) -> None:
-    """The continuity runtime is eight sibling modules plus one shared module,
-    all reached through build_pyz's import scanner rather than a hand-kept list. A
-    module dropped from the scan would only surface as an ImportError at resume
-    time, which is the one moment the user cannot afford one."""
-    names = set(zipfile.ZipFile(wheypoint_pyz).namelist())
+    """The app and shared distributions retain their package namespaces."""
+    names = _bundle_members(wheypoint_pyz)
     for module in (
         "canonical.py",
         "commit.py",
@@ -157,10 +184,10 @@ def test_the_wheypoint_bundle_carries_its_whole_runtime(wheypoint_pyz: Path) -> 
         "storage.py",
         "wheypoint.py",
     ):
-        assert module in names, module
+        assert f"easy_cheese/skills/wheypoint/{module}" in names, module
     # The shared library it reuses rather than reimplements.
-    assert "paths.py" in names
-    # Schemas and vendored deps ride along, nested, exactly as for ultracook.
+    assert "easy_cheese/shared/paths.py" in names
+    # Schemas and locked deps ride along, nested, exactly as for ultracook.
     assert "easy_cheese_schemas/wheypoint.py" in names
     assert "attr/_make.py" in names
     assert "cattrs/converters.py" in names
@@ -173,7 +200,8 @@ def test_the_wheypoint_runtime_imports_from_inside_the_zip(wheypoint_pyz: Path) 
     module must resolve out of the archive, not the developer's checkout."""
     result = _run_isolated(
         wheypoint_pyz,
-        "import commit, resolve, lint, storage, projection, records, canonical\n"
+        "from easy_cheese.skills.wheypoint import "
+        "commit, resolve, lint, storage, projection, records, canonical\n"
         "import easy_cheese_schemas as ecs\n"
         "for mod in (commit, resolve, lint, storage, ecs):\n"
         "    assert mod.__file__.startswith(sys.path[0]), (mod.__name__, mod.__file__)\n"
@@ -202,15 +230,81 @@ def test_tree_staging_stays_byte_deterministic(tmp_path: Path) -> None:
     assert first.read_bytes() == second.read_bytes()
 
 
-def test_every_member_carries_the_fixed_timestamp(ultracook_pyz: Path) -> None:
-    """Source mtimes would make the byte-compare flap; every member is pinned."""
-    with zipfile.ZipFile(ultracook_pyz) as archive:
-        stamps = {info.date_time for info in archive.infolist()}
-    assert stamps == {build_pyz.ZIP_TIMESTAMP}
+def test_builder_does_not_expose_a_custom_wheel_writer() -> None:
+    assert not hasattr(build_pyz, "_wheel")
+    assert not hasattr(build_pyz, "WHEEL_TIMESTAMP")
 
 
-def test_members_are_deflated(ultracook_pyz: Path) -> None:
-    """ZIP_DEFLATED is what keeps the vendored deps from tripling bundle size."""
+def test_members_are_stored(ultracook_pyz: Path) -> None:
+    """Shiv's --uncompressed mode stores all members for deterministic startup."""
     with zipfile.ZipFile(ultracook_pyz) as archive:
         kinds = {info.compress_type for info in archive.infolist()}
-    assert kinds == {zipfile.ZIP_DEFLATED}
+    assert kinds == {zipfile.ZIP_STORED}
+
+
+
+def test_shiv_command_uses_a_local_hash_locked_wheelhouse(tmp_path: Path) -> None:
+    requirements = tmp_path / "requirements.txt"
+    wheelhouse = tmp_path / "wheelhouse"
+    command = build_pyz._shiv_command(
+        "cut", requirements, tmp_path / "cut.pyz", wheelhouse
+    )
+    for flag in (
+        "--reproducible",
+        "--uncompressed",
+        "--no-index",
+        "--only-binary=:all:",
+        "--require-hashes",
+    ):
+        assert flag in command
+    assert command[command.index("--python") + 1] == "/usr/bin/env python3"
+    assert command[command.index("--find-links") + 1] == str(wheelhouse)
+    assert command[command.index("--requirement") + 1] == str(requirements)
+
+
+def test_requirements_close_internal_dependencies_with_sha256_locks(tmp_path: Path) -> None:
+    del tmp_path
+    lines = (REPO_ROOT / "requirements" / "bundles" / "cut.txt").read_text().splitlines()
+    assert len(lines) == 6
+    assert all(re.fullmatch(r"[^=]+==[^ ]+ --hash=sha256:[0-9a-f]{64}", line) for line in lines)
+    assert any(line.startswith("easy-cheese-cut==") for line in lines)
+    assert any(line.startswith("easy-cheese-shared==") for line in lines)
+    assert any(line.startswith("easy-cheese-schemas==") for line in lines)
+
+
+def _test_wheel(path: Path, *, pure: bool = True, native: bool = False) -> Path:
+    dist_info = "demo-1.0.0.dist-info"
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr(
+            f"{dist_info}/METADATA",
+            "Metadata-Version: 2.1\nName: demo\nVersion: 1.0.0\n",
+        )
+        archive.writestr(
+            f"{dist_info}/WHEEL",
+            f"Wheel-Version: 1.0\nRoot-Is-Purelib: {'true' if pure else 'false'}\n"
+            "Tag: py3-none-any\n",
+        )
+        archive.writestr("demo.so" if native else "demo.py", b"")
+    return path
+
+
+def test_validate_pure_wheel_rejects_native_and_non_pure_wheels(tmp_path: Path) -> None:
+    native = _test_wheel(tmp_path / "demo-1.0.0-py3-none-any.whl", native=True)
+    with pytest.raises(ValueError, match="native members"):
+        build_pyz.validate_pure_wheel(native)
+
+    renamed = _test_wheel(
+        tmp_path / "demo-1.0.0-cp314-cp314-macosx_14_0_arm64.whl"
+    )
+    with pytest.raises(ValueError, match="not py3-none-any"):
+        build_pyz.validate_pure_wheel(renamed)
+
+
+def test_shiv_bundle_has_no_loose_source_or_vendor_roots(ultracook_pyz: Path) -> None:
+    with zipfile.ZipFile(ultracook_pyz) as archive:
+        names = archive.namelist()
+    assert "site-packages" in {name.split("/", 1)[0] for name in names}
+    assert not any(
+        name.startswith(("src/", "shared/", "vendor/", "common.pyz"))
+        for name in names
+    )
