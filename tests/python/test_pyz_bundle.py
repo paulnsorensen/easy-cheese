@@ -792,18 +792,23 @@ def test_ground_check_no_table_is_error(bundles: Path, tmp_path: Path) -> None:
     assert "no evidence table" in result.stderr
 
 
-def test_ground_check_accepts_url_and_raw_path_citations(
+def test_ground_check_accepts_nonlocal_and_existing_local_citations(
     bundles: Path, tmp_path: Path
 ) -> None:
-    """A verifiable citation is a footnote, URL, path:line, OR a raw-capture path —
-    not just the footnote form the headline test uses. Locks all marker branches so a
-    narrowed citation regex (e.g. footnote-only) fails loudly instead of rejecting
-    legitimately-grounded reports."""
+    """URLs and inline paths need no lookup; local paths use their defined roots."""
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    (raw / "01-example.md").write_text("one\ntwo\nthree\nfour\n")
+    cheese = bundles / ".cheese"
+    cheese.mkdir()
+    (cheese / "notes.md").write_text("one\ntwo\n")
     body = (
         "## Research: q\n\n### Evidence\n\n"
         "| Claim | Evidence | Confidence |\n| --- | --- | --- |\n"
         "| A holds | https://example.com/a | certain |\n"
-        "| B holds | raw/01-example.md#L3-8 | certain |\n"
+        "| B holds | source.py:12 | certain |\n"
+        "| C holds | `<raw/01-example.md#L3-4>.` | certain |\n"
+        "| D holds | `<.cheese/notes.md#L1-2>.` | certain |\n"
     )
     result = _run(
         bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body))
@@ -913,6 +918,124 @@ def test_ground_check_flags_short_row_as_malformed(
     )
     assert result.returncode == 1, result.stderr
     assert "MALFORMED" in result.stderr
+
+
+def test_ground_check_rejects_unresolved_footnote(
+    bundles: Path, tmp_path: Path
+) -> None:
+    body = _GROUNDED_REPORT.replace("[^s1]", "[^missing]").replace(
+        "[^missing]: https://example.com/codex (fetched 2026-06-01).",
+        "[^s1]: https://example.com/codex (fetched 2026-06-01).",
+    )
+    result = _run(
+        bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body))
+    )
+    assert result.returncode == 1, result.stderr
+    assert "FOOTNOTE" in result.stderr
+    assert "missing" in result.stderr
+
+
+def test_ground_check_rejects_footnote_definition_without_citation(
+    bundles: Path, tmp_path: Path
+) -> None:
+    body = _GROUNDED_REPORT.replace(
+        "https://example.com/codex (fetched 2026-06-01).",
+        "vendor documentation",
+    )
+    result = _run(
+        bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body))
+    )
+    assert result.returncode == 1, result.stderr
+    assert "FOOTNOTE" in result.stderr
+    assert "no verifiable citation" in result.stderr
+
+
+def test_ground_check_accepts_citation_on_footnote_continuation_line(
+    bundles: Path, tmp_path: Path
+) -> None:
+    body = _GROUNDED_REPORT.replace(
+        "[^s1]: https://example.com/codex (fetched 2026-06-01).",
+        "[^s1]: Vendor documentation\n    https://example.com/codex",
+    )
+    result = _run(
+        bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body))
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_ground_check_rejects_duplicate_footnote_labels(
+    bundles: Path, tmp_path: Path
+) -> None:
+    body = _GROUNDED_REPORT + "[^s1]: https://example.com/duplicate\n"
+    result = _run(
+        bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body))
+    )
+    assert result.returncode == 1, result.stderr
+    assert "FOOTNOTE" in result.stderr
+    assert "duplicate definition" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "evidence,references",
+    [
+        ("raw/01-missing.md#L3-8", ""),
+        ("[^s1]", "## References\n[^s1]: raw/01-missing.md#L3-8\n"),
+    ],
+)
+def test_ground_check_rejects_missing_report_local_raw_path(
+    bundles: Path, tmp_path: Path, evidence: str, references: str
+) -> None:
+    body = (
+        "## Research: q\n\n### Evidence\n\n"
+        "| Claim | Evidence | Confidence |\n| --- | --- | --- |\n"
+        f"| A holds | {evidence} | certain |\n\n"
+        f"{references}"
+    )
+    result = _run(
+        bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body))
+    )
+    assert result.returncode == 1, result.stderr
+    assert "LOCAL_PATH" in result.stderr
+    assert "raw/01-missing.md" in result.stderr
+
+
+@pytest.mark.parametrize("anchor", ["#L3-8", "#L4-3", "#L0"])
+def test_ground_check_rejects_invalid_local_line_anchor(
+    bundles: Path, tmp_path: Path, anchor: str
+) -> None:
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    (raw / "source.md").write_text("one\ntwo\nthree\nfour\n")
+    body = (
+        "## Research: q\n\n### Evidence\n\n"
+        "| Claim | Evidence | Confidence |\n| --- | --- | --- |\n"
+        f"| A holds | raw/source.md{anchor} | certain |\n"
+    )
+    result = _run(
+        bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body))
+    )
+    assert result.returncode == 1, result.stderr
+    assert "LOCAL_PATH" in result.stderr
+    assert "line anchor" in result.stderr
+
+
+def test_ground_check_rejects_local_path_traversal(
+    bundles: Path, tmp_path: Path
+) -> None:
+    (tmp_path / "raw-secret.md").write_text("outside raw\n")
+    (bundles / "cheese-secret.md").write_text("outside cheese\n")
+    (bundles / ".cheese").mkdir(exist_ok=True)
+    body = (
+        "## Research: q\n\n### Evidence\n\n"
+        "| Claim | Evidence | Confidence |\n| --- | --- | --- |\n"
+        "| A holds | raw/../raw-secret.md#L1 | certain |\n"
+        "| B holds | .cheese/../cheese-secret.md#L1 | certain |\n"
+    )
+    result = _run(
+        bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body))
+    )
+    assert result.returncode == 1, result.stderr
+    assert result.stderr.count("outside allowed root") == 2
 
 
 def test_bundle_build_is_byte_deterministic(tmp_path: Path) -> None:

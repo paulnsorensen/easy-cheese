@@ -11,10 +11,10 @@ so the failure cannot recur silently.
 Reads a markdown report, finds every evidence table (a table whose header has a
 ``Claim`` column and a ``Confidence`` column), and per data row enforces:
 
-  - CITATION (error): the evidence/source cell carries a verifiable citation
-    marker — a footnote ``[^id]``, a URL, an inline ``path:line``, or a
-    corpus/raw path. A claim with none is un-grounded. This is the check that
-    catches the original failure: that claim had no citation at all.
+  - CITATION (error): the evidence/source cell carries a URL, an inline
+    ``path:line``, a confined local path, or a uniquely defined footnote
+    containing one of those citation shapes. Local line anchors must be in bounds.
+    A claim with none is un-grounded.
   - CONFIDENCE (error): the confidence cell is exactly one of the three label
     values (``certain`` / ``speculating`` / ``don't know``), not a synonym.
   - ABSENCE (advisory): a negative/absence-shaped claim marked ``certain`` that
@@ -39,13 +39,17 @@ CONFIDENCE_LABELS = {"certain", "speculating", "don't know"}
 # A verifiable citation marker: footnote ref, URL, inline path:line, or a
 # durable-corpus / raw-capture path. A prose source name can describe evidence,
 # but it cannot be re-checked by the gate.
-_CITATION = re.compile(
-    r"\[\^[^\]]+\]"  # footnote marker [^source-1]
-    r"|https?://\S+"  # URL
-    r"|[\w./-]+\.[A-Za-z]\w*:\d+(?:-\d+)?"  # inline path:line(-line) — alpha-led ext, not a numeric ratio
+_FOOTNOTE_REF = re.compile(r"\[\^([^\]]+)\]")
+_FOOTNOTE_DEFINITION = re.compile(r"^\[\^([^\]]+)\]:\s*(.*)$")
+_LOCAL_PATH = re.compile(r"(?<![\w./-])((?:\.cheese|raw)/[^\s|]+)", re.IGNORECASE)
+_LINE_ANCHOR = re.compile(r"#L(\d+)(?:-L?(\d+))?$", re.IGNORECASE)
+_DIRECT_CITATION = re.compile(
+    r"https?://\S+"  # URL
+    r"|[\w./-]+\.[A-Za-z]\w*:\d+(?:-\d+)?"  # inline path:line(-line)
     r"|(?:\.cheese|raw)/\S+",  # corpus or raw-capture path
     re.IGNORECASE,
 )
+_CITATION = re.compile(r"\[\^[^\]]+\]|" + _DIRECT_CITATION.pattern, re.IGNORECASE)
 
 # Negation aimed at existence / support / provision — the shape of an absence
 # claim. Whole-word matched so "Cargo" never trips "no".
@@ -109,7 +113,104 @@ def _find_columns(header: list[str]) -> tuple[int, int, int] | None:
     return claim, evidence, confidence
 
 
-def _check_row(cells: list[str], cols: tuple[int, int, int], row_no: int) -> list[Violation]:
+def _footnote_definitions(lines: list[str]) -> tuple[dict[str, str], set[str]]:
+    definitions: dict[str, str] = {}
+    duplicates: set[str] = set()
+    current: str | None = None
+    for line in lines:
+        if match := _FOOTNOTE_DEFINITION.match(line.strip()):
+            current = match.group(1)
+            if current in definitions:
+                duplicates.add(current)
+                current = None
+            else:
+                definitions[current] = match.group(2)
+        elif current and (line.startswith("    ") or line.startswith("\t")):
+            definitions[current] += f"\n{line.strip()}"
+        elif line.strip():
+            current = None
+    return definitions, duplicates
+
+
+def _check_line_anchor(
+    target: Path, anchor: re.Match[str], reference: str, row_no: int
+) -> list[Violation]:
+    start = int(anchor.group(1))
+    end = int(anchor.group(2) or start)
+    try:
+        with target.open("rb") as stream:
+            line_count = sum(1 for _ in stream)
+    except OSError as exc:
+        return [
+            Violation(
+                "error",
+                row_no,
+                "LOCAL_PATH",
+                f"cannot read local evidence path {reference!r}: {exc}",
+            )
+        ]
+    if 1 <= start <= end <= line_count:
+        return []
+    return [
+        Violation(
+            "error",
+            row_no,
+            "LOCAL_PATH",
+            f"line anchor {anchor.group(0)!r} is outside {reference!r} "
+            f"({line_count} line(s))",
+        )
+    ]
+
+
+def _check_local_paths(
+    text: str, report_dir: Path, invocation_dir: Path, row_no: int
+) -> list[Violation]:
+    violations: list[Violation] = []
+    for match in _LOCAL_PATH.finditer(text):
+        reference = match.group(1).rstrip("`>.,;:!?)]}'\"*_~")
+        anchor = _LINE_ANCHOR.search(reference)
+        local_path = reference[: anchor.start()] if anchor else reference
+        root = (
+            report_dir / "raw"
+            if local_path.casefold().startswith("raw/")
+            else invocation_dir / ".cheese"
+        ).resolve()
+        target = (
+            report_dir / local_path
+            if local_path.casefold().startswith("raw/")
+            else invocation_dir / local_path
+        ).resolve()
+        if not target.is_relative_to(root):
+            violations.append(
+                Violation(
+                    "error",
+                    row_no,
+                    "LOCAL_PATH",
+                    f"local evidence path is outside allowed root: {local_path!r}",
+                )
+            )
+        elif not target.is_file():
+            violations.append(
+                Violation(
+                    "error",
+                    row_no,
+                    "LOCAL_PATH",
+                    f"local evidence path does not exist: {local_path!r}",
+                )
+            )
+        elif anchor:
+            violations.extend(_check_line_anchor(target, anchor, local_path, row_no))
+    return violations
+
+
+def _check_row(
+    cells: list[str],
+    cols: tuple[int, int, int],
+    row_no: int,
+    footnotes: dict[str, str],
+    report_dir: Path,
+    invocation_dir: Path,
+) -> list[Violation]:
     claim_i, ev_i, conf_i = cols
     width = max(cols) + 1
     if len(cells) < width:
@@ -124,6 +225,32 @@ def _check_row(cells: list[str], cols: tuple[int, int, int], row_no: int) -> lis
         out.append(
             Violation("error", row_no, "CITATION", f"claim has no verifiable citation: {claim!r}")
         )
+
+    for label in _FOOTNOTE_REF.findall(evidence):
+        definition = footnotes.get(label)
+        if definition is None:
+            out.append(
+                Violation(
+                    "error",
+                    row_no,
+                    "FOOTNOTE",
+                    f"evidence footnote [^{label}] has no matching definition",
+                )
+            )
+        elif not _DIRECT_CITATION.search(definition):
+            out.append(
+                Violation(
+                    "error",
+                    row_no,
+                    "FOOTNOTE",
+                    f"footnote [^{label}] has no verifiable citation",
+                )
+            )
+        else:
+            out.extend(
+                _check_local_paths(definition, report_dir, invocation_dir, row_no)
+            )
+    out.extend(_check_local_paths(evidence, report_dir, invocation_dir, row_no))
 
     if confidence.lower() not in CONFIDENCE_LABELS:
         out.append(
@@ -152,11 +279,26 @@ def _check_row(cells: list[str], cols: tuple[int, int, int], row_no: int) -> lis
     return out
 
 
-def check_report(text: str) -> tuple[list[Violation], int]:
+def check_report(
+    text: str,
+    report_dir: Path | None = None,
+    invocation_dir: Path | None = None,
+) -> tuple[list[Violation], int]:
     """Return (violations, tables_checked). A report with claims but no evidence
     table is itself a grounding failure (caller maps that to a non-zero exit)."""
     lines = text.splitlines()
-    violations: list[Violation] = []
+    footnotes, duplicate_footnotes = _footnote_definitions(lines)
+    invocation_dir = (invocation_dir or Path.cwd()).resolve()
+    report_dir = (report_dir or invocation_dir).resolve()
+    violations = [
+        Violation(
+            "error",
+            0,
+            "FOOTNOTE",
+            f"footnote [^{label}] has a duplicate definition",
+        )
+        for label in sorted(duplicate_footnotes)
+    ]
     tables_checked = 0
     i = 0
     n = len(lines)
@@ -172,7 +314,16 @@ def check_report(text: str) -> tuple[list[Violation], int]:
                     cells = _split_row(lines[j])
                     if not _is_separator(cells):
                         row_no += 1
-                        violations.extend(_check_row(cells, cols, row_no))
+                        violations.extend(
+                            _check_row(
+                                cells,
+                                cols,
+                                row_no,
+                                footnotes,
+                                report_dir,
+                                invocation_dir,
+                            )
+                        )
                     j += 1
                 i = j
                 continue
@@ -192,7 +343,7 @@ def main(argv: list[str]) -> int:
         print(f"error: cannot read {args.report}: {exc}", file=sys.stderr)
         return 2
 
-    violations, tables = check_report(text)
+    violations, tables = check_report(text, path.resolve().parent, Path.cwd())
 
     if tables == 0:
         print(f"error: no evidence table found in {args.report}", file=sys.stderr)
