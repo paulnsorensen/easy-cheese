@@ -15,7 +15,7 @@ Rules:
 
 ## Don't exfiltrate private context
 
-Tavily, Context7, and `gh` send your queries to third-party services. Anything you put in a query may be logged.
+Externally hosted documentation, web-search/extraction, wiki, and Git-hosting providers may log queries (for example Context7, Tavily, Exa, or a hosted Git integration). A local provider may avoid that exposure, but provider choice never weakens the no-exfiltration rule.
 
 Rules:
 

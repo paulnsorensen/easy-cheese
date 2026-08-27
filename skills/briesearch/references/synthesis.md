@@ -9,7 +9,7 @@ One row per material claim, not per source. A single source can support multiple
 ```markdown
 | Claim | Evidence | Source type | Freshness | Confidence | Caveat |
 | --- | --- | --- | --- | --- | --- |
-| <one-line claim> | <quote or file:line>[^source-1] | vendor docs / paper / changelog / repo / GitHub / blog | <date checked or "live"> | `certain` / `speculating` / `don't know` | <if any> |
+| <one-line claim> | <quote or file:line>[^source-1] | vendor docs / paper / changelog / repository knowledge / repo code / Git host / blog | <date checked or "live"> | `certain` / `speculating` / `don't know` | <if any> |
 ```
 
 The Evidence column uses footnote markers (`[^source-1]`, `[^source-2]`, …); the absolute URLs and fetch dates live in a `## References` block at the bottom of the report per [`../../cheese/references/formatting.md`](../../cheese/references/formatting.md) § Citations. Inline `file:line` references stay raw — they are locations, not citations.
@@ -19,7 +19,7 @@ Rules:
 - **Each "latest" or "current" claim must include an absolute date** ("latest as of 2026-05-04"), not just "latest".
 - **Versioned claims must include the version** ("Next.js 15.3", not "Next.js latest").
 - **Conflicting evidence is its own row pair**, not silently averaged. Surface disagreement explicitly.
-- **Single-source claims cap at `speculating`** unless the source is authoritative for that claim type (vendor docs for an API; the codebase for a local convention) — only authoritative single sources earn `certain`. A lone Context7 chunk is authoritative *only when its version matches the version in the question*; on a version mismatch (or when the question pins a version the chunk does not state), cap at `speculating` — Context7 IDs can be version-stale (see `routing.md` § Cache library IDs).
+- **Single-source claims cap at `speculating`** unless the source is authoritative for that claim type (vendor docs for an API, repository knowledge for recorded rationale, or the codebase for current local behavior). Documentation evidence is authoritative only when its version matches the question; a provider name does not make a version-ambiguous excerpt authoritative.
 
 The tokens `certain`, `speculating`, and `don't know` are exact label values — write them verbatim, never as synonyms.
 
@@ -39,27 +39,28 @@ Canonical failure to avoid: a Tavily snippet says "hybrid retrieval combines spa
 
 ## Link / citation verification
 
-**Short form (always returned) — minimum verification:** before returning any claim, confirm **every URL cited in `## References` resolves** (HTTP 200 or matched-host redirect), except the inline-file and user-supplied URLs exempted below. Mark unreachable footnote definitions `[unverified]` rather than dropping them — the user can re-check. This runs on the always-returned path; it is not deferred to deep reports.
+**Short form (always returned) — minimum verification:** inspect every cited source that supports a claim with a real extraction/open/fetch/host operation. Also confirm every URL cited in `## References` resolves (HTTP 200 or matched-host redirect), except the inline-file and user-supplied URLs exempted below. Mark unreachable footnote definitions `[unverified]` rather than dropping them. This runs on the always-returned path; it is not deferred to deep reports.
 
 Deep reports (anything with a `research/<slug>/<slug>.md` artifact in the durable corpus) add, on top of the above:
 
 1. Quote tracing: every quoted or paraphrased line traces back to its source (one-click verifiable for the user).
 2. Every "as of <date>" claim has a verified fetch date in the same row.
 
-Skip verification only for: (a) inline file references (`file:line`), (b) the user's own supplied URLs.
+Skip link-resolution verification only for: (a) inline file references (`file:line`), (b) the user's own supplied URLs. These exemptions do not waive inspection of source content used to support a claim.
 
 ## Mechanical confidence cap
 
 | Situation | Overall confidence |
 | --- | --- |
-| Critical routed source unavailable and no equivalent fallback exists | `don't know` |
-| Non-critical routed source unavailable, failed, skipped, or searched-but-empty | cap at `speculating` |
+| Critical capability uncovered after fallbacks, or covered only by unusable evidence | `don't know` |
+| Critical coverage or evidence quality drops materially | cap at `speculating` |
+| Named provider unavailable but an evidence-equivalent provider completes the capability | no automatic impact |
 | 3+ independent sources agree per claim | `certain` |
 | 2 independent sources agree per claim | `speculating` |
 | Sources disagree | `don't know` — and surface the disagreement |
-| Single source per claim | cap at `speculating` unless authoritative (see lone-Context7 caveat above) |
+| Single source per claim | cap at `speculating` unless authoritative for that claim |
 
-**"Independent" means distinct origin, not distinct URL.** Before counting sources toward the cap, dedup by origin: collapse to one source any that share a root domain, or that quote/paraphrase the same upstream (three blogs reprinting one vendor post are one source, not three). Count only the surviving distinct origins. Criticality depends on the question. Context7 is critical for version-specific API claims, Tavily is critical for freshness-sensitive facts, Codebase is critical for local precedent questions, the wiki is critical for prior-decision/rationale questions (when hallouminate is absent, degrade per `../../cheese/references/optional-plugins.md` — skip, note once, cap at `speculating`), and GitHub is usually supporting evidence unless the user asked for real-world examples.
+**"Independent" means distinct origin, not distinct URL or provider.** Before counting sources, collapse pages that share a root domain or repeat the same upstream. Criticality belongs to the claim and capability: library/API documentation is critical for version-specific API claims; current-web evidence is critical for freshness-sensitive facts; local code is critical for current repository behavior; repository knowledge is critical for prior decisions and rationale; Git hosting/examples is usually supporting evidence unless hosted state or real-world precedent is the question. Missing Context7, Tavily, Hallouminate, `gh`, or any other named provider has no confidence effect when an equivalent source covers the same critical evidence.
 
 ## Absence and negative claims
 
@@ -101,7 +102,7 @@ Short form (always returned to the caller):
 <recommended skill or action — limited to which skill should run next (`/mold`, `/cook`, etc.), never which design knob to expose.>
 
 ### Searched, empty
-<one line per routed source that ran and returned nothing usable, naming the query/filters that came up dry (e.g. "Tavily `basic`, time_range=month, \"<query>\" → 0 results above score 0.5"). This is the provenance for any `don't know` or lowered cap — proof the search ran. Omit the section only when no routed source came back empty.>
+<one line per routed capability/provider that ran and returned nothing usable, naming the query and relevant filters (for example "Current web via native search, last 30 days, \"<query>\" → 0 relevant results"). This is the provenance for any `don't know` or lowered cap. Omit the section only when no routed capability came back empty.>
 
 ## References
 [^source-1]: <absolute URL or `.cheese/...` path> (fetched <YYYY-MM-DD>).
