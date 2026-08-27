@@ -4,7 +4,7 @@ Curdle is the terminal state of mold. It runs only after the two-key handshake (
 
 ## Artifact types
 
-Resolve the spec path with `SPEC=$(python3 ${CLAUDE_SKILL_DIR}/scripts/mold.pyz artifact-path specs <slug>)` — it anchors at the per-project durable corpus (see `../../cheese/references/formatting.md` § Corpus location). Issues stay repo-local: write them as `.cheese/issues/<slug>-NNN.md`.
+Resolve the spec path with `SPEC=$(python3 skills/mold/scripts/mold.pyz artifact-path specs <slug>)` — it anchors at the per-project durable corpus (see `../../cheese/references/formatting.md` § Corpus location). Issues stay repo-local: write them as `.cheese/issues/<slug>-NNN.md`.
 
 | Type | When | Path |
 | --- | --- | --- |

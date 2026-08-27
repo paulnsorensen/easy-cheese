@@ -75,7 +75,7 @@ or otherwise different roots before deriving production changes.
 Invoke it from the project root, using the current attempt's route request:
 
 ```sh
-python3 "${CLAUDE_SKILL_DIR}/scripts/press.pyz" press-route \
+python3 "skills/press/scripts/press.pyz" press-route \
   .cheese/press/outer-tdd-gates.attempt-1.route.json
 ```
 

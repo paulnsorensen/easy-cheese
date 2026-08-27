@@ -8,13 +8,13 @@ For shell, SQL, YAML, JSON, and other formats mergiraf does not parse, use `conf
 
 ```bash
 # Take ours for every hunk
-python3 ${CLAUDE_SKILL_DIR}/scripts/melt.pyz conflict-pick hooks/session-start.sh --ours
+python3 skills/melt/scripts/melt.pyz conflict-pick hooks/session-start.sh --ours
 
 # Take theirs for every hunk
-python3 ${CLAUDE_SKILL_DIR}/scripts/melt.pyz conflict-pick .gitignore --theirs
+python3 skills/melt/scripts/melt.pyz conflict-pick .gitignore --theirs
 
 # Match by regex; matched hunks resolve, others remain
-python3 ${CLAUDE_SKILL_DIR}/scripts/melt.pyz conflict-pick config.yaml --grep "timeout" --ours
+python3 skills/melt/scripts/melt.pyz conflict-pick config.yaml --grep "timeout" --ours
 ```
 
 ## Step 5 — Lockfiles
@@ -23,13 +23,13 @@ Lockfile content has structure that text or AST merge cannot validate. Take one 
 
 ```bash
 # Auto-detect conflicted lockfiles, take theirs, regenerate, stage
-python3 ${CLAUDE_SKILL_DIR}/scripts/melt.pyz lockfile-resolve
+python3 skills/melt/scripts/melt.pyz lockfile-resolve
 
 # Preview
-python3 ${CLAUDE_SKILL_DIR}/scripts/melt.pyz lockfile-resolve --dry-run
+python3 skills/melt/scripts/melt.pyz lockfile-resolve --dry-run
 
 # Take ours instead
-python3 ${CLAUDE_SKILL_DIR}/scripts/melt.pyz lockfile-resolve --strategy ours
+python3 skills/melt/scripts/melt.pyz lockfile-resolve --strategy ours
 ```
 
 Supports `Cargo.lock`, `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`, `poetry.lock`, `Pipfile.lock`, `uv.lock`, `Gemfile.lock`, and `go.sum`.
