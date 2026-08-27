@@ -78,7 +78,9 @@ def test_subcommand_help_names_the_command() -> None:
 
     assert result.returncode == 0
     assert result.stderr == ""
-    assert result.stdout.startswith("usage: append-attempt ")
+    usage = result.stdout.splitlines()[0]
+    assert usage.startswith("usage: ")
+    assert " append-attempt [" in usage
 
 
 def _read_rows(artifact: Path) -> list[str]:
