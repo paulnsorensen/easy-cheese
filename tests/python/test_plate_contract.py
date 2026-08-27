@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -51,6 +52,35 @@ def test_plate_final_writing_gate_precedes_publication() -> None:
     assert "halt" in durable.lower()
     assert ".cheese" in durable and "unstaged" in durable
     assert "bottom/common branch" in durable
+
+
+def test_plate_routes_tools_and_reports_a_scannable_completion_record() -> None:
+    skill = read("skills/plate/SKILL.md")
+    assert "## Tool routing" in skill
+    assert "Git and GitHub" in skill
+    assert "code-intelligence backend" in skill
+    assert "/wiki-ingest" in skill
+
+    completion = skill.split("## Completion", maxsplit=1)[1]
+    block = completion.split("```json\n", maxsplit=1)[1].split("\n```", maxsplit=1)[0]
+    record = json.loads(block)
+    assert set(record) == {
+        "mode",
+        "topology",
+        "provider",
+        "artifacts",
+        "gate",
+        "commits",
+        "prs",
+        "risk",
+    }
+    assert record["mode"] == "new-pr"
+    assert record["artifacts"][0]["verified"] is True
+    assert record["gate"]["result"] == "pass"
+    assert "Topology preflight" in completion
+    assert 'gate: {"command": "n/a", "result": "n/a"}' in completion
+    assert "scripts/plate.pyz validate-publication" in completion
+    assert "scripts/plate.pyz stack-tools" in skill
 
 
 def test_plate_stack_references_preserve_absorbed_behavior_and_safety() -> None:

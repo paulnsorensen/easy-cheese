@@ -203,6 +203,30 @@ def _copy_package_scaffold(project: Path) -> Path:
     return destination
 
 
+def _normalize_internal_wheel(wheel: Path) -> Path:
+    """Remove compressor-specific bytes from a PEP 517-built wheel."""
+    descriptor, temporary = tempfile.mkstemp(
+        prefix=f".{wheel.stem}-", suffix=".whl", dir=wheel.parent
+    )
+    os.close(descriptor)
+    normalized = Path(temporary)
+    try:
+        with zipfile.ZipFile(wheel) as source, zipfile.ZipFile(
+            normalized, "w", compression=zipfile.ZIP_STORED
+        ) as target:
+            for source_info in sorted(source.infolist(), key=lambda item: item.filename):
+                info = zipfile.ZipInfo(source_info.filename, (1980, 1, 1, 0, 0, 0))
+                info.compress_type = zipfile.ZIP_STORED
+                info.create_system = 3
+                info.external_attr = source_info.external_attr
+                info.internal_attr = source_info.internal_attr
+                target.writestr(info, source.read(source_info))
+        os.replace(normalized, wheel)
+    finally:
+        normalized.unlink(missing_ok=True)
+    return wheel
+
+
 def _build_project(project: Path, wheelhouse: Path) -> Path:
     _require_build_frontend()
     before = set(wheelhouse.glob("*.whl"))
@@ -224,7 +248,7 @@ def _build_project(project: Path, wheelhouse: Path) -> Path:
     built = set(wheelhouse.glob("*.whl")) - before
     if len(built) != 1:
         raise RuntimeError(f"PEP 517 build produced {len(built)} wheels for {project}")
-    wheel = built.pop()
+    wheel = _normalize_internal_wheel(built.pop())
     validate_pure_wheel(wheel)
     return wheel
 
@@ -250,7 +274,7 @@ def _build_schema_wheel(wheelhouse: Path) -> Path:
     built = set(wheelhouse.glob("*.whl")) - before
     if len(built) != 1:
         raise RuntimeError(f"schema build produced {len(built)} wheels")
-    wheel = built.pop()
+    wheel = _normalize_internal_wheel(built.pop())
     validate_pure_wheel(wheel)
     return wheel
 

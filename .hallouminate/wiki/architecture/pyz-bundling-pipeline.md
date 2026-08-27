@@ -27,9 +27,9 @@ The runtime lock is version- and hash-pinned. Downloads require wheels and hashe
 
 ## Per-skill locks
 
-Pip performs a dry-run install of `easy-cheese-<skill>==<version>` using only the private wheelhouse. The resulting report is converted into `requirements/bundles/<skill>.txt`, with an exact version and SHA-256 hash for every resolved wheel.[^5]
+Repository-built wheels are normalized after PEP 517 assembly: members are sorted, timestamps and ZIP metadata are fixed, and members use stored compression. Member content and wheel metadata remain unchanged, while the outer bytes no longer depend on the interpreter's zlib implementation. Downloaded third-party wheels are not rewritten.[^5]
 
-Normal builds compare the computed closure and hashes with the checked-in lock and fail if it differs. `scripts/build_pyz.py --update-locks` is the explicit regeneration path after a source, metadata, or runtime dependency change.
+Pip then performs a dry-run install of `easy-cheese-<skill>==<version>` using only the private wheelhouse. The resulting report becomes `requirements/bundles/<skill>.txt`, with an exact version and SHA-256 hash for every resolved wheel. Normal builds compare that closure with the checked-in lock; `scripts/build_pyz.py --update-locks` is the explicit regeneration path.
 
 ## Shiv assembly
 
@@ -51,7 +51,7 @@ Before building wheels, the builder recompiles the phase registry, schema catalo
 
 ## CI and release
 
-`.github/workflows/build-pyz.yml` is the dedicated bundle job. It installs `requirements-build.txt`, installs the runtime/test dependencies, rebuilds every archive without updating locks, compares rebuilt archive members with `HEAD`, and runs bundle isolation tests. Regular validation installs no Shiv.[^8]
+`.github/workflows/build-pyz.yml` runs the bundle build, freshness comparison, and isolation tests under both Python 3.12 and 3.14. This keeps 3.12 as the runtime baseline while proving that newer build interpreters produce the same locks and canonical bundle content. Regular validation installs no Shiv.[^8]
 
 `scripts/check_bundles.py` compares member names, CRCs, and uncompressed sizes rather than raw ZIP bytes. It ignores Shiv bootstrap metadata, console wrappers, and RECORD files whose bytes can vary with the host toolchain while retaining source-staleness detection.[^9]
 
@@ -79,7 +79,7 @@ just bundle                                # when current locks already match
 [^2]: scripts/build_pyz.py:`SKILLS`
 [^3]: scripts/build_pyz.py:`_project_toml`, `build_wheelhouse`
 [^4]: requirements/runtime.txt; scripts/build_pyz.py:`validate_pure_wheel`, `_download_runtime_wheels`
-[^5]: scripts/build_pyz.py:`_resolved_requirements`, `_requirements_for`; requirements/bundles/
+[^5]: scripts/build_pyz.py:`_normalize_internal_wheel`, `_resolved_requirements`, `_requirements_for`; tests/python/test_build_pyz_tree_staging.py:`test_internal_wheel_normalization_ignores_compressor_and_member_order`; requirements/bundles/
 [^6]: scripts/build_pyz.py:`_shiv_command`, `_build_from_wheelhouse`
 [^7]: scripts/build_pyz.py:`_validate_generated_runtime`; pyproject.toml
 [^8]: .github/workflows/build-pyz.yml; .github/workflows/validate.yml

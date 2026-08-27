@@ -127,6 +127,19 @@ stack machinery below. Any other branch uses the policy above unchanged.
    - Topology preflight persists the resolution, reads it back, and stops before
      any commit, branch mutation, push, or PR operation.
 
+## Tool routing
+
+- Run `python3 skills/plate/scripts/plate.pyz stack-tools` before
+  selecting a stack provider. It probes Graphite, Git Town, and `gh stack`
+  without mutating repository state.
+- Use Git and GitHub or the selected provider CLI for repository, remote, PR,
+  and stack state.
+- Use the repository code-intelligence backend for tracked artifact edits and
+  read-back; use named paths and stale-safe writes instead of shell redirects.
+- Route durable wiki knowledge through `/wiki-ingest`; never hand-edit the
+  Hallouminate tree.
+- Keep transient completion and PR-body files under `.cheese/` and unstaged.
+
 ### Generic transaction
 
 1. **Final writing gate** — inventory, write, and read back every promised or
@@ -233,11 +246,12 @@ the repository metadata directory is the literal `.git` path.
 | Git Town | `git town --version` | `git-town.main-branch` config | [`git-town.md`](references/git-town.md) |
 | `gh stack` | `gh extension list` contains `github/gh-stack` | remote enablement is detected on operation | [`gh-stack.md`](references/gh-stack.md) |
 
-Run probes on every invocation. If several providers are usable, preserve the
-one already tracking the branch. When none tracks it, prefer Graphite, then Git
-Town, then `gh stack`, and state the choice. If no provider is usable after
-stacked was selected, stop with setup instructions; do not emulate stacking
-with plain pushes.
+Use the `stack-tools` report on every invocation. If several providers are
+usable, preserve the one already tracking the branch. When none tracks it,
+use the report's `recommended` provider and state the choice. A `gh-stack`
+recommendation still requires its remote enablement check during operation. If
+no provider is usable after stacked was selected, stop with setup instructions;
+do not emulate stacking with plain pushes.
 
 ## Existing PR updates
 
@@ -261,5 +275,32 @@ submission; never use a bare single-branch push inside the stack.
 
 ## Completion
 
-Report mode, topology/provider, artifact completion rows, quality-gate result,
-commit SHA(s), PR URL(s) when published, and any remaining risk.
+Write the terminal evidence to a transient JSON file, then run
+`python3 skills/plate/scripts/plate.pyz validate-publication <state.json>`.
+Report completion only when it returns normalized evidence with `valid: true`.
+
+```json
+{
+  "mode": "new-pr",
+  "topology": "single",
+  "provider": "ordinary",
+  "artifacts": [
+    {"target": "docs/adr/example.md", "backend": "tilth", "verified": true}
+  ],
+  "gate": {"command": "just check", "result": "pass"},
+  "commits": ["0123456789abcdef0123456789abcdef01234567"],
+  "prs": [
+    {
+      "url": "https://github.com/example/repo/pull/42",
+      "base": "main",
+      "head": "feature",
+      "verified": true
+    }
+  ],
+  "risk": "none"
+}
+```
+
+Use empty `commits` or `prs` lists when the selected mode does not create them.
+Topology preflight uses `gate: {"command": "n/a", "result": "n/a"}` because it
+stops before the publication transaction and quality gate.
