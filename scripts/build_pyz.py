@@ -133,12 +133,6 @@ def _validate_generated_runtime() -> None:
     _checked_in_document_rules_bytes(_compiled_document_rules_source())
 
 
-def _schema_catalog_bytes_for(skills: list[str]) -> bytes | None:
-    if not skills:
-        return None
-    return _checked_in_schema_catalog_bytes(_compiled_schema_catalog_source())
-
-
 def _normalize(name: str) -> str:
     return re.sub(r"[-_.]+", "-", name).lower()
 
@@ -320,7 +314,7 @@ def _download_runtime_wheels(wheelhouse: Path) -> tuple[Path, ...]:
 def build_wheelhouse(
     wheelhouse: Path,
     skills: Iterable[str] | None = None,
-) -> dict[str, Path]:
+) -> None:
     """Build the private pure-Python wheelhouse used by Shiv."""
     selected = tuple(skills or SKILLS)
     unknown = sorted(set(selected) - set(SKILLS))
@@ -331,20 +325,10 @@ def build_wheelhouse(
     with tempfile.TemporaryDirectory(prefix="easy-cheese-projects-") as temporary:
         projects = Path(temporary)
         _download_runtime_wheels(wheelhouse)
-        schema = _build_schema_wheel(wheelhouse)
-        shared = _build_shared_wheel(projects, wheelhouse)
-        apps = {
-            f"easy-cheese-{skill}": _build_skill_wheel(skill, projects, wheelhouse)
-            for skill in selected
-        }
-    wheels = {
-        _normalize(_wheel_metadata(path)[0]): path
-        for path in sorted(wheelhouse.glob("*.whl"))
-    }
-    wheels[_normalize("easy-cheese-schemas")] = schema
-    wheels[_normalize("easy-cheese-shared")] = shared
-    wheels.update({_normalize(name): path for name, path in apps.items()})
-    return wheels
+        _build_schema_wheel(wheelhouse)
+        _build_shared_wheel(projects, wheelhouse)
+        for skill in selected:
+            _build_skill_wheel(skill, projects, wheelhouse)
 
 
 def _resolved_requirements(skill: str, wheelhouse: Path) -> str:
@@ -478,11 +462,6 @@ def build_bundle(skill: str, target: Path, *, update_locks: bool = False) -> Pat
     return build_bundles({skill: target}, update_locks=update_locks)[skill]
 
 
-def _build_bundle(skill: str, target: Path, **_: object) -> Path:
-    """Compatibility wrapper for release staging and focused tests."""
-    return build_bundle(skill, target)
-
-
 def cached_bundle(skill: str) -> Path:
     if skill not in SKILLS:
         raise ValueError(f"unknown skill: {skill}")
@@ -513,7 +492,15 @@ def main(argv: list[str]) -> int:
     try:
         built = build_bundles(destinations, update_locks=args.update_locks)
     except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
+        print(
+            f"ERROR: bundle build failed for {', '.join(selected)}: {exc}",
+            file=sys.stderr,
+        )
+        if isinstance(exc, subprocess.CalledProcessError):
+            for stream_name, output in (("stdout", exc.stdout), ("stderr", exc.stderr)):
+                if output:
+                    text = output.decode(errors="replace") if isinstance(output, bytes) else output
+                    print(f"--- subprocess {stream_name} ---\n{text.rstrip()}", file=sys.stderr)
         return 1
     for target in built.values():
         print(f"built {target}")

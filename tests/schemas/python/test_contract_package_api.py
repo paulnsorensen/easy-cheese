@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import subprocess
+import sys
 import venv
 from importlib.util import find_spec
 from pathlib import Path
@@ -156,11 +157,12 @@ def test_installed_wheel_exposes_exact_bundled_fixtures(tmp_path: Path) -> None:
     wheel_dir = tmp_path / "dist"
     subprocess.run(
         [
-            "uv",
-            "build",
-            "--wheel",
-            "--no-config",
-            "--out-dir",
+            sys.executable,
+            "-m",
+            "pip",
+            "wheel",
+            "--no-deps",
+            "--wheel-dir",
             str(wheel_dir),
             str(REPO_ROOT),
         ],

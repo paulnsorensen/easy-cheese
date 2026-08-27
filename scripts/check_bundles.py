@@ -4,12 +4,10 @@
 Run after `build_pyz.py` has rebuilt the working tree: this compares each
 rebuilt bundle against the copy committed at HEAD.
 
-The comparison is per-member name, CRC, and uncompressed size rather than raw
-bytes. Shiv assembles deterministic wheel members, but ZIP metadata can vary
-between toolchains. A raw-byte diff would therefore fail for contributors whose
-runtime differs from whoever last committed, which is noise, not staleness.
-Member CRCs still catch the signal this gate exists for: a source edit that never
-made it into the committed bundle.
+The comparison uses per-member content signatures rather than raw archive bytes.
+Shiv assembles deterministic wheel members, but ZIP metadata and interpreter
+paths can vary between toolchains. Host-specific fields are canonicalized; a
+source edit that never made it into the committed bundle still fails this gate.
 
 Committed common.pyz archives are rejected: each skill owns a same-named archive.
 """
@@ -17,6 +15,9 @@ Committed common.pyz archives are rejected: each skill owns a same-named archive
 from __future__ import annotations
 
 import io
+import hashlib
+import json
+import re
 import subprocess
 import sys
 import zipfile
@@ -26,21 +27,93 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 BUNDLE_GLOB = "skills/*/scripts/*.pyz"
 
 
-def _manifest(data: bytes) -> dict[str, tuple[int, int]]:
+def _site_packages_hash(
+    archive: zipfile.ZipFile,
+    *,
+    normalize_wrappers: bool,
+    include_record: bool,
+) -> str:
+    digest = hashlib.sha256()
+    members = sorted(
+        [
+            info
+            for info in archive.infolist()
+            if info.filename.startswith("site-packages/")
+            and not info.filename.endswith("/")
+            and not info.filename.endswith(".pyc")
+            and (include_record or not info.filename.endswith(".dist-info/RECORD"))
+        ],
+        key=lambda info: info.filename,
+    )
+    for info in members:
+        data = archive.read(info)
+        if normalize_wrappers and info.filename.startswith("site-packages/bin/"):
+            data = _canonical_wrapper(data)
+        relative = info.filename.removeprefix("site-packages/")
+        digest.update(data)
+        digest.update(relative.encode())
+    return digest.hexdigest()
+
+
+def _canonical_environment(data: bytes, *, canonical_build_id: str) -> bytes:
+    """Normalize Shiv's host timestamp and derive a portable cache ID."""
+    environment = json.loads(data)
+    environment.pop("built_at", None)
+    environment["build_id"] = canonical_build_id
+    return json.dumps(environment, sort_keys=True, separators=(",", ":")).encode()
+
+
+def _canonical_wrapper(data: bytes) -> bytes:
+    """Normalize only the interpreter token, retaining shebang arguments."""
+    def replace(match: re.Match[bytes]) -> bytes:
+        line = match.group(0)
+        command_line = line[2:]
+        if command_line.startswith(b"/usr/bin/env "):
+            command_line = command_line[len(b"/usr/bin/env ") :]
+        token, separator, args = command_line.partition(b" ")
+        executable = token.rsplit(b"/", 1)[-1]
+        if not re.fullmatch(rb"python(?:\d+(?:\.\d+)*)?", executable):
+            return line
+        suffix = separator + args
+        return b"#!<python>" + suffix
+
+    return re.sub(rb"(?m)^#![^\n]*", replace, data, count=1)
+
+
+def _manifest(data: bytes) -> dict[str, tuple[int, int] | bytes]:
     """Source member name -> (CRC, uncompressed size).
 
-    Shiv generates bootstrap metadata, console-script wrappers, and RECORD files
-    from the host interpreter, so those host-dependent members are not a source
-    staleness signal.
+    Shiv generates RECORD files and host-specific interpreter paths from the
+    local toolchain. Execution configuration and wrapper bodies remain signals;
+    only those host-dependent fields are canonicalized.
     """
     with zipfile.ZipFile(io.BytesIO(data)) as archive:
-        return {
-            i.filename: (i.CRC, i.file_size)
-            for i in archive.infolist()
-            if i.filename != "environment.json"
-            and not i.filename.startswith("site-packages/bin/")
-            and not i.filename.endswith(".dist-info/RECORD")
-        }
+        environment = json.loads(archive.read("environment.json"))
+        stored_build_id = environment.get("build_id")
+        raw_build_id = _site_packages_hash(
+            archive, normalize_wrappers=False, include_record=True
+        )
+        if stored_build_id != raw_build_id:
+            raise ValueError(
+                "Shiv build_id does not match site-packages contents: "
+                f"stored {stored_build_id!r}, expected {raw_build_id}"
+            )
+        canonical_build_id = _site_packages_hash(
+            archive, normalize_wrappers=True, include_record=False
+        )
+        manifest: dict[str, tuple[int, int] | bytes] = {}
+        for info in archive.infolist():
+            if info.filename.endswith(".dist-info/RECORD"):
+                continue
+            if info.filename == "environment.json":
+                manifest[info.filename] = _canonical_environment(
+                    archive.read(info), canonical_build_id=canonical_build_id
+                )
+            elif info.filename.startswith("site-packages/bin/"):
+                manifest[info.filename] = _canonical_wrapper(archive.read(info))
+            else:
+                manifest[info.filename] = (info.CRC, info.file_size)
+        return manifest
 
 
 def _committed(path: Path) -> bytes | None:
@@ -53,7 +126,10 @@ def _committed(path: Path) -> bytes | None:
     return result.stdout if result.returncode == 0 else None
 
 
-def _describe(rebuilt: dict[str, tuple[int, int]], committed: dict[str, tuple[int, int]]) -> list[str]:
+def _describe(
+    rebuilt: dict[str, tuple[int, int] | bytes],
+    committed: dict[str, tuple[int, int] | bytes],
+) -> list[str]:
     problems = []
     for name in sorted(set(rebuilt) - set(committed)):
         problems.append(f"    + {name} (built, not in the committed bundle)")
@@ -77,7 +153,12 @@ def main() -> int:
             print(f"new bundle, nothing to compare: {relative}")
             continue
         checked += 1
-        problems = _describe(_manifest(path.read_bytes()), _manifest(committed))
+        try:
+            rebuilt_manifest = _manifest(path.read_bytes())
+            committed_manifest = _manifest(committed)
+            problems = _describe(rebuilt_manifest, committed_manifest)
+        except (ValueError, KeyError, json.JSONDecodeError) as exc:
+            problems = [f"    ! bundle metadata invalid: {exc}"]
         if problems:
             stale.append(f"  {relative}\n" + "\n".join(problems))
 
@@ -89,7 +170,7 @@ def main() -> int:
         print("\n".join(stale))
         return 1
 
-    print(f".pyz bundles are current ({checked} checked, by member CRC).")
+    print(f".pyz bundles are current ({checked} checked, by canonical member content).")
     return 0
 
 

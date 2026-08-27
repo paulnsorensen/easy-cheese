@@ -21,6 +21,7 @@ COOK_PAYLOAD_FIXTURES = REPO_ROOT / "tests" / "python" / "fixtures" / "cook_payl
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 import build_pyz  # noqa: E402
+import check_bundles  # noqa: E402
 
 pytestmark = pytest.mark.skipif(
     importlib.util.find_spec("build") is None
@@ -50,9 +51,11 @@ SKILL_SUBCOMMANDS = {
         "manifest_update",
         "wiring_topo_sort",
         "pr_plan_to_branches",
-        "slugify",
+        "age-route", "curd-block", "slugify", "write_handoff_artifact",
+        "read_handoff_slug", "findings_cli", "gates_cli", "paths_cli",
+        "handoff_cli", "render_html",
     ],
-    "affinage": ["pr-status", "age-route", "review-surface"],
+    "affinage": ["pr-status", "post-reply", "age-route", "review-surface"],
     "mold": [
         "artifact-path",
         "curd-count",
@@ -62,15 +65,27 @@ SKILL_SUBCOMMANDS = {
         "validate-spec",
     ],
     "briesearch": ["artifact-path", "ground-check"],
-    "cook": ["artifact-path", "worktree", "normalize", "validate", "slugify"],
-    "cure": ["slugify", "findings_cli"],
+    "cook": [
+        "artifact-path", "age-route", "baseline", "milknado", "mode", "worktree",
+        "normalize", "validate", "slugify", "write_handoff_artifact",
+        "read_handoff_slug", "findings_cli", "gates_cli", "paths_cli",
+        "handoff_cli", "render_html",
+    ],
+    "cure": [
+        "slugify", "write_handoff_artifact", "read_handoff_slug", "findings_cli",
+        "gates_cli", "paths_cli", "handoff_cli", "render_html",
+    ],
     "cut": ["red-gate"],
     "wheypoint": ["commit", "resolve", "show", "lint"],
     "easy-cheese-setup": ["global", "local", "doctor"],
-    "age": ["html-report", "slugify"],
+    "age": [
+        "artifact-path", "html-report", "age-route", "review-surface", "severity",
+        "slugify", "write_handoff_artifact", "read_handoff_slug", "findings_cli",
+        "gates_cli", "paths_cli", "handoff_cli", "render_html",
+    ],
     "hard-cheese": ["append-attempt", "freshness-check"],
     "pasteurize": ["debug-tag-sweep", "repro-rerun", "pasteurize-route"],
-    "press": ["press-route"],
+    "press": ["press-route", "red-gate"],
 }
 
 # Every skill that registers the durable-corpus resolver shim. One shared source
@@ -110,6 +125,105 @@ def test_default_batch_builds_every_registered_skill(tmp_path: Path) -> None:
     assert len(expected) == 14
     assert {path.stem for path in tmp_path.glob("*.pyz")} == expected
     assert {path.name for path in tmp_path.glob("*.pyz")} == {f"{skill}.pyz" for skill in expected}
+
+
+def _zip_with_shiv_metadata(
+    *,
+    entry_point: str = "easy_cheese.commands:main",
+    build_id: str | None = None,
+    built_at: str = "1980-01-01 00:00:00",
+    interpreter: str = "/opt/python/bin/python3",
+    wrapper_import: str = "from easy_cheese import main",
+    record: bytes = b"easy_cheese/demo.py,sha256=old,1\n",
+) -> bytes:
+    from io import BytesIO
+
+    wrapper = f"#!{interpreter}\n{wrapper_import}\nmain()\n".encode()
+    members = {
+        "easy_cheese/demo.py": b"VALUE = 1\n",
+        "bin/demo": wrapper,
+        "easy_cheese-1.0.dist-info/RECORD": record,
+    }
+    if build_id is None:
+        import hashlib
+
+        digest = hashlib.sha256()
+        for name in sorted(members):
+            digest.update(members[name])
+            digest.update(name.encode())
+        build_id = digest.hexdigest()
+
+    data = BytesIO()
+    with zipfile.ZipFile(data, "w") as archive:
+        archive.writestr(
+            "environment.json",
+            json.dumps(
+                {
+                    "build_id": build_id,
+                    "built_at": built_at,
+                    "entry_point": entry_point,
+                    "reproducible": True,
+                }
+            ),
+        )
+        archive.writestr("site-packages/bin/demo", wrapper)
+        archive.writestr("site-packages/easy_cheese/demo.py", members["easy_cheese/demo.py"])
+        archive.writestr(
+            "site-packages/easy_cheese-1.0.dist-info/RECORD", record
+        )
+    return data.getvalue()
+
+
+def test_bundle_manifest_catches_execution_metadata_tampering() -> None:
+    baseline = check_bundles._manifest(_zip_with_shiv_metadata())
+    host_variation = check_bundles._manifest(
+        _zip_with_shiv_metadata(
+            built_at="2026-08-26 10:00:00",
+            interpreter="/usr/bin/python3",
+            record=b"easy_cheese/demo.py,sha256=new,1\n",
+        )
+    )
+    assert baseline == host_variation
+
+    tampered = check_bundles._manifest(
+        _zip_with_shiv_metadata(entry_point="evil.module:main")
+    )
+    assert tampered["environment.json"] != baseline["environment.json"]
+
+    wrapper_tampered = _zip_with_shiv_metadata(
+        wrapper_import="from evil import main"
+    )
+    assert check_bundles._manifest(wrapper_tampered)["site-packages/bin/demo"] != baseline[
+        "site-packages/bin/demo"
+    ]
+
+    with pytest.raises(ValueError, match="build_id does not match"):
+        check_bundles._manifest(_zip_with_shiv_metadata(build_id="tampered"))
+
+
+def test_bundle_manifest_preserves_wrapper_flags() -> None:
+    baseline = check_bundles._manifest(
+        _zip_with_shiv_metadata(interpreter="/opt/python/bin/python3 -I")
+    )
+    host_variation = check_bundles._manifest(
+        _zip_with_shiv_metadata(interpreter="/usr/bin/env python3 -I")
+    )
+    assert baseline == host_variation
+
+    flag_tampered = check_bundles._manifest(
+        _zip_with_shiv_metadata(interpreter="/usr/bin/env python3 -X")
+    )
+    assert flag_tampered["site-packages/bin/demo"] != baseline[
+        "site-packages/bin/demo"
+    ]
+
+
+def test_bundle_manifest_keeps_non_python_shebang_distinct() -> None:
+    python = check_bundles._manifest(_zip_with_shiv_metadata())
+    shell = check_bundles._manifest(
+        _zip_with_shiv_metadata(interpreter="/bin/sh")
+    )
+    assert shell["site-packages/bin/demo"] != python["site-packages/bin/demo"]
 
 
 def _run(

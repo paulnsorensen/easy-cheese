@@ -90,35 +90,31 @@ gate.
 
 ## `.pyz` bundles
 
-Skills that consume `shared/scripts/` ship a pre-built `.pyz` so the
-shared helpers are self-contained at install time, invoked as
-`python3 skills/<skill>/scripts/<skill>.pyz <subcommand>`
-(`skills/mold/SKILL.md:23`). The roster is the `SKILLS` dict in
-`scripts/build_pyz.py`: affinage, age, briesearch, cook, cut,
-easy-cheese-setup, hard-cheese, melt, mold, pasteurize, press,
-ultracook, and wheypoint each ship their own bundle, and a shared
-`common.pyz` is additionally fanned into age, cure, and ultracook
-(`COMMON_CONSUMERS`) so a consumer-only skill is still self-contained
-after install.
+Every Python-backed skill ships exactly one same-named Shiv archive at
+`skills/<skill>/scripts/<skill>.pyz`; there is no `common.pyz` or
+`COMMON_CONSUMERS` fan-out.[^1] Runtime source lives under
+`src/easy_cheese/`: each skill application depends on the cohesive shared
+distribution and the published schemas package through package metadata.[^2]
 
-**The bundles are committed artifacts, and CI only checks them — it does
-not regenerate them.** `build-pyz.yml` runs with `permissions: contents:
-read`, builds into a scratch tree, and then runs
-`scripts/check_bundles.py`; there is no commit step. Change anything
-under `src/`, `shared/scripts/`, or the vendored deps without running
-`just bundle` and the PR goes red rather than being silently fixed up.
-The `bundle` recipe's own comment still says "CI rebuilds on every push
-to main" (`justfile:39`) — that comment is stale; the workflow is the
-authority.
+`just bundle` rebuilds every archive from PEP 517 wheels in a private
+wheelhouse. Per-skill hash locks under `requirements/bundles/` make the
+resolved runtime closure explicit; changing that closure requires the
+deliberate `scripts/build_pyz.py --update-locks` path.[^3]
 
-`check_bundles.py` compares member CRCs, not raw bytes, because
-`ZIP_DEFLATED` output differs between zlib and zlib-ng builds — a
-byte-level comparison would fail for every contributor whose toolchain
-differs from whoever last committed the bundles.
+The archives and locks are committed deployment artifacts. `build-pyz.yml`
+rebuilds them in a read-only CI job, compares canonical archive-member content
+against `HEAD`, and runs isolation tests; it never commits generated changes.
+Changes to runtime source, build inputs, locks, manifests, or committed archives
+must therefore be followed by `just bundle` before publication.[^4]
 
-`just bundle` depends on `just vendor`: `vendor/` is generated from
-hash-pinned `requirements-vendor.txt` rather than committed, so a bundle
-rebuild is deterministic but **not** offline.
+See the [bundle pipeline](./architecture/pyz-bundling-pipeline.md) and
+[skill Python bundle doctrine](./architecture/skill-python-bundle-doctrine.md)
+for the dependency and purity contracts.
+
+[^1]: scripts/build_pyz.py
+[^2]: pyproject.toml; src/easy_cheese/shared; src/easy_cheese/skills
+[^3]: scripts/build_pyz.py; requirements/bundles
+[^4]: .github/workflows/build-pyz.yml; scripts/check_bundles.py
 
 ## CI workflows
 
@@ -127,7 +123,7 @@ Under `.github/workflows/`:
 | Workflow | Trigger | Does |
 |---|---|---|
 | `validate.yml` | push main, all PRs | frontmatter validation, pytest, install.sh bats + smoke, lint |
-| `build-pyz.yml` | PRs + push main (`src/**`, `shared/scripts/**`, build script, vendored deps, the bundles themselves) | rebuild into scratch and **verify** committed `.pyz` bundles are current — never commits |
+| `build-pyz.yml` | PRs + push main (runtime source, bundle build/check code, locks, manifests, committed archives) | rebuild committed targets, verify canonical archive-member content against `HEAD`, and run bundle isolation tests — never commits |
 | `release.yml` | tag `v[0-9]*` | stage slim tree, force-push `release` branch, GitHub release |
 | `publish-pypi.yml` | push main touching `pyproject.toml`, dispatch | publish `easy-cheese-schemas` to PyPI |
 | `docs.yml` | push/PR on docs paths, dispatch | `pnpm run docs:build` (Astro/Starlight), deploy Pages on main |

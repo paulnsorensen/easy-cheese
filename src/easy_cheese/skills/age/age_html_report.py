@@ -22,19 +22,11 @@ from __future__ import annotations
 import argparse
 import html
 import re
-import sys
 import tempfile
 from pathlib import Path
 
-# Standalone runs (outside the bundle) need shared/scripts on sys.path; inside
-# the .pyz these modules are flat siblings and this dir simply won't exist. The
-# imports below therefore come after the path bootstrap (E402 is expected).
-_SHARED = Path(__file__).resolve().parents[2] / "shared" / "scripts"
-if _SHARED.is_dir() and str(_SHARED) not in sys.path:
-    sys.path.insert(0, str(_SHARED))
-
-from easy_cheese.shared import cli, html_report  # noqa: E402
-from easy_cheese.shared import findings as findings_mod  # noqa: E402
+from easy_cheese.shared import cli, html_report
+from easy_cheese.shared import findings as findings_mod
 
 # Reuse /age's canonical severity-heading + bullet matchers so this consumer
 # stays in lockstep with the emit format findings.py already tracks.

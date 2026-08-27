@@ -215,7 +215,7 @@ def test_the_wheypoint_runtime_imports_from_inside_the_zip(wheypoint_pyz: Path) 
 
 def test_the_wheypoint_bundle_is_deterministic(tmp_path) -> None:
     """Byte-equality against the committed artifact is CI's job (check_bundles.py
-    compares member CRCs, because zlib builds differ). What is verifiable
+    compares canonical member content, because ZIP metadata differs). What is verifiable
     anywhere is that two builds of one source tree agree."""
     first = build_pyz.build_bundle("wheypoint", tmp_path / "a.pyz")
     second = build_pyz.build_bundle("wheypoint", tmp_path / "b.pyz")
@@ -262,6 +262,29 @@ def test_shiv_command_uses_a_local_hash_locked_wheelhouse(tmp_path: Path) -> Non
     assert command[command.index("--requirement") + 1] == str(requirements)
 
 
+def test_build_cli_preserves_resolver_diagnostics(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    failure = subprocess.CalledProcessError(
+        1,
+        ["pip", "install"],
+        output="resolver stdout",
+        stderr="resolver stderr",
+    )
+
+    def fail(*args: object, **kwargs: object) -> None:
+        del args, kwargs
+        raise failure
+
+    monkeypatch.setattr(build_pyz, "build_bundles", fail)
+
+    assert build_pyz.main(["build_pyz.py", "--out-dir", str(tmp_path), "cut"]) == 1
+    diagnostics = capsys.readouterr().err
+    assert "cut" in diagnostics
+    assert "subprocess stdout" in diagnostics
+    assert "subprocess stderr" in diagnostics
+
+
 def test_requirements_close_internal_dependencies_with_sha256_locks(tmp_path: Path) -> None:
     del tmp_path
     lines = (REPO_ROOT / "requirements" / "bundles" / "cut.txt").read_text().splitlines()
@@ -272,7 +295,9 @@ def test_requirements_close_internal_dependencies_with_sha256_locks(tmp_path: Pa
     assert any(line.startswith("easy-cheese-schemas==") for line in lines)
 
 
-def _test_wheel(path: Path, *, pure: bool = True, native: bool = False) -> Path:
+def _test_wheel(
+    path: Path, *, pure: bool = True, native_suffix: str | None = None
+) -> Path:
     dist_info = "demo-1.0.0.dist-info"
     with zipfile.ZipFile(path, "w") as archive:
         archive.writestr(
@@ -284,15 +309,29 @@ def _test_wheel(path: Path, *, pure: bool = True, native: bool = False) -> Path:
             f"Wheel-Version: 1.0\nRoot-Is-Purelib: {'true' if pure else 'false'}\n"
             "Tag: py3-none-any\n",
         )
-        archive.writestr("demo.so" if native else "demo.py", b"")
+        archive.writestr(f"demo{native_suffix}" if native_suffix else "demo.py", b"")
     return path
 
 
-def test_validate_pure_wheel_rejects_native_and_non_pure_wheels(tmp_path: Path) -> None:
-    native = _test_wheel(tmp_path / "demo-1.0.0-py3-none-any.whl", native=True)
+@pytest.mark.parametrize("suffix", [".so", ".pyd", ".dylib"])
+def test_validate_pure_wheel_rejects_native_suffixes(
+    tmp_path: Path, suffix: str
+) -> None:
+    native = _test_wheel(
+        tmp_path / "demo-1.0.0-py3-none-any.whl",
+        native_suffix=suffix,
+    )
     with pytest.raises(ValueError, match="native members"):
         build_pyz.validate_pure_wheel(native)
 
+
+def test_validate_pure_wheel_rejects_false_root_is_purelib(tmp_path: Path) -> None:
+    wheel = _test_wheel(tmp_path / "demo-1.0.0-py3-none-any.whl", pure=False)
+    with pytest.raises(ValueError, match="Root-Is-Purelib: true"):
+        build_pyz.validate_pure_wheel(wheel)
+
+
+def test_validate_pure_wheel_rejects_non_universal_tag(tmp_path: Path) -> None:
     renamed = _test_wheel(
         tmp_path / "demo-1.0.0-cp314-cp314-macosx_14_0_arm64.whl"
     )

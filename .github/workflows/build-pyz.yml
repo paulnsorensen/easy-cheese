@@ -61,8 +61,8 @@ jobs:
       - name: Build bundles
         run: python3 scripts/build_pyz.py
 
-      # Compares member CRCs, not raw bytes: Shiv's ZIP metadata can vary between
-      # toolchains. See scripts/check_bundles.py.
+      # Compares canonical member content, not raw bytes: Shiv's ZIP metadata and
+      # interpreter paths can vary between toolchains. See scripts/check_bundles.py.
       - name: Check bundles are current
         run: python3 scripts/check_bundles.py
 

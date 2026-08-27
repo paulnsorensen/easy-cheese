@@ -323,15 +323,6 @@ def test_bundle_build_rejects_stale_checked_in_catalog(
     assert not target.exists()
 
 
-def test_every_bundle_validates_schema_catalog() -> None:
-    scripts = REPO_ROOT / "scripts"
-    if str(scripts) not in sys.path:
-        sys.path.insert(0, str(scripts))
-    build_pyz = _load("schema_catalog_build_all", scripts / "build_pyz.py")
-    assert build_pyz._schema_catalog_bytes_for(["melt"]) == (
-        REPO_ROOT / "src/easy_cheese_schemas/_schema_catalog.py"
-    ).read_bytes()
-
 def test_compile_rejects_duplicate_source() -> None:
     declaration = _declarations()[0]
 
