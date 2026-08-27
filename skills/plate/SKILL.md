@@ -127,6 +127,16 @@ stack machinery below. Any other branch uses the policy above unchanged.
    - Topology preflight persists the resolution, reads it back, and stops before
      any commit, branch mutation, push, or PR operation.
 
+## Tool routing
+
+- Use Git and GitHub or the selected provider CLI for repository, remote, PR,
+  and stack state.
+- Use the repository code-intelligence backend for tracked artifact edits and
+  read-back; use named paths and stale-safe writes instead of shell redirects.
+- Route durable wiki knowledge through `/wiki-ingest`; never hand-edit the
+  Hallouminate tree.
+- Keep transient completion and PR-body files under `.cheese/` and unstaged.
+
 ### Generic transaction
 
 1. **Final writing gate** — inventory, write, and read back every promised or
@@ -261,5 +271,21 @@ submission; never use a bare single-branch push inside the stack.
 
 ## Completion
 
-Report mode, topology/provider, artifact completion rows, quality-gate result,
-commit SHA(s), PR URL(s) when published, and any remaining risk.
+Emit this terminal record after verification:
+
+```yaml
+mode: commit-only | topology-preflight | new-pr | existing-pr | stack-maintenance
+topology: single | stacked | n/a
+provider: ordinary | graphite | git-town | gh-stack | n/a
+artifacts:
+  - {target: <path-or-resource>, backend: <backend>, verified: true}
+gate: {command: <command>, result: pass}
+commits: [<sha>]
+prs:
+  - {url: <url>, base: <branch>, head: <branch>, verified: true}
+risk: none | <one line>
+```
+
+Use empty `commits` or `prs` lists when the selected mode does not create them.
+Topology preflight also uses `gate: {command: n/a, result: n/a}` because it stops
+before the publication transaction and quality gate.
