@@ -129,7 +129,7 @@ stack machinery below. Any other branch uses the policy above unchanged.
 
 ## Tool routing
 
-- Run `python3 ${CLAUDE_SKILL_DIR}/scripts/plate.pyz stack-tools` before
+- Run `python3 skills/plate/scripts/plate.pyz stack-tools` before
   selecting a stack provider. It probes Graphite, Git Town, and `gh stack`
   without mutating repository state.
 - Use Git and GitHub or the selected provider CLI for repository, remote, PR,
@@ -276,7 +276,7 @@ submission; never use a bare single-branch push inside the stack.
 ## Completion
 
 Write the terminal evidence to a transient JSON file, then run
-`python3 ${CLAUDE_SKILL_DIR}/scripts/plate.pyz validate-publication <state.json>`.
+`python3 skills/plate/scripts/plate.pyz validate-publication <state.json>`.
 Report completion only when it returns normalized evidence with `valid: true`.
 
 ```json
