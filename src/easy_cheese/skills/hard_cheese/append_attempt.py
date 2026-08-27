@@ -7,7 +7,7 @@ retried gate) cannot clobber the attempt log.
 
 Usage:
 
-    python3 skills/hard-cheese/scripts/append-attempt.py \\
+    python3 skills/hard-cheese/scripts/hard-cheese.pyz append-attempt \\
         --slug <slug> --status PASS --score 4 \\
         --feedback "diff-grounded, names invariants" \\
         --explanation "<user explanation verbatim>"
@@ -37,7 +37,7 @@ except ImportError:  # pragma: no cover - exercised only on Windows
     fcntl = None
     import msvcrt
 
-from easy_cheese.shared import cli  # noqa: E402
+from easy_cheese.shared import cli
 
 REPO_ROOT = Path.cwd()
 
@@ -153,6 +153,10 @@ def _setup(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--feedback", required=True, help="one-line judge feedback")
     parser.add_argument("--explanation", required=True, help="user explanation verbatim")
     parser.set_defaults(func=_cmd_append)
+
+
+def main(argv: list[str] | None = None) -> int:
+    return cli.run(_setup, argv=argv)
 
 
 if __name__ == "__main__":
