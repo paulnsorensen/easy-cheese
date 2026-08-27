@@ -86,6 +86,7 @@ def dispatch(
     if command is None:
         print(f"usage: <pyz> {{{choices}}} [args...]", file=sys.stderr)
         return 2
+    sys.argv = [name, *argv[1:]]
     result = command.function(list(argv[1:]))
     if not isinstance(result, int):
         raise TypeError(f"bundle command {name!r} did not return an integer status")

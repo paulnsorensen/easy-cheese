@@ -155,8 +155,8 @@ def _setup(parser: argparse.ArgumentParser) -> None:
     parser.set_defaults(func=_cmd_append)
 
 
-def main(argv: list[str] | None = None, *, prog: str | None = None) -> int:
-    return cli.run(_setup, argv=argv, prog=prog)
+def main(argv: list[str] | None = None) -> int:
+    return cli.run(_setup, argv=argv)
 
 
 if __name__ == "__main__":
