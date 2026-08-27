@@ -1,21 +1,19 @@
 # Skill Python bundle doctrine
 
-Every skill that executes Python ships at most one same-named `.pyz` and invokes Python only through that archive. Runtime source is organized as importable packages under `src/`; checked-in skill directories contain deployment artifacts, not Python source.
-
-This doctrine was approved on 2026-08-24. The repository does not yet conform fully; enforcement and migration belong to follow-up work rather than the doctrine-only change that introduced these rules.
+Every Python-backed skill ships one same-named Shiv archive built from standard package metadata. Runtime source lives under `src/`; checked-in skill directories contain deployment artifacts, not Python source. The repository conforms to this contract for every packaged Python skill.[^1]
 
 ## Skill deployment contract
 
 - A skill that executes Python ships exactly `skills/<skill>/scripts/<skill>.pyz`.
 - A skill that does not execute Python ships no `.pyz`.
-- Skill instructions and references invoke only their own bundled archive. They never invoke `src/**/*.py`, repository automation, loose Python helpers, `common.pyz`, or another skill's archive.
-- Skill-root-relative paths are the portable reference form required by the Agent Skills file-reference convention.[^1]
-- Python source never lives under `skills/`. Checked-in `.pyz` files are generated deployment artifacts, never source of truth.
-- Non-executable references and assets remain ordinary skill resources; “bundle-only” applies to executable Python, not Markdown, schemas, templates, or other documentation.
+- Skill prose invokes only its own archive. It never invokes loose source, repository automation, `common.pyz`, or another skill's archive.
+- Python source never lives under `skills/`. Checked-in archives are generated release artifacts.
+- Markdown, schemas, templates, and other non-executable resources remain ordinary skill files.
+- Shiv is a build dependency only. Running an archive requires Python, not Shiv or pip.[^2]
 
-## Source layout
+## Source and distribution layout
 
-Runtime Python has two import packages:
+Runtime Python uses two import packages:
 
 ```text
 src/
@@ -26,50 +24,64 @@ src/
 └── easy_cheese_schemas/
 ```
 
-- `easy_cheese_schemas` is the independently published PyPI package.
-- `easy_cheese` is repository-internal and must be excluded from the PyPI distribution.
-- Skill slugs remain kebab-case in `skills/`; import-package segments use underscores because Python import packages should be valid identifiers.[^2]
-- Shared runtime helpers live in `src/easy_cheese/shared/`.
-- Skill-owned runtime code lives in `src/easy_cheese/skills/<python_skill_name>/`.
-- Tests remain under `tests/`.
-- Repository build, release, generation, and maintenance programs may live under `scripts/`. Runtime Python has no other source root.
+- `easy_cheese_schemas` is the independently published distribution.
+- `easy-cheese-shared` is a repository-internal distribution containing the cohesive shared runtime package.
+- Each Python skill is a separate internal application distribution named `easy-cheese-<skill>`.
+- Skill slugs stay kebab-case; Python package segments use underscores.
+- Skill-owned code lives in `src/easy_cheese/skills/<python_skill_name>/`; its `commands.py` declares the console surface.
+- Shared code lives in `src/easy_cheese/shared/`.
+- Tests stay under `tests/`; build, release, generation, and maintenance programs may live under `scripts/`.[^3]
 
-The `src` layout separates importable code from repository files and prevents accidental imports from the working directory.[^3]
+Distribution dependencies carry the runtime relationship: each application depends on `easy-cheese-shared`, and shared depends on `easy-cheese-schemas`. Pip resolves that graph inside a private wheelhouse; no hand-maintained source closure map remains.[^4]
 
 ## Zip-safe runtime
 
-A skill archive may contain Python modules, bytecode, and immutable package resources. Bundled dependencies must be pure Python and zip-importable.
+Bundles may contain Python modules, bytecode, immutable package resources, and distribution metadata. All dependency wheels must be platform-independent pure Python.
 
-The following are prohibited:
+The following remain prohibited:
 
-- native extension modules such as `.so` and `.pyd`;
-- platform-specific libraries such as bundled `.dll` or `.dylib` files;
+- native extension modules such as `.so`, `.pyd`, and `.dylib`;
+- platform-specific wheels;
 - required external executables;
 - runtime package installation or downloads;
-- mandatory extraction before the skill can run.
+- caller-managed extraction before a skill can run.
 
-Python's ZIP importer supports `.py` and `.pyc` modules but explicitly rejects dynamic extension modules.[^4] Package resources may be read from ZIP archives through `importlib.resources`, so non-Python immutable data is allowed when it is part of the reachable runtime closure.[^5]
+Shiv's transparent cache extraction is part of the archive runtime contract, not a caller responsibility. The archive launches itself, selects its cached environment, and runs the packaged console script.[^5]
 
-## Minimal bundles
+## Runtime closure
 
-Minimal means both few artifacts and narrow contents:
+Each bundle contains:
 
-1. At most one same-named `.pyz` per skill.
-2. Only that skill's entrypoints and transitive runtime closure.
-3. Only required shared and schema modules.
-4. Only approved pure-Python third-party dependencies.
-5. No whole-package or whole-tree inclusion without explicit justification.
+1. one skill application distribution;
+2. the cohesive internal shared distribution;
+3. the schema distribution;
+4. approved pure-Python third-party distributions.
 
-The build must eventually enforce dependency closure, reject native artifacts, verify bundle currency, and execute every bundled interface with repository paths, `PYTHONPATH`, and ambient site packages unavailable. Those gates are follow-up implementation work; this page establishes their target contract.
+Shipping the full shared distribution is intentional. Shared is one internal dependency boundary, and metadata-driven installation removes the custom AST scanner, exception registries, and repeated closure maintenance that previously selected individual shared modules. Other skill application distributions remain excluded, and tests assert that boundary.[^6]
+
+## Build enforcement
+
+The build must:
+
+- construct every internal distribution through PEP 517;
+- resolve dependencies only from the private wheelhouse;
+- require hashes for each per-skill lock;
+- reject non-`py3-none-any` wheels, false `Root-Is-Purelib` metadata, and native members;
+- produce one same-named archive per discovered `commands.py`;
+- verify checked-in generated schema/runtime sources;
+- exercise bundled interfaces without repository imports or ambient site packages;
+- compare rebuilt archive member names, CRCs, and sizes with the committed artifacts.[^7]
 
 ## Superseded topology
 
-This doctrine supersedes the current split between `src/` and `shared/scripts/`, the multi-consumer `common.pyz`, cross-skill archive calls, and retained runtime ownership under the retired `ultracook` skill. Until migration lands, [[pyz-bundling-pipeline]] documents current behavior while this page defines the target.
+This doctrine supersedes the split runtime roots under `src/<skill>/` and `shared/scripts/`, multi-consumer `common.pyz` archives, cross-skill archive calls, `vendor_deps.py`, the custom ZIP writer, and AST-based closure inference. [[pyz-bundling-pipeline]] records the implemented pipeline.
 
-[^1]: https://agentskills.io/specification#file-references
-[^2]: https://packaging.python.org/en/latest/discussions/distribution-package-vs-import-package/
-[^3]: https://packaging.python.org/en/latest/discussions/src-layout-vs-flat-layout/
-[^4]: https://docs.python.org/3/library/zipimport.html
-[^5]: https://docs.python.org/3/library/importlib.resources.html
+[^1]: AGENTS.md; scripts/build_pyz.py
+[^2]: requirements-build.txt; .github/workflows/build-pyz.yml
+[^3]: src/easy_cheese/skills/; src/easy_cheese/shared/; src/easy_cheese_schemas/
+[^4]: scripts/build_pyz.py:`_project_toml`, `_build_shared_wheel`, `_build_skill_wheel`
+[^5]: scripts/build_pyz.py:`_shiv_command`; AGENTS.md
+[^6]: tests/python/test_pyz_bundle.py:`test_bundle_carries_only_its_own_skill_package`, `test_briesearch_bundle_uses_internal_distributions`
+[^7]: scripts/build_pyz.py:`validate_pure_wheel`; scripts/check_bundles.py; tests/python/test_pyz_bundle.py
 
-_Source: human-approved repository doctrine · Updated: 2026-08-24 · Supersedes: split runtime roots and shared common bundle topology_
+_Source: implemented repository architecture · Updated: 2026-08-26 · Supersedes: split runtime roots, custom closure inference, vendored trees, and shared common archives_
