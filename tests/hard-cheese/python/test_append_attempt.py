@@ -37,6 +37,50 @@ def _run(env_dir: Path, *args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+def _run_bundle(*args: str) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    env.pop("PYTHONPATH", None)
+    return subprocess.run(
+        [sys.executable, str(BUNDLE), *args],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=REPO_ROOT,
+    )
+
+
+def test_empty_args_prints_usage_and_exits_two() -> None:
+    result = _run_bundle()
+
+    assert result.returncode == 2
+    assert "append-attempt" in result.stdout
+    assert "freshness-check" in result.stdout
+
+
+def test_help_flag_prints_usage_and_exits_zero() -> None:
+    result = _run_bundle("--help")
+
+    assert result.returncode == 0
+    assert "append-attempt" in result.stdout
+    assert "freshness-check" in result.stdout
+
+
+def test_unknown_command_prints_usage_to_stderr() -> None:
+    result = _run_bundle("unknown")
+
+    assert result.returncode == 2
+    assert "append-attempt" in result.stderr
+    assert "freshness-check" in result.stderr
+
+
+def test_subcommand_help_names_the_command() -> None:
+    result = _run_bundle("append-attempt", "--help")
+
+    assert result.returncode == 0
+    assert result.stderr == ""
+    assert result.stdout.startswith("usage: append-attempt ")
+
+
 def _read_rows(artifact: Path) -> list[str]:
     lines = artifact.read_text(encoding="utf-8").splitlines()
     # Drop header (lines 0-1: header row + separator).

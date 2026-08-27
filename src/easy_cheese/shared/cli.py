@@ -39,10 +39,11 @@ def _inject_global_flags(parser: argparse.ArgumentParser) -> None:
 def run(
     setup: Callable[[argparse.ArgumentParser], None], *,
     argv: Sequence[str] | None = None,
+    prog: str | None = None,
     stdout: TextIO | None = None,
 ) -> int:
     """Dispatch and return a status; argparse help/errors retain SystemExit."""
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(prog=prog)
     setup(parser)
     _inject_global_flags(parser)
     args = parser.parse_args(argv)

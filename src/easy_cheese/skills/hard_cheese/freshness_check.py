@@ -16,7 +16,7 @@ States and exit codes:
 
 Usage:
 
-    python3 skills/hard-cheese/scripts/freshness-check.py --slug <slug> [--json]
+    python3 skills/hard-cheese/scripts/hard-cheese.pyz freshness-check --slug <slug> [--json]
 
 Output is the state string by default, or `{"state": ..., "diff_head": ...}`
 when `--json` is passed. Stdlib-only.
@@ -29,7 +29,6 @@ import subprocess
 from pathlib import Path
 from typing import TypedDict
 
-# cli is co-staged in the bundled .pyz alongside this module
 from easy_cheese.shared import cli
 
 EXIT_FOR_STATE = {"previously_passed": 0, "stale": 2, "new": 3}
@@ -246,6 +245,10 @@ def _setup(parser: argparse.ArgumentParser) -> None:
         help="override git cwd for rev-parse (default: cwd). Test hook.",
     )
     parser.set_defaults(func=_cmd_check)
+
+
+def main(argv: list[str] | None = None, *, prog: str | None = None) -> int:
+    return cli.run(_setup, argv=argv, prog=prog)
 
 
 if __name__ == "__main__":

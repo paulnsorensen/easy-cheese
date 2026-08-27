@@ -1,16 +1,25 @@
-"""Command surface for the Hard Cheese application bundle."""
+"""Command surface for the hard-cheese application bundle."""
 
 from __future__ import annotations
 
 import sys
 
-from easy_cheese.shared.bundle_commands import dispatch_modules
+from easy_cheese.shared import bundle_commands
 
-COMMANDS = {
-    "append-attempt": "easy_cheese.skills.hard_cheese.append_attempt",
-    "freshness-check": "easy_cheese.skills.hard_cheese.freshness_check",
-}
+from . import append_attempt, freshness_check
+
+
+@bundle_commands.bundle_command("append-attempt")
+def run_append_attempt(argv: list[str]) -> int:
+    """Append a hard-cheese attempt row."""
+    return append_attempt.main(argv, prog="append-attempt")
+
+
+@bundle_commands.bundle_command("freshness-check")
+def run_freshness_check(argv: list[str]) -> int:
+    """Check whether a hard-cheese attempt is fresh."""
+    return freshness_check.main(argv, prog="freshness-check")
 
 
 def main(argv: list[str] | None = None) -> int:
-    return dispatch_modules(COMMANDS, sys.argv[1:] if argv is None else argv)
+    return bundle_commands.dispatch(__name__, sys.argv[1:] if argv is None else argv)
