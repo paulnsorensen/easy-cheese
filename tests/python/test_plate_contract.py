@@ -1,6 +1,5 @@
+import json
 from pathlib import Path
-
-import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -63,8 +62,8 @@ def test_plate_routes_tools_and_reports_a_scannable_completion_record() -> None:
     assert "/wiki-ingest" in skill
 
     completion = skill.split("## Completion", maxsplit=1)[1]
-    block = completion.split("```yaml\n", maxsplit=1)[1].split("\n```", maxsplit=1)[0]
-    record = yaml.safe_load(block)
+    block = completion.split("```json\n", maxsplit=1)[1].split("\n```", maxsplit=1)[0]
+    record = json.loads(block)
     assert set(record) == {
         "mode",
         "topology",
@@ -75,10 +74,13 @@ def test_plate_routes_tools_and_reports_a_scannable_completion_record() -> None:
         "prs",
         "risk",
     }
-    assert "topology-preflight" in record["mode"]
+    assert record["mode"] == "new-pr"
     assert record["artifacts"][0]["verified"] is True
     assert record["gate"]["result"] == "pass"
-    assert "gate: {command: n/a, result: n/a}" in completion
+    assert "Topology preflight" in completion
+    assert 'gate: {"command": "n/a", "result": "n/a"}' in completion
+    assert "scripts/plate.pyz validate-publication" in completion
+    assert "scripts/plate.pyz stack-tools" in skill
 
 
 def test_plate_stack_references_preserve_absorbed_behavior_and_safety() -> None:

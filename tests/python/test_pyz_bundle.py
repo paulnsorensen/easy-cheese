@@ -65,6 +65,7 @@ SKILL_SUBCOMMANDS = {
         "validate-spec",
     ],
     "briesearch": ["artifact-path", "ground-check"],
+    "plate": ["stack-tools", "validate-publication"],
     "cook": [
         "artifact-path", "age-route", "baseline", "milknado", "mode", "worktree",
         "normalize", "validate", "slugify", "write_handoff_artifact",
@@ -122,7 +123,7 @@ def bundles(tmp_path_factory) -> Path:
 def test_default_batch_builds_every_registered_skill(tmp_path: Path) -> None:
     assert build_pyz.main(["build_pyz.py", "--out-dir", str(tmp_path)]) == 0
     expected = set(build_pyz.SKILLS)
-    assert len(expected) == 14
+    assert len(expected) == 15
     assert {path.stem for path in tmp_path.glob("*.pyz")} == expected
     assert {path.name for path in tmp_path.glob("*.pyz")} == {f"{skill}.pyz" for skill in expected}
 
@@ -331,6 +332,38 @@ def test_ultracook_routing_is_subcommand_specific(
     assert "manifest.slug is required" in manifest.stderr
     assert "manifest.slug" not in pr_plan.stderr
     assert "shape must be one of single" in pr_plan.stderr
+
+
+def test_plate_bundle_validates_publication_without_source_imports(
+    bundles: Path, tmp_path: Path
+) -> None:
+    state = {
+        "mode": "commit-only",
+        "topology": "n/a",
+        "provider": "n/a",
+        "artifacts": [],
+        "gate": {"command": "just check", "result": "pass"},
+        "commits": ["0022ccafb9568b5ddf04f6d3b86592885184427a"],
+        "prs": [],
+        "risk": "none",
+    }
+    path = tmp_path / "publication.json"
+    path.write_text(json.dumps(state))
+
+    result = _run(bundles / "plate.pyz", "validate-publication", str(path))
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["valid"] is True
+
+
+def test_plate_bundle_reports_stack_tools_without_source_imports(
+    bundles: Path, tmp_path: Path
+) -> None:
+    result = _run(bundles / "plate.pyz", "stack-tools", "--cwd", str(tmp_path))
+
+    assert result.returncode == 0, result.stderr
+    report = json.loads(result.stdout)
+    assert set(report["providers"]) == {"graphite", "git-town", "gh-stack"}
 
 
 def test_bundle_carries_only_its_own_skill_package(bundles: Path) -> None:
