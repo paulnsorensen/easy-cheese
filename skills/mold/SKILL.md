@@ -23,6 +23,18 @@ Two modes, by analogy to `/culture`:
 7. **Curdle** — resolve the durable spec path with `SPEC=$(python3 skills/mold/scripts/mold.pyz artifact-path specs <slug>)`. Phase one writes every local artifact and write-ahead prepared state *before any external call*: the approved spec at `"$SPEC"`, the host-validated `PlannerResult` and `CurdPlan`, any local issue drafts, and the session's non-obvious decisions as durable ADRs. Phase two then publishes approved follow-ups, retains prepared recovery state when an external capability is unavailable or publication fails, and reconciles their state and references into the durable spec before any handoff.
 8. **Count and hand off** — after reconciliation, run [`mold.pyz curd-count`](references/curd-count.md), then prompt via `## Handoff`; dispatch only the user's non-stop selection.
 
+Typed publication uses only the bundled boundary command:
+
+```text
+python3 skills/mold/scripts/mold.pyz contract publish \
+  --writer-view <path> --destination cook --operation-id <id> --out-dir <dir>
+```
+
+Mold writes the canonical payload and optional normalization receipt before it
+atomically reveals the pointer. Legacy input enters only through
+`contract migrate --legacy-handoff <path>`; never pass a legacy or bare payload
+to Cook.
+
 Portability: [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md). Prefer bundled/repo-local helpers; slash commands are host renderings, not the control model.
 
 ## Follow-up candidates

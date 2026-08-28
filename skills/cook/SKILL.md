@@ -107,6 +107,10 @@ reviewer(final age)` without Press or whole-receipt GREEN claims. After wiring,
 validate the complete receipt GREEN, then run one global
 `/press → /age → /cure` chain. Closed N/A bypasses Press.
 
+Run `python3 skills/cook/scripts/cook.pyz contract accept --pointer <path>`.
+Reject bare plans and legacy artifacts; validate route, version, bytes, digests,
+and receipt.
+
 Worktree cleanup uses `python3 skills/cook/scripts/cook.pyz worktree teardown`; the fan-pathway reference owns its arguments and lifecycle.
 
 **Un-curded.** Small work stays single-coder. Big work asks

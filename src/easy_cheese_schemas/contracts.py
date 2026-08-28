@@ -829,6 +829,103 @@ class CurdPlan:
         ):
             raise ValueError("parent_plan_ref must identify a different plan")
 
+_HANDOFF_SCHEMA_URI = "https://schemas.easy-cheese.dev/handoff"
+_OPERATION_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}")
+_NORMALIZATION_ACTIONS = frozenset(
+    {
+        "closing_delimiter",
+        "comment",
+        "legacy_adapter",
+        "single_quote",
+        "trailing_comma",
+        "unquoted_key",
+        "writer_shorthand",
+    }
+)
+
+
+def _operation_id(_instance: object, attribute: Attribute[Any], value: object) -> None:
+    if not isinstance(value, str) or _OPERATION_ID_RE.fullmatch(value) is None:
+        raise ValueError(
+            f"{attribute.name} must be 1-64 alphanumeric, '_' or '-' characters"
+        )
+
+
+def _normalization_kind(
+    _instance: object, attribute: Attribute[Any], value: object
+) -> None:
+    if value not in _NORMALIZATION_ACTIONS:
+        raise ValueError(
+            f"{attribute.name} must be one of {sorted(_NORMALIZATION_ACTIONS)}"
+        )
+
+
+@define(frozen=True)
+class NormalizationVersion:
+    major: str = field(validator=_version_component)
+    minor: str = field(validator=_version_component)
+
+
+def _normalization_version(value: object) -> NormalizationVersion | None:
+    if value is None or isinstance(value, NormalizationVersion):
+        return value
+    if isinstance(value, Mapping) and set(value) == {"major", "minor"}:
+        return NormalizationVersion(**value)
+    raise TypeError("source_version must contain exactly major and minor")
+
+
+@define(frozen=True)
+class NormalizationAction:
+    kind: str = field(validator=_normalization_kind)
+    field: str = field(validator=_bounded_string)
+
+
+@contract("normalization-receipt")
+@define(frozen=True)
+class NormalizationReceipt:
+    ingress_kind: str = field(
+        validator=validators.in_(("writer_view", "legacy_artifact"))
+    )
+    source_schema_uri: str = field(validator=_uri)
+    source_version: NormalizationVersion | None = field(
+        converter=_normalization_version,
+        validator=validators.optional(validators.instance_of(NormalizationVersion)),
+    )
+    normalizer_id: str = field(validator=_identifier)
+    actions: tuple[NormalizationAction, ...] = field(
+        converter=_tuple_sequence, validator=_list_of(NormalizationAction)
+    )
+    source_digest: str = field(validator=_digest)
+    canonical_digest: str = field(validator=_digest)
+    remove_after: str | None = field(
+        default=None, validator=validators.optional(_bounded_string)
+    )
+
+
+@contract("handoff")
+@define(frozen=True)
+class HandoffPointer:
+    contract_version: ContractVersion = field(
+        validator=validators.instance_of(ContractVersion)
+    )
+    operation_id: str = field(validator=_operation_id)
+    request_digest: str = field(validator=_digest)
+    source_phase: str = field(validator=_identifier)
+    destination_phase: str = field(validator=_identifier)
+    payload: ArtifactRef = field(validator=validators.instance_of(ArtifactRef))
+    normalization_receipt: ArtifactRef | None = field(
+        default=None,
+        validator=validators.optional(validators.instance_of(ArtifactRef)),
+    )
+
+    @normalization_receipt.validator
+    def _validate_boundary(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
+        if self.contract_version.schema_uri != _HANDOFF_SCHEMA_URI:
+            raise ValueError("handoff contract_version has the wrong schema URI")
+        if (self.source_phase, self.destination_phase) != ("mold", "cook"):
+            raise ValueError("handoff route must be mold to cook")
+
+
 
 @define(frozen=True)
 class PlannerUncertainty:
@@ -2334,6 +2431,7 @@ __all__ = [
     "CurdDisposition",
     "AgentWriterView",
     "ArtifactRef",
+    "HandoffPointer",
     "BoundedContext",
     "BoundedContextWriterView",
     "BoundedScope",
@@ -2366,6 +2464,9 @@ __all__ = [
     "IdentityAction",
     "IdentityLineage",
     "MoldSpecDocument",
+    "NormalizationAction",
+    "NormalizationVersion",
+    "NormalizationReceipt",
     "MoldSpecFrontmatter",
     "PhaseContract",
     "PhaseDestination",

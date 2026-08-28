@@ -14,6 +14,13 @@ publish(writer_view, invocation, destination, operation_id) -> PublishedArtifact
 
 Publication writes and validates the canonical payload and optional `NormalizationReceipt` before atomically revealing the pointer. Repeating the same operation and request returns the fully revalidated result; reusing the operation with a different request or corrupted referenced bytes rejects.[^spec]
 
+
+
+The first slice is now implemented by bundled commands: Mold exposes `contract
+publish` and `contract migrate`, while Cook exposes `contract accept`. The shared
+runtime owns canonicalization, no-clobber publication, pointer-last visibility,
+idempotent replay validation, and consumer-side digest verification.[^impl]
+
 ## Acceptance zones
 
 - Agent writer views are syntax-generous and semantics-strict.
@@ -25,7 +32,7 @@ The approved writer recovery set covers one uniquely identifiable candidate, com
 
 ## Bundle target
 
-Ownership derives from `src/easy_cheese/skills/<skill>`; shared runtime lives under `src/easy_cheese/shared`. Each Python-owning skill ships one same-named archive. Decorator-declared `@bundle_command` functions compile into that archive's dispatcher and generated command map.[^doctrine]
+Ownership derives from `src/easy_cheese/skills/<skill>`; shared runtime lives under `src/easy_cheese/shared`. Each Python-owning skill ships one same-named Shiv archive. Immutable `Command(name, "module:callable")` manifests declare each archive's command surface; direct dispatch supersedes the earlier decorator/generated-map design.[^doctrine]
 
 ## Delivery order
 
@@ -35,3 +42,4 @@ Cook → Press → Age → Cure and Wheypoint remain separate prepared follow-up
 
 [^spec]: `.cheese/specs/enforceable-skill-boundaries.md`; `.cheese/plans/enforceable-skill-boundaries.curd-plan.json`.
 [^doctrine]: [Skill Python bundle doctrine](../architecture/skill-python-bundle-doctrine.md); https://github.com/paulnsorensen/easy-cheese/pull/472
+[^impl]: `src/easy_cheese/shared/handoffs.py`; `src/easy_cheese/skills/mold/contract_cli.py`; `src/easy_cheese/skills/cook/contract_cli.py`.
