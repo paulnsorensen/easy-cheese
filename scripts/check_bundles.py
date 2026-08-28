@@ -9,7 +9,7 @@ Shiv assembles deterministic wheel members, but ZIP metadata and interpreter
 paths can vary between toolchains. Host-specific fields are canonicalized; a
 source edit that never made it into the committed bundle still fails this gate.
 
-Committed common.pyz archives are rejected: each skill owns a same-named archive.
+Every .pyz must carry Shiv's runtime markers; other zipapp formats are rejected.
 """
 
 from __future__ import annotations
@@ -25,6 +25,26 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BUNDLE_GLOB = "skills/*/scripts/*.pyz"
+
+SHIV_RUNTIME_MEMBERS = frozenset(
+    {
+        "_bootstrap/__init__.py",
+        "_bootstrap/environment.py",
+        "_bootstrap/filelock.py",
+        "_bootstrap/interpreter.py",
+        "__main__.py",
+        "environment.json",
+    }
+)
+
+
+def _validate_shiv_archive(archive: zipfile.ZipFile) -> None:
+    names = set(archive.namelist())
+    missing = sorted(SHIV_RUNTIME_MEMBERS - names)
+    if missing:
+        raise ValueError(f"not a Shiv archive: missing {', '.join(missing)}")
+    if not any(name.startswith("site-packages/") for name in names):
+        raise ValueError("not a Shiv archive: missing site-packages/")
 
 
 def _site_packages_hash(
@@ -88,6 +108,7 @@ def _manifest(data: bytes) -> dict[str, tuple[int, int] | bytes]:
     only those host-dependent fields are canonicalized.
     """
     with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        _validate_shiv_archive(archive)
         environment = json.loads(archive.read("environment.json"))
         stored_build_id = environment.get("build_id")
         raw_build_id = _site_packages_hash(
@@ -149,23 +170,24 @@ def main() -> int:
     for path in sorted(REPO_ROOT.glob(BUNDLE_GLOB)):
         relative = path.relative_to(REPO_ROOT)
         committed = _committed(relative)
-        if committed is None:
-            print(f"new bundle, nothing to compare: {relative}")
-            continue
         checked += 1
         try:
             rebuilt_manifest = _manifest(path.read_bytes())
+            if committed is None:
+                print(f"new Shiv bundle, nothing to compare: {relative}")
+                continue
             committed_manifest = _manifest(committed)
             problems = _describe(rebuilt_manifest, committed_manifest)
-        except (ValueError, KeyError, json.JSONDecodeError) as exc:
+        except (ValueError, KeyError, json.JSONDecodeError, zipfile.BadZipFile) as exc:
             problems = [f"    ! bundle metadata invalid: {exc}"]
         if problems:
             stale.append(f"  {relative}\n" + "\n".join(problems))
 
     if stale:
         print(
-            "::error::.pyz bundles are stale; run 'python3 scripts/build_pyz.py' "
-            "and commit the generated skills/*/scripts/*.pyz files."
+            "::error::.pyz bundles are invalid or stale; run "
+            "'python3 scripts/build_pyz.py' and commit the generated "
+            "skills/*/scripts/*.pyz files."
         )
         print("\n".join(stale))
         return 1

@@ -18,10 +18,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 BUILD = REPO_ROOT / "scripts" / "build_pyz.py"
 SPEC_FORMAT_FIXTURES = REPO_ROOT / "tests" / "python" / "fixtures" / "spec_format"
 COOK_PAYLOAD_FIXTURES = REPO_ROOT / "tests" / "python" / "fixtures" / "cook_payloads"
-
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 import build_pyz  # noqa: E402
 import check_bundles  # noqa: E402
+
 
 pytestmark = pytest.mark.skipif(
     importlib.util.find_spec("build") is None
@@ -156,6 +156,14 @@ def _zip_with_shiv_metadata(
 
     data = BytesIO()
     with zipfile.ZipFile(data, "w") as archive:
+        for member in (
+            "_bootstrap/__init__.py",
+            "_bootstrap/environment.py",
+            "_bootstrap/filelock.py",
+            "_bootstrap/interpreter.py",
+            "__main__.py",
+        ):
+            archive.writestr(member, b"")
         archive.writestr(
             "environment.json",
             json.dumps(
