@@ -10,7 +10,7 @@ silently dropped from prose.
 ## Subcommand
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/mold.pyz gate-graph \
+python3 skills/mold/scripts/mold.pyz gate-graph \
   [--state <state.json>] [--render dot|svg|png|mermaid] [--out <path>]
 ```
 
@@ -48,8 +48,8 @@ it byte-matches `to_dot()`, so the snapshot can never go stale against the model
 Regenerate it whenever the model changes:
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/mold.pyz gate-graph --render dot \
-  --out ${CLAUDE_SKILL_DIR}/scripts/mold.dot
+python3 skills/mold/scripts/mold.pyz gate-graph --render dot \
+  --out skills/mold/scripts/mold.dot
 ```
 
 ## The non-goals gate

@@ -4,14 +4,14 @@ Read this before any `n>1` dispatch from `SKILL.md § Flow` step 1 / `§ Sub-age
 
 ## Router call
 
-Compute the review range's `review_surface` score through `python3 ${CLAUDE_SKILL_DIR}/scripts/age.pyz review-surface --repo . <base>...HEAD`. The range must be the diff under review (`<base>...HEAD` for an already-committed branch, the bare working diff otherwise); never rely on the CLI's bare default, which scores the working tree against `HEAD` and silently zeroes an already-committed branch. Grep the diff's **added lines outside `skills/**` and `.hallouminate/**`** for the bundled age router's risk flags to populate `risk_flags` — scoped so a diff that merely documents the override vocabulary does not trip its own tokens; a missed token means no promoted lens, not a missing security lens, so treat a hit as a hint, not a guarantee. Then call:
+Compute the review range's `review_surface` score through `python3 skills/age/scripts/age.pyz review-surface --repo . <base>...HEAD`. The range must be the diff under review (`<base>...HEAD` for an already-committed branch, the bare working diff otherwise); never rely on the CLI's bare default, which scores the working tree against `HEAD` and silently zeroes an already-committed branch. Grep the diff's **added lines outside `skills/**` and `.hallouminate/**`** for the bundled age router's risk flags to populate `risk_flags` — scoped so a diff that merely documents the override vocabulary does not trip its own tokens; a missed token means no promoted lens, not a missing security lens, so treat a hit as a hint, not a guarantee. Then call:
 
 ```python
 from src.fanout.age_route import route
 route(score=<float>, risk_flags=[...], entry="age")
 ```
 
-If the host only ships the bundle, `echo '{"score": <float>, "risk_flags": [...], "entry": "age"}' | python3 ${CLAUDE_SKILL_DIR}/scripts/age.pyz age-route` is the fallback (JSON on stdin, route JSON on stdout).
+If the host only ships the bundle, `echo '{"score": <float>, "risk_flags": [...], "entry": "age"}' | python3 skills/age/scripts/age.pyz age-route` is the fallback (JSON on stdin, route JSON on stdout).
 
 The returned `n` is the fan-out mode. The base ladder is `n ∈ {1, 2, 5}` from `score` alone (`<60` → 1, `60–250` → 2, `>250` → 5), with `n=1` reviewed single-parent (no fan-out) via `SKILL.md § Flow` steps 2–4, unchanged; `effort` (`low`/`medium`/`high`) dials the reviewer dispatch; `overrides_hit` names any risk-override token matched (auth/secrets/crypto, tenant isolation, payments/ledgers, concurrency/idempotency/ordering/retries, schema/migration/protocol/public-API change, production-destructive ops, weak integration coverage — see `age_route.OVERRIDE_FLAGS` for the exact grep tokens). An override no longer forces the top tier: it **promotes** its mapped dimension out of whichever base-ladder group the score placed it in, into its own solo lens — the group's remaining members stay grouped as one lens. `n` climbs by however many dimensions were promoted, uncapped, with a natural maximum of 9 when all four override categories hit simultaneously at the top score tier. `effort` is `high` whenever any override hits **or** `score` exceeds 900; `low` only at `n=1` (unreachable with an override, since an override always forces `high`); `medium` otherwise.
 

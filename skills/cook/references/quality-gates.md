@@ -31,7 +31,7 @@ replaces the outer receipt. Fan mode records it once in
 `.cheese/ultracook/<slug>/manifest.yaml`'s `baseline:` block before any curd
 cooks. Bare Cook (no frame) with no baseline yet lazily captures the same
 failure records from the pre-change tree. Run the tested classifier through
-`python3 ${CLAUDE_SKILL_DIR}/../cook/scripts/cook.pyz baseline`; do not classify by
+`python3 skills/cook/scripts/cook.pyz baseline`; do not classify by
 eye.
 
 ## Classification taxonomy

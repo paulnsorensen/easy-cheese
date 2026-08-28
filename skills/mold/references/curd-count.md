@@ -29,8 +29,8 @@ After `curdle.md` writes the spec to disk, run the script and read the JSON
 digest into context:
 
 ```bash
-SPEC=$(python3 ${CLAUDE_SKILL_DIR}/scripts/mold.pyz artifact-path specs <slug>)
-python3 ${CLAUDE_SKILL_DIR}/scripts/mold.pyz curd-count "$SPEC" \
+SPEC=$(python3 skills/mold/scripts/mold.pyz artifact-path specs <slug>)
+python3 skills/mold/scripts/mold.pyz curd-count "$SPEC" \
   --blast-radius <low|medium|high>
 ```
 

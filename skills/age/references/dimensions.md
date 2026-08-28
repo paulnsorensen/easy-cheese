@@ -30,7 +30,7 @@ Each finding's severity is computed, not declared. Three independent contributor
 Do not compute the formula in-head — invoke `src/easy_cheese/shared/severity.py compute`:
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/../age/scripts/age.pyz severity compute \
+python3 skills/age/scripts/age.pyz severity compute \
     --dimension <dim> --base <low|medium|high|blocker> \
     --location <class|module|cross-module|contract> \
     --fix-cost-later <contained|spreading|structural>
@@ -88,7 +88,7 @@ The `contract` bump only applies to dimensions where boundary position genuinely
 Bucket the blast-radius file count for the proposed fix. Do not bucket in-head — pipe the raw file/module counts through `src/easy_cheese/shared/severity.py bucket`:
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/../age/scripts/age.pyz severity bucket --files <N> [--modules <M>]
+python3 skills/age/scripts/age.pyz severity bucket --files <N> [--modules <M>]
 # -> contained | moderate | sprawling
 ```
 
@@ -97,7 +97,7 @@ Source priority for the raw count:
 1. **`tilth_deps`** — primary. Returns the file set that would need to change.
 2. **LSP `find-references` / `find-callers`** — fallback when tilth is unavailable.
 
-**Worked recipe.** Given a finding at `path:line`, run `tilth_deps` on the *containing file*. Count the **distinct files** in the imported-by set as `--files` — use the `<N> dependents` header count, since the `Used by` list emits one entry per call site and several entries can map to one file (counting raw entries overcounts). Count the **distinct slice/module roots** among them as `--modules` — the logical package root, so `src/easy_cheese/skills/melt` and `src/easy_cheese/skills/affinage` are two modules, not the shared `src/easy_cheese/skills` parent. Then run `python3 ${CLAUDE_SKILL_DIR}/../age/scripts/age.pyz severity bucket --files <N> --modules <M>`. Falling back to LSP callers, count the same way (distinct touched files, distinct module dirs) so buckets stay comparable across tools.
+**Worked recipe.** Given a finding at `path:line`, run `tilth_deps` on the *containing file*. Count the **distinct files** in the imported-by set as `--files` — use the `<N> dependents` header count, since the `Used by` list emits one entry per call site and several entries can map to one file (counting raw entries overcounts). Count the **distinct slice/module roots** among them as `--modules` — the logical package root, so `src/easy_cheese/skills/melt` and `src/easy_cheese/skills/affinage` are two modules, not the shared `src/easy_cheese/skills` parent. Then run `python3 skills/age/scripts/age.pyz severity bucket --files <N> --modules <M>`. Falling back to LSP callers, count the same way (distinct touched files, distinct module dirs) so buckets stay comparable across tools.
 
 Fix-cost-now is **reported, not bumped**. Severity decides what to fix; fix-cost-now explains effort and lets triage schedule.
 
@@ -206,7 +206,7 @@ Look for: behaviour in the spec but not in the diff, behaviour in the diff but n
 
 Inherited shape: a requirement dropped in an earlier commit that the current diff neither restores nor violates outright. Compare against the spec, not only the diff.
 
-Spec resolution: locate the spec before grading. Search order: the durable spec corpus via `python3 ${CLAUDE_SKILL_DIR}/../age/scripts/age.pyz artifact-path specs <slug>`, falling back to the legacy literal `.cheese/specs/<slug>.md` only when the resolver is unavailable (see `../../cheese/references/formatting.md` § Corpus location; never hardcode `.cheese/specs/`); then unresolved items in `.cheese/press/<slug>.md`, then the PR body or linked issue (`gh pr view`), then a commit-message ticket ref. If none resolves, record "no spec located; searched [list]" and grade spec findings `don't know` rather than clean.
+Spec resolution: locate the spec before grading. Search order: the durable spec corpus via `python3 skills/age/scripts/age.pyz artifact-path specs <slug>`, falling back to the legacy literal `.cheese/specs/<slug>.md` only when the resolver is unavailable (see `../../cheese/references/formatting.md` § Corpus location; never hardcode `.cheese/specs/`); then unresolved items in `.cheese/press/<slug>.md`, then the PR body or linked issue (`gh pr view`), then a commit-message ticket ref. If none resolves, record "no spec located; searched [list]" and grade spec findings `don't know` rather than clean.
 
 Boundaries: correctness (contract commitment to spec, runtime risk to correctness; emit both). Full rules in § Dimension boundaries.
 

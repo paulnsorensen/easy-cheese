@@ -74,7 +74,7 @@ A claim that something *does not exist* ("X has no Y", "Z doesn't support W") is
 
 Before finalizing a deep report (`research/<slug>/<slug>.md`), run the mechanical grounding gate and reconcile the conclusion against what the run actually captured:
 
-1. **Run `ground-check`:** `python3 ${CLAUDE_SKILL_DIR}/scripts/briesearch.pyz ground-check "$ROOT/research/<slug>/<slug>.md"`. It exits non-zero on any claim with no verifiable citation or a non-label confidence value, and prints `ADVISORY` lines for `certain` absence claims. Resolve every error before returning; treat each advisory as a prompt to enumerate-and-rule-out or downgrade per the section above.
+1. **Run `ground-check`:** `python3 skills/briesearch/scripts/briesearch.pyz ground-check "$ROOT/research/<slug>/<slug>.md"`. It exits non-zero on any claim with no verifiable citation or a non-label confidence value, and prints `ADVISORY` lines for `certain` absence claims. Resolve every error before returning; treat each advisory as a prompt to enumerate-and-rule-out or downgrade per the section above.
 2. **Diff the conclusion against the raw capture:** a conclusion may not contradict a fact the run already recorded. Re-read the cited `raw/NN-host.md` lines behind each material claim; if the Finding contradicts a recorded fact, the Finding is wrong — fix it or halt. Do not ship the contradiction.
 
 ## Output shape
@@ -111,6 +111,6 @@ Short form (always returned to the caller):
 
 Long form (when the question warranted a deep look):
 
-- Resolve the durable corpus root with `ROOT=$(python3 ${CLAUDE_SKILL_DIR}/scripts/briesearch.pyz artifact-path research <slug>)` (slug is 4-6 kebab-case words), then write the full report to `"$ROOT/research/<slug>/<slug>.md"`. The root is the per-project durable corpus (see `../../cheese/references/formatting.md` § Corpus location); briesearch owns the nested `research/<slug>/` layout composed under it.
+- Resolve the durable corpus root with `ROOT=$(python3 skills/briesearch/scripts/briesearch.pyz artifact-path research <slug>)` (slug is 4-6 kebab-case words), then write the full report to `"$ROOT/research/<slug>/<slug>.md"`. The root is the per-project durable corpus (see `../../cheese/references/formatting.md` § Corpus location); briesearch owns the nested `research/<slug>/` layout composed under it.
 - Include the full claim table, raw bodies referenced from `"$ROOT/research/<slug>/raw/"` (see `context-isolation.md`), and the verification log.
 - In the chat reply: a one-paragraph summary, the report path, and the confidence line. Do not paste the full report inline — the user will see only the last collapsed message by default.
