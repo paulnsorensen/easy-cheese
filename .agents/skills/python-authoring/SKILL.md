@@ -41,6 +41,7 @@ This is a repository-local skill. Keep it under `.agents/skills/python-authoring
 - Keep skill runtime under `src/easy_cheese/skills/<skill_name>/` and declare its CLI surface in `commands.py`.
 - Move code to `src/easy_cheese/shared/` only when multiple existing skills need the same behavior; consume it through the `easy-cheese-shared` internal distribution.
 - Do not import another skill's internals. Wheel metadata, pip resolution, and hash-locked `requirements/bundles/<skill>.txt` files own runtime dependency closure.
+- Keep cross-skill orchestration in the owning workflow seam, not a leaf helper. Communicate through public or persisted contracts to avoid reverse dependencies and cycles.
 - Never edit `skills/<skill>/scripts/*.pyz` by hand. Install `requirements-build.txt`, then run `just bundle` after changing bundle inputs and commit the regenerated archives and locks.
 - Keep CLI modules thin: accept `argv`, return an integer status, print diagnostics to stderr, and propagate failure through a nonzero exit.
 - Keep `.github/scripts/` validators read-only. They inspect and report; they do not mutate the workspace.
@@ -48,13 +49,22 @@ This is a repository-local skill. Keep it under `.agents/skills/python-authoring
 ## Prefer succinct, readable Python
 
 - Use `match` for genuine shape-based dispatch; keep a simple `if` for a binary decision.
+- Use a handler mapping for stable command-to-function dispatch; do not create a registry for one or two branches.
+- Use an assignment expression only when it removes a repeated computation or clarifies a loop condition.
 - Use `any`, `all`, comprehensions, and generator expressions for pure collection queries or transformations. Keep a loop when it carries state, side effects, or clearer early exits.
 - Prefer generators when the result is consumed once.
 - Use `enumerate`, direct iteration, f-strings, context managers, and `pathlib` instead of manual indexing, string assembly, cleanup, or path manipulation.
 - Ignore only named, intentional failures. Never use a bare `except`, swallow `Exception`, return an empty default on failure, or use `contextlib.suppress(Exception)`.
 - Keep new top-level functions at 40 lines or fewer unless one contiguous algorithm is clearer than an artificial split.
-- Delete narration comments and docstrings that restate the code. Keep non-obvious rationale and public API documentation.
 - Prefer one clear expression to verbose scaffolding, but split dense expressions when intermediate names explain intent.
+
+## De-slop before finishing
+
+- Delete narration comments and docstrings that restate the code. Keep non-obvious rationale and public API documentation.
+- Remove abstractions with one concrete consumer unless the current task requires the seam.
+- Name values after domain concepts, not containers or implementation types.
+- Consolidate repetitive tests by behavior; do not add shallow input-variation tests.
+- Fix the underlying lint issue instead of adding a suppression.
 
 ## Test and finish
 
