@@ -30,8 +30,14 @@ class Command:
 def command_map(commands: Sequence[Command]) -> dict[str, Command]:
     mapping: dict[str, Command] = {}
     for command in commands:
+        normalized = command.name.replace("_", "-")
         if command.name in mapping:
             raise ValueError(f"duplicate bundle command: {command.name}")
+        existing = mapping.get(normalized)
+        if existing is not None and existing.name != command.name:
+            raise ValueError(
+                f"bundle command alias collision: {existing.name} vs {command.name}"
+            )
         mapping[command.name] = command
     if not mapping:
         raise ValueError("no bundle commands declared")

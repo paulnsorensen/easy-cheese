@@ -46,6 +46,11 @@ def test_duplicate_command_rejected() -> None:
         bc.command_map((command(), command()))
 
 
+def test_normalized_alias_collision_rejected() -> None:
+    with pytest.raises(ValueError, match="alias collision"):
+        bc.command_map((command("foo-bar"), command("foo_bar")))
+
+
 def test_command_map_sorted_by_name() -> None:
     commands = (command("beta"), command("alpha"))
     assert list(bc.command_map(commands)) == ["alpha", "beta"]
