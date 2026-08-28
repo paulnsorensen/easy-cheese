@@ -46,7 +46,7 @@ SKILL_SUBCOMMANDS = {
         "artifact-path", "age-route", "baseline", "phase-decision", "milknado", "mode", "worktree",
         "validate-decomposition", "validate-manifest", "validate-pr-plan", "manifest-update",
         "wiring-topo-sort", "pr-plan-to-branches", "curd-block",
-        "normalize", "validate", "slugify", "write-handoff-artifact",
+        "normalize", "validate", "red-gate", "slugify", "write-handoff-artifact",
         "read-handoff-slug", "findings-cli", "gates-cli", "paths-cli",
         "handoff-cli", "render-html",
     ],
@@ -403,16 +403,6 @@ def test_cut_bundle_carries_red_gate_and_schema_runtime(bundles: Path) -> None:
 
 
 
-def test_cook_bundle_dispatches_red_gate(bundles: Path, tmp_path: Path) -> None:
-    result = subprocess.run(
-        [sys.executable, str(bundles / "cook.pyz"), "red-gate", "--help"],
-        cwd=tmp_path,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert result.returncode == 0
-    assert "usage:" in result.stdout
 def test_cut_bundle_runs_assertion_probe_without_source_imports(
     bundles: Path,
     tmp_path: Path,

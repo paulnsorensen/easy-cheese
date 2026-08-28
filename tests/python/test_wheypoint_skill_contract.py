@@ -65,6 +65,12 @@ def test_resolution_runs_through_the_runtime_rather_than_by_hand() -> None:
     assert ".cheese/notes/" in body
 
 
+def test_runtime_commands_are_terminal_before_checkpoint_flow() -> None:
+    body = _read(SKILLS_DIR / "wheypoint" / "SKILL.md")
+    assert "return output, and **STOP** before checkpoint writing" in body
+    assert "/cheese --continue" in body
+
+
 
 def test_legacy_resolution_requires_an_informed_resume_gate() -> None:
     body = _read(CONTINUE_RESUME).lower()
