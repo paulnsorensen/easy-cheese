@@ -279,19 +279,19 @@ def _bundle_main(command: str, argv: list[str]) -> int:
     return main([command, *argv])
 
 
-def commit_main(argv: list[str]) -> int:
+def commit_main(argv: list[str]) -> int:  # noqa: V103
     return _bundle_main("commit", argv)
 
 
-def resolve_main(argv: list[str]) -> int:
+def resolve_main(argv: list[str]) -> int:  # noqa: V103
     return _bundle_main("resolve", argv)
 
 
-def show_main(argv: list[str]) -> int:
+def show_main(argv: list[str]) -> int:  # noqa: V103
     return _bundle_main("show", argv)
 
 
-def lint_main(argv: list[str]) -> int:
+def lint_main(argv: list[str]) -> int:  # noqa: V103
     return _bundle_main("lint", argv)
 
 

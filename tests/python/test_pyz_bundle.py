@@ -23,7 +23,7 @@ import build_pyz  # noqa: E402
 import check_bundles  # noqa: E402
 
 
-pytestmark = pytest.mark.skipif(
+pytestmark = pytest.mark.skipif(  # noqa: V107
     importlib.util.find_spec("build") is None
     or importlib.util.find_spec("pip") is None
     or (shutil.which("shiv") is None and importlib.util.find_spec("shiv") is None),

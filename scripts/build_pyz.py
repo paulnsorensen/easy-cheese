@@ -217,7 +217,7 @@ def _normalize_internal_wheel(wheel: Path) -> Path:
             for source_info in sorted(source.infolist(), key=lambda item: item.filename):
                 info = zipfile.ZipInfo(source_info.filename, (1980, 1, 1, 0, 0, 0))
                 info.compress_type = zipfile.ZIP_STORED
-                info.create_system = 3
+                info.create_system = 3  # noqa: V101
                 info.external_attr = source_info.external_attr
                 info.internal_attr = source_info.internal_attr
                 target.writestr(info, source.read(source_info))

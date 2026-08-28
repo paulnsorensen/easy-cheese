@@ -71,6 +71,12 @@ gate.
 
 `test_validate_skills.py` is the unittest suite covering those rules.
 
+
+
+### Dead-code gate
+
+`just lint-py-dead-code` runs Vulture 2.16 over `src`, `scripts`, `.github/scripts`, and `tests` with no broad decorator ignores or path excludes. Findings fail unless they are explicitly classified by exact owner-qualified identities (schema Enum members, attrs fields, autouse `pytest.fixture`, or the small stdlib callback override set) or carry a definition-site `# noqa: V103` annotation for generated validator methods. This recipe is wired into CI alongside the local `just check` gate.
+
 ## Source-code routing vs optional MCPs
 
 - **The shared contract names backend shape.** Workflow skills link

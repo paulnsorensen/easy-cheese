@@ -529,7 +529,7 @@ class SourceLocation:
     )
 
     @end_column.validator
-    def _validate_bounds(self, _attribute: Attribute[Any], _value: object) -> None:
+    def _validate_bounds(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
         if self.end_line < self.start_line:
             raise ValueError("end_line must not precede start_line")
         if self.end_column is not None and self.start_column is None:
@@ -566,7 +566,7 @@ class EvidenceRef:
     summary: str | None = field(default=None, validator=_optional_string)
 
     @summary.validator
-    def _validate_location(self, _attribute: Attribute[Any], _value: object) -> None:
+    def _validate_location(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
         if (
             self.location is not None
             and self.location.artifact_id != self.artifact.artifact_id
@@ -620,7 +620,7 @@ class IdentityLineage:
     )
 
     @source_curd_ids.validator
-    def _validate_action(self, _attribute: Attribute[Any], _value: object) -> None:
+    def _validate_action(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
         count = len(self.source_curd_ids)
         if self.identity_action is IdentityAction.NEW and count:
             raise ValueError("new lineage must not name source curds")
@@ -644,7 +644,7 @@ class BoundedScope:
     )
 
     @excluded_paths.validator
-    def _validate_exclusions(self, _attribute: Attribute[Any], _value: object) -> None:
+    def _validate_exclusions(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
         if set(self.paths) & set(self.excluded_paths):
             raise ValueError("paths and excluded_paths must not overlap")
         if len(self.paths) + len(self.excluded_paths) > MAX_SCOPE_PATHS:
@@ -697,7 +697,7 @@ class BoundedContext:
     )
 
     @invariants.validator
-    def _validate_context(self, _attribute: Attribute[Any], _value: object) -> None:
+    def _validate_context(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
         if not (self.shared_inputs or self.constraints or self.invariants):
             raise ValueError("bounded context must not be empty")
         duplicate = _unique_by("artifact_id", self.shared_inputs)
@@ -732,7 +732,7 @@ class SemanticCurd:
     lineage: IdentityLineage = field(validator=validators.instance_of(IdentityLineage))
 
     @lineage.validator
-    def _validate_curd(self, _attribute: Attribute[Any], _value: object) -> None:
+    def _validate_curd(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
         if self.curd_id in self.dependencies:
             raise ValueError("dependencies must not contain the curd's own curd_id")
         duplicate_input = _unique_by("artifact_id", self.inputs)
@@ -822,7 +822,7 @@ class CurdPlan:
     )
 
     @parent_plan_ref.validator
-    def _validate_parent(self, _attribute: Attribute[Any], _value: object) -> None:
+    def _validate_parent(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
         if (
             self.parent_plan_ref is not None
             and self.parent_plan_ref.plan_id == self.plan_id
@@ -875,7 +875,7 @@ class PlannerRequest:
     )
 
     @source_plan_ref.validator
-    def _validate_kind(self, _attribute: Attribute[Any], _value: object) -> None:
+    def _validate_kind(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
         if (
             self.kind is PlannerRequestKind.DECOMPOSE
             and self.source_plan_ref is not None
@@ -1028,7 +1028,7 @@ class PlannerResult:
     reason: str | None = field(default=None, validator=_optional_string)
 
     @reason.validator
-    def _validate_disposition(self, _attribute: Attribute[Any], _value: object) -> None:
+    def _validate_disposition(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
         _validate_planner_disposition(
             self.disposition,
             self.plan,
@@ -1073,7 +1073,7 @@ class ReviewCoverage:
     reason: str | None = field(default=None, validator=_optional_string)
 
     @reason.validator
-    def _validate_disposition(self, _attribute: Attribute[Any], _value: object) -> None:
+    def _validate_disposition(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
         if self.disposition is CoverageDisposition.NOT_COVERED and not self.reason:
             raise ValueError("not_covered review coverage must include a reason")
         if self.disposition is CoverageDisposition.COVERED and self.reason is not None:
@@ -1157,7 +1157,7 @@ class ReviewResult:
     reason: str | None = field(default=None, validator=_optional_string)
 
     @reason.validator
-    def _validate_disposition(self, _attribute: Attribute[Any], _value: object) -> None:
+    def _validate_disposition(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
         duplicate_target = _unique_by("target", self.coverage)
         if duplicate_target is not None:
             raise ValueError(f"coverage target {duplicate_target!r} must be unique")
@@ -1249,7 +1249,7 @@ class Reproduction:
     )
 
     @evidence.validator
-    def _validate_status(self, _attribute: Attribute[Any], _value: object) -> None:
+    def _validate_status(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
         if self.status is ReproductionDisposition.REPRODUCED:
             if self.observed is None:
                 raise ValueError("reproduced result must describe what was observed")
@@ -1290,7 +1290,7 @@ class DiagnosisHypothesis:
     )
 
     @evidence.validator
-    def _validate_disposition(self, _attribute: Attribute[Any], _value: object) -> None:
+    def _validate_disposition(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
         if (
             self.disposition is not HypothesisDisposition.UNRESOLVED
             and not self.evidence
@@ -1396,7 +1396,7 @@ class DiagnosisResult:
     reason: str | None = field(default=None, validator=_optional_string)
 
     @reason.validator
-    def _validate_disposition(self, _attribute: Attribute[Any], _value: object) -> None:
+    def _validate_disposition(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
         duplicate = _unique_by("hypothesis_id", self.hypotheses)
         if duplicate is not None:
             raise ValueError(f"hypothesis_id {duplicate!r} must be unique")
@@ -1474,7 +1474,7 @@ class CriterionResult:
     reason: str | None = field(default=None, validator=_optional_string)
 
     @reason.validator
-    def _validate_disposition(self, _attribute: Attribute[Any], _value: object) -> None:
+    def _validate_disposition(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
         if (
             self.disposition
             in {
@@ -1554,7 +1554,7 @@ class CurdResult:
     )
 
     @runtime_refs.validator
-    def _validate_result(self, _attribute: Attribute[Any], _value: object) -> None:
+    def _validate_result(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
         result_ids = [row.criterion_id for row in self.criterion_results]
         if len(result_ids) != len(set(result_ids)):
             raise ValueError("criterion_results must contain one row per criterion_id")
@@ -1595,7 +1595,7 @@ class PhaseContract:
     )
 
     @outputs.validator
-    def _validate_routes(self, _attribute: Attribute[Any], _value: object) -> None:
+    def _validate_routes(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
         routes = {
             (route.destination, route.payload_schema_uri) for route in self.outputs
         }
@@ -1631,7 +1631,7 @@ class SourceLocationWriterView:
     )
 
     @end_column.validator
-    def _validate_bounds(self, _attribute: Attribute[Any], _value: object) -> None:
+    def _validate_bounds(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
         if self.end_line < self.start_line:
             raise ValueError("end_line must not precede start_line")
         if self.end_column is not None and self.start_column is None:
@@ -1665,7 +1665,7 @@ class BoundedContextWriterView:
     )
 
     @invariants.validator
-    def _validate_context(self, _attribute: Attribute[Any], _value: object) -> None:
+    def _validate_context(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
         if not (self.shared_input_keys or self.constraints or self.invariants):
             raise ValueError("bounded context must not be empty")
 
@@ -1730,7 +1730,7 @@ class PlannerResultWriterView:
     reason: str | None = field(default=None, validator=_optional_string)
 
     @reason.validator
-    def _validate_disposition(self, _attribute: Attribute[Any], _value: object) -> None:
+    def _validate_disposition(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
         _validate_planner_disposition(
             self.disposition,
             self.plan,
@@ -1777,7 +1777,7 @@ class ReviewResultWriterView:
     reason: str | None = field(default=None, validator=_optional_string)
 
     @reason.validator
-    def _validate_disposition(self, _attribute: Attribute[Any], _value: object) -> None:
+    def _validate_disposition(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
         if self.disposition is ReviewDisposition.CLEAN and self.findings:
             raise ValueError("clean review writer view must not include findings")
         if self.disposition is ReviewDisposition.FINDINGS and not self.findings:
@@ -1825,7 +1825,7 @@ class ReproductionWriterView:
     )
 
     @evidence_keys.validator
-    def _validate_status(self, _attribute: Attribute[Any], _value: object) -> None:
+    def _validate_status(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
         if self.status is ReproductionDisposition.REPRODUCED:
             if self.observed is None:
                 raise ValueError(
@@ -1851,7 +1851,7 @@ class DiagnosisHypothesisWriterView:
     )
 
     @evidence_keys.validator
-    def _validate_disposition(self, _attribute: Attribute[Any], _value: object) -> None:
+    def _validate_disposition(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
         if (
             self.disposition is not HypothesisDisposition.UNRESOLVED
             and not self.evidence_keys
@@ -1901,7 +1901,7 @@ class DiagnosisResultWriterView:
     reason: str | None = field(default=None, validator=_optional_string)
 
     @reason.validator
-    def _validate_disposition(self, _attribute: Attribute[Any], _value: object) -> None:
+    def _validate_disposition(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
         if self.disposition is DiagnosisDisposition.CONFIRMED:
             if self.reproduction.status is not ReproductionDisposition.REPRODUCED:
                 raise ValueError(
@@ -1957,7 +1957,7 @@ class CriterionResultWriterView:
     reason: str | None = field(default=None, validator=_optional_string)
 
     @reason.validator
-    def _validate_disposition(self, _attribute: Attribute[Any], _value: object) -> None:
+    def _validate_disposition(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
         if (
             self.disposition
             in {
@@ -2075,7 +2075,7 @@ class AgentWriterView:
     payload: WriterPayload = field()
 
     @payload.validator
-    def _validate_payload(self, _attribute: Attribute[Any], value: object) -> None:
+    def _validate_payload(self, _attribute: Attribute[Any], value: object) -> None:  # noqa: V103
         expected = _WRITER_PAYLOAD_TYPES[self.kind]
         if not isinstance(value, expected):
             raise ValueError(
@@ -2159,7 +2159,7 @@ class GateApplicability:
     @reason.validator
     def _validate_not_applicable_reason(
         self, _attribute: Attribute[Any], value: object
-    ) -> None:
+    ) -> None:  # noqa: V103
         if self.disposition is GateApplicabilityDisposition.NOT_APPLICABLE and not value:
             raise ValueError(
                 "gate_applicability.reason is required when disposition is not-applicable"
@@ -2200,7 +2200,7 @@ class TestContractRow:
     )
 
     @matrix_rows.validator
-    def _validate_mode_cells(self, _attribute: Attribute[Any], value: object) -> None:
+    def _validate_mode_cells(self, _attribute: Attribute[Any], value: object) -> None:  # noqa: V103
         if self.mode is TestContractMode.TRACER:
             if self.interface_version or value:
                 raise ValueError(
@@ -2297,7 +2297,7 @@ class MoldSpecDocument:
     enums: ClassVar[dict[str, tuple[str, ...]]] = MOLD_SPEC_ENUMS
 
     @test_contract_rows.validator
-    def _validate_ac_coverage(self, _attribute: Attribute[Any], value: object) -> None:
+    def _validate_ac_coverage(self, _attribute: Attribute[Any], value: object) -> None:  # noqa: V103
         assert isinstance(value, tuple)
         counts: dict[str, int] = {}
         for row in value:
