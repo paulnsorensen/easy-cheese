@@ -69,7 +69,7 @@ gate_applicability:
 <chosen option summary>
 
 ## Decisions
-- <one-line decision> — <one-line rationale>
+- <one-line decision> — <one-line rationale>. <when the rationale rests on research, one inline evidence sentence>[^footnote]
 - _Minor decisions:_ <one line capturing the `[AGENT-DECIDED]` calls the user did not veto — the per-round ledger's minor tier; major decisions get full ADRs per `adr.md`>
 
 ## Acceptance
@@ -119,7 +119,7 @@ Add one row for each criterion.
 <failing test, curl, replay command, etc.>
 
 ## References
-<one footnote definition per cited source; include only when out-of-scope evidence was cited above per `../../cheese/references/formatting.md` § Citations>
+<one footnote definition per cited source; include only when out-of-scope evidence was cited above per `../../cheese/references/formatting.md` § Citations. Every footnote here is an audit trail, not the sole carrier of a decision's why — the citing line inlines its evidence per that section's § Self-disclosing links, because downstream consumers (e.g. `/cook`) read the spec verbatim and never follow these links.>
 ```
 
 `source: mold-handshake` marks the strict Mold production path. Every new

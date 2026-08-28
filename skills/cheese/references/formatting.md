@@ -96,6 +96,16 @@ One line per footnote. URLs absolute. For external sources, include a fetch date
 
 Reserve plain parenthetical hyperlinks (`see [name](URL)`) for cases where the link text itself carries information the reader needs inline — glossary terms, named proposals, vendor doc titles. Audit-trail evidence uses footnotes.
 
+### Self-disclosing links
+
+A footnote is an audit trail, not a container for the reasoning. Downstream consumers read the artifact verbatim and do **not** follow its footnotes — `/cook`, for one, reads a spec's body and glossary but never chases its `.cheese/research/` links. So any claim or decision whose *why* a downstream tool must act on carries that why **inline in one sentence**; the footnote then points to the full source for a human who wants to verify or go deeper.
+
+> ✅ "Flip the reranker default only on measured gain: no major vendor ships reranking on by default, and 2026 adaptive-reranking work shows unconditional reranking wastes compute on queries the first stage already ranks well.[^rerank]"
+>
+> ❌ "Flip the reranker default only on measured gain.[^rerank]" (the reasoning lives only behind the link; a link-blind reader — human or tool — is left with a bare assertion)
+
+The test: delete every footnote and the artifact still states enough for the next tool to act correctly. Footnotes add provenance and depth, never the sole copy of a decision's rationale.
+
 ## Canonical shapes
 
 Three shapes are written often enough to deserve a single owner each. The owner skill holds the authoritative shape; this file lists the entry point and the cross-cutting rules.
