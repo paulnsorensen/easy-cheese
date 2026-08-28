@@ -55,3 +55,10 @@
 - 2026-08-23 · 95363c78068f772a · skipped-near-duplicate · — · omitted duplicate, superseded, unresolved, and transient handoff/environment material from the tracked July checkpoint.
 
 - 2026-08-24 · mold:enforceable-skill-boundaries · approved · specs/enforceable-skill-boundaries.md, adr/skill-boundary-protocol-001.md, adr/skill-boundary-normalization-002.md, adr/skill-bundle-authority-003.md, adr/legacy-adapter-lifecycle-004.md, domain-model.md, architecture/workflow-contract-map.md · recorded the nine-curd Mold → Cook boundary plan, pointer-last publication, BAML-informed generous writer ingress, strict canonical acceptance, layout-derived one-skill bundles, and exact sunset-bound legacy adapters.
+
+
+- 2026-08-28 · cd6ee3e392a91bbd · merged · adr/pyz-pipeline-contracts-002.md · marked the unimplemented `just check` and prek bundle-currency proposal superseded; dedicated bundle rebuild and comparison remain authoritative.
+- 2026-08-28 · cd6ee3e392a91bbd · merged · adr/pyz-pipeline-contracts-003.md · marked the unimplemented generated source-map and source-banner proposal superseded by the package layout and architecture documentation.
+- 2026-08-28 · cd6ee3e392a91bbd · merged · architecture/pyz-bundling-pipeline.md · corrected canonical archive comparison: validate bootstrap members, canonicalize environment and wrapper shebangs, and exclude RECORD only from canonical comparison.
+- 2026-08-28 · cd6ee3e392a91bbd · merged · wiki-conventions.md · adopted the Google developer documentation style guide after repository-specific guidance and recorded its core editorial conventions.
+- 2026-08-28 · 21598ff6fb766b9f · merged · architecture/pyz-bundling-pipeline.md · incorporated PR #501's static `Command` manifests, lazy direct dispatch, command-local argument contract, stdout/stderr channels, and integer status returns.

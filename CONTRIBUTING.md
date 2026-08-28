@@ -23,9 +23,55 @@ brew install just uv bats-core shellcheck yamllint yamlfmt markdownlint-cli2
 just check
 ```
 
-`just check` resolves test tools ephemerally through `uv`. To rebuild checked-in
-skill archives, install `requirements-build.txt` and run `just bundle`; Shiv is
-a build dependency and is not required to run the archives.
+`just check` resolves test tools ephemerally through `uv`. It does not install
+Shiv or rebuild the checked-in skill archives.
+
+## Rebuild skill archives
+
+Each Python-backed skill ships one same-named Shiv archive at
+`skills/<skill>/scripts/<skill>.pyz`. You need the build dependencies only when
+you rebuild these archives; users run them with Python alone.
+
+If you change runtime source under `src/easy_cheese/`, a phase contract, build
+configuration, a bundle lock, or a committed archive, install the pinned build
+tools and rebuild every archive:
+
+```sh
+python3 -m pip install --requirement requirements-build.txt
+just bundle
+```
+
+`just bundle` resolves each application from PEP 517 wheels in a private
+wheelhouse. It compares the resolved closure with the corresponding hash-locked
+file under `requirements/bundles/`.
+
+Each Python skill declares its public subcommands in `commands.py` as an
+immutable tuple of `Command(name, "module:callable")` values. When you add or
+change a command, make its target accept `list[str]`, write result text to
+stdout or diagnostics to stderr, and return an integer process status. Do not
+mutate `sys.argv`, execute the target through `runpy`, or add a decorator-based
+registry.
+
+If you intend to change the resolved dependency closure, update the locks
+explicitly:
+
+```sh
+python3 scripts/build_pyz.py --update-locks
+```
+
+Commit the changed lock files and `skills/*/scripts/*.pyz` archives with the
+source change. CI rebuilds the archives and compares their canonical member
+content with the committed artifacts.
+
+## Documentation style
+
+For project terminology and established cheese flavor, follow the repository's
+project-specific guidance first. For other editorial decisions, follow the
+[Google developer documentation style guide](https://developers.google.com/style/).
+Write directly to the reader, prefer active voice, use sentence case for
+headings, format code-related names in backticks, and use descriptive link text.
+Edit root documents such as `README.md` and `CONTRIBUTING.md`; the documentation
+build generates their copies under `src/content/docs/`.
 
 ## Running tests
 

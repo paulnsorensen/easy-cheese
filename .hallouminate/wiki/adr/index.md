@@ -39,8 +39,8 @@
 - [post-pr-wiki-writeback-001](./post-pr-wiki-writeback-001.md) — ADR: curdle wiki writes enforced by gate node + read-back verify, not a Stop-hook
 - [post-pr-wiki-writeback-002](./post-pr-wiki-writeback-002.md) — ADR: post-PR learnings write-back reuses wiki-ingest, not the personal wiki-curator skill
 - [pyz-pipeline-contracts-001](./pyz-pipeline-contracts-001.md) — ADR: Bundle builds verify the staged import closure, including function-body imports
-- [pyz-pipeline-contracts-002](./pyz-pipeline-contracts-002.md) — ADR: Bundle currency is enforced locally by just check and a scoped prek hook
-- [pyz-pipeline-contracts-003](./pyz-pipeline-contracts-003.md) — ADR: Script locations are published as a generated, gated map plus per-source banners
+- [pyz-pipeline-contracts-002](./pyz-pipeline-contracts-002.md) — ADR: Bundle currency remains a dedicated build gate
+- [pyz-pipeline-contracts-003](./pyz-pipeline-contracts-003.md) — ADR: Runtime source locations follow the package layout
 - [pyz-pipeline-contracts-004](./pyz-pipeline-contracts-004.md) — ADR: The subcommand registry is pruned to the prose-referenced set with strict two-way equality
 - [pyz-pipeline-contracts-005](./pyz-pipeline-contracts-005.md) — ADR: cook joins COMMON_CONSUMERS so its documented common.pyz fallback ships
 - [pyz-pipeline-contracts-006](./pyz-pipeline-contracts-006.md) — ADR: The Astro site source moves out of src/ to website/, leaving src/ purely Python

@@ -6,6 +6,8 @@ The repository builds every Python-backed skill as a hash-locked Shiv applicatio
 
 `scripts/build_pyz.py` discovers applications from `src/easy_cheese/skills/*/commands.py`. Each discovered package becomes one `easy-cheese-<skill>` wheel with a same-named console script.[^2]
 
+Each `commands.py` declares the application's public subcommands as an immutable tuple of `Command(name, "module:callable")` values. Dispatch validates unique command names, imports only the selected target, passes it a command-local `list[str]`, and requires an integer status return. Command targets write result text to stdout or diagnostics to stderr; dispatch does not mutate `sys.argv`, execute modules through `runpy`, or use decorator registration.[^12]
+
 A build creates three distribution layers:
 
 1. `easy-cheese-schemas` from the root Hatchling project;
@@ -53,7 +55,7 @@ Before building wheels, the builder recompiles the phase registry, schema catalo
 
 `.github/workflows/build-pyz.yml` runs the bundle build, freshness comparison, and isolation tests under both Python 3.12 and 3.14. This keeps 3.12 as the runtime baseline while proving that newer build interpreters produce the same locks and canonical bundle content. Regular validation installs no Shiv.[^8]
 
-`scripts/check_bundles.py` compares member names, CRCs, and uncompressed sizes rather than raw ZIP bytes. It ignores Shiv bootstrap metadata, console wrappers, and RECORD files whose bytes can vary with the host toolchain while retaining source-staleness detection.[^9]
+`scripts/check_bundles.py` validates the required Shiv bootstrap members, then compares canonical member content rather than raw ZIP bytes. It removes the host timestamp from `environment.json`, derives a portable build ID, normalizes only the Python interpreter token in console-wrapper shebangs, and excludes `.dist-info/RECORD` files from the canonical comparison. The checker still includes RECORD content in its raw build-ID integrity check.[^9]
 
 The release workflow installs the same build-only requirements and runs `scripts/stage_release.py`. The staged tree contains skill files and one same-named archive per Python skill, with no loose Python source.[^10]
 
@@ -86,3 +88,6 @@ just bundle                                # when current locks already match
 [^9]: scripts/check_bundles.py
 [^10]: .github/workflows/release.yml; scripts/stage_release.py
 [^11]: justfile; .github/workflows/build-pyz.yml
+[^12]: src/easy_cheese/shared/bundle_commands.py; src/easy_cheese/skills/*/commands.py; tests/python/test_bundle_commands.py
+
+_Source: implemented repository architecture · Updated: 2026-08-28 · Supersedes: inaccurate bundle-comparison wording and implicit command registration_
