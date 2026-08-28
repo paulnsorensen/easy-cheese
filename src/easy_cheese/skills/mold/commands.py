@@ -8,6 +8,7 @@ from easy_cheese.shared.bundle_commands import Command, dispatch
 
 COMMANDS = (
     Command("artifact-path", "easy_cheese.shared.artifact_path:main"),
+    Command("contract", "easy_cheese.skills.mold.contract_cli:main"),
     Command("curd-count", "easy_cheese.skills.mold.curd_count:main"),
     Command("gate-graph", "easy_cheese.skills.mold.gate_graph:main"),
     Command("render-html", "easy_cheese.shared.html_report_cli:main"),

@@ -12,6 +12,7 @@ COMMANDS = (
     Command("baseline", "easy_cheese.shared.fanout.baseline:main"),
     Command("phase-decision", "easy_cheese.shared.fanout.phase_decision:main"),
     Command("milknado", "easy_cheese.shared.fanout.milknado:main"),
+    Command("contract", "easy_cheese.skills.cook.contract_cli:main"),
     Command("mode", "easy_cheese.shared.fanout.mode:main"),
     Command("worktree", "easy_cheese.shared.worktree:main"),
     Command("validate-decomposition", "easy_cheese.shared.fanout.validate_decomposition:main"),
