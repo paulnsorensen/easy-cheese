@@ -1,5 +1,5 @@
 set dotenv-load := true
-python := "uv run --no-project --with-requirements requirements/runtime.txt --with pytest==9.0.3 --with pyyaml==6.0.2 python3"
+python := "uv run --no-project --with-requirements requirements/runtime.txt --with pip==26.2.1 --with pytest==9.0.3 --with pyyaml==6.0.2 python3"
 
 # Keep pytest hermetic: only load plugins the suite declares, never whatever
 # third-party pytest plugins happen to be globally installed. Without this a
