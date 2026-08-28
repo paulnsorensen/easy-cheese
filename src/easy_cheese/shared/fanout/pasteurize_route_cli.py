@@ -7,28 +7,13 @@ pyz dispatch lives here instead.
 """
 from __future__ import annotations
 
-import json
 import sys
 
-from easy_cheese.shared.manifest_io import ManifestLoadError, read_mapping_arg_or_stdin
+from easy_cheese.shared.manifest_io import json_command
 
 from .pasteurize_route import size_pasteurize_fanout
 
-
-def main(argv: list[str]) -> int:
-    try:
-        payload = read_mapping_arg_or_stdin(argv, "usage: pasteurize_route_cli.py [<request.json>]")
-    except ManifestLoadError as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        return 2
-    try:
-        result = size_pasteurize_fanout(**payload)
-    except (TypeError, ValueError) as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
-    json.dump(result, sys.stdout, indent=2)
-    sys.stdout.write("\n")
-    return 0
+main = json_command(size_pasteurize_fanout, "usage: pasteurize_route_cli.py [<request.json>]")
 
 
 if __name__ == "__main__":
