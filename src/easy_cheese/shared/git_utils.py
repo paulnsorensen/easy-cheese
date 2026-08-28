@@ -6,6 +6,8 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+from easy_cheese.shared import cli
+
 # Conflict-marker prefixes (diff3 adds the ||||||| base marker). Single source
 # for marker checks here and in importers (conflict-pick).
 MARKER_OURS = "<<<<<<<"
@@ -17,14 +19,38 @@ CONFLICT_MARKERS = (MARKER_OURS, MARKER_BASE, MARKER_SEP, MARKER_THEIRS)
 _MARKER_FRAGMENTS = tuple(m[:6] for m in CONFLICT_MARKERS)
 
 
-def run_git(args: list[str], capture_output: bool = True) -> subprocess.CompletedProcess:
+def run_git(
+    args: list[str],
+    capture_output: bool = True,
+    *,
+    cwd: str | Path | None = None,
+    timeout: float | None = None,
+) -> subprocess.CompletedProcess:
+    command = ["git"]
+    if cwd is not None:
+        command += ["-C", str(cwd)]
+    command += args
+    kwargs: dict[str, object] = {}
+    if timeout is not None:
+        kwargs["timeout"] = timeout
     return subprocess.run(
-        ["git"] + args,
+        command,
         capture_output=capture_output,
         text=True,
         encoding="utf-8",
         errors="replace",
+        **kwargs,
     )
+
+
+def run_git_checked(args: list[str], *, cwd: str | Path | None = None) -> str:
+    """Run git and return stdout; raise CliError (loud) with git's stderr on failure."""
+    result = run_git(args, cwd=cwd)
+    if result.returncode != 0:
+        raise cli.CliError(
+            f"git {' '.join(args)} failed ({result.returncode}): {result.stderr.strip()}"
+        )
+    return result.stdout
 
 
 def get_conflicted_files() -> list[str]:

@@ -19,6 +19,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import NamedTuple
 
+from easy_cheese.shared import git_utils
+
 # Source of truth: skills/ultracook/references/manifest-schema.json.
 # Kebab-case, no leading/trailing hyphen, no double hyphens, 1-64 chars.
 # If manifest-schema.json changes (e.g., adding allowed characters), this regex
@@ -170,20 +172,12 @@ def _slug_from_remote(url: str) -> str:
 def _git_identity() -> str | None:
     """``owner/repo`` from origin, else the git toplevel dir name, else None."""
     try:
-        remote = subprocess.run(
-            ["git", "config", "--get", "remote.origin.url"],
-            capture_output=True,
-            text=True,
-            timeout=5,
+        remote = git_utils.run_git(
+            ["config", "--get", "remote.origin.url"], timeout=5
         )
         if remote.returncode == 0 and remote.stdout.strip():
             return _slug_from_remote(remote.stdout.strip())
-        top = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
+        top = git_utils.run_git(["rev-parse", "--show-toplevel"], timeout=5)
         if top.returncode == 0 and top.stdout.strip():
             return Path(top.stdout.strip()).name
     except (OSError, subprocess.SubprocessError):
@@ -310,12 +304,7 @@ def existing_artifacts(
 def _git_toplevel() -> Path | None:
     """Absolute git worktree root, or None outside a repo."""
     try:
-        top = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
+        top = git_utils.run_git(["rev-parse", "--show-toplevel"], timeout=5)
     except (OSError, subprocess.SubprocessError):
         return None
     if top.returncode == 0 and top.stdout.strip():
