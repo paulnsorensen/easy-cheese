@@ -381,5 +381,9 @@ def _setup(parser: argparse.ArgumentParser) -> None:
     scf.set_defaults(func=cmd_check_files)
 
 
+def main(argv: list[str]) -> int:
+    return cli.run(_setup, argv=argv)
+
+
 if __name__ == "__main__":
     raise SystemExit(cli.run(_setup))

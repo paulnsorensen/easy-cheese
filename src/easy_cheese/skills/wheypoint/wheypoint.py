@@ -275,5 +275,25 @@ def main(
     return EXIT_OK
 
 
+def _bundle_main(command: str, argv: list[str]) -> int:
+    return main([command, *argv])
+
+
+def commit_main(argv: list[str]) -> int:
+    return _bundle_main("commit", argv)
+
+
+def resolve_main(argv: list[str]) -> int:
+    return _bundle_main("resolve", argv)
+
+
+def show_main(argv: list[str]) -> int:
+    return _bundle_main("show", argv)
+
+
+def lint_main(argv: list[str]) -> int:
+    return _bundle_main("lint", argv)
+
+
 if __name__ == "__main__":
     sys.exit(main())

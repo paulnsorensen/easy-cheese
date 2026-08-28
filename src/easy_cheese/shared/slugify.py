@@ -48,5 +48,9 @@ def _setup(parser: argparse.ArgumentParser) -> None:
     from_task.set_defaults(func=_from_task)
 
 
+def main(argv: list[str]) -> int:
+    return cli.run(_setup, argv=argv)
+
+
 if __name__ == "__main__":
     raise SystemExit(cli.run(_setup))

@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import sys
 
-from easy_cheese.shared.bundle_commands import dispatch_modules
+from easy_cheese.shared.bundle_commands import Command, dispatch
 
-COMMANDS = {
-    "press-route": "easy_cheese.shared.fanout.press_route_cli",
-    "red-gate": "easy_cheese.shared.cut.red_gate",
-}
+COMMANDS = (
+    Command("press-route", "easy_cheese.shared.fanout.press_route_cli:main"),
+    Command("red-gate", "easy_cheese.shared.cut.red_gate:main"),
+)
 
 
 def main(argv: list[str] | None = None) -> int:
-    return dispatch_modules(COMMANDS, sys.argv[1:] if argv is None else argv)
+    return dispatch(COMMANDS, sys.argv[1:] if argv is None else argv)

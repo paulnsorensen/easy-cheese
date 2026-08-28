@@ -37,10 +37,10 @@ def parse_mapping(text: str, source: str = "<stdin>") -> dict[str, Any]:
 
 def read_mapping_arg_or_stdin(argv: list[str], usage: str) -> dict[str, Any]:
     """Read one optional path argument or stdin, returning a parsed mapping."""
-    if len(argv) > 2:
+    if len(argv) > 1:
         raise ManifestLoadError(usage)
-    if len(argv) == 2:
-        path = Path(argv[1])
+    if argv:
+        path = Path(argv[0])
         try:
             text = path.read_text(encoding="utf-8")
         except FileNotFoundError as exc:

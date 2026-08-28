@@ -30,7 +30,7 @@ def _run(payload: dict, capsys: pytest.CaptureFixture[str]) -> tuple[int, str, s
     sys.stdin = io.StringIO(json.dumps(payload))
     try:
         with redirect_stdout(buf):
-            exit_code = age_route_cli.main(["age_route_cli.py"])
+            exit_code = age_route_cli.main([])
     finally:
         sys.stdin = original_stdin
     return exit_code, buf.getvalue(), capsys.readouterr().err
@@ -63,7 +63,7 @@ class TestManifestErrors:
         buf = io.StringIO()
         with redirect_stdout(buf):
             exit_code = age_route_cli.main(
-                ["age_route_cli.py", str(REPO_ROOT / "does-not-exist.json")]
+                [str(REPO_ROOT / "does-not-exist.json")]
             )
         assert exit_code == 2
         assert "ERROR" in capsys.readouterr().err

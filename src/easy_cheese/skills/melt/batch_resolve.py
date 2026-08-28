@@ -231,7 +231,7 @@ def format_verbose(results: list, dry_run: bool) -> str:
     return "\n".join(lines)
 
 
-def main():
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Batch resolve conflicts using mergiraf.")
     parser.add_argument(
         "--apply", action="store_true", help="Apply resolutions (default is dry-run)."
@@ -249,7 +249,7 @@ def main():
     )
     parser.add_argument("files", nargs="*", help="Specific files (default: all conflicted files).")
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if not shutil.which("mergiraf"):
         print("mergiraf not found — install with: cargo install mergiraf", file=sys.stderr)
