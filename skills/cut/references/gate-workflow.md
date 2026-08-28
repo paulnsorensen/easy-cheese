@@ -9,14 +9,11 @@ semantics and is the only supported receipt-writing boundary.
 Resolve the validator once as an argv prefix and append every documented
 `red-gate` subcommand/argument to it:
 
-1. Installed sibling skills: `python3
-   ${CLAUDE_SKILL_DIR}/../cut/scripts/cut.pyz red-gate`.
-2. Source checkout fallback: `python3 skills/cut/scripts/cut.pyz red-gate`.
+`python3 skills/cut/scripts/cut.pyz red-gate`.
 
-The first path works from Cut, Cook, and Press because each receives its own
-`CLAUDE_SKILL_DIR`. Halt if neither bundle exists; a bare `red-gate` executable
-is not installed. Every `red-gate ...` example in these skills is shorthand
-for the resolved argv prefix, never a PATH lookup.
+Halt if the bundle does not exist; a bare `red-gate` executable is not
+installed. Every `red-gate ...` example in these skills is shorthand for the
+resolved argv prefix, never a PATH lookup.
 
 ## Inputs and provenance
 

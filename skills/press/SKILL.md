@@ -27,7 +27,7 @@ Resolve every `red-gate ...` invocation through
 [`../cut/references/gate-workflow.md`](../cut/references/gate-workflow.md)
 § Packaged command resolution. For boundary routing, append
 `press-route .cheese/press/<slug>.attempt-N.route.json` to `python3
-${CLAUDE_SKILL_DIR}/scripts/press.pyz`; in a source checkout use
+skills/press/scripts/press.pyz`; in a source checkout use
 `python3 skills/press/scripts/press.pyz press-route
 .cheese/press/<slug>.attempt-N.route.json`. The request has exactly
 `outcome`, `current_receipt`, `phase_token_ref`, and `phase_token_sha256`:

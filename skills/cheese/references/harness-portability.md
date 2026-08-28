@@ -4,11 +4,12 @@ Use this reference when a skill needs to talk about host capabilities instead of
 
 ## Helper resolution
 
-Prefer repo-local or bundled helpers first:
+Use repo-relative paths — they work on every host (Claude Code, Codex, OMP):
 
 - `src/easy_cheese/shared/*.py` for repo-wide helpers such as corpus path resolution, handoff artifact writing, and slug readers.
 - `skills/<skill>/scripts/*.pyz` for skill-specific helpers bundled with the repo.
-- `${CLAUDE_SKILL_DIR}/scripts/*` only when the host actually provides that environment variable.
+
+Do not use the `${CLAUDE_SKILL_DIR}` environment variable in invocation paths. Claude Code substitutes it in SKILL.md content, but Codex CLI has no equivalent — the literal variable lands in the model's context and fails at runtime.
 
 If a helper path is shown, the doc should say what behavior the helper provides, not imply one absolute path is the only valid transport.
 
@@ -76,6 +77,6 @@ When writing or editing a skill doc:
 2. Use the richest callable structured question primitive that fits every action; otherwise use a lossless numbered or hybrid rendering.
 3. Preserve every explicit action, recommendations, option tradeoffs, free-form `Other`, and immediate selected action.
 4. Show the bundled or repo-local helper path before the host fallback.
-5. Treat `${CLAUDE_SKILL_DIR}` as optional host context, not the required contract.
+5. Use repo-relative paths (`skills/<skill>/scripts/...`), not `${CLAUDE_SKILL_DIR}` — the latter is Claude Code-specific.
 6. Keep `status`, `next`, and `artifact` as the durable handoff fields.
 7. Use the host GitHub primitive when present; use `gh` as the documented fallback.

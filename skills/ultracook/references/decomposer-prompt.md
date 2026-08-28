@@ -78,8 +78,8 @@ trivial curd standalone when folding would violate criterion 4
 criterion.
 
 ## Validation
-The orchestrator will run `${CLAUDE_SKILL_DIR}/scripts/ultracook.pyz validate_manifest` on your output for required
-sections and field shapes, then `${CLAUDE_SKILL_DIR}/scripts/ultracook.pyz validate_decomposition` against the checks
+The orchestrator will run `skills/ultracook/scripts/ultracook.pyz validate_manifest` on your output for required
+sections and field shapes, then `skills/ultracook/scripts/ultracook.pyz validate_decomposition` against the checks
 below. Your output will be rejected on any failure:
 
 - **Behaviour overlap**, **Spec coverage**, **Test target**, **File disjointness** — enforce criteria 1–4 above.
