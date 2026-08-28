@@ -17,6 +17,17 @@ license: MIT
 
 ## Flow
 
+### Runtime commands
+
+`/wheypoint resolve --ref <absolute-path | work-id | slug>` and `/wheypoint lint <projection-path>` are read-only runtime operations. Route them through this skill's own archive:
+
+```bash
+python3 skills/wheypoint/scripts/wheypoint.pyz resolve --ref <absolute-path | work-id | slug>
+python3 skills/wheypoint/scripts/wheypoint.pyz lint <projection-path>
+```
+
+They must complete successfully before `/cheese --continue` dispatches a phase; never invoke another skill's archive.
+
 1. **Derive a slug** from the task (e.g. `auth-retry-backoff`). Reuse an existing slug if this session already owns one under `.cheese/`.
 2. **Inventory what already exists.** List the `.cheese/` artifacts, specs, PRs, issues, commits, and diffs this session produced or touched. These get referenced, never re-summarised.
 3. **Rehydrate.** `python3 skills/wheypoint/scripts/wheypoint.pyz show --work-id <id>` returns the record. Mandatory after a compaction: a compaction-marked delta is rejected unless the revision it declares as rehydrated is the current one.
