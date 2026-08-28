@@ -300,6 +300,24 @@ def _run_leg(leg: str, do_apply: bool) -> int:
     return 0
 
 
+def _leg_main(leg: str, argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog=leg)
+    parser.add_argument("--apply", action="store_true")
+    return _run_leg(leg, parser.parse_args(argv).apply)
+
+
+def global_main(argv: list[str]) -> int:
+    return _leg_main("global", argv)
+
+
+def local_main(argv: list[str]) -> int:
+    return _leg_main("local", argv)
+
+
+def doctor_main(argv: list[str]) -> int:
+    return _leg_main("doctor", argv)
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv if argv is None else argv
     legs = {"global", "local", "doctor"}

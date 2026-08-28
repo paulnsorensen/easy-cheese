@@ -505,7 +505,7 @@ def format_terse(d: dict) -> str:
     return "\n".join(lines)
 
 
-def main():
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Detect squash-merge residue and emit the remedy."
     )
@@ -516,7 +516,7 @@ def main():
     )
     parser.add_argument("--branch", help="Branch to check (default: current).")
     parser.add_argument("--json", action="store_true", help="Output as JSON.")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if not _SAFE_REF.match(args.base):
         msg = f"error: --base {args.base!r} contains unsafe characters"

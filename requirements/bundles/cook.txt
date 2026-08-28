@@ -1,6 +1,6 @@
 attrs==26.1.0 --hash=sha256:c647aa4a12dfbad9333ca4e71fe62ddc36f4e63b2d260a37a8b83d2f043ac309
 cattrs==26.1.0 --hash=sha256:d1e0804c42639494d469d08d4f26d6b9de9b8ab26b446db7b5f8c2e97f7c3096
-easy-cheese-cook==1.1.0 --hash=sha256:9a74b9d5085216bf2fbc3fc5bc992a9c83b5bfa414ccb60bf8b8ed231184db4b
+easy-cheese-cook==1.1.0 --hash=sha256:9f3d68ea1d48eecd7330da249bf984cb38a0d14f41cbc36b4cf7c7b5d47cf767
 easy-cheese-schemas==1.1.0 --hash=sha256:293518283225f923266e06d344c706935ce24806581a56f55ad6b3e1b704627a
-easy-cheese-shared==1.1.0 --hash=sha256:494d72541329a2fb576266d3454afbfed7671fe5070a5decf858d6cbd14f757b
+easy-cheese-shared==1.1.0 --hash=sha256:710d5e07aa1969f365da20e098565e0d37334dbc4e7fa3971b70b8c075e5f969
 typing_extensions==4.16.0 --hash=sha256:481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8

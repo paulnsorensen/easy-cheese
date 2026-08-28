@@ -76,7 +76,7 @@ def resolve_hunks(content: str, strategy: str, grep_pattern: str | None = None) 
     return "\n".join(result)
 
 
-def _parse_args() -> argparse.Namespace:
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Pick ours or theirs for conflict hunks")
     parser.add_argument("file", help="File to resolve")
     parser.add_argument("--ours", action="store_true", help="Take our changes for matching hunks")
@@ -87,11 +87,11 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--dry-run", action="store_true", help="Print resolved content without writing"
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
-def main() -> int:
-    args = _parse_args()
+def main(argv: list[str] | None = None) -> int:
+    args = _parse_args(argv)
 
     if args.ours and args.theirs:
         print("Error: Cannot use both --ours and --theirs", file=sys.stderr)

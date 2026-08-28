@@ -73,14 +73,15 @@ def test_unknown_command_prints_usage_to_stderr() -> None:
     assert "freshness-check" in result.stderr
 
 
-def test_subcommand_help_names_the_command() -> None:
-    result = _run_bundle("append-attempt", "--help")
+@pytest.mark.parametrize("command", ["append-attempt", "freshness-check"])
+def test_subcommand_help_names_the_command(command: str) -> None:
+    result = _run_bundle(command, "--help")
 
     assert result.returncode == 0
     assert result.stderr == ""
     usage = result.stdout.splitlines()[0]
     assert usage.startswith("usage: ")
-    assert " append-attempt [" in usage
+    assert f" {command} [" in usage
 
 
 def _read_rows(artifact: Path) -> list[str]:

@@ -156,7 +156,11 @@ def _setup(parser: argparse.ArgumentParser) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    return cli.run(_setup, argv=argv)
+    def setup(parser: argparse.ArgumentParser) -> None:
+        parser.prog = "append-attempt"
+        _setup(parser)
+
+    return cli.run(setup, argv=argv)
 
 
 if __name__ == "__main__":

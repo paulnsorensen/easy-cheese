@@ -28,7 +28,8 @@ src/
 - `easy-cheese-shared` is a repository-internal distribution containing the cohesive shared runtime package.
 - Each Python skill is a separate internal application distribution named `easy-cheese-<skill>`.
 - Skill slugs stay kebab-case; Python package segments use underscores.
-- Skill-owned code lives in `src/easy_cheese/skills/<python_skill_name>/`; its `commands.py` declares the console surface.
+- Skill-owned code lives in `src/easy_cheese/skills/<python_skill_name>/`; its `commands.py` declares the console surface as an immutable tuple of `Command(name, "module:callable")` values.[^8]
+- Every command target accepts only its command arguments as `list[str]`, writes result text to stdout or diagnostics to stderr, and returns an integer process status. Dispatch resolves the target lazily and calls it directly; it does not mutate `sys.argv`, execute a module through `runpy`, or depend on decorator registration.[^9]
 - Shared code lives in `src/easy_cheese/shared/`.
 - Tests stay under `tests/`; build, release, generation, and maintenance programs may live under `scripts/`.[^3]
 
@@ -83,5 +84,7 @@ This doctrine supersedes the split runtime roots under `src/<skill>/` and `share
 [^5]: scripts/build_pyz.py:`_shiv_command`; AGENTS.md
 [^6]: tests/python/test_pyz_bundle.py:`test_bundle_carries_only_its_own_skill_package`, `test_briesearch_bundle_uses_internal_distributions`
 [^7]: scripts/build_pyz.py:`validate_pure_wheel`; scripts/check_bundles.py; tests/python/test_pyz_bundle.py
+[^8]: src/easy_cheese/shared/bundle_commands.py:`Command`; src/easy_cheese/skills/*/commands.py
+[^9]: src/easy_cheese/shared/bundle_commands.py:`dispatch`; tests/python/test_bundle_commands.py
 
 _Source: implemented repository architecture · Updated: 2026-08-26 · Supersedes: split runtime roots, custom closure inference, vendored trees, and shared common archives_

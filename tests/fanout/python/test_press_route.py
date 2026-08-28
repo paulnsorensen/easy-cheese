@@ -414,5 +414,5 @@ def test_cli_requires_phase_token_evidence(
         '{"outcome":"green","current_receipt":"x"}',
         encoding="utf-8",
     )
-    assert press_route_cli.main(["press-route", str(request)]) == 1
+    assert press_route_cli.main([str(request)]) == 1
     assert "phase_token_ref" in capsys.readouterr().err

@@ -143,5 +143,9 @@ def _setup(parser: argparse.ArgumentParser) -> None:
     list_cmd.set_defaults(func=_cmd_list)
 
 
+def main(argv: list[str]) -> int:
+    return cli.run(_setup, argv=argv)
+
+
 if __name__ == "__main__":
     raise SystemExit(cli.run(_setup))

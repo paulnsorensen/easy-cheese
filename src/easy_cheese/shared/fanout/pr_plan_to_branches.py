@@ -77,7 +77,7 @@ def emit_commands(plan: dict[str, Any]) -> None:
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) >= 2 and argv[1] in ("-h", "--help"):
+    if argv and argv[0] in ("-h", "--help"):
         print(USAGE)
         return 0
 
@@ -98,4 +98,4 @@ def main(argv: list[str]) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv))
+    sys.exit(main(sys.argv[1:]))

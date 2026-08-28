@@ -4,22 +4,13 @@ from __future__ import annotations
 
 import sys
 
-from easy_cheese.shared import bundle_commands
+from easy_cheese.shared.bundle_commands import Command, dispatch
 
-from . import append_attempt, freshness_check
-
-
-@bundle_commands.bundle_command("append-attempt")
-def run_append_attempt(argv: list[str]) -> int:
-    """Append a hard-cheese attempt row."""
-    return append_attempt.main(argv)
-
-
-@bundle_commands.bundle_command("freshness-check")
-def run_freshness_check(argv: list[str]) -> int:
-    """Check whether a hard-cheese attempt is fresh."""
-    return freshness_check.main(argv)
+COMMANDS = (
+    Command("append-attempt", "easy_cheese.skills.hard_cheese.append_attempt:main"),
+    Command("freshness-check", "easy_cheese.skills.hard_cheese.freshness_check:main"),
+)
 
 
 def main(argv: list[str] | None = None) -> int:
-    return bundle_commands.dispatch(__name__, sys.argv[1:] if argv is None else argv)
+    return dispatch(COMMANDS, sys.argv[1:] if argv is None else argv)

@@ -179,7 +179,7 @@ def format_verbose_output(summaries: list) -> str:
     return "\n".join(lines)
 
 
-def main():
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Summarize merge conflicts. Default output is terse for LLMs."
     )
@@ -192,7 +192,7 @@ def main():
     )
     parser.add_argument("files", nargs="*", help="Specific files (default: all conflicted files).")
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     files = args.files if args.files else get_conflicted_files()
 

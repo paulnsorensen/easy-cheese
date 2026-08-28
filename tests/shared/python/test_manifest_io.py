@@ -72,7 +72,7 @@ class TestReadMappingArgOrStdin:
         plan = tmp_path / "plan.yaml"
         plan.write_text("shape: single\ngroups: []\n", encoding="utf-8")
         result = manifest_io.read_mapping_arg_or_stdin(
-            ["prog", str(plan)], "usage: prog [<plan>]"
+            [str(plan)], "usage: prog [<plan>]"
         )
         assert result == {"shape": "single", "groups": []}
 
@@ -83,7 +83,7 @@ class TestReadMappingArgOrStdin:
     ) -> None:
         monkeypatch.setattr(sys, "stdin", io.StringIO('{"hello": "world"}'))
         result = manifest_io.read_mapping_arg_or_stdin(
-            ["prog"], "usage: prog [<plan>]"
+            [], "usage: prog [<plan>]"
         )
         assert result == {"hello": "world"}
 
@@ -95,7 +95,7 @@ class TestReadMappingArgOrStdin:
         bogus = tmp_path / "does-not-exist.yaml"
         with pytest.raises(manifest_io.ManifestLoadError, match="manifest not found"):
             manifest_io.read_mapping_arg_or_stdin(
-                ["prog", str(bogus)], "usage: prog [<plan>]"
+                [str(bogus)], "usage: prog [<plan>]"
             )
 
     def test_too_many_args_yields_usage(self, manifest_io: ModuleType) -> None:
@@ -105,6 +105,6 @@ class TestReadMappingArgOrStdin:
         usage = "usage: prog [<plan>]"
         with pytest.raises(manifest_io.ManifestLoadError) as exc:
             manifest_io.read_mapping_arg_or_stdin(
-                ["prog", "a", "b"], usage
+                ["a", "b"], usage
             )
         assert str(exc.value) == usage

@@ -153,7 +153,7 @@ def _collect_lockfiles(files: list[str]) -> list[str]:
     return [f for f in get_conflicted_files() if detect_lockfile_type(f)]
 
 
-def main():
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Resolve lockfile conflicts by taking a side and regenerating"
     )
@@ -174,7 +174,7 @@ def main():
         help="Specific lockfiles to resolve (default: auto-detect)",
     )
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     lockfiles = _collect_lockfiles(args.files)
 
     if not lockfiles:

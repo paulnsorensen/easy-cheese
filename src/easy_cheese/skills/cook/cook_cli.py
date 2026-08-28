@@ -127,6 +127,14 @@ def _run_validate(argv: list[str]) -> int:
 _RUNNERS = {"normalize": _run_normalize, "validate": _run_validate}
 
 
+def normalize_main(argv: list[str]) -> int:
+    return _run_normalize(argv)
+
+
+def validate_main(argv: list[str]) -> int:
+    return _run_validate(argv)
+
+
 def main(argv: list[str]) -> int:
     command, rest = _command_of(argv)
     if command is None:
