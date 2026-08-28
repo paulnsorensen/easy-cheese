@@ -22,13 +22,8 @@ from pathlib import Path
 from easy_cheese.shared import cli, html_report
 
 
-def _reject_traversal(field: str, value: str) -> None:
-    if ".." in value or "/" in value or "\\" in value or ":" in value:
-        raise cli.CliError(f"{field} rejects path traversal: {value!r}")
-
-
 def _cmd_render(args: argparse.Namespace) -> None:
-    _reject_traversal("--out-name", args.out_name)
+    cli.reject_path_segment("--out-name", args.out_name)
     src = Path(args.in_path)
     if not src.is_file():
         raise cli.CliError(f"--in not found: {args.in_path}")
