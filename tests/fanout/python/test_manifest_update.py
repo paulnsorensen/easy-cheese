@@ -1,4 +1,4 @@
-"""Tests for skills/ultracook/scripts/manifest_update.py."""
+"""Tests for the shared fan-out manifest update module via the Cook bundle."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from types import ModuleType
 import pytest
 import yaml
 
-BUNDLE = Path(__file__).resolve().parents[3] / "skills/ultracook/scripts/ultracook.pyz"
+BUNDLE = Path(__file__).resolve().parents[3] / "skills/cook/scripts/cook.pyz"
 
 
 def _curds(n: int = 5) -> list[dict]:

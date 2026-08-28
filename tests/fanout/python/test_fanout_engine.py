@@ -1,9 +1,8 @@
 """Structural tests for the fan-out engine's shipped surface (src/fanout/ + refs).
 
-The fan-out engine (formerly /cheese-factory) ships as /ultracook's engine:
-prompt/schema references under skills/ultracook/references/ and scripts under
-src/fanout/ bundled into ultracook.pyz. This guards that every promised file is
-present so a dropped reference or script surfaces in CI. The /ultracook SKILL
+The fan-out engine is owned by /cook; prompt/schema references remain under
+skills/ultracook/references/ and implementation modules under src/easy_cheese/shared/fanout.
+This guards that every promised reference and module is present so drops surface in CI.
 frontmatter and prose are validated by .github/scripts/validate_skills.py and
 tests/python/test_ultracook_skills.py respectively.
 """
@@ -38,7 +37,7 @@ class TestReferencesPresent:
 
 
 class TestScriptsPresent:
-    """Every engine module bundled into ultracook.pyz must exist in src/fanout/."""
+    """Every retained engine module must exist in src/easy_cheese/shared/fanout/."""
 
     REQUIRED_SCRIPTS = (
         "phase_decision.py",

@@ -11,7 +11,7 @@ from types import ModuleType
 import yaml
 import pytest
 
-BUNDLE = Path(__file__).resolve().parents[3] / "skills/ultracook/scripts/ultracook.pyz"
+BUNDLE = Path(__file__).resolve().parents[3] / "skills/cook/scripts/cook.pyz"
 
 
 def _curds(n: int = 5) -> list[dict]:

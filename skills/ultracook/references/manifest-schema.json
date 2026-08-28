@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://easy-cheese.dev/schemas/ultracook-manifest.schema.json",
   "title": "Ultracook Manifest",
-  "description": "Per-spec state file written by /ultracook at .cheese/ultracook/<slug>/manifest.yaml. Updated at every phase boundary so --resume can pick up after a crash.",
+  "description": "Per-spec state file written by the /cook fan pathway at .cheese/ultracook/<slug>/manifest.yaml. Updated at every phase boundary so --resume can pick up after a crash.",
   "type": "object",
   "$defs": {
     "review_context": {

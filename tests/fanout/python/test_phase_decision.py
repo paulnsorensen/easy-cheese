@@ -1,8 +1,8 @@
-"""Tests for skills/ultracook/scripts/phase_decision.py — phase-table router.
+"""Tests for the shared fan-out phase-table router via the Cook bundle.
 
 Covers the 7-entry phase table, halt short-circuit, terminal stop, and the
 age-only early-stop signal. The unit tests take the `phase_decision` module
-from the conftest fixture; the CLI tests invoke the built ultracook.pyz directly.
+from the conftest fixture; CLI tests invoke the owning cook.pyz bundle.
 """
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from types import ModuleType
 
 import pytest
 
-BUNDLE = Path(__file__).resolve().parents[3] / "skills/ultracook/scripts/ultracook.pyz"
+BUNDLE = Path(__file__).resolve().parents[3] / "skills/cook/scripts/cook.pyz"
 
 
 class TestSpawnPhases:

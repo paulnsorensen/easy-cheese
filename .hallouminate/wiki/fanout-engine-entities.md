@@ -68,8 +68,7 @@ measured the way `review_surface` measures a completed diff.
   ("same schema both doors"); the legacy `skills/ultracook/references/decomposer-prompt.md`
   produces the **incompatible run-manifest schema** and is scope-noted as
   such -- do not present the two as the same decomposer.
-- Deployed as the `curd-block` subcommand of `ultracook.pyz`
-  (`scripts/build_pyz.py`).
+- Deployed as the `curd-block` subcommand of the `/cook` fan-pathway bundle (`scripts/build_pyz.py`).
 
 ## One validation home per entity
 

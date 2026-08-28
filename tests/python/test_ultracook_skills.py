@@ -100,7 +100,7 @@ class TestUltracookResolvesToCook:
         stub = _skill("ultracook")
         prompt = _read(SKILLS_DIR / "ultracook" / "references" / "decomposer-prompt.md")
 
-        assert "remain at their existing paths" in stub
+        assert "remains as compatibility material" in stub
         assert "remain in place, untouched" not in stub
         assert "retained legacy-manifest template" in prompt
         assert "consumed by `/cook`'s fan-path internals" in prompt
@@ -1240,7 +1240,7 @@ class TestUltracookModeGate:
             "cook must name the canonical PARALLEL_THRESHOLD constant"
         )
         # The mode subcommand picks linear|parallel deterministically.
-        assert "ultracook.pyz mode" in body or "pyz mode --count" in body, (
+        assert "cook.pyz mode" in body or "pyz mode --count" in body, (
             "cook must invoke the deterministic mode selector"
         )
 

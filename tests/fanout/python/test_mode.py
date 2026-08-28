@@ -14,7 +14,7 @@ from types import ModuleType
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-BUNDLE = REPO_ROOT / "skills/ultracook/scripts/ultracook.pyz"
+BUNDLE = REPO_ROOT / "skills/cook/scripts/cook.pyz"
 
 # Imported directly (not via the `mode` fixture) so DECOMPOSE_FIRST_THRESHOLD
 # is available at collection time for parametrize -- fixtures only resolve

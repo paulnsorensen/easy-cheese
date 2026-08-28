@@ -38,21 +38,17 @@ SKILL_SUBCOMMANDS = {
         "detect-squash-residue",
         "lockfile-resolve",
     ],
-    "ultracook": [
-        "artifact-path", "baseline", "phase_decision", "mode", "worktree", "milknado",
-        "validate_decomposition", "validate_manifest", "validate_pr_plan", "manifest_update",
-        "wiring_topo_sort", "pr_plan_to_branches", "age-route", "curd-block", "slugify",
-        "write_handoff_artifact", "read_handoff_slug", "findings_cli", "gates_cli", "paths_cli",
-        "handoff_cli", "render_html",
-    ],
     "affinage": ["pr-status", "post-reply", "age-route", "review-surface"],
     "mold": ["artifact-path", "curd-count", "gate-graph", "render-html", "taste-test", "validate-spec"],
     "briesearch": ["artifact-path", "ground-check"],
     "plate": ["stack-tools", "validate-publication"],
     "cook": [
-        "artifact-path", "age-route", "baseline", "milknado", "mode", "worktree",
-        "normalize", "validate", "slugify", "write-handoff-artifact", "read-handoff-slug",
-        "findings-cli", "gates-cli", "paths-cli", "handoff-cli", "render-html",
+        "artifact-path", "age-route", "baseline", "phase-decision", "milknado", "mode", "worktree",
+        "validate-decomposition", "validate-manifest", "validate-pr-plan", "manifest-update",
+        "wiring-topo-sort", "pr-plan-to-branches", "curd-block",
+        "normalize", "validate", "slugify", "write-handoff-artifact",
+        "read-handoff-slug", "findings-cli", "gates-cli", "paths-cli",
+        "handoff-cli", "render-html",
     ],
     "cure": [
         "slugify", "write-handoff-artifact", "read-handoff-slug", "findings-cli",
@@ -74,10 +70,10 @@ SKILL_SUBCOMMANDS = {
 # Every skill that registers the durable-corpus resolver shim. One shared source
 # (shared/scripts/artifact_path.py) backs them all; each must agree with
 # paths.artifact_path / paths.project_corpus_root.
-ARTIFACT_PATH_SKILLS = ("mold", "ultracook", "briesearch", "cook")
+ARTIFACT_PATH_SKILLS = ("mold", "briesearch", "cook")
 
 # Schema-dependent runtime bundles carry the schema wheel and its pure-Python deps.
-TYPED_RUNTIME_BUNDLES = ("cook", "cure", "ultracook", "wheypoint")
+TYPED_RUNTIME_BUNDLES = ("cook", "cure", "wheypoint")
 REQUIRED_WORKFLOW_MODULES = (
     "easy_cheese_schemas/__init__.py",
     "easy_cheese_schemas/artifacts.py",
@@ -105,7 +101,7 @@ def bundles(tmp_path_factory) -> Path:
 def test_default_batch_builds_every_registered_skill(tmp_path: Path) -> None:
     assert build_pyz.main(["build_pyz.py", "--out-dir", str(tmp_path)]) == 0
     expected = set(build_pyz.SKILLS)
-    assert len(expected) == 15
+    assert len(expected) == 14
     assert {path.stem for path in tmp_path.glob("*.pyz")} == expected
     assert {path.name for path in tmp_path.glob("*.pyz")} == {f"{skill}.pyz" for skill in expected}
 
@@ -330,18 +326,6 @@ def test_melt_subcommand_executes_with_forwarded_args(
     assert "<<<<<<<" not in result.stdout
 
 
-def test_ultracook_routing_is_subcommand_specific(
-    bundles: Path, tmp_path: Path
-) -> None:
-    empty = tmp_path / "empty.json"
-    empty.write_text("{}")
-    manifest = _run(bundles / "ultracook.pyz", "validate_manifest", str(empty))
-    pr_plan = _run(bundles / "ultracook.pyz", "validate_pr_plan", str(empty))
-    assert manifest.returncode == 1
-    assert pr_plan.returncode == 1
-    assert "manifest.slug is required" in manifest.stderr
-    assert "manifest.slug" not in pr_plan.stderr
-    assert "shape must be one of single" in pr_plan.stderr
 
 
 def test_plate_bundle_validates_publication_without_source_imports(
@@ -401,17 +385,6 @@ def test_briesearch_bundle_uses_internal_distributions(bundles: Path) -> None:
     assert not any(name.startswith("easy_cheese/skills/mold/") for name in content)
 
 
-def test_ultracook_bundle_contains_entity_modules(bundles: Path) -> None:
-    """curd.py and wiring.py are local library modules (not registered subcommands).
-    The local-sibling-bundling feature in build_pyz must stage them so that
-    validate_decomposition and validate_manifest can import them inside the .pyz."""
-    cf = _bundle_members(bundles / "ultracook.pyz")
-    assert "easy_cheese/shared/fanout/curd.py" in cf, (
-        f"curd.py missing from ultracook bundle; contents: {sorted(cf)}"
-    )
-    assert "easy_cheese/shared/fanout/wiring.py" in cf, (
-        f"wiring.py missing from ultracook bundle; contents: {sorted(cf)}"
-    )
 
 
 def test_cut_bundle_carries_red_gate_and_schema_runtime(bundles: Path) -> None:
@@ -605,16 +578,13 @@ def test_press_bundle_loads_router_and_requires_phase_token(bundles: Path) -> No
     )
 
 
-def test_ultracook_baseline_classifies_failures_via_stdin(bundles: Path) -> None:
-    """baseline reads {baseline, current} JSON from stdin and emits the classified
-    diff — the real end-to-end path /ultracook's quality gate drives."""
+def test_cook_baseline_classifies_failures_via_stdin(bundles: Path) -> None:
     payload = (
         '{"baseline": [], "current": '
         '[{"suite": "s", "test_id": "t", "signature": "x"}]}'
     )
-    result = _run(bundles / "ultracook.pyz", "baseline", stdin=payload)
+    result = _run(bundles / "cook.pyz", "baseline", stdin=payload)
     assert result.returncode == 0, result.stderr
-
     classification = json.loads(result.stdout)
     assert classification["new"] == [{"suite": "s", "test_id": "t", "signature": "x"}]
     assert classification["identical"] == []
@@ -622,26 +592,16 @@ def test_ultracook_baseline_classifies_failures_via_stdin(bundles: Path) -> None
     assert classification["resolved"] == []
 
 
-def test_ultracook_baseline_rejects_malformed_stdin(bundles: Path) -> None:
-    """Malformed stdin (not a JSON object) raises CliError -- exit 2, 'ERROR:' on
-    stderr -- rather than an uncaught traceback."""
-    result = _run(bundles / "ultracook.pyz", "baseline", stdin="not json")
+def test_cook_baseline_rejects_malformed_stdin(bundles: Path) -> None:
+    result = _run(bundles / "cook.pyz", "baseline", stdin="not json")
     assert result.returncode == 2, result.stderr
     assert result.stderr.startswith("ERROR:")
 
 
-def test_ultracook_baseline_rejects_wrong_typed_value(bundles: Path) -> None:
-    """A well-formed JSON object whose baseline/current value is the wrong shape
-    (e.g. a string instead of a list) must raise CliError -- exit 2, 'ERROR:' on
-    stderr -- rather than reaching classify() and raising an uncaught TypeError."""
-    result = _run(
-        bundles / "ultracook.pyz",
-        "baseline",
-        stdin='{"baseline": "notalist", "current": []}',
-    )
+def test_cook_baseline_rejects_wrong_typed_value(bundles: Path) -> None:
+    result = _run(bundles / "cook.pyz", "baseline", stdin='{"baseline": [], "current": {}}')
     assert result.returncode == 2, result.stderr
     assert result.stderr.startswith("ERROR:")
-    assert "baseline must be a list" in result.stderr
 
 
 # Pinned env so the resolved corpus path is deterministic and does not depend on
@@ -1102,7 +1062,7 @@ def test_bundle_build_is_byte_deterministic(tmp_path: Path) -> None:
 
 
 def test_skill_bundles_each_ship_shared_slugify(bundles: Path) -> None:
-    for skill in ("cook", "age", "cure", "ultracook"):
+    for skill in ("cook", "age", "cure"): 
         result = _run(
             bundles / f"{skill}.pyz",
             "slugify",
@@ -1347,7 +1307,7 @@ def test_document_rules_projection_matches_checked_in_source() -> None:
 
 
 def test_skill_archives_own_shared_commands_and_no_common_archive(bundles: Path) -> None:
-    for skill in ("cook", "age", "cure", "ultracook"):
+    for skill in ("cook", "age", "cure"):
         assert "easy_cheese/shared/slugify.py" in _bundle_members(bundles / f"{skill}.pyz")
     assert not any(REPO_ROOT.glob("skills/*/scripts/common.pyz"))
 

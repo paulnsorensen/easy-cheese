@@ -76,28 +76,3 @@ jobs:
 
       - name: Test bundle build and isolation contracts
         run: python3 -m pytest tests/python/test_pyz_bundle.py tests/python/test_build_pyz_tree_staging.py -q
-
-      - name: Check bundled schema version matches pyproject
-        run: |-
-          set -euo pipefail
-          python3 - <<'PY'
-          import re
-          import tomllib
-          import zipfile
-          from pathlib import Path
-
-          declared = tomllib.loads(Path("pyproject.toml").read_text())["project"]["version"]
-          bundle = Path("skills/ultracook/scripts/ultracook.pyz").resolve()
-          # Shiv stores package wheels under site-packages/ rather than at the
-          # zipapp import root. Read the bundled source member directly, never src/.
-          with zipfile.ZipFile(bundle) as archive:
-              source = archive.read("site-packages/easy_cheese_schemas/__init__.py").decode()
-          match = re.search(r"^__version__ = [\\\"]([^\\\"]+)[\\\"]$", source, re.MULTILINE)
-          if match is None:
-              raise SystemExit("easy_cheese_schemas.__version__ is missing from ultracook.pyz")
-          bundled = match.group(1)
-          if bundled != declared:
-              print(f"::error::easy_cheese_schemas in ultracook.pyz is {bundled}, but pyproject.toml declares {declared}. Sync __version__ and rebuild the bundles.")
-              raise SystemExit(1)
-          print(f"bundled easy_cheese_schemas {bundled} matches pyproject.toml.")
-          PY

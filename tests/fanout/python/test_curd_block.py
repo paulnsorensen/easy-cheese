@@ -3,9 +3,8 @@
 
 Distinct from tests/fanout/python/test_validate_decomposition.py, which
 exercises src/fanout/curd.py's run-manifest entity (id/behavior/
-acceptance_criterion/status/retry_count). curd_block.py is not yet registered
-in ultracook.pyz's SKILLS map, so this suite imports it directly from
-src/fanout/, matching the test_baseline.py precedent.
+curd_block.py is an internal shared module, so this suite imports it directly
+from src/easy_cheese/shared/fanout/, matching the test_baseline.py precedent.
 """
 from __future__ import annotations
 
