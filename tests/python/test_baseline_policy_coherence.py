@@ -6,11 +6,9 @@ Each per-curd press pass hardened its own file in isolation:
   (skills/cook/references/quality-gates.md). A future edit to one without
   the other would silently drift and no test would catch it.
 - W2 (curd 6) added `_cmd_classify` unit coverage and curd 1 documented the
-  `python3 skills/ultracook/scripts/ultracook.pyz baseline` example in
-  ultracook/SKILL.md, but nothing ties that documented example command to
-  the actual subcommand dispatch table -- the class of bug this run
-  actually hit (baseline.py was undocumented in ultracook.pyz until the
-  final wiring commit).
+  `python3 skills/cook/scripts/cook.pyz baseline` example in cook's corpus,
+  but nothing ties that documented example command to the actual subcommand
+  dispatch table -- the class of bug this run actually hit.
 - curd 4 asserted every consumer's handoff-slug fence carries a bare
   `baseline:` line, and curd 5 asserted the JSON-schema/validator agree on
   required keys, but nothing ties quality-gates.md's own worked-example
@@ -113,7 +111,7 @@ class TestBaselineCaptureExampleDispatches:
         )
 
     def test_documented_baseline_subcommand_actually_dispatches(self) -> None:
-        # Build the real ultracook.pyz bundle the same way tests/fanout does
+        # Build the real cook.pyz bundle the same way tests/fanout does
         # and invoke it exactly as the doc's example prescribes: subcommand
         # `baseline`, gate failures as JSON on stdin. If a future edit
         # unregisters baseline.py from the bundle (as it was before the
@@ -122,7 +120,7 @@ class TestBaselineCaptureExampleDispatches:
         sys.path.insert(0, str(REPO_ROOT / "scripts"))
         import build_pyz
 
-        bundle = build_pyz.cached_bundle("ultracook")
+        bundle = build_pyz.cached_bundle("cook")
         payload = {
             "baseline": [{"suite": "unit", "test_id": "test_a", "signature": "boom"}],
             "current": [{"suite": "unit", "test_id": "test_a", "signature": "boom"}],
@@ -134,7 +132,7 @@ class TestBaselineCaptureExampleDispatches:
             text=True,
         )
         assert result.returncode == 0, (
-            f"documented `ultracook.pyz baseline` command failed: {result.stderr}"
+            f"documented `cook.pyz baseline` command failed: {result.stderr}"
         )
         emitted = json.loads(result.stdout)
         assert emitted == {

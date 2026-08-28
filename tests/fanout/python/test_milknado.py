@@ -12,7 +12,7 @@ from pathlib import Path
 from types import ModuleType
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-BUNDLE = REPO_ROOT / "skills/ultracook/scripts/ultracook.pyz"
+BUNDLE = REPO_ROOT / "skills/cook/scripts/cook.pyz"
 
 ENGINE = ["milknado_todo_claim", "milknado_node_verify"]
 ENGINE_PREFIXED = [

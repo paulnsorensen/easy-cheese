@@ -11,7 +11,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[3]
 UC_DIR = REPO_ROOT / "skills" / "ultracook"
 REFERENCES_DIR = UC_DIR / "references"
-_BUNDLE = REPO_ROOT / "skills" / "ultracook" / "scripts" / "ultracook.pyz"
+_BUNDLE = REPO_ROOT / "skills" / "cook" / "scripts" / "cook.pyz"
 
 
 @pytest.fixture(scope="session")

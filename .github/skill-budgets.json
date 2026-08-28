@@ -6,7 +6,8 @@
     "skills/ultracook/references/pr-plan-schema.json",
     "skills/ultracook/references/pr-planner-prompt.md",
     "skills/ultracook/references/spawn-primitive-reference.md",
-    "skills/ultracook/references/wiring-prompt.md"
+    "skills/ultracook/references/wiring-prompt.md",
+    "skills/ultracook/references/decomposer-prompt.md"
   ],
   "skills": {
     "affinage": 3493,

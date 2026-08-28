@@ -1,6 +1,6 @@
 # PR planner sub-agent prompt template
 
-Loaded by `/ultracook` at Phase 7. Substitute `{slug}`, `{manifest_path}`, `{merged_diff_path}`, `{plate_layout}`, and `{spec_summary}` before dispatch.
+Loaded by `/cook`'s fan pathway at its PR-planning phase. Substitute `{slug}`, `{manifest_path}`, `{merged_diff_path}`, `{plate_layout}`, and `{spec_summary}` before dispatch.
 
 ````text
 You are the PR planner sub-agent for /ultracook spec: {slug}
@@ -75,10 +75,9 @@ Each group:
 - `depends_on` — branches that must be merged before this PR.
 
 For `single`, emit exactly one group. For `orthogonal_flat`, emit one group per curd
-with `base: main` and empty `depends_on`. For stacks, the orchestrator runs
-`skills/ultracook/scripts/ultracook.pyz pr_plan_to_branches` to convert the plan to
-branch-creation commands. The orchestrator validates your output with
-`skills/ultracook/scripts/ultracook.pyz validate_pr_plan` before running the branch converter.
+with `base: main` and empty `depends_on`. For stacks, `/cook` runs its internal
+`pr_plan_to_branches` command to convert the plan to branch-creation commands, then
+validates output with its internal `validate_pr_plan` command.
 
 Keep the YAML in the JSON-compatible subset: mappings, lists, strings, numbers, and
 booleans only — no anchors, aliases, tags, or multi-document streams. The shape is

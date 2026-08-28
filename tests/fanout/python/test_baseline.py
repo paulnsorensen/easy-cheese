@@ -1,11 +1,9 @@
 """Tests for src/fanout/baseline.py -- classify() baseline diff classifier.
 
-Covers the taxonomy /ultracook's baseline-aware quality gate (#298) needs:
+Covers the taxonomy /cook's baseline-aware quality gate needs:
 an unchanged baseline must let the run continue (no false regressions), and
 a new regression must still surface as `new` so the three-way policy can
-bound-fix or halt on it. `baseline.py` is not yet registered in ultracook.pyz's
-SKILLS map (a separate wiring task), so these tests import the module
-directly from src/fanout/ rather than through the built bundle.
+bound-fix or halt on it. These tests import the shared module directly.
 """
 from __future__ import annotations
 

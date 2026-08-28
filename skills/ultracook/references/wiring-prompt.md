@@ -1,6 +1,6 @@
 # Per-wiring task worker prompt template
 
-Loaded by `/ultracook` at Phase 4. Substitute `{id}`, `{slug}`, `{type}`, `{file}`, `{description}`, `{spec_summary}`, and `{agent_resolution}` before dispatch.
+Loaded by the `/cook` fan pathway at Phase 4. Substitute `{id}`, `{slug}`, `{type}`, `{file}`, `{description}`, `{spec_summary}`, and `{agent_resolution}` before dispatch.
 
 ````text
 You are performing integration wiring task: {id} for spec {slug}

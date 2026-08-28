@@ -12,7 +12,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 import easy_cheese_schemas  # noqa: E402, F401
-_BUNDLE = REPO_ROOT / "skills" / "ultracook" / "scripts" / "ultracook.pyz"
+_BUNDLE = REPO_ROOT / "skills" / "cook" / "scripts" / "cook.pyz"
 
 Validator = Callable[[dict[str, Any]], list[str]]
 

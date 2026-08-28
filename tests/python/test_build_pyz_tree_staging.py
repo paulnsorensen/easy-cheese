@@ -35,8 +35,7 @@ pytestmark = pytest.mark.skipif(
 @pytest.fixture(scope="module")
 def ultracook_pyz(tmp_path_factory) -> Path:
     out = tmp_path_factory.mktemp("tree-staging")
-    return build_pyz.build_bundle("ultracook", out / "ultracook.pyz")
-
+    return build_pyz.build_bundle("cook", out / "cook.pyz")
 
 @pytest.fixture(scope="module")
 def cut_pyz(tmp_path_factory) -> Path:
@@ -225,8 +224,8 @@ def test_the_wheypoint_bundle_is_deterministic(tmp_path) -> None:
 def test_tree_staging_stays_byte_deterministic(tmp_path: Path) -> None:
     """CI rebuilds every committed bundle and byte-compares it, so walking a
     nested tree must not leak filesystem ordering or mtimes into the archive."""
-    first = build_pyz.build_bundle("ultracook", tmp_path / "a" / "ultracook.pyz")
-    second = build_pyz.build_bundle("ultracook", tmp_path / "b" / "ultracook.pyz")
+    first = build_pyz.build_bundle("cook", tmp_path / "a" / "cook.pyz")
+    second = build_pyz.build_bundle("cook", tmp_path / "b" / "cook.pyz")
     assert first.read_bytes() == second.read_bytes()
 
 

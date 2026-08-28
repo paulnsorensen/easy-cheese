@@ -15,7 +15,7 @@ Any `/ultracook <spec> [flags]` invocation resolves to `/cook <spec> [flags]`. C
 
 ## What did not move
 
-- `skills/ultracook/scripts/` and `skills/ultracook/references/` remain at their existing paths — nothing here vaporized. `/cook`'s fan-pathway prose points at these retained files by their current relative path (e.g. `../ultracook/scripts/ultracook.pyz`, `../ultracook/references/decomposer-prompt.md`, `../ultracook/references/curd-prompt.md`, `../ultracook/references/manifest-schema.json`) rather than duplicating or moving them.
+- `skills/ultracook/references/` remains as compatibility material for `/cook`'s fan pathway; executable runtime now ships only in `cook.pyz`, and no `ultracook.pyz` bundle is published.
 - The manifest path stays `.cheese/ultracook/<slug>/manifest.yaml` for continuity — the identity of the skill that reads/writes it changed, not the path; its shape is `references/manifest-schema.json`, and each curd's dispatch prompt is `references/curd-prompt.md`, both read by `/cook`'s fan pathway.
 - `src/easy_cheese/shared/fanout/mode.py` and `src/easy_cheese/shared/fanout/curd_block.py` remain decomposer/fanout internals — `/cook`'s fan pathway calls them directly rather than through this retired skill.
 - The retained scripts/references still do source-code I/O under `/cook`'s ownership — that follows [`code-intelligence-routing.md`](../cheese/references/code-intelligence-routing.md) same as everywhere else.

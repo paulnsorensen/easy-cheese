@@ -1,6 +1,6 @@
 # Per-curd phase prompt template
 
-Loaded by `/ultracook` for each top-level phase spawn. Substitute `{N}`, `{slug}`, `{phase}`, `{worktree_path}`, `{file_list}`, `{behaviour}`, `{acceptance_criterion}`, `{test_target}`, `{spec_summary}`, `{baseline}`, `{prior_handoff}`, `{review_context}`, and `{agent_resolution}`.
+Loaded by the `/cook` fan pathway for each top-level phase spawn. Substitute `{N}`, `{slug}`, `{phase}`, `{worktree_path}`, `{file_list}`, `{behaviour}`, `{acceptance_criterion}`, `{test_target}`, `{spec_summary}`, `{baseline}`, `{prior_handoff}`, `{review_context}`, and `{agent_resolution}`.
 
 ````text
 You are executing {phase} for curd #{N} of spec {slug}.

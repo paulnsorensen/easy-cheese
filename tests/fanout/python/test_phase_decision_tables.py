@@ -15,7 +15,7 @@ from types import ModuleType
 
 import pytest
 
-BUNDLE = Path(__file__).resolve().parents[3] / "skills/ultracook/scripts/ultracook.pyz"
+BUNDLE = Path(__file__).resolve().parents[3] / "skills/cook/scripts/cook.pyz"
 
 
 class TestTableShapes:

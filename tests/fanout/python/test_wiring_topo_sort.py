@@ -12,7 +12,7 @@ import yaml
 
 from easy_cheese_schemas.wiring_graph import WiringCycleError, compute_waves, cycle_errors
 
-BUNDLE = Path(__file__).resolve().parents[3] / "skills/ultracook/scripts/ultracook.pyz"
+BUNDLE = Path(__file__).resolve().parents[3] / "skills/cook/scripts/cook.pyz"
 
 
 def _wiring(*entries: tuple[str, list[str]]) -> list[dict]:
