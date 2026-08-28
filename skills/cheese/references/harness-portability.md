@@ -9,7 +9,7 @@ Use repo-relative paths — they work on every host (Claude Code, Codex, OMP):
 - `src/easy_cheese/shared/*.py` for repo-wide helpers such as corpus path resolution, handoff artifact writing, and slug readers.
 - `skills/<skill>/scripts/*.pyz` for skill-specific helpers bundled with the repo.
 
-Do not use `${CLAUDE_SKILL_DIR}` interpolation in invocation paths. Claude Code substitutes it in SKILL.md content, but Codex CLI has no equivalent — the literal variable lands in the model's context and fails at runtime.
+Do not use the `${CLAUDE_SKILL_DIR}` environment variable in invocation paths. Claude Code substitutes it in SKILL.md content, but Codex CLI has no equivalent — the literal variable lands in the model's context and fails at runtime.
 
 If a helper path is shown, the doc should say what behavior the helper provides, not imply one absolute path is the only valid transport.
 
