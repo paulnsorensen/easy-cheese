@@ -8,7 +8,7 @@ license: MIT
 
 `/wheypoint` captures just enough state for a cold reader to resume.
 
-`/wheypoint` is for culture's end-of-session checkpoint and for the messy mid-task moment when no phase slug applies and context is about to be lost.
+`/wheypoint` checkpoints culture sessions or mid-task work without a phase slug.
 
 ## Inputs
 
