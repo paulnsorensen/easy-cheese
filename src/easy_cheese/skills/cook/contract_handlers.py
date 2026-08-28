@@ -1,4 +1,4 @@
-"""Cook CLI handlers for normalizing writer views and validating contracts.
+"""Handlers for Cook's normalize and validate contract commands.
 
 ``normalize`` combines agent-authored JSON with host-owned invocation data,
 then emits a canonical artifact. ``validate`` checks a payload against a named
@@ -21,6 +21,8 @@ from easy_cheese_schemas import (
     supported_version_for,
     validate_contract,
 )
+
+__all__ = ["normalize_main", "validate_main"]
 
 
 
