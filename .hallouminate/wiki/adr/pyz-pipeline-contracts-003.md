@@ -1,17 +1,28 @@
-# ADR: Script locations are published as a generated, gated map plus per-source banners
+# ADR: Runtime source locations follow the package layout
 
-Status: accepted (2026-08-18)
+Status: superseded (2026-08-28)
 
 Spec: pyz-pipeline-contracts (durable specs corpus).
 
-## Context
+This ADR records an unimplemented generated-source-map proposal. The implemented Shiv migration uses the package layout and the bundle architecture pages as the source-location contract; it does not generate `src/PYTHON_SCRIPTS.md`, `src/README.md`, or per-source banners.[^1]
 
-src/ mixed Astro site and Python sources with no artifact mapping subcommands to source files; the only explainer lived in .agents/skills/python-authoring/SKILL.md.
+## Historical context
 
-## Decision
+The earlier runtime layout mixed documentation-site source and Python source under `src/`. The repository had no generated map from bundle subcommands to source files.
 
-build_pyz compiles src/PYTHON_SCRIPTS.md (bundle, subcommand, source path) from its registries with a byte-match staleness gate mirroring the schema catalog; every registered source opens with a one-line ships-as banner asserted by test; a thin hand-written src/README.md explains and points at the map. Rejected: hand-written docs alone (rot silently).
+## Historical decision
 
-## Consequences
+The proposal required `build_pyz.py` to generate and gate `src/PYTHON_SCRIPTS.md`, add a short `src/README.md`, and add a one-line deployment banner to every registered source file.
 
-Where-does-this-live is answered by a generated artifact that cannot drift, at both the directory and the file.
+## Supersession
+
+Runtime Python now lives under two explicit packages: application and shared code under `src/easy_cheese/`, and published schemas under `src/easy_cheese_schemas/`.[^2] `scripts/build_pyz.py` discovers Python-backed skills from `src/easy_cheese/skills/*/commands.py`; package metadata defines the runtime closure.[^3] The public README and contributor guide describe how source becomes a same-named skill archive, while the wiki's bundle doctrine and pipeline pages document the full distribution graph.[^4]
+
+Do not add the proposed generated map or source banners without new demonstrated navigation pressure. Keep the package layout and existing architecture pages accurate instead.
+
+[^1]: specs/pyz-pipeline-contracts.md:68-72,149-151
+[^2]: AGENTS.md; .hallouminate/wiki/architecture/skill-python-bundle-doctrine.md
+[^3]: scripts/build_pyz.py:23-41,181-196
+[^4]: README.md; CONTRIBUTING.md; .hallouminate/wiki/architecture/pyz-bundling-pipeline.md
+
+_Source: implemented repository architecture · Updated: 2026-08-28 · Supersedes: the unimplemented generated source-map and source-banner proposal accepted 2026-08-18_

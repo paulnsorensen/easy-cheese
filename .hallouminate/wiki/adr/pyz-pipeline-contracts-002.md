@@ -1,17 +1,28 @@
-# ADR: Bundle currency is enforced locally by just check and a scoped prek hook
+# ADR: Bundle currency remains a dedicated build gate
 
-Status: accepted (2026-08-18)
+Status: superseded (2026-08-28)
 
 Spec: pyz-pipeline-contracts (durable specs corpus).
 
-## Context
+This ADR records an unimplemented local-gate proposal. The implemented Shiv pipeline keeps archive rebuilding and currency comparison in the dedicated bundle workflow rather than adding them to `just check`.[^1]
 
-The CRC currency check ran only in CI (build-pyz.yml), so PRs recurrently failed 'check .pyz bundles are current' (e.g. PR #424) after src/ edits without just bundle.
+## Historical context
 
-## Decision
+The CRC currency check ran only in CI, so pull requests could fail after runtime source changed without a corresponding archive rebuild.
 
-check_bundles.py joins the just check dependency chain, and a prek bundle-currency hook fires on commits touching src/, shared/, or skills/*/phase-contract.yaml. Rejected: CI auto-commit (bot pushes, rebase noise).
+## Historical decision
 
-## Consequences
+The proposal added `check_bundles.py` to the `just check` dependency chain and added a scoped prek hook for runtime changes.
 
-Staleness fails at the gate or the commit, not a CI round-trip later.
+## Supersession
+
+The current `just check` recipe runs linting, tests, and the documentation build. It does not rebuild archives or run `scripts/check_bundles.py`.[^2] Running the checker without first rebuilding the archives would compare the working-tree archives with their committed versions, not with changed runtime source. The dedicated `build-pyz.yml` workflow installs the pinned build tools, rebuilds the archives, compares canonical archive content with `HEAD`, and runs bundle isolation tests.[^3]
+
+Contributors must run `just bundle` after changes to runtime source, build inputs, phase contracts, locks, or committed archives. Do not describe archive currency as part of `just check` unless the gate first performs an authoritative rebuild.[^4]
+
+[^1]: .hallouminate/wiki/architecture/pyz-bundling-pipeline.md
+[^2]: justfile:14-39,74-78
+[^3]: .github/workflows/build-pyz.yml:39-78; scripts/check_bundles.py:1-196
+[^4]: README.md; CONTRIBUTING.md
+
+_Source: implemented repository behavior · Updated: 2026-08-28 · Supersedes: the unimplemented local `just check` and prek proposal accepted 2026-08-18_
