@@ -135,10 +135,20 @@ def test_skill_manifests_are_literal_tuples() -> None:
         package = skill.replace("-", "_")
         module = importlib.import_module(f"easy_cheese.skills.{package}.commands")
         tree = ast.parse(inspect.getsource(module))
-        assignment = next(
+        bindings = [
             node
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Assign)
-            and any(isinstance(target, ast.Name) and target.id == "COMMANDS" for target in node.targets)
+            for node in tree.body
+            if isinstance(node, (ast.Assign, ast.AnnAssign))
+            and (
+                any(
+                    isinstance(target, ast.Name) and target.id == "COMMANDS"
+                    for target in node.targets
+                )
+                if isinstance(node, ast.Assign)
+                else isinstance(node.target, ast.Name) and node.target.id == "COMMANDS"
+            )
+        ]
+        assert len(bindings) == 1, f"{module.__name__}.COMMANDS must have one top-level binding"
+        assert isinstance(bindings[0].value, ast.Tuple), (
+            f"{module.__name__}.COMMANDS must be a literal tuple"
         )
-        assert isinstance(assignment.value, ast.Tuple), f"{module.__name__}.COMMANDS must be a literal tuple"
