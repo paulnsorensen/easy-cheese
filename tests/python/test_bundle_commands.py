@@ -46,9 +46,13 @@ def test_duplicate_command_rejected() -> None:
         bc.command_map((command(), command()))
 
 
-def test_normalized_alias_collision_rejected() -> None:
+@pytest.mark.parametrize("commands", [
+    (command("foo-bar"), command("foo_bar")),
+    (command("foo_bar"), command("foo-bar")),
+])
+def test_normalized_alias_collision_rejected(commands: tuple[bc.Command, bc.Command]) -> None:
     with pytest.raises(ValueError, match="alias collision"):
-        bc.command_map((command("foo-bar"), command("foo_bar")))
+        bc.command_map(commands)
 
 
 def test_command_map_sorted_by_name() -> None:
