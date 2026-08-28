@@ -35,10 +35,10 @@ slash commands are host renderings, not the control model.
 2. **Select** — adopt any pre-locked handoff from `/age`/`/affinage`; otherwise apply the recommended composite. See `references/selection.md` for the default rule, recognized verbs, and gate conditions. To expand a user-supplied verb to finding ids:
 
    ```
-   python3 skills/cure/scripts/cure.pyz findings_cli parse-selection --report <path> --selection "<verb>"
+   python3 skills/cure/scripts/cure.pyz findings-cli parse-selection --report <path> --selection "<verb>"
    ```
 
-   If the host only ships the bundle, `python3 skills/cure/scripts/cure.pyz findings_cli parse-selection ...` is the fallback.
+   If the host only ships the bundle, `python3 skills/cure/scripts/cure.pyz findings-cli parse-selection ...` is the fallback.
 3. **Apply** — fix one logical group at a time: re-confirm the anchor through
    a fresh bounded read, then invoke `easy_cheese_schemas.cure` with the
    validated plan and a `CureDiagnosisBinding` for every selected curd. Each
@@ -73,12 +73,12 @@ Applied requires its proving test green (Iron Law — see `references/cure-disci
 **clean cure** — ≥1 fix applied, all gates green (identical recorded `baseline:` failures don't count against green — see [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md)), no false-premise halt. To map the post-cure gate booleans to a readiness verdict (agent judges the booleans; the CLI maps them):
 
    ```
-   python3 skills/cure/scripts/cure.pyz gates_cli classify \
+   python3 skills/cure/scripts/cure.pyz gates-cli classify \
      --press-status <label> \
      [--hard-floor-met] [--has-open-level-1-or-2] [--has-open-level-3] [--has-open-level-4-or-5] [--any-spinning]
    ```
 
-   If the host only ships the bundle, `python3 skills/cure/scripts/cure.pyz gates_cli classify ...` is the fallback.
+   If the host only ships the bundle, `python3 skills/cure/scripts/cure.pyz gates-cli classify ...` is the fallback.
 
 ## Handoff slug
 
@@ -96,7 +96,7 @@ Write that legacy handoff projection through the canonical writer, carrying the
 typed Cure result schema at the boundary:
 
 ```text
-python3 skills/cure/scripts/cure.pyz write_handoff_artifact \
+python3 skills/cure/scripts/cure.pyz write-handoff-artifact \
   --slug <slug> --status <status> --phase cure --next age \
   --artifact <artifact-path> --orientation "<one-line orientation>" \
   --payload-schema https://schemas.easy-cheese.dev/curd-result

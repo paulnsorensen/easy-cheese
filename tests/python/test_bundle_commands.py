@@ -46,6 +46,15 @@ def test_duplicate_command_rejected() -> None:
         bc.command_map((command(), command()))
 
 
+@pytest.mark.parametrize("commands", [
+    (command("foo-bar"), command("foo_bar")),
+    (command("foo_bar"), command("foo-bar")),
+])
+def test_normalized_alias_collision_rejected(commands: tuple[bc.Command, bc.Command]) -> None:
+    with pytest.raises(ValueError, match="alias collision"):
+        bc.command_map(commands)
+
+
 def test_command_map_sorted_by_name() -> None:
     commands = (command("beta"), command("alpha"))
     assert list(bc.command_map(commands)) == ["alpha", "beta"]
@@ -59,6 +68,14 @@ def test_dispatch_lazily_invokes_target_without_mutating_sys_argv(
     assert bc.dispatch((command(),), ["go", "x", "y"]) == 7
     assert calls == [["x", "y"]]
     assert sys.argv == original
+
+
+def test_dispatch_accepts_legacy_underscore_alias(
+    target_module: tuple[list[list[str]], ModuleType],
+) -> None:
+    calls, _ = target_module
+    assert bc.dispatch((command("write-handoff-artifact"),), ["write_handoff_artifact", "x"]) == 7
+    assert calls == [["x"]]
 
 
 def test_dispatch_empty_argv_prints_usage_and_returns_2(

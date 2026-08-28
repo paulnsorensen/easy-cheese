@@ -39,50 +39,32 @@ SKILL_SUBCOMMANDS = {
         "lockfile-resolve",
     ],
     "ultracook": [
-        "artifact-path",
-        "baseline",
-        "phase_decision",
-        "mode",
-        "worktree",
-        "milknado",
-        "validate_decomposition",
-        "validate_manifest",
-        "validate_pr_plan",
-        "manifest_update",
-        "wiring_topo_sort",
-        "pr_plan_to_branches",
-        "age-route", "curd-block", "slugify", "write_handoff_artifact",
-        "read_handoff_slug", "findings_cli", "gates_cli", "paths_cli",
+        "artifact-path", "baseline", "phase_decision", "mode", "worktree", "milknado",
+        "validate_decomposition", "validate_manifest", "validate_pr_plan", "manifest_update",
+        "wiring_topo_sort", "pr_plan_to_branches", "age-route", "curd-block", "slugify",
+        "write_handoff_artifact", "read_handoff_slug", "findings_cli", "gates_cli", "paths_cli",
         "handoff_cli", "render_html",
     ],
     "affinage": ["pr-status", "post-reply", "age-route", "review-surface"],
-    "mold": [
-        "artifact-path",
-        "curd-count",
-        "gate-graph",
-        "render_html",
-        "taste-test",
-        "validate-spec",
-    ],
+    "mold": ["artifact-path", "curd-count", "gate-graph", "render-html", "taste-test", "validate-spec"],
     "briesearch": ["artifact-path", "ground-check"],
     "plate": ["stack-tools", "validate-publication"],
     "cook": [
         "artifact-path", "age-route", "baseline", "milknado", "mode", "worktree",
-        "normalize", "validate", "slugify", "write_handoff_artifact",
-        "read_handoff_slug", "findings_cli", "gates_cli", "paths_cli",
-        "handoff_cli", "render_html",
+        "normalize", "validate", "slugify", "write-handoff-artifact", "read-handoff-slug",
+        "findings-cli", "gates-cli", "paths-cli", "handoff-cli", "render-html",
     ],
     "cure": [
-        "slugify", "write_handoff_artifact", "read_handoff_slug", "findings_cli",
-        "gates_cli", "paths_cli", "handoff_cli", "render_html",
+        "slugify", "write-handoff-artifact", "read-handoff-slug", "findings-cli",
+        "gates-cli", "paths-cli", "handoff-cli", "render-html",
     ],
     "cut": ["red-gate"],
     "wheypoint": ["commit", "resolve", "show", "lint"],
     "easy-cheese-setup": ["global", "local", "doctor"],
     "age": [
-        "artifact-path", "html-report", "age-route", "review-surface", "severity",
-        "slugify", "write_handoff_artifact", "read_handoff_slug", "findings_cli",
-        "gates_cli", "paths_cli", "handoff_cli", "render_html",
+        "artifact-path", "html-report", "age-route", "review-surface", "severity", "slugify",
+        "write-handoff-artifact", "read-handoff-slug", "findings-cli", "gates-cli", "paths-cli",
+        "handoff-cli", "render-html",
     ],
     "hard-cheese": ["append-attempt", "freshness-check"],
     "pasteurize": ["debug-tag-sweep", "repro-rerun", "pasteurize-route"],
@@ -303,6 +285,26 @@ def test_subcommand_resolves_inside_bundle(bundles: Path, skill: str, sub: str) 
     assert not dispatcher_fallback, combined
 
 
+
+
+@pytest.mark.parametrize(
+    ("skill", "canonical", "legacy"),
+    [
+        ("age", "write-handoff-artifact", "write_handoff_artifact"),
+        ("cook", "read-handoff-slug", "read_handoff_slug"),
+        ("cure", "findings-cli", "findings_cli"),
+        ("mold", "render-html", "render_html"),
+    ],
+)
+def test_kebab_commands_and_legacy_aliases_dispatch_from_committed_bundles(
+    bundles: Path, skill: str, canonical: str, legacy: str
+) -> None:
+    for name in (canonical, legacy):
+        result = _run(bundles / f"{skill}.pyz", name, "--help")
+        combined = result.stdout + result.stderr
+        assert "ModuleNotFoundError" not in combined, combined
+        assert "Traceback" not in combined, combined
+        assert not combined.strip().startswith("usage: <pyz>"), combined
 @pytest.mark.parametrize("skill", list(SKILL_SUBCOMMANDS))
 def test_unknown_subcommand_is_rejected(bundles: Path, skill: str) -> None:
     result = _run(bundles / f"{skill}.pyz", "no-such-subcommand")

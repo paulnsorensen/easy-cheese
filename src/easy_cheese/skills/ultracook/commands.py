@@ -13,24 +13,12 @@ COMMANDS = (
     Command("mode", "easy_cheese.shared.fanout.mode:main"),
     Command("worktree", "easy_cheese.shared.worktree:main"),
     Command("milknado", "easy_cheese.shared.fanout.milknado:main"),
-    Command(
-        "validate_decomposition",
-        "easy_cheese.shared.fanout.validate_decomposition:main",
-    ),
-    Command(
-        "validate_manifest",
-        "easy_cheese.shared.fanout.validate_manifest:main",
-    ),
-    Command(
-        "validate_pr_plan",
-        "easy_cheese.shared.fanout.validate_pr_plan:main",
-    ),
+    Command("validate_decomposition", "easy_cheese.shared.fanout.validate_decomposition:main"),
+    Command("validate_manifest", "easy_cheese.shared.fanout.validate_manifest:main"),
+    Command("validate_pr_plan", "easy_cheese.shared.fanout.validate_pr_plan:main"),
     Command("manifest_update", "easy_cheese.shared.fanout.manifest_update:main"),
     Command("wiring_topo_sort", "easy_cheese.shared.fanout.wiring_topo_sort:main"),
-    Command(
-        "pr_plan_to_branches",
-        "easy_cheese.shared.fanout.pr_plan_to_branches:main",
-    ),
+    Command("pr_plan_to_branches", "easy_cheese.shared.fanout.pr_plan_to_branches:main"),
     Command("age-route", "easy_cheese.shared.fanout.age_route_cli:main"),
     Command("curd-block", "easy_cheese.shared.fanout.curd_block:main"),
     Command("slugify", "easy_cheese.shared.slugify:main"),

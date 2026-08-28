@@ -104,7 +104,7 @@ def test_harness_portability_reference_is_linked_from_workflow_docs():
         # phase-state and decomposition commands are intentionally not live.
         REPO_ROOT / "skills/cook/SKILL.md": (
             "cook.pyz artifact-path",
-            "cook.pyz read_handoff_slug",
+            "cook.pyz read-handoff-slug",
             "cook.pyz mode",
             "cook.pyz milknado",
             "cook.pyz worktree create",
@@ -112,8 +112,8 @@ def test_harness_portability_reference_is_linked_from_workflow_docs():
             "cook.pyz worktree teardown",
         ),
         REPO_ROOT / "skills/age/SKILL.md": (
-            "age.pyz read_handoff_slug",
-            "age.pyz write_handoff_artifact",
+            "age.pyz read-handoff-slug",
+            "age.pyz write-handoff-artifact",
             "age.pyz html-report",
         ),
         REPO_ROOT / "skills/affinage/SKILL.md": (
