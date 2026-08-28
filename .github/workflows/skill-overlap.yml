@@ -1,5 +1,8 @@
 name: skill-overlap
 
+# Disabled for now: automatic schedule and pull_request triggers are parked
+# while we decide whether to salvage the ratchet. Manual runs still work via
+# workflow_dispatch. See https://github.com/paulnsorensen/easy-cheese/issues/511.
 on:
   workflow_dispatch:
     inputs:
@@ -9,15 +12,6 @@ on:
         default: calibrate
         type: choice
         options: [calibrate, report, check]
-  schedule:
-    - cron: "17 6 * * 1"
-  pull_request:
-    paths:
-      - 'skills/**/*.md'
-      - '.claude-plugin/plugin.json'
-      - 'tools/skill-overlap/**'
-      - '.github/skill-overlap-*.yml'
-      - '.github/workflows/skill-overlap.yml'
 
 permissions:
   contents: read
