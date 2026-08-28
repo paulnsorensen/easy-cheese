@@ -8,8 +8,9 @@ from easy_cheese.shared.manifest_io import (  # noqa: E402
     ManifestLoadError,
     read_mapping_arg_or_stdin,
 )
+from easy_cheese_schemas import Decomposition, DecomposedCurd, load  # noqa: E402
 
-from . import curd, wiring  # noqa: E402
+from . import wiring  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -36,16 +37,26 @@ def validate_manifest(manifest: dict) -> list[str]:
     if ill_formed:
         errors.append(ill_formed)
 
+    dict_curds = []
     for c in curds:
         if not isinstance(c, dict):
             errors.append(f"non-dict curd entry: {c!r}")
             continue
-        errors.extend(curd.behaviour_errors(c))
+        dict_curds.append(c)
 
-    # Runs at every curd count. Cross-curd collision is vacuous for a lone curd,
-    # but the per-curd `files` shape rules this also enforces are not — every
-    # curd must declare a non-empty list of string paths.
-    errors.extend(curd.disjoint_files_errors(curds))
+    # Content rules (behavior/acceptance_criterion/test_target/files shape)
+    # live once in easy_cheese_schemas.DecomposedCurd, checked per curd so one
+    # curd's failure never short-circuits another's. The cross-curd `files`
+    # disjointness invariant lives on Decomposition.curds instead -- a
+    # collection-level rule -- so it is checked separately over the same
+    # dicts; when it fails, only its own message is kept, since a raised
+    # collection validator would otherwise mask per-curd errors already
+    # collected above.
+    for c in dict_curds:
+        errors.extend(load(c, DecomposedCurd, strict=True).problems)
+    if dict_curds:
+        collection = load({"curds": dict_curds, "wiring": []}, Decomposition, strict=True)
+        errors.extend(problem for problem in collection.problems if "curds[" not in problem)
 
     wiring_list = manifest.get("wiring", [])
     if not isinstance(wiring_list, list):

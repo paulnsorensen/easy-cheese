@@ -3,8 +3,9 @@
 The plan is consumed by shell emitters that interpolate `branch` and `base`
 RAW into git commands, so those two fields are charset-gated at the type
 boundary rather than at each call site -- an unvalidated ref reaching the
-emitter is a shell-injection seam, not a cosmetic problem. Mirrors the
-contract src/fanout/validate_pr_plan.py enforces today.
+emitter is a shell-injection seam, not a cosmetic problem. Retired the
+contract src/fanout/validate_pr_plan.py used to enforce independently --
+that validator now delegates here via `easy_cheese_schemas.compat.load`.
 """
 
 from __future__ import annotations
@@ -94,8 +95,8 @@ def _matches_shape(
     list to itself."""
     if instance.shape is PrShape.SINGLE and len(groups) != 1:
         raise ValueError(
-            f"{attribute.name} must be exactly one group for the single "
-            f"shape, not {len(groups)}"
+            f"{attribute.name} must be exactly one group for the single shape, "
+            f"not {len(groups)}"
         )
     if instance.shape is PrShape.ORTHOGONAL_FLAT:
         for index, group in enumerate(groups, start=1):
@@ -117,7 +118,13 @@ class PrGroup:
     # Body may be empty -- `gh pr create --body ''` is valid -- so only the
     # type is constrained; the emitter calls `.replace()` on it.
     body: str | None = None
-    depends_on: list[str] = field(factory=list, validator=_string_list)
+    # The old dict-validator treated an explicit `depends_on: null` the same as
+    # an absent key -- both mean "no dependencies" -- so the field accepts
+    # `None` and normalizes it before the list-shape validator ever sees it.
+    depends_on: list[str] | None = field(
+        default=None, converter=lambda value: value if value is not None else [],
+        validator=_string_list,
+    )
 
 
 @define(frozen=True)

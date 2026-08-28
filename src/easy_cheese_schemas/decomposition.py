@@ -9,8 +9,10 @@ A decomposition is only safe to dispatch in parallel if no two curds can touch
 the same file, so that invariant lives here with the collection that owns it
 rather than in each dispatcher. Below `PARALLEL_THRESHOLD` the decomposition
 runs as one linear unit and is trivially disjoint, which is why the check is
-conditional -- it mirrors src/fanout/validate_decomposition.py, which also ends
-with the wiring graph check.
+conditional. src/fanout/validate_decomposition.py delegates its curd content
+and disjointness rules here; it keeps its own wiring DAG check locally, since
+`WiringRow` demands a run-lifecycle `status` a decomposition document never
+carries.
 """
 
 from __future__ import annotations
