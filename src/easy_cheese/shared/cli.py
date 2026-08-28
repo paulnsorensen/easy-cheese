@@ -19,6 +19,12 @@ class CliError(Exception):
     """One-line error; cli.run reports it on stderr and returns 2."""
 
 
+def reject_path_segment(field: str, value: str) -> None:
+    """Reject path-traversal segments and Windows drive/path designators."""
+    if ".." in value or "/" in value or "\\" in value or ":" in value:
+        raise CliError(f"{field} rejects path traversal: {value!r}")
+
+
 def _iter_parsers(parser: argparse.ArgumentParser) -> Iterable[argparse.ArgumentParser]:
     yield parser
     for action in parser._actions:
