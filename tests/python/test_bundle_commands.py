@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import ast
 import importlib
+import inspect
 import sys
 from types import ModuleType
 
@@ -124,3 +126,19 @@ def test_every_skill_declares_a_static_manifest() -> None:
         assert all(isinstance(item, bc.Command) for item in module.COMMANDS)
         bc.command_map(module.COMMANDS)
         assert all(callable(bc._handler(item.target)) for item in module.COMMANDS)
+
+
+def test_skill_manifests_are_literal_tuples() -> None:
+    from scripts import build_pyz
+
+    for skill in build_pyz.SKILLS:
+        package = skill.replace("-", "_")
+        module = importlib.import_module(f"easy_cheese.skills.{package}.commands")
+        tree = ast.parse(inspect.getsource(module))
+        assignment = next(
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Assign)
+            and any(isinstance(target, ast.Name) and target.id == "COMMANDS" for target in node.targets)
+        )
+        assert isinstance(assignment.value, ast.Tuple), f"{module.__name__}.COMMANDS must be a literal tuple"
