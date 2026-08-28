@@ -171,7 +171,7 @@ When this handoff is emitted for the typed fan result, use the canonical
 boundary writer and carry the result schema explicitly:
 
 ```text
-python3 skills/cook/scripts/cook.pyz write_handoff_artifact \
+python3 skills/cook/scripts/cook.pyz write-handoff-artifact \
   --slug <slug> --status <status> --phase cook --next age \
   --artifact <artifact-path> --orientation "<one-line orientation>" \
   --payload-schema https://schemas.easy-cheese.dev/curd-result

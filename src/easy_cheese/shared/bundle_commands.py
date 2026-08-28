@@ -29,10 +29,18 @@ class Command:
 
 def command_map(commands: Sequence[Command]) -> dict[str, Command]:
     mapping: dict[str, Command] = {}
+    normalized_names: dict[str, str] = {}
     for command in commands:
+        normalized = command.name.replace("_", "-")
         if command.name in mapping:
             raise ValueError(f"duplicate bundle command: {command.name}")
+        existing_name = normalized_names.get(normalized)
+        if existing_name is not None and existing_name != command.name:
+            raise ValueError(
+                f"bundle command alias collision: {existing_name} vs {command.name}"
+            )
         mapping[command.name] = command
+        normalized_names[normalized] = command.name
     if not mapping:
         raise ValueError("no bundle commands declared")
     return dict(sorted(mapping.items()))
@@ -54,6 +62,8 @@ def dispatch(commands: Sequence[Command], argv: Sequence[str]) -> int:
         return 0 if argv else 2
     name = argv[0]
     command = mapping.get(name)
+    if command is None and "_" in name:
+        command = mapping.get(name.replace("_", "-"))
     if command is None:
         print(f"usage: <pyz> {{{choices}}} [args...]", file=sys.stderr)
         return 2
