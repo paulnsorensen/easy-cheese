@@ -70,7 +70,7 @@ gate_applicability:
 
 ## Decisions
 - <one-line decision> — <one-line rationale>
-- _Minor decisions:_ <one line capturing the `[AGENT-DECIDED]` calls the user did not veto — the per-round ledger's minor tier; major decisions get full ADRs per `adr.md`>
+- _Minor decisions:_ <one line capturing the `[AGENT-DECIDED]` calls the user did not veto — the per-round ledger's minor tier; qualifying decisions get full ADRs per `adr.md`>
 
 ## Acceptance
 
@@ -253,7 +253,7 @@ Finish roadmap publication and all mechanical spec reconciliation before the imp
 
 ## ADRs (durable by-product)
 
-After both handshake keys pass, write the session's non-obvious decisions as durable ADRs in phase one's local atomic write with the durable spec. Both remain in the durable project corpus: the spec is the approved implementation contract, while ADRs preserve the rationale behind it. The corpus is resolved **dynamically** — probe for the consumer's `repo:<their-repo>:wiki` hallouminate corpus and write there if present, else fall back to a tracked `docs/adr/<slug>-NNN.md`. Never hardcode a corpus name. Full resolution rule and ADR format in [`adr.md`](adr.md).
+After both handshake keys pass, write only the session decisions that meet all three eligibility criteria in [`adr.md`](adr.md) as durable ADRs in phase one's local atomic write with the durable spec. Both remain in the durable project corpus: the spec is the approved implementation contract, while ADRs preserve qualifying rationale. The corpus is resolved **dynamically** — probe for the consumer's `repo:<their-repo>:wiki` hallouminate corpus and write there if present, else fall back to a tracked `docs/adr/<slug>-NNN.md`. Never hardcode a corpus name. Full resolution rule and ADR format in [`adr.md`](adr.md).
 
 ## Durable glossary (by-product)
 
@@ -292,6 +292,16 @@ Omit the `_Avoid_` line when no synonyms were rejected.
 
 Do not pre-split for a single context. This layout is identical across all three stores `domain_model_target()` may resolve to (wiki, `docs/`, XDG corpus).
 
+When an **existing or proposed second context** makes a resolved term or relationship's ownership ambiguous, do not infer ownership. Show the candidate contexts and put **which bounded context owns the term** to the user through the shared question transport in [`ask-user-question.md`](../../cheese/references/ask-user-question.md). Update the context map and **write only the selected context** after the answer; leave the other context pages unchanged.
+
+## Worked example — term to durable record
+
+1. **Ground resolves.** The user says “account” for both a login identity and a billing customer. Ground asks a canonical-term question; the user selects **Login identity** for authentication and **Billing account** for invoicing, with `account` recorded as an avoided ambiguous synonym.
+2. **Handshake commitment.** The Durable writes box names the glossary, ADR, and domain-model targets and commits to write → read-back → completion record before the user approves Curdle.
+3. **Curdle writes.** Curdle writes the per-slug glossary and merges both confirmed terms into the cumulative model. If this creates a second context and ownership is ambiguous, ask the user which bounded context owns the term, then write only the selected context and its confirmed relationship in `domain-model/index.md`.
+4. **Read-back.** Re-read the glossary and selected domain-model entries; a missing or mismatched entry fails the atomic step loudly.
+5. **Completion record.** Print one verified line per durable artifact, for example `Domain model → domain-model/identity.md (file)` and `Glossary → .cheese/glossary/auth-billing.md (file)`.
+
 ## Rejected-directions store (by-product)
 
 When the agent-introduced-scope audit or the two-key handshake explicitly **rejects a direction** (the user says "drop <term>" for an approach or design knob, or "not that approach"), write the rejection to `.cheese/.out-of-scope/<slug>-NNN.md`. An explicit deferral becomes a follow-up candidate; a rejected direction is not a follow-up candidate.
@@ -324,12 +334,12 @@ Stage to a temp directory under `${TMPDIR}` first, then move into place. Never l
 
 ### Write → read-back → completion record
 
-This is the runtime home of the **Durable writes** coherence gate (`handshake.md` § Agent key). The gate locks the commitment before the handshake; this step honours it. For each durable write — every ADR and the domain-model merge — run:
+This is the runtime home of the **Durable writes** coherence gate (`handshake.md` § Agent key). The gate locks the commitment before the handshake; this step honours it. For each durable write — every qualifying ADR, the domain-model merge, and the **per-slug glossary when Ground resolved terms** — run:
 
-1. **Resolve** the target dynamically — the ADR resolution procedure in [`adr.md`](adr.md) § Resolution, the `domain_model_target()` function (`src/easy_cheese/shared/paths.py`) for the model. Both yield `(backend, location)`.
+1. **Resolve** the target: use the ADR resolution procedure in [`adr.md`](adr.md) § Resolution, `domain_model_target()` (`src/easy_cheese/shared/paths.py`) for the model, and `.cheese/glossary/<slug>.md` for the glossary. The durable targets yield `(backend, location)`; the glossary uses the file backend.
 2. **Write** to that target: `add_markdown` when the backend is `hallouminate`, a staged file write when it is `file`.
 3. **Read back** and confirm the entry landed: `ground` / `read_markdown` for the wiki backend, a re-read of the file for the file backend. A write that cannot be read back is a failure — fail loud, do not claim the write.
-4. **Record** it in the curdle completion record printed to the user: one line per durable write naming `<artifact> → <location> (<backend>)`.
+4. **Record** it in the Curdle completion record printed to the user: one line per durable write naming `<artifact> → <location> (<backend>)`. When Ground resolved terms, the record must include the emitted glossary line.
 
 **Loud fallback.** When hallouminate is unavailable and the resolver degrades to a file backend (`docs/adr/…`, `docs/domain-model*`, or the XDG corpus), say so in one visible line — never let a write silently go to files when the author expected the wiki. Absent-plugin degrade contract: [`../../cheese/references/optional-plugins.md`](../../cheese/references/optional-plugins.md).
 

@@ -1,32 +1,35 @@
 # ADRs — durable design rationale
 
-Mold records the non-obvious decisions of a session as Architecture Decision
-Records (ADRs). The approved spec and its ADRs are **durable** project records:
-the spec keeps the implementation contract, while ADRs preserve the rationale a
-future session would otherwise re-derive. Write them at Curdle, after the two-key
+Mold records only decisions that pass the strict eligibility filter as Architecture
+Decision Records (ADRs). The approved spec and its ADRs are **durable** project
+records: the spec keeps the implementation contract, while ADRs preserve rationale
+that meets all three criteria below. Write them at Curdle, after the two-key
 handshake, in phase one's local atomic write.
 
 ## What earns an ADR
 
-One ADR per decision a future reader would otherwise have to reverse-engineer:
+Write one ADR only when the decision meets **all three** criteria:
 
-- a chosen approach over a real alternative (the trade-off, not the obvious pick);
-- a constraint discovered mid-dialogue (a Prototype Cycle answer that changed the
-  design; a `[CONFLICT]` the codebase forced);
-- anything tagged a Decision in the spec that has a substantive rationale.
+1. **Hard to reverse** — changing it later would require a migration, compatibility
+   break, broad rewrite, or comparable recovery work.
+2. **Surprising without context** — a future reader could not infer why this choice
+   was made from the code and spec alone.
+3. **Result of a real trade-off** — at least two viable alternatives carried
+   materially different costs or benefits.
 
-Do **not** write an ADR for a forced move with no alternative, or for a detail the
-spec body already states plainly.
+A forced move with no viable alternative fails the trade-off criterion. An obvious
+or easily reversible choice fails even when it was discussed at length. Keep every
+non-qualifying decision in the spec's one-line decision-log; do not inflate it into
+an ADR.
 
 ## Decision ledger
 
 Mold's per-round decision ledger (`Decided / Asking / [AGENT-DECIDED]`, see
-`../SKILL.md` § Rules) persists **here at curdle**: each `[AGENT-DECIDED]` call
-that had a real alternative the user could have vetoed earns an ADR — it is
-exactly the kind of decision a future reader would otherwise reverse-engineer.
-Minor calls with no surviving alternative ride the spec's one-line decision-log
-(`curdle.md` § Spec template) instead of a full ADR; the ledger keeps no separate
-file (ADR-004).
+`../SKILL.md` § Rules) feeds Curdle's ADR eligibility pass. Each
+`[AGENT-DECIDED]` entry is a **candidate**, not an automatic ADR: evaluate it
+against all three criteria exactly as a user-made decision. Qualifiers become ADRs;
+non-qualifiers remain in the spec's one-line decision-log (`curdle.md` § Spec
+template). The ledger keeps no separate file (ADR-004).
 
 ## Resolution — where ADRs land (portable, never hardcoded)
 

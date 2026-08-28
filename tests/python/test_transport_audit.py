@@ -158,6 +158,13 @@ EXEMPT_SITES: list[tuple[str, str, str]] = [
         "operational disposition of an already-approved follow-up unit, "
         "intelligible without prior-session context",
     ),
+    (
+        "skills/mold/references/curdle.md",
+        "ask the user which bounded context owns the term",
+        "worked-example narration of the live routing site at line 295 in "
+        "the same file, which already names ask-user-question.md directly; "
+        "pinned separately so a rewrite of the example forces re-audit",
+    ),
 ]
 
 
@@ -190,37 +197,71 @@ def test_exempt_sites_are_pinned_and_unrouted() -> None:
         )
 
 
+PARAGRAPH_SEP = "\n\n"
+
+
+def _question_paragraphs_without_pointer(text: str) -> list[str]:
+    """Return each blank-line-delimited paragraph that matches
+    QUESTION_KEYWORDS but carries no direct TRANSPORT_REF pointer within
+    that same paragraph. Scoping the pointer check to the matched
+    paragraph, rather than the whole file, keeps an unrelated
+    transport-doc mention elsewhere in the file from masking a bare
+    question site. Naming handoff-gate.md alone does not satisfy the
+    hatch, matching the standard test_culture_handoff_gate_site_points_to_transport
+    holds a handoff-gate.md mention alone is insufficient."""
+    return [
+        paragraph
+        for paragraph in text.split(PARAGRAPH_SEP)
+        if QUESTION_KEYWORDS.search(paragraph) and TRANSPORT_REF not in paragraph
+    ]
+
+
+def _truncate_paragraph(paragraph: str, limit: int = 80) -> str:
+    collapsed = " ".join(paragraph.split())
+    return collapsed if len(collapsed) <= limit else collapsed[: limit - 1] + "…"
+
+
 def _unaccounted_sites(
     candidates: list[Path],
     repo_root: Path,
     sibling_owned: set[str],
     accounted: set[str],
 ) -> list[str]:
-    """Core sweep logic, factored out so a synthetic fixture can exercise
-    it directly (see test_sweep_catches_new_bare_site_in_new_file) instead
-    of relying only on today's real-repo census staying bare."""
+    """Report question sites that are neither explicitly accounted for nor
+    directly linked to the shared question transport in the same paragraph
+    as the question language. Each entry names the file and, when bare,
+    the truncated first offending paragraph, so a failure points at the
+    paragraph, not just the file. Three tests witness the mechanism:
+    test_sweep_catches_new_bare_site_in_new_file proves the bare-site
+    failure path, test_sweep_flags_bare_paragraph_despite_unrelated_pointer_elsewhere
+    proves a pointer in an unrelated paragraph doesn't mask a bare site
+    elsewhere in the file, and the direct-pointer success path lives in
+    test_mold_domain_contracts.py::test_transport_pointer_site_is_accounted."""
     unaccounted = []
     for path in candidates:
         rel = str(path.relative_to(repo_root))
-        if rel in sibling_owned:
+        if rel in sibling_owned or rel in accounted:
             continue
         text = path.read_text(encoding="utf-8")
-        if QUESTION_KEYWORDS.search(text) and rel not in accounted:
-            unaccounted.append(rel)
+        bare = _question_paragraphs_without_pointer(text)
+        if bare:
+            unaccounted.append(f"{rel}: {_truncate_paragraph(bare[0])}")
     return unaccounted
 
 
 def test_no_unaccounted_question_sites() -> None:
     """Sweep every SKILL.md / references/*.md file for question-asking
     language. Every matching file must be either in ROUTED_FILES, the
-    transport doc itself, or have every one of its exempt sites accounted
-    for in EXEMPT_SITES (matched by file). Accounting is per file, not
-    per site: a brand-new bare site in a brand-new file, or a new keyword
-    hit in an already-known-bare file that isn't in EXEMPT_SITES, fails
-    this test — the sweep's teeth against drift. A new bare site added to
-    an already-accounted file does not trip this test. No file is skipped
-    as sibling-owned scaffolding any more; all five curds are merged, so
-    the sweep runs over the full corpus."""
+    transport doc itself, a file whose every question paragraph carries a
+    direct transport pointer (ask-user-question.md), or have every one of
+    its exempt sites accounted for in EXEMPT_SITES (matched by file).
+    Accounting is per file, not per site: a brand-new bare site in a
+    brand-new file, or a new keyword hit in an already-known-bare file
+    that isn't in EXEMPT_SITES, fails this test — the sweep's teeth
+    against drift. A new bare site added to an already-accounted file
+    does not trip this test. No file is skipped as sibling-owned
+    scaffolding any more; all five curds are merged, so the sweep runs
+    over the full corpus."""
     exempt_files = {rel for rel, _, _ in EXEMPT_SITES}
     accounted = ROUTED_FILES | exempt_files | TRANSPORT_DOC_ITSELF
 
@@ -232,7 +273,8 @@ def test_no_unaccounted_question_sites() -> None:
     )
     assert not unaccounted, (
         "question-asking sites found with no routing/exemption record — "
-        f"audit and add to ROUTED_FILES or EXEMPT_SITES: {unaccounted}"
+        "add a direct transport pointer, or audit and add to ROUTED_FILES "
+        f"or EXEMPT_SITES: {unaccounted}"
     )
 
 
@@ -242,7 +284,7 @@ def _paragraph_after(text: str, marker: str) -> str:
     rejects a pointer that drifted to another paragraph (see
     test_paragraph_after_rejects_pointer_moved_to_another_paragraph)."""
     start = text.index(marker)
-    end = text.find("\n\n", start)
+    end = text.find(PARAGRAPH_SEP, start)
     return text[start : end if end != -1 else len(text)]
 
 
@@ -276,7 +318,32 @@ def test_sweep_catches_new_bare_site_in_new_file(tmp_path: Path) -> None:
     unaccounted = _unaccounted_sites(
         candidates, tmp_path, sibling_owned=set(), accounted=set()
     )
-    assert unaccounted == ["skills/newskill/SKILL.md"]
+    assert unaccounted == [
+        "skills/newskill/SKILL.md: Before running, ask the user to pick an option."
+    ]
+
+
+def test_sweep_flags_bare_paragraph_despite_unrelated_pointer_elsewhere(
+    tmp_path: Path,
+) -> None:
+    """A bare question paragraph is still flagged even when the file has an
+    unrelated transport-doc mention in a different paragraph — proving the
+    pointer check is scoped per-paragraph, not whole-file."""
+    skill_dir = tmp_path / "skills" / "newskill"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "# New Skill\n\n"
+        "Before running, ask the user to pick an option.\n\n"
+        "See also the transport doc at ask-user-question.md for details.\n",
+        encoding="utf-8",
+    )
+    candidates = list((tmp_path / "skills").glob("*/SKILL.md"))
+    unaccounted = _unaccounted_sites(
+        candidates, tmp_path, sibling_owned=set(), accounted=set()
+    )
+    assert unaccounted == [
+        "skills/newskill/SKILL.md: Before running, ask the user to pick an option."
+    ]
 
 
 def test_sweep_skips_sibling_owned_and_accounted_files(tmp_path: Path) -> None:

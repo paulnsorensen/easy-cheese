@@ -166,6 +166,22 @@ class TestGateProseSync:
     def test_count_matches(self, gate_graph: ModuleType) -> None:
         assert len(self._checklist_labels()) == len(gate_graph.GATE_MODEL.by_kind("gate"))
 
+    def test_durable_writes_gate_cannot_drop_resolved_glossary(
+        self, gate_graph: ModuleType
+    ) -> None:
+        required = "glossary target included when terms were resolved"
+        gates = {n.id: n for n in gate_graph.GATE_MODEL.by_kind("gate")}
+        assert "durable-writes" in gates, "durable-writes gate missing from model"
+        durable_gate = gates["durable-writes"]
+        assert required in durable_gate.label.casefold()
+        matching = [
+            label
+            for label in self._checklist_labels()
+            if gate_graph.gate_id(label) == "durable-writes"
+        ]
+        assert matching, "no checklist label maps to the durable-writes gate"
+        assert required in matching[0].casefold()
+
 
 class TestGateTopology:
     def test_taste_gate_routes_through_decomposer(
@@ -524,9 +540,10 @@ class TestNonGoalsGatePresence:
 
 
 class TestDurableWritesGatePresence:
-    """The `durable-writes` gate (post-pr-wiki-writeback ADR-001) makes curdle's
-    ADR + domain-model writes a first-class, lockstep-enforced coherence gate
-    rather than prose an overloaded curdle can silently skip.
+    """The `durable-writes` gate (post-pr-wiki-writeback ADR-001) makes Curdle's
+    ADR + domain-model writes, plus the glossary when Ground resolved terms, a
+    first-class lockstep-enforced coherence gate rather than prose an overloaded
+    Curdle can silently skip.
 
     Like the non-goals gate, set-equality + count-equality between prose and model
     are blind to a coordinated removal (drop the checklist item AND the node
