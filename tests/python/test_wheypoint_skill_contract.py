@@ -60,9 +60,15 @@ def test_the_resume_flow_states_the_recency_prohibition_outright() -> None:
 
 def test_resolution_runs_through_the_runtime_rather_than_by_hand() -> None:
     body = _read(CONTINUE_RESUME)
-    assert "wheypoint.pyz resolve --ref" in body
+    assert "/wheypoint resolve --ref" in body
     assert "git worktree list --porcelain" in body, "legacy fallback must search sibling worktrees"
     assert ".cheese/notes/" in body
+
+
+def test_runtime_commands_are_terminal_before_checkpoint_flow() -> None:
+    body = _read(SKILLS_DIR / "wheypoint" / "SKILL.md")
+    assert "return output, and **STOP** before checkpoint writing" in body
+    assert "/cheese --continue" in body
 
 
 
@@ -92,7 +98,9 @@ def test_the_documented_command_set_is_exactly_the_four_the_spec_fixes() -> None
     lint). What matters is that all four are reachable and no fifth exists."""
     corpus = "\n".join(_read(path) for path in (WHEYPOINT, CHEESE, CONTINUE_RESUME))
     for command in COMMANDS:
-        assert f"wheypoint.pyz {command}" in corpus, f"undocumented command: {command}"
+        marker = f"wheypoint.pyz {command}"
+        portable_marker = f"/wheypoint {command}"
+        assert marker in corpus or portable_marker in corpus, f"undocumented command: {command}"
     assert "wheypoint.pyz create" not in corpus, (
         "genesis is a delta naming the sentinel, not a fifth command"
     )

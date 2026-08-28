@@ -8,7 +8,7 @@ license: MIT
 
 `/wheypoint` captures just enough state for a cold reader to resume.
 
-`/wheypoint` is for culture's end-of-session checkpoint and for the messy mid-task moment when no phase slug applies and context is about to be lost.
+`/wheypoint` checkpoints culture sessions or mid-task work without a phase slug.
 
 ## Inputs
 
@@ -16,6 +16,17 @@ license: MIT
 - Optional argument: a description of what the next session will focus on. When present, treat it as the lens and tailor the document to it. Drop state that does not serve that focus to a one-line pointer.
 
 ## Flow
+
+### Runtime commands
+
+`/wheypoint resolve --ref <absolute-path | work-id | slug>` and `/wheypoint lint <projection-path>` are read-only runtime operations. Route them through this skill's own archive:
+
+```bash
+python3 skills/wheypoint/scripts/wheypoint.pyz resolve --ref <absolute-path | work-id | slug>
+python3 skills/wheypoint/scripts/wheypoint.pyz lint <projection-path>
+```
+
+Direct invocations run, return output, and **STOP** before checkpoint writing. `/cheese --continue` uses these terminal operations; never invoke another archive.
 
 1. **Derive a slug** from the task (e.g. `auth-retry-backoff`). Reuse an existing slug if this session already owns one under `.cheese/`.
 2. **Inventory what already exists.** List the `.cheese/` artifacts, specs, PRs, issues, commits, and diffs this session produced or touched. These get referenced, never re-summarised.
