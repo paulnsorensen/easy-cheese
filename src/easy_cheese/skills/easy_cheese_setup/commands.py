@@ -6,9 +6,10 @@ import sys
 
 from easy_cheese.shared.bundle_commands import Command, dispatch
 
-COMMANDS = tuple(
-    Command(name, f"easy_cheese.shared.hallouminate_setup:{name}_main")
-    for name in ("global", "local", "doctor")
+COMMANDS = (
+    Command("global", "easy_cheese.shared.hallouminate_setup:global_main"),
+    Command("local", "easy_cheese.shared.hallouminate_setup:local_main"),
+    Command("doctor", "easy_cheese.shared.hallouminate_setup:doctor_main"),
 )
 
 

@@ -6,9 +6,11 @@ import sys
 
 from easy_cheese.shared.bundle_commands import Command, dispatch
 
-COMMANDS = tuple(
-    Command(name, f"easy_cheese.skills.wheypoint.wheypoint:{name}_main")
-    for name in ("commit", "resolve", "show", "lint")
+COMMANDS = (
+    Command("commit", "easy_cheese.skills.wheypoint.wheypoint:commit_main"),
+    Command("resolve", "easy_cheese.skills.wheypoint.wheypoint:resolve_main"),
+    Command("show", "easy_cheese.skills.wheypoint.wheypoint:show_main"),
+    Command("lint", "easy_cheese.skills.wheypoint.wheypoint:lint_main"),
 )
 
 
