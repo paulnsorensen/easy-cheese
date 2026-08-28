@@ -146,22 +146,16 @@ You don't need Shiv or pip to run a checked-in skill archive. Run an archive wit
 python3 skills/<skill>/scripts/<skill>.pyz <subcommand>
 ```
 
-If you change runtime source, build inputs, a phase contract, a bundle lock, or a committed archive, install the pinned build tools and rebuild every archive:
+If you change runtime source, build inputs, a phase contract, or a committed archive, install the pinned build tools and rebuild every archive:
 
 ```sh
 python3 -m pip install --requirement requirements-build.txt
 just bundle
 ```
 
-`just bundle` builds each application from PEP 517 wheels in a private wheelhouse and verifies the checked-in per-skill lock in `requirements/bundles/`. Each application's `commands.py` declares its public subcommands as an immutable tuple of `Command(name, "module:callable")` values. The bundle resolves a selected target lazily and calls it with only that command's arguments.
+`just bundle` builds each application from PEP 517 wheels in a private wheelhouse and resolves the complete external and internal dependency closure into an ephemeral hash-locked requirements file beside that wheelhouse. Each application's `commands.py` declares its public subcommands as an immutable tuple of `Command(name, "module:callable")` values. The bundle resolves a selected target lazily and calls it with only that command's arguments.
 
-If you intentionally change a resolved dependency closure, update the locks before you rebuild:
-
-```sh
-python3 scripts/build_pyz.py --update-locks
-```
-
-Commit the changed lock files and `skills/*/scripts/*.pyz` archives with the source change. `just check` validates the repository but does not rebuild the archives. For implementation details, see the [contributor workflow](./CONTRIBUTING.md).
+The external runtime pins in `requirements/runtime.txt` are the sole committed hash lock. `just check` validates the repository but does not rebuild the archives. For implementation details, see the [contributor workflow](./CONTRIBUTING.md).
 
 ## Optional tools
 

@@ -22,7 +22,7 @@ This is a repository-local skill. Keep it under `.agents/skills/python-authoring
 ## Keep runtime code stdlib-first
 
 - Target Python 3.12. Use its language and typing features directly; do not add compatibility code for older versions.
-- Treat the standard library as the default dependency budget for bundled helpers under `src/`. Any third-party runtime dependency must be pure Python, admitted to `requirements/runtime.txt`, and regenerated into every affected per-skill lock.
+- Treat the standard library as the default dependency budget for bundled helpers under `src/`. Any third-party runtime dependency must be pure Python and admitted to `requirements/runtime.txt`; bundle builds resolve internal and external hashes into an ephemeral requirements file.
 - Reuse the existing JSON-first, optional-YAML manifest boundary instead of importing PyYAML into new bundled modules.
 - Treat configured third-party imports as surface-specific exceptions: PyYAML for existing validators, docs tooling, and manifest/test paths; pytest for tests. A new dependency requires an explicit package and CI decision.
 - Prefer `argparse`, `json`, `pathlib`, `tempfile`, `shutil`, `zipfile`, `collections`, `itertools`, and `contextlib` over hand-written equivalents.
@@ -40,9 +40,9 @@ This is a repository-local skill. Keep it under `.agents/skills/python-authoring
 
 - Keep skill runtime under `src/easy_cheese/skills/<skill_name>/` and declare its CLI surface in `commands.py`.
 - Move code to `src/easy_cheese/shared/` only when multiple existing skills need the same behavior; consume it through the `easy-cheese-shared` internal distribution.
-- Do not import another skill's internals. Wheel metadata, pip resolution, and hash-locked `requirements/bundles/<skill>.txt` files own runtime dependency closure.
+- Do not import another skill's internals. Wheel metadata, pip resolution, and the ephemeral hash-locked requirements file own each bundle's complete runtime dependency closure.
 - Keep cross-skill orchestration in the owning workflow seam, not a leaf helper. Communicate through public or persisted contracts to avoid reverse dependencies and cycles.
-- Never edit `skills/<skill>/scripts/*.pyz` by hand. Install `requirements-build.txt`, then run `just bundle` after changing bundle inputs and commit the regenerated archives and locks.
+- Never edit `skills/<skill>/scripts/*.pyz` by hand. Install `requirements-build.txt`, then run `just bundle` after changing bundle inputs and commit the regenerated archives.
 - Keep CLI modules thin: accept `argv`, return an integer status, print diagnostics to stderr, and propagate failure through a nonzero exit.
 - Keep `.github/scripts/` validators read-only. They inspect and report; they do not mutate the workspace.
 

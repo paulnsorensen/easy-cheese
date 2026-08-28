@@ -317,14 +317,11 @@ def test_build_cli_preserves_resolver_diagnostics(
     assert "subprocess stderr" in diagnostics
 
 
-def test_requirements_close_internal_dependencies_with_sha256_locks(tmp_path: Path) -> None:
-    del tmp_path
-    lines = (REPO_ROOT / "requirements" / "bundles" / "cut.txt").read_text().splitlines()
-    assert len(lines) == 6
-    assert all(re.fullmatch(r"[^=]+==[^ ]+ --hash=sha256:[0-9a-f]{64}", line) for line in lines)
-    assert any(line.startswith("easy-cheese-cut==") for line in lines)
-    assert any(line.startswith("easy-cheese-shared==") for line in lines)
-    assert any(line.startswith("easy-cheese-schemas==") for line in lines)
+def test_runtime_lock_contains_only_external_pure_wheels() -> None:
+    lines = (REPO_ROOT / "requirements" / "runtime.txt").read_text().splitlines()
+    locked = [line for line in lines if line and not line.startswith("#")]
+    assert all(re.fullmatch(r"[^=]+==[^ ]+ --hash=sha256:[0-9a-f]{64}", line) for line in locked)
+    assert not any(line.startswith("easy-cheese-") for line in locked)
 
 
 def _test_wheel(
