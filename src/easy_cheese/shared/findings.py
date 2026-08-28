@@ -29,11 +29,11 @@ class Finding:
     dimension: str
     location: str  # file:line span, e.g. "src/auth.ts:42-50"
     summary: str
-    location_tier: str | None = None  # class | module | cross-module | contract
+    location_tier: str | None = None  # class | module | cross-module | contract  # noqa: V107
     fix_cost_now: str | None = None  # contained | moderate | sprawling
     fix_cost_later: str | None = None  # contained | spreading | structural
     confidence: str | None = None  # certain | speculating ("don't know" findings are never emitted)
-    recommendation: str | None = None
+    recommendation: str | None = None  # noqa: V107
     extra: dict[str, str] = field(default_factory=dict)
 
 

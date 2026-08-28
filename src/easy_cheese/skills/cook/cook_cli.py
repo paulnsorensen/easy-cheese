@@ -127,11 +127,11 @@ def _run_validate(argv: list[str]) -> int:
 _RUNNERS = {"normalize": _run_normalize, "validate": _run_validate}
 
 
-def normalize_main(argv: list[str]) -> int:
+def normalize_main(argv: list[str]) -> int:  # noqa: V103
     return _run_normalize(argv)
 
 
-def validate_main(argv: list[str]) -> int:
+def validate_main(argv: list[str]) -> int:  # noqa: V103
     return _run_validate(argv)
 
 

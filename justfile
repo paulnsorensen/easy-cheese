@@ -67,15 +67,29 @@ lint-yaml:
 lint-py-fix:
     uvx ruff check --fix .
 
+# Check for unused Python code with owner-qualified Vulture classifier
+lint-py-dead-code *paths="src scripts .github/scripts tests":
+    #!/usr/bin/env bash
+    set -uo pipefail
+    uvx --from vulture==2.16 python3 scripts/check_dead_code.py {{paths}}
+    status=$?
+    case "$status" in
+      0) ;;
+      3) echo "dead code found" >&2 ;;
+      *) echo "could not analyse: check_dead_code.py exited $status" >&2 ;;
+    esac
+    exit "$status"
+
+
 # Regenerate .github/skill-budgets.json (size/structure ratchet) after shrinking a skill
 update-skill-budgets:
     python3 .github/scripts/validate_skills.py --write-budgets
 
 # Full local check with autofixes
-check: lint-md-fix lint-yaml-fix lint-yaml lint-py-fix lint-sh test docs-build
+check: lint-md-fix lint-yaml-fix lint-yaml lint-py-fix lint-sh lint-py-dead-code test docs-build
 
 # CI-mode verification (no autofixes)
-ci: lint-md lint-yaml lint-sh test docs-build
+ci: lint-md lint-yaml lint-sh lint-py-dead-code test docs-build
 
 # Install docs build dependencies
 docs-install:
