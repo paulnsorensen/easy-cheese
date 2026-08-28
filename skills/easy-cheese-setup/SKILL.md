@@ -26,11 +26,10 @@ Run `doctor` (no `--apply`) first — it reports both legs' intended actions wit
 
 - Ensures `paths.corpus_home()` exists on disk (guards hallouminate's abort-on-missing-path, hallouminate#101), then insert-or-replaces the marked `# >>> easy-cheese:cheese-durable … # <<<` `[[corpus]]` block in `~/.config/hallouminate/config.toml`, pointing at `corpus_home()`. Replace-in-place keeps it idempotent — a second `global --apply` leaves the file byte-identical.
 - Repoints on drift: if the marked block points anywhere other than `corpus_home()`, `--apply` corrects it.
-- **Legacy migration (interactive only).** A pre-existing unmarked `cheese-global → ~/.cheese` block is the stale state this work fixes. `migrate_legacy` removes it so the durable corpus collapses onto the marked `cheese-durable` block. It is deliberately NOT a CLI subcommand and NOT part of `install.sh`'s path — so the installer can never delete a user's config non-interactively. Invoke it here only after the user confirms the reported legacy block:
+- **Legacy migration (interactive only).** A pre-existing unmarked `cheese-global → ~/.cheese` block is the stale state this work fixes. After showing the report and receiving confirmation, invoke the explicit opt-in flag (never used by `install.sh`):
 
   ```bash
-  python3 -c "import sys; sys.path.insert(0, '<skill>/scripts/easy-cheese-setup.pyz'); \
-    import hallouminate_setup as h; print(h.migrate_legacy(apply=True))"
+  python3 <skill>/scripts/easy-cheese-setup.pyz global --migrate-legacy --apply
   ```
 
   A `cheese-global` block pointing anywhere other than `~/.cheese` is left untouched.

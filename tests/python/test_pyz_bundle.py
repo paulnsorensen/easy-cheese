@@ -46,7 +46,7 @@ SKILL_SUBCOMMANDS = {
         "artifact-path", "age-route", "baseline", "phase-decision", "milknado", "mode", "worktree",
         "validate-decomposition", "validate-manifest", "validate-pr-plan", "manifest-update",
         "wiring-topo-sort", "pr-plan-to-branches", "curd-block",
-        "normalize", "validate", "slugify", "write-handoff-artifact",
+        "normalize", "validate", "red-gate", "slugify", "write-handoff-artifact",
         "read-handoff-slug", "findings-cli", "gates-cli", "paths-cli",
         "handoff-cli", "render-html",
     ],
@@ -399,6 +399,8 @@ def test_cut_bundle_carries_red_gate_and_schema_runtime(bundles: Path) -> None:
     assert "attrs-26.1.0.dist-info/METADATA" in names
     assert "cattrs/converters.py" in names
     assert "easy_cheese/shared/taste_test.py" in names
+
+
 
 
 def test_cut_bundle_runs_assertion_probe_without_source_imports(
