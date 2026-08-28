@@ -98,6 +98,15 @@ def test_the_documented_command_set_is_exactly_the_four_the_spec_fixes() -> None
     )
 
 
+def test_wheypoint_invokes_only_its_repo_relative_archive() -> None:
+    body = _read(WHEYPOINT)
+    command = "python3 skills/wheypoint/scripts/wheypoint.pyz"
+
+    assert "${CLAUDE_SKILL_DIR}" not in body
+    assert "bundle fallback" not in body
+    assert "wheypoint.pyz " not in body.replace(command, "")
+
+
 def test_the_genesis_sentinel_is_documented_as_the_way_work_starts() -> None:
     """Without this, a reader finds expected_revision_id required and no way to
     satisfy it on a first checkpoint."""
