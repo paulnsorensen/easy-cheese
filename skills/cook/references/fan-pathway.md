@@ -31,8 +31,8 @@ remove the listed files to start fresh.
 ```
 
 Read a handoff with
-`python3 skills/cook/scripts/cook.pyz read_handoff_slug <path>`;
-the matching `cook.pyz read_handoff_slug` command.
+`python3 skills/cook/scripts/cook.pyz read-handoff-slug <path>`;
+the matching `cook.pyz read-handoff-slug` command.
 
 ## Canonical planner → Cook → Cure steel thread
 

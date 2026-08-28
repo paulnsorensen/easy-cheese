@@ -61,6 +61,14 @@ def test_dispatch_lazily_invokes_target_without_mutating_sys_argv(
     assert sys.argv == original
 
 
+def test_dispatch_accepts_legacy_underscore_alias(
+    target_module: tuple[list[list[str]], ModuleType],
+) -> None:
+    calls, _ = target_module
+    assert bc.dispatch((command("write-handoff-artifact"),), ["write_handoff_artifact", "x"]) == 7
+    assert calls == [["x"]]
+
+
 def test_dispatch_empty_argv_prints_usage_and_returns_2(
     capsys: pytest.CaptureFixture[str],
 ) -> None:

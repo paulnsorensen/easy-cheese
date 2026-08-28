@@ -54,6 +54,8 @@ def dispatch(commands: Sequence[Command], argv: Sequence[str]) -> int:
         return 0 if argv else 2
     name = argv[0]
     command = mapping.get(name)
+    if command is None and "_" in name:
+        command = mapping.get(name.replace("_", "-"))
     if command is None:
         print(f"usage: <pyz> {{{choices}}} [args...]", file=sys.stderr)
         return 2

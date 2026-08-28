@@ -52,14 +52,14 @@ Per-dimension base-severity tables, location-sensitivity, fix-cost-now / fix-cos
 ## Flow
 
 1. Identify the diff, scope, and relevant spec or issue. **Mode check:** compute the review range's `review_surface` score and risk flags, then call `age_route.route(score=..., risk_flags=..., entry="age")` (`src/easy_cheese/shared/fanout/age_route.py`). `n=1` — steps 2–4 below, unchanged. Any `n>1` — read `references/fan-out.md` first; its `lenses` list, not a fixed label, sets worker count. Fan-out also requires `/age` not itself be a sub-agent — stay single-parent when it is. Thread the router's `effort` into the reviewer dispatch.
-2. Gather evidence: diff, touched files, tests, callers/imports. If a press report exists for this slug, read it via `python3 skills/age/scripts/age.pyz read_handoff_slug --phase press --slug <slug>` and summarise unresolved items in a `## Press findings` sub-section — `/cure` only reads `.cheese/age/<slug>.md`.
+2. Gather evidence: diff, touched files, tests, callers/imports. If a press report exists for this slug, read it via `python3 skills/age/scripts/age.pyz read-handoff-slug --phase press --slug <slug>` and summarise unresolved items in a `## Press findings` sub-section — `/cure` only reads `.cheese/age/<slug>.md`.
 
    No press report but a cook handoff exists: record `press: skipped` (see `## Output`) and print the warning at handoff. No cook artifact either: skip the marker and continue.
 
    If `.cheese/glossary/<slug>.md` exists, read it so naming drift can be flagged as a deslop finding.
 3. Review every dimension; dimensions with no findings simply omit themselves. Report every defect, however minor — never self-filter on perceived significance; filtering happens downstream in the verifier pass (`n>1`) or in severity computation (single-parent). Do not raise a finding for a gate failure identical to the diff's recorded `baseline:` block — see [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md); flag only new or changed failures.
 4. Compute severity per finding (base + location bump + compounding bump, capped at `blocker`). Group findings by severity (`## Blocker → ## High → ## Medium → ## Low`); within a severity group, order by file.
-5. Write the report (see `## Output`), then `python3 skills/age/scripts/age.pyz write_handoff_artifact --phase age --slug <slug> --status ok --next cure --artifact "" --orientation "<one-line orientation>" --durable-flags "<none | one line per flag>" --body-file "$report_file"`. Print the path.
+5. Write the report (see `## Output`), then `python3 skills/age/scripts/age.pyz write-handoff-artifact --phase age --slug <slug> --status ok --next cure --artifact "" --orientation "<one-line orientation>" --durable-flags "<none | one line per flag>" --body-file "$report_file"`. Print the path.
 6. Hand off (see `## Handoff` below).
 
 ## Preferred tools and fallbacks
