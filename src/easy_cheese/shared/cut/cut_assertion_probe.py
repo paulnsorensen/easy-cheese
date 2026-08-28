@@ -255,10 +255,10 @@ def _run_code(
     _set_native_path0("")
     _set_original_argv(original_argv0, ["-c", source, *args])
     main_module = ModuleType("__main__")
-    main_module.__builtins__ = builtins
+    main_module.__builtins__ = builtins  # noqa: V101
     main_module.__spec__ = None
-    main_module.__package__ = None
-    main_module.__loader__ = importlib.machinery.BuiltinImporter
+    main_module.__package__ = None  # noqa: V101
+    main_module.__loader__ = importlib.machinery.BuiltinImporter  # noqa: V101
     missing = object()
     previous_main = sys.modules.get("__main__", missing)
     sys.modules["__main__"] = main_module
@@ -282,11 +282,11 @@ def _run_script(
     loader = importlib.machinery.SourceFileLoader("__main__", target)
     main_module = ModuleType("__main__")
     main_module.__file__ = target
-    main_module.__loader__ = loader
-    main_module.__cached__ = None
-    main_module.__package__ = None
+    main_module.__loader__ = loader  # noqa: V101
+    main_module.__cached__ = None  # noqa: V101
+    main_module.__package__ = None  # noqa: V101
     main_module.__spec__ = None
-    main_module.__builtins__ = builtins
+    main_module.__builtins__ = builtins  # noqa: V101
     missing = object()
     previous_main = sys.modules.get("__main__", missing)
     sys.modules["__main__"] = main_module

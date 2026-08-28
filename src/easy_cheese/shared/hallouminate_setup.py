@@ -312,15 +312,15 @@ def _leg_main(leg: str, argv: list[str]) -> int:
     return _run_leg(leg, args.apply, args.migrate_legacy)
 
 
-def global_main(argv: list[str]) -> int:
+def global_main(argv: list[str]) -> int:  # noqa: V103
     return _leg_main("global", argv)
 
 
-def local_main(argv: list[str]) -> int:
+def local_main(argv: list[str]) -> int:  # noqa: V103
     return _leg_main("local", argv)
 
 
-def doctor_main(argv: list[str]) -> int:
+def doctor_main(argv: list[str]) -> int:  # noqa: V103
     return _leg_main("doctor", argv)
 
 

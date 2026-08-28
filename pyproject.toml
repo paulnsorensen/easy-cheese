@@ -55,17 +55,9 @@ only-include = [
 ]
 [tool.vulture]
 min_confidence = 60
-ignore_decorators = ["@contract*", "@schema_constraints*", "@*.validator"]
 paths = [
   "src",
   "scripts",
   ".github/scripts",
   "tests",
-  "vulture_whitelist.py",
-]
-exclude = [
-  "src/easy_cheese_schemas/_compiled_phase_registry.py",
-  "src/easy_cheese_schemas/_schema_catalog.py",
-  "build/",
-  "dist/",
 ]
