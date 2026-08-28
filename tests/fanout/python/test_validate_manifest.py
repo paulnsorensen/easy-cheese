@@ -393,7 +393,7 @@ class TestRunManifestValidator:
         manifest = _manifest()
         manifest["curds"][0]["behavior"] = ""
         errors = validate_manifest.validate_run_manifest(manifest)
-        behavior_errors = [e for e in errors if "behavior" in e and "1" in e]
+        behavior_errors = [e for e in errors if "behavior" in e]
         assert len(behavior_errors) == 1, (
             f"expected exactly 1 behavior error, got {len(behavior_errors)}: {behavior_errors}"
         )
@@ -598,8 +598,9 @@ class TestPrPlanValidator:
     def test_single_shape_requires_one_group(self, validate_pr_plan: ModuleType) -> None:
         plan = _pr_plan()
         plan["groups"].append({**plan["groups"][0], "branch": "ultracook/feature-name/pr-2"})
-        errors = validate_pr_plan.validate_pr_plan(plan)
-        assert any("single shape must contain exactly one group" in error for error in errors)
+        assert validate_pr_plan.validate_pr_plan(plan) == [
+            "PrPlan.groups must be exactly one group for the single shape, not 2"
+        ]
 
     def test_orthogonal_flat_requires_main_base(self, validate_pr_plan: ModuleType) -> None:
         plan = _pr_plan()
@@ -612,8 +613,10 @@ class TestPrPlanValidator:
         plan = _pr_plan()
         plan["shape"] = "stacked_linear"
         plan["groups"].append(dict(plan["groups"][0]))
-        errors = validate_pr_plan.validate_pr_plan(plan)
-        assert any("duplicates" in error for error in errors)
+        assert validate_pr_plan.validate_pr_plan(plan) == [
+            "PrPlan.groups must be branch-distinct: 'ultracook/feature-name/pr-1' "
+            "is claimed by two groups -- the two pull requests would race the same ref"
+        ]
 
     def test_commit_must_be_hex_sha(self, validate_pr_plan: ModuleType) -> None:
         # An option-shaped string would reach `git cherry-pick` as a flag even
@@ -660,7 +663,7 @@ class TestPrPlanValidator:
         plan = _pr_plan()
         plan["groups"][0]["body"] = 123
         errors = validate_pr_plan.validate_pr_plan(plan)
-        assert any("body must be a string when present" in error for error in errors)
+        assert any("body must be a string" in error for error in errors)
 
     def test_body_empty_string_is_allowed(self, validate_pr_plan: ModuleType) -> None:
         # `gh pr create --body ''` is valid, so empty body must pass.

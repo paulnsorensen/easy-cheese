@@ -126,8 +126,7 @@ def _cmd_html_report(args: argparse.Namespace) -> None:
     report = Path(args.report)
     if not report.is_file():
         raise cli.CliError(f"--report not found: {args.report}")
-    if any(sep in args.slug for sep in ("..", "/", "\\", ":")):
-        raise cli.CliError(f"--slug rejects path traversal: {args.slug!r}")
+    cli.reject_path_segment("--slug", args.slug)
     out_dir = Path(args.out_dir) if args.out_dir else Path(tempfile.gettempdir())
     if not out_dir.is_dir():
         raise cli.CliError(f"--out-dir is not a directory: {out_dir}")

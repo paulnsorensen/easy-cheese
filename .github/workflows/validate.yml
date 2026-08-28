@@ -106,8 +106,10 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install PyYAML
-        run: pip install --no-cache-dir pyyaml==6.0.2
+      - name: Install test dependencies
+        run: |
+          pip install --no-cache-dir pytest==9.0.3 pyyaml==6.0.2
+          pip install --disable-pip-version-check --no-cache-dir --require-hashes --requirement requirements/runtime.txt
 
       - name: Lint install.sh
         run: shellcheck scripts/install.sh
