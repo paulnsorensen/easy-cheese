@@ -1,14 +1,9 @@
-"""CLI verbs for the cook skill: normalize writer-view JSON into a canonical
-host artifact, and validate a payload against a named schema-catalog
-contract. Both verbs resolve their target schema and validate through one
-shared path so they cannot drift apart from each other.
+"""Handlers for Cook's normalize and validate contract commands.
 
-normalize's document argument is the AgentWriterView JSON (`kind` + `payload`)
-an agent wrote. The separate --invocation file supplies the host-owned data
-(plan ids, contract versions, evidence, ...) normalize_agent_output needs to
-resolve the writer's shorthand into the canonical host artifact. A document
-that itself supplies a host-owned field -- including `invocation` -- is
-rejected before that resolution runs.
+``normalize`` combines agent-authored JSON with host-owned invocation data,
+then emits a canonical artifact. ``validate`` checks a payload against a named
+schema-catalog contract. Both handlers validate through one shared path so
+their contract handling cannot drift.
 """
 from __future__ import annotations
 
@@ -27,24 +22,8 @@ from easy_cheese_schemas import (
     validate_contract,
 )
 
-COMMANDS = {"normalize", "validate"}
+__all__ = ["normalize_main", "validate_main"]
 
-
-def _command_of(argv: list[str]) -> tuple[str | None, list[str]]:
-    """The verb, read from the name cook_cli was invoked as, then from argv.
-
-    The bundle gives each verb its own entry point into this module and
-    rewrites `argv[0]` to the verb name; running the module directly leaves
-    `argv[0]` as the file, so the verb is looked for in `argv[1]` next.
-    """
-    invoked = Path(argv[0]).name if argv else ""
-    if invoked.endswith(".py"):
-        invoked = invoked[: -len(".py")]
-    if invoked in COMMANDS:
-        return invoked, list(argv[1:])
-    if len(argv) >= 2 and argv[1] in COMMANDS:
-        return argv[1], list(argv[2:])
-    return None, []
 
 
 def _validate_against(raw: bytes | str, schema: object) -> None:
@@ -62,7 +41,7 @@ def _parse_normalize_args(argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def _run_normalize(argv: list[str]) -> int:
+def normalize_main(argv: list[str]) -> int:
     args = _parse_normalize_args(argv)
     try:
         document_raw = args.document.read_text(encoding="utf-8")
@@ -104,7 +83,7 @@ def _parse_validate_args(argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def _run_validate(argv: list[str]) -> int:
+def validate_main(argv: list[str]) -> int:
     args = _parse_validate_args(argv)
     try:
         raw = args.payload.read_text(encoding="utf-8")
@@ -124,24 +103,3 @@ def _run_validate(argv: list[str]) -> int:
     return 0
 
 
-_RUNNERS = {"normalize": _run_normalize, "validate": _run_validate}
-
-
-def normalize_main(argv: list[str]) -> int:  # noqa: V103
-    return _run_normalize(argv)
-
-
-def validate_main(argv: list[str]) -> int:  # noqa: V103
-    return _run_validate(argv)
-
-
-def main(argv: list[str]) -> int:
-    command, rest = _command_of(argv)
-    if command is None:
-        print("ERROR: expected a 'normalize' or 'validate' command", file=sys.stderr)
-        return 2
-    return _RUNNERS[command](rest)
-
-
-if __name__ == "__main__":
-    sys.exit(main(sys.argv))
