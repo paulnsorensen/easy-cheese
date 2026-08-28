@@ -290,10 +290,12 @@ def _report(change: Change) -> str:
     return f"[{change.leg}] {change.action}: {change.target_path} -- {change.detail}"
 
 
-def _run_leg(leg: str, do_apply: bool) -> int:
+def _run_leg(leg: str, do_apply: bool, migrate: bool = False) -> int:
     if leg in ("global", "doctor"):
         print(_report(apply_global(apply=do_apply)))
-    if leg == "doctor" and not do_apply:
+        if migrate:
+            print(_report(migrate_legacy(apply=do_apply)))
+    if leg == "doctor" and not do_apply and not migrate:
         print(_report(migrate_legacy(apply=False)))
     if leg in ("local", "doctor"):
         print(_report(apply_local(Path.cwd(), apply=do_apply)))
@@ -303,7 +305,11 @@ def _run_leg(leg: str, do_apply: bool) -> int:
 def _leg_main(leg: str, argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog=leg)
     parser.add_argument("--apply", action="store_true")
-    return _run_leg(leg, parser.parse_args(argv).apply)
+    parser.add_argument("--migrate-legacy", action="store_true")
+    args = parser.parse_args(argv)
+    if args.migrate_legacy and leg != "global":
+        parser.error("--migrate-legacy is only valid for global")
+    return _run_leg(leg, args.apply, args.migrate_legacy)
 
 
 def global_main(argv: list[str]) -> int:
@@ -331,8 +337,11 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     parser = argparse.ArgumentParser(prog=leg)
     parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--migrate-legacy", action="store_true")
     args = parser.parse_args(rest)
-    return _run_leg(leg, args.apply)
+    if args.migrate_legacy and leg != "global":
+        parser.error("--migrate-legacy is only valid for global")
+    return _run_leg(leg, args.apply, args.migrate_legacy)
 
 
 if __name__ == "__main__":

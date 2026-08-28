@@ -23,9 +23,8 @@ contract and preserves evidence for a fresh bounded Cook repair.
 
 ## Packaged commands
 
-Resolve every `red-gate ...` invocation through
-[`../cut/references/gate-workflow.md`](../cut/references/gate-workflow.md)
-§ Packaged command resolution. For boundary routing, append
+Resolve every `red-gate ...` invocation through this skill's bundle:
+`python3 skills/press/scripts/press.pyz red-gate ...`. For boundary routing, append
 `press-route .cheese/press/<slug>.attempt-N.route.json` to `python3
 skills/press/scripts/press.pyz`; in a source checkout use
 `python3 skills/press/scripts/press.pyz press-route

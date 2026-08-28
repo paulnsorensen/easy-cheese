@@ -31,10 +31,9 @@ non-behavior path; N/A never means no requested work.
 
 ## Packaged validator
 
-Resolve `red-gate ...` through
-[`../cut/references/gate-workflow.md`](../cut/references/gate-workflow.md)
-§ Packaged command resolution: installed sibling `cut.pyz` first, then the
-source-checkout bundle. A bare executable is not on PATH.
+Resolve `red-gate ...` through this skill's bundle:
+`python3 skills/cook/scripts/cook.pyz red-gate ...`. The command is packaged
+with Cook; a bare executable is not on PATH.
 
 ## GateReceipt preflight
 
