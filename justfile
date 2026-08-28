@@ -38,6 +38,14 @@ test-skill-overlap:
 bundle:
     python3 scripts/build_pyz.py
 
+# Verify current worktree sources against current bundle artifacts
+check-bundles:
+    python3 scripts/check_bundles_local.py
+
+# CI alias keeps the HEAD comparison explicit
+check-bundles-ci:
+    python3 scripts/check_bundles.py --against head
+
 # Preview the exact tree a release ships (skills + .pyz only, no sources)
 release-preview:
     python3 scripts/stage_release.py --out .release-preview
@@ -72,10 +80,10 @@ update-skill-budgets:
     python3 .github/scripts/validate_skills.py --write-budgets
 
 # Full local check with autofixes
-check: lint-md-fix lint-yaml-fix lint-yaml lint-py-fix lint-sh test docs-build
+check: lint-md-fix lint-yaml-fix lint-yaml lint-py-fix lint-sh test check-bundles docs-build
 
 # CI-mode verification (no autofixes)
-ci: lint-md lint-yaml lint-sh test docs-build
+ci: lint-md lint-yaml lint-sh test bundle check-bundles-ci docs-build
 
 # Install docs build dependencies
 docs-install:

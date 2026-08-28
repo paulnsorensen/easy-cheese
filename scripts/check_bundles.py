@@ -14,12 +14,14 @@ Every .pyz must carry Shiv's runtime markers; other zipapp formats are rejected.
 
 from __future__ import annotations
 
+import argparse
 import io
 import hashlib
 import json
 import re
 import subprocess
 import sys
+import tempfile
 import zipfile
 from pathlib import Path
 
@@ -147,6 +149,38 @@ def _committed(path: Path) -> bytes | None:
     return result.stdout if result.returncode == 0 else None
 
 
+def _materialize_index(destination: Path) -> None:
+    """Materialize the current Git index without reading raw object contents."""
+    destination.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        ["git", "checkout-index", "--all", f"--prefix={destination}/"],
+        cwd=REPO_ROOT,
+        check=True,
+    )
+
+
+def _check_roots(built_root: Path, baseline_root: Path, *, require_baseline: bool) -> list[str]:
+    problems: list[str] = []
+    built_paths = {path.relative_to(built_root) for path in built_root.glob(BUNDLE_GLOB)}
+    baseline_paths = {path.relative_to(baseline_root) for path in baseline_root.glob(BUNDLE_GLOB)}
+    for relative in sorted(baseline_paths - built_paths):
+        problems.append(f"  {relative} (expected bundle missing from build)")
+    for relative in sorted(built_paths - baseline_paths):
+        if require_baseline:
+            problems.append(f"  {relative} (built bundle is not staged)")
+    for relative in sorted(built_paths & baseline_paths):
+        try:
+            rebuilt_manifest = _manifest((built_root / relative).read_bytes())
+            baseline_manifest = _manifest((baseline_root / relative).read_bytes())
+            problems.extend(
+                f"  {relative}\n{detail}"
+                for detail in _describe(rebuilt_manifest, baseline_manifest)
+            )
+        except (ValueError, KeyError, json.JSONDecodeError, zipfile.BadZipFile) as exc:
+            problems.append(f"  {relative}\n    ! bundle metadata invalid: {exc}")
+    return problems
+
+
 def _describe(
     rebuilt: dict[str, tuple[int, int] | bytes],
     committed: dict[str, tuple[int, int] | bytes],
@@ -162,39 +196,60 @@ def _describe(
     return problems
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--against",
+        choices=("head", "index"),
+        default="head",
+        help="compare rebuilt bundles with HEAD or the materialized Git index",
+    )
+    parser.add_argument(
+        "--baseline-root",
+        type=Path,
+        help="compare against bundles materialized under this checkout",
+    )
+    args = parser.parse_args([] if argv is None else argv)
     stale: list[str] = []
-    for path in sorted(REPO_ROOT.glob("skills/*/scripts/common.pyz")):
-        stale.append(f"  {path.relative_to(REPO_ROOT)} (obsolete shared bundle)")
     checked = 0
-    for path in sorted(REPO_ROOT.glob(BUNDLE_GLOB)):
-        relative = path.relative_to(REPO_ROOT)
-        committed = _committed(relative)
-        checked += 1
-        try:
-            rebuilt_manifest = _manifest(path.read_bytes())
-            if committed is None:
-                print(f"new Shiv bundle, nothing to compare: {relative}")
-                continue
-            committed_manifest = _manifest(committed)
-            problems = _describe(rebuilt_manifest, committed_manifest)
-        except (ValueError, KeyError, json.JSONDecodeError, zipfile.BadZipFile) as exc:
-            problems = [f"    ! bundle metadata invalid: {exc}"]
-        if problems:
-            stale.append(f"  {relative}\n" + "\n".join(problems))
-
+    if args.baseline_root is not None:
+        baseline = args.baseline_root.resolve()
+        built_paths = {path.relative_to(REPO_ROOT) for path in REPO_ROOT.glob(BUNDLE_GLOB)}
+        baseline_paths = {path.relative_to(baseline) for path in baseline.glob(BUNDLE_GLOB)}
+        checked = len(baseline_paths | built_paths)
+        stale.extend(_check_roots(REPO_ROOT, baseline, require_baseline=True))
+    elif args.against == "index":
+        with tempfile.TemporaryDirectory(prefix="easy-cheese-index-") as raw:
+            baseline = Path(raw) / "baseline"
+            _materialize_index(baseline)
+            built_paths = {path.relative_to(REPO_ROOT) for path in REPO_ROOT.glob(BUNDLE_GLOB)}
+            baseline_paths = {path.relative_to(baseline) for path in baseline.glob(BUNDLE_GLOB)}
+            checked = len(baseline_paths | built_paths)
+            stale.extend(_check_roots(REPO_ROOT, baseline, require_baseline=True))
+    else:
+        for path in sorted(REPO_ROOT.glob("skills/*/scripts/common.pyz")):
+            stale.append(f"  {path.relative_to(REPO_ROOT)} (obsolete shared bundle)")
+        for path in sorted(REPO_ROOT.glob(BUNDLE_GLOB)):
+            relative = path.relative_to(REPO_ROOT)
+            committed = _committed(relative)
+            checked += 1
+            try:
+                rebuilt_manifest = _manifest(path.read_bytes())
+                if committed is None:
+                    problems = []
+                else:
+                    problems = _describe(rebuilt_manifest, _manifest(committed))
+            except (ValueError, KeyError, json.JSONDecodeError, zipfile.BadZipFile) as exc:
+                problems = [f"    ! bundle metadata invalid: {exc}"]
+            if problems:
+                stale.append(f"  {relative}\n" + "\n".join(problems))
     if stale:
-        print(
-            "::error::.pyz bundles are invalid or stale; run "
-            "'python3 scripts/build_pyz.py' and commit the generated "
-            "skills/*/scripts/*.pyz files."
-        )
+        print("::error::.pyz bundles are invalid or stale; run 'python3 scripts/build_pyz.py' and commit the generated skills/*/scripts/*.pyz files.")
         print("\n".join(stale))
         return 1
-
     print(f".pyz bundles are current ({checked} checked, by canonical member content).")
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))

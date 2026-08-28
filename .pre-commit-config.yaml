@@ -1,0 +1,19 @@
+repos:
+  - repo: local
+    hooks:
+      - id: bundle-currency
+        name: bundle-currency
+        entry: python3 scripts/precommit_bundle_currency.py
+        language: system
+        always_run: true
+        files: >-
+          (?x)^(
+            src/|
+            skills/[^/]+/(phase-contract\.yaml|scripts/[^/]+\.pyz)$|
+            scripts/(build_pyz|check_bundles|check_bundles_local|precommit_bundle_currency)\.py$|
+            \.github/workflows/build-pyz\.yml$|
+            pyproject\.toml$|
+            requirements/(runtime\.txt|bundles/[^/]+\.txt)$|
+            requirements-build\.txt
+          )
+        pass_filenames: false
