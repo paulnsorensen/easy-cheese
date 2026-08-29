@@ -2831,19 +2831,10 @@ def begin_phase(plan: Path | str, output: Path | str) -> PhaseTokenResult:
     )
 
 
-def _load_phase_token(
-    source: Path | str,
-    receipt: _PhaseTokenReceipt,
-    root: Path,
-    *,
-    allow_inherited_root: bool = False,
-) -> tuple[_PhaseToken | None, Path | None, list[str]]:
+def _phase_token_identity_errors(
+    path: Path, receipt: _PhaseTokenReceipt, root: Path
+) -> list[str]:
     problems: list[str] = []
-    path, error = _path_inside(root, source, "phase token")
-    if error or path is None:
-        return None, None, [error or "phase token path is invalid"]
-    if not path.is_file():
-        return None, path, [f"phase token is missing: {source}"]
     expected_namespace = root / ".cheese" / receipt.producer.value
     if not path.is_relative_to(expected_namespace):
         problems.append(
@@ -2860,10 +2851,18 @@ def _load_phase_token(
     expected_digest = (receipt.phase_token_sha256 or "").removeprefix("sha256:").lower()
     if digest is None or digest != expected_digest:
         problems.append("GateReceipt.phase_token_sha256 is stale")
-    raw, read_problems = _read_json_object(path, "phase token")
-    problems.extend(read_problems)
-    if raw is None:
-        return None, path, problems
+    return problems
+
+
+def _phase_token_header_errors(
+    path: Path,
+    raw: dict[str, object],
+    receipt: _PhaseTokenReceipt,
+    root: Path,
+    *,
+    allow_inherited_root: bool,
+) -> tuple[list[str], GateProducer | None, object, object, object]:
+    problems: list[str] = []
     try:
         token_bytes = path.read_bytes()
     except OSError as exc:
@@ -2900,6 +2899,13 @@ def _load_phase_token(
         problems.append(
             "phase token.project_root does not match the current project root"
         )
+    return problems, producer, work_id, project_key, project_root
+
+
+def _phase_token_collections_errors(
+    raw: dict[str, object], root: Path
+) -> tuple[list[str], list[str], list[_CheckDict], list[_ResultDict], dict[str, str]]:
+    problems: list[str] = []
     raw_production_paths = raw.get("production_paths")
     production_paths: list[str] = []
     if not isinstance(raw_production_paths, list) or not raw_production_paths:
@@ -2992,6 +2998,15 @@ def _load_phase_token(
                 )
                 continue
             snapshot[relative] = fingerprint
+    return problems, production_paths, checks, results, snapshot
+
+
+def _phase_token_cross_check_errors(
+    checks: list[_CheckDict],
+    results: list[_ResultDict],
+    receipt: _PhaseTokenReceipt,
+) -> list[str]:
+    problems: list[str] = []
     if [result["id"] for result in results] != [
         check["id"] for check in checks
     ]:
@@ -3008,6 +3023,44 @@ def _load_phase_token(
         problems.append("GateReceipt.baseline_checks do not match the phase token")
     if results != receipt_results:
         problems.append("GateReceipt baseline results do not match the phase token")
+    return problems
+
+
+def _load_phase_token(
+    source: Path | str,
+    receipt: _PhaseTokenReceipt,
+    root: Path,
+    *,
+    allow_inherited_root: bool = False,
+) -> tuple[_PhaseToken | None, Path | None, list[str]]:
+    problems: list[str] = []
+    path, error = _path_inside(root, source, "phase token")
+    if error or path is None:
+        return None, None, [error or "phase token path is invalid"]
+    if not path.is_file():
+        return None, path, [f"phase token is missing: {source}"]
+
+    problems.extend(_phase_token_identity_errors(path, receipt, root))
+
+    raw, read_problems = _read_json_object(path, "phase token")
+    problems.extend(read_problems)
+    if raw is None:
+        return None, path, problems
+
+    header_problems, producer, work_id, project_key, project_root = (
+        _phase_token_header_errors(
+            path, raw, receipt, root, allow_inherited_root=allow_inherited_root
+        )
+    )
+    problems.extend(header_problems)
+
+    collection_problems, production_paths, checks, results, snapshot = (
+        _phase_token_collections_errors(raw, root)
+    )
+    problems.extend(collection_problems)
+
+    problems.extend(_phase_token_cross_check_errors(checks, results, receipt))
+
     if (
         problems
         or producer is None
