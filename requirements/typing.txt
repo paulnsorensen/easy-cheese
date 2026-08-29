@@ -1,0 +1,10 @@
+# Import surface for basedpyright's .venv-typing (see [tool.basedpyright] in
+# pyproject.toml): the runtime deps plus every third-party import the checked
+# trees (src, scripts, .github/scripts, tests) actually make. Versions track
+# requirements/runtime.txt pins and the justfile's tool pins.
+attrs==26.1.0
+cattrs==26.1.0
+typing_extensions==4.16.0
+pytest==9.0.3
+pyyaml==6.0.2
+vulture==2.16

@@ -67,6 +67,15 @@ lint-yaml:
 lint-py-fix:
     uvx ruff check --fix .
 
+# Create/refresh the venv basedpyright resolves imports against
+typecheck-install:
+    uv venv --quiet --allow-existing --python 3.12 .venv-typing
+    uv pip install --quiet --python .venv-typing/bin/python --requirement requirements/typing.txt
+
+# Type-check all Python (recommended tier fails on warnings too)
+typecheck: typecheck-install
+    uvx basedpyright@1.39.10
+
 # Check for unused Python code with owner-qualified Vulture classifier
 lint-py-dead-code *paths="src scripts .github/scripts tests":
     #!/usr/bin/env bash
