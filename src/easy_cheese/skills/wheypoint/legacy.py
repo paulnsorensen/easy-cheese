@@ -303,15 +303,7 @@ def find_legacy_note(
         try:
             path = reference.resolve(strict=True)
         except FileNotFoundError:
-            try:
-                try:
-                    path = reference.resolve(strict=True)
-                except FileNotFoundError:
-                    path = reference.resolve()
-            except (OSError, RuntimeError, ValueError) as exc:
-                raise LegacyLookupError(
-                    "absolute legacy reference could not be resolved"
-                ) from exc
+            path = reference.resolve()
         except (OSError, RuntimeError, ValueError) as exc:
             raise LegacyLookupError(
                 "absolute legacy reference could not be resolved"

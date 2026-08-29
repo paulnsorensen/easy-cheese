@@ -353,7 +353,7 @@ class TestValidateManifestE2E:
         curds = _curds(1)
         del curds[0]["files"]
         errors = validate_decomposition.validate_manifest(_manifest(curds=curds))
-        assert any("missing or empty 'files'" in e for e in errors), errors
+        assert any("files" in e and "required" in e for e in errors), errors
 
     def test_lone_curd_with_files_as_a_bare_string_rejected(
         self, validate_decomposition: ModuleType
@@ -361,7 +361,7 @@ class TestValidateManifestE2E:
         curds = _curds(1)
         curds[0]["files"] = "src/feature_0.ts"
         errors = validate_decomposition.validate_manifest(_manifest(curds=curds))
-        assert any("missing or empty 'files'" in e for e in errors), errors
+        assert any("files" in e and "must be a list" in e for e in errors), errors
 
     def test_curds_must_be_a_list(self, validate_decomposition: ModuleType) -> None:
         manifest = _manifest()

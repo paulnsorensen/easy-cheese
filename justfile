@@ -27,7 +27,7 @@ test:
     {{python}} -m pytest tests/wheypoint/python -q
     node --test 'tests/js/**/*.test.mjs'
     bats tests/bash/test_install.bats
-    bats tests/fanout/bash/test_pr_plan_to_branches.bats
+    uv run --no-project --with-requirements requirements/runtime.txt --with pip==26.2.1 --with pyyaml==6.0.2 bats tests/fanout/bash/test_pr_plan_to_branches.bats
     just test-skill-overlap
 
 # Run model-free overlap analyzer tests (never fetches model artifacts)

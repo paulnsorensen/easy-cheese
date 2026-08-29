@@ -463,7 +463,13 @@ def validate_run_manifest(manifest: dict[str, Any]) -> list[str]:
         if not isinstance(pr_plan, dict):
             errors.append("manifest.pr_plan must be an object")
         else:
-            errors.extend(f"manifest.pr_plan.{error}" for error in validate_pr_plan(pr_plan))
+            # validate_pr_plan now delegates to easy_cheese_schemas.PrPlan, whose
+            # problems already carry a "PrPlan." prefix; swap it for
+            # "manifest.pr_plan." instead of prepending on top of it.
+            errors.extend(
+                error.replace("PrPlan.", "manifest.pr_plan.", 1)
+                for error in validate_pr_plan(pr_plan)
+            )
 
     if "phase_summary" in manifest and not isinstance(manifest["phase_summary"], str):
         errors.append("manifest.phase_summary must be a string")

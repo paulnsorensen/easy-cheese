@@ -6,6 +6,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+
 # Conflict-marker prefixes (diff3 adds the ||||||| base marker). Single source
 # for marker checks here and in importers (conflict-pick).
 MARKER_OURS = "<<<<<<<"
@@ -17,14 +18,30 @@ CONFLICT_MARKERS = (MARKER_OURS, MARKER_BASE, MARKER_SEP, MARKER_THEIRS)
 _MARKER_FRAGMENTS = tuple(m[:6] for m in CONFLICT_MARKERS)
 
 
-def run_git(args: list[str], capture_output: bool = True) -> subprocess.CompletedProcess:
+def run_git(
+    args: list[str],
+    capture_output: bool = True,
+    *,
+    cwd: str | Path | None = None,
+    timeout: float | None = None,
+) -> subprocess.CompletedProcess:
+    command = ["git"]
+    if cwd is not None:
+        command += ["-C", str(cwd)]
+    command += args
+    kwargs: dict[str, object] = {}
+    if timeout is not None:
+        kwargs["timeout"] = timeout
     return subprocess.run(
-        ["git"] + args,
+        command,
         capture_output=capture_output,
         text=True,
         encoding="utf-8",
         errors="replace",
+        **kwargs,
     )
+
+
 
 
 def get_conflicted_files() -> list[str]:

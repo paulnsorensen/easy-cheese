@@ -66,7 +66,7 @@ The build must:
 
 - construct every internal distribution through PEP 517;
 - resolve dependencies only from the private wheelhouse;
-- require hashes for each per-skill lock;
+- require hashes from the committed external lock when populating the wheelhouse and from an ephemeral complete closure when assembling each bundle;
 - reject non-`py3-none-any` wheels, false `Root-Is-Purelib` metadata, and native members;
 - produce one same-named archive per discovered `commands.py`;
 - verify checked-in generated schema/runtime sources;
@@ -87,4 +87,4 @@ This doctrine supersedes the split runtime roots under `src/<skill>/` and `share
 [^8]: src/easy_cheese/shared/bundle_commands.py:`Command`; src/easy_cheese/skills/*/commands.py
 [^9]: src/easy_cheese/shared/bundle_commands.py:`dispatch`; tests/python/test_bundle_commands.py
 
-_Source: implemented repository architecture · Updated: 2026-08-26 · Supersedes: split runtime roots, custom closure inference, vendored trees, and shared common archives_
+_Source: implemented repository architecture · Updated: 2026-08-28 · Supersedes: committed internal-wheel hashes, split runtime roots, custom closure inference, vendored trees, and shared common archives_

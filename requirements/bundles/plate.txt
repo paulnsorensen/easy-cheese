@@ -1,6 +1,0 @@
-attrs==26.1.0 --hash=sha256:c647aa4a12dfbad9333ca4e71fe62ddc36f4e63b2d260a37a8b83d2f043ac309
-cattrs==26.1.0 --hash=sha256:d1e0804c42639494d469d08d4f26d6b9de9b8ab26b446db7b5f8c2e97f7c3096
-easy-cheese-plate==1.1.0 --hash=sha256:a7052a558b3ad2368c359bd439133d01be403c0e1d5846049ea859351ffadece
-easy-cheese-schemas==1.1.0 --hash=sha256:cf82f832dfed5143a64b2a884ed82a6e9d4e5fb4c317cfb3bb9a2ebc527598a0
-easy-cheese-shared==1.1.0 --hash=sha256:a1d3bd3a6857bf03280caa61e5b80cd1915a7e1d24757c4bcfbb332862bdb8a4
-typing_extensions==4.16.0 --hash=sha256:481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8

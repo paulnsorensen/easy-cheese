@@ -18,15 +18,14 @@ import hashlib
 import json
 import os
 import shutil
-import subprocess
 import tempfile
 from contextlib import suppress
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-# cli is co-staged in the bundled .pyz alongside this module
-from easy_cheese.shared import cli
+# cli and git_utils are co-staged in the bundled .pyz alongside this module
+from easy_cheese.shared import cli, git_utils
 
 WORKTREE_DIR = ".claude/worktrees"
 
@@ -41,11 +40,7 @@ def _worktree_branch(slug: str) -> str:
 
 def _git(repo: str, *args: str) -> str:
     """Run a git command in `repo`; raise CliError (loud) on failure."""
-    result = subprocess.run(
-        ["git", "-C", repo, *args],
-        capture_output=True,
-        text=True,
-    )
+    result = git_utils.run_git(list(args), cwd=repo)
     if result.returncode != 0:
         raise cli.CliError(
             f"git {' '.join(args)} failed ({result.returncode}): {result.stderr.strip()}"
@@ -489,16 +484,8 @@ def create(
             else []
         )
     except (cli.CliError, OSError):
-        subprocess.run(
-            ["git", "-C", repo, "worktree", "remove", "--force", path],
-            capture_output=True,
-            text=True,
-        )
-        subprocess.run(
-            ["git", "-C", repo, "branch", "-D", branch],
-            capture_output=True,
-            text=True,
-        )
+        git_utils.run_git(["worktree", "remove", "--force", path], cwd=repo)
+        git_utils.run_git(["branch", "-D", branch], cwd=repo)
         raise
     result: dict[str, object] = {"path": path, "branch": branch}
     if inherited:
@@ -520,7 +507,7 @@ def harvest(branch: str, onto: str, *, repo: str = ".") -> list[str]:
         # Leave the repo clean for the orchestrator's /melt fallback: a
         # half-finished cherry-pick (unmerged index / CHERRY_PICK_HEAD) would
         # cascade-poison the next harvest's `git checkout onto`.
-        subprocess.run(["git", "-C", repo, "cherry-pick", "--abort"], capture_output=True, text=True)
+        git_utils.run_git(["cherry-pick", "--abort"], cwd=repo)
         raise
     return revs
 

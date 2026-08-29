@@ -24,7 +24,6 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = REPO_ROOT / "src"
 PACKAGE_ROOT = SRC_ROOT / "easy_cheese"
 SKILLS_ROOT = PACKAGE_ROOT / "skills"
-LOCK_ROOT = REPO_ROOT / "requirements" / "bundles"
 RUNTIME_LOCK = REPO_ROOT / "requirements" / "runtime.txt"
 SCHEMA_ROOT = SRC_ROOT / "easy_cheese_schemas"
 SCHEMA_CONTRACT_SOURCE = SCHEMA_ROOT / "contracts.py"
@@ -398,20 +397,11 @@ def _resolved_requirements(skill: str, wheelhouse: Path) -> str:
 def _requirements_for(
     skill: str,
     wheelhouse: Path,
-    *,
-    update: bool,
 ) -> Path:
     expected = _resolved_requirements(skill, wheelhouse)
-    lock = LOCK_ROOT / f"{skill}.txt"
-    if update:
-        lock.parent.mkdir(parents=True, exist_ok=True)
-        lock.write_text(expected, encoding="utf-8")
-    elif not lock.is_file() or lock.read_text(encoding="utf-8") != expected:
-        raise RuntimeError(
-            f"bundle lock is stale: {lock.relative_to(REPO_ROOT)}; "
-            "run scripts/build_pyz.py --update-locks"
-        )
-    return lock
+    requirements = wheelhouse.parent / f"{skill}-requirements.txt"
+    requirements.write_text(expected, encoding="utf-8")
+    return requirements
 
 
 def _shiv_command(skill: str, requirements: Path, target: Path, wheelhouse: Path) -> list[str]:
@@ -445,10 +435,8 @@ def _build_from_wheelhouse(
     skill: str,
     target: Path,
     wheelhouse: Path,
-    *,
-    update_locks: bool,
 ) -> Path:
-    requirements = _requirements_for(skill, wheelhouse, update=update_locks)
+    requirements = _requirements_for(skill, wheelhouse)
     target.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(
         _shiv_command(skill, requirements, target, wheelhouse),
@@ -462,8 +450,6 @@ def _build_from_wheelhouse(
 
 def build_bundles(
     destinations: dict[str, Path],
-    *,
-    update_locks: bool = False,
 ) -> dict[str, Path]:
     unknown = sorted(set(destinations) - set(SKILLS))
     if unknown:
@@ -476,14 +462,13 @@ def build_bundles(
                 skill,
                 target,
                 wheelhouse,
-                update_locks=update_locks,
             )
             for skill, target in destinations.items()
         }
 
 
-def build_bundle(skill: str, target: Path, *, update_locks: bool = False) -> Path:
-    return build_bundles({skill: target}, update_locks=update_locks)[skill]
+def build_bundle(skill: str, target: Path) -> Path:
+    return build_bundles({skill: target})[skill]
 
 
 def cached_bundle(skill: str) -> Path:
@@ -498,7 +483,6 @@ def cached_bundle(skill: str) -> Path:
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out-dir", type=Path)
-    parser.add_argument("--update-locks", action="store_true")
     parser.add_argument("skills", nargs="*")
     args = parser.parse_args(argv[1:])
     selected = tuple(args.skills or SKILLS)
@@ -514,7 +498,7 @@ def main(argv: list[str]) -> int:
         for skill in selected
     }
     try:
-        built = build_bundles(destinations, update_locks=args.update_locks)
+        built = build_bundles(destinations)
     except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as exc:
         print(
             f"ERROR: bundle build failed for {', '.join(selected)}: {exc}",
