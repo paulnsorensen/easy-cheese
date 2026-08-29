@@ -561,7 +561,6 @@ def _parse_spec(spec: Path | str) -> _ContractPlan:
         str(declaration.get("disposition", "")).strip() if declaration else ""
     )
     work_class = str(declaration.get("work_class", "")).strip() if declaration else ""
-    reason_value = declaration.get("reason") if declaration else None
     if disposition_value == "red-required":
         disposition_value = GateDisposition.RED.value
     rows, table_problems, has_table = _contract_table(text)
@@ -679,18 +678,11 @@ def _parse_spec(spec: Path | str) -> _ContractPlan:
             problems.append("not-applicable requires a closed non-behavior work_class")
         if contracts or has_table:
             problems.append("not-applicable receipts cannot carry Test Contracts")
-        if (
-            not isinstance(reason_value, str)  # pyright: ignore[reportUnnecessaryIsInstance]
-            or not reason_value.strip()
-        ):
-            problems.append("not-applicable requires a non-empty reason")
+        # This fallback path only runs when the spec carries no
+        # gate_applicability declaration, so no reason can exist.
+        problems.append("not-applicable requires a non-empty reason")
 
     reason = None
-    if (
-        disposition is GateDisposition.NOT_APPLICABLE
-        and isinstance(reason_value, str)  # pyright: ignore[reportUnnecessaryIsInstance]
-    ):
-        reason = reason_value.strip() or None
     return _ContractPlan(
         disposition,
         work_class,
@@ -1178,11 +1170,14 @@ def _run(
             pass_fds=pass_fds,
         )
     except subprocess.TimeoutExpired as exc:
+        # subprocess.run(text=True) makes TimeoutExpired carry str streams;
+        # typeshed declares them bytes | None unconditionally, so re-narrow.
         parts = (
-            part.decode(errors="replace")
-            if isinstance(part, bytes)  # pyright: ignore[reportUnnecessaryIsInstance]
-            else part
-            for part in (exc.stdout, exc.stderr)
+            part
+            for part in (
+                cast("str | None", exc.stdout),
+                cast("str | None", exc.stderr),
+            )
             if part
         )
         return _Run(124, "\n".join(parts).strip(), "command timed out")
@@ -1238,18 +1233,18 @@ def _probe_paths(executable: str, cwd: Path) -> tuple[list[str], list[str]]:
     return trusted_paths, target_paths
 
 
-def _python_case_runner(argv: list[str], cwd: Path) -> str | None:
-    if not argv:
+def _python_case_runner(argv: Sequence[object], cwd: Path) -> str | None:
+    if not argv or not isinstance(argv[0], str):
         return None
     if not _is_trusted_interpreter(argv[0], cwd):
         return None
     if len(argv) >= 3 and argv[1] == "-c":
         return "code"
-    if len(argv) >= 3 and argv[1:3] == ["-m", "pytest"]:
+    if len(argv) >= 3 and list(argv[1:3]) == ["-m", "pytest"]:
         return "pytest"
-    if len(argv) >= 3 and argv[1:3] == ["-m", "unittest"]:
+    if len(argv) >= 3 and list(argv[1:3]) == ["-m", "unittest"]:
         return "unittest"
-    if len(argv) >= 2 and argv[1].endswith(".py"):
+    if len(argv) >= 2 and isinstance(argv[1], str) and argv[1].endswith(".py"):
         return "script"
     return None
 

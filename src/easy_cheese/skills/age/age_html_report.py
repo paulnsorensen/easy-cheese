@@ -29,10 +29,6 @@ from typing import TextIO, cast
 from easy_cheese.shared import cli, html_report
 from easy_cheese.shared import findings as findings_mod
 
-# Reuse /age's canonical severity-heading + bullet matchers so this consumer
-# stays in lockstep with the emit format findings.py already tracks.
-_SEVERITY_HEADING_RE = findings_mod._SEVERITY_HEADING_RE  # pyright: ignore[reportPrivateUsage]
-_BULLET_RE = findings_mod._BULLET_RE  # pyright: ignore[reportPrivateUsage]
 _ANY_HEADING_RE = re.compile(r"^#{1,6}\s")
 
 # Badge + distribution-bar styling for the age body. Selectors stay lowercase so
@@ -77,10 +73,9 @@ def _finding_blocks(text: str) -> list[tuple[str, str]]:
             # new scope. Trailing sections (## Confidence, ## Next step) thus end
             # the last finding instead of being swallowed into its body.
             close()
-            severity_heading = _SEVERITY_HEADING_RE.match(stripped)
-            current = severity_heading.group("severity").lower() if severity_heading else None
+            current = findings_mod.match_severity_heading(stripped)
             continue
-        bullet = _BULLET_RE.match(raw)
+        bullet = findings_mod.match_bullet(raw)
         if bullet:
             close()
             severity = bullet.group("sev").lower() if bullet.group("sev") else current

@@ -22,8 +22,9 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 from collections.abc import Iterable
-from typing import Protocol, TextIO
+from typing import TextIO
 
 # cli is co-staged in the bundled .pyz alongside this module
 from easy_cheese.shared import cli
@@ -62,10 +63,10 @@ def probe(tools: Iterable[str] | None = None) -> str | None:
     return None
 
 
-class _Args(Protocol):
-    tools: str | None
-    json_mode: bool
-    stdout: TextIO
+class _Args(argparse.Namespace):
+    tools: str | None = None
+    json_mode: bool = False
+    stdout: TextIO = sys.stdout
 
 
 def _cmd_probe(args: _Args) -> None:

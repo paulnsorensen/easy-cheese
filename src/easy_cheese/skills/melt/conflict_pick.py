@@ -11,7 +11,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Protocol, cast
+
 
 from easy_cheese.shared.git_utils import (
     MARKER_BASE,
@@ -78,12 +78,12 @@ def resolve_hunks(content: str, strategy: str, grep_pattern: str | None = None) 
     return "\n".join(result)
 
 
-class _Args(Protocol):
-    file: str
-    ours: bool
-    theirs: bool
-    grep: str | None
-    dry_run: bool
+class _Args(argparse.Namespace):
+    file: str = ""
+    ours: bool = False
+    theirs: bool = False
+    grep: str | None = None
+    dry_run: bool = False
 
 
 def _parse_args(argv: list[str] | None = None) -> _Args:
@@ -97,7 +97,7 @@ def _parse_args(argv: list[str] | None = None) -> _Args:
     _ = parser.add_argument(
         "--dry-run", action="store_true", help="Print resolved content without writing"
     )
-    return cast(_Args, cast(object, parser.parse_args(argv)))
+    return parser.parse_args(argv, namespace=_Args())
 
 
 def main(argv: list[str] | None = None) -> int:

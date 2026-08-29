@@ -18,6 +18,8 @@ import hashlib
 import json
 import os
 import shutil
+import subprocess
+import sys
 import tempfile
 from contextlib import suppress
 from collections.abc import Mapping
@@ -467,6 +469,19 @@ def inherit_oracle(
     _commit_copy_set(plans, destination_root)
     return [plan.relative.as_posix() for plan in plans]
 
+def _warn_if_rollback_failed(
+    args: list[str], result: subprocess.CompletedProcess[str]
+) -> None:
+    """Report a failed best-effort rollback on stderr without masking the
+    original error that triggered it."""
+    if result.returncode != 0:
+        command = " ".join(args)
+        print(
+            f"worktree.py: rollback `git {command}` failed ({result.returncode}): {result.stderr.strip()}",
+            file=sys.stderr,
+        )
+
+
 def create(
     slug: str, base: str, *, repo: str = ".", receipt: str | None = None
 ) -> dict[str, object]:
@@ -488,8 +503,8 @@ def create(
             else []
         )
     except (cli.CliError, OSError):
-        _ = git_utils.run_git(["worktree", "remove", "--force", path], cwd=repo)
-        _ = git_utils.run_git(["branch", "-D", branch], cwd=repo)
+        for cleanup in (["worktree", "remove", "--force", path], ["branch", "-D", branch]):
+            _warn_if_rollback_failed(cleanup, git_utils.run_git(cleanup, cwd=repo))
         raise
     result: dict[str, object] = {"path": path, "branch": branch}
     if inherited:
@@ -511,7 +526,8 @@ def harvest(branch: str, onto: str, *, repo: str = ".") -> list[str]:
         # Leave the repo clean for the orchestrator's /melt fallback: a
         # half-finished cherry-pick (unmerged index / CHERRY_PICK_HEAD) would
         # cascade-poison the next harvest's `git checkout onto`.
-        _ = git_utils.run_git(["cherry-pick", "--abort"], cwd=repo)
+        abort = ["cherry-pick", "--abort"]
+        _warn_if_rollback_failed(abort, git_utils.run_git(abort, cwd=repo))
         raise
     return revs
 

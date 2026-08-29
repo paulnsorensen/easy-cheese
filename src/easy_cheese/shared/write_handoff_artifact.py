@@ -26,9 +26,10 @@ lands.
 import argparse
 import contextlib
 import os
+import sys
 import tempfile
 from pathlib import Path
-from typing import Protocol, TextIO, cast
+from typing import TextIO
 
 from easy_cheese.shared import cli, handoff
 
@@ -166,47 +167,46 @@ def write_artifact(
     return target
 
 
-class _Args(Protocol):
-    slug: str
-    status: str
-    next: str
-    artifact: str
-    orientation: str
-    taste_test: str | None
-    durable_flags: str | None
-    baseline: str | None
-    body_file: str | None
-    phase: str
-    payload_schema: str | None
-    root: str | None
-    stdout: TextIO
+class _Args(argparse.Namespace):
+    slug: str = ""
+    status: str = ""
+    next: str = ""
+    artifact: str = ""
+    orientation: str = ""
+    taste_test: str | None = None
+    durable_flags: str | None = None
+    baseline: str | None = None
+    body_file: str | None = None
+    phase: str = ""
+    payload_schema: str | None = None
+    root: str | None = None
+    stdout: TextIO = sys.stdout
 
 
-def _cmd_write(args: argparse.Namespace) -> None:
-    a = cast(_Args, cast(object, args))
+def _cmd_write(args: _Args) -> None:
     body: str | None = None
-    if a.body_file is not None:
-        body_path = Path(a.body_file)
+    if args.body_file is not None:
+        body_path = Path(args.body_file)
         if not body_path.is_file():
             raise cli.CliError(f"--body-file not found: {body_path}")
         body = body_path.read_text(encoding="utf-8")
 
-    root = Path(a.root) if a.root else Path.cwd()
+    root = Path(args.root) if args.root else Path.cwd()
     target = write_artifact(
-        slug=a.slug,
-        status=a.status,
-        next_skill=a.next,
-        artifact=a.artifact,
-        orientation=a.orientation,
+        slug=args.slug,
+        status=args.status,
+        next_skill=args.next,
+        artifact=args.artifact,
+        orientation=args.orientation,
         body=body,
         root=root,
-        phase=a.phase,
-        payload_schema_uri=a.payload_schema,
-        taste_test=a.taste_test,
-        durable_flags=a.durable_flags,
-        baseline=a.baseline,
+        phase=args.phase,
+        payload_schema_uri=args.payload_schema,
+        taste_test=args.taste_test,
+        durable_flags=args.durable_flags,
+        baseline=args.baseline,
     )
-    cli.emit(str(target), stdout=a.stdout)
+    cli.emit(str(target), stdout=args.stdout)
 
 
 def _setup(parser: argparse.ArgumentParser) -> None:

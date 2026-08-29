@@ -12,7 +12,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import NotRequired, Protocol, TypedDict, cast
+from typing import NotRequired, TypedDict, cast
 
 from easy_cheese.shared.git_utils import (
     get_conflicted_files,
@@ -213,11 +213,11 @@ def format_verbose_output(summaries: list[_Summary | _ErrorSummary]) -> str:
     return "\n".join(lines)
 
 
-class _Args(Protocol):
-    json: bool
-    verbose: bool
-    context: int
-    files: list[str]
+class _Args(argparse.Namespace):
+    json: bool = False
+    verbose: bool = False
+    context: int = 3
+    files: list[str] = []
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -233,7 +233,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     _ = parser.add_argument("files", nargs="*", help="Specific files (default: all conflicted files).")
 
-    args = cast(_Args, cast(object, parser.parse_args(argv)))
+    args = parser.parse_args(argv, namespace=_Args())
 
     files = args.files if args.files else get_conflicted_files()
 

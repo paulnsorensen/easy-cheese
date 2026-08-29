@@ -243,13 +243,17 @@ def _install_unittest_probe(
     return original_init
 
 
+# Resolved once: the stdlib location never changes within a run, and this
+# check sits on the hooked-__import__ hot path.
+_STDLIB_UNITTEST_INIT = Path(os.__file__).resolve().parent / "unittest" / "__init__.py"
+
+
 def _stdlib_unittest(module: object) -> _UnittestModule | None:
     if not isinstance(module, ModuleType):
         return None
     spec = module.__spec__
     origin = spec.origin if spec is not None else None
-    expected = Path(os.__file__).resolve().parent / "unittest" / "__init__.py"
-    if origin is None or Path(origin).resolve() != expected:
+    if origin is None or Path(origin).resolve() != _STDLIB_UNITTEST_INIT:
         return None
     if not all(
         getattr(module, name, None) is not None

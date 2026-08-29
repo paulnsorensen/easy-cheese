@@ -154,7 +154,11 @@ def fetch_checks(pr: int) -> list[dict[str, object]]:
     if raw.strip():
         try:
             data = cast(object, json.loads(raw))
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as exc:
+            _ = sys.stderr.write(
+                f"pr-status.py: could not parse gh pr checks --json output ({exc}); "
+                + "falling back to plain-text parsing\n"
+            )
             data = None
         if isinstance(data, list):
             return cast(list[dict[str, object]], data)
