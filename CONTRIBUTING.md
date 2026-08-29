@@ -23,8 +23,11 @@ brew install just uv bats-core shellcheck yamllint yamlfmt markdownlint-cli2
 just check
 ```
 
-`just check` resolves test tools ephemerally through `uv`. It does not install
-Shiv or rebuild the checked-in skill archives.
+`just check` resolves test tools ephemerally through `uv`, except the type
+gate: `just typecheck` materializes a persistent `.venv-typing` virtualenv
+from the hash-pinned `requirements/typing.txt` so basedpyright resolves
+imports against real installed packages. It does not install Shiv or rebuild
+the checked-in skill archives.
 
 ## Rebuild skill archives
 
