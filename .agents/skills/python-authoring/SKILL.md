@@ -75,6 +75,7 @@ This is a repository-local skill. Keep it under `.agents/skills/python-authoring
 - Load build-only modules that are excluded from wheels with `importlib.import_module` plus `cast`-typed `getattr`, not static imports the checker cannot resolve.
 - Fix the type at its source. When a suppression is genuinely unavoidable, use rule-scoped `# pyright: ignore[ruleName]`, never a bare `# type: ignore` or a file-wide switch — `reportIgnoreCommentWithoutRule` flags unscoped ignores.
 - Use `--outputjson` when a tool needs machine-readable diagnostics. In GitHub Actions the CLI detects CI and emits inline PR annotations with no extra flags.
+- Read exit codes precisely: 0 clean, 1 diagnostics reported, 2 fatal internal error, 3 unreadable config, 4 bad CLI arguments. Treat 2–4 as tooling breakage to fix or report, never as type findings.
 - The binary is mise-managed and pinned to an exact version (upstream recommends exact pinning for reproducibility); the `pyright` and `pyright-langserver` shims resolve to basedpyright.
 
 ## Test and finish
