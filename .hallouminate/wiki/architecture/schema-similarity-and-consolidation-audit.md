@@ -266,7 +266,7 @@ Success is not merely deleting classes. A single malformed test contract must fa
 
 ### Program 3: make PrPlan the only PR-topology authority
 
-**Status:** recommended; current code demonstrates drift.
+**Status:** designed and approved on 2026-08-29; implementation pending.
 
 The attrs PrPlan and the hand-authored JSON Schema disagree. The JSON Schema requires plate_layout and permits pr_number/pr_url fields that the attrs model does not own; dependency validation is also split across consumers.[^15]
 
@@ -281,6 +281,9 @@ Target state:
 - publication outputs such as PR number and URL live in a distinct publication-result/state model, not in the planning input.
 
 This preserves the useful boundary between “what PR topology should exist?” and “what was published?”
+
+
+The approved design registers PrPlan v1 through an explicit modular catalog, preserves diamonds canonically, and lowers them privately in Plate. New-stack provider preference is gh-stack → Graphite → Git Town → manual git/GitHub CLI, while an existing tracked provider retains continuity. Old unversioned plans are regenerated rather than migrated, and Plate's publication receipt remains private. See [[pr-plan-contract-consolidation-001]], [[pr-plan-contract-consolidation-002]], and [[pr-plan-contract-consolidation-003]].
 
 ## Supporting consolidation opportunities
 

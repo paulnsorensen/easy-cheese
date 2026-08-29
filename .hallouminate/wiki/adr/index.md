@@ -38,6 +38,9 @@
 - [plate-publication-boundary-001](./plate-publication-boundary-001.md) — ADR: plate owns the commit-to-PR publication boundary
 - [post-pr-wiki-writeback-001](./post-pr-wiki-writeback-001.md) — ADR: curdle wiki writes enforced by gate node + read-back verify, not a Stop-hook
 - [post-pr-wiki-writeback-002](./post-pr-wiki-writeback-002.md) — ADR: post-PR learnings write-back reuses wiki-ingest, not the personal wiki-curator skill
+- [pr-plan-contract-consolidation-001](./pr-plan-contract-consolidation-001.md) — ADR: PrPlan v1 is the sole pull-request topology authority
+- [pr-plan-contract-consolidation-002](./pr-plan-contract-consolidation-002.md) — ADR: Preserve diamonds canonically and lower them privately for publication
+- [pr-plan-contract-consolidation-003](./pr-plan-contract-consolidation-003.md) — ADR: Legacy PrPlans are regenerated and publication receipts remain private
 - [pyz-pipeline-contracts-001](./pyz-pipeline-contracts-001.md) — ADR: Bundle builds verify the staged import closure, including function-body imports
 - [pyz-pipeline-contracts-002](./pyz-pipeline-contracts-002.md) — ADR: Bundle currency remains a dedicated build gate
 - [pyz-pipeline-contracts-003](./pyz-pipeline-contracts-003.md) — ADR: Runtime source locations follow the package layout

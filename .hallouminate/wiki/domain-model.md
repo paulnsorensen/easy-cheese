@@ -144,6 +144,27 @@ _Code_: NEW ENTITY
 _Avoid_: parsed bare payload
 _Code_: NEW ENTITY
 
+
+**PrPlan** - the canonical provider-neutral pull-request topology contract: target branch, layout, shape, groups, and logical dependencies.
+_Avoid_: provider execution plan, publication receipt, PR result
+_Code_: `src/easy_cheese_schemas/pr_plan.py:131`
+
+**PrGroup** - one planned comparison branch with its commits, one GitHub base branch, and its complete logical prerequisite set.
+_Avoid_: PR receipt row, stack-provider node
+_Code_: `src/easy_cheese_schemas/pr_plan.py:111`
+
+**PrGroup base** - the single branch used for the GitHub comparison of a PrGroup.
+_Avoid_: complete dependency set
+_Code_: `PrGroup.base` in `src/easy_cheese_schemas/pr_plan.py`
+
+**PrGroup depends_on** - every logical prerequisite branch for a PrGroup; unlike base, it can contain multiple branches at a diamond join.
+_Avoid_: GitHub comparison base
+_Code_: `PrGroup.depends_on` in `src/easy_cheese_schemas/pr_plan.py`
+
+**PlateLayout** - the shared single-or-stacked publication layout value used consistently by PrPlan and RunManifest.
+_Avoid_: PrShape, stack provider
+_Code_: `src/easy_cheese_schemas/manifest.py:175`
+
 ## Outside-in RED gating
 
 **GateReceipt** - the strict phase-neutral evidence envelope that binds approved work, contract mode, witness disposition, runner argv, protected-file digests, and producer provenance across Cut, Cook, and Press.
