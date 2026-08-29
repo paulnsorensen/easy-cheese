@@ -27,11 +27,11 @@ Each build creates a temporary private wheelhouse containing:
 
 The runtime lock is version- and hash-pinned. Downloads require wheels and hashes. Every wheel is rejected unless its filename is `py3-none-any`, its WHEEL metadata declares `Root-Is-Purelib: true`, and it contains no `.so`, `.pyd`, or `.dylib` member.[^4]
 
-## Per-skill locks
+## Ephemeral per-skill closure
 
 Repository-built wheels are normalized after PEP 517 assembly: members are sorted, timestamps and ZIP metadata are fixed, and members use stored compression. Member content and wheel metadata remain unchanged, while the outer bytes no longer depend on the interpreter's zlib implementation. Downloaded third-party wheels are not rewritten.[^5]
 
-Pip then performs a dry-run install of `easy-cheese-<skill>==<version>` using only the private wheelhouse. The resulting report becomes `requirements/bundles/<skill>.txt`, with an exact version and SHA-256 hash for every resolved wheel. Normal builds compare that closure with the checked-in lock; `scripts/build_pyz.py --update-locks` is the explicit regeneration path.
+Pip then performs a dry-run install of `easy-cheese-<skill>==<version>` using only the private wheelhouse. The builder hashes every wheel named by that report and writes the exact version-and-SHA-256 closure beside the temporary wheelhouse. Shiv consumes this ephemeral requirements file under `--require-hashes`; only the external pins in `requirements/runtime.txt` are committed. This preserves assembly-time verification without versioning hashes whose identity is derived from changing repository source.
 
 ## Shiv assembly
 
@@ -53,7 +53,7 @@ Before building wheels, the builder recompiles the phase registry, schema catalo
 
 ## CI and release
 
-`.github/workflows/build-pyz.yml` runs the bundle build, freshness comparison, and isolation tests under both Python 3.12 and 3.14. This keeps 3.12 as the runtime baseline while proving that newer build interpreters produce the same locks and canonical bundle content. Regular validation installs no Shiv.[^8]
+`.github/workflows/build-pyz.yml` runs the bundle build, freshness comparison, and isolation tests under both Python 3.12 and 3.14. This keeps 3.12 as the runtime baseline while proving that newer build interpreters produce the same canonical bundle content from the committed external lock. Regular validation installs no Shiv.[^8]
 
 `scripts/check_bundles.py` validates the required Shiv bootstrap members, then compares canonical member content rather than raw ZIP bytes. It removes the host timestamp from `environment.json`, derives a portable build ID, normalizes only the Python interpreter token in console-wrapper shebangs, and excludes `.dist-info/RECORD` files from the canonical comparison. The checker still includes RECORD content in its raw build-ID integrity check.[^9]
 
@@ -71,8 +71,7 @@ Rebuilding archives is explicit:
 
 ```sh
 python3 -m pip install -r requirements-build.txt
-python3 scripts/build_pyz.py --update-locks  # when locks must change
-just bundle                                # when current locks already match
+just bundle
 ```
 
 `just check` resolves normal test dependencies from `requirements/runtime.txt` through uv and does not install Shiv. The GitHub bundle job remains the authoritative full rebuild gate.[^11]
@@ -81,7 +80,7 @@ just bundle                                # when current locks already match
 [^2]: scripts/build_pyz.py:`SKILLS`
 [^3]: scripts/build_pyz.py:`_project_toml`, `build_wheelhouse`
 [^4]: requirements/runtime.txt; scripts/build_pyz.py:`validate_pure_wheel`, `_download_runtime_wheels`
-[^5]: scripts/build_pyz.py:`_normalize_internal_wheel`, `_resolved_requirements`, `_requirements_for`; tests/python/test_build_pyz_tree_staging.py:`test_internal_wheel_normalization_ignores_compressor_and_member_order`; requirements/bundles/
+[^5]: scripts/build_pyz.py:`_normalize_internal_wheel`, `_resolved_requirements`, `_requirements_for`; tests/python/test_build_pyz_tree_staging.py:`test_internal_wheel_normalization_ignores_compressor_and_member_order`; tests/python/test_build_pyz_ephemeral_requirements.py
 [^6]: scripts/build_pyz.py:`_shiv_command`, `_build_from_wheelhouse`
 [^7]: scripts/build_pyz.py:`_validate_generated_runtime`; pyproject.toml
 [^8]: .github/workflows/build-pyz.yml; .github/workflows/validate.yml
@@ -90,4 +89,4 @@ just bundle                                # when current locks already match
 [^11]: justfile; .github/workflows/build-pyz.yml
 [^12]: src/easy_cheese/shared/bundle_commands.py; src/easy_cheese/skills/*/commands.py; tests/python/test_bundle_commands.py
 
-_Source: implemented repository architecture · Updated: 2026-08-28 · Supersedes: inaccurate bundle-comparison wording and implicit command registration_
+_Source: implemented repository architecture · Updated: 2026-08-28 · Supersedes: committed internal-wheel hashes, inaccurate bundle-comparison wording, and implicit command registration_

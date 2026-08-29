@@ -103,15 +103,18 @@ Every Python-backed skill ships exactly one same-named Shiv archive at
 distribution and the published schemas package through package metadata.[^2]
 
 `just bundle` rebuilds every archive from PEP 517 wheels in a private
-wheelhouse. Per-skill hash locks under `requirements/bundles/` make the
-resolved runtime closure explicit; changing that closure requires the
-deliberate `scripts/build_pyz.py --update-locks` path.[^3]
+wheelhouse. `requirements/runtime.txt` is the sole committed hash lock and
+admits only external wheels. Each build uses pip's resolved-install report to
+write the complete external-plus-internal closure beside the temporary
+wheelhouse, then gives that ephemeral file to Shiv under `--require-hashes`.
+Locally built wheel hashes are verified during assembly but never versioned.[^3]
 
-The archives and locks are committed deployment artifacts. `build-pyz.yml`
-rebuilds them in a read-only CI job, compares canonical archive-member content
-against `HEAD`, and runs isolation tests; it never commits generated changes.
-Changes to runtime source, build inputs, locks, manifests, or committed archives
-must therefore be followed by `just bundle` before publication.[^4]
+The archives are committed deployment artifacts. `build-pyz.yml` rebuilds them
+in a read-only CI job, compares canonical archive-member content against
+`HEAD`, and runs isolation tests; it never commits generated changes. Changes
+to runtime source, build inputs, the external runtime lock, manifests, or
+committed archives must therefore be followed by `just bundle` before
+publication.[^4]
 
 See the [bundle pipeline](./architecture/pyz-bundling-pipeline.md) and
 [skill Python bundle doctrine](./architecture/skill-python-bundle-doctrine.md)
@@ -119,7 +122,7 @@ for the dependency and purity contracts.
 
 [^1]: scripts/build_pyz.py
 [^2]: pyproject.toml; src/easy_cheese/shared; src/easy_cheese/skills
-[^3]: scripts/build_pyz.py; requirements/bundles
+[^3]: scripts/build_pyz.py; requirements/runtime.txt
 [^4]: .github/workflows/build-pyz.yml; scripts/check_bundles.py
 
 ## CI workflows

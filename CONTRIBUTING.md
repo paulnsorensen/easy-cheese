@@ -33,7 +33,7 @@ Each Python-backed skill ships one same-named Shiv archive at
 you rebuild these archives; users run them with Python alone.
 
 If you change runtime source under `src/easy_cheese/`, a phase contract, build
-configuration, a bundle lock, or a committed archive, install the pinned build
+configuration, or a committed archive, install the pinned build
 tools and rebuild every archive:
 
 ```sh
@@ -42,8 +42,10 @@ just bundle
 ```
 
 `just bundle` resolves each application from PEP 517 wheels in a private
-wheelhouse. It compares the resolved closure with the corresponding hash-locked
-file under `requirements/bundles/`.
+wheelhouse. It writes the complete external and internal hash-locked closure to
+an ephemeral requirements file beside that wheelhouse before invoking Shiv.
+The external runtime pins in `requirements/runtime.txt` are the sole committed
+hash lock.
 
 Each Python skill declares its public subcommands in `commands.py` as an
 immutable tuple of `Command(name, "module:callable")` values. When you add or
@@ -52,16 +54,9 @@ stdout or diagnostics to stderr, and return an integer process status. Do not
 mutate `sys.argv`, execute the target through `runpy`, or add a decorator-based
 registry.
 
-If you intend to change the resolved dependency closure, update the locks
-explicitly:
-
-```sh
-python3 scripts/build_pyz.py --update-locks
-```
-
-Commit the changed lock files and `skills/*/scripts/*.pyz` archives with the
-source change. CI rebuilds the archives and compares their canonical member
-content with the committed artifacts.
+Commit the regenerated `skills/*/scripts/*.pyz` archives with the source change.
+CI rebuilds the archives and compares their canonical member content with the
+committed artifacts.
 
 ## Documentation style
 

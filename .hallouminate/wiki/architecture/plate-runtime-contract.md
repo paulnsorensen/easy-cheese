@@ -11,12 +11,12 @@ The tool probe never creates stack metadata or invokes provider mutations. Optio
 
 ## Skill boundary
 
-Plate prose invokes only `skills/plate/scripts/plate.pyz`. Source lives in `src/easy_cheese/skills/plate/`, the per-skill lock lives at `requirements/bundles/plate.txt`, and the checked-in archive is generated deployment output.[^5]
+Plate prose invokes only `skills/plate/scripts/plate.pyz`. Source lives in `src/easy_cheese/skills/plate/`; the build resolves Plate's complete hash-locked closure ephemerally from the committed external lock, and the checked-in archive is generated deployment output.[^5]
 
 [^1]: skills/plate/SKILL.md:130-141; skills/plate/SKILL.md:238-254
 [^2]: src/easy_cheese/skills/plate/publication.py; tests/python/test_plate_runtime.py
 [^3]: src/easy_cheese/skills/plate/stack_tools.py; skills/plate/SKILL.md:238-254
 [^4]: architecture/skill-python-bundle-doctrine.md:37-49
-[^5]: src/easy_cheese/skills/plate/commands.py; requirements/bundles/plate.txt; skills/plate/scripts/plate.pyz
+[^5]: src/easy_cheese/skills/plate/commands.py; requirements/runtime.txt; scripts/build_pyz.py; skills/plate/scripts/plate.pyz
 
-_Source: implemented repository behavior · Updated: 2026-08-27_
+_Source: implemented repository behavior · Updated: 2026-08-28_
