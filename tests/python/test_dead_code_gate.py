@@ -177,7 +177,17 @@ def test_typed_dict_field_is_not_dead_code() -> None:
     tree = ast.parse(source)
     imports = _import_map(checker, tree)
     finding = _make_finding(checker, Path("src/other/sample.py"), 4, "field", "variable", "")
-    assert _accepted_reason(checker, finding, tree, imports)
+    assert _accepted_reason(checker, finding, tree, imports) == "TypedDict field declaration"
+
+
+def test_typed_dict_lookalike_is_still_dead_code() -> None:
+    """A locally defined TypedDict that is not the typing one must not launder fields."""
+    checker = _checker_module()
+    source = "class TypedDict: pass\nclass _D(TypedDict):\n    field: str\n"
+    tree = ast.parse(source)
+    imports = _import_map(checker, tree)
+    finding = _make_finding(checker, Path("src/other/sample.py"), 3, "field", "variable", "")
+    assert _accepted_reason(checker, finding, tree, imports) is None
 
 
 def test_protocol_member_and_parameter_are_not_dead_code() -> None:
@@ -199,6 +209,24 @@ def test_protocol_member_and_parameter_are_not_dead_code() -> None:
     assert _accepted_reason(checker, param_finding, tree, imports)
 
 
+def test_protocol_lookalike_is_still_dead_code() -> None:
+    """A locally defined Protocol that is not the typing one must not launder members or params."""
+    checker = _checker_module()
+    source = (
+        "class Protocol: pass\n"
+        "class _P(Protocol):\n"
+        "    attr: str\n"
+        "\n"
+        "    def method(self, amt: int) -> None: ...\n"
+    )
+    tree = ast.parse(source)
+    imports = _import_map(checker, tree)
+    attr_finding = _make_finding(checker, Path("src/other/sample.py"), 3, "attr", "variable", "")
+    param_finding = _make_finding(checker, Path("src/other/sample.py"), 5, "amt", "variable", "")
+    assert _accepted_reason(checker, attr_finding, tree, imports) is None
+    assert _accepted_reason(checker, param_finding, tree, imports) is None
+
+
 def test_override_decorated_method_is_not_dead_code() -> None:
     """@override methods implement a framework contract vulture cannot see dispatch for."""
     checker = _checker_module()
@@ -213,7 +241,24 @@ def test_override_decorated_method_is_not_dead_code() -> None:
     tree = ast.parse(source)
     imports = _import_map(checker, tree)
     finding = _make_finding(checker, Path("src/other/sample.py"), 5, "handle_data", "method", "")
-    assert _accepted_reason(checker, finding, tree, imports)
+    assert _accepted_reason(checker, finding, tree, imports) == "@override framework hook"
+
+
+def test_override_lookalike_is_still_dead_code() -> None:
+    """A locally defined @override that is not typing.override must not launder the method."""
+    checker = _checker_module()
+    source = (
+        "def override(f):\n"
+        "    return f\n"
+        "\n"
+        "class _P:\n"
+        "    @override\n"
+        "    def unused(self) -> None: ...\n"
+    )
+    tree = ast.parse(source)
+    imports = _import_map(checker, tree)
+    finding = _make_finding(checker, Path("src/other/sample.py"), 6, "unused", "method", "")
+    assert _accepted_reason(checker, finding, tree, imports) is None
 
 
 def test_undecorated_method_is_still_dead_code() -> None:
@@ -353,7 +398,7 @@ def test_lambda_local_walrus_does_not_shadow_import() -> None:
         and any(isinstance(target, ast.Name) and target.id == "MEMBER" for target in n.targets)
     )
     finding = _make_finding(checker, Path("src/easy_cheese_schemas/sample.py"), member.lineno, "MEMBER", "variable", "")
-    assert _accepted_reason(checker, finding, tree, imports)
+    assert _accepted_reason(checker, finding, tree, imports) == "enum member or attrs field owned by easy_cheese_schemas"
 
 
 def test_definition_noqa_requires_exact_header_comment(tmp_path: Path) -> None:

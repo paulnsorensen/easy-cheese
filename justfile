@@ -70,7 +70,7 @@ lint-py-fix:
 # Create/refresh the venv basedpyright resolves imports against
 typecheck-install:
     uv venv --quiet --allow-existing --python 3.12 .venv-typing
-    uv pip install --quiet --python .venv-typing/bin/python --requirement requirements/typing.txt
+    uv pip install --quiet --require-hashes --python .venv-typing/bin/python --requirement requirements/typing.txt
 
 # Type-check all Python (recommended tier fails on warnings too)
 typecheck: typecheck-install
