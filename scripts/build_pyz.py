@@ -15,10 +15,11 @@ import sys
 import tempfile
 import tomllib
 import zipfile
+from collections.abc import Callable, Iterable, Sequence
 from email.parser import Parser
 from pathlib import Path
 from types import ModuleType
-from typing import Iterable
+from typing import cast
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = REPO_ROOT / "src"
@@ -32,35 +33,49 @@ PHASE_REGISTRY_SOURCE = SCHEMA_ROOT / "_compiled_phase_registry.py"
 DOCUMENT_RULES_SOURCE = PACKAGE_ROOT / "shared" / "document_rules.py"
 SOURCE_DATE_EPOCH = "315532800"
 NATIVE_SUFFIXES = {".so", ".pyd", ".dylib"}
-VERSION = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text())["project"]["version"]
+VERSION = cast(
+    str,
+    tomllib.loads((REPO_ROOT / "pyproject.toml").read_text())["project"]["version"],
+)
 SKILLS = tuple(
     sorted(
-        path.parent.name.replace("_", "-")
-        for path in SKILLS_ROOT.glob("*/commands.py")
+        path.parent.name.replace("_", "-") for path in SKILLS_ROOT.glob("*/commands.py")
     )
 )
 
 
-def _phase_compiler():
+def _compiler_module(name: str) -> ModuleType:
+    """Load a build-only compiler source module (excluded from wheels)."""
     package_entry = str(SCHEMA_ROOT)
     if package_entry not in sys.path:
         sys.path.insert(0, package_entry)
-    from _phase_registry_compiler import compile_phase_files_to_source
+    return importlib.import_module(name)
 
-    return compile_phase_files_to_source
+
+def _phase_compiler() -> Callable[[Iterable[Path]], str]:
+    compiler = _compiler_module("_phase_registry_compiler")
+    return cast(
+        Callable[[Iterable[Path]], str],
+        getattr(compiler, "compile_phase_files_to_source"),
+    )
 
 
 def _compiled_phase_registry_source() -> str:
     return _phase_compiler()(sorted(REPO_ROOT.glob("skills/*/phase-contract.yaml")))
 
 
-def _schema_catalog_compiler():
-    package_entry = str(SCHEMA_ROOT)
-    if package_entry not in sys.path:
-        sys.path.insert(0, package_entry)
-    from _schema_catalog_compiler import collect, render
-
-    return collect, render
+def _schema_catalog_compiler() -> tuple[
+    Callable[[ModuleType], tuple[tuple[str, str], ...]],
+    Callable[[Sequence[tuple[str, str]]], str],
+]:
+    compiler = _compiler_module("_schema_catalog_compiler")
+    return (
+        cast(
+            Callable[[ModuleType], tuple[tuple[str, str], ...]],
+            getattr(compiler, "collect"),
+        ),
+        cast(Callable[[Sequence[tuple[str, str]]], str], getattr(compiler, "render")),
+    )
 
 
 def _schema_contract_module() -> ModuleType:
@@ -77,13 +92,18 @@ def _compiled_schema_catalog_source() -> str:
     return render(collect(_schema_contract_module()))
 
 
-def _document_rules_compiler():
-    package_entry = str(SCHEMA_ROOT)
-    if package_entry not in sys.path:
-        sys.path.insert(0, package_entry)
-    from _document_rules_compiler import collect, render
-
-    return collect, render
+def _document_rules_compiler() -> tuple[
+    Callable[[ModuleType], tuple[tuple[str, type], ...]],
+    Callable[[Sequence[tuple[str, type]]], str],
+]:
+    compiler = _compiler_module("_document_rules_compiler")
+    return (
+        cast(
+            Callable[[ModuleType], tuple[tuple[str, type], ...]],
+            getattr(compiler, "collect"),
+        ),
+        cast(Callable[[Sequence[tuple[str, type]]], str], getattr(compiler, "render")),
+    )
 
 
 def _compiled_document_rules_source() -> str:
@@ -103,7 +123,11 @@ def _checked_in_generated_file_bytes(
     except FileNotFoundError as exc:
         raise RuntimeError(f"checked-in {artifact_name} is missing: {source}") from exc
     if actual != expected:
-        target = source.relative_to(REPO_ROOT) if source.is_relative_to(REPO_ROOT) else source
+        target = (
+            source.relative_to(REPO_ROOT)
+            if source.is_relative_to(REPO_ROOT)
+            else source
+        )
         raise RuntimeError(f"checked-in {artifact_name} is stale; regenerate {target}")
     return actual
 
@@ -127,9 +151,9 @@ def _checked_in_document_rules_bytes(expected_source: str) -> bytes:
 
 
 def _validate_generated_runtime() -> None:
-    _checked_in_phase_registry_bytes(_compiled_phase_registry_source())
-    _checked_in_schema_catalog_bytes(_compiled_schema_catalog_source())
-    _checked_in_document_rules_bytes(_compiled_document_rules_source())
+    _ = _checked_in_phase_registry_bytes(_compiled_phase_registry_source())
+    _ = _checked_in_schema_catalog_bytes(_compiled_schema_catalog_source())
+    _ = _checked_in_document_rules_bytes(_compiled_document_rules_source())
 
 
 def _normalize(name: str) -> str:
@@ -138,11 +162,17 @@ def _normalize(name: str) -> str:
 
 def _wheel_metadata(path: Path) -> tuple[str, str, tuple[str, ...]]:
     with zipfile.ZipFile(path) as archive:
-        members = [name for name in archive.namelist() if name.endswith(".dist-info/METADATA")]
+        members = [
+            name for name in archive.namelist() if name.endswith(".dist-info/METADATA")
+        ]
         if len(members) != 1:
             raise ValueError(f"wheel has no unique METADATA: {path.name}")
         metadata = Parser().parsestr(archive.read(members[0]).decode())
-    return metadata["Name"], metadata["Version"], tuple(metadata.get_all("Requires-Dist", []))
+    return (
+        metadata["Name"],
+        metadata["Version"],
+        tuple(metadata.get_all("Requires-Dist", [])),
+    )
 
 
 def validate_pure_wheel(path: Path) -> None:
@@ -150,14 +180,17 @@ def validate_pure_wheel(path: Path) -> None:
     if not re.fullmatch(r".+-py\d+(?:\.\d+)?-none-any\.whl", path.name):
         raise ValueError(f"wheel is not py3-none-any: {path.name}")
     with zipfile.ZipFile(path) as archive:
-        wheel_files = [name for name in archive.namelist() if name.endswith(".dist-info/WHEEL")]
+        wheel_files = [
+            name for name in archive.namelist() if name.endswith(".dist-info/WHEEL")
+        ]
         if len(wheel_files) != 1:
             raise ValueError(f"wheel has no unique WHEEL metadata: {path.name}")
         wheel = archive.read(wheel_files[0]).decode()
         if not re.search(r"(?im)^Root-Is-Purelib:\s*true\s*$", wheel):
             raise ValueError(f"wheel is not Root-Is-Purelib: true: {path.name}")
         native = [
-            name for name in archive.namelist()
+            name
+            for name in archive.namelist()
             if Path(name).suffix.lower() in NATIVE_SUFFIXES
         ]
         if native:
@@ -166,7 +199,8 @@ def validate_pure_wheel(path: Path) -> None:
 
 def _build_environment() -> dict[str, str]:
     environment = os.environ.copy()
-    environment.setdefault("SOURCE_DATE_EPOCH", SOURCE_DATE_EPOCH)
+    if "SOURCE_DATE_EPOCH" not in environment:
+        environment["SOURCE_DATE_EPOCH"] = SOURCE_DATE_EPOCH
     return environment
 
 
@@ -177,7 +211,9 @@ def _require_build_frontend() -> None:
         )
 
 
-def _project_toml(name: str, *, dependencies: Iterable[str], script: str | None = None) -> str:
+def _project_toml(
+    name: str, *, dependencies: Iterable[str], script: str | None = None
+) -> str:
     lines = [
         "[build-system]",
         'requires = ["hatchling"]',
@@ -191,14 +227,16 @@ def _project_toml(name: str, *, dependencies: Iterable[str], script: str | None 
     ]
     if script is not None:
         lines.extend(("", "[project.scripts]", script))
-    lines.extend(("", "[tool.hatch.build.targets.wheel]", 'packages = ["src/easy_cheese"]'))
+    lines.extend(
+        ("", "[tool.hatch.build.targets.wheel]", 'packages = ["src/easy_cheese"]')
+    )
     return "\n".join(lines) + "\n"
 
 
 def _copy_package_scaffold(project: Path) -> Path:
     destination = project / "src" / "easy_cheese"
     destination.mkdir(parents=True)
-    shutil.copy2(PACKAGE_ROOT / "__init__.py", destination / "__init__.py")
+    _ = shutil.copy2(PACKAGE_ROOT / "__init__.py", destination / "__init__.py")
     return destination
 
 
@@ -210,10 +248,13 @@ def _normalize_internal_wheel(wheel: Path) -> Path:
     os.close(descriptor)
     normalized = Path(temporary)
     try:
-        with zipfile.ZipFile(wheel) as source, zipfile.ZipFile(
-            normalized, "w", compression=zipfile.ZIP_STORED
-        ) as target:
-            for source_info in sorted(source.infolist(), key=lambda item: item.filename):
+        with (
+            zipfile.ZipFile(wheel) as source,
+            zipfile.ZipFile(normalized, "w", compression=zipfile.ZIP_STORED) as target,
+        ):
+            for source_info in sorted(
+                source.infolist(), key=lambda item: item.filename
+            ):
                 info = zipfile.ZipInfo(source_info.filename, (1980, 1, 1, 0, 0, 0))
                 info.compress_type = zipfile.ZIP_STORED
                 info.create_system = 3  # noqa: V101
@@ -229,7 +270,7 @@ def _normalize_internal_wheel(wheel: Path) -> Path:
 def _build_project(project: Path, wheelhouse: Path) -> Path:
     _require_build_frontend()
     before = set(wheelhouse.glob("*.whl"))
-    subprocess.run(
+    _ = subprocess.run(
         [
             sys.executable,
             "-m",
@@ -255,7 +296,7 @@ def _build_project(project: Path, wheelhouse: Path) -> Path:
 def _build_schema_wheel(wheelhouse: Path) -> Path:
     _require_build_frontend()
     before = set(wheelhouse.glob("*.whl"))
-    subprocess.run(
+    _ = subprocess.run(
         [
             sys.executable,
             "-m",
@@ -281,8 +322,8 @@ def _build_schema_wheel(wheelhouse: Path) -> Path:
 def _build_shared_wheel(project_root: Path, wheelhouse: Path) -> Path:
     project = project_root / "shared"
     package = _copy_package_scaffold(project)
-    shutil.copytree(PACKAGE_ROOT / "shared", package / "shared")
-    (project / "pyproject.toml").write_text(
+    _ = shutil.copytree(PACKAGE_ROOT / "shared", package / "shared")
+    _ = (project / "pyproject.toml").write_text(
         _project_toml(
             "easy-cheese-shared",
             dependencies=(f"easy-cheese-schemas=={VERSION}",),
@@ -298,9 +339,9 @@ def _build_skill_wheel(skill: str, project_root: Path, wheelhouse: Path) -> Path
     package = _copy_package_scaffold(project)
     skills = package / "skills"
     skills.mkdir()
-    shutil.copy2(SKILLS_ROOT / "__init__.py", skills / "__init__.py")
-    shutil.copytree(SKILLS_ROOT / package_name, skills / package_name)
-    (project / "pyproject.toml").write_text(
+    _ = shutil.copy2(SKILLS_ROOT / "__init__.py", skills / "__init__.py")
+    _ = shutil.copytree(SKILLS_ROOT / package_name, skills / package_name)
+    _ = (project / "pyproject.toml").write_text(
         _project_toml(
             f"easy-cheese-{skill}",
             dependencies=(f"easy-cheese-shared=={VERSION}",),
@@ -312,7 +353,7 @@ def _build_skill_wheel(skill: str, project_root: Path, wheelhouse: Path) -> Path
 
 
 def _download_runtime_wheels(wheelhouse: Path) -> tuple[Path, ...]:
-    subprocess.run(
+    _ = subprocess.run(
         [
             sys.executable,
             "-m",
@@ -347,16 +388,16 @@ def build_wheelhouse(
     wheelhouse.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="easy-cheese-projects-") as temporary:
         projects = Path(temporary)
-        _download_runtime_wheels(wheelhouse)
-        _build_schema_wheel(wheelhouse)
-        _build_shared_wheel(projects, wheelhouse)
+        _ = _download_runtime_wheels(wheelhouse)
+        _ = _build_schema_wheel(wheelhouse)
+        _ = _build_shared_wheel(projects, wheelhouse)
         for skill in selected:
-            _build_skill_wheel(skill, projects, wheelhouse)
+            _ = _build_skill_wheel(skill, projects, wheelhouse)
 
 
 def _resolved_requirements(skill: str, wheelhouse: Path) -> str:
     report = wheelhouse.parent / f"{skill}-pip-report.json"
-    subprocess.run(
+    _ = subprocess.run(
         [
             sys.executable,
             "-m",
@@ -378,20 +419,35 @@ def _resolved_requirements(skill: str, wheelhouse: Path) -> str:
         text=True,
     )
     by_name = {
-        _normalize(_wheel_metadata(path)[0]): path
-        for path in wheelhouse.glob("*.whl")
+        _normalize(_wheel_metadata(path)[0]): path for path in wheelhouse.glob("*.whl")
     }
-    resolved = json.loads(report.read_text())["install"]
-    lines = []
-    for item in resolved:
-        name = item["metadata"]["name"]
-        version = item["metadata"]["version"]
+    lines: list[str] = []
+    for name, version in _pip_report_records(report):
         wheel = by_name.get(_normalize(name))
         if wheel is None:
-            raise RuntimeError(f"pip resolved a wheel outside the private wheelhouse: {name}")
+            raise RuntimeError(
+                f"pip resolved a wheel outside the private wheelhouse: {name}"
+            )
         digest = hashlib.sha256(wheel.read_bytes()).hexdigest()
         lines.append(f"{name}=={version} --hash=sha256:{digest}")
     return "\n".join(sorted(lines, key=str.casefold)) + "\n"
+
+
+def _pip_report_records(report: Path) -> list[tuple[str, str]]:
+    """(name, version) pairs from a pip `--dry-run --report` document."""
+    data = cast(dict[str, object], json.loads(report.read_text()))
+    install = data.get("install")
+    if not isinstance(install, list):
+        raise RuntimeError("pip report has no install list")
+    records: list[tuple[str, str]] = []
+    for item in cast(list[dict[str, object]], install):
+        metadata = cast(dict[str, object], item.get("metadata"))
+        name = metadata.get("name")
+        version = metadata.get("version")
+        if not isinstance(name, str) or not isinstance(version, str):
+            raise RuntimeError("pip report item must carry string name and version")
+        records.append((name, version))
+    return records
 
 
 def _requirements_for(
@@ -400,11 +456,13 @@ def _requirements_for(
 ) -> Path:
     expected = _resolved_requirements(skill, wheelhouse)
     requirements = wheelhouse.parent / f"{skill}-requirements.txt"
-    requirements.write_text(expected, encoding="utf-8")
+    _ = requirements.write_text(expected, encoding="utf-8")
     return requirements
 
 
-def _shiv_command(skill: str, requirements: Path, target: Path, wheelhouse: Path) -> list[str]:
+def _shiv_command(
+    skill: str, requirements: Path, target: Path, wheelhouse: Path
+) -> list[str]:
     executable = shutil.which("shiv")
     if executable:
         command = [executable]
@@ -438,7 +496,7 @@ def _build_from_wheelhouse(
 ) -> Path:
     requirements = _requirements_for(skill, wheelhouse)
     target.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run(
+    _ = subprocess.run(
         _shiv_command(skill, requirements, target, wheelhouse),
         cwd=REPO_ROOT,
         env=_build_environment(),
@@ -476,23 +534,27 @@ def cached_bundle(skill: str) -> Path:
         raise ValueError(f"unknown skill: {skill}")
     bundle = REPO_ROOT / "skills" / skill / "scripts" / f"{skill}.pyz"
     if not bundle.is_file():
-        raise RuntimeError(f"checked-in bundle is missing: {bundle.relative_to(REPO_ROOT)}")
+        raise RuntimeError(
+            f"checked-in bundle is missing: {bundle.relative_to(REPO_ROOT)}"
+        )
     return bundle
 
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--out-dir", type=Path)
-    parser.add_argument("skills", nargs="*")
+    _ = parser.add_argument("--out-dir", type=Path)
+    _ = parser.add_argument("skills", nargs="*")
     args = parser.parse_args(argv[1:])
-    selected = tuple(args.skills or SKILLS)
+    out_dir = cast(Path | None, args.out_dir)
+    skills_arg = cast(list[str] | None, args.skills)
+    selected = tuple(skills_arg or SKILLS)
     unknown = sorted(set(selected) - set(SKILLS))
     if unknown:
         parser.error(f"unknown skill(s): {', '.join(unknown)}")
     destinations = {
         skill: (
-            args.out_dir / f"{skill}.pyz"
-            if args.out_dir
+            out_dir / f"{skill}.pyz"
+            if out_dir
             else REPO_ROOT / "skills" / skill / "scripts" / f"{skill}.pyz"
         )
         for skill in selected
@@ -505,10 +567,21 @@ def main(argv: list[str]) -> int:
             file=sys.stderr,
         )
         if isinstance(exc, subprocess.CalledProcessError):
-            for stream_name, output in (("stdout", exc.stdout), ("stderr", exc.stderr)):
+            streams: tuple[tuple[str, str | bytes | None], ...] = (
+                ("stdout", cast(str | bytes | None, exc.stdout)),
+                ("stderr", cast(str | bytes | None, exc.stderr)),
+            )
+            for stream_name, output in streams:
                 if output:
-                    text = output.decode(errors="replace") if isinstance(output, bytes) else output
-                    print(f"--- subprocess {stream_name} ---\n{text.rstrip()}", file=sys.stderr)
+                    text = (
+                        output.decode(errors="replace")
+                        if isinstance(output, bytes)
+                        else output
+                    )
+                    print(
+                        f"--- subprocess {stream_name} ---\n{text.rstrip()}",
+                        file=sys.stderr,
+                    )
         return 1
     for target in built.values():
         print(f"built {target}")
