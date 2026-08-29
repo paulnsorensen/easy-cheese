@@ -136,6 +136,27 @@ jobs:
           EC_SKILL_REF: ${{ github.event.pull_request.head.sha || github.sha }}
         run: bash scripts/install.sh --skip-mcp
 
+  typecheck:
+    name: type-check python
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.12.5"
+          python-version: "3.12"
+
+      - name: Set up just
+        uses: extractions/setup-just@f8a3cce218d9f83db3a2ecd90e41ac3de6cdfd9b # v3.1.0
+        with:
+          just-version: "1.58.0"
+
+      - name: basedpyright
+        run: just typecheck
+
   lint:
     name: lint markdown, yaml, python
     runs-on: ubuntu-latest
