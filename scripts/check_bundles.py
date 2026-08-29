@@ -14,14 +14,15 @@ Every .pyz must carry Shiv's runtime markers; other zipapp formats are rejected.
 
 from __future__ import annotations
 
-import io
 import hashlib
+import io
 import json
 import re
 import subprocess
 import sys
 import zipfile
 from pathlib import Path
+from typing import cast
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BUNDLE_GLOB = "skills/*/scripts/*.pyz"
@@ -77,14 +78,15 @@ def _site_packages_hash(
 
 def _canonical_environment(data: bytes, *, canonical_build_id: str) -> bytes:
     """Normalize Shiv's host timestamp and derive a portable cache ID."""
-    environment = json.loads(data)
-    environment.pop("built_at", None)
+    environment = cast(dict[str, object], json.loads(data))
+    _ = environment.pop("built_at", None)
     environment["build_id"] = canonical_build_id
     return json.dumps(environment, sort_keys=True, separators=(",", ":")).encode()
 
 
 def _canonical_wrapper(data: bytes) -> bytes:
     """Normalize only the interpreter token, retaining shebang arguments."""
+
     def replace(match: re.Match[bytes]) -> bytes:
         line = match.group(0)
         command_line = line[2:]
@@ -109,15 +111,16 @@ def _manifest(data: bytes) -> dict[str, tuple[int, int] | bytes]:
     """
     with zipfile.ZipFile(io.BytesIO(data)) as archive:
         _validate_shiv_archive(archive)
-        environment = json.loads(archive.read("environment.json"))
+        environment = cast(
+            dict[str, object], json.loads(archive.read("environment.json"))
+        )
         stored_build_id = environment.get("build_id")
         raw_build_id = _site_packages_hash(
             archive, normalize_wrappers=False, include_record=True
         )
         if stored_build_id != raw_build_id:
             raise ValueError(
-                "Shiv build_id does not match site-packages contents: "
-                f"stored {stored_build_id!r}, expected {raw_build_id}"
+                f"Shiv build_id does not match site-packages contents: stored {stored_build_id!r}, expected {raw_build_id}"
             )
         canonical_build_id = _site_packages_hash(
             archive, normalize_wrappers=True, include_record=False
@@ -151,7 +154,7 @@ def _describe(
     rebuilt: dict[str, tuple[int, int] | bytes],
     committed: dict[str, tuple[int, int] | bytes],
 ) -> list[str]:
-    problems = []
+    problems: list[str] = []
     for name in sorted(set(rebuilt) - set(committed)):
         problems.append(f"    + {name} (built, not in the committed bundle)")
     for name in sorted(set(committed) - set(rebuilt)):
@@ -185,9 +188,7 @@ def main() -> int:
 
     if stale:
         print(
-            "::error::.pyz bundles are invalid or stale; run "
-            "'python3 scripts/build_pyz.py' and commit the generated "
-            "skills/*/scripts/*.pyz files."
+            "::error::.pyz bundles are invalid or stale; run 'python3 scripts/build_pyz.py' and commit the generated skills/*/scripts/*.pyz files."
         )
         print("\n".join(stale))
         return 1
