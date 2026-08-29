@@ -119,113 +119,117 @@ def _enum_error(mapping: dict[str, object], key: str, allowed: set[str], where: 
     return [f"{where}.{key} must be one of {'|'.join(sorted(allowed))}"]
 
 
-def _validate_agent_resolution(value: object) -> list[str]:
-    if not isinstance(value, dict):
-        return [f"agent_resolution must be an object, got {type_name(value)}"]
-    value_dict = cast("dict[str, object]", value)
-    errors = required_keys(
-        value_dict,
-        (
-            "request",
-            "attempts",
-            "resolved",
-            "fallback_reason",
-            "degraded",
-            "permission_enforcement",
-        ),
-        "agent_resolution",
-    )
-
-    request_raw = value_dict.get("request")
-    request: dict[str, object] | None = None
-    if not isinstance(request_raw, dict):
+def _resolution_request_errors(
+    value_dict: dict[str, object],
+) -> tuple[list[str], dict[str, object] | None]:
+    errors: list[str] = []
+    request_value = value_dict.get("request")
+    if not isinstance(request_value, dict):
         errors.append("agent_resolution.request must be an object")
-    else:
-        request = cast("dict[str, object]", request_raw)
-        request_fields = (
-            "work",
-            "preferred_types",
-            "required_tools",
+        return errors, None
+    request = cast("dict[str, object]", request_value)
+    request_fields = (
+        "work",
+        "preferred_types",
+        "required_tools",
+        "permissions",
+        "isolation",
+        "minimum_power",
+        "effort",
+    )
+    errors.extend(required_keys(request, request_fields, "agent_resolution.request"))
+    errors.extend(non_empty_string(request, "work", "agent_resolution.request"))
+    for key in ("preferred_types", "required_tools"):
+        errors.extend(
+            string_list(
+                request.get(key),
+                f"agent_resolution.request.{key}",
+                non_empty=True,
+            )
+        )
+    errors.extend(
+        _enum_error(
+            request,
             "permissions",
+            {"read-only", "write"},
+            "agent_resolution.request",
+        )
+    )
+    errors.extend(
+        _enum_error(
+            request,
             "isolation",
-            "minimum_power",
-            "effort",
+            {"none", "fresh-context", "isolated-worktree"},
+            "agent_resolution.request",
         )
-        errors.extend(required_keys(request, request_fields, "agent_resolution.request"))
-        errors.extend(non_empty_string(request, "work", "agent_resolution.request"))
-        for key in ("preferred_types", "required_tools"):
-            errors.extend(
-                string_list(
-                    request.get(key),
-                    f"agent_resolution.request.{key}",
-                    non_empty=True,
-                )
-            )
-        errors.extend(
-            _enum_error(
-                request,
-                "permissions",
-                {"read-only", "write"},
-                "agent_resolution.request",
-            )
-        )
-        errors.extend(
-            _enum_error(
-                request,
-                "isolation",
-                {"none", "fresh-context", "isolated-worktree"},
-                "agent_resolution.request",
-            )
-        )
-        errors.extend(
-            _enum_error(request, "minimum_power", POWER, "agent_resolution.request")
-        )
-        errors.extend(_enum_error(request, "effort", EFFORT, "agent_resolution.request"))
+    )
+    errors.extend(
+        _enum_error(request, "minimum_power", POWER, "agent_resolution.request")
+    )
+    errors.extend(_enum_error(request, "effort", EFFORT, "agent_resolution.request"))
+    return errors, request
 
-    attempts_raw = value_dict.get("attempts")
-    attempts: list[object] | None = None
-    if not isinstance(attempts_raw, list) or not attempts_raw:
+
+def _resolution_attempts_errors(
+    value_dict: dict[str, object],
+) -> tuple[list[str], list[object] | None]:
+    errors: list[str] = []
+    attempts_value = value_dict.get("attempts")
+    if not isinstance(attempts_value, list) or not attempts_value:
         errors.append("agent_resolution.attempts must be a non-empty list")
-    else:
-        attempts = cast("list[object]", attempts_raw)
-        for index, attempt in enumerate(attempts, start=1):
-            where = f"agent_resolution.attempts[{index}]"
-            if not isinstance(attempt, dict):
-                errors.append(f"{where} must be an object")
-                continue
-            attempt_dict = cast("dict[str, object]", attempt)
-            errors.extend(
-                required_keys(
-                    attempt_dict, ("type", "model", "power", "result", "reason"), where
-                )
-            )
-            for key in ("type", "model", "reason"):
-                errors.extend(non_empty_string(attempt_dict, key, where))
-            errors.extend(_enum_error(attempt_dict, "power", RESOLVED_POWER, where))
-            errors.extend(_enum_error(attempt_dict, "result", {"accepted", "rejected"}, where))
-
-    resolved_raw = value_dict.get("resolved")
-    resolved: dict[str, object] | None = None
-    if not isinstance(resolved_raw, dict):
-        errors.append("agent_resolution.resolved must be an object")
-    else:
-        resolved = cast("dict[str, object]", resolved_raw)
+        return errors, None
+    attempts = cast("list[object]", attempts_value)
+    for index, attempt in enumerate(attempts, start=1):
+        where = f"agent_resolution.attempts[{index}]"
+        if not isinstance(attempt, dict):
+            errors.append(f"{where} must be an object")
+            continue
+        attempt_dict = cast("dict[str, object]", attempt)
         errors.extend(
             required_keys(
-                resolved, ("type", "model", "power", "effort", "topology"),
-                "agent_resolution.resolved",
+                attempt_dict, ("type", "model", "power", "result", "reason"), where
             )
         )
-        for key in ("type", "model"):
-            errors.extend(non_empty_string(resolved, key, "agent_resolution.resolved"))
-        errors.extend(
-            _enum_error(resolved, "power", RESOLVED_POWER, "agent_resolution.resolved")
-        )
-        errors.extend(_enum_error(resolved, "effort", EFFORT, "agent_resolution.resolved"))
-        errors.extend(
-            _enum_error(resolved, "topology", TOPOLOGY, "agent_resolution.resolved")
-        )
+        for key in ("type", "model", "reason"):
+            errors.extend(non_empty_string(attempt_dict, key, where))
+        errors.extend(_enum_error(attempt_dict, "power", RESOLVED_POWER, where))
+        errors.extend(_enum_error(attempt_dict, "result", {"accepted", "rejected"}, where))
+    return errors, attempts
 
+
+def _resolution_resolved_errors(
+    value_dict: dict[str, object],
+) -> tuple[list[str], dict[str, object] | None]:
+    errors: list[str] = []
+    resolved_value = value_dict.get("resolved")
+    if not isinstance(resolved_value, dict):
+        errors.append("agent_resolution.resolved must be an object")
+        return errors, None
+    resolved = cast("dict[str, object]", resolved_value)
+    errors.extend(
+        required_keys(
+            resolved, ("type", "model", "power", "effort", "topology"),
+            "agent_resolution.resolved",
+        )
+    )
+    for key in ("type", "model"):
+        errors.extend(non_empty_string(resolved, key, "agent_resolution.resolved"))
+    errors.extend(
+        _enum_error(resolved, "power", RESOLVED_POWER, "agent_resolution.resolved")
+    )
+    errors.extend(_enum_error(resolved, "effort", EFFORT, "agent_resolution.resolved"))
+    errors.extend(
+        _enum_error(resolved, "topology", TOPOLOGY, "agent_resolution.resolved")
+    )
+    return errors, resolved
+
+
+def _resolution_scalar_errors(
+    value_dict: dict[str, object],
+    request: dict[str, object] | None,
+    resolved: dict[str, object] | None,
+) -> list[str]:
+    errors: list[str] = []
     fallback_reason = value_dict.get("fallback_reason")
     if fallback_reason is not None and (
         not isinstance(fallback_reason, str) or not fallback_reason.strip()
@@ -252,79 +256,124 @@ def _validate_agent_resolution(value: object) -> list[str]:
         )
     if resolved is not None and resolved.get("power") == "unknown" and degraded is not True:
         errors.append("agent_resolution unknown power requires degraded=true")
+    return errors
 
-    if attempts:
-        accepted = [
-            (index, cast("dict[str, object]", attempt))
-            for index, attempt in enumerate(attempts)
-            if isinstance(attempt, dict)
-            and cast("dict[str, object]", attempt).get("result") == "accepted"
-        ]
-        if len(accepted) != 1:
-            errors.append("agent_resolution must contain exactly one accepted attempt")
 
-        minimum = request.get("minimum_power") if request is not None else None
-        if isinstance(minimum, str) and minimum in POWER_RANK:
-            for index, attempt in enumerate(attempts, start=1):
-                if not isinstance(attempt, dict):
-                    continue
-                attempt_dict = cast("dict[str, object]", attempt)
-                power = attempt_dict.get("power")
-                if (
-                    isinstance(power, str)
-                    and power in POWER_RANK
-                    and POWER_RANK[power] < POWER_RANK[minimum]
-                    and attempt_dict.get("result") != "rejected"
-                ):
-                    errors.append(
-                        f"agent_resolution.attempts[{index}] power {power} is below "
-                        + f"request minimum {minimum}; known underpowered attempts must be rejected"
-                    )
-            if resolved is not None:
-                resolved_power = resolved.get("power")
-                if (
-                    isinstance(resolved_power, str)
-                    and resolved_power in POWER_RANK
-                    and POWER_RANK[resolved_power] < POWER_RANK[minimum]
-                ):
-                    errors.append(
-                        f"agent_resolution.resolved power {resolved_power} is below "
-                        + f"request minimum {minimum}"
-                    )
+def _resolution_cross_field_errors(
+    value_dict: dict[str, object],
+    request: dict[str, object] | None,
+    attempts: list[object] | None,
+    resolved: dict[str, object] | None,
+) -> list[str]:
+    errors: list[str] = []
+    if not attempts:
+        return errors
 
-        if len(accepted) == 1:
-            accepted_index, accepted_attempt = accepted[0]
-            if accepted_attempt.get("power") == "unknown":
-                if accepted_index != len(attempts) - 1:
-                    errors.append(
-                        "agent_resolution unknown-power accepted attempt must be final"
-                    )
-                if degraded is not True:
-                    errors.append(
-                        "agent_resolution unknown-power accepted attempt requires degraded=true"
-                    )
-            if resolved is not None and any(
-                resolved.get(key) != accepted_attempt.get(key)
-                for key in ("type", "model", "power")
+    degraded = value_dict.get("degraded")
+    fallback_reason = value_dict.get("fallback_reason")
+
+    accepted = [
+        (index, cast("dict[str, object]", attempt))
+        for index, attempt in enumerate(attempts)
+        if isinstance(attempt, dict)
+        and cast("dict[str, object]", attempt).get("result") == "accepted"
+    ]
+    if len(accepted) != 1:
+        errors.append("agent_resolution must contain exactly one accepted attempt")
+
+    minimum = request.get("minimum_power") if request is not None else None
+    if isinstance(minimum, str) and minimum in POWER_RANK:
+        for index, attempt in enumerate(attempts, start=1):
+            if not isinstance(attempt, dict):
+                continue
+            attempt_dict = cast("dict[str, object]", attempt)
+            power = attempt_dict.get("power")
+            if (
+                isinstance(power, str)
+                and power in POWER_RANK
+                and POWER_RANK[power] < POWER_RANK[minimum]
+                and attempt_dict.get("result") != "rejected"
             ):
                 errors.append(
-                    "agent_resolution resolved type/model/power must match the accepted attempt"
+                    f"agent_resolution.attempts[{index}] power {power} is below "
+                    + f"request minimum {minimum}; known underpowered attempts must be rejected"
+                )
+        if resolved is not None:
+            resolved_power = resolved.get("power")
+            if (
+                isinstance(resolved_power, str)
+                and resolved_power in POWER_RANK
+                and POWER_RANK[resolved_power] < POWER_RANK[minimum]
+            ):
+                errors.append(
+                    f"agent_resolution.resolved power {resolved_power} is below "
+                    + f"request minimum {minimum}"
                 )
 
-            preferred = request.get("preferred_types") if request is not None else None
-            accepted_type = accepted_attempt.get("type")
-            if isinstance(preferred, list) and preferred:
-                if accepted_type == preferred[0]:
-                    if fallback_reason is not None:
-                        errors.append(
-                            "agent_resolution preferred exact acceptance requires "
-                            + "fallback_reason=null"
-                        )
-                elif fallback_reason is None:
+    if len(accepted) == 1:
+        accepted_index, accepted_attempt = accepted[0]
+        if accepted_attempt.get("power") == "unknown":
+            if accepted_index != len(attempts) - 1:
+                errors.append(
+                    "agent_resolution unknown-power accepted attempt must be final"
+                )
+            if degraded is not True:
+                errors.append(
+                    "agent_resolution unknown-power accepted attempt requires degraded=true"
+                )
+        if resolved is not None and any(
+            resolved.get(key) != accepted_attempt.get(key)
+            for key in ("type", "model", "power")
+        ):
+            errors.append(
+                "agent_resolution resolved type/model/power must match the accepted attempt"
+            )
+
+        preferred = request.get("preferred_types") if request is not None else None
+        accepted_type = accepted_attempt.get("type")
+        if isinstance(preferred, list) and preferred:
+            if accepted_type == preferred[0]:
+                if fallback_reason is not None:
                     errors.append(
-                        "agent_resolution nonpreferred acceptance requires a non-null "
-                        + "fallback_reason"
+                        "agent_resolution preferred exact acceptance requires "
+                        + "fallback_reason=null"
                     )
+            elif fallback_reason is None:
+                errors.append(
+                    "agent_resolution nonpreferred acceptance requires a non-null "
+                    + "fallback_reason"
+                )
+    return errors
+
+
+def _validate_agent_resolution(value: object) -> list[str]:
+    if not isinstance(value, dict):
+        return [f"agent_resolution must be an object, got {type_name(value)}"]
+    value_dict = cast("dict[str, object]", value)
+    errors = required_keys(
+        value_dict,
+        (
+            "request",
+            "attempts",
+            "resolved",
+            "fallback_reason",
+            "degraded",
+            "permission_enforcement",
+        ),
+        "agent_resolution",
+    )
+
+    request_errors, request = _resolution_request_errors(value_dict)
+    errors.extend(request_errors)
+
+    attempts_errors, attempts = _resolution_attempts_errors(value_dict)
+    errors.extend(attempts_errors)
+
+    resolved_errors, resolved = _resolution_resolved_errors(value_dict)
+    errors.extend(resolved_errors)
+
+    errors.extend(_resolution_scalar_errors(value_dict, request, resolved))
+    errors.extend(_resolution_cross_field_errors(value_dict, request, attempts, resolved))
     return errors
 
 
