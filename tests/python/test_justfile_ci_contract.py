@@ -6,6 +6,7 @@ import json
 import shutil
 import subprocess
 from pathlib import Path
+from typing import cast
 
 import pytest
 import yaml
@@ -27,24 +28,29 @@ def test_check_and_ci_depend_on_dead_code() -> None:
         text=True,
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    recipes = json.loads(result.stdout)["recipes"]
+    recipes = cast(dict[str, object], json.loads(result.stdout)["recipes"])
     for name in ("check", "ci"):
-        dependencies = {
-            dependency["recipe"] for dependency in recipes[name]["dependencies"]
-        }
+        recipe = cast(dict[str, object], recipes[name])
+        deps = cast(list[dict[str, object]], recipe["dependencies"])
+        dependencies = {cast(str, dependency["recipe"]) for dependency in deps}
         assert "lint-py-dead-code" in dependencies
 
 
 def test_ci_jobs_pin_tools() -> None:
     """Test and lint jobs pin both uv and just setup actions."""
-    jobs = yaml.safe_load(
-        (ROOT / ".github" / "workflows" / "validate.yml").read_text(encoding="utf-8")
-    )["jobs"]
+    jobs = cast(
+        dict[str, object],
+        yaml.safe_load(
+            (ROOT / ".github" / "workflows" / "validate.yml").read_text(encoding="utf-8")
+        )["jobs"],
+    )
     for name in ("test", "lint"):
-        uses = {
-            step["uses"].split("@")[0]: step.get("with", {})
-            for step in jobs[name]["steps"]
+        job = cast(dict[str, object], jobs[name])
+        steps = cast(list[dict[str, object]], job["steps"])
+        uses: dict[str, object] = {
+            cast(str, step["uses"]).split("@")[0]: step.get("with", {})
+            for step in steps
             if "uses" in step
         }
-        assert "version" in uses["astral-sh/setup-uv"]
-        assert "just-version" in uses["extractions/setup-just"]
+        assert "version" in cast(dict[str, object], uses["astral-sh/setup-uv"])
+        assert "just-version" in cast(dict[str, object], uses["extractions/setup-just"])

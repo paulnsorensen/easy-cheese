@@ -9,7 +9,8 @@ rather than "a digest was produced".
 from __future__ import annotations
 
 import hashlib
-from typing import Any
+from collections.abc import Callable
+from typing import Protocol, cast
 
 import pytest
 from attrs import evolve
@@ -24,6 +25,11 @@ from easy_cheese_schemas import (
 )
 
 from easy_cheese.skills.wheypoint import canonical, records
+
+
+class _HasRevision(Protocol):
+    revision: WheypointRevision
+
 
 EMPTY_SHA256 = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 
@@ -50,10 +56,10 @@ def test_text_is_utf8_rather_than_escaped_ascii() -> None:
     ],
 )
 def test_non_finite_numbers_are_rejected_with_their_location(
-    value: dict[str, Any], where: str
+    value: dict[str, object], where: str
 ) -> None:
     with pytest.raises(canonical.CanonicalJsonError) as excinfo:
-        canonical.canonical_bytes(value)
+        _ = canonical.canonical_bytes(value)
     assert where in str(excinfo.value)
     assert "finite" in str(excinfo.value)
 
@@ -64,13 +70,13 @@ def test_finite_floats_are_accepted() -> None:
 
 def test_non_string_keys_are_rejected_rather_than_coerced() -> None:
     with pytest.raises(canonical.CanonicalJsonError) as excinfo:
-        canonical.canonical_bytes({1: "one"})
+        _ = canonical.canonical_bytes({1: "one"})
     assert "keys must be strings" in str(excinfo.value)
 
 
 def test_non_json_values_are_rejected() -> None:
     with pytest.raises(canonical.CanonicalJsonError) as excinfo:
-        canonical.canonical_bytes({"a": {1, 2}})
+        _ = canonical.canonical_bytes({"a": {1, 2}})
     assert "value.a is not JSON data: set" in str(excinfo.value)
 
 
@@ -96,10 +102,13 @@ def test_digest_value_hashes_the_canonical_bytes() -> None:
     )
 
 
-def test_unstructure_round_trips_through_structure(make_record: Any) -> None:
+def test_unstructure_round_trips_through_structure(
+    make_record: Callable[..., WheypointRecord],
+) -> None:
     record = make_record(gating=True)
     payload = records.unstructure(record)
-    assert payload["next_action"]["move"] == "cook"
+    next_action = cast(dict[str, object], payload["next_action"])
+    assert next_action["move"] == "cook"
     assert records.structure(payload, WheypointRecord) == record
 
 
@@ -107,24 +116,26 @@ def test_structure_reports_the_offending_field_instead_of_returning_junk() -> No
     payload = records.unstructure(WheypointDelta(work_id="w", expected_revision_id="r"))
     payload["work_id"] = "NOT AN ID"
     with pytest.raises(records.RecordError) as excinfo:
-        records.structure(payload, WheypointDelta)
+        _ = records.structure(payload, WheypointDelta)
     assert "work_id" in str(excinfo.value)
 
 
 def test_structure_rejects_a_payload_that_is_not_a_mapping() -> None:
     with pytest.raises(records.RecordError):
-        records.structure(["not", "a", "mapping"], WheypointRecord)
+        _ = records.structure(["not", "a", "mapping"], WheypointRecord)
 
 
 def test_record_digest_ignores_the_pointer_at_its_own_receipt(
-    make_record: Any,
+    make_record: Callable[..., WheypointRecord],
 ) -> None:
     record = make_record()
     moved = evolve(record, revision_digest="sha256:" + "9" * 64)
     assert records.record_digest(moved) == records.record_digest(record)
 
 
-def test_record_digest_covers_every_other_field(make_record: Any) -> None:
+def test_record_digest_covers_every_other_field(
+    make_record: Callable[..., WheypointRecord],
+) -> None:
     record = make_record()
     assert records.record_digest(evolve(record, orientation="tampered")) != (
         records.record_digest(record)
@@ -134,13 +145,17 @@ def test_record_digest_covers_every_other_field(make_record: Any) -> None:
     )
 
 
-def test_record_digest_covers_protected_entries(make_record: Any) -> None:
+def test_record_digest_covers_protected_entries(
+    make_record: Callable[..., WheypointRecord],
+) -> None:
     plain = make_record()
     gated = make_record(gating=True)
     assert records.record_digest(plain) != records.record_digest(gated)
 
 
-def test_revision_digest_covers_every_field(make_promotion: Any) -> None:
+def test_revision_digest_covers_every_field(
+    make_promotion: Callable[..., _HasRevision],
+) -> None:
     revision: WheypointRevision = make_promotion().revision
     assert records.revision_digest(revision) != records.revision_digest(
         evolve(revision, preserved_entry_ids=["d-one"])
@@ -168,7 +183,9 @@ def test_request_fingerprint_is_stable_for_an_identical_replay() -> None:
     assert records.request_fingerprint(build()) == records.request_fingerprint(build())
 
 
-def test_canonical_payload_of_a_record_is_sorted_utf8_json(make_record: Any) -> None:
+def test_canonical_payload_of_a_record_is_sorted_utf8_json(
+    make_record: Callable[..., WheypointRecord],
+) -> None:
     payload = records.canonical_payload(make_record())
     assert payload.startswith(b'{"artifact_links":[],"blockers":[],"created":')
     assert payload.endswith(b'"working_context":["src/wheypoint/storage.py"]}')

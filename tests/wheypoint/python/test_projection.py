@@ -8,8 +8,8 @@ whatever the document claims, and the digest covers every other byte.
 from __future__ import annotations
 
 import ast
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
 
 import pytest
 from attrs import evolve
@@ -18,6 +18,7 @@ from easy_cheese_schemas import (
     NextAction,
     NextMove,
     WheypointProjection,
+    WheypointRecord,
     WheypointStatus,
 )
 
@@ -27,7 +28,7 @@ SRC = Path(__file__).resolve().parents[3] / "src/easy_cheese/skills/wheypoint"
 
 
 def test_a_built_projection_derives_everything_from_the_record(
-    make_record: Any,
+    make_record: Callable[..., WheypointRecord],
 ) -> None:
     record = make_record()
     built, markdown = projection.build_projection(
@@ -44,7 +45,9 @@ def test_a_built_projection_derives_everything_from_the_record(
     assert built.projection_digest == projection.projection_digest_of_text(markdown)
 
 
-def test_the_rendered_preamble_carries_the_whole_contract(make_record: Any) -> None:
+def test_the_rendered_preamble_carries_the_whole_contract(
+    make_record: Callable[..., WheypointRecord],
+) -> None:
     record = make_record()
     built, markdown = projection.build_projection(
         record, durability=Durability.REPO_SNAPSHOT
@@ -66,7 +69,7 @@ def test_the_rendered_preamble_carries_the_whole_contract(make_record: Any) -> N
 
 
 def test_an_active_gate_derives_gated_and_shows_its_dossier(
-    make_record: Any,
+    make_record: Callable[..., WheypointRecord],
 ) -> None:
     built, markdown = projection.build_projection(
         make_record(gating=True), durability=Durability.CANONICAL_LOCAL
@@ -79,7 +82,9 @@ def test_an_active_gate_derives_gated_and_shows_its_dossier(
 
 
 @pytest.mark.parametrize("gating", [False, True])
-def test_render_and_parse_round_trip_exactly(make_record: Any, gating: bool) -> None:
+def test_render_and_parse_round_trip_exactly(
+    make_record: Callable[..., WheypointRecord], gating: bool
+) -> None:
     built, markdown = projection.build_projection(
         make_record(gating=gating), durability=Durability.PUBLISHED
     )
@@ -89,15 +94,17 @@ def test_render_and_parse_round_trip_exactly(make_record: Any, gating: bool) -> 
 
 @pytest.mark.parametrize("durability", list(Durability))
 def test_every_durability_level_round_trips(
-    make_record: Any, durability: Durability
+    make_record: Callable[..., WheypointRecord], durability: Durability
 ) -> None:
-    built, markdown = projection.build_projection(
+    _, markdown = projection.build_projection(
         make_record(), durability=durability
     )
     assert projection.parse(markdown).durability is durability
 
 
-def test_a_next_action_without_an_artifact_round_trips(make_record: Any) -> None:
+def test_a_next_action_without_an_artifact_round_trips(
+    make_record: Callable[..., WheypointRecord],
+) -> None:
     record = make_record(
         next_action=NextAction(move=NextMove.DONE, orientation="nothing left")
     )
@@ -110,7 +117,7 @@ def test_a_next_action_without_an_artifact_round_trips(make_record: Any) -> None
 
 
 def test_a_hand_written_ok_over_an_open_gate_is_not_believed(
-    make_record: Any,
+    make_record: Callable[..., WheypointRecord],
 ) -> None:
     _, markdown = projection.build_projection(
         make_record(gating=True), durability=Durability.CANONICAL_LOCAL
@@ -123,7 +130,7 @@ def test_a_hand_written_ok_over_an_open_gate_is_not_believed(
 
 
 def test_the_status_line_is_not_part_of_the_projections_identity(
-    make_record: Any,
+    make_record: Callable[..., WheypointRecord],
 ) -> None:
     built, markdown = projection.build_projection(
         make_record(gating=True), durability=Durability.CANONICAL_LOCAL
@@ -133,7 +140,9 @@ def test_the_status_line_is_not_part_of_the_projections_identity(
     assert projection.projection_digest_of_text(forged) != built.projection_digest
 
 
-def test_editing_the_body_breaks_the_digest(make_record: Any) -> None:
+def test_editing_the_body_breaks_the_digest(
+    make_record: Callable[..., WheypointRecord],
+) -> None:
     built, markdown = projection.build_projection(
         make_record(), durability=Durability.CANONICAL_LOCAL
     )
@@ -145,7 +154,7 @@ def test_editing_the_body_breaks_the_digest(make_record: Any) -> None:
 
 
 def test_rewriting_only_the_digest_line_does_not_launder_the_document(
-    make_record: Any,
+    make_record: Callable[..., WheypointRecord],
 ) -> None:
     built, markdown = projection.build_projection(
         make_record(), durability=Durability.CANONICAL_LOCAL
@@ -173,7 +182,7 @@ def test_rewriting_only_the_digest_line_does_not_launder_the_document(
     ],
 )
 def test_a_malformed_document_is_a_parse_error_not_a_guess(
-    make_record: Any, broken: str
+    make_record: Callable[..., WheypointRecord], broken: str
 ) -> None:
     _, markdown = projection.build_projection(
         make_record(), durability=Durability.CANONICAL_LOCAL
@@ -187,27 +196,31 @@ def test_a_malformed_document_is_a_parse_error_not_a_guess(
             for line in markdown.splitlines()
         )
     with pytest.raises(projection.ProjectionParseError):
-        projection.parse(damaged)
+        _ = projection.parse(damaged)
 
 
-def test_a_truncated_document_is_a_parse_error(make_record: Any) -> None:
+def test_a_truncated_document_is_a_parse_error(
+    make_record: Callable[..., WheypointRecord],
+) -> None:
     _, markdown = projection.build_projection(
         make_record(), durability=Durability.CANONICAL_LOCAL
     )
     with pytest.raises(projection.ProjectionParseError):
-        projection.parse("\n".join(markdown.splitlines()[:5]))
+        _ = projection.parse("\n".join(markdown.splitlines()[:5]))
 
 
-def test_a_gated_projection_without_a_dossier_is_rejected(make_record: Any) -> None:
+def test_a_gated_projection_without_a_dossier_is_rejected(
+    make_record: Callable[..., WheypointRecord],
+) -> None:
     built, _ = projection.build_projection(
         make_record(gating=True), durability=Durability.CANONICAL_LOCAL
     )
     with pytest.raises(ValueError, match="decision_dossier"):
-        evolve(built, decision_dossier=[])
+        _ = evolve(built, decision_dossier=[])
 
 
 def test_a_caller_cannot_hand_build_an_ok_projection_over_a_gate(
-    make_record: Any,
+    make_record: Callable[..., WheypointRecord],
 ) -> None:
     built, _ = projection.build_projection(
         make_record(gating=True), durability=Durability.CANONICAL_LOCAL

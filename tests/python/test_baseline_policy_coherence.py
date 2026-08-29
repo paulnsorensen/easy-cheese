@@ -22,6 +22,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from typing import cast
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 COOK_SKILL = REPO_ROOT / "skills" / "cook" / "SKILL.md"
@@ -31,6 +32,10 @@ MANIFEST_SCHEMA = REPO_ROOT / "skills" / "ultracook" / "references" / "manifest-
 
 def read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
+
+
+def _dict(value: object) -> dict[str, object]:
+    return cast(dict[str, object], value)
 
 
 def _cook_corpus() -> str:
@@ -134,7 +139,7 @@ class TestBaselineCaptureExampleDispatches:
         assert result.returncode == 0, (
             f"documented `cook.pyz baseline` command failed: {result.stderr}"
         )
-        emitted = json.loads(result.stdout)
+        emitted = cast(dict[str, object], json.loads(result.stdout))
         assert emitted == {
             "identical": [{"suite": "unit", "test_id": "test_a", "signature": "boom"}],
             "new": [],
@@ -159,29 +164,29 @@ def _example_yaml_block(body: str) -> str:
 class TestBaselineBlockShapeAgreesWithSchema:
     def test_quality_gates_example_keys_match_manifest_schema(self) -> None:
         example = _example_yaml_block(read(QUALITY_GATES))
-        schema = json.loads(MANIFEST_SCHEMA.read_text(encoding="utf-8"))
-        baseline_schema = schema["properties"]["baseline"]
-        gate_schema = baseline_schema["properties"]["gates"]["items"]
-        failure_schema = gate_schema["properties"]["failures"]["items"]
+        schema = cast(dict[str, object], json.loads(MANIFEST_SCHEMA.read_text(encoding="utf-8")))
+        baseline_schema = _dict(_dict(schema["properties"])["baseline"])
+        gate_schema = _dict(_dict(_dict(baseline_schema["properties"])["gates"])["items"])
+        failure_schema = _dict(_dict(_dict(gate_schema["properties"])["failures"])["items"])
 
         # Top-level baseline keys the doc's example shows.
         assert "captured_at:" in example
         assert "gates:" in example
-        for key in baseline_schema["required"]:
+        for key in cast(list[str], baseline_schema["required"]):
             assert f"{key}:" in example, (
                 f"quality-gates.md's worked example is missing required "
                 f"top-level baseline key `{key}` from manifest-schema.json"
             )
 
         # Per-gate keys (cmd, failures).
-        for key in gate_schema["required"]:
+        for key in cast(list[str], gate_schema["required"]):
             assert key in example, (
                 f"quality-gates.md's worked example is missing required "
                 f"gate key `{key}` from manifest-schema.json"
             )
 
         # Per-failure keys (suite, test_id, signature).
-        for key in failure_schema["required"]:
+        for key in cast(list[str], failure_schema["required"]):
             assert key in example, (
                 f"quality-gates.md's worked example is missing required "
                 f"failure key `{key}` from manifest-schema.json"
@@ -214,12 +219,12 @@ class TestCookWorktreeSubcommandDispatches:
 
         repo = tmp_path / "repo"
         repo.mkdir()
-        sp.run(["git", "init", "-q", "-b", "main", str(repo)], check=True)
-        sp.run(["git", "-C", str(repo), "config", "user.email", "t@example.com"], check=True)
-        sp.run(["git", "-C", str(repo), "config", "user.name", "Tester"], check=True)
-        (repo / "base.txt").write_text("base\n", encoding="utf-8")
-        sp.run(["git", "-C", str(repo), "add", "-A"], check=True)
-        sp.run(["git", "-C", str(repo), "commit", "-q", "-m", "init"], check=True)
+        _ = sp.run(["git", "init", "-q", "-b", "main", str(repo)], check=True)
+        _ = sp.run(["git", "-C", str(repo), "config", "user.email", "t@example.com"], check=True)
+        _ = sp.run(["git", "-C", str(repo), "config", "user.name", "Tester"], check=True)
+        _ = (repo / "base.txt").write_text("base\n", encoding="utf-8")
+        _ = sp.run(["git", "-C", str(repo), "add", "-A"], check=True)
+        _ = sp.run(["git", "-C", str(repo), "commit", "-q", "-m", "init"], check=True)
 
         bundle = build_pyz.cached_bundle("cook")
         result = sp.run(
@@ -228,5 +233,5 @@ class TestCookWorktreeSubcommandDispatches:
             text=True,
         )
         assert result.returncode == 0, f"documented `cook.pyz worktree create` failed: {result.stderr}"
-        emitted = json.loads(result.stdout)
+        emitted = cast(dict[str, object], json.loads(result.stdout))
         assert emitted == {"path": ".claude/worktrees/agent-repair-x", "branch": "worktree-agent-repair-x"}

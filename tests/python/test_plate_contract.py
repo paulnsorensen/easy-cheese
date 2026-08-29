@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from typing import cast
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -63,7 +64,7 @@ def test_plate_routes_tools_and_reports_a_scannable_completion_record() -> None:
 
     completion = skill.split("## Completion", maxsplit=1)[1]
     block = completion.split("```json\n", maxsplit=1)[1].split("\n```", maxsplit=1)[0]
-    record = json.loads(block)
+    record = cast(dict[str, object], json.loads(block))
     assert set(record) == {
         "mode",
         "topology",
@@ -74,9 +75,11 @@ def test_plate_routes_tools_and_reports_a_scannable_completion_record() -> None:
         "prs",
         "risk",
     }
+    artifacts = cast(list[object], record["artifacts"])
+    gate = cast(dict[str, object], record["gate"])
     assert record["mode"] == "new-pr"
-    assert record["artifacts"][0]["verified"] is True
-    assert record["gate"]["result"] == "pass"
+    assert cast(dict[str, object], artifacts[0])["verified"] is True
+    assert gate["result"] == "pass"
     assert "Topology preflight" in completion
     assert 'gate: {"command": "n/a", "result": "n/a"}' in completion
     assert "scripts/plate.pyz validate-publication" in completion

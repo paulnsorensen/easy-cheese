@@ -11,6 +11,7 @@ import ast
 import inspect
 import sys
 from pathlib import Path
+from typing import TypedDict, cast
 
 import pytest
 
@@ -19,13 +20,38 @@ sys.path.insert(0, str(REPO_ROOT / "src" / "fanout"))
 
 from easy_cheese.shared.fanout import age_route  # noqa: E402
 
+class _RouteResult(TypedDict):
+    n: int
+    lenses: list[list[str]]
+    effort: str
+    overrides_hit: list[str]
+    rationale: str
+
+
+def _route(
+    *,
+    score: float,
+    risk_flags: list[str] | None = None,
+    entry: str = "age",
+    comments: int | None = None,
+    ci_class: str | None = None,
+) -> _RouteResult:
+    raw = age_route.route(
+        score=score,
+        risk_flags=risk_flags,
+        entry=entry,
+        comments=comments,
+        ci_class=ci_class,
+    )
+    return cast(_RouteResult, cast(object, raw))
+
 
 class TestScoreTiers:
     """No risk flags: n is decided purely by score."""
 
     def test_low_score_routes_n1_low_effort(self) -> None:
         # Acceptance: route(score=30) -> n=1, effort='low', one lens of all ten.
-        result = age_route.route(score=30, risk_flags=[])
+        result = _route(score=30, risk_flags=[])
         assert result["n"] == 1
         assert result["effort"] == "low"
         assert result["overrides_hit"] == []
@@ -33,7 +59,7 @@ class TestScoreTiers:
 
     def test_mid_score_routes_n2_medium(self) -> None:
         # Acceptance: route(score=150) -> n=2, the two-group split, medium.
-        result = age_route.route(score=150, risk_flags=[])
+        result = _route(score=150, risk_flags=[])
         assert result["n"] == 2
         assert result["effort"] == "medium"
         assert result["overrides_hit"] == []
@@ -44,7 +70,7 @@ class TestScoreTiers:
 
     def test_high_score_routes_n5_five_named_lenses(self) -> None:
         # Acceptance: route(score=400) -> n=5, the five named lenses.
-        result = age_route.route(score=400, risk_flags=[])
+        result = _route(score=400, risk_flags=[])
         assert result["n"] == 5
         assert result["effort"] == "medium"
         assert result["overrides_hit"] == []
@@ -59,29 +85,29 @@ class TestScoreTiers:
     def test_score_over_900_is_high_effort_alone(self) -> None:
         # Acceptance: route(score=1000, risk_flags=[]) -> effort='high' via
         # the score>900 branch alone (no overrides involved).
-        result = age_route.route(score=1000, risk_flags=[])
+        result = _route(score=1000, risk_flags=[])
         assert result["n"] == 5
         assert result["effort"] == "high"
         assert result["overrides_hit"] == []
 
     def test_boundary_just_under_n2_stays_n1(self) -> None:
-        result = age_route.route(score=59.9, risk_flags=[])
+        result = _route(score=59.9, risk_flags=[])
         assert result["n"] == 1
 
     def test_boundary_at_n2_floor_moves_to_n2(self) -> None:
-        result = age_route.route(score=60, risk_flags=[])
+        result = _route(score=60, risk_flags=[])
         assert result["n"] == 2
 
     def test_boundary_at_n5_floor_stays_n2(self) -> None:
-        result = age_route.route(score=250, risk_flags=[])
+        result = _route(score=250, risk_flags=[])
         assert result["n"] == 2
 
     def test_boundary_just_over_n5_floor_moves_to_n5(self) -> None:
-        result = age_route.route(score=250.1, risk_flags=[])
+        result = _route(score=250.1, risk_flags=[])
         assert result["n"] == 5
 
     def test_score_at_900_is_not_high_effort(self) -> None:
-        result = age_route.route(score=900, risk_flags=[])
+        result = _route(score=900, risk_flags=[])
         assert result["effort"] == "medium"
 
 
@@ -93,7 +119,7 @@ class TestOverridePromotion:
     def test_auth_on_tiny_score_promotes_security_solo(self) -> None:
         # SPEC ACCEPTANCE 5: route(score=20, risk_flags=['auth']) -> n=2,
         # lenses [[security],[rest]], overrides_hit=['auth'], effort='high'.
-        result = age_route.route(score=20, risk_flags=["auth"])
+        result = _route(score=20, risk_flags=["auth"])
         assert result["n"] == 2
         assert result["effort"] == "high"
         assert result["overrides_hit"] == ["auth"]
@@ -101,7 +127,7 @@ class TestOverridePromotion:
         assert result["lenses"] == [["security"], rest]
 
     def test_multiple_overrides_all_recorded(self) -> None:
-        result = age_route.route(
+        result = _route(
             score=1,
             risk_flags=["schema-migration", "production-destructive", "not-an-override"],
         )
@@ -113,17 +139,17 @@ class TestOverridePromotion:
         assert ["encapsulation"] in result["lenses"]
 
     def test_unrecognized_flag_does_not_promote(self) -> None:
-        result = age_route.route(score=20, risk_flags=["typo-fix"])
+        result = _route(score=20, risk_flags=["typo-fix"])
         assert result["n"] == 1
         assert result["overrides_hit"] == []
         assert result["effort"] == "low"
 
     def test_every_documented_override_category_is_recognized(self) -> None:
         for flag in age_route.OVERRIDE_FLAGS:
-            result = age_route.route(score=1, risk_flags=[flag])
+            result = _route(score=1, risk_flags=[flag])
             assert result["overrides_hit"] == [flag]
             assert result["effort"] == "high"
-            promoted = age_route._PROMOTIONS[flag]
+            promoted = age_route._PROMOTIONS[flag]  # pyright: ignore[reportPrivateUsage]
             assert [promoted] in result["lenses"], f"{flag} did not promote {promoted}"
 
     def test_all_four_override_categories_uncapped_n9(self) -> None:
@@ -131,7 +157,7 @@ class TestOverridePromotion:
         # every promoted dimension solo, nothing truncated. Requires the n=5
         # base tree (score > 250) so each promoted dimension comes from its
         # own tree lens.
-        result = age_route.route(
+        result = _route(
             score=400,
             risk_flags=["auth", "payments", "schema-migration", "weak-integration-coverage"],
         )
@@ -172,10 +198,10 @@ class TestOverridePromotionNeverReducesN:
     def test_override_never_lowers_n(
         self, score: float, entry: str, comments: int | None, ci_class: str | None
     ) -> None:
-        without = age_route.route(
+        without = _route(
             score=score, risk_flags=[], entry=entry, comments=comments, ci_class=ci_class
         )
-        with_override = age_route.route(
+        with_override = _route(
             score=score, risk_flags=["auth"], entry=entry, comments=comments, ci_class=ci_class
         )
         assert with_override["n"] >= without["n"]
@@ -183,10 +209,10 @@ class TestOverridePromotionNeverReducesN:
     def test_blocker_repro_auth_flag_increases_n_under_affinage_escalation(self) -> None:
         # The exact repro from the BLOCKER finding: adding "auth" must not
         # drop n from 5 to 3 -- it must compose on top of the escalated tier.
-        without = age_route.route(
+        without = _route(
             score=100.0, risk_flags=[], entry="affinage", comments=20, ci_class="failing"
         )
-        with_override = age_route.route(
+        with_override = _route(
             score=100.0, risk_flags=["auth"], entry="affinage", comments=20, ci_class="failing"
         )
         assert with_override["n"] >= without["n"]
@@ -202,7 +228,7 @@ class TestEncapsulationSeparation:
     fully resolved."""
 
     def test_n5_keeps_encapsulation_isolated_from_efficiency_and_telemetry(self) -> None:
-        result = age_route.route(score=400, risk_flags=[])
+        result = _route(score=400, risk_flags=[])
         for lens in result["lenses"]:
             if "encapsulation" in lens:
                 assert "efficiency" not in lens
@@ -212,7 +238,7 @@ class TestEncapsulationSeparation:
         # Whenever encapsulation is promoted (any base tier), it is solo --
         # trivially separated from efficiency and telemetry.
         for score in (20, 150, 400):
-            result = age_route.route(score=score, risk_flags=["schema-migration"])
+            result = _route(score=score, risk_flags=["schema-migration"])
             assert ["encapsulation"] in result["lenses"]
 
 
@@ -222,7 +248,7 @@ class TestDimensionPartitionInvariant:
 
     @pytest.mark.parametrize("score", [10, 30, 59.9, 60, 150, 250, 250.1, 400, 1000])
     def test_partition_covers_every_dimension_exactly_once_no_override(self, score: float) -> None:
-        result = age_route.route(score=score, risk_flags=[])
+        result = _route(score=score, risk_flags=[])
         flat = [dim for lens in result["lenses"] for dim in lens]
         assert sorted(flat) == sorted(age_route.DIMENSIONS)
         assert len(flat) == len(age_route.DIMENSIONS)
@@ -241,7 +267,7 @@ class TestDimensionPartitionInvariant:
     def test_partition_covers_every_dimension_exactly_once_with_overrides(
         self, score: float, flags: list[str]
     ) -> None:
-        result = age_route.route(score=score, risk_flags=flags)
+        result = _route(score=score, risk_flags=flags)
         flat = [dim for lens in result["lenses"] for dim in lens]
         assert sorted(flat) == sorted(age_route.DIMENSIONS)
         assert len(flat) == len(age_route.DIMENSIONS)
@@ -270,13 +296,13 @@ class TestRefinementTreeStructuralInvariant:
                 assert fs <= coarse_set or fs.isdisjoint(coarse_set), (fs, coarse_group)
 
     def test_n2_groups_are_unions_of_whole_n5_groups(self) -> None:
-        n2 = age_route.route(score=150, risk_flags=[])["lenses"]
-        n5 = age_route.route(score=400, risk_flags=[])["lenses"]
+        n2 = _route(score=150, risk_flags=[])["lenses"]
+        n5 = _route(score=400, risk_flags=[])["lenses"]
         self._assert_coarse_is_union_of_fine(n2, n5)
 
     def test_n1_lens_is_union_of_both_n2_groups(self) -> None:
-        n1 = age_route.route(score=30, risk_flags=[])["lenses"]
-        n2 = age_route.route(score=150, risk_flags=[])["lenses"]
+        n1 = _route(score=30, risk_flags=[])["lenses"]
+        n2 = _route(score=150, risk_flags=[])["lenses"]
         self._assert_coarse_is_union_of_fine(n1, n2)
 
 
@@ -288,53 +314,53 @@ class TestAffinageEscalation:
         # entry="age" silently dropping comments/ci_class hid a miswired
         # caller getting a quietly smaller fan-out -- now it fails loud.
         with pytest.raises(ValueError):
-            age_route.route(
+            _ = _route(
                 score=30, risk_flags=[], entry="age", comments=999, ci_class="failing"
             )
 
     def test_affinage_high_comment_count_bumps_tier(self) -> None:
-        result = age_route.route(score=30, risk_flags=[], entry="affinage", comments=15)
+        result = _route(score=30, risk_flags=[], entry="affinage", comments=15)
         assert result["n"] == 2
 
     def test_affinage_low_comment_count_does_not_bump(self) -> None:
-        result = age_route.route(score=30, risk_flags=[], entry="affinage", comments=2)
+        result = _route(score=30, risk_flags=[], entry="affinage", comments=2)
         assert result["n"] == 1
 
     def test_affinage_failing_ci_class_bumps_tier(self) -> None:
-        result = age_route.route(score=30, risk_flags=[], entry="affinage", ci_class="failing")
+        result = _route(score=30, risk_flags=[], entry="affinage", ci_class="failing")
         assert result["n"] == 2
 
     def test_affinage_bump_never_exceeds_n5(self) -> None:
-        result = age_route.route(
+        result = _route(
             score=400, risk_flags=[], entry="affinage", comments=50, ci_class="failing"
         )
         assert result["n"] == 5
 
     def test_affinage_comment_count_at_exact_threshold_bumps(self) -> None:
-        result = age_route.route(score=30, risk_flags=[], entry="affinage", comments=10)
+        result = _route(score=30, risk_flags=[], entry="affinage", comments=10)
         assert result["n"] == 2
 
     def test_affinage_comment_count_just_under_threshold_does_not_bump(self) -> None:
-        result = age_route.route(score=30, risk_flags=[], entry="affinage", comments=9)
+        result = _route(score=30, risk_flags=[], entry="affinage", comments=9)
         assert result["n"] == 1
 
     def test_affinage_red_ci_class_bumps_tier(self) -> None:
-        result = age_route.route(score=30, risk_flags=[], entry="affinage", ci_class="red")
+        result = _route(score=30, risk_flags=[], entry="affinage", ci_class="red")
         assert result["n"] == 2
 
     def test_affinage_flaky_ci_class_bumps_tier(self) -> None:
-        result = age_route.route(score=30, risk_flags=[], entry="affinage", ci_class="flaky")
+        result = _route(score=30, risk_flags=[], entry="affinage", ci_class="flaky")
         assert result["n"] == 2
 
     def test_affinage_healthy_ci_class_does_not_bump(self) -> None:
-        result = age_route.route(score=30, risk_flags=[], entry="affinage", ci_class="passing")
+        result = _route(score=30, risk_flags=[], entry="affinage", ci_class="passing")
         assert result["n"] == 1
 
     def test_affinage_comments_and_ci_class_both_bump_in_one_call(self) -> None:
         # A score in the n=1 rung with both a high comment count and a risky
         # ci_class must bump twice: 1 -> 2 -> 5, one step per signal, and the
         # rationale must record both reasons in the combined form.
-        result = age_route.route(
+        result = _route(
             score=30, risk_flags=[], entry="affinage", comments=15, ci_class="failing"
         )
         assert result["n"] == 5
@@ -345,17 +371,17 @@ class TestAffinageEscalation:
 class TestInputValidation:
     def test_invalid_entry_raises(self) -> None:
         with pytest.raises(ValueError):
-            age_route.route(score=1, entry="bogus")
+            _ = _route(score=1, entry="bogus")
 
     def test_negative_score_raises(self) -> None:
         with pytest.raises(ValueError):
-            age_route.route(score=-1)
+            _ = _route(score=-1)
 
     def test_non_finite_score_raises(self) -> None:
         with pytest.raises(ValueError):
-            age_route.route(score=float("nan"))
+            _ = _route(score=float("nan"))
         with pytest.raises(ValueError):
-            age_route.route(score=float("inf"))
+            _ = _route(score=float("inf"))
 
     def test_score_is_keyword_only(self) -> None:
         # `score` used to be `files_changed: int` in the same position, so a
@@ -378,20 +404,20 @@ class TestInputValidation:
 
     def test_age_entry_rejects_comments_only(self) -> None:
         with pytest.raises(ValueError):
-            age_route.route(score=30, entry="age", comments=50)
+            _ = _route(score=30, entry="age", comments=50)
 
 
 class TestOutputSchema:
     def test_output_keys_are_exactly_the_locked_shape(self) -> None:
         # SPEC ACCEPTANCE 9: output keys are exactly {n, lenses, effort,
         # overrides_hit, rationale}.
-        result = age_route.route(score=30)
+        result = _route(score=30)
         assert set(result.keys()) == {"n", "lenses", "effort", "overrides_hit", "rationale"}
 
 
 class TestRationale:
     def test_rationale_is_one_line_and_mentions_decision(self) -> None:
-        result = age_route.route(score=150, risk_flags=[])
+        result = _route(score=150, risk_flags=[])
         assert "\n" not in result["rationale"]
         assert "n=2" in result["rationale"]
         assert "effort=medium" in result["rationale"]
@@ -400,10 +426,10 @@ class TestRationale:
         # Finding 3: the audit trail must reconstruct the decision -- two
         # calls differing only in comments/ci_class must not produce
         # byte-identical rationale (that's how finding 1 stayed invisible).
-        escalated = age_route.route(
+        escalated = _route(
             score=100.0, risk_flags=["auth"], entry="affinage", comments=20, ci_class="failing"
         )
-        baseline = age_route.route(
+        baseline = _route(
             score=100.0, risk_flags=["auth"], entry="affinage", comments=0, ci_class=None
         )
         assert escalated["rationale"] != baseline["rationale"]
@@ -416,7 +442,7 @@ class TestPurity:
         src = (REPO_ROOT / "src/easy_cheese/shared/fanout/age_route.py").read_text(encoding="utf-8")
         tree = ast.parse(src)
         banned = {"os", "sys", "socket", "subprocess", "requests", "urllib", "pathlib", "shutil"}
-        imported = set()
+        imported: set[str] = set()
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 imported.update(alias.name.split(".")[0] for alias in node.names)
@@ -426,7 +452,7 @@ class TestPurity:
 
     def test_module_parses_as_valid_python(self) -> None:
         src = (REPO_ROOT / "src/easy_cheese/shared/fanout/age_route.py").read_text(encoding="utf-8")
-        ast.parse(src)  # raises SyntaxError if invalid
+        _ = ast.parse(src)  # raises SyntaxError if invalid
 
 
 class TestLadderBounds:
@@ -442,7 +468,7 @@ class TestLadderBounds:
                 ("affinage", 0, None),
                 ("affinage", 50, "failing"),
             ):
-                result = age_route.route(
+                result = _route(
                     score=score,
                     risk_flags=all_flags,
                     entry=entry,
@@ -453,14 +479,14 @@ class TestLadderBounds:
         assert max_n == 9
 
     def test_min_n_with_any_override_is_2(self) -> None:
-        min_n = None
+        min_n: int | None = None
         for score in range(0, 2000, 5):
             for flag in sorted(age_route.OVERRIDE_FLAGS):
                 for entry, comments, ci_class in (
                     ("age", None, None),
                     ("affinage", 0, None),
                 ):
-                    result = age_route.route(
+                    result = _route(
                         score=score,
                         risk_flags=[flag],
                         entry=entry,

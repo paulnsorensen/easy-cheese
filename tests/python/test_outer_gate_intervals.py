@@ -8,7 +8,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
+from typing import cast
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -24,7 +24,7 @@ def _event(root: Path, name: str) -> None:
     trace = root / ".cheese" / "trace.log"
     trace.parent.mkdir(parents=True, exist_ok=True)
     with trace.open("a", encoding="utf-8") as stream:
-        stream.write(name + "\n")
+        _ = stream.write(name + "\n")
 
 
 def _red_gate(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -71,12 +71,12 @@ def _write_project(root: Path) -> dict[str, Path]:
     (root / ".cheese").mkdir()
     (root / ".cheese" / "cut" / "candidates").mkdir(parents=True)
     (root / ".cheese" / "press" / "candidates").mkdir(parents=True)
-    (root / "production.py").write_text("before\n", encoding="utf-8")
-    (root / ".production-config").write_text("stable\n", encoding="utf-8")
+    _ = (root / "production.py").write_text("before\n", encoding="utf-8")
+    _ = (root / ".production-config").write_text("stable\n", encoding="utf-8")
     (root / "production-link").symlink_to("production.py")
     oracle = root / "tests" / "oracle.py"
     baseline = root / "tests" / "baseline.py"
-    baseline.write_text(
+    _ = baseline.write_text(
         """
 from pathlib import Path
 trace = Path(".cheese") / "trace.log"
@@ -87,7 +87,7 @@ raise SystemExit(0)
         encoding="utf-8",
     )
     cut_case = root / "tests" / "cut_case.py"
-    cut_case.write_text(
+    _ = cut_case.write_text(
         """
 from pathlib import Path
 state = Path("production.py").read_text(encoding="utf-8").strip()
@@ -100,7 +100,7 @@ assert state != "before", "assertion-origin"
         encoding="utf-8",
     )
     attack = root / "tests" / "attack.py"
-    attack.write_text(
+    _ = attack.write_text(
         """
 from pathlib import Path
 state = Path(".production-config").read_text(encoding="utf-8").strip()
@@ -113,7 +113,7 @@ assert state == "repaired", "assertion-origin"
         encoding="utf-8",
     )
     spec = root / "spec.md"
-    spec.write_text(
+    _ = spec.write_text(
         """---
 gate_applicability:
   disposition: red-required
@@ -156,7 +156,7 @@ def _candidate(
     *,
     producer: str,
     guard_receipts: list[str],
-) -> dict[str, Any]:
+) -> dict[str, object]:
     case = paths["cut_case"] if producer == "cut" else paths["attack"]
     witness = "assertion-origin"
     protected_files = [
@@ -252,14 +252,14 @@ def _begin(
     candidate: Path,
     *,
     label: str,
-) -> tuple[Path, dict[str, Any]]:
-    payload = json.loads(candidate.read_text(encoding="utf-8"))
+) -> tuple[Path, dict[str, object]]:
+    payload = cast(dict[str, object], json.loads(candidate.read_text(encoding="utf-8")))
     producer = str(payload["producer"])
     namespace = root / ".cheese" / producer
     namespace.mkdir(parents=True, exist_ok=True)
     plan_path = namespace / f"{label}.plan.json"
     token_path = namespace / f"{label}.phase.json"
-    plan_path.write_text(
+    _ = plan_path.write_text(
         json.dumps(
             {
                 "schema_version": 1,
@@ -276,7 +276,7 @@ def _begin(
                         "argv": check["argv"],
                         "cwd": check["cwd"],
                     }
-                    for check in payload["baseline_checks"]
+                    for check in cast(list[dict[str, object]], payload["baseline_checks"])
                 ],
             }
         ),
@@ -290,8 +290,8 @@ def _begin(
         str(token_path.relative_to(root)),
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    payload.update(json.loads(result.stdout))
-    candidate.write_text(json.dumps(payload), encoding="utf-8")
+    payload.update(cast(dict[str, object], json.loads(result.stdout)))
+    _ = candidate.write_text(json.dumps(payload), encoding="utf-8")
     return token_path, payload
 
 
@@ -302,21 +302,23 @@ def _issue(
     *,
     label: str,
     oracle: Path | None = None,
-) -> tuple[subprocess.CompletedProcess[str], dict[str, Any]]:
+) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
     token_path, payload = _begin(root, candidate, label=label)
     if oracle is not None:
         if not oracle.exists():
-            oracle.write_text("outer oracle\n", encoding="utf-8")
+            _ = oracle.write_text("outer oracle\n", encoding="utf-8")
         oracle_ref = str(oracle.relative_to(root))
         protected_files = [
-            entry for entry in payload["protected_files"] if entry["path"] != oracle_ref
+            entry
+            for entry in cast(list[dict[str, object]], payload["protected_files"])
+            if entry["path"] != oracle_ref
         ]
         protected_files.insert(
             0,
             {"path": oracle_ref, "sha256": _sha256(oracle)},
         )
         payload["protected_files"] = protected_files
-        candidate.write_text(json.dumps(payload), encoding="utf-8")
+        _ = candidate.write_text(json.dumps(payload), encoding="utf-8")
     result = _red_gate(
         root,
         "issue",
@@ -326,7 +328,7 @@ def _issue(
         "--out",
         str(receipt.relative_to(root)),
     )
-    payload = json.loads(result.stdout) if result.stdout else {}
+    payload = cast(dict[str, object], json.loads(result.stdout)) if result.stdout else {}
     return result, payload
 
 
@@ -335,7 +337,7 @@ def test_ac_7_8_press_replays_green_then_preserves_each_interval_and_attack(
 ) -> None:
     paths = _write_project(tmp_path)
     cut_candidate = _candidate(tmp_path, paths, producer="cut", guard_receipts=[])
-    paths["cut_candidate"].write_text(json.dumps(cut_candidate), encoding="utf-8")
+    _ = paths["cut_candidate"].write_text(json.dumps(cut_candidate), encoding="utf-8")
     cut_result, _ = _issue(
         tmp_path,
         paths["cut_candidate"],
@@ -344,8 +346,8 @@ def test_ac_7_8_press_replays_green_then_preserves_each_interval_and_attack(
         oracle=paths["oracle"],
     )
     assert cut_result.returncode == 0, cut_result.stdout + cut_result.stderr
-    (tmp_path / "production.py").write_text("after-cut\n", encoding="utf-8")
-    (tmp_path / ".cheese" / "trace.log").write_text("", encoding="utf-8")
+    _ = (tmp_path / "production.py").write_text("after-cut\n", encoding="utf-8")
+    _ = (tmp_path / ".cheese" / "trace.log").write_text("", encoding="utf-8")
 
     press_candidate = _candidate(
         tmp_path,
@@ -353,7 +355,7 @@ def test_ac_7_8_press_replays_green_then_preserves_each_interval_and_attack(
         producer="press",
         guard_receipts=[str(paths["cut_receipt"].relative_to(tmp_path))],
     )
-    paths["press_candidate"].write_text(json.dumps(press_candidate), encoding="utf-8")
+    _ = paths["press_candidate"].write_text(json.dumps(press_candidate), encoding="utf-8")
     attack_digest = _sha256(paths["attack"])
 
     _event(tmp_path, "press:entry")
@@ -388,7 +390,7 @@ def test_ac_7_8_press_replays_green_then_preserves_each_interval_and_attack(
     assert _sha256(paths["attack"]) == attack_digest
     assert _production_fingerprint(tmp_path) == first_before
 
-    paths["route_request"].write_text(
+    _ = paths["route_request"].write_text(
         json.dumps(
             {
                 "outcome": "in_contract_red",
@@ -411,8 +413,8 @@ def test_ac_7_8_press_replays_green_then_preserves_each_interval_and_attack(
 
     # The corrective Cook may edit production between Press-owned intervals.
     _event(tmp_path, "cook:repair")
-    (tmp_path / "production.py").write_text("after-repair\n", encoding="utf-8")
-    (tmp_path / ".production-config").write_text("repaired\n", encoding="utf-8")
+    _ = (tmp_path / "production.py").write_text("after-repair\n", encoding="utf-8")
+    _ = (tmp_path / ".production-config").write_text("repaired\n", encoding="utf-8")
 
     second_before = _production_fingerprint(tmp_path)
     _event(tmp_path, "press:resume")
@@ -436,15 +438,16 @@ def test_ac_7_8_press_replays_green_then_preserves_each_interval_and_attack(
             str(paths["press_receipt"].relative_to(tmp_path)),
         ],
     )
-    paths["press_resume_candidate"].write_text(
+    _ = paths["press_resume_candidate"].write_text(
         json.dumps(resume_candidate), encoding="utf-8"
     )
     _, resume_payload = _begin(
         tmp_path, paths["press_resume_candidate"], label="press-resume"
     )
     assert resume_payload["phase_token_ref"] != press_payload["phase_token_ref"]
-    persisted_resume = json.loads(
-        paths["press_resume_candidate"].read_text(encoding="utf-8")
+    persisted_resume = cast(
+        dict[str, object],
+        json.loads(paths["press_resume_candidate"].read_text(encoding="utf-8")),
     )
     assert persisted_resume["phase_token_ref"] == resume_payload["phase_token_ref"]
 
@@ -456,13 +459,15 @@ def test_ac_7_8_press_replays_green_then_preserves_each_interval_and_attack(
         "green",
     )
     assert resumed_attack.returncode == 0, resumed_attack.stdout + resumed_attack.stderr
-    resumed_payload = json.loads(resumed_attack.stdout)
+    resumed_payload = cast(dict[str, object], json.loads(resumed_attack.stdout))
     assert resumed_payload["ok"] is True
     _event(tmp_path, "press:attack:replay")
     assert _sha256(paths["attack"]) == attack_digest
-    assert press_payload["cases"][0]["argv"] == press_candidate["cases"][0]["argv"]
+    press_cases = cast(list[dict[str, object]], press_payload["cases"])
+    press_candidate_cases = cast(list[dict[str, object]], press_candidate["cases"])
+    assert press_cases[0]["argv"] == press_candidate_cases[0]["argv"]
 
-    paths["route_request"].write_text(
+    _ = paths["route_request"].write_text(
         json.dumps(
             {
                 "outcome": "green",

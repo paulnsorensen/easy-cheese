@@ -81,7 +81,7 @@ def cook_pyz() -> Path:
 
 def _run(pyz: Path, *args: str) -> subprocess.CompletedProcess[str]:
     env = dict(os.environ)
-    env.pop("PYTHONPATH", None)
+    _ = env.pop("PYTHONPATH", None)
     return subprocess.run(
         [sys.executable, str(pyz), *args],
         cwd=str(REPO_ROOT),

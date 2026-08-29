@@ -10,6 +10,7 @@ import subprocess
 import sys
 import zipfile
 from pathlib import Path
+from typing import cast
 
 import pytest
 from easy_cheese.shared import paths
@@ -86,7 +87,7 @@ REQUIRED_WORKFLOW_MODULES = (
 
 
 @pytest.fixture(scope="module")
-def bundles(tmp_path_factory) -> Path:
+def bundles(tmp_path_factory: pytest.TempPathFactory) -> Path:
     out = tmp_path_factory.mktemp("pyz")
     result = subprocess.run(
         [sys.executable, str(BUILD), "--out-dir", str(out)],
@@ -162,8 +163,8 @@ def _zip_with_shiv_metadata(
 
 
 def test_bundle_manifest_catches_execution_metadata_tampering() -> None:
-    baseline = check_bundles._manifest(_zip_with_shiv_metadata())
-    host_variation = check_bundles._manifest(
+    baseline = check_bundles._manifest(_zip_with_shiv_metadata())  # pyright: ignore[reportPrivateUsage]
+    host_variation = check_bundles._manifest(  # pyright: ignore[reportPrivateUsage]
         _zip_with_shiv_metadata(
             built_at="2026-08-26 10:00:00",
             interpreter="/usr/bin/python3",
@@ -172,7 +173,7 @@ def test_bundle_manifest_catches_execution_metadata_tampering() -> None:
     )
     assert baseline == host_variation
 
-    tampered = check_bundles._manifest(
+    tampered = check_bundles._manifest(  # pyright: ignore[reportPrivateUsage]
         _zip_with_shiv_metadata(entry_point="evil.module:main")
     )
     assert tampered["environment.json"] != baseline["environment.json"]
@@ -180,24 +181,26 @@ def test_bundle_manifest_catches_execution_metadata_tampering() -> None:
     wrapper_tampered = _zip_with_shiv_metadata(
         wrapper_import="from evil import main"
     )
-    assert check_bundles._manifest(wrapper_tampered)["site-packages/bin/demo"] != baseline[
+    assert check_bundles._manifest(wrapper_tampered)["site-packages/bin/demo"] != baseline[  # pyright: ignore[reportPrivateUsage]
         "site-packages/bin/demo"
     ]
 
     with pytest.raises(ValueError, match="build_id does not match"):
-        check_bundles._manifest(_zip_with_shiv_metadata(build_id="tampered"))
+        _ = check_bundles._manifest(  # pyright: ignore[reportPrivateUsage]
+            _zip_with_shiv_metadata(build_id="tampered")
+        )
 
 
 def test_bundle_manifest_preserves_wrapper_flags() -> None:
-    baseline = check_bundles._manifest(
+    baseline = check_bundles._manifest(  # pyright: ignore[reportPrivateUsage]
         _zip_with_shiv_metadata(interpreter="/opt/python/bin/python3 -I")
     )
-    host_variation = check_bundles._manifest(
+    host_variation = check_bundles._manifest(  # pyright: ignore[reportPrivateUsage]
         _zip_with_shiv_metadata(interpreter="/usr/bin/env python3 -I")
     )
     assert baseline == host_variation
 
-    flag_tampered = check_bundles._manifest(
+    flag_tampered = check_bundles._manifest(  # pyright: ignore[reportPrivateUsage]
         _zip_with_shiv_metadata(interpreter="/usr/bin/env python3 -X")
     )
     assert flag_tampered["site-packages/bin/demo"] != baseline[
@@ -206,8 +209,8 @@ def test_bundle_manifest_preserves_wrapper_flags() -> None:
 
 
 def test_bundle_manifest_keeps_non_python_shebang_distinct() -> None:
-    python = check_bundles._manifest(_zip_with_shiv_metadata())
-    shell = check_bundles._manifest(
+    python = check_bundles._manifest(_zip_with_shiv_metadata())  # pyright: ignore[reportPrivateUsage]
+    shell = check_bundles._manifest(  # pyright: ignore[reportPrivateUsage]
         _zip_with_shiv_metadata(interpreter="/bin/sh")
     )
     assert shell["site-packages/bin/demo"] != python["site-packages/bin/demo"]
@@ -222,7 +225,7 @@ def _run(
     # Run from the bundle's own dir with PYTHONPATH stripped, so the only way an
     # import can resolve is from inside the .pyz itself.
     env = dict(os.environ)
-    env.pop("PYTHONPATH", None)
+    _ = env.pop("PYTHONPATH", None)
     if extra_env:
         env.update(extra_env)
     return subprocess.run(
@@ -256,7 +259,7 @@ def _extract_site_packages(pyz: Path, root: Path) -> Path:
                 target.mkdir(parents=True, exist_ok=True)
             else:
                 target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes(archive.read(name))
+                _ = target.write_bytes(archive.read(name))
     return package_root
 
 
@@ -314,7 +317,7 @@ def test_melt_subcommand_executes_with_forwarded_args(
     """A real subcommand runs end-to-end through the bundle: proves argv forwarding,
     the shared git_utils import resolving, and correct routing."""
     conflict = tmp_path / "f.txt"
-    conflict.write_text(
+    _ = conflict.write_text(
         "before\n<<<<<<< HEAD\nOURS_LINE\n=======\nTHEIRS_LINE\n>>>>>>> branch\nafter\n"
     )
     result = _run(
@@ -342,7 +345,7 @@ def test_plate_bundle_validates_publication_without_source_imports(
         "risk": "none",
     }
     path = tmp_path / "publication.json"
-    path.write_text(json.dumps(state))
+    _ = path.write_text(json.dumps(state))
 
     result = _run(bundles / "plate.pyz", "validate-publication", str(path))
 
@@ -356,8 +359,8 @@ def test_plate_bundle_reports_stack_tools_without_source_imports(
     result = _run(bundles / "plate.pyz", "stack-tools", "--cwd", str(tmp_path))
 
     assert result.returncode == 0, result.stderr
-    report = json.loads(result.stdout)
-    assert set(report["providers"]) == {"graphite", "git-town", "gh-stack"}
+    report = cast(dict[str, object], json.loads(result.stdout))
+    assert set(cast(list[object], report["providers"])) == {"graphite", "git-town", "gh-stack"}
 
 
 def test_bundle_carries_only_its_own_skill_package(bundles: Path) -> None:
@@ -421,8 +424,8 @@ def test_cut_bundle_runs_assertion_probe_without_source_imports(
                 "code",
                 sys.executable,
                 "import sys; "
-                "assert sys.path[0] == ''; "
-                "raise AssertionError('outer witness')",
+                + "assert sys.path[0] == ''; "
+                + "raise AssertionError('outer witness')",
             ],
             cwd=tmp_path,
             capture_output=True,
@@ -435,7 +438,7 @@ def test_cut_bundle_runs_assertion_probe_without_source_imports(
     finally:
         os.close(write_fd)
     try:
-        event = json.loads(os.read(read_fd, 513))
+        event = cast(dict[str, object], json.loads(os.read(read_fd, 513)))
     finally:
         os.close(read_fd)
 
@@ -453,7 +456,7 @@ def test_cut_bundle_runs_assertion_probe_without_source_imports(
 def test_source_red_gate_uses_package_probe_over_top_level_shadow(
     tmp_path: Path,
 ) -> None:
-    (tmp_path / "cut_assertion_probe.py").write_text(
+    _ = (tmp_path / "cut_assertion_probe.py").write_text(
         "raise RuntimeError('top-level probe shadow')\n",
         encoding="utf-8",
     )
@@ -469,7 +472,7 @@ def test_source_red_gate_uses_package_probe_over_top_level_shadow(
             sys.executable,
             "-c",
             "from easy_cheese.shared.cut import red_gate; "
-            "print(red_gate.cut_assertion_probe.__name__)",
+            + "print(red_gate.cut_assertion_probe.__name__)",
         ],
         cwd=tmp_path,
         capture_output=True,
@@ -486,16 +489,16 @@ def test_cut_bundle_ignores_adjacent_probe_shadow(
     tmp_path: Path,
 ) -> None:
     pyz = tmp_path / "cut.pyz"
-    pyz.write_bytes((bundles / "cut.pyz").read_bytes())
+    _ = pyz.write_bytes((bundles / "cut.pyz").read_bytes())
     package_root = _extract_site_packages(pyz, tmp_path / "bundle")
-    (tmp_path / "cut_assertion_probe.py").write_text(
+    _ = (tmp_path / "cut_assertion_probe.py").write_text(
         "raise RuntimeError('adjacent probe shadow')\n",
         encoding="utf-8",
     )
     run_dir = tmp_path / "run"
     run_dir.mkdir()
     environment = os.environ.copy()
-    environment.pop("PYTHONPATH", None)
+    _ = environment.pop("PYTHONPATH", None)
     environment["PYTHONPATH"] = str(package_root)
 
     result = subprocess.run(
@@ -503,7 +506,7 @@ def test_cut_bundle_ignores_adjacent_probe_shadow(
             sys.executable,
             "-c",
             "from easy_cheese.shared.cut import red_gate; "
-            "print(red_gate.cut_assertion_probe.__file__)",
+            + "print(red_gate.cut_assertion_probe.__file__)",
         ],
         cwd=run_dir,
         capture_output=True,
@@ -522,14 +525,14 @@ def test_cut_bundle_probe_child_ignores_cwd_shadow(
     tmp_path: Path,
 ) -> None:
     pyz = tmp_path / "cut.pyz"
-    pyz.write_bytes((bundles / "cut.pyz").read_bytes())
+    _ = pyz.write_bytes((bundles / "cut.pyz").read_bytes())
     package_root = _extract_site_packages(pyz, tmp_path / "bundle")
-    (tmp_path / "cut_assertion_probe.py").write_text(
+    _ = (tmp_path / "cut_assertion_probe.py").write_text(
         "TARGET_LOCAL = True\n",
         encoding="utf-8",
     )
     environment = os.environ.copy()
-    environment.pop("PYTHONPATH", None)
+    _ = environment.pop("PYTHONPATH", None)
     environment["PYTHONPATH"] = str(package_root)
     child_source = (
         "import cut_assertion_probe; "
@@ -576,7 +579,7 @@ def test_press_bundle_loads_router_and_requires_phase_token(bundles: Path) -> No
     assert (
         result.stderr.strip()
         == "ERROR: request must contain exactly outcome, current_receipt, "
-        "phase_token_ref, and phase_token_sha256"
+        + "phase_token_ref, and phase_token_sha256"
     )
 
 
@@ -587,7 +590,7 @@ def test_cook_baseline_classifies_failures_via_stdin(bundles: Path) -> None:
     )
     result = _run(bundles / "cook.pyz", "baseline", stdin=payload)
     assert result.returncode == 0, result.stderr
-    classification = json.loads(result.stdout)
+    classification = cast(dict[str, object], json.loads(result.stdout))
     assert classification["new"] == [{"suite": "s", "test_id": "t", "signature": "x"}]
     assert classification["identical"] == []
     assert classification["changed"] == []
@@ -626,7 +629,7 @@ def test_artifact_path_specs_matches_paths_module(bundles: Path, skill: str) -> 
     finally:
         for k, v in old.items():
             if v is None:
-                os.environ.pop(k, None)
+                _ = os.environ.pop(k, None)
             else:
                 os.environ[k] = v
     result = _run(
@@ -727,7 +730,7 @@ _GROUNDED_REPORT = """## Research: q
 
 def _write(tmp_path: Path, body: str) -> Path:
     report = tmp_path / "report.md"
-    report.write_text(body)
+    _ = report.write_text(body)
     return report
 
 
@@ -803,10 +806,10 @@ def test_ground_check_accepts_nonlocal_and_existing_local_citations(
     """URLs and inline paths need no lookup; local paths use their defined roots."""
     raw = tmp_path / "raw"
     raw.mkdir()
-    (raw / "01-example.md").write_text("one\ntwo\nthree\nfour\n")
+    _ = (raw / "01-example.md").write_text("one\ntwo\nthree\nfour\n")
     cheese = bundles / ".cheese"
     cheese.mkdir()
-    (cheese / "notes.md").write_text("one\ntwo\n")
+    _ = (cheese / "notes.md").write_text("one\ntwo\n")
     body = (
         "## Research: q\n\n### Evidence\n\n"
         "| Claim | Evidence | Confidence |\n| --- | --- | --- |\n"
@@ -1010,7 +1013,7 @@ def test_ground_check_rejects_invalid_local_line_anchor(
 ) -> None:
     raw = tmp_path / "raw"
     raw.mkdir()
-    (raw / "source.md").write_text("one\ntwo\nthree\nfour\n")
+    _ = (raw / "source.md").write_text("one\ntwo\nthree\nfour\n")
     body = (
         "## Research: q\n\n### Evidence\n\n"
         "| Claim | Evidence | Confidence |\n| --- | --- | --- |\n"
@@ -1027,8 +1030,8 @@ def test_ground_check_rejects_invalid_local_line_anchor(
 def test_ground_check_rejects_local_path_traversal(
     bundles: Path, tmp_path: Path
 ) -> None:
-    (tmp_path / "raw-secret.md").write_text("outside raw\n")
-    (bundles / "cheese-secret.md").write_text("outside cheese\n")
+    _ = (tmp_path / "raw-secret.md").write_text("outside raw\n")
+    _ = (bundles / "cheese-secret.md").write_text("outside cheese\n")
     (bundles / ".cheese").mkdir(exist_ok=True)
     body = (
         "## Research: q\n\n### Evidence\n\n"
@@ -1207,8 +1210,8 @@ def test_committed_bundle_matches_source(bundles: Path, skill: str) -> None:
         return
     raise AssertionError(
         f"committed {skill}.pyz is stale vs its source "
-        f"(changed={changed}, added={added}, removed={removed}). "
-        f"Rebuild and commit it: python3 scripts/build_pyz.py"
+        + f"(changed={changed}, added={added}, removed={removed}). "
+        + "Rebuild and commit it: python3 scripts/build_pyz.py"
     )
 
 
@@ -1258,10 +1261,10 @@ def test_age_bundle_html_report_runs_from_inside_bundle(
     assert age_pyz.exists(), f"age bundle missing: {age_pyz}"
 
     report = tmp_path / "rep.md"
-    report.write_text(
+    _ = report.write_text(
         "# Age report — demo\n\n## Blocker\n"
-        "- **[security:blocker]** `a.py:1` — token parsed without validation.\n\n"
-        "## Confidence\ncertain\n",
+        + "- **[security:blocker]** `a.py:1` — token parsed without validation.\n\n"
+        + "## Confidence\ncertain\n",
         encoding="utf-8",
     )
     result = _run(
@@ -1305,7 +1308,7 @@ def test_press_bundle_carries_and_imports_assertion_probe(bundles: Path) -> None
 
 def test_document_rules_projection_matches_checked_in_source() -> None:
     generated = REPO_ROOT / "src" / "easy_cheese" / "shared" / "document_rules.py"
-    assert build_pyz._compiled_document_rules_source() == generated.read_text(encoding="utf-8")
+    assert build_pyz._compiled_document_rules_source() == generated.read_text(encoding="utf-8")  # pyright: ignore[reportPrivateUsage]
 
 
 def test_skill_archives_own_shared_commands_and_no_common_archive(bundles: Path) -> None:
@@ -1341,9 +1344,9 @@ def test_cook_pyz_dispatches_normalize_end_to_end() -> None:
         str(COOK_PAYLOAD_FIXTURES / "clean_invocation.json"),
     )
     assert accepted.returncode == 0, accepted.stdout + accepted.stderr
-    canonical = json.loads(accepted.stdout)
-    assert canonical["value"]["plan_id"] == "curdplan-cook-cli-normalize-1"
-    assert canonical["digest"].startswith("sha256:")
+    canonical = cast(dict[str, object], json.loads(accepted.stdout))
+    assert cast(dict[str, object], canonical["value"])["plan_id"] == "curdplan-cook-cli-normalize-1"
+    assert cast(str, canonical["digest"]).startswith("sha256:")
 
 
 def test_cook_pyz_dispatches_validate_end_to_end() -> None:

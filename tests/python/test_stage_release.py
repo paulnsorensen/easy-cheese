@@ -9,6 +9,7 @@ from __future__ import annotations
 import sys
 import shutil
 import zipfile
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -18,19 +19,19 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 import build_pyz  # noqa: E402
 import stage_release  # noqa: E402
-from ref_extraction import relative_md_refs  # noqa: E402
+from ref_extraction import relative_md_refs  # noqa: E402  # pyright: ignore[reportImplicitRelativeImport]
 
 
 def _copy_committed_bundles(destinations: dict[str, Path]) -> dict[str, Path]:
     for skill, destination in destinations.items():
         source = REPO_ROOT / "skills" / skill / "scripts" / f"{skill}.pyz"
         destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, destination)
+        _ = shutil.copy2(source, destination)
     return destinations
 
 
 @pytest.fixture(scope="module")
-def staged(tmp_path_factory) -> Path:
+def staged(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Path]:
     monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr(build_pyz, "build_bundles", _copy_committed_bundles)
     try:
@@ -50,7 +51,7 @@ def test_release_builds_all_skills_in_one_batch(
 
     monkeypatch.setattr(build_pyz, "build_bundles", build_batch)
 
-    stage_release.stage(tmp_path / "release")
+    _ = stage_release.stage(tmp_path / "release")
 
     assert batch_sizes == [len(build_pyz.SKILLS)]
 
@@ -91,16 +92,16 @@ def test_stage_refuses_to_wipe_dangerous_paths(danger: str) -> None:
     """rmtree on --out must never touch the filesystem root, the repo, or an
     ancestor — accidental data loss is the irreversible failure mode here."""
     with pytest.raises(SystemExit, match="refusing to wipe"):
-        stage_release.stage(Path(danger))
+        _ = stage_release.stage(Path(danger))
 
 
 def test_verify_rejects_missing_bundle(tmp_path: Path) -> None:
     """_verify is the publish gate — it must reject a tree whose bundles are absent."""
     fake = tmp_path / "tree"
     (fake / "skills" / "affinage").mkdir(parents=True)
-    (fake / "skills" / "affinage" / "SKILL.md").write_text("# affinage\n")
+    _ = (fake / "skills" / "affinage" / "SKILL.md").write_text("# affinage\n")
     with pytest.raises(SystemExit, match="missing bundle"):
-        stage_release._verify(fake)
+        stage_release._verify(fake)  # pyright: ignore[reportPrivateUsage]
 
 
 

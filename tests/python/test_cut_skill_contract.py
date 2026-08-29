@@ -66,7 +66,7 @@ def test_cut_frontmatter_is_first_class_and_triggerable() -> None:
 
 def test_cut_references_are_existing_one_level_links() -> None:
     body = _body(SKILL)
-    links = set(re.findall(r"\]\(([^)]+)\)", body))
+    links: set[str] = set(re.findall(r"\]\(([^)]+)\)", body))
     assert {"references/gate-workflow.md", "references/pressure-eval.md"} <= links
     for relative in links:
         if relative.startswith("references/"):
@@ -233,7 +233,7 @@ def test_pressure_reference_is_linked_from_the_gate() -> None:
 
 def test_legacy_contract_inference_is_executable(tmp_path: Path) -> None:
     spec = tmp_path / "legacy.md"
-    spec.write_text(
+    _ = spec.write_text(
         """# Legacy behavior
 
 ## Acceptance Criteria
@@ -251,7 +251,7 @@ def test_legacy_contract_inference_is_executable(tmp_path: Path) -> None:
 
 def test_closed_na_plan_is_executable_and_empty_of_red_contracts(tmp_path: Path) -> None:
     spec = tmp_path / "appearance.md"
-    spec.write_text(
+    _ = spec.write_text(
         """---
 status: approved
 gate_applicability:

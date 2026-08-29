@@ -18,7 +18,7 @@ def _non_shiv_zipapp() -> bytes:
 
 def test_bundle_manifest_rejects_non_shiv_zipapp() -> None:
     with pytest.raises(ValueError, match=r"not a Shiv archive: missing _bootstrap/"):
-        check_bundles._manifest(_non_shiv_zipapp())
+        _ = check_bundles._manifest(_non_shiv_zipapp())  # pyright: ignore[reportPrivateUsage]
 
 
 def test_bundle_checker_rejects_new_non_shiv_archive(
@@ -28,7 +28,7 @@ def test_bundle_checker_rejects_new_non_shiv_archive(
 ) -> None:
     bundle = tmp_path / "skills" / "demo" / "scripts" / "demo.pyz"
     bundle.parent.mkdir(parents=True)
-    bundle.write_bytes(_non_shiv_zipapp())
+    _ = bundle.write_bytes(_non_shiv_zipapp())
     monkeypatch.setattr(check_bundles, "REPO_ROOT", tmp_path)
 
     assert check_bundles.main() == 1

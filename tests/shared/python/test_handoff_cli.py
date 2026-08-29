@@ -8,8 +8,18 @@ import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
+from typing import TYPE_CHECKING, Protocol, cast
 
 import pytest
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+
+class _HandoffCliModule(Protocol):
+    _cmd_render: Callable[..., None]
+    _cmd_parse: Callable[..., None]
+    _cmd_dispatch: Callable[..., None]
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SHARED_SCRIPTS = REPO_ROOT / "src" / "easy_cheese" / "shared"
@@ -107,15 +117,15 @@ class TestRender:
 class TestParse:
     def test_parses_file_and_returns_json(self, tmp_path: Path) -> None:
         fixture = tmp_path / "preamble.md"
-        fixture.write_text(
+        _ = fixture.write_text(
             "status: ok\n"
-            "next: press\n"
-            "artifact: .cheese/cook/demo.md\n"
-            "Cooked the retry path.\n"
+            + "next: press\n"
+            + "artifact: .cheese/cook/demo.md\n"
+            + "Cooked the retry path.\n"
         )
         result = _run("parse", "--file", str(fixture))
         assert result.returncode == 0, result.stderr
-        payload = json.loads(result.stdout)
+        payload = cast("dict[str, object]", json.loads(result.stdout))
         assert payload == {
             "status": "ok",
             "halt_reason": None,
@@ -136,10 +146,10 @@ class TestParse:
         )
         assert rendered.returncode == 0, rendered.stderr
         fixture = tmp_path / "p.md"
-        fixture.write_text(rendered.stdout + ("\n" if not rendered.stdout.endswith("\n") else ""))
+        _ = fixture.write_text(rendered.stdout + ("\n" if not rendered.stdout.endswith("\n") else ""))
         parsed = _run("parse", "--file", str(fixture))
         assert parsed.returncode == 0, parsed.stderr
-        payload = json.loads(parsed.stdout)
+        payload = cast("dict[str, object]", json.loads(parsed.stdout))
         assert payload["status"] == "halt"
         assert payload["halt_reason"] == "stuck"
         assert payload["next_skill"] == "done"
@@ -153,7 +163,7 @@ class TestParse:
 
     def test_malformed_preamble_errors(self, tmp_path: Path) -> None:
         fixture = tmp_path / "bad.md"
-        fixture.write_text("status: ok\nnext: age\n")  # missing artifact + orientation
+        _ = fixture.write_text("status: ok\nnext: age\n")  # missing artifact + orientation
         result = _run("parse", "--file", str(fixture))
         assert result.returncode == 2
         assert "ERROR:" in result.stderr
@@ -163,13 +173,13 @@ class TestDispatch:
     def test_extracts_skill_and_args(self) -> None:
         result = _run("dispatch", "/age slug --hard")
         assert result.returncode == 0, result.stderr
-        payload = json.loads(result.stdout)
+        payload = cast("dict[str, object]", json.loads(result.stdout))
         assert payload == {"skill": "age", "args": ["slug", "--hard"]}
 
     def test_bare_skill(self) -> None:
         result = _run("dispatch", "/cure")
         assert result.returncode == 0, result.stderr
-        payload = json.loads(result.stdout)
+        payload = cast("dict[str, object]", json.loads(result.stdout))
         assert payload == {"skill": "cure", "args": []}
 
     def test_non_dispatch_errors(self) -> None:
@@ -183,17 +193,17 @@ class TestJsonMode:
         # dict output already JSON; --json must still succeed (and not double-wrap).
         result = _run("dispatch", "/age slug", "--json")
         assert result.returncode == 0, result.stderr
-        payload = json.loads(result.stdout)
+        payload = cast("dict[str, object]", json.loads(result.stdout))
         assert payload == {"skill": "age", "args": ["slug"]}
 
     def test_parse_explicit_json_flag(self, tmp_path: Path) -> None:
         fixture = tmp_path / "p.md"
-        fixture.write_text(
+        _ = fixture.write_text(
             "status: ok\nnext: cure\nartifact: \nOrient.\n"
         )
         result = _run("parse", "--file", str(fixture), "--json")
         assert result.returncode == 0, result.stderr
-        payload = json.loads(result.stdout)
+        payload = cast("dict[str, object]", json.loads(result.stdout))
         assert payload["next_skill"] == "cure"
         assert payload["artifact"] is None
 
@@ -218,8 +228,8 @@ class TestArgparse:
 
 
 class TestModuleImports:
-    def test_loads_via_importlib(self, handoff_cli_mod: ModuleType) -> None:
+    def test_loads_via_importlib(self, handoff_cli_mod: _HandoffCliModule) -> None:
         # Sanity: the module exposes the subcommand handlers (in-process unit test).
-        assert callable(handoff_cli_mod._cmd_render)
-        assert callable(handoff_cli_mod._cmd_parse)
-        assert callable(handoff_cli_mod._cmd_dispatch)
+        assert callable(handoff_cli_mod._cmd_render)  # pyright: ignore[reportPrivateUsage]
+        assert callable(handoff_cli_mod._cmd_parse)  # pyright: ignore[reportPrivateUsage]
+        assert callable(handoff_cli_mod._cmd_dispatch)  # pyright: ignore[reportPrivateUsage]

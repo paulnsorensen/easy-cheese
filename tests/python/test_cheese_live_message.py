@@ -48,13 +48,15 @@ def _widen(
     section: str,
     base_dir: Path,
     skill_root: Path,
-    _seen: frozenset[Path] = frozenset(),
+    _seen: frozenset[Path] | None = None,
 ) -> str:
     # Follows markdown links out of `section`, recursing into each linked
     # file's own links, and appends each followed file's content behind a
     # `--- resolved reference: <normalized-path> ---` marker. Paths are
     # normalized relative to `skill_root` so assertions can match the
     # sibling-relative link text a nested reference file uses.
+    if _seen is None:
+        _seen = frozenset()
     widened = section
     for match in _LINK_PATTERN.finditer(section):
         target = (base_dir / match.group(1)).resolve()

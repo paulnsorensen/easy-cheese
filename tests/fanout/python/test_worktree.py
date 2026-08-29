@@ -9,12 +9,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
-from types import ModuleType
 
 import pytest
+
+from easy_cheese.shared import cli, worktree
 
 
 def _run(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -27,39 +29,39 @@ def _run(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
 def repo(tmp_path: Path) -> Path:
     r = tmp_path / "repo"
     r.mkdir()
-    _run(r, "init", "-b", "main")
-    _run(r, "config", "user.email", "t@example.com")
-    _run(r, "config", "user.name", "Tester")
-    (r / "base.txt").write_text("base\n", encoding="utf-8")
-    _run(r, "add", "-A")
-    _run(r, "commit", "-m", "init")
+    _ = _run(r, "init", "-b", "main")
+    _ = _run(r, "config", "user.email", "t@example.com")
+    _ = _run(r, "config", "user.name", "Tester")
+    _ = (r / "base.txt").write_text("base\n", encoding="utf-8")
+    _ = _run(r, "add", "-A")
+    _ = _run(r, "commit", "-m", "init")
     return r
 
 
 class TestCreate:
-    def test_native_path_and_branch_shape(self, worktree: ModuleType, repo: Path) -> None:
+    def test_native_path_and_branch_shape(self, repo: Path) -> None:
         info = worktree.create("curd1", "main", repo=str(repo))
         assert info["path"] == ".claude/worktrees/agent-curd1"
         assert info["branch"] == "worktree-agent-curd1"
-        assert (repo / info["path"]).is_dir()
+        assert (repo / str(info["path"])).is_dir()
         branches = _run(repo, "branch", "--list", "worktree-agent-curd1").stdout
         assert "worktree-agent-curd1" in branches
 
 
     def test_inherits_uncommitted_cut_oracle_without_committing_it(
-        self, worktree: ModuleType, repo: Path
+        self, repo: Path
     ) -> None:
         oracle = repo / "tests/oracle.py"
         oracle.parent.mkdir()
-        oracle.write_text("assert feature() == 'ready'\n", encoding="utf-8")
+        _ = oracle.write_text("assert feature() == 'ready'\n", encoding="utf-8")
         digest = hashlib.sha256(oracle.read_bytes()).hexdigest()
         token = repo / ".cheese/cut/example.phase.json"
         token.parent.mkdir(parents=True)
-        token.write_text('{"phase": "entry"}\n', encoding="utf-8")
+        _ = token.write_text('{"phase": "entry"}\n', encoding="utf-8")
         token_digest = hashlib.sha256(token.read_bytes()).hexdigest()
         receipt = repo / ".cheese/cut/example.json"
         receipt.parent.mkdir(parents=True, exist_ok=True)
-        receipt.write_text(
+        _ = receipt.write_text(
             json.dumps(
                 {
                     "producer": "cut",
@@ -91,12 +93,12 @@ class TestCreate:
         assert _run(repo, "rev-list", "--count", "main..worktree-agent-oracle").stdout.strip() == "0"
 
     def test_failed_oracle_inheritance_rolls_back_worktree(
-        self, worktree: ModuleType, repo: Path
+        self, repo: Path
     ) -> None:
         oracle = repo / "oracle.py"
-        oracle.write_text("assert False\n", encoding="utf-8")
+        _ = oracle.write_text("assert False\n", encoding="utf-8")
         receipt = repo / "receipt.json"
-        receipt.write_text(
+        _ = receipt.write_text(
             json.dumps(
                 {
                     "producer": "cut",
@@ -109,8 +111,8 @@ class TestCreate:
             encoding="utf-8",
         )
 
-        with pytest.raises(worktree.cli.CliError, match="digest mismatch"):
-            worktree.create(
+        with pytest.raises(cli.CliError, match="digest mismatch"):
+            _ = worktree.create(
                 "bad-oracle", "main", repo=str(repo), receipt="receipt.json"
             )
         assert "agent-bad-oracle" not in _run(repo, "worktree", "list").stdout
@@ -121,17 +123,17 @@ class TestCreate:
 
 class TestOracleHarvest:
     def test_harvests_child_press_receipt_and_tests_before_teardown(
-        self, worktree: ModuleType, repo: Path
+        self, repo: Path
     ) -> None:
         info = worktree.create("press-oracle", "main", repo=str(repo))
         child = repo / str(info["path"])
         oracle = child / "tests/hardening.py"
         oracle.parent.mkdir()
-        oracle.write_text("assert boundary_is_guarded()\n", encoding="utf-8")
+        _ = oracle.write_text("assert boundary_is_guarded()\n", encoding="utf-8")
         digest = hashlib.sha256(oracle.read_bytes()).hexdigest()
         receipt = child / ".cheese/press/curd.json"
         receipt.parent.mkdir(parents=True)
-        receipt.write_text(
+        _ = receipt.write_text(
             json.dumps(
                 {
                     "producer": "press",
@@ -160,15 +162,15 @@ class TestOracleHarvest:
         assert (repo / ".cheese/press/curd.json").read_bytes() == receipt.read_bytes()
 
     def test_harvest_refuses_cross_curd_oracle_conflict(
-        self, worktree: ModuleType, repo: Path
+        self, repo: Path
     ) -> None:
         info = worktree.create("press-conflict", "main", repo=str(repo))
         child = repo / str(info["path"])
         child_oracle = child / "oracle.py"
-        child_oracle.write_text("assert new_contract()\n", encoding="utf-8")
+        _ = child_oracle.write_text("assert new_contract()\n", encoding="utf-8")
         digest = hashlib.sha256(child_oracle.read_bytes()).hexdigest()
         receipt = child / "press.json"
-        receipt.write_text(
+        _ = receipt.write_text(
             json.dumps(
                 {
                     "producer": "press",
@@ -179,10 +181,10 @@ class TestOracleHarvest:
             encoding="utf-8",
         )
         parent_oracle = repo / "oracle.py"
-        parent_oracle.write_text("assert other_contract()\n", encoding="utf-8")
+        _ = parent_oracle.write_text("assert other_contract()\n", encoding="utf-8")
 
-        with pytest.raises(worktree.cli.CliError, match="oracle harvest conflict"):
-            worktree.inherit_oracle(
+        with pytest.raises(cli.CliError, match="oracle harvest conflict"):
+            _ = worktree.inherit_oracle(
                 "press.json",
                 str(repo),
                 repo=str(child),
@@ -193,19 +195,19 @@ class TestOracleHarvest:
 
 class TestOracleTransferTransaction:
     def test_later_staging_failure_restores_destination(
-        self, worktree: ModuleType, repo: Path, monkeypatch: pytest.MonkeyPatch
+        self, repo: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         source_root = repo / "source"
         destination_root = repo / "destination"
         source_root.mkdir()
         destination_root.mkdir()
-        (destination_root / "existing.txt").write_text(
+        _ = (destination_root / "existing.txt").write_text(
             "keep me\n", encoding="utf-8"
         )
         source_nested = source_root / "nested"
         source_nested.mkdir()
         for name in ("first.txt", "second.txt"):
-            (source_nested / name).write_text(f"{name}\n", encoding="utf-8")
+            _ = (source_nested / name).write_text(f"{name}\n", encoding="utf-8")
         receipt = source_root / "receipt.json"
         protected_files = [
             {
@@ -216,7 +218,7 @@ class TestOracleTransferTransaction:
             }
             for name in ("first.txt", "second.txt")
         ]
-        receipt.write_text(
+        _ = receipt.write_text(
             json.dumps(
                 {
                     "producer": "cut",
@@ -226,20 +228,20 @@ class TestOracleTransferTransaction:
             ),
             encoding="utf-8",
         )
-        original_copy2 = worktree.shutil.copy2
+        original_copy2 = shutil.copy2
         calls = 0
 
-        def fail_on_second_copy(source: Path, target: Path, *args, **kwargs):
+        def fail_on_second_copy(source: Path, target: Path) -> Path | str:
             nonlocal calls
             calls += 1
             if calls == 2:
                 raise OSError("injected staging failure")
-            return original_copy2(source, target, *args, **kwargs)
+            return original_copy2(source, target)
 
-        monkeypatch.setattr(worktree.shutil, "copy2", fail_on_second_copy)
+        monkeypatch.setattr(shutil, "copy2", fail_on_second_copy)
 
-        with pytest.raises(worktree.cli.CliError, match="oracle transfer failed"):
-            worktree.inherit_oracle(
+        with pytest.raises(cli.CliError, match="oracle transfer failed"):
+            _ = worktree.inherit_oracle(
                 "receipt.json", str(destination_root), repo=str(source_root)
             )
 
@@ -250,15 +252,15 @@ class TestOracleTransferTransaction:
         assert not (destination_root / "nested").exists()
 
     def test_later_commit_failure_restores_overwrites_and_new_files(
-        self, worktree: ModuleType, repo: Path, monkeypatch: pytest.MonkeyPatch
+        self, repo: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         source_root = repo / "source"
         destination_root = repo / "destination"
         source_root.mkdir()
         destination_root.mkdir()
-        (source_root / "first.txt").write_text("new first\n", encoding="utf-8")
-        (source_root / "second.txt").write_text("new second\n", encoding="utf-8")
-        (destination_root / "first.txt").write_text(
+        _ = (source_root / "first.txt").write_text("new first\n", encoding="utf-8")
+        _ = (source_root / "second.txt").write_text("new second\n", encoding="utf-8")
+        _ = (destination_root / "first.txt").write_text(
             "old first\n", encoding="utf-8"
         )
         receipt = source_root / "receipt.json"
@@ -271,7 +273,7 @@ class TestOracleTransferTransaction:
             }
             for name in ("first.txt", "second.txt")
         ]
-        receipt.write_text(
+        _ = receipt.write_text(
             json.dumps(
                 {
                     "producer": "cut",
@@ -281,7 +283,7 @@ class TestOracleTransferTransaction:
             ),
             encoding="utf-8",
         )
-        original_replace = worktree.os.replace
+        original_replace = os.replace
         calls = 0
 
         def fail_on_second_commit(source: Path, target: Path) -> None:
@@ -291,10 +293,10 @@ class TestOracleTransferTransaction:
                 raise OSError("injected commit failure")
             original_replace(source, target)
 
-        monkeypatch.setattr(worktree.os, "replace", fail_on_second_commit)
+        monkeypatch.setattr(os, "replace", fail_on_second_commit)
 
-        with pytest.raises(worktree.cli.CliError, match="oracle transfer failed"):
-            worktree.inherit_oracle(
+        with pytest.raises(cli.CliError, match="oracle transfer failed"):
+            _ = worktree.inherit_oracle(
                 "receipt.json", str(destination_root), repo=str(source_root)
             )
 
@@ -305,14 +307,14 @@ class TestOracleTransferTransaction:
 
 class TestOracleTransferPaths:
     def test_receipt_symlink_is_rejected(
-        self, worktree: ModuleType, repo: Path
+        self, repo: Path
     ) -> None:
         source_root = repo / "source"
         destination_root = repo / "destination"
         source_root.mkdir()
         destination_root.mkdir()
         receipt = source_root / "receipt.json"
-        receipt.write_text(
+        _ = receipt.write_text(
             json.dumps(
                 {
                     "producer": "cut",
@@ -324,8 +326,8 @@ class TestOracleTransferPaths:
         )
         (source_root / "receipt-link.json").symlink_to(receipt)
 
-        with pytest.raises(worktree.cli.CliError, match="symlink"):
-            worktree.inherit_oracle(
+        with pytest.raises(cli.CliError, match="symlink"):
+            _ = worktree.inherit_oracle(
                 "receipt-link.json",
                 str(destination_root),
                 repo=str(source_root),
@@ -333,17 +335,17 @@ class TestOracleTransferPaths:
         assert list(destination_root.iterdir()) == []
 
     def test_protected_source_symlink_is_rejected(
-        self, worktree: ModuleType, repo: Path
+        self, repo: Path
     ) -> None:
         source_root = repo / "source"
         destination_root = repo / "destination"
         source_root.mkdir()
         destination_root.mkdir()
         oracle = source_root / "oracle.py"
-        oracle.write_text("assert guarded()\n", encoding="utf-8")
+        _ = oracle.write_text("assert guarded()\n", encoding="utf-8")
         (source_root / "oracle-link.py").symlink_to(oracle)
         receipt = source_root / "receipt.json"
-        receipt.write_text(
+        _ = receipt.write_text(
             json.dumps(
                 {
                     "producer": "cut",
@@ -359,14 +361,14 @@ class TestOracleTransferPaths:
             encoding="utf-8",
         )
 
-        with pytest.raises(worktree.cli.CliError, match="symlink"):
-            worktree.inherit_oracle(
+        with pytest.raises(cli.CliError, match="symlink"):
+            _ = worktree.inherit_oracle(
                 "receipt.json", str(destination_root), repo=str(source_root)
             )
         assert list(destination_root.iterdir()) == []
 
     def test_destination_symlink_traversal_is_rejected(
-        self, worktree: ModuleType, repo: Path, tmp_path: Path
+        self, repo: Path, tmp_path: Path
     ) -> None:
         source_root = repo / "source"
         destination_root = repo / "destination"
@@ -376,10 +378,10 @@ class TestOracleTransferPaths:
         outside.mkdir()
         oracle = source_root / "nested" / "oracle.py"
         oracle.parent.mkdir()
-        oracle.write_text("assert guarded()\n", encoding="utf-8")
+        _ = oracle.write_text("assert guarded()\n", encoding="utf-8")
         (destination_root / "nested").symlink_to(outside, target_is_directory=True)
         receipt = source_root / "receipt.json"
-        receipt.write_text(
+        _ = receipt.write_text(
             json.dumps(
                 {
                     "producer": "cut",
@@ -395,8 +397,8 @@ class TestOracleTransferPaths:
             encoding="utf-8",
         )
 
-        with pytest.raises(worktree.cli.CliError, match="symlink"):
-            worktree.inherit_oracle(
+        with pytest.raises(cli.CliError, match="symlink"):
+            _ = worktree.inherit_oracle(
                 "receipt.json", str(destination_root), repo=str(source_root)
             )
         assert list(outside.iterdir()) == []
@@ -404,26 +406,26 @@ class TestOracleTransferPaths:
 
     @pytest.mark.parametrize("bad_receipt", ["../receipt.json", "/tmp/receipt.json"])
     def test_receipt_escape_is_rejected(
-        self, worktree: ModuleType, repo: Path, bad_receipt: str
+        self, repo: Path, bad_receipt: str
     ) -> None:
         destination_root = repo / "destination"
         destination_root.mkdir()
 
-        with pytest.raises(worktree.cli.CliError, match="project-relative"):
-            worktree.inherit_oracle(
+        with pytest.raises(cli.CliError, match="project-relative"):
+            _ = worktree.inherit_oracle(
                 bad_receipt, str(destination_root), repo=str(repo)
             )
         assert list(destination_root.iterdir()) == []
 
     def test_protected_path_escape_is_rejected(
-        self, worktree: ModuleType, repo: Path
+        self, repo: Path
     ) -> None:
         source_root = repo / "source"
         destination_root = repo / "destination"
         source_root.mkdir()
         destination_root.mkdir()
         receipt = source_root / "receipt.json"
-        receipt.write_text(
+        _ = receipt.write_text(
             json.dumps(
                 {
                     "producer": "cut",
@@ -436,21 +438,21 @@ class TestOracleTransferPaths:
             encoding="utf-8",
         )
 
-        with pytest.raises(worktree.cli.CliError, match="project-relative"):
-            worktree.inherit_oracle(
+        with pytest.raises(cli.CliError, match="project-relative"):
+            _ = worktree.inherit_oracle(
                 "receipt.json", str(destination_root), repo=str(source_root)
             )
         assert list(destination_root.iterdir()) == []
 
     def test_destination_root_escape_is_rejected(
-        self, worktree: ModuleType, repo: Path
+        self, repo: Path
     ) -> None:
         source_root = repo / "source"
         destination_root = repo / "destination"
         source_root.mkdir()
         destination_root.mkdir()
         receipt = source_root / "receipt.json"
-        receipt.write_text(
+        _ = receipt.write_text(
             json.dumps(
                 {
                     "producer": "cut",
@@ -463,71 +465,71 @@ class TestOracleTransferPaths:
             encoding="utf-8",
         )
 
-        with pytest.raises(worktree.cli.CliError, match="remain within"):
-            worktree.inherit_oracle(
+        with pytest.raises(cli.CliError, match="remain within"):
+            _ = worktree.inherit_oracle(
                 "receipt.json", "../destination", repo=str(source_root)
             )
         assert list(destination_root.iterdir()) == []
 
 class TestHarvest:
     def test_cherry_picks_curd_commit_without_fetch(
-        self, worktree: ModuleType, repo: Path
+        self, repo: Path
     ) -> None:
         info = worktree.create("curd2", "main", repo=str(repo))
-        wt = repo / info["path"]
-        (wt / "feature.txt").write_text("feature\n", encoding="utf-8")
-        _run(wt, "add", "-A")
-        _run(wt, "commit", "-m", "add feature")
+        wt = repo / str(info["path"])
+        _ = (wt / "feature.txt").write_text("feature\n", encoding="utf-8")
+        _ = _run(wt, "add", "-A")
+        _ = _run(wt, "commit", "-m", "add feature")
 
         # No remote is configured, so a successful harvest proves no fetch.
         assert _run(repo, "remote").stdout.strip() == ""
-        picked = worktree.harvest(info["branch"], "main", repo=str(repo))
+        picked = worktree.harvest(str(info["branch"]), "main", repo=str(repo))
 
         assert len(picked) == 1
         assert (repo / "feature.txt").exists()
         head_branch = _run(repo, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
         assert head_branch == "main"
 
-    def test_empty_range_returns_empty(self, worktree: ModuleType, repo: Path) -> None:
+    def test_empty_range_returns_empty(self, repo: Path) -> None:
         info = worktree.create("curd3", "main", repo=str(repo))
-        assert worktree.harvest(info["branch"], "main", repo=str(repo)) == []
+        assert worktree.harvest(str(info["branch"]), "main", repo=str(repo)) == []
 
     def test_multiple_commits_harvested_in_order(
-        self, worktree: ModuleType, repo: Path
+        self, repo: Path
     ) -> None:
         info = worktree.create("curd5", "main", repo=str(repo))
-        wt = repo / info["path"]
+        wt = repo / str(info["path"])
         for i in range(3):
-            (wt / f"f{i}.txt").write_text(f"{i}\n", encoding="utf-8")
-            _run(wt, "add", "-A")
-            _run(wt, "commit", "-m", f"commit {i}")
+            _ = (wt / f"f{i}.txt").write_text(f"{i}\n", encoding="utf-8")
+            _ = _run(wt, "add", "-A")
+            _ = _run(wt, "commit", "-m", f"commit {i}")
         # Oldest-first: the picked SHAs must equal `git rev-list --reverse`.
         expected = _run(
             repo, "rev-list", "--reverse", f"main..{info['branch']}"
         ).stdout.split()
-        picked = worktree.harvest(info["branch"], "main", repo=str(repo))
+        picked = worktree.harvest(str(info["branch"]), "main", repo=str(repo))
         assert picked == expected
         assert len(expected) == 3
         for i in range(3):
             assert (repo / f"f{i}.txt").exists()
 
     def test_conflict_aborts_and_leaves_repo_clean(
-        self, worktree: ModuleType, repo: Path
+        self, repo: Path
     ) -> None:
         # Two commits edit the same file on branch and onto → cherry-pick
         # conflict. harvest must raise AND abort, so the repo is not left
         # mid-cherry-pick (which would poison the next harvest's checkout).
         info = worktree.create("curd8", "main", repo=str(repo))
-        wt = repo / info["path"]
-        (wt / "base.txt").write_text("worktree edit\n", encoding="utf-8")
-        _run(wt, "add", "-A")
-        _run(wt, "commit", "-m", "wt edit")
-        (repo / "base.txt").write_text("main edit\n", encoding="utf-8")
-        _run(repo, "add", "-A")
-        _run(repo, "commit", "-m", "main edit")
+        wt = repo / str(info["path"])
+        _ = (wt / "base.txt").write_text("worktree edit\n", encoding="utf-8")
+        _ = _run(wt, "add", "-A")
+        _ = _run(wt, "commit", "-m", "wt edit")
+        _ = (repo / "base.txt").write_text("main edit\n", encoding="utf-8")
+        _ = _run(repo, "add", "-A")
+        _ = _run(repo, "commit", "-m", "main edit")
 
-        with pytest.raises(worktree.cli.CliError):
-            worktree.harvest(info["branch"], "main", repo=str(repo))
+        with pytest.raises(cli.CliError):
+            _ = worktree.harvest(str(info["branch"]), "main", repo=str(repo))
 
         # No CHERRY_PICK_HEAD left behind.
         head = subprocess.run(
@@ -537,29 +539,29 @@ class TestHarvest:
         )
         assert head.returncode != 0
         # A subsequent checkout succeeds — repo is clean for the /melt fallback.
-        _run(repo, "checkout", "main")
+        _ = _run(repo, "checkout", "main")
 
 
 class TestTeardown:
-    def test_no_worktree_or_branch_leaks(self, worktree: ModuleType, repo: Path) -> None:
+    def test_no_worktree_or_branch_leaks(self, repo: Path) -> None:
         info = worktree.create("curd4", "main", repo=str(repo))
-        worktree.teardown(info["path"], info["branch"], repo=str(repo))
+        worktree.teardown(str(info["path"]), str(info["branch"]), repo=str(repo))
 
-        assert not (repo / info["path"]).exists()
+        assert not (repo / str(info["path"])).exists()
         branches = _run(repo, "branch", "--list", "worktree-agent-curd4").stdout
         assert "worktree-agent-curd4" not in branches
         assert "agent-curd4" not in _run(repo, "worktree", "list").stdout
 
     def test_full_lifecycle_leaves_clean_tree(
-        self, worktree: ModuleType, repo: Path
+        self, repo: Path
     ) -> None:
         info = worktree.create("curd6", "main", repo=str(repo))
-        wt = repo / info["path"]
-        (wt / "x.txt").write_text("x\n", encoding="utf-8")
-        _run(wt, "add", "-A")
-        _run(wt, "commit", "-m", "x")
-        worktree.harvest(info["branch"], "main", repo=str(repo))
-        worktree.teardown(info["path"], info["branch"], repo=str(repo))
+        wt = repo / str(info["path"])
+        _ = (wt / "x.txt").write_text("x\n", encoding="utf-8")
+        _ = _run(wt, "add", "-A")
+        _ = _run(wt, "commit", "-m", "x")
+        _ = worktree.harvest(str(info["branch"]), "main", repo=str(repo))
+        worktree.teardown(str(info["path"]), str(info["branch"]), repo=str(repo))
 
         # No leaked worktree registrations or branches for a completed run.
         listing = _run(repo, "worktree", "list").stdout
@@ -567,17 +569,17 @@ class TestTeardown:
         assert "worktree-agent-curd6" not in _run(repo, "branch", "--list").stdout
 
     def test_partial_teardown_still_deletes_branch(
-        self, worktree: ModuleType, repo: Path
+        self, repo: Path
     ) -> None:
         # Worktree dir vanishes out from under us (remove will fail), but the
         # branch still exists. teardown must still delete the branch — the
         # remove failure must not skip the branch delete, or the branch leaks.
         info = worktree.create("curd7", "main", repo=str(repo))
-        shutil.rmtree(repo / info["path"])
-        _run(repo, "worktree", "prune")
+        shutil.rmtree(repo / str(info["path"]))
+        _ = _run(repo, "worktree", "prune")
 
-        with pytest.raises(worktree.cli.CliError):
-            worktree.teardown(info["path"], info["branch"], repo=str(repo))
+        with pytest.raises(cli.CliError):
+            worktree.teardown(str(info["path"]), str(info["branch"]), repo=str(repo))
 
         branches = _run(repo, "branch", "--list", "worktree-agent-curd7").stdout
         assert "worktree-agent-curd7" not in branches
@@ -585,9 +587,9 @@ class TestTeardown:
 
 class TestFailsLoud:
     def test_teardown_of_missing_worktree_raises(
-        self, worktree: ModuleType, repo: Path
+        self, repo: Path
     ) -> None:
-        with pytest.raises(worktree.cli.CliError):
+        with pytest.raises(cli.CliError):
             worktree.teardown(
                 ".claude/worktrees/agent-nope", "worktree-agent-nope", repo=str(repo)
             )
@@ -600,10 +602,10 @@ class TestCreateValidatesSlug:
 
     @pytest.mark.parametrize("bad", ["../escape", "a/b", "..", "", "a\\b"])
     def test_bad_slug_raises_and_creates_nothing(
-        self, worktree: ModuleType, repo: Path, bad: str
+        self, repo: Path, bad: str
     ) -> None:
-        with pytest.raises(worktree.cli.CliError, match="invalid slug"):
-            worktree.create(bad, "main", repo=str(repo))
+        with pytest.raises(cli.CliError, match="invalid slug"):
+            _ = worktree.create(bad, "main", repo=str(repo))
         assert "agent-" not in _run(repo, "worktree", "list").stdout
 
 
@@ -613,19 +615,19 @@ class TestTeardownGuardsTarget:
     argument cannot force-remove an arbitrary path or force-delete a branch."""
 
     def test_path_outside_worktree_dir_refused(
-        self, worktree: ModuleType, repo: Path
+        self, repo: Path
     ) -> None:
-        with pytest.raises(worktree.cli.CliError, match="refusing to tear down"):
+        with pytest.raises(cli.CliError, match="refusing to tear down"):
             worktree.teardown("some/other/dir", "worktree-agent-x", repo=str(repo))
 
-    def test_escaping_path_refused(self, worktree: ModuleType, repo: Path) -> None:
-        with pytest.raises(worktree.cli.CliError, match="refusing to tear down"):
+    def test_escaping_path_refused(self, repo: Path) -> None:
+        with pytest.raises(cli.CliError, match="refusing to tear down"):
             worktree.teardown(
                 ".claude/worktrees/../../etc/agent-x", "worktree-agent-x", repo=str(repo)
             )
 
     def test_non_worktree_branch_refused(
-        self, worktree: ModuleType, repo: Path
+        self, repo: Path
     ) -> None:
-        with pytest.raises(worktree.cli.CliError, match="refusing to delete branch"):
+        with pytest.raises(cli.CliError, match="refusing to delete branch"):
             worktree.teardown(".claude/worktrees/agent-x", "main", repo=str(repo))

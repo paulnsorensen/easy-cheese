@@ -11,22 +11,46 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
+from typing import cast
 
 import pytest
 
+JSONDict = dict[str, object]
+
+
+def _d(obj: object) -> JSONDict:
+    assert isinstance(obj, dict)
+    return cast(JSONDict, obj)
+
+
+def _l(obj: object) -> list[object]:
+    assert isinstance(obj, list)
+    return cast(list[object], obj)
+
+
+def _s(obj: object) -> str:
+    assert isinstance(obj, str)
+    return obj
+
+
+def _at(obj: object, *keys: str) -> object:
+    for key in keys:
+        obj = _d(obj)[key]
+    return obj
+
 
 @pytest.fixture(scope="module")
-def schema(manifest_schema_path: Path) -> dict:
-    return json.loads(manifest_schema_path.read_text(encoding="utf-8"))
+def schema(manifest_schema_path: Path) -> JSONDict:
+    return _d(cast(object, json.loads(manifest_schema_path.read_text(encoding="utf-8"))))
 
 
 @pytest.fixture(scope="module")
-def pr_plan_schema(pr_plan_schema_path: Path) -> dict:
-    return json.loads(pr_plan_schema_path.read_text(encoding="utf-8"))
+def pr_plan_schema(pr_plan_schema_path: Path) -> JSONDict:
+    return _d(cast(object, json.loads(pr_plan_schema_path.read_text(encoding="utf-8"))))
 
 
 @pytest.fixture
-def example_manifest() -> dict:
+def example_manifest() -> JSONDict:
     """An example manifest that should match the schema."""
     return {
         "slug": "feature-name",
@@ -131,13 +155,13 @@ def example_manifest() -> dict:
 
 
 class TestSchemaShape:
-    def test_schema_parses(self, schema: dict) -> None:
+    def test_schema_parses(self, schema: JSONDict) -> None:
         assert isinstance(schema, dict)
         assert schema.get("type") == "object"
 
-    def test_required_top_level_keys(self, schema: dict) -> None:
+    def test_required_top_level_keys(self, schema: JSONDict) -> None:
         # These keys MUST be required so resume / phase routing work.
-        required = set(schema.get("required", []))
+        required = set(_l(schema.get("required", [])))
         for key in (
             "slug",
             "spec_path",
@@ -152,8 +176,8 @@ class TestSchemaShape:
         ):
             assert key in required, f"top-level required key missing: {key}"
 
-    def test_phase_enum_covers_eight_phases(self, schema: dict) -> None:
-        phases = schema["properties"]["phase"]["enum"]
+    def test_phase_enum_covers_eight_phases(self, schema: JSONDict) -> None:
+        phases = _l(_at(schema, "properties", "phase", "enum"))
         # Phase 0..7 each get a terminal "complete" marker, except the first
         # is "gate_approved" because the user gate is what marks Phase 0 done.
         expected = {
@@ -168,13 +192,13 @@ class TestSchemaShape:
         }
         assert set(phases) == expected
 
-    def test_pr_plan_is_external_ref(self, schema: dict) -> None:
+    def test_pr_plan_is_external_ref(self, schema: JSONDict) -> None:
         # The pr_plan shape is defined in its own schema file so editors and
         # other consumers can target it directly. Manifest just $refs it.
-        assert schema["properties"]["pr_plan"] == {"$ref": "pr-plan-schema.json"}
+        assert _at(schema, "properties", "pr_plan") == {"$ref": "pr-plan-schema.json"}
 
-    def test_pr_plan_shape_enum_covers_four(self, pr_plan_schema: dict) -> None:
-        shapes = pr_plan_schema["properties"]["shape"]["enum"]
+    def test_pr_plan_shape_enum_covers_four(self, pr_plan_schema: JSONDict) -> None:
+        shapes = _l(_at(pr_plan_schema, "properties", "shape", "enum"))
         assert set(shapes) == {
             "single",
             "orthogonal_flat",
@@ -182,35 +206,36 @@ class TestSchemaShape:
             "diamond_stack",
         }
 
-    def test_review_context_records_reproducible_identity(self, schema: dict) -> None:
-        review = schema["$defs"]["review_context"]
-        assert set(review["required"]) == {
+    def test_review_context_records_reproducible_identity(self, schema: JSONDict) -> None:
+        review = _d(_at(schema, "$defs", "review_context"))
+        assert set(_l(review["required"])) == {
             "base_commit",
             "reviewed_tree_oid",
             "diff_hash",
             "scope",
         }
-        assert "tree object" in review["properties"]["reviewed_tree_oid"]["description"].lower()
-        assert "commit sha" not in review["properties"]["reviewed_tree_oid"]["description"].lower()
-        assert schema["properties"]["current_review"] == {"$ref": "#/$defs/review_context"}
-        assert schema["properties"]["curds"]["items"]["properties"]["review_context"] == {
+        description = _s(_at(review, "properties", "reviewed_tree_oid", "description"))
+        assert "tree object" in description.lower()
+        assert "commit sha" not in description.lower()
+        assert _at(schema, "properties", "current_review") == {"$ref": "#/$defs/review_context"}
+        assert _at(schema, "properties", "curds", "items", "properties", "review_context") == {
             "$ref": "#/$defs/review_context"
         }
 
         for field in ("base_commit", "reviewed_tree_oid"):
-            pattern = review["properties"][field]["pattern"]
+            pattern = _s(_at(review, "properties", field, "pattern"))
             assert "A-F" in pattern
             oid_pattern = re.compile(pattern)
             assert oid_pattern.fullmatch("a" * 40)
             assert oid_pattern.fullmatch("B" * 64)
             assert oid_pattern.fullmatch("c" * 41) is None
-        resolution = schema["$defs"]["agent_resolution"]
-        assert resolution["properties"]["request"]["properties"]["required_tools"]["minItems"] == 1
-        assert set(resolution["properties"]["attempts"]["items"]["required"]) == {
+        resolution = _d(_at(schema, "$defs", "agent_resolution"))
+        assert _at(resolution, "properties", "request", "properties", "required_tools", "minItems") == 1
+        assert set(_l(_at(resolution, "properties", "attempts", "items", "required"))) == {
             "type", "model", "power", "result", "reason"
         }
         assert "allOf" in schema
-        assert "allOf" in schema["properties"]["curds"]["items"]
+        assert "allOf" in _d(_at(schema, "properties", "curds", "items"))
 
 
 class TestExampleManifestMatchesSchema:
@@ -221,32 +246,33 @@ class TestExampleManifestMatchesSchema:
     field on each shape and assert it's present in the example.
     """
 
-    def test_top_level_required_present(self, schema: dict, example_manifest: dict) -> None:
-        for key in schema.get("required", []):
+    def test_top_level_required_present(self, schema: JSONDict, example_manifest: JSONDict) -> None:
+        for key in _l(schema.get("required", [])):
             assert key in example_manifest, f"example missing top-level required key: {key}"
 
-    def test_curd_required_fields_present(self, schema: dict, example_manifest: dict) -> None:
-        curd_required = schema["properties"]["curds"]["items"]["required"]
-        for curd in example_manifest["curds"]:
+    def test_curd_required_fields_present(self, schema: JSONDict, example_manifest: JSONDict) -> None:
+        curd_required = _l(_at(schema, "properties", "curds", "items", "required"))
+        for curd in _l(example_manifest["curds"]):
             for key in curd_required:
-                assert key in curd, f"curd missing required field: {key}"
+                assert key in _d(curd), f"curd missing required field: {key}"
 
-    def test_wiring_required_fields_present(self, schema: dict, example_manifest: dict) -> None:
-        wiring_required = schema["properties"]["wiring"]["items"]["required"]
-        for wiring in example_manifest["wiring"]:
+    def test_wiring_required_fields_present(self, schema: JSONDict, example_manifest: JSONDict) -> None:
+        wiring_required = _l(_at(schema, "properties", "wiring", "items", "required"))
+        for wiring in _l(example_manifest["wiring"]):
             for key in wiring_required:
-                assert key in wiring, f"wiring missing required field: {key}"
+                assert key in _d(wiring), f"wiring missing required field: {key}"
 
-    def test_seed_item_required_fields_present(self, schema: dict, example_manifest: dict) -> None:
-        seed_required = schema["properties"]["seed"]["properties"]["items"]["items"]["required"]
-        for item in example_manifest["seed"]["items"]:
+    def test_seed_item_required_fields_present(self, schema: JSONDict, example_manifest: JSONDict) -> None:
+        seed_required = _l(_at(schema, "properties", "seed", "properties", "items", "items", "required"))
+        seed = _d(example_manifest["seed"])
+        for item in _l(seed["items"]):
             for key in seed_required:
-                assert key in item, f"seed item missing required field: {key}"
+                assert key in _d(item), f"seed item missing required field: {key}"
 
-    def test_phase_value_in_enum(self, schema: dict, example_manifest: dict) -> None:
-        phases = schema["properties"]["phase"]["enum"]
+    def test_phase_value_in_enum(self, schema: JSONDict, example_manifest: JSONDict) -> None:
+        phases = _l(_at(schema, "properties", "phase", "enum"))
         assert example_manifest["phase"] in phases
 
-    def test_pr_plan_shape_value_in_enum(self, pr_plan_schema: dict, example_manifest: dict) -> None:
-        shapes = pr_plan_schema["properties"]["shape"]["enum"]
-        assert example_manifest["pr_plan"]["shape"] in shapes
+    def test_pr_plan_shape_value_in_enum(self, pr_plan_schema: JSONDict, example_manifest: JSONDict) -> None:
+        shapes = _l(_at(pr_plan_schema, "properties", "shape", "enum"))
+        assert _d(example_manifest["pr_plan"])["shape"] in shapes

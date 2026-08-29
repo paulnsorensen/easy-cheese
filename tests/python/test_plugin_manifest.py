@@ -4,6 +4,7 @@ import re
 import shlex
 import subprocess
 from pathlib import Path
+from typing import cast
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -11,7 +12,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 def test_claude_plugin_manifest_matches_top_level_skills() -> None:
     manifest_path = REPO_ROOT / ".claude-plugin" / "plugin.json"
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest = cast(
+        dict[str, object], json.loads(manifest_path.read_text(encoding="utf-8"))
+    )
 
     expected = sorted(
         f"./skills/{path.parent.name}"
@@ -19,7 +22,7 @@ def test_claude_plugin_manifest_matches_top_level_skills() -> None:
     )
 
     assert manifest["name"] == "easy-cheese"
-    assert sorted(manifest["skills"]) == expected
+    assert sorted(cast(list[str], manifest["skills"])) == expected
 
 
 def test_install_sh_fallback_matches_top_level_skills() -> None:
@@ -37,16 +40,19 @@ def test_install_sh_fallback_matches_top_level_skills() -> None:
 
 
 def test_cut_is_listed_once_in_plugin_manifest() -> None:
-    manifest = json.loads(
-        (REPO_ROOT / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8")
+    manifest = cast(
+        dict[str, object],
+        json.loads(
+            (REPO_ROOT / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8")
+        ),
     )
-    assert manifest["skills"].count("./skills/cut") == 1
+    assert cast(list[str], manifest["skills"]).count("./skills/cut") == 1
 
 
 def test_installer_fallback_installs_cut_from_unrelated_cwd(tmp_path: Path) -> None:
     log = tmp_path / "gh.log"
     gh = tmp_path / "gh"
-    gh.write_text(
+    _ = gh.write_text(
         '#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> "$STUB_LOG"\n',
         encoding="utf-8",
     )

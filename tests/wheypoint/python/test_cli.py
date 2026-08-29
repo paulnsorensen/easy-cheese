@@ -12,11 +12,14 @@ import io
 import json
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import TypedDict, cast
 
 import pytest
 from easy_cheese_schemas import (
+    ArtifactLink,
+    DecisionFork,
     EntryKind,
+    EntryTransition,
     NextAction,
     NextMove,
     ProposedEntry,
@@ -33,7 +36,7 @@ CAPTURED_AT = "2026-08-02T00:00:00Z"
 
 def _run(
     command: str, *args: str, stdin: str = ""
-) -> tuple[int, dict[str, Any]]:
+) -> tuple[int, dict[str, object]]:
     """Invoke the CLI the way the bundle does and parse its single JSON line."""
     out = io.StringIO()
     status = wheypoint.main(
@@ -42,6 +45,23 @@ def _run(
     lines = out.getvalue().splitlines()
     assert len(lines) == 1, f"expected exactly one JSON line, got {lines!r}"
     return status, json.loads(lines[0])
+
+
+class _DeltaFields(TypedDict):
+    work_id: str
+    expected_revision_id: str
+    orientation: str | None
+    working_context: list[str] | None
+    next_action: NextAction | None
+    decision_dossier: list[DecisionFork] | None
+    add_decisions: list[ProposedEntry] | None
+    add_questions: list[ProposedEntry] | None
+    add_blockers: list[ProposedEntry] | None
+    add_artifact_links: list[ArtifactLink] | None
+    transitions: list[EntryTransition] | None
+    compacted: bool
+    rehydrated_from_revision_id: str | None
+    session_provenance: SessionProvenance | None
 
 
 def _genesis_delta(**overrides: object) -> WheypointDelta:
@@ -58,11 +78,18 @@ def _genesis_delta(**overrides: object) -> WheypointDelta:
         "session_provenance": SessionProvenance(captured_at=CAPTURED_AT),
     }
     fields.update(overrides)
-    return WheypointDelta(**fields)  # type: ignore[arg-type]
+    return WheypointDelta(**cast(_DeltaFields, cast(object, fields)))
 
 
 def _delta_json(delta: WheypointDelta) -> str:
     return json.dumps(records.unstructure(delta))
+
+
+def _get(container: object, *path: str) -> object:
+    value = container
+    for key in path:
+        value = cast(dict[str, object], value)[key]
+    return value
 
 
 @pytest.fixture
@@ -92,13 +119,12 @@ def test_commit_creates_the_first_record_from_a_genesis_delta_on_stdin(
     assert payload["status"] == "ok"
     revision_id = payload["revision_id"]
     assert payload["projection_path"] == f"projections/1-{revision_id}.md"
-    assert payload["record"]["revision_id"] == revision_id
-    assert payload["record"]["title"] == "Wave 4 owns the CLI."
-    assert payload["record"]["created"] == CAPTURED_AT
-    assert [d["summary"] for d in payload["record"]["decisions"]] == [
-        "Four subcommands."
-    ]
-    assert payload["markdown"].splitlines()[0] == "status: ok"
+    assert _get(payload, "record", "revision_id") == revision_id
+    assert _get(payload, "record", "title") == "Wave 4 owns the CLI."
+    assert _get(payload, "record", "created") == CAPTURED_AT
+    decisions = cast(list[dict[str, object]], _get(payload, "record", "decisions"))
+    assert [d["summary"] for d in decisions] == ["Four subcommands."]
+    assert cast(str, payload["markdown"]).splitlines()[0] == "status: ok"
 
     # The command wrote through the canonical store, not a private copy.
     written = store.read_record()
@@ -131,7 +157,7 @@ def test_commit_replays_an_identical_request_instead_of_writing_twice(
 def test_commit_refuses_a_genesis_delta_over_a_live_record(
     store: storage.WorkStore,
 ) -> None:
-    _run("commit", stdin=_delta_json(_genesis_delta()))
+    _ = _run("commit", stdin=_delta_json(_genesis_delta()))
     before = store.record_path.read_bytes()
 
     status, payload = _run(
@@ -141,16 +167,15 @@ def test_commit_refuses_a_genesis_delta_over_a_live_record(
     assert status == 1
     assert payload["ok"] is False
     assert payload["command"] == "commit"
-    assert payload["error"]["code"] == "genesis-conflict"
-    assert "never replaces a live one" in payload["error"]["message"]
+    assert _get(payload, "error", "code") == "genesis-conflict"
+    assert "never replaces a live one" in cast(str, _get(payload, "error", "message"))
     assert store.record_path.read_bytes() == before
 
 
-def test_commit_reports_a_stale_parent_as_its_own_code(
-    store: storage.WorkStore,
-) -> None:
+@pytest.mark.usefixtures("store")
+def test_commit_reports_a_stale_parent_as_its_own_code() -> None:
     created = _run("commit", stdin=_delta_json(_genesis_delta()))[1]
-    _run(
+    _ = _run(
         "commit",
         stdin=_delta_json(
             _genesis_delta(
@@ -171,7 +196,7 @@ def test_commit_reports_a_stale_parent_as_its_own_code(
     )
 
     assert status == 1
-    assert payload["error"]["code"] == "stale-parent"
+    assert _get(payload, "error", "code") == "stale-parent"
 
 
 def test_commit_refuses_a_delta_that_the_kernel_will_not_apply(
@@ -183,37 +208,39 @@ def test_commit_refuses_a_delta_that_the_kernel_will_not_apply(
     )
 
     assert status == 1
-    assert payload["error"]["code"] == "commit-refused"
-    assert "next_action" in payload["error"]["message"]
+    assert _get(payload, "error", "code") == "commit-refused"
+    assert "next_action" in cast(str, _get(payload, "error", "message"))
     assert store.read_record() is None
 
 
-def test_commit_refuses_stdin_that_is_not_json(corpus_root: Path) -> None:
+@pytest.mark.usefixtures("corpus_root")
+def test_commit_refuses_stdin_that_is_not_json() -> None:
     status, payload = _run("commit", stdin="not json at all")
 
     assert status == 1
-    assert payload["error"]["code"] == "invalid-json"
+    assert _get(payload, "error", "code") == "invalid-json"
 
 
-def test_commit_refuses_json_that_is_not_a_delta(corpus_root: Path) -> None:
+@pytest.mark.usefixtures("corpus_root")
+def test_commit_refuses_json_that_is_not_a_delta() -> None:
     status, payload = _run("commit", stdin=json.dumps({"work_id": WORK_ID}))
 
     assert status == 1
-    assert payload["error"]["code"] == "invalid-delta"
+    assert _get(payload, "error", "code") == "invalid-delta"
 
 
-def test_commit_refuses_a_work_id_that_is_not_a_safe_path_segment(
-    corpus_root: Path,
-) -> None:
+@pytest.mark.usefixtures("corpus_root")
+def test_commit_refuses_a_work_id_that_is_not_a_safe_path_segment() -> None:
     status, payload = _run(
         "commit", stdin=json.dumps({"work_id": "../escape", "expected_revision_id": "genesis"})
     )
 
     assert status == 1
-    assert payload["error"]["code"] in {"invalid-delta", "storage-error"}
+    assert _get(payload, "error", "code") in {"invalid-delta", "storage-error"}
 
 
-def test_show_returns_the_current_record(store: storage.WorkStore) -> None:
+@pytest.mark.usefixtures("store")
+def test_show_returns_the_current_record() -> None:
     created = _run("commit", stdin=_delta_json(_genesis_delta()))[1]
 
     status, payload = _run("show", "--work-id", WORK_ID)
@@ -228,24 +255,25 @@ def test_show_returns_the_current_record(store: storage.WorkStore) -> None:
     assert payload["record"] == created["record"]
 
 
-def test_show_refuses_work_that_has_no_record(corpus_root: Path) -> None:
+@pytest.mark.usefixtures("corpus_root")
+def test_show_refuses_work_that_has_no_record() -> None:
     status, payload = _run("show", "--work-id", WORK_ID)
 
     assert status == 1
     assert payload["ok"] is False
-    assert payload["error"]["code"] == "record-missing"
+    assert _get(payload, "error", "code") == "record-missing"
 
 
-def test_show_refuses_an_unsafe_work_id(corpus_root: Path) -> None:
+@pytest.mark.usefixtures("corpus_root")
+def test_show_refuses_an_unsafe_work_id() -> None:
     status, payload = _run("show", "--work-id", "../escape")
 
     assert status == 1
-    assert payload["error"]["code"] == "storage-error"
+    assert _get(payload, "error", "code") == "storage-error"
 
 
-def test_resolve_reports_a_committed_work_id_as_dispatchable(
-    store: storage.WorkStore,
-) -> None:
+@pytest.mark.usefixtures("store")
+def test_resolve_reports_a_committed_work_id_as_dispatchable() -> None:
     created = _run("commit", stdin=_delta_json(_genesis_delta()))[1]
 
     status, payload = _run("resolve", "--ref", WORK_ID)
@@ -261,9 +289,8 @@ def test_resolve_reports_a_committed_work_id_as_dispatchable(
     assert payload["findings"] == []
 
 
-def test_resolve_answers_not_found_without_calling_it_a_failure(
-    corpus_root: Path,
-) -> None:
+@pytest.mark.usefixtures("corpus_root")
+def test_resolve_answers_not_found_without_calling_it_a_failure() -> None:
     status, payload = _run("resolve", "--ref", "work-9999")
 
     assert status == 0
@@ -272,16 +299,18 @@ def test_resolve_answers_not_found_without_calling_it_a_failure(
     assert payload["dispatchable"] is False
 
 
-def test_resolve_refuses_a_reference_it_cannot_interpret(corpus_root: Path) -> None:
+@pytest.mark.usefixtures("corpus_root")
+def test_resolve_refuses_a_reference_it_cannot_interpret() -> None:
     status, payload = _run("resolve", "--ref", "   ")
 
     assert status == 1
     assert payload["ok"] is False
-    assert payload["error"]["code"] == "invalid-reference"
+    assert _get(payload, "error", "code") == "invalid-reference"
 
 
+@pytest.mark.usefixtures("corpus_root")
 def test_resolve_legacy_answers_not_found_for_an_absent_note(
-    tmp_path: Path, corpus_root: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.chdir(tmp_path)
 
@@ -297,7 +326,7 @@ def test_lint_reports_a_clean_projection(
     tmp_path: Path, make_promotion: Callable[..., Promotion]
 ) -> None:
     document = tmp_path / "1-rev-0001.md"
-    document.write_text(make_promotion().markdown, encoding="utf-8")
+    _ = document.write_text(make_promotion().markdown, encoding="utf-8")
 
     status, payload = _run("lint", str(document))
 
@@ -307,7 +336,7 @@ def test_lint_reports_a_clean_projection(
     assert payload["path"] == str(document)
     assert payload["clean"] is True
     assert payload["findings"] == []
-    assert payload["projection"]["work_id"] == WORK_ID
+    assert _get(payload, "projection", "work_id") == WORK_ID
 
 
 def test_lint_reports_findings_as_an_answer_not_a_refusal(tmp_path: Path) -> None:
@@ -318,13 +347,13 @@ def test_lint_reports_findings_as_an_answer_not_a_refusal(tmp_path: Path) -> Non
     assert status == 0
     assert payload["ok"] is True
     assert payload["clean"] is False
-    assert [f["code"] for f in payload["findings"]] == ["projection-unreadable"]
+    findings = cast(list[dict[str, object]], payload["findings"])
+    assert [f["code"] for f in findings] == ["projection-unreadable"]
     assert payload["projection"] is None
 
 
-def test_the_subcommand_is_read_from_argv0_and_from_argv1_alike(
-    corpus_root: Path,
-) -> None:
+@pytest.mark.usefixtures("corpus_root")
+def test_the_subcommand_is_read_from_argv0_and_from_argv1_alike() -> None:
     from_entry_point = io.StringIO()
     from_module = io.StringIO()
 
@@ -345,7 +374,8 @@ def test_the_subcommand_is_read_from_argv0_and_from_argv1_alike(
     )
 
     assert from_entry_point.getvalue() == from_module.getvalue()
-    assert json.loads(from_entry_point.getvalue())["error"]["code"] == "record-missing"
+    entry_point_payload = cast(dict[str, object], json.loads(from_entry_point.getvalue()))
+    assert _get(entry_point_payload, "error", "code") == "record-missing"
 
 
 def test_an_unknown_command_is_a_usage_error_in_the_same_json_shape() -> None:
@@ -353,12 +383,12 @@ def test_an_unknown_command_is_a_usage_error_in_the_same_json_shape() -> None:
 
     status = wheypoint.main(["wheypoint.py", "destroy"], stdin=io.StringIO(), stdout=out)
 
-    payload = json.loads(out.getvalue())
+    payload = cast(dict[str, object], json.loads(out.getvalue()))
     assert status == 2
     assert payload["ok"] is False
     assert payload["command"] == "unknown"
-    assert payload["error"]["code"] == "usage"
-    assert "commit" in payload["error"]["message"]
+    assert _get(payload, "error", "code") == "usage"
+    assert "commit" in cast(str, _get(payload, "error", "message"))
 
 
 def test_a_missing_required_argument_is_a_usage_error_not_a_traceback() -> None:
@@ -367,10 +397,11 @@ def test_a_missing_required_argument_is_a_usage_error_not_a_traceback() -> None:
     assert status == 2
     assert payload["ok"] is False
     assert payload["command"] == "show"
-    assert payload["error"]["code"] == "usage"
+    assert _get(payload, "error", "code") == "usage"
 
 
-def test_every_reply_is_one_line_of_sorted_json(store: storage.WorkStore) -> None:
+@pytest.mark.usefixtures("store")
+def test_every_reply_is_one_line_of_sorted_json() -> None:
     out = io.StringIO()
     status = wheypoint.main(
         ["commit"], stdin=io.StringIO(_delta_json(_genesis_delta())), stdout=out
@@ -380,7 +411,7 @@ def test_every_reply_is_one_line_of_sorted_json(store: storage.WorkStore) -> Non
     assert status == 0
     assert text.endswith("\n")
     assert text.count("\n") == 1
-    payload = json.loads(text)
+    payload = cast(dict[str, object], json.loads(text))
     assert json.dumps(payload, sort_keys=True) + "\n" == text
 
 
