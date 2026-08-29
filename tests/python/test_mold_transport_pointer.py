@@ -64,7 +64,7 @@ ROUTES_VIA_TRANSPORT = re.compile(
 # first — mold's rendering of the freshness rule.
 CONFORMANCE_DEPTH_IN_DIALOGUE = re.compile(
     r"\bfork\b[^.\n]{0,60}\bvalid\b[^.\n]{0,60}\bdepth\b[^.\n]{0,60}"
-    r"\bcontributed\b[^.\n]{0,30}\bin-dialogue\b[^.\n]{0,20}\bfirst\b",
+    + r"\bcontributed\b[^.\n]{0,30}\bin-dialogue\b[^.\n]{0,20}\bfirst\b",
     re.I,
 )
 
@@ -78,8 +78,8 @@ def test_rules_bullet_routes_forks_via_transport_doc() -> None:
     bullet = _tiered_lettered_options_bullet(body)
     assert ROUTES_VIA_TRANSPORT.search(bullet), (
         "#287 — the Tiered lettered options Rules bullet must route "
-        f"consequential forks via the question transport at `{TRANSPORT_DOC_PATH}`; "
-        "found no such pointer in the bullet:\n" + bullet
+        + f"consequential forks via the question transport at `{TRANSPORT_DOC_PATH}`; "
+        + "found no such pointer in the bullet:\n" + bullet
     )
 
 
@@ -88,8 +88,8 @@ def test_rules_bullet_gates_structured_fork_on_in_dialogue_depth() -> None:
     bullet = _tiered_lettered_options_bullet(body)
     assert CONFORMANCE_DEPTH_IN_DIALOGUE.search(bullet), (
         "#287 — the Tiered lettered options Rules bullet must add a conformance "
-        "line: a structured fork is valid only when its depth was contributed "
-        "in-dialogue first; found no such clause in the bullet:\n" + bullet
+        + "line: a structured fork is valid only when its depth was contributed "
+        + "in-dialogue first; found no such clause in the bullet:\n" + bullet
     )
 
 
@@ -100,7 +100,7 @@ def test_rules_bullet_keeps_abcd_mechanism() -> None:
     bullet = _tiered_lettered_options_bullet(body)
     assert re.search(r"\bA/B/C/D\b", bullet), (
         "ADR-003 — the Tiered lettered options bullet must keep the A/B/C/D "
-        "choice mechanism; found no such marker in the bullet:\n" + bullet
+        + "choice mechanism; found no such marker in the bullet:\n" + bullet
     )
 
 

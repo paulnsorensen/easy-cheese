@@ -8,8 +8,19 @@ import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
+from typing import TYPE_CHECKING, Protocol, cast
 
 import pytest
+
+if TYPE_CHECKING:
+    from easy_cheese.shared.findings import Finding
+
+
+class _FindingsModule(Protocol):
+    def parse_findings_report(self, text: str) -> list[Finding]: ...
+    def render_selection_table(self, findings: list[Finding]) -> str: ...
+    def parse_selection(self, verb: str, findings: list[Finding]) -> list[int]: ...
+
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SHARED_SCRIPTS = REPO_ROOT / "src" / "easy_cheese" / "shared"
@@ -64,10 +75,14 @@ def findings_lib() -> ModuleType:
     return _load("findings", SHARED_SCRIPTS / "findings.py")
 
 
+def _typed(findings_lib: ModuleType) -> _FindingsModule:
+    return cast("_FindingsModule", cast(object, findings_lib))
+
+
 @pytest.fixture
 def report_path(tmp_path: Path) -> Path:
     path = tmp_path / "age-report.md"
-    path.write_text(SAMPLE_REPORT)
+    _ = path.write_text(SAMPLE_REPORT)
     return path
 
 
@@ -83,21 +98,19 @@ class TestRenderTable:
     def test_matches_library_output(self, report_path: Path, findings_lib: ModuleType) -> None:
         result = _run("render-table", "--report", str(report_path))
         assert result.returncode == 0, result.stderr
-        expected = findings_lib.render_selection_table(
-            findings_lib.parse_findings_report(SAMPLE_REPORT)
-        )
+        lib = _typed(findings_lib)
+        expected = lib.render_selection_table(lib.parse_findings_report(SAMPLE_REPORT))
         assert result.stdout.rstrip("\n") == expected.rstrip("\n")
 
     def test_json_mode_dumps_string(self, report_path: Path, findings_lib: ModuleType) -> None:
         result = _run("render-table", "--report", str(report_path), "--json")
         assert result.returncode == 0, result.stderr
-        decoded = json.loads(result.stdout)
-        expected = findings_lib.render_selection_table(
-            findings_lib.parse_findings_report(SAMPLE_REPORT)
-        )
+        decoded = cast(str, json.loads(result.stdout))
+        lib = _typed(findings_lib)
+        expected = lib.render_selection_table(lib.parse_findings_report(SAMPLE_REPORT))
         assert decoded == expected
 
-    def test_confidence_column_and_values(self, report_path: Path, findings_lib: ModuleType) -> None:
+    def test_confidence_column_and_values(self, report_path: Path) -> None:
         result = _run("render-table", "--report", str(report_path))
         assert result.returncode == 0, result.stderr
         assert "confidence" in result.stdout
@@ -115,9 +128,8 @@ class TestParseSelection:
             "all-high",
         )
         assert result.returncode == 0, result.stderr
-        expected_ids = findings_lib.parse_selection(
-            "all-high", findings_lib.parse_findings_report(SAMPLE_REPORT)
-        )
+        lib = _typed(findings_lib)
+        expected_ids = lib.parse_selection("all-high", lib.parse_findings_report(SAMPLE_REPORT))
         printed = [int(line) for line in result.stdout.splitlines() if line.strip()]
         assert printed == expected_ids
 
@@ -144,9 +156,8 @@ class TestParseSelection:
             "--json",
         )
         assert result.returncode == 0, result.stderr
-        expected_ids = findings_lib.parse_selection(
-            "all-high", findings_lib.parse_findings_report(SAMPLE_REPORT)
-        )
+        lib = _typed(findings_lib)
+        expected_ids = lib.parse_selection("all-high", lib.parse_findings_report(SAMPLE_REPORT))
         assert json.loads(result.stdout) == expected_ids
 
     def test_specific_ids(self, report_path: Path) -> None:
@@ -192,7 +203,7 @@ class TestMissingFile:
 
 class TestConfidenceParsing:
     def test_findings_expose_confidence(self, findings_lib: ModuleType) -> None:
-        findings = findings_lib.parse_findings_report(SAMPLE_REPORT)
+        findings = _typed(findings_lib).parse_findings_report(SAMPLE_REPORT)
         by_id = {f.id: f for f in findings}
         assert by_id[1].confidence == "certain"
         assert by_id[3].confidence == "speculating"
@@ -205,10 +216,11 @@ class TestConfidenceParsing:
   - location: contract · fix-cost-now: contained · fix-cost-later: contained
   - recommendation: fix it.
 """
-        findings = findings_lib.parse_findings_report(report)
+        lib = _typed(findings_lib)
+        findings = lib.parse_findings_report(report)
         assert len(findings) == 1
         assert findings[0].confidence is None
-        rendered = findings_lib.render_selection_table(findings)
+        rendered = lib.render_selection_table(findings)
         assert "encapsulation" in rendered
 
 

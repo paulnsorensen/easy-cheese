@@ -30,9 +30,9 @@ def _git(repo: Path, *args: str) -> str:
 
 
 def _commit(repo: Path, subject: str) -> str:
-    (repo / "f").write_text(subject)
-    _git(repo, "add", "f")
-    _git(repo, "commit", "-m", subject)
+    _ = (repo / "f").write_text(subject)
+    _ = _git(repo, "add", "f")
+    _ = _git(repo, "commit", "-m", subject)
     return _git(repo, "rev-parse", "HEAD")
 
 
@@ -40,9 +40,9 @@ def _commit(repo: Path, subject: str) -> str:
 def repo(tmp_path: Path) -> Path:
     r = tmp_path / "repo"
     r.mkdir()
-    _git(r, "init", "-q")
-    _git(r, "config", "user.email", "t@t")
-    _git(r, "config", "user.name", "t")
+    _ = _git(r, "init", "-q")
+    _ = _git(r, "config", "user.email", "t@t")
+    _ = _git(r, "config", "user.name", "t")
     return r
 
 
@@ -50,13 +50,13 @@ def test_recovers_prev_source_and_categorizes(repo: Path) -> None:
     prev_source = _commit(repo, "feat(old): shipped in last release (#1)")
     # The orphan release snapshot: a commit whose subject records its main SHA.
     release_commit = _commit(repo, f"release: v0.1.0 from main@{prev_source}")
-    _git(repo, "tag", "v0.1.0", release_commit)
+    _ = _git(repo, "tag", "v0.1.0", release_commit)
 
-    _commit(repo, "feat(paths): anchor durable corpus (#84)")
-    _commit(repo, "fix(docs): stop token corruption (#89)")
-    _commit(repo, "docs(readme): add badges (#91)")
-    _commit(repo, "chore(deps): bump github/codeql-action from 4.35.5 to 4.36.0 (#87)")
-    _commit(repo, "refactor: tidy internals (#92)")
+    _ = _commit(repo, "feat(paths): anchor durable corpus (#84)")
+    _ = _commit(repo, "fix(docs): stop token corruption (#89)")
+    _ = _commit(repo, "docs(readme): add badges (#91)")
+    _ = _commit(repo, "chore(deps): bump github/codeql-action from 4.35.5 to 4.36.0 (#87)")
+    _ = _commit(repo, "refactor: tidy internals (#92)")
     to_sha = _git(repo, "rev-parse", "HEAD")
 
     notes = release_notes.generate("v0.2.0", to_sha, "owner/repo", cwd=str(repo))
@@ -74,7 +74,7 @@ def test_recovers_prev_source_and_categorizes(repo: Path) -> None:
 
 
 def test_breaking_change_promoted(repo: Path) -> None:
-    _commit(repo, "feat(api)!: drop legacy flag (#5)")
+    _ = _commit(repo, "feat(api)!: drop legacy flag (#5)")
     to_sha = _git(repo, "rev-parse", "HEAD")
     notes = release_notes.generate("v0.1.0", to_sha, "owner/repo", cwd=str(repo))
     assert "### Breaking changes\n- Drop legacy flag (#5)" in notes
@@ -83,7 +83,7 @@ def test_breaking_change_promoted(repo: Path) -> None:
 
 
 def test_no_previous_tag_lists_all_history(repo: Path) -> None:
-    _commit(repo, "feat: first ever (#1)")
+    _ = _commit(repo, "feat: first ever (#1)")
     to_sha = _git(repo, "rev-parse", "HEAD")
     notes = release_notes.generate("v0.1.0", to_sha, "owner/repo", cwd=str(repo))
     assert "- First ever (#1)" in notes
@@ -92,7 +92,7 @@ def test_no_previous_tag_lists_all_history(repo: Path) -> None:
 
 
 def test_non_conventional_subject_falls_to_other(repo: Path) -> None:
-    _commit(repo, "random uncategorized commit")
+    _ = _commit(repo, "random uncategorized commit")
     to_sha = _git(repo, "rev-parse", "HEAD")
     notes = release_notes.generate("v0.1.0", to_sha, "owner/repo", cwd=str(repo))
     assert "### Other\n- Random uncategorized commit" in notes

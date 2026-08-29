@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from pathlib import Path
+from typing import override
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 HTML_REPORT = REPO_ROOT / "src" / "easy_cheese" / "skills" / "age" / "age_html_report.py"
@@ -76,35 +78,49 @@ Auto-fixing the recommended set via /cure.
 """
 
 
+@dataclass
+class _Node:
+    """An HTML node in document order, collected for structural assertions."""
+
+    tag: str
+    attrs: dict[str, str | None]
+    text: str = ""
+    text_parts: list[str] = field(default_factory=list)
+
+
 class _HTMLNodes(HTMLParser):
     """Collect HTML nodes in document order for structural assertions."""
 
     def __init__(self) -> None:
         super().__init__()
-        self.nodes: list[dict[str, object]] = []
-        self._stack: list[dict[str, object]] = []
+        self.nodes: list[_Node] = []
+        self._stack: list[_Node] = []
 
+    @override
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        node = {"tag": tag, "attrs": dict(attrs), "text_parts": []}
+        node = _Node(tag=tag, attrs=dict(attrs))
         self.nodes.append(node)
         self._stack.append(node)
 
+    @override
     def handle_data(self, data: str) -> None:
         if self._stack:
-            self._stack[-1]["text_parts"].append(data)  # type: ignore[index]
+            self._stack[-1].text_parts.append(data)
 
+    @override
     def handle_endtag(self, tag: str) -> None:
+        del tag
         if not self._stack:
             return
         node = self._stack.pop()
-        node["text"] = "".join(node.pop("text_parts")).strip()  # type: ignore[arg-type]
+        node.text = "".join(node.text_parts).strip()
         if self._stack:
-            self._stack[-1]["text_parts"].append(node["text"])  # type: ignore[index]
+            self._stack[-1].text_parts.append(node.text)
 
 
 def _run_html_report(tmp_path: Path, report_body: str, slug: str = "demo") -> tuple[Path, str]:
     report = tmp_path / f"{slug}.md"
-    report.write_text(report_body, encoding="utf-8")
+    _ = report.write_text(report_body, encoding="utf-8")
     out_dir = tmp_path / "out"
     out_dir.mkdir()
     result = subprocess.run(
@@ -135,10 +151,10 @@ class TestAgeHtmlReport:
         parser.feed(html)
 
         severity_headings = [
-            node["text"]
+            node.text
             for node in parser.nodes
-            if node["tag"] in {"h1", "h2", "h3", "h4", "h5", "h6"}
-            and node.get("text") in {"Blocker", "High", "Medium", "Low"}
+            if node.tag in {"h1", "h2", "h3", "h4", "h5", "h6"}
+            and node.text in {"Blocker", "High", "Medium", "Low"}
         ]
         assert severity_headings == ["Blocker", "High", "Medium", "Low"]
 
@@ -146,7 +162,7 @@ class TestAgeHtmlReport:
             badge_nodes = [
                 node
                 for node in parser.nodes
-                if node.get("text") == severity and node["attrs"].get("class")
+                if node.text == severity and node.attrs.get("class")
             ]
             assert badge_nodes, f"{severity} label was not rendered with badge-like markup/classes"
 
@@ -166,9 +182,9 @@ class TestAgeHtmlReport:
         parser.feed(html)
 
         finding_bodies = [
-            node["text"]
+            node.text
             for node in parser.nodes
-            if node["tag"] == "pre" and "whitespace-pre-wrap" in str(node["attrs"].get("class", ""))
+            if node.tag == "pre" and "whitespace-pre-wrap" in str(node.attrs.get("class", ""))
         ]
         assert finding_bodies, "no finding <pre> rendered"
         for body in finding_bodies:

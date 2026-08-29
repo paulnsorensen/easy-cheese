@@ -9,11 +9,57 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import TypedDict, cast
 
 import pytest
+from easy_cheese_schemas import GateReceipt
+
 from easy_cheese.shared.cut import red_gate
+from easy_cheese.shared.cut.gate_receipts import GateValidationError
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _as_dict(value: object) -> dict[str, object]:
+    assert isinstance(value, dict)
+    return cast(dict[str, object], value)
+
+
+def _as_list(value: object) -> list[object]:
+    assert isinstance(value, list)
+    return cast(list[object], value)
+
+
+def _run_case(argv: list[str], cwd: Path) -> red_gate._Run:  # pyright: ignore[reportPrivateUsage]
+    return red_gate._run_case(argv, cwd)  # pyright: ignore[reportPrivateUsage]
+
+
+def _python_case_command(
+    argv: list[str], cwd: Path, probe_fd: int
+) -> red_gate._ProbeCommand | None:  # pyright: ignore[reportPrivateUsage]
+    return red_gate._python_case_command(argv, cwd, probe_fd)  # pyright: ignore[reportPrivateUsage]
+
+
+def _trusted_interpreter_path() -> Path | None:
+    return red_gate._TRUSTED_INTERPRETER_PATH  # pyright: ignore[reportPrivateUsage]
+
+
+def _native_original_argv0(executable: Path, cwd: Path) -> str:
+    return red_gate._native_original_argv0(executable, cwd)  # pyright: ignore[reportPrivateUsage]
+
+
+def _looks_harness_failure(run: red_gate._Run) -> bool:  # pyright: ignore[reportPrivateUsage]
+    return red_gate._looks_harness_failure(run)  # pyright: ignore[reportPrivateUsage]
+
+
+def _press_history_paths(root: Path, receipt: GateReceipt) -> tuple[Path, Path]:
+    return red_gate._press_history_paths(root, receipt)  # pyright: ignore[reportPrivateUsage]
+
+
+class _MatrixPayloadChanges(TypedDict, total=False):
+    declared_rows: tuple[str, ...]
+    observed_rows: tuple[str, ...] | None
+    interface_version: str | None
 
 
 def _digest(path: Path) -> str:
@@ -21,7 +67,7 @@ def _digest(path: Path) -> str:
 
 
 def _spec(path: Path, interface: str) -> None:
-    path.write_text(
+    _ = path.write_text(
         f"""---
 status: approved
 gate_applicability:
@@ -54,7 +100,7 @@ def _receipt_path(
 def _begin(
     payload: dict[str, object],
     label: str,
-) -> tuple[object, Path, Path]:
+) -> tuple[red_gate.PhaseTokenResult, Path, Path]:
     root = Path.cwd().resolve()
     producer = str(payload.get("producer"))
     namespace = root / ".cheese" / producer
@@ -68,10 +114,10 @@ def _begin(
             break
         sequence += 1
     checks = [
-        {"id": check["id"], "argv": check["argv"], "cwd": check["cwd"]}
-        for check in payload.get("baseline_checks", [])
+        {"id": _as_dict(check)["id"], "argv": _as_dict(check)["argv"], "cwd": _as_dict(check)["cwd"]}
+        for check in _as_list(payload.get("baseline_checks", []))
     ]
-    plan_path.write_text(
+    _ = plan_path.write_text(
         json.dumps(
             {
                 "schema_version": 1,
@@ -96,16 +142,16 @@ def _begin(
 def _issue(
     candidate: Path | str | dict[str, object],
     output: Path | str,
-) -> object:
+) -> GateReceipt:
     output_path = Path(output)
     payload = (
         dict(candidate)
         if isinstance(candidate, dict)
-        else json.loads(Path(candidate).read_text(encoding="utf-8"))
+        else _as_dict(cast(object, json.loads(Path(candidate).read_text(encoding="utf-8"))))
     )
     token, token_path, issue_candidate = _begin(payload, output_path.name)
-    payload.update(token.to_dict())
-    issue_candidate.write_text(json.dumps(payload), encoding="utf-8")
+    _ = payload.update(token.to_dict())
+    _ = issue_candidate.write_text(json.dumps(payload), encoding="utf-8")
     return red_gate.issue_gate(issue_candidate, output_path, token_path)
 
 
@@ -114,8 +160,8 @@ def _candidate(
 ) -> dict[str, object]:
     oracle = tmp_path / "tests" / "oracle.py"
     oracle.parent.mkdir(exist_ok=True)
-    oracle.write_text("oracle\n", encoding="utf-8")
-    (tmp_path / "production-state.txt").write_text("red\n", encoding="utf-8")
+    _ = oracle.write_text("oracle\n", encoding="utf-8")
+    _ = (tmp_path / "production-state.txt").write_text("red\n", encoding="utf-8")
     approved_spec = tmp_path / "approved.md"
     _spec(approved_spec, "outer behavior")
     red_command = command or [
@@ -184,7 +230,7 @@ def _matrix_candidate(
     spec_path = Path(str(payload["spec_ref"]))
     version_cell = interface_version or ""
     rows_cell = "<br>".join(declared_rows)
-    spec_path.write_text(
+    _ = spec_path.write_text(
         f"""---
 status: approved
 gate_applicability:
@@ -204,7 +250,7 @@ gate_applicability:
         encoding="utf-8",
     )
     payload["spec_sha256"] = _digest(spec_path)
-    contract = payload["contracts"][0]
+    contract = _as_dict(_as_list(payload["contracts"])[0])
     contract.update(
         {
             "mode": "contract-matrix",
@@ -212,7 +258,7 @@ gate_applicability:
             "matrix_rows": list(declared_rows),
         }
     )
-    base_case = payload["cases"][0]
+    base_case = _as_dict(_as_list(payload["cases"])[0])
     payload["cases"] = [
         {
             **base_case,
@@ -231,7 +277,7 @@ def test_issue_writes_only_after_replaying_red_and_validate_replays_green(
     monkeypatch.chdir(tmp_path)
     candidate = tmp_path / "candidate.json"
     receipt_path = _receipt_path(tmp_path)
-    candidate.write_text(json.dumps(_candidate(tmp_path)), encoding="utf-8")
+    _ = candidate.write_text(json.dumps(_candidate(tmp_path)), encoding="utf-8")
 
     receipt = _issue(candidate, receipt_path)
 
@@ -240,7 +286,7 @@ def test_issue_writes_only_after_replaying_red_and_validate_replays_green(
     assert receipt.cases[0].observed_witness == "outer witness"
     assert red_gate.validate_gate(receipt_path, "red").ok
 
-    (tmp_path / "production-state.txt").write_text("green\n", encoding="utf-8")
+    _ = (tmp_path / "production-state.txt").write_text("green\n", encoding="utf-8")
     assert red_gate.validate_gate(receipt_path, "green").ok
 
 
@@ -281,13 +327,13 @@ def test_versioned_contract_matrix_requires_each_declared_row_once(
 def test_contract_matrix_rejects_unversioned_or_incomplete_evidence(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    payload_changes: dict[str, object],
+    payload_changes: _MatrixPayloadChanges,
     problem: str,
 ) -> None:
     monkeypatch.chdir(tmp_path)
 
-    with pytest.raises(red_gate.GateValidationError) as raised:
-        _issue(_matrix_candidate(tmp_path, **payload_changes), _receipt_path(tmp_path))
+    with pytest.raises(GateValidationError) as raised:
+        _ = _issue(_matrix_candidate(tmp_path, **payload_changes), _receipt_path(tmp_path))
 
     assert any(problem in detail for detail in raised.value.problems)
 
@@ -303,18 +349,18 @@ def test_validate_rejects_an_unprotected_test_fixture_change(
             "-c",
             (
                 "from pathlib import Path; "
-                "state=Path('production-state.txt').read_text().strip(); "
-                "Path('tests/attack-fixture.txt').read_text(); "
-                "assert state != 'red', 'outer witness'"
+                + "state=Path('production-state.txt').read_text().strip(); "
+                + "Path('tests/attack-fixture.txt').read_text(); "
+                + "assert state != 'red', 'outer witness'"
             ),
         ],
     )
     fixture = tmp_path / "tests" / "attack-fixture.txt"
-    fixture.write_text("red\n", encoding="utf-8")
+    _ = fixture.write_text("red\n", encoding="utf-8")
     receipt_path = _receipt_path(tmp_path, "fixture.receipt.json")
-    _issue(payload, receipt_path)
-    (tmp_path / "production-state.txt").write_text("green\n", encoding="utf-8")
-    fixture.write_text("green\n", encoding="utf-8")
+    _ = _issue(payload, receipt_path)
+    _ = (tmp_path / "production-state.txt").write_text("green\n", encoding="utf-8")
+    _ = fixture.write_text("green\n", encoding="utf-8")
 
     result = red_gate.validate_gate(receipt_path, "green")
 
@@ -339,10 +385,10 @@ def test_issue_rejects_receipt_contracts_from_a_different_spec(
     payload["spec_sha256"] = _digest(second_spec)
     candidate = tmp_path / "candidate.json"
     receipt_path = _receipt_path(tmp_path)
-    candidate.write_text(json.dumps(payload), encoding="utf-8")
+    _ = candidate.write_text(json.dumps(payload), encoding="utf-8")
 
-    with pytest.raises(red_gate.GateValidationError) as raised:
-        _issue(candidate, receipt_path)
+    with pytest.raises(GateValidationError) as raised:
+        _ = _issue(candidate, receipt_path)
 
     assert not receipt_path.exists()
     assert any("exact spec contracts" in problem for problem in raised.value.problems)
@@ -359,10 +405,10 @@ def test_issue_accepts_absolute_approved_spec_outside_project_root_and_enforces_
     payload["spec_sha256"] = _digest(approved_spec)
     contract = red_gate.parse_gate_applicability(approved_spec).contracts[0]
     payload["contracts"] = [contract.to_dict()]
-    payload["cases"][0]["seam"] = contract.seam
+    _as_dict(_as_list(payload["cases"])[0])["seam"] = contract.seam
     candidate = tmp_path / "candidate.json"
     receipt_path = _receipt_path(tmp_path)
-    candidate.write_text(json.dumps(payload), encoding="utf-8")
+    _ = candidate.write_text(json.dumps(payload), encoding="utf-8")
 
     receipt = _issue(candidate, receipt_path)
 
@@ -371,9 +417,9 @@ def test_issue_accepts_absolute_approved_spec_outside_project_root_and_enforces_
 
     stale_payload = {**payload, "spec_sha256": "0" * 64}
     stale_candidate = tmp_path / "stale-candidate.json"
-    stale_candidate.write_text(json.dumps(stale_payload), encoding="utf-8")
-    with pytest.raises(red_gate.GateValidationError) as stale:
-        _issue(stale_candidate, _receipt_path(tmp_path, "stale-receipt.json"))
+    _ = stale_candidate.write_text(json.dumps(stale_payload), encoding="utf-8")
+    with pytest.raises(GateValidationError) as stale:
+        _ = _issue(stale_candidate, _receipt_path(tmp_path, "stale-receipt.json"))
     assert any("spec_sha256 is stale" in problem for problem in stale.value.problems)
 
     mismatched_payload = {
@@ -390,9 +436,9 @@ def test_issue_accepts_absolute_approved_spec_outside_project_root_and_enforces_
         ],
     }
     mismatched_candidate = tmp_path / "mismatched-candidate.json"
-    mismatched_candidate.write_text(json.dumps(mismatched_payload), encoding="utf-8")
-    with pytest.raises(red_gate.GateValidationError) as mismatched:
-        _issue(mismatched_candidate, _receipt_path(tmp_path, "mismatched-receipt.json"))
+    _ = mismatched_candidate.write_text(json.dumps(mismatched_payload), encoding="utf-8")
+    with pytest.raises(GateValidationError) as mismatched:
+        _ = _issue(mismatched_candidate, _receipt_path(tmp_path, "mismatched-receipt.json"))
     assert any(
         "exact spec contracts" in problem for problem in mismatched.value.problems
     )
@@ -403,12 +449,12 @@ def test_issue_rejects_output_path_that_overwrites_protected_oracle(
 ) -> None:
     monkeypatch.chdir(tmp_path)
     candidate = tmp_path / "candidate.json"
-    candidate.write_text(json.dumps(_candidate(tmp_path)), encoding="utf-8")
+    _ = candidate.write_text(json.dumps(_candidate(tmp_path)), encoding="utf-8")
     protected = tmp_path / "tests" / "oracle.py"
     original = protected.read_text(encoding="utf-8")
 
-    with pytest.raises(red_gate.GateValidationError) as raised:
-        _issue(candidate, protected)
+    with pytest.raises(GateValidationError) as raised:
+        _ = _issue(candidate, protected)
 
     assert protected.read_text(encoding="utf-8") == original
     assert any("receipt output" in problem for problem in raised.value.problems)
@@ -419,13 +465,13 @@ def test_issue_rejects_receipt_output_outside_project_root(
 ) -> None:
     monkeypatch.chdir(tmp_path)
     candidate = tmp_path / "candidate.json"
-    candidate.write_text(json.dumps(_candidate(tmp_path)), encoding="utf-8")
+    _ = candidate.write_text(json.dumps(_candidate(tmp_path)), encoding="utf-8")
     outside_dir = tmp_path.parent / f"{tmp_path.name}-outside"
     outside_dir.mkdir()
     output = outside_dir / "receipt.json"
 
-    with pytest.raises(red_gate.GateValidationError) as raised:
-        _issue(candidate, output)
+    with pytest.raises(GateValidationError) as raised:
+        _ = _issue(candidate, output)
 
     assert any(
         "receipt output" in problem and "project root" in problem
@@ -439,13 +485,13 @@ def test_issue_rejects_symlinked_receipt_output_before_writing(
 ) -> None:
     monkeypatch.chdir(tmp_path)
     candidate = tmp_path / "candidate.json"
-    candidate.write_text(json.dumps(_candidate(tmp_path)), encoding="utf-8")
+    _ = candidate.write_text(json.dumps(_candidate(tmp_path)), encoding="utf-8")
     target = tmp_path / "target.json"
     alias = tmp_path / "alias.json"
     alias.symlink_to(target)
 
-    with pytest.raises(red_gate.GateValidationError) as raised:
-        _issue(candidate, alias)
+    with pytest.raises(GateValidationError) as raised:
+        _ = _issue(candidate, alias)
 
     assert not target.exists()
     assert any("symlink" in problem for problem in raised.value.problems)
@@ -463,7 +509,7 @@ def test_issue_rejects_receipt_input_outside_project_root(
     plan = _receipt_path(tmp_path, "outside-input.plan.json")
     token_path = _receipt_path(tmp_path, "outside-input.phase.json")
     plan.parent.mkdir(parents=True, exist_ok=True)
-    plan.write_text(
+    _ = plan.write_text(
         json.dumps(
             {
                 "schema_version": 1,
@@ -472,8 +518,8 @@ def test_issue_rejects_receipt_input_outside_project_root(
                 "project_key": payload["project_key"],
                 "production_paths": ["production-state.txt"],
                 "baseline_checks": [
-                    {"id": check["id"], "argv": check["argv"], "cwd": check["cwd"]}
-                    for check in payload["baseline_checks"]
+                    {"id": _as_dict(check)["id"], "argv": _as_dict(check)["argv"], "cwd": _as_dict(check)["cwd"]}
+                    for check in _as_list(payload["baseline_checks"])
                 ],
             }
         ),
@@ -481,10 +527,10 @@ def test_issue_rejects_receipt_input_outside_project_root(
     )
     token = red_gate.begin_phase(plan, token_path)
     payload.update(token.to_dict())
-    candidate.write_text(json.dumps(payload), encoding="utf-8")
+    _ = candidate.write_text(json.dumps(payload), encoding="utf-8")
 
-    with pytest.raises(red_gate.GateValidationError) as raised:
-        red_gate.issue_gate(candidate, output, token_path)
+    with pytest.raises(GateValidationError) as raised:
+        _ = red_gate.issue_gate(candidate, output, token_path)
 
     assert not output.exists()
     assert any(
@@ -500,15 +546,15 @@ def test_issue_rejects_harness_failure_and_leaves_no_output(
     candidate = tmp_path / "candidate.json"
     receipt_path = _receipt_path(tmp_path)
     payload = _candidate(tmp_path)
-    payload["cases"][0]["argv"] = [
+    _as_dict(_as_list(payload["cases"])[0])["argv"] = [
         sys.executable,
         "-c",
         "raise SyntaxError('broken harness')",
     ]
-    candidate.write_text(json.dumps(payload), encoding="utf-8")
+    _ = candidate.write_text(json.dumps(payload), encoding="utf-8")
 
-    with pytest.raises(red_gate.GateValidationError) as raised:
-        _issue(candidate, receipt_path)
+    with pytest.raises(GateValidationError) as raised:
+        _ = _issue(candidate, receipt_path)
 
     assert not receipt_path.exists()
     assert any("harness" in problem for problem in raised.value.problems)
@@ -524,10 +570,10 @@ def test_issue_rejects_text_only_failure_without_assertion_origin(
         tmp_path,
         command=[sys.executable, "-c", "print('outer witness'); raise SystemExit(1)"],
     )
-    candidate.write_text(json.dumps(payload), encoding="utf-8")
+    _ = candidate.write_text(json.dumps(payload), encoding="utf-8")
 
-    with pytest.raises(red_gate.GateValidationError) as raised:
-        _issue(candidate, receipt_path)
+    with pytest.raises(GateValidationError) as raised:
+        _ = _issue(candidate, receipt_path)
 
     assert not receipt_path.exists()
     assert any("assertion-origin" in problem for problem in raised.value.problems)
@@ -543,13 +589,13 @@ def test_issue_rejects_fabricated_assertion_traceback(
         "-c",
         (
             "print('Traceback (most recent call last):\\n"
-            '  File "fake.py", line 1, in <module>\\n'
-            "AssertionError: outer witness'); raise SystemExit(1)"
+            + '  File "fake.py", line 1, in <module>\\n'
+            + "AssertionError: outer witness'); raise SystemExit(1)"
         ),
     ]
 
-    with pytest.raises(red_gate.GateValidationError) as raised:
-        _issue(_candidate(tmp_path, command=command), _receipt_path(tmp_path))
+    with pytest.raises(GateValidationError) as raised:
+        _ = _issue(_candidate(tmp_path, command=command), _receipt_path(tmp_path))
 
     assert any(
         "assertion-origin" in problem or "harness" in problem
@@ -564,7 +610,7 @@ def test_issue_accepts_unittest_assertion_origin(
     monkeypatch.chdir(tmp_path)
     test_file = tmp_path / "tests" / "test_outer.py"
     test_file.parent.mkdir()
-    test_file.write_text(
+    _ = test_file.write_text(
         """import unittest
 
 
@@ -593,9 +639,9 @@ def test_issue_accepts_python_module_unittest_assertion_origin(
     monkeypatch.chdir(tmp_path)
     package = tmp_path / "tests"
     package.mkdir()
-    (package / "__init__.py").write_text("", encoding="utf-8")
+    _ = (package / "__init__.py").write_text("", encoding="utf-8")
     test_file = package / "test_outer_module.py"
-    test_file.write_text(
+    _ = test_file.write_text(
         """import unittest
 
 
@@ -629,7 +675,7 @@ def test_issue_accepts_python_module_pytest_assertion_origin(
     monkeypatch.chdir(tmp_path)
     test_file = tmp_path / "tests" / "test_outer_pytest.py"
     test_file.parent.mkdir()
-    test_file.write_text(
+    _ = test_file.write_text(
         """def test_outer():
     assert False, "outer witness"
 """,
@@ -659,7 +705,7 @@ def test_issue_accepts_plain_script_uncaught_assertion_origin(
 ) -> None:
     monkeypatch.chdir(tmp_path)
     script = tmp_path / "candidate.py"
-    script.write_text(
+    _ = script.write_text(
         "raise AssertionError('outer witness')\n",
         encoding="utf-8",
     )
@@ -681,15 +727,15 @@ def test_issue_rejects_builtin_named_non_assertion(
 ) -> None:
     monkeypatch.chdir(tmp_path)
     script = tmp_path / "fake_assertion.py"
-    script.write_text(
+    _ = script.write_text(
         "FakeAssertionError = type('AssertionError', (Exception,), {})\n"
-        "FakeAssertionError.__module__ = 'builtins'\n"
-        "print(f'TYPE {FakeAssertionError.__module__}.{FakeAssertionError.__name__}')\n"
-        "raise FakeAssertionError('outer witness')\n",
+        + "FakeAssertionError.__module__ = 'builtins'\n"
+        + "print(f'TYPE {FakeAssertionError.__module__}.{FakeAssertionError.__name__}')\n"
+        + "raise FakeAssertionError('outer witness')\n",
         encoding="utf-8",
     )
     command = [sys.executable, str(script)]
-    run = red_gate._run_case(command, tmp_path)
+    run = _run_case(command, tmp_path)
     assert (
         run.returncode,
         run.error,
@@ -698,8 +744,8 @@ def test_issue_rejects_builtin_named_non_assertion(
     assert "TYPE builtins.AssertionError" in run.output
 
     receipt_path = _receipt_path(tmp_path, "fake-assertion.receipt.json")
-    with pytest.raises(red_gate.GateValidationError) as raised:
-        _issue(_candidate(tmp_path, command=command), receipt_path)
+    with pytest.raises(GateValidationError) as raised:
+        _ = _issue(_candidate(tmp_path, command=command), receipt_path)
 
     assert any(
         problem.endswith("failed in the harness, not its declared witness")
@@ -714,7 +760,7 @@ def test_rejects_misleading_python_executable_before_probe_fd(
 ) -> None:
     monkeypatch.chdir(tmp_path)
     fake = tmp_path / "python3"
-    fake.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+    _ = fake.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
     fake.chmod(0o755)
     command = [str(fake), "-c", "raise AssertionError('outer witness')"]
 
@@ -722,8 +768,8 @@ def test_rejects_misleading_python_executable_before_probe_fd(
         raise AssertionError("probe FD must not be created for an untrusted interpreter")
 
     with monkeypatch.context() as probe_patch:
-        probe_patch.setattr(red_gate.os, "pipe", unexpected_pipe)
-        run = red_gate._run_case(command, tmp_path)
+        probe_patch.setattr(os, "pipe", unexpected_pipe)
+        run = _run_case(command, tmp_path)
     assert (
         run.returncode,
         run.error,
@@ -731,19 +777,19 @@ def test_rejects_misleading_python_executable_before_probe_fd(
     ) == (
         127,
         "unsupported assertion-proof runner profile; use direct Python, "
-        "python -m pytest, or python -m unittest",
+        + "python -m pytest, or python -m unittest",
         False,
     )
 
     candidate = _candidate(tmp_path, command=command)
-    candidate["cases"][0]["observed_exit_code"] = 127
+    _as_dict(_as_list(candidate["cases"])[0])["observed_exit_code"] = 127
     receipt_path = _receipt_path(tmp_path, "misleading-python.receipt.json")
-    with pytest.raises(red_gate.GateValidationError) as raised:
-        _issue(candidate, receipt_path)
+    with pytest.raises(GateValidationError) as raised:
+        _ = _issue(candidate, receipt_path)
     assert raised.value.problems == (
         "GateReceipt.cases[1] failed in the harness, not its declared witness: "
-        "unsupported assertion-proof runner profile; use direct Python, "
-        "python -m pytest, or python -m unittest",
+        + "unsupported assertion-proof runner profile; use direct Python, "
+        + "python -m pytest, or python -m unittest",
         "GateReceipt.cases[1] observed witness claim disagrees with replay",
     )
     assert not receipt_path.exists()
@@ -755,17 +801,17 @@ def test_probe_executes_trusted_interpreter_after_validating_alias(
     alias = tmp_path / "python-alias"
     alias.symlink_to(sys.executable)
 
-    command = red_gate._python_case_command(
+    command = _python_case_command(
         [str(alias), "-c", "raise AssertionError('alias witness')"],
         tmp_path,
         19,
     )
 
     assert command is not None
-    assert command.argv[0] == str(red_gate._TRUSTED_INTERPRETER_PATH)
+    assert command.argv[0] == str(_trusted_interpreter_path())
     assert command.argv[1:3] == ["-E", "-S"]
     assert str(alias) in command.argv
-    assert red_gate._native_original_argv0(alias, tmp_path) in command.argv
+    assert _native_original_argv0(alias, tmp_path) in command.argv
 
 
 def test_probe_ignores_pythonhome_before_bootstrap(
@@ -774,7 +820,7 @@ def test_probe_ignores_pythonhome_before_bootstrap(
 ) -> None:
     monkeypatch.setenv("PYTHONHOME", str(tmp_path / "untrusted-home"))
 
-    run = red_gate._run_case(
+    run = _run_case(
         [sys.executable, "-c", "raise AssertionError('pythonhome witness')"],
         tmp_path,
     )
@@ -788,24 +834,24 @@ def test_sitecustomize_cannot_produce_accepted_probe_event(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "sitecustomize.py").write_text(
+    _ = (tmp_path / "sitecustomize.py").write_text(
         "import os, sys\n"
-        "event = b'{\"assertion_origin\":true,\"complete\":true,\"event\":"
-        "\"cut.assertion-origin\",\"runner\":\"script\",\"schema_version\":1}\\n'\n"
-        "for value in sys.argv[1:]:\n"
-        "    try:\n"
-        "        descriptor = int(value)\n"
-        "    except ValueError:\n"
-        "        continue\n"
-        "    try:\n"
-        "        os.write(descriptor, event)\n"
-        "    except OSError:\n"
-        "        continue\n"
-        "    os._exit(1)\n",
+        + "event = b'{\"assertion_origin\":true,\"complete\":true,\"event\":"
+        + "\"cut.assertion-origin\",\"runner\":\"script\",\"schema_version\":1}\\n'\n"
+        + "for value in sys.argv[1:]:\n"
+        + "    try:\n"
+        + "        descriptor = int(value)\n"
+        + "    except ValueError:\n"
+        + "        continue\n"
+        + "    try:\n"
+        + "        os.write(descriptor, event)\n"
+        + "    except OSError:\n"
+        + "        continue\n"
+        + "    os._exit(1)\n",
         encoding="utf-8",
     )
     target = tmp_path / "exit.py"
-    target.write_text(
+    _ = target.write_text(
         "print('outer witness')\nraise SystemExit(1)\n",
         encoding="utf-8",
     )
@@ -816,13 +862,13 @@ def test_sitecustomize_cannot_produce_accepted_probe_event(
     monkeypatch.setenv("PYTHONPATH", os.pathsep.join(pythonpath))
 
     command = [sys.executable, str(target)]
-    run = red_gate._run_case(command, tmp_path)
+    run = _run_case(command, tmp_path)
     assert (run.returncode, run.error, run.assertion_origin) == (1, None, False)
 
     candidate = _candidate(tmp_path, command=command)
     receipt_path = _receipt_path(tmp_path, "sitecustomize.receipt.json")
-    with pytest.raises(red_gate.GateValidationError) as raised:
-        _issue(candidate, receipt_path)
+    with pytest.raises(GateValidationError) as raised:
+        _ = _issue(candidate, receipt_path)
     assert raised.value.problems == (
         "GateReceipt.cases[1] failed without assertion-origin evidence",
     )
@@ -832,35 +878,35 @@ def test_sitecustomize_cannot_produce_accepted_probe_event(
 def _native_context_source() -> str:
     return (
         "import __main__, cut_assertion_probe, dataclasses, json, pathlib, "
-        "sys, unittest; "
-        "main = vars(__main__); loader = getattr(__main__, '__loader__', None); "
-        "main_console = getattr(__main__, '_console_main', None); "
-        "config_module = sys.modules.get('_pytest.config'); "
-        "config_console = getattr(config_module, '_console_main', None); "
-        "builtins_value = main.get('__builtins__'); "
-        "print('OBS ' + repr(("
-        "sys.flags.safe_path, sys.path[0], sys.argv, sys.orig_argv, "
-        "sys.executable, sys.prefix, sys.exec_prefix, "
-        "sys.base_prefix, sys.base_exec_prefix, "
-        "__main__.__name__, "
-        "getattr(getattr(__main__, '__spec__', None), 'name', None), "
-        "'__file__' in main, main.get('__file__'), "
-        "type(loader).__module__, type(loader).__qualname__, "
-        "getattr(loader, 'name', getattr(loader, '__name__', None)), "
-        "'__cached__' in main, main.get('__cached__'), "
-        "getattr(__main__, '__package__', None), "
-        "'__builtins__' in main, type(builtins_value).__name__, "
-        "'_console_main' in main, "
-        "getattr(main_console, '__module__', None), "
-        "getattr(main_console, '__name__', None), "
-        "(main_console is config_console) if main_console is not None else None, "
-        "getattr(json, 'TARGET_LOCAL', False), "
-        "getattr(cut_assertion_probe, 'TARGET_LOCAL', False), "
-        "getattr(dataclasses, 'TARGET_LOCAL', False), "
-        "getattr(pathlib, 'TARGET_LOCAL', False), "
-        "getattr(unittest, 'TARGET_LOCAL', False)"
-        "))); "
-        "raise AssertionError('matrix witness')"
+        + "sys, unittest; "
+        + "main = vars(__main__); loader = getattr(__main__, '__loader__', None); "
+        + "main_console = getattr(__main__, '_console_main', None); "
+        + "config_module = sys.modules.get('_pytest.config'); "
+        + "config_console = getattr(config_module, '_console_main', None); "
+        + "builtins_value = main.get('__builtins__'); "
+        + "print('OBS ' + repr(("
+        + "sys.flags.safe_path, sys.path[0], sys.argv, sys.orig_argv, "
+        + "sys.executable, sys.prefix, sys.exec_prefix, "
+        + "sys.base_prefix, sys.base_exec_prefix, "
+        + "__main__.__name__, "
+        + "getattr(getattr(__main__, '__spec__', None), 'name', None), "
+        + "'__file__' in main, main.get('__file__'), "
+        + "type(loader).__module__, type(loader).__qualname__, "
+        + "getattr(loader, 'name', getattr(loader, '__name__', None)), "
+        + "'__cached__' in main, main.get('__cached__'), "
+        + "getattr(__main__, '__package__', None), "
+        + "'__builtins__' in main, type(builtins_value).__name__, "
+        + "'_console_main' in main, "
+        + "getattr(main_console, '__module__', None), "
+        + "getattr(main_console, '__name__', None), "
+        + "(main_console is config_console) if main_console is not None else None, "
+        + "getattr(json, 'TARGET_LOCAL', False), "
+        + "getattr(cut_assertion_probe, 'TARGET_LOCAL', False), "
+        + "getattr(dataclasses, 'TARGET_LOCAL', False), "
+        + "getattr(pathlib, 'TARGET_LOCAL', False), "
+        + "getattr(unittest, 'TARGET_LOCAL', False)"
+        + "))); "
+        + "raise AssertionError('matrix witness')"
     )
 
 
@@ -869,20 +915,20 @@ def _matrix_command(profile: str, tmp_path: Path, source: str) -> list[str]:
         return [sys.executable, "-c", source]
     if profile == "script":
         target = tmp_path / "matrix_script.py"
-        target.write_text(source, encoding="utf-8")
+        _ = target.write_text(source, encoding="utf-8")
         return [sys.executable, str(target)]
     if profile == "pytest":
         target = tmp_path / "tests" / "test_matrix.py"
         target.parent.mkdir()
-        target.write_text(f"def test_matrix():\n    {source}\n", encoding="utf-8")
+        _ = target.write_text(f"def test_matrix():\n    {source}\n", encoding="utf-8")
         return [sys.executable, "-m", "pytest", str(target), "-q"]
     target = tmp_path / "tests" / "test_matrix_unittest.py"
     target.parent.mkdir(exist_ok=True)
-    target.write_text(
+    _ = target.write_text(
         "import unittest\n\n"
-        "class MatrixTest(unittest.TestCase):\n"
-        "    def test_matrix(self):\n"
-        f"        {source}\n",
+        + "class MatrixTest(unittest.TestCase):\n"
+        + "    def test_matrix(self):\n"
+        + f"        {source}\n",
         encoding="utf-8",
     )
     return [
@@ -900,9 +946,9 @@ def _matrix_command(profile: str, tmp_path: Path, source: str) -> list[str]:
 def _observed_matrix_value(output: str, prefix: str = "OBS ") -> tuple[object, ...]:
     for line in output.splitlines():
         if line.startswith(prefix):
-            value = ast.literal_eval(line[len(prefix) :])
+            value = cast(object, ast.literal_eval(line[len(prefix) :]))
             assert isinstance(value, tuple)
-            return value
+            return cast(tuple[object, ...], value)
     raise AssertionError(f"missing {prefix!r} observation in {output!r}")
 
 
@@ -918,21 +964,21 @@ def test_probe_replays_native_context_in_both_safe_modes(
     shadow.mkdir()
     if profile in {"code", "script"}:
         for module_name in ("dataclasses", "pathlib"):
-            (shadow / f"{module_name}.py").write_text(
+            _ = (shadow / f"{module_name}.py").write_text(
                 "TARGET_LOCAL = True\n",
                 encoding="utf-8",
             )
     if profile != "pytest":
-        (shadow / "json.py").write_text(
+        _ = (shadow / "json.py").write_text(
             "TARGET_LOCAL = True\n",
             encoding="utf-8",
         )
     if profile in {"code", "script"}:
-        (shadow / "unittest.py").write_text(
+        _ = (shadow / "unittest.py").write_text(
             "TARGET_LOCAL = True\n",
             encoding="utf-8",
         )
-    (shadow / "cut_assertion_probe.py").write_text(
+    _ = (shadow / "cut_assertion_probe.py").write_text(
         "TARGET_LOCAL = True\n",
         encoding="utf-8",
     )
@@ -950,7 +996,7 @@ def test_probe_replays_native_context_in_both_safe_modes(
     if safe_mode:
         environment["PYTHONSAFEPATH"] = "1"
     else:
-        environment.pop("PYTHONSAFEPATH", None)
+        _ = environment.pop("PYTHONSAFEPATH", None)
     command = _matrix_command(profile, tmp_path, _native_context_source())
 
     native = subprocess.run(
@@ -968,7 +1014,7 @@ def test_probe_replays_native_context_in_both_safe_modes(
         monkeypatch.setenv("PYTHONSAFEPATH", environment["PYTHONSAFEPATH"])
     else:
         monkeypatch.delenv("PYTHONSAFEPATH", raising=False)
-    replay = red_gate._run_case(command, tmp_path)
+    replay = _run_case(command, tmp_path)
     assert (
         replay.returncode,
         replay.error,
@@ -984,8 +1030,8 @@ def test_issue_rejects_an_unsupported_assertion_proof_runner_without_executing_i
 ) -> None:
     monkeypatch.chdir(tmp_path)
 
-    with pytest.raises(red_gate.GateValidationError) as raised:
-        _issue(
+    with pytest.raises(GateValidationError) as raised:
+        _ = _issue(
             _candidate(tmp_path, command=["/bin/false"]),
             _receipt_path(tmp_path),
         )
@@ -1007,10 +1053,10 @@ def test_contract_red_rejects_text_only_incompatibility_failure(
         declared_rows=("only",),
         command=[sys.executable, "-c", "print('outer witness'); raise SystemExit(1)"],
     )
-    candidate.write_text(json.dumps(payload), encoding="utf-8")
+    _ = candidate.write_text(json.dumps(payload), encoding="utf-8")
 
-    with pytest.raises(red_gate.GateValidationError) as raised:
-        _issue(candidate, receipt_path)
+    with pytest.raises(GateValidationError) as raised:
+        _ = _issue(candidate, receipt_path)
 
     assert not receipt_path.exists()
     assert any("assertion-origin" in problem for problem in raised.value.problems)
@@ -1021,7 +1067,7 @@ def test_issue_rejects_production_tree_changes(
 ) -> None:
     monkeypatch.chdir(tmp_path)
     production = tmp_path / "production.py"
-    production.write_text("before\n", encoding="utf-8")
+    _ = production.write_text("before\n", encoding="utf-8")
     candidate = tmp_path / "candidate.json"
     receipt_path = _receipt_path(tmp_path)
     payload = _candidate(
@@ -1032,10 +1078,10 @@ def test_issue_rejects_production_tree_changes(
             "from pathlib import Path; Path('production.py').write_text('changed'); assert False, 'outer witness'",
         ],
     )
-    candidate.write_text(json.dumps(payload), encoding="utf-8")
+    _ = candidate.write_text(json.dumps(payload), encoding="utf-8")
 
-    with pytest.raises(red_gate.GateValidationError) as raised:
-        _issue(candidate, receipt_path)
+    with pytest.raises(GateValidationError) as raised:
+        _ = _issue(candidate, receipt_path)
 
     assert not receipt_path.exists()
     assert any("production-tree" in problem for problem in raised.value.problems)
@@ -1046,7 +1092,7 @@ def test_issue_rejects_hidden_production_mutation(
 ) -> None:
     monkeypatch.chdir(tmp_path)
     hidden = tmp_path / ".hidden-production"
-    hidden.write_text("before\n", encoding="utf-8")
+    _ = hidden.write_text("before\n", encoding="utf-8")
     candidate = tmp_path / "candidate.json"
     receipt_path = _receipt_path(tmp_path)
     payload = _candidate(
@@ -1057,10 +1103,10 @@ def test_issue_rejects_hidden_production_mutation(
             "from pathlib import Path; Path('.hidden-production').write_text('changed'); assert False, 'outer witness'",
         ],
     )
-    candidate.write_text(json.dumps(payload), encoding="utf-8")
+    _ = candidate.write_text(json.dumps(payload), encoding="utf-8")
 
-    with pytest.raises(red_gate.GateValidationError) as raised:
-        _issue(candidate, receipt_path)
+    with pytest.raises(GateValidationError) as raised:
+        _ = _issue(candidate, receipt_path)
 
     assert not receipt_path.exists()
     assert any(".hidden-production" in problem for problem in raised.value.problems)
@@ -1075,7 +1121,7 @@ def test_issue_rejects_replay_mutation_in_source_directories(
     monkeypatch.chdir(tmp_path)
     source = tmp_path / relative_path
     source.parent.mkdir(exist_ok=True)
-    source.write_text("before\n", encoding="utf-8")
+    _ = source.write_text("before\n", encoding="utf-8")
     candidate = tmp_path / "candidate.json"
     receipt_path = _receipt_path(tmp_path)
     payload = _candidate(
@@ -1085,15 +1131,15 @@ def test_issue_rejects_replay_mutation_in_source_directories(
             "-c",
             (
                 "from pathlib import Path; "
-                f"Path({relative_path!r}).write_text('changed'); "
-                "assert False, 'outer witness'"
+                + f"Path({relative_path!r}).write_text('changed'); "
+                + "assert False, 'outer witness'"
             ),
         ],
     )
-    candidate.write_text(json.dumps(payload), encoding="utf-8")
+    _ = candidate.write_text(json.dumps(payload), encoding="utf-8")
 
-    with pytest.raises(red_gate.GateValidationError) as raised:
-        _issue(candidate, receipt_path)
+    with pytest.raises(GateValidationError) as raised:
+        _ = _issue(candidate, receipt_path)
 
     assert not receipt_path.exists()
     assert any(relative_path in problem for problem in raised.value.problems)
@@ -1104,7 +1150,7 @@ def test_issue_rejects_symlink_identity_mutation_without_following_link(
 ) -> None:
     monkeypatch.chdir(tmp_path)
     target = tmp_path / "link-target.py"
-    target.write_text("target\n", encoding="utf-8")
+    _ = target.write_text("target\n", encoding="utf-8")
     link = tmp_path / "production-link.py"
     link.symlink_to(target.name)
     candidate = tmp_path / "candidate.json"
@@ -1116,15 +1162,15 @@ def test_issue_rejects_symlink_identity_mutation_without_following_link(
             "-c",
             (
                 "from pathlib import Path; "
-                "link=Path('production-link.py'); link.unlink(); "
-                "link.symlink_to('other-target.py'); assert False, 'outer witness'"
+                + "link=Path('production-link.py'); link.unlink(); "
+                + "link.symlink_to('other-target.py'); assert False, 'outer witness'"
             ),
         ],
     )
-    candidate.write_text(json.dumps(payload), encoding="utf-8")
+    _ = candidate.write_text(json.dumps(payload), encoding="utf-8")
 
-    with pytest.raises(red_gate.GateValidationError) as raised:
-        _issue(candidate, receipt_path)
+    with pytest.raises(GateValidationError) as raised:
+        _ = _issue(candidate, receipt_path)
 
     assert not receipt_path.exists()
     assert any("production-link.py" in problem for problem in raised.value.problems)
@@ -1136,12 +1182,12 @@ def test_phase_entry_rejects_directory_symlinks_without_following_them(
     monkeypatch.chdir(tmp_path)
     external = tmp_path.parent / f"{tmp_path.name}-external-tree"
     external.mkdir()
-    (external / "state.txt").write_text("outside\n", encoding="utf-8")
+    _ = (external / "state.txt").write_text("outside\n", encoding="utf-8")
     (tmp_path / "linked-tree").symlink_to(external, target_is_directory=True)
     payload = _candidate(tmp_path)
 
-    with pytest.raises(red_gate.GateValidationError) as raised:
-        _begin(payload, "directory-symlink")
+    with pytest.raises(GateValidationError) as raised:
+        _ = _begin(payload, "directory-symlink")
 
     assert any(
         "directory symlink" in problem and "linked-tree" in problem
@@ -1157,10 +1203,10 @@ def test_issue_refuses_unsupported_production_entry(
     os.mkfifo(special)
     candidate = tmp_path / "candidate.json"
     receipt_path = _receipt_path(tmp_path)
-    candidate.write_text(json.dumps(_candidate(tmp_path)), encoding="utf-8")
+    _ = candidate.write_text(json.dumps(_candidate(tmp_path)), encoding="utf-8")
 
-    with pytest.raises(red_gate.GateValidationError) as raised:
-        _issue(candidate, receipt_path)
+    with pytest.raises(GateValidationError) as raised:
+        _ = _issue(candidate, receipt_path)
 
     assert not receipt_path.exists()
     assert any(
@@ -1176,11 +1222,11 @@ def test_issue_rejects_shell_shaped_argv_without_executing_it(
     candidate = tmp_path / "candidate.json"
     receipt_path = _receipt_path(tmp_path)
     payload = _candidate(tmp_path)
-    payload["cases"][0]["argv"] = ["sh", "-c", "echo outer witness; exit 1"]
-    candidate.write_text(json.dumps(payload), encoding="utf-8")
+    _as_dict(_as_list(payload["cases"])[0])["argv"] = ["sh", "-c", "echo outer witness; exit 1"]
+    _ = candidate.write_text(json.dumps(payload), encoding="utf-8")
 
-    with pytest.raises(red_gate.GateValidationError) as raised:
-        _issue(candidate, receipt_path)
+    with pytest.raises(GateValidationError) as raised:
+        _ = _issue(candidate, receipt_path)
 
     assert not receipt_path.exists()
     assert any("shell" in problem for problem in raised.value.problems)
@@ -1193,11 +1239,11 @@ def test_issue_rejects_shell_interpreter_and_long_flag_in_separate_argv(
     candidate = tmp_path / "candidate.json"
     receipt_path = _receipt_path(tmp_path)
     payload = _candidate(tmp_path)
-    payload["cases"][0]["argv"] = ["env", "bash", "--command", "echo outer witness"]
-    candidate.write_text(json.dumps(payload), encoding="utf-8")
+    _as_dict(_as_list(payload["cases"])[0])["argv"] = ["env", "bash", "--command", "echo outer witness"]
+    _ = candidate.write_text(json.dumps(payload), encoding="utf-8")
 
-    with pytest.raises(red_gate.GateValidationError) as raised:
-        _issue(candidate, receipt_path)
+    with pytest.raises(GateValidationError) as raised:
+        _ = _issue(candidate, receipt_path)
 
     assert not receipt_path.exists()
     assert any("shell interpreter" in problem for problem in raised.value.problems)
@@ -1221,11 +1267,11 @@ def test_issue_rejects_indirect_shell_launchers(
     candidate = tmp_path / "candidate.json"
     receipt_path = _receipt_path(tmp_path)
     payload = _candidate(tmp_path)
-    payload["cases"][0]["argv"] = argv
-    candidate.write_text(json.dumps(payload), encoding="utf-8")
+    _as_dict(_as_list(payload["cases"])[0])["argv"] = argv
+    _ = candidate.write_text(json.dumps(payload), encoding="utf-8")
 
-    with pytest.raises(red_gate.GateValidationError) as raised:
-        _issue(candidate, receipt_path)
+    with pytest.raises(GateValidationError) as raised:
+        _ = _issue(candidate, receipt_path)
 
     assert not receipt_path.exists()
     assert any(expected_problem in problem for problem in raised.value.problems)
@@ -1242,11 +1288,11 @@ def test_issue_rejects_project_runner_symlinked_to_shell(
     candidate = tmp_path / "candidate.json"
     receipt_path = _receipt_path(tmp_path)
     payload = _candidate(tmp_path)
-    payload["cases"][0]["argv"] = ["tests/runner", "-c", "echo outer witness"]
-    candidate.write_text(json.dumps(payload), encoding="utf-8")
+    _as_dict(_as_list(payload["cases"])[0])["argv"] = ["tests/runner", "-c", "echo outer witness"]
+    _ = candidate.write_text(json.dumps(payload), encoding="utf-8")
 
-    with pytest.raises(red_gate.GateValidationError) as raised:
-        _issue(candidate, receipt_path)
+    with pytest.raises(GateValidationError) as raised:
+        _ = _issue(candidate, receipt_path)
 
     assert not receipt_path.exists()
     assert any("shell interpreter" in problem for problem in raised.value.problems)
@@ -1259,9 +1305,9 @@ def test_validate_accumulates_guard_identity_and_graph_diagnostics(
     first = _candidate(tmp_path)
     first["work_id"] = "first"
     first_path = tmp_path / "first.json"
-    first_path.write_text(json.dumps(first), encoding="utf-8")
+    _ = first_path.write_text(json.dumps(first), encoding="utf-8")
     child = _receipt_path(tmp_path, "first.receipt.json")
-    _issue(first_path, child)
+    _ = _issue(first_path, child)
     press = _candidate(tmp_path)
     press["producer"] = "press"
     press["guard_receipt_refs"] = [
@@ -1270,7 +1316,7 @@ def test_validate_accumulates_guard_identity_and_graph_diagnostics(
     ]
     press["work_id"] = "second"
     press_path = tmp_path / "press.json"
-    press_path.write_text(json.dumps(press), encoding="utf-8")
+    _ = press_path.write_text(json.dumps(press), encoding="utf-8")
 
     result = red_gate.validate_gate(press_path, "red")
 
@@ -1291,8 +1337,8 @@ def test_validate_rejects_active_stack_guard_cycle(
     second["guard_receipt_refs"] = ["first.json"]
     first_path = tmp_path / "first.json"
     second_path = tmp_path / "second.json"
-    first_path.write_text(json.dumps(first), encoding="utf-8")
-    second_path.write_text(json.dumps(second), encoding="utf-8")
+    _ = first_path.write_text(json.dumps(first), encoding="utf-8")
+    _ = second_path.write_text(json.dumps(second), encoding="utf-8")
 
     result = red_gate.validate_gate(first_path, "red")
 
@@ -1308,14 +1354,14 @@ def test_validate_accepts_a_second_repair_guard_diamond(
     def stateful_candidate(state_name: str) -> tuple[dict[str, object], Path]:
         payload = _candidate(tmp_path)
         state = tmp_path / state_name
-        state.write_text("red\n", encoding="utf-8")
-        payload["cases"][0]["argv"] = [
+        _ = state.write_text("red\n", encoding="utf-8")
+        _as_dict(_as_list(payload["cases"])[0])["argv"] = [
             sys.executable,
             "-c",
             (
                 "from pathlib import Path; "
-                f"state=Path({state_name!r}).read_text(); "
-                "assert state.strip() != 'red', 'outer witness'"
+                + f"state=Path({state_name!r}).read_text(); "
+                + "assert state.strip() != 'red', 'outer witness'"
             ),
         ]
         payload["production_paths"] = [
@@ -1329,8 +1375,8 @@ def test_validate_accepts_a_second_repair_guard_diamond(
 
     cut, cut_state = stateful_candidate("cut-state.txt")
     cut_receipt_path = _receipt_path(tmp_path, "cut.receipt.json")
-    _issue(cut, cut_receipt_path)
-    cut_state.write_text("green\n", encoding="utf-8")
+    _ = _issue(cut, cut_receipt_path)
+    _ = cut_state.write_text("green\n", encoding="utf-8")
 
     first_repair, first_repair_state = stateful_candidate("first-repair-state.txt")
     first_repair["producer"] = "press"
@@ -1342,8 +1388,8 @@ def test_validate_accepts_a_second_repair_guard_diamond(
         "first-repair.receipt.json",
         producer="press",
     )
-    _issue(first_repair, first_repair_receipt_path)
-    first_repair_state.write_text("green\n", encoding="utf-8")
+    _ = _issue(first_repair, first_repair_receipt_path)
+    _ = first_repair_state.write_text("green\n", encoding="utf-8")
 
     second_repair, second_repair_state = stateful_candidate("second-repair-state.txt")
     second_repair["producer"] = "press"
@@ -1361,12 +1407,12 @@ def test_validate_accepts_a_second_repair_guard_diamond(
     result = red_gate.validate_gate(second_repair_receipt_path, "red")
 
     assert result.ok, result.problems
-    second_repair_state.write_text("green\n", encoding="utf-8")
+    _ = second_repair_state.write_text("green\n", encoding="utf-8")
 
-    history_path, _ = red_gate._press_history_paths(tmp_path, second_receipt)
-    history = json.loads(history_path.read_text(encoding="utf-8"))
-    history["receipts"] = history["receipts"][:1]
-    history_path.write_text(json.dumps(history), encoding="utf-8")
+    history_path, _ = _press_history_paths(tmp_path, second_receipt)
+    history = _as_dict(cast(object, json.loads(history_path.read_text(encoding="utf-8"))))
+    history["receipts"] = _as_list(history["receipts"])[:1]
+    _ = history_path.write_text(json.dumps(history), encoding="utf-8")
     third, third_state = stateful_candidate("third-repair-state.txt")
     third["producer"] = "press"
     third["guard_receipt_refs"] = [
@@ -1377,24 +1423,24 @@ def test_validate_accepts_a_second_repair_guard_diamond(
         tmp_path, "third-repair.receipt.json", producer="press"
     )
 
-    _issue(third, third_receipt_path)
+    _ = _issue(third, third_receipt_path)
 
-    recovered = json.loads(history_path.read_text(encoding="utf-8"))
+    recovered = _as_dict(cast(object, json.loads(history_path.read_text(encoding="utf-8"))))
     assert recovered["receipts"] == [
         first_repair_receipt_path.relative_to(tmp_path).as_posix(),
         second_repair_receipt_path.relative_to(tmp_path).as_posix(),
         third_receipt_path.relative_to(tmp_path).as_posix(),
     ]
-    third_state.write_text("green\n", encoding="utf-8")
+    _ = third_state.write_text("green\n", encoding="utf-8")
     for legacy_receipt_path in (
         first_repair_receipt_path,
         second_repair_receipt_path,
         third_receipt_path,
     ):
-        legacy_receipt = json.loads(legacy_receipt_path.read_text(encoding="utf-8"))
+        legacy_receipt = _as_dict(cast(object, json.loads(legacy_receipt_path.read_text(encoding="utf-8"))))
         legacy_receipt["phase_token_ref"] = None
         legacy_receipt["phase_token_sha256"] = None
-        legacy_receipt_path.write_text(
+        _ = legacy_receipt_path.write_text(
             json.dumps(legacy_receipt),
             encoding="utf-8",
         )
@@ -1406,8 +1452,8 @@ def test_validate_accepts_a_second_repair_guard_diamond(
         cut_receipt_path.relative_to(tmp_path).as_posix(),
     ]
 
-    with pytest.raises(red_gate.GateValidationError) as raised:
-        _issue(
+    with pytest.raises(GateValidationError) as raised:
+        _ = _issue(
             fourth,
             _receipt_path(tmp_path, "fourth-repair.receipt.json", producer="press"),
         )
@@ -1425,32 +1471,32 @@ def test_issue_rejects_a_guard_with_a_tampered_phase_token(
     cut_receipt_path = _receipt_path(tmp_path, "guard-token.cut.json")
     cut_receipt = _issue(_candidate(tmp_path), cut_receipt_path)
     assert cut_receipt.phase_token_ref is not None
-    (tmp_path / "production-state.txt").write_text("green\n", encoding="utf-8")
+    _ = (tmp_path / "production-state.txt").write_text("green\n", encoding="utf-8")
 
     press = _candidate(tmp_path)
-    (tmp_path / "production-state.txt").write_text("green\n", encoding="utf-8")
+    _ = (tmp_path / "production-state.txt").write_text("green\n", encoding="utf-8")
     press_state = tmp_path / "press-state.txt"
-    press_state.write_text("red\n", encoding="utf-8")
+    _ = press_state.write_text("red\n", encoding="utf-8")
     press["producer"] = "press"
     press["guard_receipt_refs"] = [cut_receipt_path.relative_to(tmp_path).as_posix()]
-    press["cases"][0]["argv"] = [
+    _as_dict(_as_list(press["cases"])[0])["argv"] = [
         sys.executable,
         "-c",
         (
             "from pathlib import Path; "
-            "state=Path('press-state.txt').read_text(); "
-            "assert state.strip() != 'red', 'outer witness'"
+            + "state=Path('press-state.txt').read_text(); "
+            + "assert state.strip() != 'red', 'outer witness'"
         ),
     ]
     token_path = tmp_path / cut_receipt.phase_token_ref
-    token_path.write_text(
+    _ = token_path.write_text(
         token_path.read_text(encoding="utf-8") + " ",
         encoding="utf-8",
     )
     output = _receipt_path(tmp_path, "guard-token.press.json", producer="press")
 
-    with pytest.raises(red_gate.GateValidationError) as raised:
-        _issue(press, output)
+    with pytest.raises(GateValidationError) as raised:
+        _ = _issue(press, output)
 
     assert not output.exists()
     assert any(
@@ -1467,9 +1513,9 @@ def test_phase_entry_token_allows_only_the_declared_new_oracle(
     oracle.unlink()
 
     token, token_path, candidate = _begin(payload, "pre-cut")
-    oracle.write_text("oracle\n", encoding="utf-8")
+    _ = oracle.write_text("oracle\n", encoding="utf-8")
     payload.update(token.to_dict())
-    candidate.write_text(json.dumps(payload), encoding="utf-8")
+    _ = candidate.write_text(json.dumps(payload), encoding="utf-8")
     receipt_path = _receipt_path(tmp_path, "pre-cut.receipt.json")
 
     receipt = red_gate.issue_gate(candidate, receipt_path, token_path)
@@ -1486,14 +1532,14 @@ def test_phase_entry_rejects_modifying_a_pre_existing_protected_oracle(
     payload = _candidate(tmp_path)
     oracle = tmp_path / "tests" / "oracle.py"
     token, token_path, candidate = _begin(payload, "existing-oracle")
-    oracle.write_text("weakened oracle\n", encoding="utf-8")
-    payload["protected_files"][0]["sha256"] = _digest(oracle)
+    _ = oracle.write_text("weakened oracle\n", encoding="utf-8")
+    _as_dict(_as_list(payload["protected_files"])[0])["sha256"] = _digest(oracle)
     payload.update(token.to_dict())
-    candidate.write_text(json.dumps(payload), encoding="utf-8")
+    _ = candidate.write_text(json.dumps(payload), encoding="utf-8")
     receipt_path = _receipt_path(tmp_path, "existing-oracle.receipt.json")
 
-    with pytest.raises(red_gate.GateValidationError) as raised:
-        red_gate.issue_gate(candidate, receipt_path, token_path)
+    with pytest.raises(GateValidationError) as raised:
+        _ = red_gate.issue_gate(candidate, receipt_path, token_path)
 
     assert not receipt_path.exists()
     assert any(
@@ -1508,7 +1554,7 @@ def test_not_applicable_issuance_requires_and_persists_phase_token(
     monkeypatch.chdir(tmp_path)
     payload = _candidate(tmp_path)
     approved_spec = Path(str(payload["spec_ref"]))
-    approved_spec.write_text(
+    _ = approved_spec.write_text(
         """---
 status: approved
 gate_applicability:
@@ -1545,7 +1591,7 @@ def test_not_applicable_issuance_requires_the_exact_approved_reason(
     monkeypatch.chdir(tmp_path)
     payload = _candidate(tmp_path)
     approved_spec = Path(str(payload["spec_ref"]))
-    approved_spec.write_text(
+    _ = approved_spec.write_text(
         """---
 status: approved
 gate_applicability:
@@ -1568,8 +1614,8 @@ gate_applicability:
         not_applicable_reason="unrelated reason",
     )
 
-    with pytest.raises(red_gate.GateValidationError) as raised:
-        _issue(
+    with pytest.raises(GateValidationError) as raised:
+        _ = _issue(
             payload,
             _receipt_path(tmp_path, "wrong-reason.receipt.json"),
         )
@@ -1585,16 +1631,16 @@ def test_phase_entry_token_rejects_production_changes_before_issue(
 ) -> None:
     monkeypatch.chdir(tmp_path)
     production = tmp_path / "production.py"
-    production.write_text("before\n", encoding="utf-8")
+    _ = production.write_text("before\n", encoding="utf-8")
     payload = _candidate(tmp_path)
     token, token_path, candidate = _begin(payload, "changed-production")
-    production.write_text("after\n", encoding="utf-8")
+    _ = production.write_text("after\n", encoding="utf-8")
     payload.update(token.to_dict())
-    candidate.write_text(json.dumps(payload), encoding="utf-8")
+    _ = candidate.write_text(json.dumps(payload), encoding="utf-8")
     receipt_path = _receipt_path(tmp_path, "changed-production.receipt.json")
 
-    with pytest.raises(red_gate.GateValidationError) as raised:
-        red_gate.issue_gate(candidate, receipt_path, token_path)
+    with pytest.raises(GateValidationError) as raised:
+        _ = red_gate.issue_gate(candidate, receipt_path, token_path)
 
     assert not receipt_path.exists()
     assert any(
@@ -1608,14 +1654,14 @@ def test_phase_begin_rejects_a_failing_baseline_without_writing_token(
 ) -> None:
     monkeypatch.chdir(tmp_path)
     payload = _candidate(tmp_path)
-    payload["baseline_checks"][0]["argv"] = [
+    _as_dict(_as_list(payload["baseline_checks"])[0])["argv"] = [
         sys.executable,
         "-c",
         "raise SystemExit(3)",
     ]
 
-    with pytest.raises(red_gate.GateValidationError) as raised:
-        _begin(payload, "bad-baseline")
+    with pytest.raises(GateValidationError) as raised:
+        _ = _begin(payload, "bad-baseline")
 
     assert any("is not green: exit 3" in problem for problem in raised.value.problems)
     assert not list((tmp_path / ".cheese" / "cut").glob("*.phase.json"))
@@ -1630,20 +1676,20 @@ def test_issue_rejects_an_external_spec_changed_during_replay(
     _spec(external_spec, "outer behavior")
     payload["spec_ref"] = str(external_spec)
     payload["spec_sha256"] = _digest(external_spec)
-    payload["cases"][0]["argv"] = [
+    _as_dict(_as_list(payload["cases"])[0])["argv"] = [
         sys.executable,
         "-c",
         (
             "from pathlib import Path; "
-            f"spec=Path({str(external_spec)!r}); "
-            "spec.write_text(spec.read_text() + '\\n', encoding='utf-8'); "
-            "assert False, 'outer witness'"
+            + f"spec=Path({str(external_spec)!r}); "
+            + "spec.write_text(spec.read_text() + '\\n', encoding='utf-8'); "
+            + "assert False, 'outer witness'"
         ),
     ]
     receipt_path = _receipt_path(tmp_path, "external-spec.receipt.json")
 
-    with pytest.raises(red_gate.GateValidationError) as raised:
-        _issue(payload, receipt_path)
+    with pytest.raises(GateValidationError) as raised:
+        _ = _issue(payload, receipt_path)
 
     assert not receipt_path.exists()
     assert any(
@@ -1661,21 +1707,21 @@ def test_validate_rejects_an_external_spec_changed_during_replay(
     _spec(external_spec, "outer behavior")
     payload["spec_ref"] = str(external_spec)
     payload["spec_sha256"] = _digest(external_spec)
-    payload["cases"][0]["argv"] = [
+    _as_dict(_as_list(payload["cases"])[0])["argv"] = [
         sys.executable,
         "-c",
         (
             "from pathlib import Path; "
-            "state=Path('production-state.txt').read_text().strip(); "
-            f"spec=Path({str(external_spec)!r}); "
-            "spec.write_text(spec.read_text() + '\\n', encoding='utf-8') "
-            "if state == 'green' else None; "
-            "assert state != 'red', 'outer witness'"
+            + "state=Path('production-state.txt').read_text().strip(); "
+            + f"spec=Path({str(external_spec)!r}); "
+            + "spec.write_text(spec.read_text() + '\\n', encoding='utf-8') "
+            + "if state == 'green' else None; "
+            + "assert state != 'red', 'outer witness'"
         ),
     ]
     receipt_path = _receipt_path(tmp_path, "external-spec-validation.receipt.json")
-    _issue(payload, receipt_path)
-    (tmp_path / "production-state.txt").write_text("green\n", encoding="utf-8")
+    _ = _issue(payload, receipt_path)
+    _ = (tmp_path / "production-state.txt").write_text("green\n", encoding="utf-8")
 
     result = red_gate.validate_gate(receipt_path, "green")
 
@@ -1695,13 +1741,13 @@ def test_issue_rejects_a_tampered_or_wrong_identity_phase_token(
     token, token_path, candidate = _begin(payload, "tampered")
     payload.update(token.to_dict())
     payload["work_id"] = "different-work"
-    candidate.write_text(json.dumps(payload), encoding="utf-8")
-    token_path.write_text(
+    _ = candidate.write_text(json.dumps(payload), encoding="utf-8")
+    _ = token_path.write_text(
         token_path.read_text(encoding="utf-8") + " ", encoding="utf-8"
     )
 
-    with pytest.raises(red_gate.GateValidationError) as raised:
-        red_gate.issue_gate(
+    with pytest.raises(GateValidationError) as raised:
+        _ = red_gate.issue_gate(
             candidate,
             _receipt_path(tmp_path, "tampered.receipt.json"),
             token_path,
@@ -1735,14 +1781,14 @@ def test_inherited_phase_token_replays_but_cannot_be_reissued_or_tampered(
     ):
         target = child / relative
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes((source / relative).read_bytes())
+        _ = target.write_bytes((source / relative).read_bytes())
 
     monkeypatch.chdir(child)
     result = red_gate.validate_gate(receipt_relative, "red")
     assert result.ok, result.problems
 
-    with pytest.raises(red_gate.GateValidationError) as raised:
-        red_gate.issue_gate(
+    with pytest.raises(GateValidationError) as raised:
+        _ = red_gate.issue_gate(
             receipt.to_dict(),
             _receipt_path(child, "reissued.receipt.json"),
             token_relative,
@@ -1753,7 +1799,7 @@ def test_inherited_phase_token_replays_but_cannot_be_reissued_or_tampered(
     )
 
     token_path = child / token_relative
-    token_path.write_text(
+    _ = token_path.write_text(
         token_path.read_text(encoding="utf-8") + " ",
         encoding="utf-8",
     )
@@ -1774,7 +1820,7 @@ def test_issue_cli_has_no_tokenless_issuance_form(
 ) -> None:
     monkeypatch.chdir(tmp_path)
     candidate = tmp_path / "candidate.json"
-    candidate.write_text(json.dumps(_candidate(tmp_path)), encoding="utf-8")
+    _ = candidate.write_text(json.dumps(_candidate(tmp_path)), encoding="utf-8")
 
     code = red_gate.main(["issue", str(candidate), "--out", "receipt.json"])
 
@@ -1785,13 +1831,13 @@ def test_issue_cli_has_no_tokenless_issuance_form(
 def test_run_case_reports_missing_probe_event_as_harness_error(
     tmp_path: Path,
 ) -> None:
-    run = red_gate._run_case(
+    run = _run_case(
         [sys.executable, "-c", "import os; os._exit(1)"],
         tmp_path,
     )
 
     assert run.error == "assertion probe event missing or invalid"
-    assert red_gate._looks_harness_failure(run)
+    assert _looks_harness_failure(run)
 
 
 def test_missing_probe_event_validation_problem_has_bounded_context(
@@ -1806,20 +1852,20 @@ def test_missing_probe_event_validation_problem_has_bounded_context(
         sys.executable,
         "-c",
         f"import os, sys; sys.stdout.write({output!r}); "
-        "sys.stdout.flush(); os._exit(23)",
+        + "sys.stdout.flush(); os._exit(23)",
     ]
     receipt_path = _receipt_path(tmp_path)
 
     candidate = _candidate(tmp_path, command=command)
-    candidate["cases"][0]["observed_exit_code"] = 23
-    with pytest.raises(red_gate.GateValidationError) as raised:
-        _issue(candidate, receipt_path)
+    _as_dict(_as_list(candidate["cases"])[0])["observed_exit_code"] = 23
+    with pytest.raises(GateValidationError) as raised:
+        _ = _issue(candidate, receipt_path)
 
     expected_tail = "..." + output[-252:] + "'"
     expected_problem = (
         "GateReceipt.cases[1] failed in the harness: "
-        "assertion probe event missing or invalid "
-        f"(exit 23; output tail: {expected_tail})"
+        + "assertion probe event missing or invalid "
+        + f"(exit 23; output tail: {expected_tail})"
     )
     assert raised.value.problems == (expected_problem,)
     assert len(expected_tail) == 256
@@ -1829,19 +1875,19 @@ def test_missing_probe_event_validation_problem_has_bounded_context(
 def test_source_probe_uses_canonical_worker_over_cwd_shadow(
     tmp_path: Path,
 ) -> None:
-    (tmp_path / "cut_assertion_probe.py").write_text(
+    _ = (tmp_path / "cut_assertion_probe.py").write_text(
         "TARGET_LOCAL = True\n",
         encoding="utf-8",
     )
-    run = red_gate._run_case(
+    run = _run_case(
         [
             sys.executable,
             "-c",
             (
-                f"import sys, cut_assertion_probe; "
-                f"assert sys.flags.safe_path is {sys.flags.safe_path!r}; "
-                "assert cut_assertion_probe.TARGET_LOCAL is True; "
-                "raise AssertionError('source bootstrap witness')"
+                "import sys, cut_assertion_probe; "
+                + f"assert sys.flags.safe_path is {sys.flags.safe_path!r}; "
+                + "assert cut_assertion_probe.TARGET_LOCAL is True; "
+                + "raise AssertionError('source bootstrap witness')"
             ),
         ],
         tmp_path,
@@ -1859,19 +1905,19 @@ def test_source_probe_quarantines_inherited_json_shadow(
 ) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("PYTHONPATH", str(tmp_path))
-    (tmp_path / "json.py").write_text(
+    _ = (tmp_path / "json.py").write_text(
         "TARGET_LOCAL = True\n",
         encoding="utf-8",
     )
 
-    run = red_gate._run_case(
+    run = _run_case(
         [
             sys.executable,
             "-c",
             (
                 "import json; "
-                "assert json.TARGET_LOCAL is True; "
-                "raise AssertionError('json shadow witness')"
+                + "assert json.TARGET_LOCAL is True; "
+                + "raise AssertionError('json shadow witness')"
             ),
         ],
         tmp_path,
@@ -1881,3 +1927,4 @@ def test_source_probe_quarantines_inherited_json_shadow(
     assert run.returncode == 1
     assert run.assertion_origin is True
     assert run.output.splitlines()[-1] == "AssertionError: json shadow witness"
+

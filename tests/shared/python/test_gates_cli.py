@@ -12,8 +12,16 @@ import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
+from typing import TYPE_CHECKING, Protocol, cast
 
 import pytest
+
+if TYPE_CHECKING:
+    import argparse
+
+
+class _GatesCliModule(Protocol):
+    def _cmd_classify(self, ns: argparse.Namespace) -> None: ...
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SHARED_SCRIPTS = REPO_ROOT / "src" / "easy_cheese" / "shared"
@@ -35,8 +43,8 @@ def _load(name: str, path: Path) -> ModuleType:
 def gates_cli() -> ModuleType:
     if str(SHARED_SCRIPTS) not in sys.path:
         sys.path.insert(0, str(SHARED_SCRIPTS))
-    _load("cli", CLI_PATH)
-    _load("gates", GATES_PATH)
+    _ = _load("cli", CLI_PATH)
+    _ = _load("gates", GATES_PATH)
     return _load("gates_cli", GATES_CLI_PATH)
 
 
@@ -52,7 +60,7 @@ class TestClassifyHappyPath:
     def test_clean_floor_no_gaps_is_ready(self) -> None:
         result = _run("classify", "--press-status", "ready-for-age", "--hard-floor-met", "--json")
         assert result.returncode == 0, result.stderr
-        payload = json.loads(result.stdout)
+        payload = cast(dict[str, object], json.loads(result.stdout))
         assert payload == {"press_status": "ready-for-age", "readiness": "ready for /age"}
 
     def test_level_4_or_5_only_means_follow_up(self) -> None:
@@ -65,7 +73,7 @@ class TestClassifyHappyPath:
             "--json",
         )
         assert result.returncode == 0, result.stderr
-        payload = json.loads(result.stdout)
+        payload = cast(dict[str, object], json.loads(result.stdout))
         assert payload["readiness"] == "follow-up recommended"
 
     def test_open_level_1_or_2_blocks(self) -> None:
@@ -78,7 +86,7 @@ class TestClassifyHappyPath:
             "--json",
         )
         assert result.returncode == 0, result.stderr
-        payload = json.loads(result.stdout)
+        payload = cast(dict[str, object], json.loads(result.stdout))
         assert payload["readiness"] == "blocked"
 
     def test_missing_press_status_exits_two(self) -> None:
@@ -108,7 +116,7 @@ class TestInvalidInput:
 
 class TestInProcessClassify:
     def test_classify_helper_emits_dict(
-        self, gates_cli: ModuleType, capsys: pytest.CaptureFixture[str]
+        self, gates_cli: _GatesCliModule, capsys: pytest.CaptureFixture[str]
     ) -> None:
         import argparse
 
@@ -122,6 +130,6 @@ class TestInProcessClassify:
             json_mode=True,
             stdout=sys.stdout,
         )
-        gates_cli._cmd_classify(ns)
-        payload = json.loads(capsys.readouterr().out)
+        gates_cli._cmd_classify(ns)  # pyright: ignore[reportPrivateUsage]
+        payload = cast(dict[str, object], json.loads(capsys.readouterr().out))
         assert payload == {"press_status": "ready-for-age", "readiness": "ready for /age"}

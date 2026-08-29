@@ -14,6 +14,7 @@ for source in (SRC_ROOT, SRC_ROOT / "fanout"):
         sys.path.insert(0, value)
 
 from easy_cheese.shared.cut import red_gate  # noqa: E402
+from easy_cheese.shared.cut.gate_receipts import GateValidationError  # noqa: E402
 from easy_cheese.shared.fanout import press_route  # noqa: E402
 from easy_cheese.shared.fanout import press_route_cli  # noqa: E402
 
@@ -24,7 +25,7 @@ def _digest(path: Path) -> str:
 
 def _spec(root: Path) -> Path:
     path = root / "spec.md"
-    path.write_text(
+    _ = path.write_text(
         """---
 status: approved
 gate_applicability:
@@ -56,7 +57,7 @@ def _begin(
     namespace.mkdir(parents=True, exist_ok=True)
     plan = namespace / f"{label}.plan.json"
     token = namespace / f"{label}.phase.json"
-    plan.write_text(
+    _ = plan.write_text(
         json.dumps(
             {
                 "schema_version": 1,
@@ -90,10 +91,10 @@ def _issue(
     token, token_digest = _begin(root, producer, label, production_paths)
     oracle = root / "tests" / f"{label}.py"
     oracle.parent.mkdir(exist_ok=True)
-    oracle.write_text(
+    _ = oracle.write_text(
         "from pathlib import Path\n"
-        "level = int(Path('production-state.txt').read_text())\n"
-        f"assert level >= {threshold}, 'outer witness'\n",
+        + "level = int(Path('production-state.txt').read_text())\n"
+        + f"assert level >= {threshold}, 'outer witness'\n",
         encoding="utf-8",
     )
     spec = root / "spec.md"
@@ -151,16 +152,16 @@ def _issue(
         ],
         "not_applicable_reason": None,
     }
-    candidate.write_text(json.dumps(payload), encoding="utf-8")
-    red_gate.issue_gate(candidate, receipt, token)
+    _ = candidate.write_text(json.dumps(payload), encoding="utf-8")
+    _ = red_gate.issue_gate(candidate, receipt, token)
     return receipt, token, token_digest
 
 
 def _project(root: Path) -> Path:
-    _spec(root)
-    (root / "production-state.txt").write_text("0", encoding="utf-8")
+    _ = _spec(root)
+    _ = (root / "production-state.txt").write_text("0", encoding="utf-8")
     receipt, _, _ = _issue(root, "cut", "cut", 1, [])
-    (root / "production-state.txt").write_text("1", encoding="utf-8")
+    _ = (root / "production-state.txt").write_text("1", encoding="utf-8")
     assert red_gate.validate_gate(receipt, "green").ok
     return receipt
 
@@ -208,7 +209,7 @@ def test_green_route_consumes_a_fresh_phase_token(
         == press_route.Dispatch()
     )
     with pytest.raises(press_route.ReceiptChainError, match="already been routed"):
-        press_route.route_from_receipt("green", cut, token, digest)
+        _ = press_route.route_from_receipt("green", cut, token, digest)
 
 
 def test_green_route_rejects_a_reformatted_token_copy(
@@ -222,17 +223,17 @@ def test_green_route_rejects_a_reformatted_token_copy(
         == press_route.Dispatch()
     )
     copied = token.with_name("press-copied.phase.json")
-    copied.write_text(json.dumps(json.loads(token.read_text())), encoding="utf-8")
+    _ = copied.write_text(json.dumps(json.loads(token.read_text())), encoding="utf-8")
 
     with pytest.raises(press_route.ReceiptChainError, match="canonical encoding"):
-        press_route.route_from_receipt("green", cut, copied, _digest(copied))
+        _ = press_route.route_from_receipt("green", cut, copied, _digest(copied))
 
 
 def test_green_route_inherits_the_current_receipt_production_paths(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "other-state.txt").write_text("stable", encoding="utf-8")
+    _ = (tmp_path / "other-state.txt").write_text("stable", encoding="utf-8")
     cut = _project(tmp_path)
     token, digest = _begin(
         tmp_path,
@@ -240,17 +241,17 @@ def test_green_route_inherits_the_current_receipt_production_paths(
         "press-wrong-production-root",
         ["other-state.txt"],
     )
-    (tmp_path / "production-state.txt").write_text("2", encoding="utf-8")
+    _ = (tmp_path / "production-state.txt").write_text("2", encoding="utf-8")
 
     with pytest.raises(press_route.ReceiptChainError, match="production_paths"):
-        press_route.route_from_receipt("green", cut, token, digest)
+        _ = press_route.route_from_receipt("green", cut, token, digest)
 
 
 def test_red_route_inherits_the_prior_receipt_production_paths(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "other-state.txt").write_text("stable", encoding="utf-8")
+    _ = (tmp_path / "other-state.txt").write_text("stable", encoding="utf-8")
     cut = _project(tmp_path)
     receipt, token, digest = _issue(
         tmp_path,
@@ -262,7 +263,7 @@ def test_red_route_inherits_the_prior_receipt_production_paths(
     )
 
     with pytest.raises(press_route.ReceiptChainError, match="production_paths"):
-        press_route.route_from_receipt(
+        _ = press_route.route_from_receipt(
             "in_contract_red",
             receipt,
             token,
@@ -283,7 +284,7 @@ def test_green_route_rejects_a_symlinked_decision_directory(
     )
 
     with pytest.raises(press_route.ReceiptChainError, match="unsafe"):
-        press_route.route_from_receipt("green", cut, token, digest)
+        _ = press_route.route_from_receipt("green", cut, token, digest)
     assert list(outside.iterdir()) == []
 
 
@@ -298,8 +299,8 @@ def test_press_receipt_rejects_a_symlinked_history_directory(
         outside, target_is_directory=True
     )
 
-    with pytest.raises(red_gate.GateValidationError, match="unsafe"):
-        _issue(
+    with pytest.raises(GateValidationError, match="unsafe"):
+        _ = _issue(
             tmp_path,
             "press",
             "unsafe-history",
@@ -345,12 +346,12 @@ def test_red_routes_derive_the_bound_from_authoritative_history(
         )
         guards.append(str(receipt.relative_to(tmp_path)))
         if attempt < 3:
-            (tmp_path / "production-state.txt").write_text(
+            _ = (tmp_path / "production-state.txt").write_text(
                 str(attempt + 1), encoding="utf-8"
             )
 
     with pytest.raises(press_route.ReceiptChainError, match="already been routed"):
-        press_route.route_from_receipt(
+        _ = press_route.route_from_receipt(
             "in_contract_red",
             receipts[-1],
             *tokens[-1],
@@ -360,7 +361,7 @@ def test_red_routes_derive_the_bound_from_authoritative_history(
         press_route.ReceiptChainError,
         match="(?:not the latest immutable Press receipt|oracle dependency changed)",
     ):
-        press_route.route_from_receipt(
+        _ = press_route.route_from_receipt(
             "green",
             receipts[1],
             stale_token,
@@ -375,7 +376,7 @@ def test_route_derives_production_change_from_phase_snapshot(
     monkeypatch.chdir(tmp_path)
     cut = _project(tmp_path)
     token, digest = _begin(tmp_path, "press", "production-change")
-    (tmp_path / "production-state.txt").write_text("2", encoding="utf-8")
+    _ = (tmp_path / "production-state.txt").write_text("2", encoding="utf-8")
 
     assert press_route.route_from_receipt(
         "green", cut, token, digest
@@ -399,10 +400,10 @@ def test_route_rejects_malformed_authoritative_history(
         [str(cut.relative_to(tmp_path))],
     )
     history = next((tmp_path / ".cheese" / "press-history").glob("*.json"))
-    history.write_text("{}", encoding="utf-8")
+    _ = history.write_text("{}", encoding="utf-8")
 
     with pytest.raises(press_route.ReceiptChainError, match="Press history"):
-        press_route.route_from_receipt("in_contract_red", receipt, token, digest)
+        _ = press_route.route_from_receipt("in_contract_red", receipt, token, digest)
 
 
 def test_cli_requires_phase_token_evidence(
@@ -410,7 +411,7 @@ def test_cli_requires_phase_token_evidence(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     request = tmp_path / "request.json"
-    request.write_text(
+    _ = request.write_text(
         '{"outcome":"green","current_receipt":"x"}',
         encoding="utf-8",
     )

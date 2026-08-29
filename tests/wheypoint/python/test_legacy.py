@@ -16,31 +16,37 @@ from easy_cheese.skills.wheypoint import legacy
 def write_note(root: Path, slug: str, body: str = "legacy body\n") -> Path:
     path = root.joinpath(*legacy.NOTES_DIR_PARTS, f"{slug}.md")
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(body, encoding="utf-8")
+    _ = path.write_text(body, encoding="utf-8")
     return path
 
 
 def porcelain(*roots: Path, bare: Path | None = None) -> str:
-    blocks = []
+    blocks: list[str] = []
     if bare is not None:
         blocks.append(f"worktree {bare}\nbare\n")
     blocks.extend(
         f"worktree {root}\nHEAD 0123456789abcdef0123456789abcdef01234567\n"
-        f"branch refs/heads/wt-{index}\n"
+        + f"branch refs/heads/wt-{index}\n"
         for index, root in enumerate(roots)
     )
     return "\n".join(blocks)
 
 
-def fake_runner(output: str | None):
-    calls: list[tuple[tuple[str, ...], Path]] = []
+class _FakeRunner:
+    calls: list[tuple[tuple[str, ...], Path]]
+    _output: str | None
 
-    def run(args: Sequence[str], cwd: Path) -> str | None:
-        calls.append((tuple(args), cwd))
-        return output
+    def __init__(self, output: str | None) -> None:
+        self.calls = []
+        self._output = output
 
-    run.calls = calls  # type: ignore[attr-defined]
-    return run
+    def __call__(self, args: Sequence[str], cwd: Path) -> str | None:
+        self.calls.append((tuple(args), cwd))
+        return self._output
+
+
+def fake_runner(output: str | None) -> _FakeRunner:
+    return _FakeRunner(output)
 
 
 def test_parse_worktree_list_keeps_working_trees_and_drops_bare(tmp_path: Path) -> None:
@@ -146,7 +152,7 @@ def test_a_slug_that_is_not_one_path_segment_is_refused(
     tmp_path: Path, slug: str
 ) -> None:
     with pytest.raises(legacy.LegacyLookupError, match="single path segment"):
-        legacy.find_legacy_note(slug, start=tmp_path, run=fake_runner(""))
+        _ = legacy.find_legacy_note(slug, start=tmp_path, run=fake_runner(""))
 
 
 @pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
@@ -167,7 +173,7 @@ def test_real_git_worktrees_are_searched_through_the_default_runner(
         ["commit", "-q", "--allow-empty", "-m", "seed"],
         ["worktree", "add", "-q", "-b", "side", str(tmp_path / "side")],
     ):
-        subprocess.run(
+        _ = subprocess.run(
             ["git", *args], cwd=main, env=env, check=True, capture_output=True
         )
     expected = write_note(tmp_path / "side", "cold-start")

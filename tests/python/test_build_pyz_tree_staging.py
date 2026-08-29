@@ -33,12 +33,12 @@ pytestmark = pytest.mark.skipif(  # noqa: V107
 
 
 @pytest.fixture(scope="module")
-def ultracook_pyz(tmp_path_factory) -> Path:
+def ultracook_pyz(tmp_path_factory: pytest.TempPathFactory) -> Path:
     out = tmp_path_factory.mktemp("tree-staging")
     return build_pyz.build_bundle("cook", out / "cook.pyz")
 
 @pytest.fixture(scope="module")
-def cut_pyz(tmp_path_factory) -> Path:
+def cut_pyz(tmp_path_factory: pytest.TempPathFactory) -> Path:
     out = tmp_path_factory.mktemp("tree-staging-cut")
     return build_pyz.build_bundle("cut", out / "cut.pyz")
 
@@ -95,7 +95,7 @@ def _run_isolated(pyz: Path, code: str) -> subprocess.CompletedProcess[str]:
                     target.mkdir(parents=True, exist_ok=True)
                 else:
                     target.parent.mkdir(parents=True, exist_ok=True)
-                    target.write_bytes(archive.read(name))
+                    _ = target.write_bytes(archive.read(name))
         return subprocess.run(
             [
                 sys.executable,
@@ -132,24 +132,24 @@ def test_schemas_stack_imports_and_round_trips_from_inside_the_zip(ultracook_pyz
     result = _run_isolated(
         ultracook_pyz,
         "import attrs, cattrs, easy_cheese_schemas as ecs\n"
-        "for mod in (attrs, cattrs, ecs):\n"
-        "    assert mod.__file__.startswith(sys.path[0]), (mod.__name__, mod.__file__)\n"
-        "loaded = ecs.load(\n"
-        "    {\n"
-        "        'schema_version': 1,\n"
-        "        'branch': 'claude/pypi',\n"
-        "        'title': 'Ship it',\n"
-        "        'base': 'main',\n"
-        "        'commits': ['abc1234'],\n"
-        "    },\n"
-        "    ecs.PrGroup,\n"
-        "    strict=True,\n"
-        ")\n"
-        "assert loaded.problems == (), loaded.problems\n"
-        "assert loaded.provenance is ecs.Provenance.CURRENT\n"
-        "assert loaded.value.branch == 'claude/pypi'\n"
-        "assert loaded.value.commits == ['abc1234']\n"
-        "print('ok')\n",
+        + "for mod in (attrs, cattrs, ecs):\n"
+        + "    assert mod.__file__.startswith(sys.path[0]), (mod.__name__, mod.__file__)\n"
+        + "loaded = ecs.load(\n"
+        + "    {\n"
+        + "        'schema_version': 1,\n"
+        + "        'branch': 'claude/pypi',\n"
+        + "        'title': 'Ship it',\n"
+        + "        'base': 'main',\n"
+        + "        'commits': ['abc1234'],\n"
+        + "    },\n"
+        + "    ecs.PrGroup,\n"
+        + "    strict=True,\n"
+        + ")\n"
+        + "assert loaded.problems == (), loaded.problems\n"
+        + "assert loaded.provenance is ecs.Provenance.CURRENT\n"
+        + "assert loaded.value.branch == 'claude/pypi'\n"
+        + "assert loaded.value.commits == ['abc1234']\n"
+        + "print('ok')\n",
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert result.stdout.strip() == "ok"
@@ -164,7 +164,7 @@ def test_attrs_version_resolves_from_bundled_dist_info(ultracook_pyz: Path) -> N
 
 
 @pytest.fixture(scope="module")
-def wheypoint_pyz(tmp_path_factory) -> Path:
+def wheypoint_pyz(tmp_path_factory: pytest.TempPathFactory) -> Path:
     out = tmp_path_factory.mktemp("tree-staging-wheypoint")
     return build_pyz.build_bundle("wheypoint", out / "wheypoint.pyz")
 
@@ -200,19 +200,19 @@ def test_the_wheypoint_runtime_imports_from_inside_the_zip(wheypoint_pyz: Path) 
     result = _run_isolated(
         wheypoint_pyz,
         "from easy_cheese.skills.wheypoint import "
-        "commit, resolve, lint, storage, projection, records, canonical\n"
-        "import easy_cheese_schemas as ecs\n"
-        "for mod in (commit, resolve, lint, storage, ecs):\n"
-        "    assert mod.__file__.startswith(sys.path[0]), (mod.__name__, mod.__file__)\n"
-        "assert commit.GENESIS_PARENT == 'genesis'\n"
-        "assert ecs.WheypointRecord is not None\n"
-        "print('ok')\n",
+        + "commit, resolve, lint, storage, projection, records, canonical\n"
+        + "import easy_cheese_schemas as ecs\n"
+        + "for mod in (commit, resolve, lint, storage, ecs):\n"
+        + "    assert mod.__file__.startswith(sys.path[0]), (mod.__name__, mod.__file__)\n"
+        + "assert commit.GENESIS_PARENT == 'genesis'\n"
+        + "assert ecs.WheypointRecord is not None\n"
+        + "print('ok')\n",
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert result.stdout.strip() == "ok"
 
 
-def test_the_wheypoint_bundle_is_deterministic(tmp_path) -> None:
+def test_the_wheypoint_bundle_is_deterministic(tmp_path: Path) -> None:
     """Byte-equality against the committed artifact is CI's job (check_bundles.py
     compares canonical member content, because ZIP metadata differs). What is verifiable
     anywhere is that two builds of one source tree agree."""
@@ -242,7 +242,7 @@ def test_internal_wheel_normalization_ignores_compressor_and_member_order(
         ),
         "demo-1.0.0.dist-info/RECORD": b"",
     }
-    wheels = []
+    wheels: list[Path] = []
     for name, compression, entries in (
         ("a", zipfile.ZIP_DEFLATED, members.items()),
         ("b", zipfile.ZIP_STORED, reversed(members.items())),
@@ -252,7 +252,7 @@ def test_internal_wheel_normalization_ignores_compressor_and_member_order(
         with zipfile.ZipFile(wheel, "w", compression=compression) as archive:
             for member, content in entries:
                 archive.writestr(member, content)
-        wheels.append(build_pyz._normalize_internal_wheel(wheel))
+        wheels.append(build_pyz._normalize_internal_wheel(wheel))  # pyright: ignore[reportPrivateUsage]
 
     assert wheels[0].read_bytes() == wheels[1].read_bytes()
     with zipfile.ZipFile(wheels[0]) as archive:
@@ -278,7 +278,7 @@ def test_members_are_stored(ultracook_pyz: Path) -> None:
 def test_shiv_command_uses_a_local_hash_locked_wheelhouse(tmp_path: Path) -> None:
     requirements = tmp_path / "requirements.txt"
     wheelhouse = tmp_path / "wheelhouse"
-    command = build_pyz._shiv_command(
+    command = build_pyz._shiv_command(  # pyright: ignore[reportPrivateUsage]
         "cut", requirements, tmp_path / "cut.pyz", wheelhouse
     )
     for flag in (
@@ -336,7 +336,7 @@ def _test_wheel(
         archive.writestr(
             f"{dist_info}/WHEEL",
             f"Wheel-Version: 1.0\nRoot-Is-Purelib: {'true' if pure else 'false'}\n"
-            "Tag: py3-none-any\n",
+            + "Tag: py3-none-any\n",
         )
         archive.writestr(f"demo{native_suffix}" if native_suffix else "demo.py", b"")
     return path

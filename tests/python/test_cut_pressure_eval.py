@@ -6,6 +6,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -138,7 +139,7 @@ def test_ac_12_executes_pre_cut_baseline_and_corrected_trace(tmp_path: Path) -> 
     (baseline_root / ".cheese").mkdir()
     (baseline_root / "tests").mkdir()
     baseline_driver = baseline_root / "baseline.py"
-    baseline_driver.write_text(
+    _ = baseline_driver.write_text(
         """
 from pathlib import Path
 
@@ -191,7 +192,7 @@ raise SystemExit(1)
     _record_event(corrected_root, "red-gate-issue:ok")
     assert receipt.exists()
     _record_event(corrected_root, "production-edit:first")
-    (corrected_root / "production.py").write_text(
+    _ = (corrected_root / "production.py").write_text(
         "implemented-after-red\n", encoding="utf-8"
     )
     corrected_events = (corrected_root / ".cheese" / "trace.log").read_text(
@@ -229,7 +230,7 @@ def _record_event(root: Path, event: str) -> None:
     trace = root / ".cheese" / "trace.log"
     trace.parent.mkdir(parents=True, exist_ok=True)
     with trace.open("a", encoding="utf-8") as stream:
-        stream.write(event + "\n")
+        _ = stream.write(event + "\n")
 
 
 def _red_gate_cli(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -252,9 +253,9 @@ def _write_cut_project(
     candidates = namespace / "candidates"
     tests.mkdir(parents=True)
     candidates.mkdir(parents=True)
-    (root / "production.py").write_text("before\n", encoding="utf-8")
+    _ = (root / "production.py").write_text("before\n", encoding="utf-8")
     baseline = tests / "baseline.py"
-    baseline.write_text(
+    _ = baseline.write_text(
         """
 from pathlib import Path
 trace = Path(".cheese") / "trace.log"
@@ -265,7 +266,7 @@ raise SystemExit(1 if (Path(".cheese") / "fail-baseline").exists() else 0)
         encoding="utf-8",
     )
     spec = root / "spec.md"
-    spec.write_text(
+    _ = spec.write_text(
         """---
 status: approved
 gate_applicability:
@@ -286,7 +287,7 @@ gate_applicability:
     )
     plan = namespace / "pressure.plan.json"
     token = namespace / "pressure.phase.json"
-    plan.write_text(
+    _ = plan.write_text(
         json.dumps(
             {
                 "schema_version": 1,
@@ -314,13 +315,13 @@ gate_applicability:
         str(token.relative_to(root)),
     )
     assert begun.returncode == 0, begun.stdout + begun.stderr
-    phase = json.loads(begun.stdout)
+    phase = cast(dict[str, object], json.loads(begun.stdout))
     _record_event(root, "red-gate-begin:ok")
     if failure == "baseline":
         (root / ".cheese" / "fail-baseline").touch()
 
     oracle = tests / "oracle.py"
-    oracle.write_text("outer oracle\n", encoding="utf-8")
+    _ = oracle.write_text("outer oracle\n", encoding="utf-8")
     _record_event(root, "oracle:write")
     case = tests / "case.py"
     case_body = """
@@ -333,13 +334,13 @@ trace.open("a", encoding="utf-8").write("declared-red-witness\\n")
         case_body += "raise RuntimeError('broken harness')\n"
     elif failure == "production":
         case_body += "Path('production.py').write_text('changed\\n', encoding='utf-8')\n"
-    case.write_text(
+    _ = case.write_text(
         case_body + "print('assertion-witness')\nassert False, 'assertion-witness'\n",
         encoding="utf-8",
     )
     candidate = candidates / "pressure.json"
     receipt = namespace / "pressure.receipt.json"
-    candidate.write_text(
+    _ = candidate.write_text(
         json.dumps(
             {
                 "schema_version": 1,

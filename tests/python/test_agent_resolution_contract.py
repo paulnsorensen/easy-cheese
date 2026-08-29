@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 import yaml
 
@@ -36,15 +37,18 @@ def _body(name: str) -> str:
     return (SKILLS / name / "SKILL.md").read_text(encoding="utf-8")
 
 
-def _frontmatter(body: str) -> dict:
+def _frontmatter(body: str) -> dict[str, object]:
     _, raw, _ = body.split("---", 2)
-    return yaml.safe_load(raw)
+    return cast(dict[str, object], yaml.safe_load(raw))
 
 
 def _dispatching_skills() -> set[str]:
-    marked = set()
+    marked: set[str] = set()
     for path in SKILLS.glob("*/SKILL.md"):
-        metadata = _frontmatter(path.read_text(encoding="utf-8")).get("metadata", {})
+        metadata = cast(
+            dict[str, object],
+            _frontmatter(path.read_text(encoding="utf-8")).get("metadata", {}),
+        )
         if metadata.get("dispatches-agents") is True:
             marked.add(path.parent.name)
     return marked
@@ -54,7 +58,7 @@ def _agent_resolution_rows(body: str) -> list[list[str]]:
     section = body.split("## Agent resolution", 1)[1]
     lines = section.splitlines()
     table_start = next(i for i, line in enumerate(lines) if line.startswith("| Work |"))
-    rows = []
+    rows: list[list[str]] = []
     for line in lines[table_start + 2 :]:
         if not line.startswith("|"):
             break

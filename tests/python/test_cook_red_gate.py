@@ -10,6 +10,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from typing import cast
 
 import pytest
 from easy_cheese.shared.fanout import baseline
@@ -44,7 +45,7 @@ def test_contract_makes_canonical_receipt_the_outer_boundary() -> None:
     contract = _flat(_section(SKILL, "Contract"))
     assert re.search(
         r"cook\(spec_ref, receipt\? = null, correction = false\) -> "
-        r"handoff\(next = press \| age\)",
+        + r"handoff\(next = press \| age\)",
         contract,
     )
     assert "sole outer-oracle authority" in contract
@@ -190,15 +191,15 @@ def test_broad_quality_baseline_is_cut_owned_and_receipt_carried() -> None:
     assert "references/quality-gates.md" in baseline
 
 def test_current_gate_comparison_excludes_only_receipt_outer_red() -> None:
-    frozen = [
+    frozen: list[baseline.FailureRecord] = [
         {"suite": "broad", "test_id": "existing-debt", "signature": "AssertionError: old"}
     ]
-    intentional_red = {
+    intentional_red: baseline.FailureRecord = {
         "suite": "outer",
         "test_id": "AC-5-tracer",
         "signature": "AssertionError: assertion-witness",
     }
-    new_failure = {
+    new_failure: baseline.FailureRecord = {
         "suite": "broad",
         "test_id": "new-regression",
         "signature": "TypeError: fresh",
@@ -235,7 +236,7 @@ def _cook_event(root: Path, event: str) -> None:
     trace = root / ".cheese" / "trace.log"
     trace.parent.mkdir(parents=True, exist_ok=True)
     with trace.open("a", encoding="utf-8") as stream:
-        stream.write(event + "\n")
+        _ = stream.write(event + "\n")
 
 
 def _run_cook_red_gate(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -253,9 +254,9 @@ def _write_cook_project(root: Path, *, origin: str) -> tuple[Path, Path, Path]:
     candidates = namespace / "candidates"
     tests.mkdir(parents=True)
     candidates.mkdir(parents=True)
-    (root / "production.py").write_text("before\n", encoding="utf-8")
+    _ = (root / "production.py").write_text("before\n", encoding="utf-8")
     baseline = tests / "baseline.py"
-    baseline.write_text(
+    _ = baseline.write_text(
         """
 from pathlib import Path
 trace = Path(".cheese") / "trace.log"
@@ -266,7 +267,7 @@ raise SystemExit(0)
         encoding="utf-8",
     )
     spec = root / "spec.md"
-    spec.write_text(
+    _ = spec.write_text(
         """---
 status: approved
 gate_applicability:
@@ -287,7 +288,7 @@ gate_applicability:
     )
     plan = namespace / "cook-preflight.plan.json"
     token = namespace / "cook-preflight.phase.json"
-    plan.write_text(
+    _ = plan.write_text(
         json.dumps(
             {
                 "schema_version": 1,
@@ -314,12 +315,12 @@ gate_applicability:
         str(token.relative_to(root)),
     )
     assert begun.returncode == 0, begun.stdout + begun.stderr
-    phase = json.loads(begun.stdout)
+    phase = cast(dict[str, object], json.loads(begun.stdout))
 
     oracle = tests / "oracle.py"
-    oracle.write_text("outer oracle\n", encoding="utf-8")
+    _ = oracle.write_text("outer oracle\n", encoding="utf-8")
     case = tests / "case.py"
-    case.write_text(
+    _ = case.write_text(
         """
 from pathlib import Path
 trace = Path(".cheese") / "trace.log"
@@ -332,7 +333,7 @@ assert False, "assertion-witness"
     )
     candidate = candidates / "cook-preflight.json"
     receipt = namespace / "cook-preflight.receipt.json"
-    candidate.write_text(
+    _ = candidate.write_text(
         json.dumps(
             {
                 "schema_version": 1,
@@ -402,7 +403,7 @@ def _cook_preflight_trace(
     _cook_event(root, "cut:broad-baseline:frozen")
     _cook_event(root, "cut:oracle:write")
     if receipt_state == "invalid":
-        receipt.write_text("{not-json", encoding="utf-8")
+        _ = receipt.write_text("{not-json", encoding="utf-8")
 
     before_edit = _cook_sha256(root / "production.py")
     if receipt_state == "valid":
@@ -416,7 +417,7 @@ def _cook_preflight_trace(
             str(receipt.relative_to(root)),
         )
         assert issued.returncode == 0, issued.stdout + issued.stderr
-        payload = json.loads(issued.stdout)
+        payload = cast(dict[str, object], json.loads(issued.stdout))
         _cook_event(root, "cut:red-issue")
         _cook_event(root, "cook:receipt:valid")
     else:
@@ -445,9 +446,10 @@ def _cook_preflight_trace(
             str(receipt.relative_to(root)),
         )
         assert issued.returncode == 0, issued.stdout + issued.stderr
-        payload = json.loads(issued.stdout)
+        payload = cast(dict[str, object], json.loads(issued.stdout))
         _cook_event(root, "cut:red-issue")
-        _cook_event(root, f"cut:receipt:{payload['cases'][0]['origin']}")
+        issued_cases = cast(list[dict[str, object]], payload["cases"])
+        _cook_event(root, f"cut:receipt:{issued_cases[0]['origin']}")
 
     _cook_event(root, "cook:preflight")
     _cook_event(root, "cook:baseline:consumed")
@@ -464,8 +466,8 @@ def _cook_preflight_trace(
     assert _cook_sha256(root / "production.py") == before_edit
 
     _cook_event(root, "production-edit:first")
-    (root / "production.py").write_text("implemented-after-red\n", encoding="utf-8")
-    payload = json.loads(receipt.read_text(encoding="utf-8"))
+    _ = (root / "production.py").write_text("implemented-after-red\n", encoding="utf-8")
+    payload = cast(dict[str, object], json.loads(receipt.read_text(encoding="utf-8")))
     events = (root / ".cheese" / "trace.log").read_text(
         encoding="utf-8"
     ).splitlines()
@@ -514,4 +516,4 @@ def test_ac_5_cook_preflight_traces_cut_and_red_replay_before_edit(
                 "cut:issue:start"
             )
             assert payload["producer"] == "cut"
-            assert payload["cases"][0]["origin"] == "adopted"
+            assert cast(list[dict[str, object]], payload["cases"])[0]["origin"] == "adopted"

@@ -9,8 +9,9 @@ receipt, a missing projection, and tampering with each of the three files.
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Protocol, cast
 
 import pytest
 from attrs import evolve
@@ -22,15 +23,32 @@ from easy_cheese_schemas import (
     ProtectedEntry,
     TransitionAction,
     WheypointRecord,
+    WheypointRevision,
 )
 
 from easy_cheese.skills.wheypoint import projection, records, storage
+
+
+class _Promotion(Protocol):
+    record: WheypointRecord
+    revision: WheypointRevision
+    markdown: str
+
+
+class _FcntlModule(Protocol):
+    LOCK_EX: int
+    LOCK_NB: int
+    LOCK_UN: int
+
+    def flock(self, fd: int, operation: int, /) -> None: ...
+
 
 WORK_ID = "work-0001"
 
 
 @pytest.fixture
 def store(corpus_root: Path) -> storage.WorkStore:
+    _ = corpus_root
     return storage.WorkStore.open(WORK_ID)
 
 
@@ -63,8 +81,9 @@ def test_immutable_file_names_pair_number_with_revision_id(
 def test_a_work_id_that_could_escape_the_corpus_is_refused(
     corpus_root: Path, work_id: str
 ) -> None:
+    _ = corpus_root
     with pytest.raises(storage.StorageError):
-        storage.WorkStore.open(work_id)
+        _ = storage.WorkStore.open(work_id)
 
 
 def test_an_explicit_corpus_root_overrides_the_environment(tmp_path: Path) -> None:
@@ -76,7 +95,7 @@ def test_an_explicit_corpus_root_overrides_the_environment(tmp_path: Path) -> No
 
 
 def test_promotion_writes_the_three_files_with_exact_bytes(
-    store: storage.WorkStore, make_promotion: Any
+    store: storage.WorkStore, make_promotion: Callable[..., _Promotion]
 ) -> None:
     promotion = make_promotion()
     store.promote(promotion.record, promotion.revision, promotion.markdown)
@@ -96,12 +115,14 @@ def test_promotion_writes_the_three_files_with_exact_bytes(
 
 
 def test_record_json_is_replaced_last_and_after_the_immutable_fsyncs(
-    store: storage.WorkStore, make_promotion: Any, monkeypatch: pytest.MonkeyPatch
+    store: storage.WorkStore,
+    make_promotion: Callable[..., _Promotion],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     events: list[str] = []
     real_replace, real_fsync = os.replace, os.fsync
 
-    def spy_replace(src: Any, dst: Any) -> None:
+    def spy_replace(src: str, dst: str) -> None:
         events.append(f"replace:{Path(dst).name}")
         real_replace(src, dst)
 
@@ -129,7 +150,9 @@ def test_record_json_is_replaced_last_and_after_the_immutable_fsyncs(
 
 
 def test_a_crash_before_the_record_swap_leaves_the_prior_record_standing(
-    store: storage.WorkStore, make_promotion: Any, monkeypatch: pytest.MonkeyPatch
+    store: storage.WorkStore,
+    make_promotion: Callable[..., _Promotion],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     first = make_promotion(1, "rev-0001")
     store.promote(first.record, first.revision, first.markdown)
@@ -137,7 +160,7 @@ def test_a_crash_before_the_record_swap_leaves_the_prior_record_standing(
 
     real_replace = os.replace
 
-    def crash_on_record(src: Any, dst: Any) -> None:
+    def crash_on_record(src: str, dst: str) -> None:
         if Path(dst).name == "record.json":
             raise OSError("power loss")
         real_replace(src, dst)
@@ -162,11 +185,13 @@ def test_a_crash_before_the_record_swap_leaves_the_prior_record_standing(
 
 
 def test_a_crash_before_the_first_record_swap_leaves_no_record_at_all(
-    store: storage.WorkStore, make_promotion: Any, monkeypatch: pytest.MonkeyPatch
+    store: storage.WorkStore,
+    make_promotion: Callable[..., _Promotion],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     real_replace = os.replace
 
-    def crash_on_record(src: Any, dst: Any) -> None:
+    def crash_on_record(src: str, dst: str) -> None:
         if Path(dst).name == "record.json":
             raise OSError("power loss")
         real_replace(src, dst)
@@ -184,11 +209,13 @@ def test_a_crash_before_the_first_record_swap_leaves_no_record_at_all(
 
 
 def test_a_crash_before_the_projection_lands_leaves_an_incomplete_pair(
-    store: storage.WorkStore, make_promotion: Any, monkeypatch: pytest.MonkeyPatch
+    store: storage.WorkStore,
+    make_promotion: Callable[..., _Promotion],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     real_replace = os.replace
 
-    def crash_on_projection(src: Any, dst: Any) -> None:
+    def crash_on_projection(src: str, dst: str) -> None:
         if Path(dst).suffix == ".md":
             raise OSError("power loss")
         real_replace(src, dst)
@@ -205,7 +232,7 @@ def test_a_crash_before_the_projection_lands_leaves_an_incomplete_pair(
 
 
 def test_a_promoted_revision_is_immutable(
-    store: storage.WorkStore, make_promotion: Any
+    store: storage.WorkStore, make_promotion: Callable[..., _Promotion]
 ) -> None:
     promotion = make_promotion()
     store.promote(promotion.record, promotion.revision, promotion.markdown)
@@ -218,13 +245,15 @@ def test_a_promoted_revision_is_immutable(
 
 
 def test_an_interrupted_promotion_can_be_finished_by_the_identical_retry(
-    store: storage.WorkStore, make_promotion: Any, monkeypatch: pytest.MonkeyPatch
+    store: storage.WorkStore,
+    make_promotion: Callable[..., _Promotion],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Nothing can have quoted an incomplete pair, so the retry that produces
     the same revision id completes it instead of being refused forever."""
     real_replace = os.replace
 
-    def crash_on_projection(src: Any, dst: Any) -> None:
+    def crash_on_projection(src: str, dst: str) -> None:
         if Path(dst).suffix == ".md":
             raise OSError("power loss")
         real_replace(src, dst)
@@ -246,14 +275,16 @@ def test_an_interrupted_promotion_can_be_finished_by_the_identical_retry(
 
 
 def test_the_identical_retry_over_a_complete_pair_moves_only_the_record(
-    store: storage.WorkStore, make_promotion: Any, monkeypatch: pytest.MonkeyPatch
+    store: storage.WorkStore,
+    make_promotion: Callable[..., _Promotion],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The window between the projection rename and the record rename: the
     immutable pair landed and the pointer did not. The retry finishes it by
     writing record.json alone -- the immutable half is compared, not rewritten."""
     real_replace = os.replace
 
-    def crash_on_record(src: Any, dst: Any) -> None:
+    def crash_on_record(src: str, dst: str) -> None:
         if Path(dst).name == "record.json":
             raise OSError("power loss")
         real_replace(src, dst)
@@ -284,14 +315,14 @@ def test_the_identical_retry_over_a_complete_pair_moves_only_the_record(
 
 
 def test_an_incomplete_pair_may_be_replaced_by_any_agreeing_triple_at_its_name(
-    store: storage.WorkStore, make_promotion: Any
+    store: storage.WorkStore, make_promotion: Callable[..., _Promotion]
 ) -> None:
     """What the overwrite is permitted to replace: a pair no reader can have
     quoted. The abandoned receipt's own bytes are not binding -- an incomplete
     pair carries no claim -- so the retry lands whatever agrees with itself."""
     promotion = make_promotion()
     store.revisions_dir.mkdir(parents=True, exist_ok=True)
-    store.revision_path(1, "rev-0001").write_bytes(
+    _ = store.revision_path(1, "rev-0001").write_bytes(
         records.canonical_payload(
             evolve(promotion.revision, preserved_entry_ids=["injected"])
         )
@@ -306,7 +337,7 @@ def test_an_incomplete_pair_may_be_replaced_by_any_agreeing_triple_at_its_name(
 
 
 def test_a_complete_pair_is_refused_when_the_projection_is_what_changed(
-    store: storage.WorkStore, make_promotion: Any
+    store: storage.WorkStore, make_promotion: Callable[..., _Promotion]
 ) -> None:
     """The projection digest lives in the receipt, so different markdown is a
     different receipt: re-promoting it at a settled name is a rewrite, and both
@@ -337,7 +368,7 @@ def test_a_complete_pair_is_refused_when_the_projection_is_what_changed(
 
 
 def test_a_projection_no_receipt_names_is_reported_rather_than_unseen(
-    store: storage.WorkStore, make_promotion: Any
+    store: storage.WorkStore, make_promotion: Callable[..., _Promotion]
 ) -> None:
     """Half a store is still a store: a corpus salvaged into its readable half
     alone holds real history, and scanning only receipts would report it clean."""
@@ -358,7 +389,7 @@ def test_a_projection_no_receipt_names_is_reported_rather_than_unseen(
     ["revision_id", "revision_number", "work_id", "record_digest", "projection_digest"],
 )
 def test_promotion_refuses_a_triple_that_does_not_agree(
-    store: storage.WorkStore, make_promotion: Any, field: str
+    store: storage.WorkStore, make_promotion: Callable[..., _Promotion], field: str
 ) -> None:
     promotion = make_promotion()
     broken = {
@@ -379,7 +410,7 @@ def test_promotion_refuses_a_triple_that_does_not_agree(
 
 
 def test_promotion_refuses_a_record_that_does_not_point_at_its_receipt(
-    store: storage.WorkStore, make_promotion: Any
+    store: storage.WorkStore, make_promotion: Callable[..., _Promotion]
 ) -> None:
     promotion = make_promotion()
     detached = evolve(promotion.record, revision_digest="sha256:" + "9" * 64)
@@ -398,7 +429,7 @@ def test_reading_a_missing_record_is_absence_not_an_error(
 
 
 def test_a_promoted_record_reads_back_identically(
-    store: storage.WorkStore, make_promotion: Any
+    store: storage.WorkStore, make_promotion: Callable[..., _Promotion]
 ) -> None:
     promotion = make_promotion(gating=True)
     store.promote(promotion.record, promotion.revision, promotion.markdown)
@@ -408,25 +439,25 @@ def test_a_promoted_record_reads_back_identically(
 
 
 def test_recovery_never_writes_anything(
-    store: storage.WorkStore, make_promotion: Any
+    store: storage.WorkStore, make_promotion: Callable[..., _Promotion]
 ) -> None:
     promotion = make_promotion()
     store.promote(promotion.record, promotion.revision, promotion.markdown)
     before = {path: path.read_bytes() for path in store.root.rglob("*") if path.is_file()}
 
-    store.recover()
+    _ = store.recover()
 
     after = {path: path.read_bytes() for path in store.root.rglob("*") if path.is_file()}
     assert after == before
 
 
 def test_a_truncated_receipt_is_incomplete_rather_than_half_trusted(
-    store: storage.WorkStore, make_promotion: Any
+    store: storage.WorkStore, make_promotion: Callable[..., _Promotion]
 ) -> None:
     promotion = make_promotion()
     store.promote(promotion.record, promotion.revision, promotion.markdown)
     path = store.revision_path(1, "rev-0001")
-    path.write_bytes(path.read_bytes()[:40])
+    _ = path.write_bytes(path.read_bytes()[:40])
 
     report = store.recover()
     assert report.complete == ()
@@ -436,11 +467,11 @@ def test_a_truncated_receipt_is_incomplete_rather_than_half_trusted(
 
 
 def test_a_receipt_whose_filename_lies_about_its_identity_is_incomplete(
-    store: storage.WorkStore, make_promotion: Any
+    store: storage.WorkStore, make_promotion: Callable[..., _Promotion]
 ) -> None:
     promotion = make_promotion()
     store.promote(promotion.record, promotion.revision, promotion.markdown)
-    store.revision_path(1, "rev-0001").rename(
+    _ = store.revision_path(1, "rev-0001").rename(
         store.revisions_dir / "1-rev-9999.json"
     )
 
@@ -452,7 +483,7 @@ def test_a_receipt_whose_filename_lies_about_its_identity_is_incomplete(
 
 
 def test_a_tampered_projection_breaks_its_pair(
-    store: storage.WorkStore, make_promotion: Any
+    store: storage.WorkStore, make_promotion: Callable[..., _Promotion]
 ) -> None:
     promotion = make_promotion()
     store.promote(promotion.record, promotion.revision, promotion.markdown)
@@ -461,7 +492,7 @@ def test_a_tampered_projection_breaks_its_pair(
         "Implement the canonical record runtime.", "Ship it, no gates."
     )
     assert tampered != promotion.markdown
-    path.write_text(tampered, encoding="utf-8")
+    _ = path.write_text(tampered, encoding="utf-8")
 
     report = store.recover()
     assert report.complete == ()
@@ -469,7 +500,9 @@ def test_a_tampered_projection_breaks_its_pair(
 
 
 def test_recovery_reads_each_projection_once(
-    store: storage.WorkStore, make_promotion: Any, monkeypatch: pytest.MonkeyPatch
+    store: storage.WorkStore,
+    make_promotion: Callable[..., _Promotion],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     promotion = make_promotion()
     store.promote(promotion.record, promotion.revision, promotion.markdown)
@@ -484,11 +517,13 @@ def test_recovery_reads_each_projection_once(
             reads += 1
         return real_read_bytes(path)
 
-    def count_read_text(path: Path, *args: Any, **kwargs: Any) -> str:
+    def count_read_text(
+        path: Path, encoding: str | None = None, errors: str | None = None
+    ) -> str:
         nonlocal reads
         if path == projection_path:
             reads += 1
-        return real_read_text(path, *args, **kwargs)
+        return real_read_text(path, encoding, errors)
 
     monkeypatch.setattr(Path, "read_bytes", count_read_bytes)
     monkeypatch.setattr(Path, "read_text", count_read_text)
@@ -498,7 +533,7 @@ def test_recovery_reads_each_projection_once(
 
 
 def test_an_unreadable_projection_is_incomplete(
-    store: storage.WorkStore, make_promotion: Any
+    store: storage.WorkStore, make_promotion: Callable[..., _Promotion]
 ) -> None:
     promotion = make_promotion()
     store.promote(promotion.record, promotion.revision, promotion.markdown)
@@ -513,12 +548,12 @@ def test_an_unreadable_projection_is_incomplete(
 
 
 def test_a_tampered_record_is_reported_against_its_receipt(
-    store: storage.WorkStore, make_promotion: Any
+    store: storage.WorkStore, make_promotion: Callable[..., _Promotion]
 ) -> None:
     promotion = make_promotion()
     store.promote(promotion.record, promotion.revision, promotion.markdown)
     forged = evolve(promotion.record, orientation="nothing to see here")
-    store.record_path.write_bytes(records.canonical_payload(forged))
+    _ = store.record_path.write_bytes(records.canonical_payload(forged))
 
     report = store.recover()
     assert not report.consistent
@@ -528,7 +563,7 @@ def test_a_tampered_record_is_reported_against_its_receipt(
 
 
 def test_a_record_pointing_at_an_absent_revision_invents_nothing(
-    store: storage.WorkStore, make_promotion: Any
+    store: storage.WorkStore, make_promotion: Callable[..., _Promotion]
 ) -> None:
     promotion = make_promotion()
     store.promote(promotion.record, promotion.revision, promotion.markdown)
@@ -540,7 +575,7 @@ def test_a_record_pointing_at_an_absent_revision_invents_nothing(
     assert report.latest_complete is None
     assert report.problems == (
         "record.json points at revision 'rev-0001', which is not a complete "
-        "immutable revision",
+        + "immutable revision",
     )
 
 
@@ -548,7 +583,7 @@ def test_malformed_record_json_is_reported_not_raised(
     store: storage.WorkStore,
 ) -> None:
     store.record_path.parent.mkdir(parents=True, exist_ok=True)
-    store.record_path.write_bytes(b"{ not json")
+    _ = store.record_path.write_bytes(b"{ not json")
     report = store.recover()
     assert report.record is None
     assert report.problems == ("record.json is malformed JSON",)
@@ -558,7 +593,7 @@ def test_malformed_record_json_is_reported_not_raised(
 
 
 def test_the_record_lock_excludes_a_second_holder(store: storage.WorkStore) -> None:
-    fcntl = pytest.importorskip("fcntl")
+    fcntl = cast(_FcntlModule, pytest.importorskip("fcntl"))
     with store.lock():
         assert store.lock_path.is_file()
         assert store.lock_path.stat().st_mode & 0o777 == 0o600
@@ -580,7 +615,9 @@ def test_the_record_lock_excludes_a_second_holder(store: storage.WorkStore) -> N
 # ----- artifact coverage ----------------------------------------------------
 
 
-def _covered_record(make_record: Any, link: ArtifactLink) -> WheypointRecord:
+def _covered_record(
+    make_record: Callable[..., WheypointRecord], link: ArtifactLink
+) -> WheypointRecord:
     return make_record(
         decisions=[
             ProtectedEntry(
@@ -595,7 +632,9 @@ def _covered_record(make_record: Any, link: ArtifactLink) -> WheypointRecord:
     )
 
 
-def _report(record: WheypointRecord, base: Path, store: storage.WorkStore) -> Any:
+def _report(
+    record: WheypointRecord, base: Path, store: storage.WorkStore
+) -> records.CoverageReport:
     return records.coverage_report(
         record,
         artifact_digest=lambda path: storage.file_digest(base / path),
@@ -604,10 +643,10 @@ def _report(record: WheypointRecord, base: Path, store: storage.WorkStore) -> An
 
 
 def test_a_pinned_artifact_that_still_matches_covers_its_entries(
-    tmp_path: Path, store: storage.WorkStore, make_record: Any
+    tmp_path: Path, store: storage.WorkStore, make_record: Callable[..., WheypointRecord]
 ) -> None:
     artifact = tmp_path / "cook.md"
-    artifact.write_text("the cook report", encoding="utf-8")
+    _ = artifact.write_text("the cook report", encoding="utf-8")
     link = ArtifactLink(
         path="cook.md",
         digest=storage.file_digest(artifact),
@@ -622,7 +661,7 @@ def test_a_pinned_artifact_that_still_matches_covers_its_entries(
 
 
 def test_a_missing_artifact_invalidates_the_claim_and_keeps_the_entry(
-    tmp_path: Path, store: storage.WorkStore, make_record: Any
+    tmp_path: Path, store: storage.WorkStore, make_record: Callable[..., WheypointRecord]
 ) -> None:
     link = ArtifactLink(
         path="gone.md", digest="sha256:" + "a" * 64, covers_entry_ids=["d-store"]
@@ -641,17 +680,17 @@ def test_a_missing_artifact_invalidates_the_claim_and_keeps_the_entry(
 
 
 def test_a_stale_artifact_digest_invalidates_the_claim(
-    tmp_path: Path, store: storage.WorkStore, make_record: Any
+    tmp_path: Path, store: storage.WorkStore, make_record: Callable[..., WheypointRecord]
 ) -> None:
     artifact = tmp_path / "cook.md"
-    artifact.write_text("the cook report", encoding="utf-8")
+    _ = artifact.write_text("the cook report", encoding="utf-8")
     link = ArtifactLink(
         path="cook.md",
         digest=storage.file_digest(artifact),
         covers_entry_ids=["d-store"],
     )
     record = _covered_record(make_record, link)
-    artifact.write_text("edited after the claim", encoding="utf-8")
+    _ = artifact.write_text("edited after the claim", encoding="utf-8")
 
     report = _report(record, tmp_path, store)
     assert report.covered_entry_ids == ()
@@ -662,9 +701,9 @@ def test_a_stale_artifact_digest_invalidates_the_claim(
 
 
 def test_an_unpinned_coverage_claim_is_refused(
-    tmp_path: Path, store: storage.WorkStore, make_record: Any
+    tmp_path: Path, store: storage.WorkStore, make_record: Callable[..., WheypointRecord]
 ) -> None:
-    (tmp_path / "cook.md").write_text("the cook report", encoding="utf-8")
+    _ = (tmp_path / "cook.md").write_text("the cook report", encoding="utf-8")
     record = _covered_record(
         make_record, ArtifactLink(path="cook.md", covers_entry_ids=["d-store"])
     )
@@ -679,10 +718,10 @@ def test_an_unpinned_coverage_claim_is_refused(
 
 
 def test_a_claim_naming_an_unknown_entry_is_refused(
-    tmp_path: Path, store: storage.WorkStore, make_record: Any
+    tmp_path: Path, store: storage.WorkStore, make_record: Callable[..., WheypointRecord]
 ) -> None:
     artifact = tmp_path / "cook.md"
-    artifact.write_text("the cook report", encoding="utf-8")
+    _ = artifact.write_text("the cook report", encoding="utf-8")
     record = _covered_record(
         make_record,
         ArtifactLink(
@@ -702,11 +741,14 @@ def test_a_claim_naming_an_unknown_entry_is_refused(
 
 
 def test_a_revision_pinned_claim_needs_that_revision_to_exist(
-    tmp_path: Path, store: storage.WorkStore, make_record: Any, make_promotion: Any
+    tmp_path: Path,
+    store: storage.WorkStore,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _Promotion],
 ) -> None:
     promotion = make_promotion()
     store.promote(promotion.record, promotion.revision, promotion.markdown)
-    (tmp_path / "cook.md").write_text("the cook report", encoding="utf-8")
+    _ = (tmp_path / "cook.md").write_text("the cook report", encoding="utf-8")
 
     known = _covered_record(
         make_record,
@@ -726,7 +768,7 @@ def test_a_revision_pinned_claim_needs_that_revision_to_exist(
 
 
 def test_a_link_without_a_coverage_claim_is_not_a_failure(
-    tmp_path: Path, store: storage.WorkStore, make_record: Any
+    tmp_path: Path, store: storage.WorkStore, make_record: Callable[..., WheypointRecord]
 ) -> None:
     record = _covered_record(make_record, ArtifactLink(path="never-written.md"))
     report = _report(record, tmp_path, store)
@@ -738,7 +780,7 @@ def test_a_link_without_a_coverage_claim_is_not_a_failure(
 
 
 def test_transitions_are_checked_against_the_entries_that_exist(
-    make_record: Any,
+    make_record: Callable[..., WheypointRecord],
 ) -> None:
     record = make_record(
         decisions=[
@@ -780,7 +822,7 @@ def test_transitions_are_checked_against_the_entries_that_exist(
 
 
 def test_a_supersede_transition_must_name_an_existing_successor(
-    make_record: Any,
+    make_record: Callable[..., WheypointRecord],
 ) -> None:
     record = make_record(
         decisions=[
@@ -806,7 +848,9 @@ def test_a_supersede_transition_must_name_an_existing_successor(
     ) == ("transition targets unknown entry 'd-ghost'",)
 
 
-def test_find_entry_spans_all_three_protected_lists(make_record: Any) -> None:
+def test_find_entry_spans_all_three_protected_lists(
+    make_record: Callable[..., WheypointRecord],
+) -> None:
     record = make_record(gating=True)
     assert records.find_entry(record, "q-durability") is record.questions[0]
     assert records.find_entry(record, "missing") is None
