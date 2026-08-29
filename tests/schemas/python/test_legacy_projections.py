@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+from collections.abc import Callable
 
 import pytest
 
@@ -49,7 +50,7 @@ def artifact() -> ArtifactRef:
 
 
 def semantic_curd(**changes: object) -> SemanticCurd:
-    values = {
+    values: dict[str, object] = {
         "curd_id": "widget",
         "outcome": "Implement widget",
         "scope": BoundedScope(paths=("src/widget.py", "tests/test_widget.py")),
@@ -63,11 +64,11 @@ def semantic_curd(**changes: object) -> SemanticCurd:
         "lineage": IdentityLineage(IdentityAction.NEW),
     }
     values.update(changes)
-    return SemanticCurd(**values)
+    return SemanticCurd(**values)  # pyright: ignore[reportArgumentType]
 
 
 def plan(curd: SemanticCurd | None = None, **changes: object) -> CurdPlan:
-    values = {
+    values: dict[str, object] = {
         "contract_version": VERSION,
         "plan_id": "plan-widget",
         "revision": 1,
@@ -76,7 +77,7 @@ def plan(curd: SemanticCurd | None = None, **changes: object) -> CurdPlan:
         "curds": (curd or semantic_curd(),),
     }
     values.update(changes)
-    return CurdPlan(**values)
+    return CurdPlan(**values)  # pyright: ignore[reportArgumentType]
 
 def test_curd_block_projects_single_curd_objective_without_loss() -> None:
     curd = semantic_curd(
@@ -106,6 +107,7 @@ def test_curd_block_projects_single_curd_objective_without_loss() -> None:
             prompt_version="curd-plan-projection-v1",
         ),
     )
+    assert isinstance(projected, CurdBlock)
     assert projected.curds[0].contract == curd_plan.objective
 
 
@@ -129,6 +131,7 @@ def test_decomposition_projects_single_curd_objective_without_loss() -> None:
             )
         ]
     )
+    assert isinstance(projected, Decomposition)
     assert projected.curds[0].behavior == curd_plan.objective
     assert curd_plan.curds[0].outputs == tuple(projected.curds[0].files)
 
@@ -141,7 +144,10 @@ def test_decomposition_projects_single_curd_objective_without_loss() -> None:
         (project_decomposition, "Decomposition"),
     ],
 )
-def test_legacy_projection_rejects_distinct_objective(projector, target: str) -> None:
+def test_legacy_projection_rejects_distinct_objective(
+    projector: Callable[[CurdPlan], CurdBlock | Decomposition | UnsupportedProjection],
+    target: str,
+) -> None:
     curd = semantic_curd(
         outputs=("src/widget.py", "tests/test_widget.py"),
         criteria=(Criterion("widget", "Widget support is shipped", CHECK),),
@@ -185,7 +191,10 @@ def test_decomposition_rejects_outputs_even_when_equal_to_outcome() -> None:
         (project_decomposition, "Decomposition"),
     ],
 )
-def test_plan_context_returns_typed_unsupported_projection(projector, target) -> None:
+def test_plan_context_returns_typed_unsupported_projection(
+    projector: Callable[[CurdPlan], CurdBlock | Decomposition | UnsupportedProjection],
+    target: str,
+) -> None:
     context = BoundedContext(constraints=("Keep the public API stable",))
 
     assert projector(plan(context=context)) == UnsupportedProjection(
@@ -202,7 +211,10 @@ def test_plan_context_returns_typed_unsupported_projection(projector, target) ->
         (project_decomposition, "Decomposition"),
     ],
 )
-def test_legacy_projection_rejects_parent_plan_ref(projector, target: str) -> None:
+def test_legacy_projection_rejects_parent_plan_ref(
+    projector: Callable[[CurdPlan], CurdBlock | Decomposition | UnsupportedProjection],
+    target: str,
+) -> None:
     parent = SourcePlanRef(plan_id="plan-parent", revision=1, digest=DIGEST)
 
     assert projector(plan(parent_plan_ref=parent)) == UnsupportedProjection(
@@ -220,7 +232,10 @@ def test_legacy_projection_rejects_parent_plan_ref(projector, target: str) -> No
         (project_decomposition, "Decomposition"),
     ],
 )
-def test_legacy_projection_rejects_shared_scope_paths(projector, target: str) -> None:
+def test_legacy_projection_rejects_shared_scope_paths(
+    projector: Callable[[CurdPlan], CurdBlock | Decomposition | UnsupportedProjection],
+    target: str,
+) -> None:
     foundation = semantic_curd(
         curd_id="foundation",
         outcome="Build foundation",
@@ -275,7 +290,11 @@ def test_legacy_projection_rejects_shared_scope_paths(projector, target: str) ->
     ],
 )
 def test_legacy_projection_never_flattens_unrepresentable_curd_fields(
-    projector, target: str, changes: dict[str, object], field: str, reason: str
+    projector: Callable[[CurdPlan], CurdBlock | Decomposition | UnsupportedProjection],
+    target: str,
+    changes: dict[str, object],
+    field: str,
+    reason: str,
 ) -> None:
     assert projector(plan(semantic_curd(**changes))) == UnsupportedProjection(
         target=target,
@@ -293,7 +312,8 @@ def test_legacy_projection_never_flattens_unrepresentable_curd_fields(
     ],
 )
 def test_legacy_projection_rejects_dependencies_instead_of_flattening(
-    projector, target: str
+    projector: Callable[[CurdPlan], CurdBlock | Decomposition | UnsupportedProjection],
+    target: str,
 ) -> None:
     foundation = semantic_curd(
         curd_id="foundation",
@@ -379,7 +399,7 @@ def test_decomposition_returns_typed_unsupported_for_lossy_fields(
 def test_legacy_migration_api_signatures_remain_unchanged() -> None:
     assert (
         str(inspect.signature(load))
-        == "(raw: 'dict[str, Any]', cls: 'type[T]', *, strict: 'bool') -> 'Loaded[T]'"
+        == "(raw: 'object', cls: 'type[T]', *, strict: 'bool') -> 'Loaded[T]'"
     )
     assert (
         str(inspect.signature(parse_handoff_slug))

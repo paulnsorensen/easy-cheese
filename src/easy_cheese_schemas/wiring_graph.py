@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import graphlib
 from collections.abc import Iterable, Sequence
-from typing import TypeAlias
+from typing import TypeAlias, cast
 
 
 WiringGraph: TypeAlias = Iterable[tuple[str, Sequence[str]]]
@@ -41,8 +41,8 @@ class WiringCycleError(ValueError):
     """A wiring cycle with canonical path and deterministic ID detail."""
 
     def __init__(self, cycle_path: Sequence[str]) -> None:
-        self.cycle_path = tuple(cycle_path)
-        self.cycle_ids = tuple(sorted(set(self.cycle_path)))
+        self.cycle_path: tuple[str, ...] = tuple(cycle_path)
+        self.cycle_ids: tuple[str, ...] = tuple(sorted(set(self.cycle_path)))
         path = " -> ".join(self.cycle_path)
         super().__init__(f"the dependency graph has cycle {path}")
 
@@ -53,7 +53,8 @@ def _prepare(
     try:
         sorter.prepare()
     except graphlib.CycleError as exc:
-        cycle_path = tuple(str(node) for node in exc.args[1])
+        cycle_nodes = cast(Iterable[object], exc.args[1])
+        cycle_path = tuple(str(node) for node in cycle_nodes)
         return WiringCycleError(cycle_path)
     return None
 

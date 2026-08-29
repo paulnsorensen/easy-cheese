@@ -10,10 +10,10 @@ from __future__ import annotations
 import re
 from enum import Enum
 from pathlib import PurePosixPath
-from typing import Any, Literal
+from typing import ClassVar, Literal, Protocol, cast
 
 import attrs
-from attrs import Attribute, define, field
+from attrs import define, field
 
 __all__ = [
     "BaselineCheck",
@@ -62,37 +62,42 @@ class EvidenceOrigin(str, Enum):
     ADOPTED = "adopted"
 
 
+class _NamedAttribute(Protocol):
+    name: str
+
+
 def _non_empty_string(
-    _instance: object, attribute: Attribute[Any], value: object
+    _instance: object, attribute: _NamedAttribute, value: object
 ) -> None:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{attribute.name} must be a non-empty string")
 
 
 def _optional_non_empty_string(
-    instance: object, attribute: Attribute[Any], value: object
+    instance: object, attribute: _NamedAttribute, value: object
 ) -> None:
     if value is not None:
         _non_empty_string(instance, attribute, value)
 
 
 def _optional_project_relative_path(
-    instance: object, attribute: Attribute[Any], value: object
+    instance: object, attribute: _NamedAttribute, value: object
 ) -> None:
     if value is not None:
         _project_relative_path(instance, attribute, value)
 
 
-def _string_list(_instance: object, attribute: Attribute[Any], value: object) -> None:
+def _string_list(_instance: object, attribute: _NamedAttribute, value: object) -> None:
     if not isinstance(value, list):
         raise ValueError(f"{attribute.name} must be a list")
-    for index, item in enumerate(value, start=1):
+    items = cast("list[object]", value)
+    for index, item in enumerate(items, start=1):
         if not isinstance(item, str) or not item.strip():
             raise ValueError(f"{attribute.name}[{index}] must be a non-empty string")
 
 
 def _non_empty_string_list(
-    instance: object, attribute: Attribute[Any], value: object
+    instance: object, attribute: _NamedAttribute, value: object
 ) -> None:
     _string_list(instance, attribute, value)
     if not value:
@@ -102,17 +107,17 @@ def _non_empty_string_list(
 _SHELL_TOKENS = frozenset({"&&", "||", ";", "|", "&"})
 
 
-def _argv(_instance: object, attribute: Attribute[Any], value: object) -> None:
+def _argv(_instance: object, attribute: _NamedAttribute, value: object) -> None:
     _non_empty_string_list(_instance, attribute, value)
-    assert isinstance(value, list)
-    if any(token in _SHELL_TOKENS for token in value):
+    tokens = cast("list[str]", value)
+    if any(token in _SHELL_TOKENS for token in tokens):
         raise ValueError(f"{attribute.name} must contain argv data, not shell syntax")
-    if any("\x00" in token or "\n" in token or "\r" in token for token in value):
+    if any("\x00" in token or "\n" in token or "\r" in token for token in tokens):
         raise ValueError(f"{attribute.name} must contain argv data, not shell syntax")
 
 
 def _project_relative_path(
-    _instance: object, attribute: Attribute[Any], value: object
+    _instance: object, attribute: _NamedAttribute, value: object
 ) -> None:
     _non_empty_string(_instance, attribute, value)
     assert isinstance(value, str)
@@ -133,7 +138,7 @@ _DIGEST_RE = re.compile(r"(?:sha256:)?[0-9A-Fa-f]{64}")
 
 
 def _optional_digest(
-    _instance: object, attribute: Attribute[Any], value: object
+    _instance: object, attribute: _NamedAttribute, value: object
 ) -> None:
     if value is not None and (
         not isinstance(value, str) or _DIGEST_RE.fullmatch(value) is None
@@ -141,46 +146,46 @@ def _optional_digest(
         raise ValueError(f"{attribute.name} must be a 64-character hexadecimal digest")
 
 
-def _digest(_instance: object, attribute: Attribute[Any], value: object) -> None:
+def _digest(_instance: object, attribute: _NamedAttribute, value: object) -> None:
     _optional_digest(_instance, attribute, value)
     if value is None:
         raise ValueError(f"{attribute.name} must be a 64-character hexadecimal digest")
 
 
 def _enum(enum_type: type[Enum]):
-    def validate(_instance: object, attribute: Attribute[Any], value: object) -> None:
+    def validate(_instance: object, attribute: _NamedAttribute, value: object) -> None:
         if not isinstance(value, enum_type):
             raise ValueError(
                 f"{attribute.name} must be a {enum_type.__name__}, "
-                f"not {type(value).__name__}"
+                + f"not {type(value).__name__}"
             )
 
     return validate
 
 
 def _schema_version(
-    _instance: object, attribute: Attribute[Any], value: object
+    _instance: object, attribute: _NamedAttribute, value: object
 ) -> None:
     if isinstance(value, bool) or not isinstance(value, int):
         raise ValueError(f"{attribute.name} must be an integer")
 
 
 def _zero_exit_code(
-    _instance: object, attribute: Attribute[Any], value: object
+    _instance: object, attribute: _NamedAttribute, value: object
 ) -> None:
     if isinstance(value, bool) or value != 0:
         raise ValueError(f"{attribute.name} must be exactly 0")
 
 
 def _observed_exit_code(
-    _instance: object, attribute: Attribute[Any], value: object
+    _instance: object, attribute: _NamedAttribute, value: object
 ) -> None:
     if isinstance(value, bool) or not isinstance(value, int):
         raise ValueError(f"{attribute.name} must be an integer")
 
 
 def _contract_source(
-    _instance: object, attribute: Attribute[Any], value: object
+    _instance: object, attribute: _NamedAttribute, value: object
 ) -> None:
     if value not in ("approved", "inferred"):
         raise ValueError(f"{attribute.name} must be one of: approved, inferred")
@@ -188,7 +193,7 @@ def _contract_source(
 
 def _receipt_list_shape(
     instance: object,
-    attribute: Attribute[Any],
+    attribute: _NamedAttribute,
     value: object,
 ) -> None:
     """Apply RED/N/A closure rules to one receipt evidence collection."""
@@ -201,7 +206,7 @@ def _receipt_list_shape(
         raise ValueError(f"{attribute.name} must be empty for not-applicable receipts")
 
 
-def _receipt_guards(instance: object, attribute: Attribute[Any], value: object) -> None:
+def _receipt_guards(instance: object, attribute: _NamedAttribute, value: object) -> None:
     _string_list(instance, attribute, value)
     if (
         getattr(instance, "disposition", None) is GateDisposition.NOT_APPLICABLE
@@ -210,25 +215,28 @@ def _receipt_guards(instance: object, attribute: Attribute[Any], value: object) 
         raise ValueError(f"{attribute.name} must be empty for not-applicable receipts")
 
 
-def _receipt_reason(instance: object, attribute: Attribute[Any], value: object) -> None:
+def _receipt_reason(instance: object, attribute: _NamedAttribute, value: object) -> None:
     disposition = getattr(instance, "disposition", None)
     if disposition is GateDisposition.NOT_APPLICABLE:
         if not isinstance(value, str) or not value.strip():
             raise ValueError(
                 f"{attribute.name} must be a non-empty string for "
-                "not-applicable receipts"
+                + "not-applicable receipts"
             )
     elif disposition is GateDisposition.RED and value is not None:
         raise ValueError(f"{attribute.name} must be absent for RED receipts")
 
 
-def _serialize(_instance: object, _attribute: object, value: Any) -> Any:
-    return value.value if isinstance(value, Enum) else value
+def _serialize(_instance: type, _attribute: _NamedAttribute, value: object) -> object:
+    return cast(object, value.value) if isinstance(value, Enum) else value
 
 
 class _GateRecord:
-    def to_dict(self) -> dict[str, Any]:
-        return attrs.asdict(self, recurse=True, value_serializer=_serialize)
+    def to_dict(self) -> dict[str, object]:
+        return cast(
+            "dict[str, object]",
+            attrs.asdict(self, recurse=True, value_serializer=_serialize),
+        )
 
 
 @define(frozen=True)
@@ -281,7 +289,7 @@ class ProtectedFile(_GateRecord):
 
 def _phase_token_pair(
     instance: GateReceipt,
-    attribute: Attribute[Any],
+    attribute: _NamedAttribute,
     value: str | None,
 ) -> None:
     if bool(instance.phase_token_ref) != bool(value):
@@ -292,7 +300,7 @@ def _phase_token_pair(
 
 @define(frozen=True)
 class GateReceipt(_GateRecord):
-    __schema_forbidden_fields__ = frozenset({"mode"})
+    __schema_forbidden_fields__: ClassVar[frozenset[str]] = frozenset({"mode"})
     schema_version: int = field(validator=_schema_version)
     work_id: str = field(validator=_non_empty_string)
     project_key: str = field(validator=_non_empty_string)
@@ -315,16 +323,20 @@ class GateReceipt(_GateRecord):
         default=None, validator=[_optional_digest, _phase_token_pair]
     )
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(  # pyright: ignore[reportImplicitOverride]
+        self,
+    ) -> dict[str, object]:
         payload = super().to_dict()
-        for contract in payload["contracts"]:
+        contracts = cast("list[dict[str, object]]", payload["contracts"])
+        for contract in contracts:
             if contract["interface_version"] is None:
-                contract.pop("interface_version")
+                _ = contract.pop("interface_version")
             if not contract["matrix_rows"]:
-                contract.pop("matrix_rows")
-        for case in payload["cases"]:
+                _ = contract.pop("matrix_rows")
+        cases = cast("list[dict[str, object]]", payload["cases"])
+        for case in cases:
             if case["matrix_row"] is None:
-                case.pop("matrix_row")
+                _ = case.pop("matrix_row")
         return payload
 
 

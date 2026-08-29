@@ -118,18 +118,30 @@ def test_complete_decompose_materializes_host_identity_and_references() -> None:
             ],
         ),
     )
-    host = {
-        "plan_id": "plan-host",
-        "curd_ids": {"core": "curd-core", "api": "curd-api"},
-        "artifacts": {"source": artifact()},
-        "lineages": {
-            "core": IdentityLineage(IdentityAction.NEW),
-            "api": IdentityLineage(IdentityAction.NEW),
-        },
+    plan_id = "plan-host"
+    curd_ids: dict[str, str] = {"core": "curd-core", "api": "curd-api"}
+    artifacts: dict[str, ArtifactRef] = {"source": artifact()}
+    lineages: dict[str, IdentityLineage] = {
+        "core": IdentityLineage(IdentityAction.NEW),
+        "api": IdentityLineage(IdentityAction.NEW),
     }
 
-    first = materialize_planner_result(request(), view, **host)
-    second = materialize_planner_result(request(), view, **host)
+    first = materialize_planner_result(
+        request(),
+        view,
+        plan_id=plan_id,
+        curd_ids=curd_ids,
+        artifacts=artifacts,
+        lineages=lineages,
+    )
+    second = materialize_planner_result(
+        request(),
+        view,
+        plan_id=plan_id,
+        curd_ids=curd_ids,
+        artifacts=artifacts,
+        lineages=lineages,
+    )
 
     assert first == second
     assert first.contract_version == version("planner-result")
@@ -164,7 +176,7 @@ def test_complete_writer_view_rejects_reason() -> None:
         ValueError,
         match="complete planner writer view must not include a reason",
     ):
-        PlannerResultWriterView(
+        _ = PlannerResultWriterView(
             disposition=PlannerDisposition.COMPLETE,
             plan=CurdPlanWriterView(
                 objective=OBJECTIVE,
@@ -367,7 +379,7 @@ def test_blocked_writer_requires_unresolved_work() -> None:
         ValueError,
         match="blocked planner writer view must describe unresolved work",
     ):
-        PlannerResultWriterView(
+        _ = PlannerResultWriterView(
             disposition=PlannerDisposition.BLOCKED,
             reason="Planner claimed a blocker without unresolved work",
         )
@@ -378,7 +390,7 @@ def test_invalid_writer_rejects_unresolved_payload() -> None:
         ValueError,
         match="invalid planner writer view must not carry unresolved work",
     ):
-        PlannerResultWriterView(
+        _ = PlannerResultWriterView(
             disposition=PlannerDisposition.INVALID,
             unresolved_work=[
                 PlannerUncertaintyWriterView(
@@ -432,7 +444,7 @@ def test_plan_rejects_duplicate_or_invalid_dependency_graphs(
     message: str,
 ) -> None:
     with pytest.raises(PlannerMaterializationError, match=message):
-        materialize_planner_result(
+        _ = materialize_planner_result(
             request(),
             complete_view(*curds),
             plan_id="plan-invalid",
@@ -445,7 +457,7 @@ def test_writer_view_rejects_duplicate_dependencies_before_materialization() -> 
         ValueError,
         match="dependencies must not contain duplicate 'core'",
     ):
-        writer_curd(
+        _ = writer_curd(
             "api",
             "src/api.py",
             dependencies=("core", "core"),
@@ -457,7 +469,7 @@ def test_writer_view_rejects_duplicate_input_keys_before_materialization() -> No
         ValueError,
         match="input_keys must not contain duplicate 'source'",
     ):
-        writer_curd(
+        _ = writer_curd(
             "core",
             "src/core.py",
             input_keys=("source", "source"),
@@ -469,7 +481,7 @@ def test_plan_requires_input_keys_to_resolve_to_host_artifacts() -> None:
         PlannerMaterializationError,
         match="input keys references unknown key 'missing'",
     ):
-        materialize_planner_result(
+        _ = materialize_planner_result(
             request(),
             complete_view(
                 writer_curd(
@@ -491,7 +503,7 @@ def test_complete_plan_rejects_unresolved_file_ownership() -> None:
             "'curd-core' and 'curd-api'"
         ),
     ):
-        materialize_planner_result(
+        _ = materialize_planner_result(
             request(),
             complete_view(
                 writer_curd("core", "src"),
@@ -537,7 +549,7 @@ def test_plan_rejects_duplicate_acceptance_description_and_check() -> None:
         PlannerMaterializationError,
         match="acceptance criteria must not duplicate a description/check pair",
     ):
-        materialize_planner_result(
+        _ = materialize_planner_result(
             request(),
             complete_view(first, second),
             plan_id="plan-criteria",
@@ -550,7 +562,7 @@ def test_plan_objective_must_be_the_request_objective() -> None:
         PlannerMaterializationError,
         match="writer plan objective must match the planner request objective",
     ):
-        materialize_planner_result(
+        _ = materialize_planner_result(
             request(),
             complete_view(
                 writer_curd("core", "src/core.py"),
@@ -573,7 +585,7 @@ def test_request_schema_version_mismatch_rejects_before_materialization() -> Non
         PlannerMaterializationError,
         match="planner request schema version must identify",
     ):
-        materialize_planner_result(
+        _ = materialize_planner_result(
             mismatched,
             complete_view(writer_curd("core", "src/core.py")),
             plan_id="plan-version",
@@ -613,7 +625,7 @@ def test_request_schema_version_rejects_unsupported_components(
         PlannerMaterializationError,
         match=message,
     ):
-        materialize_planner_result(
+        _ = materialize_planner_result(
             unsupported,
             complete_view(writer_curd("core", "src/core.py")),
             plan_id="plan-version",
@@ -646,7 +658,7 @@ def test_unresolved_evidence_rejects_tampered_same_id_reference(
             "planner request evidence"
         ),
     ):
-        materialize_planner_result(
+        _ = materialize_planner_result(
             request(evidence=(original,)),
             PlannerResultWriterView(
                 disposition=PlannerDisposition.BLOCKED,
@@ -679,7 +691,7 @@ def test_replan_rejects_stale_acceptance_checks_on_retained_curd() -> None:
         PlannerMaterializationError,
         match="retained curd 'curd-core' changes semantic content",
     ):
-        materialize_planner_result(
+        _ = materialize_planner_result(
             request(PlannerRequestKind.REPLAN, source_plan=source),
             complete_view(stale),
             plan_id="plan-source",
@@ -718,7 +730,7 @@ def test_complete_replan_rejects_unowned_source_work() -> None:
             r"\['curd-api'\]"
         ),
     ):
-        materialize_planner_result(
+        _ = materialize_planner_result(
             request(PlannerRequestKind.REPLAN, source_plan=source),
             complete_view(writer_curd("core", "src/core.py")),
             plan_id="plan-source",
@@ -785,7 +797,7 @@ def test_host_must_own_one_unique_id_per_writer_key(
     message: str,
 ) -> None:
     with pytest.raises(PlannerMaterializationError, match=message):
-        materialize_planner_result(
+        _ = materialize_planner_result(
             request(),
             complete_view(
                 writer_curd("core", "src/core.py"),
@@ -810,7 +822,7 @@ def test_unresolved_evidence_must_belong_to_the_planner_request() -> None:
             r"\['finding-1'\]"
         ),
     ):
-        materialize_planner_result(
+        _ = materialize_planner_result(
             request(),
             PlannerResultWriterView(
                 disposition=PlannerDisposition.BLOCKED,
@@ -828,7 +840,7 @@ def test_replan_rejects_tampered_source_plan_digest() -> None:
         PlannerMaterializationError,
         match="CurdPlan digest mismatch",
     ):
-        materialize_planner_result(
+        _ = materialize_planner_result(
             request(PlannerRequestKind.REPLAN, source_plan=source),
             complete_view(writer_curd("core", "src/core.py")),
             plan_id="plan-source",
@@ -857,7 +869,7 @@ def test_replan_rejects_source_schema_version_mismatch() -> None:
         PlannerMaterializationError,
         match="unsupported contract version 2.0",
     ):
-        materialize_planner_result(
+        _ = materialize_planner_result(
             request(PlannerRequestKind.REPLAN, source_plan=source),
             complete_view(writer_curd("core", "src/core.py")),
             plan_id="plan-source",

@@ -3,11 +3,18 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Mapping
 from pathlib import Path
+from typing import cast
 
 import attrs
+from attrs import Attribute
 import pytest
 
 import easy_cheese_schemas.workflow as workflow_module
+from easy_cheese_schemas.artifacts import (
+    ResolvedAgentArtifact,
+    SchemaValidator,
+    resolve_artifact,
+)
 from easy_cheese_schemas.contracts import (
     AgentWriterView,
     ArtifactRef,
@@ -40,6 +47,7 @@ from easy_cheese_schemas.contracts import (
     ReviewCoverage,
     ReviewDisposition,
     ReviewRequest,
+    ReviewResult,
     ReviewResultWriterView,
     SemanticCurdWriterView,
     SourceLocationWriterView,
@@ -99,7 +107,7 @@ def digest(payload: bytes) -> str:
 
 def source_artifact(root: Path) -> ArtifactRef:
     payload = b"approved workflow contract\n"
-    (root / "spec.md").write_bytes(payload)
+    _ = (root / "spec.md").write_bytes(payload)
     return ArtifactRef(
         artifact_id="source-artifact",
         role="source",
@@ -195,7 +203,7 @@ def test_review_coverage_ledger_is_representation_independent(
             },
         }
 
-    result = workflow_module._review(request, output, {})
+    result = workflow_module._review(request, output, {})  # pyright: ignore[reportPrivateUsage] -- whitebox test of the module-private review path
 
     expected_disposition = (
         CoverageDisposition.COVERED
@@ -228,7 +236,7 @@ def run_complete(root: Path, events: list[str], contexts: list[Mapping[str, obje
         events.append("writer")
         contexts.append(context)
         payload = b"verified workflow output\n"
-        (root / "result.txt").write_bytes(payload)
+        _ = (root / "result.txt").write_bytes(payload)
         return CurdResultWriterView(
             criterion_results=[
                 CriterionResultWriterView(
@@ -260,14 +268,19 @@ def run_complete(root: Path, events: list[str], contexts: list[Mapping[str, obje
 
 def field_names(value: object) -> set[str]:
     if attrs.has(type(value)):
-        names = {attribute.name for attribute in attrs.fields(type(value))}
+        fields = cast("tuple[Attribute[object], ...]", attrs.fields(type(value)))
+        names = {attribute.name for attribute in fields}
         return names | set().union(
-            *(field_names(getattr(value, name)) for name in names)
+            *(field_names(cast(object, getattr(value, name))) for name in names)
         )
     if isinstance(value, Mapping):
-        return set(value) | set().union(*(field_names(item) for item in value.values()))
+        mapping = cast("Mapping[str, object]", value)
+        return set(mapping) | set().union(
+            *(field_names(item) for item in mapping.values())
+        )
     if isinstance(value, tuple | list):
-        return set().union(*(field_names(item) for item in value))
+        items = cast("tuple[object, ...] | list[object]", value)
+        return set[str]().union(*(field_names(item) for item in items))
     return set()
 
 
@@ -286,11 +299,13 @@ def test_complete_thread_orders_real_callbacks_and_authors_contracts(
     assert [curd.curd_id for curd in planner.plan.curds] == [
         "workflow-request/plan/curd/1"
     ]
-    assert branches[0].disposition is ReviewDisposition.CLEAN
-    assert [row.target for row in branches[0].coverage] == [
+    review_branch = branches[0]
+    assert isinstance(review_branch, ReviewResult)
+    assert review_branch.disposition is ReviewDisposition.CLEAN
+    assert [row.target for row in review_branch.coverage] == [
         "workflow-request/plan/curd/1/criterion/1"
     ]
-    assert [row.disposition.value for row in branches[0].coverage] == ["covered"]
+    assert [row.disposition.value for row in review_branch.coverage] == ["covered"]
     result = results[0]
     assert result.result_id == "workflow-request/plan/revision/1/result/1"
     assert result.disposition is CurdDisposition.PASSED
@@ -306,11 +321,12 @@ def test_complete_thread_orders_real_callbacks_and_authors_contracts(
 def test_writer_context_excludes_every_host_owned_field(tmp_path: Path) -> None:
     contexts: list[Mapping[str, object]] = []
 
-    run_complete(tmp_path, [], contexts)
+    _ = run_complete(tmp_path, [], contexts)
 
     assert len(contexts) == 1
     assert field_names(contexts[0]).isdisjoint(HOST_ONLY_FIELDS)
-    assert Path(contexts[0]["inputs"]["input-1"].path).read_bytes() == (
+    inputs = cast(Mapping[str, ResolvedAgentArtifact], contexts[0]["inputs"])
+    assert Path(inputs["input-1"].path).read_bytes() == (
         b"approved workflow contract\n"
     )
     assert contexts[0]["criteria"] == (
@@ -329,7 +345,9 @@ def test_complete_thread_is_deterministic_for_same_inputs(tmp_path: Path) -> Non
     first_planner, first_branches, first_results = first
     assert first_planner.plan is not None
     assert first_planner.plan.digest.startswith("sha256:")
-    assert first_branches[0].review_id == (
+    first_review_branch = first_branches[0]
+    assert isinstance(first_review_branch, ReviewResult)
+    assert first_review_branch.review_id == (
         "workflow-request/plan/revision/1/result/1/review"
     )
     assert first_results[0].source_curd_ref.digest.startswith("sha256:")
@@ -420,13 +438,15 @@ def test_partial_plan_runs_runnable_curd_and_diagnoses_failure(tmp_path: Path) -
     assert planner.unresolved_work[0].description == (
         "The publication curd remains to be planned"
     )
-    assert branches[0].disposition is DiagnosisDisposition.CONFIRMED
-    assert branches[0].confirmed_cause is not None
-    assert branches[0].confirmed_cause.summary == (
+    diagnosis_branch = branches[0]
+    assert isinstance(diagnosis_branch, DiagnosisResult)
+    assert diagnosis_branch.disposition is DiagnosisDisposition.CONFIRMED
+    assert diagnosis_branch.confirmed_cause is not None
+    assert diagnosis_branch.confirmed_cause.summary == (
         "The workflow output did not satisfy its criterion"
     )
-    assert branches[0].regression_seam is not None
-    assert branches[0].regression_seam.path == "src/workflow.py"
+    assert diagnosis_branch.regression_seam is not None
+    assert diagnosis_branch.regression_seam.path == "src/workflow.py"
     assert results[0].disposition is CurdDisposition.FAILED
     assert results[0].runtime_refs == (
         "workflow-request/plan/revision/1/result/1/diagnosis",
@@ -548,12 +568,11 @@ def test_multi_curd_branches_keep_subjects_and_evidence_isolated(
         CurdDisposition.FAILED,
         CurdDisposition.PASSED,
     ]
-    assert [branch.diagnosis_id for branch in branches[:1]] == [
-        f"{first_result_id}/diagnosis"
-    ]
-    assert [branch.review_id for branch in branches[1:]] == [
-        f"{second_result_id}/review"
-    ]
+    first_branch, second_branch = branches
+    assert isinstance(first_branch, DiagnosisResult)
+    assert first_branch.diagnosis_id == f"{first_result_id}/diagnosis"
+    assert isinstance(second_branch, ReviewResult)
+    assert second_branch.review_id == f"{second_result_id}/review"
     first_evidence_ids = {
         item.evidence_id for item in diagnosis_requests[0].evidence
     }
@@ -597,7 +616,7 @@ def test_invalid_writer_host_field_is_rejected_before_branch_dispatch(
             },
         }
 
-    def branch_dispatch(_request):
+    def branch_dispatch(_request: object) -> object:
         events.append("branch")
         raise AssertionError("invalid writer output must stop before a branch")
 
@@ -618,7 +637,9 @@ def test_invalid_writer_host_field_is_rejected_before_branch_dispatch(
     assert results[0].disposition is CurdDisposition.BLOCKED
     assert len(results[0].criterion_results) == 1
     assert results[0].criterion_results[0].disposition is CriterionDisposition.BLOCKED
-    assert "writer output invalid" in results[0].criterion_results[0].reason
+    reason = results[0].criterion_results[0].reason
+    assert reason is not None
+    assert "writer output invalid" in reason
 
     assert events == ["writer"]
 
@@ -627,10 +648,10 @@ def test_wrong_writer_kind_is_rejected_without_review_or_diagnosis(
     tmp_path: Path,
 ) -> None:
     source = source_artifact(tmp_path)
-    branches: list[str] = []
+    branch_calls: list[str] = []
 
-    def branch_dispatch(_request):
-        branches.append("branch")
+    def branch_dispatch(_request: object) -> object:
+        branch_calls.append("branch")
         raise AssertionError("wrong writer kind must stop before a branch")
 
     planner, branches, results = run_workflow(
@@ -721,14 +742,14 @@ def test_cure_requires_confirmed_diagnosis_before_dispatch(
     binding = bind_diagnosis(planned.plan, curd, diagnosis)
     events: list[str] = []
 
-    def invoked(_value):
+    def invoked(_value: object) -> object:
         events.append("invoked")
         raise AssertionError("unconfirmed Cure work must not run")
 
     with pytest.raises(
         ValueError, match="cure dispatch requires a confirmed diagnosis"
     ):
-        run_workflow(
+        _ = run_workflow(
             planner_request(),
             repository_root=tmp_path,
             artifact_directory=tmp_path / "artifacts",
@@ -762,13 +783,13 @@ def test_cook_and_cure_reject_stale_or_unsupported_plans_before_executor(
     )
     events: list[str] = []
 
-    def invoked(_value):
+    def invoked(_value: object) -> object:
         events.append("executor")
         raise AssertionError("invalid plans must not dispatch executors")
 
     for invalid in (stale, unsupported):
         with pytest.raises(ContractValidationError):
-            cook(
+            _ = cook(
                 invalid,
                 repository_root=tmp_path,
                 artifact_directory=tmp_path / "artifacts",
@@ -777,7 +798,7 @@ def test_cook_and_cure_reject_stale_or_unsupported_plans_before_executor(
                 dispatch_diagnosis=invoked,
             )
         with pytest.raises(ContractValidationError):
-            cure(
+            _ = cure(
                 invalid,
                 repository_root=tmp_path,
                 artifact_directory=tmp_path / "artifacts",
@@ -791,7 +812,7 @@ def test_cook_and_cure_reject_stale_or_unsupported_plans_before_executor(
 
 
 def test_plan_wide_shared_inputs_and_evidence_resolve_once(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     source = source_artifact(tmp_path)
     base = complete_planner()
@@ -820,11 +841,22 @@ def test_plan_wide_shared_inputs_and_evidence_resolve_once(
     )
     planner_view = attrs.evolve(base, plan=plan_view)
     calls: list[str] = []
-    original_resolve = workflow_module.resolve_artifact
+    original_resolve = resolve_artifact
 
-    def tracking_resolve(artifact, **kwargs):
+    def tracking_resolve(
+        artifact: ArtifactRef,
+        *,
+        repository_root: str | Path = ".",
+        artifact_directory: str | Path,
+        schema_validator: SchemaValidator | None = None,
+    ) -> ResolvedAgentArtifact:
         calls.append(artifact.uri)
-        return original_resolve(artifact, **kwargs)
+        return original_resolve(
+            artifact,
+            repository_root=repository_root,
+            artifact_directory=artifact_directory,
+            schema_validator=schema_validator,
+        )
 
     monkeypatch.setattr(workflow_module, "resolve_artifact", tracking_resolve)
     contexts: list[Mapping[str, object]] = []
@@ -840,7 +872,7 @@ def test_plan_wide_shared_inputs_and_evidence_resolve_once(
             ]
         )
 
-    run_workflow(
+    _ = run_workflow(
         planner_request(),
         repository_root=tmp_path,
         artifact_directory=tmp_path / "artifacts",

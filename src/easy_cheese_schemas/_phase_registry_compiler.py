@@ -12,6 +12,7 @@ import json
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 from urllib.parse import urlparse
 try:
     from ._schema_catalog import (
@@ -91,7 +92,7 @@ class TransitionRegistry:
 def _require_mapping(value: object, field: str) -> Mapping[object, object]:
     if not isinstance(value, Mapping):
         raise ValueError(f"{field} must be a mapping")
-    return value
+    return cast("Mapping[object, object]", value)
 
 
 def _require_keys(
@@ -138,7 +139,7 @@ def _require_registered_schema(value: object, field: str) -> str:
 def _require_list(value: object, field: str) -> list[object]:
     if not isinstance(value, list) or not value:
         raise ValueError(f"{field} must be a non-empty list")
-    return value
+    return cast("list[object]", value)
 
 
 def _compile_declaration(raw: object) -> CompiledPhase:
@@ -215,7 +216,7 @@ def _registry(phases: Iterable[CompiledPhase]) -> TransitionRegistry:
             if destination is not None and route.payload_schema_uri not in destination.input_schema_uris:
                 raise ValueError(
                     f"payload schema {route.payload_schema_uri!r} for {phase.source} -> "
-                    f"{route.destination} is not declared as a destination input"
+                    + f"{route.destination} is not declared as a destination input"
                 )
     return TransitionRegistry(phases=compiled)
 
@@ -229,7 +230,7 @@ def _yaml_scalar(value: str) -> object:
     if not value:
         return None
     if len(value) >= 2 and value[0] == value[-1] == '"':
-        return json.loads(value)
+        return cast(object, json.loads(value))
     if len(value) >= 2 and value[0] == value[-1] == "'":
         return value[1:-1].replace("''", "'")
     return value
@@ -300,7 +301,7 @@ def parse_phase_yaml(text: str) -> dict[str, object]:
                 raise ValueError(f"invalid input schema list at line {line_number}")
             values = data[section]
             assert isinstance(values, list)
-            values.append(_yaml_scalar(stripped[2:]))
+            cast("list[object]", values).append(_yaml_scalar(stripped[2:]))
             continue
 
         if indent == 2 and section == "outputs":
@@ -310,7 +311,7 @@ def parse_phase_yaml(text: str) -> dict[str, object]:
             current_output = {key: value}
             outputs = data[section]
             assert isinstance(outputs, list)
-            outputs.append(current_output)
+            cast("list[object]", outputs).append(current_output)
             continue
 
         if indent == 4 and section == "outputs" and current_output is not None:
@@ -336,8 +337,8 @@ def compile_phase_files(paths: Iterable[Path]) -> TransitionRegistry:
 def render_registry_source(registry: TransitionRegistry) -> str:
     return (
         '"""Generated phase registry data; edit skills/*/phase-contract.yaml instead."""\n\n'
-        "from __future__ import annotations\n\n"
-        "PHASE_REGISTRY_DATA = "
+        + "from __future__ import annotations\n\n"
+        + "PHASE_REGISTRY_DATA = "
         + json.dumps(registry.to_data(), indent=4, sort_keys=True)
         + "\n\nPHASE_REGISTRY_JSON = "
         + repr(registry.to_json())

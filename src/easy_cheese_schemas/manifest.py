@@ -18,9 +18,9 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 from enum import Enum
-from typing import Any
+from typing import Protocol, cast
 
-from attrs import Attribute, define, field, validators
+from attrs import define, field, validators
 
 from easy_cheese_schemas.pr_plan import PrPlan
 from easy_cheese_schemas.wiring_graph import cycle_errors
@@ -33,13 +33,18 @@ _WIRING_ID_RE = re.compile(r"^W[0-9]+$")
 # is fine.
 _TWO_VERB_AND = re.compile(
     r"\b(adds|extracts|renames|fixes|removes|updates|implements|creates|deletes"
-    r"|wires|registers|exposes|replaces)\b"
-    r".*?\band\b\s+"
-    r"\b(adds|extracts|renames|fixes|removes|updates|implements|creates|deletes"
-    r"|wires|registers|exposes|replaces)\b",
+    + r"|wires|registers|exposes|replaces)\b"
+    + r".*?\band\b\s+"
+    + r"\b(adds|extracts|renames|fixes|removes|updates|implements|creates|deletes"
+    + r"|wires|registers|exposes|replaces)\b",
     re.IGNORECASE,
 )
 _COMMAND_CHAIN = ("&&", "||", ";")
+
+
+class _NamedAttribute(Protocol):
+    name: str
+
 
 # Exactly one number governs the linear/parallel split (src/fanout/mode.py).
 # It lives here rather than in decomposition.py because the run manifest owns
@@ -177,61 +182,62 @@ class PlateLayout(str, Enum):
     STACKED = "stacked"
 
 
-def _non_empty_string(_instance: object, attribute: Attribute[Any], value: object) -> None:
+def _non_empty_string(_instance: object, attribute: _NamedAttribute, value: object) -> None:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{attribute.name} must be a non-empty string")
 
 
-def _string_list(_instance: object, attribute: Attribute[Any], value: object) -> None:
+def _string_list(_instance: object, attribute: _NamedAttribute, value: object) -> None:
     if not isinstance(value, list):
         raise ValueError(f"{attribute.name} must be a list")
-    for index, item in enumerate(value, start=1):
+    items = cast("list[object]", value)
+    for index, item in enumerate(items, start=1):
         if not isinstance(item, str) or not item.strip():
             raise ValueError(f"{attribute.name}[{index}] must be a non-empty string")
 
 
-def _non_empty_list(_instance: object, attribute: Attribute[Any], value: object) -> None:
+def _non_empty_list(_instance: object, attribute: _NamedAttribute, value: object) -> None:
     if not value:
         raise ValueError(f"{attribute.name} must be a non-empty list")
 
 
 def _non_empty_string_list(
-    instance: object, attribute: Attribute[Any], value: object
+    instance: object, attribute: _NamedAttribute, value: object
 ) -> None:
     _string_list(instance, attribute, value)
     if not value:
         raise ValueError(f"{attribute.name} must be a non-empty list")
 
 
-def _hex_oid(_instance: object, attribute: Attribute[Any], value: object) -> None:
+def _hex_oid(_instance: object, attribute: _NamedAttribute, value: object) -> None:
     if not isinstance(value, str) or _OID_RE.fullmatch(value) is None:
         raise ValueError(
             f"{attribute.name} must be exactly 40 or 64 hexadecimal characters"
         )
 
 
-def _diff_hash(_instance: object, attribute: Attribute[Any], value: object) -> None:
+def _diff_hash(_instance: object, attribute: _NamedAttribute, value: object) -> None:
     if not isinstance(value, str) or _DIFF_HASH_RE.fullmatch(value) is None:
         raise ValueError(
             f"{attribute.name} must be sha256: followed by 64 hexadecimal characters"
         )
 
 
-def _wiring_id(_instance: object, attribute: Attribute[Any], value: object) -> None:
+def _wiring_id(_instance: object, attribute: _NamedAttribute, value: object) -> None:
     if not isinstance(value, str) or _WIRING_ID_RE.match(value) is None:
         raise ValueError(f"{attribute.name} must match W<number>")
 
 
-def _one_behaviour(instance: object, attribute: Attribute[Any], value: object) -> None:
+def _one_behaviour(instance: object, attribute: _NamedAttribute, value: object) -> None:
     _non_empty_string(instance, attribute, value)
     if _TWO_VERB_AND.search(str(value)):
         raise ValueError(
             f"{attribute.name} joins two verbs with 'and' ({value!r}) "
-            "-- split into two curds"
+            + "-- split into two curds"
         )
 
 
-def _single_command(instance: object, attribute: Attribute[Any], value: object) -> None:
+def _single_command(instance: object, attribute: _NamedAttribute, value: object) -> None:
     _non_empty_string(instance, attribute, value)
     if any(token in str(value) for token in _COMMAND_CHAIN):
         raise ValueError(
@@ -240,7 +246,7 @@ def _single_command(instance: object, attribute: Attribute[Any], value: object) 
 
 
 def reject_shared_curd_files(
-    _instance: object, attribute: Attribute[Any], curds: Sequence[DecomposedCurd]
+    _instance: object, attribute: _NamedAttribute, curds: Sequence[DecomposedCurd]
 ) -> None:
     """Two curds that can touch the same file cannot fan out in parallel.
 
@@ -263,14 +269,14 @@ def reject_shared_curd_files(
             if path in owner:
                 raise ValueError(
                     f"{attribute.name} must be file-disjoint: file {path!r} "
-                    f"appears in curd {owner[path]} and curd {name} (move "
-                    "shared content to seed or wiring)"
+                    + f"appears in curd {owner[path]} and curd {name} (move "
+                    + "shared content to seed or wiring)"
                 )
             owner[path] = name
 
 
 def reject_unschedulable_wiring(
-    _instance: object, attribute: Attribute[Any], wiring: Sequence[WiringRow]
+    _instance: object, attribute: _NamedAttribute, wiring: Sequence[WiringRow]
 ) -> None:
     """Wiring rows must form an acyclic graph with known W<n> dependencies."""
     ids = {row.id for row in wiring}

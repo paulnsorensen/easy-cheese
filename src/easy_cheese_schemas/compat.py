@@ -24,13 +24,13 @@ possible.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping, Sequence
 from enum import Enum, auto
-from typing import Any, Generic, TypeVar, get_origin
+from typing import Generic, TypeVar, cast, get_origin
 
 import attrs
 import cattrs
-from attrs import define, field
+from attrs import Attribute, define, field
 from cattrs.cols import list_structure_factory
 from cattrs.errors import AttributeValidationNote, IterableValidationNote
 from cattrs.gen import make_dict_structure_fn
@@ -51,10 +51,16 @@ __all__ = [
     "load",
 ]
 
+_StructureHook = Callable[[object, object], object]
+
+
+def _fields(cls: type) -> tuple[Attribute[object], ...]:
+    return cast(tuple["Attribute[object]", ...], attrs.fields(cls))
+
 
 def _exact(
     expected: type | tuple[type, ...], label: str, *, boolean: bool = False
-) -> Any:
+) -> _StructureHook:
     """A structure hook that checks a primitive instead of calling it.
 
     ``bool`` and ``int`` stay distinct in both directions: ``True`` is not an
@@ -65,12 +71,14 @@ def _exact(
     shadowed, which would let any string through as a phase or a status.
     """
 
-    def hook(value: object, _type: Any = None) -> Any:
+    def hook(value: object, _type: object = None) -> object:
         if isinstance(_type, type) and issubclass(_type, Enum):
             try:
                 return _type(value)
             except ValueError:
-                allowed = ", ".join(str(member.value) for member in _type)
+                allowed = ", ".join(
+                    str(cast(object, member.value)) for member in _type
+                )
                 raise ValueError(f"must be one of: {allowed}") from None
         if isinstance(value, bool) is not boolean or not isinstance(value, expected):
             raise TypeError(f"must be {label}, not {type(value).__name__}")
@@ -79,33 +87,37 @@ def _exact(
     return hook
 
 
-def _guarded_list(type_: Any, converter: cattrs.BaseConverter) -> Any:
+def _guarded_list(type_: object, converter: cattrs.BaseConverter) -> _StructureHook:
     """cattrs structures any iterable into a list, which turns a bare string
     into its characters. Require an actual list, then structure elements the
     ordinary way so per-index attribution survives."""
-    structure = list_structure_factory(type_, converter)
+    structure = list_structure_factory(cast(type, type_), converter)
 
-    def hook(value: object, _type: Any = type_) -> Any:
+    def hook(value: object, _type: object = type_) -> object:
         if not isinstance(value, list):
             raise TypeError(f"must be a list, not {type(value).__name__}")
-        return structure(value, _type)
+        return cast(object, structure(value, _type))
 
     return hook
 
 
-def _guarded_class(type_: Any, converter: cattrs.BaseConverter) -> Any:
+def _guarded_class(type_: object, converter: cattrs.BaseConverter) -> _StructureHook:
     """cattrs asks ``field_name in obj`` before reading a field, so a *string*
     payload answers with a substring test: every field name it does not happen
     to contain reads as absent, and a class whose fields all have defaults
     structures cleanly out of arbitrary text. Require an actual mapping first."""
-    structure = make_dict_structure_fn(type_, converter)
+    structure = make_dict_structure_fn(cast("type[object]", type_), converter)
 
-    def hook(value: object, _type: Any = type_) -> Any:
+    def hook(value: object, _type: object = type_) -> object:
         if not isinstance(value, Mapping):
             raise TypeError(f"must be an object, not {type(value).__name__}")
-        return structure(value, _type)
+        return structure(cast(Mapping[str, object], value), _type)
 
     return hook
+
+
+def _is_list_annotation(type_: object) -> bool:
+    return get_origin(type_) is list
 
 
 # Default converter semantics: unknown keys are ignored, which is exactly what
@@ -116,10 +128,8 @@ _converter.register_structure_hook(str, _exact(str, "a string"))
 _converter.register_structure_hook(bool, _exact(bool, "a boolean", boolean=True))
 _converter.register_structure_hook(int, _exact(int, "an integer"))
 _converter.register_structure_hook(float, _exact((int, float), "a number"))
-_converter.register_structure_hook_factory(attrs.has, _guarded_class)
-_converter.register_structure_hook_factory(
-    lambda type_: get_origin(type_) is list, _guarded_list
-)
+_ = _converter.register_structure_hook_factory(attrs.has, _guarded_class)
+_ = _converter.register_structure_hook_factory(_is_list_annotation, _guarded_list)
 
 
 class Provenance(Enum):
@@ -156,7 +166,7 @@ def classify_stamp(stamp: int | None) -> Provenance:
     return Provenance.STALE
 
 
-def load(raw: dict[str, Any], cls: type[T], *, strict: bool) -> Loaded[T]:
+def load(raw: object, cls: type[T], *, strict: bool) -> Loaded[T]:
     """Structure `raw` into `cls`, reporting problems instead of raising.
 
     strict=True  -> every field rule must hold; problems are accumulated and
@@ -183,17 +193,20 @@ def load(raw: dict[str, Any], cls: type[T], *, strict: bool) -> Loaded[T]:
             Provenance.UNSTAMPED,
             (f"{where} must be a mapping, not {type(raw).__name__}",),
         )
+    mapping = cast(Mapping[str, object], raw)
 
     problems: list[str] = []
-    stamp = raw.get(STAMP_KEY)
+    stamp = mapping.get(STAMP_KEY)
     if stamp is not None and (isinstance(stamp, bool) or not isinstance(stamp, int)):
         problems.append(f"{where}.{STAMP_KEY} must be an integer")
         stamp = None
     provenance = classify_stamp(stamp)
     forbidden = tuple(
         field_name
-        for field_name in getattr(cls, "__schema_forbidden_fields__", ())
-        if field_name in raw
+        for field_name in cast(
+            "tuple[str, ...]", getattr(cls, "__schema_forbidden_fields__", ())
+        )
+        if field_name in mapping
     )
     problems.extend(
         f"{where}.{field_name} is not supported; mode belongs to each TestContract"
@@ -201,20 +214,20 @@ def load(raw: dict[str, Any], cls: type[T], *, strict: bool) -> Loaded[T]:
     )
 
     if strict:
-        value, failures = _structure(dict(raw), cls, where)
+        value, failures = _structure(dict(mapping), cls, where)
         problems.extend(message for _, message in failures)
         if forbidden:
             value = None
         return Loaded(value, provenance, tuple(problems))
 
-    value, gaps = _best_effort(raw, cls, where)
+    value, gaps = _best_effort(mapping, cls, where)
     if forbidden:
         value = None
     return Loaded(value, provenance, tuple(problems + gaps))
 
 
 def _structure(
-    payload: dict[str, Any], cls: type[T], where: str
+    payload: dict[str, object], cls: type[T], where: str
 ) -> tuple[T | None, list[tuple[str | None, str]]]:
     """Structure `payload`, then apply the field rules over the result.
 
@@ -231,14 +244,14 @@ def _structure(
 
 
 def _best_effort(
-    raw: Mapping[str, Any], cls: type[T], where: str
+    raw: Mapping[str, object], cls: type[T], where: str
 ) -> tuple[T | None, list[str]]:
     """Structure what is recognizable, dropping each unusable optional field
     back to its documented default and recording why. A mandatory field that is
     missing or unusable has no default to fall back to, so it yields no value."""
     problems: list[str] = []
-    payload: dict[str, Any] = {}
-    for attribute in attrs.fields(cls):
+    payload: dict[str, object] = {}
+    for attribute in _fields(cls):
         if attribute.name in raw:
             payload[attribute.name] = raw[attribute.name]
         elif attribute.default is attrs.NOTHING:
@@ -248,7 +261,7 @@ def _best_effort(
 
     optional = {
         attribute.name
-        for attribute in attrs.fields(cls)
+        for attribute in _fields(cls)
         if attribute.default is not attrs.NOTHING
     }
     while True:
@@ -267,13 +280,13 @@ def _best_effort(
             del payload[name]
 
 
-def _field_problems(instance: Any, where: str) -> list[tuple[str | None, str]]:
+def _field_problems(instance: object, where: str) -> list[tuple[str | None, str]]:
     """Run every attrs validator over an already-structured tree, attributing
     each failure to its full path. cattrs cannot do this itself: validators run
     inside ``__init__``, outside the per-attribute error handling."""
     problems: list[tuple[str | None, str]] = []
-    for attribute in attrs.fields(type(instance)):
-        value = getattr(instance, attribute.name)
+    for attribute in _fields(type(instance)):
+        value = cast(object, getattr(instance, attribute.name))
         path = f"{where}.{attribute.name}"
         if attribute.validator is not None:
             try:
@@ -289,13 +302,14 @@ def _field_problems(instance: Any, where: str) -> list[tuple[str | None, str]]:
     return problems
 
 
-def _nested_problems(value: Any, path: str) -> list[str]:
+def _nested_problems(value: object, path: str) -> list[str]:
     if attrs.has(type(value)):
         return [message for _, message in _field_problems(value, path)]
     if isinstance(value, list):
+        items = cast(list[object], value)
         return [
             message
-            for index, item in enumerate(value, start=1)
+            for index, item in enumerate(items, start=1)
             if attrs.has(type(item))
             for _, message in _field_problems(item, f"{path}[{index}]")
         ]
@@ -317,9 +331,8 @@ def _collect(
     out: list[tuple[str | None, str]],
 ) -> None:
     path = path + _segments(exc)
-    nested = getattr(exc, "exceptions", None)
-    if nested:
-        for sub in nested:
+    if isinstance(exc, BaseExceptionGroup):
+        for sub in exc.exceptions:
             _collect(sub, path, where, out)
         return
     blamed = path[0][0] if path else None
@@ -339,8 +352,13 @@ def _segments(exc: BaseException) -> tuple[tuple[str | None, str], ...]:
     path is read off them rather than parsed out of their rendered text. List
     indexes are 1-based to match the fan-out validators' ``curds[1]``; a
     mapping's note carries its key there instead."""
+    notes: Sequence[str]
+    try:
+        notes = exc.__notes__
+    except AttributeError:
+        notes = ()
     segments: list[tuple[str | None, str]] = []
-    for note in getattr(exc, "__notes__", ()):
+    for note in notes:
         if isinstance(note, AttributeValidationNote):
             segments.append((note.name, f".{note.name}"))
         elif isinstance(note, IterableValidationNote):

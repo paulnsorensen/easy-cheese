@@ -8,14 +8,15 @@ import tempfile
 from collections.abc import Callable, Mapping
 from enum import Enum
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 from urllib.parse import quote, urlsplit
 
 import attrs
+from attrs import Attribute
 from .artifacts import (
     MAX_ARTIFACT_BYTES,
-    _read_repository_artifact,
-    _resolve_verified_bytes,
+    _read_repository_artifact,  # pyright: ignore[reportPrivateUsage]
+    _resolve_verified_bytes,  # pyright: ignore[reportPrivateUsage]
     resolve_artifact,
 )
 from .contracts import (
@@ -94,16 +95,19 @@ CureDiagnosisBindings = Mapping[str, CureDiagnosisBinding] | tuple[
 
 def _canonical_value(value: object) -> object:
     if attrs.has(type(value)):
+        fields = cast("tuple[Attribute[object], ...]", attrs.fields(type(value)))
         return {
-            field.name: _canonical_value(getattr(value, field.name))
-            for field in attrs.fields(type(value))
+            field.name: _canonical_value(cast(object, getattr(value, field.name)))
+            for field in fields
         }
     if isinstance(value, Enum):
-        return value.value
+        return cast(object, value.value)
     if isinstance(value, Mapping):
-        return {str(key): _canonical_value(item) for key, item in value.items()}
+        mapping = cast(Mapping[object, object], value)
+        return {str(key): _canonical_value(item) for key, item in mapping.items()}
     if isinstance(value, (tuple, list)):
-        return [_canonical_value(item) for item in value]
+        sequence = cast(tuple[object, ...] | list[object], value)
+        return [_canonical_value(item) for item in sequence]
     return value
 
 
@@ -162,7 +166,7 @@ def _plan_identity(
         plan_id = source_plan.plan_id
     else:
         plan_id = f"{request.request_id}/plan"
-    curd_ids = {}
+    curd_ids: dict[str, str] = {}
     for index, curd in enumerate(view.plan.curds, start=1):
         lineage = lineages.get(curd.key)
         if lineage is not None and lineage.identity_action is IdentityAction.RETAIN:
@@ -321,7 +325,7 @@ def _writer_context(
     if collision:
         names = ", ".join(sorted(collision))
         raise ValueError(f"evidence keys collide with curd inputs: {names}")
-    context = {
+    context: dict[str, object] = {
         "phase": phase,
         "outcome": curd.outcome,
         "scope": curd.scope,
@@ -386,7 +390,7 @@ def _deliverables(
     return artifacts, evidence
 
 
-def _source_curd_ref(plan: CurdPlan, curd: SemanticCurd) -> SourceCurdRef:
+def _source_curd_ref(_plan: CurdPlan, curd: SemanticCurd) -> SourceCurdRef:
     return SourceCurdRef(curd.curd_id, _canonical_digest(curd))
 
 
@@ -463,7 +467,7 @@ def _subject_artifact(
     try:
         with os.fdopen(fd, "wb") as writer:
             os.fchmod(writer.fileno(), 0o600)
-            writer.write(canonical.canonical_bytes)
+            _ = writer.write(canonical.canonical_bytes)
             writer.flush()
             os.fsync(writer.fileno())
         descriptor = attrs.evolve(descriptor, uri=temporary_path.resolve().as_uri())
@@ -481,9 +485,9 @@ def _subject_artifact(
 
 
 def _evidence_values(evidence: Mapping[str, EvidenceRef]) -> tuple[EvidenceRef, ...]:
-    unique = {}
+    unique: dict[str, EvidenceRef] = {}
     for item in evidence.values():
-        unique.setdefault(item.evidence_id, item)
+        _ = unique.setdefault(item.evidence_id, item)
     return tuple(unique.values())
 
 
@@ -951,15 +955,15 @@ def _coerce_diagnosis_bindings(
 ) -> dict[str, CureDiagnosisBinding]:
     if isinstance(bindings, Mapping):
         entries = tuple(bindings.items())
-    elif isinstance(bindings, tuple):
+    elif isinstance(bindings, tuple):  # pyright: ignore[reportUnnecessaryIsInstance]
         entries = tuple((None, item) for item in bindings)
     else:
-        raise TypeError(
+        raise TypeError(  # pyright: ignore[reportUnreachable]
             "cure requires a mapping or tuple of per-curd diagnosis bindings"
         )
     normalized: dict[str, CureDiagnosisBinding] = {}
     for key, binding in entries:
-        if not isinstance(binding, CureDiagnosisBinding):
+        if not isinstance(binding, CureDiagnosisBinding):  # pyright: ignore[reportUnnecessaryIsInstance]
             raise TypeError("cure diagnosis bindings must be CureDiagnosisBinding values")
         curd_id = binding.source_curd_ref.curd_id
         if key is not None and key != curd_id:
@@ -978,8 +982,7 @@ def _require_confirmed_bindings(
     for curd_id, binding in bindings.items():
         if binding.diagnosis.disposition is not DiagnosisDisposition.CONFIRMED:
             raise ValueError(
-                "cure dispatch requires a confirmed diagnosis "
-                f"for curd {curd_id!r}"
+                f"cure dispatch requires a confirmed diagnosis for curd {curd_id!r}"
             )
 
 
@@ -1000,8 +1003,7 @@ def _validate_cure_bindings(
     extra = sorted(set(normalized) - set(expected_curds))
     if missing or extra:
         raise ValueError(
-            "diagnosis bindings must match plan curds exactly; "
-            f"missing={missing!r}, extra={extra!r}"
+            f"diagnosis bindings must match plan curds exactly; missing={missing!r}, extra={extra!r}"
         )
     for curd_id, curd in expected_curds.items():
         binding = normalized[curd_id]
@@ -1173,11 +1175,11 @@ def run_workflow(
     if planner_result.plan is None:
         return planner_result, (), ()
     validated_plan = validate_curd_plan(planner_result.plan)
-    normalized = (
-        None
-        if phase != "cure"
-        else _validate_cure_bindings(validated_plan, prevalidated)
-    )
+    if phase == "cure":
+        assert prevalidated is not None
+        normalized = _validate_cure_bindings(validated_plan, prevalidated)
+    else:
+        normalized = None
     branches, results = _execute_plan(
         validated_plan,
         repository_root=repository_root,

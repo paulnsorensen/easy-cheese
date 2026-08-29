@@ -5,9 +5,10 @@ import json
 import types
 from collections.abc import Mapping
 from enum import Enum
-from typing import Any, Union, get_args, get_origin, get_type_hints
+from typing import Any, TypeVar, Union, cast, get_args, get_origin, get_type_hints  # pyright: ignore[reportDeprecated]
 
 import attrs
+from attrs import Attribute
 from easy_cheese_schemas._schema_catalog import (
     REGISTERED_CONTRACT_SCHEMA_URIS,
     SCHEMA_ROOT,
@@ -64,7 +65,7 @@ class _RegisteredContract:
     supported_version: ContractVersion | None
 
 
-_MARKED_CONTRACTS = contract_models._registered_contracts()
+_MARKED_CONTRACTS = contract_models._registered_contracts()  # pyright: ignore[reportPrivateUsage]
 _REGISTERED_CONTRACTS = tuple(
     _RegisteredContract(
         schema_uri := f"{SCHEMA_ROOT}/{slug}",
@@ -131,9 +132,10 @@ class CanonicalArtifact:
 
 
 def _enum_schema(enum: type[Enum]) -> dict[str, object]:
-    values = [member.value for member in enum]
+    values = [cast(object, member.value) for member in enum]
     value_type = type(values[0])
-    json_type = {str: "string", int: "integer"}.get(value_type)
+    json_types: dict[type, str] = {str: "string", int: "integer"}
+    json_type = json_types.get(value_type)
     if json_type is None:
         raise TypeError(f"unsupported enum value type {value_type.__name__}")
     return {"enum": values, "type": json_type}
@@ -142,11 +144,14 @@ def _enum_schema(enum: type[Enum]) -> dict[str, object]:
 def _validator_constraints(validator: object) -> dict[str, object]:
     if validator is None:
         return {}
-    result = dict(getattr(validator, "__schema_constraints__", {}))
-    nested = getattr(validator, "validator", None)
+    constraints = cast(
+        "Mapping[str, object]", getattr(validator, "__schema_constraints__", {})
+    )
+    result = dict(constraints)
+    nested = cast(object, getattr(validator, "validator", None))
     if nested is not None and nested is not validator:
         result.update(_validator_constraints(nested))
-    nested_many = getattr(validator, "validators", ())
+    nested_many = cast("tuple[object, ...]", getattr(validator, "validators", ()))
     for child in nested_many:
         result.update(_validator_constraints(child))
     return result
@@ -179,44 +184,45 @@ def _contract_version_definition(
         registered = None
     name = "ContractVersion"
     if name in definitions:
-        if registered is not None:
+        if registered is not None and owner is not None:
             name = f"{owner.__name__}ContractVersion"
         else:
             return {"$ref": "#/$defs/ContractVersion"}
     if name not in definitions:
+        properties: dict[str, object] = {
+            "schema_uri": {
+                "minLength": 1,
+                "pattern": r"[A-Za-z][A-Za-z0-9+.-]*:.+",
+                "type": "string",
+            },
+            "major": {
+                "minLength": 1,
+                "pattern": r"(?:0|[1-9][0-9]*)",
+                "type": "string",
+            },
+            "minor": {
+                "minLength": 1,
+                "pattern": r"(?:0|[1-9][0-9]*)",
+                "type": "string",
+            },
+        }
         schema: dict[str, object] = {
             "additionalProperties": False,
-            "properties": {
-                "schema_uri": {
-                    "minLength": 1,
-                    "pattern": r"[A-Za-z][A-Za-z0-9+.-]*:.+",
-                    "type": "string",
-                },
-                "major": {
-                    "minLength": 1,
-                    "pattern": r"(?:0|[1-9][0-9]*)",
-                    "type": "string",
-                },
-                "minor": {
-                    "minLength": 1,
-                    "pattern": r"(?:0|[1-9][0-9]*)",
-                    "type": "string",
-                },
-            },
+            "properties": properties,
             "required": ["schema_uri", "major", "minor"],
             "type": "object",
         }
         if registered is not None and registered.supported_version is not None:
             version = registered.supported_version
-            schema["properties"]["schema_uri"] = {
+            properties["schema_uri"] = {
                 "const": registered.schema_uri,
                 "type": "string",
             }
-            schema["properties"]["major"] = {
+            properties["major"] = {
                 "const": version.major,
                 "type": "string",
             }
-            schema["properties"]["minor"] = {
+            properties["minor"] = {
                 "const": version.minor,
                 "type": "string",
             }
@@ -236,15 +242,16 @@ _UNIQUE_COLLECTION_FIELDS = {
 
 def _definition(type_: type, definitions: dict[str, object]) -> dict[str, object]:
     name = type_.__name__
-    reference = {"$ref": f"#/$defs/{name}"}
+    reference: dict[str, object] = {"$ref": f"#/$defs/{name}"}
     if name in definitions:
         return reference
 
     definitions[name] = {}
-    hints = get_type_hints(type_)
+    hints = cast("dict[str, object]", get_type_hints(type_))
+    fields = cast("tuple[Attribute[object], ...]", attrs.fields(type_))
     properties: dict[str, object] = {}
     required: list[str] = []
-    for attribute in attrs.fields(type_):
+    for attribute in fields:
         property_schema = _type_schema(
             hints[attribute.name],
             definitions,
@@ -268,7 +275,9 @@ def _definition(type_: type, definitions: dict[str, object]) -> dict[str, object
     }
     if required:
         schema["required"] = required
-    model_constraints = getattr(type_, "__schema_constraints__", ())
+    model_constraints = cast(
+        "tuple[object, ...]", getattr(type_, "__schema_constraints__", ())
+    )
     if model_constraints:
         schema["allOf"] = list(model_constraints)
     definitions[name] = schema
@@ -284,7 +293,12 @@ def _type_schema(
     owner: type | None = None,
 ) -> dict[str, object]:
     constraints = _validator_constraints(validator)
-    item_constraints = dict(getattr(validator, "__schema_item_constraints__", {}))
+    item_constraints = dict(
+        cast(
+            "Mapping[str, object]",
+            getattr(validator, "__schema_item_constraints__", {}),
+        )
+    )
     if field_name in {"path", "paths", "excluded_paths"}:
         if field_name == "path":
             constraints = {
@@ -297,8 +311,9 @@ def _type_schema(
                 "pattern": _REPOSITORY_RELATIVE_PATH_PATTERN,
             }
     origin = get_origin(annotation)
-    if origin in {types.UnionType, Union}:
-        schema = {
+    if origin in {types.UnionType, Union}:  # pyright: ignore[reportDeprecated]
+        members = cast("tuple[object, ...]", get_args(annotation))
+        schema: dict[str, object] = {
             "anyOf": [
                 _type_schema(
                     member,
@@ -306,32 +321,27 @@ def _type_schema(
                     field_name=field_name,
                     owner=owner,
                 )
-                for member in get_args(annotation)
+                for member in members
             ]
         }
     elif origin in {list, tuple}:
-        item_type, *remainder = get_args(annotation)
+        item_type, *remainder = cast("tuple[object, ...]", get_args(annotation))
         if origin is tuple and remainder != [Ellipsis]:
-            schema = {
-                "prefixItems": [
-                    _type_schema(member, definitions, owner=owner)
-                    for member in (item_type, *remainder)
-                ],
-                "type": "array",
-            }
+            prefix_items = [
+                _type_schema(member, definitions, owner=owner)
+                for member in (item_type, *remainder)
+            ]
+            if item_constraints:
+                prefix_items = [
+                    _apply_schema_constraints(item, item_constraints)
+                    for item in prefix_items
+                ]
+            schema = {"prefixItems": prefix_items, "type": "array"}
         else:
             item_schema = _type_schema(item_type, definitions, owner=owner)
+            if item_constraints:
+                item_schema = _apply_schema_constraints(item_schema, item_constraints)
             schema = {"items": item_schema, "type": "array"}
-        if item_constraints:
-            if "prefixItems" in schema:
-                schema["prefixItems"] = [
-                    _apply_schema_constraints(item, item_constraints)
-                    for item in schema["prefixItems"]
-                ]
-            else:
-                schema["items"] = _apply_schema_constraints(
-                    schema["items"], item_constraints
-                )
     elif annotation is type(None):
         schema = {"type": "null"}
     elif annotation is Any:
@@ -410,9 +420,11 @@ def _enforce_tree_depth(value: object) -> None:
                 f"decoded contract exceeds MAX_CONTRACT_DEPTH ({MAX_CONTRACT_DEPTH})"
             )
         if isinstance(current, Mapping):
-            pending.extend((item, depth + 1) for item in current.values())
+            mapping_current = cast("Mapping[object, object]", current)
+            pending.extend((item, depth + 1) for item in mapping_current.values())
         elif isinstance(current, list):
-            pending.extend((item, depth + 1) for item in current)
+            list_current = cast("list[object]", current)
+            pending.extend((item, depth + 1) for item in list_current)
 
 
 def _enforce_raw_depth(raw: str | bytes | bytearray) -> None:
@@ -420,7 +432,7 @@ def _enforce_raw_depth(raw: str | bytes | bytearray) -> None:
     escaped = False
     depth = 0
     for item in raw:
-        code = ord(item) if isinstance(raw, str) else item
+        code = ord(item) if isinstance(item, str) else item
         if in_string:
             if escaped:
                 escaped = False
@@ -435,8 +447,7 @@ def _enforce_raw_depth(raw: str | bytes | bytearray) -> None:
             depth += 1
             if depth > MAX_CONTRACT_DEPTH + 1:
                 raise ContractValidationError(
-                    "raw contract exceeds MAX_CONTRACT_DEPTH "
-                    f"({MAX_CONTRACT_DEPTH})"
+                    f"raw contract exceeds MAX_CONTRACT_DEPTH ({MAX_CONTRACT_DEPTH})"
                 )
         elif code in {ord("}"), ord("]")}:
             depth = max(0, depth - 1)
@@ -472,7 +483,7 @@ def _raw_mapping(raw: object) -> Mapping[str, object]:
     if isinstance(raw, str):
         _enforce_text_bytes(raw)
         _enforce_raw_depth(raw)
-        payload: str | bytes | bytearray = raw
+        payload: object = raw
     elif isinstance(raw, (bytes, bytearray)):
         _enforce_raw_bytes(raw)
         _enforce_raw_depth(raw)
@@ -481,11 +492,10 @@ def _raw_mapping(raw: object) -> Mapping[str, object]:
         payload = raw
     if isinstance(payload, (str, bytes, bytearray)):
         try:
-            raw = json.loads(payload, object_pairs_hook=_unique_object)
+            raw = cast(object, json.loads(payload, object_pairs_hook=_unique_object))
         except RecursionError:
             raise ContractValidationError(
-                "decoded contract exceeds MAX_CONTRACT_DEPTH "
-                f"({MAX_CONTRACT_DEPTH})"
+                f"decoded contract exceeds MAX_CONTRACT_DEPTH ({MAX_CONTRACT_DEPTH})"
             ) from None
         except (json.JSONDecodeError, UnicodeDecodeError) as error:
             raise ContractValidationError(f"invalid JSON: {error}") from None
@@ -494,15 +504,15 @@ def _raw_mapping(raw: object) -> Mapping[str, object]:
         raise ContractValidationError(
             f"contract must be an object, not {type(raw).__name__}"
         )
-    return raw
+    return cast("Mapping[str, object]", raw)
 
 
 
 def _structure(value: object, annotation: object, path: str = "$") -> object:
     origin = get_origin(annotation)
-    if origin in {types.UnionType, Union}:
-        failures = []
-        for member in get_args(annotation):
+    if origin in {types.UnionType, Union}:  # pyright: ignore[reportDeprecated]
+        failures: list[str] = []
+        for member in cast("tuple[object, ...]", get_args(annotation)):
             try:
                 return _structure(value, member, path)
             except ContractValidationError as error:
@@ -515,20 +525,21 @@ def _structure(value: object, annotation: object, path: str = "$") -> object:
             raise ContractValidationError(
                 f"{path} must be an array, not {type(value).__name__}"
             )
-        arguments = get_args(annotation)
+        items_value = cast("list[object]", value)
+        arguments: tuple[object, ...] = get_args(annotation)
         if origin is tuple and len(arguments) > 1 and arguments[-1] is not Ellipsis:
-            if len(value) != len(arguments):
+            if len(items_value) != len(arguments):
                 raise ContractValidationError(
                     f"{path} must contain exactly {len(arguments)} items"
                 )
             return tuple(
                 _structure(item, item_type, f"{path}[{index}]")
-                for index, (item, item_type) in enumerate(zip(value, arguments))
+                for index, (item, item_type) in enumerate(zip(items_value, arguments))
             )
-        item_type = arguments[0]
+        item_type: object = arguments[0] if arguments else object
         items = tuple(
             _structure(item, item_type, f"{path}[{index}]")
-            for index, item in enumerate(value)
+            for index, item in enumerate(items_value)
         )
         return list(items) if origin is list else items
     if annotation is type(None):
@@ -562,29 +573,34 @@ def _structure(value: object, annotation: object, path: str = "$") -> object:
             )
         return value
     if isinstance(annotation, type) and issubclass(annotation, Enum):
-        if type(value) is not type(next(iter(annotation)).value):
+        if type(value) is not type(cast(object, next(iter(annotation)).value)):
             raise ContractValidationError(f"{path} has the wrong enum value type")
         try:
             return annotation(value)
         except ValueError:
-            allowed = ", ".join(repr(member.value) for member in annotation)
+            allowed = ", ".join(
+                repr(cast(object, member.value)) for member in annotation
+            )
             raise ContractValidationError(f"{path} must be one of {allowed}") from None
     if isinstance(annotation, type) and attrs.has(annotation):
         if not isinstance(value, Mapping):
             raise ContractValidationError(
                 f"{path} must be an object, not {type(value).__name__}"
             )
-        fields = attrs.fields_dict(annotation)
-        unknown = sorted(set(value) - set(fields))
+        mapping_value = cast("Mapping[str, object]", value)
+        fields = cast("dict[str, Attribute[object]]", attrs.fields_dict(annotation))
+        unknown = sorted(set(mapping_value) - set(fields))
         if unknown:
             raise ContractValidationError(
                 f"{path} contains unknown fields: {', '.join(unknown)}"
             )
-        hints = get_type_hints(annotation)
+        hints = cast("dict[str, object]", get_type_hints(annotation))
         values: dict[str, object] = {}
         for name, attribute in fields.items():
-            if name in value:
-                values[name] = _structure(value[name], hints[name], f"{path}.{name}")
+            if name in mapping_value:
+                values[name] = _structure(
+                    mapping_value[name], hints[name], f"{path}.{name}"
+                )
             elif attribute.default is attrs.NOTHING:
                 raise ContractValidationError(f"{path}.{name} is required")
         try:
@@ -597,17 +613,20 @@ def _structure(value: object, annotation: object, path: str = "$") -> object:
 def _unstructure(value: object) -> object:
     if attrs.has(type(value)):
         return {
-            attribute.name: _unstructure(getattr(value, attribute.name))
-            for attribute in attrs.fields(type(value))
+            attribute.name: _unstructure(cast(object, getattr(value, attribute.name)))
+            for attribute in cast("tuple[Attribute[object], ...]", attrs.fields(type(value)))
         }
     if isinstance(value, Enum):
-        return value.value
+        return cast(object, value.value)
     if isinstance(value, tuple):
-        return [_unstructure(item) for item in value]
+        tuple_value = cast("tuple[object, ...]", value)
+        return [_unstructure(item) for item in tuple_value]
     if isinstance(value, list):
-        return [_unstructure(item) for item in value]
+        list_value = cast("list[object]", value)
+        return [_unstructure(item) for item in list_value]
     if isinstance(value, Mapping):
-        return {str(key): _unstructure(item) for key, item in value.items()}
+        mapping_value = cast("Mapping[object, object]", value)
+        return {str(key): _unstructure(item) for key, item in mapping_value.items()}
     return value
 
 def canonical_bytes(value: object) -> bytes:
@@ -624,7 +643,7 @@ def _artifact(
     return CanonicalArtifact(value, canonical_bytes(value), source_version)
 
 
-def curd_plan_digest(plan: CurdPlan) -> str:
+def curd_plan_digest(plan: object) -> str:
     if not isinstance(plan, CurdPlan):
         raise TypeError(f"curd_plan_digest expects CurdPlan, not {type(plan).__name__}")
     unsigned = {
@@ -651,7 +670,7 @@ def _validate_curd_plan_against(
     if source != supported:
         raise ContractValidationError(
             f"unsupported contract version {source.major}.{source.minor} "
-            f"for {registered.schema_uri}; expected {supported.major}.{supported.minor}"
+            + f"for {registered.schema_uri}; expected {supported.major}.{supported.minor}"
         )
     expected = curd_plan_digest(plan)
     if plan.digest != expected:
@@ -661,7 +680,7 @@ def _validate_curd_plan_against(
     return plan
 
 
-def validate_curd_plan(plan: CurdPlan) -> CurdPlan:
+def validate_curd_plan(plan: object) -> CurdPlan:
     if not isinstance(plan, CurdPlan):
         raise TypeError(f"validate_curd_plan expects CurdPlan, not {type(plan).__name__}")
     supported = supported_version_for(CurdPlan)
@@ -710,7 +729,7 @@ def validate_contract(
         if source_version != supported_version:
             raise ContractValidationError(
                 f"unsupported contract version {source_version.major}.{source_version.minor} "
-                f"for {schema_uri}; expected {supported_version.major}.{supported_version.minor}"
+                + f"for {schema_uri}; expected {supported_version.major}.{supported_version.minor}"
             )
     elif supported_version is not None:
         raise ContractValidationError(
@@ -721,7 +740,7 @@ def validate_contract(
         value = _structure(data, contract)
         assert isinstance(value, CurdPlan)
         assert supported_version is not None
-        _validate_curd_plan_against(value, supported_version)
+        _ = _validate_curd_plan_against(value, supported_version)
     else:
         value = _structure(data, contract)
     return _artifact(value, source_version)
@@ -729,7 +748,8 @@ def validate_contract(
 
 def _forbidden_field(path: str, value: object) -> tuple[str, str] | None:
     if isinstance(value, Mapping):
-        for key, item in value.items():
+        mapping_value = cast("Mapping[str, object]", value)
+        for key, item in mapping_value.items():
             child = f"{path}.{key}"
             if key in _HOST_OWNED_FIELDS:
                 return child, key
@@ -737,7 +757,8 @@ def _forbidden_field(path: str, value: object) -> tuple[str, str] | None:
             if found is not None:
                 return found
     elif isinstance(value, list):
-        for index, item in enumerate(value):
+        list_value = cast("list[object]", value)
+        for index, item in enumerate(list_value):
             found = _forbidden_field(f"{path}[{index}]", item)
             if found is not None:
                 return found
@@ -754,10 +775,13 @@ def _invocation_value(
     raise ContractValidationError(f"invocation.{name} is required")
 
 
-def _typed_host(value: object, type_: type, path: str) -> object:
+_T = TypeVar("_T")
+
+
+def _typed_host(value: object, type_: type[_T], path: str) -> _T:
     if isinstance(value, type_):
         return value
-    return _structure(value, type_, path)
+    return cast(_T, _structure(value, type_, path))
 
 
 def _host_mapping(
@@ -766,7 +790,7 @@ def _host_mapping(
     value = _invocation_value(invocation, name, {})
     if not isinstance(value, Mapping):
         raise ContractValidationError(f"invocation.{name} must be an object")
-    return value
+    return cast("Mapping[str, object]", value)
 
 
 def _version_for(
@@ -782,7 +806,6 @@ def _version_for(
     else:
         raw = _invocation_value(invocation, "contract_version")
     version = _typed_host(raw, ContractVersion, "invocation.contract_version")
-    assert isinstance(version, ContractVersion)
     if version.schema_uri != schema_uri:
         raise ContractValidationError(
             f"host contract version must identify {schema_uri!r}"
@@ -793,10 +816,10 @@ def _version_for(
 def _host_refs(
     keys: tuple[str, ...],
     pool: Mapping[str, object],
-    type_: type,
+    type_: type[_T],
     path: str,
-) -> tuple[object, ...]:
-    resolved = []
+) -> tuple[_T, ...]:
+    resolved: list[_T] = []
     for key in keys:
         if key not in pool:
             raise ContractValidationError(f"{path} references unknown key {key!r}")
@@ -826,8 +849,8 @@ def _normalize_plan(
 ) -> CurdPlan:
     schema_uri = _CANONICAL_SCHEMA_BY_WRITER_KIND[WriterViewKind.CURD_PLAN]
     version = _version_for(invocation, schema_uri)
-    plan_id = _invocation_value(invocation, "plan_id")
-    revision = _invocation_value(invocation, "revision", 1)
+    plan_id = cast(str, _invocation_value(invocation, "plan_id"))
+    revision = cast(int, _invocation_value(invocation, "revision", 1))
     artifacts = _host_mapping(invocation, "artifacts")
     lineages = _host_mapping(invocation, "lineages")
 
@@ -842,7 +865,7 @@ def _normalize_plan(
     curd_ids = {
         key: f"{plan_id}/curd/{index}" for index, key in enumerate(keys, start=1)
     }
-    curds = []
+    curds: list[SemanticCurd] = []
     for writer_curd in view.curds:
         try:
             dependencies = tuple(
@@ -851,7 +874,7 @@ def _normalize_plan(
         except KeyError as error:
             raise ContractValidationError(
                 f"curd {writer_curd.key!r} references unknown dependency "
-                f"{error.args[0]!r}"
+                + f"{error.args[0]!r}"
             ) from None
         inputs = _host_refs(
             writer_curd.input_keys,
@@ -869,7 +892,6 @@ def _normalize_plan(
                 f"invocation.lineages.{writer_curd.key}",
             )
         )
-        assert isinstance(lineage, IdentityLineage)
         curd_id = curd_ids[writer_curd.key]
         criteria = tuple(
             Criterion(
@@ -911,16 +933,16 @@ def _normalize_plan(
         if parent_raw is None
         else _typed_host(parent_raw, SourcePlanRef, "invocation.parent_plan_ref")
     )
-    unsigned = {
-        "contract_version": version,
-        "plan_id": plan_id,
-        "revision": revision,
-        "objective": view.objective,
-        "curds": tuple(curds),
-        "context": context,
-        "parent_plan_ref": parent,
-    }
-    placeholder = CurdPlan(digest="sha256:" + "0" * 64, **unsigned)
+    placeholder = CurdPlan(
+        contract_version=version,
+        plan_id=plan_id,
+        revision=revision,
+        objective=view.objective,
+        curds=tuple(curds),
+        context=context,
+        parent_plan_ref=parent,
+        digest="sha256:" + "0" * 64,
+    )
     return attrs.evolve(placeholder, digest=curd_plan_digest(placeholder))
 
 
@@ -949,11 +971,11 @@ def _normalize_planner_result(
         if not isinstance(plan_invocation, Mapping):
             raise ContractValidationError("invocation.plan must be an object")
         merged = dict(invocation)
-        merged.update(plan_invocation)
+        merged.update(cast("Mapping[str, object]", plan_invocation))
         plan = _normalize_plan(view.plan, merged)
     return PlannerResult(
         contract_version=_version_for(invocation, schema_uri),
-        request_id=_invocation_value(invocation, "request_id"),
+        request_id=cast(str, _invocation_value(invocation, "request_id")),
         disposition=view.disposition,
         plan=plan,
         unresolved_work=unresolved,
@@ -972,7 +994,6 @@ def _normalize_finding(
     )
     assert refs
     first = refs[0]
-    assert isinstance(first, EvidenceRef)
     return ReviewFinding(
         finding_id=f"{review_id}/finding/{index}",
         severity=item.severity,
@@ -986,11 +1007,12 @@ def _normalize_review_result(
     view: ReviewResultWriterView, invocation: Mapping[str, object]
 ) -> ReviewResult:
     schema_uri = _CANONICAL_SCHEMA_BY_WRITER_KIND[WriterViewKind.REVIEW_RESULT]
-    review_id = _invocation_value(invocation, "review_id")
+    review_id = cast(str, _invocation_value(invocation, "review_id"))
     evidence = _host_mapping(invocation, "evidence")
     coverage_raw = _invocation_value(invocation, "coverage")
     if not isinstance(coverage_raw, list | tuple):
         raise ContractValidationError("invocation.coverage must be an array")
+    coverage_raw = cast("list[object] | tuple[object, ...]", coverage_raw)
     coverage = tuple(
         _typed_host(item, ReviewCoverage, f"invocation.coverage[{index}]")
         for index, item in enumerate(coverage_raw)
@@ -1050,7 +1072,6 @@ def _normalize_cause(
     )
     assert refs
     first = refs[0]
-    assert isinstance(first, EvidenceRef)
     return DiagnosisCause(
         summary=item.summary,
         evidence=refs,
@@ -1062,14 +1083,14 @@ def _normalize_diagnosis_result(
     view: DiagnosisResultWriterView, invocation: Mapping[str, object]
 ) -> DiagnosisResult:
     schema_uri = _CANONICAL_SCHEMA_BY_WRITER_KIND[WriterViewKind.DIAGNOSIS_RESULT]
-    diagnosis_id = _invocation_value(invocation, "diagnosis_id")
+    diagnosis_id = cast(str, _invocation_value(invocation, "diagnosis_id"))
     evidence = _host_mapping(invocation, "evidence")
     subject_artifact_id = _invocation_value(invocation, "subject_artifact_id")
     return DiagnosisResult(
         contract_version=_version_for(invocation, schema_uri),
         diagnosis_id=diagnosis_id,
         disposition=view.disposition,
-        symptom=_invocation_value(invocation, "symptom"),
+        symptom=cast(str, _invocation_value(invocation, "symptom")),
         reproduction=_normalize_reproduction(view.reproduction, evidence),
         hypotheses=tuple(
             _normalize_hypothesis(item, index, diagnosis_id, evidence)
@@ -1100,7 +1121,8 @@ def _normalize_curd_result(
         raise ContractValidationError(
             "invocation.expected_criterion_ids must be an array"
         )
-    expected = tuple(expected_raw)
+    expected_raw = cast("list[object] | tuple[object, ...]", expected_raw)
+    expected = cast("tuple[str, ...]", tuple(expected_raw))
     if len(expected) != len(view.criterion_results):
         raise ContractValidationError(
             "writer criterion results must match expected_criterion_ids"
@@ -1123,7 +1145,7 @@ def _normalize_curd_result(
         )
     )
     deliverables = _host_mapping(invocation, "deliverables")
-    resolved_deliverables = []
+    resolved_deliverables: list[ArtifactRef] = []
     for item in view.deliverables:
         if item.path not in deliverables:
             raise ContractValidationError(
@@ -1134,7 +1156,6 @@ def _normalize_curd_result(
             ArtifactRef,
             f"invocation.deliverables[{item.path!r}]",
         )
-        assert isinstance(artifact, ArtifactRef)
         if artifact.role != item.role or artifact.media_type != item.media_type:
             raise ContractValidationError(
                 f"host artifact for {item.path!r} contradicts the writer view"
@@ -1153,9 +1174,11 @@ def _normalize_curd_result(
     runtime_refs = _invocation_value(invocation, "runtime_refs", ())
     if not isinstance(runtime_refs, list | tuple):
         raise ContractValidationError("invocation.runtime_refs must be an array")
+    runtime_refs = cast("list[object] | tuple[object, ...]", runtime_refs)
+    runtime_refs = cast("tuple[str, ...]", tuple(runtime_refs))
     return CurdResult(
         contract_version=_version_for(invocation, schema_uri),
-        result_id=_invocation_value(invocation, "result_id"),
+        result_id=cast(str, _invocation_value(invocation, "result_id")),
         source_plan_ref=source_plan,
         source_curd_ref=source_curd,
         disposition=derive_curd_disposition(rows),
@@ -1163,13 +1186,14 @@ def _normalize_curd_result(
         criterion_results=rows,
         deliverables=tuple(resolved_deliverables),
         unresolved_work=view.unresolved_work,
-        runtime_refs=tuple(runtime_refs),
+        runtime_refs=runtime_refs,
     )
 
 
-def normalize_agent_value(view: object, invocation: Mapping[str, object]) -> object:
+def normalize_agent_value(view: object, invocation: object) -> object:
     if not isinstance(invocation, Mapping):
         raise ContractValidationError("invocation must be an object")
+    mapping_invocation = cast(Mapping[str, object], invocation)
     if isinstance(view, AgentWriterView):
         writer = view
     else:
@@ -1183,21 +1207,25 @@ def normalize_agent_value(view: object, invocation: Mapping[str, object]) -> obj
         writer = _structure(raw, AgentWriterView)
         assert isinstance(writer, AgentWriterView)
 
-    normalizers = {
-        WriterViewKind.CURD_PLAN: _normalize_plan,
-        WriterViewKind.PLANNER_RESULT: _normalize_planner_result,
-        WriterViewKind.REVIEW_RESULT: _normalize_review_result,
-        WriterViewKind.DIAGNOSIS_RESULT: _normalize_diagnosis_result,
-        WriterViewKind.CURD_RESULT: _normalize_curd_result,
-    }
-    return normalizers[writer.kind](writer.payload, invocation)
+    payload = writer.payload
+    if isinstance(payload, CurdPlanWriterView):
+        return _normalize_plan(payload, mapping_invocation)
+    if isinstance(payload, PlannerResultWriterView):
+        return _normalize_planner_result(payload, mapping_invocation)
+    if isinstance(payload, ReviewResultWriterView):
+        return _normalize_review_result(payload, mapping_invocation)
+    if isinstance(payload, DiagnosisResultWriterView):
+        return _normalize_diagnosis_result(payload, mapping_invocation)
+    if isinstance(payload, CurdResultWriterView):  # pyright: ignore[reportUnnecessaryIsInstance]
+        return _normalize_curd_result(payload, mapping_invocation)
+    raise ContractValidationError(f"unsupported writer view kind {writer.kind!r}")
 
 
 def normalize_agent_output(
-    view: object, invocation: Mapping[str, object]
+    view: object, invocation: object
 ) -> CanonicalArtifact:
     value = normalize_agent_value(view, invocation)
-    version = getattr(value, "contract_version")
+    version = cast(ContractVersion, getattr(value, "contract_version"))
     return _artifact(value, version)
 
 

@@ -15,9 +15,9 @@ absorb into a sibling.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any
+from typing import Protocol, cast
 
-from attrs import Attribute, define, field
+from attrs import define, field
 
 MAX_WAVE_SIZE = 4
 MIN_CURD_SURFACE = 25
@@ -39,46 +39,51 @@ class DecomposerSource(str, Enum):
     COOK = "cook"
 
 
-def _non_empty_string(_instance: object, attribute: Attribute[Any], value: object) -> None:
+class _NamedAttribute(Protocol):
+    name: str
+
+
+def _non_empty_string(_instance: object, attribute: _NamedAttribute, value: object) -> None:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{attribute.name} must be a non-empty string")
 
 
-def _string_list(_instance: object, attribute: Attribute[Any], value: object) -> None:
+def _string_list(_instance: object, attribute: _NamedAttribute, value: object) -> None:
     if not isinstance(value, list):
         raise ValueError(f"{attribute.name} must be a list")
-    for index, item in enumerate(value, start=1):
+    items = cast("list[object]", value)
+    for index, item in enumerate(items, start=1):
         if not isinstance(item, str) or not item.strip():
             raise ValueError(f"{attribute.name}[{index}] must be a non-empty string")
 
 
 def _non_empty_string_list(
-    instance: object, attribute: Attribute[Any], value: object
+    instance: object, attribute: _NamedAttribute, value: object
 ) -> None:
     _string_list(instance, attribute, value)
     if not value:
         raise ValueError(f"{attribute.name} must be a non-empty list")
 
 
-def _surface_floor(_instance: object, attribute: Attribute[Any], value: object) -> None:
+def _surface_floor(_instance: object, attribute: _NamedAttribute, value: object) -> None:
     if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
         raise ValueError(f"{attribute.name} must be a positive integer")
     if value < MIN_CURD_SURFACE:
         raise ValueError(
             f"{attribute.name} must be at least the surface floor of "
-            f"{MIN_CURD_SURFACE}, not {value} -- this curd is a MERGE "
-            "CANDIDATE: merge it into a sibling curd rather than dispatch a "
-            "fresh coder for it"
+            + f"{MIN_CURD_SURFACE}, not {value} -- this curd is a MERGE "
+            + "CANDIDATE: merge it into a sibling curd rather than dispatch a "
+            + "fresh coder for it"
         )
 
 
-def _non_empty_list(_instance: object, attribute: Attribute[Any], value: object) -> None:
+def _non_empty_list(_instance: object, attribute: _NamedAttribute, value: object) -> None:
     if not value:
         raise ValueError(f"{attribute.name} must be a non-empty list")
 
 
 def _pairwise_disjoint_files(
-    _instance: object, attribute: Attribute[Any], curds: list[PlannedCurd]
+    _instance: object, attribute: _NamedAttribute, curds: list[PlannedCurd]
 ) -> None:
     """Two curds that can touch the same file cannot dispatch in parallel."""
     owner: dict[str, str] = {}
@@ -87,14 +92,14 @@ def _pairwise_disjoint_files(
             if path in owner:
                 raise ValueError(
                     f"{attribute.name} must be pairwise file-disjoint: file "
-                    f"{path!r} appears in curd {owner[path]!r} and curd "
-                    f"{curd.slug!r}"
+                    + f"{path!r} appears in curd {owner[path]!r} and curd "
+                    + f"{curd.slug!r}"
                 )
             owner[path] = curd.slug
 
 
 def _schedulable_waves(
-    instance: CurdBlock, attribute: Attribute[Any], waves: list[list[str]]
+    instance: CurdBlock, attribute: _NamedAttribute, waves: list[list[str]]
 ) -> None:
     """Each wave dispatches together, so it must fit one orchestrator and name
     only curds the block declares.
@@ -108,13 +113,13 @@ def _schedulable_waves(
         if len(wave) > MAX_WAVE_SIZE:
             raise ValueError(
                 f"{attribute.name}[{index}] must be at most {MAX_WAVE_SIZE} "
-                f"slugs wide, not {len(wave)}"
+                + f"slugs wide, not {len(wave)}"
             )
         for slug in wave:
             if slug not in known:
                 raise ValueError(
                     f"{attribute.name}[{index}] must reference a declared curd "
-                    f"slug, not {slug!r}"
+                    + f"slug, not {slug!r}"
                 )
 
 

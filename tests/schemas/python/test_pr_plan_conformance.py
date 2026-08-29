@@ -9,8 +9,6 @@ that matter most if either side ever loosens.
 
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
 from easy_cheese_schemas import PrPlan
 from schema_conformance import (
@@ -19,6 +17,8 @@ from schema_conformance import (
     agreed_invalid,
     agreed_valid,
     agreeing,
+    as_dict,
+    as_list,
     assert_conforms,
     assert_table_is_honest,
     divergent,
@@ -28,21 +28,21 @@ from schema_conformance import (
 )
 
 
-def plan(**fields: Any) -> dict[str, Any]:
+def plan(**fields: object) -> dict[str, object]:
     payload = pr_plan()
     payload.update(fields)
     return payload
 
 
-def group(**fields: Any) -> dict[str, Any]:
+def group(**fields: object) -> dict[str, object]:
     payload = pr_plan()
-    payload["groups"][0].update(fields)
+    as_dict(as_list(payload["groups"])[0]).update(fields)
     return payload
 
 
-def group_without(key: str) -> dict[str, Any]:
+def group_without(key: str) -> dict[str, object]:
     payload = pr_plan()
-    del payload["groups"][0][key]
+    del as_dict(as_list(payload["groups"])[0])[key]
     return payload
 
 

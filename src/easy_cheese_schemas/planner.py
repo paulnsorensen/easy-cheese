@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
+from typing import TypeVar
 
 import attrs
 
@@ -37,6 +37,8 @@ PLANNER_REQUEST_SCHEMA = f"{SCHEMA_ROOT}/planner-request"
 PLANNER_RESULT_SCHEMA = f"{SCHEMA_ROOT}/planner-result"
 CURD_PLAN_SCHEMA = f"{SCHEMA_ROOT}/curd-plan"
 
+_T = TypeVar("_T")
+
 
 class PlannerMaterializationError(ValueError):
     pass
@@ -54,10 +56,10 @@ def materialize_planner_result(
     source_plan: CurdPlan | None = None,
 ) -> PlannerResult:
     """Turn a planner's slim writer view into the host-owned canonical result."""
-    if not isinstance(request, PlannerRequest):
-        raise TypeError("request must be a PlannerRequest")
-    if not isinstance(writer, PlannerResultWriterView):
-        raise TypeError("writer must be a PlannerResultWriterView")
+    if not isinstance(request, PlannerRequest):  # pyright: ignore[reportUnnecessaryIsInstance]
+        raise TypeError("request must be a PlannerRequest")  # pyright: ignore[reportUnreachable]
+    if not isinstance(writer, PlannerResultWriterView):  # pyright: ignore[reportUnnecessaryIsInstance]
+        raise TypeError("writer must be a PlannerResultWriterView")  # pyright: ignore[reportUnreachable]
     _validate_request_version(request)
     artifacts = _mapping(artifacts, "artifacts")
     evidence = _mapping(evidence, "evidence")
@@ -170,16 +172,16 @@ def _materialize_plan(
                 f"complete replan leaves source curds unaccounted for: {missing!r}"
             )
     context = _materialize_context(writer.plan.context, artifacts)
-    unsigned = {
-        "contract_version": _version(CURD_PLAN_SCHEMA),
-        "plan_id": plan_id,
-        "revision": revision,
-        "objective": writer.plan.objective,
-        "curds": curds,
-        "context": context,
-        "parent_plan_ref": parent,
-    }
-    placeholder = CurdPlan(digest="sha256:" + "0" * 64, **unsigned)
+    placeholder = CurdPlan(
+        contract_version=_version(CURD_PLAN_SCHEMA),
+        plan_id=plan_id,
+        revision=revision,
+        digest="sha256:" + "0" * 64,
+        objective=writer.plan.objective,
+        curds=curds,
+        context=context,
+        parent_plan_ref=parent,
+    )
     return validate_curd_plan(
         attrs.evolve(placeholder, digest=curd_plan_digest(placeholder))
     )
@@ -221,7 +223,7 @@ def _validate_source_plan(
             "curd plan schema has no host-supported contract version"
         )
     try:
-        validate_curd_plan(source_plan)
+        _ = validate_curd_plan(source_plan)
     except (TypeError, ValueError) as error:
         raise PlannerMaterializationError(str(error)) from error
     if (
@@ -332,7 +334,7 @@ def _validate_retained_curds(
         ):
             raise PlannerMaterializationError(
                 f"retained curd {curd.curd_id!r} changes semantic content; "
-                "use derive lineage"
+                + "use derive lineage"
             )
 
 
@@ -429,8 +431,8 @@ def _materialize_uncertainty(
         for item in writer.unresolved_work
     )
     request_evidence = request.evidence
-    unbound = set()
-    tampered = []
+    unbound: set[str] = set()
+    tampered: list[str] = []
     for writer_item, result_item in zip(
         writer.unresolved_work,
         unresolved,
@@ -456,12 +458,12 @@ def _materialize_uncertainty(
     if unbound:
         raise PlannerMaterializationError(
             "unresolved work references evidence outside the request: "
-            f"{sorted(unbound)!r}"
+            + f"{sorted(unbound)!r}"
         )
     if tampered:
         raise PlannerMaterializationError(
             "unresolved work evidence key "
-            f"{tampered[0]!r} does not exactly match planner request evidence"
+            + f"{tampered[0]!r} does not exactly match planner request evidence"
         )
     return unresolved
 
@@ -482,12 +484,12 @@ def _validate_request_version(request: PlannerRequest) -> None:
     if _compare_decimal_strings(version.major, supported.major) != 0:
         raise PlannerMaterializationError(
             f"unsupported planner request major version {version.major!r}; "
-            f"host supports {supported.major!r}"
+            + f"host supports {supported.major!r}"
         )
     if _compare_decimal_strings(version.minor, supported.minor) > 0:
         raise PlannerMaterializationError(
             f"future planner request minor version {version.minor!r}; "
-            f"host supports {supported.minor!r}"
+            + f"host supports {supported.minor!r}"
         )
 
 
@@ -508,11 +510,11 @@ def _version(schema_uri: str) -> ContractVersion:
     return supported
 
 
-def _mapping(value: Mapping[str, Any] | None, name: str) -> Mapping[str, Any]:
+def _mapping(value: Mapping[str, _T] | None, name: str) -> Mapping[str, _T]:
     if value is None:
         return {}
-    if not isinstance(value, Mapping):
-        raise TypeError(f"{name} must be a mapping")
+    if not isinstance(value, Mapping):  # pyright: ignore[reportUnnecessaryIsInstance]
+        raise TypeError(f"{name} must be a mapping")  # pyright: ignore[reportUnreachable]
     return value
 
 
@@ -538,7 +540,7 @@ def _require_exact_keys(
     missing = sorted(set(expected) - values.keys())
     extra = sorted(values.keys() - set(expected))
     if missing or extra:
-        details = []
+        details: list[str] = []
         if missing:
             details.append(f"missing {missing!r}")
         if extra:
@@ -551,11 +553,11 @@ def _require_exact_keys(
 def _resolve_refs(
     keys: tuple[str, ...],
     pool: Mapping[str, object],
-    expected: type,
+    expected: type[_T],
     label: str,
-) -> tuple[Any, ...]:
+) -> tuple[_T, ...]:
     _require_unique(keys, label)
-    resolved = []
+    resolved: list[_T] = []
     for key in keys:
         if key not in pool:
             raise PlannerMaterializationError(f"{label} references unknown key {key!r}")
@@ -604,7 +606,7 @@ def _validate_scope_ownership(curds: tuple[SemanticCurd, ...]) -> None:
                     ):
                         raise PlannerMaterializationError(
                             f"scope path {overlap!r} has unresolved ownership between "
-                            f"{first.curd_id!r} and {second.curd_id!r}"
+                            + f"{first.curd_id!r} and {second.curd_id!r}"
                         )
 
 

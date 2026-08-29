@@ -21,7 +21,7 @@ FIXTURE_NAMES = ("contract-cases.json", "normalization-cases.json")
 def _plan() -> CurdPlan:
     version = schemas.supported_version_for(CurdPlan)
     assert version is not None
-    unsigned = {
+    unsigned: dict[str, object] = {
         "contract_version": json.loads(schemas.canonical_bytes(version)),
         "plan_id": "plan",
         "revision": 1,
@@ -56,7 +56,7 @@ def _plan() -> CurdPlan:
         "context": None,
         "parent_plan_ref": None,
     }
-    raw = {**unsigned, "digest": schemas.canonical_digest(unsigned)}
+    raw: dict[str, object] = {**unsigned, "digest": schemas.canonical_digest(unsigned)}
     artifact = schemas.validate_contract(
         raw,
         CurdPlan,
@@ -126,10 +126,10 @@ def test_canonical_plan_digest_is_verified_by_strict_runtime() -> None:
         f"sha256:{hashlib.sha256(raw).hexdigest()}"
     )
 
-    tampered = json.loads(raw)
+    tampered = cast("dict[str, object]", json.loads(raw))
     tampered["objective"] = "Tampered objective"
     with pytest.raises(schemas.ContractValidationError, match="CurdPlan digest mismatch"):
-        schemas.validate_contract(
+        _ = schemas.validate_contract(
             tampered,
             schemas.CurdPlan,
             schemas.supported_version_for(schemas.CurdPlan),
@@ -150,12 +150,12 @@ def test_conformance_resource_api_is_bounded_and_returns_fresh_values() -> None:
 
     for invalid in ("../contract-cases.json", "/tmp/contract-cases.json", "unknown.json"):
         with pytest.raises(ValueError, match="unknown conformance fixture"):
-            schemas.read_conformance_fixture(invalid)
+            _ = schemas.read_conformance_fixture(invalid)
 
 
 def test_installed_wheel_exposes_exact_bundled_fixtures(tmp_path: Path) -> None:
     wheel_dir = tmp_path / "dist"
-    subprocess.run(
+    _ = subprocess.run(
         [
             sys.executable,
             "-m",
@@ -180,10 +180,10 @@ def test_installed_wheel_exposes_exact_bundled_fixtures(tmp_path: Path) -> None:
         spec = find_spec(dependency)
         assert spec is not None and spec.origin is not None
         dependency_roots.add(str(Path(spec.origin).resolve().parent.parent))
-    (site_packages / "_easy_cheese_runtime_dependencies.pth").write_text(
+    _ = (site_packages / "_easy_cheese_runtime_dependencies.pth").write_text(
         "\n".join(sorted(dependency_roots)) + "\n"
     )
-    subprocess.run(
+    _ = subprocess.run(
         [str(python), "-m", "pip", "install", "--no-deps", str(wheel)],
         check=True,
         capture_output=True,
@@ -215,7 +215,7 @@ assert actual == json.loads(__import__("os").environ["EXPECTED_FIXTURES"])
     child_env = os.environ.copy()
     child_env["EXPECTED_FIXTURES"] = json.dumps(expected, sort_keys=True)
     child_env["PYTHONNOUSERSITE"] = "1"
-    child_env.pop("PYTHONPATH", None)
+    _ = child_env.pop("PYTHONPATH", None)
     completed = subprocess.run(
         [str(python), "-c", script],
         cwd=tmp_path,

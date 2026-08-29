@@ -10,8 +10,6 @@ actually do.
 
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
 from easy_cheese_schemas import RunManifest
 from schema_conformance import (
@@ -20,6 +18,8 @@ from schema_conformance import (
     agreed_invalid,
     agreed_valid,
     agreeing,
+    as_dict,
+    as_list,
     assert_conforms,
     assert_table_is_honest,
     curd_records,
@@ -39,81 +39,86 @@ from schema_conformance import (
 UNMODELLED = "v0.1 gap: rule lives only in validate_manifest.py"
 
 
-def without(key: str) -> dict[str, Any]:
+def without(key: str) -> dict[str, object]:
     payload = run_manifest()
     del payload[key]
     return payload
 
 
-def top(**fields: Any) -> dict[str, Any]:
+def top(**fields: object) -> dict[str, object]:
     payload = run_manifest()
     payload.update(fields)
     return payload
 
 
-def first_curd(**fields: Any) -> dict[str, Any]:
+def first_curd(**fields: object) -> dict[str, object]:
     payload = run_manifest()
-    payload["curds"][0].update(fields)
+    as_dict(as_list(payload["curds"])[0]).update(fields)
     return payload
 
 
-def lone_curd(**fields: Any) -> dict[str, Any]:
+def lone_curd(**fields: object) -> dict[str, object]:
     payload = top(curds=curd_records(1))
-    payload["curds"][0].update(fields)
+    as_dict(as_list(payload["curds"])[0]).update(fields)
     return payload
 
 
-def lone_curd_without(key: str) -> dict[str, Any]:
+def lone_curd_without(key: str) -> dict[str, object]:
     payload = top(curds=curd_records(1))
-    del payload["curds"][0][key]
+    del as_dict(as_list(payload["curds"])[0])[key]
     return payload
 
 
-def shared_curd_files() -> dict[str, Any]:
+def shared_curd_files() -> dict[str, object]:
     payload = run_manifest()
-    payload["curds"][1]["files"] = list(payload["curds"][0]["files"])
+    curds = as_list(payload["curds"])
+    as_dict(curds[1])["files"] = list(as_list(as_dict(curds[0])["files"]))
     return payload
 
 
-def resolution(**fields: Any) -> dict[str, Any]:
+def resolution(**fields: object) -> dict[str, object]:
     payload = run_manifest()
-    payload["agent_resolution"].update(fields)
+    as_dict(payload["agent_resolution"]).update(fields)
     return payload
 
 
-def resolved(**fields: Any) -> dict[str, Any]:
+def resolved(**fields: object) -> dict[str, object]:
     payload = run_manifest()
-    payload["agent_resolution"]["resolved"].update(fields)
+    as_dict(as_dict(payload["agent_resolution"])["resolved"]).update(fields)
     return payload
 
 
-def power(value: str) -> dict[str, Any]:
+def power(value: str) -> dict[str, object]:
     payload = run_manifest()
-    payload["agent_resolution"]["attempts"][0]["power"] = value
-    payload["agent_resolution"]["resolved"]["power"] = value
+    agent_resolution = as_dict(payload["agent_resolution"])
+    as_dict(as_list(agent_resolution["attempts"])[0])["power"] = value
+    as_dict(agent_resolution["resolved"])["power"] = value
     return payload
 
 
-def substituted_type() -> dict[str, Any]:
+def substituted_type() -> dict[str, object]:
     payload = run_manifest()
-    payload["agent_resolution"]["attempts"][0]["type"] = "generalist"
-    payload["agent_resolution"]["attempts"][0]["reason"] = "substituted"
-    payload["agent_resolution"]["resolved"]["type"] = "generalist"
+    agent_resolution = as_dict(payload["agent_resolution"])
+    attempt = as_dict(as_list(agent_resolution["attempts"])[0])
+    attempt["type"] = "generalist"
+    attempt["reason"] = "substituted"
+    as_dict(agent_resolution["resolved"])["type"] = "generalist"
     return payload
 
 
-def prompt_only_write() -> dict[str, Any]:
+def prompt_only_write() -> dict[str, object]:
     payload = run_manifest()
-    payload["agent_resolution"]["permission_enforcement"] = "prompt-only"
-    payload["agent_resolution"]["request"]["permissions"] = "write"
-    payload["agent_resolution"]["degraded"] = True
+    agent_resolution = as_dict(payload["agent_resolution"])
+    agent_resolution["permission_enforcement"] = "prompt-only"
+    as_dict(agent_resolution["request"])["permissions"] = "write"
+    agent_resolution["degraded"] = True
     return payload
 
 
-def duplicate_accepted_attempt() -> dict[str, Any]:
+def duplicate_accepted_attempt() -> dict[str, object]:
     payload = run_manifest()
-    attempts = payload["agent_resolution"]["attempts"]
-    attempts.append(dict(attempts[0]))
+    attempts = as_list(as_dict(payload["agent_resolution"])["attempts"])
+    attempts.append(dict(as_dict(attempts[0])))
     return payload
 
 

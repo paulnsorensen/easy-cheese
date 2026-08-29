@@ -17,11 +17,19 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import cast
 
 from easy_cheese_schemas import load
 
-Validator = Callable[[dict[str, Any]], list[str]]
+Validator = Callable[[dict[str, object]], list[str]]
+
+
+def as_dict(value: object) -> dict[str, object]:
+    return cast(dict[str, object], value)
+
+
+def as_list(value: object) -> list[object]:
+    return cast(list[object], value)
 
 
 @dataclass(frozen=True)
@@ -29,7 +37,7 @@ class Case:
     """One fixture and the verdict each source of truth returns for it."""
 
     name: str
-    payload: dict[str, Any]
+    payload: dict[str, object]
     validator_accepts: bool
     structures: bool
     divergence: str | None = None
@@ -39,29 +47,29 @@ class Case:
         return self.validator_accepts != self.structures
 
 
-def agreed_valid(name: str, payload: dict[str, Any]) -> Case:
+def agreed_valid(name: str, payload: dict[str, object]) -> Case:
     """Both sides accept."""
     return Case(name, payload, validator_accepts=True, structures=True)
 
 
-def agreed_invalid(name: str, payload: dict[str, Any]) -> Case:
+def agreed_invalid(name: str, payload: dict[str, object]) -> Case:
     """Both sides reject."""
     return Case(name, payload, validator_accepts=False, structures=False)
 
 
-def looser(name: str, payload: dict[str, Any], gap: str) -> Case:
+def looser(name: str, payload: dict[str, object], gap: str) -> Case:
     """The validator rejects and the attrs type does not: a rule the types do
     not carry yet. `gap` names the missing rule."""
     return Case(name, payload, validator_accepts=False, structures=True, divergence=gap)
 
 
-def stricter(name: str, payload: dict[str, Any], gap: str) -> Case:
+def stricter(name: str, payload: dict[str, object], gap: str) -> Case:
     """The attrs type rejects and the validator does not: a rule only the types
     carry. `gap` names the extra rule."""
     return Case(name, payload, validator_accepts=True, structures=False, divergence=gap)
 
 
-def assert_conforms(case: Case, validator: Validator, cls: type) -> None:
+def assert_conforms(case: Case, validator: Validator, cls: type[object]) -> None:
     """Pin both verdicts. A verdict that moves is drift between the two sources
     of truth, whether it closes a divergence or opens one."""
     errors = validator(case.payload)
@@ -114,7 +122,7 @@ def divergent(cases: list[Case]) -> list[Case]:
 # ---------------------------------------------------------------------------
 
 
-def curd_records(count: int = 5) -> list[dict[str, Any]]:
+def curd_records(count: int = 5) -> list[dict[str, object]]:
     return [
         {
             "id": index + 1,
@@ -129,7 +137,7 @@ def curd_records(count: int = 5) -> list[dict[str, Any]]:
     ]
 
 
-def wiring_row(id_: str = "W1", depends_on: list[str] | None = None) -> dict[str, Any]:
+def wiring_row(id_: str = "W1", depends_on: list[str] | None = None) -> dict[str, object]:
     return {
         "id": id_,
         "type": "barrel_export",
@@ -139,7 +147,7 @@ def wiring_row(id_: str = "W1", depends_on: list[str] | None = None) -> dict[str
     }
 
 
-def review_context() -> dict[str, Any]:
+def review_context() -> dict[str, object]:
     return {
         "base_commit": "a" * 40,
         "reviewed_tree_oid": "B" * 64,
@@ -148,7 +156,7 @@ def review_context() -> dict[str, Any]:
     }
 
 
-def baseline() -> dict[str, Any]:
+def baseline() -> dict[str, object]:
     return {
         "captured_at": "2026-05-14T10:00:00Z",
         "gates": [
@@ -166,7 +174,7 @@ def baseline() -> dict[str, Any]:
     }
 
 
-def run_manifest() -> dict[str, Any]:
+def run_manifest() -> dict[str, object]:
     return {
         "slug": "feature-name",
         "spec_path": ".cheese/specs/feature-name.md",
@@ -210,7 +218,7 @@ def run_manifest() -> dict[str, Any]:
     }
 
 
-def pr_plan() -> dict[str, Any]:
+def pr_plan() -> dict[str, object]:
     return {
         "shape": "single",
         "groups": [
@@ -225,7 +233,7 @@ def pr_plan() -> dict[str, Any]:
     }
 
 
-def pr_group(branch: str, base: str = "main") -> dict[str, Any]:
+def pr_group(branch: str, base: str = "main") -> dict[str, object]:
     return {
         "branch": branch,
         "title": f"feat: {branch}",
@@ -235,7 +243,7 @@ def pr_group(branch: str, base: str = "main") -> dict[str, Any]:
     }
 
 
-def planned_curd(slug: str, files: Any, est_edit_lines: int = 25) -> dict[str, Any]:
+def planned_curd(slug: str, files: object, est_edit_lines: int = 25) -> dict[str, object]:
     return {
         "slug": slug,
         "contract": f"Implement {slug}.",
@@ -247,7 +255,7 @@ def planned_curd(slug: str, files: Any, est_edit_lines: int = 25) -> dict[str, A
     }
 
 
-def curd_block(curds: list[Any], waves: list[Any]) -> dict[str, Any]:
+def curd_block(curds: object, waves: object) -> dict[str, object]:
     return {
         "curds": curds,
         "waves": waves,

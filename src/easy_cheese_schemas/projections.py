@@ -164,7 +164,7 @@ def project_decomposition(plan: CurdPlan) -> Decomposition | UnsupportedProjecti
             )
         except ValueError:
             try:
-                DecomposedCurd(
+                _ = DecomposedCurd(
                     behavior=curd.outcome,
                     acceptance_criterion=criterion.description,
                     files=list(curd.scope.paths),

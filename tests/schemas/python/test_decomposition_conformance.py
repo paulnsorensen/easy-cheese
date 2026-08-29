@@ -9,8 +9,6 @@ type now reads it too.
 
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
 from easy_cheese_schemas import Decomposition
 from schema_conformance import (
@@ -19,6 +17,7 @@ from schema_conformance import (
     agreed_invalid,
     agreed_valid,
     agreeing,
+    as_list,
     assert_conforms,
     assert_table_is_honest,
     curd_records,
@@ -31,12 +30,12 @@ LIFECYCLE_KEYS = ("id", "status", "retry_count")
 
 
 def decomposition(
-    curds: list[dict[str, Any]], wiring: list[dict[str, Any]] | None = None
-) -> dict[str, Any]:
+    curds: list[dict[str, object]], wiring: list[dict[str, object]] | None = None
+) -> dict[str, object]:
     return {"curds": curds, "wiring": list(wiring or [])}
 
 
-def pre_run_curds(count: int) -> list[dict[str, Any]]:
+def pre_run_curds(count: int) -> list[dict[str, object]]:
     """The curds as a decomposition writes them: no dispatch lifecycle yet."""
     return [
         {key: value for key, value in curd.items() if key not in LIFECYCLE_KEYS}
@@ -44,21 +43,21 @@ def pre_run_curds(count: int) -> list[dict[str, Any]]:
     ]
 
 
-def lone_curd(**fields: Any) -> list[dict[str, Any]]:
+def lone_curd(**fields: object) -> list[dict[str, object]]:
     curds = curd_records(1)
     curds[0].update(fields)
     return curds
 
 
-def lone_curd_without(key: str) -> list[dict[str, Any]]:
+def lone_curd_without(key: str) -> list[dict[str, object]]:
     curds = curd_records(1)
     del curds[0][key]
     return curds
 
 
-def shared_files() -> list[dict[str, Any]]:
+def shared_files() -> list[dict[str, object]]:
     curds = curd_records(2)
-    curds[1]["files"] = list(curds[0]["files"])
+    curds[1]["files"] = list(as_list(curds[0]["files"]))
     return curds
 
 

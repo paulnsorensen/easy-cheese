@@ -7,16 +7,20 @@ runtime imports only the generated ``_schema_catalog`` projection.
 from __future__ import annotations
 
 import re
-from types import ModuleType
-from typing import Sequence
+from collections.abc import Sequence
+from typing import Protocol
 
 SCHEMA_ROOT = "https://schemas.easy-cheese.dev"
 _IDENTIFIER_RE = re.compile(r"[^A-Za-z0-9]+")
 
 
-def collect(module: ModuleType) -> tuple[tuple[str, str], ...]:
+class _ContractModule(Protocol):
+    def _registered_contracts(self) -> tuple[tuple[str, type], ...]: ...
+
+
+def collect(module: _ContractModule) -> tuple[tuple[str, str], ...]:
     """Project marked contract classes into ``(slug, class name)`` pairs."""
-    entries = module._registered_contracts()
+    entries = module._registered_contracts()  # pyright: ignore[reportPrivateUsage]
     return tuple((slug, contract.__name__) for slug, contract in entries)
 
 

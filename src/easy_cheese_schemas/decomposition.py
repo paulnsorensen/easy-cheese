@@ -17,9 +17,9 @@ carries.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Protocol
 
-from attrs import Attribute, define, field
+from attrs import define, field
 
 from easy_cheese_schemas.manifest import (
     PARALLEL_THRESHOLD,
@@ -32,7 +32,11 @@ from easy_cheese_schemas.manifest import (
 __all__ = ["PARALLEL_THRESHOLD", "DecomposedCurd", "Decomposition"]
 
 
-def _non_empty_list(_instance: object, attribute: Attribute[Any], value: object) -> None:
+class _NamedAttribute(Protocol):
+    name: str
+
+
+def _non_empty_list(_instance: object, attribute: _NamedAttribute, value: object) -> None:
     if not value:
         raise ValueError(f"{attribute.name} must be a non-empty list")
 

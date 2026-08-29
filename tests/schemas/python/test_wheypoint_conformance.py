@@ -10,7 +10,7 @@ declaring `ok` over an active gate.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TypeVar
 
 import attrs
 import pytest
@@ -29,23 +29,23 @@ from easy_cheese_schemas import (
     load,
 )
 from easy_cheese_schemas.wheypoint import (
-    _DIGEST_RE,
-    _ID_RE,
-    _MAX_ID,
-    _MAX_ITEMS,
-    _MAX_LEDGER,
-    _MAX_TEXT,
+    _DIGEST_RE,  # pyright: ignore[reportPrivateUsage]
+    _ID_RE,  # pyright: ignore[reportPrivateUsage]
+    _MAX_ID,  # pyright: ignore[reportPrivateUsage]
+    _MAX_ITEMS,  # pyright: ignore[reportPrivateUsage]
+    _MAX_LEDGER,  # pyright: ignore[reportPrivateUsage]
+    _MAX_TEXT,  # pyright: ignore[reportPrivateUsage]
 )
 
 DIGEST = "sha256:" + "0" * 64
 OTHER_DIGEST = "sha256:" + "1" * 64
 
 
-def merged(base: dict[str, Any], overrides: dict[str, Any]) -> dict[str, Any]:
+def merged(base: dict[str, object], overrides: dict[str, object]) -> dict[str, object]:
     return {**base, **overrides}
 
 
-def dossier() -> list[dict[str, Any]]:
+def dossier() -> list[dict[str, object]]:
     return [
         {
             "fork": "store status or derive it",
@@ -61,7 +61,7 @@ def dossier() -> list[dict[str, Any]]:
     ]
 
 
-def entry(entry_id: str, **overrides: Any) -> dict[str, Any]:
+def entry(entry_id: str, **overrides: object) -> dict[str, object]:
     return merged(
         {
             "entry_id": entry_id,
@@ -76,14 +76,14 @@ def entry(entry_id: str, **overrides: Any) -> dict[str, Any]:
     )
 
 
-def next_action(**overrides: Any) -> dict[str, Any]:
+def next_action(**overrides: object) -> dict[str, object]:
     return merged(
         {"move": "cook", "orientation": "schema types drafted", "artifact": None},
         overrides,
     )
 
 
-def record(**overrides: Any) -> dict[str, Any]:
+def record(**overrides: object) -> dict[str, object]:
     return merged(
         {
             "schema_version": 1,
@@ -108,14 +108,14 @@ def record(**overrides: Any) -> dict[str, Any]:
     )
 
 
-def delta(**overrides: Any) -> dict[str, Any]:
+def delta(**overrides: object) -> dict[str, object]:
     return merged(
         {"work_id": "wheypoint-continuity-kernel", "expected_revision_id": "rev-0002"},
         overrides,
     )
 
 
-def revision(**overrides: Any) -> dict[str, Any]:
+def revision(**overrides: object) -> dict[str, object]:
     return merged(
         {
             "schema_version": 1,
@@ -138,7 +138,7 @@ def revision(**overrides: Any) -> dict[str, Any]:
     )
 
 
-def projection(**overrides: Any) -> dict[str, Any]:
+def projection(**overrides: object) -> dict[str, object]:
     return merged(
         {
             "schema_version": 1,
@@ -155,7 +155,10 @@ def projection(**overrides: Any) -> dict[str, Any]:
     )
 
 
-def structured(payload: dict[str, Any], cls: type) -> Any:
+T = TypeVar("T")
+
+
+def structured(payload: dict[str, object], cls: type[T]) -> T:
     loaded = load(payload, cls, strict=True)
     assert loaded.value is not None, (
         f"{cls.__name__} refused a payload it should accept: {loaded.problems}"
@@ -164,7 +167,7 @@ def structured(payload: dict[str, Any], cls: type) -> Any:
     return loaded.value
 
 
-def refused(payload: dict[str, Any], cls: type) -> tuple[str, ...]:
+def refused(payload: dict[str, object], cls: type[object]) -> tuple[str, ...]:
     loaded = load(payload, cls, strict=True)
     assert loaded.value is None, f"{cls.__name__} accepted a payload it should refuse"
     assert loaded.problems, f"{cls.__name__} refused without saying why"
@@ -194,14 +197,14 @@ def test_the_four_types_are_public_exports() -> None:
         assert exported.__name__ in schema_exports
         assert exported.__module__ == "easy_cheese_schemas.wheypoint"
         assert attrs.has(exported)
-        assert exported.__attrs_attrs__ is not None
+        assert getattr(exported, "__attrs_attrs__", None) is not None
         assert attrs.resolve_types(exported) is exported
 
 
 def test_the_four_types_are_frozen() -> None:
     value = structured(record(), WheypointRecord)
     with pytest.raises(attrs.exceptions.FrozenInstanceError):
-        value.work_id = "other"  # type: ignore[misc]
+        value.work_id = "other"  # pyright: ignore[reportAttributeAccessIssue]
 
 
 def test_every_persisted_artifact_carries_its_own_vintage() -> None:
@@ -246,14 +249,14 @@ def test_digest_pattern_requires_lowercase_sha256() -> None:
 
 
 def test_text_bound_is_the_central_constant() -> None:
-    structured(record(orientation="x" * _MAX_TEXT), WheypointRecord)
+    _ = structured(record(orientation="x" * _MAX_TEXT), WheypointRecord)
     problems = refused(record(orientation="x" * (_MAX_TEXT + 1)), WheypointRecord)
     assert blames(problems, "WheypointRecord.orientation")
     assert str(_MAX_TEXT) in " ".join(problems)
 
 
 def test_collection_bound_is_the_central_constant() -> None:
-    structured(record(working_context=["line"] * _MAX_ITEMS), WheypointRecord)
+    _ = structured(record(working_context=["line"] * _MAX_ITEMS), WheypointRecord)
     problems = refused(record(working_context=["line"] * (_MAX_ITEMS + 1)), WheypointRecord)
     assert blames(problems, "WheypointRecord.working_context")
     assert str(_MAX_ITEMS) in " ".join(problems)
@@ -263,7 +266,7 @@ def test_bounded_collections_of_entries_are_capped() -> None:
     at_bound = [
         entry(f"q{index}", blocks_continuation=False) for index in range(_MAX_ITEMS)
     ]
-    structured(record(questions=at_bound), WheypointRecord)
+    _ = structured(record(questions=at_bound), WheypointRecord)
     problems = refused(
         record(questions=[*at_bound, entry("qx", blocks_continuation=False)]),
         WheypointRecord,
@@ -272,7 +275,7 @@ def test_bounded_collections_of_entries_are_capped() -> None:
     assert str(_MAX_ITEMS) in " ".join(problems)
 
 
-def largest_legal_record() -> dict[str, Any]:
+def largest_legal_record() -> dict[str, object]:
     """Every protected list at its cap, every question and blocker gating."""
     return record(
         decisions=[
@@ -322,7 +325,7 @@ def test_the_largest_legal_record_round_trips_through_receipt_and_projection() -
 
 def test_the_ledger_bound_is_the_central_aggregate_constant() -> None:
     ids = [f"e{index}" for index in range(_MAX_LEDGER)]
-    structured(revision(preserved_entry_ids=ids), WheypointRevision)
+    _ = structured(revision(preserved_entry_ids=ids), WheypointRevision)
     problems = refused(revision(preserved_entry_ids=[*ids, "extra"]), WheypointRevision)
     assert blames(problems, "WheypointRevision.preserved_entry_ids")
     assert str(_MAX_LEDGER) in " ".join(problems)
@@ -334,12 +337,12 @@ def test_the_ledger_bound_is_the_central_aggregate_constant() -> None:
 @pytest.mark.parametrize(
     "bad", ["", "Upper-Case", "has space", "-leading", "a" * (_MAX_ID + 1), 7, None]
 )
-def test_record_rejects_a_malformed_work_id(bad: Any) -> None:
+def test_record_rejects_a_malformed_work_id(bad: object) -> None:
     assert blames(refused(record(work_id=bad), WheypointRecord), "WheypointRecord.work_id")
 
 
 @pytest.mark.parametrize("bad", ["", "Rev-1", "rev 1", 3])
-def test_delta_rejects_a_malformed_expected_revision(bad: Any) -> None:
+def test_delta_rejects_a_malformed_expected_revision(bad: object) -> None:
     problems = refused(delta(expected_revision_id=bad), WheypointDelta)
     assert blames(problems, "WheypointDelta.expected_revision_id")
 
@@ -364,7 +367,7 @@ def test_revision_rejects_a_malformed_request_digest() -> None:
         "claude:abc-123",
     ],
 )
-def test_revision_rejects_an_invalid_session_provenance_shape(provenance: Any) -> None:
+def test_revision_rejects_an_invalid_session_provenance_shape(provenance: object) -> None:
     problems = refused(revision(session_provenance=provenance), WheypointRevision)
     assert blames(problems, "WheypointRevision.session_provenance")
 
@@ -410,7 +413,7 @@ def test_a_settled_entry_must_carry_its_rationale() -> None:
         WheypointRecord,
     )
     assert blames(problems, "WheypointRecord.questions[1].rationale")
-    structured(
+    _ = structured(
         record(questions=[entry("q1", state="resolved", rationale="answered in review")]),
         WheypointRecord,
     )
@@ -424,7 +427,7 @@ def test_a_superseded_entry_must_name_its_successor() -> None:
         WheypointRecord,
     )
     assert blames(problems, "WheypointRecord.questions[1].superseded_by")
-    structured(
+    _ = structured(
         record(
             questions=[
                 entry(
@@ -504,7 +507,7 @@ def test_an_unknown_entry_state_is_rejected(state: str) -> None:
 
 
 def test_delta_additions_carry_no_entry_id() -> None:
-    names = {attribute.name for attribute in attrs.fields(ProposedEntry)}
+    names = set(attrs.fields_dict(ProposedEntry))
     assert "entry_id" not in names, (
         "the runtime assigns entry IDs; a delta that could name one could "
         "overwrite an existing protected entry"
@@ -529,7 +532,7 @@ def test_omitted_semantic_fields_stay_none_and_an_empty_list_is_explicit() -> No
 
 
 def test_a_transition_names_an_entry_an_action_and_a_rationale() -> None:
-    structured(
+    _ = structured(
         delta(
             transitions=[
                 {
@@ -552,7 +555,7 @@ def test_a_transition_names_an_entry_an_action_and_a_rationale() -> None:
 
 
 def test_supersede_requires_a_target_and_other_actions_forbid_one() -> None:
-    structured(
+    _ = structured(
         delta(
             transitions=[
                 {
@@ -634,7 +637,7 @@ def test_an_artifact_link_may_declare_a_digest_a_revision_and_coverage() -> None
 
 def test_no_type_stores_a_status_field() -> None:
     for cls in (WheypointRecord, WheypointProjection, WheypointRevision):
-        names = {attribute.name for attribute in attrs.fields(cls)}
+        names = set(attrs.fields_dict(cls))
         assert "status" not in names, f"{cls.__name__} stores a status independently"
 
 
@@ -676,8 +679,8 @@ def test_a_stored_status_key_is_ignored_rather_than_trusted() -> None:
     ],
 )
 def test_record_status_is_derived_from_active_blocking_entries(
-    questions: list[dict[str, Any]],
-    blockers: list[dict[str, Any]],
+    questions: list[dict[str, object]],
+    blockers: list[dict[str, object]],
     expected_gating: tuple[str, ...],
 ) -> None:
     gated = bool(expected_gating)
@@ -717,13 +720,14 @@ def test_an_ungated_projection_derives_ok() -> None:
 
 
 def test_a_decision_dossier_fork_needs_options_with_evidence() -> None:
-    for bad, path in (
+    cases: list[tuple[list[dict[str, object]], str]] = [
         ([{"fork": "which store", "options": []}], "options"),
         (
             [{"fork": "", "options": dossier()[0]["options"]}],
             "fork",
         ),
-    ):
+    ]
+    for bad, path in cases:
         problems = refused(record(decision_dossier=bad), WheypointRecord)
         assert blames(problems, f"WheypointRecord.decision_dossier[1].{path}"), problems
 
