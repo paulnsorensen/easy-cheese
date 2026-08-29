@@ -40,7 +40,12 @@ def _worktree_branch(slug: str) -> str:
 
 def _git(repo: str, *args: str) -> str:
     """Run a git command in `repo`; raise CliError (loud) on failure."""
-    return git_utils.run_git_checked(list(args), cwd=repo)
+    result = git_utils.run_git(list(args), cwd=repo)
+    if result.returncode != 0:
+        raise cli.CliError(
+            f"git {' '.join(args)} failed ({result.returncode}): {result.stderr.strip()}"
+        )
+    return result.stdout
 
 
 def _validate_slug(slug: str) -> None:

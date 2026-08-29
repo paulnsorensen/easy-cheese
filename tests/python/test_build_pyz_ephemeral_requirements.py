@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import inspect
 import sys
 from pathlib import Path
 
@@ -18,17 +17,8 @@ def test_bundle_requirements_are_written_beside_the_temporary_wheelhouse(
     wheelhouse.mkdir()
     expected = "demo==1.0 --hash=sha256:" + "a" * 64 + "\n"
     monkeypatch.setattr(build_pyz, "_resolved_requirements", lambda *_: expected)
-    legacy_lock_root = tmp_path / "legacy-locks"
-    legacy_lock_root.mkdir()
-    (legacy_lock_root / "cut.txt").write_text(expected, encoding="utf-8")
-    monkeypatch.setattr(build_pyz, "LOCK_ROOT", legacy_lock_root, raising=False)
-    kwargs = (
-        {"update": False}
-        if "update" in inspect.signature(build_pyz._requirements_for).parameters
-        else {}
-    )
 
-    requirements = build_pyz._requirements_for("cut", wheelhouse, **kwargs)
+    requirements = build_pyz._requirements_for("cut", wheelhouse)
 
     assert requirements == tmp_path / "cut-requirements.txt", (
         "ephemeral-requirements-path"
@@ -42,7 +32,7 @@ def test_build_cli_rejects_removed_update_locks_option(
     monkeypatch.setattr(build_pyz, "SKILLS", ("cut",))
     monkeypatch.setattr(build_pyz, "build_bundles", lambda *_args, **_kwargs: {})
 
-    try:
+    with pytest.raises(SystemExit) as exc:
         build_pyz.main(
             [
                 "build_pyz.py",
@@ -52,7 +42,4 @@ def test_build_cli_rejects_removed_update_locks_option(
                 "cut",
             ]
         )
-    except SystemExit as exc:
-        assert exc.code == 2
-    else:
-        assert False, "update-locks-option-still-accepted"
+    assert exc.value.code == 2
