@@ -53,6 +53,18 @@ only-include = [
   "docs/easy-cheese-schemas.md",
   "LICENSE",
 ]
+# typeCheckingMode is deliberately unset: basedpyright's default "recommended"
+# tier matches the editor LSP diagnostics.
+[tool.basedpyright]
+include = ["src", "scripts", ".github/scripts", "tests"]
+pythonVersion = "3.12"
+
+# The published easy-cheese-schemas wheel declares requires-python >=3.11, so
+# its sources must not use 3.12-only features.
+[[tool.basedpyright.executionEnvironments]]
+root = "src/easy_cheese_schemas"
+pythonVersion = "3.11"
+
 [tool.vulture]
 min_confidence = 60
 paths = [
