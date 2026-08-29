@@ -88,29 +88,29 @@ def _checker_module() -> _Checker:
 
 
 def _import_map(checker: _Checker, module: ast.Module) -> dict[str, str]:
-    return checker._import_map(module)  # pyright: ignore[reportPrivateUsage]
+    return checker._import_map(module)
 
 
 def _findings(checker: _Checker, items: Sequence[_UnusedItemStub]) -> tuple[_FindingLike, ...]:
-    return checker._findings(items)  # pyright: ignore[reportPrivateUsage]
+    return checker._findings(items)
 
 
 def _make_finding(
     checker: _Checker, path: Path, first_line: int, name: str, typ: str, report: str
 ) -> _FindingLike:
-    return checker._Finding(path, first_line, name, typ, report)  # pyright: ignore[reportPrivateUsage]
+    return checker._Finding(path, first_line, name, typ, report)
 
 
 def _accepted_reason(
     checker: _Checker, finding: _FindingLike, module: ast.Module, imports: dict[str, str]
 ) -> str | None:
-    return checker._accepted_reason(finding, module, imports)  # pyright: ignore[reportPrivateUsage]
+    return checker._accepted_reason(finding, module, imports)
 
 
 def _has_definition_noqa(
     checker: _Checker, finding: _FindingLike, module: ast.Module, source_path: Path
 ) -> bool:
-    return checker._has_definition_noqa(finding, module, source_path)  # pyright: ignore[reportPrivateUsage]
+    return checker._has_definition_noqa(finding, module, source_path)
 
 
 @needs_just

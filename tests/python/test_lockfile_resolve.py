@@ -9,32 +9,9 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
-from types import ModuleType
-from typing import Protocol, TypedDict, cast
+from typing import cast
 from unittest.mock import patch
-
-
-class _LockfileResult(TypedDict):
-    path: str
-    resolved: bool
-    message: str
-
-
-class _LockfileResolveModule(Protocol):
-    subprocess: ModuleType
-
-    def resolve_lockfile(
-        self, lockfile_path: str, strategy: str = ..., dry_run: bool = ...
-    ) -> _LockfileResult: ...
-
-    def run_git(
-        self,
-        args: list[str],
-        capture_output: bool = ...,
-        *,
-        cwd: str | Path | None = None,
-        timeout: float | None = None,
-    ) -> subprocess.CompletedProcess[str]: ...
+from easy_cheese.skills.melt import lockfile_resolve
 
 
 def make_completed(
@@ -52,18 +29,18 @@ def write_clean_manifest(tmp_path: Path, name: str = "Cargo.toml") -> Path:
 
 
 class TestResolveLockfile:
-    def test_unknown_lockfile_type(self, lockfile_resolve: _LockfileResolveModule) -> None:
+    def test_unknown_lockfile_type(self) -> None:
         result = lockfile_resolve.resolve_lockfile("requirements.txt")
         assert result["resolved"] is False
         assert "Unknown lockfile type" in result["message"]
 
-    def test_missing_manifest(self, lockfile_resolve: _LockfileResolveModule, tmp_path: Path) -> None:
+    def test_missing_manifest(self, tmp_path: Path) -> None:
         result = lockfile_resolve.resolve_lockfile(str(tmp_path / "Cargo.lock"))
         assert result["resolved"] is False
         assert "Manifest not found" in result["message"]
 
     def test_manifest_with_conflict_markers_is_rejected(
-        self, lockfile_resolve: _LockfileResolveModule, tmp_path: Path
+        self, tmp_path: Path
     ) -> None:
         manifest = tmp_path / "Cargo.toml"
         _ = manifest.write_text("<<<<<<< HEAD\nname='a'\n=======\nname='b'\n>>>>>>> x\n")
@@ -72,11 +49,11 @@ class TestResolveLockfile:
         assert "conflict markers" in result["message"]
 
     def test_dry_run_does_not_invoke_subprocess(
-        self, lockfile_resolve: _LockfileResolveModule, tmp_path: Path
+        self, tmp_path: Path
     ) -> None:
         _ = write_clean_manifest(tmp_path)
         with (
-            patch.object(lockfile_resolve.subprocess, "run") as run_mock,
+            patch.object(subprocess, "run") as run_mock,
             patch.object(lockfile_resolve, "run_git") as git_mock,
         ):
             result = lockfile_resolve.resolve_lockfile(str(tmp_path / "Cargo.lock"), dry_run=True)
@@ -86,7 +63,7 @@ class TestResolveLockfile:
         git_mock.assert_not_called()
 
     def test_apply_takes_theirs_regenerates_and_stages(
-        self, lockfile_resolve: _LockfileResolveModule, tmp_path: Path
+        self, tmp_path: Path
     ) -> None:
         _ = write_clean_manifest(tmp_path)
         lockfile = tmp_path / "Cargo.lock"
@@ -95,7 +72,7 @@ class TestResolveLockfile:
         with (
             patch.object(lockfile_resolve, "run_git") as git_mock,
             patch.object(
-                lockfile_resolve.subprocess, "run", return_value=make_completed()
+                subprocess, "run", return_value=make_completed()
             ) as run_mock,
         ):
             git_mock.side_effect = [
@@ -111,7 +88,7 @@ class TestResolveLockfile:
         assert run_mock.call_args.args[0] == ["cargo", "generate-lockfile"]
         assert git_mock.call_args_list[-1].args[0] == ["add", str(lockfile)]
 
-    def test_git_show_failure(self, lockfile_resolve: _LockfileResolveModule, tmp_path: Path) -> None:
+    def test_git_show_failure(self, tmp_path: Path) -> None:
         _ = write_clean_manifest(tmp_path)
         lockfile = tmp_path / "Cargo.lock"
         _ = lockfile.write_text("doesnt matter")
@@ -122,7 +99,7 @@ class TestResolveLockfile:
         assert result["resolved"] is False
         assert "could not extract" in result["message"]
 
-    def test_regen_failure(self, lockfile_resolve: _LockfileResolveModule, tmp_path: Path) -> None:
+    def test_regen_failure(self, tmp_path: Path) -> None:
         _ = write_clean_manifest(tmp_path)
         lockfile = tmp_path / "Cargo.lock"
         _ = lockfile.write_text("ignored")
@@ -130,7 +107,7 @@ class TestResolveLockfile:
         with (
             patch.object(lockfile_resolve, "run_git", return_value=make_completed(stdout="ok")),
             patch.object(
-                lockfile_resolve.subprocess,
+                subprocess,
                 "run",
                 return_value=make_completed(returncode=1, stderr="boom"),
             ),
@@ -141,7 +118,7 @@ class TestResolveLockfile:
         assert "regen failed" in result["message"]
 
     def test_strategy_regen_skips_git_show(
-        self, lockfile_resolve: _LockfileResolveModule, tmp_path: Path
+        self, tmp_path: Path
     ) -> None:
         _ = write_clean_manifest(tmp_path)
         lockfile = tmp_path / "Cargo.lock"
@@ -149,7 +126,7 @@ class TestResolveLockfile:
 
         with (
             patch.object(lockfile_resolve, "run_git") as git_mock,
-            patch.object(lockfile_resolve.subprocess, "run", return_value=make_completed()),
+            patch.object(subprocess, "run", return_value=make_completed()),
         ):
             git_mock.return_value = make_completed()
             result = lockfile_resolve.resolve_lockfile(str(lockfile), strategy="regen")
@@ -159,14 +136,14 @@ class TestResolveLockfile:
         for call in git_mock.call_args_list:
             assert call.args[0][0] == "add"
 
-    def test_go_also_stages_go_mod(self, lockfile_resolve: _LockfileResolveModule, tmp_path: Path) -> None:
+    def test_go_also_stages_go_mod(self, tmp_path: Path) -> None:
         _ = (tmp_path / "go.mod").write_text("module x\n")
         lockfile = tmp_path / "go.sum"
         _ = lockfile.write_text("ignored")
 
         with (
             patch.object(lockfile_resolve, "run_git") as git_mock,
-            patch.object(lockfile_resolve.subprocess, "run", return_value=make_completed()),
+            patch.object(subprocess, "run", return_value=make_completed()),
         ):
             git_mock.side_effect = [
                 make_completed(stdout="theirs"),  # git show
@@ -180,14 +157,14 @@ class TestResolveLockfile:
         assert ["add", str(lockfile)] in staged
         assert any("go.mod" in path for cmd in staged for path in cmd if isinstance(path, str))
 
-    def test_staging_failure(self, lockfile_resolve: _LockfileResolveModule, tmp_path: Path) -> None:
+    def test_staging_failure(self, tmp_path: Path) -> None:
         _ = write_clean_manifest(tmp_path)
         lockfile = tmp_path / "Cargo.lock"
         _ = lockfile.write_text("ignored")
 
         with (
             patch.object(lockfile_resolve, "run_git") as git_mock,
-            patch.object(lockfile_resolve.subprocess, "run", return_value=make_completed()),
+            patch.object(subprocess, "run", return_value=make_completed()),
         ):
             git_mock.side_effect = [
                 make_completed(stdout="theirs"),

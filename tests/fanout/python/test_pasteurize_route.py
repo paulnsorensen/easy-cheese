@@ -57,27 +57,27 @@ class TestColdBugPinnedValues:
 
     def test_cold_shape_non_deterministic_routes_max(self) -> None:
         result = pasteurize_route.size_pasteurize_fanout("cold", None, False)
-        assert result == pasteurize_route._COLD_BUG_NONDETERMINISTIC_N  # pyright: ignore[reportPrivateUsage]
+        assert result == pasteurize_route._COLD_BUG_NONDETERMINISTIC_N
 
     def test_cold_shape_deterministic_repro_routes_min(self) -> None:
         result = pasteurize_route.size_pasteurize_fanout("cold", None, True)
-        assert result == pasteurize_route._COLD_BUG_DETERMINISTIC_N  # pyright: ignore[reportPrivateUsage]
+        assert result == pasteurize_route._COLD_BUG_DETERMINISTIC_N
 
     def test_cold_shape_ignores_score(self) -> None:
         # A cold shape routes on bug_shape alone -- the score is irrelevant.
         result = pasteurize_route.size_pasteurize_fanout("cold", 1000.0, False)
-        assert result == pasteurize_route._COLD_BUG_NONDETERMINISTIC_N  # pyright: ignore[reportPrivateUsage]
+        assert result == pasteurize_route._COLD_BUG_NONDETERMINISTIC_N
 
     def test_score_is_none_routes_cold_branch_even_for_regression_shape(self) -> None:
         # The `score is None` half of the cold-branch `or` also routes here,
         # even for a non-cold bug shape.
         result = pasteurize_route.size_pasteurize_fanout("regression", None, True)
-        assert result == pasteurize_route._COLD_BUG_DETERMINISTIC_N  # pyright: ignore[reportPrivateUsage]
+        assert result == pasteurize_route._COLD_BUG_DETERMINISTIC_N
 
     def test_min_below_max_and_both_ints(self) -> None:
-        assert pasteurize_route._COLD_BUG_DETERMINISTIC_N < pasteurize_route._COLD_BUG_NONDETERMINISTIC_N  # pyright: ignore[reportPrivateUsage]
-        assert isinstance(pasteurize_route._COLD_BUG_DETERMINISTIC_N, int)  # pyright: ignore[reportPrivateUsage]
-        assert isinstance(pasteurize_route._COLD_BUG_NONDETERMINISTIC_N, int)  # pyright: ignore[reportPrivateUsage]
+        assert pasteurize_route._COLD_BUG_DETERMINISTIC_N < pasteurize_route._COLD_BUG_NONDETERMINISTIC_N
+        assert isinstance(pasteurize_route._COLD_BUG_DETERMINISTIC_N, int)
+        assert isinstance(pasteurize_route._COLD_BUG_NONDETERMINISTIC_N, int)
 
 
 class TestBoundaryIsNamedConstant:

@@ -440,7 +440,7 @@ def test_rejects_forbidden_redirect_with_no_redirect_opener(
             return RedirectResponse(req.full_url, forbidden_uri)
 
     opener = build_opener(
-        artifacts_module._NoRedirectHandler(),  # pyright: ignore[reportPrivateUsage]
+        artifacts_module._NoRedirectHandler(),
         FixtureHTTPSHandler(),
     )
     monkeypatch.setattr(artifacts_module, "urlopen", opener.open)

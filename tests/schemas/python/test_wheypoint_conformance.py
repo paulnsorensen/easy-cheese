@@ -29,12 +29,12 @@ from easy_cheese_schemas import (
     load,
 )
 from easy_cheese_schemas.wheypoint import (
-    _DIGEST_RE,  # pyright: ignore[reportPrivateUsage]
-    _ID_RE,  # pyright: ignore[reportPrivateUsage]
-    _MAX_ID,  # pyright: ignore[reportPrivateUsage]
-    _MAX_ITEMS,  # pyright: ignore[reportPrivateUsage]
-    _MAX_LEDGER,  # pyright: ignore[reportPrivateUsage]
-    _MAX_TEXT,  # pyright: ignore[reportPrivateUsage]
+    _DIGEST_RE,
+    _ID_RE,
+    _MAX_ID,
+    _MAX_ITEMS,
+    _MAX_LEDGER,
+    _MAX_TEXT,
 )
 
 DIGEST = "sha256:" + "0" * 64

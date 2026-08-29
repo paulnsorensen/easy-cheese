@@ -30,30 +30,30 @@ def _as_list(value: object) -> list[object]:
     return cast(list[object], value)
 
 
-def _run_case(argv: list[str], cwd: Path) -> red_gate._Run:  # pyright: ignore[reportPrivateUsage]
-    return red_gate._run_case(argv, cwd)  # pyright: ignore[reportPrivateUsage]
+def _run_case(argv: list[str], cwd: Path) -> red_gate._Run:
+    return red_gate._run_case(argv, cwd)
 
 
 def _python_case_command(
     argv: list[str], cwd: Path, probe_fd: int
-) -> red_gate._ProbeCommand | None:  # pyright: ignore[reportPrivateUsage]
-    return red_gate._python_case_command(argv, cwd, probe_fd)  # pyright: ignore[reportPrivateUsage]
+) -> red_gate._ProbeCommand | None:
+    return red_gate._python_case_command(argv, cwd, probe_fd)
 
 
 def _trusted_interpreter_path() -> Path | None:
-    return red_gate._TRUSTED_INTERPRETER_PATH  # pyright: ignore[reportPrivateUsage]
+    return red_gate._TRUSTED_INTERPRETER_PATH
 
 
 def _native_original_argv0(executable: Path, cwd: Path) -> str:
-    return red_gate._native_original_argv0(executable, cwd)  # pyright: ignore[reportPrivateUsage]
+    return red_gate._native_original_argv0(executable, cwd)
 
 
-def _looks_harness_failure(run: red_gate._Run) -> bool:  # pyright: ignore[reportPrivateUsage]
-    return red_gate._looks_harness_failure(run)  # pyright: ignore[reportPrivateUsage]
+def _looks_harness_failure(run: red_gate._Run) -> bool:
+    return red_gate._looks_harness_failure(run)
 
 
 def _press_history_paths(root: Path, receipt: GateReceipt) -> tuple[Path, Path]:
-    return red_gate._press_history_paths(root, receipt)  # pyright: ignore[reportPrivateUsage]
+    return red_gate._press_history_paths(root, receipt)
 
 
 class _MatrixPayloadChanges(TypedDict, total=False):

@@ -131,7 +131,7 @@ gate_applicability:
         encoding="utf-8",
     )
 
-    plan = red_gate._parse_spec(spec)  # pyright: ignore[reportPrivateUsage]
+    plan = red_gate._parse_spec(spec)
     assert plan.disposition is GateDisposition.RED
     assert plan.contracts == ()
     assert plan.problems == (RED_REQUIRED_EXECUTABLE_PROBLEM,)

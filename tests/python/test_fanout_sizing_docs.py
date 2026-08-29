@@ -106,7 +106,7 @@ class TestAgeLadder:
 
     def test_age_skill_names_all_five_lens_groupings(self) -> None:
         text = read(AGE_FAN_OUT_DOC)
-        lens_tree = age_route._LENS_TREE  # pyright: ignore[reportPrivateUsage]
+        lens_tree = age_route._LENS_TREE
         for group in lens_tree:
             pattern = r"\[\s*" + r"\s*,\s*".join(group) + r"\s*\]"
             assert re.search(pattern, text), (
@@ -201,9 +201,9 @@ class TestThresholdCodeDocsAgreement:
         )
 
     def test_age_skill_router_ladder_matches_live_score_floors(self) -> None:
-        n2_floor = age_route._SCORE_N2_FLOOR  # pyright: ignore[reportPrivateUsage]
-        n5_floor = age_route._SCORE_N5_FLOOR  # pyright: ignore[reportPrivateUsage]
-        high_effort_score = age_route._HIGH_EFFORT_SCORE  # pyright: ignore[reportPrivateUsage]
+        n2_floor = age_route._SCORE_N2_FLOOR
+        n5_floor = age_route._SCORE_N5_FLOOR
+        high_effort_score = age_route._HIGH_EFFORT_SCORE
         assert n2_floor == 60
         assert n5_floor == 250
         assert high_effort_score == 900
@@ -240,13 +240,13 @@ class TestThresholdCodeDocsAgreement:
         assert table, "pasteurize/SKILL.md's fan-out sizing table is missing"
         rows = table.group(0)
 
-        tight_deterministic_n = pasteurize_route._REGRESSION_TIGHT_DETERMINISTIC_N  # pyright: ignore[reportPrivateUsage]
-        tight_nondeterministic_n = pasteurize_route._REGRESSION_TIGHT_NONDETERMINISTIC_N  # pyright: ignore[reportPrivateUsage]
-        wide_deterministic_n = pasteurize_route._REGRESSION_WIDE_DETERMINISTIC_N  # pyright: ignore[reportPrivateUsage]
-        wide_nondeterministic_n = pasteurize_route._REGRESSION_WIDE_NONDETERMINISTIC_N  # pyright: ignore[reportPrivateUsage]
-        unstable_repro_n = pasteurize_route._UNSTABLE_REPRO_N  # pyright: ignore[reportPrivateUsage]
-        cold_bug_deterministic_n = pasteurize_route._COLD_BUG_DETERMINISTIC_N  # pyright: ignore[reportPrivateUsage]
-        cold_bug_nondeterministic_n = pasteurize_route._COLD_BUG_NONDETERMINISTIC_N  # pyright: ignore[reportPrivateUsage]
+        tight_deterministic_n = pasteurize_route._REGRESSION_TIGHT_DETERMINISTIC_N
+        tight_nondeterministic_n = pasteurize_route._REGRESSION_TIGHT_NONDETERMINISTIC_N
+        wide_deterministic_n = pasteurize_route._REGRESSION_WIDE_DETERMINISTIC_N
+        wide_nondeterministic_n = pasteurize_route._REGRESSION_WIDE_NONDETERMINISTIC_N
+        unstable_repro_n = pasteurize_route._UNSTABLE_REPRO_N
+        cold_bug_deterministic_n = pasteurize_route._COLD_BUG_DETERMINISTIC_N
+        cold_bug_nondeterministic_n = pasteurize_route._COLD_BUG_NONDETERMINISTIC_N
 
         expectations = [
             ("tight", "deterministic", tight_deterministic_n),

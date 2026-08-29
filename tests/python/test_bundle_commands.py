@@ -134,7 +134,7 @@ def test_every_skill_declares_a_static_manifest() -> None:
         assert all(isinstance(item, bc.Command) for item in commands)
         _ = bc.command_map(commands)
         assert all(
-            callable(bc._handler(item.target))  # pyright: ignore[reportPrivateUsage]
+            callable(bc._handler(item.target))
             for item in commands
         )
 

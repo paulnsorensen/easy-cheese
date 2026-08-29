@@ -6,25 +6,15 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-from typing import Protocol, TypedDict, cast
-
-
-class _RerunVerdict(TypedDict):
-    exit_code: int
-    reproduced: bool
-    runs: int
-    failures: int
-
-
-class _ReproRerunModule(Protocol):
-    def rerun(self, cmd: str, runs: int) -> _RerunVerdict: ...
+from typing import cast
+from easy_cheese.skills.pasteurize import repro_rerun
 
 
 BUNDLE = Path(__file__).resolve().parents[3] / "skills/pasteurize/scripts/pasteurize.pyz"
 
 
 class TestRerunFunction:
-    def test_reproducible_failure(self, repro_rerun: _ReproRerunModule) -> None:
+    def test_reproducible_failure(self) -> None:
         verdict = repro_rerun.rerun("false", 3)
         assert verdict == {
             "exit_code": 1,
@@ -33,7 +23,7 @@ class TestRerunFunction:
             "failures": 3,
         }
 
-    def test_non_reproducible(self, repro_rerun: _ReproRerunModule) -> None:
+    def test_non_reproducible(self) -> None:
         verdict = repro_rerun.rerun("true", 3)
         assert verdict == {
             "exit_code": 0,
@@ -42,7 +32,7 @@ class TestRerunFunction:
             "failures": 0,
         }
 
-    def test_mixed_first_run_fails(self, repro_rerun: _ReproRerunModule, tmp_path: Path) -> None:
+    def test_mixed_first_run_fails(self, tmp_path: Path) -> None:
         # Counter file: fails on first invocation, passes thereafter. This
         # exercises the flake-vs-repro distinction without relying on $RANDOM.
         counter = tmp_path / "n"
@@ -61,7 +51,7 @@ class TestRerunFunction:
         assert verdict["exit_code"] == 7
 
     def test_last_nonzero_wins_when_multiple_failures(
-        self, repro_rerun: _ReproRerunModule, tmp_path: Path
+        self, tmp_path: Path
     ) -> None:
         # First run exits 3, second exits 0, third exits 9 -> we report 9.
         counter = tmp_path / "n"
@@ -74,12 +64,12 @@ class TestRerunFunction:
         assert verdict["failures"] == 2
         assert verdict["exit_code"] == 9
 
-    def test_runs_override_one(self, repro_rerun: _ReproRerunModule) -> None:
+    def test_runs_override_one(self) -> None:
         verdict = repro_rerun.rerun("false", 1)
         assert verdict["runs"] == 1
         assert verdict["failures"] == 1
 
-    def test_runs_override_five(self, repro_rerun: _ReproRerunModule) -> None:
+    def test_runs_override_five(self) -> None:
         verdict = repro_rerun.rerun("true", 5)
         assert verdict["runs"] == 5
         assert verdict["failures"] == 0

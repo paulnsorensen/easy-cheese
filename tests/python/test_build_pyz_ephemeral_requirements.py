@@ -22,7 +22,7 @@ def test_bundle_requirements_are_written_beside_the_temporary_wheelhouse(
 
     monkeypatch.setattr(build_pyz, "_resolved_requirements", _stub_resolved_requirements)
 
-    requirements = build_pyz._requirements_for("cut", wheelhouse)  # pyright: ignore[reportPrivateUsage]
+    requirements = build_pyz._requirements_for("cut", wheelhouse)
 
     assert requirements == tmp_path / "cut-requirements.txt", (
         "ephemeral-requirements-path"

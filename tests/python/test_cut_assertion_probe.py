@@ -8,9 +8,9 @@ from pathlib import Path
 import pytest
 from easy_cheese.shared.cut.gate_receipts import GateValidationError
 from test_red_gate_validator import (  # pyright: ignore[reportImplicitRelativeImport]
-    _candidate,  # pyright: ignore[reportPrivateUsage]
-    _issue,  # pyright: ignore[reportPrivateUsage]
-    _receipt_path,  # pyright: ignore[reportPrivateUsage]
+    _candidate,
+    _issue,
+    _receipt_path,
 )
 
 _EXPECTED_FAILURE = (

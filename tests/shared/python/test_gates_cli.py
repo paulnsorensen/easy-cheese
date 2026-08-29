@@ -130,6 +130,6 @@ class TestInProcessClassify:
             json_mode=True,
             stdout=sys.stdout,
         )
-        gates_cli._cmd_classify(ns)  # pyright: ignore[reportPrivateUsage]
+        gates_cli._cmd_classify(ns)
         payload = cast(dict[str, object], json.loads(capsys.readouterr().out))
         assert payload == {"press_status": "ready-for-age", "readiness": "ready for /age"}

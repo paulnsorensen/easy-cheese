@@ -3,16 +3,10 @@
 from __future__ import annotations
 
 import subprocess
-from types import ModuleType
-from typing import TYPE_CHECKING, Protocol
 from unittest.mock import patch
 
 import pytest
-
-if TYPE_CHECKING:
-    from pathlib import Path
-
-    from easy_cheese.shared.git_utils import ConflictHunk
+from easy_cheese.shared import git_utils
 
 
 def make_completed(
@@ -23,56 +17,27 @@ def make_completed(
     )
 
 
-class _GitUtilsModule(Protocol):
-    subprocess: ModuleType
-
-    def get_file_extension(self, path: str) -> str: ...
-
-    def is_mergiraf_supported(self, path: str) -> bool: ...
-
-    def detect_lockfile_type(self, path: str) -> str | None: ...
-
-    def parse_conflict_hunks(self, content: str) -> list[ConflictHunk]: ...
-
-    def get_surrounding_context(
-        self, content: str, start_line: int, end_line: int, context_lines: int = 3
-    ) -> tuple[list[str], list[str]]: ...
-
-    def run_git(
-        self,
-        args: list[str],
-        capture_output: bool = True,
-        *,
-        cwd: str | Path | None = None,
-        timeout: float | None = None,
-    ) -> subprocess.CompletedProcess[str]: ...
-
-    def get_conflicted_files(self) -> list[str]: ...
-
-    def extract_stages(self, path: str) -> tuple[str | None, str | None, str | None]: ...
-
-
 class TestGetFileExtension:
-    def test_returns_extension_without_dot(self, git_utils: _GitUtilsModule) -> None:
+    def test_returns_extension_without_dot(self) -> None:
         assert git_utils.get_file_extension("src/foo.py") == "py"
 
-    def test_handles_no_extension(self, git_utils: _GitUtilsModule) -> None:
+    def test_handles_no_extension(self) -> None:
         assert git_utils.get_file_extension("Makefile") == ""
 
-    def test_handles_multi_dot(self, git_utils: _GitUtilsModule) -> None:
+    def test_handles_multi_dot(self) -> None:
         assert git_utils.get_file_extension("archive.tar.gz") == "gz"
 
 
 class TestIsMergirafSupported:
     @pytest.mark.parametrize("path", ["foo.rs", "bar.go", "baz.py", "x.tsx", "y.md"])
-    def test_supported_extensions(self, git_utils: _GitUtilsModule, path: str) -> None:
+    def test_supported_extensions(self, path: str) -> None:
         assert git_utils.is_mergiraf_supported(path) is True
 
     @pytest.mark.parametrize("path", ["foo.lock", "bar.yaml", "Cargo.toml", "shell.sh", "no_ext"])
-    def test_unsupported_extensions(self, git_utils: _GitUtilsModule, path: str) -> None:
+    def test_unsupported_extensions(self, path: str) -> None:
         assert git_utils.is_mergiraf_supported(path) is False
 
-    def test_case_insensitive(self, git_utils: _GitUtilsModule) -> None:
+    def test_case_insensitive(self) -> None:
         assert git_utils.is_mergiraf_supported("Foo.PY") is True
 
 
@@ -92,21 +57,21 @@ class TestDetectLockfileType:
             ("go.sum", "go"),
         ],
     )
-    def test_known_lockfiles(self, git_utils: _GitUtilsModule, path: str, expected: str) -> None:
+    def test_known_lockfiles(self, path: str, expected: str) -> None:
         assert git_utils.detect_lockfile_type(path) == expected
 
-    def test_returns_none_for_unknown(self, git_utils: _GitUtilsModule) -> None:
+    def test_returns_none_for_unknown(self) -> None:
         assert git_utils.detect_lockfile_type("requirements.txt") is None
 
-    def test_case_insensitive_filename(self, git_utils: _GitUtilsModule) -> None:
+    def test_case_insensitive_filename(self) -> None:
         assert git_utils.detect_lockfile_type("CARGO.LOCK") == "cargo"
 
 
 class TestParseConflictHunks:
-    def test_no_conflicts_returns_empty(self, git_utils: _GitUtilsModule) -> None:
+    def test_no_conflicts_returns_empty(self) -> None:
         assert git_utils.parse_conflict_hunks("just some\nplain text\n") == []
 
-    def test_single_standard_hunk(self, git_utils: _GitUtilsModule) -> None:
+    def test_single_standard_hunk(self) -> None:
         content = "before\n<<<<<<< HEAD\nours-line\n=======\ntheirs-line\n>>>>>>> branch\nafter\n"
         hunks = git_utils.parse_conflict_hunks(content)
         assert len(hunks) == 1
@@ -116,14 +81,14 @@ class TestParseConflictHunks:
         assert hunks[0]["start_line"] == 2
         assert hunks[0]["end_line"] == 6
 
-    def test_diff3_hunk_captures_base(self, git_utils: _GitUtilsModule) -> None:
+    def test_diff3_hunk_captures_base(self) -> None:
         content = "<<<<<<< HEAD\nours\n||||||| merged\nbase\n=======\ntheirs\n>>>>>>> other\n"
         hunks = git_utils.parse_conflict_hunks(content)
         assert hunks[0]["base"] == ["base"]
         assert hunks[0]["ours"] == ["ours"]
         assert hunks[0]["theirs"] == ["theirs"]
 
-    def test_multiple_hunks(self, git_utils: _GitUtilsModule) -> None:
+    def test_multiple_hunks(self) -> None:
         content = (
             "<<<<<<< HEAD\nA1\n=======\nB1\n>>>>>>> x\n"
             "middle\n"
@@ -136,7 +101,7 @@ class TestParseConflictHunks:
 
 
 class TestGetSurroundingContext:
-    def test_returns_lines_before_and_after(self, git_utils: _GitUtilsModule) -> None:
+    def test_returns_lines_before_and_after(self) -> None:
         content = "\n".join(f"line{i}" for i in range(1, 11))
         before, after = git_utils.get_surrounding_context(
             content, start_line=5, end_line=6, context_lines=2
@@ -144,14 +109,14 @@ class TestGetSurroundingContext:
         assert before == ["3: line3", "4: line4"]
         assert after == ["7: line7", "8: line8"]
 
-    def test_skips_conflict_marker_lines(self, git_utils: _GitUtilsModule) -> None:
+    def test_skips_conflict_marker_lines(self) -> None:
         content = "a\nb\n<<<<<<< HEAD\nc\n=======\nd\n>>>>>>> x\ne\nf\n"
         before, after = git_utils.get_surrounding_context(
             content, start_line=3, end_line=7, context_lines=2
         )
         assert all("<<<<<<" not in line and "======" not in line for line in before + after)
 
-    def test_handles_start_at_top(self, git_utils: _GitUtilsModule) -> None:
+    def test_handles_start_at_top(self) -> None:
         content = "a\nb\n"
         before, _after = git_utils.get_surrounding_context(
             content, start_line=1, end_line=2, context_lines=3
@@ -160,9 +125,9 @@ class TestGetSurroundingContext:
 
 
 class TestRunGit:
-    def test_invokes_git_with_args(self, git_utils: _GitUtilsModule) -> None:
+    def test_invokes_git_with_args(self) -> None:
         with patch.object(
-            git_utils.subprocess, "run", return_value=make_completed(stdout="ok")
+            subprocess, "run", return_value=make_completed(stdout="ok")
         ) as run_mock:
             result = git_utils.run_git(["status"])
         assert result.stdout == "ok"
@@ -176,21 +141,21 @@ class TestRunGit:
 
 
 class TestGetConflictedFiles:
-    def test_parses_newline_list(self, git_utils: _GitUtilsModule) -> None:
+    def test_parses_newline_list(self) -> None:
         with patch.object(git_utils, "run_git", return_value=make_completed(stdout="a.py\nb.rs\n")):
             assert git_utils.get_conflicted_files() == ["a.py", "b.rs"]
 
-    def test_empty_output(self, git_utils: _GitUtilsModule) -> None:
+    def test_empty_output(self) -> None:
         with patch.object(git_utils, "run_git", return_value=make_completed(stdout="")):
             assert git_utils.get_conflicted_files() == []
 
-    def test_git_failure_returns_empty(self, git_utils: _GitUtilsModule) -> None:
+    def test_git_failure_returns_empty(self) -> None:
         with patch.object(git_utils, "run_git", return_value=make_completed(returncode=128)):
             assert git_utils.get_conflicted_files() == []
 
 
 class TestExtractStages:
-    def test_returns_three_stages(self, git_utils: _GitUtilsModule) -> None:
+    def test_returns_three_stages(self) -> None:
         responses = [
             make_completed(stdout="BASE"),
             make_completed(stdout="OURS"),
@@ -199,7 +164,7 @@ class TestExtractStages:
         with patch.object(git_utils, "run_git", side_effect=responses):
             assert git_utils.extract_stages("foo.py") == ("BASE", "OURS", "THEIRS")
 
-    def test_missing_base_returns_none_for_base(self, git_utils: _GitUtilsModule) -> None:
+    def test_missing_base_returns_none_for_base(self) -> None:
         responses = [
             make_completed(returncode=128),
             make_completed(stdout="OURS"),

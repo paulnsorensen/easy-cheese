@@ -5,9 +5,10 @@ from __future__ import annotations
 import json
 import subprocess
 from collections.abc import Callable, Iterable
-from typing import Protocol, TypedDict, cast
+from typing import TypedDict, cast
 
 import pytest
+from easy_cheese.skills.affinage import pr_status
 
 
 class _EnrichedCheck(TypedDict):
@@ -33,17 +34,6 @@ class _Output(TypedDict):
     pr: int
     build: _BuildInfo
     merge: _MergeInfo
-
-
-class _PrStatusModule(Protocol):
-    def fetch_checks(self, pr: int) -> list[dict[str, object]]: ...
-    def fetch_merge_state(self, pr: int) -> _MergeInfo: ...
-    def extract_run_id(self, link: str) -> str | None: ...
-    def extract_failed_tests(self, log: str) -> list[str]: ...
-    def classify_status(self, checks: list[dict[str, object]]) -> str: ...
-    def build_output(self, pr: int) -> _Output: ...
-    def all_failures_ungroundable(self, output: dict[str, object]) -> bool: ...
-    def main(self, argv: list[str] | None = None) -> int: ...
 
 
 class _FakeCompletedProcess:
@@ -76,7 +66,7 @@ def _fake_run(responses: list[_Response]) -> Callable[..., _FakeCompletedProcess
     return runner
 
 
-def test_passing_build_no_checks(pr_status: _PrStatusModule, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_passing_build_no_checks(monkeypatch: pytest.MonkeyPatch) -> None:
     """Empty check list classifies as passing."""
     monkeypatch.setattr(
         subprocess,
@@ -99,7 +89,7 @@ def test_passing_build_no_checks(pr_status: _PrStatusModule, monkeypatch: pytest
     assert output["merge"] == {"mergeable": "MERGEABLE", "state": "CLEAN"}
 
 
-def test_failing_build_extracts_summary_and_tests(pr_status: _PrStatusModule, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_failing_build_extracts_summary_and_tests(monkeypatch: pytest.MonkeyPatch) -> None:
     """A failing check enriches the entry with summary + failed tests."""
     checks_json = json.dumps(
         [
@@ -153,7 +143,7 @@ def test_failing_build_extracts_summary_and_tests(pr_status: _PrStatusModule, mo
     assert "tests/auth.test.ts::rejects_expired_token" in check["failed_tests"]
 
 
-def test_pending_check_classified_pending(pr_status: _PrStatusModule, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_pending_check_classified_pending(monkeypatch: pytest.MonkeyPatch) -> None:
     """A check still in_progress reports pending."""
     checks_json = json.dumps(
         [{"name": "slow-job", "state": "IN_PROGRESS", "bucket": "pending", "link": ""}]
@@ -176,7 +166,7 @@ def test_pending_check_classified_pending(pr_status: _PrStatusModule, monkeypatc
     assert output["build"]["status"] == "pending"
 
 
-def test_merge_conflict_surfaced(pr_status: _PrStatusModule, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_merge_conflict_surfaced(monkeypatch: pytest.MonkeyPatch) -> None:
     """CONFLICTING / DIRTY merge state surfaces in the output."""
     monkeypatch.setattr(
         subprocess,
@@ -197,7 +187,7 @@ def test_merge_conflict_surfaced(pr_status: _PrStatusModule, monkeypatch: pytest
     assert output["merge"]["state"] == "DIRTY"
 
 
-def test_missing_gh_exits_two(pr_status: _PrStatusModule, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_missing_gh_exits_two(monkeypatch: pytest.MonkeyPatch) -> None:
     """FileNotFoundError on subprocess.run → exit 2 (gh not installed)."""
 
     def raise_fnfe(*_args: object, **_kwargs: object) -> _FakeCompletedProcess:
@@ -209,7 +199,7 @@ def test_missing_gh_exits_two(pr_status: _PrStatusModule, monkeypatch: pytest.Mo
     assert exc.value.code == 2
 
 
-def test_gh_failure_exits_one(pr_status: _PrStatusModule, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_gh_failure_exits_one(monkeypatch: pytest.MonkeyPatch) -> None:
     """Both the --json fast path and the plain fallback failing (e.g. PR not
     found: non-zero exit, empty stdout, no 'no checks reported' marker) → exit 1."""
 
@@ -224,17 +214,17 @@ def test_gh_failure_exits_one(pr_status: _PrStatusModule, monkeypatch: pytest.Mo
     assert exc.value.code == 1
 
 
-def test_extract_run_id_from_actions_url(pr_status: _PrStatusModule) -> None:
+def test_extract_run_id_from_actions_url() -> None:
     url = "https://github.com/foo/bar/actions/runs/123456789/job/987654"
     assert pr_status.extract_run_id(url) == "123456789"
 
 
-def test_extract_run_id_returns_none_on_empty(pr_status: _PrStatusModule) -> None:
+def test_extract_run_id_returns_none_on_empty() -> None:
     assert pr_status.extract_run_id("") is None
     assert pr_status.extract_run_id("https://example.com/no/run/here") is None
 
 
-def test_extract_failed_tests_pytest_style(pr_status: _PrStatusModule) -> None:
+def test_extract_failed_tests_pytest_style() -> None:
     log = "FAILED tests/auth.py::test_foo\nFAILED tests/auth.py::test_bar\nrandom line\n"
     assert pr_status.extract_failed_tests(log) == [
         "tests/auth.py::test_foo",
@@ -242,23 +232,23 @@ def test_extract_failed_tests_pytest_style(pr_status: _PrStatusModule) -> None:
     ]
 
 
-def test_extract_failed_tests_rust_style(pr_status: _PrStatusModule) -> None:
+def test_extract_failed_tests_rust_style() -> None:
     log = "running 3 tests\ntest foo::bar ... FAILED\ntest foo::baz ... ok\n"
     assert pr_status.extract_failed_tests(log) == ["foo::bar"]
 
 
-def test_extract_failed_tests_dedups(pr_status: _PrStatusModule) -> None:
+def test_extract_failed_tests_dedups() -> None:
     log = "FAILED tests/x::a\nFAILED tests/x::a\n"
     assert pr_status.extract_failed_tests(log) == ["tests/x::a"]
 
 
-def test_classify_status_with_cancelled_is_failing(pr_status: _PrStatusModule) -> None:
+def test_classify_status_with_cancelled_is_failing() -> None:
     checks: list[dict[str, object]] = [{"name": "lint", "state": "CANCELLED", "bucket": "fail", "link": ""}]
     assert pr_status.classify_status(checks) == "failing"
 
 
 def test_main_writes_json_to_stdout(
-    pr_status: _PrStatusModule, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setattr(
         subprocess,
@@ -282,13 +272,13 @@ def test_main_writes_json_to_stdout(
     assert cast(dict[str, object], payload["build"])["status"] == "passing"
 
 
-def test_classify_status_with_timed_out_is_failing(pr_status: _PrStatusModule) -> None:
+def test_classify_status_with_timed_out_is_failing() -> None:
     """timed_out conclusion classifies as failing (sibling of failure/cancelled)."""
     checks: list[dict[str, object]] = [{"name": "slow", "state": "TIMED_OUT", "bucket": "fail", "link": ""}]
     assert pr_status.classify_status(checks) == "failing"
 
 
-def test_multiple_failing_checks_get_independent_summaries(pr_status: _PrStatusModule, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_multiple_failing_checks_get_independent_summaries(monkeypatch: pytest.MonkeyPatch) -> None:
     """Each failing check fetches its own log; summaries don't bleed across checks."""
     checks_json = json.dumps(
         [
@@ -336,7 +326,7 @@ def test_multiple_failing_checks_get_independent_summaries(pr_status: _PrStatusM
 
 
 def test_unparseable_json_falls_back_then_exits_one_if_plain_also_fails(
-    pr_status: _PrStatusModule, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Unparseable --json output triggers the plain fallback; if the plain path
     also yields nothing usable (empty stdout, error stderr), exit 1 — both
@@ -360,7 +350,7 @@ def test_unparseable_json_falls_back_then_exits_one_if_plain_also_fails(
 
 
 def test_malformed_json_from_gh_pr_view_falls_back_to_unknown(
-    pr_status: _PrStatusModule, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Malformed JSON from gh pr view falls back to UNKNOWN/UNKNOWN (less critical than checks)."""
     monkeypatch.setattr(
@@ -373,7 +363,7 @@ def test_malformed_json_from_gh_pr_view_falls_back_to_unknown(
 
 
 def test_failing_check_with_empty_log_yields_empty_summary(
-    pr_status: _PrStatusModule, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """gh run view returning empty produces empty summary, not a crash."""
     checks_json = json.dumps(
@@ -410,7 +400,7 @@ def test_failing_check_with_empty_log_yields_empty_summary(
 
 
 def test_failing_check_with_no_run_id_in_link_yields_empty_summary(
-    pr_status: _PrStatusModule, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A failing check whose link has no /runs/<id> segment skips log fetch gracefully."""
     checks_json = json.dumps(
@@ -443,7 +433,7 @@ def test_failing_check_with_no_run_id_in_link_yields_empty_summary(
 
 
 def test_non_list_json_from_gh_checks_exits_one(
-    pr_status: _PrStatusModule, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Valid JSON that isn't a list is treated as an unusable fast path and
     triggers the plain fallback; with the plain path also failing, exit 1 —
@@ -489,7 +479,7 @@ def _fallback_runner(
 
 
 def test_fallback_parses_plain_checks_when_json_unsupported(
-    pr_status: _PrStatusModule, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """gh < 2.49 rejects --json; the plain tab-separated output is parsed and the
     `bucket` field synthesized from the STATUS column (which already carries gh's
@@ -514,7 +504,7 @@ def test_fallback_parses_plain_checks_when_json_unsupported(
 
 
 def test_fallback_full_build_output_failing_enriches(
-    pr_status: _PrStatusModule, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """End-to-end: with only the plain path available, a failing check still gets
     its `failing` flag set and its log fetched/summarized."""
@@ -533,7 +523,7 @@ def test_fallback_full_build_output_failing_enriches(
 
 
 def test_fallback_pending_and_pass_buckets(
-    pr_status: _PrStatusModule, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The plain STATUS column carries pass/pending buckets directly; a pending
     check classifies the build pending."""
@@ -552,7 +542,7 @@ def test_fallback_pending_and_pass_buckets(
 
 
 def test_fallback_no_checks_reported_is_empty_not_error(
-    pr_status: _PrStatusModule, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """gh exits non-zero with empty stdout and a 'no checks reported' message when
     a PR has no checks — that is a real passing/no-checks answer, not a failure."""
@@ -567,7 +557,7 @@ def test_fallback_no_checks_reported_is_empty_not_error(
 
 
 def test_json_fast_path_used_when_supported(
-    pr_status: _PrStatusModule, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """When --json works, the plain fallback is never invoked."""
     plain_called = {"hit": False}
@@ -591,7 +581,7 @@ def test_json_fast_path_used_when_supported(
 
 
 def test_json_fast_path_succeeds_despite_nonzero_exit(
-    pr_status: _PrStatusModule, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """gh exits non-zero (8) when checks are *failing* yet still prints valid JSON;
     the fast path must accept that output rather than dropping to the fallback."""
@@ -617,7 +607,7 @@ def test_json_fast_path_succeeds_despite_nonzero_exit(
 
 
 def test_gh_pr_checks_uses_real_schema_fields(
-    pr_status: _PrStatusModule, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Regression for cure #1: the --json arg passed to `gh pr checks` must use
     fields that the CLI actually returns. The original implementation requested
@@ -649,13 +639,19 @@ def test_gh_pr_checks_uses_real_schema_fields(
     assert "state" in fields
 
 
-def test_all_failures_ungroundable_passing_build_is_false(pr_status: _PrStatusModule) -> None:
+def _as_output(output: dict[str, object]) -> pr_status._Output:
+    """White-box: the ungroundable check only reads output["build"], so tests
+    build partial shapes; launder them into the SUT's TypedDict once, here."""
+    return cast(pr_status._Output, cast(object, output))
+
+
+def test_all_failures_ungroundable_passing_build_is_false() -> None:
     """A passing build is never ungroundable — nothing to halt on."""
     output: dict[str, object] = {"build": {"status": "passing", "checks": []}}
-    assert pr_status.all_failures_ungroundable(output) is False
+    assert pr_status.all_failures_ungroundable(_as_output(output)) is False
 
 
-def test_all_failures_ungroundable_pending_build_is_false(pr_status: _PrStatusModule) -> None:
+def test_all_failures_ungroundable_pending_build_is_false() -> None:
     """A pending build hasn't failed yet, so it isn't ungroundable."""
     output: dict[str, object] = {
         "build": {
@@ -663,10 +659,10 @@ def test_all_failures_ungroundable_pending_build_is_false(pr_status: _PrStatusMo
             "checks": [{"failing": False, "failure_summary": ""}],
         }
     }
-    assert pr_status.all_failures_ungroundable(output) is False
+    assert pr_status.all_failures_ungroundable(_as_output(output)) is False
 
 
-def test_all_failures_ungroundable_all_empty_is_true(pr_status: _PrStatusModule) -> None:
+def test_all_failures_ungroundable_all_empty_is_true() -> None:
     """Failing build whose every fetchable failing check has an empty summary
     (expired Actions logs) → halt-worthy."""
     output: dict[str, object] = {
@@ -681,10 +677,10 @@ def test_all_failures_ungroundable_all_empty_is_true(pr_status: _PrStatusModule)
             ],
         }
     }
-    assert pr_status.all_failures_ungroundable(output) is True
+    assert pr_status.all_failures_ungroundable(_as_output(output)) is True
 
 
-def test_all_failures_ungroundable_one_summary_present_is_false(pr_status: _PrStatusModule) -> None:
+def test_all_failures_ungroundable_one_summary_present_is_false() -> None:
     """If at least one fetchable failing check has grounded evidence, the
     affineur can ground that one — not ungroundable, no halt."""
     output: dict[str, object] = {
@@ -704,10 +700,10 @@ def test_all_failures_ungroundable_one_summary_present_is_false(pr_status: _PrSt
             ],
         }
     }
-    assert pr_status.all_failures_ungroundable(output) is False
+    assert pr_status.all_failures_ungroundable(_as_output(output)) is False
 
 
-def test_all_failures_ungroundable_ignores_non_failing_checks(pr_status: _PrStatusModule) -> None:
+def test_all_failures_ungroundable_ignores_non_failing_checks() -> None:
     """Only checks flagged `failing` count toward grounding. A non-failing check
     carrying a (non-empty) summary must NOT mask an ungroundable failing check —
     this fails if the `failing` filter is dropped and every check is considered."""
@@ -728,10 +724,10 @@ def test_all_failures_ungroundable_ignores_non_failing_checks(pr_status: _PrStat
             ],
         }
     }
-    assert pr_status.all_failures_ungroundable(output) is True
+    assert pr_status.all_failures_ungroundable(_as_output(output)) is True
 
 
-def test_all_failures_ungroundable_excludes_non_actions_checks(pr_status: _PrStatusModule) -> None:
+def test_all_failures_ungroundable_excludes_non_actions_checks() -> None:
     """Finding #3292480022: a build failing solely on a non-Actions check (a
     `url` with no `/runs/<id>` segment) is NOT ungroundable. Its empty summary is
     by design — `fetch_failure_summary` never attempts a fetch — not expired
@@ -750,12 +746,11 @@ def test_all_failures_ungroundable_excludes_non_actions_checks(pr_status: _PrSta
             ],
         }
     }
-    assert pr_status.all_failures_ungroundable(output) is False
+    assert pr_status.all_failures_ungroundable(_as_output(output)) is False
 
 
 def test_all_failures_ungroundable_actions_failure_not_masked_by_non_actions(
-    pr_status: _PrStatusModule,
-) -> None:
+    ) -> None:
     """A non-Actions failing check (no run id, by-design empty summary) must not
     mask an Actions failing check whose logs expired: the fetchable set is the
     one Actions check with an empty summary, so the build is still ungroundable
@@ -777,11 +772,11 @@ def test_all_failures_ungroundable_actions_failure_not_masked_by_non_actions(
             ],
         }
     }
-    assert pr_status.all_failures_ungroundable(output) is True
+    assert pr_status.all_failures_ungroundable(_as_output(output)) is True
 
 
 def test_build_output_tags_failing_from_bucket(
-    pr_status: _PrStatusModule, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """`failing` is derived from gh's bucket, not the conclusion string — so a
     bucket==fail check whose state is OUTSIDE {failure,cancelled,timed_out}
@@ -822,7 +817,7 @@ def test_build_output_tags_failing_from_bucket(
 
 
 def test_main_exits_three_for_out_of_family_fail_state(
-    pr_status: _PrStatusModule, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Regression for the predicate-divergence finding: a build failing solely on
     a bucket==fail check whose state is outside the old conclusion family
@@ -857,7 +852,7 @@ def test_main_exits_three_for_out_of_family_fail_state(
 
 
 def test_main_exits_three_when_failing_logs_unfetchable(
-    pr_status: _PrStatusModule, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """#76: a failing build with every failing check's log unfetchable (expired
     Actions logs) exits 3 so the skill's halt branch fires instead of grading a
@@ -898,7 +893,7 @@ def test_main_exits_three_when_failing_logs_unfetchable(
 
 
 def test_main_exits_zero_when_some_failure_groundable(
-    pr_status: _PrStatusModule, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """#76: a failing build is NOT halted when at least one failing check has a
     fetchable log — that finding can be graded; the empty ones become
@@ -941,7 +936,7 @@ def test_main_exits_zero_when_some_failure_groundable(
 
 
 def test_failing_state_with_cancelled_bucket_fail_enriches(
-    pr_status: _PrStatusModule, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Regression for cure #4: enrichment runs on bucket==fail, so cancelled
     and timed_out states (which gh classifies as bucket=fail) now get summary

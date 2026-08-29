@@ -11,16 +11,12 @@ from typing import cast
 
 import pytest
 
+from easy_cheese_schemas import _document_rules_compiler as compiler
+from easy_cheese_schemas import contracts
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SCHEMAS_ROOT = REPO_ROOT / "src" / "easy_cheese_schemas"
 GENERATED = REPO_ROOT / "src" / "easy_cheese" / "shared" / "document_rules.py"
 CURDLE_MD = REPO_ROOT / "skills" / "mold" / "references" / "curdle.md"
-
-if str(SCHEMAS_ROOT) not in sys.path:
-    sys.path.insert(0, str(SCHEMAS_ROOT))
-
-import contracts  # noqa: E402
-import _document_rules_compiler as compiler  # noqa: E402
 
 _OPTIONAL_SECTIONS = {"Deferred follow-ups", "Reproduction", "References"}
 
@@ -114,7 +110,7 @@ def test_ac_coverage_validator_rejects_missing_and_duplicate_ids() -> None:
 def test_document_rules_compiler_render_rejects_duplicate_slugs() -> None:
     with pytest.raises(ValueError, match="duplicate slugs"):
         pairs = cast(
-            "Sequence[tuple[str, type[compiler._DocumentContractLike]]]",  # pyright: ignore[reportPrivateUsage]
+            "Sequence[tuple[str, type[compiler._DocumentContractLike]]]",
             [("mold-spec", contracts.MoldSpecDocument), ("mold-spec", contracts.MoldSpecDocument)],
         )
         _ = compiler.render(pairs)

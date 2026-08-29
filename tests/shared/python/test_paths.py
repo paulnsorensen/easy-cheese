@@ -3,60 +3,17 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol
 
 import pytest
 
-if TYPE_CHECKING:
-    from collections.abc import Callable
-
-    from easy_cheese.shared.paths import ResolveSlugResult
-
-
-class _PathsModule(Protocol):
-    def validate_slug(self, slug: object) -> str | None: ...
-    def artifact_path(
-        self, phase: str, slug: str, *, root: Path | str | None = None
-    ) -> Path: ...
-    def default_root_for_phase(
-        self, phase: str, *, project: str | None = None
-    ) -> Path: ...
-    def corpus_home(self) -> Path: ...
-    def xdg_data_home(self) -> Path: ...
-    def project_key(self) -> str: ...
-    def _slug_from_remote(self, url: str) -> str: ...
-    def parse_artifact_path(self, path: Path | str) -> tuple[str, str]: ...
-    def existing_artifacts(
-        self,
-        slug: str,
-        *,
-        root: Path | str | None = None,
-        phases: tuple[str, ...] = (),
-    ) -> dict[str, Path]: ...
-    def phase_skill(self, phase: str) -> str: ...
-    def domain_model_target(
-        self,
-        *,
-        repo_root: Path | str | None = None,
-        project: str | None = None,
-        list_corpora: Callable[[], list[str]] | None = None,
-        wiki_has_model: Callable[[str], bool] | None = None,
-    ) -> tuple[str, str | Path]: ...
-    def resolve_slug(
-        self,
-        slug: str,
-        *,
-        phase_hint: str | None = None,
-        repo_root: Path | str | None = None,
-    ) -> ResolveSlugResult: ...
-
+from easy_cheese.shared import paths
 
 class TestValidateSlug:
     @pytest.mark.parametrize(
         "slug",
         ["a", "feature", "fix-auth-retry", "x1", "abc-123-def", "a" * 64],
     )
-    def test_accepts_valid_kebab(self, paths: _PathsModule, slug: str) -> None:
+    def test_accepts_valid_kebab(self, slug: str) -> None:
         assert paths.validate_slug(slug) is None
 
     @pytest.mark.parametrize(
@@ -73,10 +30,10 @@ class TestValidateSlug:
             "snake_case",
         ],
     )
-    def test_rejects_invalid(self, paths: _PathsModule, slug: str) -> None:
+    def test_rejects_invalid(self, slug: str) -> None:
         assert paths.validate_slug(slug) is not None
 
-    def test_non_string_rejected(self, paths: _PathsModule) -> None:
+    def test_non_string_rejected(self) -> None:
         assert paths.validate_slug(None) is not None  # type: ignore[arg-type]
         assert paths.validate_slug(42) is not None  # type: ignore[arg-type]
 
@@ -95,69 +52,65 @@ def xdg_corpus(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
 
 
 class TestArtifactPath:
-    def test_builds_canonical_path(self, paths: _PathsModule) -> None:
+    def test_builds_canonical_path(self) -> None:
         result = paths.artifact_path("age", "fix-auth-retry")
         assert result == Path(".cheese/age/fix-auth-retry.md")
 
-    def test_custom_root(self, paths: _PathsModule, tmp_path: Path) -> None:
+    def test_custom_root(self, tmp_path: Path) -> None:
         result = paths.artifact_path("cure", "demo", root=tmp_path)
         assert result == tmp_path / "cure" / "demo.md"
 
-    def test_transient_phase_stays_repo_local(
-        self, paths: _PathsModule, xdg_corpus: Path
-    ) -> None:
+    def test_transient_phase_stays_repo_local(self, xdg_corpus: Path) -> None:
         _ = xdg_corpus
         # Even with the XDG corpus pinned, transient phases stay under .cheese/.
         assert paths.artifact_path("cook", "demo") == Path(".cheese/cook/demo.md")
 
     @pytest.mark.parametrize("phase", ["specs", "research"])
     def test_durable_phase_root_anchors_at_xdg_corpus(
-        self, paths: _PathsModule, xdg_corpus: Path, phase: str
+        self, xdg_corpus: Path, phase: str
     ) -> None:
         # Durable phases route their root to the per-project XDG corpus.
         assert paths.default_root_for_phase(phase) == xdg_corpus
 
-    def test_spec_artifact_is_flat_under_corpus(
-        self, paths: _PathsModule, xdg_corpus: Path
-    ) -> None:
+    def test_spec_artifact_is_flat_under_corpus(self, xdg_corpus: Path) -> None:
         # specs/<slug>.md is flat. Research long-form uses a nested
         # research/<slug>/<slug>.md layout composed by /briesearch from
         # project_corpus_root(), not from this flat helper.
         assert paths.artifact_path("specs", "demo") == xdg_corpus / "specs" / "demo.md"
 
-    def test_rejects_unknown_phase(self, paths: _PathsModule) -> None:
+    def test_rejects_unknown_phase(self) -> None:
         with pytest.raises(ValueError, match="unknown phase"):
             _ = paths.artifact_path("bogus", "fix-x")
 
-    def test_rejects_bad_slug(self, paths: _PathsModule) -> None:
+    def test_rejects_bad_slug(self) -> None:
         with pytest.raises(ValueError, match="kebab-case"):
             _ = paths.artifact_path("age", "Bad_Slug")
 
 
 class TestCorpusResolution:
     def test_xdg_data_home_env(
-        self, paths: _PathsModule, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         monkeypatch.delenv("EASY_CHEESE_HOME", raising=False)
         monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
         assert paths.corpus_home() == tmp_path / "cheese"
 
     def test_xdg_data_home_ignores_relative(
-        self, paths: _PathsModule, monkeypatch: pytest.MonkeyPatch
+        self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         # Per the spec, a non-absolute XDG value is ignored for the default.
         monkeypatch.setenv("XDG_DATA_HOME", "relative/path")
         assert paths.xdg_data_home() == Path.home() / ".local" / "share"
 
     def test_easy_cheese_home_overrides_xdg(
-        self, paths: _PathsModule, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         monkeypatch.setenv("XDG_DATA_HOME", "/should/be/ignored")
         monkeypatch.setenv("EASY_CHEESE_HOME", str(tmp_path / "override"))
         assert paths.corpus_home() == tmp_path / "override"
 
     def test_easy_cheese_home_ignores_relative(
-        self, paths: _PathsModule, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         # A relative override is ignored, matching the XDG convention.
         monkeypatch.delenv("EASY_CHEESE_HOME", raising=False)
@@ -165,9 +118,7 @@ class TestCorpusResolution:
         monkeypatch.setenv("EASY_CHEESE_HOME", "relative/corpus")
         assert paths.corpus_home() == tmp_path / "cheese"
 
-    def test_project_key_override(
-        self, paths: _PathsModule, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_project_key_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("EASY_CHEESE_PROJECT", "My Repo!!")
         assert paths.project_key() == "my-repo"
 
@@ -184,26 +135,24 @@ class TestSlugFromRemote:
             ("https://gitlab.com/group/subgroup/repo.git", "subgroup/repo"),
         ],
     )
-    def test_extracts_owner_repo(
-        self, paths: _PathsModule, url: str, expected: str
-    ) -> None:
-        assert paths._slug_from_remote(url) == expected  # pyright: ignore[reportPrivateUsage]
+    def test_extracts_owner_repo(self, url: str, expected: str) -> None:
+        assert paths._slug_from_remote(url) == expected
 
 
 class TestHardDirReconciliation:
     """`hard` token stays stable; on-disk dir is `hard-cheese`."""
 
-    def test_artifact_path_uses_hard_cheese_dir(self, paths: _PathsModule) -> None:
-        assert paths.artifact_path("hard", "demo") == Path(".cheese/hard-cheese/demo.md")
+    def test_artifact_path_uses_hard_cheese_dir(self) -> None:
+        assert paths.artifact_path("hard", "demo") == Path(
+            ".cheese/hard-cheese/demo.md"
+        )
 
-    def test_roundtrip_parse(self, paths: _PathsModule) -> None:
+    def test_roundtrip_parse(self) -> None:
         path = paths.artifact_path("hard", "demo")
         assert path == Path(".cheese/hard-cheese/demo.md")
         assert paths.parse_artifact_path(path) == ("hard", "demo")
 
-    def test_existing_artifacts_finds_hard(
-        self, paths: _PathsModule, tmp_path: Path
-    ) -> None:
+    def test_existing_artifacts_finds_hard(self, tmp_path: Path) -> None:
         target = tmp_path / "hard-cheese" / "demo.md"
         target.parent.mkdir(parents=True)
         _ = target.write_text("x", encoding="utf-8")
@@ -224,9 +173,7 @@ class TestPhaseSkill:
             ("press", "/press"),
         ],
     )
-    def test_maps_phase_to_skill(
-        self, paths: _PathsModule, phase: str, skill: str
-    ) -> None:
+    def test_maps_phase_to_skill(self, phase: str, skill: str) -> None:
         assert paths.phase_skill(phase) == skill
 
 
@@ -239,7 +186,7 @@ class TestDomainModelTarget:
     """
 
     def test_create_uses_docs_when_tracked_docs_dir_exists(
-        self, paths: _PathsModule, tmp_path: Path, xdg_corpus: Path
+        self, tmp_path: Path, xdg_corpus: Path
     ) -> None:
         _ = xdg_corpus
         # No model anywhere yet, but a tracked docs/ dir exists: create there.
@@ -249,7 +196,7 @@ class TestDomainModelTarget:
         assert location == tmp_path / "docs" / "domain-model.md"
 
     def test_create_uses_xdg_when_no_docs_dir(
-        self, paths: _PathsModule, tmp_path: Path, xdg_corpus: Path
+        self, tmp_path: Path, xdg_corpus: Path
     ) -> None:
         # No docs/ dir: the first write lands in the XDG durable corpus.
         backend, location = paths.domain_model_target(repo_root=tmp_path)
@@ -257,7 +204,7 @@ class TestDomainModelTarget:
         assert location == xdg_corpus / "domain-model.md"
 
     def test_existing_docs_model_wins_over_create(
-        self, paths: _PathsModule, tmp_path: Path, xdg_corpus: Path
+        self, tmp_path: Path, xdg_corpus: Path
     ) -> None:
         _ = xdg_corpus
         # An existing docs model is returned verbatim; the create branch must
@@ -268,7 +215,7 @@ class TestDomainModelTarget:
         assert paths.domain_model_target(repo_root=tmp_path) == ("file", model)
 
     def test_existing_xdg_model_wins_over_docs_create(
-        self, paths: _PathsModule, tmp_path: Path, xdg_corpus: Path
+        self, tmp_path: Path, xdg_corpus: Path
     ) -> None:
         # A docs/ dir exists (create would pick it) but a model already lives in
         # the XDG corpus: the existing model wins, no new docs/ model is forged.
@@ -279,7 +226,7 @@ class TestDomainModelTarget:
         assert paths.domain_model_target(repo_root=tmp_path) == ("file", model)
 
     def test_existing_split_directory_is_returned(
-        self, paths: _PathsModule, tmp_path: Path, xdg_corpus: Path
+        self, tmp_path: Path, xdg_corpus: Path
     ) -> None:
         _ = xdg_corpus
         # The second bounded context splits the store into a domain-model/ dir.
@@ -291,7 +238,7 @@ class TestDomainModelTarget:
         assert paths.domain_model_target(repo_root=tmp_path) == ("file", split)
 
     def test_single_file_wins_over_split_dir_in_same_store(
-        self, paths: _PathsModule, tmp_path: Path, xdg_corpus: Path
+        self, tmp_path: Path, xdg_corpus: Path
     ) -> None:
         _ = xdg_corpus
         # Migration debt: both layouts somehow coexist in the same store. Per
@@ -308,7 +255,7 @@ class TestDomainModelTarget:
         assert paths.domain_model_target(repo_root=tmp_path) == ("file", single)
 
     def test_docs_store_precedes_xdg_store_on_read(
-        self, paths: _PathsModule, tmp_path: Path, xdg_corpus: Path
+        self, tmp_path: Path, xdg_corpus: Path
     ) -> None:
         # Both file stores hold a model: docs/ (tier 2) wins over XDG (tier 3).
         docs_model = tmp_path / "docs" / "domain-model.md"
@@ -320,7 +267,7 @@ class TestDomainModelTarget:
         assert paths.domain_model_target(repo_root=tmp_path) == ("file", docs_model)
 
     def test_wiki_probe_wins_when_corpus_listed_and_has_model_confirmed(
-        self, paths: _PathsModule, tmp_path: Path, xdg_corpus: Path
+        self, tmp_path: Path, xdg_corpus: Path
     ) -> None:
         _ = xdg_corpus
         # A reachable probe listing the repo's wiki corpus, confirmed via
@@ -339,7 +286,7 @@ class TestDomainModelTarget:
         assert (backend, location) == ("hallouminate", corpus)
 
     def test_wiki_corpus_shape_matched_regardless_of_repo_root_name(
-        self, paths: _PathsModule, tmp_path: Path, xdg_corpus: Path
+        self, tmp_path: Path, xdg_corpus: Path
     ) -> None:
         _ = xdg_corpus
         # Shape-match like grounding.md:18 (first `repo:*:wiki`), never a name
@@ -354,7 +301,7 @@ class TestDomainModelTarget:
         assert (backend, location) == ("hallouminate", corpus)
 
     def test_existing_file_model_wins_over_wiki_corpus_with_no_model(
-        self, paths: _PathsModule, tmp_path: Path, xdg_corpus: Path
+        self, tmp_path: Path, xdg_corpus: Path
     ) -> None:
         _ = xdg_corpus
         # The wiki corpus is listed but wiki_has_model confirms it holds no
@@ -372,7 +319,7 @@ class TestDomainModelTarget:
         assert (backend, location) == ("file", docs_model)
 
     def test_existing_file_model_wins_when_wiki_has_model_hook_absent(
-        self, paths: _PathsModule, tmp_path: Path, xdg_corpus: Path
+        self, tmp_path: Path, xdg_corpus: Path
     ) -> None:
         _ = xdg_corpus
         # No wiki_has_model hook injected: "cannot confirm a wiki model"
@@ -389,7 +336,7 @@ class TestDomainModelTarget:
         assert (backend, location) == ("file", docs_model)
 
     def test_wiki_still_wins_create_precedence_when_has_model_unconfirmed(
-        self, paths: _PathsModule, tmp_path: Path, xdg_corpus: Path
+        self, tmp_path: Path, xdg_corpus: Path
     ) -> None:
         _ = xdg_corpus
         # No model exists anywhere and wiki_has_model can't confirm: the wiki
@@ -405,9 +352,10 @@ class TestDomainModelTarget:
         assert (backend, location) == ("hallouminate", corpus)
 
     def test_wiki_has_model_hook_raising_degrades_like_absent(
-        self, paths: _PathsModule, tmp_path: Path, xdg_corpus: Path
+        self, tmp_path: Path, xdg_corpus: Path
     ) -> None:
         _ = xdg_corpus
+
         # A raising wiki_has_model must not block resolution: same "cannot
         # confirm" degrade as an absent hook.
         def boom(_corpus: str) -> bool:
@@ -425,9 +373,10 @@ class TestDomainModelTarget:
         assert (backend, location) == ("file", docs_model)
 
     def test_unreachable_probe_degrades_to_file_stores(
-        self, paths: _PathsModule, tmp_path: Path, xdg_corpus: Path
+        self, tmp_path: Path, xdg_corpus: Path
     ) -> None:
         _ = xdg_corpus
+
         # A probe that raises must not block resolution: degrade to the files.
         def boom() -> list[str]:
             raise RuntimeError("hallouminate unreachable")
@@ -438,9 +387,7 @@ class TestDomainModelTarget:
         )
         assert (backend, location) == ("file", tmp_path / "docs" / "domain-model.md")
 
-    def test_none_probe_skips_wiki_leg(
-        self, paths: _PathsModule, tmp_path: Path, xdg_corpus: Path
-    ) -> None:
+    def test_none_probe_skips_wiki_leg(self, tmp_path: Path, xdg_corpus: Path) -> None:
         _ = xdg_corpus
         # The default: no probe injected → wiki leg skipped, file stores only.
         backend, _ = paths.domain_model_target(repo_root=tmp_path)
@@ -448,9 +395,7 @@ class TestDomainModelTarget:
 
 
 class TestResolveSlug:
-    def test_tier1_exact_repo_local(
-        self, paths: _PathsModule, tmp_path: Path
-    ) -> None:
+    def test_tier1_exact_repo_local(self, tmp_path: Path) -> None:
         art = tmp_path / ".cheese" / "cook" / "demo.md"
         art.parent.mkdir(parents=True)
         _ = art.write_text("x", encoding="utf-8")
@@ -465,9 +410,7 @@ class TestResolveSlug:
             }
         ]
 
-    def test_tier1_research_nested_xdg(
-        self, paths: _PathsModule, tmp_path: Path, xdg_corpus: Path
-    ) -> None:
+    def test_tier1_research_nested_xdg(self, tmp_path: Path, xdg_corpus: Path) -> None:
         art = xdg_corpus / "research" / "foo" / "foo.md"
         art.parent.mkdir(parents=True)
         _ = art.write_text("x", encoding="utf-8")
@@ -481,9 +424,7 @@ class TestResolveSlug:
             }
         ]
 
-    def test_tier1_ultracook_manifest(
-        self, paths: _PathsModule, tmp_path: Path
-    ) -> None:
+    def test_tier1_ultracook_manifest(self, tmp_path: Path) -> None:
         art = tmp_path / ".cheese" / "ultracook" / "widget" / "manifest.yaml"
         art.parent.mkdir(parents=True)
         _ = art.write_text("name: widget", encoding="utf-8")
@@ -497,9 +438,7 @@ class TestResolveSlug:
             }
         ]
 
-    def test_tier1_affinage_pr_key(
-        self, paths: _PathsModule, tmp_path: Path
-    ) -> None:
+    def test_tier1_affinage_pr_key(self, tmp_path: Path) -> None:
         art = tmp_path / ".cheese" / "affinage" / "pr-7.md"
         art.parent.mkdir(parents=True)
         _ = art.write_text("x", encoding="utf-8")
@@ -513,9 +452,7 @@ class TestResolveSlug:
             }
         ]
 
-    def test_tier1_hard_found_under_hard_cheese(
-        self, paths: _PathsModule, tmp_path: Path
-    ) -> None:
+    def test_tier1_hard_found_under_hard_cheese(self, tmp_path: Path) -> None:
         art = tmp_path / ".cheese" / "hard-cheese" / "demo.md"
         art.parent.mkdir(parents=True)
         _ = art.write_text("x", encoding="utf-8")
@@ -529,9 +466,7 @@ class TestResolveSlug:
             }
         ]
 
-    def test_phase_hint_restricts_search(
-        self, paths: _PathsModule, tmp_path: Path
-    ) -> None:
+    def test_phase_hint_restricts_search(self, tmp_path: Path) -> None:
         cook = tmp_path / ".cheese" / "cook" / "demo.md"
         cook.parent.mkdir(parents=True)
         _ = cook.write_text("x", encoding="utf-8")
@@ -541,7 +476,7 @@ class TestResolveSlug:
         result = paths.resolve_slug("demo", phase_hint="age", repo_root=tmp_path)
         assert [m["phase"] for m in result["matches"]] == ["age"]
 
-    def test_tier2_fuzzy(self, paths: _PathsModule, tmp_path: Path) -> None:
+    def test_tier2_fuzzy(self, tmp_path: Path) -> None:
         art = tmp_path / ".cheese" / "cook" / "slug-resolver.md"
         art.parent.mkdir(parents=True)
         _ = art.write_text("x", encoding="utf-8")
@@ -553,9 +488,7 @@ class TestResolveSlug:
         assert 0.6 <= match["confidence"] < 1.0
         assert result["fallback_roots"] == []
 
-    def test_tier3_fallback_roots(
-        self, paths: _PathsModule, tmp_path: Path
-    ) -> None:
+    def test_tier3_fallback_roots(self, tmp_path: Path) -> None:
         result = paths.resolve_slug("nowhere", repo_root=tmp_path)
         assert result["matches"] == []
         cook_dir = str(tmp_path / ".cheese" / "cook")
@@ -564,13 +497,11 @@ class TestResolveSlug:
         assert affinage_dir in result["fallback_roots"]
         assert result["fallback_roots"] == sorted(result["fallback_roots"])
 
-    def test_rejects_bad_slug(self, paths: _PathsModule) -> None:
+    def test_rejects_bad_slug(self) -> None:
         with pytest.raises(ValueError, match="kebab-case"):
             _ = paths.resolve_slug("Bad_Slug")
 
-    def test_tier2_fuzzy_ranked_by_confidence_descending(
-        self, paths: _PathsModule, tmp_path: Path
-    ) -> None:
+    def test_tier2_fuzzy_ranked_by_confidence_descending(self, tmp_path: Path) -> None:
         # Two near-misses in one phase: the closer stem must come first.
         cook = tmp_path / ".cheese" / "cook"
         cook.mkdir(parents=True)
@@ -583,9 +514,7 @@ class TestResolveSlug:
         assert matches[0]["confidence"] > matches[1]["confidence"]
         assert matches[0]["confidence"] == 0.96
 
-    def test_tier2_below_cutoff_excluded(
-        self, paths: _PathsModule, tmp_path: Path
-    ) -> None:
+    def test_tier2_below_cutoff_excluded(self, tmp_path: Path) -> None:
         # ratio('abcde','abxyz') == 0.4 < 0.6 cutoff: not a match, fall to tier 3.
         cook = tmp_path / ".cheese" / "cook"
         cook.mkdir(parents=True)
@@ -594,9 +523,7 @@ class TestResolveSlug:
         assert result["matches"] == []
         assert str(cook) in result["fallback_roots"]
 
-    def test_tier2_at_cutoff_is_inclusive(
-        self, paths: _PathsModule, tmp_path: Path
-    ) -> None:
+    def test_tier2_at_cutoff_is_inclusive(self, tmp_path: Path) -> None:
         # ratio('payment','pay') == 0.6 exactly: cutoff is `>=`, so it matches.
         cook = tmp_path / ".cheese" / "cook"
         cook.mkdir(parents=True)
@@ -606,9 +533,7 @@ class TestResolveSlug:
         assert [m["abs_path"] for m in matches] == [str(art)]
         assert matches[0]["confidence"] == 0.6
 
-    def test_collision_same_slug_two_phases(
-        self, paths: _PathsModule, tmp_path: Path
-    ) -> None:
+    def test_collision_same_slug_two_phases(self, tmp_path: Path) -> None:
         # An exact slug present in two phases returns both, ordered by phase.
         cook = tmp_path / ".cheese" / "cook" / "demo.md"
         cook.parent.mkdir(parents=True)
@@ -621,9 +546,7 @@ class TestResolveSlug:
         assert {m["abs_path"] for m in result["matches"]} == {str(age), str(cook)}
         assert all(m["confidence"] == 1.0 for m in result["matches"])
 
-    def test_phase_hint_miss_does_not_fall_through(
-        self, paths: _PathsModule, tmp_path: Path
-    ) -> None:
+    def test_phase_hint_miss_does_not_fall_through(self, tmp_path: Path) -> None:
         # Slug lives in cook, but the hint names press: the search stays restricted
         # to press, misses, and the fallback lists only the hinted root.
         cook = tmp_path / ".cheese" / "cook" / "demo.md"
@@ -633,9 +556,7 @@ class TestResolveSlug:
         assert result["matches"] == []
         assert result["fallback_roots"] == [str(tmp_path / ".cheese" / "press")]
 
-    def test_unknown_phase_hint_raises(
-        self, paths: _PathsModule, tmp_path: Path
-    ) -> None:
+    def test_unknown_phase_hint_raises(self, tmp_path: Path) -> None:
         # Fail-fast: a typo/unknown hint raises rather than silently widening the
         # search to every phase, matching the `existing`/`artifact_path` contracts.
         cook = tmp_path / ".cheese" / "cook" / "demo.md"
@@ -644,9 +565,7 @@ class TestResolveSlug:
         with pytest.raises(ValueError, match=r"unknown phase 'bogus'"):
             _ = paths.resolve_slug("demo", phase_hint="bogus", repo_root=tmp_path)
 
-    def test_literal_hard_dir_is_not_resolved(
-        self, paths: _PathsModule, tmp_path: Path
-    ) -> None:
+    def test_literal_hard_dir_is_not_resolved(self, tmp_path: Path) -> None:
         # The `hard` token resolves to hard-cheese/ only; a literal .cheese/hard/
         # artifact must NOT be found.
         stray = tmp_path / ".cheese" / "hard" / "demo.md"
@@ -657,7 +576,7 @@ class TestResolveSlug:
         assert str(stray.parent) not in result["fallback_roots"]
 
     def test_all_emitted_paths_are_absolute(
-        self, paths: _PathsModule, tmp_path: Path, xdg_corpus: Path
+        self, tmp_path: Path, xdg_corpus: Path
     ) -> None:
         _ = xdg_corpus
         # Invariant across all three tiers: every path the resolver emits is absolute.

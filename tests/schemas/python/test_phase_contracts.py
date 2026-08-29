@@ -229,7 +229,7 @@ def test_checked_in_registry_projection_matches_build_generator() -> None:
 
     assert (
         REPO_ROOT / "src" / "easy_cheese_schemas" / "_compiled_phase_registry.py"
-    ).read_text(encoding="utf-8") == build_pyz._compiled_phase_registry_source()  # pyright: ignore[reportPrivateUsage]
+    ).read_text(encoding="utf-8") == build_pyz._compiled_phase_registry_source()
 
 
 
@@ -269,12 +269,12 @@ def test_build_compiler_is_clean_bootstrap_safe_and_fresh_per_call(
     declaration = tmp_path / "skills" / "smoke" / "phase-contract.yaml"
     _write_phase_yaml(declaration, "smoke")
 
-    first = build_pyz._compiled_phase_registry_source()  # pyright: ignore[reportPrivateUsage]
+    first = build_pyz._compiled_phase_registry_source()
     _ = declaration.write_text(
         declaration.read_text(encoding="utf-8").replace("source: smoke", "source: fresh"),
         encoding="utf-8",
     )
-    second = build_pyz._compiled_phase_registry_source()  # pyright: ignore[reportPrivateUsage]
+    second = build_pyz._compiled_phase_registry_source()
 
     assert "source\": \"smoke\"" in first
     assert "source\": \"fresh\"" in second
@@ -307,7 +307,7 @@ def test_checked_in_generated_file_bytes_covers_missing_stale_and_matching(
         ),
     )
     generated = tmp_path / source_name
-    validate = build_pyz._checked_in_generated_file_bytes  # pyright: ignore[reportPrivateUsage]
+    validate = build_pyz._checked_in_generated_file_bytes
 
     with pytest.raises(RuntimeError) as missing:
         _ = validate(
@@ -351,7 +351,7 @@ def test_checked_in_catalog_projection_matches_build_generator() -> None:
 
     assert (
         REPO_ROOT / "src" / "easy_cheese_schemas" / "_schema_catalog.py"
-    ).read_text(encoding="utf-8") == build_pyz._compiled_schema_catalog_source()  # pyright: ignore[reportPrivateUsage]
+    ).read_text(encoding="utf-8") == build_pyz._compiled_schema_catalog_source()
 
 
 def test_schema_catalog_compilation_is_fresh_per_call(
@@ -369,14 +369,14 @@ def test_schema_catalog_compilation_is_fresh_per_call(
     _ = staged.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
     monkeypatch.setattr(build_pyz, "SCHEMA_CONTRACT_SOURCE", staged)
 
-    first = build_pyz._compiled_schema_catalog_source()  # pyright: ignore[reportPrivateUsage]
+    first = build_pyz._compiled_schema_catalog_source()
     _ = staged.write_text(
         staged.read_text(encoding="utf-8").replace(
             '@contract("curd-plan")', '@contract("fresh-plan")', 1
         ),
         encoding="utf-8",
     )
-    second = build_pyz._compiled_schema_catalog_source()  # pyright: ignore[reportPrivateUsage]
+    second = build_pyz._compiled_schema_catalog_source()
 
     assert "curd-plan" in first
     assert "fresh-plan" in second

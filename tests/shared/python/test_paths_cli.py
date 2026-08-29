@@ -4,48 +4,21 @@ from __future__ import annotations
 
 import os
 
-import importlib.util
 import json
 import subprocess
 import sys
 from pathlib import Path
-from types import ModuleType
-from typing import TYPE_CHECKING, Protocol, cast
+from typing import cast
 
 import pytest
-
-if TYPE_CHECKING:
-    import argparse
-    import re
-    from collections.abc import Callable
-
-
-class _PathsSubmodule(Protocol):
-    KEBAB_SLUG: re.Pattern[str]
-    PHASES: frozenset[str]
-
-
-class _PathsCliModule(Protocol):
-    _setup: Callable[[argparse.ArgumentParser], None]
-    paths: _PathsSubmodule
+import easy_cheese.shared.paths_cli as paths_cli_mod
+from easy_cheese.shared import paths
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SHARED_SCRIPTS = REPO_ROOT / "src" / "easy_cheese" / "shared"
 PATHS_CLI = SHARED_SCRIPTS / "paths_cli.py"
 
-
-@pytest.fixture(scope="module")
-def paths_cli_mod() -> ModuleType:
-    # Sibling imports (cli, paths) resolve via sys.path; conftest already inserts it.
-    if str(SHARED_SCRIPTS) not in sys.path:
-        sys.path.insert(0, str(SHARED_SCRIPTS))
-    spec = importlib.util.spec_from_file_location("paths_cli", PATHS_CLI)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules["paths_cli"] = module
-    spec.loader.exec_module(module)
-    return module
 
 
 def _run(*args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
@@ -358,11 +331,11 @@ class TestResolve:
 
 
 class TestModuleImport:
-    def test_setup_callable_present(self, paths_cli_mod: _PathsCliModule) -> None:
+    def test_setup_callable_present(self) -> None:
         # Sanity: the module exports the argparse setup hook cli.run consumes.
-        assert callable(paths_cli_mod._setup)  # pyright: ignore[reportPrivateUsage]
+        assert callable(paths_cli_mod._setup)
 
-    def test_delegates_to_paths_module(self, paths_cli_mod: _PathsCliModule) -> None:
+    def test_delegates_to_paths_module(self) -> None:
         # paths_cli must use the shared paths module, not redefine the regex/phases.
-        assert paths_cli_mod.paths.KEBAB_SLUG is not None
-        assert "age" in paths_cli_mod.paths.PHASES
+        assert paths.KEBAB_SLUG is not None
+        assert "age" in paths.PHASES

@@ -149,7 +149,7 @@ class TestOverridePromotion:
             result = _route(score=1, risk_flags=[flag])
             assert result["overrides_hit"] == [flag]
             assert result["effort"] == "high"
-            promoted = age_route._PROMOTIONS[flag]  # pyright: ignore[reportPrivateUsage]
+            promoted = age_route._PROMOTIONS[flag]
             assert [promoted] in result["lenses"], f"{flag} did not promote {promoted}"
 
     def test_all_four_override_categories_uncapped_n9(self) -> None:

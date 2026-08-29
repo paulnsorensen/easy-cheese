@@ -8,41 +8,19 @@ skipping — against synthetic trees only. No conftest; load the module by path.
 
 from __future__ import annotations
 
-import argparse
 import json
 import subprocess
 import sys
-from collections.abc import Callable, Sequence
 from io import StringIO
 from pathlib import Path
-from typing import Protocol, TextIO, TypedDict, cast
+from typing import cast
 
 import pytest
+from easy_cheese.skills.pasteurize import debug_tag_sweep
+from easy_cheese.shared import cli
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
 BUNDLE = Path(__file__).resolve().parents[3] / "skills/pasteurize/scripts/pasteurize.pyz"
-
-
-class _CliNamespace(Protocol):
-    def run(
-        self,
-        setup: Callable[[argparse.ArgumentParser], None],
-        *,
-        argv: Sequence[str] | None = ...,
-        stdout: TextIO | None = ...,
-    ) -> int: ...
-
-
-class _SweepResult(TypedDict):
-    files: list[str]
-    total: int
-
-
-class _DebugTagSweepModule(Protocol):
-    cli: _CliNamespace
-
-    def _setup(self, parser: argparse.ArgumentParser) -> None: ...
-    def sweep(self, root: Path, tags: tuple[str, ...]) -> _SweepResult: ...
 
 
 def _run(*args: str) -> subprocess.CompletedProcess[str]:
@@ -67,12 +45,12 @@ class TestExitCodes:
         assert "bug.py" in result.stdout
 
     def test_in_process_returns_status_and_injected_output(
-        self, debug_tag_sweep: _DebugTagSweepModule, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         _ = (tmp_path / "bug.py").write_text("needle\n")
         output = StringIO()
-        status = debug_tag_sweep.cli.run(
-            debug_tag_sweep._setup,  # pyright: ignore[reportPrivateUsage]
+        status = cli.run(
+            debug_tag_sweep._setup,
             argv=("--root", str(tmp_path), "--tags", "needle"),
             stdout=output,
         )
@@ -197,7 +175,7 @@ class TestDefaultTags:
 
 
 class TestSweepFunction:
-    def test_sweep_returns_relative_paths(self, debug_tag_sweep: _DebugTagSweepModule, tmp_path: Path) -> None:
+    def test_sweep_returns_relative_paths(self, tmp_path: Path) -> None:
         sub = tmp_path / "pkg"
         sub.mkdir()
         _ = (sub / "mod.py").write_text("# DEBUG x\n")
@@ -205,7 +183,7 @@ class TestSweepFunction:
         assert result["files"] == ["pkg/mod.py"]
         assert result["total"] == 1
 
-    def test_sweep_files_sorted(self, debug_tag_sweep: _DebugTagSweepModule, tmp_path: Path) -> None:
+    def test_sweep_files_sorted(self, tmp_path: Path) -> None:
         for name in ("z.py", "a.py", "m.py"):
             _ = (tmp_path / name).write_text("DEBUG: hit\n")
         result = debug_tag_sweep.sweep(tmp_path, ("DEBUG:",))

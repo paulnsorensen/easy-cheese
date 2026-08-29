@@ -23,8 +23,8 @@ sys.path.insert(0, str(REPO_ROOT / "src" / "fanout"))
 from easy_cheese.shared import cli  # noqa: E402
 from easy_cheese.shared.fanout import baseline  # noqa: E402
 from easy_cheese.shared.fanout.baseline import (  # noqa: E402
-    _Args,  # pyright: ignore[reportPrivateUsage]
-    _cmd_classify,  # pyright: ignore[reportPrivateUsage]
+    _Args,
+    _cmd_classify,
 )
 
 

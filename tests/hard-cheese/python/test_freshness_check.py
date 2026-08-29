@@ -10,46 +10,19 @@ subtree). The repo root is resolved via parents[N] from this file.
 
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import subprocess
 import sys
-from collections.abc import Callable, Sequence
 from io import StringIO
 from pathlib import Path
-from typing import Protocol, TextIO, cast
+from typing import cast
 
 import pytest
+from easy_cheese.skills.hard_cheese import freshness_check
+from easy_cheese.shared import cli
 
 BUNDLE = Path(__file__).resolve().parents[3] / "skills/hard-cheese/scripts/hard-cheese.pyz"
-
-
-class _CliNamespace(Protocol):
-    def run(
-        self,
-        setup: Callable[[argparse.ArgumentParser], None],
-        *,
-        argv: Sequence[str] | None = ...,
-        stdout: TextIO | None = ...,
-    ) -> int: ...
-
-
-class _FreshnessCheckModule(Protocol):
-    cli: _CliNamespace
-
-    def _setup(self, parser: argparse.ArgumentParser) -> None: ...
-    def last_pass_sha(self, log_path: Path) -> str | None: ...
-    def decide(
-        self,
-        slug: str,
-        *,
-        cheese_root: Path,
-        repo_root: Path | None = ...,
-        passing_score: int = ...,
-    ) -> dict[str, str]: ...
-    def _sha_matches(self, recorded: str, diff_head: str) -> bool: ...
-    def _is_pass_status(self, token: str) -> bool: ...
 
 
 # ---------- git fixture --------------------------------------------------- #
@@ -186,12 +159,12 @@ class TestStateStale:
         assert result.stdout.strip() == "stale"
 
     def test_in_process_returns_status_and_injected_output(
-        self, repo: Path, freshness_check: _FreshnessCheckModule, capsys: pytest.CaptureFixture[str]
+        self, repo: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         _ = _write_log(repo, "feat-e", _table_log("feat-e", "abc123" * 7))
         output = StringIO()
-        status = freshness_check.cli.run(
-            freshness_check._setup,  # pyright: ignore[reportPrivateUsage]
+        status = cli.run(
+            freshness_check._setup,
             argv=("--slug", "feat-e", "--cheese-root", str(repo / ".cheese"), "--repo-root", str(repo)),
             stdout=output,
         )
@@ -205,7 +178,7 @@ class TestAppendAttemptIntegration:
     parseable by freshness-check.py. M3 regression."""
 
     def test_canonical_table_schema_round_trips(
-        self, repo: Path, freshness_check: _FreshnessCheckModule
+        self, repo: Path
     ) -> None:
         # Write the *exact* table shape `append-attempt.py` produces (HEADER +
         # one row). The parser must read head_sha out of column 1, not 2 —
@@ -234,7 +207,7 @@ class TestAppendAttemptIntegration:
         assert result == {"state": "previously_passed", "diff_head": head}
 
     def test_legacy_table_shape_still_parses(
-        self, freshness_check: _FreshnessCheckModule, tmp_path: Path
+        self, tmp_path: Path
     ) -> None:
         # Pre-canonical table (status at col 0, head_sha at col 2) still
         # parses via the legacy fallback so any old logs do not silently
@@ -244,17 +217,17 @@ class TestAppendAttemptIntegration:
         assert freshness_check.last_pass_sha(path) == "feedface" * 5
 
     def test_sha_matches_handles_short_and_full(
-        self, freshness_check: _FreshnessCheckModule
+        self
     ) -> None:
         full = "deadbeef" * 5
         short = full[:7]
-        assert freshness_check._sha_matches(short, full) is True  # pyright: ignore[reportPrivateUsage]
-        assert freshness_check._sha_matches(full, short) is True  # pyright: ignore[reportPrivateUsage]
-        assert freshness_check._sha_matches("cafebabe", full) is False  # pyright: ignore[reportPrivateUsage]
+        assert freshness_check._sha_matches(short, full) is True
+        assert freshness_check._sha_matches(full, short) is True
+        assert freshness_check._sha_matches("cafebabe", full) is False
         # 'unknown' sentinel (writer fallback when git fails) must never
         # silently match — otherwise every diff would be previously_passed.
-        assert freshness_check._sha_matches("unknown", full) is False  # pyright: ignore[reportPrivateUsage]
-        assert freshness_check._sha_matches("", full) is False  # pyright: ignore[reportPrivateUsage]
+        assert freshness_check._sha_matches("unknown", full) is False
+        assert freshness_check._sha_matches("", full) is False
 
 
 class TestMalformedLog:
@@ -301,22 +274,22 @@ class TestArgHandling:
 
 class TestPureHelpers:
     def test_is_pass_status_matches_variants(
-        self, freshness_check: _FreshnessCheckModule
+        self
     ) -> None:
-        assert freshness_check._is_pass_status("PASS") is True  # pyright: ignore[reportPrivateUsage]
-        assert freshness_check._is_pass_status("pass") is True  # pyright: ignore[reportPrivateUsage]
-        assert freshness_check._is_pass_status("passed") is True  # pyright: ignore[reportPrivateUsage]
-        assert freshness_check._is_pass_status("Pass — SOLO 4") is True  # pyright: ignore[reportPrivateUsage]
-        assert freshness_check._is_pass_status("FAIL") is False  # pyright: ignore[reportPrivateUsage]
-        assert freshness_check._is_pass_status("error") is False  # pyright: ignore[reportPrivateUsage]
+        assert freshness_check._is_pass_status("PASS") is True
+        assert freshness_check._is_pass_status("pass") is True
+        assert freshness_check._is_pass_status("passed") is True
+        assert freshness_check._is_pass_status("Pass — SOLO 4") is True
+        assert freshness_check._is_pass_status("FAIL") is False
+        assert freshness_check._is_pass_status("error") is False
 
     def test_last_pass_sha_returns_none_when_missing(
-        self, freshness_check: _FreshnessCheckModule, tmp_path: Path
+        self, tmp_path: Path
     ) -> None:
         assert freshness_check.last_pass_sha(tmp_path / "missing.md") is None
 
     def test_last_pass_sha_from_table(
-        self, freshness_check: _FreshnessCheckModule, tmp_path: Path
+        self, tmp_path: Path
     ) -> None:
         path = tmp_path / "log.md"
         _ = path.write_text(_table_log("x", "feedface" * 5), encoding="utf-8")

@@ -119,7 +119,7 @@ def test_direct_code_mode_exposes_python_dash_c_context(
         f"assert sys.flags.safe_path is {safe_path!r}"
     )
 
-    cut_assertion_probe._run_code(  # pyright: ignore[reportPrivateUsage]
+    cut_assertion_probe._run_code(
         source, ["arg"], sys.executable
     )
 
@@ -157,7 +157,7 @@ def test_direct_script_mode_preserves_native_context(tmp_path: Path) -> None:
     )
     _ = script.write_text(script_source, encoding="utf-8")
 
-    cut_assertion_probe._run_script(  # pyright: ignore[reportPrivateUsage]
+    cut_assertion_probe._run_script(
         str(script), ["arg"], sys.executable
     )
 
@@ -200,7 +200,7 @@ def test_pytest_observes_runner_native_global_argv(tmp_path: Path) -> None:
     )
     read_fd, write_fd = os.pipe()
     try:
-        returncode = cut_assertion_probe._run_pytest(  # pyright: ignore[reportPrivateUsage]
+        returncode = cut_assertion_probe._run_pytest(
             [str(test_file), "-q"],
             write_fd,
             sys.executable,
@@ -234,7 +234,7 @@ def test_pytest_ignores_expected_xfail_and_observes_real_failure(
     )
     read_fd, write_fd = os.pipe()
     try:
-        returncode = cut_assertion_probe._run_pytest(  # pyright: ignore[reportPrivateUsage]
+        returncode = cut_assertion_probe._run_pytest(
             [str(test_file), "-q"], write_fd
         )
     finally:
@@ -278,7 +278,7 @@ def test_unittest_preserves_explicit_custom_runner_and_observes_assertion(
     read_fd, write_fd = os.pipe()
     try:
         with pytest.raises(SystemExit) as raised:
-            _ = cut_assertion_probe._run_direct(  # pyright: ignore[reportPrivateUsage]
+            _ = cut_assertion_probe._run_direct(
                 "script",
                 str(script),
                 [],
@@ -326,7 +326,7 @@ def test_unittest_restores_result_methods_for_exit_false(tmp_path: Path) -> None
     )
     read_fd, write_fd = os.pipe()
     try:
-        returncode = cut_assertion_probe._run_direct(  # pyright: ignore[reportPrivateUsage]
+        returncode = cut_assertion_probe._run_direct(
             "script",
             str(script),
             [],
@@ -368,7 +368,7 @@ def test_unittest_observes_custom_runner_default_result(tmp_path: Path) -> None:
     read_fd, write_fd = os.pipe()
     try:
         with pytest.raises(SystemExit) as raised:
-            _ = cut_assertion_probe._run_direct(  # pyright: ignore[reportPrivateUsage]
+            _ = cut_assertion_probe._run_direct(
                 "script",
                 str(script),
                 [],
@@ -394,7 +394,7 @@ def test_direct_uncaught_exception_emits_exactly_one_event(tmp_path: Path) -> No
     read_fd, write_fd = os.pipe()
     try:
         with pytest.raises(RuntimeError, match="uncaught witness"):
-            _ = cut_assertion_probe._run_direct(  # pyright: ignore[reportPrivateUsage]
+            _ = cut_assertion_probe._run_direct(
                 "script",
                 str(script),
                 [],
@@ -468,7 +468,7 @@ def test_unittest_observes_runner_native_global_argv(tmp_path: Path) -> None:
     args = ["discover", "-s", str(tmp_path), "-p", "test_*.py"]
     read_fd, write_fd = os.pipe()
     try:
-        returncode = cut_assertion_probe._run_unittest(  # pyright: ignore[reportPrivateUsage]
+        returncode = cut_assertion_probe._run_unittest(
             args,
             write_fd,
             sys.executable,
@@ -499,7 +499,7 @@ def test_unittest_preserves_stdlib_zero_test_exit_code(tmp_path: Path) -> None:
     )
     read_fd, write_fd = os.pipe()
     try:
-        returncode = cut_assertion_probe._run_unittest(  # pyright: ignore[reportPrivateUsage]
+        returncode = cut_assertion_probe._run_unittest(
             args, write_fd
         )
     finally:

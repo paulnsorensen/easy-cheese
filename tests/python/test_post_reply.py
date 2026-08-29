@@ -10,14 +10,9 @@ from __future__ import annotations
 
 import subprocess
 from collections.abc import Callable, Iterable
-from typing import Protocol
 
 import pytest
-
-
-class _PostReplyModule(Protocol):
-    def main(self, argv: list[str] | None = None) -> int: ...
-    def compose_body(self, body: str, handle: str) -> str: ...
+from easy_cheese.skills.affinage import post_reply
 
 
 class _FakeCompletedProcess:
@@ -92,14 +87,14 @@ def _clear_handle_env(monkeypatch: pytest.MonkeyPatch) -> None:  # pyright: igno
 # --- endpoint routing -----------------------------------------------------
 
 
-def test_thread_mode_hits_replies_endpoint(post_reply: _PostReplyModule, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_thread_mode_hits_replies_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
     rec: list[list[str]] = []
     monkeypatch.setattr(subprocess, "run", _healthy(rec))
     assert post_reply.main(["--thread", "--pr", "42", "--comment-id", "999", "--body", "Fixed."]) == 0
     assert _posted_path(rec) == "repos/owner/repo/pulls/42/comments/999/replies"
 
 
-def test_issue_mode_hits_issues_endpoint(post_reply: _PostReplyModule, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_issue_mode_hits_issues_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
     rec: list[list[str]] = []
     monkeypatch.setattr(subprocess, "run", _healthy(rec))
     assert post_reply.main(["--issue", "--pr", "42", "--body", "Re: @alice — fixed."]) == 0
@@ -109,14 +104,14 @@ def test_issue_mode_hits_issues_endpoint(post_reply: _PostReplyModule, monkeypat
 # --- attribution ----------------------------------------------------------
 
 
-def test_attribution_appended_with_resolved_handle(post_reply: _PostReplyModule, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_attribution_appended_with_resolved_handle(monkeypatch: pytest.MonkeyPatch) -> None:
     rec: list[list[str]] = []
     monkeypatch.setattr(subprocess, "run", _healthy(rec))
     _ = post_reply.main(["--issue", "--pr", "42", "--body", "Hello world."])
     assert "agent on behalf of stub-user" in _posted_body(rec)
 
 
-def test_respond_gh_handle_overrides_resolution(post_reply: _PostReplyModule, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_respond_gh_handle_overrides_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
     rec: list[list[str]] = []
     monkeypatch.setenv("RESPOND_GH_HANDLE", "override-handle")
     monkeypatch.setattr(subprocess, "run", _healthy(rec))
@@ -126,7 +121,7 @@ def test_respond_gh_handle_overrides_resolution(post_reply: _PostReplyModule, mo
     assert not any(cmd[:3] == ["gh", "api", "user"] for cmd in rec)
 
 
-def test_idempotent_no_double_append(post_reply: _PostReplyModule, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_idempotent_no_double_append(monkeypatch: pytest.MonkeyPatch) -> None:
     rec: list[list[str]] = []
     monkeypatch.setattr(subprocess, "run", _healthy(rec))
     body = "Hello.\n\n---\nagent on behalf of stub-user"
@@ -134,7 +129,7 @@ def test_idempotent_no_double_append(post_reply: _PostReplyModule, monkeypatch: 
     assert _posted_body(rec).count("agent on behalf of stub-user") == 1
 
 
-def test_idempotent_tolerates_trailing_newline(post_reply: _PostReplyModule, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_idempotent_tolerates_trailing_newline(monkeypatch: pytest.MonkeyPatch) -> None:
     rec: list[list[str]] = []
     monkeypatch.setattr(subprocess, "run", _healthy(rec))
     body = "Hello.\n\n---\nagent on behalf of stub-user\n"
@@ -142,7 +137,7 @@ def test_idempotent_tolerates_trailing_newline(post_reply: _PostReplyModule, mon
     assert _posted_body(rec).count("agent on behalf of stub-user") == 1
 
 
-def test_attribution_appended_when_body_only_quotes_it(post_reply: _PostReplyModule) -> None:
+def test_attribution_appended_when_body_only_quotes_it() -> None:
     """Exact-suffix match, not substring: a body that mentions the attribution
     phrase mid-text but does not END with the suffix block still gets a real
     attribution appended."""
@@ -154,7 +149,7 @@ def test_attribution_appended_when_body_only_quotes_it(post_reply: _PostReplyMod
     assert out.count("agent on behalf of") == 2
 
 
-def test_compose_body_preserves_metacharacters(post_reply: _PostReplyModule) -> None:
+def test_compose_body_preserves_metacharacters() -> None:
     body = 'Backticks `code` and $vars and "quotes" and newlines\nstill survive.'
     out = post_reply.compose_body(body, "u")
     assert "Backticks `code` and $vars" in out
@@ -164,7 +159,7 @@ def test_compose_body_preserves_metacharacters(post_reply: _PostReplyModule) -> 
 # --- handle resolution precedence -----------------------------------------
 
 
-def test_handle_falls_through_to_git_config(post_reply: _PostReplyModule, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_handle_falls_through_to_git_config(monkeypatch: pytest.MonkeyPatch) -> None:
     rec: list[list[str]] = []
     monkeypatch.setattr(
         subprocess,
@@ -183,7 +178,7 @@ def test_handle_falls_through_to_git_config(post_reply: _PostReplyModule, monkey
     assert "agent on behalf of fallback-user" in _posted_body(rec)
 
 
-def test_handle_resolution_exhausted_exits_1(post_reply: _PostReplyModule, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_handle_resolution_exhausted_exits_1(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         subprocess,
         "run",
@@ -199,7 +194,7 @@ def test_handle_resolution_exhausted_exits_1(post_reply: _PostReplyModule, monke
     assert exc.value.code == 1
 
 
-def test_repo_resolution_failure_exits_1(post_reply: _PostReplyModule, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_repo_resolution_failure_exits_1(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         subprocess,
         "run",
@@ -218,7 +213,7 @@ def test_repo_resolution_failure_exits_1(post_reply: _PostReplyModule, monkeypat
 # --- argument validation --------------------------------------------------
 
 
-def test_post_api_failure_exits_1(post_reply: _PostReplyModule, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_post_api_failure_exits_1(monkeypatch: pytest.MonkeyPatch) -> None:
     """A failed `gh api POST` must fail loud (exit 1), never silently succeed —
     a swallowed POST error would drop the reply while reporting success."""
     monkeypatch.setattr(
@@ -249,7 +244,7 @@ def test_post_api_failure_exits_1(post_reply: _PostReplyModule, monkeypatch: pyt
         (["--pr", "42", "--body", "x"], 2),  # no mode -> usage
     ],
 )
-def test_arg_validation_exit_codes(post_reply: _PostReplyModule, argv: list[str], code: int) -> None:
+def test_arg_validation_exit_codes(argv: list[str], code: int) -> None:
     with pytest.raises(SystemExit) as exc:
         _ = post_reply.main(argv)
     assert exc.value.code == code
@@ -260,7 +255,7 @@ def test_arg_validation_exit_codes(post_reply: _PostReplyModule, argv: list[str]
 
 @pytest.mark.parametrize("flag", ["-h", "--help"])
 def test_help_prints_usage_to_stdout_and_exits_0(
-    post_reply: _PostReplyModule, flag: str, capsys: pytest.CaptureFixture[str]
+    flag: str, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """--help / -h must write usage to stdout and exit 0 — it is not an error."""
     with pytest.raises(SystemExit) as exc:

@@ -101,7 +101,7 @@ def test_verify_rejects_missing_bundle(tmp_path: Path) -> None:
     (fake / "skills" / "affinage").mkdir(parents=True)
     _ = (fake / "skills" / "affinage" / "SKILL.md").write_text("# affinage\n")
     with pytest.raises(SystemExit, match="missing bundle"):
-        stage_release._verify(fake)  # pyright: ignore[reportPrivateUsage]
+        stage_release._verify(fake)
 
 
 

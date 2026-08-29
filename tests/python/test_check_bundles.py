@@ -18,7 +18,7 @@ def _non_shiv_zipapp() -> bytes:
 
 def test_bundle_manifest_rejects_non_shiv_zipapp() -> None:
     with pytest.raises(ValueError, match=r"not a Shiv archive: missing _bootstrap/"):
-        _ = check_bundles._manifest(_non_shiv_zipapp())  # pyright: ignore[reportPrivateUsage]
+        _ = check_bundles._manifest(_non_shiv_zipapp())
 
 
 def test_bundle_checker_rejects_new_non_shiv_archive(

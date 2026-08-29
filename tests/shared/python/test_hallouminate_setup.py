@@ -3,32 +3,10 @@
 from __future__ import annotations
 
 import subprocess
-from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol
 
 import pytest
-
-if TYPE_CHECKING:
-    from easy_cheese.shared.hallouminate_setup import Change, _State  # pyright: ignore[reportPrivateUsage]
-
-
-class _HallouminateSetupModule(Protocol):
-    BEGIN: str
-    END: str
-    _run_init_repo: Callable[[str, Path], None]
-
-    def config_path(self) -> Path: ...
-
-    def detect_state(self, config_path: Path | None = None) -> _State: ...
-
-    def apply_global(self, config_path: Path | None = None, *, apply: bool) -> Change: ...
-
-    def migrate_legacy(self, config_path: Path | None = None, *, apply: bool) -> Change: ...
-
-    def apply_local(self, repo_root: Path, *, apply: bool) -> Change: ...
-
-    def main(self, argv: list[str] | None = None) -> int: ...
+from easy_cheese.shared import hallouminate_setup
 
 
 @pytest.fixture
@@ -47,7 +25,7 @@ def config_path(tmp_path: Path) -> Path:
 class TestApplyGlobalIdempotency:
     @pytest.mark.usefixtures("corpus_home")
     def test_second_apply_is_byte_identical(
-        self, hallouminate_setup: _HallouminateSetupModule, config_path: Path
+        self, config_path: Path
     ) -> None:
         _ = hallouminate_setup.apply_global(config_path, apply=True)
         first = config_path.read_bytes()
@@ -57,7 +35,7 @@ class TestApplyGlobalIdempotency:
 
     @pytest.mark.usefixtures("corpus_home")
     def test_second_apply_reports_noop(
-        self, hallouminate_setup: _HallouminateSetupModule, config_path: Path
+        self, config_path: Path
     ) -> None:
         _ = hallouminate_setup.apply_global(config_path, apply=True)
         change = hallouminate_setup.apply_global(config_path, apply=True)
@@ -67,7 +45,7 @@ class TestApplyGlobalIdempotency:
 class TestDetectDrift:
     @pytest.mark.usefixtures("corpus_home")
     def test_reports_drifted_when_paths0_mismatches_corpus_home(
-        self, hallouminate_setup: _HallouminateSetupModule, config_path: Path
+        self, config_path: Path
     ) -> None:
         config_path.parent.mkdir(parents=True)
         _ = config_path.write_text(
@@ -89,7 +67,7 @@ class TestDetectDrift:
         }
 
     def test_apply_global_repoints_drifted_block(
-        self, hallouminate_setup: _HallouminateSetupModule, corpus_home: Path, config_path: Path
+        self, corpus_home: Path, config_path: Path
     ) -> None:
         config_path.parent.mkdir(parents=True)
         _ = config_path.write_text(
@@ -111,7 +89,7 @@ class TestDetectDrift:
 
 class TestApplyGlobalCreatesCorpusHome:
     def test_mkdir_p_guards_hallouminate_abort_on_missing(
-        self, hallouminate_setup: _HallouminateSetupModule, corpus_home: Path, config_path: Path
+        self, corpus_home: Path, config_path: Path
     ) -> None:
         assert not corpus_home.exists()
         _ = hallouminate_setup.apply_global(config_path, apply=True)
@@ -121,7 +99,7 @@ class TestApplyGlobalCreatesCorpusHome:
 class TestApplyGlobalDuplicateNameSafety:
     @pytest.mark.usefixtures("corpus_home")
     def test_replace_never_leaves_two_marked_blocks(
-        self, hallouminate_setup: _HallouminateSetupModule, config_path: Path
+        self, config_path: Path
     ) -> None:
         _ = hallouminate_setup.apply_global(config_path, apply=True)
         _ = hallouminate_setup.apply_global(config_path, apply=True)
@@ -132,7 +110,7 @@ class TestApplyGlobalDuplicateNameSafety:
 
 class TestApplyGlobalRobustness:
     def test_orphan_begin_marker_is_replaced_not_duplicated(
-        self, hallouminate_setup: _HallouminateSetupModule, corpus_home: Path, config_path: Path
+        self, corpus_home: Path, config_path: Path
     ) -> None:
         # A truncated block: BEGIN + a stale paths line, but no closing END
         # (e.g. an interrupted prior write). Must be rewritten in place, not
@@ -160,7 +138,7 @@ class TestApplyGlobalRobustness:
 
     @pytest.mark.usefixtures("corpus_home")
     def test_write_is_atomic_and_leaves_no_temp_file(
-        self, hallouminate_setup: _HallouminateSetupModule, config_path: Path
+        self, config_path: Path
     ) -> None:
         config_path.parent.mkdir(parents=True)
         _ = config_path.write_text(
@@ -176,7 +154,7 @@ class TestApplyGlobalRobustness:
 
 class TestApplyGlobalDryRun:
     def test_apply_false_writes_nothing(
-        self, hallouminate_setup: _HallouminateSetupModule, corpus_home: Path, config_path: Path
+        self, corpus_home: Path, config_path: Path
     ) -> None:
         change = hallouminate_setup.apply_global(config_path, apply=False)
         assert change.action == "create"
@@ -186,7 +164,7 @@ class TestApplyGlobalDryRun:
 
 class TestMigrateLegacy:
     def test_removes_unmarked_cheese_global_pointing_at_dot_cheese(
-        self, hallouminate_setup: _HallouminateSetupModule, config_path: Path
+        self, config_path: Path
     ) -> None:
         config_path.parent.mkdir(parents=True)
         _ = config_path.write_text(
@@ -203,7 +181,7 @@ class TestMigrateLegacy:
         assert "~/.cheese" not in text
 
     def test_leaves_cheese_global_pointing_elsewhere_intact(
-        self, hallouminate_setup: _HallouminateSetupModule, config_path: Path
+        self, config_path: Path
     ) -> None:
         original = (
             '[[corpus]]\n'
@@ -218,7 +196,7 @@ class TestMigrateLegacy:
         assert config_path.read_text(encoding="utf-8") == original
 
     def test_preserves_trailing_config_after_last_legacy_corpus(
-        self, hallouminate_setup: _HallouminateSetupModule, config_path: Path
+        self, config_path: Path
     ) -> None:
         # The legacy cheese-global block is the LAST [[corpus]], followed by an
         # unrelated [[repository]] section. Removing the corpus must not run to
@@ -247,7 +225,6 @@ class TestMigrateLegacy:
 class TestApplyLocalMainRoot:
     def test_init_repo_targets_main_root_not_worktree(
         self,
-        hallouminate_setup: _HallouminateSetupModule,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
@@ -280,7 +257,7 @@ class TestApplyLocalMainRoot:
         assert calls == [(main_root.name, main_root)]
 
     def test_noop_when_already_a_tenant(
-        self, hallouminate_setup: _HallouminateSetupModule, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         repo_root = tmp_path / "repo"
         (repo_root / ".cheese").mkdir(parents=True)
@@ -301,7 +278,7 @@ class TestApplyLocalMainRoot:
         assert calls == []
 
     def test_noop_when_no_dot_cheese_dir(
-        self, hallouminate_setup: _HallouminateSetupModule, tmp_path: Path
+        self, tmp_path: Path
     ) -> None:
         repo_root = tmp_path / "repo"
         repo_root.mkdir()
@@ -312,7 +289,7 @@ class TestApplyLocalMainRoot:
         assert change.action == "noop"
 
     def test_noop_when_cheese_dir_but_not_a_git_repo(
-        self, hallouminate_setup: _HallouminateSetupModule, tmp_path: Path
+        self, tmp_path: Path
     ) -> None:
         # .cheese/ present but the dir is not inside a git repo -- git rev-parse
         # would raise; the leg must degrade to a clean noop, not a traceback.
@@ -327,7 +304,7 @@ class TestApplyLocalMainRoot:
 class TestApplyGlobalNewlinePreservation:
     @pytest.mark.usefixtures("corpus_home")
     def test_crlf_config_stays_crlf_after_write(
-        self, hallouminate_setup: _HallouminateSetupModule, config_path: Path
+        self, config_path: Path
     ) -> None:
         config_path.parent.mkdir(parents=True)
         _ = config_path.write_text(
@@ -344,7 +321,7 @@ class TestApplyGlobalNewlinePreservation:
 
 class TestMigrateLegacyNewlinePreservation:
     def test_crlf_config_stays_crlf_after_migrate(
-        self, hallouminate_setup: _HallouminateSetupModule, config_path: Path
+        self, config_path: Path
     ) -> None:
         config_path.parent.mkdir(parents=True)
         _ = config_path.write_text(
@@ -369,7 +346,7 @@ class TestMigrateLegacyNewlinePreservation:
 
 class TestMigrateLegacyDryRun:
     def test_dry_run_reports_remove_without_writing(
-        self, hallouminate_setup: _HallouminateSetupModule, config_path: Path
+        self, config_path: Path
     ) -> None:
         original = (
             '[[corpus]]\n'
@@ -387,14 +364,14 @@ class TestMigrateLegacyDryRun:
 
 class TestConfigPathResolution:
     def test_hallouminate_config_override_wins(
-        self, hallouminate_setup: _HallouminateSetupModule, monkeypatch: pytest.MonkeyPatch
+        self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("HALLOUMINATE_CONFIG", "/opt/custom/config.toml")
         monkeypatch.setenv("XDG_CONFIG_HOME", "/should/be/ignored")
         assert hallouminate_setup.config_path() == Path("/opt/custom/config.toml")
 
     def test_xdg_config_home_when_no_override(
-        self, hallouminate_setup: _HallouminateSetupModule, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         monkeypatch.delenv("HALLOUMINATE_CONFIG", raising=False)
         monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
@@ -407,7 +384,6 @@ class TestCliDispatch:
 
     def test_global_apply_writes_marked_block(
         self,
-        hallouminate_setup: _HallouminateSetupModule,
         corpus_home: Path,
         config_path: Path,
         monkeypatch: pytest.MonkeyPatch,
@@ -422,7 +398,6 @@ class TestCliDispatch:
     @pytest.mark.usefixtures("corpus_home")
     def test_prog0_leg_dispatch_dry_run_writes_nothing(
         self,
-        hallouminate_setup: _HallouminateSetupModule,
         config_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
@@ -434,7 +409,6 @@ class TestCliDispatch:
 
     def test_doctor_dry_run_reports_legacy_migration_without_writing(
         self,
-        hallouminate_setup: _HallouminateSetupModule,
         config_path: Path,
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
@@ -458,7 +432,6 @@ class TestCliDispatch:
     @pytest.mark.usefixtures("corpus_home")
     def test_global_apply_does_not_remove_legacy_config(
         self,
-        hallouminate_setup: _HallouminateSetupModule,
         config_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
@@ -481,7 +454,6 @@ class TestCliDispatch:
 
     def test_unknown_leg_returns_usage_error(
         self,
-        hallouminate_setup: _HallouminateSetupModule,
         config_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:

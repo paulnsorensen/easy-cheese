@@ -23,7 +23,7 @@ sys.path.insert(0, str(REPO_ROOT / "src" / "fanout"))
 
 from easy_cheese.shared import cli, git_utils  # noqa: E402
 from easy_cheese.shared.fanout import review_surface, review_surface_cli  # noqa: E402
-from easy_cheese.shared.fanout.review_surface_cli import _Args  # noqa: E402  # pyright: ignore[reportPrivateUsage]
+from easy_cheese.shared.fanout.review_surface_cli import _Args  # noqa: E402
 from easy_cheese.shared.fanout.review_surface import ReviewScore  # noqa: E402
 
 
@@ -82,7 +82,7 @@ def fixture_repo(tmp_path: Path) -> Path:
 
 class TestReviewSurfaceSubcommand:
     def test_prints_json_matching_score(self, fixture_repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
-        review_surface_cli._cmd_score(_ns(str(fixture_repo)))  # pyright: ignore[reportPrivateUsage]
+        review_surface_cli._cmd_score(_ns(str(fixture_repo)))
         result = cast(ReviewScore, json.loads(capsys.readouterr().out))
 
         expected = review_surface.score(
@@ -97,7 +97,7 @@ class TestReviewSurfaceSubcommand:
 
 class TestTomlOverride:
     def test_default_zeros_lockfile(self, fixture_repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
-        review_surface_cli._cmd_score(_ns(str(fixture_repo)))  # pyright: ignore[reportPrivateUsage]
+        review_surface_cli._cmd_score(_ns(str(fixture_repo)))
         result = cast(ReviewScore, json.loads(capsys.readouterr().out))
         assert result["zeroed"] == ["Cargo.lock"]
 
@@ -106,7 +106,7 @@ class TestTomlOverride:
         _ = config.write_text(
             '[review_surface]\nweights = [["*.lock", 1.0]]\n', encoding="utf-8"
         )
-        review_surface_cli._cmd_score(  # pyright: ignore[reportPrivateUsage]
+        review_surface_cli._cmd_score(
             _ns(str(fixture_repo), config=str(config))
         )
         result = cast(ReviewScore, json.loads(capsys.readouterr().out))
@@ -120,7 +120,7 @@ class TestTomlOverride:
         )
 
     def test_omitted_config_uses_module_defaults(self, fixture_repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
-        review_surface_cli._cmd_score(_ns(str(fixture_repo)))  # pyright: ignore[reportPrivateUsage]
+        review_surface_cli._cmd_score(_ns(str(fixture_repo)))
         result = cast(ReviewScore, json.loads(capsys.readouterr().out))
         # Independent literal (not computed by calling score()) so this
         # test can actually fail if _cmd_score stops using module defaults.
@@ -135,13 +135,13 @@ class TestErrorHandling:
         config = tmp_path / "bad.toml"
         _ = config.write_text("this is not [ valid toml", encoding="utf-8")
         with pytest.raises(cli.CliError, match="malformed TOML"):
-            review_surface_cli._cmd_score(  # pyright: ignore[reportPrivateUsage]
+            review_surface_cli._cmd_score(
                 _ns(str(fixture_repo), config=str(config))
             )
 
     def test_unreadable_git_ref_exits_nonzero(self, fixture_repo: Path) -> None:
         with pytest.raises(cli.CliError, match="git diff"):
-            review_surface_cli._cmd_score(  # pyright: ignore[reportPrivateUsage]
+            review_surface_cli._cmd_score(
                 _ns(str(fixture_repo), diff_args=["not-a-real-ref"])
             )
 
@@ -157,7 +157,7 @@ class TestInjectionGuard:
     ) -> None:
         target = tmp_path / "should_not_exist"
         with pytest.raises(cli.CliError, match=r"must not start with '-'"):
-            review_surface_cli._cmd_score(  # pyright: ignore[reportPrivateUsage]
+            review_surface_cli._cmd_score(
                 _ns(str(fixture_repo), diff_args=[f"--output={target}"])
             )
         assert not target.exists()
@@ -171,14 +171,14 @@ class TestNumstatRows:
 
     def test_binary_diff_rows_zeroed(self, monkeypatch: pytest.MonkeyPatch) -> None:
         _stub_run_git(monkeypatch, "10\t5\tsrc/a.py\0-\t-\tassets/logo.png\0")
-        rows = review_surface_cli._numstat_rows(  # pyright: ignore[reportPrivateUsage]
+        rows = review_surface_cli._numstat_rows(
             "irrelevant-repo", ["HEAD"]
         )
         assert rows == [("src/a.py", 10, 5), ("assets/logo.png", 0, 0)]
 
     def test_path_with_spaces_parses(self, monkeypatch: pytest.MonkeyPatch) -> None:
         _stub_run_git(monkeypatch, "3\t1\tsrc/file with spaces.py\0")
-        rows = review_surface_cli._numstat_rows(  # pyright: ignore[reportPrivateUsage]
+        rows = review_surface_cli._numstat_rows(
             "irrelevant-repo", ["HEAD"]
         )
         assert rows == [("src/file with spaces.py", 3, 1)]
@@ -195,7 +195,7 @@ class TestNumstatRows:
             "-\t-\tbin.dat\0"
         )
         _stub_run_git(monkeypatch, stdout)
-        rows = review_surface_cli._numstat_rows(  # pyright: ignore[reportPrivateUsage]
+        rows = review_surface_cli._numstat_rows(
             "irrelevant-repo", ["HEAD"]
         )
         assert rows == [
@@ -213,7 +213,7 @@ class TestLoadWeightOverrideEdgeShapes:
         config = tmp_path / "config.toml"
         _ = config.write_text("[review_surface]\nother_key = 1\n", encoding="utf-8")
         assert (
-            review_surface_cli._load_weight_override(str(config))  # pyright: ignore[reportPrivateUsage]
+            review_surface_cli._load_weight_override(str(config))
             is None
         )
 
@@ -221,14 +221,14 @@ class TestLoadWeightOverrideEdgeShapes:
         config = tmp_path / "config.toml"
         _ = config.write_text("[other_section]\nkey = 1\n", encoding="utf-8")
         assert (
-            review_surface_cli._load_weight_override(str(config))  # pyright: ignore[reportPrivateUsage]
+            review_surface_cli._load_weight_override(str(config))
             is None
         )
 
     def test_empty_weights_list_returns_empty_tuple_not_none(self, tmp_path: Path) -> None:
         config = tmp_path / "config.toml"
         _ = config.write_text("[review_surface]\nweights = []\n", encoding="utf-8")
-        result = review_surface_cli._load_weight_override(str(config))  # pyright: ignore[reportPrivateUsage]
+        result = review_surface_cli._load_weight_override(str(config))
         assert result == ()
         assert result is not None
 
@@ -246,7 +246,7 @@ class TestLoadWeightOverrideEdgeShapes:
     def test_missing_config_path_raises_cannot_read(self, tmp_path: Path) -> None:
         missing = tmp_path / "does-not-exist.toml"
         with pytest.raises(cli.CliError, match="cannot read config"):
-            _ = review_surface_cli._load_weight_override(  # pyright: ignore[reportPrivateUsage]
+            _ = review_surface_cli._load_weight_override(
                 str(missing)
             )
 
@@ -254,7 +254,7 @@ class TestLoadWeightOverrideEdgeShapes:
         config = tmp_path / "bad.toml"
         _ = config.write_text("this is not [ valid toml", encoding="utf-8")
         with pytest.raises(cli.CliError, match="malformed TOML"):
-            _ = review_surface_cli._load_weight_override(  # pyright: ignore[reportPrivateUsage]
+            _ = review_surface_cli._load_weight_override(
                 str(config)
             )
 
@@ -297,6 +297,6 @@ class TestMalformedWeightTables:
         config = tmp_path / "config.toml"
         _ = config.write_text(toml_text, encoding="utf-8")
         with pytest.raises(cli.CliError, match=match):
-            _ = review_surface_cli._load_weight_override(  # pyright: ignore[reportPrivateUsage]
+            _ = review_surface_cli._load_weight_override(
                 str(config)
             )

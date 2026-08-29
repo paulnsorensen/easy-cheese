@@ -124,9 +124,9 @@ class TestFrozenFixturePyramid:
         )
         assert len(commits) == 30
 
-        n2_floor = age_route._SCORE_N2_FLOOR  # pyright: ignore[reportPrivateUsage]
-        n5_floor = age_route._SCORE_N5_FLOOR  # pyright: ignore[reportPrivateUsage]
-        high_effort = age_route._HIGH_EFFORT_SCORE  # pyright: ignore[reportPrivateUsage]
+        n2_floor = age_route._SCORE_N2_FLOOR
+        n5_floor = age_route._SCORE_N5_FLOOR
+        high_effort = age_route._HIGH_EFFORT_SCORE
 
         tiers = {"top": 0, "mid": 0, "low": 0, "single": 0}
         for commit in commits:

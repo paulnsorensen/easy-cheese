@@ -76,14 +76,17 @@ pythonVersion = "3.11"
 [[tool.basedpyright.executionEnvironments]]
 root = "tests/schemas/python"
 extraPaths = ["tests/schemas/python", ".", "src", "scripts", ".github/scripts", "src/easy_cheese_schemas"]
+reportPrivateUsage = "none"
 
 [[tool.basedpyright.executionEnvironments]]
 root = "tests/wheypoint/python"
 extraPaths = ["tests/wheypoint/python", ".", "src", "scripts", ".github/scripts", "src/easy_cheese_schemas"]
+reportPrivateUsage = "none"
 
 [[tool.basedpyright.executionEnvironments]]
 root = "tests"
 extraPaths = [".", "src", "scripts", ".github/scripts"]
+reportPrivateUsage = "none"
 
 [tool.vulture]
 min_confidence = 60

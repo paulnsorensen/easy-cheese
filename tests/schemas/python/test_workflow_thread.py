@@ -203,7 +203,7 @@ def test_review_coverage_ledger_is_representation_independent(
             },
         }
 
-    result = workflow_module._review(request, output, {})  # pyright: ignore[reportPrivateUsage] -- whitebox test of the module-private review path
+    result = workflow_module._review(request, output, {})  # whitebox test of the module-private review path
 
     expected_disposition = (
         CoverageDisposition.COVERED

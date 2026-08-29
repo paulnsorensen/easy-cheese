@@ -252,7 +252,7 @@ def test_internal_wheel_normalization_ignores_compressor_and_member_order(
         with zipfile.ZipFile(wheel, "w", compression=compression) as archive:
             for member, content in entries:
                 archive.writestr(member, content)
-        wheels.append(build_pyz._normalize_internal_wheel(wheel))  # pyright: ignore[reportPrivateUsage]
+        wheels.append(build_pyz._normalize_internal_wheel(wheel))
 
     assert wheels[0].read_bytes() == wheels[1].read_bytes()
     with zipfile.ZipFile(wheels[0]) as archive:
@@ -278,7 +278,7 @@ def test_members_are_stored(ultracook_pyz: Path) -> None:
 def test_shiv_command_uses_a_local_hash_locked_wheelhouse(tmp_path: Path) -> None:
     requirements = tmp_path / "requirements.txt"
     wheelhouse = tmp_path / "wheelhouse"
-    command = build_pyz._shiv_command(  # pyright: ignore[reportPrivateUsage]
+    command = build_pyz._shiv_command(
         "cut", requirements, tmp_path / "cut.pyz", wheelhouse
     )
     for flag in (

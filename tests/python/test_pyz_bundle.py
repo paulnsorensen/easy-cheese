@@ -163,8 +163,8 @@ def _zip_with_shiv_metadata(
 
 
 def test_bundle_manifest_catches_execution_metadata_tampering() -> None:
-    baseline = check_bundles._manifest(_zip_with_shiv_metadata())  # pyright: ignore[reportPrivateUsage]
-    host_variation = check_bundles._manifest(  # pyright: ignore[reportPrivateUsage]
+    baseline = check_bundles._manifest(_zip_with_shiv_metadata())
+    host_variation = check_bundles._manifest(
         _zip_with_shiv_metadata(
             built_at="2026-08-26 10:00:00",
             interpreter="/usr/bin/python3",
@@ -173,7 +173,7 @@ def test_bundle_manifest_catches_execution_metadata_tampering() -> None:
     )
     assert baseline == host_variation
 
-    tampered = check_bundles._manifest(  # pyright: ignore[reportPrivateUsage]
+    tampered = check_bundles._manifest(
         _zip_with_shiv_metadata(entry_point="evil.module:main")
     )
     assert tampered["environment.json"] != baseline["environment.json"]
@@ -181,26 +181,26 @@ def test_bundle_manifest_catches_execution_metadata_tampering() -> None:
     wrapper_tampered = _zip_with_shiv_metadata(
         wrapper_import="from evil import main"
     )
-    assert check_bundles._manifest(wrapper_tampered)["site-packages/bin/demo"] != baseline[  # pyright: ignore[reportPrivateUsage]
+    assert check_bundles._manifest(wrapper_tampered)["site-packages/bin/demo"] != baseline[
         "site-packages/bin/demo"
     ]
 
     with pytest.raises(ValueError, match="build_id does not match"):
-        _ = check_bundles._manifest(  # pyright: ignore[reportPrivateUsage]
+        _ = check_bundles._manifest(
             _zip_with_shiv_metadata(build_id="tampered")
         )
 
 
 def test_bundle_manifest_preserves_wrapper_flags() -> None:
-    baseline = check_bundles._manifest(  # pyright: ignore[reportPrivateUsage]
+    baseline = check_bundles._manifest(
         _zip_with_shiv_metadata(interpreter="/opt/python/bin/python3 -I")
     )
-    host_variation = check_bundles._manifest(  # pyright: ignore[reportPrivateUsage]
+    host_variation = check_bundles._manifest(
         _zip_with_shiv_metadata(interpreter="/usr/bin/env python3 -I")
     )
     assert baseline == host_variation
 
-    flag_tampered = check_bundles._manifest(  # pyright: ignore[reportPrivateUsage]
+    flag_tampered = check_bundles._manifest(
         _zip_with_shiv_metadata(interpreter="/usr/bin/env python3 -X")
     )
     assert flag_tampered["site-packages/bin/demo"] != baseline[
@@ -209,8 +209,8 @@ def test_bundle_manifest_preserves_wrapper_flags() -> None:
 
 
 def test_bundle_manifest_keeps_non_python_shebang_distinct() -> None:
-    python = check_bundles._manifest(_zip_with_shiv_metadata())  # pyright: ignore[reportPrivateUsage]
-    shell = check_bundles._manifest(  # pyright: ignore[reportPrivateUsage]
+    python = check_bundles._manifest(_zip_with_shiv_metadata())
+    shell = check_bundles._manifest(
         _zip_with_shiv_metadata(interpreter="/bin/sh")
     )
     assert shell["site-packages/bin/demo"] != python["site-packages/bin/demo"]
@@ -1308,7 +1308,7 @@ def test_press_bundle_carries_and_imports_assertion_probe(bundles: Path) -> None
 
 def test_document_rules_projection_matches_checked_in_source() -> None:
     generated = REPO_ROOT / "src" / "easy_cheese" / "shared" / "document_rules.py"
-    assert build_pyz._compiled_document_rules_source() == generated.read_text(encoding="utf-8")  # pyright: ignore[reportPrivateUsage]
+    assert build_pyz._compiled_document_rules_source() == generated.read_text(encoding="utf-8")
 
 
 def test_skill_archives_own_shared_commands_and_no_common_archive(bundles: Path) -> None:

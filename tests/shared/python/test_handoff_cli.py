@@ -2,41 +2,20 @@
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import subprocess
 import sys
 from pathlib import Path
-from types import ModuleType
-from typing import TYPE_CHECKING, Protocol, cast
+from typing import cast
 
-import pytest
-
-if TYPE_CHECKING:
-    from collections.abc import Callable
+import easy_cheese.shared.handoff_cli as handoff_cli_mod
 
 
-class _HandoffCliModule(Protocol):
-    _cmd_render: Callable[..., None]
-    _cmd_parse: Callable[..., None]
-    _cmd_dispatch: Callable[..., None]
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SHARED_SCRIPTS = REPO_ROOT / "src" / "easy_cheese" / "shared"
 HANDOFF_CLI = SHARED_SCRIPTS / "handoff_cli.py"
 
-
-@pytest.fixture(scope="module")
-def handoff_cli_mod() -> ModuleType:
-    # Make sibling modules (cli, handoff) importable.
-    if str(SHARED_SCRIPTS) not in sys.path:
-        sys.path.insert(0, str(SHARED_SCRIPTS))
-    spec = importlib.util.spec_from_file_location("handoff_cli", HANDOFF_CLI)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules["handoff_cli"] = module
-    spec.loader.exec_module(module)
-    return module
 
 
 def _run(*args: str) -> subprocess.CompletedProcess[str]:
@@ -228,8 +207,8 @@ class TestArgparse:
 
 
 class TestModuleImports:
-    def test_loads_via_importlib(self, handoff_cli_mod: _HandoffCliModule) -> None:
+    def test_loads_via_importlib(self) -> None:
         # Sanity: the module exposes the subcommand handlers (in-process unit test).
-        assert callable(handoff_cli_mod._cmd_render)  # pyright: ignore[reportPrivateUsage]
-        assert callable(handoff_cli_mod._cmd_parse)  # pyright: ignore[reportPrivateUsage]
-        assert callable(handoff_cli_mod._cmd_dispatch)  # pyright: ignore[reportPrivateUsage]
+        assert callable(handoff_cli_mod._cmd_render)
+        assert callable(handoff_cli_mod._cmd_parse)
+        assert callable(handoff_cli_mod._cmd_dispatch)

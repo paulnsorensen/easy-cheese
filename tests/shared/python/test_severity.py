@@ -5,49 +5,34 @@ from __future__ import annotations
 import subprocess
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol
 
 import pytest
-
-if TYPE_CHECKING:
-    from easy_cheese.shared.severity import RubricError
+from easy_cheese.shared import severity
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SEVERITY_CLI = REPO_ROOT / "src" / "easy_cheese" / "shared" / "severity.py"
 
 
-class _SeverityModule(Protocol):
-    RubricError: type[RubricError]
-
-    def bump(self, sev: str) -> str: ...
-
-    def compute_severity(
-        self, *, dimension: str, base: str, location: str, fix_cost_later: str
-    ) -> str: ...
-
-    def bucket_fix_cost_now(self, *, file_count: int, module_count: int = 1) -> str: ...
-
-
 class TestBump:
-    def test_low_to_medium(self, severity: _SeverityModule) -> None:
+    def test_low_to_medium(self) -> None:
         assert severity.bump("low") == "medium"
 
-    def test_medium_to_high(self, severity: _SeverityModule) -> None:
+    def test_medium_to_high(self) -> None:
         assert severity.bump("medium") == "high"
 
-    def test_high_to_blocker(self, severity: _SeverityModule) -> None:
+    def test_high_to_blocker(self) -> None:
         assert severity.bump("high") == "blocker"
 
-    def test_blocker_caps(self, severity: _SeverityModule) -> None:
+    def test_blocker_caps(self) -> None:
         assert severity.bump("blocker") == "blocker"
 
-    def test_unknown_raises(self, severity: _SeverityModule) -> None:
+    def test_unknown_raises(self) -> None:
         with pytest.raises(severity.RubricError, match="unknown severity"):
             _ = severity.bump("critical")
 
 
 class TestComputeSeverity:
-    def test_no_bumps(self, severity: _SeverityModule) -> None:
+    def test_no_bumps(self) -> None:
         # Class-private encapsulation leak example from dimensions.md.
         assert (
             severity.compute_severity(
@@ -59,7 +44,7 @@ class TestComputeSeverity:
             == "low"
         )
 
-    def test_contract_bump_on_sensitive_dim(self, severity: _SeverityModule) -> None:
+    def test_contract_bump_on_sensitive_dim(self) -> None:
         # security at the contract boundary: medium base → high.
         assert (
             severity.compute_severity(
@@ -71,7 +56,7 @@ class TestComputeSeverity:
             == "high"
         )
 
-    def test_contract_does_not_bump_complexity(self, severity: _SeverityModule) -> None:
+    def test_contract_does_not_bump_complexity(self) -> None:
         # complexity is NOT location-sensitive per the rubric table.
         assert (
             severity.compute_severity(
@@ -83,7 +68,7 @@ class TestComputeSeverity:
             == "medium"
         )
 
-    def test_contract_does_not_bump_deslop(self, severity: _SeverityModule) -> None:
+    def test_contract_does_not_bump_deslop(self) -> None:
         assert (
             severity.compute_severity(
                 dimension="deslop",
@@ -94,7 +79,7 @@ class TestComputeSeverity:
             == "medium"
         )
 
-    def test_contract_does_not_bump_assertions(self, severity: _SeverityModule) -> None:
+    def test_contract_does_not_bump_assertions(self) -> None:
         assert (
             severity.compute_severity(
                 dimension="assertions",
@@ -105,7 +90,7 @@ class TestComputeSeverity:
             == "medium"
         )
 
-    def test_structural_bump(self, severity: _SeverityModule) -> None:
+    def test_structural_bump(self) -> None:
         assert (
             severity.compute_severity(
                 dimension="complexity",  # not location-sensitive — isolate structural bump
@@ -116,7 +101,7 @@ class TestComputeSeverity:
             == "medium"
         )
 
-    def test_both_bumps_canonical_example(self, severity: _SeverityModule) -> None:
+    def test_both_bumps_canonical_example(self) -> None:
         # The dimensions.md "mental shortcut": encapsulation leak at slice index.
         # base high → contract bump (high→blocker) → structural bump (capped) = blocker.
         assert (
@@ -129,7 +114,7 @@ class TestComputeSeverity:
             == "blocker"
         )
 
-    def test_cap_at_blocker(self, severity: _SeverityModule) -> None:
+    def test_cap_at_blocker(self) -> None:
         assert (
             severity.compute_severity(
                 dimension="security",
@@ -140,7 +125,7 @@ class TestComputeSeverity:
             == "blocker"
         )
 
-    def test_unknown_dimension(self, severity: _SeverityModule) -> None:
+    def test_unknown_dimension(self) -> None:
         with pytest.raises(severity.RubricError, match="unknown dimension"):
             _ = severity.compute_severity(
                 dimension="vibes",
@@ -149,7 +134,7 @@ class TestComputeSeverity:
                 fix_cost_later="contained",
             )
 
-    def test_unknown_base(self, severity: _SeverityModule) -> None:
+    def test_unknown_base(self) -> None:
         with pytest.raises(severity.RubricError, match="unknown base"):
             _ = severity.compute_severity(
                 dimension="security",
@@ -158,7 +143,7 @@ class TestComputeSeverity:
                 fix_cost_later="contained",
             )
 
-    def test_unknown_location(self, severity: _SeverityModule) -> None:
+    def test_unknown_location(self) -> None:
         with pytest.raises(severity.RubricError, match="unknown location"):
             _ = severity.compute_severity(
                 dimension="security",
@@ -167,7 +152,7 @@ class TestComputeSeverity:
                 fix_cost_later="contained",
             )
 
-    def test_unknown_fix_cost_later(self, severity: _SeverityModule) -> None:
+    def test_unknown_fix_cost_later(self) -> None:
         with pytest.raises(severity.RubricError, match="unknown fix-cost-later"):
             _ = severity.compute_severity(
                 dimension="security",
@@ -178,30 +163,30 @@ class TestComputeSeverity:
 
 
 class TestBucketFixCostNow:
-    def test_contained_one_file(self, severity: _SeverityModule) -> None:
+    def test_contained_one_file(self) -> None:
         assert severity.bucket_fix_cost_now(file_count=1) == "contained"
 
-    def test_contained_two_files(self, severity: _SeverityModule) -> None:
+    def test_contained_two_files(self) -> None:
         assert severity.bucket_fix_cost_now(file_count=2) == "contained"
 
-    def test_moderate_lower_bound(self, severity: _SeverityModule) -> None:
+    def test_moderate_lower_bound(self) -> None:
         assert severity.bucket_fix_cost_now(file_count=3) == "moderate"
 
-    def test_moderate_upper_bound(self, severity: _SeverityModule) -> None:
+    def test_moderate_upper_bound(self) -> None:
         assert severity.bucket_fix_cost_now(file_count=10) == "moderate"
 
-    def test_sprawling_by_file_count(self, severity: _SeverityModule) -> None:
+    def test_sprawling_by_file_count(self) -> None:
         assert severity.bucket_fix_cost_now(file_count=11) == "sprawling"
 
-    def test_sprawling_by_modules_overrides_low_files(self, severity: _SeverityModule) -> None:
+    def test_sprawling_by_modules_overrides_low_files(self) -> None:
         # Two files but two modules — multi-module is sprawling regardless of count.
         assert severity.bucket_fix_cost_now(file_count=2, module_count=2) == "sprawling"
 
-    def test_negative_files_rejected(self, severity: _SeverityModule) -> None:
+    def test_negative_files_rejected(self) -> None:
         with pytest.raises(severity.RubricError, match="file_count must be"):
             _ = severity.bucket_fix_cost_now(file_count=-1)
 
-    def test_zero_modules_rejected(self, severity: _SeverityModule) -> None:
+    def test_zero_modules_rejected(self) -> None:
         with pytest.raises(severity.RubricError, match="module_count must be"):
             _ = severity.bucket_fix_cost_now(file_count=1, module_count=0)
 
