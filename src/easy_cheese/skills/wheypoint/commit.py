@@ -42,6 +42,8 @@ first: an identical genesis resubmission is a replay, not a conflict.
 
 from __future__ import annotations
 
+from typing import cast
+
 from attrs import define, evolve
 from easy_cheese_schemas import (
     SCHEMA_VERSION,
@@ -49,6 +51,7 @@ from easy_cheese_schemas import (
     EntryKind,
     EntryState,
     EntryTransition,
+    NextAction,
     ProposedEntry,
     ProtectedEntry,
     RepositoryProvenance,
@@ -134,14 +137,17 @@ def commit(
     delta: WheypointDelta,
     *,
     store: storage.WorkStore,
-    repository: RepositoryProvenance = RepositoryProvenance(),
+    repository: RepositoryProvenance | None = None,
     durability: Durability = Durability.CANONICAL_LOCAL,
 ) -> CommitResult:
     """Apply `delta` to the store's current record under the record lock."""
+    repository_value: RepositoryProvenance = (
+        RepositoryProvenance() if repository is None else repository
+    )
     if delta.work_id != store.work_id:
         raise CommitError(
             f"delta names work {delta.work_id!r} but the store holds "
-            f"{store.work_id!r}"
+            + f"{store.work_id!r}"
         )
     fingerprint = records.request_fingerprint(delta)
     with store.lock():
@@ -150,7 +156,7 @@ def commit(
         except ValueError as exc:
             raise CommitError(
                 f"{storage.RECORD_FILENAME} for work {store.work_id!r} cannot be "
-                f"read, so no delta can be applied to it: {exc}"
+                + f"read, so no delta can be applied to it: {exc}"
             ) from exc
         if delta.expected_revision_id == GENESIS_PARENT:
             replay = _find_replay(store, delta, fingerprint)
@@ -159,8 +165,8 @@ def commit(
                     return _replayed(store, replay, current)
                 raise GenesisConflictError(
                     f"work {store.work_id!r} already holds revision "
-                    f"{current.revision_id!r}: a genesis delta creates the first "
-                    "record and never replaces a live one"
+                    + f"{current.revision_id!r}: a genesis delta creates the first "
+                    + "record and never replaces a live one"
                 )
             if replay is None:
                 # No record, but the history it pointed at can still be on
@@ -176,13 +182,13 @@ def commit(
                 store,
                 delta,
                 fingerprint=fingerprint,
-                repository=repository,
+                repository=repository_value,
                 durability=durability,
             )
         if current is None:
             raise CommitError(
                 f"work {store.work_id!r} has no record to apply a delta to; "
-                f"a first delta must name {GENESIS_PARENT!r} as its parent"
+                + f"a first delta must name {GENESIS_PARENT!r} as its parent"
             )
         replay = _find_replay(store, delta, fingerprint)
         if replay is not None and replay.parent_revision_id != current.revision_id:
@@ -193,7 +199,7 @@ def commit(
         if delta.expected_revision_id != current.revision_id:
             raise StaleParentError(
                 f"delta expects revision {delta.expected_revision_id!r} but the "
-                f"current revision is {current.revision_id!r}"
+                + f"current revision is {current.revision_id!r}"
             )
         _check_lineage(store, current)
         _check_rehydration(delta, current)
@@ -202,7 +208,7 @@ def commit(
             delta,
             current,
             fingerprint=fingerprint,
-            repository=repository,
+            repository=repository_value,
             durability=durability,
         )
 
@@ -221,8 +227,8 @@ def _refuse_over_existing_history(store: storage.WorkStore) -> None:
         return
     raise GenesisConflictError(
         f"work {store.work_id!r} has no {storage.RECORD_FILENAME}, but its work "
-        f"directory still holds {'; '.join(held)}: a genesis delta creates the "
-        "first record and never orphans existing history"
+        + f"directory still holds {'; '.join(held)}: a genesis delta creates the "
+        + "first record and never orphans existing history"
     )
 
 
@@ -273,12 +279,12 @@ def _check_lineage(store: storage.WorkStore, current: WheypointRecord) -> None:
     if parent is None:
         raise CommitError(
             f"current revision {current.revision_id!r} has no immutable receipt "
-            "in this store"
+            + "in this store"
         )
     if records.revision_digest(parent) != current.revision_digest:
         raise CommitError(
             f"current revision {current.revision_id!r} does not match the digest "
-            "the record quotes"
+            + "the record quotes"
         )
 
 
@@ -288,8 +294,8 @@ def _check_rehydration(delta: WheypointDelta, current: WheypointRecord) -> None:
     if delta.rehydrated_from_revision_id != current.revision_id:
         raise CommitError(
             "a compacted delta must be rehydrated from the current revision "
-            f"{current.revision_id!r}, not "
-            f"{delta.rehydrated_from_revision_id!r}"
+            + f"{current.revision_id!r}, not "
+            + f"{delta.rehydrated_from_revision_id!r}"
         )
 
 
@@ -326,8 +332,16 @@ def _revision_id(delta: WheypointDelta, fingerprint: str) -> str:
     return f"rev-{digest[len(canonical.DIGEST_PREFIX) :][:_ID_HEX]}"
 
 
+def _proposed_entries(delta: WheypointDelta, kind: EntryKind) -> list[ProposedEntry]:
+    if kind is EntryKind.DECISION:
+        return list(delta.add_decisions or [])
+    if kind is EntryKind.QUESTION:
+        return list(delta.add_questions or [])
+    return list(delta.add_blockers or [])
+
+
 def _additions(delta: WheypointDelta, kind: EntryKind) -> list[ProtectedEntry]:
-    proposed = getattr(delta, _ADDITION_FIELDS[kind]) or []
+    proposed = _proposed_entries(delta, kind)
     return [
         ProtectedEntry(
             entry_id=_entry_id(delta, entry, index),
@@ -338,6 +352,16 @@ def _additions(delta: WheypointDelta, kind: EntryKind) -> list[ProtectedEntry]:
         )
         for index, entry in enumerate(proposed)
     ]
+
+
+def _existing_entries(
+    current: WheypointRecord, kind: EntryKind
+) -> list[ProtectedEntry]:
+    if kind is EntryKind.DECISION:
+        return current.decisions
+    if kind is EntryKind.QUESTION:
+        return current.questions
+    return current.blockers
 
 
 def _transitioned(
@@ -370,8 +394,8 @@ def _apply(
 
     kept: dict[EntryKind, list[ProtectedEntry]] = {}
     preserved: list[str] = []
-    for kind, record_field in _RECORD_FIELDS.items():
-        existing = getattr(current, record_field)
+    for kind in _RECORD_FIELDS:
+        existing = _existing_entries(current, kind)
         kept[kind] = [
             _transitioned(entry, by_entry.get(entry.entry_id)) for entry in existing
         ]
@@ -430,12 +454,13 @@ def _genesis(
     if missing:
         raise CommitError(
             "a genesis delta has no parent to carry state from, so it must "
-            f"carry {', '.join(missing)}"
+            + f"carry {', '.join(missing)}"
         )
+    next_action = cast(NextAction, delta.next_action)
     if delta.compacted:
         raise CommitError(
             "a genesis delta cannot declare compaction: there is no current "
-            "revision to rehydrate from"
+            + "revision to rehydrate from"
         )
     if delta.transitions:
         raise CommitError("a genesis delta has no existing entries to transition")
@@ -447,7 +472,7 @@ def _genesis(
     if created is None:
         raise CommitError(
             "a genesis delta must carry session_provenance.captured_at: the "
-            "runtime derives the record's created time rather than reading a clock"
+            + "runtime derives the record's created time rather than reading a clock"
         )
 
     additions = {kind: _additions(delta, kind) for kind in _ADDITION_FIELDS}
@@ -467,7 +492,7 @@ def _genesis(
             revision_digest=_UNPINNED_DIGEST,
             orientation=delta.orientation or "",
             working_context=list(delta.working_context or []),
-            next_action=delta.next_action,
+            next_action=next_action,
             decisions=additions[EntryKind.DECISION],
             questions=additions[EntryKind.QUESTION],
             blockers=additions[EntryKind.BLOCKER],

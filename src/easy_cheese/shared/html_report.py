@@ -194,7 +194,7 @@ def _render_chunk(lines: list[str]) -> list[str]:
         if _LIST_ITEM.match(line):
             flush()
             j = i
-            items = []
+            items: list[str] = []
             while j < n and _LIST_ITEM.match(lines[j]):
                 items.append(lines[j])
                 j += 1
@@ -204,7 +204,7 @@ def _render_chunk(lines: list[str]) -> list[str]:
         if line.lstrip().startswith(">"):
             flush()
             j = i
-            quoted = []
+            quoted: list[str] = []
             while j < n and lines[j].lstrip().startswith(">"):
                 content = lines[j].lstrip()[1:]
                 if content.startswith(" "):
@@ -222,13 +222,16 @@ def _render_chunk(lines: list[str]) -> list[str]:
 
 def _render_list(items: list[str]) -> str:
     """One nesting level via a fixed 2-space indent unit (not CommonMark width-matching)."""
-    top_ordered = _LIST_ITEM.match(items[0]).group(2).endswith(".")
+    first_match = _LIST_ITEM.match(items[0])
+    assert first_match is not None
+    top_ordered = first_match.group(2).endswith(".")
     top_tag = "ol" if top_ordered else "ul"
     parts = [f"<{top_tag}>"]
     li_open = False
     nested_tag: str | None = None
     for item in items:
         m = _LIST_ITEM.match(item)
+        assert m is not None
         indent = len(m.group(1))
         ordered = m.group(2).endswith(".")
         text = _inline(m.group(3))
@@ -307,7 +310,7 @@ def _inline(text: str) -> str:
     code span stays literal instead of turning into <strong>.
     """
     text = text.replace("\x00", "\uFFFD")
-    parts = []
+    parts: list[str] = []
     for idx, seg in enumerate(_CODE_SPAN.split(text)):
         if idx % 2 == 1:
             parts.append(f"<code>{html.escape(seg)}</code>")
@@ -341,13 +344,13 @@ def _inline_spans(seg: str) -> str:
     """
     links: list[tuple[str, str]] = []
 
-    def _stash(m: re.Match) -> str:
+    def _stash(m: re.Match[str]) -> str:
         links.append((m.group(1), m.group(2)))
         return f"\x00{len(links) - 1}\x00"
 
     s = _emphasis(_LINK.sub(_stash, seg))
 
-    def _restore(m: re.Match) -> str:
+    def _restore(m: re.Match[str]) -> str:
         text, url = links[int(m.group(1))]
         return _render_link(_emphasis(text), url)
 

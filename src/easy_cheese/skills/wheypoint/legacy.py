@@ -161,9 +161,7 @@ def _parse_legacy_header(text: str) -> LegacyHandoffSlug:
             break
         key = match.group("key")
         if key not in _ALLOWED_HEADER_KEYS:
-            if orientation is None:
-                raise LegacyDecodeError(f"unknown handoff key {key!r}")
-            break
+            raise LegacyDecodeError(f"unknown handoff key {key!r}")
         if key in values:
             raise LegacyDecodeError(f"duplicate '{key}:' line in handoff preamble")
         value = match.group("value")
@@ -199,7 +197,7 @@ def _parse_legacy_header(text: str) -> LegacyHandoffSlug:
     )
 
 
-def _parse_legacy_note(text: str) -> LegacyHandoffSlug:
+def parse_legacy_note(text: str) -> LegacyHandoffSlug:
     """Decode a raw preamble or a historical handoff wrapper."""
     return _parse_legacy_header(_unwrap_legacy_note(text))
 
@@ -317,20 +315,20 @@ def find_legacy_note(
             raise LegacyLookupError(
                 "absolute legacy reference must be a .cheese/notes/<slug>.md path"
             )
-        searched = (str(path),)
+        searched_path = (str(path),)
         if path.is_file():
             root = path.parent.parent.parent
             return LegacyLookup(
                 outcome=LegacyOutcome.FOUND,
                 matches=(LegacyNote(worktree=root, path=path),),
-                searched=searched,
+                searched=searched_path,
             )
-        return LegacyLookup(outcome=LegacyOutcome.NOT_FOUND, searched=searched)
+        return LegacyLookup(outcome=LegacyOutcome.NOT_FOUND, searched=searched_path)
 
     if _SLUG_RE.fullmatch(slug) is None:
         raise LegacyLookupError(
             f"slug {slug!r} must be a single path segment matching "
-            f"{_SLUG_RE.pattern}"
+            + f"{_SLUG_RE.pattern}"
         )
     scan = worktree_roots(start, run=run)
     searched: list[str] = []

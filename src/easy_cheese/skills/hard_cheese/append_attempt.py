@@ -29,13 +29,19 @@ import datetime as _dt
 import os
 import subprocess
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
+from typing import TextIO, cast
 
 try:
     import fcntl  # POSIX advisory file locks
 except ImportError:  # pragma: no cover - exercised only on Windows
     fcntl = None
-    import msvcrt
+
+try:
+    import msvcrt  # Windows advisory file locks
+except ImportError:  # pragma: no cover - exercised only on POSIX
+    msvcrt = None
 
 from easy_cheese.shared import cli
 
@@ -47,6 +53,7 @@ def _lock(fd: int, *, exclusive: bool) -> None:
     if fcntl is not None:
         fcntl.flock(fd, fcntl.LOCK_EX if exclusive else fcntl.LOCK_UN)
     else:  # pragma: no cover - Windows only
+        assert msvcrt is not None
         msvcrt.locking(fd, msvcrt.LK_LOCK if exclusive else msvcrt.LK_UNLCK, 1)
 
 
@@ -91,8 +98,8 @@ def _atomic_rewrite(target: Path, new_text: str) -> None:
     fd, tmp_name = tempfile.mkstemp(prefix=target.name + ".", dir=str(target.parent))
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            fh.write(new_text)
-        Path(tmp_name).replace(target)
+            _ = fh.write(new_text)
+        _ = Path(tmp_name).replace(target)
     except Exception:
         # Best-effort cleanup; do not mask the original error.
         with contextlib.suppress(OSError):
@@ -110,7 +117,7 @@ def _append_row(target: Path, row: str) -> None:
     _atomic_rewrite(target, existing + row)
 
 
-def _with_flock(lock_path: Path, fn) -> None:
+def _with_flock(lock_path: Path, fn: Callable[[], None]) -> None:
     """Run fn() while holding an exclusive advisory lock on lock_path.
 
     Uses POSIX ``fcntl.flock`` where available and falls back to
@@ -131,27 +138,34 @@ def _with_flock(lock_path: Path, fn) -> None:
 
 
 def _cmd_append(args: argparse.Namespace) -> None:
-    slug = _validate_slug(args.slug)
+    status = cast(str, args.status)
+    score = cast(str, args.score)
+    feedback = cast(str, args.feedback)
+    explanation = cast(str, args.explanation)
+    json_mode = cast(bool, args.json_mode)
+    stdout = cast("TextIO | None", args.stdout)
+
+    slug = _validate_slug(cast(str, args.slug))
     artifact_dir = _artifact_dir()
     target = artifact_dir / f"{slug}.md"
     lock = artifact_dir / f".{slug}.lock"
     timestamp = _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds")
-    row = f"| {timestamp} | {_head_sha()} | {_escape_cell(args.status)} | {_escape_cell(str(args.score))} | {_escape_cell(args.feedback)} | {_escape_cell(args.explanation)} |\n"
+    row = f"| {timestamp} | {_head_sha()} | {_escape_cell(status)} | {_escape_cell(score)} | {_escape_cell(feedback)} | {_escape_cell(explanation)} |\n"
     _with_flock(lock, lambda: _append_row(target, row))
     try:
         rel = target.relative_to(REPO_ROOT)
         artifact_str = str(rel)
     except ValueError:
         artifact_str = str(target)
-    cli.emit({"slug": slug, "artifact": artifact_str, "appended": True}, json_mode=args.json_mode, stdout=args.stdout)
+    cli.emit({"slug": slug, "artifact": artifact_str, "appended": True}, json_mode=json_mode, stdout=stdout)
 
 
 def _setup(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--slug", required=True, help="artifact slug (no slashes, no '..')")
-    parser.add_argument("--status", required=True, help="PASS | FAIL | ERROR | LOGGED | FAILED")
-    parser.add_argument("--score", required=True, help="SOLO level 1-5 (or '-' when status=LOGGED)")
-    parser.add_argument("--feedback", required=True, help="one-line judge feedback")
-    parser.add_argument("--explanation", required=True, help="user explanation verbatim")
+    _ = parser.add_argument("--slug", required=True, help="artifact slug (no slashes, no '..')")
+    _ = parser.add_argument("--status", required=True, help="PASS | FAIL | ERROR | LOGGED | FAILED")
+    _ = parser.add_argument("--score", required=True, help="SOLO level 1-5 (or '-' when status=LOGGED)")
+    _ = parser.add_argument("--feedback", required=True, help="one-line judge feedback")
+    _ = parser.add_argument("--explanation", required=True, help="user explanation verbatim")
     parser.set_defaults(func=_cmd_append)
 
 

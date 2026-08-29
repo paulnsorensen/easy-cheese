@@ -17,7 +17,7 @@ import re
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
-from typing import NamedTuple
+from typing import NamedTuple, TypedDict
 
 from easy_cheese.shared import git_utils
 
@@ -95,7 +95,7 @@ def phase_skill(phase: str) -> str:
     return PHASE_SKILL.get(phase, f"/{phase}")
 
 
-def validate_slug(slug: str) -> str | None:
+def validate_slug(slug: object) -> str | None:
     """Return an error string if invalid, else None."""
     if not isinstance(slug, str) or not slug:
         return "slug must be a non-empty string"
@@ -172,12 +172,14 @@ def _slug_from_remote(url: str) -> str:
 def _git_identity() -> str | None:
     """``owner/repo`` from origin, else the git toplevel dir name, else None."""
     try:
-        remote = git_utils.run_git(
+        remote: subprocess.CompletedProcess[str] = git_utils.run_git(
             ["config", "--get", "remote.origin.url"], timeout=5
         )
         if remote.returncode == 0 and remote.stdout.strip():
             return _slug_from_remote(remote.stdout.strip())
-        top = git_utils.run_git(["rev-parse", "--show-toplevel"], timeout=5)
+        top: subprocess.CompletedProcess[str] = git_utils.run_git(
+            ["rev-parse", "--show-toplevel"], timeout=5
+        )
         if top.returncode == 0 and top.stdout.strip():
             return Path(top.stdout.strip()).name
     except (OSError, subprocess.SubprocessError):
@@ -304,7 +306,9 @@ def existing_artifacts(
 def _git_toplevel() -> Path | None:
     """Absolute git worktree root, or None outside a repo."""
     try:
-        top = git_utils.run_git(["rev-parse", "--show-toplevel"], timeout=5)
+        top: subprocess.CompletedProcess[str] = git_utils.run_git(
+            ["rev-parse", "--show-toplevel"], timeout=5
+        )
     except (OSError, subprocess.SubprocessError):
         return None
     if top.returncode == 0 and top.stdout.strip():
@@ -358,12 +362,28 @@ def _phase_entries(phase: str, repo_root: Path) -> list[tuple[str, Path]]:
 _FUZZY_CUTOFF = 0.6
 
 
+class SlugMatch(TypedDict):
+    """One candidate artifact path returned by ``resolve_slug``."""
+
+    abs_path: str
+    phase: str
+    skill: str
+    confidence: float
+
+
+class ResolveSlugResult(TypedDict):
+    """Return shape of ``resolve_slug``."""
+
+    matches: list[SlugMatch]
+    fallback_roots: list[str]
+
+
 def resolve_slug(
     slug: str,
     *,
     phase_hint: str | None = None,
     repo_root: Path | str | None = None,
-) -> dict:
+) -> ResolveSlugResult:
     """Resolve a slug to absolute artifact path(s) without relative-path guessing.
 
     Three tiers: exact stem match (confidence 1.0), fuzzy stem match
@@ -383,7 +403,7 @@ def resolve_slug(
     repo = _resolve_repo_root(repo_root)
     phases = [phase_hint] if phase_hint is not None else known
 
-    exact: list[dict] = []
+    exact: list[SlugMatch] = []
     fuzzy_pool: list[tuple[str, Path, str]] = []
     searched_roots: list[str] = []
     for phase in phases:
@@ -405,7 +425,7 @@ def resolve_slug(
         exact.sort(key=lambda m: (m["phase"], m["abs_path"]))
         return {"matches": exact, "fallback_roots": []}
 
-    fuzzy: list[dict] = []
+    fuzzy: list[SlugMatch] = []
     for stem, path, phase in fuzzy_pool:
         ratio = difflib.SequenceMatcher(None, slug, stem).ratio()
         if ratio >= _FUZZY_CUTOFF:

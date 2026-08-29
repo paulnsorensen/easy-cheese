@@ -243,7 +243,8 @@ def _resolve_slug(slug: str, checks: _Checks) -> Resolution:
                 + ", ".join(matches)
             ),
         )
-    return _validate(matches[0], ResolutionSource.SLUG, checks, searched=searched)
+    only_match = next(iter(matches))
+    return _validate(only_match, ResolutionSource.SLUG, checks, searched=searched)
 
 
 def _validate(
@@ -303,7 +304,7 @@ def _validate(
         return _gate(
             resolution,
             f"reference names revision {expected_revision_id!r}, but the current "
-            f"revision is {report.record.revision_id!r}",
+            + f"revision is {report.record.revision_id!r}",
         )
     if report.record.status is WheypointStatus.GATED:
         return _gate(
@@ -351,7 +352,7 @@ def resolve_legacy(
             detail=lookup.error,
         )
     try:
-        slug_block = legacy_mod._parse_legacy_note(
+        slug_block = legacy_mod.parse_legacy_note(
             note.path.read_text(encoding="utf-8")
         )
     except (legacy_mod.LegacyDecodeError, OSError) as exc:
@@ -376,7 +377,7 @@ def resolve_legacy(
             return _gate(
                 found,
                 f"declared artifact {slug_block.artifact!r} must be a "
-                f"repo-relative regular file under {worktree}",
+                + f"repo-relative regular file under {worktree}",
             )
         candidate = worktree / artifact
         try:
@@ -385,21 +386,21 @@ def resolve_legacy(
             return _gate(
                 found,
                 f"declared artifact {slug_block.artifact!r} does not resolve to "
-                f"an existing regular file under {worktree}",
+                + f"an existing regular file under {worktree}",
             )
         try:
-            resolved_artifact.relative_to(worktree)
+            _ = resolved_artifact.relative_to(worktree)
         except ValueError:
             return _gate(
                 found,
                 f"declared artifact {slug_block.artifact!r} resolves outside "
-                f"legacy worktree {worktree}",
+                + f"legacy worktree {worktree}",
             )
         if not resolved_artifact.is_file():
             return _gate(
                 found,
                 f"declared artifact {slug_block.artifact!r} must be an existing "
-                "regular file",
+                + "regular file",
             )
     if slug_block.is_halt():
         reason = slug_block.halt_reason or "halt status"

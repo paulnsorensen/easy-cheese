@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import re
+from typing import cast
 
 from attrs import evolve
 from easy_cheese_schemas import (
@@ -120,7 +121,7 @@ def _preamble(lines: list[str]) -> dict[str, str]:
     if len(lines) <= _ORIENTATION_LINE:
         raise ProjectionParseError(
             f"projection needs {_ORIENTATION_LINE + 1} preamble lines, "
-            f"got {len(lines)}"
+            + f"got {len(lines)}"
         )
     values: dict[str, str] = {}
     for index, key in enumerate(_PREAMBLE_KEYS):
@@ -163,13 +164,14 @@ def _dossier(lines: list[str]) -> list[DecisionFork]:
     if len(body) < 3 or body[0] != _FENCE or body[-1] != "```":
         raise ProjectionParseError(f"{_DOSSIER_HEADING!r} must hold one json block")
     try:
-        payload = json.loads("\n".join(body[1:-1]))
+        payload = cast(object, json.loads("\n".join(body[1:-1])))
     except ValueError as exc:
         raise ProjectionParseError(f"decision dossier is not JSON: {exc}") from exc
     if not isinstance(payload, list):
         raise ProjectionParseError("decision dossier must be a JSON array")
+    forks = cast("list[object]", payload)
     try:
-        return [records.structure(fork, DecisionFork) for fork in payload]
+        return [records.structure(fork, DecisionFork) for fork in forks]
     except records.RecordError as exc:
         raise ProjectionParseError(str(exc)) from exc
 
