@@ -7,7 +7,8 @@ from enum import Enum
 from pathlib import Path
 from typing import TypeAlias
 
-from easy_cheese.shared.cut.red_gate import GateValidationError, consume_press_boundary
+from easy_cheese.shared.cut.gate_receipts import GateValidationError
+from easy_cheese.shared.cut.red_gate import consume_press_boundary
 
 
 class Outcome(str, Enum):
@@ -57,7 +58,7 @@ def route_from_receipt(
 ) -> Action:
     """Validate and consume one immutable Press interval before routing it."""
     resolved = _coerce_outcome(outcome)
-    if resolved not in {Outcome.GREEN, Outcome.IN_CONTRACT_RED}:
+    if resolved is not Outcome.GREEN and resolved is not Outcome.IN_CONTRACT_RED:
         return press_route(resolved, 0)
     try:
         evidence = consume_press_boundary(
@@ -89,7 +90,7 @@ def _coerce_outcome(outcome: object) -> Outcome:
         ) from exc
 
 
-def _check_repair_cycles(repair_cycles: int) -> None:
+def _check_repair_cycles(repair_cycles: object) -> None:
     if isinstance(repair_cycles, bool) or not isinstance(repair_cycles, int):
         raise TypeError("repair_cycles must be a non-negative integer")
     if repair_cycles < 0:

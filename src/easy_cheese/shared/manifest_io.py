@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import json
 import sys
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
 
 from easy_cheese_schemas.io import ManifestLoadError, parse_mapping
 
@@ -16,7 +16,7 @@ __all__ = [
     "json_command",
 ]
 
-def read_mapping_arg_or_stdin(argv: list[str], usage: str) -> dict[str, Any]:
+def read_mapping_arg_or_stdin(argv: list[str], usage: str) -> dict[str, object]:
     """Read one optional path argument or stdin, returning a parsed mapping."""
     if len(argv) > 1:
         raise ManifestLoadError(usage)
@@ -30,7 +30,7 @@ def read_mapping_arg_or_stdin(argv: list[str], usage: str) -> dict[str, Any]:
     return parse_mapping(sys.stdin.read())
 
 
-def json_command(func: Callable[..., Any], usage: str) -> Callable[[list[str]], int]:
+def json_command(func: Callable[..., object], usage: str) -> Callable[[list[str]], int]:
     """Build a `main(argv)` that reads a JSON mapping, calls `func`, and prints JSON.
 
     Exit codes and the "ERROR: " stderr prefix match the previously hand-written
@@ -49,7 +49,7 @@ def json_command(func: Callable[..., Any], usage: str) -> Callable[[list[str]], 
             print(f"ERROR: {exc}", file=sys.stderr)
             return 1
         json.dump(result, sys.stdout, indent=2)
-        sys.stdout.write("\n")
+        _ = sys.stdout.write("\n")
         return 0
 
     return main

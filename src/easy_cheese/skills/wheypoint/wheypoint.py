@@ -34,7 +34,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any, TextIO
+from typing import NoReturn, TextIO, cast, override
 
 from easy_cheese_schemas import WheypointDelta
 
@@ -56,7 +56,7 @@ class _Refused(Exception):
 
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
-        self.code = code
+        self.code: str = code
 
 
 class _BadUsage(Exception):
@@ -64,44 +64,45 @@ class _BadUsage(Exception):
 
 
 class _Parser(argparse.ArgumentParser):
-    def error(self, message: str) -> None:
+    @override
+    def error(self, message: str) -> NoReturn:
         raise _BadUsage(message)
 
 
 def _parser(command: str) -> _Parser:
     parser = _Parser(prog=f"wheypoint.pyz {command}")
     if command == "resolve":
-        parser.add_argument(
+        _ = parser.add_argument(
             "--ref",
             required=True,
             help="an absolute projection path, a work id, or a slug",
         )
-        parser.add_argument(
+        _ = parser.add_argument(
             "--legacy",
             action="store_true",
             help="resolve a pre-kernel .cheese/notes/<slug>.md instead",
         )
     elif command == "show":
-        parser.add_argument("--work-id", required=True, dest="work_id")
+        _ = parser.add_argument("--work-id", required=True, dest="work_id")
     elif command == "lint":
-        parser.add_argument("path", help="path to a rendered projection document")
+        _ = parser.add_argument("path", help="path to a rendered projection document")
     return parser
 
 
-def _findings(findings: object) -> list[dict[str, str]]:
+def _findings(findings: tuple[lint_mod.LintFinding, ...]) -> list[dict[str, str]]:
     return [
         {"code": finding.code.value, "detail": finding.detail}
-        for finding in findings  # type: ignore[attr-defined]
+        for finding in findings
     ]
 
 
-def _maybe(obj: object) -> dict[str, Any] | None:
+def _maybe(obj: object) -> dict[str, object] | None:
     return None if obj is None else records.unstructure(obj)
 
 
-def _run_commit(args: argparse.Namespace, stdin: TextIO) -> dict[str, Any]:
+def _run_commit(_args: argparse.Namespace, stdin: TextIO) -> dict[str, object]:
     try:
-        payload = json.loads(stdin.read())
+        payload = cast(object, json.loads(stdin.read()))
     except ValueError as exc:
         raise _Refused("invalid-json", f"stdin is not one JSON value: {exc}") from exc
     try:
@@ -133,16 +134,17 @@ def _run_commit(args: argparse.Namespace, stdin: TextIO) -> dict[str, Any]:
     }
 
 
-def _run_show(args: argparse.Namespace, _stdin: TextIO) -> dict[str, Any]:
+def _run_show(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
+    work_id = cast(str, args.work_id)
     try:
-        store = storage.WorkStore.open(args.work_id)
+        store = storage.WorkStore.open(work_id)
     except storage.StorageError as exc:
         raise _Refused("storage-error", str(exc)) from exc
     record = store.read_record()
     if record is None:
         raise _Refused(
             "record-missing",
-            f"work {args.work_id!r} has no record at {store.record_path}",
+            f"work {work_id!r} has no record at {store.record_path}",
         )
     return {
         "work_id": record.work_id,
@@ -153,19 +155,21 @@ def _run_show(args: argparse.Namespace, _stdin: TextIO) -> dict[str, Any]:
     }
 
 
-def _run_resolve(args: argparse.Namespace, _stdin: TextIO) -> dict[str, Any]:
+def _run_resolve(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
+    ref = cast(str, args.ref)
+    legacy_flag = cast(bool, args.legacy)
     resolution = (
-        resolve_mod.resolve_legacy(args.ref, start=Path.cwd())
-        if args.legacy
-        else resolve_mod.resolve(args.ref)
+        resolve_mod.resolve_legacy(ref, start=Path.cwd())
+        if legacy_flag
+        else resolve_mod.resolve(ref)
     )
     if resolution.outcome is resolve_mod.ResolutionOutcome.ERROR:
         raise _Refused(
             "invalid-reference",
-            resolution.detail or f"reference {args.ref!r} could not be interpreted",
+            resolution.detail or f"reference {ref!r} could not be interpreted",
         )
     return {
-        "ref": args.ref,
+        "ref": ref,
         "outcome": resolution.outcome.value,
         "dispatchable": resolution.dispatchable,
         "source": None if resolution.source is None else resolution.source.value,
@@ -183,10 +187,11 @@ def _run_resolve(args: argparse.Namespace, _stdin: TextIO) -> dict[str, Any]:
     }
 
 
-def _run_lint(args: argparse.Namespace, _stdin: TextIO) -> dict[str, Any]:
-    report = lint_mod.lint_projection_file(args.path)
+def _run_lint(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
+    path = cast(str, args.path)
+    report = lint_mod.lint_projection_file(path)
     return {
-        "path": args.path,
+        "path": path,
         "clean": report.ok,
         "findings": _findings(report.findings),
         "projection": _maybe(report.projection),
@@ -218,8 +223,8 @@ def _command_of(argv: list[str]) -> tuple[str | None, list[str]]:
     return None, []
 
 
-def _emit(stdout: TextIO, payload: dict[str, Any]) -> None:
-    stdout.write(json.dumps(payload, sort_keys=True) + "\n")
+def _emit(stdout: TextIO, payload: dict[str, object]) -> None:
+    _ = stdout.write(json.dumps(payload, sort_keys=True) + "\n")
 
 
 def _refuse(
@@ -242,14 +247,14 @@ def main(
     stdin: TextIO | None = None,
     stdout: TextIO | None = None,
 ) -> int:
-    argv = sys.argv if argv is None else argv
-    stdin = sys.stdin if stdin is None else stdin
-    stdout = sys.stdout if stdout is None else stdout
+    argv2: list[str] = sys.argv if argv is None else argv
+    stdin2: TextIO = sys.stdin if stdin is None else stdin
+    stdout2: TextIO = sys.stdout if stdout is None else stdout
 
-    command, rest = _command_of(argv)
+    command, rest = _command_of(argv2)
     if command is None:
         return _refuse(
-            stdout,
+            stdout2,
             "unknown",
             "usage",
             f"expected one of {', '.join(COMMANDS)}",
@@ -258,20 +263,20 @@ def main(
     try:
         args = _parser(command).parse_args(rest)
     except _BadUsage as exc:
-        return _refuse(stdout, command, "usage", str(exc), EXIT_USAGE)
+        return _refuse(stdout2, command, "usage", str(exc), EXIT_USAGE)
     try:
-        payload = _RUNNERS[command](args, stdin)
+        payload = _RUNNERS[command](args, stdin2)
     except _Refused as exc:
-        return _refuse(stdout, command, exc.code, str(exc), EXIT_REFUSED)
+        return _refuse(stdout2, command, exc.code, str(exc), EXIT_REFUSED)
     except Exception as exc:  # noqa: BLE001 - a traceback is not a reply
         return _refuse(
-            stdout,
+            stdout2,
             command,
             "internal-error",
             f"{type(exc).__name__}: {exc}",
             EXIT_REFUSED,
         )
-    _emit(stdout, {"ok": True, "command": command, **payload})
+    _emit(stdout2, {"ok": True, "command": command, **payload})
     return EXIT_OK
 
 

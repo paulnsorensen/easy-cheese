@@ -27,7 +27,7 @@ import argparse
 import re
 import subprocess
 from pathlib import Path
-from typing import TypedDict
+from typing import TextIO, TypedDict, cast
 
 from easy_cheese.shared import cli
 
@@ -39,6 +39,11 @@ MAX_PASSING_SCORE = 5
 class PassAttempt(TypedDict):
     sha: str
     score: int | None
+
+
+class FreshnessResult(TypedDict):
+    state: str
+    diff_head: str
 
 
 # Match a markdown table row like `| timestamp | head_sha | status | ... |`.
@@ -58,7 +63,7 @@ def git_head(cwd: Path | None = None) -> str:
     except FileNotFoundError as exc:
         raise cli.CliError("git not found on PATH") from exc
     except subprocess.CalledProcessError as exc:
-        stderr = (exc.stderr or "").strip()
+        stderr = (cast("str | None", exc.stderr) or "").strip()
         raise cli.CliError(f"git rev-parse HEAD failed: {stderr or exc}") from exc
     sha = result.stdout.strip()
     if not sha:
@@ -163,7 +168,7 @@ def decide(
     cheese_root: Path,
     repo_root: Path | None = None,
     passing_score: int = 3,
-) -> dict:
+) -> FreshnessResult:
     """Compute {state, diff_head} for `slug`. Pure modulo git + filesystem.
 
     `append-attempt.py` writes the short (abbreviated) HEAD sha; `git rev-parse
@@ -197,21 +202,27 @@ def _sha_matches(recorded: str, diff_head: str) -> bool:
 
 
 def _cmd_check(args: argparse.Namespace) -> int:
-    slug = (args.slug or "").strip()
+    slug = (cast("str | None", args.slug) or "").strip()
     if not slug:
         raise cli.CliError("--slug must not be empty")
-    cheese_root = Path(args.cheese_root) if args.cheese_root else Path(".cheese")
-    repo_root = Path(args.repo_root) if args.repo_root else None
+    cheese_root_arg = cast("str | None", args.cheese_root)
+    repo_root_arg = cast("str | None", args.repo_root)
+    passing_score = cast(int, args.passing_score)
+    json_mode = cast(bool, args.json_mode)
+    stdout = cast("TextIO | None", args.stdout)
+
+    cheese_root = Path(cheese_root_arg) if cheese_root_arg else Path(".cheese")
+    repo_root = Path(repo_root_arg) if repo_root_arg else None
     result = decide(
         slug,
         cheese_root=cheese_root,
         repo_root=repo_root,
-        passing_score=args.passing_score,
+        passing_score=passing_score,
     )
-    if args.json_mode:
-        cli.emit(result, json_mode=True, stdout=args.stdout)
+    if json_mode:
+        cli.emit(result, json_mode=True, stdout=stdout)
     else:
-        cli.emit(result["state"], stdout=args.stdout)
+        cli.emit(result["state"], stdout=stdout)
     return EXIT_FOR_STATE[result["state"]]
 
 
@@ -227,19 +238,19 @@ def _passing_score(value: str) -> int:
 
 def _setup(parser: argparse.ArgumentParser) -> None:
     parser.description = "Decide /hard-cheese freshness for <slug>."
-    parser.add_argument("--slug", required=True, help="hard-cheese slug to check")
-    parser.add_argument(
+    _ = parser.add_argument("--slug", required=True, help="hard-cheese slug to check")
+    _ = parser.add_argument(
         "--passing-score",
         type=_passing_score,
         default=3,
         help="minimum SOLO score that counts as a fresh pass (default: 3)",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--cheese-root",
         default=None,
         help="override .cheese directory (default: ./.cheese). Test hook.",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--repo-root",
         default=None,
         help="override git cwd for rev-parse (default: cwd). Test hook.",

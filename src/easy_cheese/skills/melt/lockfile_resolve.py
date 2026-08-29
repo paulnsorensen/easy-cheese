@@ -10,6 +10,7 @@ import argparse
 import subprocess
 import sys
 from pathlib import Path
+from typing import Protocol, TypedDict, cast
 
 from easy_cheese.shared.git_utils import (
     detect_lockfile_type,
@@ -17,8 +18,21 @@ from easy_cheese.shared.git_utils import (
     run_git,
 )
 
+
+class _LockfileConfig(TypedDict):
+    manifest: str
+    lockfile: str
+    regen_cmd: list[str]
+
+
+class _LockfileResult(TypedDict):
+    path: str
+    resolved: bool
+    message: str
+
+
 # Map lockfile types to regeneration commands and manifest files
-LOCKFILE_CONFIG = {
+LOCKFILE_CONFIG: dict[str, _LockfileConfig] = {
     "cargo": {
         "manifest": "Cargo.toml",
         "lockfile": "Cargo.lock",
@@ -71,8 +85,8 @@ def resolve_lockfile(
     lockfile_path: str,
     strategy: str = "theirs",
     dry_run: bool = False,
-) -> dict:
-    result = {
+) -> _LockfileResult:
+    result: _LockfileResult = {
         "path": lockfile_path,
         "resolved": False,
         "message": "",
@@ -106,13 +120,13 @@ def resolve_lockfile(
 
     if strategy in ("ours", "theirs"):
         stage = ":2:" if strategy == "ours" else ":3:"
-        git_result = run_git(["show", f"{stage}{lockfile_path}"])
+        git_result: subprocess.CompletedProcess[str] = run_git(["show", f"{stage}{lockfile_path}"])
 
         if git_result.returncode != 0:
             result["message"] = f"could not extract {strategy} version"
             return result
 
-        Path(lockfile_path).write_text(git_result.stdout)
+        _ = Path(lockfile_path).write_text(git_result.stdout)
 
     regen_result = subprocess.run(
         config["regen_cmd"],
@@ -125,14 +139,14 @@ def resolve_lockfile(
         result["message"] = f"regen failed: {regen_result.stderr.strip()}"
         return result
 
-    add_result = run_git(["add", lockfile_path])
+    add_result: subprocess.CompletedProcess[str] = run_git(["add", lockfile_path])
     if add_result.returncode != 0:
         result["message"] = f"regenerated but staging failed: {add_result.stderr.strip()}"
         return result
     if lockfile_type == "go":
         go_mod = Path(lockfile_path).parent / "go.mod"
         if go_mod.exists():
-            add_mod_result = run_git(["add", str(go_mod)])
+            add_mod_result: subprocess.CompletedProcess[str] = run_git(["add", str(go_mod)])
             if add_mod_result.returncode != 0:
                 result["message"] = (
                     f"regenerated but staging go.mod failed: {add_mod_result.stderr.strip()}"
@@ -153,35 +167,41 @@ def _collect_lockfiles(files: list[str]) -> list[str]:
     return [f for f in get_conflicted_files() if detect_lockfile_type(f)]
 
 
+class _Args(Protocol):
+    strategy: str
+    dry_run: bool
+    files: list[str]
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Resolve lockfile conflicts by taking a side and regenerating"
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--strategy",
         choices=["ours", "theirs", "regen"],
         default="theirs",
         help="Strategy: take ours, theirs, or just regenerate (default: theirs)",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Show what would be done without making changes",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "files",
         nargs="*",
         help="Specific lockfiles to resolve (default: auto-detect)",
     )
 
-    args = parser.parse_args(argv)
+    args = cast(_Args, cast(object, parser.parse_args(argv)))
     lockfiles = _collect_lockfiles(args.files)
 
     if not lockfiles:
         print("no conflicted lockfiles")
         return 0
 
-    results = []
+    results: list[_LockfileResult] = []
     for path in lockfiles:
         result = resolve_lockfile(path, args.strategy, args.dry_run)
         results.append(result)

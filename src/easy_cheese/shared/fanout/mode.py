@@ -21,7 +21,10 @@ mold hint) call to turn a curd count into a mode name.
 """
 from __future__ import annotations
 
+import argparse
 import math
+from collections.abc import Sized
+from typing import Protocol, TextIO, cast
 
 from easy_cheese.shared import cli
 
@@ -33,7 +36,7 @@ PARALLEL_THRESHOLD = 2
 DECOMPOSE_FIRST_THRESHOLD = 250
 
 
-def select_mode(curds) -> str:
+def select_mode(curds: Sized) -> str:
     """Return "parallel" when the decomposition has at least
     `PARALLEL_THRESHOLD` curds, else "linear". `curds` is any sized
     collection — only its length is consulted."""
@@ -51,32 +54,40 @@ def select_mode_from_score(score: float) -> str:
     )
 
 
-def _cmd_select(args: object) -> None:
+class _Args(Protocol):
+    count: int | None
+    score: float
+    json_mode: bool
+    stdout: TextIO
+
+
+def _cmd_select(args: argparse.Namespace) -> None:
+    a = cast(_Args, cast(object, args))
     # The decomposer knows the curd count; the count is all select_mode reads.
-    if args.count is not None:
-        if args.count < 0:
-            raise cli.CliError(f"invalid --count {args.count}: must be zero or greater")
-        cli.emit(select_mode(range(args.count)), json_mode=args.json_mode, stdout=args.stdout)
+    if a.count is not None:
+        if a.count < 0:
+            raise cli.CliError(f"invalid --count {a.count}: must be zero or greater")
+        cli.emit(select_mode(range(a.count)), json_mode=a.json_mode, stdout=a.stdout)
         return
-    score = args.score
+    score = a.score
     if not math.isfinite(score) or score < 0:
         raise cli.CliError(f"invalid --score {score}: must be zero or greater and finite")
-    cli.emit(select_mode_from_score(score), json_mode=args.json_mode, stdout=args.stdout)
+    cli.emit(select_mode_from_score(score), json_mode=a.json_mode, stdout=a.stdout)
 
 
-def _setup(parser) -> None:
+def _setup(parser: argparse.ArgumentParser) -> None:
     parser.description = (
         "Pick /ultracook's mode (linear|parallel|decompose-first) from a "
         "curd count (curd block present) or a score (no curd block)."
     )
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument(
+    _ = group.add_argument(
         "--count",
         type=int,
         default=None,
         help="Number of curds in the decomposition.",
     )
-    group.add_argument(
+    _ = group.add_argument(
         "--score",
         type=float,
         default=None,

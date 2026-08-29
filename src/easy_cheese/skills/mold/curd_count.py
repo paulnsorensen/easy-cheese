@@ -27,7 +27,7 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Any
+from typing import cast
 
 from easy_cheese.shared.fanout.mode import PARALLEL_THRESHOLD
 from easy_cheese.shared.taste_test import (
@@ -91,7 +91,7 @@ def _recommend(
         "/cook",
         None,
         f"{candidate_curds} candidate curds < {PARALLEL_THRESHOLD}; "
-        f"blast radius {radius or 'unknown'}",
+        + f"blast radius {radius or 'unknown'}",
     )
 
 
@@ -110,7 +110,7 @@ def _read_spec(spec_path: Path) -> str:
         raise SpecReadError(f"could not read spec: {exc.strerror or exc}") from exc
 
 
-def _gate_handoff(spec_path: Path, body: str) -> dict[str, Any] | None:
+def _gate_handoff(spec_path: Path, body: str) -> dict[str, object] | None:
     if (
         not re.search(r"(?m)^gate_applicability:\s*(?:\{|$)", body)
         and not is_new_mold_spec(body)
@@ -128,7 +128,7 @@ def _gate_handoff(spec_path: Path, body: str) -> dict[str, Any] | None:
     return None
 
 
-def analyze(spec_path: Path, blast_radius: str | None) -> dict:
+def analyze(spec_path: Path, blast_radius: str | None) -> dict[str, object]:
     body = _read_spec(spec_path)
     goals = _count_bullets(_extract_section(body, GOALS_HEADINGS))
     quality_gates = _count_bullets(_extract_section(body, QUALITY_GATES_HEADINGS))
@@ -138,7 +138,8 @@ def analyze(spec_path: Path, blast_radius: str | None) -> dict:
     recommended, mode, rationale = _recommend(candidate_curds, blast_radius)
     handoff = _gate_handoff(spec_path, body)
     if handoff is not None:
-        recommended = str(handoff["command"][0])
+        command = cast(list[str], handoff["command"])
+        recommended = command[0]
         rationale = f"red-required outer gate precedes {rationale}"
 
     return {
@@ -169,32 +170,34 @@ def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
         description=(__doc__ or "").splitlines()[0],
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "spec_path",
         type=Path,
         help="Path to the spec markdown file (typically .cheese/specs/<slug>.md).",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--blast-radius",
         choices=["low", "medium", "high"],
         help="Verdict from mold's shape-check; drives the recommendation when curds < threshold.",
     )
     args = parser.parse_args(argv)
+    spec_path = cast(Path, args.spec_path)
+    blast_radius = cast("str | None", args.blast_radius)
 
-    if not args.spec_path.exists():
-        print(f"error: spec not found: {args.spec_path}", file=sys.stderr)
+    if not spec_path.exists():
+        print(f"error: spec not found: {spec_path}", file=sys.stderr)
         return 2
-    if not args.spec_path.is_file():
-        print(f"error: not a file: {args.spec_path}", file=sys.stderr)
+    if not spec_path.is_file():
+        print(f"error: not a file: {spec_path}", file=sys.stderr)
         return 2
 
     try:
-        digest = analyze(args.spec_path, args.blast_radius)
+        digest = analyze(spec_path, blast_radius)
     except SpecReadError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     json.dump(digest, sys.stdout, indent=2)
-    sys.stdout.write("\n")
+    _ = sys.stdout.write("\n")
     return 0
 
 

@@ -8,7 +8,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
+from typing import cast
 
 _TIMEOUT_SECONDS = 5
 
@@ -43,7 +43,7 @@ def _configured_status(installed: bool, configured: bool) -> str:
     return "available" if configured else "not-configured"
 
 
-def detect_stack_tools(cwd: Path) -> dict[str, Any]:
+def detect_stack_tools(cwd: Path) -> dict[str, object]:
     """Return deterministic installation and repository signals for stack tools."""
     git_dir = _git_dir(cwd)
     graphite_installed = shutil.which("gt") is not None
@@ -73,7 +73,7 @@ def detect_stack_tools(cwd: Path) -> dict[str, Any]:
         )
     )
 
-    providers = {
+    providers: dict[str, dict[str, object]] = {
         "graphite": {
             "installed": graphite_installed,
             "repository_signal": graphite_signal,
@@ -103,12 +103,13 @@ def detect_stack_tools(cwd: Path) -> dict[str, Any]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--cwd", type=Path, default=Path.cwd())
+    _ = parser.add_argument("--cwd", type=Path, default=Path.cwd())
     args = parser.parse_args(argv)
-    if not args.cwd.is_dir():
-        print(f"ERROR: not a directory: {args.cwd}", file=sys.stderr)
+    cwd = cast(Path, args.cwd)
+    if not cwd.is_dir():
+        print(f"ERROR: not a directory: {cwd}", file=sys.stderr)
         return 1
-    print(json.dumps(detect_stack_tools(args.cwd.resolve()), indent=2, sort_keys=True))
+    print(json.dumps(detect_stack_tools(cwd.resolve()), indent=2, sort_keys=True))
     return 0
 
 

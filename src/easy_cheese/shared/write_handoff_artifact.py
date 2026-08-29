@@ -28,6 +28,7 @@ import contextlib
 import os
 import tempfile
 from pathlib import Path
+from typing import Protocol, TextIO, cast
 
 from easy_cheese.shared import cli, handoff
 
@@ -42,7 +43,7 @@ def _validate_transition(
     source: str, destination: str, payload_schema_uri: str | None
 ) -> None:
     try:
-        validate_transition(
+        _ = validate_transition(
             COMPILED_TRANSITION_REGISTRY,
             source=source,
             destination=destination,
@@ -151,7 +152,7 @@ def write_artifact(
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             fd = -1
-            handle.write(contents)
+            _ = handle.write(contents)
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(tmp_name, target)
@@ -165,69 +166,86 @@ def write_artifact(
     return target
 
 
+class _Args(Protocol):
+    slug: str
+    status: str
+    next: str
+    artifact: str
+    orientation: str
+    taste_test: str | None
+    durable_flags: str | None
+    baseline: str | None
+    body_file: str | None
+    phase: str
+    payload_schema: str | None
+    root: str | None
+    stdout: TextIO
+
+
 def _cmd_write(args: argparse.Namespace) -> None:
+    a = cast(_Args, cast(object, args))
     body: str | None = None
-    if args.body_file is not None:
-        body_path = Path(args.body_file)
+    if a.body_file is not None:
+        body_path = Path(a.body_file)
         if not body_path.is_file():
             raise cli.CliError(f"--body-file not found: {body_path}")
         body = body_path.read_text(encoding="utf-8")
 
-    root = Path(args.root) if args.root else Path.cwd()
+    root = Path(a.root) if a.root else Path.cwd()
     target = write_artifact(
-        slug=args.slug,
-        status=args.status,
-        next_skill=args.next,
-        artifact=args.artifact,
-        orientation=args.orientation,
+        slug=a.slug,
+        status=a.status,
+        next_skill=a.next,
+        artifact=a.artifact,
+        orientation=a.orientation,
         body=body,
         root=root,
-        phase=args.phase,
-        payload_schema_uri=args.payload_schema,
-        taste_test=args.taste_test,
-        durable_flags=args.durable_flags,
-        baseline=args.baseline,
+        phase=a.phase,
+        payload_schema_uri=a.payload_schema,
+        taste_test=a.taste_test,
+        durable_flags=a.durable_flags,
+        baseline=a.baseline,
     )
-    cli.emit(str(target), stdout=args.stdout)
+    cli.emit(str(target), stdout=a.stdout)
 
 
 def _setup(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--slug", required=True, help="artifact slug (filename stem)")
-    parser.add_argument("--status", required=True, help="'ok' or 'halt: <reason>'")
-    parser.add_argument("--next", required=True, help="next skill name or 'done'")
-    parser.add_argument(
+    _ = parser.add_argument("--slug", required=True, help="artifact slug (filename stem)")
+    _ = parser.add_argument("--status", required=True, help="'ok' or 'halt: <reason>'")
+    _ = parser.add_argument("--next", required=True, help="next skill name or 'done'")
+    _ = parser.add_argument(
         "--artifact", required=True, help="path to prior artifact (may be empty)"
     )
-    parser.add_argument("--orientation", required=True, help="one-line orientation")
-    parser.add_argument(
+    _ = parser.add_argument("--orientation", required=True, help="one-line orientation")
+    _ = parser.add_argument(
         "--taste-test",
         default=None,
         help="optional taste_test: keyed preamble line (omitted when absent)",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--durable-flags",
         default=None,
         help="optional durable_flags: keyed preamble line (omitted when absent)",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--baseline",
         default=None,
         help="optional baseline: keyed preamble line (omitted when absent)",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--body-file", default=None, help="optional path to body content"
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--phase",
         required=True,
         help="name of THIS phase's own directory under .cheese/ (path authority)",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--payload-schema",
         default=None,
         help="payload schema URI for transition validation",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--root",
         default=None,
         help="repo root (default: cwd); .cheese/<phase>/<slug>.md is written under this",

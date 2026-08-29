@@ -25,13 +25,21 @@ from __future__ import annotations
 import argparse
 import subprocess
 import sys
+from typing import TextIO, TypedDict, cast
 
 from easy_cheese.shared import cli  # noqa: E402
 
 DEFAULT_RUNS = 3
 
 
-def rerun(cmd: str, runs: int) -> dict:
+class _RerunVerdict(TypedDict):
+    exit_code: int
+    reproduced: bool
+    runs: int
+    failures: int
+
+
+def rerun(cmd: str, runs: int) -> _RerunVerdict:
     """Execute `cmd` (shell expression) `runs` times; aggregate the verdict."""
     last_nonzero = 0
     failures = 0
@@ -49,17 +57,23 @@ def rerun(cmd: str, runs: int) -> dict:
 
 
 def _cmd(args: argparse.Namespace) -> None:
-    if not args.cmd:
+    cmd = cast("str | None", args.cmd)
+    if not cmd:
         raise cli.CliError("--cmd is required")
-    if args.runs < 1:
-        raise cli.CliError(f"--runs must be >= 1, got {args.runs}")
-    verdict = rerun(args.cmd, args.runs)
-    cli.emit(verdict, json_mode=args.json_mode, stdout=args.stdout)
+    runs = cast(int, args.runs)
+    if runs < 1:
+        raise cli.CliError(f"--runs must be >= 1, got {runs}")
+    verdict = rerun(cmd, runs)
+    cli.emit(
+        verdict,
+        json_mode=cast(bool, args.json_mode),
+        stdout=cast(TextIO, args.stdout),
+    )
 
 
 def _setup(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--cmd", help="shell expression to re-run")
-    parser.add_argument(
+    _ = parser.add_argument("--cmd", help="shell expression to re-run")
+    _ = parser.add_argument(
         "--runs",
         type=int,
         default=DEFAULT_RUNS,

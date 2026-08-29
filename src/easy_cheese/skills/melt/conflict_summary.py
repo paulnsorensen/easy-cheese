@@ -12,6 +12,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import NotRequired, Protocol, TypedDict, cast
 
 from easy_cheese.shared.git_utils import (
     get_conflicted_files,
@@ -20,6 +21,40 @@ from easy_cheese.shared.git_utils import (
     is_mergiraf_supported,
     parse_conflict_hunks,
 )
+
+
+class _Hunk(TypedDict):
+    start_line: int
+    end_line: int
+    ours: list[str]
+    base: list[str]
+    theirs: list[str]
+
+
+class _HunkSummary(TypedDict):
+    hunk_number: int
+    lines: str
+    ours: list[str]
+    theirs: list[str]
+    has_base: bool
+    context_before: list[str]
+    context_after: list[str]
+    base: NotRequired[list[str]]
+
+
+class _Summary(TypedDict):
+    path: str
+    extension: str
+    mergiraf_supported: bool
+    hunk_count: int
+    hunks: list[_HunkSummary]
+    recommendation: str
+
+
+class _ErrorSummary(TypedDict):
+    path: str
+    error: str
+
 
 _OURS_CAP = 5
 _THEIRS_CAP = 5
@@ -39,29 +74,22 @@ def _recommendation(path: str, ext: str, hunk_count: int, mergiraf_ok: bool) -> 
     return "git mergetool"
 
 
-def summarize_file(path: str, context_lines: int = 3) -> dict:
+def summarize_file(path: str, context_lines: int = 3) -> _Summary | _ErrorSummary:
     try:
         content = Path(path).read_text()
     except Exception as e:
         return {"path": path, "error": str(e)}
 
     ext = get_file_extension(path)
-    hunks = parse_conflict_hunks(content)
+    hunks = cast(list[_Hunk], parse_conflict_hunks(content))
 
-    summary = {
-        "path": path,
-        "extension": ext,
-        "mergiraf_supported": is_mergiraf_supported(path),
-        "hunk_count": len(hunks),
-        "hunks": [],
-    }
-
+    hunk_summaries: list[_HunkSummary] = []
     for i, hunk in enumerate(hunks, 1):
         before, after = get_surrounding_context(
             content, hunk["start_line"], hunk["end_line"], context_lines
         )
 
-        hunk_summary = {
+        hunk_summary: _HunkSummary = {
             "hunk_number": i,
             "lines": f"{hunk['start_line']}-{hunk['end_line']}",
             "ours": hunk["ours"],
@@ -74,15 +102,21 @@ def summarize_file(path: str, context_lines: int = 3) -> dict:
         if hunk["base"]:
             hunk_summary["base"] = hunk["base"]
 
-        summary["hunks"].append(hunk_summary)
+        hunk_summaries.append(hunk_summary)
 
-    summary["recommendation"] = _recommendation(
-        path, ext, summary["hunk_count"], summary["mergiraf_supported"]
-    )
-    return summary
+    mergiraf_supported = is_mergiraf_supported(path)
+    hunk_count = len(hunk_summaries)
+    return {
+        "path": path,
+        "extension": ext,
+        "mergiraf_supported": mergiraf_supported,
+        "hunk_count": hunk_count,
+        "hunks": hunk_summaries,
+        "recommendation": _recommendation(path, ext, hunk_count, mergiraf_supported),
+    }
 
 
-def _capped_terse(items: list, cap: int, marker: str) -> list[str]:
+def _capped_terse(items: list[str], cap: int, marker: str) -> list[str]:
     out = [f"    {marker} {line}" for line in items[:cap]]
     extra = len(items) - cap
     if extra > 0:
@@ -90,7 +124,7 @@ def _capped_terse(items: list, cap: int, marker: str) -> list[str]:
     return out
 
 
-def _render_hunk_terse(hunk: dict) -> list[str]:
+def _render_hunk_terse(hunk: _HunkSummary) -> list[str]:
     lines = [f"  [h{hunk['hunk_number']} L{hunk['lines']}]"]
     lines.extend(f"    {ctx}" for ctx in hunk["context_before"])
     lines.extend(_capped_terse(hunk["ours"], _OURS_CAP, "+"))
@@ -101,7 +135,7 @@ def _render_hunk_terse(hunk: dict) -> list[str]:
     return lines
 
 
-def format_terse_output(summaries: list) -> str:
+def format_terse_output(summaries: list[_Summary | _ErrorSummary]) -> str:
     if not summaries:
         return "no conflicts"
 
@@ -113,7 +147,7 @@ def format_terse_output(summaries: list) -> str:
         mergiraf = "y" if s["mergiraf_supported"] else "n"
         lines.append(
             f"{s['path']} hunks={s['hunk_count']} ext={s['extension']} "
-            f"mergiraf={mergiraf} rec={s['recommendation']}"
+            + f"mergiraf={mergiraf} rec={s['recommendation']}"
         )
         for hunk in s["hunks"]:
             lines.extend(_render_hunk_terse(hunk))
@@ -121,14 +155,14 @@ def format_terse_output(summaries: list) -> str:
     return "\n".join(lines)
 
 
-def _capped_verbose(items: list, cap: int, marker: str) -> list[str]:
+def _capped_verbose(items: list[str], cap: int, marker: str) -> list[str]:
     out = [f"  {marker} {line}" for line in items[:cap]]
     if len(items) > cap:
         out.append(f"  ... ({len(items) - cap} more lines)")
     return out
 
 
-def _render_hunk_verbose(hunk: dict) -> list[str]:
+def _render_hunk_verbose(hunk: _HunkSummary) -> list[str]:
     lines = [f"### Hunk {hunk['hunk_number']} (lines {hunk['lines']})"]
     if hunk["context_before"]:
         lines.append("Context before:")
@@ -147,7 +181,7 @@ def _render_hunk_verbose(hunk: dict) -> list[str]:
     return lines
 
 
-def format_verbose_output(summaries: list) -> str:
+def format_verbose_output(summaries: list[_Summary | _ErrorSummary]) -> str:
     if not summaries:
         return "No conflicted files found."
 
@@ -164,7 +198,7 @@ def format_verbose_output(summaries: list) -> str:
         lines.append(f"## {summary['path']}")
         lines.append(
             f"Extension: .{summary['extension']} | Mergiraf: {status} | "
-            f"Hunks: {summary['hunk_count']}"
+            + f"Hunks: {summary['hunk_count']}"
         )
         lines.append("")
 
@@ -179,20 +213,27 @@ def format_verbose_output(summaries: list) -> str:
     return "\n".join(lines)
 
 
+class _Args(Protocol):
+    json: bool
+    verbose: bool
+    context: int
+    files: list[str]
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Summarize merge conflicts. Default output is terse for LLMs."
     )
-    parser.add_argument("--json", action="store_true", help="Output as JSON.")
-    parser.add_argument(
+    _ = parser.add_argument("--json", action="store_true", help="Output as JSON.")
+    _ = parser.add_argument(
         "--verbose", action="store_true", help="Emit markdown-formatted human view."
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--context", type=int, default=3, help="Lines of context to show (default: 3)."
     )
-    parser.add_argument("files", nargs="*", help="Specific files (default: all conflicted files).")
+    _ = parser.add_argument("files", nargs="*", help="Specific files (default: all conflicted files).")
 
-    args = parser.parse_args(argv)
+    args = cast(_Args, cast(object, parser.parse_args(argv)))
 
     files = args.files if args.files else get_conflicted_files()
 

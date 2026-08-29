@@ -139,7 +139,7 @@ def lint_projection_text(text: str) -> LintReport:
                 LintFinding(
                     LintCode.PROJECTION_DIGEST_MISMATCH,
                     f"document hashes to {actual}, but claims "
-                    f"{parsed.projection_digest}",
+                    + f"{parsed.projection_digest}",
                 ),
             ),
             projection=parsed,
@@ -189,7 +189,7 @@ def lint_work(
             LintFinding(
                 LintCode.PROJECT_MISMATCH,
                 f"record belongs to project {record.project_key!r}, not "
-                f"{project_key!r}",
+                + f"{project_key!r}",
             )
         )
 
@@ -200,7 +200,7 @@ def lint_work(
             LintFinding(
                 LintCode.PARENT_UNRESOLVED,
                 f"record names revision {record.revision_id!r}, which has no "
-                "immutable revision file",
+                + "immutable revision file",
             )
         )
     else:
@@ -234,7 +234,7 @@ def _lint_current_projection(
     parsed = report.projection
     if parsed is None:
         return report
-    mismatches = []
+    mismatches: list[str] = []
     if parsed.work_id != record.work_id:
         mismatches.append(f"work_id {parsed.work_id!r} != {record.work_id!r}")
     if parsed.revision_id != record.revision_id:
@@ -278,7 +278,7 @@ def _chain_findings(
                 LintFinding(
                     LintCode.PARENT_UNRESOLVED,
                     f"revision {revision.revision_id!r} re-enters the chain at "
-                    f"{parent_id!r}",
+                    + f"{parent_id!r}",
                 )
             )
             break
@@ -288,7 +288,7 @@ def _chain_findings(
                 LintFinding(
                     LintCode.PARENT_UNRESOLVED,
                     f"revision {revision.revision_id!r} names parent "
-                    f"{parent_id!r}, which is not a complete immutable revision",
+                    + f"{parent_id!r}, which is not a complete immutable revision",
                 )
             )
             break
@@ -307,7 +307,7 @@ def _git_findings(
         LintFinding(
             LintCode.GIT_OBJECT_MISSING,
             f"revision {revision.revision_id!r} cites commit {commit}, which "
-            "does not resolve in this repository",
+            + "does not resolve in this repository",
         )
     ]
 

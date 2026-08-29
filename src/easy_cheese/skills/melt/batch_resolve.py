@@ -14,6 +14,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import Protocol, TypedDict, cast
 
 from easy_cheese.shared.git_utils import (
     extract_stages,
@@ -23,8 +24,26 @@ from easy_cheese.shared.git_utils import (
 )
 
 
-def resolve_file(path: str, dry_run: bool = True, verbose: bool = False) -> dict:
-    result = {
+class _ResolveResult(TypedDict):
+    path: str
+    supported: bool
+    resolved: bool
+    message: str
+
+
+class _DebugResult(TypedDict):
+    path: str
+    supported: bool
+    tempdir: str | None
+    merged_path: str | None
+    log_path: str | None
+    conflict_markers: int | None
+    exit_code: int | None
+    message: str
+
+
+def resolve_file(path: str, dry_run: bool = True, verbose: bool = False) -> _ResolveResult:
+    result: _ResolveResult = {
         "path": path,
         "supported": is_mergiraf_supported(path),
         "resolved": False,
@@ -47,11 +66,11 @@ def resolve_file(path: str, dry_run: bool = True, verbose: bool = False) -> dict
         theirs_path = str(Path(tmpdir) / "theirs")
         merged_path = str(Path(tmpdir) / "merged")
 
-        Path(base_path).write_text(base)
-        Path(ours_path).write_text(ours)
-        Path(theirs_path).write_text(theirs)
+        _ = Path(base_path).write_text(base)
+        _ = Path(ours_path).write_text(ours)
+        _ = Path(theirs_path).write_text(theirs)
 
-        cmd = [
+        cmd: list[str] = [
             "mergiraf",
             "merge",
             base_path,
@@ -88,8 +107,8 @@ def resolve_file(path: str, dry_run: bool = True, verbose: bool = False) -> dict
         if dry_run:
             result["message"] = "would resolve cleanly"
         else:
-            Path(path).write_text(merged_content)
-            add_result = run_git(["add", path])
+            _ = Path(path).write_text(merged_content)
+            add_result: subprocess.CompletedProcess[str] = run_git(["add", path])
             if add_result.returncode != 0:
                 result["resolved"] = False
                 result["message"] = f"resolved but staging failed: {add_result.stderr.strip()}"
@@ -99,9 +118,9 @@ def resolve_file(path: str, dry_run: bool = True, verbose: bool = False) -> dict
     return result
 
 
-def debug_file(path: str, keep_dir: str | None = None) -> dict:
+def debug_file(path: str, keep_dir: str | None = None) -> _DebugResult:
     """Run mergiraf with debug logging; never modifies the working tree."""
-    result = {
+    result: _DebugResult = {
         "path": path,
         "supported": is_mergiraf_supported(path),
         "tempdir": None,
@@ -128,11 +147,11 @@ def debug_file(path: str, keep_dir: str | None = None) -> dict:
     merged_path = str(Path(tmpdir) / "merged")
     log_path = str(Path(tmpdir) / "mergiraf.log")
 
-    Path(base_path).write_text(base)
-    Path(ours_path).write_text(ours)
-    Path(theirs_path).write_text(theirs)
+    _ = Path(base_path).write_text(base)
+    _ = Path(ours_path).write_text(ours)
+    _ = Path(theirs_path).write_text(theirs)
 
-    cmd = [
+    cmd: list[str] = [
         "mergiraf", "merge",
         base_path, ours_path, theirs_path,
         "-o", merged_path,
@@ -142,7 +161,7 @@ def debug_file(path: str, keep_dir: str | None = None) -> dict:
     env["RUST_LOG"] = "mergiraf=debug"
     merge_result = subprocess.run(cmd, capture_output=True, text=True, env=env)
 
-    Path(log_path).write_text(merge_result.stderr or "")
+    _ = Path(log_path).write_text(merge_result.stderr or "")
 
     result["tempdir"] = tmpdir
     result["log_path"] = log_path
@@ -162,7 +181,7 @@ def debug_file(path: str, keep_dir: str | None = None) -> dict:
     return result
 
 
-def format_debug(d: dict) -> str:
+def format_debug(d: _DebugResult) -> str:
     lines = [f"path: {d['path']}"]
     if not d["supported"] or d["tempdir"] is None:
         lines.append(f"result: {d['message']}")
@@ -187,11 +206,11 @@ def format_debug(d: dict) -> str:
     return "\n".join(lines)
 
 
-def format_terse(results: list, dry_run: bool) -> str:
+def format_terse(results: list[_ResolveResult], dry_run: bool) -> str:
     if not results:
         return "no conflicts"
 
-    lines = []
+    lines: list[str] = []
     for r in results:
         marker = "ok" if r["resolved"] else "--"
         lines.append(f"{marker} {r['path']}: {r['message']}")
@@ -202,7 +221,7 @@ def format_terse(results: list, dry_run: bool) -> str:
     return "\n".join(lines)
 
 
-def format_verbose(results: list, dry_run: bool) -> str:
+def format_verbose(results: list[_ResolveResult], dry_run: bool) -> str:
     resolved = [r for r in results if r["resolved"]]
     unresolved = [r for r in results if not r["resolved"]]
 
@@ -231,15 +250,22 @@ def format_verbose(results: list, dry_run: bool) -> str:
     return "\n".join(lines)
 
 
+class _Args(Protocol):
+    apply: bool
+    verbose: bool
+    debug: str | None
+    files: list[str]
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Batch resolve conflicts using mergiraf.")
-    parser.add_argument(
+    _ = parser.add_argument(
         "--apply", action="store_true", help="Apply resolutions (default is dry-run)."
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--verbose", action="store_true", help="Markdown-formatted output and mergiraf debug logs."
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--debug",
         metavar="PATH",
         help=(
@@ -247,9 +273,9 @@ def main(argv: list[str] | None = None) -> int:
             "RUST_LOG=mergiraf=debug, prints artifact paths. No working tree changes."
         ),
     )
-    parser.add_argument("files", nargs="*", help="Specific files (default: all conflicted files).")
+    _ = parser.add_argument("files", nargs="*", help="Specific files (default: all conflicted files).")
 
-    args = parser.parse_args(argv)
+    args = cast(_Args, cast(object, parser.parse_args(argv)))
 
     if not shutil.which("mergiraf"):
         print("mergiraf not found — install with: cargo install mergiraf", file=sys.stderr)

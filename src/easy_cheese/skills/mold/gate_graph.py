@@ -27,6 +27,7 @@ import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import cast
 
 RENDER_TARGETS = ("dot", "svg", "png", "mermaid")
 BINARY_TARGETS = {"svg", "png"}
@@ -221,66 +222,73 @@ def render(
     return target, proc.stdout
 
 
-def _load_state(path: Path) -> dict:
+def _load_state(path: Path) -> dict[str, object]:
     try:
-        obj = json.loads(path.read_text(encoding="utf-8"))
+        obj = cast(object, json.loads(path.read_text(encoding="utf-8")))
     except (OSError, ValueError) as exc:
         raise RenderError(f"could not read state file {path}: {exc}") from exc
     if not isinstance(obj, dict):
         raise RenderError(
             f"state file {path} must be a JSON object, got {type(obj).__name__}"
         )
-    return obj
+    return cast(dict[str, object], obj)
 
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
-    parser.add_argument(
+    _ = parser.add_argument(
         "--state",
         type=Path,
-        help="Optional mold state.json (reserved for per-session annotation; "
-        "the gate model itself is static).",
+        help=(
+            "Optional mold state.json (reserved for per-session annotation; "
+            "the gate model itself is static)."
+        ),
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--render",
         choices=RENDER_TARGETS,
         default="dot",
         help="Render target. svg/png need Graphviz `dot`; absent it degrades to mermaid.",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--out",
         type=Path,
-        help="Write to this path instead of stdout (required when the effective "
-        "output is binary — svg/png with Graphviz present).",
+        help=(
+            "Write to this path instead of stdout (required when the effective "
+            "output is binary — svg/png with Graphviz present)."
+        ),
     )
     args = parser.parse_args(argv)
+    state = cast("Path | None", args.state)
+    render_target = cast(str, args.render)
+    out = cast("Path | None", args.out)
 
-    if args.state is not None:
+    if state is not None:
         try:
-            _load_state(args.state)  # validated for shape; model stays static
+            _ = _load_state(state)  # validated for shape; model stays static
         except RenderError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 2
 
     try:
-        effective, payload = render(args.render)
+        effective, payload = render(render_target)
     except RenderError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
-    if effective != args.render:
+    if effective != render_target:
         print(
-            f"note: `dot` not on PATH; degraded {args.render} -> {effective}",
+            f"note: `dot` not on PATH; degraded {render_target} -> {effective}",
             file=sys.stderr,
         )
 
-    if args.out is not None:
+    if out is not None:
         try:
-            args.out.write_bytes(payload)
+            _ = out.write_bytes(payload)
         except OSError as exc:
-            print(f"error: could not write {args.out}: {exc}", file=sys.stderr)
+            print(f"error: could not write {out}: {exc}", file=sys.stderr)
             return 2
-        print(str(args.out))
+        print(str(out))
         return 0
 
     if effective in BINARY_TARGETS:
@@ -289,7 +297,7 @@ def main(argv: list[str]) -> int:
             file=sys.stderr,
         )
         return 2
-    sys.stdout.write(payload.decode("utf-8"))
+    _ = sys.stdout.write(payload.decode("utf-8"))
     return 0
 
 
