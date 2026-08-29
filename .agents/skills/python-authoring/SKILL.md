@@ -17,7 +17,7 @@ This is a repository-local skill. Keep it under `.agents/skills/python-authoring
 4. Validate untrusted input once at the boundary, then work with typed trusted data.
 5. Choose the clearest succinct Python construct; do not compress code until it becomes harder to read.
 6. Remove only slop introduced by the change and code that the change orphaned.
-7. Run targeted tests, rebuild affected bundles, then run `just check`.
+7. Type-check changed files with basedpyright, run targeted tests, rebuild affected bundles, then run `just check`.
 
 ## Keep runtime code stdlib-first
 
@@ -66,6 +66,17 @@ This is a repository-local skill. Keep it under `.agents/skills/python-authoring
 - Consolidate repetitive tests by behavior; do not add shallow input-variation tests.
 - Fix the underlying lint issue instead of adding a suppression.
 
+## Type-check with basedpyright
+
+- Run `basedpyright <changed .py files>` (fall back to `uvx basedpyright` if the binary is absent) before finishing. Changed files must report zero errors and warnings.
+- Repo config lives in `[tool.basedpyright]` in `pyproject.toml`: include paths, `pythonVersion = "3.12"`, and an execution environment pinning `src/easy_cheese_schemas` to 3.11 to honor the published wheel's `requires-python >=3.11`. `typeCheckingMode` is deliberately unset — basedpyright defaults to `recommended`, which enables every rule with an error/warning split and `failOnWarnings`, so a full run fails on warnings too.
+- Scope runs to the files the change touched: the repo carries a large pre-existing backlog, so a whole-repo run is red by design. Pre-existing diagnostics in untouched files are out of scope; report them, do not fix them. If the repo adopts a baseline (`basedpyright --writebaseline` → `.basedpyright/baseline.json`), never hand-edit it — entries for fixed diagnostics are removed automatically on the next run.
+- basedpyright is stricter than stock pyright; its extra rules are binding here: assign deliberately ignored call results to `_` (`reportUnusedCallResult`), collapse implicit string concatenations, and `cast` untrusted boundary reads to their validated type.
+- Load build-only modules that are excluded from wheels with `importlib.import_module` plus `cast`-typed `getattr`, not static imports the checker cannot resolve.
+- Fix the type at its source. When a suppression is genuinely unavoidable, use rule-scoped `# pyright: ignore[ruleName]`, never a bare `# type: ignore` or a file-wide switch — `reportIgnoreCommentWithoutRule` flags unscoped ignores.
+- Use `--outputjson` when a tool needs machine-readable diagnostics. In GitHub Actions the CLI detects CI and emits inline PR annotations with no extra flags.
+- The binary is mise-managed and pinned to an exact version (upstream recommends exact pinning for reproducibility); the `pyright` and `pyright-langserver` shims resolve to basedpyright.
+
 ## Test and finish
 
 - Test observable behavior and the reason it matters; do not add assertions that can pass when the implementation is broken.
@@ -85,4 +96,5 @@ Confirm:
 - Bundle registration and generated `.pyz` files match their sources when applicable.
 - CLI and validator failures remain loud, read-only validators remain read-only, and tests are hermetic.
 - No silent failures, speculative abstractions, narration comments, unnecessary local annotations, or unrelated cleanup remain.
+- Changed Python files pass basedpyright with zero errors and warnings.
 - A fresh `just check` run passed.
