@@ -9,12 +9,13 @@ taste_test, durable_flags, baseline.
 from __future__ import annotations
 
 import argparse
+from typing import TextIO, cast
 
 from easy_cheese.shared import cli, handoff, paths
 
 
 def _cmd(args: argparse.Namespace) -> None:
-    artifact = paths.artifact_path(args.phase, args.slug)
+    artifact = paths.artifact_path(cast(str, args.phase), cast(str, args.slug))
     if not artifact.is_file():
         raise cli.CliError(f"artifact not found: {artifact}")
     try:
@@ -33,13 +34,13 @@ def _cmd(args: argparse.Namespace) -> None:
             "baseline": slug.baseline,
         },
         json_mode=True,
-        stdout=args.stdout,
+        stdout=cast(TextIO, args.stdout),
     )
 
 
 def _setup(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--phase", required=True, choices=sorted(paths.PHASES))
-    parser.add_argument("--slug", required=True)
+    _ = parser.add_argument("--phase", required=True, choices=sorted(paths.PHASES))
+    _ = parser.add_argument("--slug", required=True)
     parser.set_defaults(func=_cmd)
 
 

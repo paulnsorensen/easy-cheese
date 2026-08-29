@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from typing import Literal, TypedDict
 
 
 # Conflict-marker prefixes (diff3 adds the ||||||| base marker). Single source
@@ -24,21 +25,26 @@ def run_git(
     *,
     cwd: str | Path | None = None,
     timeout: float | None = None,
-) -> subprocess.CompletedProcess:
+) -> subprocess.CompletedProcess[str]:
     command = ["git"]
     if cwd is not None:
         command += ["-C", str(cwd)]
     command += args
-    kwargs: dict[str, object] = {}
-    if timeout is not None:
-        kwargs["timeout"] = timeout
+    if timeout is None:
+        return subprocess.run(
+            command,
+            capture_output=capture_output,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
     return subprocess.run(
         command,
         capture_output=capture_output,
         text=True,
         encoding="utf-8",
         errors="replace",
-        **kwargs,
+        timeout=timeout,
     )
 
 
@@ -106,12 +112,25 @@ def is_mergiraf_supported(path: str) -> bool:
     return ext.lower() in supported_extensions
 
 
-def parse_conflict_hunks(content: str) -> list[dict]:
+class ConflictHunk(TypedDict):
+    start_line: int
+    end_line: int | None
+    ours: list[str]
+    base: list[str]
+    theirs: list[str]
+    marker_ours: str
+    marker_theirs: str | None
+
+
+_HunkSection = Literal["ours", "base", "theirs"]
+
+
+def parse_conflict_hunks(content: str) -> list[ConflictHunk]:
     """Handles both diff3 (with ||||||| base) and standard (without base) conflict markers."""
     lines = content.split("\n")
-    hunks = []
-    current_hunk = None
-    section = None
+    hunks: list[ConflictHunk] = []
+    current_hunk: ConflictHunk | None = None
+    section: _HunkSection | None = None
 
     for i, line in enumerate(lines, 1):
         if line.startswith(MARKER_OURS):
@@ -136,7 +155,7 @@ def parse_conflict_hunks(content: str) -> list[dict]:
             current_hunk = None
             section = None
         elif current_hunk and section:
-            current_hunk[section].append(line)
+            _ = current_hunk[section].append(line)
 
     return hunks
 
@@ -148,14 +167,14 @@ def get_surrounding_context(
 
     # Before context (avoiding conflict markers)
     before_start = max(0, start_line - context_lines - 1)
-    before = []
+    before: list[str] = []
     for i in range(before_start, start_line - 1):
         line = lines[i]
         if not any(fragment in line for fragment in _MARKER_FRAGMENTS):
             before.append(f"{i + 1}: {line}")
 
     after_end = min(len(lines), end_line + context_lines)
-    after = []
+    after: list[str] = []
     for i in range(end_line, after_end):
         line = lines[i]
         if not any(fragment in line for fragment in _MARKER_FRAGMENTS):

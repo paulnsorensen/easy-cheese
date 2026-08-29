@@ -12,7 +12,7 @@ of truth for plan shape.
 from __future__ import annotations
 
 import sys
-from typing import Any
+from typing import cast
 
 from easy_cheese.shared.manifest_io import (  # noqa: E402
     ManifestLoadError,
@@ -51,28 +51,29 @@ def sq(value: str) -> str:
     return "'" + value.replace("'", "'\\''") + "'"
 
 
-def emit_commands(plan: dict[str, Any]) -> None:
+def emit_commands(plan: dict[str, object]) -> None:
     shape = plan["shape"]
-    groups = plan["groups"]
+    groups = cast("list[object]", plan["groups"])
     print(f"# pr-plan shape: {shape} ({len(groups)} groups)")
     print("set -euo pipefail")
-    for index, group in enumerate(groups, start=1):
-        branch = group["branch"]
-        title = group["title"]
-        body = group.get("body", "")
-        base = group["base"]
-        commits = group["commits"]
+    for index, group_obj in enumerate(groups, start=1):
+        group = cast("dict[str, object]", group_obj)
+        branch = cast(str, group["branch"])
+        title = cast(str, group["title"])
+        body = cast(str, group.get("body", ""))
+        base = cast(str, group["base"])
+        commits = cast("list[object]", group["commits"])
 
         print()
         print(f"# Group {index}: {branch} (base: {base})")
         print(f"git checkout -b {sq(branch)} {sq(base)}")
-        for sha in commits:
-            print(f"git cherry-pick {sq(sha)}")
+        for sha_obj in commits:
+            print(f"git cherry-pick {sq(cast(str, sha_obj))}")
         print(f"git push -u origin {sq(branch)}")
         print(
             f"gh pr view {sq(branch)} --json number >/dev/null 2>&1 || "
-            f"gh pr create --base {sq(base)} --head {sq(branch)} "
-            f"--title {sq(title)} --body {sq(body)}"
+            + f"gh pr create --base {sq(base)} --head {sq(branch)} "
+            + f"--title {sq(title)} --body {sq(body)}"
         )
 
 

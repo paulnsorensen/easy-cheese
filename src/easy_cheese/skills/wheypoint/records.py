@@ -22,11 +22,13 @@ from __future__ import annotations
 
 from collections.abc import Callable, Container, Sequence
 from enum import Enum
-from typing import Any, TypeVar
+from typing import TypeVar, cast
 
 import attrs
 from attrs import define, field
+from attrs import AttrsInstance
 from easy_cheese_schemas import (
+    ArtifactLink,
     EntryState,
     EntryTransition,
     ProtectedEntry,
@@ -47,36 +49,36 @@ class RecordError(ValueError):
     """Raised when a payload is not the schema type it claims to be."""
 
 
-def _serialize(_instance: object, _attribute: object, value: Any) -> Any:
-    return value.value if isinstance(value, Enum) else value
+def _serialize(_instance: object, _attribute: object, value: object) -> object:
+    return cast(object, value.value) if isinstance(value, Enum) else value
 
 
-def unstructure(obj: Any) -> dict[str, Any]:
+def unstructure(obj: AttrsInstance) -> dict[str, object]:
     """A schema instance as plain JSON data, enums flattened to their values."""
     return attrs.asdict(obj, recurse=True, value_serializer=_serialize)
 
 
-def structure(payload: Any, cls: type[T]) -> T:
+def structure(payload: object, cls: type[T]) -> T:
     """Structure `payload` into `cls` or raise with everything that was wrong."""
-    loaded = load(payload, cls, strict=True)
+    loaded = load(cast(dict[str, object], payload), cls, strict=True)
     if loaded.value is None:
         detail = "; ".join(loaded.problems) or "payload is not readable"
         raise RecordError(f"{cls.__name__}: {detail}")
     return loaded.value
 
 
-def canonical_payload(obj: Any) -> bytes:
+def canonical_payload(obj: AttrsInstance) -> bytes:
     """The exact bytes a schema instance is stored and hashed as."""
     return canonical.canonical_bytes(unstructure(obj))
 
 
 def record_digest(record: WheypointRecord) -> str:
     payload = unstructure(record)
-    payload.pop(_RECEIPT_POINTER)
+    _ = payload.pop(_RECEIPT_POINTER)
     return canonical.digest_value(payload)
 
 
-def revision_digest(revision: Any) -> str:
+def revision_digest(revision: AttrsInstance) -> str:
     return canonical.digest_value(unstructure(revision))
 
 
@@ -182,7 +184,7 @@ def coverage_report(
 
 
 def _pin_failure(
-    link: Any,
+    link: ArtifactLink,
     artifact_digest: Callable[[str], str | None],
     known_revision_ids: Container[str],
 ) -> str | None:

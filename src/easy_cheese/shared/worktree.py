@@ -23,6 +23,7 @@ from contextlib import suppress
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TextIO, cast
 
 # cli and git_utils are co-staged in the bundled .pyz alongside this module
 from easy_cheese.shared import cli, git_utils
@@ -121,7 +122,7 @@ def _contained_file(root: Path, relative: Path, *, label: str) -> Path:
     _reject_symlink_components(candidate, label=label)
     try:
         resolved = candidate.resolve(strict=True)
-        resolved.relative_to(root)
+        _ = resolved.relative_to(root)
     except (FileNotFoundError, OSError, RuntimeError, ValueError) as exc:
         raise cli.CliError(
             f"{label} is unavailable or escapes the project: {relative}"
@@ -139,7 +140,7 @@ def _target_file(root: Path, relative: Path) -> Path:
             raise cli.CliError(
                 f"oracle target parent must be a directory: {relative}"
             )
-        target.parent.resolve(strict=False).relative_to(root)
+        _ = target.parent.resolve(strict=False).relative_to(root)
     except (OSError, RuntimeError, ValueError) as exc:
         raise cli.CliError(f"oracle target escapes the worktree: {relative}") from exc
     if target.is_symlink():
@@ -190,8 +191,7 @@ def _plan_copy(
     actual = _file_digest(source, label=label)
     if actual != expected:
         raise cli.CliError(
-            f"protected file digest mismatch for {relative}: "
-            f"expected {expected}, got {actual}"
+            f"protected file digest mismatch for {relative}: expected {expected}, got {actual}"
         )
     target = _target_file(destination_root, relative)
     original_digest = (
@@ -203,8 +203,7 @@ def _plan_copy(
         and not overwrite
     ):
         raise cli.CliError(
-            f"oracle harvest conflict for {target}: "
-            f"expected {expected}, found {original_digest}"
+            f"oracle harvest conflict for {target}: expected {expected}, found {original_digest}"
         )
     return _CopyPlan(source, target, relative, expected, original_digest)
 
@@ -213,7 +212,7 @@ def _ensure_parent_dirs(targets: list[Path], root: Path) -> list[Path]:
     created: list[Path] = []
     for target in targets:
         try:
-            target.parent.relative_to(root)
+            _ = target.parent.relative_to(root)
         except ValueError as exc:
             raise cli.CliError(
                 f"oracle target escapes the worktree: {target}"
@@ -246,12 +245,11 @@ def _stage_copy(
     os.close(fd)
     temporary = Path(temporary_name)
     try:
-        shutil.copy2(source, temporary)
+        _ = shutil.copy2(source, temporary)
         actual = _file_digest(temporary, label=label)
         if actual != expected:
             raise cli.CliError(
-                f"{label} digest mismatch for {target}: "
-                f"expected {expected}, got {actual}"
+                f"{label} digest mismatch for {target}: expected {expected}, got {actual}"
             )
     except BaseException:
         with suppress(FileNotFoundError):
@@ -364,26 +362,32 @@ def inherit_oracle(
         source_root, receipt_relative, label="receipt"
     )
     try:
-        payload = json.loads(receipt_source.read_text(encoding="utf-8"))
+        raw_payload = cast(object, json.loads(receipt_source.read_text(encoding="utf-8")))
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise cli.CliError(f"invalid gate receipt {receipt}: {exc}") from exc
+    if not isinstance(raw_payload, Mapping):
+        raise cli.CliError(
+            f"oracle inheritance requires a {expected_producer} RED GateReceipt"
+        )
+    payload = cast(Mapping[str, object], raw_payload)
     if (
-        not isinstance(payload, Mapping)
-        or payload.get("producer") != expected_producer
+        payload.get("producer") != expected_producer
         or payload.get("disposition") != "red"
     ):
         raise cli.CliError(
             f"oracle inheritance requires a {expected_producer} RED GateReceipt"
         )
-    protected = payload.get("protected_files")
-    if not isinstance(protected, list) or not protected:
+    protected_raw = payload.get("protected_files")
+    if not isinstance(protected_raw, list) or not protected_raw:
         raise cli.CliError("RED GateReceipt must declare protected_files")
+    protected = cast(list[object], protected_raw)
 
     plans: list[_CopyPlan] = []
     seen: set[Path] = set()
-    for index, item in enumerate(protected, start=1):
-        if not isinstance(item, Mapping):
+    for index, raw_item in enumerate(protected, start=1):
+        if not isinstance(raw_item, Mapping):
             raise cli.CliError(f"protected_files[{index}] must be an object")
+        item = cast(Mapping[str, object], raw_item)
         relative = _project_relative(
             item.get("path"), label=f"protected_files[{index}].path"
         )
@@ -470,7 +474,7 @@ def create(
     _validate_slug(slug)
     path = _worktree_path(slug)
     branch = _worktree_branch(slug)
-    _git(repo, "worktree", "add", "-b", branch, path, base)
+    _ = _git(repo, "worktree", "add", "-b", branch, path, base)
     try:
         inherited = (
             inherit_oracle(
@@ -484,8 +488,8 @@ def create(
             else []
         )
     except (cli.CliError, OSError):
-        git_utils.run_git(["worktree", "remove", "--force", path], cwd=repo)
-        git_utils.run_git(["branch", "-D", branch], cwd=repo)
+        _ = git_utils.run_git(["worktree", "remove", "--force", path], cwd=repo)
+        _ = git_utils.run_git(["branch", "-D", branch], cwd=repo)
         raise
     result: dict[str, object] = {"path": path, "branch": branch}
     if inherited:
@@ -497,17 +501,17 @@ def harvest(branch: str, onto: str, *, repo: str = ".") -> list[str]:
     """Cherry-pick the commits unique to `branch` onto `onto` (the orchestrator
     branch). Shared `.git` object store means no fetch. Returns the picked SHAs
     (oldest first); an empty list when `branch` added nothing over `onto`."""
-    _git(repo, "checkout", onto)
+    _ = _git(repo, "checkout", onto)
     revs = _git(repo, "rev-list", "--reverse", f"{onto}..{branch}").split()
     if not revs:
         return []
     try:
-        _git(repo, "cherry-pick", *revs)
+        _ = _git(repo, "cherry-pick", *revs)
     except cli.CliError:
         # Leave the repo clean for the orchestrator's /melt fallback: a
         # half-finished cherry-pick (unmerged index / CHERRY_PICK_HEAD) would
         # cascade-poison the next harvest's `git checkout onto`.
-        git_utils.run_git(["cherry-pick", "--abort"], cwd=repo)
+        _ = git_utils.run_git(["cherry-pick", "--abort"], cwd=repo)
         raise
     return revs
 
@@ -523,7 +527,7 @@ def teardown(path: str, branch: str, *, repo: str = ".") -> None:
     errors: list[str] = []
     for args in (("worktree", "remove", "--force", path), ("branch", "-D", branch)):
         try:
-            _git(repo, *args)
+            _ = _git(repo, *args)
         except cli.CliError as exc:
             errors.append(str(exc))
     if errors:
@@ -531,42 +535,65 @@ def teardown(path: str, branch: str, *, repo: str = ".") -> None:
 
 
 def _cmd_create(args: argparse.Namespace) -> None:
+    stdout = cast("TextIO | None", args.stdout)
+    receipt = cast("str | None", args.receipt)
     cli.emit(
-        create(args.slug, args.base, repo=args.repo, receipt=args.receipt),
+        create(
+            cast(str, args.slug),
+            cast(str, args.base),
+            repo=cast(str, args.repo),
+            receipt=receipt,
+        ),
         json_mode=True,
-        stdout=args.stdout,
+        stdout=stdout,
     )
 
 def _cmd_inherit(args: argparse.Namespace) -> None:
+    path = cast(str, args.path)
     inherited = inherit_oracle(
-        args.receipt,
-        args.path,
-        repo=args.repo,
+        cast(str, args.receipt),
+        path,
+        repo=cast(str, args.repo),
         expected_producer="cut",
         overwrite=True,
     )
-    cli.emit({"path": args.path, "inherited": inherited}, json_mode=True, stdout=args.stdout)
+    cli.emit(
+        {"path": path, "inherited": inherited},
+        json_mode=True,
+        stdout=cast("TextIO | None", args.stdout),
+    )
 
 
 def _cmd_harvest_oracle(args: argparse.Namespace) -> None:
+    path = cast(str, args.path)
     inherited = inherit_oracle(
-        args.receipt,
-        args.path,
-        repo=args.repo,
+        cast(str, args.receipt),
+        path,
+        repo=cast(str, args.repo),
         expected_producer="press",
         overwrite=False,
     )
-    cli.emit({"path": args.path, "inherited": inherited}, json_mode=True, stdout=args.stdout)
+    cli.emit(
+        {"path": path, "inherited": inherited},
+        json_mode=True,
+        stdout=cast("TextIO | None", args.stdout),
+    )
 
 
 def _cmd_harvest(args: argparse.Namespace) -> None:
-    picked = harvest(args.branch, args.onto, repo=args.repo)
-    cli.emit({"picked": picked}, json_mode=True, stdout=args.stdout)
+    picked = harvest(cast(str, args.branch), cast(str, args.onto), repo=cast(str, args.repo))
+    cli.emit({"picked": picked}, json_mode=True, stdout=cast("TextIO | None", args.stdout))
 
 
 def _cmd_teardown(args: argparse.Namespace) -> None:
-    teardown(args.path, args.branch, repo=args.repo)
-    cli.emit({"removed": args.path, "deleted_branch": args.branch}, json_mode=True, stdout=args.stdout)
+    path = cast(str, args.path)
+    branch = cast(str, args.branch)
+    teardown(path, branch, repo=cast(str, args.repo))
+    cli.emit(
+        {"removed": path, "deleted_branch": branch},
+        json_mode=True,
+        stdout=cast("TextIO | None", args.stdout),
+    )
 
 
 def _setup(parser: argparse.ArgumentParser) -> None:
@@ -574,10 +601,10 @@ def _setup(parser: argparse.ArgumentParser) -> None:
     sub = parser.add_subparsers(dest="action", required=True)
 
     p_create = sub.add_parser("create", help="Create a worktree off a base ref.")
-    p_create.add_argument("--slug", required=True, help="Curd slug (names the worktree + branch).")
-    p_create.add_argument("--base", required=True, help="Base ref to branch the worktree from.")
-    p_create.add_argument("--repo", default=".", help="Repo root (default: cwd).")
-    p_create.add_argument(
+    _ = p_create.add_argument("--slug", required=True, help="Curd slug (names the worktree + branch).")
+    _ = p_create.add_argument("--base", required=True, help="Base ref to branch the worktree from.")
+    _ = p_create.add_argument("--repo", default=".", help="Repo root (default: cwd).")
+    _ = p_create.add_argument(
         "--receipt",
         help="Project-relative RED GateReceipt to inherit with its protected files.",
     )
@@ -586,32 +613,32 @@ def _setup(parser: argparse.ArgumentParser) -> None:
     p_inherit = sub.add_parser(
         "inherit", help="Copy a RED receipt and protected files into a worktree."
     )
-    p_inherit.add_argument("--receipt", required=True, help="Project-relative GateReceipt.")
-    p_inherit.add_argument("--path", required=True, help="Destination worktree path.")
-    p_inherit.add_argument("--repo", default=".", help="Oracle source repo (default: cwd).")
+    _ = p_inherit.add_argument("--receipt", required=True, help="Project-relative GateReceipt.")
+    _ = p_inherit.add_argument("--path", required=True, help="Destination worktree path.")
+    _ = p_inherit.add_argument("--repo", default=".", help="Oracle source repo (default: cwd).")
     p_inherit.set_defaults(func=_cmd_inherit)
 
     p_oracle = sub.add_parser(
         "harvest-oracle",
         help="Copy a child Press receipt and protected files to the orchestrator.",
     )
-    p_oracle.add_argument(
+    _ = p_oracle.add_argument(
         "--receipt", required=True, help="Child-relative Press GateReceipt."
     )
-    p_oracle.add_argument("--path", required=True, help="Destination orchestrator path.")
-    p_oracle.add_argument("--repo", default=".", help="Child worktree root.")
+    _ = p_oracle.add_argument("--path", required=True, help="Destination orchestrator path.")
+    _ = p_oracle.add_argument("--repo", default=".", help="Child worktree root.")
     p_oracle.set_defaults(func=_cmd_harvest_oracle)
 
     p_harvest = sub.add_parser("harvest", help="Cherry-pick a curd branch onto the orchestrator branch.")
-    p_harvest.add_argument("--branch", required=True, help="Curd branch to harvest.")
-    p_harvest.add_argument("--onto", required=True, help="Orchestrator branch to cherry-pick onto.")
-    p_harvest.add_argument("--repo", default=".", help="Repo root (default: cwd).")
+    _ = p_harvest.add_argument("--branch", required=True, help="Curd branch to harvest.")
+    _ = p_harvest.add_argument("--onto", required=True, help="Orchestrator branch to cherry-pick onto.")
+    _ = p_harvest.add_argument("--repo", default=".", help="Repo root (default: cwd).")
     p_harvest.set_defaults(func=_cmd_harvest)
 
     p_teardown = sub.add_parser("teardown", help="Remove a worktree and delete its branch.")
-    p_teardown.add_argument("--path", required=True, help="Worktree path to remove.")
-    p_teardown.add_argument("--branch", required=True, help="Worktree branch to delete.")
-    p_teardown.add_argument("--repo", default=".", help="Repo root (default: cwd).")
+    _ = p_teardown.add_argument("--path", required=True, help="Worktree path to remove.")
+    _ = p_teardown.add_argument("--branch", required=True, help="Worktree branch to delete.")
+    _ = p_teardown.add_argument("--repo", default=".", help="Repo root (default: cwd).")
     p_teardown.set_defaults(func=_cmd_teardown)
 
 

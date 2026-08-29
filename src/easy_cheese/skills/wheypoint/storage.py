@@ -29,10 +29,10 @@ import json
 import os
 import re
 import tempfile
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import cast
 
 from attrs import define
 from easy_cheese_schemas import WheypointRecord, WheypointRevision
@@ -41,7 +41,6 @@ try:
     import fcntl  # POSIX advisory file locks
 except ImportError:  # pragma: no cover - exercised only on Windows
     fcntl = None  # type: ignore[assignment]
-    import msvcrt
 
 from easy_cheese.shared import paths
 
@@ -109,6 +108,8 @@ def _lock(fd: int, *, exclusive: bool) -> None:
     if fcntl is not None:
         fcntl.flock(fd, fcntl.LOCK_EX if exclusive else fcntl.LOCK_UN)
     else:  # pragma: no cover - Windows only
+        import msvcrt
+
         msvcrt.locking(fd, msvcrt.LK_LOCK if exclusive else msvcrt.LK_UNLCK, 1)
 
 
@@ -132,7 +133,7 @@ def _write_atomic(path: Path, payload: bytes) -> None:
     tmp = Path(tmp_name)
     try:
         with os.fdopen(fd, "wb") as handle:
-            handle.write(payload)
+            _ = handle.write(payload)
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(str(tmp), str(path))
@@ -154,7 +155,7 @@ class WorkStore:
         if _WORK_ID_RE.fullmatch(work_id) is None:
             raise StorageError(
                 f"work id {work_id!r} must match {_WORK_ID_RE.pattern} so it is a "
-                "single safe path segment"
+                + "single safe path segment"
             )
         base = (
             Path(corpus_root)
@@ -190,7 +191,7 @@ class WorkStore:
         return f"{PROJECTIONS_DIRNAME}/{number}-{revision_id}.md"
 
     @contextmanager
-    def lock(self) -> Iterator[None]:
+    def lock(self) -> Generator[None]:
         """Hold the exclusive per-record lock for the duration of the block."""
         self.root.mkdir(parents=True, exist_ok=True)
         fd = os.open(str(self.lock_path), os.O_RDWR | os.O_CREAT, _LOCK_MODE)
@@ -305,17 +306,17 @@ class WorkStore:
         if revision.work_id != record.work_id or record.work_id != self.work_id:
             raise StorageError(
                 f"work id mismatch: store {self.work_id!r}, record "
-                f"{record.work_id!r}, revision {revision.work_id!r}"
+                + f"{record.work_id!r}, revision {revision.work_id!r}"
             )
         if revision.revision_id != record.revision_id:
             raise StorageError(
                 f"revision id mismatch: record {record.revision_id!r}, revision "
-                f"{revision.revision_id!r}"
+                + f"{revision.revision_id!r}"
             )
         if revision.revision_number != record.revision_number:
             raise StorageError(
                 f"revision number mismatch: record {record.revision_number}, "
-                f"revision {revision.revision_number}"
+                + f"revision {revision.revision_number}"
             )
         if revision.record_digest != records.record_digest(record):
             raise StorageError("revision does not quote this record's digest")
@@ -327,7 +328,7 @@ class WorkStore:
         if revision.projection_path != expected_path:
             raise StorageError(
                 f"revision projection_path {revision.projection_path!r} is not "
-                f"{expected_path!r}"
+                + f"{expected_path!r}"
             )
         if projection_mod.projection_digest_of_text(markdown) != (
             revision.projection_digest
@@ -434,21 +435,21 @@ def _record_problems(
     if match is None:
         return [
             f"{RECORD_FILENAME} points at revision {record.revision_id!r}, which is "
-            "not a complete immutable revision"
+            + "not a complete immutable revision"
         ]
     problems: list[str] = []
     if match.revision.record_digest != records.record_digest(record):
         problems.append(
             f"{RECORD_FILENAME} does not match the record digest in revision "
-            f"{record.revision_id!r}"
+            + f"{record.revision_id!r}"
         )
     if record.revision_digest != records.revision_digest(match.revision):
         problems.append(
             f"{RECORD_FILENAME} revision_digest does not match revision "
-            f"{record.revision_id!r}"
+            + f"{record.revision_id!r}"
         )
     return problems
 
 
-def _parse_json(raw: bytes) -> Any:
-    return json.loads(raw.decode("utf-8"))
+def _parse_json(raw: bytes) -> object:
+    return cast(object, json.loads(raw.decode("utf-8")))

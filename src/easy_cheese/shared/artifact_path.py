@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from typing import cast
 
 from easy_cheese.shared import paths
 
@@ -28,21 +29,23 @@ def artifact_path(phase: str, slug: str) -> Path:
     # string"; this shim's long-standing CLI contract folds that case into
     # the same kebab-case message as every other invalid slug, so it is
     # special-cased here rather than delegated.
-    if not isinstance(slug, str) or not slug:
+    if not isinstance(slug, str) or not slug:  # pyright: ignore[reportUnnecessaryIsInstance]
         raise ValueError(
             f"slug {slug!r} must be kebab-case, 1-64 chars, [a-z0-9-], "
-            "no leading/trailing hyphen, no double hyphens"
+            + "no leading/trailing hyphen, no double hyphens"
         )
     return paths.artifact_path(phase, slug)
 
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("phase")
-    parser.add_argument("slug")
+    _ = parser.add_argument("phase")
+    _ = parser.add_argument("slug")
     args = parser.parse_args(argv)
+    phase = cast(str, args.phase)
+    slug = cast(str, args.slug)
     try:
-        resolved = project_corpus_root() if args.phase == "research" else artifact_path(args.phase, args.slug)
+        resolved = project_corpus_root() if phase == "research" else artifact_path(phase, slug)
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

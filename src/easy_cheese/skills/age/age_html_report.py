@@ -24,14 +24,15 @@ import html
 import re
 import tempfile
 from pathlib import Path
+from typing import TextIO, cast
 
 from easy_cheese.shared import cli, html_report
 from easy_cheese.shared import findings as findings_mod
 
 # Reuse /age's canonical severity-heading + bullet matchers so this consumer
 # stays in lockstep with the emit format findings.py already tracks.
-_SEVERITY_HEADING_RE = findings_mod._SEVERITY_HEADING_RE
-_BULLET_RE = findings_mod._BULLET_RE
+_SEVERITY_HEADING_RE = findings_mod._SEVERITY_HEADING_RE  # pyright: ignore[reportPrivateUsage]
+_BULLET_RE = findings_mod._BULLET_RE  # pyright: ignore[reportPrivateUsage]
 _ANY_HEADING_RE = re.compile(r"^#{1,6}\s")
 
 # Badge + distribution-bar styling for the age body. Selectors stay lowercase so
@@ -105,47 +106,52 @@ def _build_body(slug: str, blocks: list[tuple[str, str]]) -> str:
 
     segments = "".join(
         f'<div class="seg sev-{sev}" style="flex:{len(by_sev[sev])}">'
-        f"{sev.capitalize()} {len(by_sev[sev])}</div>"
+        + f"{sev.capitalize()} {len(by_sev[sev])}</div>"
         for sev in present
     )
-    sections = []
+    sections: list[str] = []
     for sev in present:
         items = "".join(
-            f'<div class="finding"><pre class="body whitespace-pre-wrap">'
-            f"{html.escape(block)}</pre></div>"
+            '<div class="finding"><pre class="body whitespace-pre-wrap">'
+            + f"{html.escape(block)}</pre></div>"
             for block in by_sev[sev]
         )
         sections.append(
             f'<section class="sev-section"><h2 class="sev sev-{sev}">'
-            f"{sev.capitalize()}</h2>{items}</section>"
+            + f"{sev.capitalize()}</h2>{items}</section>"
         )
     return f'<h1>{title}</h1>\n<div class="dist">{segments}</div>\n{"".join(sections)}'
 
 
 def _cmd_html_report(args: argparse.Namespace) -> None:
-    report = Path(args.report)
+    report_arg = cast(str, args.report)
+    slug = cast(str, args.slug)
+    out_dir_arg = cast(str, args.out_dir)
+    stdout = cast("TextIO | None", args.stdout)
+
+    report = Path(report_arg)
     if not report.is_file():
-        raise cli.CliError(f"--report not found: {args.report}")
-    cli.reject_path_segment("--slug", args.slug)
-    out_dir = Path(args.out_dir) if args.out_dir else Path(tempfile.gettempdir())
+        raise cli.CliError(f"--report not found: {report_arg}")
+    cli.reject_path_segment("--slug", slug)
+    out_dir = Path(out_dir_arg) if out_dir_arg else Path(tempfile.gettempdir())
     if not out_dir.is_dir():
         raise cli.CliError(f"--out-dir is not a directory: {out_dir}")
 
     blocks = _finding_blocks(report.read_text(encoding="utf-8"))
-    body = _build_body(args.slug, blocks)
+    body = _build_body(slug, blocks)
     document = html_report.render_document(
-        body, title=f"Age report — {args.slug}", extra_css=_EXTRA_CSS
+        body, title=f"Age report — {slug}", extra_css=_EXTRA_CSS
     )
-    out_path = out_dir / f"age-{args.slug}.html"
-    out_path.write_text(document, encoding="utf-8")
-    cli.emit(str(out_path), stdout=args.stdout)
+    out_path = out_dir / f"age-{slug}.html"
+    _ = out_path.write_text(document, encoding="utf-8")
+    cli.emit(str(out_path), stdout=stdout)
 
 
 def _setup(parser: argparse.ArgumentParser) -> None:
     parser.description = "Render an /age markdown report into a self-contained HTML file."
-    parser.add_argument("--report", required=True, help="source /age markdown report")
-    parser.add_argument("--slug", required=True, help="slug for the output filename and title")
-    parser.add_argument(
+    _ = parser.add_argument("--report", required=True, help="source /age markdown report")
+    _ = parser.add_argument("--slug", required=True, help="slug for the output filename and title")
+    _ = parser.add_argument(
         "--out-dir", default="", help="output directory (defaults to the OS temp dir)"
     )
     parser.set_defaults(func=_cmd_html_report)

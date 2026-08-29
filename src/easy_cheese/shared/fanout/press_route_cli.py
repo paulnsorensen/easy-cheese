@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import sys
 from dataclasses import asdict
+from pathlib import Path
+from typing import cast
 
 from easy_cheese.shared.manifest_io import json_command
 
 from .press_route import (
     Continue,
     Dispatch,
+    Outcome,
     ReceiptChainError,
     Stop,
     route_from_receipt,
@@ -37,14 +40,14 @@ def _route(**payload: object) -> dict[str, object]:
     if set(payload) != _EXPECTED_KEYS:
         raise ValueError(
             "request must contain exactly outcome, current_receipt, "
-            "phase_token_ref, and phase_token_sha256"
+            + "phase_token_ref, and phase_token_sha256"
         )
     try:
         action = route_from_receipt(
-            payload["outcome"],
-            payload["current_receipt"],
-            payload["phase_token_ref"],
-            payload["phase_token_sha256"],
+            cast("Outcome | str", payload["outcome"]),
+            cast("str | Path", payload["current_receipt"]),
+            cast("str | Path", payload["phase_token_ref"]),
+            cast(str, payload["phase_token_sha256"]),
         )
     except ReceiptChainError as exc:
         raise ValueError(str(exc)) from exc

@@ -22,6 +22,8 @@ from __future__ import annotations
 
 import argparse
 import os
+from collections.abc import Iterable
+from typing import Protocol, TextIO
 
 # cli is co-staged in the bundled .pyz alongside this module
 from easy_cheese.shared import cli
@@ -46,7 +48,7 @@ def _tools_from_env() -> list[str]:
     return _split(os.environ.get(TOOLS_ENV, ""))
 
 
-def probe(tools=None) -> str | None:
+def probe(tools: Iterable[str] | None = None) -> str | None:
     """Classify the milknado seam from the available tool names.
 
     Returns ``"engine"``, ``"tracker"``, or ``None``. ``tools`` is an iterable of
@@ -60,7 +62,13 @@ def probe(tools=None) -> str | None:
     return None
 
 
-def _cmd_probe(args: argparse.Namespace) -> None:
+class _Args(Protocol):
+    tools: str | None
+    json_mode: bool
+    stdout: TextIO
+
+
+def _cmd_probe(args: _Args) -> None:
     tools = _split(args.tools) if args.tools is not None else None
     role = probe(tools)
     cli.emit("none" if role is None else role, json_mode=args.json_mode, stdout=args.stdout)
@@ -68,7 +76,7 @@ def _cmd_probe(args: argparse.Namespace) -> None:
 
 def _setup(parser: argparse.ArgumentParser) -> None:
     parser.description = "Probe the milknado seam (engine | tracker | none)."
-    parser.add_argument(
+    _ = parser.add_argument(
         "--tools",
         default=None,
         help=(

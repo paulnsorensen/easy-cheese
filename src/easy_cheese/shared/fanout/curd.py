@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import re
 
+from typing import cast
+
 from easy_cheese.shared.schema import disjoint_errors, required_keys
 
 # A behaviour sentence joining two distinct verbs with "and" usually means
@@ -17,15 +19,15 @@ from easy_cheese.shared.schema import disjoint_errors, required_keys
 # "X and Y" (no second verb) is fine.
 _TWO_VERB_AND = re.compile(
     r"\b(adds|extracts|renames|fixes|removes|updates|implements|creates|deletes|wires|registers|exposes|replaces)\b"
-    r".*?\band\b\s+"
-    r"\b(adds|extracts|renames|fixes|removes|updates|implements|creates|deletes|wires|registers|exposes|replaces)\b",
+    + r".*?\band\b\s+"
+    + r"\b(adds|extracts|renames|fixes|removes|updates|implements|creates|deletes|wires|registers|exposes|replaces)\b",
     re.IGNORECASE,
 )
 
 _WORK_STATUSES = {"pending", "running", "completed", "failed"}
 
 
-def _one_behaviour(curd: dict) -> str | None:
+def _one_behaviour(curd: dict[str, object]) -> str | None:
     behavior = curd.get("behavior", "")
     if not isinstance(behavior, str) or not behavior.strip():
         return f"curd {curd.get('id', '?')}: missing or empty 'behavior'"
@@ -37,14 +39,14 @@ def _one_behaviour(curd: dict) -> str | None:
     return None
 
 
-def _acceptance(curd: dict) -> str | None:
+def _acceptance(curd: dict[str, object]) -> str | None:
     ac = curd.get("acceptance_criterion", "")
     if not isinstance(ac, str) or not ac.strip():
         return f"curd {curd.get('id', '?')}: missing or empty 'acceptance_criterion'"
     return None
 
 
-def _test_target(curd: dict) -> str | None:
+def _test_target(curd: dict[str, object]) -> str | None:
     tt = curd.get("test_target", "")
     if not isinstance(tt, str) or not tt.strip():
         return f"curd {curd.get('id', '?')}: missing or empty 'test_target'"
@@ -56,7 +58,7 @@ def _test_target(curd: dict) -> str | None:
     return None
 
 
-def behaviour_errors(curd: dict) -> list[str]:
+def behaviour_errors(curd: dict[str, object]) -> list[str]:
     """Content rules checked at every pipeline stage."""
     errors: list[str] = []
     for check in (_one_behaviour, _acceptance, _test_target):
@@ -66,7 +68,7 @@ def behaviour_errors(curd: dict) -> list[str]:
     return errors
 
 
-def lifecycle_errors(curd: dict, where: str) -> list[str]:
+def lifecycle_errors(curd: dict[str, object], where: str) -> list[str]:
     """Run-manifest-only lifecycle checks: id, status, retry_count.
 
     The caller passes ``where`` (e.g. "curds[1]") so error messages carry
@@ -77,7 +79,8 @@ def lifecycle_errors(curd: dict, where: str) -> list[str]:
     """
     errors: list[str] = []
     errors.extend(required_keys(curd, ("id", "status", "retry_count"), where))
-    if not isinstance(curd.get("id"), int) or curd.get("id", 0) < 1:
+    curd_id = curd.get("id")
+    if not isinstance(curd_id, int) or curd_id < 1:
         errors.append(f"{where}.id must be an integer >= 1")
     if curd.get("status") not in _WORK_STATUSES:
         errors.append(f"{where}.status must be one of pending|running|completed|failed")
@@ -87,10 +90,10 @@ def lifecycle_errors(curd: dict, where: str) -> list[str]:
     return errors
 
 
-def disjoint_files_errors(curds: list[dict]) -> list[str]:
+def disjoint_files_errors(curds: list[dict[str, object]]) -> list[str]:
     """Cross-curd file collision + missing/empty files. Skips non-dict entries."""
     return disjoint_errors(
-        curds,
+        cast("list[object]", curds),
         id_key="id",
         message=lambda f, first, second: (
             f"file {f!r} appears in curd {first} and curd {second} — "

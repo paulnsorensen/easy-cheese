@@ -33,6 +33,7 @@ import argparse
 import re
 import sys
 from pathlib import Path
+from typing import cast
 
 CONFIDENCE_LABELS = {"certain", "speculating", "don't know"}
 
@@ -44,9 +45,11 @@ _FOOTNOTE_DEFINITION = re.compile(r"^\[\^([^\]]+)\]:\s*(.*)$")
 _LOCAL_PATH = re.compile(r"(?<![\w./-])((?:\.cheese|raw)/[^\s|]+)", re.IGNORECASE)
 _LINE_ANCHOR = re.compile(r"#L(\d+)(?:-L?(\d+))?$", re.IGNORECASE)
 _DIRECT_CITATION = re.compile(
-    r"https?://\S+"  # URL
-    r"|[\w./-]+\.[A-Za-z]\w*:\d+(?:-\d+)?"  # inline path:line(-line)
-    r"|(?:\.cheese|raw)/\S+",  # corpus or raw-capture path
+    (
+        r"https?://\S+"  # URL
+        r"|[\w./-]+\.[A-Za-z]\w*:\d+(?:-\d+)?"  # inline path:line(-line)
+        r"|(?:\.cheese|raw)/\S+"  # corpus or raw-capture path
+    ),
     re.IGNORECASE,
 )
 _CITATION = re.compile(r"\[\^[^\]]+\]|" + _DIRECT_CITATION.pattern, re.IGNORECASE)
@@ -54,9 +57,11 @@ _CITATION = re.compile(r"\[\^[^\]]+\]|" + _DIRECT_CITATION.pattern, re.IGNORECAS
 # Negation aimed at existence / support / provision — the shape of an absence
 # claim. Whole-word matched so "Cargo" never trips "no".
 _ABSENCE = re.compile(
-    r"\b(?:no|not|never|none|cannot|can'?t|does\s*n'?t|do\s*n'?t|did\s*n'?t"
-    r"|is\s*n'?t|are\s*n'?t|was\s*n'?t|wo\s*n'?t|lacks?|lacking|without"
-    r"|absent|missing|unsupported|unavailable)\b",
+    (
+        r"\b(?:no|not|never|none|cannot|can'?t|does\s*n'?t|do\s*n'?t|did\s*n'?t"
+        r"|is\s*n'?t|are\s*n'?t|was\s*n'?t|wo\s*n'?t|lacks?|lacking|without"
+        r"|absent|missing|unsupported|unavailable)\b"
+    ),
     re.IGNORECASE,
 )
 
@@ -68,10 +73,15 @@ _RULED_OUT = re.compile(
 
 
 class Violation:
-    __slots__ = ("level", "row", "kind", "message")
+    __slots__: tuple[str, ...] = ("level", "row", "kind", "message")
+
+    level: str  # "error" | "advisory"
+    row: int
+    kind: str
+    message: str
 
     def __init__(self, level: str, row: int, kind: str, message: str) -> None:
-        self.level = level  # "error" | "advisory"
+        self.level = level
         self.row = row
         self.kind = kind
         self.message = message
@@ -119,12 +129,14 @@ def _footnote_definitions(lines: list[str]) -> tuple[dict[str, str], set[str]]:
     current: str | None = None
     for line in lines:
         if match := _FOOTNOTE_DEFINITION.match(line.strip()):
-            current = match.group(1)
-            if current in definitions:
-                duplicates.add(current)
+            label = match.group(1)
+            body = match.group(2)
+            if label in definitions:
+                duplicates.add(label)
                 current = None
             else:
-                definitions[current] = match.group(2)
+                definitions[label] = body
+                current = label
         elif current and (line.startswith("    ") or line.startswith("\t")):
             definitions[current] += f"\n{line.strip()}"
         elif line.strip():
@@ -157,7 +169,7 @@ def _check_line_anchor(
             row_no,
             "LOCAL_PATH",
             f"line anchor {anchor.group(0)!r} is outside {reference!r} "
-            f"({line_count} line(s))",
+            + f"({line_count} line(s))",
         )
     ]
 
@@ -226,7 +238,7 @@ def _check_row(
             Violation("error", row_no, "CITATION", f"claim has no verifiable citation: {claim!r}")
         )
 
-    for label in _FOOTNOTE_REF.findall(evidence):
+    for label in cast("list[str]", _FOOTNOTE_REF.findall(evidence)):
         definition = footnotes.get(label)
         if definition is None:
             out.append(
@@ -273,7 +285,7 @@ def _check_row(
                 row_no,
                 "ABSENCE",
                 "certain absence claim — confirm candidate mechanisms were enumerated and "
-                "ruled out; if inferred from silence, downgrade to 'not found in <sources>'",
+                + "ruled out; if inferred from silence, downgrade to 'not found in <sources>'",
             )
         )
     return out
@@ -333,20 +345,21 @@ def check_report(
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
-    parser.add_argument("report", help="Path to the synthesis report markdown file.")
+    _ = parser.add_argument("report", help="Path to the synthesis report markdown file.")
     args = parser.parse_args(argv)
 
-    path = Path(args.report)
+    report = cast(str, args.report)
+    path = Path(report)
     try:
         text = path.read_text(encoding="utf-8")
     except OSError as exc:
-        print(f"error: cannot read {args.report}: {exc}", file=sys.stderr)
+        print(f"error: cannot read {report}: {exc}", file=sys.stderr)
         return 2
 
     violations, tables = check_report(text, path.resolve().parent, Path.cwd())
 
     if tables == 0:
-        print(f"error: no evidence table found in {args.report}", file=sys.stderr)
+        print(f"error: no evidence table found in {report}", file=sys.stderr)
         return 1
 
     for v in violations:

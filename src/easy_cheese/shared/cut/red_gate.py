@@ -18,14 +18,15 @@ import stat
 import subprocess
 import sys
 import tempfile
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from types import SimpleNamespace
-from typing import Any, Literal
+from typing import Literal, Protocol, TypedDict, cast
 
 from easy_cheese_schemas import (  # noqa: E402
+    BaselineCheck,
     GateDisposition,
     GateMode,
     GateProducer,
@@ -61,6 +62,32 @@ _PHASE_PLAN_KEYS = frozenset(
 )
 _PHASE_CHECK_KEYS = frozenset({"id", "argv", "cwd"})
 _PHASE_RESULT_KEYS = frozenset({"id", "observed_exit_code"})
+
+
+class _CheckDict(TypedDict):
+    id: str
+    argv: list[str]
+    cwd: str
+
+
+class _ResultDict(TypedDict):
+    id: str
+    observed_exit_code: int
+
+
+class _PhaseTokenReceipt(Protocol):
+    @property
+    def producer(self) -> GateProducer: ...
+    @property
+    def work_id(self) -> str: ...
+    @property
+    def project_key(self) -> str: ...
+    @property
+    def phase_token_ref(self) -> str | None: ...
+    @property
+    def phase_token_sha256(self) -> str | None: ...
+    @property
+    def baseline_checks(self) -> list[BaselineCheck]: ...
 _PHASE_TOKEN_KEYS = frozenset(
     {
         "schema_version",
@@ -100,7 +127,7 @@ class _PhasePlan:
     work_id: str
     project_key: str
     production_paths: tuple[str, ...]
-    baseline_checks: tuple[dict[str, Any], ...]
+    baseline_checks: tuple[_CheckDict, ...]
 
 
 @dataclass(frozen=True)
@@ -110,11 +137,11 @@ class _PhaseToken:
     project_key: str
     project_root: str
     production_paths: tuple[str, ...]
-    baseline_checks: tuple[dict[str, Any], ...]
-    baseline_results: tuple[dict[str, Any], ...]
+    baseline_checks: tuple[_CheckDict, ...]
+    baseline_results: tuple[_ResultDict, ...]
     snapshot: dict[str, str]
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> dict[str, object]:
         return {
             "schema_version": SCHEMA_VERSION,
             "producer": self.producer.value,
@@ -158,7 +185,7 @@ class _ContractPlan:
     not_applicable_reason: str | None
     problems: tuple[str, ...]
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> dict[str, object]:
         return {
             "disposition": self.disposition.value,
             "work_class": self.work_class,
@@ -273,7 +300,7 @@ def _unquote(value: str) -> str:
     return value
 
 
-def _parse_frontmatter(text: str) -> dict[str, Any]:
+def _parse_frontmatter(text: str) -> dict[str, str | dict[str, str]]:
     lines = text.splitlines()
     if not lines or lines[0].strip() != "---":
         return {}
@@ -282,7 +309,7 @@ def _parse_frontmatter(text: str) -> dict[str, Any]:
     )
     if end is None:
         return {}
-    result: dict[str, Any] = {}
+    result: dict[str, str | dict[str, str]] = {}
     nested: dict[str, str] | None = None
     for line in lines[1:end]:
         if not line.strip() or line.lstrip().startswith("#"):
@@ -320,12 +347,11 @@ def _acceptance_criteria(text: str) -> dict[str, str]:
     if start is None:
         return {}
     selected = lines[start:]
-    if start is not None:
-        for index, line in enumerate(selected):
-            match = _HEADING.match(line)
-            if match and len(match.group(1)) <= level:
-                selected = selected[:index]
-                break
+    for index, line in enumerate(selected):
+        match = _HEADING.match(line)
+        if match and len(match.group(1)) <= level:
+            selected = selected[:index]
+            break
     criteria: dict[str, str] = {}
     for line in selected:
         match = _ACCEPTANCE_ID.search(line)
@@ -333,7 +359,7 @@ def _acceptance_criteria(text: str) -> dict[str, str]:
             continue
         acceptance_id = match.group(0)
         text_value = line.split(acceptance_id, 1)[1].lstrip(" :-\t")
-        criteria.setdefault(acceptance_id, text_value.strip() or acceptance_id)
+        _ = criteria.setdefault(acceptance_id, text_value.strip() or acceptance_id)
     return criteria
 
 
@@ -483,7 +509,9 @@ def _parse_declared_spec(path: Path) -> _ContractPlan:
             seam=contract.seam,
             expected_failure=contract.expected_failure,
             mode=GateMode(contract.mode),
-            contract_source=contract.contract_source,
+            contract_source=cast(
+                Literal["approved", "inferred"], contract.contract_source
+            ),
             interface_version=contract.interface_version,
             matrix_rows=list(contract.matrix_rows),
         )
@@ -552,7 +580,9 @@ def _parse_spec(spec: Path | str) -> _ContractPlan:
     if has_table:
         for row_number, row in enumerate(rows, start=1):
             acceptance_cell = row.get("acceptance", "").strip()
-            acceptance_ids = _ACCEPTANCE_ID.findall(acceptance_cell)
+            acceptance_ids = cast(
+                "list[str]", _ACCEPTANCE_ID.findall(acceptance_cell)
+            )
             residue = _ACCEPTANCE_ID.sub("", acceptance_cell)
             if not acceptance_ids or residue.replace(",", "").replace("`", "").strip():
                 problems.append(
@@ -649,11 +679,17 @@ def _parse_spec(spec: Path | str) -> _ContractPlan:
             problems.append("not-applicable requires a closed non-behavior work_class")
         if contracts or has_table:
             problems.append("not-applicable receipts cannot carry Test Contracts")
-        if not isinstance(reason_value, str) or not reason_value.strip():
+        if (
+            not isinstance(reason_value, str)  # pyright: ignore[reportUnnecessaryIsInstance]
+            or not reason_value.strip()
+        ):
             problems.append("not-applicable requires a non-empty reason")
 
     reason = None
-    if disposition is GateDisposition.NOT_APPLICABLE and isinstance(reason_value, str):
+    if (
+        disposition is GateDisposition.NOT_APPLICABLE
+        and isinstance(reason_value, str)  # pyright: ignore[reportUnnecessaryIsInstance]
+    ):
         reason = reason_value.strip() or None
     return _ContractPlan(
         disposition,
@@ -678,24 +714,24 @@ def parse_gate_applicability(spec: Path | str) -> _ContractPlan:
 
 
 def _load_mapping(
-    source: Path | str | Mapping[str, Any] | GateReceipt,
-) -> tuple[dict[str, Any] | None, list[str]]:
+    source: Path | str | Mapping[str, object] | GateReceipt,
+) -> tuple[dict[str, object] | None, list[str]]:
     if isinstance(source, GateReceipt):
         return source.to_dict(), []
     if isinstance(source, Mapping):
         return dict(source), []
     path = Path(source)
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
+        raw = cast(object, json.loads(path.read_text(encoding="utf-8")))
     except (OSError, json.JSONDecodeError) as exc:
         return None, [f"cannot read JSON receipt {path}: {exc}"]
     if not isinstance(raw, dict):
         return None, [f"receipt root must be a mapping, not {type(raw).__name__}"]
-    return raw, []
+    return cast("dict[str, object]", raw), []
 
 
 def _load_receipt(
-    source: Path | str | Mapping[str, Any] | GateReceipt,
+    source: Path | str | Mapping[str, object] | GateReceipt,
 ) -> tuple[GateReceipt | None, list[str], Provenance | None]:
     raw, problems = _load_mapping(source)
     if raw is None:
@@ -724,7 +760,7 @@ def _path_inside(
             os.path.abspath(raw_path if raw_path.is_absolute() else root / raw_path)
         )
         resolved = lexical.resolve(strict=False)
-        resolved.relative_to(root)
+        _ = resolved.relative_to(root)
         relative = lexical.relative_to(root)
         current = root
         for part in relative.parts:
@@ -770,7 +806,7 @@ def _resolve_spec_reference(
                 return None, f"{label} uses a symlink path: {value!r}"
         path = lexical.resolve(strict=False)
         if not absolute:
-            path.relative_to(root)
+            _ = path.relative_to(root)
     except (OSError, RuntimeError, ValueError):
         return None, (
             f"{label} escapes the project root: {value!r}"
@@ -844,7 +880,7 @@ def _is_trusted_interpreter(executable: str, cwd: Path) -> bool:
 
 
 def _validate_argv(
-    argv: Sequence[str],
+    argv: Sequence[object],
     label: str,
     *,
     cwd: Path | None = None,
@@ -1019,7 +1055,7 @@ def _semantic_errors(
                 if case.kind is not RedKind.CONTRACT:
                     problems.append(
                         f"{label}.cases[{index}] must be kind contract for matrix contract "
-                        f"{acceptance_id}"
+                        + acceptance_id
                     )
                 if case.matrix_row is None:
                     problems.append(
@@ -1143,7 +1179,9 @@ def _run(
         )
     except subprocess.TimeoutExpired as exc:
         parts = (
-            part.decode(errors="replace") if isinstance(part, bytes) else part
+            part.decode(errors="replace")
+            if isinstance(part, bytes)  # pyright: ignore[reportUnnecessaryIsInstance]
+            else part
             for part in (exc.stdout, exc.stderr)
             if part
         )
@@ -1160,7 +1198,7 @@ def _run(
 # its target path by importing site or consulting its startup path.
 def _probe_paths(executable: str, cwd: Path) -> tuple[list[str], list[str]]:
     parent_paths = [path for path in _PARENT_RUNTIME_PATH if path]
-    trusted_paths = []
+    trusted_paths: list[str] = []
     lexical_executable = _lexical_executable_path(executable, cwd)
     resolved_executable = _resolved_executable_path(executable, cwd)
     lexical_prefix = (
@@ -1201,7 +1239,7 @@ def _probe_paths(executable: str, cwd: Path) -> tuple[list[str], list[str]]:
 
 
 def _python_case_runner(argv: list[str], cwd: Path) -> str | None:
-    if not argv or not isinstance(argv[0], str):
+    if not argv:
         return None
     if not _is_trusted_interpreter(argv[0], cwd):
         return None
@@ -1211,7 +1249,7 @@ def _python_case_runner(argv: list[str], cwd: Path) -> str | None:
         return "pytest"
     if len(argv) >= 3 and argv[1:3] == ["-m", "unittest"]:
         return "unittest"
-    if len(argv) >= 2 and isinstance(argv[1], str) and argv[1].endswith(".py"):
+    if len(argv) >= 2 and argv[1].endswith(".py"):
         return "script"
     return None
 
@@ -1297,7 +1335,7 @@ def _run_case(argv: list[str], cwd: Path) -> _Run:
         return _Run(
             127,
             "",
-            "unsupported assertion-proof runner profile; use direct Python, "
+            "unsupported assertion-proof runner profile; use direct Python, " +
             "python -m pytest, or python -m unittest",
         )
     try:
@@ -1311,7 +1349,7 @@ def _run_case(argv: list[str], cwd: Path) -> _Run:
         return _Run(
             127,
             "",
-            "unsupported assertion-proof runner profile; use direct Python, "
+            "unsupported assertion-proof runner profile; use direct Python, " +
             "python -m pytest, or python -m unittest",
         )
 
@@ -1447,7 +1485,7 @@ def _replay_cases(
         if run.error == _PROBE_EVENT_ERROR:
             problems.append(
                 f"{label}.cases[{index}] failed in the harness: "
-                f"{_probe_event_problem(run)}"
+                + f"{_probe_event_problem(run)}"
             )
         elif desired == "red":
             if run.returncode == 0:
@@ -1455,7 +1493,8 @@ def _replay_cases(
             elif _looks_harness_failure(run):
                 suffix = f": {run.error}" if run.error else ""
                 problems.append(
-                    f"{label}.cases[{index}] failed in the harness, not its declared witness{suffix}"
+                    f"{label}.cases[{index}] failed in the harness, "
+                    + f"not its declared witness{suffix}"
                 )
             elif not run.assertion_origin:
                 problems.append(
@@ -1637,7 +1676,7 @@ def _production_symlink_alias(
         if part == "..":
             if not parts:
                 return False
-            parts.pop()
+            _ = parts.pop()
         else:
             parts.append(part)
     return _path_is_beneath("/".join(parts), production_paths)
@@ -1733,6 +1772,7 @@ def _spec_identity(
     if digest is None:
         problems.append(f"{label}.spec_ref cannot be fingerprinted: {receipt.spec_ref}")
         return
+    assert receipt.spec_sha256 is not None
     expected_digest = receipt.spec_sha256.removeprefix("sha256:").lower()
     if digest != expected_digest:
         problems.append(f"{label}.spec_sha256 is stale")
@@ -1833,7 +1873,7 @@ def _guard_graph(root_receipt: GateReceipt, root: Path) -> _GuardGraph:
             for nested in guard.guard_receipt_refs:
                 visit(nested)
         finally:
-            visiting.pop()
+            _ = visiting.pop()
 
     duplicate_refs(root_receipt, "GateReceipt")
     for reference in root_receipt.guard_receipt_refs:
@@ -1849,7 +1889,7 @@ def _guard_graph(root_receipt: GateReceipt, root: Path) -> _GuardGraph:
 
 
 def _load_and_check(
-    source: Path | str | Mapping[str, Any] | GateReceipt,
+    source: Path | str | Mapping[str, object] | GateReceipt,
     root: Path,
     *,
     require_spec: bool = False,
@@ -1888,14 +1928,14 @@ def _validate_runtime(
         return
     _replay_baselines(receipt, root, problems, "GateReceipt")
     desired: Literal["red", "green"] = "red" if state == "red" else "green"
-    _replay_cases(receipt, root, desired, problems, "GateReceipt")
-    _protected_errors(receipt, root, problems, "GateReceipt")
+    _ = _replay_cases(receipt, root, desired, problems, "GateReceipt")
+    _ = _protected_errors(receipt, root, problems, "GateReceipt")
     if graph is None:
         return
     for reference, guard in _graph_receipts(graph):
         _replay_baselines(guard, root, problems, reference)
-        _replay_cases(guard, root, "green", problems, reference)
-        _protected_errors(guard, root, problems, reference)
+        _ = _replay_cases(guard, root, "green", problems, reference)
+        _ = _protected_errors(guard, root, problems, reference)
 
 
 def validate_gate(
@@ -1994,7 +2034,7 @@ def _issue_output_errors(receipt: GateReceipt, output: Path, root: Path) -> list
     namespace = root / ".cheese" / namespace_name
     problems: list[str] = []
     try:
-        output.relative_to(namespace)
+        _ = output.relative_to(namespace)
     except ValueError:
         problems.append(
             f"receipt output must be beneath project .cheese/{namespace_name}/"
@@ -2020,7 +2060,9 @@ def _press_history_paths(root: Path, receipt: GateReceipt) -> tuple[Path, Path]:
     return directory / f"{key}.json", directory / f"{key}.lock"
 
 
-def _receipt_identity(receipt: GateReceipt) -> tuple[Any, ...]:
+def _receipt_identity(
+    receipt: GateReceipt,
+) -> tuple[str, str, str | None, str | None, str, tuple[str, ...]]:
     contracts = tuple(
         json.dumps(contract.to_dict(), sort_keys=True, separators=(",", ":"))
         for contract in receipt.contracts
@@ -2044,7 +2086,7 @@ def _read_press_history(
         payload = _read_internal_bytes(root, history_path)
         if payload is None:
             return (), []
-        raw = json.loads(payload)
+        raw = cast(object, json.loads(payload))
     except (
         GateValidationError,
         OSError,
@@ -2056,6 +2098,7 @@ def _read_press_history(
         return (), [f"Press history is malformed: {exc}"]
     if not isinstance(raw, dict):
         return (), ["Press history root must be an object"]
+    raw = cast("dict[str, object]", raw)
     problems: list[str] = []
     if raw.get("schema_version") != SCHEMA_VERSION:
         problems.append("Press history schema_version is not current")
@@ -2063,12 +2106,13 @@ def _read_press_history(
         problems.append("Press history has a mismatched project_key")
     if raw.get("work_id") != receipt.work_id:
         problems.append("Press history has a mismatched work_id")
-    references = raw.get("receipts")
-    if not isinstance(references, list) or not all(
-        isinstance(item, str) for item in references
+    references_raw = raw.get("receipts")
+    if not isinstance(references_raw, list) or not all(
+        isinstance(item, str) for item in cast("list[object]", references_raw)
     ):
         problems.append("Press history receipts must be a list of paths")
         return (), problems
+    references = cast("list[str]", references_raw)
     if not references:
         problems.append("Press history cannot be empty after a Press receipt")
     if len(references) > _PRESS_HISTORY_LIMIT:
@@ -2195,7 +2239,7 @@ def _existing_press_receipts(
 
 
 @contextmanager
-def _internal_directory_fd(root: Path, directory: Path) -> Iterator[int]:
+def _internal_directory_fd(root: Path, directory: Path) -> Generator[int]:
     try:
         parts = directory.relative_to(root).parts
     except ValueError as exc:
@@ -2228,7 +2272,7 @@ def _internal_directory_fd(root: Path, directory: Path) -> Iterator[int]:
 def _internal_entry_exists(root: Path, path: Path) -> bool:
     with _internal_directory_fd(root, path.parent) as directory_fd:
         try:
-            os.stat(path.name, dir_fd=directory_fd, follow_symlinks=False)
+            _ = os.stat(path.name, dir_fd=directory_fd, follow_symlinks=False)
         except FileNotFoundError:
             return False
         return True
@@ -2285,7 +2329,7 @@ def _remove_internal_entry(root: Path, path: Path) -> None:
 
 
 @contextmanager
-def _press_history_lock(root: Path, lock_path: Path) -> Iterator[None]:
+def _press_history_lock(root: Path, lock_path: Path) -> Generator[None]:
     with _internal_directory_fd(root, lock_path.parent) as directory_fd:
         try:
             descriptor = os.open(
@@ -2319,7 +2363,7 @@ def _atomic_internal_write(root: Path, path: Path, payload: bytes) -> None:
             )
             with os.fdopen(descriptor, "wb") as stream:
                 descriptor = -1
-                stream.write(payload)
+                _ = stream.write(payload)
                 stream.flush()
                 os.fsync(stream.fileno())
             os.replace(
@@ -2349,7 +2393,7 @@ def _atomic_write_bytes(path: Path, payload: bytes) -> None:
         )
         try:
             with os.fdopen(descriptor, "wb") as stream:
-                stream.write(payload)
+                _ = stream.write(payload)
                 stream.flush()
                 os.fsync(stream.fileno())
             os.replace(temporary, path)
@@ -2373,22 +2417,24 @@ def _press_phase_token(
         return None, path, problems
     checks = raw.get("baseline_checks")
     results = raw.get("baseline_results")
-    if (
-        not isinstance(checks, list)
-        or not isinstance(results, list)
-        or len(checks) != len(results)
-    ):
+    if not isinstance(checks, list) or not isinstance(results, list):
+        return None, path, ["Press phase token has invalid baseline evidence"]
+    checks = cast("list[object]", checks)
+    results = cast("list[object]", results)
+    if len(checks) != len(results):
         return None, path, ["Press phase token has invalid baseline evidence"]
     baseline_checks: list[SimpleNamespace] = []
     for check, result in zip(checks, results, strict=True):
         if not isinstance(check, dict) or not isinstance(result, dict):
             return None, path, ["Press phase token has invalid baseline evidence"]
+        check = cast("dict[str, object]", check)
+        result = cast("dict[str, object]", result)
         baseline_checks.append(
             SimpleNamespace(
-                id=check.get("id"),
-                argv=tuple(check.get("argv", ())),
-                cwd=check.get("cwd"),
-                observed_exit_code=result.get("observed_exit_code"),
+                id=cast(str, check.get("id")),
+                argv=tuple(cast("list[str]", check.get("argv", ()))),
+                cwd=cast(str, check.get("cwd")),
+                observed_exit_code=cast(int, result.get("observed_exit_code")),
             )
         )
     binding = SimpleNamespace(
@@ -2399,7 +2445,9 @@ def _press_phase_token(
         phase_token_sha256=digest,
         baseline_checks=tuple(baseline_checks),
     )
-    return _load_phase_token(source, binding, root)
+    return _load_phase_token(
+        source, cast(_PhaseTokenReceipt, cast(object, binding)), root
+    )
 
 
 def _press_prior_receipt(
@@ -2566,14 +2614,14 @@ def consume_press_boundary(
 
 def _read_json_object(
     path: Path, label: str
-) -> tuple[dict[str, Any] | None, list[str]]:
+) -> tuple[dict[str, object] | None, list[str]]:
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
+        raw = cast(object, json.loads(path.read_text(encoding="utf-8")))
     except (OSError, json.JSONDecodeError) as exc:
         return None, [f"cannot read {label} {path}: {exc}"]
     if not isinstance(raw, dict):
         return None, [f"{label} must be a JSON object"]
-    return raw, []
+    return cast("dict[str, object]", raw), []
 
 
 def _phase_check(
@@ -2581,11 +2629,12 @@ def _phase_check(
     index: int,
     root: Path,
     problems: list[str],
-) -> dict[str, Any] | None:
+) -> _CheckDict | None:
     label = f"phase baseline_checks[{index}]"
     if not isinstance(raw, dict):
         problems.append(f"{label} must be an object")
         return None
+    raw = cast("dict[str, object]", raw)
     extras = sorted(set(raw) - _PHASE_CHECK_KEYS)
     missing = sorted(_PHASE_CHECK_KEYS - set(raw))
     for key in extras:
@@ -2600,7 +2649,7 @@ def _phase_check(
     if (
         not isinstance(argv, list)
         or not argv
-        or not all(isinstance(token, str) and token for token in argv)
+        or not all(isinstance(token, str) and token for token in cast("list[object]", argv))
     ):
         problems.append(f"{label}.argv must be a non-empty list of strings")
     if not isinstance(cwd, str) or not cwd:
@@ -2609,18 +2658,23 @@ def _phase_check(
         _safe_cwd(root, cwd, f"{label}.cwd", problems) if isinstance(cwd, str) else None
     )
     if isinstance(argv, list):
-        problems.extend(_validate_argv(argv, f"{label}.argv", cwd=cwd_path))
+        problems.extend(
+            _validate_argv(cast(list[object], argv), f"{label}.argv", cwd=cwd_path)
+        )
     if extras or missing or not isinstance(identifier, str) or not identifier.strip():
         return None
     if (
         not isinstance(argv, list)
         or not argv
-        or not all(isinstance(token, str) and token for token in argv)
+        or not all(isinstance(token, str) and token for token in cast("list[object]", argv))
         or not isinstance(cwd, str)
         or cwd_path is None
     ):
         return None
-    return {"id": identifier, "argv": argv, "cwd": cwd}
+    return cast(
+        _CheckDict,
+        cast(object, {"id": identifier, "argv": cast(list[str], argv), "cwd": cwd}),
+    )
 
 
 def _phase_production_paths(
@@ -2631,6 +2685,7 @@ def _phase_production_paths(
     if not isinstance(raw, list) or not raw:
         problems.append("phase plan.production_paths must be a non-empty list")
         return ()
+    raw = cast("list[object]", raw)
     paths: list[str] = []
     for index, item in enumerate(raw, start=1):
         label = f"phase plan.production_paths[{index}]"
@@ -2692,10 +2747,11 @@ def _load_phase_plan(
         raw.get("production_paths"), root, problems
     )
     raw_checks = raw.get("baseline_checks")
-    checks: list[dict[str, Any]] = []
+    checks: list[_CheckDict] = []
     if not isinstance(raw_checks, list):
         problems.append("phase plan.baseline_checks must be a list")
     else:
+        raw_checks = cast("list[object]", raw_checks)
         for index, raw_check in enumerate(raw_checks, start=1):
             check = _phase_check(raw_check, index, root, problems)
             if check is not None:
@@ -2725,7 +2781,7 @@ def _phase_output_errors(producer: GateProducer, output: Path, root: Path) -> li
     namespace = root / ".cheese" / producer.value
     problems: list[str] = []
     try:
-        output.relative_to(namespace)
+        _ = output.relative_to(namespace)
     except ValueError:
         problems.append(
             f"phase token output must be beneath project .cheese/{producer.value}/"
@@ -2747,7 +2803,7 @@ def begin_phase(plan: Path | str, output: Path | str) -> PhaseTokenResult:
     if loaded is None or output_path is None:
         raise GateValidationError(_unique(problems))
     problems.extend(_phase_output_errors(loaded.producer, output_path, root))
-    results: list[dict[str, Any]] = []
+    results: list[_ResultDict] = []
     for index, check in enumerate(loaded.baseline_checks, start=1):
         run = _run(check["argv"], root / check["cwd"])
         if run.error:
@@ -2782,7 +2838,7 @@ def begin_phase(plan: Path | str, output: Path | str) -> PhaseTokenResult:
 
 def _load_phase_token(
     source: Path | str,
-    receipt: GateReceipt,
+    receipt: _PhaseTokenReceipt,
     root: Path,
     *,
     allow_inherited_root: bool = False,
@@ -2854,6 +2910,7 @@ def _load_phase_token(
     if not isinstance(raw_production_paths, list) or not raw_production_paths:
         problems.append("phase token.production_paths must be a non-empty list")
     else:
+        raw_production_paths = cast("list[object]", raw_production_paths)
         for index, item in enumerate(raw_production_paths, start=1):
             label = f"phase token.production_paths[{index}]"
             if not isinstance(item, str) or not item:
@@ -2883,37 +2940,41 @@ def _load_phase_token(
                 )
                 break
     checks_raw = raw.get("baseline_checks")
-    checks: list[dict[str, Any]] = []
+    checks: list[_CheckDict] = []
     if not isinstance(checks_raw, list):
         problems.append("phase token.baseline_checks must be a list")
     else:
+        checks_raw = cast("list[object]", checks_raw)
         for index, raw_check in enumerate(checks_raw, start=1):
             check = _phase_check(raw_check, index, root, problems)
             if check is not None:
                 checks.append(check)
     results_raw = raw.get("baseline_results")
-    results: list[dict[str, Any]] = []
+    results: list[_ResultDict] = []
     if not isinstance(results_raw, list):
         problems.append("phase token.baseline_results must be a list")
     else:
+        results_raw = cast("list[object]", results_raw)
         for index, raw_result in enumerate(results_raw, start=1):
             label = f"phase token.baseline_results[{index}]"
             if not isinstance(raw_result, dict):
                 problems.append(f"{label} must be an object")
                 continue
-            if set(raw_result) != _PHASE_RESULT_KEYS:
+            raw_result = cast("dict[str, object]", raw_result)
+            if set(raw_result) != set(_PHASE_RESULT_KEYS):
                 problems.append(f"{label} must contain only id and observed_exit_code")
                 continue
             if not isinstance(raw_result.get("id"), str) or not raw_result["id"]:
                 problems.append(f"{label}.id must be a non-empty string")
             if raw_result.get("observed_exit_code") != 0:
                 problems.append(f"{label}.observed_exit_code must be 0")
-            results.append(dict(raw_result))
+            results.append(cast(_ResultDict, cast(object, dict(raw_result))))
     snapshot_raw = raw.get("snapshot")
     snapshot: dict[str, str] = {}
     if not isinstance(snapshot_raw, dict):
         problems.append("phase token.snapshot must be an object")
     else:
+        snapshot_raw = cast("dict[object, object]", snapshot_raw)
         for relative, fingerprint in snapshot_raw.items():
             if (
                 not isinstance(relative, str)
@@ -2928,7 +2989,7 @@ def _load_phase_token(
                 continue
             if not isinstance(fingerprint, str) or not re.fullmatch(
                 r"(?:file:[0-9a-f]{64}:mode:[0-7]{3,4}|directory:mode:[0-7]{3,4}|"
-                r"symlink:[^\r\n]+:mode:[0-7]{3,4}:target:[^\r\n]+)",
+                + r"symlink:[^\r\n]+:mode:[0-7]{3,4}:target:[^\r\n]+)",
                 fingerprint,
             ):
                 problems.append(
@@ -2936,8 +2997,8 @@ def _load_phase_token(
                 )
                 continue
             snapshot[relative] = fingerprint
-    if [result.get("id") for result in results] != [
-        check.get("id") for check in checks
+    if [result["id"] for result in results] != [
+        check["id"] for check in checks
     ]:
         problems.append("phase token baseline result IDs do not match baseline checks")
     receipt_checks = [
@@ -2990,7 +3051,7 @@ def _is_test_side_path(relative: str) -> bool:
 
 
 def _phase_replay_errors(
-    receipt: GateReceipt,
+    _receipt: GateReceipt,
     token: _PhaseToken,
     current: Mapping[str, str],
     label: str,
@@ -3091,7 +3152,7 @@ def _issue_press_history(
             raise GateValidationError(
                 ("Press history has reached the three RED observation limit",)
             )
-        missing = []
+        missing: list[str] = []
         for reference in references:
             path, error = _path_inside(root, reference, "Press history receipt")
             if error or path is None or path.as_posix() not in graph.nodes:
@@ -3143,20 +3204,21 @@ def _canonical_receipt(
     receipt: GateReceipt, runs: Mapping[str, _Run]
 ) -> GateReceipt | None:
     raw = receipt.to_dict()
-    for case in raw.get("cases", []):
-        run = runs.get(case.get("id"))
+    cases = cast("list[dict[str, object]]", raw.get("cases", []))
+    for case in cases:
+        run = runs.get(cast(str, case.get("id")))
         if run is None:
             continue
         case["observed_exit_code"] = run.returncode
         case["observed_witness"] = _canonical_witness(
-            run.output, case["expected_witness"]
+            run.output, cast("Sequence[str]", case["expected_witness"])
         )
     loaded = strict_load(raw, GateReceipt, strict=True)
     return loaded.value if not loaded.problems else None
 
 
 def issue_gate(
-    candidate: Path | str | Mapping[str, Any] | GateReceipt,
+    candidate: Path | str | Mapping[str, object] | GateReceipt,
     output: Path | str,
     phase_token: Path | str,
 ) -> GateReceipt:
@@ -3203,7 +3265,7 @@ def issue_gate(
         if receipt.producer not in {GateProducer.CUT, GateProducer.PRESS}:
             problems.append("not-applicable receipt has an unknown producer")
     else:
-        _protected_errors(receipt, root, problems, "GateReceipt")
+        _ = _protected_errors(receipt, root, problems, "GateReceipt")
 
     ignored = {output_path}
     if candidate_path is not None:
@@ -3264,8 +3326,8 @@ def issue_gate(
         if graph is not None:
             for reference, guard in _graph_receipts(graph):
                 _replay_baselines(guard, root, problems, reference)
-                _replay_cases(guard, root, "green", problems, reference)
-                _protected_errors(guard, root, problems, reference)
+                _ = _replay_cases(guard, root, "green", problems, reference)
+                _ = _protected_errors(guard, root, problems, reference)
     receipt_after = _receipt_snapshot(
         receipt_paths, problems, "receipt files after issue"
     )
@@ -3334,7 +3396,7 @@ def _atomic_write(receipt: GateReceipt, output: Path) -> None:
         )
         try:
             with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
-                stream.write(payload)
+                _ = stream.write(payload)
                 stream.flush()
                 os.fsync(stream.fileno())
             os.replace(temporary, output_path)
@@ -3382,7 +3444,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 raise GateValidationError(
                     (
                         "usage: red-gate issue <candidate> --token <token> "
-                        "--out <receipt>",
+                        + "--out <receipt>",
                     )
                 )
             receipt = issue_gate(Path(args[0]), Path(args[4]), Path(args[2]))
@@ -3393,7 +3455,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 raise GateValidationError(
                     ("usage: red-gate validate <receipt> --state red|green",)
                 )
-            result = validate_gate(Path(args[0]), args[2])  # type: ignore[arg-type]
+            result = validate_gate(Path(args[0]), cast(State, args[2]))
             print(json.dumps(result.to_dict(), indent=2, sort_keys=True))
             return 0 if result.ok else 1
         raise GateValidationError((f"unknown red-gate command: {command}",))
