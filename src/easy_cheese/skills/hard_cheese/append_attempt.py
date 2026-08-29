@@ -29,32 +29,13 @@ import datetime as _dt
 import os
 import subprocess
 import tempfile
-from collections.abc import Callable
 from pathlib import Path
 from typing import TextIO, cast
 
-try:
-    import fcntl  # POSIX advisory file locks
-except ImportError:  # pragma: no cover - exercised only on Windows
-    fcntl = None
-
-try:
-    import msvcrt  # Windows advisory file locks
-except ImportError:  # pragma: no cover - exercised only on POSIX
-    msvcrt = None
-
 from easy_cheese.shared import cli
+from easy_cheese.shared.flock import with_flock as _with_flock
 
 REPO_ROOT = Path.cwd()
-
-
-def _lock(fd: int, *, exclusive: bool) -> None:
-    """Acquire (exclusive=True) or release an advisory lock on fd, cross-platform."""
-    if fcntl is not None:
-        fcntl.flock(fd, fcntl.LOCK_EX if exclusive else fcntl.LOCK_UN)
-    else:  # pragma: no cover - Windows only
-        assert msvcrt is not None
-        msvcrt.locking(fd, msvcrt.LK_LOCK if exclusive else msvcrt.LK_UNLCK, 1)
 
 
 def _artifact_dir() -> Path:
@@ -115,26 +96,6 @@ def _append_row(target: Path, row: str) -> None:
     elif not existing.endswith("\n"):
         existing += "\n"
     _atomic_rewrite(target, existing + row)
-
-
-def _with_flock(lock_path: Path, fn: Callable[[], None]) -> None:
-    """Run fn() while holding an exclusive advisory lock on lock_path.
-
-    Uses POSIX ``fcntl.flock`` where available and falls back to
-    ``msvcrt.locking`` on Windows so the concurrency guard is not silently lost.
-    """
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
-    # O_CREAT so concurrent processes share the same lockfile inode. 0o600
-    # so the lockfile is not world-readable (CodeQL py/overly-permissive-file).
-    fd = os.open(str(lock_path), os.O_RDWR | os.O_CREAT, 0o600)
-    try:
-        _lock(fd, exclusive=True)
-        fn()
-    finally:
-        try:
-            _lock(fd, exclusive=False)
-        finally:
-            os.close(fd)
 
 
 def _cmd_append(args: argparse.Namespace) -> None:

@@ -10,8 +10,9 @@ from __future__ import annotations
 
 import argparse
 import math
+import sys
 import tomllib
-from typing import Protocol, TextIO, cast
+from typing import TextIO, cast
 
 from easy_cheese.shared import cli, git_utils
 
@@ -104,11 +105,11 @@ def _load_weight_override(config_path: str) -> tuple[tuple[str, float], ...] | N
     return tuple(weights)
 
 
-class _Args(Protocol):
-    config: str | None
-    repo: str
-    diff_args: list[str]
-    stdout: TextIO
+class _Args(argparse.Namespace):
+    config: str | None = None
+    repo: str = "."
+    diff_args: list[str] = ["HEAD"]
+    stdout: TextIO = sys.stdout
 
 
 def _cmd_score(args: _Args) -> None:

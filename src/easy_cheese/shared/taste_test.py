@@ -87,7 +87,7 @@ class TestContract:
             "contract_source": self.contract_source,
         }
         for name, value in values.items():
-            if not isinstance(value, str) or not value.strip():  # pyright: ignore[reportUnnecessaryIsInstance]
+            if not value.strip():
                 raise ApplicabilityError(f"contract-{name}-empty")
         if ACCEPTANCE_ID.fullmatch(self.acceptance_id) is None:
             raise ApplicabilityError(
@@ -103,20 +103,11 @@ class TestContract:
             raise ApplicabilityError(
                 f"contract-nondeterministic-witness:{self.acceptance_id}"
             )
-        if self.interface_version is not None and (
-            not isinstance(  # pyright: ignore[reportUnnecessaryIsInstance]
-                self.interface_version, str
-            )
-            or not self.interface_version.strip()
-        ):
+        if self.interface_version is not None and not self.interface_version.strip():
             raise ApplicabilityError(
                 f"contract-interface-version-empty:{self.acceptance_id}"
             )
-        if any(
-            not isinstance(row, str)  # pyright: ignore[reportUnnecessaryIsInstance]
-            or not row.strip()
-            for row in self.matrix_rows
-        ):
+        if any(not row.strip() for row in self.matrix_rows):
             raise ApplicabilityError(f"contract-matrix-row-empty:{self.acceptance_id}")
         if len(set(self.matrix_rows)) != len(self.matrix_rows):
             raise ApplicabilityError(
@@ -186,7 +177,7 @@ class NotApplicable:
             raise ApplicabilityError(
                 "not-applicable-work-class-must-be-closed-non-behavior"
             )
-        if not isinstance(self.reason, str) or not self.reason.strip():  # pyright: ignore[reportUnnecessaryIsInstance]
+        if not self.reason.strip():
             raise ApplicabilityError("not-applicable-reason-required")
         if self.contracts:
             raise ApplicabilityError("not-applicable-cannot-carry-test-contracts")
@@ -222,7 +213,7 @@ class ForkCoverage:
             raise TasteTestError(f"fork-reflected-in-not-list:{fork_id}")
         reflected_items = cast(list[object], reflected)
         if any(not isinstance(item, str) for item in reflected_items):
-            raise TasteTestError(f"fork-reflected-in-not-list:{fork_id}")
+            raise TasteTestError(f"fork-reflected-in-not-strings:{fork_id}")
         reflected_strs = cast(list[str], reflected_items)
         normalized: list[str] = []
         for item in reflected_strs:

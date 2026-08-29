@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import cast
 
 _COMMAND_RE = re.compile(r"[a-z0-9][a-z0-9_-]*")
-CommandHandler = Callable[[list[str]], int]
+CommandHandler = Callable[[list[str]], object]
 
 
 @dataclass(frozen=True)
@@ -19,10 +19,8 @@ class Command:
     target: str
 
     def __post_init__(self) -> None:
-        if not isinstance(self.name, str) or _COMMAND_RE.fullmatch(self.name) is None:  # pyright: ignore[reportUnnecessaryIsInstance]
+        if _COMMAND_RE.fullmatch(self.name) is None:
             raise ValueError("invalid command name")
-        if not isinstance(self.target, str):  # pyright: ignore[reportUnnecessaryIsInstance]
-            raise ValueError("invalid command target")
         module, separator, attribute = self.target.partition(":")
         if not module or separator != ":" or not attribute:
             raise ValueError("invalid command target")
@@ -69,7 +67,7 @@ def dispatch(commands: Sequence[Command], argv: Sequence[str]) -> int:
         print(f"usage: <pyz> {{{choices}}} [args...]", file=sys.stderr)
         return 2
     result = _handler(command.target)(list(argv[1:]))
-    if not isinstance(result, int):  # pyright: ignore[reportUnnecessaryIsInstance]
+    if not isinstance(result, int):
         raise TypeError(f"bundle command {name!r} did not return an integer status")
     return result
 

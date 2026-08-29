@@ -29,7 +29,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from typing import Protocol, TextIO, TypedDict, cast
+from typing import TextIO, TypedDict, cast
 
 # cli is co-staged in the bundled .pyz alongside this module
 from easy_cheese.shared import cli
@@ -104,8 +104,8 @@ def _validate_records(value: object, field: str) -> list[FailureRecord]:
     return cast(list[FailureRecord], items)
 
 
-class _Args(Protocol):
-    stdout: TextIO
+class _Args(argparse.Namespace):
+    stdout: TextIO = sys.stdout
 
 
 def _cmd_classify(args: _Args) -> None:

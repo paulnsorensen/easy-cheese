@@ -30,18 +30,13 @@ from __future__ import annotations
 import argparse
 import contextlib
 import os
+import sys
 import tempfile
 from pathlib import Path
-from typing import Callable, Protocol, TextIO, cast
-
-try:
-    import fcntl  # POSIX advisory file locks
-    msvcrt = None
-except ImportError:  # pragma: no cover - exercised only on Windows
-    fcntl = None
-    import msvcrt
+from typing import TextIO, cast
 
 from easy_cheese.shared import cli  # noqa: E402
+from easy_cheese.shared.flock import with_flock as _with_flock  # noqa: E402
 from easy_cheese.shared.manifest_io import (  # noqa: E402
     ManifestLoadError,
     parse_mapping,
@@ -61,37 +56,6 @@ PHASES = {
     "pr_publish_complete",
 }
 WORK_STATUSES = ("pending", "running", "completed", "failed")
-
-
-# Mirrors append-attempt.py's _lock helper.
-def _lock(fd: int, *, exclusive: bool) -> None:
-    """Acquire (exclusive=True) or release an advisory lock on fd, cross-platform."""
-    if fcntl is not None:
-        fcntl.flock(fd, fcntl.LOCK_EX if exclusive else fcntl.LOCK_UN)
-    else:  # pragma: no cover - Windows only
-        assert msvcrt is not None
-        msvcrt.locking(fd, msvcrt.LK_LOCK if exclusive else msvcrt.LK_UNLCK, 1)
-
-
-# Mirrors append-attempt.py's _with_flock helper.
-def _with_flock(lock_path: Path, fn: Callable[[], None]) -> None:
-    """Run fn() while holding an exclusive advisory lock on lock_path.
-
-    Uses POSIX ``fcntl.flock`` where available and falls back to
-    ``msvcrt.locking`` on Windows so the concurrency guard is not silently lost.
-    """
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
-    # O_CREAT so concurrent processes share the same lockfile inode. 0o600
-    # so the lockfile is not world-readable (CodeQL py/overly-permissive-file).
-    fd = os.open(str(lock_path), os.O_RDWR | os.O_CREAT, 0o600)
-    try:
-        _lock(fd, exclusive=True)
-        fn()
-    finally:
-        try:
-            _lock(fd, exclusive=False)
-        finally:
-            os.close(fd)
 
 
 def _load_manifest(path: Path) -> tuple[dict[str, object], bytes]:
@@ -180,10 +144,10 @@ def _commit(path: Path, data: dict[str, object], original: bytes) -> None:
 # ----- subcommand handlers -------------------------------------------------
 
 
-class _SetPhaseArgs(Protocol):
-    manifest: str
-    phase: str
-    stdout: TextIO
+class _SetPhaseArgs(argparse.Namespace):
+    manifest: str = ""
+    phase: str = ""
+    stdout: TextIO = sys.stdout
 
 
 def cmd_set_phase(args: _SetPhaseArgs) -> None:
@@ -215,16 +179,16 @@ def _find_curd(data: dict[str, object], curd_id: int) -> dict[str, object]:
     raise cli.CliError(f"curd id {curd_id} not found")
 
 
-class _SetCurdStatusArgs(Protocol):
-    manifest: str
-    curd: int
-    status: str
-    commit_sha: str | None
-    base_commit: str | None
-    reviewed_tree_oid: str | None
-    diff_hash: str | None
-    scope: list[str] | None
-    stdout: TextIO
+class _SetCurdStatusArgs(argparse.Namespace):
+    manifest: str = ""
+    curd: int = 0
+    status: str = ""
+    commit_sha: str | None = None
+    base_commit: str | None = None
+    reviewed_tree_oid: str | None = None
+    diff_hash: str | None = None
+    scope: list[str] | None = None
+    stdout: TextIO = sys.stdout
 
 
 def cmd_set_curd_status(args: _SetCurdStatusArgs) -> None:
@@ -258,18 +222,18 @@ def cmd_set_curd_status(args: _SetCurdStatusArgs) -> None:
     cli.emit(f"curd {args.curd} status set to {args.status}", stdout=args.stdout)
 
 
-class _SetPostReviewArgs(Protocol):
-    manifest: str
-    base_commit: str
-    reviewed_tree_oid: str
-    diff_hash: str
-    scope: list[str]
-    press_slug: str | None
-    age_slug: str | None
-    cure_slug: str | None
-    findings_applied: int | None
-    findings_deferred: int | None
-    stdout: TextIO
+class _SetPostReviewArgs(argparse.Namespace):
+    manifest: str = ""
+    base_commit: str = ""
+    reviewed_tree_oid: str = ""
+    diff_hash: str = ""
+    scope: list[str] = []
+    press_slug: str | None = None
+    age_slug: str | None = None
+    cure_slug: str | None = None
+    findings_applied: int | None = None
+    findings_deferred: int | None = None
+    stdout: TextIO = sys.stdout
 
 
 def cmd_set_post_review(args: _SetPostReviewArgs) -> None:
@@ -320,12 +284,12 @@ def _find_wiring(data: dict[str, object], wiring_id: str) -> dict[str, object]:
     raise cli.CliError(f"wiring id {wiring_id!r} not found")
 
 
-class _SetWiringStatusArgs(Protocol):
-    manifest: str
-    wiring: str
-    status: str
-    commit_sha: str | None
-    stdout: TextIO
+class _SetWiringStatusArgs(argparse.Namespace):
+    manifest: str = ""
+    wiring: str = ""
+    status: str = ""
+    commit_sha: str | None = None
+    stdout: TextIO = sys.stdout
 
 
 def cmd_set_wiring_status(args: _SetWiringStatusArgs) -> None:
@@ -346,11 +310,11 @@ def cmd_set_wiring_status(args: _SetWiringStatusArgs) -> None:
     cli.emit(f"wiring {args.wiring} status set to {args.status}", stdout=args.stdout)
 
 
-class _CheckFilesArgs(Protocol):
-    manifest: str
-    root: str | None
-    json_mode: bool
-    stdout: TextIO
+class _CheckFilesArgs(argparse.Namespace):
+    manifest: str = ""
+    root: str | None = None
+    json_mode: bool = False
+    stdout: TextIO = sys.stdout
 
 
 def cmd_check_files(args: _CheckFilesArgs) -> None:

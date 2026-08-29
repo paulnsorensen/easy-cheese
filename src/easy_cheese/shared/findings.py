@@ -52,6 +52,21 @@ _BULLET_RE = re.compile(
     re.IGNORECASE,
 )
 
+
+def match_severity_heading(line: str) -> str | None:
+    """Return the lowercase severity if ``line`` is a `## <severity>` heading, else None."""
+    match = _SEVERITY_HEADING_RE.match(line)
+    return match.group("severity").lower() if match else None
+
+
+def match_bullet(line: str) -> re.Match[str] | None:
+    """Return the finding-bullet match for ``line``, or None if it isn't a bullet.
+
+    Group "sev" holds the inline `[dim:severity]` override, if present.
+    """
+    return _BULLET_RE.match(line)
+
+
 # Sub-field lines, indented under the main bullet:
 #   - location: <tier> · fix-cost-now: <bucket> · fix-cost-later: <bucket>
 #   - recommendation: <text>

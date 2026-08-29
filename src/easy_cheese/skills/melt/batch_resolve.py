@@ -14,7 +14,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Protocol, TypedDict, cast
+from typing import TypedDict
 
 from easy_cheese.shared.git_utils import (
     extract_stages,
@@ -250,11 +250,11 @@ def format_verbose(results: list[_ResolveResult], dry_run: bool) -> str:
     return "\n".join(lines)
 
 
-class _Args(Protocol):
-    apply: bool
-    verbose: bool
-    debug: str | None
-    files: list[str]
+class _Args(argparse.Namespace):
+    apply: bool = False
+    verbose: bool = False
+    debug: str | None = None
+    files: list[str] = []
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -275,7 +275,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     _ = parser.add_argument("files", nargs="*", help="Specific files (default: all conflicted files).")
 
-    args = cast(_Args, cast(object, parser.parse_args(argv)))
+    args = parser.parse_args(argv, namespace=_Args())
 
     if not shutil.which("mergiraf"):
         print("mergiraf not found — install with: cargo install mergiraf", file=sys.stderr)

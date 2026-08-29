@@ -10,7 +10,7 @@ import argparse
 import subprocess
 import sys
 from pathlib import Path
-from typing import Protocol, TypedDict, cast
+from typing import TypedDict
 
 from easy_cheese.shared.git_utils import (
     detect_lockfile_type,
@@ -167,10 +167,10 @@ def _collect_lockfiles(files: list[str]) -> list[str]:
     return [f for f in get_conflicted_files() if detect_lockfile_type(f)]
 
 
-class _Args(Protocol):
-    strategy: str
-    dry_run: bool
-    files: list[str]
+class _Args(argparse.Namespace):
+    strategy: str = "theirs"
+    dry_run: bool = False
+    files: list[str] = []
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -194,7 +194,7 @@ def main(argv: list[str] | None = None) -> int:
         help="Specific lockfiles to resolve (default: auto-detect)",
     )
 
-    args = cast(_Args, cast(object, parser.parse_args(argv)))
+    args = parser.parse_args(argv, namespace=_Args())
     lockfiles = _collect_lockfiles(args.files)
 
     if not lockfiles:

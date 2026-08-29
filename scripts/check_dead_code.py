@@ -13,10 +13,13 @@ import tokenize
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol, override
+from typing import Protocol, TypedDict, cast, override
 
 from vulture import Vulture  # pyright: ignore[reportMissingTypeStubs]
-from vulture.config import InputError, make_config  # pyright: ignore[reportMissingTypeStubs]
+from vulture.config import (  # pyright: ignore[reportMissingTypeStubs]
+    InputError,
+    make_config,  # pyright: ignore[reportUnknownVariableType]
+)
 from vulture.core import ExitCode  # pyright: ignore[reportMissingTypeStubs]
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -30,6 +33,26 @@ class _UnusedItem(Protocol):
     typ: str
 
     def get_report(self) -> str: ...
+
+
+class _VultureLike(Protocol):
+    exit_code: int
+
+    def scavenge(self, paths: Sequence[str], exclude: Sequence[str] | None = None) -> None: ...  # noqa: V107
+
+    def get_unused_code(
+        self, min_confidence: int = 0, sort_by_size: bool = False  # noqa: V107
+    ) -> list[_UnusedItem]: ...
+
+
+class _VultureConfig(TypedDict):
+    verbose: bool  # noqa: V107
+    ignore_names: list[str]  # noqa: V107
+    ignore_decorators: list[str]  # noqa: V107
+    paths: list[str]  # noqa: V107
+    exclude: list[str]  # noqa: V107
+    min_confidence: int  # noqa: V107
+    sort_by_size: bool  # noqa: V107
 
 
 # base names are matched via each file's own import map (see _import_map),
@@ -325,15 +348,25 @@ def _accepted_reason(finding: _Finding, module: ast.Module, imports: dict[str, s
 
 def main(argv: Sequence[str] | None = None) -> int:
     try:
-        config = make_config(list(argv) if argv is not None else sys.argv[1:])
+        config = cast(
+            _VultureConfig, make_config(list(argv) if argv is not None else sys.argv[1:])
+        )
     except InputError as err:
         print(err, file=sys.stderr)
         return ExitCode.InvalidCmdlineArguments.value
 
-    vult = Vulture(
-        verbose=config["verbose"],
-        ignore_names=config["ignore_names"],
-        ignore_decorators=config["ignore_decorators"],
+    # vulture ships no stubs, so its class is opaque to the checker; launder
+    # through object to view the instance as the narrow Protocol we rely on.
+    vult = cast(
+        _VultureLike,
+        cast(
+            object,
+            Vulture(
+                verbose=config["verbose"],
+                ignore_names=config["ignore_names"],
+                ignore_decorators=config["ignore_decorators"],
+            ),
+        ),
     )
     vult.scavenge(config["paths"], exclude=config["exclude"])
     if vult.exit_code == ExitCode.InvalidInput:

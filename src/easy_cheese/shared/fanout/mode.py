@@ -23,8 +23,9 @@ from __future__ import annotations
 
 import argparse
 import math
+import sys
 from collections.abc import Sized
-from typing import Protocol, TextIO, cast
+from typing import TextIO
 
 from easy_cheese.shared import cli
 
@@ -54,25 +55,24 @@ def select_mode_from_score(score: float) -> str:
     )
 
 
-class _Args(Protocol):
-    count: int | None
-    score: float
-    json_mode: bool
-    stdout: TextIO
+class _Args(argparse.Namespace):
+    count: int | None = None
+    score: float = 0.0
+    json_mode: bool = False
+    stdout: TextIO = sys.stdout
 
 
-def _cmd_select(args: argparse.Namespace) -> None:
-    a = cast(_Args, cast(object, args))
+def _cmd_select(args: _Args) -> None:
     # The decomposer knows the curd count; the count is all select_mode reads.
-    if a.count is not None:
-        if a.count < 0:
-            raise cli.CliError(f"invalid --count {a.count}: must be zero or greater")
-        cli.emit(select_mode(range(a.count)), json_mode=a.json_mode, stdout=a.stdout)
+    if args.count is not None:
+        if args.count < 0:
+            raise cli.CliError(f"invalid --count {args.count}: must be zero or greater")
+        cli.emit(select_mode(range(args.count)), json_mode=args.json_mode, stdout=args.stdout)
         return
-    score = a.score
+    score = args.score
     if not math.isfinite(score) or score < 0:
         raise cli.CliError(f"invalid --score {score}: must be zero or greater and finite")
-    cli.emit(select_mode_from_score(score), json_mode=a.json_mode, stdout=a.stdout)
+    cli.emit(select_mode_from_score(score), json_mode=args.json_mode, stdout=args.stdout)
 
 
 def _setup(parser: argparse.ArgumentParser) -> None:

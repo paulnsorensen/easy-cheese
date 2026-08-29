@@ -35,7 +35,8 @@ Output (JSON):
 from __future__ import annotations
 
 import argparse
-from typing import Literal, Protocol, TextIO, TypedDict
+import sys
+from typing import Literal, TextIO, TypedDict
 
 # cli is co-staged in the bundled .pyz alongside this module
 from easy_cheese.shared import cli
@@ -153,12 +154,12 @@ def decide(
     }
 
 
-class _Args(Protocol):
-    table: str
-    phase_index: int
-    status: str
-    next: str | None
-    stdout: TextIO
+class _Args(argparse.Namespace):
+    table: str = "linear"
+    phase_index: int = 0
+    status: str = ""
+    next: str | None = None
+    stdout: TextIO = sys.stdout
 
 
 def _cmd_decide(args: _Args) -> None:

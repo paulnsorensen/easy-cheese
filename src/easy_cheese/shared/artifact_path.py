@@ -29,7 +29,7 @@ def artifact_path(phase: str, slug: str) -> Path:
     # string"; this shim's long-standing CLI contract folds that case into
     # the same kebab-case message as every other invalid slug, so it is
     # special-cased here rather than delegated.
-    if not isinstance(slug, str) or not slug:  # pyright: ignore[reportUnnecessaryIsInstance]
+    if not slug:
         raise ValueError(
             f"slug {slug!r} must be kebab-case, 1-64 chars, [a-z0-9-], "
             + "no leading/trailing hyphen, no double hyphens"

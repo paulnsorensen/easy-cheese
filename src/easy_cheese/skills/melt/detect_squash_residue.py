@@ -36,7 +36,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import NotRequired, Protocol, TypedDict, cast
+from typing import NotRequired, TypedDict, cast
 
 # Safe git ref name characters: alphanumeric, slash, dot, dash, underscore.
 # Used to prevent shell metacharacters from being interpolated into the printed
@@ -106,10 +106,10 @@ class _DetectResult(TypedDict):
     warnings: list[str]
 
 
-class _Args(Protocol):
-    base: str
-    branch: str | None
-    json: bool
+class _Args(argparse.Namespace):
+    base: str = "origin/main"
+    branch: str | None = None
+    json: bool = False
 
 
 def _current_branch() -> str | None:
@@ -597,7 +597,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     _ = parser.add_argument("--branch", help="Branch to check (default: current).")
     _ = parser.add_argument("--json", action="store_true", help="Output as JSON.")
-    args = cast(_Args, cast(object, parser.parse_args(argv)))
+    args = parser.parse_args(argv, namespace=_Args())
 
     if not _SAFE_REF.match(args.base):
         msg = f"error: --base {args.base!r} contains unsafe characters"
