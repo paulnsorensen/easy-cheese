@@ -5,6 +5,7 @@ import json
 import types
 from collections.abc import Mapping
 from enum import Enum
+from functools import cache
 from typing import Any, TypeVar, Union, cast, get_args, get_origin, get_type_hints  # pyright: ignore[reportDeprecated]
 
 import attrs
@@ -65,7 +66,7 @@ class _RegisteredContract:
     supported_version: ContractVersion | None
 
 
-_MARKED_CONTRACTS = contract_models._registered_contracts()  # pyright: ignore[reportPrivateUsage]
+_MARKED_CONTRACTS = contract_models.registered_contracts()
 _REGISTERED_CONTRACTS = tuple(
     _RegisteredContract(
         schema_uri := f"{SCHEMA_ROOT}/{slug}",
@@ -508,6 +509,15 @@ def _raw_mapping(raw: object) -> Mapping[str, object]:
 
 
 
+@cache
+def _class_hints_and_fields(
+    cls: type,
+) -> tuple[dict[str, object], dict[str, Attribute[object]]]:
+    hints = cast("dict[str, object]", get_type_hints(cls))
+    fields = cast("dict[str, Attribute[object]]", attrs.fields_dict(cls))
+    return hints, fields
+
+
 def _structure(value: object, annotation: object, path: str = "$") -> object:
     origin = get_origin(annotation)
     if origin in {types.UnionType, Union}:  # pyright: ignore[reportDeprecated]
@@ -588,13 +598,12 @@ def _structure(value: object, annotation: object, path: str = "$") -> object:
                 f"{path} must be an object, not {type(value).__name__}"
             )
         mapping_value = cast("Mapping[str, object]", value)
-        fields = cast("dict[str, Attribute[object]]", attrs.fields_dict(annotation))
+        hints, fields = _class_hints_and_fields(annotation)
         unknown = sorted(set(mapping_value) - set(fields))
         if unknown:
             raise ContractValidationError(
                 f"{path} contains unknown fields: {', '.join(unknown)}"
             )
-        hints = cast("dict[str, object]", get_type_hints(annotation))
         values: dict[str, object] = {}
         for name, attribute in fields.items():
             if name in mapping_value:

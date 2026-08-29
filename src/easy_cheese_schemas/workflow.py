@@ -15,8 +15,8 @@ import attrs
 from attrs import Attribute
 from .artifacts import (
     MAX_ARTIFACT_BYTES,
-    _read_repository_artifact,  # pyright: ignore[reportPrivateUsage]
-    _resolve_verified_bytes,  # pyright: ignore[reportPrivateUsage]
+    read_repository_artifact,
+    resolve_verified_bytes,
     resolve_artifact,
 )
 from .contracts import (
@@ -359,7 +359,7 @@ def _deliverables(
     for index, item in enumerate(view.deliverables, start=1):
         source_uri = f"repo://{quote(item.path, safe='/-._~')}"
         parsed = urlsplit(source_uri)
-        payload, detected_type = _read_repository_artifact(
+        payload, detected_type = read_repository_artifact(
             parsed.netloc,
             parsed.path,
             repository_root,
@@ -373,7 +373,7 @@ def _deliverables(
             size_bytes=len(payload),
             media_type=item.media_type,
         )
-        resolved = _resolve_verified_bytes(
+        resolved = resolve_verified_bytes(
             source,
             payload,
             detected_type,
@@ -1176,7 +1176,10 @@ def run_workflow(
         return planner_result, (), ()
     validated_plan = validate_curd_plan(planner_result.plan)
     if phase == "cure":
-        assert prevalidated is not None
+        if prevalidated is None:
+            raise TypeError(
+                "cure requires a mapping or tuple of per-curd diagnosis bindings"
+            )
         normalized = _validate_cure_bindings(validated_plan, prevalidated)
     else:
         normalized = None

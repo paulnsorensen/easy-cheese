@@ -764,6 +764,33 @@ def test_cure_requires_confirmed_diagnosis_before_dispatch(
     assert events == []
 
 
+def test_cure_without_bindings_raises_before_any_dispatch(
+    tmp_path: Path,
+) -> None:
+    events: list[str] = []
+
+    def invoked(_value: object) -> object:
+        events.append("invoked")
+        raise AssertionError("cure without bindings must not dispatch")
+
+    with pytest.raises(
+        ValueError, match="cure requires per-curd diagnosis bindings"
+    ):
+        _ = run_workflow(
+            planner_request(),
+            repository_root=tmp_path,
+            artifact_directory=tmp_path / "artifacts",
+            dispatch_planner=invoked,
+            dispatch_writer=invoked,
+            dispatch_review=invoked,
+            dispatch_diagnosis=invoked,
+            phase="cure",
+            diagnosis_bindings=None,
+        )
+
+    assert events == []
+
+
 def test_cook_and_cure_reject_stale_or_unsupported_plans_before_executor(
     tmp_path: Path,
 ) -> None:

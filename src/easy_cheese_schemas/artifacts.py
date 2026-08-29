@@ -24,7 +24,9 @@ __all__ = [
     "MAX_ARTIFACT_BYTES",
     "ArtifactResolutionError",
     "ResolvedAgentArtifact",
+    "read_repository_artifact",
     "resolve_artifact",
+    "resolve_verified_bytes",
 ]
 
 _READ_CHUNK_BYTES = 64 * 1024
@@ -74,7 +76,7 @@ def resolve_artifact(
         )
 
     if parsed.scheme == "repo":
-        content, detected_type = _read_repository_artifact(
+        content, detected_type = read_repository_artifact(
             parsed.netloc,
             parsed.path,
             repository_root,
@@ -90,14 +92,14 @@ def resolve_artifact(
             f"unsupported artifact URI scheme: {parsed.scheme}"
         )
 
-    return _resolve_verified_bytes(
+    return resolve_verified_bytes(
         artifact,
         content,
         detected_type,
         artifact_directory,
         schema_validator,
     )
-def _resolve_verified_bytes(
+def resolve_verified_bytes(
     artifact: ArtifactRef,
     content: bytes,
     detected_type: str,
@@ -129,7 +131,7 @@ def _repository_components(authority: str, uri_path: str) -> tuple[str, ...]:
     return components
 
 
-def _read_repository_artifact(
+def read_repository_artifact(
     authority: str,
     uri_path: str,
     repository_root: str | Path,

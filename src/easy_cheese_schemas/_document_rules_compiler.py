@@ -9,9 +9,8 @@ attrs-decorated models in ``contracts.py``.
 from __future__ import annotations
 
 import pprint
-from collections.abc import Callable, Mapping, Sequence
-from types import ModuleType
-from typing import ClassVar, Protocol, cast
+from collections.abc import Mapping, Sequence
+from typing import ClassVar, Protocol
 
 
 class _TableRuleLike(Protocol):
@@ -36,13 +35,17 @@ class _DocumentContractLike(Protocol):
     enums: ClassVar[Mapping[str, Sequence[str]]]
 
 
-def collect(module: ModuleType) -> tuple[tuple[str, type[_DocumentContractLike]], ...]:
+class _DocumentContractModule(Protocol):
+    def registered_document_contracts(
+        self,
+    ) -> tuple[tuple[str, type[_DocumentContractLike]], ...]: ...
+
+
+def collect(
+    module: _DocumentContractModule,
+) -> tuple[tuple[str, type[_DocumentContractLike]], ...]:
     """Project marked document-contract classes into ``(slug, class)`` pairs."""
-    registered_document_contracts = cast(
-        "Callable[[], tuple[tuple[str, type[_DocumentContractLike]], ...]]",
-        getattr(module, "_registered_document_contracts"),
-    )
-    return registered_document_contracts()
+    return module.registered_document_contracts()
 
 
 def _section_data(section: _SectionLike) -> dict[str, object]:

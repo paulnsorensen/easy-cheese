@@ -15,12 +15,12 @@ _IDENTIFIER_RE = re.compile(r"[^A-Za-z0-9]+")
 
 
 class _ContractModule(Protocol):
-    def _registered_contracts(self) -> tuple[tuple[str, type], ...]: ...
+    def registered_contracts(self) -> tuple[tuple[str, type], ...]: ...
 
 
 def collect(module: _ContractModule) -> tuple[tuple[str, str], ...]:
     """Project marked contract classes into ``(slug, class name)`` pairs."""
-    entries = module._registered_contracts()  # pyright: ignore[reportPrivateUsage]
+    entries = module.registered_contracts()
     return tuple((slug, contract.__name__) for slug, contract in entries)
 
 
