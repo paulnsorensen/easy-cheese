@@ -113,12 +113,40 @@ _STOPWORDS = frozenset(
 
 
 def slugify(text: str, *, max_words: int = 5) -> str:
-    """Best-effort kebab-slug from arbitrary text."""
+    """Best-effort kebab-slug from arbitrary text.
+
+    Deliberately NOT ``python-slugify`` (or any general slugifier), and not a
+    candidate for replacement by one. The divergences are the point:
+
+    - **Stopwords are dropped** (``_STOPWORDS``) *before* the word cap, so a
+      title-cased task phrase spends its budget on meaning
+      (``"The quick brown fox jumps"`` -> ``quick-brown-fox-jumps``).
+    - **The result is capped at ``max_words`` words**, because the slug is a
+      human-readable artifact filename, not a URL of the whole title.
+    - **Non-``[a-z0-9]`` characters are deleted, never transliterated** — a
+      general slugifier turns ``"über"`` into ``uber``; here it becomes ``ber``.
+      Deleting keeps the output inside ``KEBAB_SLUG`` for every input without a
+      Unicode table riding along in every ``.pyz`` bundle.
+    - **Hard-truncated to 64 characters** to match ``KEBAB_SLUG``.
+
+    Swapping in a standard slugifier would change the output of all four, and
+    the output is embedded in on-disk artifact paths (``.cheese/<phase>/
+    <slug>.md`` and the XDG corpus): every already-written spec, report, and
+    manifest would stop resolving. The tests in
+    ``tests/shared/python/test_paths.py::TestSlugify`` pin these four
+    behaviours so a future migration fails loudly instead of silently orphaning
+    artifacts.
+
+    The result always satisfies ``validate_slug`` unless it is empty; callers
+    must reject the empty slug themselves (see ``paths_cli._cmd_slugify``).
+    """
     lowered = re.sub(r"[^a-z0-9\s-]+", "", text.lower())
     words = [w for w in lowered.split() if w and w not in _STOPWORDS]
     slug = "-".join(words[:max_words])
     slug = re.sub(r"-+", "-", slug).strip("-")
-    return slug[:64]
+    # Strip again after truncation: a cut landing on a hyphen would otherwise
+    # emit a trailing-hyphen slug that validate_slug rejects.
+    return slug[:64].strip("-")
 
 
 def _xdg_dir(env_var: str, *default: str) -> Path:
