@@ -995,7 +995,7 @@ def test_normalization_receipt_legacy_ingress_requires_source_fields_at_attrs_le
         )
 
 
-def test_normalization_receipt_legacy_ingress_requires_source_fields_at_contract_level() -> None:
+def test_normalization_receipt_legacy_ingress_requires_source_fields_at_gateway_level() -> None:
     raw: dict[str, object] = {
         "ingress_kind": IngressKind.LEGACY_ARTIFACT.value,
         "normalizer_id": "normalizer-1",

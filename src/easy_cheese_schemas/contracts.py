@@ -625,8 +625,6 @@ class NormalizationActionKind(str, Enum):
     TRIM_WHITESPACE = "trim_whitespace"
     NORMALIZE_QUOTES = "normalize_quotes"
     REMOVE_TRAILING_COMMA = "remove_trailing_comma"
-    NORMALIZE_KEY_CASE = "normalize_key_case"
-    COERCE_NULL_LITERAL = "coerce_null_literal"
 
 
 @define(frozen=True)
