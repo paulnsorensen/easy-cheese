@@ -16,9 +16,17 @@ must be present and parseable, with disposition/work_class/ui_surface drawn
 from their closed enum sets; not-applicable requires a reason and zero
 Test Contracts rows.
 
+Legacy acceptance: the default (read) posture accepts v0.13-era specs — those
+without a Mold provenance marker — indefinitely, waiving only the two parts the
+hardened format added after v0.13 (the Test Contracts section and the
+gate_applicability block) and printing a one-line NOTICE. ``--strict`` is the
+mint/rewrite posture: the hardened format unconditionally, plus the provenance
+marker itself. The policy lives once in ``easy_cheese_schemas.spec_format`` so
+every release channel inherits it.
+
 Rules are consumed from the generated, dependency-free ``_document_rules``
 projection (built from the ``@document_contract("mold-spec")`` models in
-contracts.py) so mold.pyz stays free of the attrs-based schema stack.
+contracts.py) so the rule data never drags the attrs-based model stack in.
 
 ERROR:-line accumulation and exit codes follow .github/scripts/validate_wiki.py.
 """
@@ -31,6 +39,7 @@ from pathlib import Path
 from typing import TypedDict, cast
 
 from easy_cheese.shared.document_rules import DOCUMENT_RULES
+from easy_cheese_schemas.spec_format import is_hardened_provenance, spec_format_policy
 
 
 class _CrossFieldRule(TypedDict):
@@ -206,11 +215,19 @@ def _acceptance_ids(content_lines: list[str]) -> list[str]:
     return ids
 
 
-def validate(path: Path) -> list[str]:
+def validate(path: Path, *, strict: bool = False) -> tuple[list[str], str | None]:
+    """Return accumulated ``ERROR:`` lines plus a legacy NOTICE when one applies."""
     errors: list[str] = []
     text = path.read_text(encoding="utf-8")
     frontmatter, body = _split_frontmatter(text)
+    policy = spec_format_policy(frontmatter, strict=strict)
     found_sections, duplicate_headings = _find_sections(body)
+
+    if strict and not is_hardened_provenance(frontmatter):
+        errors.append(
+            "ERROR: spec-provenance-required frontmatter source must be a mold "
+            + f"provenance marker when minting a spec in {path}"
+        )
 
     for name in sorted(set(duplicate_headings)):
         errors.append(
@@ -219,7 +236,7 @@ def validate(path: Path) -> list[str]:
         )
 
     for section in SECTIONS:
-        if section["optional"]:
+        if section["optional"] or not policy.requires_section(section["name"]):
             continue
         canonical = _canonical_heading(section["name"])
         if canonical not in found_sections:
@@ -321,10 +338,11 @@ def validate(path: Path) -> list[str]:
 
     gate_applicability = frontmatter.get("gate_applicability")
     if not isinstance(gate_applicability, dict):
-        errors.append(
-            "ERROR: gate-applicability-required frontmatter gate_applicability is "
-            + f"missing or unparseable in {path}"
-        )
+        if policy.requires_gate_applicability():
+            errors.append(
+                "ERROR: gate-applicability-required frontmatter gate_applicability is "
+                + f"missing or unparseable in {path}"
+            )
     else:
         disposition = gate_applicability.get("disposition")
         work_class = gate_applicability.get("work_class")
@@ -357,20 +375,31 @@ def validate(path: Path) -> list[str]:
                     + f"not-applicable requires zero Test Contracts rows in {path}"
                 )
 
-    return errors
+    return errors, policy.notice
 
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     _ = parser.add_argument("spec_path", type=Path, help="Path to the mold spec markdown file.")
+    _ = parser.add_argument(
+        "--strict",
+        action="store_true",
+        help=(
+            "Mint/rewrite posture: enforce the current hardened format "
+            "unconditionally, with no legacy acceptance."
+        ),
+    )
     args = parser.parse_args(argv)
     spec_path = cast(Path, args.spec_path)
+    strict = cast(bool, args.strict)
 
     if not spec_path.is_file():
         print(f"ERROR: spec not found: {spec_path}", file=sys.stderr)
         return 1
 
-    errors = validate(spec_path)
+    errors, notice = validate(spec_path, strict=strict)
+    if notice is not None:
+        print(f"{notice} in {spec_path}")
     if errors:
         for error in errors:
             print(error, file=sys.stderr)

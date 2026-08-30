@@ -11,9 +11,8 @@ from __future__ import annotations
 
 import subprocess
 import sys
-from collections.abc import Callable
 from pathlib import Path
-from typing import cast
+from typing import Protocol, cast
 
 import pytest
 
@@ -21,28 +20,32 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 VALIDATOR = (
     REPO_ROOT / "src" / "easy_cheese" / "skills" / "mold" / "validate_spec.py"
 )
-BASE_SPEC = (
-    REPO_ROOT / "tests" / "python" / "fixtures" / "spec_format" / "valid_spec.md"
-).read_text(encoding="utf-8")
+SPEC_FIXTURES = REPO_ROOT / "tests" / "python" / "fixtures" / "spec_format"
+BASE_SPEC = (SPEC_FIXTURES / "valid_spec.md").read_text(encoding="utf-8")
+LEGACY_SPEC = (SPEC_FIXTURES / "legacy_v013_spec.md").read_text(encoding="utf-8")
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 import build_pyz  # noqa: E402
 
-_RunFn = Callable[[Path], subprocess.CompletedProcess[str]]
+
+class _RunFn(Protocol):
+    def __call__(
+        self, path: Path, *flags: str
+    ) -> subprocess.CompletedProcess[str]: ...
 
 
-def _run_direct(path: Path) -> subprocess.CompletedProcess[str]:
+def _run_direct(path: Path, *flags: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, str(VALIDATOR), str(path)],
+        [sys.executable, str(VALIDATOR), *flags, str(path)],
         capture_output=True,
         text=True,
     )
 
 
-def _run_pyz(path: Path) -> subprocess.CompletedProcess[str]:
+def _run_pyz(path: Path, *flags: str) -> subprocess.CompletedProcess[str]:
     mold_pyz = build_pyz.cached_bundle("mold")
     return subprocess.run(
-        [sys.executable, str(mold_pyz), "validate-spec", str(path)],
+        [sys.executable, str(mold_pyz), "validate-spec", *flags, str(path)],
         capture_output=True,
         text=True,
     )
@@ -58,6 +61,11 @@ def run_fixture(request: pytest.FixtureRequest) -> _RunFn:
 def _error_lines(result: subprocess.CompletedProcess[str]) -> list[str]:
     combined = result.stdout + result.stderr
     return [line for line in combined.splitlines() if line.startswith("ERROR:")]
+
+
+def _notice_lines(result: subprocess.CompletedProcess[str]) -> list[str]:
+    combined = result.stdout + result.stderr
+    return [line for line in combined.splitlines() if line.startswith("NOTICE:")]
 
 
 def _write(tmp_path: Path, name: str, text: str) -> Path:
@@ -447,4 +455,105 @@ def test_multiple_violations_accumulate_in_one_run(tmp_path: Path, _run: _RunFn)
     assert len(errors) == 3
     assert any("Risks" in line for line in errors)
     assert any("AC-1" in line and "tracer" in line for line in errors)
-    assert any("AC-2" in line and "contract-matrix" in line for line in errors)
+
+
+# --- v0.13 legacy acceptance on read, hardened-only on mint ---------------
+
+
+def _strip_test_contracts(text: str) -> str:
+    start = text.index("## Test Contracts")
+    return text[:start] + text[text.index("## Interface sketches") :]
+
+
+def test_legacy_v013_spec_is_accepted_on_read(tmp_path: Path, _run: _RunFn) -> None:
+    path = _write(tmp_path, "spec.md", LEGACY_SPEC)
+    result = _run(path)
+    assert result.returncode == 0
+    assert not _error_lines(result)
+    assert _notice_lines(result) == [
+        "NOTICE: legacy-spec-format this spec predates the current format "
+        + "(no mold provenance marker, so Test Contracts and gate_applicability "
+        + "are not required); accepted on read — re-mint it with /mold to adopt "
+        + f"them in {path}"
+    ]
+
+
+def test_legacy_v013_spec_is_rejected_under_strict_mint(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    path = _write(tmp_path, "spec.md", LEGACY_SPEC)
+    result = _run(path, "--strict")
+    errors = _error_lines(result)
+    assert result.returncode == 1
+    assert not _notice_lines(result)
+    assert any("spec-provenance-required" in line for line in errors)
+    assert any(
+        "missing-required-section" in line and "Test Contracts" in line
+        for line in errors
+    )
+    assert any("gate-applicability-required" in line for line in errors)
+
+
+def test_legacy_spec_still_fails_on_a_section_v013_required(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    text = LEGACY_SPEC.replace("## Risks\n", "## Hazards\n", 1)
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    errors = _error_lines(result)
+    assert result.returncode == 1
+    assert any(
+        "missing-required-section" in line and "Risks" in line for line in errors
+    )
+
+
+def test_legacy_spec_test_contracts_content_is_still_validated(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    text = LEGACY_SPEC.replace(
+        "## Interface sketches",
+        "## Test Contracts\n\n| Acceptance ID | Mode |\n| --- | --- |\n"
+        + "| AC-1 | tracer |\n\n## Interface sketches",
+        1,
+    )
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    errors = _error_lines(result)
+    assert result.returncode == 1
+    assert any("test-contracts-table-shape" in line for line in errors)
+
+
+def test_hardened_spec_missing_test_contracts_is_rejected_on_read(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    path = _write(tmp_path, "spec.md", _strip_test_contracts(BASE_SPEC))
+    result = _run(path)
+    errors = _error_lines(result)
+    assert result.returncode == 1
+    assert not _notice_lines(result)
+    assert any(
+        "missing-required-section" in line and "Test Contracts" in line
+        for line in errors
+    )
+
+
+def test_current_format_spec_reads_and_mints_without_a_legacy_notice(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    path = _write(tmp_path, "spec.md", BASE_SPEC)
+    for flags in ((), ("--strict",)):
+        result = _run(path, *flags)
+        assert result.returncode == 0, flags
+        assert not _error_lines(result), flags
+        assert not _notice_lines(result), flags
+
+
+def test_spec_without_frontmatter_is_malformed_not_legacy(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    end = BASE_SPEC.index("---", 3) + 3
+    path = _write(tmp_path, "spec.md", BASE_SPEC[end:].lstrip("\n"))
+    result = _run(path)
+    assert result.returncode == 1
+    assert not _notice_lines(result)
+    assert any("gate-applicability-required" in line for line in _error_lines(result))

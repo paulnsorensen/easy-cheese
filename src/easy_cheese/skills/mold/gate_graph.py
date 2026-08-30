@@ -90,7 +90,7 @@ COHERENCE_GATES: tuple[str, ...] = (
     "Reproduction loop captured if Diagnose ran (or [BLOCKED] if no loop is possible)",
     "Durable writes: ADR + domain-model targets resolved and the write, read-back, and completion-record protocol committed for the atomic step (or loud fallback noted)",
     "Fork taste test passed: fresh-context verdict covers every settled consequential decision before decomposition",
-    "Spec format valid: validate-spec exits 0 on the draft",
+    "Spec format valid: validate-spec --strict exits 0 on the draft",
 )
 
 MODES: tuple[Node, ...] = (

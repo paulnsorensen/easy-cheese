@@ -16,4 +16,34 @@ Declare the spec format as decorator-marked models (`@document_contract`, extend
 - **mdschema (Go)** — rejected: declarative shape only, cannot express conditional cross-field contract rules or fenced-block content schemas; adds a Go toolchain dependency.
 - **PyMarkdown custom rules** — rejected: same effort as hand-rolling behind a plugin API, plus a dependency.
 - **Vendoring BAML's jsonish** — rejected: not exposed as a standalone library (BoundaryML/baml issue #998).
-- **Vendoring attrs into mold.pyz** — rejected in favor of the dependency-free generated rules module, mirroring `_schema_catalog.py`.
+- **Vendoring attrs into mold.pyz** — rejected in favor of the dependency-free generated rules module, mirroring `_schema_catalog.py`. Superseded in part — see the amendment below.
+
+## Amendment (2026-08-30): schemas-package seam for the spec-format policy
+
+**Status:** superseded in part (2026-08-30). The Decision above stands; the
+fourth Alternative — "Vendoring attrs into mold.pyz — rejected" — no longer
+governs where the *acceptance policy* lives.
+
+v0.13-era specs must stay readable forever, so `validate-spec` gained a
+read-side legacy acceptance path with a mint-side `--strict` posture. That
+policy now lives in `src/easy_cheese_schemas/spec_format.py`, and
+`src/easy_cheese/skills/mold/validate_spec.py` imports it — which drags the
+attrs-backed model stack into the validator's import graph.
+
+Rationale for accepting that cost:
+
+- **The bundle-size argument is moot.** attrs already ships in every bundle:
+  `easy_cheese.shared.manifest_io` imports `easy_cheese_schemas.io`, and that
+  import executes the `easy_cheese_schemas` package `__init__`, which pulls the
+  attrs-backed models. The validator adds no new dependency to any archive.
+- **Channel portability is the point.** The read-side legacy grace has to hold
+  identically for every release channel that reads a spec, not just for
+  `mold.pyz`. Putting the policy in the published schemas package makes every
+  channel inherit one definition of "what a legacy spec is" instead of
+  re-deriving it.
+- **Measured cost:** ~124 ms of import time on a `validate-spec` invocation.
+  Acceptable for a one-shot CLI gate.
+
+The generated dependency-free `_document_rules` projection is unchanged: the
+*rule data* still reaches the validator without the model stack. Only the
+acceptance-policy seam moved.

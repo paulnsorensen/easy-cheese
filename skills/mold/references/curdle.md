@@ -126,9 +126,18 @@ Add one row for each criterion.
 behavior declaration must set `ui_surface` to `browser` or `non-browser`;
 closed non-behavior declarations, including `appearance-only`, set it to
 `not-applicable`. A browser declaration is valid only when every Test Contract
-names an existing browser/E2E interface and outer seam. Specs without this
-provenance marker remain legacy-compatible, including the approved v1
-spec.
+names an existing browser/E2E interface and outer seam.
+
+Specs without this provenance marker are v0.13-era legacy and stay
+**readable forever**: `validate-spec` accepts them, waiving only the two parts
+the hardened format added after v0.13 — the `Test Contracts` section and the
+`gate_applicability` block — and printing a one-line `NOTICE:` rather than an
+error. Everything a v0.13 spec did carry is still validated. Minting is the
+mirror image: Curdle writes only the template above and gates it with
+`validate-spec --strict`, which enforces the hardened format *and* the
+`source:` marker unconditionally. Legacy is a read-side grace, never a
+write-side option. The policy lives once in
+`src/easy_cheese_schemas/spec_format.py` so every release channel inherits it.
 
 ### Current mold-spec schema (generated)
 
