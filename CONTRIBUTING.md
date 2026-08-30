@@ -66,7 +66,7 @@ project-specific guidance first. For other editorial decisions, follow the
 Write directly to the reader, prefer active voice, use sentence case for
 headings, format code-related names in backticks, and use descriptive link text.
 Edit root documents such as `README.md` and `CONTRIBUTING.md`; the documentation
-build generates their copies under `src/content/docs/`.
+build generates their copies under `website/content/docs/`.
 
 ## Running tests
 
