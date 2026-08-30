@@ -69,7 +69,11 @@ must hash the exact draft, then accept a strict `ForkTasteVerdict` whose
 coverage names every settled consequential decision exactly once. The verdict
 has no stale digest, missing reflection, contradiction, orphan, unsupported
 assumption, or acceptance gap; a semantic `pass` carrying blockers is also a
-failure. A failure returns only its named fork ids for reopening. The initial
+failure. The reflection set is disposition-aware: `red-required` drafts owe
+Approach, Interface sketches, Acceptance, and Test Contracts, while
+`not-applicable` drafts — which the applicability gate forbids from carrying a
+Test Contracts section — owe the first three. A failure returns only its named
+fork ids for reopening. The initial
 verdict and two corrective rounds are the complete budget; the third failure
 halts before decomposition and before the two-key handshake.
 

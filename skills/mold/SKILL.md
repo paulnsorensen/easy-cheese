@@ -108,6 +108,8 @@ marker remain legacy-compatible and may omit `ui_surface`.
 
 `mold.pyz taste-test` binds the verdict to the draft SHA256 and every settled consequential ledger fork. Stale/partial coverage or any blocker fails; failures reopen named forks only, with two correction rounds. Approved `red-required` specs hand off unchanged metadata and durable pointer to `/cook --auto`.
 
+Each settled consequential fork must be reflected in Approach, Interface sketches, Acceptance, and — on `red-required` specs — Test Contracts. A `not-applicable` spec is forbidden from carrying Test Contracts at all, so it owes the first three only; never rename a section to fake the fourth.
+
 ## Approval gate
 
 Curdle requires the **two-key handshake**: an explicit user verb (e.g. `curdle`, `ship it`) plus the agent's coherence self-check, with the validated typed `CurdPlan`'s `N curds / M waves` presented alongside the final approval request (Flow step 5). Checklist, mandatory gates, and override semantics: `references/handshake.md`.
