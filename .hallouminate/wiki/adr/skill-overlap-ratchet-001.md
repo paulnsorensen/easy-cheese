@@ -1,5 +1,7 @@
 # ADR: Own the Snowflake overlap analyzer in easy-cheese
 
+Status: superseded (2026-08-30) by [[skill-overlap-ratchet-005]] — the ratchet is retired and `tools/skill-overlap/` is deleted.
+
 The skill-overlap job is one standalone Rust binary under `tools/skill-overlap/`, reproducing Hallouminate's Snowflake embedding path without depending on Hallouminate's index or storage schema.
 
 ## Decision record

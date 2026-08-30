@@ -1,5 +1,7 @@
 # ADR: Compare semantic overlap against explicit reference topology
 
+Status: superseded (2026-08-30) by [[skill-overlap-ratchet-005]] — the ratchet is retired and `tools/skill-overlap/` is deleted.
+
 The analyzer keeps document references, collapsed skill ownership, and semantic similarity as distinct graph views; slash-command mentions are not invocation edges.
 
 ## Decision record

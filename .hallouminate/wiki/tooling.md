@@ -25,16 +25,14 @@ validators (`test_validate_skills.py`, `test_validate_wiki.py`,
 (`tests/python`, `tests/shared/python`, `tests/fanout/python`,
 `tests/schemas/python`, `tests/hard-cheese/python`,
 `tests/pasteurize/python`, `tests/wheypoint/python`), the JS suite
-(`node --test tests/js`), the bats suites
-(`tests/bash/test_install.bats`, the fan-out bats), and
-`just test-skill-overlap` (`justfile:17-33`).
+(`node --test tests/js`), and the bats suites
+(`tests/bash/test_install.bats`, the fan-out bats) (`justfile:15-31`).
 
-`test-skill-overlap` is the one leg of the gate that is not Python, JS,
-or bash: it is `cargo test` against `tools/skill-overlap/`
-(`justfile:36-37`), so a machine without a Rust toolchain cannot run
-`just check` to completion even though everything else in the repo is
-Python-and-markdown. It is deliberately model-free — the analyzer's
-model artifacts are never fetched during the gate.
+Every leg of the gate is Python, JS, or bash. The gate carried one Rust
+leg — `just test-skill-overlap`, `cargo test` against
+`tools/skill-overlap/` — until the overlap ratchet was retired
+([[adr/skill-overlap-ratchet-005]]); a Rust toolchain is no longer a
+prerequisite for running `just check` to completion.
 
 Note the markdownlint globs are `skills/**/*.md`, `.agents/**/*.md`, and
 `*.md` (`justfile:52-58`) — files outside those globs (for example this
@@ -137,7 +135,6 @@ Under `.github/workflows/`:
 | `publish-pypi.yml` | push main touching `pyproject.toml`, dispatch | publish `easy-cheese-schemas` to PyPI |
 | `docs.yml` | push/PR on docs paths, dispatch | `pnpm run docs:build` (Astro/Starlight), deploy Pages on main |
 | `docs-retry.yml` | `docs` workflow_run failure | auto re-run failed `docs` jobs on main, up to 3 attempts |
-| `skill-overlap.yml` | PRs on `skills/**/*.md` + tools, weekly cron, dispatch | semantic skill-overlap ratchet (`calibrate` / `report` / `check`) |
 | `codeql.yml` | PRs, push main, weekly | CodeQL on python + actions |
 | `dependency-review.yml` | PRs to main | block vulnerable / disallowed-license deps |
 | `scorecard.yml` | push main, weekly | OpenSSF Scorecard → SARIF |
