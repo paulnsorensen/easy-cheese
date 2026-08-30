@@ -974,6 +974,13 @@ class TestPublicSurface:
             "classify_readiness",
             "classify_stamp",
             "parse_mapping",
+            "AcceptedArtifact",
+            "HandoffPointer",
+            "IngressKind",
+            "NormalizationAction",
+            "NormalizationActionKind",
+            "NormalizationReceipt",
+            "PublishedArtifact",
         ):
             assert name in easy_cheese_schemas.__all__
             assert getattr(easy_cheese_schemas, name) is not None

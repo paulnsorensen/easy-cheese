@@ -4,6 +4,8 @@ import easy_cheese_schemas.contracts as contract_module
 import attrs
 import pytest
 
+from easy_cheese_schemas.schema_runtime import ContractValidationError, validate_contract
+
 from easy_cheese_schemas.contracts import (
     AgentWriterView,
     ArtifactRef,
@@ -31,9 +33,13 @@ from easy_cheese_schemas.contracts import (
     DiagnosisResult,
     EvidenceKind,
     EvidenceRef,
+    HandoffPointer,
     HypothesisDisposition,
     IdentityAction,
     IdentityLineage,
+    IngressKind,
+    NormalizationAction,
+    NormalizationReceipt,
     PhaseContract,
     PhaseDestination,
     PlannerDisposition,
@@ -959,3 +965,50 @@ def test_criterion_writer_view_enforces_disposition() -> None:
         ValueError, match="passed criterion result must include evidence"
     ):
         _ = CriterionResultWriterView(**kwargs)  # pyright: ignore[reportArgumentType]
+
+
+def test_handoff_pointer_rejects_invalid_request_digest() -> None:
+    with pytest.raises(
+        ValueError,
+        match="request_digest must be sha256: followed by 64 lowercase hexadecimal characters",
+    ):
+        _ = HandoffPointer(
+            contract_version=VERSION,
+            operation_id="operation-1",
+            request_digest="not-a-digest",
+            source_phase="mold",
+            destination_phase="cook",
+            payload=artifact(),
+        )
+
+
+def test_normalization_receipt_legacy_ingress_requires_source_fields_at_attrs_level() -> None:
+    with pytest.raises(
+        ValueError,
+        match="legacy_artifact ingress requires source_schema_uri and source_version",
+    ):
+        _ = NormalizationReceipt(
+            ingress_kind=IngressKind.LEGACY_ARTIFACT,
+            normalizer_id="normalizer-1",
+            source_digest=DIGEST,
+            canonical_digest=DIGEST,
+        )
+
+
+def test_normalization_receipt_legacy_ingress_requires_source_fields_at_contract_level() -> None:
+    raw: dict[str, object] = {
+        "ingress_kind": IngressKind.LEGACY_ARTIFACT.value,
+        "normalizer_id": "normalizer-1",
+        "source_digest": DIGEST,
+        "canonical_digest": DIGEST,
+        "actions": [],
+    }
+    with pytest.raises(
+        ContractValidationError,
+        match="legacy_artifact ingress requires source_schema_uri and source_version",
+    ):
+        _ = validate_contract(raw, NormalizationReceipt)
+
+
+def test_normalization_action_exposes_only_field_path_and_action() -> None:
+    assert set(attrs.fields_dict(NormalizationAction)) == {"field_path", "action"}
