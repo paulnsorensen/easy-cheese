@@ -492,7 +492,7 @@ def test_red_required_handoff_preserves_pointer_and_metadata(taste: ModuleType) 
     applicability = taste.parse_gate_applicability(red_spec())
     metadata = {"spec_sha256": "abc", "taste_sha256": "def"}
     handoff = taste.auto_handoff("artifact://specs/a.md", applicability, metadata)
-    assert handoff["command"] == ["/cut", "--auto", "artifact://specs/a.md"]
+    assert handoff["command"] == ["/cook", "--auto", "artifact://specs/a.md"]
     assert handoff["spec_ref"] == "artifact://specs/a.md"
     assert handoff["metadata"]["spec_sha256"] == "abc"
     assert handoff["metadata"]["taste_sha256"] == "def"

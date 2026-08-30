@@ -127,7 +127,7 @@ behavior declaration must set `ui_surface` to `browser` or `non-browser`;
 closed non-behavior declarations, including `appearance-only`, set it to
 `not-applicable`. A browser declaration is valid only when every Test Contract
 names an existing browser/E2E interface and outer seam. Specs without this
-provenance marker remain legacy-compatible for Cut, including the approved v1
+provenance marker remain legacy-compatible, including the approved v1
 spec.
 
 ### Current mold-spec schema (generated)
@@ -352,6 +352,6 @@ After writing, suggest the next step inline. **Never auto-invoke.**
 
 | Artifact | Suggested next step |
 | --- | --- |
-| Red-required Spec | `/cut --auto <durable spec pointer>` (preserve gate and taste metadata) |
+| Red-required Spec | `/cook --auto <durable spec pointer>` (preserve gate and taste metadata) |
 | Spec | `/cook <spec-path>` |
 | Issues | Paste each into your tracker, or `gh issue create --body-file <path>` |

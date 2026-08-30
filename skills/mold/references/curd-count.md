@@ -6,10 +6,10 @@ and stays out of the conversation's token budget.
 
 ## What it answers
 
-Gate applicability selects the immediate handoff. A `red-required` spec
-recommends `/cut`; Cut's receipt then unlocks Cook. A closed
-`not-applicable` spec and a legacy spec without a declaration recommend
-`/cook`. Mold-produced specs are marked with `source: mold-handshake` or
+Gate applicability shapes the immediate handoff. Every disposition recommends
+`/cook`: a `red-required` spec carries a non-null `handoff` with the
+executable auto route, while a closed `not-applicable` spec and a legacy spec
+without a declaration carry `handoff: null`. Mold-produced specs are marked with `source: mold-handshake` or
 `source: agent-mini-spec`; their `gate_applicability.ui_surface` is mandatory.
 The digest also records the eventual Cook wave-plan mode: parallel curd
 fan-out, a linear chain, or no mode hint.
@@ -36,7 +36,7 @@ python3 skills/mold/scripts/mold.pyz curd-count "$SPEC" \
 
 Pass the `--blast-radius` value verbatim from the shape-check verdict line
 (see `shape-check.md`). If shape-check was skipped or its verdict was `[?]`,
-omit the flag; applicability still selects `/cut` or `/cook`, while
+omit the flag; the route stays `/cook`, while
 sub-threshold specs receive no Cook mode hint.
 
 ## Signals counted
@@ -59,7 +59,7 @@ thoroughly a spec was written, the more likely it mis-recommended fan-out.
 
 | Gate applicability | `recommended_skill` | `handoff` |
 | --- | --- | --- |
-| `red-required` | `/cut` | `command: ["/cut", "--auto", "<spec-path>"]` |
+| `red-required` | `/cook` | `command: ["/cook", "--auto", "<spec-path>"]` |
 | closed `not-applicable` | `/cook` | `null` |
 | no declaration (legacy) | `/cook` | `null` |
 
@@ -67,7 +67,7 @@ For a Mold provenance marker, the parser also requires
 `ui_surface: browser | non-browser | not-applicable`. `browser` validates
 both the interface and outer seam in every Test Contract; `non-browser` is
 explicit and does not infer applicability from prose. The unmarked approved v1
-spec and other legacy specs remain consumable by Cut without this field.
+spec and other legacy specs remain consumable without this field.
 The independent Cook mode signal follows the curd count and blast radius:
 
 | `candidate_curds` | `blast_radius` | `mode` |
@@ -87,15 +87,15 @@ The independent Cook mode signal follows the curd count and blast radius:
   "signals": {"goals": 7, "quality_gates": 6, "decisions": 3},
   "threshold": 2,
   "decomposable": true,
-  "recommended_skill": "/cut",
+  "recommended_skill": "/cook",
   "handoff": {
-    "next": "cut",
-    "command": ["/cut", "--auto", "<spec-path>"],
+    "next": "cook",
+    "command": ["/cook", "--auto", "<spec-path>"],
     "spec_ref": "<spec-path>",
     "metadata": {"gate_applicability": {"disposition": "red-required", "work_class": "behavior", "ui_surface": "non-browser"}}
   },
   "mode": "parallel",
-  "rationale": "red-required outer gate precedes 7 candidate curds >= 2 threshold; parallel fan-out"
+  "rationale": "red-required handoff to /cook precedes 7 candidate curds >= 2 threshold; parallel fan-out"
 }
 ```
 
@@ -111,8 +111,8 @@ curds back into the linear chain; the dispatched skill is `/cook` either way.
 ## When tilth / Python is unavailable
 
 The script depends only on the Python 3 stdlib. If the host has no `python3`,
-Mold must still read the spec's `gate_applicability` declaration and render the
-same immediate route: `red-required` to Cut, closed `not-applicable` to Cook,
-and legacy specs to Cook. Blast radius may supply the Cook mode hint. The
+Mold must still read the spec's `gate_applicability` declaration and render
+the same immediate route: `/cook` for every disposition. Blast radius may
+supply the Cook mode hint. The
 `--auto` form remains an explicit user menu choice. Say the degraded
 substitution out loud.

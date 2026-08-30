@@ -18,9 +18,9 @@ def test_bundle_requirements_are_written_beside_the_temporary_wheelhouse(
     expected = "demo==1.0 --hash=sha256:" + "a" * 64 + "\n"
     monkeypatch.setattr(build_pyz, "_resolved_requirements", lambda *_: expected)
 
-    requirements = build_pyz._requirements_for("cut", wheelhouse)
+    requirements = build_pyz._requirements_for("cook", wheelhouse)
 
-    assert requirements == tmp_path / "cut-requirements.txt", (
+    assert requirements == tmp_path / "cook-requirements.txt", (
         "ephemeral-requirements-path"
     )
     assert requirements.read_text(encoding="utf-8") == expected
@@ -29,7 +29,7 @@ def test_bundle_requirements_are_written_beside_the_temporary_wheelhouse(
 def test_build_cli_rejects_removed_update_locks_option(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    monkeypatch.setattr(build_pyz, "SKILLS", ("cut",))
+    monkeypatch.setattr(build_pyz, "SKILLS", ("cook",))
     monkeypatch.setattr(build_pyz, "build_bundles", lambda *_args, **_kwargs: {})
 
     with pytest.raises(SystemExit) as exc:
@@ -39,7 +39,7 @@ def test_build_cli_rejects_removed_update_locks_option(
                 "--update-locks",
                 "--out-dir",
                 str(tmp_path),
-                "cut",
+                "cook",
             ]
         )
     assert exc.value.code == 2

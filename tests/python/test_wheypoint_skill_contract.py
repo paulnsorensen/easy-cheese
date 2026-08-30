@@ -167,16 +167,16 @@ def test_split_and_join_are_marked_outside_the_continuity_contract() -> None:
     assert "outside this continuity contract" in body
     assert "commit no delta" in body
 
-def test_cut_is_first_class_and_resume_preserves_receipt_and_flags() -> None:
+def test_pipeline_omits_cut_and_resume_preserves_flags() -> None:
     wheypoint = _read(WHEYPOINT)
     cheese = _read(CHEESE)
     resume = _read(CONTINUE_RESUME)
     corpus = "\n".join((wheypoint, cheese, resume))
 
-    assert "next: mold | cut | cook" in wheypoint
-    assert "culture -> mold -> cut -> cook -> press -> age -> cure -> plate" in corpus
-    assert "next: cut" in corpus
-    assert "GateReceipt" in corpus
+    assert "next: mold | cook" in wheypoint
+    assert "culture -> mold -> cook -> press -> age -> cure -> plate" in corpus
+    assert "next: cut" not in corpus
+    assert "GateReceipt" not in corpus
     for flag in ("mode:", "--auto", "--hard", "--open-pr", "--safe"):
         assert flag in corpus
     assert "continue: press-corrective-cook" in corpus

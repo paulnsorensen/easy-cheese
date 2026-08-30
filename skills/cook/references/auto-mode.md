@@ -4,28 +4,19 @@ Full mechanics for `--auto`, the autonomous-pipeline switch: the per-step chain,
 
 ## Cook entry preflight
 
-`--auto` uses the same `cook(spec_ref, receipt? = null, correction = false)`
-contract as manual Cook; it never bypasses the canonical GateReceipt boundary.
-Before any production mutation, Cook verifies the same spec/work/project
-identity, protected-file hashes, and guard graph, then runs
-`red-gate validate <receipt> --state red`. An absent or invalid receipt
-synchronously invokes `/cut`, consumes the returned receipt exactly once, and
-does not recursively hand off from Cut back to Cook. Adopted reproductions
-remain `producer: cut` with case `origin: adopted`.
-
-Closed `not-applicable` receipts retain identity and structural validation but
-skip RED replay and production work; Cook returns promptly. Once inner TDD
-completes, Cook runs `red-gate validate <receipt> --state green` and requires
-the active case plus every transitive guard GREEN before invoking `/press`.
-When `correction = true`, only the active Press RED receipt is in scope;
-transitive guards remain immutable and cannot be weakened or bypassed.
+`--auto` uses the same `cook(spec_ref, correction = false)` contract as manual
+Cook. Behavior work runs the inner RED → GREEN loop against the spec's test
+contracts; a closed `not-applicable` disposition routes the requested
+non-behavior change through its own verification path. Once inner TDD
+completes, Cook requires every inner test and relevant gate GREEN before
+invoking `/press`. When `correction = true`, only the active Press corrective
+loop is in scope; existing tests cannot be weakened or bypassed.
 
 ## What auto mode does
 
-1. After Cook's completed GateReceipt preflight, inner implementation, and
-   `red-gate validate <receipt> --state green` for active and transitive
-   guards, write the package-ready report and invoke `/press <slug> --auto`;
-   append `--open-pr` so terminal `/plate` may publish a new PR.
+1. After Cook's inner implementation and green gates, write the package-ready
+   report and invoke `/press <slug> --auto`; append `--open-pr` so terminal
+   `/plate` may publish a new PR.
 2. `/press --auto` runs its hardening pass and, if readiness is `ready for /age` or `follow-up recommended`, invokes `/age <slug> --auto`. Both states mean the cooked contract is sound and every changed behaviour has a hardening test; documented follow-ups are review-safe. Only `blocked` stops auto — blocked criteria: defined once in [`../../press/references/gap-analysis.md`](../../press/references/gap-analysis.md).
 3. `/age <slug> --auto` writes the report and invokes `/cure <slug> --auto --stake medium+`.
 4. `/cure --auto --stake medium+` bypasses the selection gate, applies every finding of `blocker`, `high`, or `medium` severity plus every cheap (contained-fix) `Low`, then invokes `/age --scope <touched-paths> --auto` for verification.
@@ -49,8 +40,7 @@ In every early-stop case, surface the report from the failing skill and tell the
 
 Each phase's existing `--auto` contract chains forward in-session —
 `/cook --auto` invokes `/press --auto`, which invokes `/age --auto`, and so
-on. Cook's synchronous Cut preflight is the exception: it returns a receipt
-to the current Cook call and never chains Cook recursively. When `/cook` is
+on. When `/cook` is
 running as its own fan-pathway orchestrator (`fan-pathway.md`), that default
 is overridden for every per-curd or post-merge dispatch: each phase sub-agent
 runs only its own phase, writes its handoff slug, and stops — it never chains

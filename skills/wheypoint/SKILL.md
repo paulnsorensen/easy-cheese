@@ -42,7 +42,7 @@ Prepend the standard resumable slug to the top of the file so `/cheese --continu
 
 ```markdown
 status: ok | gated: <one-line decision> | halt: <one-line reason>
-next: mold | cut | cook | press | age | cure | affinage | briesearch | culture | hold | tasks | done
+next: mold | cook | press | age | cure | affinage | briesearch | culture | hold | tasks | done
 mode: single | parallel
 artifact: <path-to-richer-report, or PR ref (PR#<n> / URL) when next: affinage, else none>
 session: <harness>:<session-id>      # optional; auto-filled provenance
@@ -54,7 +54,7 @@ baseline: none | <block — carries a recorded baseline block forward from an up
 ```
 
 `mode:` is optional for backwards compatibility; omitted mode means `mode: single`. In `mode: single`, `next:` names the skill the cold reader should run, which is the machine-readable form of the suggested-skills section below. Use `done` only when the work is genuinely finished and the handoff is a record, not a baton. `/cheese --continue <slug>` resolves the slug through `python3 skills/wheypoint/scripts/wheypoint.pyz resolve` and dispatches `next:` only from the validated current revision; an absolute note path resolves as an explicit path first. When `next: affinage`, record the PR reference (`PR#<n>` or its URL) in `artifact:` so the resume dispatches `/affinage <pr>` explicitly rather than relying on branch auto-detection.
-Pipeline: `culture -> mold -> cut -> cook -> press -> age -> cure -> plate`. Mold `red-required` checkpoints use `next: cut`; Cut success uses `next: cook` with the authoritative GateReceipt in `artifact:`. Resume preserves `mode:`, `--hard`, `--open-pr`, `--safe`, and explicit `--auto`. Press corrective work remains `continue: press-corrective-cook`, not a global Press-to-Cook dispatch.
+Pipeline: `culture -> mold -> cook -> press -> age -> cure -> plate`. Mold `red-required` checkpoints use `next: cook` with the durable spec pointer in `artifact:`. Resume preserves `mode:`, `--hard`, `--open-pr`, `--safe`, and explicit `--auto`. Press corrective work remains `continue: press-corrective-cook`, not a global Press-to-Cook dispatch.
 
 When the checkpointed session carries a recorded `baseline:` block, carry it into the delta unchanged: it is settled state, not something the resumed phase should re-ask about or re-halt on. See [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md).
 
@@ -77,9 +77,9 @@ Status is **derived** by the runtime, never asserted by the author: an active hu
 
 ### `next:` values and semantics
 
-Single-value `next:` is one of the pipeline phases (`mold | cut | cook | press | age | cure | affinage`), a read-only kickoff (`briesearch | culture`), `hold`, `tasks` (with `mode: parallel`), or `done`.
+Single-value `next:` is one of the pipeline phases (`mold | cook | press | age | cure | affinage`), a read-only kickoff (`briesearch | culture`), `hold`, `tasks` (with `mode: parallel`), or `done`.
 
-- **`mold` / `cut` / `cook` / `press` / `age` / `cure`** — the pipeline phases. Which one fits the session state (and the mid-phase resume case, e.g. `/cook` interrupted) is defined by the `## Suggested skills` mapping table below, which owns these semantics.
+- **`mold` / `cook` / `press` / `age` / `cure`** — the pipeline phases. Which one fits the session state (and the mid-phase resume case, e.g. `/cook` interrupted) is defined by the `## Suggested skills` mapping table below, which owns these semantics.
 - **`affinage`** — PR has review comments or failing CI. Record the PR reference in `artifact:` (`PR#<n>` or URL) so the resume dispatches `/affinage <pr>` explicitly.
 - **`briesearch | culture`** — read-only, low-risk next moves. Under `status: ok`, `/cheese --continue` auto-dispatches them directly (frictionless research/think kickoff), deriving any dispatch argument (e.g. `briesearch`'s question) from the orientation line. A move that needs a human decision belongs in `status: gated:`.
 - **`hold`** — restore orientation and wait for instruction; dispatch nothing. For compacting or stringing context along when no action is implied. Distinct from `done` (work finished, record only).
@@ -166,7 +166,6 @@ Pick the next move from where the session actually is, name it as an easy-cheese
 | Next step blocked on a human decision | surface the decision, ask direction | — (set `status: gated:`) |
 | Compacting or stringing along, no action implied | restore orientation, wait | `hold` |
 | Approved spec, not yet implemented | `/cook <spec-path>` | `cook` |
-| Approved `red-required` spec, not yet outer-tested | `/cut <spec-path>` | `cut` |
 | Code written, not yet hardened or reviewed | `/press <slug>` then `/age` | `press` |
 | Implementation done, review wanted now | `/age <ref>` | `age` |
 | Review findings in hand, fixes not applied | `/cure <slug>` | `cure` |
@@ -186,7 +185,6 @@ The opening line ("`/wheypoint` captures just enough state for a cold reader to 
 | `next: culture` | agenda + open-thread state |
 | `next: cure` | findings artifact ref |
 | `next: cook` / `press` / `age` | spec/slug pointers per existing conventions |
-| `next: cut` | approved spec and GateReceipt handoff pointers |
 | `next: hold` / `done` | orientation only |
 
 **`status: gated:` overrides the "just enough state" compression rule for gated notes.** Every open fork gets its own `## Decision dossier` entry — options considered, evidence as `file:line` citations, what each option breaks, and any prior leaning from the session — instead of the one-line decision the compression default would otherwise leave. A resumed session with a consequential fork rebuilds its prose weighing from this dossier; see [`../cheese/references/ask-user-question.md`](../cheese/references/ask-user-question.md) § When to structure for why an undiscussed design fork needs that weighing rather than a structured confirm.

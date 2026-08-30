@@ -62,7 +62,7 @@ These are not soft suggestions — Curdle hard-blocks until they are addressed:
   Test Contract; `non-browser` is explicit and never inferred from prose;
   closed non-behavior work, including appearance-only, uses
   `not-applicable`. The taste and curd gates enforce this field without
-  changing legacy specs consumed by Cut.
+  changing legacy specs.
 
 These audits — agent-introduced scope, entity-referent binding, and the non-goals audit (below) — fire **inline, per dialogue round**, not only terminally at Curdle: each runs the moment new scope is proposed and is surfaced in that round's decision ledger, so a lean is caught when it happens rather than reverse-engineered at the end. Curdle re-runs all three as the terminal backstop and stays the single chokepoint downstream skills trust (RC3).
 

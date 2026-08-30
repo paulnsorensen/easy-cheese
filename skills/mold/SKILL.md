@@ -44,7 +44,7 @@ Full mode definitions, exit criteria, and user knobs: `references/modes.md`. Tri
 
 ## Agent-invoked mini-spec mode
 
-`/cheese`'s tier-1 escalation calls into `/mold` to produce a spec without a user-facing dialogue, once the cook fast-path checks have already passed at the call site. The mode skips the Flow above entirely: derive a slug, write the mini-spec, parse its declared gate applicability, and return the resolved spec path with `/cut --auto <spec-path>` for `red-required` or `/cook --auto <spec-path>` for a closed `not-applicable` disposition.
+`/cheese`'s tier-1 escalation calls into `/mold` to produce a spec without a user-facing dialogue, once the cook fast-path checks have already passed at the call site. The mode skips the Flow above entirely: derive a slug, write the mini-spec, parse its declared gate applicability, and return the resolved spec path with `/cook --auto <spec-path>`.
 
 The two-key handshake does not fire in this mode; the agent-introduced-scope check still runs implicitly — every distinguishing noun in the mini-spec must come from the user's input or the tier-2 `/culture`/`/briesearch` synthesis, never a silent agent addition.
 
@@ -102,11 +102,11 @@ A contract-matrix row also declares a non-empty ratified interface version and
 the complete, unique matrix row identities; tracer rows leave both fields
 blank. `not-applicable` requires a closed non-behavior class, reason, and no
 contracts. Mold never infers applicability. Specs without a Mold provenance
-marker remain legacy-compatible for Cut and may omit `ui_surface`.
+marker remain legacy-compatible and may omit `ui_surface`.
 
 ### Fork taste gate
 
-`mold.pyz taste-test` binds the verdict to the draft SHA256 and every settled consequential ledger fork. Stale/partial coverage or any blocker fails; failures reopen named forks only, with two correction rounds. Approved `red-required` specs hand off unchanged metadata and durable pointer to `/cut --auto`.
+`mold.pyz taste-test` binds the verdict to the draft SHA256 and every settled consequential ledger fork. Stale/partial coverage or any blocker fails; failures reopen named forks only, with two correction rounds. Approved `red-required` specs hand off unchanged metadata and durable pointer to `/cook --auto`.
 
 ## Approval gate
 
@@ -122,9 +122,9 @@ If any gate is unmet or the typed plan remains invalid after one retry, propose 
 
 ## Handoff
 
-**Pipeline:** culture → **[mold]** → cut → cook → press → age → cure → plate
+**Pipeline:** culture → **[mold]** → cook → press → age → cure → plate
 
-After Curdle's phase two finishes, run `curd-count`, then prompt through the shared handoff gate ([policy](../cheese/references/handoff-gate.md)). Approved `red-required` behavior recommends `/cut --auto <durable spec pointer>` with unchanged applicability, contract, taste metadata, and any in-scope `--hard`; `/cook` is the synchronous no-receipt fallback. Never pre-select.
+After Curdle's phase two finishes, run `curd-count`, then prompt through the shared handoff gate ([policy](../cheese/references/handoff-gate.md)). Approved `red-required` behavior recommends `/cook --auto <durable spec pointer>` with unchanged applicability, contract, taste metadata, and any in-scope `--hard`. Never pre-select.
 
 The digest's `mode` is orientation, not a skill. Render the fixed blast-radius menu from `decomposable`, `candidate_curds`, `verdict`, and `mode`; see `references/handoff-menus.md`.
 

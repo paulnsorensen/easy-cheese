@@ -139,7 +139,7 @@ def analyze(spec_path: Path, blast_radius: str | None) -> dict:
     handoff = _gate_handoff(spec_path, body)
     if handoff is not None:
         recommended = str(handoff["command"][0])
-        rationale = f"red-required outer gate precedes {rationale}"
+        rationale = f"red-required handoff to /cook precedes {rationale}"
 
     return {
         "spec_path": str(spec_path),
