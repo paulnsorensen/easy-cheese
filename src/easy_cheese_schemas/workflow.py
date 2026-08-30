@@ -357,6 +357,8 @@ def _deliverables(
     artifacts: dict[str, ArtifactRef] = {}
     evidence: dict[str, EvidenceRef] = {}
     for index, item in enumerate(view.deliverables, start=1):
+        if item.path in artifacts:
+            raise ValueError(f"duplicate deliverable path: {item.path}")
         source_uri = f"repo://{quote(item.path, safe='/-._~')}"
         parsed = urlsplit(source_uri)
         payload, detected_type = read_repository_artifact(

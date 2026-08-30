@@ -644,6 +644,98 @@ def test_invalid_writer_host_field_is_rejected_before_branch_dispatch(
     assert events == ["writer"]
 
 
+@pytest.mark.parametrize("second_role", ["result", "report"])
+def test_duplicate_deliverable_path_blocks_the_curd_result(
+    tmp_path: Path,
+    second_role: str,
+) -> None:
+    source = source_artifact(tmp_path)
+    _ = (tmp_path / "result.txt").write_bytes(b"verified workflow output\n")
+    branch_calls: list[str] = []
+
+    def branch_dispatch(_request: object) -> object:
+        branch_calls.append("branch")
+        raise AssertionError("a duplicate deliverable must stop before a branch")
+
+    def dispatch_writer(_context: Mapping[str, object]) -> CurdResultWriterView:
+        return CurdResultWriterView(
+            criterion_results=[
+                CriterionResultWriterView(
+                    CriterionDisposition.PASSED,
+                    evidence_keys=["result.txt"],
+                )
+            ],
+            deliverables=[
+                DeliverableWriterView("result", "result.txt", "text/plain"),
+                DeliverableWriterView(second_role, "result.txt", "text/plain"),
+            ],
+        )
+
+    _planner, branches, results = run_workflow(
+        planner_request(),
+        repository_root=tmp_path,
+        artifact_directory=tmp_path / "artifacts",
+        dispatch_planner=lambda _request: complete_planner(),
+        dispatch_writer=dispatch_writer,
+        dispatch_review=branch_dispatch,
+        dispatch_diagnosis=branch_dispatch,
+        artifacts={"source": source},
+    )
+
+    assert branch_calls == []
+    assert branches == ()
+    assert results[0].disposition is CurdDisposition.BLOCKED
+    assert results[0].deliverables == ()
+    assert results[0].criterion_results[0].reason == (
+        "writer output invalid: ValueError: duplicate deliverable path: result.txt"
+    )
+
+
+def test_distinct_deliverable_paths_are_all_retained(tmp_path: Path) -> None:
+    source = source_artifact(tmp_path)
+    _ = (tmp_path / "result.txt").write_bytes(b"verified workflow output\n")
+    _ = (tmp_path / "report.txt").write_bytes(b"verified workflow report\n")
+
+    def dispatch_writer(_context: Mapping[str, object]) -> CurdResultWriterView:
+        return CurdResultWriterView(
+            criterion_results=[
+                CriterionResultWriterView(
+                    CriterionDisposition.PASSED,
+                    evidence_keys=["result.txt", "report.txt"],
+                )
+            ],
+            deliverables=[
+                DeliverableWriterView("result", "result.txt", "text/plain"),
+                DeliverableWriterView("report", "report.txt", "text/plain"),
+            ],
+        )
+
+    _planner, _branches, results = run_workflow(
+        planner_request(),
+        repository_root=tmp_path,
+        artifact_directory=tmp_path / "artifacts",
+        dispatch_planner=lambda _request: complete_planner(),
+        dispatch_writer=dispatch_writer,
+        dispatch_review=clean_review,
+        dispatch_diagnosis=unused_diagnosis,
+        artifacts={"source": source},
+    )
+
+    result_id = "workflow-request/plan/revision/1/result/1"
+    assert results[0].disposition is CurdDisposition.PASSED
+    assert [item.artifact_id for item in results[0].deliverables] == [
+        f"{result_id}/artifact/1",
+        f"{result_id}/artifact/2",
+    ]
+    assert [item.digest for item in results[0].deliverables] == [
+        digest(b"verified workflow output\n"),
+        digest(b"verified workflow report\n"),
+    ]
+    assert [
+        item.evidence_id for item in results[0].criterion_results[0].evidence
+    ] == [f"{result_id}/evidence/1", f"{result_id}/evidence/2"]
+
+
 def test_wrong_writer_kind_is_rejected_without_review_or_diagnosis(
     tmp_path: Path,
 ) -> None:
