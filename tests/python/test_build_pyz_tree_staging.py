@@ -38,9 +38,9 @@ def ultracook_pyz(tmp_path_factory) -> Path:
     return build_pyz.build_bundle("cook", out / "cook.pyz")
 
 @pytest.fixture(scope="module")
-def cut_pyz(tmp_path_factory) -> Path:
-    out = tmp_path_factory.mktemp("tree-staging-cut")
-    return build_pyz.build_bundle("cut", out / "cut.pyz")
+def press_pyz(tmp_path_factory) -> Path:
+    out = tmp_path_factory.mktemp("tree-staging-press")
+    return build_pyz.build_bundle("press", out / "press.pyz")
 
 
 def _bundle_members(pyz: Path) -> set[str]:
@@ -52,11 +52,11 @@ def _bundle_members(pyz: Path) -> set[str]:
         }
 
 
-def test_cut_tree_staging_keeps_schema_and_helpers_nested(cut_pyz: Path) -> None:
-    names = _bundle_members(cut_pyz)
-    assert "easy_cheese/shared/cut/red_gate.py" in names
-    assert "easy_cheese/shared/cut/gate_receipts.py" in names
-    assert "easy_cheese/skills/cut/commands.py" in names
+def test_press_tree_staging_keeps_schema_and_helpers_nested(press_pyz: Path) -> None:
+    names = _bundle_members(press_pyz)
+    assert "easy_cheese/shared/fanout/press_route.py" in names
+    assert "easy_cheese/shared/fanout/press_route_cli.py" in names
+    assert "easy_cheese/skills/press/commands.py" in names
     assert "easy_cheese_schemas/gates.py" in names
     assert "easy_cheese_schemas/compat.py" in names
     assert "attrs-26.1.0.dist-info/METADATA" in names
@@ -64,20 +64,20 @@ def test_cut_tree_staging_keeps_schema_and_helpers_nested(cut_pyz: Path) -> None
     assert "gates.py" not in names
 
 
-def test_cut_red_gate_cli_runs_from_isolated_bundle(cut_pyz: Path) -> None:
+def test_press_cli_runs_from_isolated_bundle(press_pyz: Path) -> None:
     result = subprocess.run(
-        [sys.executable, "-S", "-I", str(cut_pyz), "red-gate"],
+        [sys.executable, "-S", "-I", str(press_pyz), "nope"],
         capture_output=True,
         text=True,
     )
     assert result.returncode == 2, result.stdout + result.stderr
     usage = result.stdout + result.stderr
-    assert all(command in usage for command in ("contracts", "issue", "validate"))
+    assert "press-route" in usage
 
 
-def test_cut_bundle_is_byte_deterministic(tmp_path: Path) -> None:
-    first = build_pyz.build_bundle("cut", tmp_path / "a" / "cut.pyz")
-    second = build_pyz.build_bundle("cut", tmp_path / "b" / "cut.pyz")
+def test_press_bundle_is_byte_deterministic(tmp_path: Path) -> None:
+    first = build_pyz.build_bundle("press", tmp_path / "a" / "press.pyz")
+    second = build_pyz.build_bundle("press", tmp_path / "b" / "press.pyz")
     assert first.read_bytes() == second.read_bytes()
 
 
@@ -279,7 +279,7 @@ def test_shiv_command_uses_a_local_hash_locked_wheelhouse(tmp_path: Path) -> Non
     requirements = tmp_path / "requirements.txt"
     wheelhouse = tmp_path / "wheelhouse"
     command = build_pyz._shiv_command(
-        "cut", requirements, tmp_path / "cut.pyz", wheelhouse
+        "cook", requirements, tmp_path / "cook.pyz", wheelhouse
     )
     for flag in (
         "--reproducible",
@@ -310,9 +310,9 @@ def test_build_cli_preserves_resolver_diagnostics(
 
     monkeypatch.setattr(build_pyz, "build_bundles", fail)
 
-    assert build_pyz.main(["build_pyz.py", "--out-dir", str(tmp_path), "cut"]) == 1
+    assert build_pyz.main(["build_pyz.py", "--out-dir", str(tmp_path), "cook"]) == 1
     diagnostics = capsys.readouterr().err
-    assert "cut" in diagnostics
+    assert "cook" in diagnostics
     assert "subprocess stdout" in diagnostics
     assert "subprocess stderr" in diagnostics
 

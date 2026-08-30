@@ -65,7 +65,6 @@ A Python-backed skill ships exactly one executable archive at `skills/<skill>/sc
 | `skills/cheese/SKILL.md` | `/cheese` | Unified entry point. Classifies any input (idea, spec path, PR, stack trace, file path), announces the routing decision as a short three-line block (Intent / Reason / Target), and dispatches the chosen target immediately with `--auto` propagated downstream. Add `--safe` to gate dispatch behind a confirmation prompt and surface non-auto alternatives. |
 | `skills/briesearch/SKILL.md` | `/briesearch` | Research technical questions across docs, web, codebase, and GitHub examples with confidence-capped synthesis. |
 | `skills/mold/SKILL.md` | `/mold` | Shape fuzzy ideas into grounded specs through dialogue, validate cycles, and a two-key handshake. |
-| `skills/cut/SKILL.md` | `/cut` | Establish protected, test-only RED evidence for observable behavior before Cook changes production. |
 | `skills/culture/SKILL.md` | `/culture` | The agent's internal-thinking skill — invoked silently by `/cheese` and other workflow skills to model a problem before dispatching. Surfaces to the user only when they explicitly opted out of writes ("no writes", "rubber-duck this"). Hard invariant: writes only the opt-in `.cheese/notes/<slug>.md` handoff at session end, and only when the user asks for notes. |
 | `skills/pasteurize/SKILL.md` | `/pasteurize` | Diagnose hard bugs, flaky failures, and performance regressions with a feedback-loop-first investigation, then hand off into `/cook → /press → /age → /cure`. |
 | `skills/cook/SKILL.md` | `/cook` | Single implementation orchestrator: runs a focused spec through one coder or fans an approved curd block through fresh-context phase agents. |
@@ -95,8 +94,8 @@ See [Installing MCP servers](#installing-mcp-servers) below — expand the tilth
 /cheese  ──►  classify intent  ──►  dispatch immediately (autonomous by default)
    ├─ need info / external evidence  ──►  /briesearch
    ├─ no-writes discussion only      ──►  /culture                  (user explicitly opted out of writes)
-   ├─ fuzzy / multi-module idea       ──►  /mold        ──►  /cut --auto  ──►  /cook --auto  ──►  /press  ──►  /age  ──►  /cure
-   ├─ high-blast-radius spec          ──►  /mold        ──►  /cut --auto  ──►  /cook --auto  (fresh-context fan pathway)
+   ├─ fuzzy / multi-module idea       ──►  /mold        ──►  /cook --auto  ──►  /press  ──►  /age  ──►  /cure
+   ├─ high-blast-radius spec          ──►  /mold        ──►  /cook --auto  (fresh-context fan pathway)
    ├─ clear, scoped ask               ──►  /cook --auto                                                ──►  /press  ──►  /age  ──►  /cure
    ├─ debugging task                  ──►  /pasteurize --auto ──►  /cook --auto                        ──►  /press  ──►  /age  ──►  /cure
    ├─ PR comments / CI failures       ──►  /affinage    ──►  /cure
@@ -185,7 +184,7 @@ When a preferred tool is unavailable, workflow skills say so once, use the stron
 ### skills.sh (recommended)
 
 Install every skill with the [skills.sh](https://skills.sh) installer. The
-skills form one pipeline (`/cheese → /mold → /cut → /cook → /press → /age →
+skills form one pipeline (`/cheese → /mold → /cook → /press → /age →
 /cure`), so install them together rather than cherry-picking:
 
 ```sh
@@ -220,7 +219,7 @@ gh skill install paulnsorensen/easy-cheese
 Install every current skill in one shot:
 
 ```sh
-for s in age affinage briesearch cheese cook culture cure cut hard-cheese melt mold pasteurize press ultracook wheypoint; do
+for s in age affinage briesearch cheese cook culture cure hard-cheese melt mold pasteurize press ultracook wheypoint; do
   gh skill install paulnsorensen/easy-cheese "$s"
 done
 ```

@@ -28,7 +28,7 @@ Cross-cutting house style and citation form: [`formatting.md`](../../cheese/refe
 - <suite>/<test_id>: <signature> — identical to baseline, outside the cooked contract, not fixed (see [`quality-gates.md`](quality-gates.md))
 
 ### Self-eval
-- [x] Cut wrote failing tests before production changes.
+- [x] A failing test existed before production changes.
 - [x] Cook made tests pass without speculative behaviour.
 - [x] Taste-test passed.
 - [x] Quality gates pass, or all remaining red is recorded baseline failure (see Baseline section).

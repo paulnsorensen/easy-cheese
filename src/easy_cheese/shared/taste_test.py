@@ -942,7 +942,7 @@ class MoldHandoff:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "next": "cut",
+            "next": "cook",
             "command": list(self.command),
             "spec_ref": self.spec_ref,
             "metadata": copy.deepcopy(dict(self.metadata)),
@@ -955,7 +955,7 @@ def red_required_handoff(
     metadata: Mapping[str, Any] | None = None,
 ) -> MoldHandoff:
     if not isinstance(applicability, RedRequired):
-        raise ApplicabilityError("cut-handoff-requires-red-required")
+        raise ApplicabilityError("handoff-requires-red-required")
     pointer = str(spec_ref)
     if not pointer.strip():
         raise TasteTestError("durable-spec-pointer-required")
@@ -970,7 +970,7 @@ def red_required_handoff(
     if applicability.ui_surface is not None:
         gate_metadata.setdefault("ui_surface", applicability.ui_surface)
     preserved["gate_applicability"] = gate_metadata
-    return MoldHandoff(pointer, ("/cut", "--auto", pointer), preserved)
+    return MoldHandoff(pointer, ("/cook", "--auto", pointer), preserved)
 
 
 def auto_handoff(

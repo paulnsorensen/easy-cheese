@@ -302,10 +302,9 @@ class TestMoldHighBlastHandoff:
     def test_routes_high_blast_by_gate_disposition(self) -> None:
         body = _skill_corpus("mold")
         menu = _mold_high_blast_handoff_menu()
-        assert "recommended_skill: /cut" in body
-        assert "/cut --auto <spec-path>" in body
+        assert "/cook --auto <spec-path>" in body
         assert "fresh-context isolation" in menu.lower()
-        assert "Active RED continues" in menu
+        assert "Red-required behavior continues" in menu
         assert "closed N/A skips Press" in menu
 
     def test_offers_continue_flow(self) -> None:
@@ -336,8 +335,7 @@ class TestMoldLowMediumHandoff:
     def test_routes_low_medium_by_gate_disposition(self) -> None:
         body = _skill_corpus("mold")
         menu = _mold_low_medium_handoff_menu()
-        assert "Auto choices use `/cut --auto <spec-path>`" in body
-        assert "Auto choices use `/cook --auto <spec-path>`" in body
+        assert "auto choices use `/cook --auto <spec-path>`" in body
         assert "**Implement the spec**" in menu
         assert "**Implement and auto-review**" in menu
 

@@ -50,7 +50,6 @@ def _cook_corpus() -> str:
 # fails -- catching drift that per-file tests (which only ever read one of
 # the two files) structurally cannot.
 LOAD_BEARING_PHRASES = (
-    "never captures its own",
     "no frame)",
     "lazily",
     "pre-change tree",

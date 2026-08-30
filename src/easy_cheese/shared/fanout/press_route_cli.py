@@ -1,4 +1,4 @@
-"""JSON CLI wrapper for the receipt-derived Press route."""
+"""JSON CLI wrapper for the Press route decision."""
 
 from __future__ import annotations
 
@@ -7,20 +7,9 @@ from dataclasses import asdict
 
 from easy_cheese.shared.manifest_io import json_command
 
-from .press_route import (
-    Continue,
-    Dispatch,
-    ReceiptChainError,
-    Stop,
-    route_from_receipt,
-)
+from .press_route import Continue, Dispatch, Stop, press_route
 
-_EXPECTED_KEYS = {
-    "outcome",
-    "current_receipt",
-    "phase_token_ref",
-    "phase_token_sha256",
-}
+_EXPECTED_KEYS = {"outcome", "repair_cycles"}
 
 
 def _action_payload(action: Continue | Dispatch | Stop) -> dict[str, object]:
@@ -35,18 +24,16 @@ def _action_payload(action: Continue | Dispatch | Stop) -> dict[str, object]:
 
 def _route(**payload: object) -> dict[str, object]:
     if set(payload) != _EXPECTED_KEYS:
-        raise ValueError(
-            "request must contain exactly outcome, current_receipt, "
-            "phase_token_ref, and phase_token_sha256"
-        )
+        raise ValueError("request must contain exactly outcome and repair_cycles")
+    outcome = payload["outcome"]
+    repair_cycles = payload["repair_cycles"]
+    if not isinstance(outcome, str):
+        raise ValueError("outcome must be a string")
+    if isinstance(repair_cycles, bool) or not isinstance(repair_cycles, int):
+        raise ValueError("repair_cycles must be a non-negative integer")
     try:
-        action = route_from_receipt(
-            payload["outcome"],
-            payload["current_receipt"],
-            payload["phase_token_ref"],
-            payload["phase_token_sha256"],
-        )
-    except ReceiptChainError as exc:
+        action = press_route(outcome, repair_cycles)
+    except TypeError as exc:
         raise ValueError(str(exc)) from exc
     return _action_payload(action)
 

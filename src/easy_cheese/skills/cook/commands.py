@@ -31,7 +31,6 @@ COMMANDS = (
     Command("paths-cli", "easy_cheese.shared.paths_cli:main"),
     Command("handoff-cli", "easy_cheese.shared.handoff_cli:main"),
     Command("render-html", "easy_cheese.shared.html_report_cli:main"),
-    Command("red-gate", "easy_cheese.shared.cut.red_gate:main"),
 )
 
 

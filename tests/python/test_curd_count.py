@@ -283,13 +283,13 @@ class TestAnalyze:
         digest = curd_count.analyze(spec, None)
         assert digest["recommended_skill"] == "/cook"
 
-    def test_red_required_spec_routes_through_cut(
+    def test_red_required_spec_routes_to_cook_with_handoff(
         self, curd_count: ModuleType, tmp_path: Path
     ) -> None:
         spec = self._write(tmp_path, "behavior.md", SPEC_RED_REQUIRED)
         digest = curd_count.analyze(spec, "medium")
-        assert digest["recommended_skill"] == "/cut"
-        assert digest["handoff"]["command"] == ["/cut", "--auto", str(spec)]
+        assert digest["recommended_skill"] == "/cook"
+        assert digest["handoff"]["command"] == ["/cook", "--auto", str(spec)]
 
 
     def test_new_mold_spec_without_ui_surface_is_blocked(
@@ -311,7 +311,7 @@ class TestAnalyze:
         with pytest.raises(curd_count.SpecReadError, match="browser-e2e-seam"):
             curd_count.analyze(spec, "medium")
 
-    def test_valid_browser_ui_carries_surface_in_cut_handoff(
+    def test_valid_browser_ui_carries_surface_in_handoff(
         self, curd_count: ModuleType, tmp_path: Path
     ) -> None:
         body = SPEC_RED_REQUIRED.replace(
@@ -323,14 +323,15 @@ class TestAnalyze:
         digest = curd_count.analyze(spec, "medium")
         assert digest["handoff"]["metadata"]["gate_applicability"]["ui_surface"] == "browser"
 
-    def test_unmarked_legacy_spec_without_ui_surface_remains_a_cut_candidate(
+    def test_unmarked_legacy_spec_without_ui_surface_keeps_red_required_handoff(
         self, curd_count: ModuleType, tmp_path: Path
     ) -> None:
         body = SPEC_RED_REQUIRED.replace("source: mold-handshake\n", "")
         body = body.replace("  ui_surface: non-browser\n", "")
         spec = self._write(tmp_path, "legacy.md", body)
         digest = curd_count.analyze(spec, "medium")
-        assert digest["recommended_skill"] == "/cut"
+        assert digest["recommended_skill"] == "/cook"
+        assert digest["handoff"] is not None
 
     def test_not_applicable_spec_with_acceptance_ids_routes_to_cook(
         self, curd_count: ModuleType, tmp_path: Path

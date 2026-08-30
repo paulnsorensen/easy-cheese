@@ -73,6 +73,6 @@ failure. A failure returns only its named fork ids for reopening. The initial
 verdict and two corrective rounds are the complete budget; the third failure
 halts before decomposition and before the two-key handshake.
 
-The corresponding automatic red-gate handoff is `/cut --auto <durable spec
+The corresponding automatic handoff is `/cook --auto <durable spec
 pointer>`. It passes the durable pointer and the approved applicability,
 contract, and taste metadata unchanged.

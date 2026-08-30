@@ -4,10 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from pathlib import Path
 from typing import TypeAlias
-
-from easy_cheese.shared.cut.red_gate import GateValidationError, consume_press_boundary
 
 
 class Outcome(str, Enum):
@@ -43,34 +40,6 @@ class Stop:
 
 Action: TypeAlias = Continue | Dispatch | Stop
 _MAX_REPAIR_CYCLES = 2
-
-
-class ReceiptChainError(ValueError):
-    """Raised when Press boundary evidence is not canonical and closed."""
-
-
-def route_from_receipt(
-    outcome: Outcome | str,
-    current_receipt: str | Path,
-    phase_token_ref: str | Path,
-    phase_token_sha256: str,
-) -> Action:
-    """Validate and consume one immutable Press interval before routing it."""
-    resolved = _coerce_outcome(outcome)
-    if resolved not in {Outcome.GREEN, Outcome.IN_CONTRACT_RED}:
-        return press_route(resolved, 0)
-    try:
-        evidence = consume_press_boundary(
-            resolved.value,
-            current_receipt,
-            phase_token_ref,
-            phase_token_sha256,
-        )
-    except GateValidationError as exc:
-        raise ReceiptChainError("; ".join(exc.problems)) from exc
-    if evidence.production_changed:
-        return press_route(Outcome.PRODUCTION_CHANGED, evidence.completed_cycles)
-    return press_route(resolved, evidence.completed_cycles)
 
 
 def _coerce_outcome(outcome: object) -> Outcome:
@@ -117,8 +86,6 @@ __all__ = [
     "Continue",
     "Dispatch",
     "Outcome",
-    "ReceiptChainError",
     "Stop",
     "press_route",
-    "route_from_receipt",
 ]

@@ -36,14 +36,14 @@ def test_install_sh_fallback_matches_top_level_skills() -> None:
     assert fallback == expected
 
 
-def test_cut_is_listed_once_in_plugin_manifest() -> None:
+def test_cut_is_not_listed_in_plugin_manifest() -> None:
     manifest = json.loads(
         (REPO_ROOT / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8")
     )
-    assert manifest["skills"].count("./skills/cut") == 1
+    assert "./skills/cut" not in manifest["skills"]
 
 
-def test_installer_fallback_installs_cut_from_unrelated_cwd(tmp_path: Path) -> None:
+def test_installer_fallback_installs_press_from_unrelated_cwd(tmp_path: Path) -> None:
     log = tmp_path / "gh.log"
     gh = tmp_path / "gh"
     gh.write_text(
@@ -71,4 +71,4 @@ def test_installer_fallback_installs_cut_from_unrelated_cwd(tmp_path: Path) -> N
         for line in log.read_text(encoding="utf-8").splitlines()
         if line.startswith("skill install ")
     ]
-    assert any(" cut " in f" {line} " and "--force" in line for line in installs)
+    assert any(" press " in f" {line} " and "--force" in line for line in installs)
