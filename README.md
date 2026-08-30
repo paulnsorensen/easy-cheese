@@ -23,6 +23,7 @@ A portable, harness-agnostic Agent Skills toolkit for any [Agent Skills](https:/
 - [Skill layout](#skill-layout)
 - [Skills](#skills)
 - [Scope](#scope)
+- [Release channels](#release-channels)
 - [Python package](#python-package)
 - [Build skill archives](#build-skill-archives)
 - [Optional tools](#optional-tools)
@@ -127,6 +128,10 @@ Easy-cheese is intentionally a small surface. What that means in practice:
 - **No repo-wide MCP requirement.** Workflow skills suggest tools (tilth, Context7, Tavily) but have host-native fallbacks. Source-code work follows the shared routing contract: prefer tilth when present, use equivalent native AST/LSP/anchored-edit backends when available, and report any precision loss from bounded fallbacks.
 - **One orchestrator skill, narrowly scoped.** `/cook` is the single implementation orchestrator: focused specs use its single-coder path, while approved file-disjoint curds use its fresh-context fan pathway. `/ultracook` is only a compatibility redirect to `/cook`. Harvest and `/plate` remain parent-owned; parallel curds use sequential same-worktree phase spawns and a terminal reviewer pass before publication.
 - **No automatic re-age loop in `/cure`.** The skill describes the protocol; the human runs the next `/age` when ready.
+
+## Release channels
+
+Every pull request targets `next` (`gh pr create --base next`), the integration/soak channel. `main` is the stable channel and default branch; it advances only by fast-forward promotion (`just promote`) after `next` is green, and releases tag `main` after promotion — published tags only ever contain soaked changes. Never open a promotion PR: a squash-merge to `main` would rewrite the promoted SHAs and break fast-forward parity. See [CONTRIBUTING.md](CONTRIBUTING.md#release-channels) for the full contributor workflow.
 
 ## Python package
 

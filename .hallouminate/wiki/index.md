@@ -14,6 +14,7 @@ git-tracking axis (`skills/cheese/references/formatting.md:103`).
 
 <!-- HALLOUMINATE:INDEX-START -->
 - [adr/](./adr/index.md) — adr
+- [analytics/](./analytics/index.md)
 - [architecture/](./architecture/index.md) — architecture
 - [gotchas/](./gotchas/index.md) — gotchas
 - [specs/](./specs/index.md) — specs
