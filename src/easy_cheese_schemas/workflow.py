@@ -126,10 +126,6 @@ def _canonical_digest(value: object) -> str:
     return _artifact_digest(_canonical_bytes(value))
 
 
-def _plan_digest(plan: CurdPlan) -> str:
-    return curd_plan_digest(plan)
-
-
 def _version(contract: type) -> ContractVersion:
     version = supported_version_for(contract)
     if version is None:
@@ -218,16 +214,6 @@ def plan(
     )
 
 
-def _resolve_agent_artifact(
-    artifact: ArtifactRef, repository_root: Path, artifact_directory: Path
-) -> object:
-    return resolve_artifact(
-        artifact,
-        repository_root=repository_root,
-        artifact_directory=artifact_directory,
-    )
-
-
 def _retained_artifact(
     artifact: ArtifactRef,
     resolved_path: str,
@@ -267,10 +253,10 @@ def _resolve_plan_context(
         ()
         if plan.context is None
         else tuple(
-            _resolve_agent_artifact(
+            resolve_artifact(
                 artifact,
-                repository_root,
-                artifact_directory,
+                repository_root=repository_root,
+                artifact_directory=artifact_directory,
             )
             for artifact in plan.context.shared_inputs
         )
@@ -992,7 +978,7 @@ def _validate_cure_bindings(
     curd_plan: CurdPlan,
     bindings: CureDiagnosisBindings,
 ) -> dict[str, CureDiagnosisBinding]:
-    if curd_plan.digest != _plan_digest(curd_plan):
+    if curd_plan.digest != curd_plan_digest(curd_plan):
         raise ValueError("curd plan digest does not match its canonical content")
     normalized = _coerce_diagnosis_bindings(bindings)
     expected_plan = SourcePlanRef(
