@@ -8,6 +8,7 @@ import importlib.util
 import shutil
 import subprocess
 import sys
+import tomllib
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -144,6 +145,68 @@ def test_probe_fails_at_sixty_percent(tmp_path: Path) -> None:
     output = result.stdout + result.stderr
     assert result.returncode == 3
     assert f"{probe}:2: unused variable 'unused_var' (60% confidence)" in output
+
+
+@needs_just
+def test_orphaned_function_fails_the_gate(tmp_path: Path) -> None:
+    """A newly-orphaned top-level function is reported, not silently accepted."""
+    probe = tmp_path / "probe.py"
+    _ = probe.write_text(
+        "def orphaned_function():\n    return 1\n",
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        ["just", "lint-py-dead-code", str(tmp_path)],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    output = result.stdout + result.stderr
+    assert result.returncode == 3
+    assert f"{probe}:1: unused function 'orphaned_function' (60% confidence)" in output
+
+
+@needs_just
+def test_decorator_registered_function_does_not_fail_the_gate(tmp_path: Path) -> None:
+    """A function registered through a data-driven `ignore_decorators` entry is
+    invoked only via a compiled dispatcher, so the gate must not report it dead.
+    """
+    probe = tmp_path / "probe.py"
+    lines = (
+        "def bundle_command(func):",
+        "    return func",
+        "",
+        "",
+        "@bundle_command",
+        "def registered_entry_point():",
+        "    return 1",
+        "",
+    )
+    _ = probe.write_text("\n".join(lines), encoding="utf-8")
+    result = subprocess.run(
+        ["just", "lint-py-dead-code", str(tmp_path)],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    output = result.stdout + result.stderr
+    assert result.returncode == 0, output
+
+
+def test_pyproject_declares_decorator_registered_entry_points() -> None:
+    """Decorator-registered entry points are allowlisted through pyproject's
+    data-driven `[tool.vulture]` config, not inline `# noqa` comments at each
+    call site.
+    """
+    config = _as_dict(cast(object, tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))))
+    tool = _as_dict(config["tool"])
+    vulture = _as_dict(tool["vulture"])
+    ignore_decorators = _as_list(vulture["ignore_decorators"])
+    assert "@bundle_command" in ignore_decorators
+    assert "@contract" in ignore_decorators
+    assert "@document_contract" in ignore_decorators
 
 
 def test_schema_enum_and_attrs_fields_accept_absolute_vulture_filenames() -> None:
