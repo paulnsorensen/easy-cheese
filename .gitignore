@@ -23,6 +23,9 @@
 # milknado optional-plugin runtime data (SQLite task graph)
 .milknado/
 
+# milknado ultracode workflow, copied in per-session by its SessionStart hook
+.claude/workflows/
+
 # Python
 __pycache__/
 *.pyc
