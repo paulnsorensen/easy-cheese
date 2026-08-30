@@ -2,12 +2,13 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import { cheeselordTheme } from '@cheeselord/design/starlight';
-import { sidebar } from './src/sidebar.mjs';
+import { sidebar } from './website/sidebar.mjs';
 
 export default defineConfig({
   site: 'https://paulnsorensen.github.io',
   base: '/easy-cheese',
   output: 'static',
+  srcDir: './website',
   integrations: [
     starlight({
       title: '🧀 easy-cheese',
@@ -16,10 +17,10 @@ export default defineConfig({
         'Harness-agnostic Agent Skills (agentskills.io) — the cheese-making pipeline that ages raw curds into shippable wheels of code.',
       sidebar,
       components: {
-        Sidebar: './src/components/Sidebar.astro',
-        SiteTitle: './src/components/SiteTitle.astro',
+        Sidebar: './website/components/Sidebar.astro',
+        SiteTitle: './website/components/SiteTitle.astro',
       },
-      customCss: ['./src/styles/cheese.css'],
+      customCss: ['./website/styles/cheese.css'],
       social: [
         {
           icon: 'github',
@@ -28,7 +29,7 @@ export default defineConfig({
         },
       ],
       editLink: {
-        baseUrl: 'https://github.com/paulnsorensen/easy-cheese/edit/main/src/content/docs/',
+        baseUrl: 'https://github.com/paulnsorensen/easy-cheese/edit/main/website/content/docs/',
       },
     }),
   ],

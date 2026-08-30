@@ -6,7 +6,7 @@ on:
     paths:
       - "skills/**"
       - "shared/**"
-      - "src/**"
+      - "website/**"
       - "public/**"
       - "astro.config.mjs"
       - "package.json"
@@ -22,7 +22,7 @@ on:
     paths:
       - "skills/**"
       - "shared/**"
-      - "src/**"
+      - "website/**"
       - "public/**"
       - "astro.config.mjs"
       - "package.json"
