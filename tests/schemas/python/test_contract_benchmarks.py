@@ -254,7 +254,7 @@ def test_invalid_repair_is_recorded_and_repair_rate_aggregates_invalid_cases() -
     report = benchmark_contracts((repaired, unrepaired, invalid_repair))
 
     assert report.first_pass_validity == 0.0
-    assert report.repair_rate == pytest.approx(1 / 2)  # pyright: ignore[reportUnknownMemberType]
+    assert report.repair_rate == pytest.approx(1 / 2)
     assert report.records[2].repair_attempted is True
     assert report.records[2].repair_succeeded is False
     assert report.records[2].canonical_bytes is None

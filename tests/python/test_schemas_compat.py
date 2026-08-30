@@ -12,6 +12,7 @@ from copy import deepcopy
 import re
 import tomllib
 from pathlib import Path
+from typing import cast
 
 import pytest
 from attrs import define, field
@@ -159,12 +160,13 @@ class TestGateReceiptCompatibility:
         assert result.problems == ()
         assert result.value is not None
         assert not hasattr(result.value, "future_key")
-        assert result.value.to_dict()["contracts"][0]["mode"] == "tracer"
+        contracts = cast(list[dict[str, object]], result.value.to_dict()["contracts"])
+        assert contracts[0]["mode"] == "tracer"
 
     def test_malformed_receipt_problems_are_deterministic_and_accumulated(self) -> None:
         payload = deepcopy(GATE_PAYLOAD)
         payload["work_id"] = 7
-        payload["contracts"][0]["mode"] = "not-a-mode"
+        cast(list[dict[str, object]], payload["contracts"])[0]["mode"] = "not-a-mode"
         payload["guard_receipt_refs"] = ("prior",)
 
         first = load(payload, GateReceipt, strict=True)
@@ -252,7 +254,7 @@ class TestLoadNeverRaises:
     reach it from a corpus document must come back as problems, not tracebacks."""
 
     def test_non_attrs_class_is_reported_not_raised(self) -> None:
-        result = load({"a": 1}, dict, strict=False)
+        result = load({"a": 1}, dict[str, object], strict=False)
         assert result.value is None
         assert result.problems == ("dict is not a schema type",)
 
@@ -277,15 +279,18 @@ class TestLoadedShape:
     def test_loaded_is_frozen(self) -> None:
         result = Loaded(value=Widget(name="gouda"), provenance=Provenance.CURRENT, problems=[])
         with pytest.raises(FrozenInstanceError):
-            result.value = None  # type: ignore[misc]
+            result.value = None  # pyright: ignore[reportAttributeAccessIssue]
 
 
 class TestDistributionMetadata:
-    def _pyproject(self) -> dict:
-        return tomllib.loads((REPO_ROOT / "pyproject.toml").read_text())
+    def _pyproject(self) -> dict[str, object]:
+        return cast(dict[str, object], tomllib.loads((REPO_ROOT / "pyproject.toml").read_text()))
+
+    def _project(self) -> dict[str, object]:
+        return cast(dict[str, object], self._pyproject()["project"])
 
     def test_python_floor_is_311(self) -> None:
-        assert self._pyproject()["project"]["requires-python"] == ">=3.11"
+        assert self._project()["requires-python"] == ">=3.11"
 
     def test_dependency_floors_match_the_locked_versions(self) -> None:
         # The floors are only meaningful if the suite exercises the locked
@@ -295,7 +300,7 @@ class TestDistributionMetadata:
         import attrs
 
         pins = _runtime_pins()
-        deps = self._pyproject()["project"]["dependencies"]
+        deps = cast(list[str], self._project()["dependencies"])
         assert pins["attrs"] == attrs.__version__
         assert f"attrs>={pins['attrs']}" in deps
         assert f"cattrs>={pins['cattrs']}" in deps
@@ -303,4 +308,4 @@ class TestDistributionMetadata:
     def test_version_matches_package(self) -> None:
         import easy_cheese_schemas
 
-        assert self._pyproject()["project"]["version"] == easy_cheese_schemas.__version__
+        assert self._project()["version"] == easy_cheese_schemas.__version__

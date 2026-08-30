@@ -106,7 +106,8 @@ class TestAgeLadder:
 
     def test_age_skill_names_all_five_lens_groupings(self) -> None:
         text = read(AGE_FAN_OUT_DOC)
-        for group in age_route._LENS_TREE:
+        lens_tree = age_route._LENS_TREE  # pyright: ignore[reportPrivateUsage]
+        for group in lens_tree:
             pattern = r"\[\s*" + r"\s*,\s*".join(group) + r"\s*\]"
             assert re.search(pattern, text), (
                 f"age/references/fan-out.md does not name the lens grouping {group!r}"
@@ -200,26 +201,29 @@ class TestThresholdCodeDocsAgreement:
         )
 
     def test_age_skill_router_ladder_matches_live_score_floors(self) -> None:
-        assert age_route._SCORE_N2_FLOOR == 60
-        assert age_route._SCORE_N5_FLOOR == 250
-        assert age_route._HIGH_EFFORT_SCORE == 900
+        n2_floor = age_route._SCORE_N2_FLOOR  # pyright: ignore[reportPrivateUsage]
+        n5_floor = age_route._SCORE_N5_FLOOR  # pyright: ignore[reportPrivateUsage]
+        high_effort_score = age_route._HIGH_EFFORT_SCORE  # pyright: ignore[reportPrivateUsage]
+        assert n2_floor == 60
+        assert n5_floor == 250
+        assert high_effort_score == 900
 
         age_text = read(AGE_FAN_OUT_DOC)
-        assert f"<{age_route._SCORE_N2_FLOOR}" in age_text, (
+        assert f"<{n2_floor}" in age_text, (
             f"age/references/fan-out.md does not quote the live _SCORE_N2_FLOOR "
-            f"({age_route._SCORE_N2_FLOOR})"
+            f"({n2_floor})"
         )
-        assert f"{age_route._SCORE_N2_FLOOR}–{age_route._SCORE_N5_FLOOR}" in age_text, (
+        assert f"{n2_floor}–{n5_floor}" in age_text, (
             f"age/references/fan-out.md does not quote the live _SCORE_N2_FLOOR-_SCORE_N5_FLOOR "
-            f"band ({age_route._SCORE_N2_FLOOR}-{age_route._SCORE_N5_FLOOR})"
+            f"band ({n2_floor}-{n5_floor})"
         )
-        assert f">{age_route._SCORE_N5_FLOOR}" in age_text, (
+        assert f">{n5_floor}" in age_text, (
             f"age/references/fan-out.md does not quote the live _SCORE_N5_FLOOR "
-            f"({age_route._SCORE_N5_FLOOR})"
+            f"({n5_floor})"
         )
-        assert str(age_route._HIGH_EFFORT_SCORE) in age_text, (
+        assert str(high_effort_score) in age_text, (
             f"age/references/fan-out.md does not quote the live _HIGH_EFFORT_SCORE "
-            f"({age_route._HIGH_EFFORT_SCORE})"
+            f"({high_effort_score})"
         )
 
     def test_pasteurize_skill_fanout_table_matches_live_constants(self) -> None:
@@ -236,11 +240,19 @@ class TestThresholdCodeDocsAgreement:
         assert table, "pasteurize/SKILL.md's fan-out sizing table is missing"
         rows = table.group(0)
 
+        tight_deterministic_n = pasteurize_route._REGRESSION_TIGHT_DETERMINISTIC_N  # pyright: ignore[reportPrivateUsage]
+        tight_nondeterministic_n = pasteurize_route._REGRESSION_TIGHT_NONDETERMINISTIC_N  # pyright: ignore[reportPrivateUsage]
+        wide_deterministic_n = pasteurize_route._REGRESSION_WIDE_DETERMINISTIC_N  # pyright: ignore[reportPrivateUsage]
+        wide_nondeterministic_n = pasteurize_route._REGRESSION_WIDE_NONDETERMINISTIC_N  # pyright: ignore[reportPrivateUsage]
+        unstable_repro_n = pasteurize_route._UNSTABLE_REPRO_N  # pyright: ignore[reportPrivateUsage]
+        cold_bug_deterministic_n = pasteurize_route._COLD_BUG_DETERMINISTIC_N  # pyright: ignore[reportPrivateUsage]
+        cold_bug_nondeterministic_n = pasteurize_route._COLD_BUG_NONDETERMINISTIC_N  # pyright: ignore[reportPrivateUsage]
+
         expectations = [
-            ("tight", "deterministic", pasteurize_route._REGRESSION_TIGHT_DETERMINISTIC_N),
-            ("tight", "non-deterministic", pasteurize_route._REGRESSION_TIGHT_NONDETERMINISTIC_N),
-            ("wide", "deterministic", pasteurize_route._REGRESSION_WIDE_DETERMINISTIC_N),
-            ("wide", "non-deterministic", pasteurize_route._REGRESSION_WIDE_NONDETERMINISTIC_N),
+            ("tight", "deterministic", tight_deterministic_n),
+            ("tight", "non-deterministic", tight_nondeterministic_n),
+            ("wide", "deterministic", wide_deterministic_n),
+            ("wide", "non-deterministic", wide_nondeterministic_n),
         ]
         for range_word, repro_word, expected_n in expectations:
             row_pattern = (
@@ -253,26 +265,26 @@ class TestThresholdCodeDocsAgreement:
             )
 
         assert re.search(
-            r"heisenbug.*?\| " + str(pasteurize_route._UNSTABLE_REPRO_N) + r"\b", rows
+            r"heisenbug.*?\| " + str(unstable_repro_n) + r"\b", rows
         ), (
             f"pasteurize/SKILL.md's table does not show n="
-            f"{pasteurize_route._UNSTABLE_REPRO_N} for the heisenbug row"
+            f"{unstable_repro_n} for the heisenbug row"
         )
         assert re.search(
             r"cold bug.*?deterministic \| "
-            + str(pasteurize_route._COLD_BUG_DETERMINISTIC_N) + r"\b",
+            + str(cold_bug_deterministic_n) + r"\b",
             rows,
         ), (
             f"pasteurize/SKILL.md's table does not show n="
-            f"{pasteurize_route._COLD_BUG_DETERMINISTIC_N} for the deterministic cold-bug row"
+            f"{cold_bug_deterministic_n} for the deterministic cold-bug row"
         )
         assert re.search(
             r"cold bug.*?non-deterministic \| "
-            + str(pasteurize_route._COLD_BUG_NONDETERMINISTIC_N) + r"\b",
+            + str(cold_bug_nondeterministic_n) + r"\b",
             rows,
         ), (
             f"pasteurize/SKILL.md's table does not show n="
-            f"{pasteurize_route._COLD_BUG_NONDETERMINISTIC_N} for the non-deterministic "
+            f"{cold_bug_nondeterministic_n} for the non-deterministic "
             f"cold-bug row"
         )
 

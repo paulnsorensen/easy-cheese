@@ -7,6 +7,7 @@ import importlib
 import inspect
 import sys
 from types import ModuleType
+from typing import cast
 
 import pytest
 
@@ -26,7 +27,7 @@ def target_module(monkeypatch: pytest.MonkeyPatch) -> tuple[list[list[str]], Mod
         calls.append(argv)
         return 7
 
-    module.handler = handler  # type: ignore[attr-defined]
+    module.handler = handler  # pyright: ignore[reportAttributeAccessIssue]
     monkeypatch.setitem(sys.modules, module.__name__, module)
     return calls, module
 
@@ -34,18 +35,18 @@ def target_module(monkeypatch: pytest.MonkeyPatch) -> tuple[list[list[str]], Mod
 @pytest.mark.parametrize("name", ["Bad", "", "-x", "_x", "a b", "camelCase"])
 def test_invalid_command_name_rejected(name: str) -> None:
     with pytest.raises(ValueError, match="invalid command name"):
-        command(name=name)
+        _ = command(name=name)
 
 
 @pytest.mark.parametrize("target", ["", "module", ":main", "module:"])
 def test_invalid_command_target_rejected(target: str) -> None:
     with pytest.raises(ValueError, match="invalid command target"):
-        command(target=target)
+        _ = command(target=target)
 
 
 def test_duplicate_command_rejected() -> None:
     with pytest.raises(ValueError, match="duplicate bundle command"):
-        bc.command_map((command(), command()))
+        _ = bc.command_map((command(), command()))
 
 
 @pytest.mark.parametrize("commands", [
@@ -54,7 +55,7 @@ def test_duplicate_command_rejected() -> None:
 ])
 def test_normalized_alias_collision_rejected(commands: tuple[bc.Command, bc.Command]) -> None:
     with pytest.raises(ValueError, match="alias collision"):
-        bc.command_map(commands)
+        _ = bc.command_map(commands)
 
 
 def test_command_map_sorted_by_name() -> None:
@@ -103,17 +104,23 @@ def test_dispatch_unknown_command_returns_2_to_stderr(
 def test_dispatch_rejects_missing_target_attribute(
     target_module: tuple[list[list[str]], ModuleType],
 ) -> None:
+    _ = target_module
     with pytest.raises(AttributeError):
-        bc.dispatch((command(target="test_bundle_target:missing"),), ["go"])
+        _ = bc.dispatch((command(target="test_bundle_target:missing"),), ["go"])
 
 
 def test_dispatch_rejects_non_integer_status(
     target_module: tuple[list[list[str]], ModuleType],
 ) -> None:
     _, module = target_module
-    module.handler = lambda argv: "oops"  # type: ignore[attr-defined]
+
+    def handler(argv: list[str]) -> str:
+        del argv
+        return "oops"
+
+    module.handler = handler  # pyright: ignore[reportAttributeAccessIssue]
     with pytest.raises(TypeError, match="did not return an integer status"):
-        bc.dispatch((command(),), ["go"])
+        _ = bc.dispatch((command(),), ["go"])
 
 
 def test_every_skill_declares_a_static_manifest() -> None:
@@ -122,10 +129,14 @@ def test_every_skill_declares_a_static_manifest() -> None:
     for skill in build_pyz.SKILLS:
         package = skill.replace("-", "_")
         module = importlib.import_module(f"easy_cheese.skills.{package}.commands")
-        assert module.COMMANDS
-        assert all(isinstance(item, bc.Command) for item in module.COMMANDS)
-        bc.command_map(module.COMMANDS)
-        assert all(callable(bc._handler(item.target)) for item in module.COMMANDS)
+        commands = cast(tuple[bc.Command, ...], module.COMMANDS)
+        assert commands
+        assert all(isinstance(item, bc.Command) for item in commands)
+        _ = bc.command_map(commands)
+        assert all(
+            callable(bc._handler(item.target))  # pyright: ignore[reportPrivateUsage]
+            for item in commands
+        )
 
 
 def test_skill_manifests_are_literal_tuples() -> None:

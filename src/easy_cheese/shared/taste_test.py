@@ -13,9 +13,10 @@ import hashlib
 import json
 import re
 import sys
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import ClassVar, NoReturn, cast
 
 ACCEPTANCE_ID = re.compile(r"^AC-\d+$")
 DIGEST = re.compile(r"^[0-9a-fA-F]{64}$")
@@ -57,7 +58,7 @@ class TasteTestError(ValueError):
     """A malformed or blocked Mold gate result."""
 
     def __init__(self, message: str, problems: Sequence[str] = ()) -> None:
-        self.problems = tuple(problems) or (message,)
+        self.problems: tuple[str, ...] = tuple(problems) or (message,)
         super().__init__(message)
 
 
@@ -86,7 +87,7 @@ class TestContract:
             "contract_source": self.contract_source,
         }
         for name, value in values.items():
-            if not isinstance(value, str) or not value.strip():
+            if not isinstance(value, str) or not value.strip():  # pyright: ignore[reportUnnecessaryIsInstance]
                 raise ApplicabilityError(f"contract-{name}-empty")
         if ACCEPTANCE_ID.fullmatch(self.acceptance_id) is None:
             raise ApplicabilityError(
@@ -103,13 +104,19 @@ class TestContract:
                 f"contract-nondeterministic-witness:{self.acceptance_id}"
             )
         if self.interface_version is not None and (
-            not isinstance(self.interface_version, str)
+            not isinstance(  # pyright: ignore[reportUnnecessaryIsInstance]
+                self.interface_version, str
+            )
             or not self.interface_version.strip()
         ):
             raise ApplicabilityError(
                 f"contract-interface-version-empty:{self.acceptance_id}"
             )
-        if any(not isinstance(row, str) or not row.strip() for row in self.matrix_rows):
+        if any(
+            not isinstance(row, str)  # pyright: ignore[reportUnnecessaryIsInstance]
+            or not row.strip()
+            for row in self.matrix_rows
+        ):
             raise ApplicabilityError(f"contract-matrix-row-empty:{self.acceptance_id}")
         if len(set(self.matrix_rows)) != len(self.matrix_rows):
             raise ApplicabilityError(
@@ -133,8 +140,8 @@ class TestContract:
                 f"non-matrix-cannot-carry-matrix-metadata:{self.acceptance_id}"
             )
 
-    def to_dict(self) -> dict[str, Any]:
-        payload: dict[str, Any] = {
+    def to_dict(self) -> dict[str, object]:
+        payload: dict[str, object] = {
             "acceptance_id": self.acceptance_id,
             "interface": self.interface,
             "seam": self.seam,
@@ -179,7 +186,7 @@ class NotApplicable:
             raise ApplicabilityError(
                 "not-applicable-work-class-must-be-closed-non-behavior"
             )
-        if not isinstance(self.reason, str) or not self.reason.strip():
+        if not isinstance(self.reason, str) or not self.reason.strip():  # pyright: ignore[reportUnnecessaryIsInstance]
             raise ApplicabilityError("not-applicable-reason-required")
         if self.contracts:
             raise ApplicabilityError("not-applicable-cannot-carry-test-contracts")
@@ -191,17 +198,17 @@ GateApplicability = RedRequired | NotApplicable
 @dataclass(frozen=True)
 class ForkCoverage:
     id: str
-    decision: Any
+    decision: object
     reflected_in: tuple[str, ...]
 
     @classmethod
-    def from_mapping(cls, value: Mapping[str, Any]) -> "ForkCoverage":
+    def from_mapping(cls, value: Mapping[str, object]) -> "ForkCoverage":
         required = {"id", "decision", "reflected_in"}
         keys = set(value)
         missing = sorted(required - keys)
         extra = sorted(keys - required)
         if missing or extra:
-            bits = []
+            bits: list[str] = []
             if missing:
                 bits.append("missing=" + ",".join(missing))
             if extra:
@@ -211,12 +218,14 @@ class ForkCoverage:
         if not isinstance(fork_id, str) or not fork_id.strip():
             raise TasteTestError("fork-id-empty")
         reflected = value["reflected_in"]
-        if not isinstance(reflected, list) or any(
-            not isinstance(item, str) for item in reflected
-        ):
+        if not isinstance(reflected, list):
             raise TasteTestError(f"fork-reflected-in-not-list:{fork_id}")
+        reflected_items = cast(list[object], reflected)
+        if any(not isinstance(item, str) for item in reflected_items):
+            raise TasteTestError(f"fork-reflected-in-not-list:{fork_id}")
+        reflected_strs = cast(list[str], reflected_items)
         normalized: list[str] = []
-        for item in reflected:
+        for item in reflected_strs:
             key = _REFLECTION_ALIASES.get(item.strip().lower())
             if key is None:
                 raise TasteTestError(f"fork-invalid-reflection:{fork_id}:{item}")
@@ -225,7 +234,7 @@ class ForkCoverage:
             normalized.append(key)
         return cls(fork_id, value["decision"], tuple(normalized))
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> dict[str, object]:
         return {
             "id": self.id,
             "decision": copy.deepcopy(self.decision),
@@ -236,7 +245,7 @@ class ForkCoverage:
 @dataclass(frozen=True)
 class ForkDecision:
     id: str
-    decision: Any
+    decision: object
     settled: bool = True
     consequential: bool = True
 
@@ -251,7 +260,7 @@ class ForkTasteVerdict:
     unsupported_assumptions: tuple[str, ...]
     acceptance_gaps: tuple[str, ...]
 
-    _FIELDS = frozenset(
+    _FIELDS: ClassVar[frozenset[str]] = frozenset(
         {
             "draft_sha256",
             "verdict",
@@ -264,13 +273,14 @@ class ForkTasteVerdict:
     )
 
     @classmethod
-    def from_mapping(cls, value: Any) -> "ForkTasteVerdict":
+    def from_mapping(cls, value: object) -> "ForkTasteVerdict":
         if not isinstance(value, Mapping):
             raise TasteTestError("verdict-must-be-object")
+        value = cast(Mapping[str, object], value)
         missing = sorted(cls._FIELDS - set(value))
         extra = sorted(set(value) - cls._FIELDS)
         if missing or extra:
-            bits = []
+            bits: list[str] = []
             if missing:
                 bits.append("missing=" + ",".join(missing))
             if extra:
@@ -286,14 +296,16 @@ class ForkTasteVerdict:
         verdict = value["verdict"]
         if verdict not in {"pass", "fail"}:
             raise TasteTestError("verdict-must-be-pass-or-fail")
+        verdict = cast(str, verdict)
         raw_forks = value["forks"]
         if not isinstance(raw_forks, list):
             raise TasteTestError("verdict-forks-not-list")
+        raw_forks_items = cast(list[object], raw_forks)
         forks = tuple(
-            ForkCoverage.from_mapping(item)
+            ForkCoverage.from_mapping(cast(Mapping[str, object], item))
             if isinstance(item, Mapping)
             else (_raise("fork-must-be-object"))
-            for item in raw_forks
+            for item in raw_forks_items
         )
         lists: dict[str, tuple[str, ...]] = {}
         for name in (
@@ -303,11 +315,15 @@ class ForkTasteVerdict:
             "acceptance_gaps",
         ):
             raw = value[name]
-            if not isinstance(raw, list) or any(
-                not isinstance(item, str) or not item.strip() for item in raw
+            if not isinstance(raw, list):
+                raise TasteTestError(f"verdict-{name}-must-be-list-of-strings")
+            raw_items = cast(list[object], raw)
+            if any(
+                not isinstance(item, str) or not item.strip() for item in raw_items
             ):
                 raise TasteTestError(f"verdict-{name}-must-be-list-of-strings")
-            lists[name] = tuple(item.strip() for item in raw)
+            raw_strs = cast(list[str], raw_items)
+            lists[name] = tuple(item.strip() for item in raw_strs)
         ids = [fork.id for fork in forks]
         if len(set(ids)) != len(ids):
             raise TasteTestError("verdict-duplicate-fork-id")
@@ -337,7 +353,7 @@ class ForkTasteVerdict:
         """Only fork ids explicitly named by a failed verdict are reopened."""
         deterministic = re.compile(
             r"^(?:duplicate-fork|decision-mismatch|missing-reflection|"
-            r"missing-section|unreflected-decision|missing-fork):([^:]+)"
+            + r"missing-section|unreflected-decision|missing-fork):([^:]+)"
         )
         if self.verdict != "fail":
             return ()
@@ -357,7 +373,7 @@ class ForkTasteVerdict:
                     named.append(fork.id)
         return tuple(named)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> dict[str, object]:
         return {
             "draft_sha256": self.draft_sha256,
             "verdict": self.verdict,
@@ -377,15 +393,15 @@ class TasteGateResult:
     reason: str
 
 
-def _raise(message: str) -> Any:
+def _raise(message: str) -> NoReturn:
     raise TasteTestError(message)
 
 
-def _canonical(value: Any) -> str:
+def _canonical(value: object) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
-def _draft_bytes(draft: Any) -> bytes:
+def _draft_bytes(draft: object) -> bytes:
     if isinstance(draft, Path):
         return draft.read_bytes()
     if isinstance(draft, bytes):
@@ -395,30 +411,31 @@ def _draft_bytes(draft: Any) -> bytes:
     return _canonical(draft).encode("utf-8")
 
 
-def draft_sha256(draft: Any) -> str:
+def draft_sha256(draft: object) -> str:
     return hashlib.sha256(_draft_bytes(draft)).hexdigest()
 
 
-def _spec_text(spec: Any) -> tuple[str, Mapping[str, Any]]:
+def _spec_text(spec: object) -> tuple[str, Mapping[str, object]]:
     if isinstance(spec, Path):
         text = spec.read_text(encoding="utf-8")
         return text, {}
     if isinstance(spec, Mapping):
-        return _canonical(spec), spec
+        spec_map = cast(Mapping[str, object], spec)
+        return _canonical(spec_map), spec_map
     if isinstance(spec, bytes):
         return spec.decode("utf-8"), {}
     if not isinstance(spec, str):
         raise ApplicabilityError("spec-must-be-text-or-object")
     try:
-        parsed = json.loads(spec)
+        parsed = cast(object, json.loads(spec))
     except json.JSONDecodeError:
         return spec, {}
     if isinstance(parsed, Mapping):
-        return spec, parsed
+        return spec, cast(Mapping[str, object], parsed)
     return spec, {}
 
 
-def _frontmatter(text: str) -> dict[str, Any]:
+def _frontmatter(text: str) -> dict[str, object]:
     lines = text.splitlines()
     if not lines or lines[0].strip() != "---":
         return {}
@@ -426,8 +443,8 @@ def _frontmatter(text: str) -> dict[str, Any]:
         end = next(i for i in range(1, len(lines)) if lines[i].strip() == "---")
     except StopIteration:
         return {}
-    result: dict[str, Any] = {}
-    current: dict[str, Any] | None = None
+    result: dict[str, object] = {}
+    current: dict[str, object] | None = None
     for line in lines[1:end]:
         match = re.match(r"^([A-Za-z][A-Za-z0-9_-]*):\s*(.*)$", line)
         nested = re.match(r"^\s{2,}([A-Za-z][A-Za-z0-9_-]*):\s*(.*)$", line)
@@ -446,7 +463,7 @@ def _frontmatter(text: str) -> dict[str, Any]:
     return result
 
 
-def is_new_mold_spec(spec: Any) -> bool:
+def is_new_mold_spec(spec: object) -> bool:
     """Return whether ``spec`` came through Mold's marked production path."""
     text, raw_spec = _spec_text(spec)
     front = _frontmatter(text)
@@ -454,7 +471,7 @@ def is_new_mold_spec(spec: Any) -> bool:
     return source in NEW_MOLD_SOURCES
 
 
-def _scalar(value: str) -> Any:
+def _scalar(value: str) -> object:
     value = value.strip()
     if value in {"{}", "[]"}:
         return {} if value == "{}" else []
@@ -464,7 +481,7 @@ def _scalar(value: str) -> Any:
         value.startswith("[") and value.endswith("]")
     ):
         try:
-            return json.loads(value.replace("'", '"'))
+            return cast(object, json.loads(value.replace("'", '"')))
         except json.JSONDecodeError:
             pass
     return value.strip("'\"")
@@ -481,12 +498,13 @@ def _section(text: str, title: str) -> str:
     return match.group(1) if match else ""
 
 
-def _acceptance_ids(text: str, spec: Mapping[str, Any]) -> tuple[str, ...]:
+def _acceptance_ids(text: str, spec: Mapping[str, object]) -> tuple[str, ...]:
     raw = spec.get("acceptance_ids", spec.get("acceptance"))
     if isinstance(raw, list):
+        raw_items = cast(list[object], raw)
         found = [
             item
-            for item in (re.search(r"\bAC-\d+\b", str(value)) for value in raw)
+            for item in (re.search(r"\bAC-\d+\b", str(value)) for value in raw_items)
             if item
         ]
         ids = [item.group(0) for item in found]
@@ -500,24 +518,27 @@ def _acceptance_ids(text: str, spec: Mapping[str, Any]) -> tuple[str, ...]:
     return tuple(ids)
 
 
-def _contract_items(text: str, spec: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+def _contract_items(
+    text: str, spec: Mapping[str, object]
+) -> list[Mapping[str, object]]:
     for key in ("test_contracts", "test_contract", "contracts"):
         value = spec.get(key)
         if value is not None:
-            if not isinstance(value, list) or any(
-                not isinstance(item, Mapping) for item in value
-            ):
+            if not isinstance(value, list):
                 raise ApplicabilityError("test-contracts-must-be-list-of-objects")
-            return list(value)
+            items = cast(list[object], value)
+            if any(not isinstance(item, Mapping) for item in items):
+                raise ApplicabilityError("test-contracts-must-be-list-of-objects")
+            return cast(list[Mapping[str, object]], items)
     body = _section(text, "Test Contracts")
-    rows: list[Mapping[str, Any]] = []
+    rows: list[Mapping[str, object]] = []
     for line in body.splitlines():
         if not line.strip().startswith("|") or re.match(r"^\s*\|\s*:?-+", line):
             continue
         cells = [cell.strip().strip("`") for cell in line.strip().strip("|").split("|")]
         if len(cells) < 5 or cells[0].lower() in {"acceptance", "acceptance id"}:
             continue
-        row: dict[str, Any] = {
+        row: dict[str, object] = {
             "acceptance_id": cells[0],
             "interface": cells[1],
             "seam": cells[2],
@@ -532,7 +553,7 @@ def _contract_items(text: str, spec: Mapping[str, Any]) -> list[Mapping[str, Any
     return rows
 
 
-def _matrix_rows(value: Any) -> tuple[str, ...]:
+def _matrix_rows(value: object) -> tuple[str, ...]:
     if value is None:
         return ()
     if isinstance(value, str):
@@ -541,20 +562,23 @@ def _matrix_rows(value: Any) -> tuple[str, ...]:
             for row in re.split(r"\s*(?:<br\s*/?>|[,;])\s*", value, flags=re.I)
             if row.strip().strip("`")
         )
-    if isinstance(value, list) and all(isinstance(row, str) for row in value):
-        return tuple(row.strip() for row in value if row.strip())
+    if isinstance(value, list):
+        rows = cast(list[object], value)
+        if all(isinstance(row, str) for row in rows):
+            str_rows = cast(list[str], rows)
+            return tuple(row.strip() for row in str_rows if row.strip())
     raise ApplicabilityError(
         "test-contract-matrix-rows-must-be-list-or-delimited-string"
     )
 
 
-def _has_test_contract_section(text: str, spec: Mapping[str, Any]) -> bool:
+def _has_test_contract_section(text: str, spec: Mapping[str, object]) -> bool:
     return any(
         key in spec for key in ("test_contracts", "test_contract", "contracts")
     ) or bool(re.search(r"(?im)^#{1,6}\s+Test Contracts\s*$", text))
 
 
-def parse_test_contracts(spec: Any) -> tuple[TestContract, ...]:
+def parse_test_contracts(spec: object) -> tuple[TestContract, ...]:
     text, raw_spec = _spec_text(spec)
     front = _frontmatter(text)
     source = {**front, **raw_spec}
@@ -564,7 +588,7 @@ def parse_test_contracts(spec: Any) -> tuple[TestContract, ...]:
         acceptance_value = item.get("acceptance_id", item.get("acceptance", ""))
         interface_value = item.get("interface", item.get("interface_referent"))
         seam_value = item.get("seam", item.get("outermost_stable_seam"))
-        ids = re.findall(r"\bAC-\d+\b", str(acceptance_value))
+        ids = cast(list[str], re.findall(r"\bAC-\d+\b", str(acceptance_value)))
         if not ids:
             raise ApplicabilityError("contract-acceptance-id-missing")
         interface_version_value = item.get("interface_version")
@@ -609,7 +633,7 @@ def parse_test_contracts(spec: Any) -> tuple[TestContract, ...]:
     return tuple(contracts)
 
 
-def _clean_cell(value: Any) -> str:
+def _clean_cell(value: object) -> str:
     if not isinstance(value, str):
         raise ApplicabilityError("test-contract-field-not-string")
     return value.strip().strip("`")
@@ -628,7 +652,7 @@ def _has_browser_seam(contract: TestContract) -> bool:
 
 
 def parse_gate_applicability(
-    spec: Any, *, require_ui_surface: bool = False
+    spec: object, *, require_ui_surface: bool = False
 ) -> GateApplicability:
     text, raw_spec = _spec_text(spec)
     front = _frontmatter(text)
@@ -637,12 +661,16 @@ def parse_gate_applicability(
     if not isinstance(declaration, Mapping):
         inline = re.search(r"(?im)^gate_applicability:\s*\{([^}]*)\}\s*$", text)
         if inline:
+            pairs = cast(
+                "list[tuple[str, str]]",
+                re.findall(r"([\w-]+)\s*:\s*([^,]+)", inline.group(1)),
+            )
             declaration = {
-                key.strip(): value.strip().strip("'\"")
-                for key, value in re.findall(r"([\w-]+)\s*:\s*([^,]+)", inline.group(1))
+                key.strip(): value.strip().strip("'\"") for key, value in pairs
             }
     if not isinstance(declaration, Mapping):
         raise ApplicabilityError("gate-applicability-declaration-required")
+    declaration = cast(Mapping[str, object], declaration)
     disposition = declaration.get("disposition")
     work_class = declaration.get("work_class")
     ui_surface = declaration.get("ui_surface")
@@ -694,54 +722,65 @@ def parse_gate_applicability(
     if problems:
         raise ApplicabilityError("; ".join(problems), problems)
     return NotApplicable(
-        work_class,
+        cast(str, work_class),
         normalized_reason,
         ui_surface=ui_surface if isinstance(ui_surface, str) else None,
     )
 
 
-def _normalize_ledger(value: Any) -> tuple[tuple[ForkDecision, ...], tuple[str, ...]]:
+def _normalize_ledger(
+    value: object,
+) -> tuple[tuple[ForkDecision, ...], tuple[str, ...]]:
+    raw: object
     if isinstance(value, Mapping):
-        raw = value.get(
+        mapping_value = cast(Mapping[object, object], value)
+        raw = mapping_value.get(
             "forks",
-            value.get("decisions", value.get("ledger", value.get("settled_decisions"))),
+            mapping_value.get(
+                "decisions", mapping_value.get("ledger", mapping_value.get("settled_decisions"))
+            ),
         )
         if raw is None:
-            raw = []
-            for key, item in value.items():
+            raw_list: list[object] = []
+            for key, item in mapping_value.items():
                 if not isinstance(key, str):
                     continue
                 if isinstance(item, Mapping):
-                    raw.append({"id": key, **item})
+                    raw_list.append({"id": key, **cast(Mapping[str, object], item)})
                 else:
-                    raw.append({"id": key, "decision": item})
+                    raw_list.append({"id": key, "decision": item})
+            raw = raw_list
     else:
         raw = value
     if not isinstance(raw, (list, tuple)):
         raise TasteTestError("decision-ledger-must-be-list")
+    raw_items = cast("list[object] | tuple[object, ...]", raw)
     entries: list[ForkDecision] = []
     problems: list[str] = []
-    for item in raw:
+    for item in raw_items:
         if not isinstance(item, Mapping):
             problems.append("ledger-entry-must-be-object")
             continue
-        fork_id = item.get("id")
+        entry_map = cast(Mapping[str, object], item)
+        fork_id = entry_map.get("id")
         if not isinstance(fork_id, str) or not fork_id.strip():
             problems.append("ledger-fork-id-empty")
             continue
-        status = str(item.get("status", "settled")).lower()
+        status = str(entry_map.get("status", "settled")).lower()
         settled = bool(
-            item.get(
+            entry_map.get(
                 "settled",
                 status in {"settled", "decided", "approved", "closed", "done"},
             )
         )
         consequential = bool(
-            item.get("consequential", item.get("impact", "consequential") != "minor")
+            entry_map.get(
+                "consequential", entry_map.get("impact", "consequential") != "minor"
+            )
         )
         if settled and consequential:
             entries.append(
-                ForkDecision(fork_id.strip(), item.get("decision"), True, True)
+                ForkDecision(fork_id.strip(), entry_map.get("decision"), True, True)
             )
     ids = [entry.id for entry in entries]
     if len(set(ids)) != len(ids):
@@ -749,10 +788,11 @@ def _normalize_ledger(value: Any) -> tuple[tuple[ForkDecision, ...], tuple[str, 
     return tuple(entries), tuple(problems)
 
 
-def _draft_sections(draft: Any) -> dict[str, str]:
+def _draft_sections(draft: object) -> dict[str, str]:
     if isinstance(draft, Mapping):
+        draft_map = cast(Mapping[object, object], draft)
         result: dict[str, str] = {}
-        for key, value in draft.items():
+        for key, value in draft_map.items():
             normalized = _REFLECTION_ALIASES.get(str(key).strip().lower())
             if normalized:
                 result[normalized] = _canonical(value)
@@ -790,7 +830,7 @@ def _mentions(section: str, fork: ForkCoverage, expected: ForkDecision) -> bool:
             return True
         words = [
             word
-            for word in re.findall(r"[a-z0-9]{3,}", needle)
+            for word in cast(list[str], re.findall(r"[a-z0-9]{3,}", needle))
             if word not in {"the", "and", "with", "from"}
         ]
         return bool(words) and all(word in haystack for word in words)
@@ -803,13 +843,14 @@ def _failed(
     values = candidate.to_dict()
     values["verdict"] = "fail"
     for name, items in additions.items():
-        values[name] = list(dict.fromkeys([*values[name], *items]))
+        existing = cast(list[str], values[name])
+        values[name] = list(dict.fromkeys([*existing, *items]))
     return ForkTasteVerdict.from_mapping(values)
 
 
-def _applicability_gaps(draft: Any) -> list[str]:
+def _applicability_gaps(draft: object) -> list[str]:
     try:
-        parse_gate_applicability(draft, require_ui_surface=True)
+        _ = parse_gate_applicability(draft, require_ui_surface=True)
     except ApplicabilityError as exc:
         if exc.problems == ("gate-applicability-declaration-required",):
             if not is_new_mold_spec(draft):
@@ -820,9 +861,9 @@ def _applicability_gaps(draft: Any) -> list[str]:
 
 
 def taste_test(
-    draft: Any,
-    decision_ledger: Any,
-    reviewer_verdict: Mapping[str, Any] | ForkTasteVerdict,
+    draft: object,
+    decision_ledger: object,
+    reviewer_verdict: Mapping[str, object] | ForkTasteVerdict,
     *,
     correction_round: int = 0,
 ) -> ForkTasteVerdict:
@@ -892,9 +933,9 @@ def taste_test(
 
 
 def validate_fork_taste(
-    draft: Any,
-    decision_ledger: Any,
-    reviewer_verdict: Mapping[str, Any] | ForkTasteVerdict,
+    draft: object,
+    decision_ledger: object,
+    reviewer_verdict: Mapping[str, object] | ForkTasteVerdict,
     *,
     correction_round: int = 0,
 ) -> ForkTasteVerdict:
@@ -938,9 +979,9 @@ def require_decomposition(  # noqa: V103
 class MoldHandoff:
     spec_ref: str
     command: tuple[str, ...]
-    metadata: Mapping[str, Any]
+    metadata: Mapping[str, object]
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> dict[str, object]:
         return {
             "next": "cook",
             "command": list(self.command),
@@ -952,7 +993,7 @@ class MoldHandoff:
 def red_required_handoff(
     spec_ref: str | Path,
     applicability: GateApplicability,
-    metadata: Mapping[str, Any] | None = None,
+    metadata: Mapping[str, object] | None = None,
 ) -> MoldHandoff:
     if not isinstance(applicability, RedRequired):
         raise ApplicabilityError("handoff-requires-red-required")
@@ -960,15 +1001,16 @@ def red_required_handoff(
     if not pointer.strip():
         raise TasteTestError("durable-spec-pointer-required")
     preserved = copy.deepcopy(dict(metadata or {}))
-    gate_metadata = preserved.get("gate_applicability")
-    if not isinstance(gate_metadata, Mapping):
-        gate_metadata = {}
+    gate_metadata_raw = preserved.get("gate_applicability")
+    gate_metadata: dict[str, object]
+    if isinstance(gate_metadata_raw, Mapping):
+        gate_metadata = dict(cast(Mapping[str, object], gate_metadata_raw))
     else:
-        gate_metadata = dict(gate_metadata)
-    gate_metadata.setdefault("disposition", "red-required")
-    gate_metadata.setdefault("work_class", applicability.work_class)
+        gate_metadata = {}
+    _ = gate_metadata.setdefault("disposition", "red-required")
+    _ = gate_metadata.setdefault("work_class", applicability.work_class)
     if applicability.ui_surface is not None:
-        gate_metadata.setdefault("ui_surface", applicability.ui_surface)
+        _ = gate_metadata.setdefault("ui_surface", applicability.ui_surface)
     preserved["gate_applicability"] = gate_metadata
     return MoldHandoff(pointer, ("/cook", "--auto", pointer), preserved)
 
@@ -976,33 +1018,40 @@ def red_required_handoff(
 def auto_handoff(
     spec_ref: str | Path,
     applicability: GateApplicability,
-    metadata: Mapping[str, Any] | None = None,
-) -> dict[str, Any]:
+    metadata: Mapping[str, object] | None = None,
+) -> dict[str, object]:
     return red_required_handoff(spec_ref, applicability, metadata).to_dict()
 
 
-def _load_json(path: Path) -> Any:
-    return json.loads(path.read_text(encoding="utf-8"))
+def _load_json(path: Path) -> object:
+    return cast(object, json.loads(path.read_text(encoding="utf-8")))
 
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
         description=__doc__.splitlines()[0] if __doc__ else "Mold taste gate"
     )
-    parser.add_argument("--draft", type=Path, required=True)
-    parser.add_argument("--ledger", type=Path, required=True)
-    parser.add_argument("--verdict", type=Path, required=True)
-    parser.add_argument("--correction-round", type=int, default=0)
+    _ = parser.add_argument("--draft", type=Path, required=True)
+    _ = parser.add_argument("--ledger", type=Path, required=True)
+    _ = parser.add_argument("--verdict", type=Path, required=True)
+    _ = parser.add_argument("--correction-round", type=int, default=0)
     args = parser.parse_args(argv)
     try:
-        draft = args.draft.read_bytes()
-        ledger = _load_json(args.ledger)
-        verdict = _load_json(args.verdict)
+        draft_path = cast(Path, args.draft)
+        ledger_path = cast(Path, args.ledger)
+        verdict_path = cast(Path, args.verdict)
+        correction_round = cast(int, args.correction_round)
+        draft = draft_path.read_bytes()
+        ledger = _load_json(ledger_path)
+        verdict = _load_json(verdict_path)
         result = taste_test(
-            draft, ledger, verdict, correction_round=args.correction_round
+            draft,
+            ledger,
+            cast("Mapping[str, object] | ForkTasteVerdict", verdict),
+            correction_round=correction_round,
         )
         print(json.dumps(result.to_dict(), sort_keys=True))
-        gate = decomposition_gate(result, correction_round=args.correction_round)
+        gate = decomposition_gate(result, correction_round=correction_round)
         return 0 if gate.allowed else 1
     except (OSError, json.JSONDecodeError, TasteTestError) as exc:
         print(f"error: {exc}", file=sys.stderr)

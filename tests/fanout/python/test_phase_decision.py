@@ -10,9 +10,13 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-from types import ModuleType
+from typing import cast
 
 import pytest
+
+from easy_cheese.shared import cli
+from easy_cheese.shared.fanout import phase_decision
+from easy_cheese.shared.fanout.phase_decision import Verdict
 
 BUNDLE = Path(__file__).resolve().parents[3] / "skills/cook/scripts/cook.pyz"
 
@@ -20,34 +24,34 @@ BUNDLE = Path(__file__).resolve().parents[3] / "skills/cook/scripts/cook.pyz"
 class TestSpawnPhases:
     """Each ok phase except the terminal one spawns the next phase."""
 
-    def test_phase_0_cook_spawns_press(self, phase_decision: ModuleType) -> None:
+    def test_phase_0_cook_spawns_press(self) -> None:
         # Acceptance: phase index 0 with status=ok returns action=spawn next_phase=press.
         result = phase_decision.decide(0, "ok")
         assert result["action"] == "spawn"
         assert result["next_phase"] == "press"
 
-    def test_phase_1_press_spawns_age(self, phase_decision: ModuleType) -> None:
+    def test_phase_1_press_spawns_age(self) -> None:
         result = phase_decision.decide(1, "ok")
         assert result["action"] == "spawn"
         assert result["next_phase"] == "age"
 
-    def test_phase_2_age_spawns_cure(self, phase_decision: ModuleType) -> None:
+    def test_phase_2_age_spawns_cure(self) -> None:
         # Age with next!=done continues; the medium+ floor is not yet met.
         result = phase_decision.decide(2, "ok", "cure")
         assert result["action"] == "spawn"
         assert result["next_phase"] == "cure"
 
-    def test_phase_3_cure_spawns_age(self, phase_decision: ModuleType) -> None:
+    def test_phase_3_cure_spawns_age(self) -> None:
         result = phase_decision.decide(3, "ok")
         assert result["action"] == "spawn"
         assert result["next_phase"] == "age"
 
-    def test_phase_4_age_spawns_cure(self, phase_decision: ModuleType) -> None:
+    def test_phase_4_age_spawns_cure(self) -> None:
         result = phase_decision.decide(4, "ok", "cure")
         assert result["action"] == "spawn"
         assert result["next_phase"] == "cure"
 
-    def test_phase_5_cure_spawns_age(self, phase_decision: ModuleType) -> None:
+    def test_phase_5_cure_spawns_age(self) -> None:
         result = phase_decision.decide(5, "ok")
         assert result["action"] == "spawn"
         assert result["next_phase"] == "age"
@@ -56,12 +60,12 @@ class TestSpawnPhases:
 class TestStopTerminal:
     """Phase 6 is the final age; the chain table is exhausted."""
 
-    def test_phase_6_returns_stop_when_done(self, phase_decision: ModuleType) -> None:
+    def test_phase_6_returns_stop_when_done(self) -> None:
         result = phase_decision.decide(6, "ok", "done")
         assert result["action"] == "stop"
         assert result["next_phase"] is None
 
-    def test_phase_6_halts_when_review_requests_cure(self, phase_decision: ModuleType) -> None:
+    def test_phase_6_halts_when_review_requests_cure(self) -> None:
         result = phase_decision.decide(6, "ok", "cure")
         assert result["action"] == "halt"
         assert "not publishable" in result["exit_message"]
@@ -70,27 +74,27 @@ class TestStopTerminal:
 class TestHaltShortCircuit:
     """status=halt at any phase produces action=halt regardless of next_phase."""
 
-    def test_halt_at_phase_0(self, phase_decision: ModuleType) -> None:
+    def test_halt_at_phase_0(self) -> None:
         # Acceptance: status=halt at any phase returns action=halt.
         result = phase_decision.decide(0, "halt: cook gate failed")
         assert result["action"] == "halt"
         assert result["next_phase"] is None
         assert "halt" in result["exit_message"].lower()
 
-    def test_halt_at_phase_3(self, phase_decision: ModuleType) -> None:
+    def test_halt_at_phase_3(self) -> None:
         result = phase_decision.decide(3, "halt: cure could not apply any finding")
         assert result["action"] == "halt"
 
-    def test_halt_at_terminal_phase(self, phase_decision: ModuleType) -> None:
+    def test_halt_at_terminal_phase(self) -> None:
         # Even the final phase honours halt — never silently coalesce to stop.
         result = phase_decision.decide(6, "halt: age crashed")
         assert result["action"] == "halt"
 
-    def test_halt_case_insensitive(self, phase_decision: ModuleType) -> None:
+    def test_halt_case_insensitive(self) -> None:
         result = phase_decision.decide(2, "HALT: scary thing")
         assert result["action"] == "halt"
 
-    def test_halt_bare_word(self, phase_decision: ModuleType) -> None:
+    def test_halt_bare_word(self) -> None:
         # "halt" alone (no colon, no reason) still short-circuits.
         result = phase_decision.decide(1, "halt")
         assert result["action"] == "halt"
@@ -99,28 +103,28 @@ class TestHaltShortCircuit:
 class TestEarlyStop:
     """Age-only signal: next=done means the diff is clean at medium+ floor."""
 
-    def test_age_phase_2_next_done_stops_early(self, phase_decision: ModuleType) -> None:
+    def test_age_phase_2_next_done_stops_early(self) -> None:
         result = phase_decision.decide(2, "ok", "done")
         assert result["action"] == "stop_early"
         assert result["next_phase"] is None
 
-    def test_age_phase_4_next_done_stops_early(self, phase_decision: ModuleType) -> None:
+    def test_age_phase_4_next_done_stops_early(self) -> None:
         result = phase_decision.decide(4, "ok", "done")
         assert result["action"] == "stop_early"
 
-    def test_cure_with_next_done_still_spawns(self, phase_decision: ModuleType) -> None:
+    def test_cure_with_next_done_still_spawns(self) -> None:
         # Cure never writes next=done per the SKILL.md contract, but if it
         # somehow did, the orchestrator must not treat it as early-stop.
         result = phase_decision.decide(3, "ok", "done")
         assert result["action"] == "spawn"
         assert result["next_phase"] == "age"
 
-    def test_age_with_other_next_keeps_spawning(self, phase_decision: ModuleType) -> None:
+    def test_age_with_other_next_keeps_spawning(self) -> None:
         result = phase_decision.decide(2, "ok", "cure")
         assert result["action"] == "spawn"
         assert result["next_phase"] == "cure"
 
-    def test_age_with_no_next_keeps_spawning(self, phase_decision: ModuleType) -> None:
+    def test_age_with_no_next_keeps_spawning(self) -> None:
         # If the handoff slug omits `next`, default to spawn — the orchestrator
         # only stops early when the slug positively signals done.
         result = phase_decision.decide(2, "ok")
@@ -129,23 +133,23 @@ class TestEarlyStop:
 
 
 class TestInvalidIndex:
-    def test_negative_index_raises(self, phase_decision: ModuleType) -> None:
-        with pytest.raises(phase_decision.cli.CliError):
-            phase_decision.decide(-1, "ok")
+    def test_negative_index_raises(self) -> None:
+        with pytest.raises(cli.CliError):
+            _ = phase_decision.decide(-1, "ok")
 
-    def test_index_past_end_raises(self, phase_decision: ModuleType) -> None:
-        with pytest.raises(phase_decision.cli.CliError):
-            phase_decision.decide(7, "ok")
+    def test_index_past_end_raises(self) -> None:
+        with pytest.raises(cli.CliError):
+            _ = phase_decision.decide(7, "ok")
 
 
 class TestOutputShape:
-    def test_required_keys_present(self, phase_decision: ModuleType) -> None:
+    def test_required_keys_present(self) -> None:
         result = phase_decision.decide(0, "ok")
         assert set(result.keys()) == {"action", "next_phase", "exit_message"}
         assert isinstance(result["exit_message"], str)
         assert result["exit_message"]
 
-    def test_action_is_one_of_five(self, phase_decision: ModuleType) -> None:
+    def test_action_is_one_of_five(self) -> None:
         valid = {"spawn", "stop", "stop_early", "clean_complete", "halt"}
         for idx, status, nxt in [
             (0, "ok", None),
@@ -174,20 +178,20 @@ class TestCli:
     def test_phase_0_ok_spawns_press(self) -> None:
         result = _run_cli("--phase-index", "0", "--status", "ok")
         assert result.returncode == 0
-        payload = json.loads(result.stdout)
+        payload = cast(Verdict, cast(object, json.loads(result.stdout)))
         assert payload["action"] == "spawn"
         assert payload["next_phase"] == "press"
 
     def test_phase_6_returns_stop_when_done(self) -> None:
         result = _run_cli("--phase-index", "6", "--status", "ok", "--next", "done")
         assert result.returncode == 0
-        payload = json.loads(result.stdout)
+        payload = cast(Verdict, cast(object, json.loads(result.stdout)))
         assert payload["action"] == "stop"
 
     def test_halt_returns_halt(self) -> None:
         result = _run_cli("--phase-index", "2", "--status", "halt: oops")
         assert result.returncode == 0
-        payload = json.loads(result.stdout)
+        payload = cast(Verdict, cast(object, json.loads(result.stdout)))
         assert payload["action"] == "halt"
 
     def test_age_next_done_stops_early(self) -> None:
@@ -195,7 +199,7 @@ class TestCli:
             "--phase-index", "4", "--status", "ok", "--next", "done"
         )
         assert result.returncode == 0
-        payload = json.loads(result.stdout)
+        payload = cast(Verdict, cast(object, json.loads(result.stdout)))
         assert payload["action"] == "stop_early"
 
     def test_missing_phase_index_exits_2(self) -> None:
@@ -227,14 +231,14 @@ class TestNormalizationHardening:
 
     @pytest.mark.parametrize("nxt", ["DONE", " done ", "Done"])
     def test_age_next_done_normalised_stops_early(
-        self, phase_decision: ModuleType, nxt: str
+        self, nxt: str
     ) -> None:
         result = phase_decision.decide(2, "ok", nxt)
         assert result["action"] == "stop_early"
 
     @pytest.mark.parametrize("status", [" halt: boom ", "  HALT", "Halt: x"])
     def test_halt_normalised_short_circuits(
-        self, phase_decision: ModuleType, status: str
+        self, status: str
     ) -> None:
         result = phase_decision.decide(2, status)
         assert result["action"] == "halt"

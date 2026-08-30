@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -25,6 +27,8 @@ BASE_SPEC = (
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 import build_pyz  # noqa: E402
+
+_RunFn = Callable[[Path], subprocess.CompletedProcess[str]]
 
 
 def _run_direct(path: Path) -> subprocess.CompletedProcess[str]:
@@ -44,9 +48,11 @@ def _run_pyz(path: Path) -> subprocess.CompletedProcess[str]:
     )
 
 
-@pytest.fixture(params=[_run_direct, _run_pyz], ids=["direct-script", "mold-pyz"])
-def _run(request: pytest.FixtureRequest):
-    return request.param
+@pytest.fixture(  # noqa: V103 -- registered under name="_run", injected by pytest
+    params=[_run_direct, _run_pyz], ids=["direct-script", "mold-pyz"], name="_run"
+)
+def run_fixture(request: pytest.FixtureRequest) -> _RunFn:
+    return cast(_RunFn, request.param)
 
 
 def _error_lines(result: subprocess.CompletedProcess[str]) -> list[str]:
@@ -56,21 +62,21 @@ def _error_lines(result: subprocess.CompletedProcess[str]) -> list[str]:
 
 def _write(tmp_path: Path, name: str, text: str) -> Path:
     path = tmp_path / name
-    path.write_text(text, encoding="utf-8")
+    _ = path.write_text(text, encoding="utf-8")
     return path
 
 
 # --- lenient syntax-repair classes (AC-1 half) ---------------------------
 
 
-def test_valid_spec_fixture_is_accepted(tmp_path: Path, _run) -> None:
+def test_valid_spec_fixture_is_accepted(tmp_path: Path, _run: _RunFn) -> None:
     path = _write(tmp_path, "spec.md", BASE_SPEC)
     result = _run(path)
     assert result.returncode == 0
     assert not _error_lines(result)
 
 
-def test_lenient_heading_case_is_repaired(tmp_path: Path, _run) -> None:
+def test_lenient_heading_case_is_repaired(tmp_path: Path, _run: _RunFn) -> None:
     text = BASE_SPEC.replace("## Problem", "## PROBLEM", 1)
     path = _write(tmp_path, "spec.md", text)
     result = _run(path)
@@ -78,7 +84,7 @@ def test_lenient_heading_case_is_repaired(tmp_path: Path, _run) -> None:
     assert not _error_lines(result)
 
 
-def test_lenient_heading_trailing_punctuation_is_repaired(tmp_path: Path, _run) -> None:
+def test_lenient_heading_trailing_punctuation_is_repaired(tmp_path: Path, _run: _RunFn) -> None:
     text = BASE_SPEC.replace("## Goals\n", "## Goals.\n", 1)
     path = _write(tmp_path, "spec.md", text)
     result = _run(path)
@@ -86,7 +92,7 @@ def test_lenient_heading_trailing_punctuation_is_repaired(tmp_path: Path, _run) 
     assert not _error_lines(result)
 
 
-def test_lenient_table_cell_whitespace_is_repaired(tmp_path: Path, _run) -> None:
+def test_lenient_table_cell_whitespace_is_repaired(tmp_path: Path, _run: _RunFn) -> None:
     text = BASE_SPEC.replace(
         "| AC-1 | validate-spec CLI |",
         "|   AC-1   |  validate-spec CLI  |",
@@ -98,7 +104,7 @@ def test_lenient_table_cell_whitespace_is_repaired(tmp_path: Path, _run) -> None
     assert not _error_lines(result)
 
 
-def test_lenient_fence_dialect_is_repaired(tmp_path: Path, _run) -> None:
+def test_lenient_fence_dialect_is_repaired(tmp_path: Path, _run: _RunFn) -> None:
     text = BASE_SPEC.replace("```pseudocode", "~~~pseudocode", 1).replace(
         "```\n\n## Risks", "~~~\n\n## Risks", 1
     )
@@ -111,7 +117,7 @@ def test_lenient_fence_dialect_is_repaired(tmp_path: Path, _run) -> None:
 
 @pytest.mark.parametrize("fence", ["```", "~~~"])
 def test_fenced_fake_heading_and_table_rows_are_invisible_to_detection(
-    tmp_path: Path, _run, fence: str
+    tmp_path: Path, _run: _RunFn, fence: str
 ) -> None:
     """A fenced fake '## Risks' heading and fenced '|' rows must not satisfy or
     corrupt section/table detection: with the real Risks section removed, the
@@ -122,7 +128,7 @@ def test_fenced_fake_heading_and_table_rows_are_invisible_to_detection(
     )
     text = text.replace(
         "## Interface sketches",
-        f"## Interface sketches\n\n{fence}\n## Risks\n\n"
+        f"## Interface sketches\n\n{fence}\n## Risks\n\n" +
         f"| fake | row | that | should | not | count | anywhere |\n{fence}",
         1,
     )
@@ -136,7 +142,7 @@ def test_fenced_fake_heading_and_table_rows_are_invisible_to_detection(
 # --- strict semantic-rejection rules (AC-2 half) --------------------------
 
 
-def test_missing_required_section_is_rejected(tmp_path: Path, _run) -> None:
+def test_missing_required_section_is_rejected(tmp_path: Path, _run: _RunFn) -> None:
     text = BASE_SPEC.replace(
         "## Risks\n\n- None beyond the usual validator-drift risk.\n\n", "", 1
     )
@@ -148,9 +154,9 @@ def test_missing_required_section_is_rejected(tmp_path: Path, _run) -> None:
     assert "Risks" in errors[0]
 
 
-def test_acceptance_id_absent_from_table_is_rejected(tmp_path: Path, _run) -> None:
+def test_acceptance_id_absent_from_table_is_rejected(tmp_path: Path, _run: _RunFn) -> None:
     text = BASE_SPEC.replace(
-        "| AC-2 | validate-spec CLI | pytest invoking the CLI as a subprocess "
+        "| AC-2 | validate-spec CLI | pytest invoking the CLI as a subprocess " +
         "| no validator exists yet | contract-matrix | v1 | row-a, row-b |\n",
         "",
         1,
@@ -164,23 +170,23 @@ def test_acceptance_id_absent_from_table_is_rejected(tmp_path: Path, _run) -> No
     assert "absent" in errors[0]
 
 
-def test_acceptance_id_duplicated_in_table_is_rejected(tmp_path: Path, _run) -> None:
+def test_acceptance_id_duplicated_in_table_is_rejected(tmp_path: Path, _run: _RunFn) -> None:
     text = BASE_SPEC.replace(
-        "- AC-2: WHEN the validator runs on a valid contract-matrix spec "
+        "- AC-2: WHEN the validator runs on a valid contract-matrix spec " +
         "THE SYSTEM SHALL exit 0.\n",
         "",
         1,
     ).replace(
-        "| AC-2 | validate-spec CLI | pytest invoking the CLI as a subprocess "
+        "| AC-2 | validate-spec CLI | pytest invoking the CLI as a subprocess " +
         "| no validator exists yet | contract-matrix | v1 | row-a, row-b |\n",
         "",
         1,
     ).replace(
-        "| AC-1 | validate-spec CLI | pytest invoking the CLI as a subprocess "
+        "| AC-1 | validate-spec CLI | pytest invoking the CLI as a subprocess " +
         "| no validator exists yet | tracer | | |\n",
-        "| AC-1 | validate-spec CLI | pytest invoking the CLI as a subprocess "
-        "| no validator exists yet | tracer | | |\n"
-        "| AC-1 | validate-spec CLI | pytest invoking the CLI as a subprocess "
+        "| AC-1 | validate-spec CLI | pytest invoking the CLI as a subprocess " +
+        "| no validator exists yet | tracer | | |\n" +
+        "| AC-1 | validate-spec CLI | pytest invoking the CLI as a subprocess " +
         "| no validator exists yet | tracer | | |\n",
         1,
     )
@@ -193,21 +199,21 @@ def test_acceptance_id_duplicated_in_table_is_rejected(tmp_path: Path, _run) -> 
     assert "2 times" in errors[0]
 
 
-def test_matrix_metadata_on_tracer_row_is_rejected(tmp_path: Path, _run) -> None:
+def test_matrix_metadata_on_tracer_row_is_rejected(tmp_path: Path, _run: _RunFn) -> None:
     text = BASE_SPEC.replace(
-        "- AC-2: WHEN the validator runs on a valid contract-matrix spec "
+        "- AC-2: WHEN the validator runs on a valid contract-matrix spec " +
         "THE SYSTEM SHALL exit 0.\n",
         "",
         1,
     ).replace(
-        "| AC-2 | validate-spec CLI | pytest invoking the CLI as a subprocess "
+        "| AC-2 | validate-spec CLI | pytest invoking the CLI as a subprocess " +
         "| no validator exists yet | contract-matrix | v1 | row-a, row-b |\n",
         "",
         1,
     ).replace(
-        "| AC-1 | validate-spec CLI | pytest invoking the CLI as a subprocess "
+        "| AC-1 | validate-spec CLI | pytest invoking the CLI as a subprocess " +
         "| no validator exists yet | tracer | | |",
-        "| AC-1 | validate-spec CLI | pytest invoking the CLI as a subprocess "
+        "| AC-1 | validate-spec CLI | pytest invoking the CLI as a subprocess " +
         "| no validator exists yet | tracer | v1 | |",
         1,
     )
@@ -221,22 +227,22 @@ def test_matrix_metadata_on_tracer_row_is_rejected(tmp_path: Path, _run) -> None
 
 
 def test_contract_matrix_row_missing_interface_version_is_rejected(
-    tmp_path: Path, _run,
+    tmp_path: Path, _run: _RunFn,
 ) -> None:
     text = BASE_SPEC.replace(
-        "- AC-1: WHEN the validator runs on a valid tracer spec THE SYSTEM "
+        "- AC-1: WHEN the validator runs on a valid tracer spec THE SYSTEM " +
         "SHALL exit 0.\n",
         "",
         1,
     ).replace(
-        "| AC-1 | validate-spec CLI | pytest invoking the CLI as a subprocess "
+        "| AC-1 | validate-spec CLI | pytest invoking the CLI as a subprocess " +
         "| no validator exists yet | tracer | | |\n",
         "",
         1,
     ).replace(
-        "| AC-2 | validate-spec CLI | pytest invoking the CLI as a subprocess "
+        "| AC-2 | validate-spec CLI | pytest invoking the CLI as a subprocess " +
         "| no validator exists yet | contract-matrix | v1 | row-a, row-b |",
-        "| AC-2 | validate-spec CLI | pytest invoking the CLI as a subprocess "
+        "| AC-2 | validate-spec CLI | pytest invoking the CLI as a subprocess " +
         "| no validator exists yet | contract-matrix | | row-a, row-b |",
         1,
     )
@@ -249,11 +255,11 @@ def test_contract_matrix_row_missing_interface_version_is_rejected(
     assert "contract-matrix" in errors[0]
 
 
-def test_unknown_mode_value_is_rejected(tmp_path: Path, _run) -> None:
+def test_unknown_mode_value_is_rejected(tmp_path: Path, _run: _RunFn) -> None:
     text = BASE_SPEC.replace(
-        "| AC-1 | validate-spec CLI | pytest invoking the CLI as a subprocess "
+        "| AC-1 | validate-spec CLI | pytest invoking the CLI as a subprocess " +
         "| no validator exists yet | tracer | | |",
-        "| AC-1 | validate-spec CLI | pytest invoking the CLI as a subprocess "
+        "| AC-1 | validate-spec CLI | pytest invoking the CLI as a subprocess " +
         "| no validator exists yet | Tracer | | |",
         1,
     )
@@ -264,11 +270,11 @@ def test_unknown_mode_value_is_rejected(tmp_path: Path, _run) -> None:
     assert any("AC-1" in line and "Mode" in line for line in errors)
 
 
-def test_six_cell_row_is_a_shape_error(tmp_path: Path, _run) -> None:
+def test_six_cell_row_is_a_shape_error(tmp_path: Path, _run: _RunFn) -> None:
     text = BASE_SPEC.replace(
-        "| AC-1 | validate-spec CLI | pytest invoking the CLI as a subprocess "
+        "| AC-1 | validate-spec CLI | pytest invoking the CLI as a subprocess " +
         "| no validator exists yet | tracer | | |",
-        "| AC-1 | validate-spec CLI | pytest invoking the CLI as a subprocess "
+        "| AC-1 | validate-spec CLI | pytest invoking the CLI as a subprocess " +
         "| no validator exists yet | tracer | |",
         1,
     )
@@ -279,12 +285,12 @@ def test_six_cell_row_is_a_shape_error(tmp_path: Path, _run) -> None:
     assert any("test-contracts-table-shape" in line for line in errors)
 
 
-def test_missing_delimiter_row_is_a_shape_error(tmp_path: Path, _run) -> None:
+def test_missing_delimiter_row_is_a_shape_error(tmp_path: Path, _run: _RunFn) -> None:
     text = BASE_SPEC.replace(
-        "| Acceptance ID | Interface referent | Outermost stable seam | Expected "
-        "failure | Mode | Interface version | Matrix rows |\n"
+        "| Acceptance ID | Interface referent | Outermost stable seam | Expected " +
+        "failure | Mode | Interface version | Matrix rows |\n" +
         "| --- | --- | --- | --- | --- | --- | --- |\n",
-        "| Acceptance ID | Interface referent | Outermost stable seam | Expected "
+        "| Acceptance ID | Interface referent | Outermost stable seam | Expected " +
         "failure | Mode | Interface version | Matrix rows |\n",
         1,
     )
@@ -295,7 +301,7 @@ def test_missing_delimiter_row_is_a_shape_error(tmp_path: Path, _run) -> None:
     assert any("test-contracts-table-shape" in line for line in errors)
 
 
-def test_duplicate_acceptance_heading_is_rejected(tmp_path: Path, _run) -> None:
+def test_duplicate_acceptance_heading_is_rejected(tmp_path: Path, _run: _RunFn) -> None:
     text = BASE_SPEC.replace(
         "## Test Contracts",
         "## Acceptance\n\n- AC-3: duplicate heading filler.\n\n## Test Contracts",
@@ -308,7 +314,7 @@ def test_duplicate_acceptance_heading_is_rejected(tmp_path: Path, _run) -> None:
     assert any("duplicate-heading" in line and "acceptance" in line for line in errors)
 
 
-def test_missing_frontmatter_is_rejected(tmp_path: Path, _run) -> None:
+def test_missing_frontmatter_is_rejected(tmp_path: Path, _run: _RunFn) -> None:
     end = BASE_SPEC.index("---", 3) + 3
     text = BASE_SPEC[end:].lstrip("\n")
     path = _write(tmp_path, "spec.md", text)
@@ -318,9 +324,9 @@ def test_missing_frontmatter_is_rejected(tmp_path: Path, _run) -> None:
     assert any("gate-applicability-required" in line for line in errors)
 
 
-def test_missing_gate_applicability_is_rejected(tmp_path: Path, _run) -> None:
+def test_missing_gate_applicability_is_rejected(tmp_path: Path, _run: _RunFn) -> None:
     text = BASE_SPEC.replace(
-        "gate_applicability:\n  disposition: red-required\n  work_class: behavior\n"
+        "gate_applicability:\n  disposition: red-required\n  work_class: behavior\n" +
         "  ui_surface: non-browser\n",
         "",
         1,
@@ -332,7 +338,7 @@ def test_missing_gate_applicability_is_rejected(tmp_path: Path, _run) -> None:
     assert any("gate-applicability-required" in line for line in errors)
 
 
-def test_underscore_not_applicable_is_rejected(tmp_path: Path, _run) -> None:
+def test_underscore_not_applicable_is_rejected(tmp_path: Path, _run: _RunFn) -> None:
     text = BASE_SPEC.replace(
         "  disposition: red-required\n", "  disposition: not_applicable\n", 1
     )
@@ -343,7 +349,7 @@ def test_underscore_not_applicable_is_rejected(tmp_path: Path, _run) -> None:
     assert any("gate-applicability-closed-class" in line and "disposition" in line for line in errors)
 
 
-def test_unknown_work_class_is_rejected(tmp_path: Path, _run) -> None:
+def test_unknown_work_class_is_rejected(tmp_path: Path, _run: _RunFn) -> None:
     text = BASE_SPEC.replace("  work_class: behavior\n", "  work_class: bogus\n", 1)
     path = _write(tmp_path, "spec.md", text)
     result = _run(path)
@@ -352,7 +358,7 @@ def test_unknown_work_class_is_rejected(tmp_path: Path, _run) -> None:
     assert any("gate-applicability-closed-class" in line and "work_class" in line for line in errors)
 
 
-def test_unknown_ui_surface_is_rejected(tmp_path: Path, _run) -> None:
+def test_unknown_ui_surface_is_rejected(tmp_path: Path, _run: _RunFn) -> None:
     text = BASE_SPEC.replace("  ui_surface: non-browser\n", "  ui_surface: bogus\n", 1)
     path = _write(tmp_path, "spec.md", text)
     result = _run(path)
@@ -363,33 +369,33 @@ def test_unknown_ui_surface_is_rejected(tmp_path: Path, _run) -> None:
 
 def _isolated_gate_applicability_fixture(reason: str | None, rows: bool) -> str:
     text = BASE_SPEC.replace(
-        "gate_applicability:\n  disposition: red-required\n  work_class: behavior\n"
+        "gate_applicability:\n  disposition: red-required\n  work_class: behavior\n" +
         "  ui_surface: non-browser\n",
-        "gate_applicability:\n  disposition: not-applicable\n  work_class: docs-only\n"
+        "gate_applicability:\n  disposition: not-applicable\n  work_class: docs-only\n" +
         "  ui_surface: not-applicable\n"
         + (f"  reason: {reason}\n" if reason else ""),
         1,
     )
     text = text.replace(
-        "- AC-2: WHEN the validator runs on a valid contract-matrix spec "
+        "- AC-2: WHEN the validator runs on a valid contract-matrix spec " +
         "THE SYSTEM SHALL exit 0.\n",
         "",
         1,
     )
     ac2_row = (
-        "| AC-2 | validate-spec CLI | pytest invoking the CLI as a subprocess "
+        "| AC-2 | validate-spec CLI | pytest invoking the CLI as a subprocess " +
         "| no validator exists yet | contract-matrix | v1 | row-a, row-b |\n"
     )
     if rows:
         text = text.replace(ac2_row, "", 1)
     else:
         ac1_row = (
-            "| AC-1 | validate-spec CLI | pytest invoking the CLI as a subprocess "
+            "| AC-1 | validate-spec CLI | pytest invoking the CLI as a subprocess " +
             "| no validator exists yet | tracer | | |\n"
         )
         text = text.replace(ac1_row, "", 1).replace(ac2_row, "", 1)
         text = text.replace(
-            "- AC-1: WHEN the validator runs on a valid tracer spec THE SYSTEM "
+            "- AC-1: WHEN the validator runs on a valid tracer spec THE SYSTEM " +
             "SHALL exit 0.\n",
             "",
             1,
@@ -397,7 +403,7 @@ def _isolated_gate_applicability_fixture(reason: str | None, rows: bool) -> str:
     return text
 
 
-def test_not_applicable_with_contracts_is_rejected(tmp_path: Path, _run) -> None:
+def test_not_applicable_with_contracts_is_rejected(tmp_path: Path, _run: _RunFn) -> None:
     text = _isolated_gate_applicability_fixture(reason="closed, no CLI change", rows=True)
     path = _write(tmp_path, "spec.md", text)
     result = _run(path)
@@ -408,7 +414,7 @@ def test_not_applicable_with_contracts_is_rejected(tmp_path: Path, _run) -> None
     assert "zero Test Contracts rows" in errors[0]
 
 
-def test_not_applicable_without_reason_is_rejected(tmp_path: Path, _run) -> None:
+def test_not_applicable_without_reason_is_rejected(tmp_path: Path, _run: _RunFn) -> None:
     text = _isolated_gate_applicability_fixture(reason=None, rows=False)
     path = _write(tmp_path, "spec.md", text)
     result = _run(path)
@@ -418,19 +424,19 @@ def test_not_applicable_without_reason_is_rejected(tmp_path: Path, _run) -> None
     assert "reason is required" in errors[0]
 
 
-def test_multiple_violations_accumulate_in_one_run(tmp_path: Path, _run) -> None:
+def test_multiple_violations_accumulate_in_one_run(tmp_path: Path, _run: _RunFn) -> None:
     text = BASE_SPEC.replace(
         "## Risks\n\n- None beyond the usual validator-drift risk.\n\n", "", 1
     ).replace(
-        "| AC-1 | validate-spec CLI | pytest invoking the CLI as a subprocess "
+        "| AC-1 | validate-spec CLI | pytest invoking the CLI as a subprocess " +
         "| no validator exists yet | tracer | | |",
-        "| AC-1 | validate-spec CLI | pytest invoking the CLI as a subprocess "
+        "| AC-1 | validate-spec CLI | pytest invoking the CLI as a subprocess " +
         "| no validator exists yet | tracer | v1 | |",
         1,
     ).replace(
-        "| AC-2 | validate-spec CLI | pytest invoking the CLI as a subprocess "
+        "| AC-2 | validate-spec CLI | pytest invoking the CLI as a subprocess " +
         "| no validator exists yet | contract-matrix | v1 | row-a, row-b |",
-        "| AC-2 | validate-spec CLI | pytest invoking the CLI as a subprocess "
+        "| AC-2 | validate-spec CLI | pytest invoking the CLI as a subprocess " +
         "| no validator exists yet | contract-matrix | | |",
         1,
     )

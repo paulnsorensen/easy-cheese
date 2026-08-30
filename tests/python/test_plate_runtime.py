@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 from pathlib import Path
+from typing import cast
 
 import pytest
 
 from easy_cheese.skills.plate import publication, stack_tools
 
 
-def valid_publication() -> dict:
+def valid_publication() -> dict[str, object]:
     return {
         "mode": "new-pr",
         "topology": "single",
@@ -38,7 +40,7 @@ def test_validate_publication_normalizes_valid_evidence() -> None:
     assert result["mode"] == "new-pr"
     assert result["topology"] == "single"
     assert result["provider"] == "ordinary"
-    assert result["artifacts"][0]["verified"] is True
+    assert cast(dict[str, object], cast(list[object], result["artifacts"])[0])["verified"] is True
 
 
 @pytest.mark.parametrize(
@@ -52,23 +54,23 @@ def test_validate_publication_normalizes_valid_evidence() -> None:
     ],
 )
 def test_validate_publication_rejects_impossible_states(
-    updates: dict, message: str
+    updates: dict[str, object], message: str
 ) -> None:
     state = valid_publication() | updates
 
     with pytest.raises(publication.PublicationValidationError) as error:
-        publication.validate_publication(state)
+        _ = publication.validate_publication(state)
 
     assert message in error.value.errors
 
 
 def test_validate_publication_rejects_unverified_artifacts_and_pr_plan_drift() -> None:
     state = valid_publication()
-    state["artifacts"][0]["verified"] = False
+    cast(dict[str, object], cast(list[object], state["artifacts"])[0])["verified"] = False
     state["pr_plan"] = {"plate_layout": "stacked"}
 
     with pytest.raises(publication.PublicationValidationError) as error:
-        publication.validate_publication(state)
+        _ = publication.validate_publication(state)
 
     assert error.value.errors == (
         "artifacts[0].verified must be true",
@@ -77,13 +79,14 @@ def test_validate_publication_rejects_unverified_artifacts_and_pr_plan_drift() -
 
 
 def test_topology_preflight_requires_empty_publication_evidence() -> None:
-    state = valid_publication() | {
+    overrides: dict[str, object] = {
         "mode": "topology-preflight",
         "provider": "n/a",
         "gate": {"command": "n/a", "result": "n/a"},
         "commits": [],
         "prs": [],
     }
+    state = valid_publication() | overrides
 
     result = publication.validate_publication(state)
 
@@ -95,10 +98,10 @@ def test_validate_publication_cli_reports_every_violation(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     state = valid_publication()
-    state["artifacts"][0]["verified"] = False
+    cast(dict[str, object], cast(list[object], state["artifacts"])[0])["verified"] = False
     state["commits"] = ["bad"]
     path = tmp_path / "state.json"
-    path.write_text(json.dumps(state))
+    _ = path.write_text(json.dumps(state))
 
     assert publication.main([str(path)]) == 1
 
@@ -118,15 +121,14 @@ def test_stack_tools_reports_available_providers(
 ) -> None:
     git_dir = tmp_path / ".git"
     git_dir.mkdir()
-    (git_dir / ".graphite_repo_config").write_text("{}")
+    _ = (git_dir / ".graphite_repo_config").write_text("{}")
 
-    monkeypatch.setattr(
-        stack_tools.shutil,
-        "which",
-        lambda name: f"/bin/{name}" if name in {"git", "gt", "git-town", "gh"} else None,
-    )
+    def which(name: str) -> str | None:
+        return f"/bin/{name}" if name in {"git", "gt", "git-town", "gh"} else None
 
-    def run(args: list[str], **_kwargs) -> subprocess.CompletedProcess[str]:
+    monkeypatch.setattr(shutil, "which", which)
+
+    def run(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
         if args == ["git", "rev-parse", "--git-dir"]:
             return completed(args, stdout=".git\n")
         if args == ["git", "config", "--get", "git-town.main-branch"]:
@@ -135,7 +137,7 @@ def test_stack_tools_reports_available_providers(
             return completed(args, stdout="github/gh-stack\tgh stack\n")
         raise AssertionError(args)
 
-    monkeypatch.setattr(stack_tools.subprocess, "run", run)
+    monkeypatch.setattr(subprocess, "run", run)
 
     result = stack_tools.detect_stack_tools(tmp_path)
 
@@ -162,11 +164,15 @@ def test_stack_tools_reports_available_providers(
 def test_stack_tools_reports_missing_providers(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(stack_tools.shutil, "which", lambda _name: None)
+    def which(_name: str) -> None:
+        return None
+
+    monkeypatch.setattr(shutil, "which", which)
 
     result = stack_tools.detect_stack_tools(tmp_path)
 
+    providers = cast(dict[str, dict[str, object]], result["providers"])
     assert result["recommended"] is None
-    assert {provider["status"] for provider in result["providers"].values()} == {
+    assert {provider["status"] for provider in providers.values()} == {
         "not-installed"
     }

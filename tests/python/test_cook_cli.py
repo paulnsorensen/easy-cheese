@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import cast
 
 import pytest
 from easy_cheese.skills.cook import commands
@@ -101,12 +102,14 @@ def test_normalize_emits_canonical_json_for_clean_payload(
     captured = capsys.readouterr()
     assert exit_code == 0
     assert captured.err == ""
-    canonical = json.loads(captured.out)
+    canonical = cast(dict[str, object], json.loads(captured.out))
     assert set(canonical) == {"value", "digest", "version"}
-    assert canonical["value"]["plan_id"] == "curdplan-cook-cli-normalize-1"
-    assert canonical["value"]["objective"] == "Ship the approved behavior"
-    assert canonical["digest"].startswith("sha256:")
-    assert canonical["version"]["major"] == "1"
+    value = cast(dict[str, object], canonical["value"])
+    assert value["plan_id"] == "curdplan-cook-cli-normalize-1"
+    assert value["objective"] == "Ship the approved behavior"
+    assert cast(str, canonical["digest"]).startswith("sha256:")
+    version = cast(dict[str, object], canonical["version"])
+    assert version["major"] == "1"
     # Re-encoding must reproduce the same bytes: the CLI's stdout is already canonical.
     assert json.dumps(canonical, sort_keys=True, separators=(",", ":")) == captured.out.strip()
 
@@ -172,10 +175,10 @@ def test_validate_accepts_versioned_curd_plan_payload(
     )
     captured = capsys.readouterr()
     assert exit_code == 0, captured.err
-    plan_value = json.loads(captured.out)["value"]
-    assert plan_value["contract_version"]["major"] == "1"
+    plan_value = cast(dict[str, object], json.loads(captured.out)["value"])
+    assert cast(dict[str, object], plan_value["contract_version"])["major"] == "1"
     payload_path = tmp_path / "curd-plan.json"
-    payload_path.write_text(json.dumps(plan_value), encoding="utf-8")
+    _ = payload_path.write_text(json.dumps(plan_value), encoding="utf-8")
 
     exit_code = commands.main(
         ["validate", str(payload_path), "--schema", "curd-plan"]

@@ -17,6 +17,7 @@ CLI:
 from __future__ import annotations
 
 import argparse
+from typing import TextIO, cast
 
 from easy_cheese.shared import cli
 
@@ -115,22 +116,24 @@ def bucket_fix_cost_now(*, file_count: int, module_count: int = 1) -> str:
 def _cmd_compute(args: argparse.Namespace) -> None:
     try:
         result = compute_severity(
-            dimension=args.dimension,
-            base=args.base,
-            location=args.location,
-            fix_cost_later=args.fix_cost_later,
+            dimension=cast(str, args.dimension),
+            base=cast(str, args.base),
+            location=cast(str, args.location),
+            fix_cost_later=cast(str, args.fix_cost_later),
         )
     except RubricError as exc:
         raise cli.CliError(str(exc)) from exc
-    cli.emit(result, stdout=args.stdout)
+    cli.emit(result, stdout=cast("TextIO", args.stdout))
 
 
 def _cmd_bucket(args: argparse.Namespace) -> None:
     try:
-        result = bucket_fix_cost_now(file_count=args.files, module_count=args.modules)
+        result = bucket_fix_cost_now(
+            file_count=cast(int, args.files), module_count=cast(int, args.modules)
+        )
     except RubricError as exc:
         raise cli.CliError(str(exc)) from exc
-    cli.emit(result, stdout=args.stdout)
+    cli.emit(result, stdout=cast("TextIO", args.stdout))
 
 
 def _setup(parser: argparse.ArgumentParser) -> None:
@@ -138,15 +141,15 @@ def _setup(parser: argparse.ArgumentParser) -> None:
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     compute = sub.add_parser("compute", help="compute severity from rubric inputs")
-    compute.add_argument("--dimension", required=True)
-    compute.add_argument("--base", required=True)
-    compute.add_argument("--location", required=True)
-    compute.add_argument("--fix-cost-later", required=True)
+    _ = compute.add_argument("--dimension", required=True)
+    _ = compute.add_argument("--base", required=True)
+    _ = compute.add_argument("--location", required=True)
+    _ = compute.add_argument("--fix-cost-later", required=True)
     compute.set_defaults(func=_cmd_compute)
 
     bucket = sub.add_parser("bucket", help="bucket fix-cost-now from blast-radius counts")
-    bucket.add_argument("--files", type=int, required=True, help="file count from tilth_deps")
-    bucket.add_argument("--modules", type=int, default=1, help="distinct module count (default 1)")
+    _ = bucket.add_argument("--files", type=int, required=True, help="file count from tilth_deps")
+    _ = bucket.add_argument("--modules", type=int, default=1, help="distinct module count (default 1)")
     bucket.set_defaults(func=_cmd_bucket)
 
 

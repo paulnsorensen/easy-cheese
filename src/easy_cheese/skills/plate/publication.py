@@ -8,7 +8,7 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Any
+from typing import cast
 from urllib.parse import urlparse
 
 _MODES = {"commit-only", "topology-preflight", "new-pr", "existing-pr", "stack-maintenance"}
@@ -24,39 +24,39 @@ class PublicationValidationError(ValueError):
     """One or more publication evidence invariants failed."""
 
     def __init__(self, errors: list[str]) -> None:
-        self.errors = tuple(errors)
+        self.errors: tuple[str, ...] = tuple(errors)
         super().__init__("; ".join(errors))
 
 
-def _object(value: Any, path: str, errors: list[str]) -> dict[str, Any] | None:
+def _object(value: object, path: str, errors: list[str]) -> dict[str, object] | None:
     if not isinstance(value, dict):
         errors.append(f"{path} must be an object")
         return None
-    return value
+    return cast("dict[str, object]", value)
 
 
-def _list(value: Any, path: str, errors: list[str]) -> list[Any] | None:
+def _list(value: object, path: str, errors: list[str]) -> list[object] | None:
     if not isinstance(value, list):
         errors.append(f"{path} must be a list")
         return None
-    return value
+    return cast("list[object]", value)
 
 
-def _text(value: Any, path: str, errors: list[str]) -> str | None:
+def _text(value: object, path: str, errors: list[str]) -> str | None:
     if not isinstance(value, str) or not value or any(char.isspace() for char in value):
         errors.append(f"{path} must be a non-empty string without whitespace")
         return None
     return value
 
 
-def _exact_fields(value: dict[str, Any], required: set[str], path: str, errors: list[str]) -> None:
+def _exact_fields(value: dict[str, object], required: set[str], path: str, errors: list[str]) -> None:
     for name in sorted(required - value.keys()):
         errors.append(f"{path}.{name} is required")
     for name in sorted(value.keys() - required):
         errors.append(f"{path}.{name} is not allowed")
 
 
-def validate_publication(data: object) -> dict[str, Any]:
+def validate_publication(data: object) -> dict[str, object]:
     """Return normalized publication evidence or raise every detected violation."""
     errors: list[str] = []
     state = _object(data, "publication", errors)
@@ -85,8 +85,8 @@ def validate_publication(data: object) -> dict[str, Any]:
             if item is None:
                 continue
             _exact_fields(item, {"target", "backend", "verified"}, f"artifacts[{index}]", errors)
-            _text(item.get("target"), f"artifacts[{index}].target", errors)
-            _text(item.get("backend"), f"artifacts[{index}].backend", errors)
+            _ = _text(item.get("target"), f"artifacts[{index}].target", errors)
+            _ = _text(item.get("backend"), f"artifacts[{index}].backend", errors)
             if item.get("verified") is not True:
                 errors.append(f"artifacts[{index}].verified must be true")
 
@@ -115,8 +115,8 @@ def validate_publication(data: object) -> dict[str, Any]:
             parsed = urlparse(url) if isinstance(url, str) else None
             if parsed is None or parsed.scheme not in {"http", "https"} or not parsed.netloc:
                 errors.append(f"prs[{index}].url must be an HTTP(S) URL")
-            _text(item.get("base"), f"prs[{index}].base", errors)
-            _text(item.get("head"), f"prs[{index}].head", errors)
+            _ = _text(item.get("base"), f"prs[{index}].base", errors)
+            _ = _text(item.get("head"), f"prs[{index}].head", errors)
             if item.get("verified") is not True:
                 errors.append(f"prs[{index}].verified must be true")
 
@@ -176,10 +176,11 @@ def validate_publication(data: object) -> dict[str, Any]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("state", type=Path)
+    _ = parser.add_argument("state", type=Path)
     args = parser.parse_args(argv)
+    state_path = cast(Path, args.state)
     try:
-        data = json.loads(args.state.read_text())
+        data = cast(object, json.loads(state_path.read_text()))
         result = validate_publication(data)
     except (OSError, json.JSONDecodeError) as error:
         print(f"ERROR: {error}", file=sys.stderr)

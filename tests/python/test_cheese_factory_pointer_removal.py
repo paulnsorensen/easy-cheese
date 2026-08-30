@@ -27,7 +27,7 @@ def _text(path: Path) -> str:
 
 def test_cheese_factory_absent_from_all_skills() -> None:
     """Ratchet: /cheese-factory must never reappear anywhere under skills/."""
-    offenders = []
+    offenders: list[str] = []
     for path in SKILLS_DIR.rglob("*"):
         if not path.is_file():
             continue

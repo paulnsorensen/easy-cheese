@@ -8,6 +8,7 @@ import shutil
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
+from typing import cast
 from collections.abc import Callable
 
 import yaml
@@ -39,7 +40,7 @@ class GeneratedPage:
     source_rel: str | None
 
 
-def parse_frontmatter(text: str) -> tuple[dict, str]:
+def parse_frontmatter(text: str) -> tuple[dict[str, object], str]:
     if not text.startswith("---\n"):
         return {}, text
     end = text.find("\n---\n", 4)
@@ -48,12 +49,17 @@ def parse_frontmatter(text: str) -> tuple[dict, str]:
     raw = text[4:end]
     body = text[end + 5 :]
     try:
-        meta = yaml.safe_load(raw) or {}
+        loaded = cast(object, yaml.safe_load(raw))
     except yaml.YAMLError:
-        meta = {}
-    if not isinstance(meta, dict):
-        meta = {}
-    return meta, body
+        loaded = None
+    if not isinstance(loaded, dict):
+        return {}, body
+    return cast(dict[str, object], loaded), body
+
+
+def _meta_str(meta: dict[str, object], key: str, default: str = "") -> str:
+    value = meta.get(key, default)
+    return value if isinstance(value, str) else default
 
 
 def first_sentence(desc: str) -> str:
@@ -132,7 +138,7 @@ def write_doc(
     # Starlight renders the frontmatter title as the page H1; a literal leading
     # `# …` in the body would show the heading twice.
     body = re.sub(r"^#\s[^\n]*\n+", "", content.lstrip(), count=1)
-    target.write_text(
+    _ = target.write_text(
         starlight_frontmatter(
             title=title,
             description=description,
@@ -147,11 +153,11 @@ def write_doc(
 
 
 def convert_mkdocs_admonitions(markdown: str) -> str:
-    def repl(match: re.Match) -> str:
+    def repl(match: re.Match[str]) -> str:
         kind = match.group(1)
         title = match.group(2)
         body = match.group(3)
-        stripped = []
+        stripped: list[str] = []
         for line in body.splitlines():
             if line.startswith("    "):
                 stripped.append(line[4:])
@@ -179,23 +185,16 @@ def _heading_slug(text: str) -> str:
     return _HEADING_SLUG_STRIP_RE.sub("", text.lower()).replace(" ", "-")
 
 
-def _ref_title(skill_name: str, ref_stem: str) -> str:
-    return _ref_title_cached(str(SKILLS_DIR), skill_name, ref_stem)
-
-
 @cache
-def _ref_title_cached(skills_dir: str, skill_name: str, ref_stem: str) -> str:
-    ref_path = Path(skills_dir) / skill_name / "references" / f"{ref_stem}.md"
+def _ref_title(skill_name: str, ref_stem: str) -> str:
+    ref_path = SKILLS_DIR / skill_name / "references" / f"{ref_stem}.md"
     try:
         text = ref_path.read_text(encoding="utf-8")
     except OSError:
         return _heading_slug(ref_stem.replace("-", " "))
     meta, body = parse_frontmatter(text)
-    title = meta.get("title") or _first_h1(body) or ref_stem.replace("-", " ").capitalize()
+    title = _meta_str(meta, "title") or _first_h1(body) or ref_stem.replace("-", " ").capitalize()
     return _heading_slug(title)
-
-
-_ref_title.cache_clear = _ref_title_cached.cache_clear
 
 
 def rewrite_skill_link(url: str, skill_name: str) -> str:
@@ -284,11 +283,11 @@ def rewrite_root_passthrough_link(url: str) -> str:
 
 
 def apply_link_rewrite(text: str, rewriter: Callable[[str], str]) -> str:
-    def image_repl(match: re.Match) -> str:
+    def image_repl(match: re.Match[str]) -> str:
         prefix, url, suffix = match.group(1), match.group(2), match.group(3)
         return f"{prefix}{rewriter(url)}{suffix}"
 
-    def repl(match: re.Match) -> str:
+    def repl(match: re.Match[str]) -> str:
         label, url, title = match.group(1), match.group(2), match.group(3) or ""
         return f"[{label}]({rewriter(url)}{title})"
 
@@ -324,7 +323,7 @@ def fold_references(skill_name: str, refs_dir: Path) -> tuple[str, dict[str, str
         meta, body = parse_frontmatter(ref.read_text(encoding="utf-8"))
         body = apply_link_rewrite(body, lambda url: rewrite_ref_link(url, skill_name))
         body = convert_mkdocs_admonitions(body)
-        title = meta.get("title") or _first_h1(body) or stem.replace("-", " ").capitalize()
+        title = _meta_str(meta, "title") or _first_h1(body) or stem.replace("-", " ").capitalize()
         titles[stem] = title
         body = re.sub(r"^#\s[^\n]*\n+", "", body.lstrip(), count=1)
         body = _bump_headings(body)
@@ -339,9 +338,9 @@ def emit_skill_page(skill_dir: Path) -> GeneratedPage | None:
         return None
 
     meta, body = parse_frontmatter(skill_md.read_text(encoding="utf-8"))
-    name = meta.get("name") or skill_dir.name
-    description = meta.get("description", "").strip()
-    license_id = meta.get("license", "MIT")
+    name = _meta_str(meta, "name") or skill_dir.name
+    description = _meta_str(meta, "description").strip()
+    license_id = _meta_str(meta, "license", "MIT")
 
     src_rel = skill_md.relative_to(REPO_ROOT).as_posix()
     page_path = f"skills/{name}.md"
@@ -383,7 +382,7 @@ def emit_skills_index(skills: list[GeneratedPage]) -> GeneratedPage:
     ]
     for skill in skills:
         meta, _ = parse_frontmatter((CONTENT_ROOT / _doc_path_for_slug(skill.slug)).read_text(encoding="utf-8"))
-        summary = first_sentence(str(meta.get("description", ""))).replace("|", "\\|")
+        summary = first_sentence(_meta_str(meta, "description")).replace("|", "\\|")
         lines.append(f"| [`{skill.title}`]({skill.slug.removeprefix('skills/')}/) | {summary} |")
     lines.append("")
 
@@ -442,7 +441,7 @@ def emit_install_page() -> GeneratedPage | None:
     if missing:
         raise RuntimeError(
             f"README.md is missing expected H2 section(s) {missing!r} — "
-            "gen_docs.py:emit_install_page can't build docs/install.md without them"
+            + "gen_docs.py:emit_install_page can't build docs/install.md without them"
         )
 
     body = (
@@ -497,14 +496,14 @@ def emit_sidebar(
     project: list[GeneratedPage],
     install: GeneratedPage | None,
 ) -> None:
-    skill_items: list[dict] = [{"label": "Skills index", "slug": "skills"}]
+    skill_items: list[dict[str, str]] = [{"label": "Skills index", "slug": "skills"}]
     for skill in skills:
         skill_items.append(_sidebar_link(skill))
 
-    start_items = [{"label": "Home", "link": "/"}]
+    start_items: list[dict[str, str]] = [{"label": "Home", "link": "/"}]
     if install:
         start_items.append({"label": "Install", "slug": "install"})
-    sidebar = [
+    sidebar: list[dict[str, object]] = [
         {"label": "Start", "items": start_items},
         {"label": "Skills", "items": skill_items},
     ]
@@ -512,9 +511,9 @@ def emit_sidebar(
         sidebar.append({"label": "Project", "items": [_sidebar_link(page) for page in project]})
 
     SIDEBAR_PATH.parent.mkdir(parents=True, exist_ok=True)
-    SIDEBAR_PATH.write_text(
+    _ = SIDEBAR_PATH.write_text(
         "// Generated by scripts/gen_docs.py; do not edit by hand.\n"
-        "export const sidebar = "
+        + "export const sidebar = "
         + json.dumps(sidebar, indent=2, ensure_ascii=False)
         + ";\n",
         encoding="utf-8",
@@ -541,7 +540,7 @@ def main() -> None:
         if page is not None:
             skills.append(page)
 
-    emit_skills_index(skills)
+    _ = emit_skills_index(skills)
     install = emit_install_page()
 
     project: list[GeneratedPage] = []

@@ -59,7 +59,7 @@ def _coerce_outcome(outcome: object) -> Outcome:
 
 
 def _check_repair_cycles(repair_cycles: int) -> None:
-    if isinstance(repair_cycles, bool) or not isinstance(repair_cycles, int):
+    if isinstance(repair_cycles, bool):
         raise TypeError("repair_cycles must be a non-negative integer")
     if repair_cycles < 0:
         raise ValueError("repair_cycles must be a non-negative integer")

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
+from typing import TypedDict, cast
 
 import pytest
 
@@ -17,6 +18,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 from attrs import define, evolve  # noqa: E402
 from easy_cheese_schemas import (  # noqa: E402
     SCHEMA_VERSION,
+    ArtifactLink,
     DecisionFork,
     DossierOption,
     Durability,
@@ -77,6 +79,26 @@ def _dossier() -> DecisionFork:
     )
 
 
+class _RecordFields(TypedDict):
+    schema_version: int
+    work_id: str
+    slug: str
+    title: str
+    created: str
+    project_key: str
+    revision_id: str
+    revision_number: int
+    revision_digest: str
+    orientation: str
+    working_context: list[str]
+    next_action: NextAction
+    decisions: list[ProtectedEntry]
+    questions: list[ProtectedEntry]
+    blockers: list[ProtectedEntry]
+    artifact_links: list[ArtifactLink]
+    decision_dossier: list[DecisionFork]
+
+
 def _record(**overrides: object) -> WheypointRecord:
     gating = bool(overrides.pop("gating", False))
     fields: dict[str, object] = {
@@ -99,7 +121,7 @@ def _record(**overrides: object) -> WheypointRecord:
         "decision_dossier": [_dossier()] if gating else [],
     }
     fields.update(overrides)
-    return WheypointRecord(**fields)  # type: ignore[arg-type]
+    return WheypointRecord(**cast(_RecordFields, cast(object, fields)))
 
 
 def _promotion(

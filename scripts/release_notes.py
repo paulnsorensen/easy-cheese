@@ -18,6 +18,7 @@ import argparse
 import re
 import subprocess
 import sys
+from typing import cast
 
 # type/scope: description (optional ! before the colon marks a breaking change)
 _CONVENTIONAL = re.compile(
@@ -63,7 +64,7 @@ def find_previous_tag(tag: str, cwd: str | None = None) -> str | None:
     current = _semver_key(tag)
     if current is None:
         return None
-    candidates = []
+    candidates: list[tuple[tuple[int, int, int], str]] = []
     for line in _git("tag", "--list", "v[0-9]*", cwd=cwd).splitlines():
         key = _semver_key(line.strip())
         if key is not None and key < current:
@@ -129,7 +130,7 @@ def categorize(subjects: list[str]) -> dict[str, list[str]]:
 
 
 def render(
-    tag: str,
+    _tag: str,
     subjects: list[str],
     repo: str,
     prev_source: str | None,
@@ -160,11 +161,14 @@ def generate(tag: str, to_sha: str, repo: str, cwd: str | None = None) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--tag", required=True, help="version tag being released, e.g. v0.5.3")
-    parser.add_argument("--to", default="HEAD", help="end of the commit range (the main SHA)")
-    parser.add_argument("--repo", required=True, help="owner/repo for the changelog link")
+    _ = parser.add_argument("--tag", required=True, help="version tag being released, e.g. v0.5.3")
+    _ = parser.add_argument("--to", default="HEAD", help="end of the commit range (the main SHA)")
+    _ = parser.add_argument("--repo", required=True, help="owner/repo for the changelog link")
     args = parser.parse_args()
-    sys.stdout.write(generate(args.tag, args.to, args.repo))
+    tag = cast(str, args.tag)
+    to_sha = cast(str, args.to)
+    repo = cast(str, args.repo)
+    _ = sys.stdout.write(generate(tag, to_sha, repo))
 
 
 if __name__ == "__main__":

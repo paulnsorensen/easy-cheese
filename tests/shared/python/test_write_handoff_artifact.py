@@ -7,12 +7,60 @@ import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
+from typing import TYPE_CHECKING, Protocol, TypedDict
 
 import pytest
+
+if TYPE_CHECKING:
+    from easy_cheese.shared.cli import CliError
+    from easy_cheese.shared.handoff import HandoffParseError, HandoffSlug
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SHARED_SCRIPTS = REPO_ROOT / "src" / "easy_cheese" / "shared"
 WRITER_CLI = SHARED_SCRIPTS / "write_handoff_artifact.py"
+
+
+class _CliModule(Protocol):
+    CliError: type[CliError]
+
+
+class _WriterModule(Protocol):
+    cli: _CliModule
+
+    def write_artifact(
+        self,
+        *,
+        slug: str,
+        status: str,
+        next_skill: str,
+        artifact: str,
+        orientation: str,
+        body: str | None,
+        root: Path,
+        phase: str,
+        payload_schema_uri: str | None = None,
+        taste_test: str | None = None,
+        durable_flags: str | None = None,
+        baseline: str | None = None,
+    ) -> Path: ...
+
+
+class _RerunKwargs(TypedDict):
+    slug: str
+    status: str
+    phase: str
+    next_skill: str
+    artifact: str
+    body: str | None
+    root: Path
+
+
+class _HandoffModule(Protocol):
+    HandoffSlug: type[HandoffSlug]
+    HandoffParseError: type[HandoffParseError]
+
+    def parse_handoff_slug(self, text: str) -> HandoffSlug: ...
+    def render_handoff_slug(self, slug: HandoffSlug) -> str: ...
 
 
 def _load(name: str, path: Path) -> ModuleType:
@@ -29,8 +77,8 @@ def writer() -> ModuleType:
     # cli + handoff first so write_handoff_artifact's `import cli` / `import handoff` resolve.
     if str(SHARED_SCRIPTS) not in sys.path:
         sys.path.insert(0, str(SHARED_SCRIPTS))
-    _load("cli", SHARED_SCRIPTS / "cli.py")
-    _load("handoff", SHARED_SCRIPTS / "handoff.py")
+    _ = _load("cli", SHARED_SCRIPTS / "cli.py")
+    _ = _load("handoff", SHARED_SCRIPTS / "handoff.py")
     return _load("write_handoff_artifact", WRITER_CLI)
 
 
@@ -43,7 +91,7 @@ def handoff_mod() -> ModuleType:
 
 class TestPreambleRoundTrip:
     def test_ok_status_round_trips(
-        self, writer: ModuleType, handoff_mod: ModuleType, tmp_path: Path
+        self, writer: _WriterModule, handoff_mod: _HandoffModule, tmp_path: Path
     ) -> None:
         target = writer.write_artifact(
             slug="my-task",
@@ -66,7 +114,7 @@ class TestPreambleRoundTrip:
         assert slug.durable_flags is None
 
     def test_halt_status_round_trips(
-        self, writer: ModuleType, handoff_mod: ModuleType, tmp_path: Path
+        self, writer: _WriterModule, handoff_mod: _HandoffModule, tmp_path: Path
     ) -> None:
         target = writer.write_artifact(
             slug="blocked",
@@ -87,27 +135,27 @@ class TestPreambleRoundTrip:
 class TestPathTraversalRejected:
     @pytest.mark.parametrize("bad_slug", ["../escape", "a/b", "..", "win\\esc"])
     def test_traversal_slug_rejected(
-        self, writer: ModuleType, tmp_path: Path, bad_slug: str
+        self, writer: _WriterModule, tmp_path: Path, bad_slug: str
     ) -> None:
         with pytest.raises(writer.cli.CliError):
-            writer.write_artifact(
+            _ = writer.write_artifact(
                 slug=bad_slug, status="ok", phase="age", next_skill="done",
                 artifact="", orientation="x", body=None, root=tmp_path,
             )
 
-    def test_traversal_phase_rejected(self, writer: ModuleType, tmp_path: Path) -> None:
+    def test_traversal_phase_rejected(self, writer: _WriterModule, tmp_path: Path) -> None:
         with pytest.raises(writer.cli.CliError):
-            writer.write_artifact(
+            _ = writer.write_artifact(
                 slug="ok-slug", status="ok", next_skill="done", artifact="",
                 orientation="x", body=None, root=tmp_path, phase="../etc",
             )
 
 
 class TestRerunOverwrite:
-    def test_rerun_same_slug_overwrites(self, writer: ModuleType, tmp_path: Path) -> None:
+    def test_rerun_same_slug_overwrites(self, writer: _WriterModule, tmp_path: Path) -> None:
         # os.replace (not os.rename) must overwrite an existing artifact cleanly
         # on a re-run — the cross-platform atomic-overwrite contract.
-        common = {
+        common: _RerunKwargs = {
             "slug": "rerun", "status": "ok", "phase": "press",
             "next_skill": "age", "artifact": "",
             "body": None, "root": tmp_path,
@@ -128,45 +176,45 @@ class TestOptionalKeyedLines:
     plain four-line slugs keep parsing identically.
     """
 
-    def test_four_line_slug_back_compat(self, handoff_mod: ModuleType) -> None:
+    def test_four_line_slug_back_compat(self, handoff_mod: _HandoffModule) -> None:
         slug = handoff_mod.parse_handoff_slug(
             "status: ok\n"
-            "next: cure\n"
-            "artifact: .cheese/press/demo.md\n"
-            "reviewed the retry path\n"
+            + "next: cure\n"
+            + "artifact: .cheese/press/demo.md\n"
+            + "reviewed the retry path\n"
         )
         assert slug.orientation == "reviewed the retry path"
         assert slug.taste_test is None
         assert slug.durable_flags is None
 
-    def test_durable_flags_keyed_line(self, handoff_mod: ModuleType) -> None:
+    def test_durable_flags_keyed_line(self, handoff_mod: _HandoffModule) -> None:
         # The age-slug shape: durable_flags between artifact and orientation.
         slug = handoff_mod.parse_handoff_slug(
             "status: ok\n"
-            "next: cure\n"
-            "artifact: .cheese/press/demo.md\n"
-            "durable_flags: none\n"
-            "reviewed the retry path\n"
+            + "next: cure\n"
+            + "artifact: .cheese/press/demo.md\n"
+            + "durable_flags: none\n"
+            + "reviewed the retry path\n"
         )
         assert slug.durable_flags == "none"
         # The keyed line must not be swallowed as the orientation.
         assert slug.orientation == "reviewed the retry path"
 
-    def test_taste_test_and_durable_flags(self, handoff_mod: ModuleType) -> None:
+    def test_taste_test_and_durable_flags(self, handoff_mod: _HandoffModule) -> None:
         # The cook-slug shape: both keyed lines before the orientation.
         slug = handoff_mod.parse_handoff_slug(
             "status: ok\n"
-            "next: press\n"
-            "artifact:\n"
-            "taste_test: inline-pass\n"
-            "durable_flags: keyed-line parsing added -> handoff-contract\n"
-            "cook implemented widget\n"
+            + "next: press\n"
+            + "artifact:\n"
+            + "taste_test: inline-pass\n"
+            + "durable_flags: keyed-line parsing added -> handoff-contract\n"
+            + "cook implemented widget\n"
         )
         assert slug.taste_test == "inline-pass"
         assert slug.durable_flags == "keyed-line parsing added -> handoff-contract"
         assert slug.orientation == "cook implemented widget"
 
-    def test_render_parse_roundtrip_with_keyed_lines(self, handoff_mod: ModuleType) -> None:
+    def test_render_parse_roundtrip_with_keyed_lines(self, handoff_mod: _HandoffModule) -> None:
         original = handoff_mod.HandoffSlug(
             status="ok",
             halt_reason=None,
@@ -179,21 +227,21 @@ class TestOptionalKeyedLines:
         rendered = handoff_mod.render_handoff_slug(original)
         assert handoff_mod.parse_handoff_slug(rendered) == original
 
-    def test_duplicate_keyed_line_fails_loud(self, handoff_mod: ModuleType) -> None:
+    def test_duplicate_keyed_line_fails_loud(self, handoff_mod: _HandoffModule) -> None:
         text = (
             "status: ok\nnext: cure\nartifact:\n"
             "durable_flags: none\ndurable_flags: none\norient\n"
         )
         with pytest.raises(handoff_mod.HandoffParseError, match="duplicate 'durable_flags:'"):
-            handoff_mod.parse_handoff_slug(text)
+            _ = handoff_mod.parse_handoff_slug(text)
 
-    def test_keyed_line_without_value_fails_loud(self, handoff_mod: ModuleType) -> None:
+    def test_keyed_line_without_value_fails_loud(self, handoff_mod: _HandoffModule) -> None:
         text = "status: ok\nnext: cure\nartifact:\ndurable_flags:\norient\n"
         with pytest.raises(handoff_mod.HandoffParseError, match="requires a value"):
-            handoff_mod.parse_handoff_slug(text)
+            _ = handoff_mod.parse_handoff_slug(text)
 
     def test_writer_emits_durable_flags(
-        self, writer: ModuleType, handoff_mod: ModuleType, tmp_path: Path
+        self, writer: _WriterModule, handoff_mod: _HandoffModule, tmp_path: Path
     ) -> None:
         target = writer.write_artifact(
             slug="flagged",
@@ -212,7 +260,7 @@ class TestOptionalKeyedLines:
         assert slug.orientation == "reviewed widget"
 
     def test_writer_cli_flags_roundtrip(
-        self, handoff_mod: ModuleType, tmp_path: Path
+        self, handoff_mod: _HandoffModule, tmp_path: Path
     ) -> None:
         # Locks the argparse dest wiring (--taste-test/--durable-flags).
         result = subprocess.run(
@@ -233,22 +281,22 @@ class TestOptionalKeyedLines:
         assert slug.durable_flags == "none"
 
     def test_baseline_keyed_line_present_does_not_corrupt_orientation(
-        self, handoff_mod: ModuleType
+        self, handoff_mod: _HandoffModule
     ) -> None:
         # Repro: a `baseline:` line between artifact and orientation must be
         # consumed as a keyed line, not swallowed as the orientation.
         slug = handoff_mod.parse_handoff_slug(
             "status: ok\n"
-            "next: cure\n"
-            "artifact: .cheese/press/demo.md\n"
-            "baseline: none\n"
-            "reviewed the retry path\n"
+            + "next: cure\n"
+            + "artifact: .cheese/press/demo.md\n"
+            + "baseline: none\n"
+            + "reviewed the retry path\n"
         )
         assert slug.baseline == "none"
         assert slug.orientation == "reviewed the retry path"
 
     def test_render_parse_roundtrip_with_baseline_present(
-        self, handoff_mod: ModuleType
+        self, handoff_mod: _HandoffModule
     ) -> None:
         original = handoff_mod.HandoffSlug(
             status="ok",
@@ -264,7 +312,7 @@ class TestOptionalKeyedLines:
         assert handoff_mod.parse_handoff_slug(rendered) == original
 
     def test_render_parse_roundtrip_with_baseline_absent(
-        self, handoff_mod: ModuleType
+        self, handoff_mod: _HandoffModule
     ) -> None:
         original = handoff_mod.HandoffSlug(
             status="ok",
@@ -279,7 +327,7 @@ class TestOptionalKeyedLines:
         assert round_tripped.baseline is None
 
     def test_writer_emits_baseline(
-        self, writer: ModuleType, handoff_mod: ModuleType, tmp_path: Path
+        self, writer: _WriterModule, handoff_mod: _HandoffModule, tmp_path: Path
     ) -> None:
         target = writer.write_artifact(
             slug="baselined",
@@ -297,7 +345,7 @@ class TestOptionalKeyedLines:
         assert slug.orientation == "reviewed widget"
 
     def test_writer_cli_baseline_flag_roundtrip(
-        self, handoff_mod: ModuleType, tmp_path: Path
+        self, handoff_mod: _HandoffModule, tmp_path: Path
     ) -> None:
         # Locks the argparse dest wiring (--baseline).
         result = subprocess.run(
@@ -319,11 +367,11 @@ class TestOptionalKeyedLines:
 
 class TestBodyFile:
     def test_body_content_appended_with_blank_separator(
-        self, writer: ModuleType, handoff_mod: ModuleType, tmp_path: Path
+        self, handoff_mod: _HandoffModule, tmp_path: Path
     ) -> None:
         body_src = tmp_path / "body.md"
         body_text = "# Report\n\nLine one.\nLine two.\n"
-        body_src.write_text(body_text, encoding="utf-8")
+        _ = body_src.write_text(body_text, encoding="utf-8")
 
         result = subprocess.run(
             [
@@ -412,9 +460,10 @@ class TestCliErrors:
         assert result.returncode == 2
         assert "body-file" in result.stderr.lower()
 
+
 class TestPathDerivation:
     def test_path_is_under_root_dot_cheese_phase(
-        self, writer: ModuleType, tmp_path: Path
+        self, writer: _WriterModule, tmp_path: Path
     ) -> None:
         target = writer.write_artifact(
             slug="curd-7",
@@ -429,11 +478,12 @@ class TestPathDerivation:
         assert target == tmp_path / ".cheese" / "age" / "curd-7.md"
         assert target.is_file()
 
+
 class TestPhaseFlag:
     """`--phase` names this phase's own directory; `--next` stays as preamble-only."""
 
     def test_phase_overrides_next_for_on_disk_path(
-        self, writer: ModuleType, tmp_path: Path
+        self, writer: _WriterModule, tmp_path: Path
     ) -> None:
         # Press writes its own report at .cheese/press/<slug>.md while pointing
         # the next phase at age. Before --phase existed, the writer derived the
@@ -453,7 +503,7 @@ class TestPhaseFlag:
 
     def test_phase_cli_flag_lands_artifact_under_phase_dir(
         self,
-        handoff_mod: ModuleType,
+        handoff_mod: _HandoffModule,
         tmp_path: Path,
     ) -> None:
         # Subprocess: --phase age --next cure means the file lives at
@@ -482,10 +532,10 @@ class TestPhaseFlag:
         assert slug.artifact == ".cheese/press/phase-flag.md"
 
     def test_phase_is_required_for_direct_call(
-        self, writer: ModuleType, tmp_path: Path
+        self, writer: _WriterModule, tmp_path: Path
     ) -> None:
         with pytest.raises(writer.cli.CliError, match="--phase must be non-empty"):
-            writer.write_artifact(
+            _ = writer.write_artifact(
                 slug="legacy",
                 status="ok",
                 next_skill="done",
@@ -500,20 +550,20 @@ class TestPhaseFlag:
 class TestAtomicRename:
     def test_no_partial_file_when_rename_fails(
         self,
-        writer: ModuleType,
+        writer: _WriterModule,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         # Force the atomic move to fail; assert target is absent and no .tmp lingers.
         import os as _os
 
-        def boom(src: str, dst: str) -> None:  # noqa: ARG001
+        def boom(_src: str, _dst: str) -> None:
             raise OSError("simulated rename failure")
 
         monkeypatch.setattr(_os, "replace", boom)
 
         with pytest.raises(OSError, match="simulated rename failure"):
-            writer.write_artifact(
+            _ = writer.write_artifact(
                 slug="never",
                 status="ok",
                 phase="age",
