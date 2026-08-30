@@ -132,7 +132,7 @@ spec.
 
 ### Current mold-spec schema (generated)
 
-The `mold-spec` document contract enforced by `validate-spec` (`shape-check.md`), refreshed by `scripts/render_generated_regions.py` from the `@document_contract("mold-spec")` model in `src/easy_cheese_schemas/contracts.py`. Do not hand-edit the generated region.
+The `mold-spec` document contract enforced by `validate-spec` (`shape-check.md`), refreshed by `scripts/render_generated_regions.py` from the `MoldSpecDocument` model in `src/easy_cheese_schemas/contracts.py`. Do not hand-edit the generated region.
 
 <!-- BEGIN GENERATED: mold-spec-schema -->
 document mold-spec {

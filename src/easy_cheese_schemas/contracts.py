@@ -84,42 +84,6 @@ def registered_contracts() -> tuple[tuple[str, type], ...]:
     return _registered_contracts()
 
 
-_DOCUMENT_CONTRACT_MARKER = "__document_contract_slug__"
-
-
-def document_contract(slug: str) -> Callable[[_ClsT], _ClsT]:
-    """Mark a prose document-format contract class with its canonical schema slug."""
-    validated_slug = _validate_contract_slug(slug)
-
-    def decorate(cls: _ClsT) -> _ClsT:
-        setattr(cls, _DOCUMENT_CONTRACT_MARKER, validated_slug)
-        return cls
-
-    return decorate
-
-
-def _registered_document_contracts() -> tuple[tuple[str, type], ...]:
-    """Return marked document-contract classes in deterministic slug order."""
-    pairs: list[tuple[str, type]] = []
-    for value in cast(Iterable[object], globals().values()):
-        if not isinstance(value, type):
-            continue
-        slug = cast(object, getattr(value, _DOCUMENT_CONTRACT_MARKER, None))
-        if slug is None:
-            continue
-        pairs.append((_validate_contract_slug(slug), value))
-    pairs.sort(key=lambda pair: pair[0])
-    for previous, current in zip(pairs, pairs[1:]):
-        if previous[0] == current[0]:
-            raise ValueError(f"duplicate document contract marker {current[0]!r}")
-    return tuple(pairs)
-
-
-def registered_document_contracts() -> tuple[tuple[str, type], ...]:
-    """Public accessor for marked document-contract classes in deterministic slug order."""
-    return _registered_document_contracts()
-
-
 def schema_constraints(
     *rules: Mapping[str, object], **simple: object
 ) -> Callable[[_C], _C]:
@@ -2303,9 +2267,10 @@ MOLD_SPEC_CROSS_FIELD_RULES: tuple[CrossFieldRule, ...] = (
 )
 
 
-@document_contract("mold-spec")
 @define(frozen=True)
 class MoldSpecDocument:
+    """The mold-spec prose document contract; ``slug`` is its canonical schema slug."""
+
     frontmatter: MoldSpecFrontmatter = field(
         validator=validators.instance_of(MoldSpecFrontmatter)
     )
@@ -2316,6 +2281,7 @@ class MoldSpecDocument:
         factory=tuple, converter=_tuple_sequence, validator=_list_of(TestContractRow)
     )
 
+    slug: ClassVar[str] = "mold-spec"
     sections: ClassVar[tuple[Section, ...]] = MOLD_SPEC_SECTIONS
     cross_field_rules: ClassVar[tuple[CrossFieldRule, ...]] = MOLD_SPEC_CROSS_FIELD_RULES
     enums: ClassVar[dict[str, tuple[str, ...]]] = MOLD_SPEC_ENUMS
@@ -2427,5 +2393,4 @@ __all__ = [
     "WorkClass",
     "WriterPayload",
     "WriterViewKind",
-    "document_contract",
 ]

@@ -93,16 +93,13 @@ def _compiled_schema_catalog_source() -> str:
 
 
 def _document_rules_compiler() -> tuple[
-    Callable[[ModuleType], tuple[tuple[str, type], ...]],
-    Callable[[Sequence[tuple[str, type]]], str],
+    Callable[[ModuleType], type],
+    Callable[[type], str],
 ]:
     compiler = _compiler_module("_document_rules_compiler")
     return (
-        cast(
-            Callable[[ModuleType], tuple[tuple[str, type], ...]],
-            getattr(compiler, "collect"),
-        ),
-        cast(Callable[[Sequence[tuple[str, type]]], str], getattr(compiler, "render")),
+        cast(Callable[[ModuleType], type], getattr(compiler, "collect")),
+        cast(Callable[[type], str], getattr(compiler, "render")),
     )
 
 
