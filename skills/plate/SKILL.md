@@ -244,14 +244,16 @@ the repository metadata directory is the literal `.git` path.
 | --- | --- | --- | --- |
 | Graphite | `gt --version` | `$GIT_DIR/.graphite_repo_config` | [`gt.md`](references/gt.md) |
 | Git Town | `git town --version` | `git-town.main-branch` config | [`git-town.md`](references/git-town.md) |
-| `gh stack` | `gh extension list` contains `github/gh-stack` | remote enablement is detected on operation | [`gh-stack.md`](references/gh-stack.md) |
+| `gh stack` | `gh extension list` contains `github/gh-stack` | `gh api --include "repos/{owner}/{repo}/stacks"` preflight | [`gh-stack.md`](references/gh-stack.md) |
 
 Use the `stack-tools` report on every invocation. If several providers are
 usable, preserve the one already tracking the branch. When none tracks it,
-use the report's `recommended` provider and state the choice. A `gh-stack`
-recommendation still requires its remote enablement check during operation. If
-no provider is usable after stacked was selected, stop with setup instructions;
-do not emulate stacking with plain pushes.
+use the report's `recommended` provider and state the choice. Only a `gh-stack`
+status of `not-enabled` (preflight `404`) is the repository-enablement
+requirement; other non-`available` statuses are environment failures that leave
+exit code 4 as the fallback. If no provider is usable after stacked was
+selected, stop with setup instructions; do not emulate stacking with plain
+pushes.
 
 ## Existing PR updates
 

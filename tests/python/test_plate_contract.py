@@ -130,6 +130,30 @@ def test_plate_stack_references_preserve_absorbed_behavior_and_safety() -> None:
         assert behavior in gh_stack
 
 
+def test_gh_stack_enablement_is_preflighted_not_discovered_on_mutation() -> None:
+    gh_stack = read("skills/plate/references/gh-stack.md")
+    skill = read("skills/plate/SKILL.md")
+    flat = " ".join(gh_stack.split())
+
+    assert "no documented preflight" not in gh_stack
+    assert 'gh api --include "repos/{owner}/{repo}/stacks"' in gh_stack
+    assert 'gh api --include "repos/{owner}/{repo}/stacks"' in skill
+    assert "run it before the first stack mutation" in flat
+    for status, verdict in (
+        ("`2xx`", "Stacked PRs enabled"),
+        ("`404`", "Repository enablement requirement"),
+        ("`401`, `403`", "Authentication or authorization failure"),
+    ):
+        assert status in gh_stack
+        assert verdict in gh_stack
+    # Exit code 4 survives as the race/late-failure fallback, not the primary
+    # enablement signal.
+    assert "fallback for races and later remote failures" in flat
+    assert "exit code 4 stays the fallback" in flat
+    assert "| 4 | API/preview unavailable |" in gh_stack
+    assert "`not-enabled` (preflight `404`)" in skill
+
+
 def test_plate_stack_flow_is_per_layer_and_metadata_is_resolved() -> None:
     skill = read("skills/plate/SKILL.md")
     provider = skill.index("Select the configured provider")

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -11,16 +12,20 @@ from pathlib import Path
 from typing import cast
 
 _TIMEOUT_SECONDS = 5
+_REMOTE_TIMEOUT_SECONDS = 10
+_STATUS_LINE = re.compile(r"^HTTP/[\d.]+\s+(\d{3})\b")
 
 
-def _run(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str] | None:
+def _run(
+    args: list[str], cwd: Path, timeout: float = _TIMEOUT_SECONDS
+) -> subprocess.CompletedProcess[str] | None:
     try:
         return subprocess.run(
             args,
             cwd=cwd,
             capture_output=True,
             text=True,
-            timeout=_TIMEOUT_SECONDS,
+            timeout=timeout,
             check=False,
         )
     except (OSError, subprocess.SubprocessError):
@@ -41,6 +46,41 @@ def _configured_status(installed: bool, configured: bool) -> str:
     if not installed:
         return "not-installed"
     return "available" if configured else "not-configured"
+
+
+def _http_status(stdout: str) -> int | None:
+    """The final HTTP status code in a `gh api --include` response, if any."""
+    codes = [
+        int(match.group(1))
+        for line in stdout.splitlines()
+        if (match := _STATUS_LINE.match(line)) is not None
+    ]
+    return codes[-1] if codes else None
+
+
+def _gh_stack_enablement(cwd: Path) -> tuple[str, bool | None]:
+    """Classify the documented read-only `gh stack` enablement preflight.
+
+    `GET /repos/{owner}/{repo}/stacks` answers 200 when Stacked PRs is enabled
+    and 404 when it is not. Every other outcome — authentication, service, or
+    an unresolvable repository — stays indeterminate so the caller keeps the
+    exit-code-4 fallback instead of reporting a false enablement verdict.
+    """
+    result = _run(
+        ["gh", "api", "--include", "repos/{owner}/{repo}/stacks"],
+        cwd,
+        timeout=_REMOTE_TIMEOUT_SECONDS,
+    )
+    status = _http_status(result.stdout) if result is not None else None
+    if status is None:
+        return "remote-check-required", None
+    if 200 <= status < 300:
+        return "available", True
+    if status == 404:
+        return "not-enabled", False
+    if status in {401, 403}:
+        return "auth-required", None
+    return "service-error", None
 
 
 def detect_stack_tools(cwd: Path) -> dict[str, object]:
@@ -73,6 +113,10 @@ def detect_stack_tools(cwd: Path) -> dict[str, object]:
         )
     )
 
+    gh_stack_status, gh_stack_signal = (
+        _gh_stack_enablement(cwd) if gh_stack_installed else ("not-installed", None)
+    )
+
     providers: dict[str, dict[str, object]] = {
         "graphite": {
             "installed": graphite_installed,
@@ -86,8 +130,8 @@ def detect_stack_tools(cwd: Path) -> dict[str, object]:
         },
         "gh-stack": {
             "installed": gh_stack_installed,
-            "repository_signal": None,
-            "status": "remote-check-required" if gh_stack_installed else "not-installed",
+            "repository_signal": gh_stack_signal,
+            "status": gh_stack_status,
         },
     }
     recommended = next(
@@ -96,7 +140,7 @@ def detect_stack_tools(cwd: Path) -> dict[str, object]:
             for name in ("graphite", "git-town")
             if providers[name]["status"] == "available"
         ),
-        "gh-stack" if gh_stack_installed else None,
+        "gh-stack" if gh_stack_installed and gh_stack_status != "not-enabled" else None,
     )
     return {"providers": providers, "recommended": recommended}
 

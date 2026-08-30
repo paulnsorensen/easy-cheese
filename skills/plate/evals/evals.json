@@ -93,6 +93,20 @@
       "files": []
     },
     {
+      "id": 14,
+      "name": "gh-stack-not-enabled",
+      "prompt": "Publish this as a stack. gh-stack is the only installed provider and its repository preflight answers 404.",
+      "expected_output": "Reads the stack-tools gh-stack status not-enabled from the read-only repos/{owner}/{repo}/stacks preflight, halts before any stack mutation, and reports the repository-enablement requirement rather than retrying or emulating a stack with plain pushes.",
+      "files": []
+    },
+    {
+      "id": 15,
+      "name": "gh-stack-preflight-auth-failure",
+      "prompt": "Publish this as a gh-stack stack; the enablement preflight answers 401.",
+      "expected_output": "Reports an authentication failure, not a repository-enablement requirement, and does not treat the non-200 response as proof that Stacked PRs is disabled.",
+      "files": []
+    },
+    {
       "id": 11,
       "name": "hard-final-state",
       "prompt": "Plate --hard and open a PR.",

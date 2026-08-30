@@ -1,8 +1,9 @@
 # `gh stack` publication
 
-Use when the `github/gh-stack` extension is installed and the repository
-accepts its remote operations. Exit code 4 means the GitHub API or preview is
-unavailable; halt and report the enablement requirement.
+Use when the `github/gh-stack` extension is installed and the enablement
+preflight below reports the repository as enabled. Exit code 4 remains the
+fallback for races and later remote failures: it means the GitHub API or
+preview is unavailable; halt and report the enablement requirement.
 
 ## Initialize and inspect
 
@@ -44,9 +45,35 @@ never use a bare single-branch push.
 - Use full `gh stack` commands; do not assume the optional `gs` alias.
 - Authenticate through `gh auth login`; the extension uses OAuth, not personal
   access tokens.
-- Detect via `gh extension list`. Repository enablement has no documented
-  preflight; translate remote exit code 4 into the API/preview failure.
+- Detect installation via `gh extension list`.
 - Resolve all local metadata with `git rev-parse --git-dir`.
+
+## Enablement preflight
+
+`GET /repos/{owner}/{repo}/stacks` is a read-only preflight: run it before the
+first stack mutation instead of discovering enablement from a failed write.
+
+```bash
+gh api --include "repos/{owner}/{repo}/stacks"
+```
+
+`--include` prints the status line on success and failure alike, so classify
+the response by status rather than by exit code:
+
+| Status | Meaning | Response |
+| --- | --- | --- |
+| `2xx` | Stacked PRs enabled | Proceed with the provider |
+| `404` | Repository enablement requirement | Halt; report that Stacked PRs must be enabled |
+| `401`, `403` | Authentication or authorization failure | Halt; report auth, not enablement |
+| other | Service failure | Halt; preserve the status and stderr |
+| none | Indeterminate — no resolvable repository, network failure, or timeout | Proceed; exit code 4 stays the fallback |
+
+`python3 skills/plate/scripts/plate.pyz stack-tools` runs this preflight and
+reports it as the `gh-stack` `status`: `available`, `not-enabled`,
+`auth-required`, `service-error`, `remote-check-required` (indeterminate), or
+`not-installed`. `repository_signal` is `true` only for a 2xx, `false` only for
+a 404, and `null` when the probe could not decide. A `not-enabled` repository
+is never recommended.
 
 ## Command map
 
