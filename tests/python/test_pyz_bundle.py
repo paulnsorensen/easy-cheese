@@ -47,7 +47,7 @@ SKILL_SUBCOMMANDS = {
         "artifact-path", "age-route", "baseline", "phase-decision", "milknado", "mode", "worktree",
         "validate-decomposition", "validate-manifest", "validate-pr-plan", "manifest-update",
         "wiring-topo-sort", "pr-plan-to-branches", "curd-block",
-        "normalize", "validate", "red-gate", "slugify", "write-handoff-artifact",
+        "normalize", "validate", "slugify", "write-handoff-artifact",
         "read-handoff-slug", "findings-cli", "gates-cli", "paths-cli",
         "handoff-cli", "render-html",
     ],
@@ -55,7 +55,6 @@ SKILL_SUBCOMMANDS = {
         "slugify", "write-handoff-artifact", "read-handoff-slug", "findings-cli",
         "gates-cli", "paths-cli", "handoff-cli", "render-html",
     ],
-    "cut": ["red-gate"],
     "wheypoint": ["commit", "resolve", "show", "lint"],
     "easy-cheese-setup": ["global", "local", "doctor"],
     "age": [
@@ -65,7 +64,7 @@ SKILL_SUBCOMMANDS = {
     ],
     "hard-cheese": ["append-attempt", "freshness-check"],
     "pasteurize": ["debug-tag-sweep", "repro-rerun", "pasteurize-route"],
-    "press": ["press-route", "red-gate"],
+    "press": ["press-route"],
 }
 
 # Every skill that registers the durable-corpus resolver shim. One shared source
@@ -102,7 +101,7 @@ def bundles(tmp_path_factory: pytest.TempPathFactory) -> Path:
 def test_default_batch_builds_every_registered_skill(tmp_path: Path) -> None:
     assert build_pyz.main(["build_pyz.py", "--out-dir", str(tmp_path)]) == 0
     expected = set(build_pyz.SKILLS)
-    assert len(expected) == 14
+    assert len(expected) == 13
     assert {path.stem for path in tmp_path.glob("*.pyz")} == expected
     assert {path.name for path in tmp_path.glob("*.pyz")} == {f"{skill}.pyz" for skill in expected}
 
@@ -390,196 +389,17 @@ def test_briesearch_bundle_uses_internal_distributions(bundles: Path) -> None:
 
 
 
-def test_cut_bundle_carries_red_gate_and_schema_runtime(bundles: Path) -> None:
-    names = _bundle_members(bundles / "cut.pyz")
-    assert {
-        "easy_cheese/shared/cut/cut_assertion_probe.py",
-        "easy_cheese/shared/cut/gate_receipts.py",
-        "easy_cheese/shared/cut/red_gate.py",
-    }.issubset(names)
-    assert "easy_cheese_schemas/__init__.py" in names
-    assert "easy_cheese_schemas/gates.py" in names
-    assert "attrs-26.1.0.dist-info/METADATA" in names
-    assert "cattrs/converters.py" in names
-    assert "easy_cheese/shared/taste_test.py" in names
-
-
-
-
-def test_cut_bundle_runs_assertion_probe_without_source_imports(
-    bundles: Path,
-    tmp_path: Path,
-) -> None:
-    package_root = _extract_site_packages(bundles / "cut.pyz", tmp_path / "bundle")
-    read_fd, write_fd = os.pipe()
-    environment = os.environ.copy()
-    environment["PYTHONPATH"] = str(package_root)
-    try:
-        result = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "easy_cheese.shared.cut.cut_assertion_probe",
-                str(write_fd),
-                "code",
-                sys.executable,
-                "import sys; "
-                + "assert sys.path[0] == ''; "
-                + "raise AssertionError('outer witness')",
-            ],
-            cwd=tmp_path,
-            capture_output=True,
-            text=True,
-            shell=False,
-            pass_fds=(write_fd,),
-            env=environment,
-            timeout=30,
-        )
-    finally:
-        os.close(write_fd)
-    try:
-        event = cast(dict[str, object], json.loads(os.read(read_fd, 513)))
-    finally:
-        os.close(read_fd)
-
-    assert result.returncode == 1
-    assert "AssertionError: outer witness" in result.stderr
-    assert event == {
-        "assertion_origin": True,
-        "complete": True,
-        "event": "cut.assertion-origin",
-        "runner": "code",
-        "schema_version": 1,
-    }
-
-
-def test_source_red_gate_uses_package_probe_over_top_level_shadow(
-    tmp_path: Path,
-) -> None:
-    _ = (tmp_path / "cut_assertion_probe.py").write_text(
-        "raise RuntimeError('top-level probe shadow')\n",
-        encoding="utf-8",
-    )
-    environment = os.environ.copy()
-    environment["PYTHONPATH"] = os.pathsep.join(
-        [
-            str(tmp_path),
-            str(REPO_ROOT / "src"),
-        ]
-    )
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-c",
-            "from easy_cheese.shared.cut import red_gate; "
-            + "print(red_gate.cut_assertion_probe.__name__)",
-        ],
-        cwd=tmp_path,
-        capture_output=True,
-        text=True,
-        env=environment,
-    )
-
-    assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == "easy_cheese.shared.cut.cut_assertion_probe"
-
-
-def test_cut_bundle_ignores_adjacent_probe_shadow(
-    bundles: Path,
-    tmp_path: Path,
-) -> None:
-    pyz = tmp_path / "cut.pyz"
-    _ = pyz.write_bytes((bundles / "cut.pyz").read_bytes())
-    package_root = _extract_site_packages(pyz, tmp_path / "bundle")
-    _ = (tmp_path / "cut_assertion_probe.py").write_text(
-        "raise RuntimeError('adjacent probe shadow')\n",
-        encoding="utf-8",
-    )
-    run_dir = tmp_path / "run"
-    run_dir.mkdir()
-    environment = os.environ.copy()
-    _ = environment.pop("PYTHONPATH", None)
-    environment["PYTHONPATH"] = str(package_root)
-
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-c",
-            "from easy_cheese.shared.cut import red_gate; "
-            + "print(red_gate.cut_assertion_probe.__file__)",
-        ],
-        cwd=run_dir,
-        capture_output=True,
-        text=True,
-        env=environment,
-    )
-    origin = result.stdout.strip()
-
-    assert result.returncode == 0, result.stderr
-    assert origin.startswith(f"{package_root}{os.sep}")
-    assert origin.endswith(f"{os.sep}cut_assertion_probe.py")
-
-
-def test_cut_bundle_probe_child_ignores_cwd_shadow(
-    bundles: Path,
-    tmp_path: Path,
-) -> None:
-    pyz = tmp_path / "cut.pyz"
-    _ = pyz.write_bytes((bundles / "cut.pyz").read_bytes())
-    package_root = _extract_site_packages(pyz, tmp_path / "bundle")
-    _ = (tmp_path / "cut_assertion_probe.py").write_text(
-        "TARGET_LOCAL = True\n",
-        encoding="utf-8",
-    )
-    environment = os.environ.copy()
-    _ = environment.pop("PYTHONPATH", None)
-    environment["PYTHONPATH"] = str(package_root)
-    child_source = (
-        "import cut_assertion_probe; "
-        "assert cut_assertion_probe.TARGET_LOCAL is True; "
-        "raise AssertionError('bundle child witness')"
-    )
-    parent_source = (
-        "import pathlib, sys; from easy_cheese.shared.cut import red_gate; "
-        f"run = red_gate._run_case([sys.executable, '-c', {child_source!r}], "
-        "pathlib.Path.cwd()); "
-        "assert run.error is None, run.output; "
-        "assert run.returncode == 1, run; "
-        "assert run.assertion_origin is True"
-    )
-
-    result = subprocess.run(
-        [sys.executable, "-P", "-c", parent_source],
-        cwd=tmp_path,
-        capture_output=True,
-        text=True,
-        env=environment,
-    )
-
-    assert result.returncode == 0, result.stderr
-
-
-def test_cut_bundle_exposes_red_gate_subcommands(bundles: Path) -> None:
-    result = _run(bundles / "cut.pyz", "red-gate")
-    assert result.returncode == 2
-    usage = result.stdout + result.stderr
-    assert all(
-        command in usage for command in ("contracts", "begin", "issue", "validate")
-    )
-
-
-def test_press_bundle_loads_router_and_requires_phase_token(bundles: Path) -> None:
+def test_press_bundle_loads_router_and_rejects_receipt_keys(bundles: Path) -> None:
     result = _run(
         bundles / "press.pyz",
         "press-route",
-        stdin='{"outcome": "green", "current_receipt": "press-cut.json"}',
+        stdin='{"outcome": "green", "current_receipt": "press.json"}',
     )
 
     assert result.returncode == 1
     assert (
         result.stderr.strip()
-        == "ERROR: request must contain exactly outcome, current_receipt, "
-        + "phase_token_ref, and phase_token_sha256"
+        == "ERROR: request must contain exactly outcome and repair_cycles"
     )
 
 
@@ -1293,17 +1113,6 @@ def test_age_bundle_carries_html_report_and_findings_imports(bundles: Path) -> N
     content = _bundle_members(age_pyz)
     assert "easy_cheese/skills/age/age_html_report.py" in content
     assert "easy_cheese/shared/findings.py" in content
-
-
-def test_press_bundle_carries_and_imports_assertion_probe(bundles: Path) -> None:
-    press_pyz = bundles / "press.pyz"
-    names = _bundle_members(press_pyz)
-    assert "easy_cheese/shared/cut/cut_assertion_probe.py" in names
-
-    result = _run(press_pyz, "red-gate")
-    combined = result.stdout + result.stderr
-    assert result.returncode == 2, combined
-    assert "ModuleNotFoundError" not in combined
 
 
 def test_document_rules_projection_matches_checked_in_source() -> None:
