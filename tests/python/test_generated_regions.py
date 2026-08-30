@@ -119,7 +119,7 @@ def test_intertwine_lists_a_real_registered_phase_transition_row() -> None:
 # registry through its own pipeline, review the diff, then recompute:
 #   python3 -c "import hashlib; print(hashlib.sha256(open(PATH, 'rb').read()).hexdigest())"
 _PHASE_REGISTRY_COMPILER_DIGEST = (
-    "393f0dd5f084de9565b485767b933bab5a828a2907655c3e535c63666b87f61f"
+    "181d0f6aea78a6ff7ce82ba3b54d3c582040eee364e8789ef431a366ea3bc16e"
 )
 _COMPILED_PHASE_REGISTRY_DIGEST = (
     "5fb1a336e8eb7ee23e5ab44916808341cf6adf972e92a14ac5521c66f41eec30"

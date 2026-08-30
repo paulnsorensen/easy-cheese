@@ -3,9 +3,10 @@ from __future__ import annotations
 import re
 from collections.abc import Callable, Mapping
 from enum import Enum
-from typing import Any, ClassVar
+from collections.abc import Iterable
+from typing import ClassVar, Protocol, TypeVar, cast
 
-from attrs import Attribute, define, field, validators
+from attrs import define, field, validators
 
 _attrs_field = field
 
@@ -26,7 +27,20 @@ _MEDIA_TYPE_RE = re.compile(
 )
 _URI_RE = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:.+")
 
-Validator = Callable[[object, Attribute, object], None]
+class _NamedAttribute(Protocol):
+    name: str
+
+
+class _HasUncertaintyScope(Protocol):
+    @property
+    def scope(self) -> UncertaintyScope: ...
+
+
+_ItemT = TypeVar("_ItemT")
+_C = TypeVar("_C")
+_ClsT = TypeVar("_ClsT", bound=type)
+
+Validator = Callable[[object, _NamedAttribute, object], None]
 
 _CONTRACT_MARKER = "__contract_slug__"
 
@@ -37,11 +51,11 @@ def _validate_contract_slug(slug: object) -> str:
     return slug
 
 
-def contract(slug: str) -> Callable[[type], type]:
+def contract(slug: str) -> Callable[[_ClsT], _ClsT]:
     """Mark a contract class with its canonical schema slug."""
     validated_slug = _validate_contract_slug(slug)
 
-    def decorate(cls: type) -> type:
+    def decorate(cls: _ClsT) -> _ClsT:
         setattr(cls, _CONTRACT_MARKER, validated_slug)
         return cls
 
@@ -51,10 +65,10 @@ def contract(slug: str) -> Callable[[type], type]:
 def _registered_contracts() -> tuple[tuple[str, type], ...]:
     """Return marked contract classes in deterministic slug order."""
     pairs: list[tuple[str, type]] = []
-    for value in globals().values():
+    for value in cast(Iterable[object], globals().values()):
         if not isinstance(value, type):
             continue
-        slug = getattr(value, _CONTRACT_MARKER, None)
+        slug = cast(object, getattr(value, _CONTRACT_MARKER, None))
         if slug is None:
             continue
         pairs.append((_validate_contract_slug(slug), value))
@@ -73,11 +87,11 @@ def registered_contracts() -> tuple[tuple[str, type], ...]:
 _DOCUMENT_CONTRACT_MARKER = "__document_contract_slug__"
 
 
-def document_contract(slug: str) -> Callable[[type], type]:
+def document_contract(slug: str) -> Callable[[_ClsT], _ClsT]:
     """Mark a prose document-format contract class with its canonical schema slug."""
     validated_slug = _validate_contract_slug(slug)
 
-    def decorate(cls: type) -> type:
+    def decorate(cls: _ClsT) -> _ClsT:
         setattr(cls, _DOCUMENT_CONTRACT_MARKER, validated_slug)
         return cls
 
@@ -87,10 +101,10 @@ def document_contract(slug: str) -> Callable[[type], type]:
 def _registered_document_contracts() -> tuple[tuple[str, type], ...]:
     """Return marked document-contract classes in deterministic slug order."""
     pairs: list[tuple[str, type]] = []
-    for value in globals().values():
+    for value in cast(Iterable[object], globals().values()):
         if not isinstance(value, type):
             continue
-        slug = getattr(value, _DOCUMENT_CONTRACT_MARKER, None)
+        slug = cast(object, getattr(value, _DOCUMENT_CONTRACT_MARKER, None))
         if slug is None:
             continue
         pairs.append((_validate_contract_slug(slug), value))
@@ -108,11 +122,11 @@ def registered_document_contracts() -> tuple[tuple[str, type], ...]:
 
 def schema_constraints(
     *rules: Mapping[str, object], **simple: object
-) -> Callable[[object], object]:
+) -> Callable[[_C], _C]:
     """Attach JSON Schema constraints to a validator or attrs model."""
     declarations = (*map(dict, rules), *([simple] if simple else []))
 
-    def decorate(target: object) -> object:
+    def decorate(target: _C) -> _C:
         if isinstance(target, type):
             setattr(target, "__schema_constraints__", declarations)
         else:
@@ -125,6 +139,10 @@ def schema_constraints(
         return target
 
     return decorate
+
+
+def _constraints_of(target: object) -> Mapping[str, object]:
+    return cast(Mapping[str, object], getattr(target, "__schema_constraints__"))
 
 
 def _if_equals(
@@ -249,7 +267,7 @@ class WriterViewKind(str, Enum):
 
 @schema_constraints(minLength=1, maxLength=MAX_TEXT_LENGTH)
 def _bounded_string(
-    _instance: object, attribute: Attribute[Any], value: object
+    _instance: object, attribute: _NamedAttribute, value: object
 ) -> None:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{attribute.name} must be a non-empty string")
@@ -261,7 +279,7 @@ def _bounded_string(
 
 @schema_constraints(minLength=1, maxLength=MAX_CONTEXT_TEXT_LENGTH)
 def _context_string(
-    _instance: object, attribute: Attribute[Any], value: object
+    _instance: object, attribute: _NamedAttribute, value: object
 ) -> None:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{attribute.name} must be a non-empty string")
@@ -271,32 +289,32 @@ def _context_string(
         )
 
 
-@schema_constraints(_bounded_string.__schema_constraints__)
+@schema_constraints(_constraints_of(_bounded_string))
 def _optional_string(
-    instance: object, attribute: Attribute[Any], value: object
+    instance: object, attribute: _NamedAttribute, value: object
 ) -> None:
     if value is not None:
         _bounded_string(instance, attribute, value)
 
 
 @schema_constraints(pattern=_ID_RE.pattern, minLength=1, maxLength=128)
-def _identifier(_instance: object, attribute: Attribute[Any], value: object) -> None:
+def _identifier(_instance: object, attribute: _NamedAttribute, value: object) -> None:
     if not isinstance(value, str) or _ID_RE.fullmatch(value) is None:
         raise ValueError(
             f"{attribute.name} must be an opaque identifier matching {_ID_RE.pattern}"
         )
 
 
-@schema_constraints(_identifier.__schema_constraints__)
+@schema_constraints(_constraints_of(_identifier))
 def _optional_identifier(
-    instance: object, attribute: Attribute[Any], value: object
+    instance: object, attribute: _NamedAttribute, value: object
 ) -> None:
     if value is not None:
         _identifier(instance, attribute, value)
 
 
 @schema_constraints(pattern=_DIGEST_RE.pattern)
-def _digest(_instance: object, attribute: Attribute[Any], value: object) -> None:
+def _digest(_instance: object, attribute: _NamedAttribute, value: object) -> None:
     if not isinstance(value, str) or _DIGEST_RE.fullmatch(value) is None:
         raise ValueError(
             f"{attribute.name} must be sha256: followed by 64 lowercase hexadecimal characters"
@@ -305,7 +323,7 @@ def _digest(_instance: object, attribute: Attribute[Any], value: object) -> None
 
 @schema_constraints(minimum=1)
 def _positive_integer(
-    _instance: object, attribute: Attribute[Any], value: object
+    _instance: object, attribute: _NamedAttribute, value: object
 ) -> None:
     if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
         raise ValueError(f"{attribute.name} must be a positive integer")
@@ -313,7 +331,7 @@ def _positive_integer(
 
 @schema_constraints(minimum=0, maximum=MAX_ARTIFACT_BYTES)
 def _artifact_size(
-    instance: object, attribute: Attribute[Any], value: object
+    instance: object, attribute: _NamedAttribute, value: object
 ) -> None:
     _non_negative_integer(instance, attribute, value)
     assert isinstance(value, int)
@@ -325,7 +343,7 @@ def _artifact_size(
 
 @schema_constraints(minimum=0)
 def _non_negative_integer(
-    _instance: object, attribute: Attribute[Any], value: object
+    _instance: object, attribute: _NamedAttribute, value: object
 ) -> None:
     if not isinstance(value, int) or isinstance(value, bool) or value < 0:
         raise ValueError(f"{attribute.name} must be a non-negative integer")
@@ -334,7 +352,7 @@ def _non_negative_integer(
  
 @schema_constraints(pattern=_VERSION_RE.pattern, minLength=1)
 def _version_component(
-    _instance: object, attribute: Attribute[Any], value: object
+    _instance: object, attribute: _NamedAttribute, value: object
 ) -> None:
     if not isinstance(value, str) or _VERSION_RE.fullmatch(value) is None:
         raise ValueError(
@@ -342,24 +360,26 @@ def _version_component(
         )
 
 
-def _tuple_sequence(value: object) -> tuple[object, ...]:
+def _tuple_sequence(value: list[_ItemT] | tuple[_ItemT, ...]) -> tuple[_ItemT, ...]:
     if isinstance(value, tuple):
         return value
-    if isinstance(value, list):
+    if isinstance(value, list):  # pyright: ignore[reportUnnecessaryIsInstance]
         return tuple(value)
-    raise TypeError("collection fields must be provided as a list or tuple")
+    raise TypeError(  # pyright: ignore[reportUnreachable]
+        "collection fields must be provided as a list or tuple"
+    )
 
 
 @schema_constraints(pattern=_URI_RE.pattern, minLength=1)
-def _uri(_instance: object, attribute: Attribute[Any], value: object) -> None:
+def _uri(_instance: object, attribute: _NamedAttribute, value: object) -> None:
     if not isinstance(value, str) or _URI_RE.fullmatch(value) is None:
         raise ValueError(f"{attribute.name} must be an absolute URI")
 
 
 
 
-@schema_constraints(_uri.__schema_constraints__)
-def _optional_uri(instance: object, attribute: Attribute[Any], value: object) -> None:
+@schema_constraints(_constraints_of(_uri))
+def _optional_uri(instance: object, attribute: _NamedAttribute, value: object) -> None:
     if value is not None:
         _uri(instance, attribute, value)
 
@@ -367,15 +387,15 @@ def _optional_uri(instance: object, attribute: Attribute[Any], value: object) ->
 
 
 @schema_constraints(pattern=_MEDIA_TYPE_RE.pattern, minLength=3)
-def _media_type(_instance: object, attribute: Attribute[Any], value: object) -> None:
+def _media_type(_instance: object, attribute: _NamedAttribute, value: object) -> None:
     if not isinstance(value, str) or _MEDIA_TYPE_RE.fullmatch(value) is None:
         raise ValueError(f"{attribute.name} must be a valid media type")
 
 
 
 
-@schema_constraints(_bounded_string.__schema_constraints__)
-def _scope_path(_instance: object, attribute: Attribute[Any], value: object) -> None:
+@schema_constraints(_constraints_of(_bounded_string))
+def _scope_path(_instance: object, attribute: _NamedAttribute, value: object) -> None:
     _bounded_string(_instance, attribute, value)
     assert isinstance(value, str)
     if value.startswith("/") or value in {".", ".."} or ".." in value.split("/"):
@@ -383,28 +403,30 @@ def _scope_path(_instance: object, attribute: Attribute[Any], value: object) -> 
 
 
 def _list_of(
-    expected: type,
+    expected: type[_ItemT],
     *,
     non_empty: bool = False,
     limit: int = MAX_COLLECTION_ITEMS,
 ) -> Validator:
-    def validate(_instance: object, attribute: Attribute[Any], value: object) -> None:
+    def validate(_instance: object, attribute: _NamedAttribute, value: object) -> None:
         if not isinstance(value, tuple):
             raise ValueError(f"{attribute.name} must be a list")
-        if non_empty and not value:
+        items = cast(tuple[object, ...], value)
+        if non_empty and not items:
             raise ValueError(f"{attribute.name} must be a non-empty list")
-        if len(value) > limit:
+        if len(items) > limit:
             raise ValueError(f"{attribute.name} must be at most {limit} items")
-        for index, item in enumerate(value, start=1):
+        for index, item in enumerate(items, start=1):
             if not isinstance(item, expected):
                 raise ValueError(
                     f"{attribute.name}[{index}] must be {expected.__name__}"
                 )
 
-    validate.__schema_constraints__ = {
-        "maxItems": limit,
-        **({"minItems": 1} if non_empty else {}),
-    }
+    setattr(
+        validate,
+        "__schema_constraints__",
+        {"maxItems": limit, **({"minItems": 1} if non_empty else {})},
+    )
     return validate
 
 
@@ -419,17 +441,18 @@ def _string_list(
         raise ValueError("path and item_validator cannot be combined")
     element_validator = item_validator or (_scope_path if path else _bounded_string)
 
-    def validate(instance: object, attribute: Attribute[Any], value: object) -> None:
+    def validate(instance: object, attribute: _NamedAttribute, value: object) -> None:
         if not isinstance(value, tuple):
             raise ValueError(f"{attribute.name} must be a list")
-        if non_empty and not value:
+        items = cast(tuple[object, ...], value)
+        if non_empty and not items:
             raise ValueError(f"{attribute.name} must be a non-empty list")
-        if len(value) > limit:
+        if len(items) > limit:
             raise ValueError(f"{attribute.name} must be at most {limit} items")
         seen: set[str] = set()
-        for index, item in enumerate(value, start=1):
+        for index, item in enumerate(items, start=1):
             item_attribute = _ListItemAttribute(f"{attribute.name}[{index}]")
-            element_validator(instance, item_attribute, item)
+            _ = element_validator(instance, item_attribute, item)
             assert isinstance(item, str)
             if item in seen:
                 raise ValueError(
@@ -437,13 +460,19 @@ def _string_list(
                 )
             seen.add(item)
 
-    validate.__schema_constraints__ = {
-        "maxItems": limit,
-        "uniqueItems": True,
-        **({"minItems": 1} if non_empty else {}),
-    }
-    validate.__schema_item_constraints__ = getattr(
-        element_validator, "__schema_constraints__", {}
+    setattr(
+        validate,
+        "__schema_constraints__",
+        {
+            "maxItems": limit,
+            "uniqueItems": True,
+            **({"minItems": 1} if non_empty else {}),
+        },
+    )
+    setattr(
+        validate,
+        "__schema_item_constraints__",
+        getattr(element_validator, "__schema_constraints__", {}),
     )
     return validate
 
@@ -486,13 +515,13 @@ def _context_string_list(
 
 class _ListItemAttribute:
     def __init__(self, name: str) -> None:
-        self.name = name
+        self.name: str = name
 
 
 def _unique_by(attribute_name: str, values: tuple[object, ...]) -> str | None:
     seen: set[object] = set()
     for value in values:
-        item = getattr(value, attribute_name)
+        item = cast(object, getattr(value, attribute_name))
         if item in seen:
             return str(item)
         seen.add(item)
@@ -528,8 +557,8 @@ class SourceLocation:
         default=None, validator=validators.optional(_positive_integer)
     )
 
-    @end_column.validator
-    def _validate_bounds(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
+    @end_column.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue, reportOptionalMemberAccess]
+    def _validate_bounds(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
         if self.end_line < self.start_line:
             raise ValueError("end_line must not precede start_line")
         if self.end_column is not None and self.start_column is None:
@@ -565,8 +594,8 @@ class EvidenceRef:
     )
     summary: str | None = field(default=None, validator=_optional_string)
 
-    @summary.validator
-    def _validate_location(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
+    @summary.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
+    def _validate_location(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
         if (
             self.location is not None
             and self.location.artifact_id != self.artifact.artifact_id
@@ -619,8 +648,8 @@ class IdentityLineage:
         validator=_identifier_list(limit=MAX_CONTEXT_ITEMS),
     )
 
-    @source_curd_ids.validator
-    def _validate_action(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
+    @source_curd_ids.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
+    def _validate_action(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
         count = len(self.source_curd_ids)
         if self.identity_action is IdentityAction.NEW and count:
             raise ValueError("new lineage must not name source curds")
@@ -643,8 +672,8 @@ class BoundedScope:
         validator=_string_list(limit=MAX_SCOPE_PATHS, path=True),
     )
 
-    @excluded_paths.validator
-    def _validate_exclusions(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
+    @excluded_paths.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
+    def _validate_exclusions(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
         if set(self.paths) & set(self.excluded_paths):
             raise ValueError("paths and excluded_paths must not overlap")
         if len(self.paths) + len(self.excluded_paths) > MAX_SCOPE_PATHS:
@@ -696,8 +725,8 @@ class BoundedContext:
         validator=_context_string_list(limit=MAX_CONTEXT_ITEMS),
     )
 
-    @invariants.validator
-    def _validate_context(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
+    @invariants.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
+    def _validate_context(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
         if not (self.shared_inputs or self.constraints or self.invariants):
             raise ValueError("bounded context must not be empty")
         duplicate = _unique_by("artifact_id", self.shared_inputs)
@@ -731,8 +760,8 @@ class SemanticCurd:
     )
     lineage: IdentityLineage = field(validator=validators.instance_of(IdentityLineage))
 
-    @lineage.validator
-    def _validate_curd(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
+    @lineage.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
+    def _validate_curd(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
         if self.curd_id in self.dependencies:
             raise ValueError("dependencies must not contain the curd's own curd_id")
         duplicate_input = _unique_by("artifact_id", self.inputs)
@@ -756,22 +785,22 @@ class SemanticCurd:
     uniqueItems=True,
 )
 def _validate_plan_curds(
-    _instance: object, attribute: Attribute[Any], value: object
+    _instance: object, attribute: _NamedAttribute, value: object
 ) -> None:
     _list_of(SemanticCurd, non_empty=True)(_instance, attribute, value)
     assert isinstance(value, tuple)
-    duplicate_curd = _unique_by("curd_id", value)
+    curds = cast(tuple[SemanticCurd, ...], value)
+    duplicate_curd = _unique_by("curd_id", curds)
     if duplicate_curd is not None:
         raise ValueError(f"curd_id {duplicate_curd!r} must be unique")
 
-    curd_ids = {curd.curd_id for curd in value}
+    curd_ids = {curd.curd_id for curd in curds}
     criterion_ids: set[str] = set()
-    for index, curd in enumerate(value, start=1):
+    for index, curd in enumerate(curds, start=1):
         for dependency in curd.dependencies:
             if dependency not in curd_ids:
                 raise ValueError(
-                    f"curds[{index}].dependencies references undeclared curd "
-                    f"{dependency!r}"
+                    f"curds[{index}].dependencies references undeclared curd {dependency!r}"
                 )
         for item in curd.criteria:
             if item.criterion_id in criterion_ids:
@@ -780,7 +809,7 @@ def _validate_plan_curds(
                 )
             criterion_ids.add(item.criterion_id)
 
-    dependencies = {curd.curd_id: curd.dependencies for curd in value}
+    dependencies = {curd.curd_id: curd.dependencies for curd in curds}
     visiting: set[str] = set()
     visited: set[str] = set()
 
@@ -821,8 +850,8 @@ class CurdPlan:
         validator=validators.optional(validators.instance_of(SourcePlanRef)),
     )
 
-    @parent_plan_ref.validator
-    def _validate_parent(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
+    @parent_plan_ref.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue, reportOptionalMemberAccess]
+    def _validate_parent(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
         if (
             self.parent_plan_ref is not None
             and self.parent_plan_ref.plan_id == self.plan_id
@@ -874,8 +903,8 @@ class PlannerRequest:
         validator=validators.optional(validators.instance_of(SourcePlanRef)),
     )
 
-    @source_plan_ref.validator
-    def _validate_kind(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
+    @source_plan_ref.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue, reportOptionalMemberAccess]
+    def _validate_kind(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
         if (
             self.kind is PlannerRequestKind.DECOMPOSE
             and self.source_plan_ref is not None
@@ -893,7 +922,7 @@ class PlannerRequest:
 def _validate_planner_disposition(
     disposition: PlannerDisposition,
     plan: object | None,
-    unresolved_work: tuple[Any, ...],
+    unresolved_work: tuple[_HasUncertaintyScope, ...],
     reason: str | None,
     *,
     label: str,
@@ -1027,8 +1056,8 @@ class PlannerResult:
     )
     reason: str | None = field(default=None, validator=_optional_string)
 
-    @reason.validator
-    def _validate_disposition(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
+    @reason.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
+    def _validate_disposition(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
         _validate_planner_disposition(
             self.disposition,
             self.plan,
@@ -1072,8 +1101,8 @@ class ReviewCoverage:
     )
     reason: str | None = field(default=None, validator=_optional_string)
 
-    @reason.validator
-    def _validate_disposition(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
+    @reason.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
+    def _validate_disposition(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
         if self.disposition is CoverageDisposition.NOT_COVERED and not self.reason:
             raise ValueError("not_covered review coverage must include a reason")
         if self.disposition is CoverageDisposition.COVERED and self.reason is not None:
@@ -1156,8 +1185,8 @@ class ReviewResult:
     )
     reason: str | None = field(default=None, validator=_optional_string)
 
-    @reason.validator
-    def _validate_disposition(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
+    @reason.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
+    def _validate_disposition(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
         duplicate_target = _unique_by("target", self.coverage)
         if duplicate_target is not None:
             raise ValueError(f"coverage target {duplicate_target!r} must be unique")
@@ -1248,8 +1277,8 @@ class Reproduction:
         validator=_list_of(EvidenceRef),
     )
 
-    @evidence.validator
-    def _validate_status(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
+    @evidence.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
+    def _validate_status(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
         if self.status is ReproductionDisposition.REPRODUCED:
             if self.observed is None:
                 raise ValueError("reproduced result must describe what was observed")
@@ -1289,8 +1318,8 @@ class DiagnosisHypothesis:
         validator=_list_of(EvidenceRef),
     )
 
-    @evidence.validator
-    def _validate_disposition(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
+    @evidence.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
+    def _validate_disposition(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
         if (
             self.disposition is not HypothesisDisposition.UNRESOLVED
             and not self.evidence
@@ -1395,8 +1424,8 @@ class DiagnosisResult:
     )
     reason: str | None = field(default=None, validator=_optional_string)
 
-    @reason.validator
-    def _validate_disposition(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
+    @reason.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
+    def _validate_disposition(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
         duplicate = _unique_by("hypothesis_id", self.hypotheses)
         if duplicate is not None:
             raise ValueError(f"hypothesis_id {duplicate!r} must be unique")
@@ -1473,8 +1502,8 @@ class CriterionResult:
     )
     reason: str | None = field(default=None, validator=_optional_string)
 
-    @reason.validator
-    def _validate_disposition(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
+    @reason.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
+    def _validate_disposition(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
         if (
             self.disposition
             in {
@@ -1553,8 +1582,8 @@ class CurdResult:
         factory=tuple, converter=_tuple_sequence, validator=_string_list()
     )
 
-    @runtime_refs.validator
-    def _validate_result(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
+    @runtime_refs.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
+    def _validate_result(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
         result_ids = [row.criterion_id for row in self.criterion_results]
         if len(result_ids) != len(set(result_ids)):
             raise ValueError("criterion_results must contain one row per criterion_id")
@@ -1594,8 +1623,8 @@ class PhaseContract:
         converter=_tuple_sequence, validator=_list_of(PhaseDestination, non_empty=True)
     )
 
-    @outputs.validator
-    def _validate_routes(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
+    @outputs.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
+    def _validate_routes(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
         routes = {
             (route.destination, route.payload_schema_uri) for route in self.outputs
         }
@@ -1630,8 +1659,8 @@ class SourceLocationWriterView:
         default=None, validator=validators.optional(_positive_integer)
     )
 
-    @end_column.validator
-    def _validate_bounds(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
+    @end_column.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue, reportOptionalMemberAccess]
+    def _validate_bounds(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
         if self.end_line < self.start_line:
             raise ValueError("end_line must not precede start_line")
         if self.end_column is not None and self.start_column is None:
@@ -1664,8 +1693,8 @@ class BoundedContextWriterView:
         validator=_context_string_list(limit=MAX_CONTEXT_ITEMS),
     )
 
-    @invariants.validator
-    def _validate_context(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
+    @invariants.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
+    def _validate_context(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
         if not (self.shared_input_keys or self.constraints or self.invariants):
             raise ValueError("bounded context must not be empty")
 
@@ -1729,8 +1758,8 @@ class PlannerResultWriterView:
     )
     reason: str | None = field(default=None, validator=_optional_string)
 
-    @reason.validator
-    def _validate_disposition(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
+    @reason.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
+    def _validate_disposition(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
         _validate_planner_disposition(
             self.disposition,
             self.plan,
@@ -1776,8 +1805,8 @@ class ReviewResultWriterView:
     )
     reason: str | None = field(default=None, validator=_optional_string)
 
-    @reason.validator
-    def _validate_disposition(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
+    @reason.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
+    def _validate_disposition(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
         if self.disposition is ReviewDisposition.CLEAN and self.findings:
             raise ValueError("clean review writer view must not include findings")
         if self.disposition is ReviewDisposition.FINDINGS and not self.findings:
@@ -1824,8 +1853,8 @@ class ReproductionWriterView:
         factory=tuple, converter=_tuple_sequence, validator=_identifier_list()
     )
 
-    @evidence_keys.validator
-    def _validate_status(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
+    @evidence_keys.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
+    def _validate_status(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
         if self.status is ReproductionDisposition.REPRODUCED:
             if self.observed is None:
                 raise ValueError(
@@ -1850,8 +1879,8 @@ class DiagnosisHypothesisWriterView:
         factory=tuple, converter=_tuple_sequence, validator=_identifier_list()
     )
 
-    @evidence_keys.validator
-    def _validate_disposition(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
+    @evidence_keys.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
+    def _validate_disposition(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
         if (
             self.disposition is not HypothesisDisposition.UNRESOLVED
             and not self.evidence_keys
@@ -1900,8 +1929,8 @@ class DiagnosisResultWriterView:
     )
     reason: str | None = field(default=None, validator=_optional_string)
 
-    @reason.validator
-    def _validate_disposition(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
+    @reason.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
+    def _validate_disposition(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
         if self.disposition is DiagnosisDisposition.CONFIRMED:
             if self.reproduction.status is not ReproductionDisposition.REPRODUCED:
                 raise ValueError(
@@ -1918,13 +1947,11 @@ class DiagnosisResultWriterView:
             return
         if self.confirmed_cause is not None:
             raise ValueError(
-                f"{self.disposition.value} diagnosis writer view must not include "
-                "a confirmed cause"
+                f"{self.disposition.value} diagnosis writer view must not include a confirmed cause"
             )
         if self.regression_seam is not None:
             raise ValueError(
-                f"{self.disposition.value} diagnosis writer view must not identify "
-                "a regression seam"
+                f"{self.disposition.value} diagnosis writer view must not identify a regression seam"
             )
         if self.disposition is DiagnosisDisposition.INCONCLUSIVE:
             if not self.unresolved_evidence_keys:
@@ -1935,8 +1962,7 @@ class DiagnosisResultWriterView:
         if self.disposition is DiagnosisDisposition.NOT_REPRODUCED:
             if self.reproduction.status is not ReproductionDisposition.NOT_REPRODUCED:
                 raise ValueError(
-                    "not_reproduced diagnosis writer view requires a "
-                    "not_reproduced result"
+                    "not_reproduced diagnosis writer view requires a not_reproduced result"
                 )
             return
         if not self.reason:
@@ -1956,8 +1982,8 @@ class CriterionResultWriterView:
     )
     reason: str | None = field(default=None, validator=_optional_string)
 
-    @reason.validator
-    def _validate_disposition(self, _attribute: Attribute[Any], _value: object) -> None:  # noqa: V103
+    @reason.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
+    def _validate_disposition(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
         if (
             self.disposition
             in {
@@ -2074,8 +2100,8 @@ class AgentWriterView:
     kind: WriterViewKind = field(validator=validators.instance_of(WriterViewKind))
     payload: WriterPayload = field()
 
-    @payload.validator
-    def _validate_payload(self, _attribute: Attribute[Any], value: object) -> None:  # noqa: V103
+    @payload.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
+    def _validate_payload(self, _attribute: _NamedAttribute, value: object) -> None:  # noqa: V103
         expected = _WRITER_PAYLOAD_TYPES[self.kind]
         if not isinstance(value, expected):
             raise ValueError(
@@ -2156,9 +2182,9 @@ class GateApplicability:
     ui_surface: UiSurface = field(validator=validators.instance_of(UiSurface))
     reason: str | None = field(default=None, validator=_optional_string)
 
-    @reason.validator
+    @reason.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
     def _validate_not_applicable_reason(
-        self, _attribute: Attribute[Any], value: object
+        self, _attribute: _NamedAttribute, value: object
     ) -> None:  # noqa: V103
         if self.disposition is GateApplicabilityDisposition.NOT_APPLICABLE and not value:
             raise ValueError(
@@ -2199,18 +2225,16 @@ class TestContractRow:
         factory=tuple, converter=_tuple_sequence, validator=_string_list()
     )
 
-    @matrix_rows.validator
-    def _validate_mode_cells(self, _attribute: Attribute[Any], value: object) -> None:  # noqa: V103
+    @matrix_rows.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
+    def _validate_mode_cells(self, _attribute: _NamedAttribute, value: object) -> None:  # noqa: V103
         if self.mode is TestContractMode.TRACER:
             if self.interface_version or value:
                 raise ValueError(
-                    f"Test Contracts row {self.acceptance_id} is tracer mode and must "
-                    "leave Interface version and Matrix rows blank"
+                    f"Test Contracts row {self.acceptance_id} is tracer mode and must leave Interface version and Matrix rows blank"
                 )
         elif not self.interface_version or not value:
             raise ValueError(
-                f"Test Contracts row {self.acceptance_id} is contract-matrix mode and "
-                "requires both Interface version and Matrix rows"
+                f"Test Contracts row {self.acceptance_id} is contract-matrix mode and requires both Interface version and Matrix rows"
             )
 
 
@@ -2296,19 +2320,19 @@ class MoldSpecDocument:
     cross_field_rules: ClassVar[tuple[CrossFieldRule, ...]] = MOLD_SPEC_CROSS_FIELD_RULES
     enums: ClassVar[dict[str, tuple[str, ...]]] = MOLD_SPEC_ENUMS
 
-    @test_contract_rows.validator
-    def _validate_ac_coverage(self, _attribute: Attribute[Any], value: object) -> None:  # noqa: V103
+    @test_contract_rows.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
+    def _validate_ac_coverage(self, _attribute: _NamedAttribute, value: object) -> None:  # noqa: V103
         assert isinstance(value, tuple)
+        rows = cast(tuple[TestContractRow, ...], value)
         counts: dict[str, int] = {}
-        for row in value:
+        for row in rows:
             counts[row.acceptance_id] = counts.get(row.acceptance_id, 0) + 1
         missing = [ac for ac in self.acceptance_ids if counts.get(ac, 0) != 1]
         duplicated = sorted(ac for ac, count in counts.items() if count > 1)
         unexpected = sorted(ac for ac in counts if ac not in self.acceptance_ids)
         if missing or duplicated or unexpected:
             raise ValueError(
-                "Test Contracts table must cover every Acceptance ID exactly once: "
-                f"missing={missing} duplicated={duplicated} unexpected={unexpected}"
+                f"Test Contracts table must cover every Acceptance ID exactly once: missing={missing} duplicated={duplicated} unexpected={unexpected}"
             )
         if (
             self.frontmatter.gate_applicability.disposition
@@ -2316,8 +2340,7 @@ class MoldSpecDocument:
             and value
         ):
             raise ValueError(
-                "gate_applicability.disposition=not-applicable requires zero "
-                "Test Contracts rows"
+                "gate_applicability.disposition=not-applicable requires zero Test Contracts rows"
             )
 
 

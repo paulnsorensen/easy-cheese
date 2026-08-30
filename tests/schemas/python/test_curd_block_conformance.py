@@ -8,8 +8,6 @@ there; the row below now pins agreement.
 
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
 from easy_cheese_schemas import CurdBlock
 from schema_conformance import (
@@ -18,6 +16,7 @@ from schema_conformance import (
     agreed_invalid,
     agreed_valid,
     agreeing,
+    as_dict,
     assert_conforms,
     assert_table_is_honest,
     curd_block,
@@ -30,22 +29,22 @@ ALPHA = planned_curd("alpha", ["src/alpha.ts"])
 BETA = planned_curd("beta", ["src/beta.ts"])
 
 
-def curd_without(key: str) -> dict[str, Any]:
+def curd_without(key: str) -> dict[str, object]:
     curd = planned_curd("alpha", ["src/alpha.ts"])
     del curd[key]
     return curd
 
 
-def solo(**fields: Any) -> dict[str, Any]:
+def solo(**fields: object) -> dict[str, object]:
     """A one-curd block whose single curd carries `fields`."""
     curd = planned_curd("alpha", ["src/alpha.ts"])
     curd.update(fields)
     return curd_block([curd], [["alpha"]])
 
 
-def with_decomposer(**fields: Any) -> dict[str, Any]:
+def with_decomposer(**fields: object) -> dict[str, object]:
     block = curd_block([ALPHA], [["alpha"]])
-    block["decomposer"].update(fields)
+    as_dict(block["decomposer"]).update(fields)
     return block
 
 

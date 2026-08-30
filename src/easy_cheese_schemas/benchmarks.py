@@ -4,6 +4,7 @@ import json
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from enum import Enum
+from typing import Protocol, cast
 
 import attrs
 
@@ -26,7 +27,7 @@ class ContractBenchmarkInput:
     def __post_init__(self) -> None:
         if not self.name.strip():
             raise ValueError("benchmark name must not be empty")
-        if not isinstance(self.invocation, Mapping):
+        if not isinstance(self.invocation, Mapping):  # pyright: ignore[reportUnnecessaryIsInstance]
             raise TypeError("benchmark invocation must be a mapping")
 
 
@@ -65,20 +66,27 @@ class BenchmarkReport:
     repair_rate: float
 
 
+class _NamedAttribute(Protocol):
+    name: str
+
+
 def _json_value(value: object) -> object:
     if isinstance(value, CanonicalArtifact):
         return value.canonical_bytes.decode()
     if attrs.has(type(value)):
+        attributes = cast("tuple[_NamedAttribute, ...]", attrs.fields(type(value)))
         return {
-            attribute.name: _json_value(getattr(value, attribute.name))
-            for attribute in attrs.fields(type(value))
+            attribute.name: _json_value(cast(object, getattr(value, attribute.name)))
+            for attribute in attributes
         }
     if isinstance(value, Enum):
-        return value.value
+        return cast(object, value.value)
     if isinstance(value, Mapping):
-        return {str(key): _json_value(item) for key, item in value.items()}
+        mapping = cast("Mapping[object, object]", value)
+        return {str(key): _json_value(item) for key, item in mapping.items()}
     if isinstance(value, (tuple, list)):
-        return [_json_value(item) for item in value]
+        items = cast("tuple[object, ...] | list[object]", value)
+        return [_json_value(item) for item in items]
     return value
 
 
@@ -137,7 +145,7 @@ def benchmark_contracts(
     if not representative_inputs:
         raise ValueError("at least one benchmark input is required")
     if not all(
-        isinstance(input_, ContractBenchmarkInput)
+        isinstance(input_, ContractBenchmarkInput)  # pyright: ignore[reportUnnecessaryIsInstance]
         for input_ in representative_inputs
     ):
         raise TypeError("benchmark_contracts requires ContractBenchmarkInput values")

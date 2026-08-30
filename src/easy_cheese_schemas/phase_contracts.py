@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Any
+from typing import TypedDict, cast
 
 from ._compiled_phase_registry import PHASE_REGISTRY_DATA
 from ._schema_catalog import (
@@ -76,15 +77,38 @@ class TransitionRegistry:
         )
 
 
-def _freeze(value: Any) -> Any:
+class _TransitionData(TypedDict):
+    destination: str
+    payload_schema_uri: str
+
+
+class _ContractVersionData(TypedDict):
+    major: str
+    minor: str
+    schema_uri: str
+
+
+# referenced only inside quoted cast("_PhaseData", ...) below
+class _PhaseData(TypedDict):  # noqa: V102
+    contract_version: _ContractVersionData
+    input_schema_uris: list[str]
+    outputs: list[_TransitionData]
+    source: str
+
+
+def _freeze(value: object) -> object:
     if isinstance(value, dict):
-        return MappingProxyType({key: _freeze(item) for key, item in value.items()})
+        mapping = cast("Mapping[object, object]", value)
+        return MappingProxyType({key: _freeze(item) for key, item in mapping.items()})
     if isinstance(value, list):
-        return tuple(_freeze(item) for item in value)
+        items = cast("list[object]", value)
+        return tuple(_freeze(item) for item in items)
     return value
 
 
-_PHASE_DATA = _freeze(PHASE_REGISTRY_DATA)
+_PHASE_DATA = cast(
+    "tuple[_PhaseData, ...]", tuple(_freeze(phase) for phase in PHASE_REGISTRY_DATA)
+)
 _PHASES_BY_SOURCE = MappingProxyType(
     {phase["source"]: phase for phase in _PHASE_DATA}
 )
@@ -157,12 +181,12 @@ def _resolve_transition(
         if route is None:
             raise TransitionError(
                 f"payload schema {payload_schema_uri!r} is not declared for "
-                f"{source} -> {destination}"
+                + f"{source} -> {destination}"
             )
     elif len(routes) != 1:
         raise TransitionError(
-            f"payload schema is required for ambiguous transition "
-            f"{source} -> {destination}"
+            "payload schema is required for ambiguous transition "
+            + f"{source} -> {destination}"
         )
     else:
         route = routes[0]

@@ -6,11 +6,12 @@ import os
 from email.message import Message
 from io import BytesIO
 from pathlib import Path
+from typing import NoReturn, cast, override
 from urllib.error import HTTPError
-from urllib.request import HTTPSHandler, build_opener
+from urllib.request import HTTPSHandler, Request, build_opener
 
 import pytest
-from attrs import asdict, evolve, fields
+from attrs import Attribute, asdict, evolve, fields
 
 import easy_cheese_schemas.artifacts as artifacts_module
 from easy_cheese_schemas.artifacts import (
@@ -38,11 +39,11 @@ def artifact_ref(
     )
 
 
-def test_resolves_repository_artifact_to_durable_atomic_snapshot(tmp_path) -> None:
+def test_resolves_repository_artifact_to_durable_atomic_snapshot(tmp_path: Path) -> None:
     content = b"trusted input"
     source = tmp_path / "artifacts" / "input.txt"
     source.parent.mkdir()
-    source.write_bytes(content)
+    _ = source.write_bytes(content)
     artifact_directory = tmp_path / "resolved"
 
     resolved = resolve_artifact(
@@ -52,7 +53,8 @@ def test_resolves_repository_artifact_to_durable_atomic_snapshot(tmp_path) -> No
     )
 
     resolved_path = Path(resolved.path)
-    assert {field.name for field in fields(type(resolved))} == {
+    resolved_fields = cast("tuple[Attribute[object], ...]", fields(type(resolved)))
+    assert {field.name for field in resolved_fields} == {
         "role",
         "path",
         "media_type",
@@ -71,12 +73,16 @@ def test_resolves_repository_artifact_to_durable_atomic_snapshot(tmp_path) -> No
     assert not hasattr(resolved, "uri")
 
     replacement = source.with_name("replacement.txt")
-    replacement.write_bytes(b"tampered replacement")
+    _ = replacement.write_bytes(b"tampered replacement")
     os.replace(replacement, source)
     assert resolved_path.read_bytes() == content
 
-    serialized = json.loads(json.dumps(asdict(resolved)))
-    copied_path = Path(serialized["path"])
+    serialized_raw = cast(object, json.loads(json.dumps(asdict(resolved))))
+    assert isinstance(serialized_raw, dict)
+    serialized = cast("dict[str, object]", serialized_raw)
+    path_value = serialized["path"]
+    assert isinstance(path_value, str)
+    copied_path = Path(path_value)
     assert copied_path.read_bytes() == content
 
     if os.name == "posix":
@@ -84,16 +90,16 @@ def test_resolves_repository_artifact_to_durable_atomic_snapshot(tmp_path) -> No
         assert os.stat(resolved_path).st_mode & 0o777 == 0o600
 
 
-def test_replaces_invalid_existing_snapshot(tmp_path) -> None:
+def test_replaces_invalid_existing_snapshot(tmp_path: Path) -> None:
     content = b"trusted input"
     source = tmp_path / "input.txt"
-    source.write_bytes(content)
+    _ = source.write_bytes(content)
     artifact_directory = tmp_path / "resolved"
     artifact_directory.mkdir()
     destination = (
         artifact_directory / f"sha256-{hashlib.sha256(content).hexdigest()}"
     )
-    destination.write_bytes(b"stale snapshot")
+    _ = destination.write_bytes(b"stale snapshot")
 
     resolved = resolve_artifact(
         artifact_ref(source.as_uri(), content),
@@ -106,17 +112,17 @@ def test_replaces_invalid_existing_snapshot(tmp_path) -> None:
 
 
 
-def test_replaces_symlinked_snapshot_without_touching_target(tmp_path) -> None:
+def test_replaces_symlinked_snapshot_without_touching_target(tmp_path: Path) -> None:
     content = b"trusted input"
     source = tmp_path / "input.txt"
-    source.write_bytes(content)
+    _ = source.write_bytes(content)
     artifact_directory = tmp_path / "resolved"
     artifact_directory.mkdir()
     destination = (
         artifact_directory / f"sha256-{hashlib.sha256(content).hexdigest()}"
     )
     outside = tmp_path / "outside.txt"
-    outside.write_bytes(b"do not overwrite")
+    _ = outside.write_bytes(b"do not overwrite")
     destination.symlink_to(outside)
 
     resolved = resolve_artifact(
@@ -129,10 +135,10 @@ def test_replaces_symlinked_snapshot_without_touching_target(tmp_path) -> None:
     assert destination.read_bytes() == content
     assert outside.read_bytes() == b"do not overwrite"
 
-def test_resolves_local_file_artifact(tmp_path) -> None:
+def test_resolves_local_file_artifact(tmp_path: Path) -> None:
     content = b"trusted input"
     source = tmp_path / "input.txt"
-    source.write_bytes(content)
+    _ = source.write_bytes(content)
     artifact_directory = tmp_path / "resolved"
 
     resolved = resolve_artifact(
@@ -147,12 +153,12 @@ def test_resolves_local_file_artifact(tmp_path) -> None:
     assert resolved_path != source.resolve()
 
 
-def test_requires_artifact_directory_lifecycle_owner(tmp_path) -> None:
+def test_requires_artifact_directory_lifecycle_owner(tmp_path: Path) -> None:
     content = b"trusted input"
     source = tmp_path / "input.txt"
-    source.write_bytes(content)
+    _ = source.write_bytes(content)
     with pytest.raises(TypeError):
-        resolve_artifact(artifact_ref(source.as_uri(), content))
+        resolve_artifact(artifact_ref(source.as_uri(), content))  # pyright: ignore[reportCallIssue]
 
 
 @pytest.mark.parametrize(
@@ -169,28 +175,28 @@ def test_requires_artifact_directory_lifecycle_owner(tmp_path) -> None:
         ("file://remotehost/tmp/input.txt", "local file URI"),
     ],
 )
-def test_rejects_uri_outside_policy(tmp_path, uri: str, message: str) -> None:
+def test_rejects_uri_outside_policy(tmp_path: Path, uri: str, message: str) -> None:
     repository = tmp_path / "repository"
     repository.mkdir()
-    (tmp_path / "outside.txt").write_bytes(b"trusted input")
+    _ = (tmp_path / "outside.txt").write_bytes(b"trusted input")
 
     with pytest.raises(ArtifactResolutionError, match=message):
-        resolve_artifact(
+        _ = resolve_artifact(
             artifact_ref(uri, b"trusted input"),
             repository_root=repository,
             artifact_directory=tmp_path / "resolved",
         )
 
 
-def test_rejects_repository_symlink_escape(tmp_path) -> None:
+def test_rejects_repository_symlink_escape(tmp_path: Path) -> None:
     repository = tmp_path / "repository"
     repository.mkdir()
     outside = tmp_path / "outside.txt"
-    outside.write_bytes(b"trusted input")
+    _ = outside.write_bytes(b"trusted input")
     (repository / "input.txt").symlink_to(outside)
 
     with pytest.raises(ArtifactResolutionError, match="escapes repository root"):
-        resolve_artifact(
+        _ = resolve_artifact(
             artifact_ref("repo:input.txt", b"trusted input"),
             repository_root=repository,
             artifact_directory=tmp_path / "resolved",
@@ -206,21 +212,22 @@ def test_rejects_repository_symlink_escape(tmp_path) -> None:
     ],
 )
 def test_rejects_integrity_mismatch_before_exposure(
-    tmp_path, field: str, value: object, message: str
+    tmp_path: Path, field: str, value: object, message: str
 ) -> None:
+    _ = message
     source = tmp_path / "input.txt"
-    source.write_bytes(b"trusted input")
-    calls = []
+    _ = source.write_bytes(b"trusted input")
+    calls: list[tuple[bytes, str]] = []
     reference = evolve(
         artifact_ref(source.as_uri(), b"trusted input"),
         schema_uri="urn:example:input",
         **{field: value},
     )
 
-    def schema_validator(_raw, _schema_uri):
+    def schema_validator(_raw: bytes, _schema_uri: str) -> None:
         calls.append((_raw, _schema_uri))
 
-        resolve_artifact(
+        _ = resolve_artifact(
             reference,
             artifact_directory=tmp_path / "resolved",
             schema_validator=schema_validator,
@@ -234,8 +241,8 @@ class HttpsResponse(BytesIO):
         self, content: bytes, url: str, media_type: str | None
     ) -> None:
         super().__init__(content)
-        self._url = url
-        self.headers = Message()
+        self._url: str = url
+        self.headers: Message = Message()
         if media_type is not None:
             self.headers["Content-Type"] = media_type
 
@@ -246,39 +253,41 @@ class HttpsResponse(BytesIO):
 class TrackingHTTPError(HTTPError):
     def __init__(self, url: str, code: int, headers: Message) -> None:
         super().__init__(url, code, "error", headers, BytesIO())
-        self.was_closed = False
+        self.was_closed: bool = False
 
+    @override
     def close(self) -> None:
         self.was_closed = True
         super().close()
 
 
-def test_closes_http_error_before_raising(tmp_path, monkeypatch) -> None:
+def test_closes_http_error_before_raising(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     content = b"trusted input"
     uri = "https://example.test/input.txt"
     error = TrackingHTTPError(uri, 500, Message())
 
-    def raise_error(_request, *, timeout):
+    def raise_error(_request: Request, *, timeout: int) -> NoReturn:
+        _ = timeout
         raise error
 
     monkeypatch.setattr("easy_cheese_schemas.artifacts.urlopen", raise_error)
 
     with pytest.raises(ArtifactResolutionError, match="could not be fetched"):
-        resolve_artifact(artifact_ref(uri, content), artifact_directory=tmp_path)
+        _ = resolve_artifact(artifact_ref(uri, content), artifact_directory=tmp_path)
 
     assert error.was_closed
 
 
-def test_closes_http_error_before_following_redirect(tmp_path, monkeypatch) -> None:
+def test_closes_http_error_before_following_redirect(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     content = b"trusted input"
     uri = "https://example.test/input.txt"
     redirected_uri = "https://example.test/next.txt"
     headers = Message()
     headers["Location"] = "/next.txt"
     error = TrackingHTTPError(uri, 302, headers)
-    calls = []
+    calls: list[tuple[str, int]] = []
 
-    def open_https(request, *, timeout):
+    def open_https(request: Request, *, timeout: int) -> HttpsResponse:
         calls.append((request.full_url, timeout))
         if len(calls) == 1:
             raise error
@@ -296,12 +305,12 @@ def test_closes_http_error_before_following_redirect(tmp_path, monkeypatch) -> N
     assert Path(resolved.path).read_bytes() == content
 
 
-def test_resolves_https_artifact_to_durable_snapshot(tmp_path, monkeypatch) -> None:
+def test_resolves_https_artifact_to_durable_snapshot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     content = b"trusted input"
     uri = "https://example.test/input.txt"
-    calls = []
+    calls: list[tuple[str, int]] = []
 
-    def open_https(request, *, timeout):
+    def open_https(request: Request, *, timeout: int) -> HttpsResponse:
         calls.append((request.full_url, timeout))
         return HttpsResponse(content, uri, "text/plain")
 
@@ -320,18 +329,20 @@ def test_resolves_https_artifact_to_durable_snapshot(tmp_path, monkeypatch) -> N
 
 
 def test_rejects_https_response_without_media_type(
-    tmp_path, monkeypatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     content = b"trusted input"
     uri = "https://example.test/input.txt"
-    monkeypatch.setattr(
-        "easy_cheese_schemas.artifacts.urlopen",
-        lambda _request, *, timeout: HttpsResponse(content, uri, None),
-    )
+
+    def open_https(_request: Request, *, timeout: int) -> HttpsResponse:
+        _ = timeout
+        return HttpsResponse(content, uri, None)
+
+    monkeypatch.setattr("easy_cheese_schemas.artifacts.urlopen", open_https)
     artifact_directory = tmp_path / "resolved"
 
     with pytest.raises(ArtifactResolutionError, match="declare a Content-Type"):
-        resolve_artifact(
+        _ = resolve_artifact(
             artifact_ref(uri, content),
             artifact_directory=artifact_directory,
         )
@@ -348,20 +359,20 @@ def test_rejects_https_response_without_media_type(
     ],
 )
 def test_rejects_https_redirect_outside_policy(
-    tmp_path, monkeypatch, redirect_uri: str
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, redirect_uri: str
 ) -> None:
     content = b"trusted input"
     uri = "https://example.test/input.txt"
-    monkeypatch.setattr(
-        "easy_cheese_schemas.artifacts.urlopen",
-        lambda _request, *, timeout: HttpsResponse(
-            content, redirect_uri, "text/plain"
-        ),
-    )
+
+    def open_https(_request: Request, *, timeout: int) -> HttpsResponse:
+        _ = timeout
+        return HttpsResponse(content, redirect_uri, "text/plain")
+
+    monkeypatch.setattr("easy_cheese_schemas.artifacts.urlopen", open_https)
     artifact_directory = tmp_path / "resolved"
 
     with pytest.raises(ArtifactResolutionError, match="redirected outside URI policy"):
-        resolve_artifact(
+        _ = resolve_artifact(
             artifact_ref(uri, content),
             artifact_directory=artifact_directory,
         )
@@ -370,6 +381,10 @@ def test_rejects_https_redirect_outside_policy(
     assert not artifact_directory.exists()
 
 class RedirectResponse(HttpsResponse):
+    status: int
+    code: int
+    msg: str
+
     def __init__(self, url: str, redirect_uri: str) -> None:
         super().__init__(b"", url, "text/plain")
         self.status = 302
@@ -380,19 +395,21 @@ class RedirectResponse(HttpsResponse):
     def info(self) -> Message:
         return self.headers
 
-    def read(self, *_args, **_kwargs):
+    @override
+    def read(self, *_args: object, **_kwargs: object) -> bytes:
         raise AssertionError("redirect response body must not be read")
 
 
 def test_rejects_forbidden_redirect_before_opening_or_reading(
-    tmp_path, monkeypatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     content = b"trusted input"
     uri = "https://example.test/input.txt"
     forbidden_uri = "http://attacker.test/input.txt"
-    opened = []
+    opened: list[str] = []
 
-    def open_https(request, *, timeout):
+    def open_https(request: Request, *, timeout: int) -> RedirectResponse:
+        _ = timeout
         opened.append(request.full_url)
         if len(opened) > 1:
             raise AssertionError("forbidden redirect must not be contacted")
@@ -401,34 +418,35 @@ def test_rejects_forbidden_redirect_before_opening_or_reading(
     monkeypatch.setattr("easy_cheese_schemas.artifacts.urlopen", open_https)
 
     with pytest.raises(ArtifactResolutionError, match="redirected outside URI policy"):
-        resolve_artifact(artifact_ref(uri, content), artifact_directory=tmp_path / "resolved")
+        _ = resolve_artifact(artifact_ref(uri, content), artifact_directory=tmp_path / "resolved")
 
     assert opened == [uri]
 
 
 def test_rejects_forbidden_redirect_with_no_redirect_opener(
-    tmp_path, monkeypatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     content = b"trusted input"
     uri = "https://example.test/input.txt"
     forbidden_uri = "https://attacker.test/input.txt?download=1"
-    opened = []
+    opened: list[str] = []
 
     class FixtureHTTPSHandler(HTTPSHandler):
-        def https_open(self, request):
-            opened.append(request.full_url)
+        @override
+        def https_open(self, req: Request) -> RedirectResponse:  # pyright: ignore[reportIncompatibleMethodOverride]
+            opened.append(req.full_url)
             if len(opened) > 1:
                 raise AssertionError("forbidden redirect must not be contacted")
-            return RedirectResponse(request.full_url, forbidden_uri)
+            return RedirectResponse(req.full_url, forbidden_uri)
 
     opener = build_opener(
-        artifacts_module._NoRedirectHandler(),
+        artifacts_module._NoRedirectHandler(),  # pyright: ignore[reportPrivateUsage]
         FixtureHTTPSHandler(),
     )
     monkeypatch.setattr(artifacts_module, "urlopen", opener.open)
 
     with pytest.raises(ArtifactResolutionError, match="redirected outside URI policy"):
-        resolve_artifact(
+        _ = resolve_artifact(
             artifact_ref(uri, content),
             artifact_directory=tmp_path / "resolved",
         )
@@ -436,14 +454,14 @@ def test_rejects_forbidden_redirect_with_no_redirect_opener(
     assert opened == [uri]
 
 
-def test_validates_declared_schema_before_exposure(tmp_path) -> None:
+def test_validates_declared_schema_before_exposure(tmp_path: Path) -> None:
     document = {"contract_version": {"schema_uri": "urn:example:input"}, "value": 1}
     content = json.dumps(document).encode()
     source = tmp_path / "input.json"
-    source.write_bytes(content)
-    calls = []
+    _ = source.write_bytes(content)
+    calls: list[tuple[bytes, str]] = []
 
-    def validate_schema(raw, schema_uri):
+    def validate_schema(raw: bytes, schema_uri: str) -> None:
         calls.append((raw, schema_uri))
 
     artifact_directory = tmp_path / "resolved"
@@ -464,16 +482,16 @@ def test_validates_declared_schema_before_exposure(tmp_path) -> None:
     assert calls == [(content, "urn:example:input")]
 
 
-def test_rejects_schema_mismatch_before_exposure(tmp_path) -> None:
+def test_rejects_schema_mismatch_before_exposure(tmp_path: Path) -> None:
     content = b'{"value": 1}'
     source = tmp_path / "input.json"
-    source.write_bytes(content)
+    _ = source.write_bytes(content)
 
-    def reject_schema(_raw, _schema_uri):
+    def reject_schema(_raw: bytes, _schema_uri: str) -> NoReturn:
         raise ValueError("required property is missing")
 
     with pytest.raises(ArtifactResolutionError, match="artifact schema mismatch"):
-        resolve_artifact(
+        _ = resolve_artifact(
             artifact_ref(
                 source.as_uri(),
                 content,
@@ -485,15 +503,15 @@ def test_rejects_schema_mismatch_before_exposure(tmp_path) -> None:
         )
 
 
-def test_rejects_unknown_schema_uri_from_default_registry(tmp_path) -> None:
+def test_rejects_unknown_schema_uri_from_default_registry(tmp_path: Path) -> None:
     content = b'{"value": 1}'
     source = tmp_path / "input.json"
-    source.write_bytes(content)
+    _ = source.write_bytes(content)
     schema_uri = "https://schemas.easy-cheese.dev/not-registered"
     artifact_directory = tmp_path / "resolved"
 
     with pytest.raises(ArtifactResolutionError, match="artifact schema mismatch"):
-        resolve_artifact(
+        _ = resolve_artifact(
             artifact_ref(
                 source.as_uri(),
                 content,
@@ -506,16 +524,16 @@ def test_rejects_unknown_schema_uri_from_default_registry(tmp_path) -> None:
     assert not artifact_directory.exists()
 
 
-def test_rejects_invalid_json_before_schema_validator(tmp_path) -> None:
+def test_rejects_invalid_json_before_schema_validator(tmp_path: Path) -> None:
     content = b"not JSON"
     source = tmp_path / "input.json"
-    source.write_bytes(content)
+    _ = source.write_bytes(content)
 
-    def unexpected_validation(_raw, _schema_uri):
+    def unexpected_validation(_raw: bytes, _schema_uri: str) -> NoReturn:
         raise AssertionError("validator must not receive invalid JSON")
 
     with pytest.raises(ArtifactResolutionError, match="not valid JSON"):
-        resolve_artifact(
+        _ = resolve_artifact(
             artifact_ref(
                 source.as_uri(),
                 content,
@@ -527,13 +545,15 @@ def test_rejects_invalid_json_before_schema_validator(tmp_path) -> None:
         )
 
 
-def test_https_integrity_failure_is_not_materialized(tmp_path, monkeypatch) -> None:
+def test_https_integrity_failure_is_not_materialized(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     content = b"untrusted input"
     uri = "https://example.test/input.txt"
-    monkeypatch.setattr(
-        "easy_cheese_schemas.artifacts.urlopen",
-        lambda _request, *, timeout: HttpsResponse(content, uri, "text/plain"),
-    )
+
+    def open_https(_request: Request, *, timeout: int) -> HttpsResponse:
+        _ = timeout
+        return HttpsResponse(content, uri, "text/plain")
+
+    monkeypatch.setattr("easy_cheese_schemas.artifacts.urlopen", open_https)
     reference = evolve(
         artifact_ref(uri, content),
         digest=f"sha256:{'0' * 64}",
@@ -541,12 +561,12 @@ def test_https_integrity_failure_is_not_materialized(tmp_path, monkeypatch) -> N
     artifact_directory = tmp_path / "resolved"
 
     with pytest.raises(ArtifactResolutionError, match="digest mismatch"):
-        resolve_artifact(reference, artifact_directory=artifact_directory)
+        _ = resolve_artifact(reference, artifact_directory=artifact_directory)
 
     assert not artifact_directory.exists()
 
 def test_resolves_registered_versioned_json_with_default_schema_validation(
-    tmp_path,
+    tmp_path: Path,
 ) -> None:
     schema_uri = "https://schemas.easy-cheese.dev/phase-contract"
     document = {
@@ -566,7 +586,7 @@ def test_resolves_registered_versioned_json_with_default_schema_validation(
     }
     content = json.dumps(document).encode()
     source = tmp_path / "input.json"
-    source.write_bytes(content)
+    _ = source.write_bytes(content)
     artifact_directory = tmp_path / "resolved"
 
     resolved = resolve_artifact(
@@ -583,10 +603,12 @@ def test_resolves_registered_versioned_json_with_default_schema_validation(
     assert resolved_path.read_bytes() == content
 
 
-def test_rejects_artifact_larger_than_ceiling_before_local_open(tmp_path, monkeypatch):
+def test_rejects_artifact_larger_than_ceiling_before_local_open(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     content = b"small"
     source = tmp_path / "input.txt"
-    source.write_bytes(content)
+    _ = source.write_bytes(content)
     artifact = object.__new__(ArtifactRef)
     object.__setattr__(artifact, "artifact_id", "artifact-1")
     object.__setattr__(artifact, "role", "source")
@@ -599,27 +621,26 @@ def test_rejects_artifact_larger_than_ceiling_before_local_open(tmp_path, monkey
     )
     object.__setattr__(artifact, "media_type", "text/plain")
     object.__setattr__(artifact, "schema_uri", None)
-    monkeypatch.setattr(
-        artifacts_module.os,
-        "open",
-        lambda *_args, **_kwargs: pytest.fail("oversized artifact must not open"),
-    )
+    def fail_open(*_args: object, **_kwargs: object) -> int:
+        pytest.fail("oversized artifact must not open")
+
+    monkeypatch.setattr(os, "open", fail_open)
 
     with pytest.raises(ArtifactResolutionError, match="maximum size"):
-        resolve_artifact(artifact, artifact_directory=tmp_path / "resolved")
+        _ = resolve_artifact(artifact, artifact_directory=tmp_path / "resolved")
 
 
-def test_rejects_duplicate_json_keys_before_registered_validation(tmp_path):
+def test_rejects_duplicate_json_keys_before_registered_validation(tmp_path: Path) -> None:
     content = b'{"value": 1, "value": 2}'
     source = tmp_path / "input.json"
-    source.write_bytes(content)
-    called = []
+    _ = source.write_bytes(content)
+    called: list[bytes] = []
 
-    def validator(raw, _schema_uri):
+    def validator(raw: bytes, _schema_uri: str) -> None:
         called.append(raw)
 
     with pytest.raises(ArtifactResolutionError, match="duplicate key"):
-        resolve_artifact(
+        _ = resolve_artifact(
             artifact_ref(
                 source.as_uri(),
                 content,
@@ -634,51 +655,51 @@ def test_rejects_duplicate_json_keys_before_registered_validation(tmp_path):
 
 
 def test_permission_failure_is_not_silenced_for_existing_snapshot(
-    tmp_path, monkeypatch
-):
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     content = b"trusted input"
     source = tmp_path / "input.txt"
-    source.write_bytes(content)
+    _ = source.write_bytes(content)
     artifact_directory = tmp_path / "resolved"
     artifact_directory.mkdir()
     destination = artifact_directory / f"sha256-{hashlib.sha256(content).hexdigest()}"
-    destination.write_bytes(content)
+    _ = destination.write_bytes(content)
 
-    def fail_chmod(*_args, **_kwargs):
+    def fail_chmod(*_args: object, **_kwargs: object) -> None:
         raise PermissionError("denied")
 
-    monkeypatch.setattr(artifacts_module.os, "chmod", fail_chmod)
+    monkeypatch.setattr(os, "chmod", fail_chmod)
     with pytest.raises(ArtifactResolutionError, match="private permissions"):
-        resolve_artifact(
+        _ = resolve_artifact(
             artifact_ref(source.as_uri(), content),
             artifact_directory=artifact_directory,
         )
 
 
-def test_repository_ancestor_symlink_is_rejected(tmp_path):
+def test_repository_ancestor_symlink_is_rejected(tmp_path: Path) -> None:
     repository = tmp_path / "repository"
     repository.mkdir()
     outside = tmp_path / "outside"
     outside.mkdir()
-    (outside / "input.txt").write_bytes(b"trusted input")
+    _ = (outside / "input.txt").write_bytes(b"trusted input")
     (repository / "nested").symlink_to(outside, target_is_directory=True)
 
     with pytest.raises(ArtifactResolutionError, match="escapes repository root"):
-        resolve_artifact(
+        _ = resolve_artifact(
             artifact_ref("repo:nested/input.txt", b"trusted input"),
             repository_root=repository,
             artifact_directory=tmp_path / "resolved",
         )
 
 
-def test_local_file_final_symlink_is_rejected(tmp_path):
+def test_local_file_final_symlink_is_rejected(tmp_path: Path) -> None:
     outside = tmp_path / "outside.txt"
-    outside.write_bytes(b"trusted input")
+    _ = outside.write_bytes(b"trusted input")
     source = tmp_path / "input.txt"
     source.symlink_to(outside)
 
     with pytest.raises(ArtifactResolutionError, match="not readable"):
-        resolve_artifact(
+        _ = resolve_artifact(
             artifact_ref(source.as_uri(), b"trusted input"),
             artifact_directory=tmp_path / "resolved",
         )

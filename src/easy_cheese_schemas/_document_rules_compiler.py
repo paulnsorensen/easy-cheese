@@ -9,17 +9,47 @@ attrs-decorated models in ``contracts.py``.
 from __future__ import annotations
 
 import pprint
-from types import ModuleType
-from typing import Sequence
+from collections.abc import Mapping, Sequence
+from typing import ClassVar, Protocol
 
 
-def collect(module: ModuleType) -> tuple[tuple[str, type], ...]:
+class _TableRuleLike(Protocol):
+    columns: Sequence[str]
+    per_row: Sequence[str]
+
+
+class _SectionLike(Protocol):
+    name: str
+    optional: bool
+    table: _TableRuleLike | None
+
+
+class _CrossFieldRuleLike(Protocol):
+    rule_id: str
+    description: str
+
+
+class _DocumentContractLike(Protocol):
+    sections: ClassVar[Sequence[_SectionLike]]
+    cross_field_rules: ClassVar[Sequence[_CrossFieldRuleLike]]
+    enums: ClassVar[Mapping[str, Sequence[str]]]
+
+
+class _DocumentContractModule(Protocol):
+    def registered_document_contracts(
+        self,
+    ) -> tuple[tuple[str, type[_DocumentContractLike]], ...]: ...
+
+
+def collect(
+    module: _DocumentContractModule,
+) -> tuple[tuple[str, type[_DocumentContractLike]], ...]:
     """Project marked document-contract classes into ``(slug, class)`` pairs."""
-    return module._registered_document_contracts()
+    return module.registered_document_contracts()
 
 
-def _section_data(section: object) -> dict[str, object]:
-    table = getattr(section, "table", None)
+def _section_data(section: _SectionLike) -> dict[str, object]:
+    table = section.table
     table_data = None
     if table is not None:
         table_data = {
@@ -33,15 +63,15 @@ def _section_data(section: object) -> dict[str, object]:
     }
 
 
-def _rule_data(rule: object) -> dict[str, str]:
+def _rule_data(rule: _CrossFieldRuleLike) -> dict[str, str]:
     return {"rule_id": rule.rule_id, "description": rule.description}
 
 
-def _enum_data(cls: type) -> dict[str, list[str]]:
+def _enum_data(cls: type[_DocumentContractLike]) -> dict[str, list[str]]:
     return {name: list(values) for name, values in cls.enums.items()}
 
 
-def render(pairs: Sequence[tuple[str, type]]) -> str:
+def render(pairs: Sequence[tuple[str, type[_DocumentContractLike]]]) -> str:
     """Render deterministic, dependency-free document-rules source for ``pairs``."""
     ordered = tuple(sorted(pairs, key=lambda pair: pair[0]))
     slugs = [slug for slug, _cls in ordered]
@@ -61,9 +91,9 @@ def render(pairs: Sequence[tuple[str, type]]) -> str:
 
     return (
         '"""Generated dependency-free mold-spec document rules; edit the\n'
-        "@document_contract models in contracts.py instead.\"\"\"\n\n"
-        "from __future__ import annotations\n\n"
-        "DOCUMENT_RULES = "
+        + "@document_contract models in contracts.py instead.\"\"\"\n\n"
+        + "from __future__ import annotations\n\n"
+        + "DOCUMENT_RULES = "
         + pprint.pformat(document_rules, indent=4, sort_dicts=True, width=161)
         + "\n"
     )

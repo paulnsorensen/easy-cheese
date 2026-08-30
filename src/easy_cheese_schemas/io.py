@@ -10,7 +10,7 @@ hard dependencies remain attrs and cattrs.
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import cast
 
 __all__ = ["ManifestLoadError", "parse_mapping"]
 
@@ -18,20 +18,21 @@ class ManifestLoadError(Exception):
     """Raised when a manifest-like document cannot be loaded as a mapping."""
 
 
-def parse_mapping(text: str, source: str = "<stdin>") -> dict[str, Any]:
+def parse_mapping(text: str, source: str = "<stdin>") -> dict[str, object]:
     """Parse JSON first, then YAML, and require a top-level mapping."""
+    data: object
     try:
-        data = json.loads(text)
+        data = cast(object, json.loads(text))
     except json.JSONDecodeError as json_exc:
         try:
             import yaml
         except ImportError as exc:
             raise ManifestLoadError(
                 f"{source}: invalid JSON and PyYAML is not installed for YAML "
-                f"input: {json_exc}"
+                + f"input: {json_exc}"
             ) from exc
         try:
-            data = yaml.safe_load(text)
+            data = cast(object, yaml.safe_load(text))
         except yaml.YAMLError as yaml_exc:
             raise ManifestLoadError(
                 f"{source}: invalid JSON ({json_exc}) and invalid YAML ({yaml_exc})"
@@ -39,4 +40,4 @@ def parse_mapping(text: str, source: str = "<stdin>") -> dict[str, Any]:
 
     if not isinstance(data, dict):
         raise ManifestLoadError(f"{source}: expected a mapping at document root")
-    return data
+    return cast(dict[str, object], data)

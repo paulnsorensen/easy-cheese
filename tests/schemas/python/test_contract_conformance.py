@@ -2,18 +2,28 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Generator
 from pathlib import Path
+from typing import cast
 
 import pytest
 
 from easy_cheese_schemas.artifacts import ArtifactResolutionError, resolve_artifact
-from easy_cheese_schemas.contracts import ArtifactRef, ContractVersion
+from easy_cheese_schemas.contracts import (
+    ArtifactRef,
+    ContractVersion,
+    CurdPlan,
+    CurdResult,
+    PlannerResult,
+    ReviewResult,
+    UnsupportedProjection,
+)
 from easy_cheese_schemas.phase_contracts import (
     COMPILED_TRANSITION_REGISTRY,
     TransitionError,
     validate_transition,
 )
-from easy_cheese_schemas.projections import UnsupportedProjection, project_curd_block
+from easy_cheese_schemas.projections import project_curd_block
 from easy_cheese_schemas.schema_runtime import (
     ContractValidationError,
     normalize_agent_output,
@@ -35,23 +45,25 @@ ERROR_TYPES = {
 
 
 def _load_fixture(filename: str) -> dict[str, object]:
-    return json.loads(FIXTURE_FILES[filename].read_text(encoding="utf-8"))
+    return cast(
+        "dict[str, object]", json.loads(FIXTURE_FILES[filename].read_text(encoding="utf-8"))
+    )
 
 
 CONTRACT_DOCUMENT = _load_fixture("contract-cases.json")
 NORMALIZATION_DOCUMENT = _load_fixture("normalization-cases.json")
-CONTRACT_CASES = CONTRACT_DOCUMENT["cases"]
-NORMALIZATION_CASES = NORMALIZATION_DOCUMENT["cases"]
+CONTRACT_CASES = cast("list[dict[str, object]]", CONTRACT_DOCUMENT["cases"])
+NORMALIZATION_CASES = cast("list[dict[str, object]]", NORMALIZATION_DOCUMENT["cases"])
 
 
-def _strings(value: object):
+def _strings(value: object) -> Generator[str, None, None]:
     if isinstance(value, str):
         yield value
     elif isinstance(value, list):
-        for item in value:
+        for item in cast("list[object]", value):
             yield from _strings(item)
     elif isinstance(value, dict):
-        for item in value.values():
+        for item in cast("dict[str, object]", value).values():
             yield from _strings(item)
 
 
@@ -64,7 +76,8 @@ def _assert_fixture_document(filename: str, document: dict[str, object]) -> None
     assert document["fixture_version"] == "1.0"
     cases = document["cases"]
     assert isinstance(cases, list) and cases
-    names = [case["name"] for case in cases]
+    raw_cases = cast("list[object]", cases)
+    names = [cast("dict[str, object]", case)["name"] for case in raw_cases]
     assert all(isinstance(name, str) and NAME_PATTERN.fullmatch(name) for name in names)
     assert len(names) == len(set(names))
     assert all(not value.startswith(("/", "file://")) for value in _strings(document))
@@ -84,14 +97,14 @@ def test_fixture_names_are_unique_across_the_package() -> None:
     names = [
         case["name"]
         for document in (CONTRACT_DOCUMENT, NORMALIZATION_DOCUMENT)
-        for case in document["cases"]
+        for case in cast("list[dict[str, object]]", document["cases"])
     ]
     assert len(names) == len(set(names))
 
 
 def test_contract_fixture_case_schema_is_closed() -> None:
     common = {"name", "operation", "input", "expected"}
-    operation_fields = {
+    operation_fields: dict[str, set[str]] = {
         "validate_contract": {"schema_uri", "supported_version"},
         "normalize_agent_output": set(),
         "resolve_artifact": set(),
@@ -100,9 +113,12 @@ def test_contract_fixture_case_schema_is_closed() -> None:
     }
     for case in CONTRACT_CASES:
         operation = case["operation"]
+        assert isinstance(operation, str)
         assert operation in operation_fields
         assert set(case) == common | operation_fields[operation]
         expected = case["expected"]
+        assert isinstance(expected, dict)
+        expected = cast("dict[str, object]", expected)
         assert expected["status"] in {"accept", "reject"}
         if expected["status"] == "accept":
             assert set(expected) == {"status", "value"}
@@ -123,21 +139,34 @@ def test_normalization_fixture_case_schema_is_closed() -> None:
     for case in NORMALIZATION_CASES:
         assert set(case) == expected_fields
         assert case["operation"] == "normalize_agent_output"
-        assert set(case["writer_view"]) == {"kind", "payload"}
+        writer_view = case["writer_view"]
+        assert isinstance(writer_view, dict)
+        writer_view = cast("dict[str, object]", writer_view)
+        assert set(writer_view) == {"kind", "payload"}
         assert isinstance(case["host_invocation"], dict)
         assert isinstance(case["expected_canonical_output"], dict)
         assert isinstance(case["stable"], dict)
 
 
 def _version(case: dict[str, object]) -> ContractVersion:
-    return ContractVersion(**case["supported_version"])
+    supported_version = case["supported_version"]
+    assert isinstance(supported_version, dict)
+    supported_version = cast("dict[str, str]", supported_version)
+    return ContractVersion(
+        schema_uri=supported_version["schema_uri"],
+        major=supported_version["major"],
+        minor=supported_version["minor"],
+    )
 
 
 def _validated_contract_observation(case: dict[str, object]) -> dict[str, object]:
+    schema_uri = case["schema_uri"]
+    assert isinstance(schema_uri, str)
     value = validate_contract(
-        case["input"], case["schema_uri"], supported_version=_version(case)
+        case["input"], schema_uri, supported_version=_version(case)
     ).value
-    if case["schema_uri"].endswith("/curd-plan"):
+    if schema_uri.endswith("/curd-plan"):
+        assert isinstance(value, CurdPlan)
         return {
             "type": type(value).__name__,
             "plan_id": value.plan_id,
@@ -149,6 +178,7 @@ def _validated_contract_observation(case: dict[str, object]) -> dict[str, object
                 for criterion in curd.criteria
             ],
         }
+    assert isinstance(value, CurdResult)
     return {
         "type": type(value).__name__,
         "result_id": value.result_id,
@@ -162,9 +192,12 @@ def _validated_contract_observation(case: dict[str, object]) -> dict[str, object
 
 def _normalized_contract_observation(case: dict[str, object]) -> dict[str, object]:
     invocation = case["input"]
+    assert isinstance(invocation, dict)
+    invocation = cast("dict[str, object]", invocation)
     value = normalize_agent_output(
         invocation["writer_view"], invocation["host_invocation"]
     ).value
+    assert isinstance(value, PlannerResult)
     return {
         "type": type(value).__name__,
         "disposition": value.disposition.value,
@@ -178,13 +211,50 @@ def _normalized_contract_observation(case: dict[str, object]) -> dict[str, objec
 def _resolved_artifact_observation(
     case: dict[str, object], tmp_path: Path
 ) -> dict[str, object]:
-    repository_root = tmp_path / case["name"]
+    name = case["name"]
+    assert isinstance(name, str)
+    repository_root = tmp_path / name
     repository_root.mkdir()
-    if source := case["input"].get("source"):
-        source_path = repository_root / source["path"]
+    input_ = case["input"]
+    assert isinstance(input_, dict)
+    input_ = cast("dict[str, object]", input_)
+    source = input_.get("source")
+    if source:
+        assert isinstance(source, dict)
+        source = cast("dict[str, object]", source)
+        path = source["path"]
+        content = source["content"]
+        assert isinstance(path, str)
+        assert isinstance(content, str)
+        source_path = repository_root / path
         source_path.parent.mkdir(parents=True)
-        source_path.write_text(source["content"], encoding="utf-8")
-    artifact = ArtifactRef(**case["input"]["artifact"])
+        _ = source_path.write_text(content, encoding="utf-8")
+    artifact_data = input_["artifact"]
+    assert isinstance(artifact_data, dict)
+    artifact_data = cast("dict[str, object]", artifact_data)
+    artifact_id = artifact_data["artifact_id"]
+    role = artifact_data["role"]
+    uri = artifact_data["uri"]
+    digest = artifact_data["digest"]
+    size_bytes = artifact_data["size_bytes"]
+    media_type = artifact_data["media_type"]
+    schema_uri = artifact_data.get("schema_uri")
+    assert isinstance(artifact_id, str)
+    assert isinstance(role, str)
+    assert isinstance(uri, str)
+    assert isinstance(digest, str)
+    assert isinstance(size_bytes, int)
+    assert isinstance(media_type, str)
+    assert schema_uri is None or isinstance(schema_uri, str)
+    artifact = ArtifactRef(
+        artifact_id=artifact_id,
+        role=role,
+        uri=uri,
+        digest=digest,
+        size_bytes=size_bytes,
+        media_type=media_type,
+        schema_uri=schema_uri,
+    )
     resolved = resolve_artifact(
         artifact,
         repository_root=repository_root,
@@ -199,7 +269,19 @@ def _resolved_artifact_observation(
 
 
 def _transition_observation(case: dict[str, object]) -> dict[str, object]:
-    transition = validate_transition(COMPILED_TRANSITION_REGISTRY, **case["input"])
+    input_ = case["input"]
+    assert isinstance(input_, dict)
+    input_ = cast("dict[str, object]", input_)
+    source = input_["source"]
+    destination = input_["destination"]
+    payload_schema_uri = input_.get("payload_schema_uri")
+    assert isinstance(source, str)
+    assert isinstance(destination, str)
+    assert payload_schema_uri is None or isinstance(payload_schema_uri, str)
+    transition = validate_transition(
+        COMPILED_TRANSITION_REGISTRY, source, destination, payload_schema_uri
+    )
+    assert transition is not None
     return {
         "type": type(transition).__name__,
         "source": transition.source,
@@ -209,11 +291,14 @@ def _transition_observation(case: dict[str, object]) -> dict[str, object]:
 
 
 def _projection_observation(case: dict[str, object]) -> dict[str, object]:
-    plan = validate_contract(
-        case["input"], case["schema_uri"], supported_version=_version(case)
+    schema_uri = case["schema_uri"]
+    assert isinstance(schema_uri, str)
+    value = validate_contract(
+        case["input"], schema_uri, supported_version=_version(case)
     ).value
+    assert isinstance(value, CurdPlan)
     assert case["target"] == "curd_block"
-    projected = project_curd_block(plan)
+    projected = project_curd_block(value)
     assert isinstance(projected, UnsupportedProjection)
     return {
         "type": type(projected).__name__,
@@ -241,21 +326,32 @@ def _dispatch_contract_case(
     raise AssertionError(f"unhandled fixture operation: {operation}")
 
 
-@pytest.mark.parametrize("case", CONTRACT_CASES, ids=lambda case: case["name"])
+def _case_id(case: dict[str, object]) -> str:
+    name = case["name"]
+    assert isinstance(name, str)
+    return name
+
+
+@pytest.mark.parametrize("case", CONTRACT_CASES, ids=_case_id)
 def test_contract_case(case: dict[str, object], tmp_path: Path) -> None:
     expected = case["expected"]
+    assert isinstance(expected, dict)
+    expected = cast("dict[str, object]", expected)
     if expected["status"] == "accept":
         assert _dispatch_contract_case(case, tmp_path) == expected["value"]
         return
 
-    error_type = ERROR_TYPES[expected["error_type"]]
+    error_type_name = expected["error_type"]
+    assert isinstance(error_type_name, str)
+    error_type = ERROR_TYPES[error_type_name]
     with pytest.raises(error_type) as error:
-        _dispatch_contract_case(case, tmp_path)
+        _ = _dispatch_contract_case(case, tmp_path)
     assert str(error.value) == expected["message"]
 
 
 def _stable_observation(kind: str, value: object) -> dict[str, object]:
     if kind == "curd_plan":
+        assert isinstance(value, CurdPlan)
         return {
             "digest": value.digest,
             "identity": {
@@ -277,6 +373,7 @@ def _stable_observation(kind: str, value: object) -> dict[str, object]:
             },
         }
     if kind == "review_result":
+        assert isinstance(value, ReviewResult)
         return {
             "identity": {
                 "review_id": value.review_id,
@@ -299,6 +396,7 @@ def _stable_observation(kind: str, value: object) -> dict[str, object]:
                 "dispositions": [row.disposition.value for row in value.coverage],
             },
         }
+    assert isinstance(value, CurdResult)
     return {
         "identity": {
             "result_id": value.result_id,
@@ -328,12 +426,16 @@ def _stable_observation(kind: str, value: object) -> dict[str, object]:
     }
 
 
-@pytest.mark.parametrize("case", NORMALIZATION_CASES, ids=lambda case: case["name"])
+@pytest.mark.parametrize("case", NORMALIZATION_CASES, ids=_case_id)
 def test_normalization_case_is_byte_exact_and_stable(case: dict[str, object]) -> None:
     normalized = normalize_agent_output(case["writer_view"], case["host_invocation"])
+    expected_canonical_output = case["expected_canonical_output"]
+    expected_stable = case["stable"]
+    assert isinstance(expected_canonical_output, dict)
+    assert isinstance(expected_stable, dict)
     expected_bytes = (
         json.dumps(
-            case["expected_canonical_output"],
+            expected_canonical_output,
             ensure_ascii=False,
             separators=(",", ":"),
             sort_keys=True,
@@ -341,7 +443,12 @@ def test_normalization_case_is_byte_exact_and_stable(case: dict[str, object]) ->
         + "\n"
     ).encode()
     assert normalized.canonical_bytes == expected_bytes
+    writer_view = case["writer_view"]
+    assert isinstance(writer_view, dict)
+    writer_view = cast("dict[str, object]", writer_view)
+    kind = writer_view["kind"]
+    assert isinstance(kind, str)
     assert (
-        _stable_observation(case["writer_view"]["kind"], normalized.value)
-        == case["stable"]
+        _stable_observation(kind, normalized.value)
+        == expected_stable
     )

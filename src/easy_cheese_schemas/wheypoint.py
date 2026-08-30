@@ -27,11 +27,11 @@ would report the reader's vintage rather than the writer's.
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from enum import Enum
-from typing import Any
+from typing import Protocol, cast
 
-from attrs import Attribute, define, field, validators
+from attrs import define, field, validators
 
 # The central bounds. A Wheypoint record is written by an agent under context
 # pressure, so "as much text as you like" is a denial-of-service on the next
@@ -46,6 +46,11 @@ _MAX_ID = 64
 _ID_RE = re.compile(rf"[a-z0-9][a-z0-9._-]{{0,{_MAX_ID - 1}}}")
 _DIGEST_RE = re.compile(r"sha256:[0-9a-f]{64}")
 _COMMIT_RE = re.compile(r"[0-9a-f]{7,64}")
+
+
+class _NamedAttribute(Protocol):
+    name: str
+
 
 __all__ = [
     "ArtifactLink",
@@ -138,7 +143,7 @@ _TRANSITION_STATE = {
 }
 
 
-def _bounded_text(_instance: object, attribute: Attribute[Any], value: object) -> None:
+def _bounded_text(_instance: object, attribute: _NamedAttribute, value: object) -> None:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{attribute.name} must be a non-empty string")
     if len(value) > _MAX_TEXT:
@@ -148,15 +153,16 @@ def _bounded_text(_instance: object, attribute: Attribute[Any], value: object) -
 
 
 def _bounded_text_list(
-    _instance: object, attribute: Attribute[Any], value: object
+    _instance: object, attribute: _NamedAttribute, value: object
 ) -> None:
     if not isinstance(value, list):
         raise ValueError(f"{attribute.name} must be a list")
-    if len(value) > _MAX_ITEMS:
+    items = cast("list[object]", value)
+    if len(items) > _MAX_ITEMS:
         raise ValueError(
-            f"{attribute.name} must be at most {_MAX_ITEMS} items, not {len(value)}"
+            f"{attribute.name} must be at most {_MAX_ITEMS} items, not {len(items)}"
         )
-    for index, item in enumerate(value, start=1):
+    for index, item in enumerate(items, start=1):
         if not isinstance(item, str) or not item.strip():
             raise ValueError(f"{attribute.name}[{index}] must be a non-empty string")
         if len(item) > _MAX_TEXT:
@@ -165,74 +171,77 @@ def _bounded_text_list(
             )
 
 
-def _identifier(_instance: object, attribute: Attribute[Any], value: object) -> None:
+def _identifier(_instance: object, attribute: _NamedAttribute, value: object) -> None:
     if not isinstance(value, str) or _ID_RE.fullmatch(value) is None:
         raise ValueError(
             f"{attribute.name} must be a lowercase identifier of at most "
-            f"{_MAX_ID} characters matching {_ID_RE.pattern}"
+            + f"{_MAX_ID} characters matching {_ID_RE.pattern}"
         )
 
 
-def _each_identifier(attribute: Attribute[Any], value: list[Any]) -> None:
+def _each_identifier(attribute: _NamedAttribute, value: list[object]) -> None:
     for index, item in enumerate(value, start=1):
         if not isinstance(item, str) or _ID_RE.fullmatch(item) is None:
             raise ValueError(
                 f"{attribute.name}[{index}] must be a lowercase identifier "
-                f"matching {_ID_RE.pattern}"
+                + f"matching {_ID_RE.pattern}"
             )
 
 
 def _identifier_list(
-    instance: object, attribute: Attribute[Any], value: object
+    instance: object, attribute: _NamedAttribute, value: object
 ) -> None:
     _bounded_list(instance, attribute, value)
-    _each_identifier(attribute, value)  # type: ignore[arg-type]
+    if isinstance(value, list):
+        _each_identifier(attribute, cast("list[object]", value))
 
 
 def _identifier_ledger(
-    instance: object, attribute: Attribute[Any], value: object
+    instance: object, attribute: _NamedAttribute, value: object
 ) -> None:
     _bounded_ledger(instance, attribute, value)
-    _each_identifier(attribute, value)  # type: ignore[arg-type]
+    if isinstance(value, list):
+        _each_identifier(attribute, cast("list[object]", value))
 
 
-def _digest(_instance: object, attribute: Attribute[Any], value: object) -> None:
+def _digest(_instance: object, attribute: _NamedAttribute, value: object) -> None:
     if not isinstance(value, str) or _DIGEST_RE.fullmatch(value) is None:
         raise ValueError(
             f"{attribute.name} must be sha256: followed by 64 lowercase "
-            "hexadecimal characters"
+            + "hexadecimal characters"
         )
 
 
-def _commit(_instance: object, attribute: Attribute[Any], value: object) -> None:
+def _commit(_instance: object, attribute: _NamedAttribute, value: object) -> None:
     if not isinstance(value, str) or _COMMIT_RE.fullmatch(value) is None:
         raise ValueError(
             f"{attribute.name} must be 7 to 64 lowercase hexadecimal characters"
         )
 
 
-def _list_within(attribute: Attribute[Any], value: object, limit: int) -> None:
+def _list_within(attribute: _NamedAttribute, value: object, limit: int) -> None:
     if not isinstance(value, list):
         raise ValueError(f"{attribute.name} must be a list")
-    if len(value) > limit:
+    items = cast("list[object]", value)
+    if len(items) > limit:
         raise ValueError(
-            f"{attribute.name} must be at most {limit} items, not {len(value)}"
+            f"{attribute.name} must be at most {limit} items, not {len(items)}"
         )
 
 
-def _bounded_list(_instance: object, attribute: Attribute[Any], value: object) -> None:
+def _bounded_list(_instance: object, attribute: _NamedAttribute, value: object) -> None:
     _list_within(attribute, value, _MAX_ITEMS)
 
 
 def _bounded_ledger(
-    _instance: object, attribute: Attribute[Any], value: object
+    _instance: object, attribute: _NamedAttribute, value: object
 ) -> None:
     """For a list that aggregates the per-kind lists rather than mirroring one."""
     _list_within(attribute, value, _MAX_LEDGER)
 
 
 def _non_empty_bounded_list(
-    instance: object, attribute: Attribute[Any], value: object
+    instance: object, attribute: _NamedAttribute, value: object
 ) -> None:
     _bounded_list(instance, attribute, value)
     if not value:
@@ -281,21 +290,21 @@ class NextAction:
 
 
 def _successor_rule(
-    instance: ProtectedEntry, attribute: Attribute[Any], value: object
+    instance: ProtectedEntry, attribute: _NamedAttribute, value: object
 ) -> None:
     if instance.state is EntryState.SUPERSEDED and value is None:
         raise ValueError(f"{attribute.name} must name the entry that replaced this one")
     if instance.state is not EntryState.SUPERSEDED and value is not None:
         raise ValueError(
             f"{attribute.name} must be null unless the entry is superseded, "
-            f"not {value!r}"
+            + f"not {value!r}"
         )
     if value is not None:
         _identifier(instance, attribute, value)
 
 
 def _rationale_rule(
-    instance: ProtectedEntry, attribute: Attribute[Any], value: object
+    instance: ProtectedEntry, attribute: _NamedAttribute, value: object
 ) -> None:
     if instance.state in _SETTLED and value is None:
         raise ValueError(
@@ -307,13 +316,13 @@ def _rationale_rule(
 
 def _gating_kind_rule(
     instance: ProtectedEntry | ProposedEntry,
-    attribute: Attribute[Any],
+    attribute: _NamedAttribute,
     value: object,
 ) -> None:
     if value and instance.kind is EntryKind.DECISION:
         raise ValueError(
             f"{attribute.name} must be false for a decision: only a question or "
-            "a blocker gates continuation"
+            + "a blocker gates continuation"
         )
 
 
@@ -344,13 +353,13 @@ class ProposedEntry:
 
 
 def _target_rule(
-    instance: EntryTransition, attribute: Attribute[Any], value: object
+    instance: EntryTransition, attribute: _NamedAttribute, value: object
 ) -> None:
     supersede = instance.action is TransitionAction.SUPERSEDE
     if supersede and value is None:
         raise ValueError(
             f"{attribute.name} must name the superseding entry for a "
-            f"{TransitionAction.SUPERSEDE.value} transition"
+            + f"{TransitionAction.SUPERSEDE.value} transition"
         )
     if not supersede and value is not None:
         raise ValueError(
@@ -417,7 +426,9 @@ class RepositoryProvenance:
     commit: str | None = field(default=None, validator=validators.optional(_commit))
 
 
-def _protected_entries(kind: EntryKind, *preceding: str) -> Any:
+def _protected_entries(
+    kind: EntryKind, *preceding: str
+) -> Callable[[WheypointRecord, _NamedAttribute, list[ProtectedEntry]], None]:
     """The rules every protected list carries.
 
     Each list owns one kind, so a reader counting blockers never has to filter a
@@ -429,25 +440,25 @@ def _protected_entries(kind: EntryKind, *preceding: str) -> Any:
 
     def rule(
         instance: WheypointRecord,
-        attribute: Attribute[Any],
+        attribute: _NamedAttribute,
         value: list[ProtectedEntry],
     ) -> None:
         _bounded_list(instance, attribute, value)
         seen = {
             entry.entry_id
             for name in preceding
-            for entry in getattr(instance, name)
+            for entry in cast("list[ProtectedEntry]", getattr(instance, name))
         }
         for entry in value:
             if entry.kind is not kind:
                 raise ValueError(
                     f"{attribute.name} must contain only {kind.value} entries, "
-                    f"but {entry.entry_id!r} is a {entry.kind.value}"
+                    + f"but {entry.entry_id!r} is a {entry.kind.value}"
                 )
             if entry.entry_id in seen:
                 raise ValueError(
                     f"{attribute.name} must not repeat an entry id already used "
-                    f"in this record: {entry.entry_id!r}"
+                    + f"in this record: {entry.entry_id!r}"
                 )
             seen.add(entry.entry_id)
 
@@ -455,7 +466,7 @@ def _protected_entries(kind: EntryKind, *preceding: str) -> Any:
 
 
 def _record_dossier(
-    instance: WheypointRecord, attribute: Attribute[Any], value: list[DecisionFork]
+    instance: WheypointRecord, attribute: _NamedAttribute, value: list[DecisionFork]
 ) -> None:
     """A gated record without a dossier is the misfire this kernel exists to
     stop: the resumed session sees a gate and no way to weigh it."""
@@ -464,20 +475,20 @@ def _record_dossier(
     if gating and not value:
         raise ValueError(
             f"{attribute.name} must describe the open fork for gating entries "
-            f"{', '.join(gating)}"
+            + f"{', '.join(gating)}"
         )
 
 
 def _projection_dossier(
     instance: WheypointProjection,
-    attribute: Attribute[Any],
+    attribute: _NamedAttribute,
     value: list[DecisionFork],
 ) -> None:
     _bounded_list(instance, attribute, value)
     if instance.gating_entry_ids and not value:
         raise ValueError(
             f"{attribute.name} must describe the open fork for gating entries "
-            f"{', '.join(instance.gating_entry_ids)}"
+            + f"{', '.join(instance.gating_entry_ids)}"
         )
 
 
@@ -526,7 +537,7 @@ class WheypointRecord:
 
 
 def _rehydration_rule(
-    instance: WheypointDelta, attribute: Attribute[Any], value: object
+    instance: WheypointDelta, attribute: _NamedAttribute, value: object
 ) -> None:
     if value is not None and not instance.compacted:
         raise ValueError(
@@ -537,7 +548,7 @@ def _rehydration_rule(
 
 
 def _one_transition_per_entry(
-    _instance: object, attribute: Attribute[Any], value: list[EntryTransition] | None
+    _instance: object, attribute: _NamedAttribute, value: list[EntryTransition] | None
 ) -> None:
     if value is None:
         return
@@ -547,20 +558,20 @@ def _one_transition_per_entry(
         if transition.entry_id in seen:
             raise ValueError(
                 f"{attribute.name} must transition each entry at most once, "
-                f"but {transition.entry_id!r} appears twice"
+                + f"but {transition.entry_id!r} appears twice"
             )
         seen.add(transition.entry_id)
 
 
 def _optional_bounded_list(
-    instance: object, attribute: Attribute[Any], value: object
+    instance: object, attribute: _NamedAttribute, value: object
 ) -> None:
     if value is not None:
         _bounded_list(instance, attribute, value)
 
 
 def _optional_bounded_text_list(
-    instance: object, attribute: Attribute[Any], value: object
+    instance: object, attribute: _NamedAttribute, value: object
 ) -> None:
     if value is not None:
         _bounded_text_list(instance, attribute, value)

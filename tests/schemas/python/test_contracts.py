@@ -209,7 +209,7 @@ def test_contract_rejects_invalid_slugs_at_decorator_construction(
     with pytest.raises(
         ValueError, match=r"^contract slug must be a non-empty string$"
     ):
-        contract_module.contract(slug)  # type: ignore[arg-type]
+        _ = contract_module.contract(slug)  # pyright: ignore[reportArgumentType]
 
 
 def test_canonical_contracts_are_deeply_frozen() -> None:
@@ -221,16 +221,16 @@ def test_canonical_contracts_are_deeply_frozen() -> None:
     assert scope.paths == ("src/curd-1.py",)
     assert isinstance(value.curds, tuple)
     with pytest.raises(AttributeError, match="append"):
-        value.curds.append(curd("escaped"))  # type: ignore[attr-defined]
+        value.curds.append(curd("escaped"))  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType]
     with pytest.raises(attrs.exceptions.FrozenInstanceError):
-        value.revision = 2  # type: ignore[misc]
+        value.revision = 2  # pyright: ignore[reportAttributeAccessIssue]
 
 
 
 
 def test_artifact_size_is_bounded() -> None:
     with pytest.raises(ValueError, match="at most"):
-        ArtifactRef(
+        _ = ArtifactRef(
             artifact_id="artifact-large",
             role="source",
             uri="repo://artifacts/large",
@@ -272,7 +272,7 @@ def test_bounded_scope_rejects_unbounded_or_contradictory_paths(
     scope: object, message: str
 ) -> None:
     with pytest.raises(ValueError, match=message):
-        scope()  # type: ignore[operator]
+        scope()  # pyright: ignore[reportCallIssue]
 
 
 def test_curd_plan_rejects_unknown_dependencies() -> None:
@@ -280,7 +280,7 @@ def test_curd_plan_rejects_unknown_dependencies() -> None:
         ValueError,
         match=r"curds\[1\].dependencies references undeclared curd 'missing'",
     ):
-        plan(curd(dependencies=["missing"]))
+        _ = plan(curd(dependencies=["missing"]))
 
 
 def test_curd_plan_rejects_dependency_cycles() -> None:
@@ -292,7 +292,7 @@ def test_curd_plan_rejects_dependency_cycles() -> None:
     )
 
     with pytest.raises(ValueError, match="curd dependencies must be acyclic"):
-        plan(first, second)
+        _ = plan(first, second)
 
 
 def test_curd_plan_rejects_duplicate_criterion_identity() -> None:
@@ -300,24 +300,24 @@ def test_curd_plan_rejects_duplicate_criterion_identity() -> None:
     second = curd("curd-2")
 
     with pytest.raises(ValueError, match="criterion_id 'criterion-1' must be unique"):
-        plan(first, second)
+        _ = plan(first, second)
 
 
 def test_identity_lineage_enforces_new_retain_and_derive_rules() -> None:
     with pytest.raises(ValueError, match="new lineage must not name source curds"):
-        IdentityLineage(IdentityAction.NEW, ["old-curd"])
+        _ = IdentityLineage(IdentityAction.NEW, ["old-curd"])
     with pytest.raises(
         ValueError, match="retain lineage must name exactly one source curd"
     ):
-        IdentityLineage(IdentityAction.RETAIN)
+        _ = IdentityLineage(IdentityAction.RETAIN)
     with pytest.raises(
         ValueError, match="derive lineage must name at least one source curd"
     ):
-        IdentityLineage(IdentityAction.DERIVE)
+        _ = IdentityLineage(IdentityAction.DERIVE)
     with pytest.raises(
         ValueError, match="retain lineage must preserve curd_id 'curd-1'"
     ):
-        curd(lineage=IdentityLineage(IdentityAction.RETAIN, ["different-curd"]))
+        _ = curd(lineage=IdentityLineage(IdentityAction.RETAIN, ["different-curd"]))
 
 
 @pytest.mark.parametrize(
@@ -368,7 +368,7 @@ def test_planner_result_disposition_invariants(
     message: str,
 ) -> None:
     with pytest.raises(ValueError, match=message):
-        PlannerResult(
+        _ = PlannerResult(
             contract_version=VERSION,
             request_id="request-1",
             disposition=disposition,
@@ -389,7 +389,7 @@ def test_partial_planner_result_rejects_uncertainty_in_emitted_work() -> None:
         ValueError,
         match="partial planner result uncertainty must concern omitted work only",
     ):
-        PlannerResult(
+        _ = PlannerResult(
             contract_version=VERSION,
             request_id="request-1",
             disposition=PlannerDisposition.PARTIAL,
@@ -402,7 +402,7 @@ def test_planner_request_kind_controls_source_plan_and_evidence() -> None:
     with pytest.raises(
         ValueError, match="decompose request must not name a source plan"
     ):
-        PlannerRequest(
+        _ = PlannerRequest(
             contract_version=VERSION,
             request_id="request-1",
             kind=PlannerRequestKind.DECOMPOSE,
@@ -410,7 +410,7 @@ def test_planner_request_kind_controls_source_plan_and_evidence() -> None:
             source_plan_ref=source_plan_ref(),
         )
     with pytest.raises(ValueError, match="remediate request must carry evidence"):
-        PlannerRequest(
+        _ = PlannerRequest(
             contract_version=VERSION,
             request_id="request-2",
             kind=PlannerRequestKind.REMEDIATE,
@@ -431,7 +431,7 @@ def test_clean_review_requires_complete_coverage() -> None:
     with pytest.raises(
         ValueError, match="clean review result requires complete coverage"
     ):
-        ReviewResult(
+        _ = ReviewResult(
             contract_version=VERSION,
             review_id="review-1",
             disposition=ReviewDisposition.CLEAN,
@@ -444,7 +444,7 @@ def test_review_findings_disposition_requires_a_finding() -> None:
     with pytest.raises(
         ValueError, match="findings review result must include at least one finding"
     ):
-        ReviewResult(
+        _ = ReviewResult(
             contract_version=VERSION,
             review_id="review-1",
             disposition=ReviewDisposition.FINDINGS,
@@ -464,7 +464,7 @@ def test_blocked_review_rejects_findings_at_both_contract_boundaries() -> None:
     with pytest.raises(
         ValueError, match="blocked review result must not include findings"
     ):
-        ReviewResult(
+        _ = ReviewResult(
             contract_version=VERSION,
             review_id="review-1",
             disposition=ReviewDisposition.BLOCKED,
@@ -530,12 +530,12 @@ def test_review_request_accepts_typed_review_kind_and_rejects_invalid_values() -
     assert request.review_kind is ReviewKind.TASTE_TEST
 
     with pytest.raises(TypeError, match="'review_kind' must be"):
-        ReviewRequest(
+        _ = ReviewRequest(
             contract_version=VERSION,
             review_id="review-1",
             subject=artifact(),
             coverage_targets=["correctness"],
-            review_kind="not_a_review_kind",  # type: ignore[arg-type]
+            review_kind="not_a_review_kind",  # pyright: ignore[reportArgumentType]
         )
 
 
@@ -544,7 +544,7 @@ def test_confirmed_diagnosis_requires_reproduction_cause_and_regression_seam() -
         ValueError,
         match="confirmed diagnosis must include a confirmed cause",
     ):
-        DiagnosisResult(
+        _ = DiagnosisResult(
             contract_version=VERSION,
             diagnosis_id="diagnosis-1",
             disposition=DiagnosisDisposition.CONFIRMED,
@@ -558,7 +558,7 @@ def test_inconclusive_diagnosis_cannot_dispatch_a_confirmed_cause() -> None:
     with pytest.raises(
         ValueError, match="inconclusive diagnosis must not include a confirmed cause"
     ):
-        DiagnosisResult(
+        _ = DiagnosisResult(
             contract_version=VERSION,
             diagnosis_id="diagnosis-1",
             disposition=DiagnosisDisposition.INCONCLUSIVE,
@@ -586,7 +586,7 @@ def test_diagnosis_contract_rejects_remediation_fields() -> None:
     )
 
     with pytest.raises(TypeError, match="unexpected keyword argument 'remediation'"):
-        DiagnosisResult(
+        _ = DiagnosisResult(
             contract_version=VERSION,
             diagnosis_id=request.diagnosis_id,
             disposition=DiagnosisDisposition.CONFIRMED,
@@ -595,7 +595,7 @@ def test_diagnosis_contract_rejects_remediation_fields() -> None:
             hypotheses=[],
             confirmed_cause=cause(),
             regression_seam=cause().location,
-            remediation="Rewrite the parser",  # type: ignore[call-arg]
+            remediation="Rewrite the parser",  # pyright: ignore[reportCallIssue]
         )
 
     assert set(attrs.fields_dict(DiagnosisResult)) == {
@@ -648,7 +648,7 @@ def test_criterion_result_disposition_invariants(
     message: str,
 ) -> None:
     with pytest.raises(ValueError, match=message):
-        CriterionResult(
+        _ = CriterionResult(
             criterion_id="criterion-1",
             disposition=disposition,
             evidence=evidence_value,
@@ -661,7 +661,7 @@ def test_curd_result_requires_exact_criterion_coverage() -> None:
         ValueError,
         match="criterion_results must cover expected_criterion_ids exactly",
     ):
-        CurdResult(
+        _ = CurdResult(
             contract_version=VERSION,
             result_id="result-1",
             source_plan_ref=source_plan_ref(),
@@ -677,7 +677,7 @@ def test_curd_result_disposition_is_derived_from_criterion_rows() -> None:
         ValueError,
         match="disposition must be failed for the supplied criterion_results",
     ):
-        curd_result(
+        _ = curd_result(
             disposition=CurdDisposition.PASSED,
             row=criterion_result(CriterionDisposition.FAILED),
         )
@@ -690,7 +690,7 @@ def test_phase_contract_rejects_duplicate_routes() -> None:
     )
 
     with pytest.raises(ValueError, match="outputs must not contain duplicate routes"):
-        PhaseContract(
+        _ = PhaseContract(
             contract_version=VERSION,
             source="mold",
             input_schema_uris=["https://schemas.easy-cheese.dev/spec"],
@@ -748,15 +748,15 @@ def test_agent_writer_view_cannot_supply_host_owned_plan_fields() -> None:
     with pytest.raises(
         ValueError, match="curd_result writer view payload must be CurdResultWriterView"
     ):
-        AgentWriterView(kind=WriterViewKind.CURD_RESULT, payload=view.payload)
+        _ = AgentWriterView(kind=WriterViewKind.CURD_RESULT, payload=view.payload)
 
 
 @pytest.mark.parametrize("component", [1, "", "01", "one", "-1"])
 def test_contract_version_requires_numeric_string_components(component: object) -> None:
     with pytest.raises(ValueError, match="version component"):
-        ContractVersion(
+        _ = ContractVersion(
             schema_uri="https://schemas.easy-cheese.dev/curd-plan",
-            major=component,  # type: ignore[arg-type]
+            major=component,  # pyright: ignore[reportArgumentType]
             minor="0",
         )
 
@@ -764,15 +764,15 @@ def test_contract_version_requires_numeric_string_components(component: object) 
 @pytest.mark.parametrize("value", ["ab", {"a", "b"}, {"a": "b"}])
 def test_collection_converter_rejects_non_sequence_inputs(value: object) -> None:
     with pytest.raises(TypeError, match="list or tuple"):
-        BoundedScope(paths=value)  # type: ignore[arg-type]
+        _ = BoundedScope(paths=value)  # pyright: ignore[reportArgumentType]
 
 
 def test_semantic_string_collections_use_their_declared_validators() -> None:
     with pytest.raises(ValueError, match="opaque identifier"):
-        IdentityLineage(IdentityAction.RETAIN, source_curd_ids=["not an id"])
+        _ = IdentityLineage(IdentityAction.RETAIN, source_curd_ids=["not an id"])
 
     with pytest.raises(ValueError, match="opaque identifier"):
-        ReviewRequest(
+        _ = ReviewRequest(
             contract_version=VERSION,
             review_id="review-1",
             subject=artifact(),
@@ -780,7 +780,7 @@ def test_semantic_string_collections_use_their_declared_validators() -> None:
         )
 
     with pytest.raises(ValueError, match="absolute URI"):
-        PhaseContract(
+        _ = PhaseContract(
             contract_version=VERSION,
             source="mold",
             input_schema_uris=["not-a-uri"],
@@ -872,7 +872,7 @@ def test_planner_writer_view_rejects_no_work_with_unresolved_work() -> None:
         ValueError,
         match="no_work planner writer view must not carry unresolved work",
     ):
-        PlannerResultWriterView(
+        _ = PlannerResultWriterView(
             disposition=PlannerDisposition.NO_WORK,
             unresolved_work=[
                 PlannerUncertaintyWriterView(
@@ -898,7 +898,7 @@ def test_review_writer_view_enforces_disposition() -> None:
 
     result_kwargs: dict[str, object] = {
         "disposition": ReviewDisposition.CLEAN,
-        "findings": [ReviewFindingWriterView(**finding_kwargs)],
+        "findings": [ReviewFindingWriterView(**finding_kwargs)],  # pyright: ignore[reportArgumentType]
     }
     if "coverage" in attrs.fields_dict(ReviewResultWriterView):
         result_kwargs["coverage"] = [
@@ -908,7 +908,7 @@ def test_review_writer_view_enforces_disposition() -> None:
     with pytest.raises(
         ValueError, match="clean review writer view must not include findings"
     ):
-        ReviewResultWriterView(**result_kwargs)
+        _ = ReviewResultWriterView(**result_kwargs)  # pyright: ignore[reportArgumentType]
 
 
 def test_diagnosis_writer_view_enforces_confirmed_disposition() -> None:
@@ -929,7 +929,7 @@ def test_diagnosis_writer_view_enforces_confirmed_disposition() -> None:
         ValueError,
         match="confirmed diagnosis writer view must include a confirmed cause",
     ):
-        DiagnosisResultWriterView(**kwargs)
+        _ = DiagnosisResultWriterView(**kwargs)  # pyright: ignore[reportArgumentType]
 
 
 def test_diagnosis_hypothesis_writer_view_requires_evidence_for_a_verdict() -> None:
@@ -943,7 +943,7 @@ def test_diagnosis_hypothesis_writer_view_requires_evidence_for_a_verdict() -> N
         del kwargs["evidence_keys"]
 
     with pytest.raises(ValueError, match="confirmed hypothesis must include evidence"):
-        DiagnosisHypothesisWriterView(**kwargs)
+        _ = DiagnosisHypothesisWriterView(**kwargs)  # pyright: ignore[reportArgumentType]
 
 
 def test_criterion_writer_view_enforces_disposition() -> None:
@@ -958,4 +958,4 @@ def test_criterion_writer_view_enforces_disposition() -> None:
     with pytest.raises(
         ValueError, match="passed criterion result must include evidence"
     ):
-        CriterionResultWriterView(**kwargs)
+        _ = CriterionResultWriterView(**kwargs)  # pyright: ignore[reportArgumentType]

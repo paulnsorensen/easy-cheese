@@ -5,6 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
+from typing import TYPE_CHECKING, Protocol, cast
 
 import pytest
 import yaml
@@ -23,6 +24,9 @@ from easy_cheese_schemas.phase_contracts import (
     validate_transition,
 )
 
+if TYPE_CHECKING:
+    from easy_cheese_schemas.phase_contracts import CompiledTransition, TransitionRegistry
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SHARED_SCRIPTS = REPO_ROOT / "src" / "easy_cheese" / "shared"
 WRITER_PATH = SHARED_SCRIPTS / "write_handoff_artifact.py"
@@ -34,6 +38,7 @@ DECLARATIONS = (
     REPO_ROOT / "skills" / "press" / "phase-contract.yaml",
 )
 
+
 def _load(name: str, path: Path) -> ModuleType:
     spec = importlib.util.spec_from_file_location(name, path)
     assert spec is not None and spec.loader is not None
@@ -43,17 +48,77 @@ def _load(name: str, path: Path) -> ModuleType:
     return module
 
 
+class _CliModule(Protocol):
+    CliError: type[Exception]
+
+
+class _WriterModule(Protocol):
+    cli: _CliModule
+    COMPILED_TRANSITION_REGISTRY: TransitionRegistry
+
+    def validate_transition(
+        self,
+        registry: TransitionRegistry,
+        source: str,
+        destination: str,
+        payload_schema_uri: str | None = None,
+    ) -> CompiledTransition | None: ...
+
+    def write_artifact(
+        self,
+        *,
+        slug: str,
+        status: str,
+        next_skill: str,
+        artifact: str,
+        orientation: str,
+        body: str | None,
+        root: Path,
+        phase: str,
+        payload_schema_uri: str | None = None,
+        taste_test: str | None = None,
+        durable_flags: str | None = None,
+        baseline: str | None = None,
+    ) -> Path: ...
+
+
+class _BuildPyzModule(Protocol):
+    REPO_ROOT: Path
+    SCHEMA_CONTRACT_SOURCE: Path
+
+    def _compiled_phase_registry_source(self) -> str: ...
+
+    def _checked_in_generated_file_bytes(
+        self, expected_source: str, source: Path, *, artifact_name: str
+    ) -> bytes: ...
+
+    def _compiled_schema_catalog_source(self) -> str: ...
+
+    def build_bundle(self, skill: str, target: Path) -> Path: ...
+
+
 @pytest.fixture(scope="module")
-def writer() -> ModuleType:
+def writer() -> _WriterModule:
     if str(SHARED_SCRIPTS) not in sys.path:
         sys.path.insert(0, str(SHARED_SCRIPTS))
-    _load("cli", SHARED_SCRIPTS / "cli.py")
-    _load("handoff", SHARED_SCRIPTS / "handoff.py")
-    return _load("phase_contract_writer", WRITER_PATH)
+    _ = _load("cli", SHARED_SCRIPTS / "cli.py")
+    _ = _load("handoff", SHARED_SCRIPTS / "handoff.py")
+    return cast(_WriterModule, cast(object, _load("phase_contract_writer", WRITER_PATH)))
 
 
-def _declarations() -> list[object]:
-    return [yaml.safe_load(path.read_text(encoding="utf-8")) for path in DECLARATIONS]
+def as_dict(value: object) -> dict[str, object]:
+    return cast(dict[str, object], value)
+
+
+def as_list(value: object) -> list[object]:
+    return cast(list[object], value)
+
+
+def _declarations() -> list[dict[str, object]]:
+    return [
+        cast(dict[str, object], yaml.safe_load(path.read_text(encoding="utf-8")))
+        for path in DECLARATIONS
+    ]
 
 
 def test_phase_declarations_compile_to_embedded_registry_deterministically() -> None:
@@ -68,22 +133,25 @@ def test_phase_declarations_use_canonical_registered_schema_ids() -> None:
     declarations = _declarations()
     canonical = "https://schemas.easy-cheese.dev/"
     mold = next(item for item in declarations if item["source"] == "mold")
-    assert mold["contract_version"]["schema_uri"] == PHASE_CONTRACT_SCHEMA_URI
+    assert as_dict(mold["contract_version"])["schema_uri"] == PHASE_CONTRACT_SCHEMA_URI
     assert mold["input_schema_uris"] == [PLANNER_REQUEST_SCHEMA_URI]
     for declaration in declarations:
-        assert declaration["contract_version"]["schema_uri"] == PHASE_CONTRACT_SCHEMA_URI
-        assert all(
-            uri.startswith(canonical)
-            for uri in declaration["input_schema_uris"]
+        assert (
+            as_dict(declaration["contract_version"])["schema_uri"]
+            == PHASE_CONTRACT_SCHEMA_URI
         )
         assert all(
-            route["payload_schema_uri"].startswith(canonical)
-            for route in declaration["outputs"]
+            cast(str, uri).startswith(canonical)
+            for uri in as_list(declaration["input_schema_uris"])
+        )
+        assert all(
+            cast(str, as_dict(route)["payload_schema_uri"]).startswith(canonical)
+            for route in as_list(declaration["outputs"])
         )
 
     mold["input_schema_uris"] = ["urn:easy-cheese:schema:planner-request:1.0"]
     with pytest.raises(ValueError, match="schema URI"):
-        compile_phase_declarations([mold])
+        _ = compile_phase_declarations([mold])
 
 
 @pytest.mark.parametrize(
@@ -102,28 +170,28 @@ def test_compile_rejects_unsupported_phase_contract_version(
     field: str, value: str, message: str
 ) -> None:
     declaration = _declarations()[0]
-    declaration["contract_version"][field] = value
+    as_dict(declaration["contract_version"])[field] = value
     with pytest.raises(ValueError, match=message):
-        compile_phase_declarations([declaration])
+        _ = compile_phase_declarations([declaration])
 
 
 def test_compile_rejects_unregistered_payload_schema() -> None:
     declaration = _declarations()[0]
-    declaration["outputs"][0]["payload_schema_uri"] = (
+    as_dict(as_list(declaration["outputs"])[0])["payload_schema_uri"] = (
         "https://schemas.easy-cheese.dev/not-registered"
     )
     with pytest.raises(ValueError, match="registered canonical schema URI"):
-        compile_phase_declarations([declaration])
+        _ = compile_phase_declarations([declaration])
 
 
 def test_compile_rejects_route_not_declared_by_registered_destination() -> None:
     declaration = _declarations()[0]
-    declaration["outputs"][0]["payload_schema_uri"] = CURD_RESULT_SCHEMA_URI
+    as_dict(as_list(declaration["outputs"])[0])["payload_schema_uri"] = CURD_RESULT_SCHEMA_URI
     with pytest.raises(ValueError, match="destination input"):
-        compile_phase_declarations([declaration, *_declarations()[1:]])
+        _ = compile_phase_declarations([declaration, *_declarations()[1:]])
 
 
-def test_writer_uses_the_compiled_registry_projection(writer: ModuleType) -> None:
+def test_writer_uses_the_compiled_registry_projection(writer: _WriterModule) -> None:
     from easy_cheese_schemas import phase_contracts
 
     assert not hasattr(writer, "_TRANSITION_REGISTRY")
@@ -155,17 +223,19 @@ def test_checked_in_registry_projection_matches_build_generator() -> None:
     scripts = REPO_ROOT / "scripts"
     if str(scripts) not in sys.path:
         sys.path.insert(0, str(scripts))
-    build_pyz = _load("phase_contract_build_pyz", scripts / "build_pyz.py")
+    build_pyz: _BuildPyzModule = cast(
+        _BuildPyzModule, cast(object, _load("phase_contract_build_pyz", scripts / "build_pyz.py"))
+    )
 
     assert (
         REPO_ROOT / "src" / "easy_cheese_schemas" / "_compiled_phase_registry.py"
-    ).read_text(encoding="utf-8") == build_pyz._compiled_phase_registry_source()
+    ).read_text(encoding="utf-8") == build_pyz._compiled_phase_registry_source()  # pyright: ignore[reportPrivateUsage]
 
 
 
 def _write_phase_yaml(path: Path, source: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
+    _ = path.write_text(
         "\n".join(
             [
                 "contract_version:",
@@ -191,17 +261,20 @@ def test_build_compiler_is_clean_bootstrap_safe_and_fresh_per_call(
     scripts = REPO_ROOT / "scripts"
     if str(scripts) not in sys.path:
         sys.path.insert(0, str(scripts))
-    build_pyz = _load("phase_contract_build_bootstrap", scripts / "build_pyz.py")
+    build_pyz: _BuildPyzModule = cast(
+        _BuildPyzModule,
+        cast(object, _load("phase_contract_build_bootstrap", scripts / "build_pyz.py")),
+    )
     monkeypatch.setattr(build_pyz, "REPO_ROOT", tmp_path)
     declaration = tmp_path / "skills" / "smoke" / "phase-contract.yaml"
     _write_phase_yaml(declaration, "smoke")
 
-    first = build_pyz._compiled_phase_registry_source()
-    declaration.write_text(
+    first = build_pyz._compiled_phase_registry_source()  # pyright: ignore[reportPrivateUsage]
+    _ = declaration.write_text(
         declaration.read_text(encoding="utf-8").replace("source: smoke", "source: fresh"),
         encoding="utf-8",
     )
-    second = build_pyz._compiled_phase_registry_source()
+    second = build_pyz._compiled_phase_registry_source()  # pyright: ignore[reportPrivateUsage]
 
     assert "source\": \"smoke\"" in first
     assert "source\": \"fresh\"" in second
@@ -223,24 +296,30 @@ def test_checked_in_generated_file_bytes_covers_missing_stale_and_matching(
     scripts = REPO_ROOT / "scripts"
     if str(scripts) not in sys.path:
         sys.path.insert(0, str(scripts))
-    build_pyz = _load(
-        f"generated_file_validator_{artifact_name.replace(' ', '_')}",
-        scripts / "build_pyz.py",
+    build_pyz: _BuildPyzModule = cast(
+        _BuildPyzModule,
+        cast(
+            object,
+            _load(
+                f"generated_file_validator_{artifact_name.replace(' ', '_')}",
+                scripts / "build_pyz.py",
+            ),
+        ),
     )
     generated = tmp_path / source_name
-    validate = build_pyz._checked_in_generated_file_bytes
+    validate = build_pyz._checked_in_generated_file_bytes  # pyright: ignore[reportPrivateUsage]
 
     with pytest.raises(RuntimeError) as missing:
-        validate(
+        _ = validate(
             "current",
             generated,
             artifact_name=artifact_name,
         )
     assert str(missing.value) == f"checked-in {artifact_name} is missing: {generated}"
 
-    generated.write_bytes(b"stale")
+    _ = generated.write_bytes(b"stale")
     with pytest.raises(RuntimeError) as stale:
-        validate(
+        _ = validate(
             "current",
             generated,
             artifact_name=artifact_name,
@@ -251,7 +330,7 @@ def test_checked_in_generated_file_bytes_covers_missing_stale_and_matching(
     )
 
     expected = b"current"
-    generated.write_bytes(expected)
+    _ = generated.write_bytes(expected)
     assert (
         validate(
             "current",
@@ -266,11 +345,13 @@ def test_checked_in_catalog_projection_matches_build_generator() -> None:
     scripts = REPO_ROOT / "scripts"
     if str(scripts) not in sys.path:
         sys.path.insert(0, str(scripts))
-    build_pyz = _load("schema_catalog_build_pyz", scripts / "build_pyz.py")
+    build_pyz: _BuildPyzModule = cast(
+        _BuildPyzModule, cast(object, _load("schema_catalog_build_pyz", scripts / "build_pyz.py"))
+    )
 
     assert (
         REPO_ROOT / "src" / "easy_cheese_schemas" / "_schema_catalog.py"
-    ).read_text(encoding="utf-8") == build_pyz._compiled_schema_catalog_source()
+    ).read_text(encoding="utf-8") == build_pyz._compiled_schema_catalog_source()  # pyright: ignore[reportPrivateUsage]
 
 
 def test_schema_catalog_compilation_is_fresh_per_call(
@@ -279,20 +360,23 @@ def test_schema_catalog_compilation_is_fresh_per_call(
     scripts = REPO_ROOT / "scripts"
     if str(scripts) not in sys.path:
         sys.path.insert(0, str(scripts))
-    build_pyz = _load("schema_catalog_build_fresh", scripts / "build_pyz.py")
+    build_pyz: _BuildPyzModule = cast(
+        _BuildPyzModule,
+        cast(object, _load("schema_catalog_build_fresh", scripts / "build_pyz.py")),
+    )
     source = REPO_ROOT / "src" / "easy_cheese_schemas" / "contracts.py"
     staged = tmp_path / "contracts.py"
-    staged.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+    _ = staged.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
     monkeypatch.setattr(build_pyz, "SCHEMA_CONTRACT_SOURCE", staged)
 
-    first = build_pyz._compiled_schema_catalog_source()
-    staged.write_text(
+    first = build_pyz._compiled_schema_catalog_source()  # pyright: ignore[reportPrivateUsage]
+    _ = staged.write_text(
         staged.read_text(encoding="utf-8").replace(
             '@contract("curd-plan")', '@contract("fresh-plan")', 1
         ),
         encoding="utf-8",
     )
-    second = build_pyz._compiled_schema_catalog_source()
+    second = build_pyz._compiled_schema_catalog_source()  # pyright: ignore[reportPrivateUsage]
 
     assert "curd-plan" in first
     assert "fresh-plan" in second
@@ -305,10 +389,13 @@ def test_bundle_build_rejects_stale_checked_in_catalog(
     scripts = REPO_ROOT / "scripts"
     if str(scripts) not in sys.path:
         sys.path.insert(0, str(scripts))
-    build_pyz = _load("schema_catalog_build_stale", scripts / "build_pyz.py")
+    build_pyz: _BuildPyzModule = cast(
+        _BuildPyzModule,
+        cast(object, _load("schema_catalog_build_stale", scripts / "build_pyz.py")),
+    )
     source = REPO_ROOT / "src" / "easy_cheese_schemas" / "contracts.py"
     staged = tmp_path / "contracts.py"
-    staged.write_text(
+    _ = staged.write_text(
         source.read_text(encoding="utf-8").replace(
             '@contract("curd-plan")', '@contract("fresh-plan")', 1
         ),
@@ -318,7 +405,7 @@ def test_bundle_build_rejects_stale_checked_in_catalog(
     target = tmp_path / "cook.pyz"
 
     with pytest.raises(RuntimeError, match="checked-in schema catalog is stale"):
-        build_pyz.build_bundle("cook", target)
+        _ = build_pyz.build_bundle("cook", target)
 
     assert not target.exists()
 
@@ -330,19 +417,19 @@ def test_compile_rejects_duplicate_source() -> None:
         ValueError,
         match=f"duplicate phase source {declaration['source']!r}",
     ):
-        compile_phase_declarations([declaration, declaration])
+        _ = compile_phase_declarations([declaration, declaration])
 
 
 def test_compile_rejects_duplicate_output_route() -> None:
     declaration = _declarations()[0]
-    declaration["outputs"].append(dict(declaration["outputs"][0]))
+    as_list(declaration["outputs"]).append(dict(as_dict(as_list(declaration["outputs"])[0])))
 
     with pytest.raises(ValueError, match="duplicate output transitions"):
-        compile_phase_declarations([declaration])
+        _ = compile_phase_declarations([declaration])
 
 def test_parse_phase_yaml_rejects_duplicate_authority_fields() -> None:
     with pytest.raises(ValueError, match=r"duplicate field 'major'"):
-        parse_phase_yaml(
+        _ = parse_phase_yaml(
             "\n".join(
                 [
                     "contract_version:",
@@ -366,10 +453,10 @@ def test_compile_requires_canonical_decimal_version_components(
     component: object,
 ) -> None:
     declaration = _declarations()[0]
-    declaration["contract_version"]["major"] = component
+    as_dict(declaration["contract_version"])["major"] = component
 
     with pytest.raises(ValueError, match="major must be a canonical decimal string"):
-        compile_phase_declarations([declaration])
+        _ = compile_phase_declarations([declaration])
 
 
 def test_compile_rejects_non_uri_schema_reference() -> None:
@@ -379,7 +466,7 @@ def test_compile_rejects_non_uri_schema_reference() -> None:
     with pytest.raises(
         ValueError, match=r"input_schema_uris\[0\] must be a schema URI"
     ):
-        compile_phase_declarations([declaration])
+        _ = compile_phase_declarations([declaration])
 
 
 def test_registry_runtime_does_not_import_yaml() -> None:
@@ -416,6 +503,7 @@ def test_validate_transition_returns_the_declared_route() -> None:
         payload_schema_uri=CURD_PLAN_SCHEMA_URI,
     )
 
+    assert route is not None
     assert route.source == "mold"
     assert route.destination == "cook"
     assert route.payload_schema_uri == CURD_PLAN_SCHEMA_URI
@@ -436,7 +524,7 @@ def test_validate_transition_rejects_each_invalid_dimension(
     message: str,
 ) -> None:
     with pytest.raises(TransitionError, match=message):
-        validate_transition(
+        _ = validate_transition(
             COMPILED_TRANSITION_REGISTRY,
             source=source,
             destination=destination,
@@ -445,7 +533,7 @@ def test_validate_transition_rejects_each_invalid_dimension(
 
 
 def test_writer_validates_registered_transition_and_preserves_phase_path(
-    writer: ModuleType, tmp_path: Path
+    writer: _WriterModule, tmp_path: Path
 ) -> None:
     target = writer.write_artifact(
         slug="approved-plan",
@@ -469,10 +557,10 @@ def test_writer_validates_registered_transition_and_preserves_phase_path(
 
 
 def test_writer_rejects_invalid_transition_before_creating_directories(
-    writer: ModuleType, tmp_path: Path
+    writer: _WriterModule, tmp_path: Path
 ) -> None:
     with pytest.raises(writer.cli.CliError, match="mold -> cure is not declared"):
-        writer.write_artifact(
+        _ = writer.write_artifact(
             slug="bad-route",
             status="ok",
             phase="mold",
@@ -488,10 +576,10 @@ def test_writer_rejects_invalid_transition_before_creating_directories(
 
 
 def test_writer_rejects_wrong_schema_before_creating_directories(
-    writer: ModuleType, tmp_path: Path
+    writer: _WriterModule, tmp_path: Path
 ) -> None:
     with pytest.raises(writer.cli.CliError, match="payload schema .* not declared"):
-        writer.write_artifact(
+        _ = writer.write_artifact(
             slug="wrong-schema",
             status="ok",
             phase="mold",
@@ -507,10 +595,10 @@ def test_writer_rejects_wrong_schema_before_creating_directories(
 
 
 def test_writer_rejects_missing_phase_before_creating_directories(
-    writer: ModuleType, tmp_path: Path
+    writer: _WriterModule, tmp_path: Path
 ) -> None:
     with pytest.raises(writer.cli.CliError, match="--phase must be non-empty"):
-        writer.write_artifact(
+        _ = writer.write_artifact(
             slug="missing-phase",
             status="ok",
             phase="",
@@ -525,10 +613,10 @@ def test_writer_rejects_missing_phase_before_creating_directories(
 
 
 def test_writer_rejects_unknown_phase_before_creating_directories(
-    writer: ModuleType, tmp_path: Path
+    writer: _WriterModule, tmp_path: Path
 ) -> None:
     with pytest.raises(writer.cli.CliError, match="unknown source phase 'unknown'"):
-        writer.write_artifact(
+        _ = writer.write_artifact(
             slug="unknown-phase",
             status="ok",
             phase="unknown",
@@ -543,12 +631,12 @@ def test_writer_rejects_unknown_phase_before_creating_directories(
 
 
 def test_writer_never_follows_preplaced_predictable_tmp_symlink(
-    writer: ModuleType, tmp_path: Path
+    writer: _WriterModule, tmp_path: Path
 ) -> None:
     target_dir = tmp_path / ".cheese" / "press"
     target_dir.mkdir(parents=True)
     sentinel = tmp_path / "sentinel"
-    sentinel.write_text("untouched", encoding="utf-8")
+    _ = sentinel.write_text("untouched", encoding="utf-8")
     predictable_tmp = target_dir / "safe.md.tmp"
     predictable_tmp.symlink_to(sentinel)
 
@@ -568,7 +656,7 @@ def test_writer_never_follows_preplaced_predictable_tmp_symlink(
     assert predictable_tmp.is_symlink()
 
 def test_unregistered_legacy_age_route_preserves_phase_path(
-    writer: ModuleType, tmp_path: Path
+    writer: _WriterModule, tmp_path: Path
 ) -> None:
     target = writer.write_artifact(
         slug="legacy-age-route",
@@ -585,7 +673,7 @@ def test_unregistered_legacy_age_route_preserves_phase_path(
 
 
 def test_registered_writer_route_can_infer_its_only_payload_schema(
-    writer: ModuleType, tmp_path: Path
+    writer: _WriterModule, tmp_path: Path
 ) -> None:
     target = writer.write_artifact(
         slug="legacy-cook-call",
@@ -602,7 +690,7 @@ def test_registered_writer_route_can_infer_its_only_payload_schema(
 
 
 def test_terminal_outcome_preserves_registered_phase_path(
-    writer: ModuleType, tmp_path: Path
+    writer: _WriterModule, tmp_path: Path
 ) -> None:
     target = writer.write_artifact(
         slug="terminal-cure",

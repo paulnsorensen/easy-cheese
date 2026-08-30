@@ -11,6 +11,7 @@ import tempfile
 from collections.abc import Callable
 from email.message import Message
 from pathlib import Path
+from typing import Protocol, cast
 from urllib.error import HTTPError, URLError
 from urllib.parse import SplitResult, unquote, urljoin, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
@@ -23,7 +24,9 @@ __all__ = [
     "MAX_ARTIFACT_BYTES",
     "ArtifactResolutionError",
     "ResolvedAgentArtifact",
+    "read_repository_artifact",
     "resolve_artifact",
+    "resolve_verified_bytes",
 ]
 
 _READ_CHUNK_BYTES = 64 * 1024
@@ -34,7 +37,7 @@ _MAX_REDIRECTS = 5
 
 
 class _NoRedirectHandler(HTTPRedirectHandler):
-    def redirect_request(self, *args: object, **kwargs: object) -> None:
+    def redirect_request(self, *args: object, **kwargs: object) -> None:  # pyright: ignore[reportImplicitOverride]
         return None
 
 
@@ -58,10 +61,10 @@ def resolve_artifact(
     artifact_directory: str | Path,
     schema_validator: SchemaValidator | None = None,
 ) -> ResolvedAgentArtifact:
-    if artifact_directory is None:
-        raise ArtifactResolutionError("artifact_directory is required")
-    if not isinstance(artifact, ArtifactRef):
-        raise ArtifactResolutionError("artifact must be an ArtifactRef")
+    if artifact_directory is None:  # pyright: ignore[reportUnnecessaryComparison]
+        raise ArtifactResolutionError("artifact_directory is required")  # pyright: ignore[reportUnreachable]
+    if not isinstance(artifact, ArtifactRef):  # pyright: ignore[reportUnnecessaryIsInstance]
+        raise ArtifactResolutionError("artifact must be an ArtifactRef")  # pyright: ignore[reportUnreachable]
     _require_artifact_size(artifact.size_bytes)
     try:
         parsed = urlsplit(artifact.uri)
@@ -73,7 +76,7 @@ def resolve_artifact(
         )
 
     if parsed.scheme == "repo":
-        content, detected_type = _read_repository_artifact(
+        content, detected_type = read_repository_artifact(
             parsed.netloc,
             parsed.path,
             repository_root,
@@ -89,14 +92,14 @@ def resolve_artifact(
             f"unsupported artifact URI scheme: {parsed.scheme}"
         )
 
-    return _resolve_verified_bytes(
+    return resolve_verified_bytes(
         artifact,
         content,
         detected_type,
         artifact_directory,
         schema_validator,
     )
-def _resolve_verified_bytes(
+def resolve_verified_bytes(
     artifact: ArtifactRef,
     content: bytes,
     detected_type: str,
@@ -128,7 +131,7 @@ def _repository_components(authority: str, uri_path: str) -> tuple[str, ...]:
     return components
 
 
-def _read_repository_artifact(
+def read_repository_artifact(
     authority: str,
     uri_path: str,
     repository_root: str | Path,
@@ -293,7 +296,7 @@ def _read_bounded(
         chunk = reader(amount)
         if not chunk:
             break
-        if not isinstance(chunk, bytes):
+        if not isinstance(chunk, bytes):  # pyright: ignore[reportUnnecessaryIsInstance]
             raise ArtifactResolutionError(
                 f"artifact reader returned invalid data: {display_path}"
             )
@@ -308,6 +311,14 @@ def _read_bounded(
     return bytes(content)
 
 
+class _HttpsResponse(Protocol):
+    headers: Message
+
+    def read(self, amt: int | None = ...) -> bytes: ...
+    def __enter__(self) -> _HttpsResponse: ...
+    def __exit__(self, *args: object) -> None: ...
+
+
 def _read_https(artifact: ArtifactRef, parsed: SplitResult) -> tuple[bytes, str]:
     _require_artifact_size(artifact.size_bytes)
     _validate_https_location(parsed)
@@ -317,7 +328,7 @@ def _read_https(artifact: ArtifactRef, parsed: SplitResult) -> tuple[bytes, str]
     while True:
         request = Request(current_uri, headers={"User-Agent": "easy-cheese-schemas/1"})
         try:
-            with urlopen(request, timeout=30) as response:
+            with cast(_HttpsResponse, urlopen(request, timeout=30)) as response:
                 status = _response_status(response)
                 if status in _REDIRECT_CODES:
                     current_uri = _redirect_uri(
@@ -330,7 +341,7 @@ def _read_https(artifact: ArtifactRef, parsed: SplitResult) -> tuple[bytes, str]
                     redirects += 1
                     continue
 
-                _response_uri(response, current_uri)
+                _ = _response_uri(response, current_uri)
                 detected_type = _response_media_type(response.headers)
                 _validate_content_length(
                     response.headers.get("Content-Length"),
@@ -345,7 +356,7 @@ def _read_https(artifact: ArtifactRef, parsed: SplitResult) -> tuple[bytes, str]
         except HTTPError as exc:
             try:
                 headers = exc.headers
-                location = headers.get("Location") if headers is not None else None
+                location = headers.get("Location") if headers is not None else None  # pyright: ignore[reportUnnecessaryComparison]
                 if exc.code not in _REDIRECT_CODES:
                     raise ArtifactResolutionError(
                         f"HTTPS artifact could not be fetched: {artifact.uri}"
@@ -372,7 +383,7 @@ def _read_https(artifact: ArtifactRef, parsed: SplitResult) -> tuple[bytes, str]
         return content, detected_type
 
 
-def _validate_content_length(raw: object, expected_size: int) -> None:
+def _validate_content_length(raw: str | None, expected_size: int) -> None:
     if raw is None:
         return
     try:
@@ -400,7 +411,7 @@ def _response_status(response: object) -> int | None:
 
 
 def _response_uri(response: object, fallback: str) -> str:
-    geturl = getattr(response, "geturl", None)
+    geturl = cast(Callable[[], str] | None, getattr(response, "geturl", None))
     uri = geturl() if callable(geturl) else fallback
     try:
         parsed = urlsplit(uri)
@@ -414,7 +425,7 @@ def _response_uri(response: object, fallback: str) -> str:
     return uri
 
 
-def _redirect_uri(current_uri: str, location: object) -> str:
+def _redirect_uri(current_uri: str, location: str | None) -> str:
     if not isinstance(location, str) or not location:
         raise ArtifactResolutionError(
             "HTTPS artifact redirected outside URI policy"
@@ -479,12 +490,12 @@ def _validate_integrity(
     if _base_media_type(detected_type) != _base_media_type(artifact.media_type):
         raise ArtifactResolutionError(
             f"artifact media type mismatch: expected {artifact.media_type}, "
-            f"got {detected_type}"
+            + f"got {detected_type}"
         )
 
 
 def _require_artifact_size(size: int) -> None:
-    if not isinstance(size, int) or isinstance(size, bool) or size < 0:
+    if not isinstance(size, int) or isinstance(size, bool) or size < 0:  # pyright: ignore[reportUnnecessaryIsInstance]
         raise ArtifactResolutionError("artifact size must be a non-negative integer")
     if size > MAX_ARTIFACT_BYTES:
         raise ArtifactResolutionError(
@@ -521,7 +532,7 @@ def _validate_schema(
             "schema validation requires a JSON artifact media type"
         )
     try:
-        document = json.loads(content, object_pairs_hook=_reject_duplicate_keys)
+        document = cast(object, json.loads(content, object_pairs_hook=_reject_duplicate_keys))
     except ArtifactResolutionError:
         raise
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -554,7 +565,7 @@ def _validate_registered_schema(content: bytes, schema_uri: str) -> None:
         version = supported_version_for(schema_uri)
         if version is None:
             raise KeyError(schema_uri)
-        validate_contract(
+        _ = validate_contract(
             content,
             schema_uri,
             supported_version=version,
@@ -617,7 +628,7 @@ def _restrict_open_file(fd: int, _path: Path) -> None:
     if not callable(fchmod):
         raise ArtifactResolutionError("private file permissions are unavailable")
     try:
-        fchmod(fd, 0o600)
+        _ = fchmod(fd, 0o600)
         metadata = os.fstat(fd)
     except (NotImplementedError, OSError, TypeError, ValueError) as exc:
         raise ArtifactResolutionError(
@@ -630,8 +641,8 @@ def _restrict_open_file(fd: int, _path: Path) -> None:
 
 
 def _retain_verified_bytes(content: bytes, artifact_directory: str | Path) -> str:
-    if artifact_directory is None:
-        raise ArtifactResolutionError("artifact_directory is required")
+    if artifact_directory is None:  # pyright: ignore[reportUnnecessaryComparison]
+        raise ArtifactResolutionError("artifact_directory is required")  # pyright: ignore[reportUnreachable]
     _require_artifact_size(len(content))
     directory = Path(artifact_directory)
     try:
@@ -667,7 +678,7 @@ def _retain_verified_bytes(content: bytes, artifact_directory: str | Path) -> st
         with os.fdopen(temp_fd, "wb") as writer:
             temp_fd = None
             _restrict_open_file(writer.fileno(), temp_path)
-            writer.write(content)
+            _ = writer.write(content)
             writer.flush()
             os.fsync(writer.fileno())
         _restrict_permissions(temp_path, 0o600)
