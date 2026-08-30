@@ -25,7 +25,7 @@ Schema:
 from __future__ import annotations
 
 import sys
-from typing import Any
+from typing import cast
 
 from easy_cheese.shared.manifest_io import (
     ManifestLoadError,
@@ -49,9 +49,10 @@ class CurdBlockError(ValueError):
     """Raised when a curd block violates the locked schema."""
 
 
-def _curd_errors(curd: Any, where: str) -> list[str]:
+def _curd_errors(curd: object, where: str) -> list[str]:
     if not isinstance(curd, dict):
         return [f"{where} must be a mapping"]
+    curd = cast("dict[str, object]", curd)
 
     errors = required_keys(curd, _CURD_REQUIRED_KEYS, where)
     for key in ("slug", "contract", "test_target"):
@@ -68,7 +69,7 @@ def _curd_errors(curd: Any, where: str) -> list[str]:
     return errors
 
 
-def _est_edit_lines_errors(curd: dict, where: str) -> list[str]:
+def _est_edit_lines_errors(curd: dict[str, object], where: str) -> list[str]:
     value = curd["est_edit_lines"]
     if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
         return [f"{where}.est_edit_lines must be a positive integer"]
@@ -76,16 +77,16 @@ def _est_edit_lines_errors(curd: dict, where: str) -> list[str]:
         slug = curd.get("slug", "?")
         return [
             f"{where}.est_edit_lines={value} is below the surface floor of "
-            f"{MIN_CURD_SURFACE} — curd {slug!r} is a MERGE CANDIDATE: merge it "
-            "into a sibling curd rather than dispatch a fresh coder for it"
+            + f"{MIN_CURD_SURFACE} — curd {slug!r} is a MERGE CANDIDATE: merge it "
+            + "into a sibling curd rather than dispatch a fresh coder for it"
         ]
     return []
 
 
-def _disjoint_files_errors(curds: list[dict]) -> list[str]:
+def _disjoint_files_errors(curds: list[dict[str, object]]) -> list[str]:
     """Cross-curd file collision — the core file-disjointness invariant."""
     return disjoint_errors(
-        curds,
+        cast("list[object]", curds),
         id_key="slug",
         message=lambda f, first, second: (
             f"file {f!r} appears in curd {first!r} and curd {second!r} — "
@@ -94,28 +95,31 @@ def _disjoint_files_errors(curds: list[dict]) -> list[str]:
     )
 
 
-def _wave_errors(waves: Any, known_slugs: set[str]) -> list[str]:
+def _wave_errors(waves: object, known_slugs: set[str]) -> list[str]:
     if not isinstance(waves, list):
         return ["block.waves must be a list"]
+    wave_items = cast("list[object]", waves)
 
     errors: list[str] = []
-    for index, wave in enumerate(waves, start=1):
+    for index, wave in enumerate(wave_items, start=1):
         where = f"waves[{index}]"
         if not isinstance(wave, list):
             errors.append(f"{where} must be a list of slugs")
             continue
-        if len(wave) > MAX_WAVE_SIZE:
-            errors.append(f"{where} has {len(wave)} slugs, exceeding the max of {MAX_WAVE_SIZE}")
-        for slug in wave:
+        wave_slugs = cast("list[object]", wave)
+        if len(wave_slugs) > MAX_WAVE_SIZE:
+            errors.append(f"{where} has {len(wave_slugs)} slugs, exceeding the max of {MAX_WAVE_SIZE}")
+        for slug in wave_slugs:
             if slug not in known_slugs:
                 errors.append(f"{where} references unknown slug {slug!r}")
     return errors
 
 
-def _decomposer_errors(decomposer: Any) -> list[str]:
+def _decomposer_errors(decomposer: object) -> list[str]:
     where = "decomposer"
     if not isinstance(decomposer, dict):
         return [f"{where} must be a mapping"]
+    decomposer = cast("dict[str, object]", decomposer)
 
     errors = required_keys(decomposer, ("source", "model", "prompt_version"), where)
     if "source" in decomposer and decomposer["source"] not in _DECOMPOSER_SOURCES:
@@ -126,25 +130,35 @@ def _decomposer_errors(decomposer: Any) -> list[str]:
     return errors
 
 
-def validate_curd_block(block: Any) -> list[str]:
+def validate_curd_block(block: object) -> list[str]:
     """Return every schema violation in `block`; an empty list means valid."""
     if not isinstance(block, dict):
         return ["curd block must be a mapping"]
+    block = cast("dict[str, object]", block)
 
     errors = required_keys(block, ("curds", "waves", "decomposer"), "block")
     curds_field = block.get("curds")
+    curds_items: list[object]
     if "curds" in block and not isinstance(curds_field, list):
         errors.append("block.curds must be a list")
-        curds_field = []
-    elif isinstance(curds_field, list) and not curds_field:
-        errors.append("block.curds must be a non-empty list — a block with no curds is undispatchable")
-    curds = [c for c in (curds_field or []) if isinstance(c, dict)]
-    for index, curd in enumerate(curds_field or [], start=1):
+        curds_items = []
+    elif isinstance(curds_field, list):
+        curds_items = cast("list[object]", curds_field)
+        if not curds_items:
+            errors.append("block.curds must be a non-empty list — a block with no curds is undispatchable")
+    else:
+        curds_items = []
+    curds = [cast("dict[str, object]", c) for c in curds_items if isinstance(c, dict)]
+    for index, curd in enumerate(curds_items, start=1):
         errors.extend(_curd_errors(curd, f"curds[{index}]"))
 
     errors.extend(_disjoint_files_errors(curds))
 
-    known_slugs = {c["slug"] for c in curds if isinstance(c.get("slug"), str)}
+    known_slugs: set[str] = set()
+    for c in curds:
+        slug = c.get("slug")
+        if isinstance(slug, str):
+            known_slugs.add(slug)
     if "waves" in block:
         errors.extend(_wave_errors(block["waves"], known_slugs))
 
@@ -154,7 +168,7 @@ def validate_curd_block(block: Any) -> list[str]:
     return errors
 
 
-def parse_curd_block(source: dict | str) -> dict:
+def parse_curd_block(source: dict[str, object] | str) -> dict[str, object]:
     """Parse (if a YAML/JSON string) and validate a curd block.
 
     Raises CurdBlockError with every violation joined into one message; never

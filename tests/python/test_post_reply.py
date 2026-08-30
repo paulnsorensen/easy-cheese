@@ -10,15 +10,21 @@ from __future__ import annotations
 
 import subprocess
 from collections.abc import Callable, Iterable
+from typing import Protocol
 
 import pytest
 
 
+class _PostReplyModule(Protocol):
+    def main(self, argv: list[str] | None = None) -> int: ...
+    def compose_body(self, body: str, handle: str) -> str: ...
+
+
 class _FakeCompletedProcess:
-    def __init__(self, stdout: str = "", returncode: int = 0, stderr: str = ""):
-        self.stdout = stdout
-        self.returncode = returncode
-        self.stderr = stderr
+    def __init__(self, stdout: str = "", returncode: int = 0, stderr: str = "") -> None:
+        self.stdout: str = stdout
+        self.returncode: int = returncode
+        self.stderr: str = stderr
 
 
 def _matcher(prefix: Iterable[str]) -> Callable[[list[str]], bool]:
@@ -26,12 +32,17 @@ def _matcher(prefix: Iterable[str]) -> Callable[[list[str]], bool]:
     return lambda cmd: cmd[: len(needle)] == needle
 
 
-def _fake_run(responses, recorder: list[list[str]] | None = None):
+_Response = tuple[Callable[[list[str]], bool], str, int]
+
+
+def _fake_run(
+    responses: list[_Response], recorder: list[list[str]] | None = None
+) -> Callable[..., _FakeCompletedProcess]:
     """Fake subprocess.run dispatching by argv prefix. Each response is
     (matcher, stdout, returncode); first match wins. Every call is appended to
     `recorder` if given."""
 
-    def runner(cmd, **kwargs):
+    def runner(cmd: list[str], **_kwargs: object) -> _FakeCompletedProcess:
         if recorder is not None:
             recorder.append(list(cmd))
         for matcher, stdout, rc in responses:
@@ -43,7 +54,7 @@ def _fake_run(responses, recorder: list[list[str]] | None = None):
 
 
 # Canned responses for a healthy environment: resolves handle + repo, POST ok.
-def _healthy(recorder: list[list[str]]):
+def _healthy(recorder: list[list[str]]) -> Callable[..., _FakeCompletedProcess]:
     return _fake_run(
         [
             (_matcher(["gh", "api", "user"]), "stub-user", 0),
@@ -74,21 +85,21 @@ def _posted_path(recorder: list[list[str]]) -> str:
 
 
 @pytest.fixture(autouse=True)
-def _clear_handle_env(monkeypatch):
+def _clear_handle_env(monkeypatch: pytest.MonkeyPatch) -> None:  # pyright: ignore[reportUnusedFunction]
     monkeypatch.delenv("RESPOND_GH_HANDLE", raising=False)
 
 
 # --- endpoint routing -----------------------------------------------------
 
 
-def test_thread_mode_hits_replies_endpoint(post_reply, monkeypatch):
+def test_thread_mode_hits_replies_endpoint(post_reply: _PostReplyModule, monkeypatch: pytest.MonkeyPatch) -> None:
     rec: list[list[str]] = []
     monkeypatch.setattr(subprocess, "run", _healthy(rec))
     assert post_reply.main(["--thread", "--pr", "42", "--comment-id", "999", "--body", "Fixed."]) == 0
     assert _posted_path(rec) == "repos/owner/repo/pulls/42/comments/999/replies"
 
 
-def test_issue_mode_hits_issues_endpoint(post_reply, monkeypatch):
+def test_issue_mode_hits_issues_endpoint(post_reply: _PostReplyModule, monkeypatch: pytest.MonkeyPatch) -> None:
     rec: list[list[str]] = []
     monkeypatch.setattr(subprocess, "run", _healthy(rec))
     assert post_reply.main(["--issue", "--pr", "42", "--body", "Re: @alice — fixed."]) == 0
@@ -98,40 +109,40 @@ def test_issue_mode_hits_issues_endpoint(post_reply, monkeypatch):
 # --- attribution ----------------------------------------------------------
 
 
-def test_attribution_appended_with_resolved_handle(post_reply, monkeypatch):
+def test_attribution_appended_with_resolved_handle(post_reply: _PostReplyModule, monkeypatch: pytest.MonkeyPatch) -> None:
     rec: list[list[str]] = []
     monkeypatch.setattr(subprocess, "run", _healthy(rec))
-    post_reply.main(["--issue", "--pr", "42", "--body", "Hello world."])
+    _ = post_reply.main(["--issue", "--pr", "42", "--body", "Hello world."])
     assert "agent on behalf of stub-user" in _posted_body(rec)
 
 
-def test_respond_gh_handle_overrides_resolution(post_reply, monkeypatch):
+def test_respond_gh_handle_overrides_resolution(post_reply: _PostReplyModule, monkeypatch: pytest.MonkeyPatch) -> None:
     rec: list[list[str]] = []
     monkeypatch.setenv("RESPOND_GH_HANDLE", "override-handle")
     monkeypatch.setattr(subprocess, "run", _healthy(rec))
-    post_reply.main(["--issue", "--pr", "42", "--body", "Hello."])
+    _ = post_reply.main(["--issue", "--pr", "42", "--body", "Hello."])
     assert "agent on behalf of override-handle" in _posted_body(rec)
     # gh api user must never be called when the env var short-circuits.
     assert not any(cmd[:3] == ["gh", "api", "user"] for cmd in rec)
 
 
-def test_idempotent_no_double_append(post_reply, monkeypatch):
+def test_idempotent_no_double_append(post_reply: _PostReplyModule, monkeypatch: pytest.MonkeyPatch) -> None:
     rec: list[list[str]] = []
     monkeypatch.setattr(subprocess, "run", _healthy(rec))
     body = "Hello.\n\n---\nagent on behalf of stub-user"
-    post_reply.main(["--issue", "--pr", "42", "--body", body])
+    _ = post_reply.main(["--issue", "--pr", "42", "--body", body])
     assert _posted_body(rec).count("agent on behalf of stub-user") == 1
 
 
-def test_idempotent_tolerates_trailing_newline(post_reply, monkeypatch):
+def test_idempotent_tolerates_trailing_newline(post_reply: _PostReplyModule, monkeypatch: pytest.MonkeyPatch) -> None:
     rec: list[list[str]] = []
     monkeypatch.setattr(subprocess, "run", _healthy(rec))
     body = "Hello.\n\n---\nagent on behalf of stub-user\n"
-    post_reply.main(["--issue", "--pr", "42", "--body", body])
+    _ = post_reply.main(["--issue", "--pr", "42", "--body", body])
     assert _posted_body(rec).count("agent on behalf of stub-user") == 1
 
 
-def test_attribution_appended_when_body_only_quotes_it(post_reply):
+def test_attribution_appended_when_body_only_quotes_it(post_reply: _PostReplyModule) -> None:
     """Exact-suffix match, not substring: a body that mentions the attribution
     phrase mid-text but does not END with the suffix block still gets a real
     attribution appended."""
@@ -143,7 +154,7 @@ def test_attribution_appended_when_body_only_quotes_it(post_reply):
     assert out.count("agent on behalf of") == 2
 
 
-def test_compose_body_preserves_metacharacters(post_reply):
+def test_compose_body_preserves_metacharacters(post_reply: _PostReplyModule) -> None:
     body = 'Backticks `code` and $vars and "quotes" and newlines\nstill survive.'
     out = post_reply.compose_body(body, "u")
     assert "Backticks `code` and $vars" in out
@@ -153,7 +164,7 @@ def test_compose_body_preserves_metacharacters(post_reply):
 # --- handle resolution precedence -----------------------------------------
 
 
-def test_handle_falls_through_to_git_config(post_reply, monkeypatch):
+def test_handle_falls_through_to_git_config(post_reply: _PostReplyModule, monkeypatch: pytest.MonkeyPatch) -> None:
     rec: list[list[str]] = []
     monkeypatch.setattr(
         subprocess,
@@ -168,11 +179,11 @@ def test_handle_falls_through_to_git_config(post_reply, monkeypatch):
             rec,
         ),
     )
-    post_reply.main(["--issue", "--pr", "42", "--body", "Hello."])
+    _ = post_reply.main(["--issue", "--pr", "42", "--body", "Hello."])
     assert "agent on behalf of fallback-user" in _posted_body(rec)
 
 
-def test_handle_resolution_exhausted_exits_1(post_reply, monkeypatch):
+def test_handle_resolution_exhausted_exits_1(post_reply: _PostReplyModule, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         subprocess,
         "run",
@@ -184,11 +195,11 @@ def test_handle_resolution_exhausted_exits_1(post_reply, monkeypatch):
         ),
     )
     with pytest.raises(SystemExit) as exc:
-        post_reply.main(["--issue", "--pr", "42", "--body", "Hello."])
+        _ = post_reply.main(["--issue", "--pr", "42", "--body", "Hello."])
     assert exc.value.code == 1
 
 
-def test_repo_resolution_failure_exits_1(post_reply, monkeypatch):
+def test_repo_resolution_failure_exits_1(post_reply: _PostReplyModule, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         subprocess,
         "run",
@@ -200,14 +211,14 @@ def test_repo_resolution_failure_exits_1(post_reply, monkeypatch):
         ),
     )
     with pytest.raises(SystemExit) as exc:
-        post_reply.main(["--issue", "--pr", "42", "--body", "Hello."])
+        _ = post_reply.main(["--issue", "--pr", "42", "--body", "Hello."])
     assert exc.value.code == 1
 
 
 # --- argument validation --------------------------------------------------
 
 
-def test_post_api_failure_exits_1(post_reply, monkeypatch):
+def test_post_api_failure_exits_1(post_reply: _PostReplyModule, monkeypatch: pytest.MonkeyPatch) -> None:
     """A failed `gh api POST` must fail loud (exit 1), never silently succeed —
     a swallowed POST error would drop the reply while reporting success."""
     monkeypatch.setattr(
@@ -222,7 +233,7 @@ def test_post_api_failure_exits_1(post_reply, monkeypatch):
         ),
     )
     with pytest.raises(SystemExit) as exc:
-        post_reply.main(["--issue", "--pr", "42", "--body", "Hello."])
+        _ = post_reply.main(["--issue", "--pr", "42", "--body", "Hello."])
     assert exc.value.code == 1
 
 
@@ -238,9 +249,9 @@ def test_post_api_failure_exits_1(post_reply, monkeypatch):
         (["--pr", "42", "--body", "x"], 2),  # no mode -> usage
     ],
 )
-def test_arg_validation_exit_codes(post_reply, argv, code):
+def test_arg_validation_exit_codes(post_reply: _PostReplyModule, argv: list[str], code: int) -> None:
     with pytest.raises(SystemExit) as exc:
-        post_reply.main(argv)
+        _ = post_reply.main(argv)
     assert exc.value.code == code
 
 
@@ -248,10 +259,12 @@ def test_arg_validation_exit_codes(post_reply, argv, code):
 
 
 @pytest.mark.parametrize("flag", ["-h", "--help"])
-def test_help_prints_usage_to_stdout_and_exits_0(post_reply, flag, capsys):
+def test_help_prints_usage_to_stdout_and_exits_0(
+    post_reply: _PostReplyModule, flag: str, capsys: pytest.CaptureFixture[str]
+) -> None:
     """--help / -h must write usage to stdout and exit 0 — it is not an error."""
     with pytest.raises(SystemExit) as exc:
-        post_reply.main([flag])
+        _ = post_reply.main([flag])
     assert exc.value.code == 0
     captured = capsys.readouterr()
     assert "Usage" in captured.out

@@ -47,13 +47,13 @@ _USAGE = (
 
 def _die(message: str) -> SystemExit:
     """Build a fatal error exiting 1 (operational failure). Caller `raise`s it."""
-    sys.stderr.write(f"post-reply: {message}\n")
+    _ = sys.stderr.write(f"post-reply: {message}\n")
     return SystemExit(1)
 
 
 def _usage_error() -> SystemExit:
     """Build a usage error exiting 2. Caller `raise`s it."""
-    sys.stderr.write(_USAGE)
+    _ = sys.stderr.write(_USAGE)
     return SystemExit(2)
 
 
@@ -82,7 +82,7 @@ def resolve_handle() -> str:
         return name
     raise _die(
         "could not resolve a GitHub handle (set RESPOND_GH_HANDLE, sign in "
-        "with gh, or set git config user.name)"
+        + "with gh, or set git config user.name)"
     )
 
 
@@ -123,7 +123,7 @@ def _post(api_path: str, full_body: str) -> None:
         raise _die("gh CLI not found in PATH") from exc
     if result.returncode != 0:
         raise _die(f"gh api POST {api_path} failed (exit {result.returncode}): {result.stderr.strip()}")
-    sys.stdout.write(result.stdout)
+    _ = sys.stdout.write(result.stdout)
 
 
 def post_thread_reply(pr: str, comment_id: str, full_body: str) -> None:
@@ -171,7 +171,7 @@ def _scan_flags(argv: list[str]) -> tuple[str, str, str, str]:
             body = argv[i + 1] if i + 1 < len(argv) else ""
             i += 2
         elif arg in ("-h", "--help"):
-            sys.stdout.write(_USAGE)
+            _ = sys.stdout.write(_USAGE)
             raise SystemExit(0)
         else:
             raise _die(f"unknown argument: {arg}")

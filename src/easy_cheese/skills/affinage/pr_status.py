@@ -49,13 +49,39 @@ import json
 import re
 import subprocess
 import sys
-from typing import Any
+from typing import TypedDict, cast
 
 FAILURE_TAIL_LINES = 10
 
 # Exit code for "failing build, but no failing check produced any groundable
 # log evidence" — see the module docstring.
 EXIT_LOGS_EXPIRED = 3
+
+
+class _EnrichedCheck(TypedDict):
+    name: str
+    conclusion: str
+    url: str
+    failing: bool
+    failure_summary: str
+    failed_tests: list[str]
+
+
+class _BuildInfo(TypedDict):
+    status: str
+    checks: list[_EnrichedCheck]
+
+
+class _MergeInfo(TypedDict):
+    mergeable: str
+    state: str
+
+
+class _Output(TypedDict):
+    pr: int
+    build: _BuildInfo
+    merge: _MergeInfo
+
 
 # Heuristic patterns for extracting failed-test names from log output.
 # Conservative — false positives are noise but not incorrect grading.
@@ -79,7 +105,7 @@ def _gh(args: list[str]) -> subprocess.CompletedProcess[str]:
             check=False,
         )
     except FileNotFoundError:
-        sys.stderr.write("pr-status.py: gh CLI not found in PATH\n")
+        _ = sys.stderr.write("pr-status.py: gh CLI not found in PATH\n")
         sys.exit(2)
 
 
@@ -88,14 +114,14 @@ def _run_gh(args: list[str], *, allow_fail: bool = False) -> str:
     result = _gh(args)
     if result.returncode != 0:
         if allow_fail:
-            sys.stderr.write(
+            _ = sys.stderr.write(
                 f"pr-status.py: gh {' '.join(args)} failed (exit {result.returncode}); "
-                "continuing with empty result\n"
+                + "continuing with empty result\n"
             )
             return ""
-        sys.stderr.write(
+        _ = sys.stderr.write(
             f"pr-status.py: gh {' '.join(args)} failed (exit {result.returncode}): "
-            f"{result.stderr.strip()}\n"
+            + f"{result.stderr.strip()}\n"
         )
         sys.exit(1)
     return result.stdout
@@ -113,7 +139,7 @@ _BUCKET_TO_STATE = {
 }
 
 
-def fetch_checks(pr: int) -> list[dict[str, Any]]:
+def fetch_checks(pr: int) -> list[dict[str, object]]:
     """Return raw check entries for ``pr``.
 
     Fast path: `gh pr checks --json name,state,bucket,link` (gh >= 2.49.0).
@@ -127,11 +153,11 @@ def fetch_checks(pr: int) -> list[dict[str, Any]]:
     raw = json_result.stdout
     if raw.strip():
         try:
-            data = json.loads(raw)
+            data = cast(object, json.loads(raw))
         except json.JSONDecodeError:
             data = None
         if isinstance(data, list):
-            return data
+            return cast(list[dict[str, object]], data)
     elif json_result.returncode == 0:
         # gh succeeded and reported no checks at all.
         return []
@@ -141,7 +167,7 @@ def fetch_checks(pr: int) -> list[dict[str, Any]]:
 
 def _fetch_checks_plain(
     pr: int, json_result: subprocess.CompletedProcess[str]
-) -> list[dict[str, Any]]:
+) -> list[dict[str, object]]:
     """Parse plain `gh pr checks` output when the `--json` fast path is unusable."""
     plain = _gh(["pr", "checks", str(pr)])
     text = plain.stdout
@@ -152,15 +178,15 @@ def _fetch_checks_plain(
         # real "passing, no checks" answer; the latter must surface as exit 1.
         if "no checks reported" in plain.stderr.lower():
             return []
-        sys.stderr.write(
+        _ = sys.stderr.write(
             "pr-status.py: gh pr checks --json failed (exit "
-            f"{json_result.returncode}: {json_result.stderr.strip()}) and the "
-            f"plain fallback also failed (exit {plain.returncode}: "
-            f"{plain.stderr.strip()})\n"
+            + f"{json_result.returncode}: {json_result.stderr.strip()}) and the "
+            + f"plain fallback also failed (exit {plain.returncode}: "
+            + f"{plain.stderr.strip()})\n"
         )
         sys.exit(1)
 
-    checks: list[dict[str, Any]] = []
+    checks: list[dict[str, object]] = []
     for line in text.splitlines():
         if not line.strip():
             continue
@@ -179,21 +205,26 @@ def _fetch_checks_plain(
     return checks
 
 
-def fetch_merge_state(pr: int) -> dict[str, str]:
+def fetch_merge_state(pr: int) -> _MergeInfo:
     raw = _run_gh(["pr", "view", str(pr), "--json", "mergeable,mergeStateStatus"])
     if not raw.strip():
         return {"mergeable": "UNKNOWN", "state": "UNKNOWN"}
     try:
-        data = json.loads(raw)
+        data = cast(object, json.loads(raw))
     except json.JSONDecodeError as exc:
-        sys.stderr.write(
+        _ = sys.stderr.write(
             f"pr-status.py: could not parse gh pr view JSON ({exc}); "
-            "treating merge state as UNKNOWN\n"
+            + "treating merge state as UNKNOWN\n"
         )
         return {"mergeable": "UNKNOWN", "state": "UNKNOWN"}
+    if not isinstance(data, dict):
+        return {"mergeable": "UNKNOWN", "state": "UNKNOWN"}
+    payload = cast(dict[str, object], data)
+    mergeable = payload.get("mergeable")
+    state = payload.get("mergeStateStatus")
     return {
-        "mergeable": data.get("mergeable", "UNKNOWN") or "UNKNOWN",
-        "state": data.get("mergeStateStatus", "UNKNOWN") or "UNKNOWN",
+        "mergeable": mergeable if isinstance(mergeable, str) and mergeable else "UNKNOWN",
+        "state": state if isinstance(state, str) and state else "UNKNOWN",
     }
 
 
@@ -230,7 +261,12 @@ def fetch_failure_summary(link: str) -> tuple[str, list[str]]:
     return tail, failed_tests
 
 
-def classify_status(checks: list[dict[str, Any]]) -> str:
+def _str_field(d: dict[str, object], key: str) -> str:
+    value = d.get(key)
+    return value if isinstance(value, str) else ""
+
+
+def classify_status(checks: list[dict[str, object]]) -> str:
     """Classify overall build state from per-check `bucket` values.
 
     `gh pr checks` exposes a pre-classified `bucket` field (pass / fail /
@@ -239,7 +275,7 @@ def classify_status(checks: list[dict[str, Any]]) -> str:
     """
     if not checks:
         return "passing"
-    buckets = {(c.get("bucket") or "").lower() for c in checks}
+    buckets = {_str_field(c, "bucket").lower() for c in checks}
     if "fail" in buckets:
         return "failing"
     if "pending" in buckets:
@@ -247,36 +283,39 @@ def classify_status(checks: list[dict[str, Any]]) -> str:
     return "passing"
 
 
-def build_output(pr: int) -> dict[str, Any]:
+def build_output(pr: int) -> _Output:
     raw_checks = fetch_checks(pr)
     merge = fetch_merge_state(pr)
     status = classify_status(raw_checks)
 
-    enriched: list[dict[str, Any]] = []
+    enriched: list[_EnrichedCheck] = []
     for check in raw_checks:
-        bucket = (check.get("bucket") or "").lower()
-        state = (check.get("state") or "")
-        entry: dict[str, Any] = {
-            "name": check.get("name", ""),
-            # Output key stays `conclusion` per spec; we derive it from gh's
-            # canonical `state` (SUCCESS / FAILURE / CANCELLED / TIMED_OUT /
-            # SKIPPED / IN_PROGRESS / QUEUED / ...) lowercased.
-            "conclusion": state.lower(),
-            "url": check.get("link", "") or "",
-            # `failing` is the single source of truth for "this check made the
-            # build fail" — derived from gh's pre-classified `bucket`, the same
-            # signal that drives classification and enrichment. Downstream halt
-            # logic reads this, never the conclusion string, so the three stay
-            # in lockstep across every gh state that maps to bucket==fail.
-            "failing": bucket == "fail",
-            "failure_summary": "",
-            "failed_tests": [],
-        }
-        if entry["failing"]:
-            summary, failed = fetch_failure_summary(entry["url"])
-            entry["failure_summary"] = summary
-            entry["failed_tests"] = failed
-        enriched.append(entry)
+        bucket = _str_field(check, "bucket").lower()
+        # Output key stays `conclusion` per spec; we derive it from gh's
+        # canonical `state` (SUCCESS / FAILURE / CANCELLED / TIMED_OUT /
+        # SKIPPED / IN_PROGRESS / QUEUED / ...) lowercased.
+        conclusion = _str_field(check, "state").lower()
+        url = _str_field(check, "link")
+        # `failing` is the single source of truth for "this check made the
+        # build fail" — derived from gh's pre-classified `bucket`, the same
+        # signal that drives classification and enrichment. Downstream halt
+        # logic reads this, never the conclusion string, so the three stay
+        # in lockstep across every gh state that maps to bucket==fail.
+        failing = bucket == "fail"
+        failure_summary = ""
+        failed_tests: list[str] = []
+        if failing:
+            failure_summary, failed_tests = fetch_failure_summary(url)
+        enriched.append(
+            {
+                "name": _str_field(check, "name"),
+                "conclusion": conclusion,
+                "url": url,
+                "failing": failing,
+                "failure_summary": failure_summary,
+                "failed_tests": failed_tests,
+            }
+        )
 
     return {
         "pr": pr,
@@ -285,7 +324,7 @@ def build_output(pr: int) -> dict[str, Any]:
     }
 
 
-def all_failures_ungroundable(output: dict[str, Any]) -> bool:
+def all_failures_ungroundable(output: _Output) -> bool:
     """True when the build is failing and every failing check whose logs are
     *fetchable* produced no log evidence — the expired-Actions-logs case, where
     rerunning the failed jobs is the right remediation.
@@ -305,34 +344,31 @@ def all_failures_ungroundable(output: dict[str, Any]) -> bool:
     signal `build_output` uses to enrich, so this never drifts from the set of
     checks that actually made the build fail.
     """
-    build = output.get("build", {})
-    if build.get("status") != "failing":
+    build = output["build"]
+    if build["status"] != "failing":
         return False
-    fetchable = [
-        c
-        for c in build.get("checks", [])
-        if c.get("failing") and extract_run_id(c.get("url") or "")
-    ]
+    fetchable = [c for c in build["checks"] if c["failing"] and extract_run_id(c["url"])]
     if not fetchable:
         return False
-    return all(not (c.get("failure_summary") or "") for c in fetchable)
+    return all(not c["failure_summary"] for c in fetchable)
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Fetch PR status (build + merge) for /affinage grading.",
     )
-    parser.add_argument("pr", type=int, help="PR number")
+    _ = parser.add_argument("pr", type=int, help="PR number")
     args = parser.parse_args(argv)
+    pr = cast(int, args.pr)
 
-    output = build_output(args.pr)
+    output = build_output(pr)
     json.dump(output, sys.stdout, indent=2)
-    sys.stdout.write("\n")
+    _ = sys.stdout.write("\n")
     if all_failures_ungroundable(output):
-        sys.stderr.write(
+        _ = sys.stderr.write(
             "pr-status.py: build is failing but no failing check produced any "
-            "log evidence (logs likely expired); exiting "
-            f"{EXIT_LOGS_EXPIRED} so the caller can halt\n"
+            + "log evidence (logs likely expired); exiting "
+            + f"{EXIT_LOGS_EXPIRED} so the caller can halt\n"
         )
         return EXIT_LOGS_EXPIRED
     return 0

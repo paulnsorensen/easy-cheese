@@ -8,6 +8,7 @@ import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
+from typing import cast
 
 import pytest
 
@@ -59,7 +60,7 @@ class TestHappyPathJson:
             "--json",
         )
         assert result.returncode == 0, result.stderr
-        payload = json.loads(result.stdout)
+        payload = cast(dict[str, str], json.loads(result.stdout))
         assert payload["slug"] == "tail-trailing-newline"
         assert payload["path"].endswith("/specs/tail-trailing-newline.md")
 
@@ -70,7 +71,7 @@ class TestHappyPathJson:
             cwd=tmp_path,
         )
         assert result.returncode == 0, result.stderr
-        payload = json.loads(result.stdout)
+        payload = cast(dict[str, str], json.loads(result.stdout))
         assert payload == {
             "slug": "tail-trailing-newline",
             "path": ".cheese/specs/tail-trailing-newline.md",
@@ -85,7 +86,7 @@ class TestKebabCasing:
             "--json",
         )
         assert result.returncode == 0, result.stderr
-        payload = json.loads(result.stdout)
+        payload = cast(dict[str, str], json.loads(result.stdout))
         # Apostrophes drop ("Don't"->"dont"), commas/exclamation drop.
         assert payload["slug"] == "dont-stop-believin"
 
@@ -96,7 +97,7 @@ class TestKebabCasing:
             "--json",
         )
         assert result.returncode == 0, result.stderr
-        payload = json.loads(result.stdout)
+        payload = cast(dict[str, str], json.loads(result.stdout))
         # "The" is a stopword and is dropped.
         assert payload["slug"] == "quick-brown-fox-jumps"
 
@@ -107,7 +108,7 @@ class TestKebabCasing:
             "--json",
         )
         assert result.returncode == 0, result.stderr
-        payload = json.loads(result.stdout)
+        payload = cast(dict[str, str], json.loads(result.stdout))
         assert payload["slug"] == "multiple-spaces-here"
 
 
@@ -120,7 +121,7 @@ class TestFiveWordCap:
             "--json",
         )
         assert result.returncode == 0, result.stderr
-        payload = json.loads(result.stdout)
+        payload = cast(dict[str, str], json.loads(result.stdout))
         assert payload["slug"] == "one-two-three-four-five"
         # Sanity: exactly 5 hyphen-separated tokens.
         assert payload["slug"].count("-") == 4
@@ -134,7 +135,7 @@ class TestFiveWordCap:
             "--json",
         )
         assert result.returncode == 0, result.stderr
-        payload = json.loads(result.stdout)
+        payload = cast(dict[str, str], json.loads(result.stdout))
         assert payload["slug"] == "alpha-beta-gamma-delta-epsilon"
 
 
@@ -143,7 +144,7 @@ class TestCollision:
         # Pre-create .cheese/specs/<slug>.md under tmp_path.
         specs_dir = tmp_path / "specs"
         specs_dir.mkdir(parents=True)
-        (specs_dir / "tail-trailing-newline.md").write_text("preexisting\n")
+        _ = (specs_dir / "tail-trailing-newline.md").write_text("preexisting\n")
 
         result = _run(
             "from-task", "--task", "Tail trailing newline",

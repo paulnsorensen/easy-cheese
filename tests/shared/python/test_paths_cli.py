@@ -10,8 +10,25 @@ import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
+from typing import TYPE_CHECKING, Protocol, cast
 
 import pytest
+
+if TYPE_CHECKING:
+    import argparse
+    import re
+    from collections.abc import Callable
+
+
+class _PathsSubmodule(Protocol):
+    KEBAB_SLUG: re.Pattern[str]
+    PHASES: frozenset[str]
+
+
+class _PathsCliModule(Protocol):
+    _setup: Callable[[argparse.ArgumentParser], None]
+    paths: _PathsSubmodule
+
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SHARED_SCRIPTS = REPO_ROOT / "src" / "easy_cheese" / "shared"
@@ -106,7 +123,7 @@ class TestExisting:
     def test_json_returns_list(self, tmp_path: Path) -> None:
         (tmp_path / "age").mkdir()
         target = tmp_path / "age" / "demo.md"
-        target.write_text("body", encoding="utf-8")
+        _ = target.write_text("body", encoding="utf-8")
 
         result = _run(
             "existing",
@@ -119,7 +136,7 @@ class TestExisting:
             "--json",
         )
         assert result.returncode == 0, result.stderr
-        payload = json.loads(result.stdout)
+        payload = cast(list[str], json.loads(result.stdout))
         assert payload == [str(target)]
 
     def test_empty_when_missing(self, tmp_path: Path) -> None:
@@ -139,7 +156,7 @@ class TestExisting:
     def test_filters_to_requested_phase(self, tmp_path: Path) -> None:
         # Artifact exists under cook but caller asked for age — must come back empty.
         (tmp_path / "cook").mkdir()
-        (tmp_path / "cook" / "demo.md").write_text("body", encoding="utf-8")
+        _ = (tmp_path / "cook" / "demo.md").write_text("body", encoding="utf-8")
 
         result = _run(
             "existing",
@@ -191,7 +208,7 @@ class TestExisting:
         home = tmp_path / "corpus-home"
         spec = home / "owner-repo" / "specs" / "demo.md"
         spec.parent.mkdir(parents=True)
-        spec.write_text("body", encoding="utf-8")
+        _ = spec.write_text("body", encoding="utf-8")
         env = dict(os.environ)
         env["EASY_CHEESE_HOME"] = str(home)
         env["EASY_CHEESE_PROJECT"] = "owner-repo"
@@ -206,11 +223,11 @@ class TestExisting:
         home = tmp_path / "corpus-home"
         corpus_spec = home / "owner-repo" / "specs" / "demo.md"
         corpus_spec.parent.mkdir(parents=True)
-        corpus_spec.write_text("body", encoding="utf-8")
+        _ = corpus_spec.write_text("body", encoding="utf-8")
         override_root = tmp_path / "custom-root"
         override_spec = override_root / "specs" / "demo.md"
         override_spec.parent.mkdir(parents=True)
-        override_spec.write_text("body", encoding="utf-8")
+        _ = override_spec.write_text("body", encoding="utf-8")
         env = dict(os.environ)
         env["EASY_CHEESE_HOME"] = str(home)
         env["EASY_CHEESE_PROJECT"] = "owner-repo"
@@ -237,7 +254,7 @@ class TestList:
         home = tmp_path / "corpus-home"
         spec = home / "owner-repo" / "specs" / "demo.md"
         spec.parent.mkdir(parents=True)
-        spec.write_text("body", encoding="utf-8")
+        _ = spec.write_text("body", encoding="utf-8")
         env = dict(os.environ)
         env["EASY_CHEESE_HOME"] = str(home)
         env["EASY_CHEESE_PROJECT"] = "owner-repo"
@@ -249,7 +266,7 @@ class TestList:
     def test_transient_phase_anchors_under_dot_cheese(self, tmp_path: Path) -> None:
         art = tmp_path / ".cheese" / "cook" / "demo.md"
         art.parent.mkdir(parents=True)
-        art.write_text("body", encoding="utf-8")
+        _ = art.write_text("body", encoding="utf-8")
 
         result = _run("list", "--phase", "cook", "--repo-root", str(tmp_path), "--json")
         assert result.returncode == 0, result.stderr
@@ -261,26 +278,26 @@ class TestList:
         for name in ("alpha", "bravo", "charlie"):
             art = tmp_path / ".cheese" / "cook" / f"{name}.md"
             art.parent.mkdir(parents=True, exist_ok=True)
-            art.write_text("body", encoding="utf-8")
+            _ = art.write_text("body", encoding="utf-8")
 
         capped = _run(
             "list", "--phase", "cook", "--repo-root", str(tmp_path),
             "--json", "--limit", "2",
         )
         assert capped.returncode == 0, capped.stderr
-        assert len(json.loads(capped.stdout)) == 2
+        assert len(cast(list[object], json.loads(capped.stdout))) == 2
 
         full = _run(
             "list", "--phase", "cook", "--repo-root", str(tmp_path),
             "--json", "--limit", "2", "--full",
         )
         assert full.returncode == 0, full.stderr
-        assert len(json.loads(full.stdout)) == 3
+        assert len(cast(list[object], json.loads(full.stdout))) == 3
 
     def test_plain_mode_emits_slugs_only(self, tmp_path: Path) -> None:
         art = tmp_path / ".cheese" / "cook" / "demo.md"
         art.parent.mkdir(parents=True)
-        art.write_text("body", encoding="utf-8")
+        _ = art.write_text("body", encoding="utf-8")
 
         result = _run("list", "--phase", "cook", "--repo-root", str(tmp_path))
         assert result.returncode == 0, result.stderr
@@ -306,10 +323,10 @@ class TestResolve:
     def test_hit_emits_contract_keys(self, tmp_path: Path) -> None:
         art = tmp_path / ".cheese" / "cook" / "demo.md"
         art.parent.mkdir(parents=True)
-        art.write_text("body", encoding="utf-8")
+        _ = art.write_text("body", encoding="utf-8")
         result = _run("resolve", "--slug", "demo", "--repo-root", str(tmp_path))
         assert result.returncode == 0, result.stderr
-        payload = json.loads(result.stdout)
+        payload = cast(dict[str, object], json.loads(result.stdout))
         assert payload["fallback_roots"] == []
         assert payload["matches"] == [
             {
@@ -323,9 +340,9 @@ class TestResolve:
     def test_fallback_emits_searched_roots(self, tmp_path: Path) -> None:
         result = _run("resolve", "--slug", "nowhere", "--repo-root", str(tmp_path))
         assert result.returncode == 0, result.stderr
-        payload = json.loads(result.stdout)
+        payload = cast(dict[str, object], json.loads(result.stdout))
         assert payload["matches"] == []
-        assert str(tmp_path / ".cheese" / "cook") in payload["fallback_roots"]
+        assert str(tmp_path / ".cheese" / "cook") in cast(list[str], payload["fallback_roots"])
 
     def test_invalid_slug_exits_two(self, tmp_path: Path) -> None:
         result = _run("resolve", "--slug", "Bad_Slug", "--repo-root", str(tmp_path))
@@ -341,11 +358,11 @@ class TestResolve:
 
 
 class TestModuleImport:
-    def test_setup_callable_present(self, paths_cli_mod: ModuleType) -> None:
+    def test_setup_callable_present(self, paths_cli_mod: _PathsCliModule) -> None:
         # Sanity: the module exports the argparse setup hook cli.run consumes.
-        assert callable(paths_cli_mod._setup)
+        assert callable(paths_cli_mod._setup)  # pyright: ignore[reportPrivateUsage]
 
-    def test_delegates_to_paths_module(self, paths_cli_mod: ModuleType) -> None:
+    def test_delegates_to_paths_module(self, paths_cli_mod: _PathsCliModule) -> None:
         # paths_cli must use the shared paths module, not redefine the regex/phases.
         assert paths_cli_mod.paths.KEBAB_SLUG is not None
         assert "age" in paths_cli_mod.paths.PHASES

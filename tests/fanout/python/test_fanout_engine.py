@@ -19,7 +19,7 @@ SRC_FANOUT = REPO_ROOT / "src" / "easy_cheese" / "shared" / "fanout"
 class TestReferencesPresent:
     """Every prompt / schema reference the parallel mode loads must be present."""
 
-    REQUIRED_REFERENCES = (
+    REQUIRED_REFERENCES: tuple[str, ...] = (
         "decomposer-prompt.md",
         "curd-prompt.md",
         "wiring-prompt.md",
@@ -39,7 +39,7 @@ class TestReferencesPresent:
 class TestScriptsPresent:
     """Every retained engine module must exist in src/easy_cheese/shared/fanout/."""
 
-    REQUIRED_SCRIPTS = (
+    REQUIRED_SCRIPTS: tuple[str, ...] = (
         "phase_decision.py",
         "mode.py",
         "milknado.py",
@@ -55,7 +55,7 @@ class TestScriptsPresent:
 
     # The CLI validators are marked executable; the dispatcher runs every module
     # from inside the .pyz, so only these carry the exec bit historically.
-    EXECUTABLE_SCRIPTS = (
+    EXECUTABLE_SCRIPTS: tuple[str, ...] = (
         "validate_decomposition.py",
         "validate_manifest.py",
         "validate_pr_plan.py",

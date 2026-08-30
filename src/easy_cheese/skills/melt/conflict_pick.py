@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import argparse
 import re
+import subprocess
 import sys
 from pathlib import Path
+from typing import Protocol, cast
 
 from easy_cheese.shared.git_utils import (
     MARKER_BASE,
@@ -76,18 +78,26 @@ def resolve_hunks(content: str, strategy: str, grep_pattern: str | None = None) 
     return "\n".join(result)
 
 
-def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+class _Args(Protocol):
+    file: str
+    ours: bool
+    theirs: bool
+    grep: str | None
+    dry_run: bool
+
+
+def _parse_args(argv: list[str] | None = None) -> _Args:
     parser = argparse.ArgumentParser(description="Pick ours or theirs for conflict hunks")
-    parser.add_argument("file", help="File to resolve")
-    parser.add_argument("--ours", action="store_true", help="Take our changes for matching hunks")
-    parser.add_argument(
+    _ = parser.add_argument("file", help="File to resolve")
+    _ = parser.add_argument("--ours", action="store_true", help="Take our changes for matching hunks")
+    _ = parser.add_argument(
         "--theirs", action="store_true", help="Take their changes for matching hunks"
     )
-    parser.add_argument("--grep", metavar="PATTERN", help="Only resolve hunks matching this regex")
-    parser.add_argument(
+    _ = parser.add_argument("--grep", metavar="PATTERN", help="Only resolve hunks matching this regex")
+    _ = parser.add_argument(
         "--dry-run", action="store_true", help="Print resolved content without writing"
     )
-    return parser.parse_args(argv)
+    return cast(_Args, cast(object, parser.parse_args(argv)))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -121,12 +131,12 @@ def main(argv: list[str] | None = None) -> int:
             print("# some conflicts remain (not matching --grep)", file=sys.stderr)
         return 0
 
-    Path(args.file).write_text(resolved)
+    _ = Path(args.file).write_text(resolved)
     if has_remaining:
         print(f"partial {args.file}: some conflicts remain")
         return 0
 
-    add_result = run_git(["add", args.file])
+    add_result: subprocess.CompletedProcess[str] = run_git(["add", args.file])
     if add_result.returncode != 0:
         print(f"resolved but staging failed: {add_result.stderr.strip()}", file=sys.stderr)
         return 1

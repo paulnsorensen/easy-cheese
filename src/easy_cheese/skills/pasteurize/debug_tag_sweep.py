@@ -15,6 +15,7 @@ import argparse
 import os
 import sys
 from pathlib import Path
+from typing import TextIO, TypedDict, cast
 
 from easy_cheese.shared import cli  # noqa: E402
 
@@ -29,6 +30,11 @@ DEFAULT_TAGS = (
 )
 
 SKIP_DIRS = frozenset({".git", "node_modules", "__pycache__", ".venv", "site"})
+
+
+class _SweepResult(TypedDict):
+    files: list[str]
+    total: int
 
 
 def _is_binary(path: Path, *, sniff_bytes: int = 4096) -> bool:
@@ -47,7 +53,7 @@ def _read_text(path: Path) -> str | None:
         return None
 
 
-def sweep(root: Path, tags: tuple[str, ...]) -> dict:
+def sweep(root: Path, tags: tuple[str, ...]) -> _SweepResult:
     """Walk `root` and return {files: [...], total: N} for any file containing a tag."""
     hits: list[str] = []
     total = 0
@@ -70,38 +76,41 @@ def sweep(root: Path, tags: tuple[str, ...]) -> dict:
 
 
 def _run(args: argparse.Namespace) -> int:
-    root = args.root.resolve()
+    root_arg = cast(Path, args.root)
+    root = root_arg.resolve()
     if not root.exists():
-        raise cli.CliError(f"root does not exist: {args.root}")
+        raise cli.CliError(f"root does not exist: {root_arg}")
     if not root.is_dir():
-        raise cli.CliError(f"root is not a directory: {args.root}")
+        raise cli.CliError(f"root is not a directory: {root_arg}")
 
-    tags = tuple(t for t in (args.tags.split(",") if args.tags else DEFAULT_TAGS) if t)
+    tags_arg = cast("str | None", args.tags)
+    tags = tuple(t for t in (tags_arg.split(",") if tags_arg else DEFAULT_TAGS) if t)
     if not tags:
         raise cli.CliError("no tags to scan for")
 
     result = sweep(root, tags)
+    stdout = cast(TextIO, args.stdout)
 
-    if args.json_mode:
-        cli.emit(result, json_mode=True, stdout=args.stdout)
+    if cast(bool, args.json_mode):
+        cli.emit(result, json_mode=True, stdout=stdout)
     else:
         cli.emit(
             result["files"] or ["(clean)"],
-            limit=args.limit,
-            full=args.full,
-            stdout=args.stdout,
+            limit=cast(int, args.limit),
+            full=cast(bool, args.full),
+            stdout=stdout,
         )
-        print(f"total: {result['total']}", file=args.stdout)
+        print(f"total: {result['total']}", file=stdout)
 
     return 1 if result["total"] else 0
 
 
 def _setup(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--root", type=Path, default=Path.cwd(),
+    _ = parser.add_argument("--root", type=Path, default=Path.cwd(),
                         help="Directory to scan (default: cwd).")
-    parser.add_argument("--tags", default=None,
+    _ = parser.add_argument("--tags", default=None,
                         help="Comma-separated tag tokens to scan for (default: pasteurize set).")
-    parser.add_argument("--limit", type=int, default=50,
+    _ = parser.add_argument("--limit", type=int, default=50,
                         help="Max files to list in plain output (default: 50).")
     parser.set_defaults(func=_run)
 

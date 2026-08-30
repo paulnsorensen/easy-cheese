@@ -4,9 +4,14 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import cast
 
 import pytest
+from easy_cheese_schemas import GateDisposition
+
 from easy_cheese.shared.cut import red_gate
+from easy_cheese.shared.cut.gate_receipts import GateValidationError
+from easy_cheese.shared.taste_test import RED_REQUIRED_EXECUTABLE_PROBLEM
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -24,7 +29,7 @@ def test_approved_contracts_map_each_acceptance_id_once(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     spec = tmp_path / "approved.md"
-    spec.write_text(
+    _ = spec.write_text(
         """---
 status: approved
 gate_applicability:
@@ -51,7 +56,7 @@ gate_applicability:
     assert code == 0, error
     assert payload is not None
     assert payload["disposition"] == "red"
-    contracts = payload["contracts"]
+    contracts = cast(list[dict[str, object]], payload["contracts"])
     assert [contract["acceptance_id"] for contract in contracts] == ["AC-1", "AC-2"]
     assert [contract["contract_source"] for contract in contracts] == [
         "approved",
@@ -64,7 +69,7 @@ def test_contract_plan_excludes_green_guards(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     spec = tmp_path / "guarded.md"
-    spec.write_text(
+    _ = spec.write_text(
         """---
 source: mold-handshake
 gate_applicability:
@@ -92,9 +97,10 @@ gate_applicability:
     assert code == 0, error
     assert payload is not None
     assert payload["disposition"] == "red"
+    contracts = cast(list[dict[str, object]], payload["contracts"])
     assert [
         (contract["acceptance_id"], contract["mode"])
-        for contract in payload["contracts"]
+        for contract in contracts
     ] == [("AC-1", "tracer")]
 
 
@@ -102,7 +108,7 @@ def test_guard_only_red_required_is_rejected_with_one_actionable_problem(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     spec = tmp_path / "guard-only.md"
-    spec.write_text(
+    _ = spec.write_text(
         """---
 source: mold-handshake
 gate_applicability:
@@ -125,29 +131,29 @@ gate_applicability:
         encoding="utf-8",
     )
 
-    plan = red_gate._parse_spec(spec)
-    assert plan.disposition is red_gate.GateDisposition.RED
+    plan = red_gate._parse_spec(spec)  # pyright: ignore[reportPrivateUsage]
+    assert plan.disposition is GateDisposition.RED
     assert plan.contracts == ()
-    assert plan.problems == (red_gate.RED_REQUIRED_EXECUTABLE_PROBLEM,)
+    assert plan.problems == (RED_REQUIRED_EXECUTABLE_PROBLEM,)
 
     code, payload, error = _run_contracts(spec, capsys)
 
     assert code == 1
     assert payload is None
     assert error.splitlines() == [
-        f"ERROR: {red_gate.RED_REQUIRED_EXECUTABLE_PROBLEM}"
+        f"ERROR: {RED_REQUIRED_EXECUTABLE_PROBLEM}"
     ]
 
-    with pytest.raises(red_gate.GateValidationError) as failure:
-        red_gate.parse_gate_applicability(spec)
-    assert failure.value.problems == (red_gate.RED_REQUIRED_EXECUTABLE_PROBLEM,)
+    with pytest.raises(GateValidationError) as failure:
+        _ = red_gate.parse_gate_applicability(spec)
+    assert failure.value.problems == (RED_REQUIRED_EXECUTABLE_PROBLEM,)
 
 
 def test_approved_contract_row_can_cover_multiple_acceptance_ids(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     spec = tmp_path / "grouped.md"
-    spec.write_text(
+    _ = spec.write_text(
         """---
 gate_applicability:
   disposition: red-required
@@ -171,7 +177,8 @@ gate_applicability:
 
     assert code == 0, error
     assert payload is not None
-    assert [contract["acceptance_id"] for contract in payload["contracts"]] == [
+    contracts = cast(list[dict[str, object]], payload["contracts"])
+    assert [contract["acceptance_id"] for contract in contracts] == [
         "AC-1",
         "AC-2",
     ]
@@ -181,7 +188,7 @@ def test_approved_red_required_rejects_table_ids_without_acceptance_ids(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     spec = tmp_path / "missing-acceptance-ids.md"
-    spec.write_text(
+    _ = spec.write_text(
         """---
 status: approved
 gate_applicability:
@@ -212,7 +219,7 @@ def test_legacy_contracts_are_inferred_without_approval(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     spec = tmp_path / "legacy.md"
-    spec.write_text(
+    _ = spec.write_text(
         """# Legacy behavior
 
 ## Acceptance Criteria
@@ -226,22 +233,23 @@ def test_legacy_contracts_are_inferred_without_approval(
 
     assert code == 0, error
     assert payload is not None
-    assert [contract["acceptance_id"] for contract in payload["contracts"]] == [
+    contracts = cast(list[dict[str, object]], payload["contracts"])
+    assert [contract["acceptance_id"] for contract in contracts] == [
         "AC-7",
         "AC-8",
     ]
     assert all(
-        contract["contract_source"] == "inferred" for contract in payload["contracts"]
+        contract["contract_source"] == "inferred" for contract in contracts
     )
-    assert all(contract["seam"] for contract in payload["contracts"])
-    assert all(contract["expected_failure"] for contract in payload["contracts"])
+    assert all(contract["seam"] for contract in contracts)
+    assert all(contract["expected_failure"] for contract in contracts)
 
 
 def test_not_applicable_allows_acceptance_ids_without_contract_table(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     spec = tmp_path / "docs.md"
-    spec.write_text(
+    _ = spec.write_text(
         """---
 gate_applicability:
   disposition: not-applicable
@@ -268,7 +276,7 @@ def test_not_applicable_requires_reason(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     spec = tmp_path / "missing-reason.md"
-    spec.write_text(
+    _ = spec.write_text(
         """---
 gate_applicability:
   disposition: not-applicable
@@ -293,7 +301,7 @@ def test_contracts_reject_contradictory_not_applicable_declaration(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     spec = tmp_path / "contradictory.md"
-    spec.write_text(
+    _ = spec.write_text(
         """---
 gate_applicability:
   disposition: not-applicable
@@ -323,7 +331,7 @@ def test_contracts_reject_duplicate_and_missing_acceptance_rows(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     spec = tmp_path / "incomplete.md"
-    spec.write_text(
+    _ = spec.write_text(
         """---
 gate_applicability:
   disposition: red-required
@@ -355,7 +363,7 @@ def test_cut_reuses_mold_browser_surface_validation(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     spec = tmp_path / "browser.md"
-    spec.write_text(
+    _ = spec.write_text(
         """---
 source: agent-mini-spec
 gate_applicability:
@@ -388,7 +396,7 @@ def test_cut_accepts_mold_appearance_only_ui_as_not_applicable(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     spec = tmp_path / "appearance.md"
-    spec.write_text(
+    _ = spec.write_text(
         """---
 source: agent-mini-spec
 gate_applicability:
@@ -418,7 +426,7 @@ def test_cut_reuses_mold_disposition_validation(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     spec = tmp_path / "invalid-disposition.md"
-    spec.write_text(
+    _ = spec.write_text(
         """---
 gate_applicability:
   disposition: deferred

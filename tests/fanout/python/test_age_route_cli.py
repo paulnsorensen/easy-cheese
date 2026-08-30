@@ -12,6 +12,7 @@ from __future__ import annotations
 import io
 import json
 import sys
+from collections.abc import Mapping
 from contextlib import redirect_stdout
 from pathlib import Path
 
@@ -23,7 +24,7 @@ sys.path.insert(0, str(REPO_ROOT / "src" / "fanout"))
 from easy_cheese.shared.fanout import age_route, age_route_cli  # noqa: E402
 
 
-def _run(payload: dict, capsys: pytest.CaptureFixture[str]) -> tuple[int, str, str]:
+def _run(payload: Mapping[str, object], capsys: pytest.CaptureFixture[str]) -> tuple[int, str, str]:
     # contextlib has no redirect_stdin; swap sys.stdin directly and restore.
     buf = io.StringIO()
     original_stdin = sys.stdin

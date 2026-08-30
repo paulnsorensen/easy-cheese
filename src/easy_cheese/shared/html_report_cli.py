@@ -18,26 +18,29 @@ from __future__ import annotations
 import argparse
 import tempfile
 from pathlib import Path
+from typing import TextIO, cast
 
 from easy_cheese.shared import cli, html_report
 
 
 def _cmd_render(args: argparse.Namespace) -> None:
-    cli.reject_path_segment("--out-name", args.out_name)
-    src = Path(args.in_path)
+    out_name = cast(str, args.out_name)
+    in_path = cast(str, args.in_path)
+    cli.reject_path_segment("--out-name", out_name)
+    src = Path(in_path)
     if not src.is_file():
-        raise cli.CliError(f"--in not found: {args.in_path}")
-    document = html_report.render(src.read_text(encoding="utf-8"), title=args.title)
-    out_path = Path(tempfile.gettempdir()) / f"{args.out_name}.html"
-    out_path.write_text(document, encoding="utf-8")
-    cli.emit(str(out_path), stdout=args.stdout)
+        raise cli.CliError(f"--in not found: {in_path}")
+    document = html_report.render(src.read_text(encoding="utf-8"), title=cast(str, args.title))
+    out_path = Path(tempfile.gettempdir()) / f"{out_name}.html"
+    _ = out_path.write_text(document, encoding="utf-8")
+    cli.emit(str(out_path), stdout=cast("TextIO", args.stdout))
 
 
 def _setup(parser: argparse.ArgumentParser) -> None:
     parser.description = "Render a Markdown report artifact into a self-contained HTML file."
-    parser.add_argument("--in", dest="in_path", required=True, help="source markdown artifact")
-    parser.add_argument("--title", required=True, help="document title")
-    parser.add_argument("--out-name", dest="out_name", required=True, help="output filename stem")
+    _ = parser.add_argument("--in", dest="in_path", required=True, help="source markdown artifact")
+    _ = parser.add_argument("--title", required=True, help="document title")
+    _ = parser.add_argument("--out-name", dest="out_name", required=True, help="output filename stem")
     parser.set_defaults(func=_cmd_render)
 
 

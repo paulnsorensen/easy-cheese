@@ -48,7 +48,7 @@ def test_both_surfaces_carry_a_non_empty_generated_region() -> None:
 
 def _prepared_stale_tree(tmp_path: Path) -> Path:
     tree = tmp_path / "repo"
-    shutil.copytree(
+    _ = shutil.copytree(
         REPO_ROOT,
         tree,
         symlinks=True,
@@ -70,7 +70,7 @@ def test_seeded_stale_region_copy_is_detected_as_drift(tmp_path: Path) -> None:
     tree = _prepared_stale_tree(tmp_path)
     stale = tree / "skills" / "mold" / "references" / "curdle.md"
     text = stale.read_text(encoding="utf-8")
-    stale.write_text(
+    _ = stale.write_text(
         regen.replace_region(text, regen.MOLD_SPEC_TAG, "document mold-spec { stale }\n"),
         encoding="utf-8",
     )
@@ -95,7 +95,7 @@ def test_intertwine_generator_runs_twice_byte_identical_and_matches_checked_in()
 def test_intertwine_seeded_stale_copy_is_detected_as_drift(tmp_path: Path) -> None:
     tree = _prepared_stale_tree(tmp_path)
     stale = tree / "skills" / "cheese" / "references" / "schema-intertwine.md"
-    stale.write_text("stale content\n", encoding="utf-8")
+    _ = stale.write_text("stale content\n", encoding="utf-8")
     result = subprocess.run(
         [sys.executable, str(tree / "scripts" / "render_generated_regions.py"), "--check"],
         cwd=tree,

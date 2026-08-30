@@ -83,7 +83,7 @@ extraPaths = ["tests/wheypoint/python", ".", "src", "scripts", ".github/scripts"
 
 [[tool.basedpyright.executionEnvironments]]
 root = "tests"
-extraPaths = [".", "src", "scripts", ".github/scripts"]
+extraPaths = [".", "src", "scripts", ".github/scripts", "src/easy_cheese_schemas"]
 
 [tool.vulture]
 min_confidence = 60

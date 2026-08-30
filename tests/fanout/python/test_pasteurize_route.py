@@ -57,27 +57,27 @@ class TestColdBugPinnedValues:
 
     def test_cold_shape_non_deterministic_routes_max(self) -> None:
         result = pasteurize_route.size_pasteurize_fanout("cold", None, False)
-        assert result == pasteurize_route._COLD_BUG_NONDETERMINISTIC_N
+        assert result == pasteurize_route._COLD_BUG_NONDETERMINISTIC_N  # pyright: ignore[reportPrivateUsage]
 
     def test_cold_shape_deterministic_repro_routes_min(self) -> None:
         result = pasteurize_route.size_pasteurize_fanout("cold", None, True)
-        assert result == pasteurize_route._COLD_BUG_DETERMINISTIC_N
+        assert result == pasteurize_route._COLD_BUG_DETERMINISTIC_N  # pyright: ignore[reportPrivateUsage]
 
     def test_cold_shape_ignores_score(self) -> None:
         # A cold shape routes on bug_shape alone -- the score is irrelevant.
         result = pasteurize_route.size_pasteurize_fanout("cold", 1000.0, False)
-        assert result == pasteurize_route._COLD_BUG_NONDETERMINISTIC_N
+        assert result == pasteurize_route._COLD_BUG_NONDETERMINISTIC_N  # pyright: ignore[reportPrivateUsage]
 
     def test_score_is_none_routes_cold_branch_even_for_regression_shape(self) -> None:
         # The `score is None` half of the cold-branch `or` also routes here,
         # even for a non-cold bug shape.
         result = pasteurize_route.size_pasteurize_fanout("regression", None, True)
-        assert result == pasteurize_route._COLD_BUG_DETERMINISTIC_N
+        assert result == pasteurize_route._COLD_BUG_DETERMINISTIC_N  # pyright: ignore[reportPrivateUsage]
 
     def test_min_below_max_and_both_ints(self) -> None:
-        assert pasteurize_route._COLD_BUG_DETERMINISTIC_N < pasteurize_route._COLD_BUG_NONDETERMINISTIC_N
-        assert isinstance(pasteurize_route._COLD_BUG_DETERMINISTIC_N, int)
-        assert isinstance(pasteurize_route._COLD_BUG_NONDETERMINISTIC_N, int)
+        assert pasteurize_route._COLD_BUG_DETERMINISTIC_N < pasteurize_route._COLD_BUG_NONDETERMINISTIC_N  # pyright: ignore[reportPrivateUsage]
+        assert isinstance(pasteurize_route._COLD_BUG_DETERMINISTIC_N, int)  # pyright: ignore[reportPrivateUsage]
+        assert isinstance(pasteurize_route._COLD_BUG_NONDETERMINISTIC_N, int)  # pyright: ignore[reportPrivateUsage]
 
 
 class TestBoundaryIsNamedConstant:
@@ -97,21 +97,21 @@ class TestBoundaryIsNamedConstant:
 class TestInvalidBugShape:
     def test_invalid_bug_shape_raises_value_error(self) -> None:
         with pytest.raises(ValueError):
-            pasteurize_route.size_pasteurize_fanout("not-a-shape", 100, True)
+            _ = pasteurize_route.size_pasteurize_fanout("not-a-shape", 100, True)
 
 
 class TestInvalidScore:
     def test_nan_score_raises_value_error(self) -> None:
         with pytest.raises(ValueError, match=r"invalid score"):
-            pasteurize_route.size_pasteurize_fanout("regression", float("nan"), True)
+            _ = pasteurize_route.size_pasteurize_fanout("regression", float("nan"), True)
 
     def test_inf_score_raises_value_error(self) -> None:
         with pytest.raises(ValueError, match=r"invalid score"):
-            pasteurize_route.size_pasteurize_fanout("regression", float("inf"), True)
+            _ = pasteurize_route.size_pasteurize_fanout("regression", float("inf"), True)
 
     def test_negative_score_raises_value_error(self) -> None:
         with pytest.raises(ValueError, match=r"invalid score"):
-            pasteurize_route.size_pasteurize_fanout("regression", -500, False)
+            _ = pasteurize_route.size_pasteurize_fanout("regression", -500, False)
 
     def test_none_score_still_works_for_every_bug_shape(self) -> None:
         # score=None is the valid cold-bug-style sentinel, not an invalid
@@ -127,11 +127,11 @@ class TestInvalidDeterministicRepro:
         # style bool coercion -- isinstance(True, int) is True, so the guard
         # must check bool specifically, not just truthiness.
         with pytest.raises(ValueError, match=r"invalid deterministic_repro"):
-            pasteurize_route.size_pasteurize_fanout("regression", 10, "false")
+            _ = pasteurize_route.size_pasteurize_fanout("regression", 10, "false")
 
     def test_int_deterministic_repro_raises_value_error(self) -> None:
         with pytest.raises(ValueError, match=r"invalid deterministic_repro"):
-            pasteurize_route.size_pasteurize_fanout("regression", 10, 1)
+            _ = pasteurize_route.size_pasteurize_fanout("regression", 10, 1)
 
 
 class TestPurity:
@@ -141,7 +141,7 @@ class TestPurity:
         src = (REPO_ROOT / "src/easy_cheese/shared/fanout/pasteurize_route.py").read_text(encoding="utf-8")
         tree = ast.parse(src)
         banned = {"os", "sys", "socket", "subprocess", "requests", "urllib", "pathlib", "shutil"}
-        imported = set()
+        imported: set[str] = set()
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 imported.update(alias.name.split(".")[0] for alias in node.names)
@@ -151,4 +151,4 @@ class TestPurity:
 
     def test_module_parses_as_valid_python(self) -> None:
         src = (REPO_ROOT / "src/easy_cheese/shared/fanout/pasteurize_route.py").read_text(encoding="utf-8")
-        ast.parse(src)  # raises SyntaxError if invalid
+        _ = ast.parse(src)  # raises SyntaxError if invalid

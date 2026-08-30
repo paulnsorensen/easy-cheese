@@ -9,11 +9,40 @@ import sys
 import textwrap
 from pathlib import Path
 from types import ModuleType
+from typing import TYPE_CHECKING, Protocol, cast
 
 import pytest
 
+if TYPE_CHECKING:
+    from collections.abc import Callable, Sequence
+    from typing import TextIO
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 CLI_PATH = REPO_ROOT / "src" / "easy_cheese" / "shared" / "cli.py"
+
+
+class _CliModule(Protocol):
+    CliError: type[Exception]
+
+    def _inject_global_flags(self, parser: argparse.ArgumentParser) -> None: ...
+
+    def emit(
+        self,
+        value: object,
+        *,
+        limit: int | None = ...,
+        full: bool = ...,
+        json_mode: bool = ...,
+        stdout: TextIO | None = ...,
+    ) -> None: ...
+
+    def run(
+        self,
+        setup: Callable[[argparse.ArgumentParser], None],
+        *,
+        argv: Sequence[str] | None = ...,
+        stdout: TextIO | None = ...,
+    ) -> int: ...
 
 
 @pytest.fixture(scope="module")
@@ -37,94 +66,94 @@ class TestLineBudget:
 
 
 class TestCliError:
-    def test_is_exception(self, cli: ModuleType) -> None:
+    def test_is_exception(self, cli: _CliModule) -> None:
         assert issubclass(cli.CliError, Exception)
 
 
 class TestInjectGlobalFlags:
-    def test_injects_full_and_json(self, cli: ModuleType) -> None:
+    def test_injects_full_and_json(self, cli: _CliModule) -> None:
         parser = argparse.ArgumentParser()
-        cli._inject_global_flags(parser)
+        cli._inject_global_flags(parser)  # pyright: ignore[reportPrivateUsage]
         args = parser.parse_args(["--full", "--json"])
-        assert args.full is True
-        assert args.json_mode is True
+        assert cast(bool, args.full) is True
+        assert cast(bool, args.json_mode) is True
 
-    def test_injection_recurses_into_subparsers(self, cli: ModuleType) -> None:
+    def test_injection_recurses_into_subparsers(self, cli: _CliModule) -> None:
         parser = argparse.ArgumentParser()
         sub = parser.add_subparsers(dest="cmd")
-        sub.add_parser("do")
-        cli._inject_global_flags(parser)
+        _ = sub.add_parser("do")
+        cli._inject_global_flags(parser)  # pyright: ignore[reportPrivateUsage]
         args = parser.parse_args(["do", "--full", "--json"])
-        assert args.full is True
-        assert args.json_mode is True
+        assert cast(bool, args.full) is True
+        assert cast(bool, args.json_mode) is True
 
-    def test_does_not_double_register(self, cli: ModuleType) -> None:
+    def test_does_not_double_register(self, cli: _CliModule) -> None:
         parser = argparse.ArgumentParser()
-        parser.add_argument("--full", action="store_true")
+        _ = parser.add_argument("--full", action="store_true")
         # Must not raise argparse.ArgumentError for duplicate option.
-        cli._inject_global_flags(parser)
+        cli._inject_global_flags(parser)  # pyright: ignore[reportPrivateUsage]
         args = parser.parse_args(["--full"])
-        assert args.full is True
+        assert cast(bool, args.full) is True
 
 
 class TestEmitScalar:
-    def test_print_plain_string(self, cli: ModuleType, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_print_plain_string(self, cli: _CliModule, capsys: pytest.CaptureFixture[str]) -> None:
         cli.emit("hello")
         assert capsys.readouterr().out == "hello\n"
 
-    def test_print_int(self, cli: ModuleType, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_print_int(self, cli: _CliModule, capsys: pytest.CaptureFixture[str]) -> None:
         cli.emit(42)
         assert capsys.readouterr().out == "42\n"
 
-    def test_json_mode_wraps_scalar(self, cli: ModuleType, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_json_mode_wraps_scalar(self, cli: _CliModule, capsys: pytest.CaptureFixture[str]) -> None:
         cli.emit("hello", json_mode=True)
         assert json.loads(capsys.readouterr().out) == "hello"
 
 
 class TestEmitDict:
-    def test_dict_always_json(self, cli: ModuleType, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_dict_always_json(self, cli: _CliModule, capsys: pytest.CaptureFixture[str]) -> None:
         cli.emit({"k": 1})
         assert json.loads(capsys.readouterr().out) == {"k": 1}
 
-    def test_dict_json_mode(self, cli: ModuleType, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_dict_json_mode(self, cli: _CliModule, capsys: pytest.CaptureFixture[str]) -> None:
         cli.emit({"k": 1}, json_mode=True)
         assert json.loads(capsys.readouterr().out) == {"k": 1}
 
 
 class TestEmitListNoLimit:
-    def test_no_footer_when_limit_unset(self, cli: ModuleType, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_no_footer_when_limit_unset(self, cli: _CliModule, capsys: pytest.CaptureFixture[str]) -> None:
         cli.emit(["a", "b", "c"])
         out = capsys.readouterr().out
         assert out == "a\nb\nc\n"
         assert "showing" not in out
 
-    def test_json_mode_dumps_list(self, cli: ModuleType, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_json_mode_dumps_list(self, cli: _CliModule, capsys: pytest.CaptureFixture[str]) -> None:
         cli.emit(["a", "b"], json_mode=True)
         assert json.loads(capsys.readouterr().out) == ["a", "b"]
 
 
 class TestEmitListWithLimit:
-    def test_no_footer_when_total_under_limit(self, cli: ModuleType, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_no_footer_when_total_under_limit(self, cli: _CliModule, capsys: pytest.CaptureFixture[str]) -> None:
         cli.emit(["a", "b"], limit=5)
         out = capsys.readouterr().out
         assert out == "a\nb\n"
         assert "showing" not in out  # spec mitigation: no ceremony on small lists
 
-    def test_footer_when_total_exceeds_limit(self, cli: ModuleType, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_footer_when_total_exceeds_limit(self, cli: _CliModule, capsys: pytest.CaptureFixture[str]) -> None:
         cli.emit(["a", "b", "c", "d", "e"], limit=2)
         out = capsys.readouterr().out
         lines = out.splitlines()
         assert lines[:2] == ["a", "b"]
         assert lines[2] == "... showing 2 of 5; pass --full for the rest (limit=2)"
 
-    def test_full_always_emits_footer(self, cli: ModuleType, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_full_always_emits_footer(self, cli: _CliModule, capsys: pytest.CaptureFixture[str]) -> None:
         cli.emit(["a", "b"], limit=5, full=True)
         out = capsys.readouterr().out
         lines = out.splitlines()
         assert lines[:2] == ["a", "b"]
         assert lines[2] == "... showing 2 of 2 (--full; default limit=5)"
 
-    def test_full_shows_all_items(self, cli: ModuleType, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_full_shows_all_items(self, cli: _CliModule, capsys: pytest.CaptureFixture[str]) -> None:
         cli.emit(["a", "b", "c", "d", "e"], limit=2, full=True)
         out = capsys.readouterr().out
         lines = out.splitlines()
@@ -133,14 +162,14 @@ class TestEmitListWithLimit:
 
 
 class TestEmitMultilineString:
-    def test_string_with_limit_splits(self, cli: ModuleType, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_string_with_limit_splits(self, cli: _CliModule, capsys: pytest.CaptureFixture[str]) -> None:
         cli.emit("line1\nline2\nline3", limit=2)
         out = capsys.readouterr().out
         lines = out.splitlines()
         assert lines[:2] == ["line1", "line2"]
         assert lines[2] == "... showing 2 of 3; pass --full for the rest (limit=2)"
 
-    def test_string_without_limit_prints_as_is(self, cli: ModuleType, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_string_without_limit_prints_as_is(self, cli: _CliModule, capsys: pytest.CaptureFixture[str]) -> None:
         cli.emit("line1\nline2")
         assert capsys.readouterr().out == "line1\nline2\n"
 
@@ -148,7 +177,7 @@ class TestEmitMultilineString:
 def _write_runner(tmp_path: Path, body: str) -> Path:
     """Drop a tiny executable script next to cli.py so the import works."""
     runner = tmp_path / "runner.py"
-    runner.write_text(
+    _ = runner.write_text(
         textwrap.dedent(
             f"""
             import sys
@@ -179,13 +208,13 @@ class TestRun:
         assert result.returncode == 0
         assert json.loads(result.stdout) == {"ok": True}
 
-    def test_injects_argv_and_stdout(self, cli: ModuleType) -> None:
+    def test_injects_argv_and_stdout(self, cli: _CliModule) -> None:
         from io import StringIO
 
         output = StringIO()
 
         def _cmd(args: argparse.Namespace) -> int:
-            cli.emit({"ok": True}, json_mode=args.json_mode, stdout=args.stdout)
+            cli.emit({"ok": True}, json_mode=cast(bool, args.json_mode), stdout=cast("TextIO", args.stdout))
             return 7
 
         def _setup(parser: argparse.ArgumentParser) -> None:

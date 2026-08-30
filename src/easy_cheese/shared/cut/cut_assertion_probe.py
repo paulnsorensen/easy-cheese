@@ -10,11 +10,16 @@ import json
 import os
 import runpy
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Generator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from types import MethodType, ModuleType
-from typing import Any
+from types import MethodType, ModuleType, TracebackType
+from typing import TYPE_CHECKING, Protocol, cast
+
+if TYPE_CHECKING:
+    import pytest
+    from pluggy import Result
+    from _pytest.reports import TestReport
 
 EVENT_KIND = "cut.assertion-origin"
 EVENT_SCHEMA_VERSION = 1
@@ -58,22 +63,26 @@ class ProbeEvent:
         ):
             return None
         try:
-            payload = json.loads(raw)
+            payload = cast(object, json.loads(raw))
         except (UnicodeDecodeError, json.JSONDecodeError):
             return None
-        if not isinstance(payload, dict) or set(payload) != _EVENT_KEYS:
+        if not isinstance(payload, dict):
             return None
+        fields = cast(dict[str, object], payload)
+        if set(fields) != set(_EVENT_KEYS):
+            return None
+        assertion_origin = fields["assertion_origin"]
         if (
-            type(payload["schema_version"]) is not int
-            or payload["schema_version"] != EVENT_SCHEMA_VERSION
-            or payload["event"] != EVENT_KIND
-            or payload["runner"] != expected_runner
+            type(fields["schema_version"]) is not int
+            or fields["schema_version"] != EVENT_SCHEMA_VERSION
+            or fields["event"] != EVENT_KIND
+            or fields["runner"] != expected_runner
             or expected_runner not in _RUNNERS
-            or payload["complete"] is not True
-            or type(payload["assertion_origin"]) is not bool
+            or fields["complete"] is not True
+            or type(assertion_origin) is not bool
         ):
             return None
-        return cls(expected_runner, payload["assertion_origin"])
+        return cls(expected_runner, assertion_origin)
 
 
 @dataclass
@@ -98,11 +107,32 @@ class _Observation:
         return True
 
 
+_ExcInfo = tuple[type[BaseException], BaseException, TracebackType]
+
+
+class _TestCase(Protocol):
+    defaultTestResult: Callable[[], object]
+
+    def run(self, *args: object, **kwargs: object) -> object: ...
+
+
+class _TestProgram(Protocol):
+    def __init__(self, *args: object, **kwargs: object) -> None: ...
+    def runTests(self) -> None: ...
+
+
+class _UnittestModule(Protocol):
+    @property
+    def TestCase(self) -> type[_TestCase]: ...
+    @property
+    def TestProgram(self) -> type[_TestProgram]: ...
+
+
 def _install_unittest_probe(
-    unittest_module: ModuleType,
+    unittest_module: _UnittestModule,
     observation: _Observation,
-) -> Callable[..., Any]:
-    def observe_result(result: Any) -> Callable[[], None]:
+) -> Callable[..., None]:
+    def observe_result(result: object) -> Callable[[], None]:
         missing = object()
         originals: list[tuple[str, object]] = []
 
@@ -110,20 +140,23 @@ def _install_unittest_probe(
             method_name: str,
             error_index: int,
         ) -> None:
-            original_method = getattr(result, method_name, None)
+            original_method: Callable[..., object] | None = getattr(
+                result, method_name, None
+            )
             if original_method is None:
                 return
             originals.append((method_name, vars(result).get(method_name, missing)))
 
             def observed_method(
-                _result: Any,
-                *args: Any,
-                **kwargs: Any,
-            ) -> Any:
-                error = (
+                _result: object,
+                *args: object,
+                **kwargs: object,
+            ) -> object:
+                error = cast(
+                    "_ExcInfo | None",
                     args[error_index]
                     if len(args) > error_index
-                    else kwargs.get("err")
+                    else kwargs.get("err"),
                 )
                 if error is not None:
                     observation.observe(error[0])
@@ -144,55 +177,61 @@ def _install_unittest_probe(
 
         return restore_result
 
-    original_run_tests = unittest_module.TestProgram.runTests
-    original_test_case_run = unittest_module.TestCase.run
+    original_run_tests: Callable[[_TestProgram], None] = (
+        unittest_module.TestProgram.runTests
+    )
+    original_test_case_run: Callable[..., object] = unittest_module.TestCase.run
 
     def probe_test_case_run(
-        test_case: Any,
-        *args: Any,
-        **kwargs: Any,
-    ) -> Any:
+        self: _TestCase,
+        *args: object,
+        **kwargs: object,
+    ) -> object:
         result = args[0] if args else kwargs.get("result")
         if result is None:
-            original_factory = test_case.defaultTestResult
+            original_factory = self.defaultTestResult
             missing = object()
-            previous_factory = vars(test_case).get("defaultTestResult", missing)
+            previous_factory = cast(
+                object, vars(self).get("defaultTestResult", missing)
+            )
             result_restorers: list[Callable[[], None]] = []
 
-            def probe_default_result(_test_case: Any) -> Any:
+            def probe_default_result(_test_case: object) -> object:
                 created = original_factory()
                 result_restorers.append(observe_result(created))
                 return created
 
-            test_case.defaultTestResult = MethodType(probe_default_result, test_case)
+            self.defaultTestResult = MethodType(probe_default_result, self)
             try:
-                return original_test_case_run(test_case, *args, **kwargs)
+                return original_test_case_run(self, *args, **kwargs)
             finally:
                 for restore_result in reversed(result_restorers):
                     restore_result()
                 if previous_factory is missing:
-                    del test_case.defaultTestResult
+                    del self.defaultTestResult
                 else:
-                    test_case.defaultTestResult = previous_factory
+                    self.defaultTestResult = cast(
+                        "Callable[[], object]", previous_factory
+                    )
         restore_result = observe_result(result)
         try:
-            return original_test_case_run(test_case, *args, **kwargs)
+            return original_test_case_run(self, *args, **kwargs)
         finally:
             restore_result()
 
-    def probe_run_tests(program: Any) -> Any:
+    def probe_run_tests(self: _TestProgram) -> None:
         unittest_module.TestCase.run = probe_test_case_run
         try:
-            return original_run_tests(program)
+            original_run_tests(self)
         finally:
             unittest_module.TestCase.run = original_test_case_run
 
-    original_init = unittest_module.TestProgram.__init__
+    original_init: Callable[..., None] = unittest_module.TestProgram.__init__
 
     def probe_test_program_init(
-        self: Any,
-        *args: Any,
-        **kwargs: Any,
+        self: _TestProgram,
+        *args: object,
+        **kwargs: object,
     ) -> None:
         unittest_module.TestProgram.runTests = probe_run_tests
         try:
@@ -204,11 +243,11 @@ def _install_unittest_probe(
     return original_init
 
 
-def _stdlib_unittest(module: object) -> ModuleType | None:
+def _stdlib_unittest(module: object) -> _UnittestModule | None:
     if not isinstance(module, ModuleType):
         return None
-    spec = getattr(module, "__spec__", None)
-    origin = getattr(spec, "origin", None)
+    spec = module.__spec__
+    origin = spec.origin if spec is not None else None
     expected = Path(os.__file__).resolve().parent / "unittest" / "__init__.py"
     if origin is None or Path(origin).resolve() != expected:
         return None
@@ -217,14 +256,16 @@ def _stdlib_unittest(module: object) -> ModuleType | None:
         for name in ("TestCase", "TestProgram")
     ):
         return None
-    return module
+    return cast(_UnittestModule, cast(object, module))
 
 
 class _PytestAssertionProbe:
     def __init__(self, observation: _Observation) -> None:
-        self._observation = observation
+        self._observation: _Observation = observation
 
-    def pytest_runtest_makereport(self, item: Any, call: Any) -> Any:
+    def pytest_runtest_makereport(
+        self, item: pytest.Item, call: pytest.CallInfo[None]
+    ) -> Generator[None, Result[TestReport], None]:
         del item
         outcome = yield
         report = outcome.get_result()
@@ -255,7 +296,7 @@ def _run_code(
     _set_native_path0("")
     _set_original_argv(original_argv0, ["-c", source, *args])
     main_module = ModuleType("__main__")
-    main_module.__builtins__ = builtins  # noqa: V101
+    setattr(main_module, "__builtins__", builtins)  # noqa: V101
     main_module.__spec__ = None
     main_module.__package__ = None  # noqa: V101
     main_module.__loader__ = importlib.machinery.BuiltinImporter  # noqa: V101
@@ -266,9 +307,9 @@ def _run_code(
         exec(compile(source, "<string>", "exec"), main_module.__dict__)
     finally:
         if previous_main is missing:
-            sys.modules.pop("__main__", None)
+            _ = sys.modules.pop("__main__", None)
         else:
-            sys.modules["__main__"] = previous_main
+            sys.modules["__main__"] = cast(ModuleType, previous_main)
 
 
 def _run_script(
@@ -283,10 +324,10 @@ def _run_script(
     main_module = ModuleType("__main__")
     main_module.__file__ = target
     main_module.__loader__ = loader  # noqa: V101
-    main_module.__cached__ = None  # noqa: V101
+    setattr(main_module, "__cached__", None)  # noqa: V101
     main_module.__package__ = None  # noqa: V101
     main_module.__spec__ = None
-    main_module.__builtins__ = builtins  # noqa: V101
+    setattr(main_module, "__builtins__", builtins)  # noqa: V101
     missing = object()
     previous_main = sys.modules.get("__main__", missing)
     sys.modules["__main__"] = main_module
@@ -297,9 +338,9 @@ def _run_script(
         exec(code, main_module.__dict__)
     finally:
         if previous_main is missing:
-            sys.modules.pop("__main__", None)
+            _ = sys.modules.pop("__main__", None)
         else:
-            sys.modules["__main__"] = previous_main
+            sys.modules["__main__"] = cast(ModuleType, previous_main)
 
 
 def _run_direct(
@@ -310,8 +351,17 @@ def _run_direct(
     original_argv0: str | None = None,
 ) -> int:
     observation = _Observation(runner)
-    original_import = builtins.__import__
-    original_test_program_inits: dict[ModuleType, Any] = {}
+    original_import: Callable[
+        [
+            str,
+            Mapping[str, object] | None,
+            Mapping[str, object] | None,
+            Sequence[str] | None,
+            int,
+        ],
+        ModuleType,
+    ] = builtins.__import__
+    original_test_program_inits: dict[_UnittestModule, Callable[..., None]] = {}
 
     def instrument(module: object) -> None:
         unittest_module = _stdlib_unittest(module)
@@ -323,12 +373,14 @@ def _run_direct(
 
     def import_with_probe(
         name: str,
-        globals: dict[str, Any] | None = None,
-        locals: dict[str, Any] | None = None,
-        fromlist: tuple[str, ...] = (),
+        globals: Mapping[str, object] | None = None,
+        locals: Mapping[str, object] | None = None,
+        fromlist: Sequence[str] | None = (),
         level: int = 0,
-    ) -> Any:
-        imported = original_import(name, globals, locals, fromlist, level)
+    ) -> ModuleType:
+        imported = cast(
+            ModuleType, original_import(name, globals, locals, fromlist, level)
+        )
         instrument(sys.modules.get("unittest"))
         return imported
 
@@ -346,7 +398,7 @@ def _run_direct(
         raise
     except BaseException as error:
         observation.observe(type(error))
-        observation.emit(descriptor)
+        _ = observation.emit(descriptor)
         raise
     finally:
         builtins.__import__ = original_import
@@ -386,10 +438,10 @@ def _run_pytest(
     import _pytest.config as pytest_config
 
     observation = _Observation("pytest")
-    pytest.hookimpl(hookwrapper=True)(_PytestAssertionProbe.pytest_runtest_makereport)
+    _ = pytest.hookimpl(hookwrapper=True)(_PytestAssertionProbe.pytest_runtest_makereport)
     sys.argv = [_runner_main_origin("pytest"), *args]
     seam_module, seam_attr = _pytest_console_seam(pytest, pytest_config)
-    original_console_main = getattr(seam_module, seam_attr)
+    original_console_main = cast(Callable[[], int], getattr(seam_module, seam_attr))
     returncode = 0
 
     def probe_console_main() -> int:
@@ -408,7 +460,7 @@ def _run_pytest(
 
     setattr(seam_module, seam_attr, probe_console_main)
     try:
-        runpy.run_module(
+        _ = runpy.run_module(
             "pytest.__main__",
             run_name="__main__",
             alter_sys=True,
@@ -437,11 +489,12 @@ def _run_unittest(
     import unittest
 
     observation = _Observation("unittest")
-    original_init = _install_unittest_probe(unittest, observation)
+    unittest_module = cast(_UnittestModule, cast(object, sys.modules["unittest"]))
+    original_init = _install_unittest_probe(unittest_module, observation)
     runner_argv = [_runner_main_origin("unittest"), *args]
     sys.argv = runner_argv
     try:
-        runpy.run_module(
+        _ = runpy.run_module(
             "unittest.__main__",
             run_name="__main__",
             alter_sys=True,
@@ -461,7 +514,7 @@ def main(argv: list[str] | None = None) -> int:
     if len(args) < 2:
         print(
             "usage: python -m cut_assertion_probe <fd> "
-            "<code|script|pytest|unittest> <origin> [args ...]",
+            + "<code|script|pytest|unittest> <origin> [args ...]",
             file=sys.stderr,
         )
         return 2

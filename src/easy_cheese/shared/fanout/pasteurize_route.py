@@ -52,7 +52,7 @@ _COLD_BUG_NONDETERMINISTIC_N = 5
 BUG_SHAPES = frozenset({"regression", "heisenbug", "race", "perf_regression", "cold"})
 
 
-def size_pasteurize_fanout(bug_shape: str, score: float | None, deterministic_repro: bool) -> int:
+def size_pasteurize_fanout(bug_shape: str, score: float | None, deterministic_repro: object) -> int:
     """Pure decision -- no I/O. Returns the agent fan width for /pasteurize.
 
     heisenbug / race / perf_regression, any range, any repro              -> 3

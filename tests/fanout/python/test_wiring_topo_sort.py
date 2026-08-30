@@ -15,15 +15,15 @@ from easy_cheese_schemas.wiring_graph import WiringCycleError, compute_waves, cy
 BUNDLE = Path(__file__).resolve().parents[3] / "skills/cook/scripts/cook.pyz"
 
 
-def _wiring(*entries: tuple[str, list[str]]) -> list[dict]:
+def _wiring(*entries: tuple[str, list[str]]) -> list[dict[str, str | list[str]]]:
     return [{"id": wid, "depends_on": list(deps)} for wid, deps in entries]
 
 
-def _write_manifest(path: Path, wiring: list[dict]) -> None:
-    path.write_text(yaml.safe_dump({"wiring": wiring}, sort_keys=False), encoding="utf-8")
+def _write_manifest(path: Path, wiring: list[dict[str, str | list[str]]]) -> None:
+    _ = path.write_text(yaml.safe_dump({"wiring": wiring}, sort_keys=False), encoding="utf-8")
 
 
-def _run_cli(*args: str) -> subprocess.CompletedProcess:
+def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, str(BUNDLE), "wiring_topo_sort", *args],
         capture_output=True,
@@ -34,13 +34,13 @@ def _run_cli(*args: str) -> subprocess.CompletedProcess:
 class TestComputeWaves:
     def test_linear_chain(self) -> None:
         # W1 <- W2 <- W3 must serialize into three single-item waves.
-        wiring = [("W1", []), ("W2", ["W1"]), ("W3", ["W2"])]
+        wiring: list[tuple[str, list[str]]] = [("W1", []), ("W2", ["W1"]), ("W3", ["W2"])]
         assert compute_waves(wiring) == [["W1"], ["W2"], ["W3"]]
 
     def test_branching_dag(self) -> None:
         # Two independent children of W1 must land in the same second wave —
         # the whole point of waves is to surface parallelism for dispatch.
-        wiring = [("W1", []), ("W2", ["W1"]), ("W3", ["W1"])]
+        wiring: list[tuple[str, list[str]]] = [("W1", []), ("W2", ["W1"]), ("W3", ["W1"])]
         assert compute_waves(wiring) == [["W1"], ["W2", "W3"]]
 
     def test_empty_wiring_returns_empty(self) -> None:
@@ -51,7 +51,7 @@ class TestComputeWaves:
         # boundary adapters do not need to parse the error string.
         wiring = [("W1", ["W2"]), ("W2", ["W1"])]
         with pytest.raises(WiringCycleError) as raised:
-            compute_waves(wiring)
+            _ = compute_waves(wiring)
         error = raised.value
         assert error.cycle_path == ("W1", "W2", "W1")
         assert error.cycle_ids == ("W1", "W2")
@@ -72,7 +72,7 @@ class TestComputeWaves:
 
     def test_wave_ordering_is_deterministic(self) -> None:
         # IDs within a wave are sorted so output is stable across runs.
-        wiring = [("W3", []), ("W1", []), ("W2", [])]
+        wiring: list[tuple[str, list[str]]] = [("W3", []), ("W1", []), ("W2", [])]
         assert compute_waves(wiring) == [["W1", "W2", "W3"]]
 
 
@@ -106,7 +106,7 @@ class TestCLI:
 
     def test_empty_wiring_emits_nothing(self, tmp_path: Path) -> None:
         manifest = tmp_path / "manifest.yaml"
-        manifest.write_text(yaml.safe_dump({"wiring": []}), encoding="utf-8")
+        _ = manifest.write_text(yaml.safe_dump({"wiring": []}), encoding="utf-8")
         result = _run_cli("--manifest", str(manifest))
         assert result.returncode == 0, result.stderr
         assert result.stdout == ""
@@ -129,7 +129,7 @@ class TestCLI:
         assert result.stderr == "ERROR: cycle detected: W1, W2\n"
 
 
-    def test_missing_manifest_flag_exits_two(self, tmp_path: Path) -> None:
+    def test_missing_manifest_flag_exits_two(self) -> None:
         # argparse's own missing-required-arg path also exits 2; check that
         # the CLI surface doesn't accidentally silently default the path.
         result = _run_cli()
@@ -139,7 +139,7 @@ class TestCLI:
         # manifest_io tries JSON before YAML; a .json manifest must also work
         # so callers don't need to pre-convert.
         manifest = tmp_path / "manifest.json"
-        manifest.write_text(
+        _ = manifest.write_text(
             json.dumps({"wiring": [{"id": "W1", "depends_on": []}]}),
             encoding="utf-8",
         )

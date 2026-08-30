@@ -5,7 +5,13 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from test_red_gate_validator import _candidate, _issue, _receipt_path, red_gate
+import pytest
+from easy_cheese.shared.cut.gate_receipts import GateValidationError
+from test_red_gate_validator import (  # pyright: ignore[reportImplicitRelativeImport]
+    _candidate,  # pyright: ignore[reportPrivateUsage]
+    _issue,  # pyright: ignore[reportPrivateUsage]
+    _receipt_path,  # pyright: ignore[reportPrivateUsage]
+)
 
 _EXPECTED_FAILURE = (
     "a non-`AssertionError` rendered as `builtins.AssertionError` is accepted "
@@ -16,12 +22,12 @@ _EXPECTED_FAILURE = (
 
 def test_issue_rejects_non_assertion_rendered_as_assertion(
     tmp_path: Path,
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
     test_file = tmp_path / "tests" / "test_outer_pytest.py"
     test_file.parent.mkdir()
-    test_file.write_text(
+    _ = test_file.write_text(
         """FakeAssertion = type(
     "AssertionError",
     (Exception,),
@@ -37,7 +43,7 @@ def test_outer():
     receipt_path = _receipt_path(tmp_path)
 
     try:
-        _issue(
+        _ = _issue(
             _candidate(
                 tmp_path,
                 command=[
@@ -50,7 +56,7 @@ def test_outer():
             ),
             receipt_path,
         )
-    except red_gate.GateValidationError as error:
+    except GateValidationError as error:
         problems = error.problems
     else:
         raise AssertionError(_EXPECTED_FAILURE)

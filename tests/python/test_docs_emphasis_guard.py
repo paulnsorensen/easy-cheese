@@ -40,24 +40,24 @@ def test_shared_source_routing_contract_is_linked_and_complete():
         assert "code-intelligence-routing.md" in (REPO_ROOT / path).read_text(encoding="utf-8"), path
 
 
-def test_documented_single_workflow_install_resolves_shared_routing_contract(tmp_path):
+def test_documented_single_workflow_install_resolves_shared_routing_contract(tmp_path: Path) -> None:
     readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
     _, heading, tail = readme.partition("Install one workflow skill")
     assert heading, "README must document workflow-skill dependencies"
     section, next_heading, _ = tail.partition("Pin both skills")
     assert next_heading
 
-    skills = re.findall(
+    skills: list[str] = re.findall(
         r"gh skill install paulnsorensen/easy-cheese ([\w-]+)", section
     )
     assert skills == ["cheese", "cook"]
 
     installed = tmp_path / "skills"
     for skill in skills:
-        shutil.copytree(REPO_ROOT / "skills" / skill, installed / skill)
+        _ = shutil.copytree(REPO_ROOT / "skills" / skill, installed / skill)
 
     cook = installed / "cook" / "SKILL.md"
-    links = re.findall(
+    links: list[str] = re.findall(
         r"\]\(([^)]+code-intelligence-routing\.md)\)",
         cook.read_text(encoding="utf-8"),
     )

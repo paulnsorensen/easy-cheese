@@ -7,10 +7,11 @@ import re
 import threading
 from collections.abc import Callable
 from pathlib import Path
+from typing import cast
 
 import attrs
 import pytest
-from attrs import evolve
+from attrs import Attribute, evolve
 from easy_cheese_schemas import (
     ArtifactLink,
     DecisionFork,
@@ -58,7 +59,7 @@ def _seed(
 def _delta(parent: str, **overrides: object) -> WheypointDelta:
     fields: dict[str, object] = {"work_id": WORK_ID, "expected_revision_id": parent}
     fields.update(overrides)
-    return WheypointDelta(**fields)  # type: ignore[arg-type]
+    return WheypointDelta(**fields)  # pyright: ignore[reportArgumentType]
 
 
 @pytest.fixture
@@ -149,7 +150,7 @@ def test_assigned_entry_ids_are_derived_from_the_request_not_the_clock(
     first = commit.commit(delta, store=store)
 
     twin = storage.WorkStore.open(WORK_ID, corpus_root=corpus_root / "twin")
-    _seed(twin, make_promotion)
+    _ = _seed(twin, make_promotion)
     second = commit.commit(delta, store=twin)
 
     assigned = first.record.questions[0].entry_id
@@ -216,7 +217,7 @@ def test_transition_naming_an_unknown_entry_promotes_nothing(
     before = _revision_files(store)
 
     with pytest.raises(commit.CommitError, match="unknown entry 'd-ghost'"):
-        commit.commit(
+        _ = commit.commit(
             _delta(
                 seed.record.revision_id,
                 transitions=[
@@ -250,7 +251,7 @@ def test_transition_of_an_already_settled_entry_is_refused(
     seed = _seed(store, make_promotion, record=make_record(decisions=[settled]))
 
     with pytest.raises(commit.CommitError, match="'d-done' is already withdrawn"):
-        commit.commit(
+        _ = commit.commit(
             _delta(
                 seed.record.revision_id,
                 transitions=[
@@ -268,11 +269,14 @@ def test_transition_of_an_already_settled_entry_is_refused(
 def test_a_delta_offers_no_way_to_remove_protected_state() -> None:
     # Acceptance: generic deletion is unavailable, so every state change has to
     # carry an entry id, an action, and a rationale.
-    field_names = {field.name for field in attrs.fields(WheypointDelta)}
+    field_names = {
+        field.name
+        for field in cast(tuple["Attribute[object]", ...], attrs.fields(WheypointDelta))
+    }
     assert not [name for name in field_names if "remove" in name or "delete" in name]
     assert "delete" not in {action.value for action in TransitionAction}
     with pytest.raises(TypeError):
-        EntryTransition(entry_id="d-keep", action=TransitionAction.RESOLVE)  # type: ignore[call-arg]
+        _ = EntryTransition(entry_id="d-keep", action=TransitionAction.RESOLVE)  # pyright: ignore[reportCallIssue]
 
 
 def test_a_lost_parent_receipt_blocks_the_next_revision(
@@ -284,7 +288,7 @@ def test_a_lost_parent_receipt_blocks_the_next_revision(
     ).unlink()
 
     with pytest.raises(commit.CommitError, match="has no immutable receipt"):
-        commit.commit(
+        _ = commit.commit(
             _delta(seed.record.revision_id, orientation="Extend a broken chain."),
             store=store,
         )
@@ -297,10 +301,10 @@ def test_a_record_quoting_the_wrong_receipt_digest_blocks_the_next_revision(
 ) -> None:
     seed = _seed(store, make_promotion)
     tampered = evolve(seed.record, revision_digest=PLACEHOLDER_DIGEST)
-    store.record_path.write_bytes(records.canonical_payload(tampered))
+    _ = store.record_path.write_bytes(records.canonical_payload(tampered))
 
     with pytest.raises(commit.CommitError, match="does not match the digest"):
-        commit.commit(
+        _ = commit.commit(
             _delta(seed.record.revision_id, orientation="Extend a tampered chain."),
             store=store,
         )
@@ -346,14 +350,14 @@ def test_a_promotion_that_died_before_the_record_swap_is_finished_by_the_retry(
     delta = _delta(seed.record.revision_id, orientation="Checkpoint two.")
     real_replace = os.replace
 
-    def crash_on_record(src: object, dst: object) -> None:
-        if Path(str(dst)).name == storage.RECORD_FILENAME:
+    def crash_on_record(src: str, dst: str) -> None:
+        if Path(dst).name == storage.RECORD_FILENAME:
             raise OSError("power loss")
-        real_replace(src, dst)  # type: ignore[arg-type]
+        real_replace(src, dst)
 
     monkeypatch.setattr(os, "replace", crash_on_record)
     with pytest.raises(OSError, match="power loss"):
-        commit.commit(delta, store=store)
+        _ = commit.commit(delta, store=store)
     monkeypatch.setattr(os, "replace", real_replace)
 
     # Precisely the state the reviewer reproduced: two complete revisions,
@@ -369,8 +373,10 @@ def test_a_promotion_that_died_before_the_record_swap_is_finished_by_the_retry(
     assert result.revision.revision_number == 2
     assert result.record.orientation == "Checkpoint two."
     # The claim the caller is handed is the claim the store can serve.
-    assert store.read_record() == result.record
-    assert store.read_record().revision_id == result.revision.revision_id
+    settled = store.read_record()
+    assert settled == result.record
+    assert settled is not None
+    assert settled.revision_id == result.revision.revision_id
     assert store.recover().consistent
 
     # And a delta built on the revision it returned is not stale.
@@ -418,7 +424,7 @@ def test_a_changed_request_against_a_stale_parent_promotes_nothing(
     after_winner = _revision_files(store)
 
     with pytest.raises(commit.StaleParentError) as raised:
-        commit.commit(
+        _ = commit.commit(
             _delta(seed.record.revision_id, orientation="Second writer loses."),
             store=store,
         )
@@ -442,7 +448,7 @@ def test_two_concurrent_writers_on_one_parent_promote_exactly_one_revision(
 
     def writer(orientation: str) -> None:
         delta = _delta(seed.record.revision_id, orientation=orientation)
-        start.wait(timeout=5)
+        _ = start.wait(timeout=5)
         try:
             outcome: object = commit.commit(delta, store=store)
         except commit.CommitError as exc:
@@ -497,7 +503,8 @@ def test_compaction_rehydrated_from_the_current_revision_is_accepted(
     # Evidence only: the authority the record carries has nowhere to put a
     # session, so nothing downstream can select on one.
     assert "session_provenance" not in {
-        field.name for field in attrs.fields(WheypointRecord)
+        field.name
+        for field in cast(tuple["Attribute[object]", ...], attrs.fields(WheypointRecord))
     }
 
 
@@ -511,7 +518,7 @@ def test_compaction_rehydrated_from_a_superseded_revision_is_rejected(
     after_second = _revision_files(store)
 
     with pytest.raises(commit.CommitError) as raised:
-        commit.commit(
+        _ = commit.commit(
             _delta(
                 second.revision.revision_id,
                 orientation="Written from a stale memory.",
@@ -547,7 +554,7 @@ def test_a_new_gating_blocker_derives_gated_and_needs_a_dossier(
     )
 
     with pytest.raises(commit.CommitError, match="does not produce a legal record"):
-        commit.commit(
+        _ = commit.commit(
             _delta(seed.record.revision_id, add_blockers=[blocker]), store=store
         )
     assert _revision_files(store) == [f"1-{seed.record.revision_id}.json"]
@@ -591,7 +598,7 @@ def test_a_held_record_lock_blocks_the_transaction_until_it_is_released(
     done = threading.Event()
 
     def writer() -> None:
-        commit.commit(
+        _ = commit.commit(
             _delta(seed.record.revision_id, orientation="Waits for the lock."),
             store=store,
         )
@@ -705,7 +712,7 @@ def test_a_genesis_delta_against_a_live_record_promotes_nothing(
     before_projections = _projection_files(store)
 
     with pytest.raises(commit.GenesisConflictError) as raised:
-        commit.commit(_genesis_delta(), store=store)
+        _ = commit.commit(_genesis_delta(), store=store)
 
     assert seed.record.revision_id in str(raised.value)
     assert store.record_path.read_bytes() == before_record
@@ -725,7 +732,7 @@ def test_a_genesis_delta_never_orphans_history_whose_record_is_gone(
     before_projections = _projection_files(store)
 
     with pytest.raises(commit.GenesisConflictError) as raised:
-        commit.commit(_genesis_delta(), store=store)
+        _ = commit.commit(_genesis_delta(), store=store)
 
     assert seed.record.revision_id in str(raised.value)
     assert _revision_files(store) == before_revisions
@@ -745,7 +752,7 @@ def test_a_genesis_delta_is_refused_over_receipts_whose_projections_are_gone(
     before_revisions = _revision_files(store)
 
     with pytest.raises(commit.GenesisConflictError) as raised:
-        commit.commit(_genesis_delta(), store=store)
+        _ = commit.commit(_genesis_delta(), store=store)
 
     assert seed.record.revision_id in str(raised.value)
     assert _revision_files(store) == before_revisions
@@ -771,7 +778,7 @@ def test_a_genesis_delta_is_refused_over_projections_whose_receipts_are_gone(
     )
 
     with pytest.raises(commit.GenesisConflictError) as raised:
-        commit.commit(_genesis_delta(), store=store)
+        _ = commit.commit(_genesis_delta(), store=store)
 
     assert seed.record.revision_id in str(raised.value)
     assert _revision_files(store) == []
@@ -789,14 +796,14 @@ def test_a_genesis_that_died_before_the_record_swap_is_finished_by_the_retry(
     delta = _genesis_delta()
     real_replace = os.replace
 
-    def crash_on_record(src: object, dst: object) -> None:
-        if Path(str(dst)).name == storage.RECORD_FILENAME:
+    def crash_on_record(src: str, dst: str) -> None:
+        if Path(dst).name == storage.RECORD_FILENAME:
             raise OSError("power loss")
-        real_replace(src, dst)  # type: ignore[arg-type]
+        real_replace(src, dst)
 
     monkeypatch.setattr(os, "replace", crash_on_record)
     with pytest.raises(OSError, match="power loss"):
-        commit.commit(delta, store=store)
+        _ = commit.commit(delta, store=store)
     monkeypatch.setattr(os, "replace", real_replace)
     assert store.read_record() is None
     assert store.recover().latest_complete is not None
@@ -815,16 +822,16 @@ def test_an_unreadable_record_is_named_rather_than_raised_as_a_decode_error(
     """It already failed closed; it failed closed with a Python exception name.
     The operator is told which file to look at instead."""
     seed = _seed(store, make_promotion)
-    store.record_path.write_bytes(b"{ not json")
+    _ = store.record_path.write_bytes(b"{ not json")
 
     with pytest.raises(commit.CommitError, match=storage.RECORD_FILENAME):
-        commit.commit(
+        _ = commit.commit(
             _delta(seed.record.revision_id, orientation="Over a broken record."),
             store=store,
         )
 
     with pytest.raises(commit.CommitError, match=storage.RECORD_FILENAME):
-        commit.commit(_genesis_delta(), store=store)
+        _ = commit.commit(_genesis_delta(), store=store)
 
     assert _revision_files(store) == [f"1-{seed.record.revision_id}.json"]
     assert store.record_path.read_bytes() == b"{ not json"
@@ -856,7 +863,7 @@ def test_a_different_genesis_delta_over_a_live_record_still_conflicts(
     first = commit.commit(_genesis_delta(), store=store)
 
     with pytest.raises(commit.GenesisConflictError) as raised:
-        commit.commit(
+        _ = commit.commit(
             _genesis_delta(orientation="A different genesis entirely."), store=store
         )
 
@@ -869,7 +876,7 @@ def test_a_first_delta_against_an_empty_store_must_name_genesis(
     store: storage.WorkStore,
 ) -> None:
     with pytest.raises(commit.CommitError, match="'genesis'"):
-        commit.commit(
+        _ = commit.commit(
             _delta("rev-000000000001", orientation="There is no parent yet."),
             store=store,
         )
@@ -880,7 +887,7 @@ def test_a_first_delta_against_an_empty_store_must_name_genesis(
 
 def test_a_genesis_delta_cannot_declare_compaction(store: storage.WorkStore) -> None:
     with pytest.raises(commit.CommitError, match="cannot declare compaction"):
-        commit.commit(
+        _ = commit.commit(
             _genesis_delta(
                 compacted=True, rehydrated_from_revision_id="rev-000000000001"
             ),
@@ -892,7 +899,7 @@ def test_a_genesis_delta_cannot_declare_compaction(store: storage.WorkStore) -> 
 
 def test_a_genesis_delta_cannot_carry_transitions(store: storage.WorkStore) -> None:
     with pytest.raises(commit.CommitError, match="no existing entries to transition"):
-        commit.commit(
+        _ = commit.commit(
             _genesis_delta(
                 transitions=[
                     EntryTransition(
@@ -915,7 +922,7 @@ def test_a_genesis_delta_must_carry_the_state_it_has_no_parent_for(
     store: storage.WorkStore, missing: str
 ) -> None:
     with pytest.raises(commit.CommitError, match=f"must carry .*{missing}"):
-        commit.commit(_genesis_delta(**{missing: None}), store=store)
+        _ = commit.commit(_genesis_delta(**{missing: None}), store=store)
 
     assert store.read_record() is None
     assert not store.revisions_dir.exists()
@@ -925,7 +932,7 @@ def test_a_genesis_delta_must_carry_the_capture_time_it_is_created_at(
     store: storage.WorkStore,
 ) -> None:
     with pytest.raises(commit.CommitError, match="session_provenance.captured_at"):
-        commit.commit(_genesis_delta(session_provenance=None), store=store)
+        _ = commit.commit(_genesis_delta(session_provenance=None), store=store)
 
     assert store.read_record() is None
 
@@ -934,6 +941,7 @@ def test_genesis_ids_are_derived_from_the_request_not_the_corpus(
     tmp_path: Path, corpus_root: Path
 ) -> None:
     """Two independent corpora given the same genesis request agree on names."""
+    _ = corpus_root
     delta = _genesis_delta(
         add_questions=[
             ProposedEntry(kind=EntryKind.QUESTION, summary="Is genesis derived?")

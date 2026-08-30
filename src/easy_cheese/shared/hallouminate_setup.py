@@ -16,8 +16,17 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TypedDict, cast
 
 from easy_cheese.shared import paths
+
+
+class _State(TypedDict):
+    present: bool
+    path: str | None
+    drifted: bool
+    drift_from: str | None
+
 
 BEGIN = "# >>> easy-cheese:cheese-durable"
 END = "# <<< easy-cheese:cheese-durable"
@@ -89,8 +98,8 @@ def _atomic_write(path: Path, text: str) -> None:
     tmp = path.with_name(f"{path.name}.ec-tmp")
     # write_bytes (not write_text) so line endings pass through verbatim on
     # every Python -- write_text(newline=...) is 3.13+, CI runs 3.12.
-    tmp.write_bytes(text.encode("utf-8"))
-    tmp.replace(path)
+    _ = tmp.write_bytes(text.encode("utf-8"))
+    _ = tmp.replace(path)
 
 
 def _extract_block(text: str) -> str | None:
@@ -125,7 +134,7 @@ def _replace_marked_block(text: str, new_block: str) -> str:
     return prefix + new_block
 
 
-def detect_state(config_path: Path | None = None) -> dict:
+def detect_state(config_path: Path | None = None) -> _State:
     """``{present, path, drifted, drift_from}`` for the marked cheese-durable block.
 
     ``drifted`` is True when the block is present but its ``paths[0]`` does not
@@ -177,7 +186,7 @@ def apply_global(config_path: Path | None = None, *, apply: bool) -> Change:
     home.mkdir(parents=True, exist_ok=True)
     path.parent.mkdir(parents=True, exist_ok=True)
     if not path.exists():
-        path.write_text("", encoding="utf-8")
+        _ = path.write_text("", encoding="utf-8")
     if action != "noop":
         # read_bytes (not read_text) so CRLF endings survive verbatim on
         # every Python -- read_text(newline=...) is 3.13+, CI runs 3.12.
@@ -262,7 +271,7 @@ def _main_root(repo_root: Path) -> Path:
 
 
 def _run_init_repo(name: str, path: Path) -> None:
-    subprocess.run(["hallouminate", "init-repo", name, "--path", str(path)], check=True)
+    _ = subprocess.run(["hallouminate", "init-repo", name, "--path", str(path)], check=True)
 
 
 def apply_local(repo_root: Path, *, apply: bool) -> Change:
@@ -304,12 +313,14 @@ def _run_leg(leg: str, do_apply: bool, migrate: bool = False) -> int:
 
 def _leg_main(leg: str, argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog=leg)
-    parser.add_argument("--apply", action="store_true")
-    parser.add_argument("--migrate-legacy", action="store_true")
+    _ = parser.add_argument("--apply", action="store_true")
+    _ = parser.add_argument("--migrate-legacy", action="store_true")
     args = parser.parse_args(argv)
-    if args.migrate_legacy and leg != "global":
+    do_apply = cast(bool, args.apply)
+    migrate = cast(bool, args.migrate_legacy)
+    if migrate and leg != "global":
         parser.error("--migrate-legacy is only valid for global")
-    return _run_leg(leg, args.apply, args.migrate_legacy)
+    return _run_leg(leg, do_apply, migrate)
 
 
 def global_main(argv: list[str]) -> int:  # noqa: V103
@@ -333,15 +344,17 @@ def main(argv: list[str] | None = None) -> int:
     elif len(argv) >= 2 and argv[1] in legs:
         leg, rest = argv[1], argv[2:]
     else:
-        sys.stderr.write("usage: hallouminate_setup.py {global|local|doctor} [--apply]\n")
+        _ = sys.stderr.write("usage: hallouminate_setup.py {global|local|doctor} [--apply]\n")
         return 2
     parser = argparse.ArgumentParser(prog=leg)
-    parser.add_argument("--apply", action="store_true")
-    parser.add_argument("--migrate-legacy", action="store_true")
+    _ = parser.add_argument("--apply", action="store_true")
+    _ = parser.add_argument("--migrate-legacy", action="store_true")
     args = parser.parse_args(rest)
-    if args.migrate_legacy and leg != "global":
+    do_apply = cast(bool, args.apply)
+    migrate = cast(bool, args.migrate_legacy)
+    if migrate and leg != "global":
         parser.error("--migrate-legacy is only valid for global")
-    return _run_leg(leg, args.apply, args.migrate_legacy)
+    return _run_leg(leg, do_apply, migrate)
 
 
 if __name__ == "__main__":

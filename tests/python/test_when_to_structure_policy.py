@@ -108,7 +108,7 @@ def test_when_to_structure_section_present() -> None:
 
 def test_freshness_rule() -> None:
     section = _section(TRANSPORT_DOC.read_text(encoding="utf-8"), "When to structure")
-    missing = []
+    missing: list[str] = []
     if not FRESHNESS_CONFIRMS_SESSION.search(section):
         missing.append("a structured question may only confirm trade-offs discussed this session")
     if not FRESHNESS_NEVER_INTRODUCES.search(section):
@@ -121,7 +121,7 @@ def test_freshness_rule() -> None:
 
 def test_mechanical_fast_path() -> None:
     section = _section(TRANSPORT_DOC.read_text(encoding="utf-8"), "When to structure")
-    missing = []
+    missing: list[str] = []
     if not MECHANICAL_DEFINITION.search(section):
         missing.append("mechanical item definition: intelligible without session context")
     if not MECHANICAL_EXAMPLES.search(section):
@@ -136,7 +136,7 @@ def test_mechanical_fast_path() -> None:
 
 def test_design_definition() -> None:
     section = _section(TRANSPORT_DOC.read_text(encoding="utf-8"), "When to structure")
-    missing = []
+    missing: list[str] = []
     if not DESIGN_DEFINITION.search(section):
         missing.append("design item definition: options need session context to be intelligible")
     if not DESIGN_FORK_NONFRESH.search(section):
@@ -149,7 +149,7 @@ def test_design_definition() -> None:
 
 def test_one_confirm_max_never_bundled() -> None:
     section = _section(TRANSPORT_DOC.read_text(encoding="utf-8"), "When to structure")
-    missing = []
+    missing: list[str] = []
     if not ONE_CONFIRM_MAX.search(section):
         missing.append("at most one structured confirm after prose convergence")
     if not NEVER_BUNDLE_FORKS.search(section):

@@ -48,7 +48,7 @@ _SEVERITY_HEADING_RE = re.compile(
 # section heading if it is absent.
 _BULLET_RE = re.compile(
     r"^-\s+\*\*\[(?P<dim>[^\]:]+)(?::(?P<sev>blocker|high|medium|low))?\]\*\*"
-    r"\s+`(?P<loc>[^`]+)`\s*[—-]\s*(?P<body>.+?)\s*$",
+    + r"\s+`(?P<loc>[^`]+)`\s*[—-]\s*(?P<body>.+?)\s*$",
     re.IGNORECASE,
 )
 

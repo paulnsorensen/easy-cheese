@@ -2,19 +2,41 @@
 
 from __future__ import annotations
 
+import json
 import multiprocessing
 import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
+from typing import Callable, cast
 
 import pytest
 import yaml
 
+from easy_cheese.shared.cli import CliError
+
 BUNDLE = Path(__file__).resolve().parents[3] / "skills/cook/scripts/cook.pyz"
 
 
-def _curds(n: int = 5) -> list[dict]:
+def _d(value: object) -> dict[str, object]:
+    return cast(dict[str, object], value)
+
+
+def _l(value: object) -> list[object]:
+    return cast(list[object], value)
+
+
+def _load(module: ModuleType, path: Path) -> tuple[dict[str, object], bytes]:
+    fn = cast(Callable[[Path], tuple[dict[str, object], bytes]], module._load_manifest)
+    return fn(path)
+
+
+def _commit(module: ModuleType, path: Path, data: dict[str, object], original: bytes) -> None:
+    fn = cast(Callable[[Path, dict[str, object], bytes], None], module._commit)
+    fn(path, data, original)
+
+
+def _curds(n: int = 5) -> list[dict[str, object]]:
     return [
         {
             "id": i + 1,
@@ -29,7 +51,7 @@ def _curds(n: int = 5) -> list[dict]:
     ]
 
 
-def _manifest() -> dict:
+def _manifest() -> dict[str, object]:
     return {
         "slug": "feature-name",
         "spec_path": ".cheese/specs/feature-name.md",
@@ -69,11 +91,11 @@ def _manifest() -> dict:
 
 def _write_fixture(tmp_path: Path) -> Path:
     path = tmp_path / "manifest.yaml"
-    path.write_text(yaml.safe_dump(_manifest(), sort_keys=False), encoding="utf-8")
+    _ = path.write_text(yaml.safe_dump(_manifest(), sort_keys=False), encoding="utf-8")
     return path
 
 
-def _run_cli(*args: str) -> subprocess.CompletedProcess:
+def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, str(BUNDLE), "manifest_update", *args],
         capture_output=True,
@@ -81,7 +103,7 @@ def _run_cli(*args: str) -> subprocess.CompletedProcess:
     )
 
 
-def _validate(path: Path) -> subprocess.CompletedProcess:
+def _validate(path: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, str(BUNDLE), "validate_manifest", str(path)],
         capture_output=True,
@@ -94,7 +116,7 @@ class TestSetPhase:
         path = _write_fixture(tmp_path)
         result = _run_cli("set-phase", "--manifest", str(path), "--phase", "seed_complete")
         assert result.returncode == 0, result.stderr
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        data = _d(cast(object, yaml.safe_load(path.read_text(encoding="utf-8"))))
         assert data["phase"] == "seed_complete"
         # The rewritten file must still pass the schema validator.
         check = _validate(path)
@@ -120,7 +142,7 @@ class TestSetPhase:
         expected_keys = list(_manifest().keys())
         result = _run_cli("set-phase", "--manifest", str(path), "--phase", "seed_complete")
         assert result.returncode == 0, result.stderr
-        rewritten = yaml.safe_load(path.read_text(encoding="utf-8"))
+        rewritten = _d(cast(object, yaml.safe_load(path.read_text(encoding="utf-8"))))
         assert list(rewritten.keys()) == expected_keys
 
 
@@ -147,8 +169,8 @@ class TestSetCurdStatus:
             "src/feature_2.ts",
         )
         assert result.returncode == 0, result.stderr
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
-        curd = next(c for c in data["curds"] if c["id"] == 3)
+        data = _d(cast(object, yaml.safe_load(path.read_text(encoding="utf-8"))))
+        curd = next(_d(c) for c in _l(data["curds"]) if _d(c)["id"] == 3)
         assert curd["status"] == "completed"
         assert curd["commit_sha"] == "deadbeef"
         assert curd["review_context"] == {
@@ -179,9 +201,9 @@ class TestSetCurdStatus:
 
     def test_other_curds_untouched(self, tmp_path: Path) -> None:
         path = _write_fixture(tmp_path)
-        _run_cli("set-curd-status", "--manifest", str(path), "--curd", "2", "--status", "running")
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
-        other_statuses = [c["status"] for c in data["curds"] if c["id"] != 2]
+        _ = _run_cli("set-curd-status", "--manifest", str(path), "--curd", "2", "--status", "running")
+        data = _d(cast(object, yaml.safe_load(path.read_text(encoding="utf-8"))))
+        other_statuses = [_d(c)["status"] for c in _l(data["curds"]) if _d(c)["id"] != 2]
         assert all(s == "pending" for s in other_statuses)
 
     def test_invalid_status_exits_2(self, tmp_path: Path) -> None:
@@ -230,8 +252,8 @@ class TestSetPostReview:
             "0",
         )
         assert result.returncode == 0, result.stderr
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
-        context = {
+        data = _d(cast(object, yaml.safe_load(path.read_text(encoding="utf-8"))))
+        context: dict[str, object] = {
             "base_commit": "A" * 40,
             "reviewed_tree_oid": "b" * 64,
             "diff_hash": "sha256:" + "C" * 64,
@@ -255,7 +277,7 @@ class TestSetPostReview:
             "post_review_complete",
         )
         assert advance.returncode == 0, advance.stderr
-        assert yaml.safe_load(path.read_text(encoding="utf-8"))["phase"] == "post_review_complete"
+        assert _d(cast(object, yaml.safe_load(path.read_text(encoding="utf-8"))))["phase"] == "post_review_complete"
 
 
 class TestSetWiringStatus:
@@ -273,8 +295,8 @@ class TestSetWiringStatus:
             "abc1234",
         )
         assert result.returncode == 0, result.stderr
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
-        wiring = data["wiring"][0]
+        data = _d(cast(object, yaml.safe_load(path.read_text(encoding="utf-8"))))
+        wiring = _d(_l(data["wiring"])[0])
         assert wiring["status"] == "completed"
         assert wiring["commit_sha"] == "abc1234"
         assert _validate(path).returncode == 0
@@ -303,11 +325,11 @@ class TestAtomicity:
         # in a way that argparse-level guards can't catch but the validator does.
         path = _write_fixture(tmp_path)
         original = path.read_bytes()
-        data, original_bytes = manifest_update._load_manifest(path)
+        data, original_bytes = _load(manifest_update, path)
         # quality_gates must be a non-empty list — clearing it breaks schema.
         data["quality_gates"] = []
-        with pytest.raises(manifest_update.cli.CliError):
-            manifest_update._commit(path, data, original_bytes)
+        with pytest.raises(CliError):
+            _commit(manifest_update, path, data, original_bytes)
         assert path.read_bytes() == original
         assert list(tmp_path.glob("*.tmp")) == []
 
@@ -315,13 +337,13 @@ class TestAtomicity:
 class TestCheckFiles:
     def test_all_present_reports_clean(self, tmp_path: Path) -> None:
         manifest = _manifest()
-        for curd in manifest["curds"]:
-            for f in curd["files"]:
-                target = tmp_path / f
+        for curd in _l(manifest["curds"]):
+            for f in _l(_d(curd)["files"]):
+                target = tmp_path / cast(str, f)
                 target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_text("", encoding="utf-8")
+                _ = target.write_text("", encoding="utf-8")
         path = tmp_path / "manifest.yaml"
-        path.write_text(yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8")
+        _ = path.write_text(yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8")
         result = _run_cli("check-files", "--manifest", str(path), "--root", str(tmp_path))
         assert result.returncode == 0, result.stderr
         assert "all curd files present" in result.stdout
@@ -337,12 +359,12 @@ class TestCheckFiles:
     def test_json_mode_reports_missing_per_curd_id(self, tmp_path: Path) -> None:
         manifest = _manifest()
         (tmp_path / "src").mkdir()
-        (tmp_path / "src" / "feature_0.ts").write_text("", encoding="utf-8")
+        _ = (tmp_path / "src" / "feature_0.ts").write_text("", encoding="utf-8")
         path = tmp_path / "manifest.yaml"
-        path.write_text(yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8")
+        _ = path.write_text(yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8")
         result = _run_cli("check-files", "--manifest", str(path), "--root", str(tmp_path), "--json")
         assert result.returncode == 0, result.stderr
-        report = __import__("json").loads(result.stdout)
+        report = _d(cast(object, json.loads(result.stdout)))
         assert "1" not in report
         assert report["2"] == ["src/feature_1.ts"]
 
@@ -367,7 +389,7 @@ class TestCheckFiles:
         target.mkdir(parents=True)
         result = _run_cli("check-files", "--manifest", str(path), "--root", str(tmp_path), "--json")
         assert result.returncode == 0, result.stderr
-        report = __import__("json").loads(result.stdout)
+        report = _d(cast(object, json.loads(result.stdout)))
         assert report["1"] == ["src/feature_0.ts"]
 
 
@@ -403,9 +425,9 @@ class TestConcurrentWrites:
                 results = pool.map(_worker, jobs)
             # The advisory lock serialises all writes — no update should be lost
             # and no writer should fail due to a race condition.
-            data = yaml.safe_load(path.read_text(encoding="utf-8"))
+            data = _d(cast(object, yaml.safe_load(path.read_text(encoding="utf-8"))))
             assert isinstance(data, dict)
-            assert len(data["curds"]) == n_curds
+            assert len(_l(data["curds"])) == n_curds
             for rc, err in results:
                 assert rc == 0, f"unexpected rc={rc} stderr={err!r}"
         # Final state still passes validation.
@@ -430,7 +452,7 @@ class TestConcurrentWrites:
             }
             for i in range(n)
         ]
-        path.write_text(yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8")
+        _ = path.write_text(yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8")
 
         # All jobs target distinct curd ids with the same manifest file — genuine
         # concurrent contention with no serialisation at the test level.
@@ -443,10 +465,11 @@ class TestConcurrentWrites:
             assert rc == 0, f"rc={rc} stderr={err!r}"
 
         # Every curd's update must be present in the final manifest.
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        data = _d(cast(object, yaml.safe_load(path.read_text(encoding="utf-8"))))
         assert _validate(path).returncode == 0
-        assert len(data["curds"]) == n
-        for curd in data["curds"]:
-            assert curd["status"] == "running", (
-                f"curd {curd['id']} status={curd['status']!r} — update was lost"
+        assert len(_l(data["curds"])) == n
+        for curd in _l(data["curds"]):
+            c = _d(curd)
+            assert c["status"] == "running", (
+                f"curd {c['id']} status={c['status']!r} — update was lost"
             )

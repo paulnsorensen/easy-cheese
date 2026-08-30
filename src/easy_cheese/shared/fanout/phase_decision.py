@@ -35,9 +35,18 @@ Output (JSON):
 from __future__ import annotations
 
 import argparse
+from typing import Literal, Protocol, TextIO, TypedDict
 
 # cli is co-staged in the bundled .pyz alongside this module
 from easy_cheese.shared import cli
+
+Action = Literal["spawn", "stop", "stop_early", "clean_complete", "halt"]
+
+
+class Verdict(TypedDict):
+    action: Action
+    next_phase: str | None
+    exit_message: str
 
 # A phase table is an ordered list of phase names; the phase that runs after
 # index i is table[i + 1], and the last entry is terminal.
@@ -69,7 +78,7 @@ def decide(
     *,
     table: list[str] = LINEAR_TABLE,
     allow_early_stop: bool | None = None,
-) -> dict:
+) -> Verdict:
     """Pure decision — no I/O. Raises CliError on invalid phase index."""
     max_index = len(table) - 1
     if phase_index < 0 or phase_index > max_index:
@@ -144,7 +153,15 @@ def decide(
     }
 
 
-def _cmd_decide(args: argparse.Namespace) -> None:
+class _Args(Protocol):
+    table: str
+    phase_index: int
+    status: str
+    next: str | None
+    stdout: TextIO
+
+
+def _cmd_decide(args: _Args) -> None:
     table = TABLES[args.table]
     verdict = decide(
         args.phase_index,
@@ -158,24 +175,24 @@ def _cmd_decide(args: argparse.Namespace) -> None:
 
 def _setup(parser: argparse.ArgumentParser) -> None:
     parser.description = "Decide /ultracook's next action from a phase handoff."
-    parser.add_argument(
+    _ = parser.add_argument(
         "--phase-index",
         type=int,
         required=True,
         dest="phase_index",
         help="0-indexed phase that just returned.",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--status",
         required=True,
         help="`status` field from the handoff slug (ok | halt: <reason>).",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--next",
         default=None,
         help="`next` field from the handoff slug (e.g. press, cure, done).",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--table",
         choices=sorted(TABLES),
         default="linear",

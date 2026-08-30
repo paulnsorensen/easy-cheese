@@ -18,6 +18,7 @@ import sys
 from enum import Enum
 from pathlib import Path
 from types import ModuleType
+from typing import TYPE_CHECKING, ClassVar, Protocol, TypedDict, cast
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -31,6 +32,30 @@ import attrs  # noqa: E402
 from easy_cheese_schemas import contracts  # noqa: E402
 from easy_cheese_schemas import COMPILED_TRANSITION_REGISTRY  # noqa: E402
 from easy_cheese_schemas import REGISTERED_CONTRACT_SCHEMA_URIS  # noqa: E402
+
+
+class _DocumentContract(Protocol):
+    sections: ClassVar[tuple[contracts.Section, ...]]
+    cross_field_rules: ClassVar[tuple[contracts.CrossFieldRule, ...]]
+
+
+class _ContractVersion(TypedDict):
+    major: int
+    minor: int
+    schema_uri: str
+
+
+class _PhaseOutput(TypedDict):
+    destination: str
+    payload_schema_uri: str
+
+
+class _Phase(TypedDict):
+    contract_version: _ContractVersion
+    input_schema_uris: list[str]
+    outputs: list[_PhaseOutput]
+    source: str
+
 
 CURDLE_PATH = REPO_ROOT / "skills" / "mold" / "references" / "curdle.md"
 WRITER_VIEWS_PATH = REPO_ROOT / "skills" / "cook" / "references" / "writer-views.md"
@@ -65,9 +90,15 @@ def _identifier_names(type_repr: str) -> list[str]:
     return re.findall(r"[A-Za-z_][A-Za-z0-9_]*", type_repr)
 
 
-def _collect_reachable(roots: list[type], module: ModuleType) -> tuple[dict[str, tuple], dict[str, list[Enum]]]:
+if TYPE_CHECKING:
+    _Fields = tuple[attrs.Attribute[object], ...]
+
+
+def _collect_reachable(
+    roots: list[type], module: ModuleType
+) -> tuple[dict[str, _Fields], dict[str, list[Enum]]]:
     """BFS from ``roots`` over attrs classes and Enums reachable via field types."""
-    classes: dict[str, tuple] = {}
+    classes: dict[str, _Fields] = {}
     enums: dict[str, list[Enum]] = {}
     to_visit = list(roots)
     seen: set[str] = set()
@@ -77,10 +108,11 @@ def _collect_reachable(roots: list[type], module: ModuleType) -> tuple[dict[str,
             continue
         seen.add(cls.__name__)
         if attrs.has(cls):
-            fields = attrs.fields(cls)
+            fields = cast("tuple[attrs.Attribute[object], ...]", attrs.fields(cls))
             classes[cls.__name__] = fields
             for field in fields:
-                for name in _identifier_names(field.type or ""):
+                type_repr = cast(str, field.type or "")
+                for name in _identifier_names(type_repr):
                     candidate = getattr(module, name, None)
                     if not isinstance(candidate, type):
                         continue
@@ -90,7 +122,7 @@ def _collect_reachable(roots: list[type], module: ModuleType) -> tuple[dict[str,
                     elif candidate.__module__ == module.__name__:
                         raise ValueError(
                             f"{cls.__name__}.{field.name} references "
-                            f"non-attrs, non-Enum class {candidate.__name__!r}"
+                            + f"non-attrs, non-Enum class {candidate.__name__!r}"
                         )
         elif issubclass(cls, Enum):
             enums[cls.__name__] = list(cls)
@@ -108,13 +140,13 @@ def render_type_blocks(roots: list[type], module: ModuleType) -> str:
         lines.append("}")
         lines.append("")
     for name in sorted(enums):
-        values = " | ".join(f'"{member.value}"' for member in enums[name])
+        values = " | ".join(f'"{cast(str, member.value)}"' for member in enums[name])
         lines.append(f"enum {name} = {values}")
         lines.append("")
     return "\n".join(lines).rstrip("\n") + "\n"
 
 
-def render_document_contract(slug: str, cls: type) -> str:
+def render_document_contract(slug: str, cls: type[_DocumentContract]) -> str:
     """Render a document contract's sections and cross-field rules as a compact block."""
     lines = [f"document {slug} {{"]
     for section in cls.sections:
@@ -138,7 +170,7 @@ def render_mold_spec_region() -> str:
     document_contracts = dict(contracts.registered_document_contracts())
     mold_spec = document_contracts["mold-spec"]
     return (
-        render_document_contract("mold-spec", mold_spec)
+        render_document_contract("mold-spec", cast(type[_DocumentContract], mold_spec))
         + "\n"
         + render_type_blocks([mold_spec], contracts)
     )
@@ -155,7 +187,7 @@ def _slug_from_uri(uri: str) -> str:
 
 def render_schema_intertwine() -> str:
     contract_slugs = {slug: cls.__name__ for slug, cls in contracts.registered_contracts()}
-    phases = COMPILED_TRANSITION_REGISTRY.to_data()
+    phases = cast(list[_Phase], COMPILED_TRANSITION_REGISTRY.to_data())
     catalog_slugs = sorted(
         _slug_from_uri(uri) for uri in REGISTERED_CONTRACT_SCHEMA_URIS
     )
@@ -205,7 +237,7 @@ def render_schema_intertwine() -> str:
         contract_cls = contract_slugs.get(slug, "—")
         lines.append(
             f'| {slug} | {contract_cls} | {", ".join(input_phases) or "—"} |'
-            f' {", ".join(output_phases) or "—"} |'
+            + f' {", ".join(output_phases) or "—"} |'
         )
     lines.append("")
     return "\n".join(lines)
@@ -238,20 +270,21 @@ def refresh(check: bool) -> bool:
         if check:
             print(f"DRIFT: {path.relative_to(REPO_ROOT)} is stale", file=sys.stderr)
         else:
-            path.write_text(new_text, encoding="utf-8")
+            _ = path.write_text(new_text, encoding="utf-8")
     return clean
 
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
+    _ = parser.add_argument(
         "--check",
         action="store_true",
         help="exit 1 if any generated surface is stale, without writing",
     )
     args = parser.parse_args(argv)
-    clean = refresh(check=args.check)
-    if args.check and not clean:
+    check = cast(bool, args.check)
+    clean = refresh(check=check)
+    if check and not clean:
         return 1
     return 0
 

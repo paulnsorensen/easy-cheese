@@ -7,6 +7,7 @@ import shutil
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
+from typing import Protocol
 
 import pytest
 from easy_cheese_schemas import (
@@ -15,6 +16,7 @@ from easy_cheese_schemas import (
     EntryState,
     ProtectedEntry,
     WheypointRecord,
+    WheypointRevision,
 )
 
 from easy_cheese.skills.wheypoint import canonical, lint, records, storage
@@ -22,12 +24,18 @@ from easy_cheese.skills.wheypoint import canonical, lint, records, storage
 PROJECT = "paulnsorensen-easy-cheese"
 
 
-def all_objects_exist(obj: str) -> bool:
+def all_objects_exist(_obj: str) -> bool:
     return True
 
 
-def no_artifacts(path: str) -> str | None:
+def no_artifacts(_path: str) -> str | None:
     return None
+
+
+class _PromotionLike(Protocol):
+    record: WheypointRecord
+    revision: WheypointRevision
+    markdown: str
 
 
 def make_store(corpus_root: Path) -> storage.WorkStore:
@@ -49,7 +57,9 @@ def check(
     )
 
 
-def test_a_consistent_promotion_lints_clean(corpus_root, make_promotion) -> None:
+def test_a_consistent_promotion_lints_clean(
+    corpus_root: Path, make_promotion: Callable[..., _PromotionLike]
+) -> None:
     store = make_store(corpus_root)
     promotion = make_promotion()
     store.promote(promotion.record, promotion.revision, promotion.markdown)
@@ -63,7 +73,7 @@ def test_a_consistent_promotion_lints_clean(corpus_root, make_promotion) -> None
     assert report.projection.revision_id == "rev-0001"
 
 
-def test_an_empty_store_reports_the_missing_record_path(corpus_root) -> None:
+def test_an_empty_store_reports_the_missing_record_path(corpus_root: Path) -> None:
     store = make_store(corpus_root)
 
     report = check(store)
@@ -73,13 +83,13 @@ def test_an_empty_store_reports_the_missing_record_path(corpus_root) -> None:
 
 
 def test_a_tampered_projection_fails_its_own_digest(
-    corpus_root, make_promotion
+    corpus_root: Path, make_promotion: Callable[..., _PromotionLike]
 ) -> None:
     store = make_store(corpus_root)
     promotion = make_promotion()
     store.promote(promotion.record, promotion.revision, promotion.markdown)
     path = store.projection_path(1, "rev-0001")
-    path.write_text(
+    _ = path.write_text(
         promotion.markdown.replace("status: ok", "status: gated"), encoding="utf-8"
     )
 
@@ -90,21 +100,23 @@ def test_a_tampered_projection_fails_its_own_digest(
 
 
 def test_a_tampered_record_fails_the_digest_its_receipt_quotes(
-    corpus_root, make_promotion
+    corpus_root: Path, make_promotion: Callable[..., _PromotionLike]
 ) -> None:
     store = make_store(corpus_root)
     promotion = make_promotion()
     store.promote(promotion.record, promotion.revision, promotion.markdown)
     forged = records.unstructure(promotion.record)
     forged["orientation"] = "someone edited the authority directly"
-    store.record_path.write_bytes(canonical.canonical_bytes(forged))
+    _ = store.record_path.write_bytes(canonical.canonical_bytes(forged))
 
     report = check(store)
 
     assert lint.LintCode.STORE_INCONSISTENT in report.codes
 
 
-def test_a_missing_parent_revision_blocks(corpus_root, make_promotion) -> None:
+def test_a_missing_parent_revision_blocks(
+    corpus_root: Path, make_promotion: Callable[..., _PromotionLike]
+) -> None:
     store = make_store(corpus_root)
     promotion = make_promotion(parent="rev-0000")
     store.promote(promotion.record, promotion.revision, promotion.markdown)
@@ -115,7 +127,9 @@ def test_a_missing_parent_revision_blocks(corpus_root, make_promotion) -> None:
     assert "rev-0000" in report.findings[0].detail
 
 
-def test_a_present_parent_chain_lints_clean(corpus_root, make_promotion) -> None:
+def test_a_present_parent_chain_lints_clean(
+    corpus_root: Path, make_promotion: Callable[..., _PromotionLike]
+) -> None:
     store = make_store(corpus_root)
     first = make_promotion(1, "rev-0001")
     store.promote(first.record, first.revision, first.markdown)
@@ -130,7 +144,7 @@ def test_a_present_parent_chain_lints_clean(corpus_root, make_promotion) -> None
 
 
 def test_a_record_from_another_project_never_dispatches_here(
-    corpus_root, make_promotion
+    corpus_root: Path, make_promotion: Callable[..., _PromotionLike]
 ) -> None:
     store = make_store(corpus_root)
     promotion = make_promotion()
@@ -143,7 +157,7 @@ def test_a_record_from_another_project_never_dispatches_here(
 
 
 def test_a_declared_commit_that_no_longer_resolves_blocks(
-    corpus_root, make_promotion
+    corpus_root: Path, make_promotion: Callable[..., _PromotionLike]
 ) -> None:
     store = make_store(corpus_root)
     promotion = make_promotion()
@@ -160,7 +174,9 @@ def test_a_declared_commit_that_no_longer_resolves_blocks(
     assert report.codes == (lint.LintCode.GIT_OBJECT_MISSING,)
 
 
-def covered_record(make_record, digest: str) -> WheypointRecord:
+def covered_record(
+    make_record: Callable[..., WheypointRecord], digest: str
+) -> WheypointRecord:
     return make_record(
         decisions=[
             ProtectedEntry(
@@ -182,7 +198,9 @@ def covered_record(make_record, digest: str) -> WheypointRecord:
 
 
 def test_a_stale_artifact_invalidates_its_claim_and_keeps_the_entry(
-    corpus_root, make_record, make_promotion
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
 ) -> None:
     store = make_store(corpus_root)
     promotion = make_promotion(
@@ -201,7 +219,9 @@ def test_a_stale_artifact_invalidates_its_claim_and_keeps_the_entry(
 
 
 def test_a_pinned_artifact_that_still_matches_lints_clean(
-    corpus_root, make_record, make_promotion
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
 ) -> None:
     store = make_store(corpus_root)
     pinned = canonical.digest_text("as written")
@@ -214,7 +234,7 @@ def test_a_pinned_artifact_that_still_matches_lints_clean(
 
 
 def test_an_interrupted_promotion_is_named_rather_than_reported_clean(
-    corpus_root, make_promotion
+    corpus_root: Path, make_promotion: Callable[..., _PromotionLike]
 ) -> None:
     """A half-written pair is invisible to the record checks, so lint reports
     it directly: the operator has to be told the retry was interrupted."""
@@ -222,7 +242,7 @@ def test_an_interrupted_promotion_is_named_rather_than_reported_clean(
     promotion = make_promotion(1, "rev-0001")
     store.promote(promotion.record, promotion.revision, promotion.markdown)
     orphan = make_promotion(2, "rev-0002", parent="rev-0001")
-    store.revision_path(2, "rev-0002").write_bytes(
+    _ = store.revision_path(2, "rev-0002").write_bytes(
         records.canonical_payload(orphan.revision)
     )
 
@@ -257,7 +277,7 @@ def test_lint_projection_file_reports_a_missing_file(tmp_path: Path) -> None:
 
 def test_artifact_digest_in_hashes_relative_paths(tmp_path: Path) -> None:
     (tmp_path / "cook").mkdir()
-    (tmp_path / "cook" / "report.md").write_text("body", encoding="utf-8")
+    _ = (tmp_path / "cook" / "report.md").write_text("body", encoding="utf-8")
     digest = lint.artifact_digest_in(tmp_path)
 
     assert digest("cook/report.md") == canonical.digest_text("body")
@@ -268,7 +288,7 @@ def test_artifact_digest_in_rejects_absolute_paths(tmp_path: Path) -> None:
     root = tmp_path / "root"
     root.mkdir()
     outside = tmp_path / "outside.md"
-    outside.write_text("body", encoding="utf-8")
+    _ = outside.write_text("body", encoding="utf-8")
 
     assert lint.artifact_digest_in(root)(str(outside)) is None
 
@@ -276,7 +296,7 @@ def test_artifact_digest_in_rejects_absolute_paths(tmp_path: Path) -> None:
 def test_artifact_digest_in_rejects_parent_traversal(tmp_path: Path) -> None:
     root = tmp_path / "root"
     root.mkdir()
-    (tmp_path / "outside.md").write_text("body", encoding="utf-8")
+    _ = (tmp_path / "outside.md").write_text("body", encoding="utf-8")
 
     assert lint.artifact_digest_in(root)("../outside.md") is None
 
@@ -285,7 +305,7 @@ def test_artifact_digest_in_rejects_symlink_escapes(tmp_path: Path) -> None:
     root = tmp_path / "root"
     root.mkdir()
     outside = tmp_path / "outside.md"
-    outside.write_text("body", encoding="utf-8")
+    _ = outside.write_text("body", encoding="utf-8")
     (root / "link.md").symlink_to(outside)
 
     assert lint.artifact_digest_in(root)("link.md") is None
@@ -309,7 +329,7 @@ def test_git_object_exists_in_answers_from_a_real_repository(tmp_path: Path) -> 
         "GIT_COMMITTER_EMAIL": "t@example.com",
     }
     for args in (["init", "-q", "-b", "main"], ["commit", "-q", "--allow-empty", "-m", "s"]):
-        subprocess.run(
+        _ = subprocess.run(
             ["git", *args], cwd=tmp_path, env=env, check=True, capture_output=True
         )
     head = subprocess.run(
