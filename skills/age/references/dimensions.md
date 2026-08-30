@@ -214,7 +214,7 @@ Recommendation shape: "Restore the X requirement" / "Confirm with the user that 
 
 ### complexity
 
-Look for: functions over budget (40 lines / 4 params / 3 nesting), files over 300 lines that grew, speculative abstractions, redundant state, parameter sprawl, stringly-typed code, explanatory-renaming comments, and the inverse failure — abstractions whose interface costs more than they hide: pass-through methods, pass-through variables, adjacent layers restating the same abstraction, wrapper types that forward every call.
+Look for: functions over budget (40 lines / 4 params / 3 nesting), files over 300 lines that grew, speculative abstractions, redundant state, parameter sprawl, stringly-typed code, explanatory-renaming comments, special cases layered on shared infrastructure when generalizing the underlying mechanism costs less (a bandaid-depth fix), and the inverse failure — abstractions whose interface costs more than they hide: pass-through methods, pass-through variables, adjacent layers restating the same abstraction, wrapper types that forward every call.
 
 | Base | Trigger |
 | --- | --- |
@@ -293,7 +293,7 @@ Recommendation shape: "Replace with `<existing-dep>.<fn>`" / "Use the stdlib `<f
 
 ### efficiency
 
-Look for: unnecessary work, missed concurrency, hot-path bloat, no-op updates, TOCTOU pre-checks, memory leaks, overly broad reads.
+Look for: unnecessary work, missed concurrency, hot-path bloat, no-op updates, TOCTOU pre-checks, memory leaks, long-lived objects built from closures that capture the enclosing scope (the capture keeps the whole scope alive — prefer a type that copies only the fields it needs), overly broad reads.
 
 | Base | Trigger |
 | --- | --- |
