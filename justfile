@@ -38,6 +38,29 @@ test-skill-overlap:
 bundle:
     python3 scripts/build_pyz.py
 
+# Fast-forward main to next once the soak channel's CI is green.
+# Never promote via a PR: a squash-merge to main rewrites SHAs and
+# permanently breaks fast-forward parity between the channels.
+promote:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    git fetch origin main next
+    if ! git merge-base --is-ancestor origin/main origin/next; then
+      echo "promote: main has commits next lacks — rebase next onto main first" >&2
+      exit 1
+    fi
+    if [ "$(git rev-parse origin/main)" = "$(git rev-parse origin/next)" ]; then
+      echo "promote: main is already at next — nothing to do"
+      exit 0
+    fi
+    conclusion=$(gh run list --branch next --workflow validate --limit 1 --json conclusion --jq '.[0].conclusion // "none"')
+    if [ "$conclusion" != "success" ]; then
+      echo "promote: latest validate run on next is '$conclusion', not success — refusing" >&2
+      exit 1
+    fi
+    git push origin origin/next:refs/heads/main
+    echo "promoted: main fast-forwarded to $(git rev-parse --short origin/next)"
+
 # Preview the exact tree a release ships (skills + .pyz only, no sources)
 release-preview:
     python3 scripts/stage_release.py --out .release-preview
