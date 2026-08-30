@@ -60,7 +60,6 @@ def resolve_artifact(
     *,
     repository_root: str | Path = ".",
     artifact_directory: str | Path,
-    schema_validator: SchemaValidator | None = None,
 ) -> ResolvedAgentArtifact:
     if artifact_directory is None:  # pyright: ignore[reportUnnecessaryComparison]
         raise ArtifactResolutionError("artifact_directory is required")  # pyright: ignore[reportUnreachable]
@@ -98,7 +97,6 @@ def resolve_artifact(
         content,
         detected_type,
         artifact_directory,
-        schema_validator,
     )
 
 
@@ -107,10 +105,9 @@ def resolve_verified_bytes(
     content: bytes,
     detected_type: str,
     artifact_directory: str | Path,
-    schema_validator: SchemaValidator | None = None,
 ) -> ResolvedAgentArtifact:
     _validate_integrity(artifact, content, detected_type)
-    _validate_schema(artifact, content, schema_validator)
+    _validate_schema(artifact, content)
     path = _retain_verified_bytes(content, artifact_directory)
     return _agent_view(artifact, path)
 
@@ -522,11 +519,7 @@ def _reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]
     return document
 
 
-def _validate_schema(
-    artifact: ArtifactRef,
-    content: bytes,
-    schema_validator: SchemaValidator | None,
-) -> None:
+def _validate_schema(artifact: ArtifactRef, content: bytes) -> None:
     if artifact.schema_uri is None:
         return
     media_type = _base_media_type(artifact.media_type)
@@ -545,7 +538,7 @@ def _validate_schema(
 
     try:
         validator = schema_validator or _validate_registered_schema
-        validator(content, artifact.schema_uri)
+        _validate_registered_schema(content, artifact.schema_uri)
     except ArtifactResolutionError:
         raise
     except ValueError as exc:
