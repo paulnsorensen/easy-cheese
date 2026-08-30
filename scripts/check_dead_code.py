@@ -13,13 +13,24 @@ import tokenize
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol, override
 
-from vulture import Vulture
-from vulture.config import InputError, make_config
-from vulture.core import ExitCode
+from vulture import Vulture  # pyright: ignore[reportMissingTypeStubs]
+from vulture.config import InputError, make_config  # pyright: ignore[reportMissingTypeStubs]
+from vulture.core import ExitCode  # pyright: ignore[reportMissingTypeStubs]
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 _SCHEMA_PREFIX = "src/easy_cheese_schemas/"
+
+
+class _UnusedItem(Protocol):
+    filename: Path
+    first_lineno: int
+    name: str
+    typ: str
+
+    def get_report(self) -> str: ...
+
 
 # base names are matched via each file's own import map (see _import_map),
 # resolved to "module.Name" and compared against these fully-qualified pairs:
@@ -41,8 +52,8 @@ class _Finding:
     report: str
 
 
-def _findings(items) -> tuple[_Finding, ...]:
-    findings = []
+def _findings(items: Sequence[_UnusedItem]) -> tuple[_Finding, ...]:
+    findings: list[_Finding] = []
     for i in items:
         path = Path(i.filename)
         if path.is_absolute():
@@ -62,7 +73,7 @@ class _ImportMap(dict[str, str]):
     def bind(self, name: str, line: int, qualified: str | None) -> None:
         self.bindings.setdefault(name, []).append((line, qualified))
         if qualified is None:
-            self.pop(name, None)
+            _ = self.pop(name, None)
         else:
             self[name] = qualified
 
@@ -81,16 +92,24 @@ def _import_map(module: ast.Module) -> _ImportMap:
     out = _ImportMap()
 
     class _WalrusBindings(ast.NodeVisitor):
+        @override
         def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
             return
 
-        visit_AsyncFunctionDef = visit_FunctionDef
-        visit_ClassDef = visit_FunctionDef
+        @override
+        def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+            return
 
+        @override
+        def visit_ClassDef(self, node: ast.ClassDef) -> None:
+            return
+
+        @override
         def visit_Lambda(self, node: ast.Lambda) -> None:  # noqa: V105
             return
 
-        def visit_NamedExpr(self, node: ast.NamedExpr) -> None:  # noqa: V105
+        @override  # noqa: V105
+        def visit_NamedExpr(self, node: ast.NamedExpr) -> None:
             for name in _bound_names(node.target):
                 out.bind(name, node.lineno, None)
             self.generic_visit(node.value)
@@ -165,6 +184,27 @@ def _is_enum_base(resolved: str | None) -> bool:
     return resolved == "enum.Enum"
 
 
+_TYPED_DICT_BASES = {"typing.TypedDict", "typing_extensions.TypedDict"}
+_PROTOCOL_BASES = {"typing.Protocol", "typing_extensions.Protocol"}
+_OVERRIDE_DECORATORS = {"typing.override", "typing_extensions.override"}
+
+
+def _function_args(func: ast.FunctionDef | ast.AsyncFunctionDef) -> tuple[ast.arg, ...]:
+    args = func.args
+    optional = [args.vararg] if args.vararg else []
+    optional += [args.kwarg] if args.kwarg else []
+    return (*args.posonlyargs, *args.args, *args.kwonlyargs, *optional)
+
+
+def _ann_assign_matches(item: ast.stmt, finding: _Finding) -> bool:
+    return (
+        isinstance(item, ast.AnnAssign)
+        and isinstance(item.target, ast.Name)
+        and item.target.id == finding.name
+        and item.lineno == finding.first_line
+    )
+
+
 def _is_attrs_decorated(class_def: ast.ClassDef, imports: Mapping[str, str]) -> bool:
     for dec in class_def.decorator_list:
         head = dec.func if isinstance(dec, ast.Call) else dec
@@ -232,6 +272,31 @@ def _accepted_reason(finding: _Finding, module: ast.Module, imports: dict[str, s
                             for qualified, method in _QUALIFIED_CALLBACK_OVERRIDES
                         ):
                             return "exact callback override"
+                if (
+                    isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))
+                    and item.name == finding.name
+                    and finding.first_line in {item.lineno, *(d.lineno for d in item.decorator_list)}
+                    and any(
+                        _resolve_expr(decorator, imports, item.lineno) in _OVERRIDE_DECORATORS
+                        for decorator in item.decorator_list
+                    )
+                ):
+                    return "@override framework hook"
+        if finding.typ == "variable":
+            bases_resolved = {_resolve_base(base, imports, node.lineno) for base in node.bases}
+            if bases_resolved & _TYPED_DICT_BASES and any(
+                _ann_assign_matches(item, finding) for item in node.body
+            ):
+                return "TypedDict field declaration"
+            if bases_resolved & _PROTOCOL_BASES:
+                if any(_ann_assign_matches(item, finding) for item in node.body):
+                    return "Protocol member declaration"
+                for item in node.body:
+                    if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) and any(
+                        arg.arg == finding.name and arg.lineno == finding.first_line
+                        for arg in _function_args(item)
+                    ):
+                        return "Protocol method parameter"
         if finding.typ == "variable" and schema_owned:
             for item in node.body:
                 target_line = None
@@ -279,7 +344,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             min_confidence=config["min_confidence"], sort_by_size=config["sort_by_size"]
         )
     )
-    unclassified = []
+    unclassified: list[_Finding] = []
     module_cache: dict[Path, tuple[ast.Module | None, dict[str, str]]] = {}
     for finding in findings:
         if finding.path not in module_cache:

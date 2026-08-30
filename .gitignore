@@ -27,6 +27,7 @@
 __pycache__/
 *.pyc
 .venv/
+.venv-typing/
 node_modules/
 
 # OS / editor

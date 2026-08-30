@@ -55,15 +55,35 @@ only-include = [
 ]
 # typeCheckingMode is deliberately unset: basedpyright's default "recommended"
 # tier matches the editor LSP diagnostics.
+# The venv carries the runtime deps (attrs, cattrs) plus the test/tooling
+# surface (pytest, pyyaml, vulture); `just typecheck` creates it on demand.
 [tool.basedpyright]
 include = ["src", "scripts", ".github/scripts", "tests"]
 pythonVersion = "3.12"
+venvPath = "."
+venv = ".venv-typing"
 
 # The published easy-cheese-schemas wheel declares requires-python >=3.11, so
 # its sources must not use 3.12-only features.
 [[tool.basedpyright.executionEnvironments]]
 root = "src/easy_cheese_schemas"
 pythonVersion = "3.11"
+
+# Tests import scripts/ and .github/scripts/ modules after inserting those
+# directories onto sys.path at runtime; mirror that for static resolution.
+# tests/wheypoint/python lists itself first so `from conftest import ...`
+# resolves to the sibling conftest.py, matching pytest's rootdir insertion.
+[[tool.basedpyright.executionEnvironments]]
+root = "tests/schemas/python"
+extraPaths = ["tests/schemas/python", ".", "src", "scripts", ".github/scripts", "src/easy_cheese_schemas"]
+
+[[tool.basedpyright.executionEnvironments]]
+root = "tests/wheypoint/python"
+extraPaths = ["tests/wheypoint/python", ".", "src", "scripts", ".github/scripts", "src/easy_cheese_schemas"]
+
+[[tool.basedpyright.executionEnvironments]]
+root = "tests"
+extraPaths = [".", "src", "scripts", ".github/scripts"]
 
 [tool.vulture]
 min_confidence = 60
