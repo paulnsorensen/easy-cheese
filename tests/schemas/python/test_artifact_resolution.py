@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from email.message import Message
 from io import BytesIO
 from pathlib import Path
@@ -18,7 +19,28 @@ from easy_cheese_schemas.artifacts import (
     ArtifactResolutionError,
     resolve_artifact,
 )
-from easy_cheese_schemas.contracts import ArtifactRef
+from easy_cheese_schemas.contracts import (
+    ArtifactRef,
+    PlannerRequest,
+    PlannerRequestKind,
+)
+from easy_cheese_schemas.schema_runtime import canonical_bytes, supported_version_for
+
+REGISTERED_SCHEMA_URI = "https://schemas.easy-cheese.dev/planner-request"
+
+
+def registered_contract_bytes() -> bytes:
+    """Canonical bytes of a payload the registered-schema validator accepts."""
+    version = supported_version_for(REGISTERED_SCHEMA_URI)
+    assert version is not None
+    return canonical_bytes(
+        PlannerRequest(
+            contract_version=version,
+            request_id="request-1",
+            kind=PlannerRequestKind.DECOMPOSE,
+            objective="Resolve the declared artifact",
+        )
+    )
 
 
 def artifact_ref(
@@ -214,26 +236,23 @@ def test_rejects_repository_symlink_escape(tmp_path: Path) -> None:
 def test_rejects_integrity_mismatch_before_exposure(
     tmp_path: Path, field: str, value: object, message: str
 ) -> None:
-    _ = message
     source = tmp_path / "input.txt"
     _ = source.write_bytes(b"trusted input")
-    calls: list[tuple[bytes, str]] = []
+    artifact_directory = tmp_path / "resolved"
     reference = evolve(
         artifact_ref(source.as_uri(), b"trusted input"),
-        schema_uri="urn:example:input",
+        schema_uri=REGISTERED_SCHEMA_URI,
         **{field: value},
     )
 
-    def schema_validator(_raw: bytes, _schema_uri: str) -> None:
-        calls.append((_raw, _schema_uri))
+    with pytest.raises(ArtifactResolutionError) as raised:
+        _ = resolve_artifact(reference, artifact_directory=artifact_directory)
 
-        _ = resolve_artifact(
-            reference,
-            artifact_directory=tmp_path / "resolved",
-            schema_validator=schema_validator,
-        )
-
-    assert calls == []
+    # The declared schema URI is registered but the body is not a contract
+    # payload: surfacing the integrity message proves integrity ran first.
+    assert message in str(raised.value)
+    assert "schema mismatch" not in str(raised.value)
+    assert not artifact_directory.exists()
 
 
 class HttpsResponse(BytesIO):
@@ -455,14 +474,9 @@ def test_rejects_forbidden_redirect_with_no_redirect_opener(
 
 
 def test_validates_declared_schema_before_exposure(tmp_path: Path) -> None:
-    document = {"contract_version": {"schema_uri": "urn:example:input"}, "value": 1}
-    content = json.dumps(document).encode()
+    content = registered_contract_bytes()
     source = tmp_path / "input.json"
     _ = source.write_bytes(content)
-    calls: list[tuple[bytes, str]] = []
-
-    def validate_schema(raw: bytes, schema_uri: str) -> None:
-        calls.append((raw, schema_uri))
 
     artifact_directory = tmp_path / "resolved"
     resolved = resolve_artifact(
@@ -470,37 +484,37 @@ def test_validates_declared_schema_before_exposure(tmp_path: Path) -> None:
             source.as_uri(),
             content,
             media_type="application/json",
-            schema_uri="urn:example:input",
+            schema_uri=REGISTERED_SCHEMA_URI,
         ),
         artifact_directory=artifact_directory,
-        schema_validator=validate_schema,
     )
 
     resolved_path = Path(resolved.path)
     assert resolved_path.read_bytes() == content
     assert resolved_path != source.resolve()
-    assert calls == [(content, "urn:example:input")]
 
 
 def test_rejects_schema_mismatch_before_exposure(tmp_path: Path) -> None:
     content = b'{"value": 1}'
     source = tmp_path / "input.json"
     _ = source.write_bytes(content)
+    artifact_directory = tmp_path / "resolved"
 
-    def reject_schema(_raw: bytes, _schema_uri: str) -> NoReturn:
-        raise ValueError("required property is missing")
-
-    with pytest.raises(ArtifactResolutionError, match="artifact schema mismatch"):
+    with pytest.raises(
+        ArtifactResolutionError,
+        match=f"artifact schema mismatch: {re.escape(REGISTERED_SCHEMA_URI)}",
+    ):
         _ = resolve_artifact(
             artifact_ref(
                 source.as_uri(),
                 content,
                 media_type="application/json",
-                schema_uri="urn:example:input",
+                schema_uri=REGISTERED_SCHEMA_URI,
             ),
-            artifact_directory=tmp_path / "resolved",
-            schema_validator=reject_schema,
+            artifact_directory=artifact_directory,
         )
+
+    assert not artifact_directory.exists()
 
 
 def test_rejects_unknown_schema_uri_from_default_registry(tmp_path: Path) -> None:
@@ -524,24 +538,20 @@ def test_rejects_unknown_schema_uri_from_default_registry(tmp_path: Path) -> Non
     assert not artifact_directory.exists()
 
 
-def test_rejects_invalid_json_before_schema_validator(tmp_path: Path) -> None:
+def test_rejects_invalid_json_before_schema_validation(tmp_path: Path) -> None:
     content = b"not JSON"
     source = tmp_path / "input.json"
     _ = source.write_bytes(content)
 
-    def unexpected_validation(_raw: bytes, _schema_uri: str) -> NoReturn:
-        raise AssertionError("validator must not receive invalid JSON")
-
-    with pytest.raises(ArtifactResolutionError, match="not valid JSON"):
+    with pytest.raises(ArtifactResolutionError, match="^schema artifact is not valid JSON$"):
         _ = resolve_artifact(
             artifact_ref(
                 source.as_uri(),
                 content,
                 media_type="application/json",
-                schema_uri="urn:example:input",
+                schema_uri=REGISTERED_SCHEMA_URI,
             ),
             artifact_directory=tmp_path / "resolved",
-            schema_validator=unexpected_validation,
         )
 
 
@@ -631,27 +641,29 @@ def test_rejects_artifact_larger_than_ceiling_before_local_open(
 
 
 def test_rejects_duplicate_json_keys_before_registered_validation(tmp_path: Path) -> None:
-    content = b'{"value": 1, "value": 2}'
+    # A payload the registered validator would otherwise accept: only the
+    # duplicate-key guard can reject it, so the message proves it ran first.
+    valid = registered_contract_bytes().decode()
+    content = valid.replace('"request_id":', '"request_id":"first","request_id":', 1).encode()
     source = tmp_path / "input.json"
     _ = source.write_bytes(content)
-    called: list[bytes] = []
+    artifact_directory = tmp_path / "resolved"
 
-    def validator(raw: bytes, _schema_uri: str) -> None:
-        called.append(raw)
-
-    with pytest.raises(ArtifactResolutionError, match="duplicate key"):
+    with pytest.raises(
+        ArtifactResolutionError,
+        match="^schema artifact contains duplicate key \'request_id\'$",
+    ):
         _ = resolve_artifact(
             artifact_ref(
                 source.as_uri(),
                 content,
                 media_type="application/json",
-                schema_uri="urn:example:input",
+                schema_uri=REGISTERED_SCHEMA_URI,
             ),
-            artifact_directory=tmp_path / "resolved",
-            schema_validator=validator,
+            artifact_directory=artifact_directory,
         )
 
-    assert called == []
+    assert not artifact_directory.exists()
 
 
 def test_permission_failure_is_not_silenced_for_existing_snapshot(
