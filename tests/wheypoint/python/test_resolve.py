@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
+from typing import Protocol
 
 import pytest
+from easy_cheese_schemas import WheypointRecord, WheypointRevision
 
 from easy_cheese.skills.wheypoint import canonical, lint, records, storage
 from easy_cheese.skills.wheypoint import resolve as resolve_mod
@@ -15,10 +17,15 @@ PROJECT = "paulnsorensen-easy-cheese"
 NOTE = "status: ok\nnext: cook\nartifact: {artifact}\nPick the loop back up.\n"
 
 
+class _PromotionLike(Protocol):
+    record: WheypointRecord
+    revision: WheypointRevision
+    markdown: str
+
 def seed(
     corpus_root: Path,
-    make_record,
-    make_promotion,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
     *,
     work_id: str,
     slug: str,
@@ -39,18 +46,30 @@ def seed(
     return store
 
 
-def run(ref: str, corpus_root: Path, **kwargs) -> resolve_mod.Resolution:
-    kwargs.setdefault("project_key", PROJECT)
-    kwargs.setdefault("git_object_exists", lambda obj: True)
-    kwargs.setdefault("artifact_digest", lambda path: None)
-    return resolve_mod.resolve(ref, corpus_root=corpus_root, **kwargs)
+def run(
+    ref: str,
+    corpus_root: Path,
+    *,
+    project_key: str = PROJECT,
+    git_object_exists: Callable[[str], bool] = lambda obj: True,
+    artifact_digest: Callable[[str], str | None] = lambda path: None,
+) -> resolve_mod.Resolution:
+    return resolve_mod.resolve(
+        ref,
+        corpus_root=corpus_root,
+        project_key=project_key,
+        git_object_exists=git_object_exists,
+        artifact_digest=artifact_digest,
+    )
 
 
 def test_an_exact_work_id_beats_another_record_holding_that_slug(
-    corpus_root, make_record, make_promotion
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
 ) -> None:
-    seed(corpus_root, make_record, make_promotion, work_id="alpha", slug="beta")
-    seed(corpus_root, make_record, make_promotion, work_id="gamma", slug="alpha")
+    _ = seed(corpus_root, make_record, make_promotion, work_id="alpha", slug="beta")
+    _ = seed(corpus_root, make_record, make_promotion, work_id="gamma", slug="alpha")
 
     found = run("alpha", corpus_root)
 
@@ -61,9 +80,11 @@ def test_an_exact_work_id_beats_another_record_holding_that_slug(
 
 
 def test_a_work_id_ending_in_md_is_not_treated_as_a_path(
-    corpus_root, make_record, make_promotion
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
 ) -> None:
-    seed(corpus_root, make_record, make_promotion, work_id="alpha.md", slug="beta")
+    _ = seed(corpus_root, make_record, make_promotion, work_id="alpha.md", slug="beta")
 
     found = run("alpha.md", corpus_root)
 
@@ -72,7 +93,9 @@ def test_a_work_id_ending_in_md_is_not_treated_as_a_path(
     assert found.work_id == "alpha.md"
 
 def test_an_explicit_path_beats_the_corpus_lookups(
-    corpus_root, make_record, make_promotion
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
 ) -> None:
     store = seed(corpus_root, make_record, make_promotion, work_id="alpha", slug="beta")
     path = store.projection_path(1, "rev-0001")
@@ -86,9 +109,11 @@ def test_an_explicit_path_beats_the_corpus_lookups(
 
 
 def test_a_unique_slug_resolves_when_no_work_id_matches(
-    corpus_root, make_record, make_promotion
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
 ) -> None:
-    seed(corpus_root, make_record, make_promotion, work_id="work-0001", slug="kernel")
+    _ = seed(corpus_root, make_record, make_promotion, work_id="work-0001", slug="kernel")
 
     found = run("kernel", corpus_root)
 
@@ -101,9 +126,11 @@ def test_a_unique_slug_resolves_when_no_work_id_matches(
 
 
 def test_a_slug_ending_in_md_is_not_treated_as_a_path(
-    corpus_root, make_record, make_promotion
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
 ) -> None:
-    seed(
+    _ = seed(
         corpus_root,
         make_record,
         make_promotion,
@@ -120,7 +147,10 @@ def test_a_slug_ending_in_md_is_not_treated_as_a_path(
 
 @pytest.mark.parametrize("newer", ["work-0001", "work-0002"])
 def test_one_slug_on_two_records_is_ambiguous_whichever_is_newer(
-    corpus_root, make_record, make_promotion, newer: str
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+    newer: str,
 ) -> None:
     """A recency tiebreak would pick the newer record; ambiguity must not."""
     for work_id in ("work-0001", "work-0002"):
@@ -139,7 +169,7 @@ def test_one_slug_on_two_records_is_ambiguous_whichever_is_newer(
     assert found.detail == "slug 'kernel' names 2 work records: work-0001, work-0002"
 
 
-def test_a_miss_lists_exactly_the_corpus_locations_searched(corpus_root) -> None:
+def test_a_miss_lists_exactly_the_corpus_locations_searched(corpus_root: Path) -> None:
     work_root = corpus_root / "work"
 
     found = run("kernel", corpus_root)
@@ -152,7 +182,7 @@ def test_a_miss_lists_exactly_the_corpus_locations_searched(corpus_root) -> None
 
 
 def test_a_missing_explicit_path_reports_only_that_path(
-    corpus_root, tmp_path: Path
+    corpus_root: Path, tmp_path: Path
 ) -> None:
     missing = tmp_path / "nope.md"
 
@@ -163,10 +193,10 @@ def test_a_missing_explicit_path_reports_only_that_path(
 
 
 def test_a_path_that_is_not_a_projection_is_an_error(
-    corpus_root, tmp_path: Path
+    corpus_root: Path, tmp_path: Path
 ) -> None:
     stray = tmp_path / "notes.md"
-    stray.write_text("# just markdown\n", encoding="utf-8")
+    _ = stray.write_text("# just markdown\n", encoding="utf-8")
 
     found = run(str(stray), corpus_root)
 
@@ -175,7 +205,9 @@ def test_a_path_that_is_not_a_projection_is_an_error(
 
 
 def test_a_superseded_projection_path_does_not_dispatch(
-    corpus_root, make_record, make_promotion
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
 ) -> None:
     store = seed(corpus_root, make_record, make_promotion, work_id="alpha", slug="beta")
     stale = store.projection_path(1, "rev-0001")
@@ -199,9 +231,11 @@ def test_a_superseded_projection_path_does_not_dispatch(
 
 
 def test_an_active_gate_blocks_automatic_continuation(
-    corpus_root, make_record, make_promotion
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
 ) -> None:
-    seed(
+    _ = seed(
         corpus_root,
         make_record,
         make_promotion,
@@ -219,14 +253,16 @@ def test_an_active_gate_blocks_automatic_continuation(
 
 
 def test_a_tampered_record_gates_instead_of_dispatching(
-    corpus_root, make_record, make_promotion
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
 ) -> None:
     store = seed(
         corpus_root, make_record, make_promotion, work_id="work-0001", slug="kernel"
     )
     forged = records.unstructure(store.read_record())
     forged["orientation"] = "edited behind the runtime's back"
-    store.record_path.write_bytes(canonical.canonical_bytes(forged))
+    _ = store.record_path.write_bytes(canonical.canonical_bytes(forged))
 
     found = run("kernel", corpus_root)
 
@@ -236,9 +272,11 @@ def test_a_tampered_record_gates_instead_of_dispatching(
 
 
 def test_a_declared_commit_that_is_gone_gates(
-    corpus_root, make_record, make_promotion
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
 ) -> None:
-    seed(
+    _ = seed(
         corpus_root, make_record, make_promotion, work_id="work-0001", slug="kernel"
     )
 
@@ -249,9 +287,11 @@ def test_a_declared_commit_that_is_gone_gates(
 
 
 def test_a_record_from_another_project_never_resolves_here(
-    corpus_root, make_record, make_promotion
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
 ) -> None:
-    seed(
+    _ = seed(
         corpus_root, make_record, make_promotion, work_id="work-0001", slug="kernel"
     )
 
@@ -263,7 +303,7 @@ def test_a_record_from_another_project_never_resolves_here(
 
 @pytest.mark.parametrize("ref", ["", "   ", "Not An Id", "UPPER"])
 def test_a_reference_that_is_neither_path_nor_identifier_is_an_error(
-    corpus_root, ref: str
+    corpus_root: Path, ref: str
 ) -> None:
     found = run(ref, corpus_root)
 
@@ -278,8 +318,8 @@ def porcelain(*roots: Path) -> str:
     return "\n".join(f"worktree {root}\nbranch refs/heads/wt\n" for root in roots)
 
 
-def fake_runner(output: str):
-    def run_git(args: Sequence[str], cwd: Path) -> str:
+def fake_runner(output: str) -> Callable[[Sequence[str], Path], str]:
+    def run_git(_args: Sequence[str], _cwd: Path) -> str:
         return output
 
     return run_git
@@ -288,7 +328,7 @@ def fake_runner(output: str):
 def write_note(root: Path, slug: str, *, artifact: str = "") -> Path:
     path = root / ".cheese" / "notes" / f"{slug}.md"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(NOTE.format(artifact=artifact), encoding="utf-8")
+    _ = path.write_text(NOTE.format(artifact=artifact), encoding="utf-8")
     return path
 
 
@@ -330,7 +370,7 @@ def test_two_legacy_notes_stay_ambiguous(tmp_path: Path) -> None:
 def test_a_legacy_note_whose_artifact_is_gone_gates(tmp_path: Path) -> None:
     start = tmp_path / "start"
     start.mkdir()
-    write_note(start, "cold-start", artifact=".cheese/cook/cold-start.md")
+    _ = write_note(start, "cold-start", artifact=".cheese/cook/cold-start.md")
 
     found = resolve_mod.resolve_legacy(
         "cold-start", start=start, run=fake_runner(porcelain(start))
@@ -344,10 +384,10 @@ def test_a_legacy_note_whose_artifact_is_gone_gates(tmp_path: Path) -> None:
 def test_a_legacy_note_whose_artifact_resolves_is_returned(tmp_path: Path) -> None:
     start = tmp_path / "start"
     start.mkdir()
-    write_note(start, "cold-start", artifact=".cheese/cook/cold-start.md")
+    _ = write_note(start, "cold-start", artifact=".cheese/cook/cold-start.md")
     report = start / ".cheese" / "cook" / "cold-start.md"
     report.parent.mkdir(parents=True)
-    report.write_text("prior report\n", encoding="utf-8")
+    _ = report.write_text("prior report\n", encoding="utf-8")
 
     found = resolve_mod.resolve_legacy(
         "cold-start", start=start, run=fake_runner(porcelain(start))
@@ -361,7 +401,7 @@ def test_an_unparsable_legacy_note_is_an_error(tmp_path: Path) -> None:
     start.mkdir()
     path = start / ".cheese" / "notes" / "cold-start.md"
     path.parent.mkdir(parents=True)
-    path.write_text("# not a handoff note\n\nbody\n", encoding="utf-8")
+    _ = path.write_text("# not a handoff note\n\nbody\n", encoding="utf-8")
 
     found = resolve_mod.resolve_legacy(
         "cold-start", start=start, run=fake_runner(porcelain(start))
@@ -388,7 +428,9 @@ def test_a_legacy_miss_reports_every_worktree_probed(tmp_path: Path) -> None:
 
 
 def test_an_orphaned_revision_is_reported_but_does_not_block_continuation(
-    corpus_root, make_record, make_promotion
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
 ) -> None:
     """An interrupted promotion leaves a revision file with no projection. No
     reader can have quoted it and the identical retry overwrites it, so it is
@@ -396,7 +438,7 @@ def test_an_orphaned_revision_is_reported_but_does_not_block_continuation(
     record in exactly the crash it just survived."""
     store = seed(corpus_root, make_record, make_promotion, work_id="alpha", slug="alpha")
     orphan = store.revision_path(2, "rev-0002")
-    orphan.write_text(store.revision_path(1, "rev-0001").read_text(), encoding="utf-8")
+    _ = orphan.write_text(store.revision_path(1, "rev-0001").read_text(), encoding="utf-8")
 
     found = run("alpha", corpus_root)
 
@@ -407,12 +449,14 @@ def test_an_orphaned_revision_is_reported_but_does_not_block_continuation(
 
 
 def test_a_real_integrity_failure_still_blocks_continuation(
-    corpus_root, make_record, make_promotion
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
 ) -> None:
     """The advisory carve-out must not leak: tampering still gates."""
     store = seed(corpus_root, make_record, make_promotion, work_id="alpha", slug="alpha")
     path = store.projection_path(1, "rev-0001")
-    path.write_text(path.read_text(encoding="utf-8").replace("cook", "press"), encoding="utf-8")
+    _ = path.write_text(path.read_text(encoding="utf-8").replace("cook", "press"), encoding="utf-8")
 
     found = run("alpha", corpus_root)
 
@@ -444,8 +488,8 @@ def test_real_wrapped_legacy_note_decodes_additive_header(tmp_path: Path) -> Non
     start.mkdir()
     note = start / ".cheese" / "notes" / "wrapped.md"
     note.parent.mkdir(parents=True)
-    note.write_text(WRAPPED_NOTE, encoding="utf-8")
-    (start / ".cheese" / "notes" / "context.md").write_text("context\n", encoding="utf-8")
+    _ = note.write_text(WRAPPED_NOTE, encoding="utf-8")
+    _ = (start / ".cheese" / "notes" / "context.md").write_text("context\n", encoding="utf-8")
 
     found = resolve_mod.resolve_legacy(
         "wrapped", start=start, run=fake_runner(porcelain(start))
@@ -464,9 +508,9 @@ def test_normal_resolve_falls_back_to_a_legacy_slug(tmp_path: Path) -> None:
     start.mkdir()
     note = start / ".cheese" / "notes" / "wrapped.md"
     note.parent.mkdir(parents=True)
-    note.write_text(WRAPPED_NOTE, encoding="utf-8")
+    _ = note.write_text(WRAPPED_NOTE, encoding="utf-8")
 
-    (start / ".cheese" / "notes" / "context.md").write_text("context\n", encoding="utf-8")
+    _ = (start / ".cheese" / "notes" / "context.md").write_text("context\n", encoding="utf-8")
     found = resolve_mod.resolve("wrapped", workspace_root=start)
 
     assert found.outcome is resolve_mod.ResolutionOutcome.LEGACY
@@ -479,9 +523,9 @@ def test_absolute_legacy_path_resolves_exact_note_without_worktree_scan(tmp_path
     start.mkdir()
     note = start / ".cheese" / "notes" / "wrapped.md"
     note.parent.mkdir(parents=True)
-    note.write_text(WRAPPED_NOTE, encoding="utf-8")
+    _ = note.write_text(WRAPPED_NOTE, encoding="utf-8")
 
-    (start / ".cheese" / "notes" / "context.md").write_text("context\n", encoding="utf-8")
+    _ = (start / ".cheese" / "notes" / "context.md").write_text("context\n", encoding="utf-8")
     found = resolve_mod.resolve(str(note), workspace_root=tmp_path / "elsewhere")
 
     assert found.outcome is resolve_mod.ResolutionOutcome.LEGACY
@@ -494,7 +538,7 @@ def test_wrapped_gated_status_blocks_legacy_resume(tmp_path: Path) -> None:
     start.mkdir()
     note = start / ".cheese" / "notes" / "gated.md"
     note.parent.mkdir(parents=True)
-    note.write_text(WRAPPED_NOTE.replace("status: ok", "status: gated: decide"), encoding="utf-8")
+    _ = note.write_text(WRAPPED_NOTE.replace("status: ok", "status: gated: decide"), encoding="utf-8")
 
     found = resolve_mod.resolve_legacy(
         "gated", start=start, run=fake_runner(porcelain(start))
@@ -522,7 +566,7 @@ def test_malformed_or_ambiguous_wrappers_are_rejected(
     start.mkdir()
     note = start / ".cheese" / "notes" / "bad.md"
     note.parent.mkdir(parents=True)
-    note.write_text(body, encoding="utf-8")
+    _ = note.write_text(body, encoding="utf-8")
 
     found = resolve_mod.resolve_legacy(
         "bad", start=start, run=fake_runner(porcelain(start))
@@ -550,7 +594,7 @@ def _resolve_legacy_artifact(tmp_path: Path, artifact: str) -> resolve_mod.Resol
     start.mkdir()
     note = start / ".cheese" / "notes" / "artifact.md"
     note.parent.mkdir(parents=True)
-    note.write_text(
+    _ = note.write_text(
         WRAPPED_NOTE.replace(
             "artifact: .cheese/notes/context.md", f"artifact: {artifact}"
         ),
@@ -563,7 +607,7 @@ def _resolve_legacy_artifact(tmp_path: Path, artifact: str) -> resolve_mod.Resol
 
 def test_legacy_artifact_absolute_path_is_gated(tmp_path: Path) -> None:
     external = tmp_path / "outside.txt"
-    external.write_text("outside\n", encoding="utf-8")
+    _ = external.write_text("outside\n", encoding="utf-8")
 
     found = _resolve_legacy_artifact(tmp_path, str(external))
 
@@ -572,7 +616,7 @@ def test_legacy_artifact_absolute_path_is_gated(tmp_path: Path) -> None:
 
 
 def test_legacy_artifact_traversal_escape_is_gated(tmp_path: Path) -> None:
-    (tmp_path / "outside.txt").write_text("outside\n", encoding="utf-8")
+    _ = (tmp_path / "outside.txt").write_text("outside\n", encoding="utf-8")
 
     found = _resolve_legacy_artifact(tmp_path, "../outside.txt")
 
@@ -583,14 +627,14 @@ def test_legacy_artifact_traversal_escape_is_gated(tmp_path: Path) -> None:
 def test_legacy_artifact_symlink_escape_is_gated(tmp_path: Path) -> None:
     outside = tmp_path / "outside"
     outside.mkdir()
-    (outside / "secret.txt").write_text("secret\n", encoding="utf-8")
+    _ = (outside / "secret.txt").write_text("secret\n", encoding="utf-8")
     start = tmp_path / "start"
     start.mkdir()
     (start / "link").symlink_to(outside, target_is_directory=True)
 
     note = start / ".cheese" / "notes" / "artifact.md"
     note.parent.mkdir(parents=True)
-    note.write_text(
+    _ = note.write_text(
         WRAPPED_NOTE.replace(
             "artifact: .cheese/notes/context.md", "artifact: link/secret.txt"
         ),
@@ -616,9 +660,9 @@ def test_repo_relative_regular_legacy_artifact_is_accepted(tmp_path: Path) -> No
     start.mkdir()
     context = start / ".cheese" / "notes" / "context.md"
     context.parent.mkdir(parents=True)
-    context.write_text("context\n", encoding="utf-8")
+    _ = context.write_text("context\n", encoding="utf-8")
     note = context.parent / "artifact.md"
-    note.write_text(WRAPPED_NOTE, encoding="utf-8")
+    _ = note.write_text(WRAPPED_NOTE, encoding="utf-8")
 
     found = resolve_mod.resolve_legacy(
         "artifact", start=start, run=fake_runner(porcelain(start))

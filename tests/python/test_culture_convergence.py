@@ -82,14 +82,14 @@ def test_culture_skill_exists() -> None:
 
 def test_user_owns_session_end() -> None:
     body = _body_below_frontmatter(CULTURE_SKILL)
-    missing = []
+    missing: list[str] = []
     if not USER_DECLARES_END.search(body):
         missing.append("the user declares the session/thread over")
     if not AGENT_NEVER_CONVERGES.search(body):
         missing.append("the agent never declares convergence on the user's behalf")
     assert not missing, (
         "#299 session-end ownership clause absent — user-facing mode must name the "
-        "USER as the one who ends the session, not the agent:\n  - "
+        + "USER as the one who ends the session, not the agent:\n  - "
         + "\n  - ".join(missing)
     )
 
@@ -104,7 +104,7 @@ def test_flow_step_five_gates_end_on_user() -> None:
 
 def test_forks_raised_conversationally_not_bundled() -> None:
     body = _body_below_frontmatter(CULTURE_SKILL)
-    missing = []
+    missing: list[str] = []
     if not FORKS_CONVERSATIONAL.search(body):
         missing.append("forks are raised conversationally in the dialogue")
     if not STRUCTURED_RESERVED_FOR_HANDOFF.search(body):
@@ -113,6 +113,6 @@ def test_forks_raised_conversationally_not_bundled() -> None:
         missing.append("multiple consequential forks are never bundled into one prompt")
     assert not missing, (
         "#299 fork-medium clause absent — count-only wording lets chained "
-        "single-question popups railroad the dialogue; the medium must be pinned:\n  - "
+        + "single-question popups railroad the dialogue; the medium must be pinned:\n  - "
         + "\n  - ".join(missing)
     )

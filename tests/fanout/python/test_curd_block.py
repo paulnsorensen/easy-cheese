@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -19,8 +20,11 @@ sys.path.insert(0, str(REPO_ROOT / "src" / "fanout"))
 
 from easy_cheese.shared.fanout import curd_block  # noqa: E402
 
+CurdDict = dict[str, object]
+BlockDict = dict[str, object]
 
-def _curd(slug: str, files: list[str], est_edit_lines: int = curd_block.MIN_CURD_SURFACE) -> dict:
+
+def _curd(slug: str, files: list[str], est_edit_lines: int = curd_block.MIN_CURD_SURFACE) -> CurdDict:
     return {
         "slug": slug,
         "contract": f"Implement {slug}.",
@@ -32,7 +36,7 @@ def _curd(slug: str, files: list[str], est_edit_lines: int = curd_block.MIN_CURD
     }
 
 
-def _block(curds: list[dict], waves: list[list[str]]) -> dict:
+def _block(curds: list[CurdDict], waves: list[list[str]]) -> BlockDict:
     return {
         "curds": curds,
         "waves": waves,
@@ -67,7 +71,7 @@ waves:
 decomposer: {source: mold, model: claude-opus-5, prompt_version: deadbeef}
 """
         result = curd_block.parse_curd_block(yaml_text)
-        assert result["curds"][0]["slug"] == "solo"
+        assert cast("list[CurdDict]", result["curds"])[0]["slug"] == "solo"
 
 
 class TestDisjointness:
@@ -87,13 +91,13 @@ class TestDisjointness:
             waves=[["add-widget", "add-gadget"]],
         )
         with pytest.raises(curd_block.CurdBlockError, match="src/shared.py"):
-            curd_block.parse_curd_block(block)
+            _ = curd_block.parse_curd_block(block)
 
 
 class TestWaves:
     def test_rejects_wave_over_max_size(self) -> None:
         curds = [_curd(f"c{i}", [f"src/c{i}.py"]) for i in range(5)]
-        block = _block(curds=curds, waves=[[c["slug"] for c in curds]])
+        block = _block(curds=curds, waves=[[str(c["slug"]) for c in curds]])
         errors = curd_block.validate_curd_block(block)
         assert any("waves[1]" in e and "4" in e for e in errors), errors
 
@@ -152,7 +156,7 @@ class TestMalformedShapes:
         assert errors == ["block.curds must be a list"]
 
     def test_curd_entry_not_a_mapping(self) -> None:
-        block = _block(curds=["oops"], waves=[])
+        block = _block(curds=cast("list[CurdDict]", ["oops"]), waves=[])
         errors = curd_block.validate_curd_block(block)
         assert any("curds[1] must be a mapping" in e for e in errors), errors
 
@@ -163,7 +167,7 @@ class TestMalformedShapes:
         assert "block.waves must be a list" in errors
 
     def test_wave_entry_not_a_list(self) -> None:
-        block = _block(curds=[_curd("solo", ["src/solo.py"])], waves=["oops"])
+        block = _block(curds=[_curd("solo", ["src/solo.py"])], waves=cast("list[list[str]]", ["oops"]))
         errors = curd_block.validate_curd_block(block)
         assert any("waves[1] must be a list of slugs" in e for e in errors), errors
 
@@ -175,7 +179,7 @@ class TestMalformedShapes:
 
     def test_decomposer_source_outside_allowed_values(self) -> None:
         block = _block(curds=[_curd("solo", ["src/solo.py"])], waves=[["solo"]])
-        block["decomposer"]["source"] = "human"
+        cast("BlockDict", block["decomposer"])["source"] = "human"
         errors = curd_block.validate_curd_block(block)
         assert any("decomposer.source must be one of" in e for e in errors), errors
 
@@ -277,10 +281,10 @@ class TestSurfaceFloor:
 
     def test_eight_one_line_curds_produce_eight_floor_violations(self) -> None:
         curds = [_curd(f"c{i}", [f"src/c{i}.py"], est_edit_lines=1) for i in range(8)]
-        waves = [[c["slug"] for c in curds[:4]], [c["slug"] for c in curds[4:]]]
+        waves = [[str(c["slug"]) for c in curds[:4]], [str(c["slug"]) for c in curds[4:]]]
         block = _block(curds=curds, waves=waves)
         errors = curd_block.validate_curd_block(block)
         floor_errors = [e for e in errors if "MERGE CANDIDATE" in e]
         assert len(floor_errors) == 8, errors
         for curd in curds:
-            assert any(curd["slug"] in e for e in floor_errors), (curd["slug"], errors)
+            assert any(str(curd["slug"]) in e for e in floor_errors), (curd["slug"], errors)

@@ -12,7 +12,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from ref_extraction import relative_md_refs
+from ref_extraction import relative_md_refs  # pyright: ignore[reportImplicitRelativeImport]
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SKILLS_ROOT = REPO_ROOT / "skills"

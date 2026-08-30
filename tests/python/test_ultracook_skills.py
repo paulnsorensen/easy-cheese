@@ -479,7 +479,7 @@ def _handoff_schema_fence() -> list[str]:
 
 
 class TestWheypointProvenance:
-    PROVENANCE_KEYS = ("session:", "git:", "created:", "parents:")
+    PROVENANCE_KEYS: tuple[str, str, str, str] = ("session:", "git:", "created:", "parents:")
 
     def test_schema_lists_all_provenance_fields(self) -> None:
         fence = "\n".join(_handoff_schema_fence())

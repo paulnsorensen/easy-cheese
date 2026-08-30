@@ -19,13 +19,24 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from types import ModuleType
+from typing import Protocol
 
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 BUNDLE = Path(__file__).resolve().parents[3] / "skills/hard-cheese/scripts/hard-cheese.pyz"
+
+
+class _CliNamespace(Protocol):
+    CliError: type[Exception]
+
+
+class _AppendAttemptModule(Protocol):
+    cli: _CliNamespace
+
+    def _validate_slug(self, slug: str) -> str: ...
+    def _escape_cell(self, value: str) -> str: ...
 
 
 def _run(env_dir: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -39,7 +50,7 @@ def _run(env_dir: Path, *args: str) -> subprocess.CompletedProcess[str]:
 
 def _run_bundle(*args: str) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
-    env.pop("PYTHONPATH", None)
+    _ = env.pop("PYTHONPATH", None)
     return subprocess.run(
         [sys.executable, str(BUNDLE), *args],
         capture_output=True,
@@ -91,32 +102,32 @@ def _read_rows(artifact: Path) -> list[str]:
 
 
 class TestSlugValidation:
-    def test_rejects_traversal(self, append_attempt: ModuleType) -> None:
+    def test_rejects_traversal(self, append_attempt: _AppendAttemptModule) -> None:
         with pytest.raises(append_attempt.cli.CliError):
-            append_attempt._validate_slug("../escape")
+            _ = append_attempt._validate_slug("../escape")  # pyright: ignore[reportPrivateUsage]
 
-    def test_rejects_forward_slash(self, append_attempt: ModuleType) -> None:
+    def test_rejects_forward_slash(self, append_attempt: _AppendAttemptModule) -> None:
         with pytest.raises(append_attempt.cli.CliError):
-            append_attempt._validate_slug("foo/bar")
+            _ = append_attempt._validate_slug("foo/bar")  # pyright: ignore[reportPrivateUsage]
 
-    def test_rejects_backslash(self, append_attempt: ModuleType) -> None:
+    def test_rejects_backslash(self, append_attempt: _AppendAttemptModule) -> None:
         with pytest.raises(append_attempt.cli.CliError):
-            append_attempt._validate_slug("foo\\bar")
+            _ = append_attempt._validate_slug("foo\\bar")  # pyright: ignore[reportPrivateUsage]
 
-    def test_rejects_empty(self, append_attempt: ModuleType) -> None:
+    def test_rejects_empty(self, append_attempt: _AppendAttemptModule) -> None:
         with pytest.raises(append_attempt.cli.CliError):
-            append_attempt._validate_slug("")
+            _ = append_attempt._validate_slug("")  # pyright: ignore[reportPrivateUsage]
 
-    def test_accepts_kebab(self, append_attempt: ModuleType) -> None:
-        assert append_attempt._validate_slug("my-slug-42") == "my-slug-42"
+    def test_accepts_kebab(self, append_attempt: _AppendAttemptModule) -> None:
+        assert append_attempt._validate_slug("my-slug-42") == "my-slug-42"  # pyright: ignore[reportPrivateUsage]
 
 
 class TestEscapeCell:
-    def test_pipe_is_escaped(self, append_attempt: ModuleType) -> None:
-        assert append_attempt._escape_cell("a | b") == "a \\| b"
+    def test_pipe_is_escaped(self, append_attempt: _AppendAttemptModule) -> None:
+        assert append_attempt._escape_cell("a | b") == "a \\| b"  # pyright: ignore[reportPrivateUsage]
 
-    def test_newline_becomes_br(self, append_attempt: ModuleType) -> None:
-        assert append_attempt._escape_cell("line1\nline2") == "line1<br>line2"
+    def test_newline_becomes_br(self, append_attempt: _AppendAttemptModule) -> None:
+        assert append_attempt._escape_cell("line1\nline2") == "line1<br>line2"  # pyright: ignore[reportPrivateUsage]
 
 
 class TestCli:

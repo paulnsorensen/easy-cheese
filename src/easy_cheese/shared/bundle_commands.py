@@ -7,6 +7,7 @@ import re
 import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from typing import cast
 
 _COMMAND_RE = re.compile(r"[a-z0-9][a-z0-9_-]*")
 CommandHandler = Callable[[list[str]], int]
@@ -18,9 +19,9 @@ class Command:
     target: str
 
     def __post_init__(self) -> None:
-        if not isinstance(self.name, str) or _COMMAND_RE.fullmatch(self.name) is None:
+        if not isinstance(self.name, str) or _COMMAND_RE.fullmatch(self.name) is None:  # pyright: ignore[reportUnnecessaryIsInstance]
             raise ValueError("invalid command name")
-        if not isinstance(self.target, str):
+        if not isinstance(self.target, str):  # pyright: ignore[reportUnnecessaryIsInstance]
             raise ValueError("invalid command target")
         module, separator, attribute = self.target.partition(":")
         if not module or separator != ":" or not attribute:
@@ -48,10 +49,10 @@ def command_map(commands: Sequence[Command]) -> dict[str, Command]:
 
 def _handler(target: str) -> CommandHandler:
     module_name, _, attribute = target.partition(":")
-    function = getattr(importlib.import_module(module_name), attribute)
+    function = cast(object, getattr(importlib.import_module(module_name), attribute))
     if not callable(function):
         raise TypeError(f"bundle command target {target!r} is not callable")
-    return function
+    return cast(CommandHandler, function)
 
 
 def dispatch(commands: Sequence[Command], argv: Sequence[str]) -> int:
@@ -68,7 +69,7 @@ def dispatch(commands: Sequence[Command], argv: Sequence[str]) -> int:
         print(f"usage: <pyz> {{{choices}}} [args...]", file=sys.stderr)
         return 2
     result = _handler(command.target)(list(argv[1:]))
-    if not isinstance(result, int):
+    if not isinstance(result, int):  # pyright: ignore[reportUnnecessaryIsInstance]
         raise TypeError(f"bundle command {name!r} did not return an integer status")
     return result
 

@@ -42,6 +42,6 @@ def test_no_claude_skill_dir_in_invocation_paths() -> None:
 
     assert not violations, (
         "Skill files must use repo-relative paths (skills/<skill>/scripts/...), "
-        "not ${CLAUDE_SKILL_DIR}/ interpolation — Codex CLI has no equivalent.\n"
+        + "not ${CLAUDE_SKILL_DIR}/ interpolation — Codex CLI has no equivalent.\n"
         + "\n".join(violations)
     )

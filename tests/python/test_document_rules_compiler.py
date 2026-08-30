@@ -5,7 +5,9 @@ from __future__ import annotations
 import ast
 import re
 import sys
+from collections.abc import Sequence
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -32,7 +34,7 @@ def _curdle_template_section_headings() -> list[str]:
     assert open_match, "curdle.md must contain a fenced Spec template block"
     close_index = section.rindex("\n```")
     template = section[open_match.end():close_index]
-    headings = []
+    headings: list[str] = []
     for line in template.splitlines():
         if line.startswith("## "):
             name = line[3:].strip()
@@ -97,12 +99,12 @@ def test_ac_coverage_validator_rejects_missing_and_duplicate_ids() -> None:
         expected_failure="witness",
         mode=contracts.TestContractMode.TRACER,
     )
-    contracts.MoldSpecDocument(
+    _ = contracts.MoldSpecDocument(
         frontmatter=frontmatter, acceptance_ids=("AC-1",), test_contract_rows=(row,)
     )
 
     with pytest.raises(ValueError, match="AC-2"):
-        contracts.MoldSpecDocument(
+        _ = contracts.MoldSpecDocument(
             frontmatter=frontmatter,
             acceptance_ids=("AC-1", "AC-2"),
             test_contract_rows=(row,),
@@ -111,9 +113,11 @@ def test_ac_coverage_validator_rejects_missing_and_duplicate_ids() -> None:
 
 def test_document_rules_compiler_render_rejects_duplicate_slugs() -> None:
     with pytest.raises(ValueError, match="duplicate slugs"):
-        compiler.render(
-            [("mold-spec", contracts.MoldSpecDocument), ("mold-spec", contracts.MoldSpecDocument)]
+        pairs = cast(
+            "Sequence[tuple[str, type[compiler._DocumentContractLike]]]",  # pyright: ignore[reportPrivateUsage]
+            [("mold-spec", contracts.MoldSpecDocument), ("mold-spec", contracts.MoldSpecDocument)],
         )
+        _ = compiler.render(pairs)
 
 
 def test_document_rules_compiler_is_deterministic_and_matches_checked_in_file() -> None:
@@ -139,17 +143,20 @@ def test_generated_document_rules_module_imports_only_stdlib_names() -> None:
 
     namespace: dict[str, object] = {}
     exec(compile(source, str(GENERATED), "exec"), namespace)
-    rules = namespace["DOCUMENT_RULES"]["mold-spec"]
-    assert {section["name"] for section in rules["sections"]} == set(
+    document_rules = cast(dict[str, object], namespace["DOCUMENT_RULES"])
+    rules = cast(dict[str, object], document_rules["mold-spec"])
+    sections = cast(list[dict[str, object]], rules["sections"])
+    assert {section["name"] for section in sections} == set(
         _curdle_template_section_headings()
     )
-    assert {rule["rule_id"] for rule in rules["cross_field_rules"]} == {
+    cross_field_rules = cast(list[dict[str, object]], rules["cross_field_rules"])
+    assert {rule["rule_id"] for rule in cross_field_rules} == {
         "ac-coverage-exactly-once",
         "tracer-row-blank-matrix-cells",
         "contract-matrix-row-requires-both",
         "not-applicable-closed-class",
     }
-    assert set(rules["enums"]) == {
+    assert set(cast(dict[str, object], rules["enums"])) == {
         "mode",
         "gate_applicability_disposition",
         "work_class",

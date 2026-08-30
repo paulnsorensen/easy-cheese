@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from typing import cast
 
 from easy_cheese.shared.manifest_io import (  # noqa: E402
     ManifestLoadError,
@@ -18,7 +19,7 @@ from . import wiring  # noqa: E402
 # ---------------------------------------------------------------------------
 
 
-def check_minimum_curd_count(curds: list[dict]) -> str | None:
+def check_minimum_curd_count(curds: list[object]) -> str | None:
     """A decomposition is well-formed only with at least one curd. Fewer than
     `PARALLEL_THRESHOLD` curds is valid — it routes to linear /ultracook rather
     than parallel fan-out — so the only count that fails is zero."""
@@ -27,22 +28,23 @@ def check_minimum_curd_count(curds: list[dict]) -> str | None:
     return None
 
 
-def validate_manifest(manifest: dict) -> list[str]:
+def validate_manifest(manifest: dict[str, object]) -> list[str]:
     errors: list[str] = []
-    curds = manifest.get("curds", [])
-    if not isinstance(curds, list):
+    curds_field = manifest.get("curds", [])
+    if not isinstance(curds_field, list):
         return ["manifest.curds must be a list"]
+    curds = cast("list[object]", curds_field)
 
     ill_formed = check_minimum_curd_count(curds)
     if ill_formed:
         errors.append(ill_formed)
 
-    dict_curds = []
+    dict_curds: list[dict[str, object]] = []
     for c in curds:
         if not isinstance(c, dict):
             errors.append(f"non-dict curd entry: {c!r}")
             continue
-        dict_curds.append(c)
+        dict_curds.append(cast("dict[str, object]", c))
 
     # Content rules (behavior/acceptance_criterion/test_target/files shape)
     # live once in easy_cheese_schemas.DecomposedCurd, checked per curd so one
@@ -58,10 +60,11 @@ def validate_manifest(manifest: dict) -> list[str]:
         collection = load({"curds": dict_curds, "wiring": []}, Decomposition, strict=True)
         errors.extend(problem for problem in collection.problems if "curds[" not in problem)
 
-    wiring_list = manifest.get("wiring", [])
-    if not isinstance(wiring_list, list):
+    wiring_field = manifest.get("wiring", [])
+    if not isinstance(wiring_field, list):
         errors.append("manifest.wiring must be a list")
     else:
+        wiring_list = cast("list[object]", wiring_field)
         errors.extend(wiring.graph_errors(wiring_list))
 
     return errors
@@ -88,7 +91,9 @@ def main(argv: list[str]) -> int:
         print(f"\nFAIL: {len(errors)} validation error(s)", file=sys.stderr)
         return 1
 
-    print(f"OK: {len(manifest.get('curds', []))} curds, decomposition valid")
+    curds_field = manifest.get("curds", [])
+    curd_count = len(cast("list[object]", curds_field)) if isinstance(curds_field, list) else 0
+    print(f"OK: {curd_count} curds, decomposition valid")
     return 0
 
 

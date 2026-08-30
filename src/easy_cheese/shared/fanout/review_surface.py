@@ -17,6 +17,7 @@ tests/fanout/python/test_review_surface.py::TestPurity).
 from __future__ import annotations
 
 import fnmatch
+from typing import TypedDict
 
 # A touched file costs about eight lines of reviewer attention regardless of
 # its line delta -- context-switch cost, not content cost.
@@ -50,6 +51,15 @@ DEFAULT_WEIGHTS: tuple[tuple[str, float], ...] = (
 # zeroes it out of review sizing.
 
 _DEFAULT_WEIGHT = 1.0
+
+
+class ReviewScore(TypedDict):
+    score: float
+    weighted_files: float
+    weighted_lines: float
+    zeroed: list[str]
+    weights_source: str
+    rows: int
 
 
 def weigh(path: str, weights: tuple[tuple[str, float], ...] | None = None) -> float:
@@ -93,7 +103,7 @@ def score(
     rows: list[tuple[str, int, int]],
     weights: tuple[tuple[str, float], ...] | None = None,
     weights_source: str = "defaults",
-) -> dict:
+) -> ReviewScore:
     """rows are (path, insertions, deletions) numstat tuples. Returns
     {score, weighted_files, weighted_lines, zeroed, weights_source, rows}.
 

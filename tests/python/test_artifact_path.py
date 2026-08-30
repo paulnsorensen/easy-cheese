@@ -32,7 +32,7 @@ def test_xdg_phase_resolves_under_corpus_root(
 
 def test_unknown_phase_raises() -> None:
     with pytest.raises(ValueError, match="unknown phase"):
-        ap.artifact_path("bogus", "my-slug")
+        _ = ap.artifact_path("bogus", "my-slug")
 
 
 @pytest.mark.parametrize(
@@ -41,7 +41,7 @@ def test_unknown_phase_raises() -> None:
 )
 def test_invalid_slug_raises(slug: str) -> None:
     with pytest.raises(ValueError, match="kebab-case"):
-        ap.artifact_path("cook", slug)
+        _ = ap.artifact_path("cook", slug)
 
 
 @pytest.mark.parametrize("slug", ["a", "a" * 64, "a-b-c", "phase-1"])

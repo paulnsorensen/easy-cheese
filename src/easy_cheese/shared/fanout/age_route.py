@@ -144,7 +144,7 @@ def route(
     entry: str = "age",
     comments: int | None = None,
     ci_class: str | None = None,
-) -> dict:
+) -> dict[str, object]:
     """Pure decision -- no I/O. Returns the locked age-router output shape:
     {n, lenses, effort, overrides_hit, rationale}."""
     if entry not in ("age", "affinage"):
@@ -175,6 +175,7 @@ def route(
             base_n = bumped
 
     overrides_hit = sorted({flag for flag in risk_flags if flag in OVERRIDE_FLAGS})
+    promoted_dims: set[str] = set()
 
     if overrides_hit:
         promoted_dims = {_PROMOTIONS[flag] for flag in overrides_hit}

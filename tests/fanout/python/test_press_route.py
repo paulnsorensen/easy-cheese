@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -52,23 +53,22 @@ def test_press_route_accepts_string_outcomes() -> None:
 
 def test_press_route_rejects_unknown_outcome() -> None:
     with pytest.raises(ValueError, match="invalid outcome"):
-        press_route.press_route("purple", 0)
+        _ = press_route.press_route("purple", 0)
 
 
 def test_press_route_rejects_non_string_outcome() -> None:
     with pytest.raises(TypeError, match="Outcome or string"):
-        press_route.press_route(7, 0)  # type: ignore[arg-type]
+        _ = press_route.press_route(cast(str, cast(object, 7)), 0)
 
 
-@pytest.mark.parametrize("bad_cycles", [-1])
-def test_press_route_rejects_negative_repair_cycles(bad_cycles: int) -> None:
+def test_press_route_rejects_negative_repair_cycles() -> None:
     with pytest.raises(ValueError, match="non-negative"):
-        press_route.press_route("green", bad_cycles)
+        _ = press_route.press_route("green", -1)
 
 
 def test_press_route_rejects_bool_repair_cycles() -> None:
     with pytest.raises(TypeError, match="non-negative"):
-        press_route.press_route("green", True)
+        _ = press_route.press_route("green", True)
 
 
 def test_cli_routes_green_to_age_dispatch(
@@ -76,7 +76,7 @@ def test_cli_routes_green_to_age_dispatch(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     request = tmp_path / "request.json"
-    request.write_text(
+    _ = request.write_text(
         '{"outcome":"green","repair_cycles":0}',
         encoding="utf-8",
     )
@@ -91,7 +91,7 @@ def test_cli_routes_third_red_to_stop(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     request = tmp_path / "request.json"
-    request.write_text(
+    _ = request.write_text(
         '{"outcome":"in_contract_red","repair_cycles":2}',
         encoding="utf-8",
     )
@@ -106,7 +106,7 @@ def test_cli_requires_exact_request_keys(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     request = tmp_path / "request.json"
-    request.write_text('{"outcome":"green"}', encoding="utf-8")
+    _ = request.write_text('{"outcome":"green"}', encoding="utf-8")
     assert press_route_cli.main([str(request)]) == 1
     assert "repair_cycles" in capsys.readouterr().err
 
@@ -116,7 +116,7 @@ def test_cli_rejects_extra_request_keys(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     request = tmp_path / "request.json"
-    request.write_text(
+    _ = request.write_text(
         '{"outcome":"green","repair_cycles":0,"current_receipt":"x"}',
         encoding="utf-8",
     )
@@ -129,7 +129,7 @@ def test_cli_rejects_invalid_outcome(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     request = tmp_path / "request.json"
-    request.write_text(
+    _ = request.write_text(
         '{"outcome":"purple","repair_cycles":0}',
         encoding="utf-8",
     )
@@ -142,7 +142,7 @@ def test_cli_rejects_bool_repair_cycles(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     request = tmp_path / "request.json"
-    request.write_text(
+    _ = request.write_text(
         '{"outcome":"green","repair_cycles":true}',
         encoding="utf-8",
     )

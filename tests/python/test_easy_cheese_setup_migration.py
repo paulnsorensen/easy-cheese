@@ -22,7 +22,7 @@ def _run(config: Path, *args: str) -> subprocess.CompletedProcess[str]:
 def test_global_migrate_legacy_dry_run_preserves_config(tmp_path: Path) -> None:
     config = tmp_path / "config.toml"
     original = '[[corpus]]\nname = "cheese-global"\npaths = ["~/.cheese"]\n'
-    config.write_text(original)
+    _ = config.write_text(original)
     result = _run(config, "global", "--migrate-legacy")
     assert result.returncode == 0
     assert config.read_text() == original
@@ -31,7 +31,7 @@ def test_global_migrate_legacy_dry_run_preserves_config(tmp_path: Path) -> None:
 
 def test_global_migrate_legacy_apply_removes_only_legacy_block(tmp_path: Path) -> None:
     config = tmp_path / "config.toml"
-    config.write_text('[[corpus]]\nname = "cheese-global"\npaths = ["~/.cheese"]\n\n[settings]\nkeep = true\n')
+    _ = config.write_text('[[corpus]]\nname = "cheese-global"\npaths = ["~/.cheese"]\n\n[settings]\nkeep = true\n')
     result = _run(config, "global", "--migrate-legacy", "--apply")
     assert result.returncode == 0
     text = config.read_text()

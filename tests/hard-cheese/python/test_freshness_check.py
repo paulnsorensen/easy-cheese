@@ -10,16 +10,46 @@ subtree). The repo root is resolved via parents[N] from this file.
 
 from __future__ import annotations
 
+import argparse
 import json
+import os
 import subprocess
 import sys
+from collections.abc import Callable, Sequence
 from io import StringIO
 from pathlib import Path
-from types import ModuleType
+from typing import Protocol, TextIO, cast
 
 import pytest
 
 BUNDLE = Path(__file__).resolve().parents[3] / "skills/hard-cheese/scripts/hard-cheese.pyz"
+
+
+class _CliNamespace(Protocol):
+    def run(
+        self,
+        setup: Callable[[argparse.ArgumentParser], None],
+        *,
+        argv: Sequence[str] | None = ...,
+        stdout: TextIO | None = ...,
+    ) -> int: ...
+
+
+class _FreshnessCheckModule(Protocol):
+    cli: _CliNamespace
+
+    def _setup(self, parser: argparse.ArgumentParser) -> None: ...
+    def last_pass_sha(self, log_path: Path) -> str | None: ...
+    def decide(
+        self,
+        slug: str,
+        *,
+        cheese_root: Path,
+        repo_root: Path | None = ...,
+        passing_score: int = ...,
+    ) -> dict[str, str]: ...
+    def _sha_matches(self, recorded: str, diff_head: str) -> bool: ...
+    def _is_pass_status(self, token: str) -> bool: ...
 
 
 # ---------- git fixture --------------------------------------------------- #
@@ -38,7 +68,7 @@ def _git(cwd: Path, *args: str) -> str:
             "GIT_COMMITTER_NAME": "test",
             "GIT_COMMITTER_EMAIL": "test@example.com",
             "HOME": str(cwd),  # avoid touching the user's git config
-            "PATH": __import__("os").environ.get("PATH", ""),
+            "PATH": os.environ.get("PATH", ""),
         },
     )
     return result.stdout.strip()
@@ -47,10 +77,10 @@ def _git(cwd: Path, *args: str) -> str:
 @pytest.fixture()
 def repo(tmp_path: Path) -> Path:
     """A tmp git repo with one commit; returns the repo path."""
-    _git(tmp_path, "init", "-q", "-b", "main")
-    (tmp_path / "seed.txt").write_text("seed\n", encoding="utf-8")
-    _git(tmp_path, "add", "seed.txt")
-    _git(tmp_path, "commit", "-q", "-m", "seed")
+    _ = _git(tmp_path, "init", "-q", "-b", "main")
+    _ = (tmp_path / "seed.txt").write_text("seed\n", encoding="utf-8")
+    _ = _git(tmp_path, "add", "seed.txt")
+    _ = _git(tmp_path, "commit", "-q", "-m", "seed")
     return tmp_path
 
 
@@ -62,7 +92,7 @@ def _write_log(repo: Path, slug: str, body: str) -> Path:
     log_dir = repo / ".cheese" / "hard-cheese"
     log_dir.mkdir(parents=True, exist_ok=True)
     path = log_dir / f"{slug}.md"
-    path.write_text(body, encoding="utf-8")
+    _ = path.write_text(body, encoding="utf-8")
     return path
 
 
@@ -118,7 +148,7 @@ class TestStateNew:
     def test_json_payload_carries_head(self, repo: Path) -> None:
         result = _run_cli(repo, "never-seen", "--json")
         assert result.returncode == 3
-        payload = json.loads(result.stdout)
+        payload = cast("dict[str, str]", json.loads(result.stdout))
         assert payload == {"state": "new", "diff_head": _head(repo)}
 
     def test_missing_log_file_is_new(self, repo: Path) -> None:
@@ -132,7 +162,7 @@ class TestStateNew:
 class TestStatePreviouslyPassed:
     def test_table_log_matching_head(self, repo: Path) -> None:
         head = _head(repo)
-        _write_log(repo, "feat-b", _table_log("feat-b", head))
+        _ = _write_log(repo, "feat-b", _table_log("feat-b", head))
         result = _run_cli(repo, "feat-b", "--json")
         assert result.returncode == 0
         assert json.loads(result.stdout) == {
@@ -143,25 +173,25 @@ class TestStatePreviouslyPassed:
 
 class TestStateStale:
     def test_table_log_stale(self, repo: Path) -> None:
-        _write_log(repo, "feat-d", _table_log("feat-d", "abc123" * 7))  # not current HEAD
+        _ = _write_log(repo, "feat-d", _table_log("feat-d", "abc123" * 7))  # not current HEAD
         result = _run_cli(repo, "feat-d")
         assert result.returncode == 2
         assert result.stdout.strip() == "stale"
 
     def test_matching_head_below_requested_passing_score_is_stale(self, repo: Path) -> None:
         head = _head(repo)
-        _write_log(repo, "strict", _table_log("strict", head, status="PASS", score="3"))
+        _ = _write_log(repo, "strict", _table_log("strict", head, status="PASS", score="3"))
         result = _run_cli(repo, "strict", "--passing-score", "4")
         assert result.returncode == 2
         assert result.stdout.strip() == "stale"
 
     def test_in_process_returns_status_and_injected_output(
-        self, repo: Path, freshness_check: ModuleType, capsys: pytest.CaptureFixture[str]
+        self, repo: Path, freshness_check: _FreshnessCheckModule, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        _write_log(repo, "feat-e", _table_log("feat-e", "abc123" * 7))
+        _ = _write_log(repo, "feat-e", _table_log("feat-e", "abc123" * 7))
         output = StringIO()
         status = freshness_check.cli.run(
-            freshness_check._setup,
+            freshness_check._setup,  # pyright: ignore[reportPrivateUsage]
             argv=("--slug", "feat-e", "--cheese-root", str(repo / ".cheese"), "--repo-root", str(repo)),
             stdout=output,
         )
@@ -175,7 +205,7 @@ class TestAppendAttemptIntegration:
     parseable by freshness-check.py. M3 regression."""
 
     def test_canonical_table_schema_round_trips(
-        self, repo: Path, freshness_check: ModuleType
+        self, repo: Path, freshness_check: _FreshnessCheckModule
     ) -> None:
         # Write the *exact* table shape `append-attempt.py` produces (HEADER +
         # one row). The parser must read head_sha out of column 1, not 2 —
@@ -186,10 +216,10 @@ class TestAppendAttemptIntegration:
         artifact = (repo / ".cheese" / "hard-cheese")
         artifact.mkdir(parents=True, exist_ok=True)
         path = artifact / "real.md"
-        path.write_text(
+        _ = path.write_text(
             "| timestamp | head_sha | status | score | feedback | explanation |\n"
-            "| --- | --- | --- | --- | --- | --- |\n"
-            f"| 2026-05-19T10:00:00+00:00 | {short_head} | PASS | 4 | solid | I get it |\n",
+            + "| --- | --- | --- | --- | --- | --- |\n"
+            + f"| 2026-05-19T10:00:00+00:00 | {short_head} | PASS | 4 | solid | I get it |\n",
             encoding="utf-8",
         )
 
@@ -204,38 +234,38 @@ class TestAppendAttemptIntegration:
         assert result == {"state": "previously_passed", "diff_head": head}
 
     def test_legacy_table_shape_still_parses(
-        self, freshness_check: ModuleType, tmp_path: Path
+        self, freshness_check: _FreshnessCheckModule, tmp_path: Path
     ) -> None:
         # Pre-canonical table (status at col 0, head_sha at col 2) still
         # parses via the legacy fallback so any old logs do not silently
         # report `new`.
         path = tmp_path / "legacy.md"
-        path.write_text(_legacy_table_log("x", "feedface" * 5), encoding="utf-8")
+        _ = path.write_text(_legacy_table_log("x", "feedface" * 5), encoding="utf-8")
         assert freshness_check.last_pass_sha(path) == "feedface" * 5
 
     def test_sha_matches_handles_short_and_full(
-        self, freshness_check: ModuleType
+        self, freshness_check: _FreshnessCheckModule
     ) -> None:
         full = "deadbeef" * 5
         short = full[:7]
-        assert freshness_check._sha_matches(short, full) is True
-        assert freshness_check._sha_matches(full, short) is True
-        assert freshness_check._sha_matches("cafebabe", full) is False
+        assert freshness_check._sha_matches(short, full) is True  # pyright: ignore[reportPrivateUsage]
+        assert freshness_check._sha_matches(full, short) is True  # pyright: ignore[reportPrivateUsage]
+        assert freshness_check._sha_matches("cafebabe", full) is False  # pyright: ignore[reportPrivateUsage]
         # 'unknown' sentinel (writer fallback when git fails) must never
         # silently match — otherwise every diff would be previously_passed.
-        assert freshness_check._sha_matches("unknown", full) is False
-        assert freshness_check._sha_matches("", full) is False
+        assert freshness_check._sha_matches("unknown", full) is False  # pyright: ignore[reportPrivateUsage]
+        assert freshness_check._sha_matches("", full) is False  # pyright: ignore[reportPrivateUsage]
 
 
 class TestMalformedLog:
     def test_garbage_log_is_new(self, repo: Path) -> None:
-        _write_log(repo, "garbage", "this is not a valid log at all\n")
+        _ = _write_log(repo, "garbage", "this is not a valid log at all\n")
         result = _run_cli(repo, "garbage")
         assert result.returncode == 3
         assert result.stdout.strip() == "new"
 
     def test_empty_log_is_new(self, repo: Path) -> None:
-        _write_log(repo, "empty", "")
+        _ = _write_log(repo, "empty", "")
         result = _run_cli(repo, "empty")
         assert result.returncode == 3
         assert result.stdout.strip() == "new"
@@ -271,23 +301,23 @@ class TestArgHandling:
 
 class TestPureHelpers:
     def test_is_pass_status_matches_variants(
-        self, freshness_check: ModuleType
+        self, freshness_check: _FreshnessCheckModule
     ) -> None:
-        assert freshness_check._is_pass_status("PASS") is True
-        assert freshness_check._is_pass_status("pass") is True
-        assert freshness_check._is_pass_status("passed") is True
-        assert freshness_check._is_pass_status("Pass — SOLO 4") is True
-        assert freshness_check._is_pass_status("FAIL") is False
-        assert freshness_check._is_pass_status("error") is False
+        assert freshness_check._is_pass_status("PASS") is True  # pyright: ignore[reportPrivateUsage]
+        assert freshness_check._is_pass_status("pass") is True  # pyright: ignore[reportPrivateUsage]
+        assert freshness_check._is_pass_status("passed") is True  # pyright: ignore[reportPrivateUsage]
+        assert freshness_check._is_pass_status("Pass — SOLO 4") is True  # pyright: ignore[reportPrivateUsage]
+        assert freshness_check._is_pass_status("FAIL") is False  # pyright: ignore[reportPrivateUsage]
+        assert freshness_check._is_pass_status("error") is False  # pyright: ignore[reportPrivateUsage]
 
     def test_last_pass_sha_returns_none_when_missing(
-        self, freshness_check: ModuleType, tmp_path: Path
+        self, freshness_check: _FreshnessCheckModule, tmp_path: Path
     ) -> None:
         assert freshness_check.last_pass_sha(tmp_path / "missing.md") is None
 
     def test_last_pass_sha_from_table(
-        self, freshness_check: ModuleType, tmp_path: Path
+        self, freshness_check: _FreshnessCheckModule, tmp_path: Path
     ) -> None:
         path = tmp_path / "log.md"
-        path.write_text(_table_log("x", "feedface" * 5), encoding="utf-8")
+        _ = path.write_text(_table_log("x", "feedface" * 5), encoding="utf-8")
         assert freshness_check.last_pass_sha(path) == "feedface" * 5

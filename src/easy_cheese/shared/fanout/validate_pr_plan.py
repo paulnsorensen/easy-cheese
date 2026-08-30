@@ -14,7 +14,7 @@ interface.
 from __future__ import annotations
 
 import sys
-from typing import Any
+from typing import cast
 
 from easy_cheese.shared.manifest_io import (  # noqa: E402
     ManifestLoadError,
@@ -23,7 +23,7 @@ from easy_cheese.shared.manifest_io import (  # noqa: E402
 from easy_cheese_schemas import PrPlan, load  # noqa: E402
 
 
-def validate_pr_plan(plan: dict[str, Any]) -> list[str]:
+def validate_pr_plan(plan: dict[str, object]) -> list[str]:
     return list(load(plan, PrPlan, strict=True).problems)
 
 
@@ -41,7 +41,9 @@ def main(argv: list[str]) -> int:
         print(f"\nFAIL: {len(errors)} validation error(s)", file=sys.stderr)
         return 1
 
-    print(f"OK: {len(plan.get('groups', []))} PR group(s), plan valid")
+    groups = plan.get("groups")
+    group_count = len(cast("list[object]", groups)) if isinstance(groups, list) else 0
+    print(f"OK: {group_count} PR group(s), plan valid")
     return 0
 
 

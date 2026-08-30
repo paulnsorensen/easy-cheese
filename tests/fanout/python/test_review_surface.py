@@ -11,6 +11,7 @@ import ast
 import json
 import sys
 from pathlib import Path
+from typing import TypedDict, cast
 
 import pytest
 
@@ -20,6 +21,11 @@ sys.path.insert(0, str(REPO_ROOT / "src" / "fanout"))
 from easy_cheese.shared.fanout import age_route, review_surface  # noqa: E402
 
 FIXTURE_PATH = REPO_ROOT / "tests" / "fanout" / "python" / "fixtures" / "numstat_30_commits.json"
+
+
+class _CommitFixture(TypedDict):
+    sha: str
+    rows: list[tuple[str, int, int]]
 
 
 class TestWeigh:
@@ -57,8 +63,12 @@ class TestScore:
         weighted_files = 0.0 + 0.25 + 1.0
         expected = weighted_lines + review_surface.FILE_COST * weighted_files
         assert result["score"] == pytest.approx(expected)
-        assert result["weighted_lines"] == pytest.approx(weighted_lines)
-        assert result["weighted_files"] == pytest.approx(weighted_files)
+        assert result["weighted_lines"] == pytest.approx(
+            weighted_lines
+        )
+        assert result["weighted_files"] == pytest.approx(
+            weighted_files
+        )
 
     def test_zeroed_contains_exactly_zero_weight_paths(self) -> None:
         rows = [
@@ -109,17 +119,18 @@ class TestFrozenFixturePyramid:
     """
 
     def test_pyramid_matches_measured_distribution(self) -> None:
-        commits = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
+        commits = cast(
+            list[_CommitFixture], json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
+        )
         assert len(commits) == 30
 
-        n2_floor = age_route._SCORE_N2_FLOOR
-        n5_floor = age_route._SCORE_N5_FLOOR
-        high_effort = age_route._HIGH_EFFORT_SCORE
+        n2_floor = age_route._SCORE_N2_FLOOR  # pyright: ignore[reportPrivateUsage]
+        n5_floor = age_route._SCORE_N5_FLOOR  # pyright: ignore[reportPrivateUsage]
+        high_effort = age_route._HIGH_EFFORT_SCORE  # pyright: ignore[reportPrivateUsage]
 
         tiers = {"top": 0, "mid": 0, "low": 0, "single": 0}
         for commit in commits:
-            rows = [tuple(row) for row in commit["rows"]]
-            result = review_surface.score(rows)
+            result = review_surface.score(commit["rows"])
             s = result["score"]
             # age_route._tier_for_score routes `score < n2_floor` to n=1 and
             # everything else to n=2+, so the "single" bucket boundary must
@@ -162,7 +173,7 @@ class TestPurity:
             "importlib",
             "pickle",
         }
-        imported = set()
+        imported: set[str] = set()
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 imported.update(alias.name.split(".")[0] for alias in node.names)
@@ -172,7 +183,7 @@ class TestPurity:
 
     def test_module_parses_as_valid_python(self) -> None:
         src = (REPO_ROOT / "src/easy_cheese/shared/fanout/review_surface.py").read_text(encoding="utf-8")
-        ast.parse(src)  # raises SyntaxError if invalid
+        _ = ast.parse(src)  # raises SyntaxError if invalid
 
 
 class TestDualGlobFirstMatchWinsRealTable:

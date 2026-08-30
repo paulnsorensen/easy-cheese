@@ -19,7 +19,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-from typing import Any
+from typing import cast
 
 DIGEST_PREFIX = "sha256:"
 
@@ -28,7 +28,7 @@ class CanonicalJsonError(ValueError):
     """Raised when a value has no canonical JSON encoding."""
 
 
-def _check(value: Any, path: str) -> None:
+def _check(value: object, path: str) -> None:
     if value is None or isinstance(value, (bool, int, str)):
         return
     if isinstance(value, float):
@@ -36,7 +36,8 @@ def _check(value: Any, path: str) -> None:
             raise CanonicalJsonError(f"{path} must be a finite number, not {value!r}")
         return
     if isinstance(value, dict):
-        for key, item in value.items():
+        mapping = cast("dict[object, object]", value)
+        for key, item in mapping.items():
             if not isinstance(key, str):
                 raise CanonicalJsonError(
                     f"{path} keys must be strings, not {type(key).__name__}"
@@ -44,13 +45,14 @@ def _check(value: Any, path: str) -> None:
             _check(item, f"{path}.{key}")
         return
     if isinstance(value, (list, tuple)):
-        for index, item in enumerate(value):
+        sequence = cast("list[object] | tuple[object, ...]", value)
+        for index, item in enumerate(sequence):
             _check(item, f"{path}[{index}]")
         return
     raise CanonicalJsonError(f"{path} is not JSON data: {type(value).__name__}")
 
 
-def canonical_bytes(value: Any) -> bytes:
+def canonical_bytes(value: object) -> bytes:
     """The one encoding of `value` every digest in the runtime is taken over."""
     _check(value, "value")
     return json.dumps(
@@ -71,5 +73,5 @@ def digest_text(text: str) -> str:
     return digest_bytes(text.encode("utf-8"))
 
 
-def digest_value(value: Any) -> str:
+def digest_value(value: object) -> str:
     return digest_bytes(canonical_bytes(value))

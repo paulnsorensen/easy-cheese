@@ -9,7 +9,6 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-from types import ModuleType
 
 import pytest
 
@@ -23,27 +22,27 @@ from easy_cheese.shared.fanout import mode as _mode_module  # noqa: E402
 
 
 class TestSelectMode:
-    def test_zero_curds_linear(self, mode: ModuleType) -> None:
-        assert mode.select_mode([]) == "linear"
+    def test_zero_curds_linear(self) -> None:
+        assert _mode_module.select_mode([]) == "linear"
 
-    def test_one_curd_linear(self, mode: ModuleType) -> None:
-        assert mode.select_mode([1]) == "linear"
+    def test_one_curd_linear(self) -> None:
+        assert _mode_module.select_mode([1]) == "linear"
 
-    def test_two_curds_parallel(self, mode: ModuleType) -> None:
-        assert mode.select_mode([1, 2]) == "parallel"
+    def test_two_curds_parallel(self) -> None:
+        assert _mode_module.select_mode([1, 2]) == "parallel"
 
-    def test_many_curds_parallel(self, mode: ModuleType) -> None:
-        assert mode.select_mode(list(range(7))) == "parallel"
+    def test_many_curds_parallel(self) -> None:
+        assert _mode_module.select_mode(list(range(7))) == "parallel"
 
-    def test_threshold_is_two(self, mode: ModuleType) -> None:
-        assert mode.PARALLEL_THRESHOLD == 2
+    def test_threshold_is_two(self) -> None:
+        assert _mode_module.PARALLEL_THRESHOLD == 2
 
-    def test_boundary_tracks_the_constant(self, mode: ModuleType) -> None:
+    def test_boundary_tracks_the_constant(self) -> None:
         # The boundary must be PARALLEL_THRESHOLD itself, not a coincidental 2:
         # below it is linear, at it is parallel. Locks the selector to the
         # single constant so bumping the constant moves the boundary.
-        below = mode.select_mode(range(mode.PARALLEL_THRESHOLD - 1))
-        at = mode.select_mode(range(mode.PARALLEL_THRESHOLD))
+        below = _mode_module.select_mode(range(_mode_module.PARALLEL_THRESHOLD - 1))
+        at = _mode_module.select_mode(range(_mode_module.PARALLEL_THRESHOLD))
         assert below == "linear"
         assert at == "parallel"
 
@@ -148,18 +147,16 @@ class TestSelectModeFromScore:
             (_mode_module.DECOMPOSE_FIRST_THRESHOLD + 1, "decompose-first"),
         ],
     )
-    def test_boundary_tracks_the_constant(
-        self, mode: ModuleType, score: float, expected: str
-    ) -> None:
-        assert mode.select_mode_from_score(score) == expected
+    def test_boundary_tracks_the_constant(self, score: float, expected: str) -> None:
+        assert _mode_module.select_mode_from_score(score) == expected
 
-    def test_never_returns_parallel(self, mode: ModuleType) -> None:
+    def test_never_returns_parallel(self) -> None:
         scores = list(range(0, 2000, 10)) + [0, 10_000_000]
         for score in scores:
-            assert mode.select_mode_from_score(score) != "parallel"
+            assert _mode_module.select_mode_from_score(score) != "parallel"
 
-    def test_below_threshold_is_linear(self, mode: ModuleType) -> None:
-        assert mode.select_mode_from_score(100) == "linear"
+    def test_below_threshold_is_linear(self) -> None:
+        assert _mode_module.select_mode_from_score(100) == "linear"
 
-    def test_above_threshold_is_decompose_first(self, mode: ModuleType) -> None:
-        assert mode.select_mode_from_score(251) == "decompose-first"
+    def test_above_threshold_is_decompose_first(self) -> None:
+        assert _mode_module.select_mode_from_score(251) == "decompose-first"

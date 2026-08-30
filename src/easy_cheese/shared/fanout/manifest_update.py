@@ -32,10 +32,11 @@ import contextlib
 import os
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Callable, Protocol, TextIO, cast
 
 try:
     import fcntl  # POSIX advisory file locks
+    msvcrt = None
 except ImportError:  # pragma: no cover - exercised only on Windows
     fcntl = None
     import msvcrt
@@ -68,11 +69,12 @@ def _lock(fd: int, *, exclusive: bool) -> None:
     if fcntl is not None:
         fcntl.flock(fd, fcntl.LOCK_EX if exclusive else fcntl.LOCK_UN)
     else:  # pragma: no cover - Windows only
+        assert msvcrt is not None
         msvcrt.locking(fd, msvcrt.LK_LOCK if exclusive else msvcrt.LK_UNLCK, 1)
 
 
 # Mirrors append-attempt.py's _with_flock helper.
-def _with_flock(lock_path: Path, fn) -> None:
+def _with_flock(lock_path: Path, fn: Callable[[], None]) -> None:
     """Run fn() while holding an exclusive advisory lock on lock_path.
 
     Uses POSIX ``fcntl.flock`` where available and falls back to
@@ -92,7 +94,7 @@ def _with_flock(lock_path: Path, fn) -> None:
             os.close(fd)
 
 
-def _load_manifest(path: Path) -> tuple[dict[str, Any], bytes]:
+def _load_manifest(path: Path) -> tuple[dict[str, object], bytes]:
     """Return (parsed mapping, original bytes for restore on failure)."""
     try:
         original = path.read_bytes()
@@ -114,7 +116,7 @@ def _is_json(original: bytes) -> bool:
         return False
 
 
-def _atomic_write(path: Path, data: dict[str, Any], *, as_json: bool) -> None:
+def _atomic_write(path: Path, data: dict[str, object], *, as_json: bool) -> None:
     """Dump data to a unique sibling tmp then rename. tmp is removed on failure.
 
     Writes JSON when `as_json` is True, YAML otherwise (lazy import).
@@ -136,10 +138,10 @@ def _atomic_write(path: Path, data: dict[str, Any], *, as_json: bool) -> None:
     tmp = Path(tmp_name)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            handle.write(text)
+            _ = handle.write(text)
             handle.flush()
             os.fsync(handle.fileno())
-        tmp.replace(path)
+        _ = tmp.replace(path)
     except Exception:
         if tmp.exists():
             with contextlib.suppress(OSError):
@@ -161,8 +163,8 @@ def _revalidate_or_restore(path: Path, original: bytes) -> None:
         tmp = Path(tmp_name)
         try:
             with os.fdopen(fd, "wb") as handle:
-                handle.write(original)
-            tmp.replace(path)
+                _ = handle.write(original)
+            _ = tmp.replace(path)
         except Exception:
             if tmp.exists():
                 with contextlib.suppress(OSError):
@@ -171,14 +173,20 @@ def _revalidate_or_restore(path: Path, original: bytes) -> None:
         raise cli.CliError(f"validation rejected update; restored original ({errors[-1]})")
 
 
-def _commit(path: Path, data: dict[str, Any], original: bytes) -> None:
+def _commit(path: Path, data: dict[str, object], original: bytes) -> None:
     _atomic_write(path, data, as_json=_is_json(original))
     _revalidate_or_restore(path, original)
 
 # ----- subcommand handlers -------------------------------------------------
 
 
-def cmd_set_phase(args: argparse.Namespace) -> None:
+class _SetPhaseArgs(Protocol):
+    manifest: str
+    phase: str
+    stdout: TextIO
+
+
+def cmd_set_phase(args: _SetPhaseArgs) -> None:
     if args.phase not in PHASES:
         raise cli.CliError(f"invalid phase {args.phase!r}; expected one of {sorted(PHASES)}")
     path = Path(args.manifest)
@@ -193,17 +201,33 @@ def cmd_set_phase(args: argparse.Namespace) -> None:
     cli.emit(f"phase set to {args.phase}", stdout=args.stdout)
 
 
-def _find_curd(data: dict[str, Any], curd_id: int) -> dict[str, Any]:
+def _find_curd(data: dict[str, object], curd_id: int) -> dict[str, object]:
     curds = data.get("curds")
     if not isinstance(curds, list):
         raise cli.CliError("manifest has no curds list")
-    for entry in curds:
-        if isinstance(entry, dict) and entry.get("id") == curd_id:
-            return entry
+    items = cast("list[object]", curds)
+    for entry in items:
+        if not isinstance(entry, dict):
+            continue
+        entry_dict = cast("dict[str, object]", entry)
+        if entry_dict.get("id") == curd_id:
+            return entry_dict
     raise cli.CliError(f"curd id {curd_id} not found")
 
 
-def cmd_set_curd_status(args: argparse.Namespace) -> None:
+class _SetCurdStatusArgs(Protocol):
+    manifest: str
+    curd: int
+    status: str
+    commit_sha: str | None
+    base_commit: str | None
+    reviewed_tree_oid: str | None
+    diff_hash: str | None
+    scope: list[str] | None
+    stdout: TextIO
+
+
+def cmd_set_curd_status(args: _SetCurdStatusArgs) -> None:
     if args.status not in WORK_STATUSES:
         raise cli.CliError(f"invalid status {args.status!r}; expected one of {list(WORK_STATUSES)}")
     path = Path(args.manifest)
@@ -217,7 +241,7 @@ def cmd_set_curd_status(args: argparse.Namespace) -> None:
             if any(value is None for value in review_values):
                 raise cli.CliError(
                     "review context requires --base-commit, --reviewed-tree-oid, "
-                    "--diff-hash, and at least one --scope"
+                    + "--diff-hash, and at least one --scope"
                 )
             curd["review_context"] = {
                 "base_commit": args.base_commit,
@@ -234,7 +258,21 @@ def cmd_set_curd_status(args: argparse.Namespace) -> None:
     cli.emit(f"curd {args.curd} status set to {args.status}", stdout=args.stdout)
 
 
-def cmd_set_post_review(args: argparse.Namespace) -> None:
+class _SetPostReviewArgs(Protocol):
+    manifest: str
+    base_commit: str
+    reviewed_tree_oid: str
+    diff_hash: str
+    scope: list[str]
+    press_slug: str | None
+    age_slug: str | None
+    cure_slug: str | None
+    findings_applied: int | None
+    findings_deferred: int | None
+    stdout: TextIO
+
+
+def cmd_set_post_review(args: _SetPostReviewArgs) -> None:
     path = Path(args.manifest)
     lock = path.parent / ("." + path.name + ".lock")
 
@@ -248,16 +286,19 @@ def cmd_set_post_review(args: argparse.Namespace) -> None:
         }
         data["current_review"] = context
         existing = data.get("post_review")
-        post_review = dict(existing) if isinstance(existing, dict) else {}
+        existing_dict = cast("dict[str, object]", existing) if isinstance(existing, dict) else {}
+        post_review: dict[str, object] = dict(existing_dict)
         post_review["review_context"] = {**context, "scope": list(args.scope)}
-        for key in ("press_slug", "age_slug", "cure_slug"):
-            value = getattr(args, key)
-            if value is not None:
-                post_review[key] = value
-        for key in ("findings_applied", "findings_deferred"):
-            value = getattr(args, key)
-            if value is not None:
-                post_review[key] = value
+        if args.press_slug is not None:
+            post_review["press_slug"] = args.press_slug
+        if args.age_slug is not None:
+            post_review["age_slug"] = args.age_slug
+        if args.cure_slug is not None:
+            post_review["cure_slug"] = args.cure_slug
+        if args.findings_applied is not None:
+            post_review["findings_applied"] = args.findings_applied
+        if args.findings_deferred is not None:
+            post_review["findings_deferred"] = args.findings_deferred
         data["post_review"] = post_review
         _commit(path, data, original)
 
@@ -265,17 +306,29 @@ def cmd_set_post_review(args: argparse.Namespace) -> None:
     cli.emit("post-merge review identity recorded", stdout=args.stdout)
 
 
-def _find_wiring(data: dict[str, Any], wiring_id: str) -> dict[str, Any]:
+def _find_wiring(data: dict[str, object], wiring_id: str) -> dict[str, object]:
     wiring = data.get("wiring")
     if not isinstance(wiring, list):
         raise cli.CliError("manifest has no wiring list")
-    for entry in wiring:
-        if isinstance(entry, dict) and entry.get("id") == wiring_id:
-            return entry
+    items = cast("list[object]", wiring)
+    for entry in items:
+        if not isinstance(entry, dict):
+            continue
+        entry_dict = cast("dict[str, object]", entry)
+        if entry_dict.get("id") == wiring_id:
+            return entry_dict
     raise cli.CliError(f"wiring id {wiring_id!r} not found")
 
 
-def cmd_set_wiring_status(args: argparse.Namespace) -> None:
+class _SetWiringStatusArgs(Protocol):
+    manifest: str
+    wiring: str
+    status: str
+    commit_sha: str | None
+    stdout: TextIO
+
+
+def cmd_set_wiring_status(args: _SetWiringStatusArgs) -> None:
     if args.status not in WORK_STATUSES:
         raise cli.CliError(f"invalid status {args.status!r}; expected one of {list(WORK_STATUSES)}")
     path = Path(args.manifest)
@@ -293,7 +346,14 @@ def cmd_set_wiring_status(args: argparse.Namespace) -> None:
     cli.emit(f"wiring {args.wiring} status set to {args.status}", stdout=args.stdout)
 
 
-def cmd_check_files(args: argparse.Namespace) -> None:
+class _CheckFilesArgs(Protocol):
+    manifest: str
+    root: str | None
+    json_mode: bool
+    stdout: TextIO
+
+
+def cmd_check_files(args: _CheckFilesArgs) -> None:
     path = Path(args.manifest)
     data, _ = _load_manifest(path)
     if args.root and not Path(args.root).is_dir():
@@ -304,15 +364,17 @@ def cmd_check_files(args: argparse.Namespace) -> None:
         raise cli.CliError("manifest has no curds list")
 
     stale: dict[str, list[str]] = {}
-    for entry in curds:
+    for entry in cast("list[object]", curds):
         if not isinstance(entry, dict):
             continue
-        files = entry.get("files")
+        entry_dict = cast("dict[str, object]", entry)
+        files = entry_dict.get("files")
         if not isinstance(files, list):
             continue
-        missing = [f for f in files if isinstance(f, str) and not (root / f).is_file()]
+        file_items = cast("list[object]", files)
+        missing = [f for f in file_items if isinstance(f, str) and not (root / f).is_file()]
         if missing:
-            stale[str(entry.get("id"))] = missing
+            stale[str(entry_dict.get("id"))] = missing
 
     if args.json_mode:
         cli.emit(stale, json_mode=True, stdout=args.stdout)
@@ -323,8 +385,8 @@ def cmd_check_files(args: argparse.Namespace) -> None:
     for curd_id, missing in stale.items():
         cli.emit(
             f"curd {curd_id}: not found in working tree — {', '.join(missing)} "
-            "(may be new files the curd creates, or a stale decomposition path; "
-            "pass this along as dispatch context)",
+            + "(may be new files the curd creates, or a stale decomposition path; "
+            + "pass this along as dispatch context)",
             stdout=args.stdout,
         )
 
@@ -336,48 +398,48 @@ def _setup(parser: argparse.ArgumentParser) -> None:
     subs = parser.add_subparsers(dest="cmd")
 
     sp = subs.add_parser("set-phase", help="update top-level phase")
-    sp.add_argument("--manifest", required=True)
-    sp.add_argument("--phase", required=True)
+    _ = sp.add_argument("--manifest", required=True)
+    _ = sp.add_argument("--phase", required=True)
     sp.set_defaults(func=cmd_set_phase)
 
     sc = subs.add_parser("set-curd-status", help="update one curd's status")
-    sc.add_argument("--manifest", required=True)
-    sc.add_argument("--curd", required=True, type=int)
-    sc.add_argument("--status", required=True)
-    sc.add_argument("--commit-sha", default=None)
-    sc.add_argument("--base-commit", default=None)
-    sc.add_argument("--reviewed-tree-oid", default=None)
-    sc.add_argument("--diff-hash", default=None)
-    sc.add_argument("--scope", action="append", default=None)
+    _ = sc.add_argument("--manifest", required=True)
+    _ = sc.add_argument("--curd", required=True, type=int)
+    _ = sc.add_argument("--status", required=True)
+    _ = sc.add_argument("--commit-sha", default=None)
+    _ = sc.add_argument("--base-commit", default=None)
+    _ = sc.add_argument("--reviewed-tree-oid", default=None)
+    _ = sc.add_argument("--diff-hash", default=None)
+    _ = sc.add_argument("--scope", action="append", default=None)
     sc.set_defaults(func=cmd_set_curd_status)
 
     sr = subs.add_parser(
         "set-post-review", help="atomically record final post-merge review identity"
     )
-    sr.add_argument("--manifest", required=True)
-    sr.add_argument("--base-commit", required=True)
-    sr.add_argument("--reviewed-tree-oid", required=True)
-    sr.add_argument("--diff-hash", required=True)
-    sr.add_argument("--scope", action="append", required=True)
-    sr.add_argument("--press-slug", default=None)
-    sr.add_argument("--age-slug", default=None)
-    sr.add_argument("--cure-slug", default=None)
-    sr.add_argument("--findings-applied", type=int, default=None)
-    sr.add_argument("--findings-deferred", type=int, default=None)
+    _ = sr.add_argument("--manifest", required=True)
+    _ = sr.add_argument("--base-commit", required=True)
+    _ = sr.add_argument("--reviewed-tree-oid", required=True)
+    _ = sr.add_argument("--diff-hash", required=True)
+    _ = sr.add_argument("--scope", action="append", required=True)
+    _ = sr.add_argument("--press-slug", default=None)
+    _ = sr.add_argument("--age-slug", default=None)
+    _ = sr.add_argument("--cure-slug", default=None)
+    _ = sr.add_argument("--findings-applied", type=int, default=None)
+    _ = sr.add_argument("--findings-deferred", type=int, default=None)
     sr.set_defaults(func=cmd_set_post_review)
 
     sw = subs.add_parser("set-wiring-status", help="update one wiring row's status")
-    sw.add_argument("--manifest", required=True)
-    sw.add_argument("--wiring", required=True)
-    sw.add_argument("--status", required=True)
-    sw.add_argument("--commit-sha", default=None)
+    _ = sw.add_argument("--manifest", required=True)
+    _ = sw.add_argument("--wiring", required=True)
+    _ = sw.add_argument("--status", required=True)
+    _ = sw.add_argument("--commit-sha", default=None)
     sw.set_defaults(func=cmd_set_wiring_status)
 
     scf = subs.add_parser(
         "check-files", help="re-validate curd file lists against the working tree at dispatch time"
     )
-    scf.add_argument("--manifest", required=True)
-    scf.add_argument("--root", default=None, help="repo root to resolve relative paths against (default: cwd)")
+    _ = scf.add_argument("--manifest", required=True)
+    _ = scf.add_argument("--root", default=None, help="repo root to resolve relative paths against (default: cwd)")
     scf.set_defaults(func=cmd_check_files)
 
 

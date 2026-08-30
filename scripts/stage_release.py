@@ -17,9 +17,10 @@ import argparse
 import shutil
 import sys
 from pathlib import Path
+from typing import cast
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import build_pyz  # noqa: E402  (sibling module in scripts/)
+import build_pyz  # noqa: E402  (sibling module in scripts/)  # pyright: ignore[reportImplicitRelativeImport]
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -38,10 +39,10 @@ SHIP = [
 
 def _copy(src: Path, dst: Path) -> None:
     if src.is_dir():
-        shutil.copytree(src, dst)
+        _ = shutil.copytree(src, dst)
     else:
         dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(src, dst)
+        _ = shutil.copy2(src, dst)
 
 
 def _guard_out(out: Path) -> None:
@@ -66,7 +67,7 @@ def stage(out: Path) -> Path:
         if src.exists():
             _copy(src, out / rel)
 
-    build_pyz.build_bundles(
+    _ = build_pyz.build_bundles(
         {
             skill: out / "skills" / skill / "scripts" / f"{skill}.pyz"
             for skill in build_pyz.SKILLS
@@ -99,9 +100,9 @@ def _verify(out: Path) -> None:
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Stage the shippable release tree.")
-    parser.add_argument("--out", type=Path, required=True, help="Output directory (wiped first).")
+    _ = parser.add_argument("--out", type=Path, required=True, help="Output directory (wiped first).")
     args = parser.parse_args(argv[1:])
-    out = stage(args.out)
+    out = stage(cast(Path, args.out))
     print(f"staged release tree at {out}")
     return 0
 

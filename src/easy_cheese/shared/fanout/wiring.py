@@ -7,6 +7,7 @@ Two layered functions:
 from __future__ import annotations
 
 import re
+from typing import cast
 
 from easy_cheese.shared.schema import (  # noqa: E402
     non_empty_string,
@@ -27,15 +28,18 @@ _WIRING_ID_RE = re.compile(r"^W[0-9]+$")
 _WORK_STATUSES = {"pending", "running", "completed", "failed"}
 
 
-def graph_errors(wiring: list) -> list[str]:
+def graph_errors(wiring: list[object]) -> list[str]:
     """Collection invariants at every stage: acyclic DAG and known dependencies."""
-    wiring_list = [w for w in wiring if isinstance(w, dict)]
+    wiring_list = [cast("dict[str, object]", w) for w in wiring if isinstance(w, dict)]
     ids = {w.get("id") for w in wiring_list if isinstance(w.get("id"), str)}
     errors: list[str] = []
 
-    def _string_deps(w: dict) -> list[str]:
+    def _string_deps(w: dict[str, object]) -> list[str]:
         deps = w.get("depends_on")
-        return [d for d in deps if isinstance(d, str)] if isinstance(deps, list) else []
+        if not isinstance(deps, list):
+            return []
+        items = cast("list[object]", deps)
+        return [d for d in items if isinstance(d, str)]
 
     for w in wiring_list:
         wid = w.get("id", "?")
@@ -46,7 +50,7 @@ def graph_errors(wiring: list) -> list[str]:
                 errors.append(f"wiring {wid}: depends_on references unknown id {dep!r}")
 
     known: dict[str, list[str]] = {
-        w["id"]: _string_deps(w)
+        cast(str, w["id"]): _string_deps(w)
         for w in wiring_list
         if isinstance(w.get("id"), str)
     }
@@ -54,7 +58,7 @@ def graph_errors(wiring: list) -> list[str]:
     return errors
 
 
-def lifecycle_errors(node: dict, where: str) -> list[str]:
+def lifecycle_errors(node: dict[str, object], where: str) -> list[str]:
     """Run-manifest-only lifecycle checks for a single wiring node.
 
     The caller passes ``where`` (e.g. "wiring[1]") so error messages carry

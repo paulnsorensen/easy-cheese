@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import os
 from pathlib import Path
+from typing import TextIO, cast
 
 # cli and git_utils are co-staged in the bundled .pyz alongside this module
 from easy_cheese.shared import cli, git_utils
@@ -77,7 +78,7 @@ def create(slug: str, base: str, *, repo: str = ".") -> dict[str, object]:
     _validate_slug(slug)
     path = _worktree_path(slug)
     branch = _worktree_branch(slug)
-    _git(repo, "worktree", "add", "-b", branch, path, base)
+    _ = _git(repo, "worktree", "add", "-b", branch, path, base)
     return {"path": path, "branch": branch}
 
 
@@ -85,17 +86,17 @@ def harvest(branch: str, onto: str, *, repo: str = ".") -> list[str]:
     """Cherry-pick the commits unique to `branch` onto `onto` (the orchestrator
     branch). Shared `.git` object store means no fetch. Returns the picked SHAs
     (oldest first); an empty list when `branch` added nothing over `onto`."""
-    _git(repo, "checkout", onto)
+    _ = _git(repo, "checkout", onto)
     revs = _git(repo, "rev-list", "--reverse", f"{onto}..{branch}").split()
     if not revs:
         return []
     try:
-        _git(repo, "cherry-pick", *revs)
+        _ = _git(repo, "cherry-pick", *revs)
     except cli.CliError:
         # Leave the repo clean for the orchestrator's /melt fallback: a
         # half-finished cherry-pick (unmerged index / CHERRY_PICK_HEAD) would
         # cascade-poison the next harvest's `git checkout onto`.
-        git_utils.run_git(["cherry-pick", "--abort"], cwd=repo)
+        _ = git_utils.run_git(["cherry-pick", "--abort"], cwd=repo)
         raise
     return revs
 
@@ -111,7 +112,7 @@ def teardown(path: str, branch: str, *, repo: str = ".") -> None:
     errors: list[str] = []
     for args in (("worktree", "remove", "--force", path), ("branch", "-D", branch)):
         try:
-            _git(repo, *args)
+            _ = _git(repo, *args)
         except cli.CliError as exc:
             errors.append(str(exc))
     if errors:
@@ -120,19 +121,30 @@ def teardown(path: str, branch: str, *, repo: str = ".") -> None:
 
 def _cmd_create(args: argparse.Namespace) -> None:
     cli.emit(
-        create(args.slug, args.base, repo=args.repo),
+        create(
+            cast(str, args.slug),
+            cast(str, args.base),
+            repo=cast(str, args.repo),
+        ),
         json_mode=True,
-        stdout=args.stdout,
+        stdout=cast("TextIO | None", args.stdout),
     )
 
+
 def _cmd_harvest(args: argparse.Namespace) -> None:
-    picked = harvest(args.branch, args.onto, repo=args.repo)
-    cli.emit({"picked": picked}, json_mode=True, stdout=args.stdout)
+    picked = harvest(cast(str, args.branch), cast(str, args.onto), repo=cast(str, args.repo))
+    cli.emit({"picked": picked}, json_mode=True, stdout=cast("TextIO | None", args.stdout))
 
 
 def _cmd_teardown(args: argparse.Namespace) -> None:
-    teardown(args.path, args.branch, repo=args.repo)
-    cli.emit({"removed": args.path, "deleted_branch": args.branch}, json_mode=True, stdout=args.stdout)
+    path = cast(str, args.path)
+    branch = cast(str, args.branch)
+    teardown(path, branch, repo=cast(str, args.repo))
+    cli.emit(
+        {"removed": path, "deleted_branch": branch},
+        json_mode=True,
+        stdout=cast("TextIO | None", args.stdout),
+    )
 
 
 def _setup(parser: argparse.ArgumentParser) -> None:
@@ -140,21 +152,21 @@ def _setup(parser: argparse.ArgumentParser) -> None:
     sub = parser.add_subparsers(dest="action", required=True)
 
     p_create = sub.add_parser("create", help="Create a worktree off a base ref.")
-    p_create.add_argument("--slug", required=True, help="Curd slug (names the worktree + branch).")
-    p_create.add_argument("--base", required=True, help="Base ref to branch the worktree from.")
-    p_create.add_argument("--repo", default=".", help="Repo root (default: cwd).")
+    _ = p_create.add_argument("--slug", required=True, help="Curd slug (names the worktree + branch).")
+    _ = p_create.add_argument("--base", required=True, help="Base ref to branch the worktree from.")
+    _ = p_create.add_argument("--repo", default=".", help="Repo root (default: cwd).")
     p_create.set_defaults(func=_cmd_create)
 
     p_harvest = sub.add_parser("harvest", help="Cherry-pick a curd branch onto the orchestrator branch.")
-    p_harvest.add_argument("--branch", required=True, help="Curd branch to harvest.")
-    p_harvest.add_argument("--onto", required=True, help="Orchestrator branch to cherry-pick onto.")
-    p_harvest.add_argument("--repo", default=".", help="Repo root (default: cwd).")
+    _ = p_harvest.add_argument("--branch", required=True, help="Curd branch to harvest.")
+    _ = p_harvest.add_argument("--onto", required=True, help="Orchestrator branch to cherry-pick onto.")
+    _ = p_harvest.add_argument("--repo", default=".", help="Repo root (default: cwd).")
     p_harvest.set_defaults(func=_cmd_harvest)
 
     p_teardown = sub.add_parser("teardown", help="Remove a worktree and delete its branch.")
-    p_teardown.add_argument("--path", required=True, help="Worktree path to remove.")
-    p_teardown.add_argument("--branch", required=True, help="Worktree branch to delete.")
-    p_teardown.add_argument("--repo", default=".", help="Repo root (default: cwd).")
+    _ = p_teardown.add_argument("--path", required=True, help="Worktree path to remove.")
+    _ = p_teardown.add_argument("--branch", required=True, help="Worktree branch to delete.")
+    _ = p_teardown.add_argument("--repo", default=".", help="Repo root (default: cwd).")
     p_teardown.set_defaults(func=_cmd_teardown)
 
 

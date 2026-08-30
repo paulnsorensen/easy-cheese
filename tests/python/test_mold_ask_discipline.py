@@ -54,7 +54,7 @@ def test_no_lean_antipattern_phrase() -> None:
                 offenders.append(f"{path.relative_to(REPO_ROOT)}:{n}: {line.strip()}")
     assert not offenders, (
         "RC1 anti-pattern phrasing reintroduced (asking minimised / agent output "
-        "maximised) — reword so asking the user is primary:\n" + "\n".join(offenders)
+        + "maximised) — reword so asking the user is primary:\n" + "\n".join(offenders)
     )
 
 
@@ -87,13 +87,13 @@ def test_asking_primary_intent_present() -> None:
     # Require BOTH the phrase AND an affirmative ownership clause (the fork is the
     # user's to decide): the phrase alone can persist inside prose that demotes it,
     # so the ownership half is what proves asking stayed *primary*.
-    missing = []
+    missing: list[str] = []
     for p in SCOPED_FILES:
         body = _body_below_frontmatter(p)
         if not (ASKING_PRIMARY.search(body) and ASKING_OWNERSHIP.search(body)):
             missing.append(str(p.relative_to(REPO_ROOT)))
     assert not missing, (
         "RC1 asking-primary intent absent or demoted in the body of "
-        "(needs both 'ask the user' and an ownership clause naming the fork as "
-        "theirs to decide): " + ", ".join(missing)
+        + "(needs both 'ask the user' and an ownership clause naming the fork as "
+        + "theirs to decide): " + ", ".join(missing)
     )

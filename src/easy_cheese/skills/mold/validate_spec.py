@@ -28,20 +28,46 @@ import argparse
 import re
 import sys
 from pathlib import Path
+from typing import TypedDict, cast
 
 from easy_cheese.shared.document_rules import DOCUMENT_RULES
 
-RULES = DOCUMENT_RULES["mold-spec"]
+
+class _CrossFieldRule(TypedDict):
+    description: str
+    rule_id: str
+
+
+class _TableRules(TypedDict):
+    columns: list[str]
+    per_row: list[str]
+
+
+class _SectionRules(TypedDict):
+    name: str
+    optional: bool
+    table: _TableRules | None
+
+
+class _ModeRules(TypedDict):
+    cross_field_rules: list[_CrossFieldRule]
+    enums: dict[str, list[str]]
+    sections: list[_SectionRules]
+
+
+RULES = cast(_ModeRules, cast(object, DOCUMENT_RULES["mold-spec"]))
 SECTIONS = RULES["sections"]
 ENUMS = RULES["enums"]
 _TEST_CONTRACTS_SECTION = next(s for s in SECTIONS if s["name"] == "Test Contracts")
-TABLE_COLUMNS: tuple[str, ...] = tuple(_TEST_CONTRACTS_SECTION["table"]["columns"])
+_TEST_CONTRACTS_TABLE = _TEST_CONTRACTS_SECTION["table"]
+assert _TEST_CONTRACTS_TABLE is not None
+TABLE_COLUMNS: tuple[str, ...] = tuple(_TEST_CONTRACTS_TABLE["columns"])
 _AC_ID_COL = TABLE_COLUMNS.index("Acceptance ID")
 _MODE_COL = TABLE_COLUMNS.index("Mode")
 _INTERFACE_VERSION_COL = TABLE_COLUMNS.index("Interface version")
 _MATRIX_ROWS_COL = TABLE_COLUMNS.index("Matrix rows")
 
-_CROSS_FIELD_RULE_IDS = {rule["rule_id"] for rule in RULES["cross_field_rules"]}
+_CROSS_FIELD_RULE_IDS: set[str] = {rule["rule_id"] for rule in RULES["cross_field_rules"]}
 
 
 def _rule_id(rule_id: str) -> str:
@@ -64,7 +90,7 @@ def _canonical_heading(raw: str) -> str:
     return raw.strip().rstrip(".,;:!?").strip().lower()
 
 
-def _split_frontmatter(text: str) -> tuple[dict[str, object], str]:
+def _split_frontmatter(text: str) -> tuple[dict[str, str | dict[str, str]], str]:
     lines = text.splitlines()
     if not lines or lines[0].strip() != "---":
         return {}, text
@@ -79,9 +105,9 @@ def _split_frontmatter(text: str) -> tuple[dict[str, object], str]:
     return data, body
 
 
-def _parse_yaml_block(lines: list[str]) -> dict[str, object]:
+def _parse_yaml_block(lines: list[str]) -> dict[str, str | dict[str, str]]:
     """Minimal key: value / nested-mapping parser for mold frontmatter."""
-    data: dict[str, object] = {}
+    data: dict[str, str | dict[str, str]] = {}
     i = 0
     while i < len(lines):
         line = lines[i]
@@ -189,7 +215,7 @@ def validate(path: Path) -> list[str]:
     for name in sorted(set(duplicate_headings)):
         errors.append(
             f"ERROR: duplicate-heading '## {name}' heading appears more than once "
-            f"in {path}"
+            + f"in {path}"
         )
 
     for section in SECTIONS:
@@ -199,7 +225,7 @@ def validate(path: Path) -> list[str]:
         if canonical not in found_sections:
             errors.append(
                 f"ERROR: missing-required-section '{section['name']}' section not "
-                f"found in {path}"
+                + f"found in {path}"
             )
 
     test_contracts_lines = found_sections.get(_canonical_heading("Test Contracts"))
@@ -208,16 +234,16 @@ def validate(path: Path) -> list[str]:
         parsed = _parse_table(test_contracts_lines)
         if parsed is None:
             errors.append(
-                f"ERROR: test-contracts-table-shape no table found in Test "
-                f"Contracts section of {path}"
+                "ERROR: test-contracts-table-shape no table found in Test "
+                + f"Contracts section of {path}"
             )
         else:
             header = parsed[0]
             if tuple(header) != TABLE_COLUMNS:
                 errors.append(
-                    f"ERROR: test-contracts-table-shape Test Contracts table columns "
-                    f"{header} do not match the required seven columns {list(TABLE_COLUMNS)} "
-                    f"in {path}"
+                    "ERROR: test-contracts-table-shape Test Contracts table columns "
+                    + f"{header} do not match the required seven columns {list(TABLE_COLUMNS)} "
+                    + f"in {path}"
                 )
             else:
                 delimiter_row = parsed[1]
@@ -225,8 +251,8 @@ def validate(path: Path) -> list[str]:
                     DELIMITER_CELL_RE.match(cell) for cell in delimiter_row
                 ):
                     errors.append(
-                        f"ERROR: test-contracts-table-shape Test Contracts table is "
-                        f"missing its '---' delimiter row in {path}"
+                        "ERROR: test-contracts-table-shape Test Contracts table is "
+                        + f"missing its '---' delimiter row in {path}"
                     )
                     candidate_rows = parsed[1:]
                 else:
@@ -234,9 +260,9 @@ def validate(path: Path) -> list[str]:
                 for row in candidate_rows:
                     if len(row) != len(TABLE_COLUMNS):
                         errors.append(
-                            f"ERROR: test-contracts-table-shape Test Contracts row "
-                            f"{row} has {len(row)} cells, expected {len(TABLE_COLUMNS)} "
-                            f"in {path}"
+                            "ERROR: test-contracts-table-shape Test Contracts row "
+                            + f"{row} has {len(row)} cells, expected {len(TABLE_COLUMNS)} "
+                            + f"in {path}"
                         )
                     else:
                         rows.append(row)
@@ -254,17 +280,17 @@ def validate(path: Path) -> list[str]:
         if count == 0:
             errors.append(
                 f"ERROR: {AC_COVERAGE_RULE} acceptance ID '{acceptance_id}' is "
-                f"absent from the Test Contracts table in {path}"
+                + f"absent from the Test Contracts table in {path}"
             )
         elif count > 1:
             errors.append(
                 f"ERROR: {AC_COVERAGE_RULE} acceptance ID '{acceptance_id}' "
-                f"appears {count} times in the Test Contracts table in {path}"
+                + f"appears {count} times in the Test Contracts table in {path}"
             )
     for acceptance_id in sorted(set(counts) - set(declared_ids)):
         errors.append(
             f"ERROR: {AC_COVERAGE_RULE} acceptance ID '{acceptance_id}' appears "
-            f"in the Test Contracts table but is not declared in Acceptance in {path}"
+            + f"in the Test Contracts table but is not declared in Acceptance in {path}"
         )
 
     for row in rows:
@@ -275,29 +301,29 @@ def validate(path: Path) -> list[str]:
         if mode not in ENUMS["mode"]:
             errors.append(
                 f"ERROR: mode-closed-class Test Contracts row '{acceptance_id}' has "
-                f"unknown Mode '{mode}' in {path}"
+                + f"unknown Mode '{mode}' in {path}"
             )
             continue
         if mode == "tracer":
             if interface_version or matrix_rows:
                 errors.append(
                     f"ERROR: {TRACER_ROW_RULE} Test Contracts row "
-                    f"'{acceptance_id}' is tracer mode and must leave Interface "
-                    f"version and Matrix rows blank in {path}"
+                    + f"'{acceptance_id}' is tracer mode and must leave Interface "
+                    + f"version and Matrix rows blank in {path}"
                 )
         elif mode == "contract-matrix":
             if not interface_version or not matrix_rows:
                 errors.append(
                     f"ERROR: {CONTRACT_MATRIX_ROW_RULE} Test Contracts row "
-                    f"'{acceptance_id}' is contract-matrix mode and requires both "
-                    f"Interface version and Matrix rows in {path}"
+                    + f"'{acceptance_id}' is contract-matrix mode and requires both "
+                    + f"Interface version and Matrix rows in {path}"
                 )
 
     gate_applicability = frontmatter.get("gate_applicability")
     if not isinstance(gate_applicability, dict):
         errors.append(
-            f"ERROR: gate-applicability-required frontmatter gate_applicability is "
-            f"missing or unparseable in {path}"
+            "ERROR: gate-applicability-required frontmatter gate_applicability is "
+            + f"missing or unparseable in {path}"
         )
     else:
         disposition = gate_applicability.get("disposition")
@@ -306,29 +332,29 @@ def validate(path: Path) -> list[str]:
         reason = gate_applicability.get("reason")
         if disposition not in ENUMS["gate_applicability_disposition"]:
             errors.append(
-                f"ERROR: gate-applicability-closed-class gate_applicability.disposition "
-                f"'{disposition}' is not a recognized disposition in {path}"
+                "ERROR: gate-applicability-closed-class gate_applicability.disposition "
+                + f"'{disposition}' is not a recognized disposition in {path}"
             )
         if work_class not in ENUMS["work_class"]:
             errors.append(
-                f"ERROR: gate-applicability-closed-class gate_applicability.work_class "
-                f"'{work_class}' is not a recognized work class in {path}"
+                "ERROR: gate-applicability-closed-class gate_applicability.work_class "
+                + f"'{work_class}' is not a recognized work class in {path}"
             )
         if ui_surface not in ENUMS["ui_surface"]:
             errors.append(
-                f"ERROR: gate-applicability-closed-class gate_applicability.ui_surface "
-                f"'{ui_surface}' is not a recognized UI surface in {path}"
+                "ERROR: gate-applicability-closed-class gate_applicability.ui_surface "
+                + f"'{ui_surface}' is not a recognized UI surface in {path}"
             )
         if disposition == "not-applicable":
             if not reason:
                 errors.append(
                     f"ERROR: {NOT_APPLICABLE_RULE} gate_applicability.reason is "
-                    f"required when disposition is not-applicable in {path}"
+                    + f"required when disposition is not-applicable in {path}"
                 )
             if rows:
                 errors.append(
                     f"ERROR: {NOT_APPLICABLE_RULE} gate_applicability.disposition="
-                    f"not-applicable requires zero Test Contracts rows in {path}"
+                    + f"not-applicable requires zero Test Contracts rows in {path}"
                 )
 
     return errors
@@ -336,21 +362,22 @@ def validate(path: Path) -> list[str]:
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
-    parser.add_argument("spec_path", type=Path, help="Path to the mold spec markdown file.")
+    _ = parser.add_argument("spec_path", type=Path, help="Path to the mold spec markdown file.")
     args = parser.parse_args(argv)
+    spec_path = cast(Path, args.spec_path)
 
-    if not args.spec_path.is_file():
-        print(f"ERROR: spec not found: {args.spec_path}", file=sys.stderr)
+    if not spec_path.is_file():
+        print(f"ERROR: spec not found: {spec_path}", file=sys.stderr)
         return 1
 
-    errors = validate(args.spec_path)
+    errors = validate(spec_path)
     if errors:
         for error in errors:
             print(error, file=sys.stderr)
-        print(f"\nFAIL: {len(errors)} error(s) in {args.spec_path}", file=sys.stderr)
+        print(f"\nFAIL: {len(errors)} error(s) in {spec_path}", file=sys.stderr)
         return 1
 
-    print(f"OK: {args.spec_path} is a valid mold spec")
+    print(f"OK: {spec_path} is a valid mold spec")
     return 0
 
 

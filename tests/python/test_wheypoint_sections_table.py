@@ -102,7 +102,7 @@ def test_wheypoint_skill_exists() -> None:
 
 def test_state_to_sections_table_present_with_gated_dossier_row() -> None:
     body = _read()
-    missing = []
+    missing: list[str] = []
     if not STATE_TO_SECTIONS_TABLE.search(body):
         missing.append("a state -> required Document sections table")
     if not GATED_ROW_POINTS_AT_DOSSIER.search(body):
@@ -114,7 +114,7 @@ def test_state_to_sections_table_present_with_gated_dossier_row() -> None:
 
 def test_decision_dossier_requires_all_four_elements() -> None:
     body = _read()
-    missing = []
+    missing: list[str] = []
     if not DOSSIER_PER_OPEN_FORK.search(body):
         missing.append("dossier is scoped per open fork")
     if not DOSSIER_HAS_OPTIONS.search(body):
@@ -133,7 +133,7 @@ def test_decision_dossier_requires_all_four_elements() -> None:
 
 def test_remaining_state_rows_present() -> None:
     body = _read()
-    missing = []
+    missing: list[str] = []
     if not CULTURE_ROW.search(body):
         missing.append("`next: culture` -> agenda + open-thread state")
     if not CURE_ROW.search(body):
