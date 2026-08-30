@@ -36,6 +36,7 @@ a typed fan handoff and its referenced artifacts. Their policies live in
 ## Flow
 
 1. **Contract** — confirm behaviour, non-goals, scope, gates, and applicability.
+   If `.cheese/glossary/<slug>.md` exists, use its canonical terms.
 2. **Implement** — behavior changes use inner RED → GREEN; closed N/A work
    uses its requested non-behavior implementation path. Only the applicable
    path may mutate its requested surface.
