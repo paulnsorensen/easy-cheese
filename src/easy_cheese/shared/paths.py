@@ -284,6 +284,63 @@ def artifact_path(phase: str, slug: str, *, root: Path | str | None = None) -> P
     return base / phase_dir(phase) / f"{slug}.md"
 
 
+# The `research` phase is the one phase whose artifact is a directory, not a
+# file: /briesearch writes `<corpus>/research/<slug>/<slug>.md` beside the raw
+# captures it cites (`raw/NN-host.md`) and the capture manifest. These names are
+# the single source of truth for that layout — `research_layout` composes it for
+# callers and `_phase_entries` resolves it for the slug resolver.
+RESEARCH_RAW_DIRNAME = "raw"
+RESEARCH_MANIFEST_NAME = "manifest.json"
+
+
+class ResearchLayout(TypedDict):
+    """Absolute paths making up one `/briesearch` research artifact."""
+
+    slug: str
+    corpus_root: str
+    dir: str
+    report: str
+    raw_dir: str
+    manifest: str
+
+
+def _research_dir(research_root: Path, slug: str) -> Path:
+    """The `<research-root>/<slug>/` directory holding one research artifact."""
+    return research_root / slug
+
+
+def _research_report(research_root: Path, slug: str) -> Path:
+    """The long-form report inside a research artifact directory."""
+    return _research_dir(research_root, slug) / f"{slug}.md"
+
+
+def research_layout(slug: str, *, root: Path | str | None = None) -> ResearchLayout:
+    """Every path in the nested `research/<slug>/` layout, as absolute strings.
+
+    ``artifact_path("research", slug)`` returns the flat `<root>/research/<slug>.md`
+    shape shared by every phase, and the `artifact-path research <slug>` CLI returns
+    the corpus root; neither expresses the nested directory `/briesearch` actually
+    writes. This does, so callers compose no paths of their own.
+
+    ``root`` defaults to the per-project durable corpus (``project_corpus_root``);
+    pass one to pin the layout elsewhere (e.g. a pytest ``tmp_path``).
+    """
+    err = validate_slug(slug)
+    if err is not None:
+        raise ValueError(err)
+    corpus_root = Path(root) if root is not None else project_corpus_root()
+    research_root = corpus_root / "research"
+    directory = _research_dir(research_root, slug)
+    return {
+        "slug": slug,
+        "corpus_root": str(corpus_root),
+        "dir": str(directory),
+        "report": str(_research_report(research_root, slug)),
+        "raw_dir": str(directory / RESEARCH_RAW_DIRNAME),
+        "manifest": str(directory / RESEARCH_MANIFEST_NAME),
+    }
+
+
 def parse_artifact_path(path: Path | str) -> tuple[str, str]:
     """Parse ``phase, slug`` from a canonical ``.cheese/<phase-dir>/<slug>.md`` path.
 
@@ -371,7 +428,7 @@ def _phase_entries(phase: str, repo_root: Path) -> list[tuple[str, Path]]:
     entries: list[tuple[str, Path]] = []
     if phase == "research":
         for sub in dirpath.iterdir():
-            nested = sub / f"{sub.name}.md"
+            nested = _research_report(dirpath, sub.name)
             if sub.is_dir() and nested.is_file():
                 entries.append((sub.name, nested))
         entries.extend((f.stem, f) for f in dirpath.glob("*.md"))

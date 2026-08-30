@@ -17,6 +17,9 @@ COMMANDS = (
         "easy_cheese.skills.briesearch.ground_check:main",
         "Lint a synthesis report for grounding and citation violations",
     ),
+    Command(
+        "research-layout", "easy_cheese.skills.briesearch.research_layout:main"
+    ),
 )
 
 

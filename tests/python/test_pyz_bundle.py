@@ -41,7 +41,7 @@ SKILL_SUBCOMMANDS = {
     ],
     "affinage": ["pr-status", "post-reply", "age-route", "review-surface"],
     "mold": ["artifact-path", "curd-count", "gate-graph", "render-html", "taste-test", "validate-spec"],
-    "briesearch": ["artifact-path", "ground-check"],
+    "briesearch": ["artifact-path", "ground-check", "research-layout"],
     "plate": ["stack-tools", "validate-publication"],
     "cook": [
         "artifact-path", "age-route", "baseline", "phase-decision", "milknado", "mode", "worktree",
@@ -555,6 +555,59 @@ def test_artifact_path_rejects_unknown_phase(bundles: Path) -> None:
     )
     assert result.returncode == 1
     assert "unknown phase" in result.stderr
+
+
+def test_research_layout_prints_slug_aware_paths(bundles: Path) -> None:
+    """`artifact-path research <slug>` returns only the corpus root, so every caller
+    re-derived `research/<slug>/…` by hand (#492). research-layout returns the whole
+    nested layout as JSON, anchored at the same corpus root."""
+    result = _run(
+        bundles / "briesearch.pyz",
+        "research-layout",
+        "demo-slug",
+        extra_env=_CORPUS_ENV,
+    )
+    assert result.returncode == 0, result.stderr
+    layout = cast("dict[str, str]", json.loads(result.stdout))
+    root = f"{_CORPUS_ENV['EASY_CHEESE_HOME']}/{_CORPUS_ENV['EASY_CHEESE_PROJECT']}"
+    assert layout == {
+        "slug": "demo-slug",
+        "corpus_root": root,
+        "dir": f"{root}/research/demo-slug",
+        "report": f"{root}/research/demo-slug/demo-slug.md",
+        "raw_dir": f"{root}/research/demo-slug/raw",
+        "manifest": f"{root}/research/demo-slug/manifest.json",
+    }
+
+
+def test_research_layout_rejects_invalid_slug(bundles: Path) -> None:
+    result = _run(
+        bundles / "briesearch.pyz",
+        "research-layout",
+        "Not A Slug",
+        extra_env=_CORPUS_ENV,
+    )
+    assert result.returncode == 1
+    assert "kebab-case" in result.stderr
+
+
+def test_artifact_path_research_root_unchanged_by_layout_command(
+    bundles: Path,
+) -> None:
+    """#492 required research-layout to be additive: `artifact-path research <slug>`
+    still prints the bare corpus root every existing caller substitutes into
+    "$ROOT/research/<slug>/"."""
+    result = _run(
+        bundles / "briesearch.pyz",
+        "artifact-path",
+        "research",
+        "demo-slug",
+        extra_env=_CORPUS_ENV,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == (
+        f"{_CORPUS_ENV['EASY_CHEESE_HOME']}/{_CORPUS_ENV['EASY_CHEESE_PROJECT']}"
+    )
 
 
 # briesearch ground-check: the mechanical grounding gate behind issue #113. The

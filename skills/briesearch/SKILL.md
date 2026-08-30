@@ -59,7 +59,7 @@ A provider substitution does not by itself lower confidence. Lower it only when 
 
 ## Output
 
-Cross-cutting house style and citation form: [`../cheese/references/formatting.md`](../cheese/references/formatting.md). The output contract lives in `references/synthesis.md` (single source of truth). Short shape: one-paragraph synthesis, claim-level evidence table, open questions block, confidence with one-line justification, recommended next step. For deep looks, also write the long form to the durable corpus's `research/<slug>/<slug>.md` (resolve the root via `artifact-path research <slug>` — see `references/synthesis.md`) and pass back the path.
+Cross-cutting house style and citation form: [`../cheese/references/formatting.md`](../cheese/references/formatting.md). The output contract lives in `references/synthesis.md` (single source of truth). Short shape: one-paragraph synthesis, claim-level evidence table, open questions block, confidence with one-line justification, recommended next step. For deep looks, also write the long form to the durable corpus's `research/<slug>/<slug>.md` (resolve every path via `research-layout <slug>` — see `references/synthesis.md`) and pass back the path.
 
 ## Rules
 

@@ -111,6 +111,6 @@ Short form (always returned to the caller):
 
 Long form (when the question warranted a deep look):
 
-- Resolve the durable corpus root with `ROOT=$(python3 skills/briesearch/scripts/briesearch.pyz artifact-path research <slug>)` (slug is 4-6 kebab-case words), then write the full report to `"$ROOT/research/<slug>/<slug>.md"`. The root is the per-project durable corpus (see `../../cheese/references/formatting.md` § Corpus location); briesearch owns the nested `research/<slug>/` layout composed under it.
+- Resolve every path with `python3 skills/briesearch/scripts/briesearch.pyz research-layout <slug>` (slug is 4-6 kebab-case words). It prints JSON with `corpus_root`, `dir`, `report`, `raw_dir`, and `manifest`; write the full report to `report` and never compose those paths by hand. The root is the per-project durable corpus (see `../../cheese/references/formatting.md` § Corpus location); briesearch owns the nested `research/<slug>/` layout composed under it. `artifact-path research <slug>` still returns the bare corpus root for callers that only need it.
 - Include the full claim table, raw bodies referenced from `"$ROOT/research/<slug>/raw/"` (see `context-isolation.md`), and the verification log.
 - In the chat reply: a one-paragraph summary, the report path, and the confidence line. Do not paste the full report inline — the user will see only the last collapsed message by default.

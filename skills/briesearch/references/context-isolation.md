@@ -17,7 +17,7 @@ Provider examples include Tavily crawl/research, Exa contents over many URLs, an
 ## The recipe
 
 1. **Generate a slug.** Use 4-6 kebab-case words derived from the question, matching `synthesis.md`.
-2. **Resolve the durable corpus root.** `ROOT=$(python3 skills/briesearch/scripts/briesearch.pyz artifact-path research <slug>)`. Compose paths under `"$ROOT/research/<slug>/"`.
+2. **Resolve the layout.** `python3 skills/briesearch/scripts/briesearch.pyz research-layout <slug>` prints the JSON paths (`dir`, `report`, `raw_dir`, `manifest`) for this slug. Use them verbatim; do not re-derive them.
 3. **Run the heavy provider operation from a forked sub-agent**, not the main context. Give it the routing block and `$ROOT`.
 4. **Persist raw bodies as files.** One file per result/URL:
 
