@@ -90,7 +90,7 @@ class TestReviewSurfaceSubcommand:
         )
         assert result == expected
         assert result["zeroed"] == ["Cargo.lock"]
-        assert result["score"] == pytest.approx(  # pyright: ignore[reportUnknownMemberType]
+        assert result["score"] == pytest.approx(
             2.0 + review_surface.FILE_COST * 1.0
         )
 
@@ -112,7 +112,7 @@ class TestTomlOverride:
         result = cast(ReviewScore, json.loads(capsys.readouterr().out))
         # Cargo.lock now weighs 1.0 instead of the module default's 0.0.
         assert result["zeroed"] == []
-        assert result["score"] == pytest.approx(  # pyright: ignore[reportUnknownMemberType]
+        assert result["score"] == pytest.approx(
             review_surface.score(
                 [("a.txt", 2, 0), ("Cargo.lock", 5, 0)],
                 weights=(("*.lock", 1.0),),
@@ -124,8 +124,8 @@ class TestTomlOverride:
         result = cast(ReviewScore, json.loads(capsys.readouterr().out))
         # Independent literal (not computed by calling score()) so this
         # test can actually fail if _cmd_score stops using module defaults.
-        assert result["weighted_files"] == pytest.approx(1.0)  # pyright: ignore[reportUnknownMemberType]
-        assert result["weighted_lines"] == pytest.approx(2.0)  # pyright: ignore[reportUnknownMemberType]
+        assert result["weighted_files"] == pytest.approx(1.0)
+        assert result["weighted_lines"] == pytest.approx(2.0)
         assert result["zeroed"] == ["Cargo.lock"]
         assert result["weights_source"] == "defaults"
 
@@ -239,7 +239,7 @@ class TestLoadWeightOverrideEdgeShapes:
         rows = [("pnpm-lock.yaml", 400, 276)]
         scored = review_surface.score(rows, weights=result)
         assert scored["zeroed"] == []
-        assert scored["score"] == pytest.approx(  # pyright: ignore[reportUnknownMemberType]
+        assert scored["score"] == pytest.approx(
             676.0 + review_surface.FILE_COST * 1.0
         )
 

@@ -62,11 +62,11 @@ class TestScore:
         weighted_lines = 0.0 * 150 + 0.25 * 30 + 1.0 * 35
         weighted_files = 0.0 + 0.25 + 1.0
         expected = weighted_lines + review_surface.FILE_COST * weighted_files
-        assert result["score"] == pytest.approx(expected)  # pyright: ignore[reportUnknownMemberType]
-        assert result["weighted_lines"] == pytest.approx(  # pyright: ignore[reportUnknownMemberType]
+        assert result["score"] == pytest.approx(expected)
+        assert result["weighted_lines"] == pytest.approx(
             weighted_lines
         )
-        assert result["weighted_files"] == pytest.approx(  # pyright: ignore[reportUnknownMemberType]
+        assert result["weighted_files"] == pytest.approx(
             weighted_files
         )
 
