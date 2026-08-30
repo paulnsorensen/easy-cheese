@@ -85,25 +85,9 @@ bats tests/bash/test_install.bats
 
 Please run the full test suite before opening a PR.
 
-## Release channels
-
-The repo runs two branches:
-
-- **`next`** — integration/soak channel. Every pull request targets
-  `next` (`gh pr create --base next`) and is squash-merged there.
-- **`main`** — stable channel and default branch. It advances **only**
-  by fast-forward promotion from `next` (`just promote`); nothing merges
-  to `main` directly. Never open a promotion PR — a squash-merge to
-  `main` would rewrite the promoted SHAs and permanently break
-  fast-forward parity between the branches.
-
-Releases are tagged on `main` after a promotion, so published tags only
-ever contain soaked changes.
-
 ## Submitting a pull request
 
-1. Fork the repo and create a topic branch from `next`, and open your
-   PR against `next` (not `main`).
+1. Fork the repo and create a topic branch from `main`.
 2. Make your change. Keep commits focused; one concern per commit is
    easier to review than a kitchen-sink commit.
 3. Use [Conventional Commits](https://www.conventionalcommits.org)

@@ -8,9 +8,6 @@ version: 2
 updates:
   - package-ecosystem: github-actions
     directory: /
-    # All PRs land on the next soak channel; main only advances by
-    # fast-forward promotion (see CONTRIBUTING.md "Release channels").
-    target-branch: next
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
@@ -20,7 +17,6 @@ updates:
 
   - package-ecosystem: pip
     directory: /
-    target-branch: next
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
@@ -30,7 +26,6 @@ updates:
 
   - package-ecosystem: pip
     directory: /docs
-    target-branch: next
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
