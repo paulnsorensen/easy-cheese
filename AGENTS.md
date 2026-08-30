@@ -20,6 +20,14 @@ Do NOT commit or push when `just check` fails. If CI fails, pull the branch loca
 - [`uv`](https://github.com/astral-sh/uv) — `lint-py-fix` invokes `uvx ruff` (no global ruff install needed)
 - `yamllint`, `yamlfmt`, `markdownlint-cli2`, `shellcheck`, `bats` — see README for install hints
 
+## Release channels: PRs target `next`, never `main`
+
+All pull requests use `--base next` (the integration/soak channel) and
+squash-merge there. `main` is the stable channel and advances only by
+fast-forward promotion (`just promote`). Do not open PRs against `main`
+and never squash-merge `next` into `main` — that breaks fast-forward
+parity. See CONTRIBUTING.md "Release channels".
+
 ## Skills in this repo
 
 This is a skills-only collection following the [Agent Skills spec](https://agentskills.io/specification). Every change either adds, edits, or supports a skill under `skills/<name>/`.

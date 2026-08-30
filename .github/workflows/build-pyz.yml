@@ -16,8 +16,8 @@ on:
       - 'requirements-build.txt'
       - 'requirements/**/*.txt'
   push:
-    branches: [main]
-    # Keep the check on main too so stale bundles are visible after merges.
+    branches: [main, next]
+    # Keep the check on main/next too so stale bundles are visible after merges.
     paths:
       - '.github/workflows/build-pyz.yml'
       - 'src/**'

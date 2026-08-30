@@ -3,7 +3,7 @@ name: validate
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, next]
 
 permissions:
   contents: read

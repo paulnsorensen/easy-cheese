@@ -1,14 +1,14 @@
 # CodeQL — GitHub's semantic code analysis for finding security
-# vulnerabilities and code quality issues. Runs on PRs, pushes to main,
+# vulnerabilities and code quality issues. Runs on PRs, pushes to main/next,
 # and weekly to catch newly disclosed query updates.
 # See: https://github.com/github/codeql-action
 name: codeql
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, next]
   push:
-    branches: [main]
+    branches: [main, next]
   schedule:
     - cron: "32 5 * * 1"
 
