@@ -493,7 +493,7 @@ class WikiProbe(NamedTuple):
     """
 
     corpus: str | None
-    reachable: bool  # noqa: V107
+    reachable: bool
 
 
 def _wiki_corpus(list_corpora: Callable[[], list[str]] | None) -> WikiProbe:
@@ -538,14 +538,33 @@ def _wiki_has_model(
         return None
 
 
+class DomainModelTarget(NamedTuple):
+    """Where the project domain model lives, and whether the wiki was consulted.
+
+    ``wiki_reachable`` is ``False`` when the hallouminate probe could not be
+    consulted at all — no ``list_corpora`` hook injected, or one that raised.
+    A ``("file", ...)`` result carrying ``wiki_reachable=False`` is therefore a
+    *degraded* resolution, not a confirmed absence of a wiki model: the caller
+    must "degrade to 'not loaded' and say so"
+    (skills/mold/references/modes.md) before writing, instead of silently
+    forking a second store beside a wiki model it never saw. A listed-but-empty
+    wiki (``reachable=True, corpus=None``) is a real answer and keeps
+    ``wiki_reachable=True``.
+    """
+
+    backend: str
+    location: str | Path
+    wiki_reachable: bool
+
+
 def domain_model_target(
     *,
     repo_root: Path | str | None = None,
     project: str | None = None,
     list_corpora: Callable[[], list[str]] | None = None,
     wiki_has_model: Callable[[str], bool] | None = None,
-) -> tuple[str, str | Path]:
-    """Resolve where the project domain model lives: ``(backend, location)``.
+) -> DomainModelTarget:
+    """Resolve where the project domain model lives: ``(backend, location, wiki_reachable)``.
 
     Mirrors the ADR resolver (skills/mold/references/adr.md): an existing model
     always wins, so the full read-probe cascade runs before any create decision:
@@ -576,23 +595,33 @@ def domain_model_target(
     leg degrades gracefully rather than blocking resolution. The wiki corpus
     name is shape-matched from the probe's listing, never hardcoded or
     reconstructed from ``repo_root.name``.
+
+    The third element, ``wiki_reachable``, carries whether the ``list_corpora``
+    probe was consulted at all. Without it a raising probe would be
+    indistinguishable from a listing that simply holds no wiki corpus — both
+    fall through to the file stores — and the caller could not honour the loud
+    degrade the ADR/Ground contract requires
+    (skills/mold/references/adr.md § Resolution).
     """
     repo = _resolve_repo_root(repo_root)
     docs_root = repo / "docs"
     xdg_root = project_corpus_root(project)
 
-    wiki = _wiki_corpus(list_corpora).corpus
+    probe = _wiki_corpus(list_corpora)
+    wiki = probe.corpus
     if wiki is not None and _wiki_has_model(wiki_has_model, wiki) is True:
-        return ("hallouminate", wiki)
+        return DomainModelTarget("hallouminate", wiki, probe.reachable)
 
     # Read-probe the file stores in full: an existing model wins over a create.
     for store_root in (docs_root, xdg_root):
         existing = _existing_domain_model(store_root)
         if existing is not None:
-            return ("file", existing)
+            return DomainModelTarget("file", existing, probe.reachable)
 
     # Create (first write): wiki corpus if present, else tracked docs/, else XDG.
     if wiki is not None:
-        return ("hallouminate", wiki)
+        return DomainModelTarget("hallouminate", wiki, probe.reachable)
     create_root = docs_root if docs_root.is_dir() else xdg_root
-    return ("file", create_root / f"{DOMAIN_MODEL_STEM}.md")
+    return DomainModelTarget(
+        "file", create_root / f"{DOMAIN_MODEL_STEM}.md", probe.reachable
+    )
