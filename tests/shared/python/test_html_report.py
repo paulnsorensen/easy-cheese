@@ -147,6 +147,13 @@ class TestInline:
         assert 'href="javascript' not in out
         assert "<p>x)</p>" in out
 
+    def test_dangerous_scheme_with_ascii_control_is_plain_text(
+        self, hr: _HtmlReportModule
+    ) -> None:
+        out = hr.render("[x](java\tscript:alert(1))", title="t")
+        assert "href=" not in out
+        assert "<p>x)</p>" in out
+
 
 class TestEscaping:
     def test_prose_angle_and_amp_escaped(self, hr: _HtmlReportModule) -> None:
@@ -203,10 +210,10 @@ class TestClosedSubsetContract:
         assert "<p>[ref]: https://example.com</p>" in out
         assert "<a href=" not in out
 
-    def test_image_renders_as_a_link_with_a_literal_bang(self, hr: _HtmlReportModule) -> None:
-        # No image support: the inline-link rule matches and the '!' stays text.
+    def test_image_stays_literal(self, hr: _HtmlReportModule) -> None:
         out = hr.render("![img](a.png)", title="t")
-        assert '<p>!<a href="a.png">img</a></p>' in out
+        assert "<p>![img](a.png)</p>" in out
+        assert "<a " not in out
         assert "<img" not in out
 
     def test_strikethrough_and_definition_list_stay_literal(

@@ -93,7 +93,7 @@ _CODE_SPAN = re.compile(r"`([^`]+)`")
 _BOLD = re.compile(r"\*\*(.+?)\*\*")
 _ITALIC_STAR = re.compile(r"\*([^*]+)\*")
 _ITALIC_UNDER = re.compile(r"_([^_]+)_")
-_LINK = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
+_LINK = re.compile(r"(?<!!)\[([^\]]+)\]\(([^)]+)\)")
 _LINK_TOKEN = re.compile("\x00(\\d+)\x00")
 _URL_SCHEME = re.compile(r"^([a-zA-Z][a-zA-Z0-9+.\-]*):")
 _ALLOWED_SCHEMES = {"http", "https", "mailto"}
@@ -342,9 +342,11 @@ def _emphasis(s: str) -> str:
 
 
 def _url_is_safe(url: str) -> bool:
-    """Allow http/https/mailto and relative/scheme-relative URLs; reject javascript:, data:, etc."""
-    m = _URL_SCHEME.match(url.strip())
-    return m is None or m.group(1).lower() in _ALLOWED_SCHEMES
+    """Allow http/https/mailto and relative URLs without ASCII controls."""
+    if any(ord(char) < 0x20 or ord(char) == 0x7F for char in url):
+        return False
+    match = _URL_SCHEME.match(url.strip())
+    return match is None or match.group(1).lower() in _ALLOWED_SCHEMES
 
 
 def _render_link(anchor: str, url: str) -> str:
