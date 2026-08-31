@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { injectToc, isSkillPageHref, ANCHOR_CLASS } from '../../src/components/sidebar-toc.mjs';
+import { injectToc, isSkillPageHref, ANCHOR_CLASS } from '../../website/components/sidebar-toc.mjs';
 
 const isActive = (entry) => entry.isCurrent;
 
