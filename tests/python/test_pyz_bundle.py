@@ -64,7 +64,7 @@ SKILL_SUBCOMMANDS = {
     ],
     "hard-cheese": ["append-attempt", "freshness-check"],
     "pasteurize": ["debug-tag-sweep", "repro-rerun", "pasteurize-route"],
-    "press": ["press-route"],
+    "press": ["press-route", "press-telemetry"],
 }
 
 # Every skill that registers the durable-corpus resolver shim. One shared source
@@ -387,6 +387,33 @@ def test_briesearch_bundle_uses_internal_distributions(bundles: Path) -> None:
     assert not any(name.startswith("easy_cheese/skills/mold/") for name in content)
 
 
+
+
+def test_press_bundle_emits_a_telemetry_record(bundles: Path) -> None:
+    request = json.dumps(
+        {
+            "slug": "outer-tdd-gates",
+            "attempt": 2,
+            "outcome": "green",
+            "repair_cycles": 1,
+            "tool_errors": [
+                {"phase": "attack", "operation": "pytest"},
+                {"phase": "attack", "operation": "pytest"},
+            ],
+            "delegations": [{"role": "reviewer", "purpose": "replay the digest"}],
+            "changed_files": ["tests/test_widget.py", "src/widget.py"],
+        }
+    )
+
+    result = _run(bundles / "press.pyz", "press-telemetry", stdin=request)
+
+    assert result.returncode == 0, result.stderr
+    record = cast(dict[str, object], json.loads(result.stdout))
+    assert record["operations"] == [
+        {"phase": "attack", "operation": "pytest", "errors": 2, "recurring": True}
+    ]
+    assert record["production_source_files"] == ["src/widget.py"]
+    assert record["boundary_consistent"] is False
 
 
 def test_press_bundle_loads_router_and_rejects_receipt_keys(bundles: Path) -> None:

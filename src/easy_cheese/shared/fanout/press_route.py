@@ -42,7 +42,8 @@ Action: TypeAlias = Continue | Dispatch | Stop
 _MAX_REPAIR_CYCLES = 2
 
 
-def _coerce_outcome(outcome: object) -> Outcome:
+def coerce_outcome(outcome: object) -> Outcome:
+    """Resolve the single Press outcome vocabulary from an untrusted value."""
     if isinstance(outcome, Outcome):
         return outcome
     if not isinstance(outcome, str):
@@ -67,7 +68,7 @@ def _check_repair_cycles(repair_cycles: int) -> None:
 
 def press_route(outcome: Outcome | str, repair_cycles: int) -> Action:
     """Return the only action permitted at a Press decision boundary."""
-    resolved = _coerce_outcome(outcome)
+    resolved = coerce_outcome(outcome)
     _check_repair_cycles(repair_cycles)
 
     if resolved is Outcome.GREEN:
@@ -87,5 +88,6 @@ __all__ = [
     "Dispatch",
     "Outcome",
     "Stop",
+    "coerce_outcome",
     "press_route",
 ]
