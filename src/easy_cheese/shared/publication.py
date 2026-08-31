@@ -26,6 +26,7 @@ from easy_cheese_schemas import (
     NORMALIZATION_RECEIPT_SCHEMA_URI,
     AcceptedArtifact,
     ArtifactRef,
+    CanonicalArtifact,
     ContractValidationError,
     HandoffPointer,
     IngressKind,
@@ -43,6 +44,7 @@ from easy_cheese_schemas import (
 
 __all__ = [
     "AmbiguousSyntaxRepairError",
+    "CorruptLeftoverError",
     "IdempotencyConflictError",
     "PayloadDigestMismatchError",
     "PointerNotFoundError",
@@ -50,6 +52,8 @@ __all__ = [
     "UnsafeArtifactUriError",
     "accept",
     "publish",
+    "publish_canonical",
+    "request_digest",
     "syntax_normalize",
 ]
 
@@ -64,6 +68,15 @@ class AmbiguousSyntaxRepairError(ValueError):
 
 class IdempotencyConflictError(ValueError):
     """``operation_id`` replayed with a request that does not match."""
+
+
+class CorruptLeftoverError(ValueError):
+    """A prepared payload or receipt file does not match its content digest.
+
+    Raised on retry after an interrupted publication when a leftover file was
+    tampered with between the crash and the retry; the corrupt file is
+    removed before this is raised, so a further retry starts clean.
+    """
 
 
 class PointerNotFoundError(ValueError):
@@ -228,7 +241,17 @@ def _digest_text(text: str) -> str:
     return f"sha256:{hashlib.sha256(text.encode('utf-8')).hexdigest()}"
 
 
-def _request_digest(raw_text: str, invocation: Mapping[str, object]) -> str:
+def _digest_bytes(content: bytes) -> str:
+    return f"sha256:{hashlib.sha256(content).hexdigest()}"
+
+
+def request_digest(raw_text: str, invocation: Mapping[str, object]) -> str:
+    """Digest binding a request to its exact raw text and invocation context.
+
+    Two publications sharing an ``operation_id`` are the same request only if
+    this digest matches; both :func:`publish` and
+    ``easy_cheese.shared.migrate.migrate`` bind idempotency to it.
+    """
     envelope = json.dumps(
         {"invocation": invocation, "raw_text": raw_text},
         sort_keys=True,
@@ -293,14 +316,25 @@ def _content_path(directory: Path, digest: str) -> Path:
 
 
 def _retain_content(directory: Path, digest: str, content: bytes) -> Path:
+    """Write ``content`` at its digest-addressed path, revalidating a leftover.
+
+    A file already at this path was fully written by a prior attempt (writes
+    are atomic), so it must match ``digest`` exactly. If it does not --
+    tampered after the fact -- the leftover is removed and rejected rather
+    than silently overwritten, so a caller learns of the corruption instead of
+    a retry quietly proceeding on it.
+    """
     path = _content_path(directory, digest)
-    if not path.exists() or _digest_bytes(path.read_bytes()) != digest:
-        _atomic_write(path, content)
+    if path.exists():
+        existing = path.read_bytes()
+        if _digest_bytes(existing) == digest:
+            return path
+        path.unlink()
+        raise CorruptLeftoverError(
+            f"prepared content at {path} does not match digest {digest}; removed"
+        )
+    _atomic_write(path, content)
     return path
-
-
-def _digest_bytes(content: bytes) -> str:
-    return f"sha256:{hashlib.sha256(content).hexdigest()}"
 
 
 def _uri_to_path(uri: str, artifact_root: Path) -> Path:
@@ -346,31 +380,29 @@ def _rehydrate(
     )
 
 
-def publish(
-    raw_text: str,
-    invocation: Mapping[str, object],
+def publish_canonical(
     *,
+    request_digest: str,
     source_phase: str,
     destination_phase: str,
     payload_schema_uri: str,
     operation_id: str,
     artifact_root: str | Path,
+    prepare: Callable[[], tuple[CanonicalArtifact, NormalizationReceipt | None]],
     _before_reveal: Callable[[], None] | None = None,
 ) -> PublishedArtifact:
-    """Validate, persist, and reveal one canonical Mold-to-Cook handoff.
+    """Validate a route, persist canonical content, and reveal one pointer.
 
-    Runs ``raw_text`` through :func:`syntax_normalize` then the existing
-    semantics-strict ``normalize_agent_output``, validates the canonical
-    payload against ``payload_schema_uri`` and the route against the compiled
-    phase registry, writes the payload (and receipt, if any syntax repair
-    happened) as immutable content-addressed files, and only then atomically
-    reveals the ``HandoffPointer`` for ``operation_id``. A replayed
-    ``operation_id`` with the same request returns the same
-    :class:`PublishedArtifact`; a replay with a different request raises
-    :class:`IdempotencyConflictError`.
+    The shared second half of every Mold-to-Cook publication: an idempotency
+    check against ``operation_id``, then -- only for a genuinely new request
+    -- ``prepare()`` supplies the already-canonical payload and its optional
+    receipt, the route is validated against the compiled phase registry, both
+    are written as immutable content-addressed files, and the
+    ``HandoffPointer`` is atomically revealed last. :func:`publish` and
+    ``easy_cheese.shared.migrate.migrate`` both call this rather than
+    duplicating pointer-reveal logic.
     """
     root = Path(artifact_root)
-    request_digest = _request_digest(raw_text, invocation)
     pointer_path = root / "pointers" / f"{operation_id}.json"
     if pointer_path.exists():
         existing = _read_pointer(pointer_path)
@@ -380,13 +412,7 @@ def publish(
             )
         return _rehydrate(existing, payload_schema_uri, root)
 
-    normalized_text, actions = syntax_normalize(raw_text)
-    canonical = normalize_agent_output(normalized_text, invocation)
-    validated = validate_contract(
-        canonical.canonical_bytes,
-        payload_schema_uri,
-        supported_version_for(payload_schema_uri),
-    )
+    validated, receipt = prepare()
     _ = validate_transition(
         COMPILED_TRANSITION_REGISTRY, source_phase, destination_phase, payload_schema_uri
     )
@@ -406,14 +432,7 @@ def publish(
     )
 
     receipt_ref: ArtifactRef | None = None
-    if actions:
-        receipt = NormalizationReceipt(
-            ingress_kind=IngressKind.WRITER_VIEW,
-            normalizer_id="easy_cheese.shared.publication:syntax_normalize",
-            source_digest=_digest_text(raw_text),
-            canonical_digest=payload_digest,
-            actions=actions,
-        )
+    if receipt is not None:
         receipt_bytes = canonical_bytes(receipt)
         receipt_digest = canonical_digest(receipt)
         receipt_path = _retain_content(root / "receipts", receipt_digest, receipt_bytes)
@@ -451,6 +470,59 @@ def publish(
         return _rehydrate(existing, payload_schema_uri, root)
     return PublishedArtifact(
         pointer=pointer, canonical=validated, normalization_receipt=receipt_ref
+    )
+
+
+def publish(
+    raw_text: str,
+    invocation: Mapping[str, object],
+    *,
+    source_phase: str,
+    destination_phase: str,
+    payload_schema_uri: str,
+    operation_id: str,
+    artifact_root: str | Path,
+    _before_reveal: Callable[[], None] | None = None,
+) -> PublishedArtifact:
+    """Validate, persist, and reveal one canonical Mold-to-Cook handoff.
+
+    Runs ``raw_text`` through :func:`syntax_normalize` then the existing
+    semantics-strict ``normalize_agent_output``, then hands the canonical
+    result to :func:`publish_canonical` for route validation, immutable
+    persistence, and pointer-last reveal. A replayed ``operation_id`` with the
+    same request returns the same :class:`PublishedArtifact`; a replay with a
+    different request raises :class:`IdempotencyConflictError`.
+    """
+    req_digest = request_digest(raw_text, invocation)
+
+    def _prepare() -> tuple[CanonicalArtifact, NormalizationReceipt | None]:
+        normalized_text, actions = syntax_normalize(raw_text)
+        canonical = normalize_agent_output(normalized_text, invocation)
+        validated = validate_contract(
+            canonical.canonical_bytes,
+            payload_schema_uri,
+            supported_version_for(payload_schema_uri),
+        )
+        receipt = None
+        if actions:
+            receipt = NormalizationReceipt(
+                ingress_kind=IngressKind.WRITER_VIEW,
+                normalizer_id="easy_cheese.shared.publication:syntax_normalize",
+                source_digest=_digest_text(raw_text),
+                canonical_digest=canonical_digest(validated.value),
+                actions=actions,
+            )
+        return validated, receipt
+
+    return publish_canonical(
+        request_digest=req_digest,
+        source_phase=source_phase,
+        destination_phase=destination_phase,
+        payload_schema_uri=payload_schema_uri,
+        operation_id=operation_id,
+        artifact_root=artifact_root,
+        prepare=_prepare,
+        _before_reveal=_before_reveal,
     )
 
 

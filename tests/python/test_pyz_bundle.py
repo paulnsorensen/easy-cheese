@@ -40,7 +40,7 @@ SKILL_SUBCOMMANDS = {
         "lockfile-resolve",
     ],
     "affinage": ["pr-status", "post-reply", "age-route", "review-surface"],
-    "mold": ["artifact-path", "curd-count", "gate-graph", "publish", "render-html", "taste-test", "validate-spec"],
+    "mold": ["artifact-path", "curd-count", "gate-graph", "migrate", "publish", "render-html", "taste-test", "validate-spec"],
     "briesearch": ["artifact-path", "ground-check"],
     "plate": ["stack-tools", "validate-publication"],
     "cook": [

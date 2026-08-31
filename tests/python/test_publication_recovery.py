@@ -1,0 +1,126 @@
+"""Unit coverage for crash-then-retry recovery in the publication gateway.
+
+:func:`publish_canonical` writes payload and receipt files at digest-addressed
+paths before revealing the pointer, so an interrupted publication leaves
+intact leftovers a retry can reuse. A leftover that was tampered with between
+the crash and the retry must be rejected as :class:`CorruptLeftoverError`,
+not silently overwritten -- and the rejection must clean the tampered file so
+a further retry starts clean.
+"""
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+from easy_cheese_schemas import (
+    CanonicalArtifact,
+    NormalizationReceipt,
+    PublishedArtifact,
+    canonical_digest,
+    supported_version_for,
+    validate_contract,
+)
+
+from easy_cheese.shared import publication
+
+CURD_PLAN_SCHEMA_URI = "https://schemas.easy-cheese.dev/curd-plan"
+
+_UNSIGNED_DOC: dict[str, object] = {
+    "contract_version": {
+        "schema_uri": CURD_PLAN_SCHEMA_URI,
+        "major": "1",
+        "minor": "0",
+    },
+    "plan_id": "curdplan-recovery-1",
+    "revision": 1,
+    "objective": "Ship the approved behavior",
+    "curds": [
+        {
+            "curd_id": "runtime",
+            "outcome": "Implement strict validation",
+            "scope": {"paths": ["src/runtime.py"], "excluded_paths": []},
+            "inputs": [],
+            "outputs": ["Validated contract"],
+            "dependencies": [],
+            "criteria": [
+                {
+                    "criterion_id": "recovery-1",
+                    "description": "Unknown fields reject",
+                    "check": "uv run pytest tests/test_runtime.py",
+                }
+            ],
+            "lineage": {"identity_action": "new", "source_curd_ids": []},
+        }
+    ],
+    "context": None,
+    "parent_plan_ref": None,
+}
+
+DOC: dict[str, object] = {**_UNSIGNED_DOC, "digest": canonical_digest(_UNSIGNED_DOC)}
+
+
+def _prepare() -> tuple[CanonicalArtifact, NormalizationReceipt | None]:
+    validated = validate_contract(
+        DOC, CURD_PLAN_SCHEMA_URI, supported_version_for(CURD_PLAN_SCHEMA_URI)
+    )
+    return validated, None
+
+
+def _publish_canonical(
+    tmp_path: Path,
+    *,
+    operation_id: str,
+    _before_reveal: object = None,
+) -> PublishedArtifact:
+    return publication.publish_canonical(
+        request_digest=publication.request_digest("raw", {"operation_id": operation_id}),
+        source_phase="mold",
+        destination_phase="cook",
+        payload_schema_uri=CURD_PLAN_SCHEMA_URI,
+        operation_id=operation_id,
+        artifact_root=tmp_path,
+        prepare=_prepare,
+        _before_reveal=_before_reveal,  # pyright: ignore[reportArgumentType]
+    )
+
+
+def test_crash_then_retry_succeeds_with_intact_leftovers(tmp_path: Path) -> None:
+    def _boom() -> None:
+        raise RuntimeError("simulated crash before pointer reveal")
+
+    with pytest.raises(RuntimeError, match="simulated crash"):
+        _ = _publish_canonical(tmp_path, operation_id="op-crash", _before_reveal=_boom)
+
+    pointer_path = tmp_path / "pointers" / "op-crash.json"
+    assert not pointer_path.exists()
+    payload_paths = list((tmp_path / "payloads").glob("*.json"))
+    assert payload_paths
+    leftover_bytes = payload_paths[0].read_bytes()
+
+    artifact = _publish_canonical(tmp_path, operation_id="op-crash")
+    assert pointer_path.exists()
+    assert artifact.pointer.operation_id == "op-crash"
+    assert payload_paths[0].read_bytes() == leftover_bytes
+
+
+def test_crash_tamper_retry_raises_corrupt_leftover_and_cleans(tmp_path: Path) -> None:
+    def _boom() -> None:
+        raise RuntimeError("simulated crash before pointer reveal")
+
+    with pytest.raises(RuntimeError, match="simulated crash"):
+        _ = _publish_canonical(tmp_path, operation_id="op-tamper", _before_reveal=_boom)
+
+    payload_paths = list((tmp_path / "payloads").glob("*.json"))
+    assert payload_paths
+    tampered_path = payload_paths[0]
+    _ = tampered_path.write_bytes(b"not the original content")
+
+    with pytest.raises(publication.CorruptLeftoverError):
+        _ = _publish_canonical(tmp_path, operation_id="op-tamper")
+
+    assert not tampered_path.exists()
+
+    artifact = _publish_canonical(tmp_path, operation_id="op-tamper")
+    assert (tmp_path / "pointers" / "op-tamper.json").exists()
+    assert artifact.pointer.operation_id == "op-tamper"
+    assert tampered_path.exists()

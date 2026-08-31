@@ -28,6 +28,13 @@ def _gate_graph(argv: list[str]) -> int:
     return main(argv)
 
 
+@bundle_command("migrate")
+def _migrate(argv: list[str]) -> int:
+    from easy_cheese.skills.mold.contract_handlers import migrate_main
+
+    return migrate_main(argv)
+
+
 @bundle_command("publish")
 def _publish(argv: list[str]) -> int:
     from easy_cheese.skills.mold.contract_handlers import publish_main
@@ -60,6 +67,7 @@ COMMANDS = (
     derive_command(_artifact_path),
     derive_command(_curd_count),
     derive_command(_gate_graph),
+    derive_command(_migrate),
     derive_command(_publish),
     derive_command(_render_html),
     derive_command(_taste_test),
