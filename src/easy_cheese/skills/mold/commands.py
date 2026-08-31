@@ -28,6 +28,13 @@ def _gate_graph(argv: list[str]) -> int:
     return main(argv)
 
 
+@bundle_command("publish")
+def _publish(argv: list[str]) -> int:
+    from easy_cheese.skills.mold.contract_handlers import publish_main
+
+    return publish_main(argv)
+
+
 @bundle_command("render-html")
 def _render_html(argv: list[str]) -> int:
     from easy_cheese.shared.html_report_cli import main
@@ -53,6 +60,7 @@ COMMANDS = (
     derive_command(_artifact_path),
     derive_command(_curd_count),
     derive_command(_gate_graph),
+    derive_command(_publish),
     derive_command(_render_html),
     derive_command(_taste_test),
     derive_command(_validate_spec),
