@@ -78,8 +78,7 @@ def migrate(
     adapter = adapter_for(source_schema_uri, source_major, source_minor)
     if adapter is None:
         raise UnsupportedLegacySourceError(
-            f"no adapter registered for {source_schema_uri}@"
-            f"{source_major}.{source_minor}"
+            f"no adapter registered for {source_schema_uri}@{source_major}.{source_minor}"
         )
 
     req_digest = request_digest(

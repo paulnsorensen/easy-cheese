@@ -318,7 +318,7 @@ class TestDistributionMetadata:
 
 
 class TestAdapterSunsets:
-    _SOURCE_SCHEMA_URI = "https://schemas.easy-cheese.dev/test-fixtures/sunset-fixture"
+    _SOURCE_SCHEMA_URI: str = "https://schemas.easy-cheese.dev/test-fixtures/sunset-fixture"
 
     def teardown_method(self) -> None:
         unregister_adapter(self._SOURCE_SCHEMA_URI, "0", "1")

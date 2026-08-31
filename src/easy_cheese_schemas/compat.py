@@ -436,7 +436,7 @@ def register_adapter(adapter: LegacyAdapter) -> None:
 
 
 def unregister_adapter(source_schema_uri: str, source_major: str, source_minor: str) -> None:
-    _ADAPTERS.pop((source_schema_uri, source_major, source_minor), None)
+    _ = _ADAPTERS.pop((source_schema_uri, source_major, source_minor), None)
 
 
 def adapter_for(
@@ -469,7 +469,7 @@ def check_adapter_sunsets(reference_date: date) -> None:
     if expired:
         names = ", ".join(
             f"{adapter.source_schema_uri}@{adapter.source_major}.{adapter.source_minor}"
-            f" (remove_after {adapter.remove_after})"
+            + f" (remove_after {adapter.remove_after})"
             for adapter in expired
         )
         raise AdapterSunsetError(f"expired legacy adapters still registered: {names}")

@@ -12,7 +12,12 @@ from typing import cast
 
 import pytest
 
-from easy_cheese_schemas import CanonicalArtifact, supported_version_for, validate_contract
+from easy_cheese_schemas import (
+    CanonicalArtifact,
+    CurdPlan,
+    supported_version_for,
+    validate_contract,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
@@ -101,7 +106,7 @@ def test_mold_pyz_dispatches_migrate_end_to_end(tmp_path: Path) -> None:
         payload_bytes, CURD_PLAN_SCHEMA_URI, supported_version_for(CURD_PLAN_SCHEMA_URI)
     )
     assert isinstance(validated, CanonicalArtifact)
-    payload = validated.value
+    payload = cast(CurdPlan, validated.value)
     assert payload.objective == LEGACY_DOC["goal"]
     assert payload.curds[0].curd_id == "runtime"
 

@@ -113,7 +113,7 @@ def test_crash_tamper_retry_raises_corrupt_leftover_and_cleans(tmp_path: Path) -
     payload_paths = list((tmp_path / "payloads").glob("*.json"))
     assert payload_paths
     tampered_path = payload_paths[0]
-    tampered_path.write_bytes(b"not the original content")
+    _ = tampered_path.write_bytes(b"not the original content")
 
     with pytest.raises(publication.CorruptLeftoverError):
         _ = _publish_canonical(tmp_path, operation_id="op-tamper")
