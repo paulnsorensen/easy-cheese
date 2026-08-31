@@ -135,8 +135,8 @@ def test_cook_pyz_accepts_a_receipt_bearing_pointer(tmp_path: Path) -> None:
 def test_cook_pyz_rejects_tampered_payload(tmp_path: Path) -> None:
     pointer_path, pointer = _publish(tmp_path, "op-tampered-payload")
     payload = cast(dict[str, object], pointer["payload"])
-    payload_path = Path(payload["uri"].removeprefix("file://"))  # type: ignore[union-attr]
-    body = json.loads(payload_path.read_text(encoding="utf-8"))
+    payload_path = Path(cast(str, payload["uri"]).removeprefix("file://"))
+    body = cast(dict[str, object], json.loads(payload_path.read_text(encoding="utf-8")))
     body["objective"] = "Tampered after publication"
     _ = payload_path.write_text(json.dumps(body), encoding="utf-8")
     result = _accept(pointer_path)
@@ -157,7 +157,7 @@ def test_cook_pyz_rejects_missing_receipt_file(tmp_path: Path) -> None:
     raw_text = json.dumps(DOC)[:-1] + ",}"
     pointer_path, pointer = _publish(tmp_path, "op-missing-receipt", raw_text=raw_text)
     receipt = cast(dict[str, object], pointer["normalization_receipt"])
-    receipt_path = Path(receipt["uri"].removeprefix("file://"))  # type: ignore[union-attr]
+    receipt_path = Path(cast(str, receipt["uri"]).removeprefix("file://"))
     receipt_path.unlink()
     result = _accept(pointer_path)
     assert result.returncode == 1, result.stdout + result.stderr
@@ -187,7 +187,7 @@ def test_cook_pyz_rejects_bare_payload(tmp_path: Path) -> None:
 def test_cook_pyz_rejects_missing_payload_file(tmp_path: Path) -> None:
     pointer_path, pointer = _publish(tmp_path, "op-missing-payload")
     payload = cast(dict[str, object], pointer["payload"])
-    payload_path = Path(payload["uri"].removeprefix("file://"))  # type: ignore[union-attr]
+    payload_path = Path(cast(str, payload["uri"]).removeprefix("file://"))
     payload_path.unlink()
     result = _accept(pointer_path)
     assert result.returncode == 1, result.stdout + result.stderr
