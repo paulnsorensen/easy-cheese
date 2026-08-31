@@ -1,0 +1,29 @@
+{
+  "expect_first_pass_valid": true,
+  "invocation": {
+    "coverage": [
+      {
+        "disposition": "covered",
+        "target": "changed-files"
+      }
+    ],
+    "review_id": "review-benchmark",
+    "versions": {
+      "https://schemas.easy-cheese.dev/review-result": {
+        "major": "1",
+        "minor": "0",
+        "schema_uri": "https://schemas.easy-cheese.dev/review-result"
+      }
+    }
+  },
+  "name": "review-result-clean",
+  "provenance": "synthetic",
+  "source": "Synthetic seed derived from the four-case representative benchmark recorded in docs/architecture/milknado-semantic-boundary-reassessment.md; not captured agent output.",
+  "writer_view": {
+    "kind": "review_result",
+    "payload": {
+      "disposition": "clean",
+      "findings": []
+    }
+  }
+}

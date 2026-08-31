@@ -1,0 +1,39 @@
+# Weekly contract validity benchmark.
+#
+# Replays the stored writer-output corpus (benchmarks/contracts/) through the
+# real normalizer and publishes the report to the job summary, so the budget's
+# status is visible without running anything locally. The job goes red when a
+# recorded expectation flips or the captured-case budget is exceeded; ordinary
+# pull requests are never gated on the budget (see issue #406).
+name: contract-benchmarks
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    name: contract validity budget
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install runtime dependencies
+        run: pip install --disable-pip-version-check --no-cache-dir --require-hashes --requirement requirements/runtime.txt
+
+      - name: Replay the writer-output corpus
+        run: |-
+          set -o pipefail
+          python3 scripts/contract_benchmarks.py | tee -a "$GITHUB_STEP_SUMMARY"

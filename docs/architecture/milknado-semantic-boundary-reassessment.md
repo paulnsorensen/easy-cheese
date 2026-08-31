@@ -88,6 +88,15 @@ repaired successfully) produced:
 
 These measurements are operational evidence, not release guarantees.
 
+Those four cases now live as JSON captures in `benchmarks/contracts/`, marked
+`provenance: synthetic`. `scripts/contract_benchmarks.py` replays them and
+reproduces the table above; the weekly `contract-benchmarks` workflow publishes
+its report to the run's job summary. The writer validity budget (under 10%
+first-pass invalid) is measured over `provenance: captured` cases only, so it
+reports as not measurable until real writer output is captured — that capture
+path is tracked in issue #406, and the budget is deliberately not a
+pull-request gate until real data shows it sustained under budget.
+
 ## Release blocker
 
 The package boundary is implemented locally but is not yet reproducible from the
