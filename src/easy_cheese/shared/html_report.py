@@ -10,6 +10,21 @@ subset: ATX headings, bold/italic/inline-code, links, unordered/ordered lists
 pipe tables, horizontal rules, blockquotes, and paragraphs. It is deliberately
 NOT a CommonMark implementation.
 
+Outside that subset -- setext headings, reference links, images, strikethrough,
+definition lists, raw HTML -- input degrades to escaped literal text; nothing
+raises. Raw HTML is ALWAYS escaped, never passed through, and link URLs are
+restricted to the http/https/mailto allowlist, so model-authored report prose
+cannot inject markup or a `javascript:` href into the document.
+
+Why not a Markdown library (decided in #517, recorded in
+`docs/adr/html-report-renderer-001.md`): the input is report artifacts our own
+skills author against the subset above, not arbitrary Markdown, so CommonMark
+fidelity buys nothing today -- while a dependency lands in every `.pyz` that
+stages this module and puts committed-bundle bytes at the mercy of upstream
+output changes. Revisit if externally authored Markdown ever reaches `render()`.
+`TestClosedSubsetContract` in tests/shared/python/test_html_report.py pins the
+boundary described above.
+
 Determinism contract: output depends only on the input and is stable across
 runs -- no timestamps, no randomness, no environment reads. CI diffs committed
 bundles, so identical input MUST yield identical bytes.
@@ -78,7 +93,7 @@ _CODE_SPAN = re.compile(r"`([^`]+)`")
 _BOLD = re.compile(r"\*\*(.+?)\*\*")
 _ITALIC_STAR = re.compile(r"\*([^*]+)\*")
 _ITALIC_UNDER = re.compile(r"_([^_]+)_")
-_LINK = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
+_LINK = re.compile(r"(?<!!)\[([^\]]+)\]\(([^)]+)\)")
 _LINK_TOKEN = re.compile("\x00(\\d+)\x00")
 _URL_SCHEME = re.compile(r"^([a-zA-Z][a-zA-Z0-9+.\-]*):")
 _ALLOWED_SCHEMES = {"http", "https", "mailto"}
@@ -327,9 +342,11 @@ def _emphasis(s: str) -> str:
 
 
 def _url_is_safe(url: str) -> bool:
-    """Allow http/https/mailto and relative/scheme-relative URLs; reject javascript:, data:, etc."""
-    m = _URL_SCHEME.match(url.strip())
-    return m is None or m.group(1).lower() in _ALLOWED_SCHEMES
+    """Allow http/https/mailto and relative URLs without ASCII controls."""
+    if any(ord(char) < 0x20 or ord(char) == 0x7F for char in url):
+        return False
+    match = _URL_SCHEME.match(url.strip())
+    return match is None or match.group(1).lower() in _ALLOWED_SCHEMES
 
 
 def _render_link(anchor: str, url: str) -> str:

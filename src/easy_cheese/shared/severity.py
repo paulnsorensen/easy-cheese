@@ -17,12 +17,56 @@ CLI:
 from __future__ import annotations
 
 import argparse
-from typing import TextIO, cast
+from enum import IntEnum
+from typing import Self, TextIO, cast
+
+from typing_extensions import override
 
 from easy_cheese.shared import cli
 
-SEVERITY_LADDER: tuple[str, ...] = ("low", "medium", "high", "blocker")
-_SEV_INDEX = {sev: i for i, sev in enumerate(SEVERITY_LADDER)}
+
+class RubricError(ValueError):
+    """Raised when a rubric input is outside the allowed vocabulary."""
+
+
+class _OrderedRubricTier(IntEnum):
+    """Base for the rubric's ordered vocabularies: member order IS the ladder.
+
+    Members ascend from least to most severe/costly, so `<` and `max()` express
+    the rubric's ordering directly. `str()` yields the wire spelling the /age
+    report and the CLI use (lowercase member name).
+    """
+
+    @override
+    def __str__(self) -> str:
+        return self.name.lower()
+
+    @classmethod
+    def parse(cls, value: str, *, field: str) -> Self:
+        """Parse a wire spelling at the trust boundary, or raise `RubricError`."""
+        try:
+            return cls[value.upper()]
+        except KeyError:
+            expected = ", ".join(str(tier) for tier in cls)
+            raise RubricError(f"unknown {field} {value!r}; expected one of {expected}") from None
+
+
+class Severity(_OrderedRubricTier):
+    """The /age severity ladder, least → most severe; `BLOCKER` is the cap."""
+
+    LOW = 0
+    MEDIUM = 1
+    HIGH = 2
+    BLOCKER = 3
+
+
+class FixCostNow(_OrderedRubricTier):
+    """Blast-radius bucket for fixing now, least → most costly."""
+
+    CONTAINED = 0
+    MODERATE = 1
+    SPRAWLING = 2
+
 
 DIMENSIONS: frozenset[str] = frozenset(
     {
@@ -53,18 +97,11 @@ LOCATION_SENSITIVE: frozenset[str] = frozenset(
 
 LOCATIONS: frozenset[str] = frozenset({"class", "module", "cross-module", "contract"})
 FIX_COST_LATER: frozenset[str] = frozenset({"contained", "spreading", "structural"})
-FIX_COST_NOW: tuple[str, ...] = ("contained", "moderate", "sprawling")
 
 
-class RubricError(ValueError):
-    """Raised when a rubric input is outside the allowed vocabulary."""
-
-
-def bump(sev: str) -> str:
-    """Promote one tier; blocker is the cap."""
-    if sev not in _SEV_INDEX:
-        raise RubricError(f"unknown severity {sev!r}; expected one of {SEVERITY_LADDER}")
-    return SEVERITY_LADDER[min(_SEV_INDEX[sev] + 1, len(SEVERITY_LADDER) - 1)]
+def bump(sev: Severity) -> Severity:
+    """Promote one tier; `Severity.BLOCKER` is the cap."""
+    return Severity.BLOCKER if sev is Severity.BLOCKER else Severity(sev + 1)
 
 
 def compute_severity(
@@ -73,12 +110,11 @@ def compute_severity(
     base: str,
     location: str,
     fix_cost_later: str,
-) -> str:
+) -> Severity:
     """Apply contract + structural bumps to a base severity, capped at blocker."""
     if dimension not in DIMENSIONS:
         raise RubricError(f"unknown dimension {dimension!r}")
-    if base not in _SEV_INDEX:
-        raise RubricError(f"unknown base {base!r}; expected one of {SEVERITY_LADDER}")
+    sev = Severity.parse(base, field="base")
     if location not in LOCATIONS:
         raise RubricError(f"unknown location {location!r}; expected one of {sorted(LOCATIONS)}")
     if fix_cost_later not in FIX_COST_LATER:
@@ -86,7 +122,6 @@ def compute_severity(
             f"unknown fix-cost-later {fix_cost_later!r}; expected one of {sorted(FIX_COST_LATER)}"
         )
 
-    sev = base
     if location == "contract" and dimension in LOCATION_SENSITIVE:
         sev = bump(sev)
     if fix_cost_later == "structural":
@@ -94,23 +129,17 @@ def compute_severity(
     return sev
 
 
-def bucket_fix_cost_now(*, file_count: int, module_count: int = 1) -> str:
-    """Bucket a blast-radius file/module count into contained / moderate / sprawling.
-
-    Returns one of `FIX_COST_NOW` — the tuple defines the ladder (index 0 =
-    least costly), so callers can compare buckets ordinally if they need to.
-    """
+def bucket_fix_cost_now(*, file_count: int, module_count: int = 1) -> FixCostNow:
+    """Bucket a blast-radius file/module count into contained / moderate / sprawling."""
     if file_count < 0:
         raise RubricError(f"file_count must be >= 0, got {file_count}")
     if module_count < 1:
         raise RubricError(f"module_count must be >= 1, got {module_count}")
     if module_count >= 2 or file_count >= 11:
-        tier = 2
-    elif file_count >= 3:
-        tier = 1
-    else:
-        tier = 0
-    return FIX_COST_NOW[tier]
+        return FixCostNow.SPRAWLING
+    if file_count >= 3:
+        return FixCostNow.MODERATE
+    return FixCostNow.CONTAINED
 
 
 def _cmd_compute(args: argparse.Namespace) -> None:

@@ -147,6 +147,13 @@ class TestInline:
         assert 'href="javascript' not in out
         assert "<p>x)</p>" in out
 
+    def test_dangerous_scheme_with_ascii_control_is_plain_text(
+        self, hr: _HtmlReportModule
+    ) -> None:
+        out = hr.render("[x](java\tscript:alert(1))", title="t")
+        assert "href=" not in out
+        assert "<p>x)</p>" in out
+
 
 class TestEscaping:
     def test_prose_angle_and_amp_escaped(self, hr: _HtmlReportModule) -> None:
@@ -162,6 +169,60 @@ class TestEscaping:
     def test_emitted_tags_not_escaped(self, hr: _HtmlReportModule) -> None:
         # We escape source text, never the tags we emit ourselves.
         assert "<h1>Title</h1>" in hr.render("# Title", title="t")
+
+
+class TestClosedSubsetContract:
+    """Pins the deliberately-not-CommonMark boundary (#517, docs/adr/html-report-renderer-001.md).
+
+    Keeping the hand-rolled renderer is a decision, so the two properties that
+    decision rests on are asserted here: raw HTML never reaches the document,
+    and constructs outside the documented subset degrade to literal text rather
+    than raising or half-rendering. A drift toward CommonMark fails these.
+    """
+
+    def test_raw_html_block_is_escaped_not_passed_through(self, hr: _HtmlReportModule) -> None:
+        out = hr.render("<script>alert(1)</script>", title="t")
+        assert "<p>&lt;script&gt;alert(1)&lt;/script&gt;</p>" in out
+        assert "<script" not in out
+
+    def test_raw_html_inline_is_escaped_while_subset_markup_still_renders(
+        self, hr: _HtmlReportModule
+    ) -> None:
+        out = hr.render("<div>raw **x**</div>", title="t")
+        assert "<p>&lt;div&gt;raw <strong>x</strong>&lt;/div&gt;</p>" in out
+
+    def test_setext_heading_stays_a_paragraph(self, hr: _HtmlReportModule) -> None:
+        out = hr.render("Title\n=====", title="t")
+        assert "<p>Title\n=====</p>" in out
+        assert "<h1>" not in out
+
+    def test_setext_h2_underline_is_read_as_a_horizontal_rule(
+        self, hr: _HtmlReportModule
+    ) -> None:
+        # '---' is the subset's horizontal rule; it never promotes the line above.
+        out = hr.render("Title\n---", title="t")
+        assert "<p>Title</p>\n<hr>" in out
+        assert "<h2>" not in out
+
+    def test_reference_link_stays_literal(self, hr: _HtmlReportModule) -> None:
+        out = hr.render("See [text][ref].\n\n[ref]: https://example.com", title="t")
+        assert "<p>See [text][ref].</p>" in out
+        assert "<p>[ref]: https://example.com</p>" in out
+        assert "<a href=" not in out
+
+    def test_image_stays_literal(self, hr: _HtmlReportModule) -> None:
+        out = hr.render("![img](a.png)", title="t")
+        assert "<p>![img](a.png)</p>" in out
+        assert "<a " not in out
+        assert "<img" not in out
+
+    def test_strikethrough_and_definition_list_stay_literal(
+        self, hr: _HtmlReportModule
+    ) -> None:
+        out = hr.render("~~gone~~\n\nTerm\n: definition", title="t")
+        assert "<p>~~gone~~</p>" in out
+        assert "<p>Term\n: definition</p>" in out
+        assert "<del>" not in out and "<dl>" not in out
 
 
 class TestTablePipes:
