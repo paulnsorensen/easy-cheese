@@ -523,7 +523,9 @@ def _reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]
 
 
 def _validate_schema(
-    artifact: ArtifactRef, content: bytes, schema_validator: SchemaValidator | None
+    artifact: ArtifactRef,
+    content: bytes,
+    schema_validator: SchemaValidator | None,
 ) -> None:
     if artifact.schema_uri is None:
         return

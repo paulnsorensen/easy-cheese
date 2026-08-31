@@ -12,7 +12,6 @@ import pytest
 import easy_cheese_schemas.workflow as workflow_module
 from easy_cheese_schemas.artifacts import (
     ResolvedAgentArtifact,
-    SchemaValidator,
     resolve_artifact,
 )
 from easy_cheese_schemas.contracts import (
@@ -970,14 +969,12 @@ def test_plan_wide_shared_inputs_and_evidence_resolve_once(
         *,
         repository_root: str | Path = ".",
         artifact_directory: str | Path,
-        schema_validator: SchemaValidator | None = None,
     ) -> ResolvedAgentArtifact:
         calls.append(artifact.uri)
         return original_resolve(
             artifact,
             repository_root=repository_root,
             artifact_directory=artifact_directory,
-            schema_validator=schema_validator,
         )
 
     monkeypatch.setattr(workflow_module, "resolve_artifact", tracking_resolve)
