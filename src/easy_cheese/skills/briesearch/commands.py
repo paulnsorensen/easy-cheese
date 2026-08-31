@@ -7,8 +7,16 @@ import sys
 from easy_cheese.shared.bundle_commands import Command, dispatch
 
 COMMANDS = (
-    Command("artifact-path", "easy_cheese.shared.artifact_path:main"),
-    Command("ground-check", "easy_cheese.skills.briesearch.ground_check:main"),
+    Command(
+        "artifact-path",
+        "easy_cheese.shared.artifact_path:main",
+        "Resolve the durable or transient artifact path for a phase and slug",
+    ),
+    Command(
+        "ground-check",
+        "easy_cheese.skills.briesearch.ground_check:main",
+        "Lint a synthesis report for grounding and citation violations",
+    ),
 )
 
 

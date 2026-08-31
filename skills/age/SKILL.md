@@ -143,6 +143,7 @@ When invoked with `--auto`:
 
 ## References
 
+- Generated bundle command inventory: [`references/commands.md`](references/commands.md).
 - `references/dimensions.md` — before grading any finding: rubrics, location sensitivity, fix-cost tables, recommendation shapes.
 - `references/fan-out.md` — before any `n>1` dispatch: router mechanics, lens partitions, six-seam sequence, verifier pass.
 - `references/packet.md` — when assembling the Seam-2 shared context packet for a fan-out run.

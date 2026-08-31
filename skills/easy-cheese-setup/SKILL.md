@@ -44,3 +44,5 @@ Run `doctor` (no `--apply`) first — it reports both legs' intended actions wit
 - Detect and report before mutating; every mutating leg is `--apply`-gated and confirmed.
 - One source of truth for the durable root: the engine imports `paths.corpus_home()` — never hardcode `~/.cheese` or an XDG path.
 - Non-destructive by default: `install.sh` touches only the marked block; legacy-block removal is interactive-only.
+
+Generated bundle command inventory: [`references/commands.md`](references/commands.md).

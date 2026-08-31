@@ -7,8 +7,16 @@ import sys
 from easy_cheese.shared.bundle_commands import Command, dispatch
 
 COMMANDS = (
-    Command("append-attempt", "easy_cheese.skills.hard_cheese.append_attempt:main"),
-    Command("freshness-check", "easy_cheese.skills.hard_cheese.freshness_check:main"),
+    Command(
+        "append-attempt",
+        "easy_cheese.skills.hard_cheese.append_attempt:main",
+        "Atomically append an attempt row to the audit trail",
+    ),
+    Command(
+        "freshness-check",
+        "easy_cheese.skills.hard_cheese.freshness_check:main",
+        "Decide whether a prior attempt is fresh, stale, or new",
+    ),
 )
 
 

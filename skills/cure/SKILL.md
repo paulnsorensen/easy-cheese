@@ -178,3 +178,5 @@ Resolve fix application through [`../cheese/references/agent-resolution.md`](../
 | Apply selected findings | coder | write, isolated-worktree | default | high | compatible coder, then general |
 
 The canonical cure handoff carries the shared `agent_resolution` block.
+
+Generated bundle command inventory: [`references/commands.md`](references/commands.md).

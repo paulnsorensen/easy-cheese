@@ -7,9 +7,21 @@ import sys
 from easy_cheese.shared.bundle_commands import Command, dispatch
 
 COMMANDS = (
-    Command("global", "easy_cheese.shared.hallouminate_setup:global_main"),
-    Command("local", "easy_cheese.shared.hallouminate_setup:local_main"),
-    Command("doctor", "easy_cheese.shared.hallouminate_setup:doctor_main"),
+    Command(
+        "global",
+        "easy_cheese.shared.hallouminate_setup:global_main",
+        "Register or repair the durable hallouminate corpus",
+    ),
+    Command(
+        "local",
+        "easy_cheese.shared.hallouminate_setup:local_main",
+        "Register or repair this repository's hallouminate tenant",
+    ),
+    Command(
+        "doctor",
+        "easy_cheese.shared.hallouminate_setup:doctor_main",
+        "Run both the global and local registration legs",
+    ),
 )
 
 

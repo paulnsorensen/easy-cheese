@@ -238,5 +238,4 @@ In every early-stop case, write the halt slug and surface the report. Do not sil
 
 ## References
 
-- `skills/pasteurize/scripts/pasteurize.pyz repro-rerun` — run the repro command N times and emit `{exit_code, reproduced, runs, failures}` (Phase 2).
-- `skills/pasteurize/scripts/pasteurize.pyz debug-tag-sweep` — scan the tree for instrumentation tag prefixes and exit 1 if any survive (Phase 6 cleanup gate).
+- Generated bundle command inventory: [`references/commands.md`](references/commands.md).

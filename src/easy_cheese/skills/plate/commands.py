@@ -7,8 +7,16 @@ import sys
 from easy_cheese.shared.bundle_commands import Command, dispatch
 
 COMMANDS = (
-    Command("stack-tools", "easy_cheese.skills.plate.stack_tools:main"),
-    Command("validate-publication", "easy_cheese.skills.plate.publication:main"),
+    Command(
+        "stack-tools",
+        "easy_cheese.skills.plate.stack_tools:main",
+        "Detect supported stacked-PR providers without mutating the repo",
+    ),
+    Command(
+        "validate-publication",
+        "easy_cheese.skills.plate.publication:main",
+        "Validate terminal publication evidence",
+    ),
 )
 
 

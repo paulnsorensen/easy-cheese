@@ -137,13 +137,7 @@ For ours/theirs picks, lockfiles, mergiraf debugging, and maintenance, see [refe
 
 ## Scripts
 
-| Script | Purpose | When |
-| --- | --- | --- |
-| `python3 skills/melt/scripts/melt.pyz detect-squash-residue` | Detect that the branch was squash-merged and emit both the merge and reset+cherry-pick remedies | **Run first** — short-circuits the cascade |
-| `python3 skills/melt/scripts/melt.pyz conflict-summary` | Structured summary with line numbers and context | After residue check |
-| `python3 skills/melt/scripts/melt.pyz batch-resolve` | Run `mergiraf merge` over every conflicted file | Supported languages |
-| `python3 skills/melt/scripts/melt.pyz conflict-pick` | Choose ours / theirs per hunk | Shell, SQL, formats mergiraf does not parse |
-| `python3 skills/melt/scripts/melt.pyz lockfile-resolve` | Take one side and regenerate the lockfile | `Cargo.lock`, `package-lock.json`, etc. |
+Generated bundle command inventory: [`references/commands.md`](references/commands.md).
 
 ## What this skill does NOT do
 

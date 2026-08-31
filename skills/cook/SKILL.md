@@ -201,3 +201,5 @@ uses a coder, taste-test uses a reviewer, and harvest and plate stay parent-owne
 
 The handoff carries the `agent_resolution` block.
 A terminal Age is publishable only with `next: done`; `next: cure` or a missing `next` halts.
+
+Generated bundle command inventory: [`references/commands.md`](references/commands.md).

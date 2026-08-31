@@ -149,3 +149,5 @@ Press's discipline is evidence-first: fear is the curd-killer, and an
 unverified failure is not a RED. Before each route decision, name the outcome,
 the attack digest, and the completed `repair_cycles` count. If any one is
 missing, stop rather than guessing.
+
+Generated bundle command inventory: [`references/commands.md`](references/commands.md).

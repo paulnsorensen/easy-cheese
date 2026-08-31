@@ -304,3 +304,5 @@ Report completion only when it returns normalized evidence with `valid: true`.
 Use empty `commits` or `prs` lists when the selected mode does not create them.
 Topology preflight uses `gate: {"command": "n/a", "result": "n/a"}` because it
 stops before the publication transaction and quality gate.
+
+Generated bundle command inventory: [`references/commands.md`](references/commands.md).

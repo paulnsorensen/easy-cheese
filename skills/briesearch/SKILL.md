@@ -72,6 +72,7 @@ Cross-cutting house style and citation form: [`../cheese/references/formatting.m
 
 ## References
 
+- Generated bundle command inventory: [`references/commands.md`](references/commands.md).
 - `references/query-planning.md` — compact freshness plans, full decomposition, fan-out, stop criteria.
 - `references/routing.md` — capability matrix, provider selection, source priority.
 - `references/synthesis.md` — claim-level evidence, confidence cap, output shape.
