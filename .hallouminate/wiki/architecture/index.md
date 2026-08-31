@@ -2,6 +2,7 @@
 
 <!-- HALLOUMINATE:INDEX-START -->
 - [age-fanout-router](./age-fanout-router.md) — Age fan-out router
+- [graph-flow-overview](./graph-flow-overview.md) — Graph-flow overview (easy-cheese x milknado)
 - [plate-runtime-contract](./plate-runtime-contract.md) — Plate runtime contract
 - [pyz-bundling-pipeline](./pyz-bundling-pipeline.md) — Pyz bundling pipeline
 - [schema-similarity-and-consolidation-audit](./schema-similarity-and-consolidation-audit.md) — Schema similarity and consolidation audit
