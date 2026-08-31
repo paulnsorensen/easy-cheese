@@ -19,7 +19,6 @@ import functools
 import hashlib
 import io
 import json
-import os
 import re
 import subprocess
 import sys
@@ -112,6 +111,23 @@ def _is_import_error_handler(handler: ast.ExceptHandler) -> bool:
     return bool(guard_names & names)
 
 
+def _resolve_relative(package: str, level: int, module: str | None) -> str | None:
+    """Absolute dotted name for a `from .[module] import ...` (level >= 1)."""
+    bits = package.split(".") if package else []
+    if level - 1 > len(bits):
+        return None
+    base = bits[: len(bits) - (level - 1)] if level > 1 else bits
+    if module:
+        base = [*base, *module.split(".")]
+    return ".".join(base) if base else None
+
+
+def _package_for(relpath: str) -> str:
+    """The dotted `__package__` a module at this site-packages relpath sees."""
+    parts = relpath.removesuffix(".py").split("/")
+    return ".".join(parts[:-1])
+
+
 class _ImportVisitor(ast.NodeVisitor):
     """Collect every runtime import, including deferred and guarded ones.
 
@@ -119,13 +135,16 @@ class _ImportVisitor(ast.NodeVisitor):
     *built* archive's own site-packages/, not a pre-build staging tree.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, package: str = "") -> None:
+        self.package: str = package
         self.imports: set[tuple[str, bool]] = set()
         self.alternatives: list[tuple[_ImportVisitor, ...]] = []
 
     @classmethod
-    def from_statements(cls, statements: list[ast.stmt]) -> "_ImportVisitor":
-        visitor = cls()
+    def from_statements(
+        cls, statements: list[ast.stmt], package: str = ""
+    ) -> "_ImportVisitor":
+        visitor = cls(package)
         for statement in statements:
             visitor.visit(statement)
         return visitor
@@ -136,11 +155,14 @@ class _ImportVisitor(ast.NodeVisitor):
 
     @override
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
-        if node.level != 0 or not node.module:
+        module = node.module
+        if node.level != 0:
+            module = _resolve_relative(self.package, node.level, node.module)
+        if not module:
             return
         self.imports.update(
             (
-                node.module if alias.name == "*" else f"{node.module}.{alias.name}",
+                module if alias.name == "*" else f"{module}.{alias.name}",
                 alias.name != "*",
             )
             for alias in node.names
@@ -156,8 +178,11 @@ class _ImportVisitor(ast.NodeVisitor):
             return
         self.alternatives.append(
             (
-                self.from_statements(node.body),
-                *(self.from_statements(handler.body) for handler in guarded),
+                self.from_statements(node.body, self.package),
+                *(
+                    self.from_statements(handler.body, self.package)
+                    for handler in guarded
+                ),
             )
         )
         for handler in node.handlers:
@@ -263,12 +288,35 @@ def _archive_module_index(
     return frozenset(files), frozenset(dirs)
 
 
+def _command_module_targets(tree: ast.Module) -> set[str]:
+    """Module half of every `Command(name, "module:attr")` call in this tree.
+
+    bundle_commands.dispatch resolves these via importlib at runtime, off a
+    static string a plain import/from-import scan never sees (AC-7 finding 1).
+    """
+    targets: set[str] = set()
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)):
+            continue
+        if node.func.id != "Command":
+            continue
+        args = [a for a in node.args if isinstance(a, ast.Constant)]
+        if len(args) < 2 or not isinstance(args[1].value, str):
+            continue
+        module, separator, attribute = args[1].value.partition(":")
+        if separator and module and attribute:
+            targets.add(module)
+    return targets
+
+
 def check_import_closure(archive: zipfile.ZipFile) -> list[str]:
     """Every first-party import must resolve inside this archive's own closure.
 
     Catches unresolved deferred/function-body imports, ambient site-package
-    dependencies absent from the shipped wheel set, and cross-skill imports
-    (another skill's package is simply not present in this archive).
+    dependencies absent from the shipped wheel set, cross-skill imports
+    (another skill's package is simply not present in this archive), and
+    deferred imports named only as a `Command(name, "module:attr")` string in
+    the Command-manifest dispatch mechanism.
     """
     files, dirs = _archive_module_index(archive)
     stdlib = frozenset(sys.stdlib_module_names)
@@ -324,10 +372,41 @@ def check_import_closure(archive: zipfile.ZipFile) -> list[str]:
         if not relpath.startswith(FIRST_PARTY_PREFIXES):
             continue
         source = archive.read(f"site-packages/{relpath}").decode("utf-8")
-        visitor = _ImportVisitor()
-        visitor.visit(ast.parse(source))
+        tree = ast.parse(source)
+        visitor = _ImportVisitor(_package_for(relpath))
+        visitor.visit(tree)
         for name in sorted(_unresolved_imports(visitor, resolves)):
             problems.append(f"unresolved import {name!r} in site-packages/{relpath}")
+        for name in sorted(_command_module_targets(tree)):
+            if not resolves(name, False):
+                problems.append(
+                    f"unresolved Command target {name!r} in site-packages/{relpath}"
+                )
+    return problems
+
+
+def _isolated_interpreter() -> str:
+    """The base system interpreter, bypassing any active venv's site-packages.
+
+    A venv resolves via pyvenv.cfg, not PYTHONPATH/VIRTUAL_ENV env vars, so
+    stripping those env vars alone still leaks the venv's own site-packages
+    (e.g. yaml resolving from .venv inside a run). Switching to the base
+    executable sidesteps the venv prefix entirely.
+    """
+    if sys.prefix != sys.base_prefix:
+        return cast(str, getattr(sys, "_base_executable"))
+    return sys.executable
+
+
+def _import_failure_problems(combined: str) -> list[str]:
+    """Uncaught-exception signals only; excludes REPO_ROOT, which a handler's
+    own --help usage banner legitimately prints (its own invocation path).
+    """
+    problems: list[str] = []
+    if "ModuleNotFoundError" in combined or "ImportError" in combined:
+        problems.append(f"failed to resolve imports: {combined.strip()}")
+    if "Traceback (most recent call last)" in combined:
+        problems.append(f"raised: {combined.strip()}")
     return problems
 
 
@@ -335,29 +414,66 @@ def check_isolated_execution(pyz: Path) -> list[str]:
     """Run the built archive from a scratch cwd with no PYTHONPATH or repo path.
 
     Proves the archive is self-contained: no reliance on the repository
-    checkout, its cwd, or an ambient PYTHONPATH to resolve its own imports.
+    checkout, its cwd, an ambient PYTHONPATH, or a host venv's site-packages
+    to resolve its own imports.
     """
-    env = {
-        key: value
-        for key, value in os.environ.items()
-        if key not in {"PYTHONPATH", "VIRTUAL_ENV"}
-    }
+    interpreter = _isolated_interpreter()
     with tempfile.TemporaryDirectory(prefix="easy-cheese-isolated-") as scratch:
         result = subprocess.run(
-            [sys.executable, str(pyz)],
+            [interpreter, "-I", str(pyz)],
             cwd=scratch,
             capture_output=True,
             text=True,
-            env=env,
         )
     combined = result.stdout + result.stderr
-    problems: list[str] = []
-    if "ModuleNotFoundError" in combined or "ImportError" in combined:
-        problems.append(f"isolated execution failed to resolve imports: {combined.strip()}")
-    if "Traceback (most recent call last)" in combined:
-        problems.append(f"isolated execution raised: {combined.strip()}")
+    problems = [f"isolated execution {p}" for p in _import_failure_problems(combined)]
     if str(REPO_ROOT) in combined:
         problems.append(f"isolated execution referenced the repository path: {combined.strip()}")
+    return problems
+
+
+def _declared_command_names(archive: zipfile.ZipFile) -> list[str]:
+    """Every `Command("name", ...)` literal declared by this archive's own sources."""
+    names: set[str] = set()
+    for name in archive.namelist():
+        if not name.startswith("site-packages/") or not name.endswith(".py"):
+            continue
+        relpath = name.removeprefix("site-packages/")
+        if not relpath.startswith(FIRST_PARTY_PREFIXES):
+            continue
+        tree = ast.parse(archive.read(name).decode("utf-8"))
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)):
+                continue
+            if node.func.id != "Command" or not node.args:
+                continue
+            first = node.args[0]
+            if isinstance(first, ast.Constant) and isinstance(first.value, str):
+                names.add(first.value)
+    return sorted(names)
+
+
+def check_command_dispatch(pyz: Path, archive: zipfile.ZipFile) -> list[str]:
+    """Every declared command must actually import its handler module.
+
+    A bare argv only reaches the dispatcher's own usage branch (exit 2), so
+    no handler import ever runs; invoke each declared command with --help to
+    force the same importlib.import_module the real dispatch path takes.
+    """
+    interpreter = _isolated_interpreter()
+    problems: list[str] = []
+    for name in _declared_command_names(archive):
+        with tempfile.TemporaryDirectory(prefix="easy-cheese-isolated-") as scratch:
+            result = subprocess.run(
+                [interpreter, "-I", str(pyz), name, "--help"],
+                cwd=scratch,
+                capture_output=True,
+                text=True,
+            )
+        combined = result.stdout + result.stderr
+        problems.extend(
+            f"command {name!r} {p}" for p in _import_failure_problems(combined)
+        )
     return problems
 
 
@@ -425,6 +541,73 @@ def _manifest(data: bytes) -> dict[str, tuple[int, int] | bytes]:
         return manifest
 
 
+_PYZ_REFERENCE = re.compile(r"[\w-]+\.pyz")
+
+# ultracook is a retired skill: its SKILL.md documents that no ultracook.pyz
+# is published and that runtime moved into cook.pyz, purely as retirement
+# prose (see skills/ultracook/SKILL.md's "What did not move" section) -- not
+# an instruction for any code path to invoke another skill's archive.
+_RETIRED_REDIRECT_SKILLS = frozenset({"ultracook"})
+
+# This file is the scan's own implementation: its stale-shared-bundle glob
+# legitimately names the retired common.pyz, which would otherwise trip its
+# own "references obsolete shared bundle" rule.
+_SELF_PATH = Path(__file__).resolve()
+
+
+def _owning_skill(path: Path) -> str | None:
+    """The skill a file may reference its own .pyz for, or None if none applies."""
+    parts = path.relative_to(REPO_ROOT).parts
+    if parts[0] == "skills":
+        return parts[1]
+    if parts[:3] == ("src", "easy_cheese", "skills"):
+        return parts[3].replace("_", "-")
+    if parts[:4] == ("src", "content", "docs", "skills") and len(parts) == 5:
+        return path.stem
+    return None
+
+
+def _pyz_reference_roots() -> list[Path]:
+    return [
+        *REPO_ROOT.glob("skills/**/*.md"),
+        *(p for p in REPO_ROOT.glob("skills/*/scripts/*") if p.is_file() and p.suffix != ".pyz"),
+        *(
+            p
+            for p in (REPO_ROOT / "src").rglob("*")
+            if p.is_file() and "__pycache__" not in p.parts
+        ),
+        *(p for p in (REPO_ROOT / "scripts").glob("*.py") if p.resolve() != _SELF_PATH),
+    ]
+
+
+def check_pyz_references() -> list[str]:
+    """Skill docs and sources may only name their own .pyz archive.
+
+    A skill's docs or source naming another skill's bundle is either a stale
+    doc (the skill was renamed/merged) or a real cross-skill import that
+    check_import_closure cannot see (it only audits one archive at a time).
+    """
+    violations: list[str] = []
+    for path in sorted(set(_pyz_reference_roots())):
+        skill = _owning_skill(path)
+        if skill in _RETIRED_REDIRECT_SKILLS:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        for match in _PYZ_REFERENCE.finditer(text):
+            archive_name = match.group(0).removesuffix(".pyz")
+            relative = path.relative_to(REPO_ROOT)
+            if archive_name == "common":
+                violations.append(f"{relative}: references obsolete shared bundle common.pyz")
+            elif skill is not None and archive_name != skill:
+                violations.append(
+                    f"{relative}: references {archive_name}.pyz, not its own {skill}.pyz"
+                )
+    return violations
+
+
 def _committed(path: Path) -> bytes | None:
     """The blob at HEAD, or None when the bundle is newly added."""
     result = subprocess.run(
@@ -454,17 +637,21 @@ def main() -> int:
     stale: list[str] = []
     for path in sorted(REPO_ROOT.glob("skills/*/scripts/common.pyz")):
         stale.append(f"  {path.relative_to(REPO_ROOT)} (obsolete shared bundle)")
+    for reference_problem in check_pyz_references():
+        stale.append(f"  {reference_problem}")
     checked = 0
     for path in sorted(REPO_ROOT.glob(BUNDLE_GLOB)):
         relative = path.relative_to(REPO_ROOT)
         committed = _committed(relative)
         checked += 1
         data = path.read_bytes()
+        problems: list[str] = []
         try:
             rebuilt_manifest = _manifest(data)
             with zipfile.ZipFile(io.BytesIO(data)) as archive:
-                problems = [f"    ! native member: {name}" for name in _native_members(archive)]
+                problems += [f"    ! native member: {name}" for name in _native_members(archive)]
                 problems += [f"    ! {p}" for p in check_import_closure(archive)]
+                problems += [f"    ! {p}" for p in check_command_dispatch(path, archive)]
             problems += [f"    ! {p}" for p in check_isolated_execution(path)]
             if committed is None:
                 print(f"new Shiv bundle, nothing to compare: {relative}")
@@ -474,7 +661,7 @@ def main() -> int:
             committed_manifest = _manifest(committed)
             problems += _describe(rebuilt_manifest, committed_manifest)
         except (ValueError, KeyError, json.JSONDecodeError, zipfile.BadZipFile) as exc:
-            problems = [f"    ! bundle metadata invalid: {exc}"]
+            problems.append(f"    ! bundle metadata invalid: {exc}")
         if problems:
             stale.append(f"  {relative}\n" + "\n".join(problems))
 

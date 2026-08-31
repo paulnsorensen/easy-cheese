@@ -9,7 +9,7 @@ skills/*/scripts/*.pyz directly -- no rebuild.
 from __future__ import annotations
 
 import io
-import re
+import site
 import zipfile
 from pathlib import Path
 
@@ -85,6 +85,54 @@ def test_check_import_closure_flags_ambient_third_party_import() -> None:
     assert any("requests" in p for p in problems), problems
 
 
+def test_check_import_closure_resolves_command_manifest_target() -> None:
+    archive = _archive(
+        {
+            "site-packages/easy_cheese/dispatch.py": (
+                b'COMMANDS = [Command("demo", "easy_cheese.handler:main")]\n'
+            ),
+            "site-packages/easy_cheese/handler.py": b"def main() -> None:\n    pass\n",
+        }
+    )
+    assert check_bundles.check_import_closure(archive) == []
+
+
+def test_check_import_closure_flags_unresolved_command_manifest_target() -> None:
+    archive = _archive(
+        {
+            "site-packages/easy_cheese/dispatch.py": (
+                b'COMMANDS = [Command("demo", "easy_cheese.missing:main")]\n'
+            )
+        }
+    )
+    problems = check_bundles.check_import_closure(archive)
+    assert any("easy_cheese.missing" in p for p in problems), problems
+
+
+def test_check_import_closure_resolves_relative_import_to_sibling_module() -> None:
+    archive = _archive(
+        {
+            "site-packages/easy_cheese/skills/foo/__init__.py": b"",
+            "site-packages/easy_cheese/skills/foo/handler.py": b"from . import sibling\n",
+            "site-packages/easy_cheese/skills/foo/sibling.py": b"",
+        }
+    )
+    assert check_bundles.check_import_closure(archive) == []
+
+
+def test_check_import_closure_flags_unresolved_relative_import() -> None:
+    archive = _archive(
+        {
+            "site-packages/easy_cheese/skills/foo/__init__.py": b"",
+            "site-packages/easy_cheese/skills/foo/handler.py": (
+                b"from . import missing_sibling\n"
+            ),
+        }
+    )
+    problems = check_bundles.check_import_closure(archive)
+    assert any("missing_sibling" in p for p in problems), problems
+
+
 def test_all_committed_bundles_pass_closure_and_native_checks() -> None:
     bundles = sorted(REPO_ROOT.glob("skills/*/scripts/*.pyz"))
     assert bundles, "expected committed .pyz bundles under skills/*/scripts/"
@@ -104,44 +152,29 @@ def test_isolated_execution_check_passes_on_a_real_committed_bundle() -> None:
     assert check_bundles.check_isolated_execution(pyz) == []
 
 
-_PYZ_REFERENCE = re.compile(r"[\w-]+\.pyz")
+def test_check_isolated_execution_flags_module_only_in_user_site_packages(
+    tmp_path: Path,
+) -> None:
+    marker = "easy_cheese_isolation_marker_for_test"
+    user_site = Path(site.getusersitepackages())
+    user_site.mkdir(parents=True, exist_ok=True)
+    marker_path = user_site / f"{marker}.py"
+    preexisting = marker_path.exists()
+    _ = marker_path.write_text("VALUE = 1\n", encoding="utf-8")
+    try:
+        data = io.BytesIO()
+        with zipfile.ZipFile(data, "w") as archive:
+            archive.writestr("__main__.py", f"import {marker}\n".encode())
+        pyz = tmp_path / "demo.pyz"
+        _ = pyz.write_bytes(data.getvalue())
 
-# ultracook is a retired skill: its SKILL.md documents that no ultracook.pyz
-# is published and that runtime moved into cook.pyz, purely as retirement
-# prose (see skills/ultracook/SKILL.md's "What did not move" section) -- not
-# an instruction for any code path to invoke another skill's archive.
-_RETIRED_REDIRECT_SKILLS = frozenset({"ultracook"})
+        problems = check_bundles.check_isolated_execution(pyz)
+    finally:
+        if not preexisting:
+            marker_path.unlink()
 
-
-def _referencing_files() -> list[tuple[str, Path]]:
-    files: list[tuple[str, Path]] = []
-    for path in sorted(REPO_ROOT.glob("skills/*/SKILL.md")):
-        files.append((path.parent.name, path))
-    for path in sorted((REPO_ROOT / "src" / "easy_cheese" / "skills").rglob("*.py")):
-        relative = path.relative_to(REPO_ROOT / "src" / "easy_cheese" / "skills")
-        skill_dir = relative.parts[0]
-        files.append((skill_dir.replace("_", "-"), path))
-    return files
-
-
-def test_skill_docs_and_sources_only_reference_their_own_pyz_archive() -> None:
-    violations: list[str] = []
-    for skill, path in _referencing_files():
-        if skill in _RETIRED_REDIRECT_SKILLS:
-            continue
-        text = path.read_text(encoding="utf-8")
-        for match in _PYZ_REFERENCE.finditer(text):
-            archive = match.group(0)[: -len(".pyz")]
-            if archive == "common":
-                violations.append(f"{path}: references obsolete shared bundle common.pyz")
-            elif archive != skill:
-                violations.append(
-                    f"{path}: references {archive}.pyz, not its own {skill}.pyz"
-                )
-    assert violations == [], "\n".join(violations)
+    assert any(marker in p for p in problems), problems
 
 
-def test_no_skill_ever_references_common_pyz_including_retired_docs() -> None:
-    for _skill, path in _referencing_files():
-        text = path.read_text(encoding="utf-8")
-        assert "common.pyz" not in text, f"{path}: references obsolete shared bundle common.pyz"
+def test_check_pyz_references_finds_no_violations_across_the_repo() -> None:
+    assert check_bundles.check_pyz_references() == []
