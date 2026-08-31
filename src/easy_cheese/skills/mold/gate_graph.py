@@ -72,13 +72,15 @@ def gate_id(checklist_label: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", head.strip().lower()).strip("-")
 
 
-# The 15 coherence-checklist gates, verbatim from handshake.md's checklist (the
+# The 17 coherence-checklist gates, verbatim from handshake.md's checklist (the
 # text before each colon is the gate's name; gate_id() slugs it). Order matches
 # the prose so a diff between the two is legible.
 COHERENCE_GATES: tuple[str, ...] = (
     "Problem statement: grounded, agreed",
+    "Grounding recorded: a wiki probe result — citations or an explicit hallouminate-absent note — preceded the first structured question",
     "At least 2 options weighed (Do Nothing included)",
     "Chosen option grounded in codebase evidence",
+    "Exploration delegated: evidence-heavy reads carry an explorer digest, or the parent-context fallback is recorded",
     "Interface sketches: every public seam has a pseudocode signature",
     "Cross-module calls go through public interfaces, not internals",
     "Identity nouns: each bound to a code referent or marked NEW ENTITY (an ALIAS must be resolved, not just noted)",

@@ -15,8 +15,10 @@ Print this checklist and require every box checked before extraction (or an expl
 ```
 Coherence self-check before curdle:
 - [ ] Problem statement: grounded, agreed
+- [ ] Grounding recorded: a wiki probe result — citations or an explicit hallouminate-absent note — preceded the first structured question
 - [ ] At least 2 options weighed (Do Nothing included)
 - [ ] Chosen option grounded in codebase evidence
+- [ ] Exploration delegated: evidence-heavy reads carry an explorer digest, or the parent-context fallback is recorded
 - [ ] Interface sketches: every public seam has a pseudocode signature
 - [ ] Cross-module calls go through public interfaces, not internals
 - [ ] Identity nouns: each bound to a code referent or marked NEW ENTITY (an ALIAS must be resolved, not just noted)
@@ -35,7 +37,7 @@ If any box is unchecked, name it and propose the smallest move to fill it. The u
 
 The last box — **Durable writes** — is a *commitment* checked before the handshake, not a claim the write already happened: it asserts the ADR + domain-model targets are resolved and the write → read-back → completion-record protocol is locked in for the atomic-write step (`curdle.md` § Atomic write). The read-back verify and the visible completion record fire *during* that step, and the hallouminate-absent fallback is noted loud, never silent.
 
-These fifteen checklist items are the gates in mold's machine-readable gate model
+These seventeen checklist items are the gates in mold's machine-readable gate model
 (`gate-graph.md`). A passing `fork_taste_test_passed` verdict is the mandatory
 decomposition gate; stale, partial, contradictory, or blocker-bearing verdicts
 keep decomposition closed. A test asserts the checklist items here equal the

@@ -59,13 +59,13 @@ Beyond source-code routing there are mold-specific tools:
 | Need | Prefer | Fallback |
 | --- | --- | --- |
 | External validation | `/briesearch` with Context7/Tavily | user-provided docs, repo docs, or note as unverified |
-| Wiki grounding (Ground entry + decision points; scope per `references/grounding.md` § When to probe) | `mcp__hallouminate__list_corpora` + `mcp__hallouminate__ground` on `repo:<repo>:wiki` | skip; proceed with code evidence only; cap at `speculating` when design rationale is central |
+| Wiki grounding (Ground entry + decision points; scope per `references/grounding.md` § When to probe) | `mcp__hallouminate__list_corpora` + `mcp__hallouminate__ground` on `repo:<repo>:wiki` | record `hallouminate: absent` in the ledger, proceed on code evidence, and cap at `speculating` when design rationale is central |
 
-Optional tools accelerate the work but never block the dialogue. When evidence is unavailable, mark the claim `[?]` until settled.
+**The grounding record is a precondition on the first structured question, not a step.** No question fires until the ledger carries a probe result — citations, or an explicit `hallouminate: absent`. The degrade path still works; it must leave evidence rather than be assumed. When evidence is unavailable, mark the claim `[?]` until settled.
 
 ## Sub-agent context gate
 
-`/mold` owns dialogue, contradictions, and approval state. Delegate evidence-heavy reads or graphs to a fresh-context `explorer`, and external research to a `researcher`; see `references/context-budget.md`.
+`/mold` owns dialogue, contradictions, and approval state; those never delegate. Evidence-heavy reads and graphs are the fresh-context `explorer`'s work, external research the `researcher`'s. **Shape's options take an explorer digest as input** — hand-run parent-context exploration is a recorded degrade, not a fallback. Orchestration budgets and the checkpoint they force: `references/context-budget.md`.
 
 ### Gate graph
 
@@ -135,7 +135,7 @@ The digest's `mode` is orientation, not a skill. Render the fixed blast-radius m
 - Dialogue first; artifacts are the by-product.
 - **Tiered lettered options.** Consequential forks use `A/B/C/D` choices via the question transport at `../cheese/references/ask-user-question.md`; never decide them silently. Minor mechanics use `[AGENT-DECIDED]` with a vetoable alternative. A fork is valid only after its depth was contributed in-dialogue first. Precede every structured question with visible prose weighing the fork and evidence, and keep one open picker.
 - **Decision ledger.** Each round prints `Decided / Asking / [AGENT-DECIDED]`. Curdle persists consequential decisions to [ADRs](references/adr.md) and minor ones to the spec. The taste verdict names every settled consequential entry exactly once.
-- **Decision map.** After three consecutive fork questions, or on request, show done forks, required and optional remaining forks, and a ready/blocked verdict. It renders ledger state; it creates no artifact.
+- **Decision map and fork-round cap.** After three consecutive fork rounds that add no new evidence, or on request, show done forks, required and optional remaining forks, and a ready/blocked verdict — then stop asking: a fourth such round needs fresh grounding, a delegated digest, or a `/wheypoint` checkpoint. The map renders ledger state; it creates no artifact.
 - Do not implement code.
 - Do not write production files before the approval gate.
 - Do not silently settle uncertain claims.

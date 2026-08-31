@@ -2,9 +2,10 @@
 
 A long mold dialogue can drift into the model's degraded-attention band (roughly
 ~120k–140k tokens), where recall and coherence soften. Mold defends the window
-two ways: **offload heavy work to sub-agents by default**, and **nudge** the user
-toward a checkpoint as the window fills. Both are advisory levers, not hard gates —
-the reliable one is sub-agent offload (ADR-003, Risks).
+three ways: **offload heavy work to sub-agents by default**, **bound the active
+orchestration** so a phase cannot grind unnoticed, and **nudge** the user toward a
+checkpoint as the window fills. None is a hard gate — the reliable one is sub-agent
+offload (ADR-003, Risks).
 
 ## Default: offload heavy work to sub-agents
 
@@ -22,6 +23,25 @@ The sub-agent context gate (`SKILL.md` § Sub-agent context gate) is the **defau
 The sub-agent returns a ≤2 KB digest; the raw evidence never enters the parent
 window. The parent keeps only the dialogue, contradictions, approval state, and
 the two-key handshake — those never delegate.
+
+## Orchestration budgets — bound the active work, not only the window
+
+Token pressure is the late signal. What actually runs long is *active orchestration*: one mold episode owns bounds, grounding, research, shape, taste testing, planning, approval, and publication, and the cost shows up as tool calls and spawns long before the window fills. Measured over 16 top-level invocations (the 2026-08 workflow-skill analytics sample): median 35.6 active minutes, heavy sessions at 100–276 tool calls and up to 11 sub-agent spawns.
+
+So each phase carries a bound, and every bound has the same exhaustion move — stop adding work, record what is settled, and take the checkpoint:
+
+| Budget | Bound | On exhaustion |
+| --- | --- | --- |
+| Ground per topic | 1 wiki probe + 1 delegated digest | mark the remainder `[?]` and move on; a third probe is re-reading, not grounding |
+| Shape / Sketch per option set | 1 explorer digest | a second dispatch needs a *new* question, never a rerun of the same one |
+| Fork rounds | 3 consecutive rounds that add no new evidence | render the decision map and stop asking (`SKILL.md` § Rules) |
+| Parent-context tool calls | ~40 in the parent window | `/wheypoint` before the next heavy step |
+| Sub-agent spawns | 6 per episode | `/wheypoint`; resume with the digests, not the dispatches |
+| Repeated failures | 2 consecutive failures of the same tool or agent | record the degrade in the ledger and route around it — the third attempt is the one that burns the window |
+
+Count only the *parent* window's calls and spawns. A sub-agent's internal tool calls are exactly what offload is for, and charging them here would penalise the lever that works.
+
+These are budgets, not walls: exhaustion forces a checkpoint or a recorded degrade, never a truncated design. What it forbids is the silent third try.
 
 ## The nudge — heuristic, not a hard count
 
