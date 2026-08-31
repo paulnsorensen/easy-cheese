@@ -139,6 +139,58 @@ def test_every_skill_declares_a_static_manifest() -> None:
         )
 
 
+def _fake_command_module(*, decorated: tuple[str, ...]) -> ModuleType:
+    module = ModuleType("test_bundle_surface_module")
+
+    def make_handler(name: str) -> bc.CommandHandler:
+        def handler(argv: list[str]) -> int:
+            del argv
+            return 0
+
+        handler.__module__ = module.__name__
+        handler.__qualname__ = f"_{name.replace('-', '_')}"
+        return bc.bundle_command(name)(handler)
+
+    for name in decorated:
+        setattr(module, f"_{name.replace('-', '_')}", make_handler(name))
+    return module
+
+
+def test_validate_command_surface_rejects_unreferenced_declaration() -> None:
+    module = _fake_command_module(decorated=("foo", "bar"))
+    with pytest.raises(ValueError, match="declares unreferenced bundle command.*foo"):
+        bc.validate_command_surface(module, (bc.derive_command(module._bar),))
+
+
+def test_validate_command_surface_rejects_undeclared_reference() -> None:
+    module = _fake_command_module(decorated=("foo",))
+    stray = command("stray")
+    with pytest.raises(ValueError, match="references undeclared bundle command.*stray"):
+        bc.validate_command_surface(module, (bc.derive_command(module._foo), stray))
+
+
+_SKILLS_ON_THE_DECORATOR_SURFACE = (
+    "age",
+    "affinage",
+    "briesearch",
+    "cure",
+    "melt",
+    "mold",
+    "pasteurize",
+    "plate",
+    "hard-cheese",
+    "wheypoint",
+    "cook",
+)
+
+
+@pytest.mark.parametrize("skill", _SKILLS_ON_THE_DECORATOR_SURFACE)
+def test_validate_command_surface_passes_for_every_skill(skill: str) -> None:
+    package = skill.replace("-", "_")
+    module = importlib.import_module(f"easy_cheese.skills.{package}.commands")
+    bc.validate_command_surface(module, module.COMMANDS)
+
+
 def test_skill_manifests_are_literal_tuples() -> None:
     from scripts import build_pyz
 
