@@ -35,15 +35,21 @@ dispatch had no upstream report; the key is never omitted.
 | `status:` | Wire form | Disposition | Meaning |
 |---|---|---|---|
 | `ok` | `ok` — stands alone, never carries a reason | **proceed** | The phase did its job; the orchestrator walks on to `next:`. |
+| `ok-with-concerns` | `ok-with-concerns: <one-line concern>` | **proceed** | The phase did its job and found something the next phase should know. Name the concern; the run walks on and carries it forward. |
+| `needs-context` | `needs-context: <one-line gap>` | **retry** | The phase cannot finish with what it was handed. Name the missing input; the orchestrator re-dispatches the **same** phase with it. |
 | `gated` | `gated: <one-line decision>` | **stop** | The work is sound but the next step is blocked on a human decision. Name the decision. |
 | `halt` | `halt: <one-line reason>` | **stop** | The phase could not complete. Name the reason. |
 
 Rules that hold at every seam:
 
 - **Consumers branch on the disposition, not the name.** `proceed` walks the
-  table; `stop` ends the run and surfaces the reason. Adding a status must not
-  require editing every consumer, and a status a consumer does not recognise is
-  an error — never a silent "proceed".
+  table; `retry` re-dispatches the phase that just returned, without advancing
+  the phase index; `stop` ends the run and surfaces the reason. Adding a status
+  must not require editing every consumer, and a status a consumer does not
+  recognise is an error — never a silent "proceed".
+- **A `retry` handback is a request for input, not a second attempt at the same
+  brief.** The re-dispatch must carry the gap the worker named; re-running the
+  identical prompt would return the identical status.
 - **Every non-`ok` status carries a one-line reason**; `ok` carries none.
   Both halves are enforced on render and on parse.
 - **Names are matched case-insensitively** after stripping, because the field

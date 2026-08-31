@@ -19,7 +19,8 @@ Inputs:
     --phase-index <int>     Which phase just returned (0-indexed into the table).
     --status <value>        Status field from the handoff slug. Parsed through
                             the declared handback vocabulary: a `proceed`
-                            status walks the table, a `stop` status halts.
+                            status walks the table, `retry` re-dispatches the
+                            same phase, `stop` halts.
     --next <name>           Optional. The `next` field from the handoff slug;
                             terminal age always gates publication, while a
                             nonterminal clean age ends the linear and
@@ -29,7 +30,8 @@ Inputs:
 Output (JSON):
 
     {
-      "action": "spawn" | "stop" | "stop_early" | "clean_complete" | "halt",
+      "action": "spawn" | "stop" | "stop_early" | "clean_complete" | "halt"
+                | "needs_context",
       "next_phase": "press" | "age" | "cure" | null,
       "exit_message": "<one-line operator-visible reason>"
     }
@@ -43,13 +45,16 @@ from typing import Literal, Protocol, TextIO, TypedDict
 from easy_cheese.shared import cli
 
 from easy_cheese_schemas.phase_contracts import (
+    RETRY,
     STOP,
     StatusError,
     parse_status_field,
     status_disposition,
 )
 
-Action = Literal["spawn", "stop", "stop_early", "clean_complete", "halt"]
+Action = Literal[
+    "spawn", "stop", "stop_early", "clean_complete", "halt", "needs_context"
+]
 
 
 class Verdict(TypedDict):
@@ -116,6 +121,16 @@ def decide(
             "next_phase": None,
             "exit_message": f"{current_phase} (phase {phase_index}) halted: {status.strip()}",
         }
+    if disposition == RETRY:
+        return {
+            "action": "needs_context",
+            "next_phase": current_phase,
+            "exit_message": (
+                f"{current_phase} (phase {phase_index}) needs more context: "
+                f"{status.strip()}; re-dispatch the same phase with it"
+            ),
+        }
+
     # The terminal entry of every table is the final review; it is publishable
     # only when it positively reports done. Missing/next=cure means findings
     # remain and publication must halt.

@@ -53,20 +53,35 @@ agent_resolution:
 - Do not turn a known underpowered candidate into a fallback.
 - Use unknown power only after every known-power candidate is rejected, and record the degradation.
 
-## Roles x tiers (spawn-primitive effort per role)
+## Roles x tiers (spawn-primitive power and effort per role)
 
-Each role's spawn-primitive `effort` default, harness-agnostic (harness-specific model/tier bindings live in `routing-policy.md`'s Roles x tiers table):
+Each role's spawn-primitive `minimum_power` and `effort` defaults, harness-agnostic (harness-specific model/tier bindings live in `routing-policy.md`'s Roles x tiers table):
 
-| Role | Effort | Notes |
-|---|---|---|
-| explorer | low | judgment-shaped digests stay at a capable-but-cheap tier; schema-constrained scans may go cheaper |
-| researcher | medium | unchanged |
-| coder | medium | gains the ESCALATE contract; delegation IS the downgrade |
-| verifier | low | "verify exactly one claim"; schema-constrained; the cheap severity-filter leg |
-| reviewer | low \| medium \| high (dial) | pinned to a powerful model; count and effort follow the age router |
-| planner / integrator | xhigh (at mold) | never delegated; owns the approval loop |
+| Role | Minimum power | Effort | Notes |
+|---|---|---|---|
+| explorer | default | low | judgment-shaped digests stay at a capable-but-cheap tier; schema-constrained scans may go cheaper |
+| researcher | default | medium | unchanged |
+| coder | default | medium | gains the ESCALATE contract; delegation IS the downgrade |
+| verifier | cheap | low | "verify exactly one claim"; schema-constrained; the cheap severity-filter leg |
+| reviewer | powerful | low \| medium \| high (dial) | pinned to a powerful model; count and effort follow the age router |
+| planner / integrator | powerful | xhigh (at mold) | never delegated; owns the approval loop |
 
 A local skill table's `Effort` column defaults to this table for the matching role; override only with a stated reason (e.g. a router-driven dial).
+
+## Phases x roles (per-phase model selection)
+
+Model and effort are selected **per phase**, from the phase's role — not inherited from whatever model the dispatching orchestrator happens to be running. A phase spawn that omits the model is underspecified, not "the parent's model by default".
+
+| Phase | Role | Minimum power | Effort |
+|---|---|---|---|
+| mold | planner / integrator | powerful | xhigh |
+| cook | coder | default | medium |
+| press | coder | default | medium |
+| age (first and final) | reviewer | powerful | dial: low \| medium \| high, set by the age router |
+| cure | coder | default | medium |
+| wiring task | coder | default | low — single-file glue, capped at ~20 tool calls |
+
+Resolve each phase against this table, run the resolution order above over the result, and record the resolved `model`, `power`, and `effort` in that phase's own `agent_resolution` block. A phase that resolves to a different model than the phase before it is normal; a phase whose `resolved.model` is `unknown` because nobody chose one is a degraded dispatch and carries `degraded: true`.
 
 ## Local skill tables
 

@@ -25,6 +25,7 @@ from easy_cheese_schemas.phase_contracts import (
     HANDBACK_STATUSES,
     PROCEED,
     REGISTERED_STATUSES,
+    RETRY,
     STOP,
     StatusError,
     parse_status_field,
@@ -44,9 +45,17 @@ def _all_statuses() -> list[str]:
 
 
 def test_vocabulary_pins_every_status_name_and_disposition() -> None:
-    assert REGISTERED_STATUSES == ("ok", "gated", "halt")
+    assert REGISTERED_STATUSES == (
+        "ok",
+        "ok-with-concerns",
+        "needs-context",
+        "gated",
+        "halt",
+    )
     assert {name: HANDBACK_STATUSES[name].disposition for name in HANDBACK_STATUSES} == {
         "ok": PROCEED,
+        "ok-with-concerns": PROCEED,
+        "needs-context": RETRY,
         "gated": STOP,
         "halt": STOP,
     }
@@ -56,7 +65,7 @@ def test_vocabulary_pins_every_status_name_and_disposition() -> None:
         for name in REGISTERED_STATUSES
         if name != "ok"
     )
-    assert set(DISPOSITIONS) == {PROCEED, STOP}
+    assert set(DISPOSITIONS) == {PROCEED, RETRY, STOP}
 
 
 @pytest.mark.parametrize("name", _all_statuses())
@@ -70,6 +79,7 @@ def test_status_field_round_trips_through_the_shared_grammar(name: str) -> None:
 @pytest.mark.parametrize(
     ("value", "message"),
     [
+        ("DONE_WITH_CONCERNS: x", "status must be one of"),
         ("NEEDS_CONTEXT: x", "status must be one of"),
         ("okay", "status must be one of"),
         ("halt", "halt status requires a reason"),
@@ -91,6 +101,7 @@ def test_status_field_rejects_values_outside_the_vocabulary(
         ("Halt: x", ("halt", "x")),
         (" gated ", ("gated", None)),
         ("Gated: a decision", ("gated", "a decision")),
+        ("NEEDS-CONTEXT: more", ("needs-context", "more")),
         ("  OK  ", ("ok", None)),
     ],
 )
@@ -207,7 +218,7 @@ def test_artifact_writer_rejects_an_unknown_status_before_creating_directories(
     with pytest.raises(cli.CliError, match="status must be one of"):
         _ = write_handoff_artifact.write_artifact(
             slug="demo",
-            status="NEEDS_CONTEXT",
+            status="DONE_WITH_CONCERNS",
             next_skill="age",
             artifact="",
             orientation="must not be written",
@@ -223,6 +234,8 @@ def test_artifact_writer_rejects_an_unknown_status_before_creating_directories(
     ("status", "action", "next_phase"),
     [
         ("ok", "spawn", "press"),
+        (f"ok-with-concerns: {REASON}", "spawn", "press"),
+        (f"needs-context: {REASON}", "needs_context", "cook"),
         (f"gated: {REASON}", "halt", None),
         (f"halt: {REASON}", "halt", None),
     ],
@@ -255,3 +268,29 @@ def test_legacy_reader_never_accepts_a_status_the_runtime_cannot_route() -> None
 def test_legacy_reader_keeps_its_bare_reason_optional_tolerance() -> None:
     assert legacy._parse_legacy_status("halt") == ("halt", None)  # pyright: ignore[reportPrivateUsage]
     assert legacy._parse_legacy_status("gated") == ("gated", None)  # pyright: ignore[reportPrivateUsage]
+
+
+def test_needs_context_re_dispatches_the_same_phase_with_its_reason() -> None:
+    """`needs-context` is a request for more input, not a failure.
+
+    The phase index does not advance and the exit message carries the worker's
+    stated gap, so the orchestrator re-dispatches the identical phase with the
+    missing context rather than halting the run or walking past the shortfall.
+    """
+    verdict = phase_decision.decide(1, f"needs-context: {REASON}")
+
+    assert verdict["action"] == "needs_context"
+    assert verdict["next_phase"] == "press"
+    assert REASON in verdict["exit_message"]
+    assert "re-dispatch the same phase" in verdict["exit_message"]
+
+
+def test_ok_with_concerns_proceeds_but_keeps_its_reason_on_the_wire() -> None:
+    """A proceed status that still has something to say must not lose it."""
+    slug = handoff.parse_handoff_slug(
+        f"status: ok-with-concerns: {REASON}\nnext: age\nartifact: \ndid the work\n"
+    )
+
+    assert slug.status == "ok-with-concerns"
+    assert slug.halt_reason == REASON
+    assert slug.disposition == PROCEED

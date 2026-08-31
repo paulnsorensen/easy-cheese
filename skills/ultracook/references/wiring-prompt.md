@@ -1,12 +1,21 @@
 # Per-wiring task worker prompt template
 
-Loaded by the `/cook` fan pathway at Phase 4. Substitute `{id}`, `{slug}`, `{type}`, `{file}`, `{description}`, `{spec_summary}`, and `{agent_resolution}` before dispatch.
+Loaded by the `/cook` fan pathway at Phase 4. Substitute `{id}`, `{slug}`, `{type}`, `{file}`, `{description}`, `{spec_summary}`, `{model}`, `{effort}`, and `{agent_resolution}` before dispatch.
+
+`{model}` and `{effort}` are resolved for the wiring task's role (coder), per `skills/cheese/references/agent-resolution.md` § Phases x roles. They are never left unsubstituted so the spawn falls through to the parent's model.
 
 ````text
 You are performing integration wiring task: {id} for spec {slug}
 
 Resolved role: coder
 Agent resolution: {agent_resolution}
+
+## Model
+
+Model: {model}
+Effort: {effort}
+
+This task runs at the model and effort resolved for its role, not at whatever model the dispatching parent is running. A wiring task never silently inherits the parent model: if `{model}` arrived unresolved, halt rather than guessing one. The resolved model, power, and effort are recorded in `agent_resolution` (`resolved.model`, `resolved.power`, `resolved.effort`) and copied unchanged into the handoff slug below.
 
 ## Task
 

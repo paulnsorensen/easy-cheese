@@ -1,6 +1,8 @@
 # Per-curd phase prompt template
 
-Loaded by the `/cook` fan pathway for each top-level phase spawn. Substitute `{N}`, `{slug}`, `{phase}`, `{worktree_path}`, `{file_list}`, `{behaviour}`, `{acceptance_criterion}`, `{test_target}`, `{spec_summary}`, `{baseline}`, `{prior_handoff}`, `{review_context}`, and `{agent_resolution}`.
+Loaded by the `/cook` fan pathway for each top-level phase spawn. Substitute `{N}`, `{slug}`, `{phase}`, `{worktree_path}`, `{file_list}`, `{behaviour}`, `{acceptance_criterion}`, `{test_target}`, `{spec_summary}`, `{baseline}`, `{prior_handoff}`, `{review_context}`, `{model}`, `{effort}`, and `{agent_resolution}`.
+
+`{model}` and `{effort}` are resolved per phase from the phase's role, per `skills/cheese/references/agent-resolution.md` § Phases x roles. They are never left unsubstituted so the spawn falls through to the parent's model.
 
 ````text
 You are executing {phase} for curd #{N} of spec {slug}.
@@ -41,9 +43,16 @@ review_context: {review_context}
 
 `review_context` contains `base_commit` (commit SHA), `reviewed_tree_oid` (tree object ID, including uncommitted state), `diff_hash`, and `scope`. Never call the tree object ID a head commit SHA.
 
+## Model
+
+Model: {model}
+Effort: {effort}
+
+This phase runs at the model and effort resolved for its own role, not at whatever model the dispatching parent is running. A phase never silently inherits the parent model: if `{model}` arrived unresolved, halt rather than guessing one. Consecutive phases of the same curd routinely resolve differently — coder phases at the coder tier, age phases pinned to a powerful model at the age router's effort dial.
+
 ## Resolution provenance
 
-Copy this resolved record unchanged into the phase output:
+The resolved model, power, and effort are recorded in `agent_resolution` (`resolved.model`, `resolved.power`, `resolved.effort`); that record, not the parent's model, is what makes the phase reproducible. Copy this resolved record unchanged into the phase output:
 
 ```yaml
 agent_resolution: {agent_resolution}

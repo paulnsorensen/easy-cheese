@@ -42,14 +42,19 @@ class HandbackStatus:
 
 
 PROCEED = "proceed"
+RETRY = "retry"
 STOP = "stop"
-DISPOSITIONS = (PROCEED, STOP)
+DISPOSITIONS = (PROCEED, RETRY, STOP)
 
 HANDBACK_STATUSES: Mapping[str, HandbackStatus] = MappingProxyType(
     {
         status.name: status
         for status in (
             HandbackStatus("ok", requires_reason=False, disposition=PROCEED),
+            HandbackStatus(
+                "ok-with-concerns", requires_reason=True, disposition=PROCEED
+            ),
+            HandbackStatus("needs-context", requires_reason=True, disposition=RETRY),
             HandbackStatus("gated", requires_reason=True, disposition=STOP),
             HandbackStatus("halt", requires_reason=True, disposition=STOP),
         )
@@ -346,6 +351,7 @@ __all__ = [
     "REGISTERED_PHASES",
     "REGISTERED_SCHEMA_URIS",
     "REGISTERED_STATUSES",
+    "RETRY",
     "STOP",
     "CompiledPhase",
     "CompiledTransition",
