@@ -93,7 +93,7 @@ Beyond source-code routing there are router-specific tools:
 | PR / issue context | `gh` | the URL or numbers the user provided |
 | Confirming routing target with the user (only under `--safe` or `clarify`) | host-routed structured question per [`references/handoff-gate.md`](references/handoff-gate.md) | a numbered list with explicit dispatch commands |
 
-`/cheese` keeps tool use light. Beyond the single wiki-grounding probe in `## Flow`, treat anything heavier than a single-file read or one search call as a sign the work belongs in the downstream skill, not in the router.
+One evidence probe is one file read, one search call, one `gh` call, or the wiki-grounding probe in `## Flow`; the router spends at most three, and the fast path spends zero. Past three, the input needs work the router should not be doing — escalate to `/culture` or `/briesearch` in internal mode. Budget, fast-path conditions, and receipt fields: [`references/routing-receipt.md`](references/routing-receipt.md).
 
 ## Output
 
@@ -102,9 +102,16 @@ Always emit, in order:
 1. **Detected intent** — one line, e.g. `Intent: cook (clear single-file fix)`.
 2. **Reason** — one line citing the signal (`reason: spec path .cheese/specs/foo.md`).
 3. **Target** — the chosen skill, e.g. `Target: /cook .cheese/specs/foo.md`.
-4. **Wiki hits** — when `handoff_context.wiki_hits` is non-empty, one line per hit: `wiki: <page>:<line> — <why>` — always rendered before dispatch so the user sees what memory informed the routing and can challenge stale hits. Omit the section when hallouminate is absent.
+4. **Wiki hits** — when `handoff_context.wiki_hits` is non-empty, one line per hit: `wiki: <page>:<line> — <why>` — always rendered before the receipt so the user sees what memory informed the routing and can challenge stale hits. Omit the section when hallouminate is absent.
+5. **Routing receipt** — the last line before dispatch, always emitted, one line per route:
 
-Then dispatch in the same turn (or, under `--safe`, via the handoff gate). If `clarify` is chosen, replace the dispatch with the single clarifying question.
+   ```text
+   route: intent=<intent> target=<skill> path=<fast|escalated> probes=<n>
+   ```
+
+   Its position is the terminal routing boundary separating classification from the work it dispatched, so never put a duration or a timestamp in it — the host already timestamps the line. Fields and rules: [`references/routing-receipt.md`](references/routing-receipt.md).
+
+Then dispatch in the same turn (or, under `--safe`, via the handoff gate). If `clarify` is chosen, replace the dispatch with the single clarifying question — the receipt still prints, with `target=clarify` and the probes the route actually spent.
 
 ## Handoff
 
@@ -137,4 +144,5 @@ Pre-select only the highest-confidence target. Without `--safe`, surface the tar
 - [`references/handoff-gate.md`](references/handoff-gate.md) — cross-harness post-selection dispatch contract (shared across workflow skills).
 - [`references/handback-contract.md`](references/handback-contract.md) — the one preamble, status vocabulary, and dispatch/handback boundary inventory every phase speaks.
 - `references/escalation.md` — full escalation-tier mechanics and the spec-discovery check.
-- `references/continue-resume.md` — the `--continue` resume flow.
+- `references/continue-resume.md` — the `--continue` resume flow and the `--reground` re-check.
+- `references/routing-receipt.md` — the terminal routing receipt, the probe budget, and the fast path.
