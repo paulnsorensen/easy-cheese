@@ -210,6 +210,9 @@ def lint_work(
 
     current = store.read_revision(record.revision_number, record.revision_id)
     projection = None
+    # No receipt for the current revision means no proven ancestry, so every
+    # revision pin is unresolved rather than resolved against the whole store.
+    ancestry: frozenset[str] = frozenset()
     if current is None:
         findings.append(
             LintFinding(
@@ -223,11 +226,12 @@ def lint_work(
         findings.extend(projection_report.findings)
         projection = projection_report.projection
         chain = _walk_chain(recovery, current)
+        ancestry = chain.revision_ids
         findings.extend(chain.findings)
         findings.extend(_conservation_findings(chain, record))
         findings.extend(_git_findings(current, git_object_exists))
 
-    findings.extend(_coverage_findings(recovery, record, artifact_digest))
+    findings.extend(_coverage_findings(ancestry, record, artifact_digest))
     return LintReport(findings=tuple(findings), record=record, projection=projection)
 
 
@@ -382,14 +386,14 @@ def _git_findings(
 
 
 def _coverage_findings(
-    recovery: storage.RecoveryReport,
+    ancestry: frozenset[str],
     record: WheypointRecord,
     artifact_digest: Callable[[str], str | None],
 ) -> list[LintFinding]:
     report = records.coverage_report(
         record,
         artifact_digest=artifact_digest,
-        known_revision_ids=recovery.revision_ids,
+        ancestor_revision_ids=ancestry,
     )
     return [
         LintFinding(

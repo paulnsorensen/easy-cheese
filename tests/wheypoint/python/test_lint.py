@@ -391,6 +391,97 @@ def test_a_pinned_artifact_that_still_matches_lints_clean(
     assert report.codes == ()
 
 
+def revision_pinned_record(
+    make_record: Callable[..., WheypointRecord],
+    pinned_revision_id: str,
+    **overrides: object,
+) -> WheypointRecord:
+    return make_record(
+        decisions=[
+            ProtectedEntry(
+                entry_id="d-shape",
+                kind=EntryKind.DECISION,
+                summary="The record is the authority.",
+                state=EntryState.ACTIVE,
+                blocks_continuation=False,
+            )
+        ],
+        artifact_links=[
+            ArtifactLink(
+                path="cook/report.md",
+                revision_id=pinned_revision_id,
+                covers_entry_ids=["d-shape"],
+            )
+        ],
+        **overrides,
+    )
+
+
+def test_a_revision_pin_resolves_against_the_ancestry_not_the_directory(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    """An abandoned sibling is still a file on disk. A claim pinned to one
+    describes work this record never took, so it must not read as fresh."""
+    store = make_store(corpus_root)
+    sibling = make_promotion(
+        1, "rev-0009", record=make_record(revision_id="rev-0009")
+    )
+    store.promote(sibling.record, sibling.revision, sibling.markdown)
+    current = make_promotion(
+        1, "rev-0001", record=revision_pinned_record(make_record, "rev-0009")
+    )
+    store.promote(current.record, current.revision, current.markdown)
+
+    report = check(store, artifact_digest=lambda path: canonical.digest_text("here"))
+
+    assert report.codes == (lint.LintCode.ARTIFACT_COVERAGE_INVALID,)
+    assert report.findings[0].detail == (
+        "cook/report.md: coverage pins unknown revision 'rev-0009'"
+    )
+
+
+def test_a_revision_pin_on_a_walked_ancestor_lints_clean(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    store = make_store(corpus_root)
+    first = make_promotion(1, "rev-0001")
+    store.promote(first.record, first.revision, first.markdown)
+    second = make_promotion(
+        2,
+        "rev-0002",
+        parent="rev-0001",
+        record=revision_pinned_record(
+            make_record, "rev-0001", revision_id="rev-0002", revision_number=2
+        ),
+    )
+    store.promote(second.record, second.revision, second.markdown)
+
+    report = check(store, artifact_digest=lambda path: canonical.digest_text("here"))
+
+    assert report.codes == ()
+
+
+def test_a_revision_pinned_artifact_that_is_gone_invalidates_its_claim(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    store = make_store(corpus_root)
+    promotion = make_promotion(
+        record=revision_pinned_record(make_record, "rev-0001")
+    )
+    store.promote(promotion.record, promotion.revision, promotion.markdown)
+
+    report = check(store)
+
+    assert report.codes == (lint.LintCode.ARTIFACT_COVERAGE_INVALID,)
+    assert report.findings[0].detail == "cook/report.md: artifact is missing"
+
+
 def test_an_interrupted_promotion_is_named_rather_than_reported_clean(
     corpus_root: Path, make_promotion: Callable[..., _PromotionLike]
 ) -> None:

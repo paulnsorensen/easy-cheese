@@ -638,7 +638,7 @@ def _report(
     return records.coverage_report(
         record,
         artifact_digest=lambda path: storage.file_digest(base / path),
-        known_revision_ids=store.revision_ids(),
+        ancestor_revision_ids=store.revision_ids(),
     )
 
 
@@ -765,6 +765,31 @@ def test_a_revision_pinned_claim_needs_that_revision_to_exist(
             path="cook.md", reason="coverage pins unknown revision 'rev-9999'"
         ),
     )
+
+
+def test_a_revision_pinned_claim_needs_the_artifact_to_still_be_there(
+    tmp_path: Path,
+    store: storage.WorkStore,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _Promotion],
+) -> None:
+    """A revision pin says what the file was at a revision, which says nothing
+    at all once the file is gone -- the digest branch already refused that, and
+    the revision branch used to wave it through."""
+    promotion = make_promotion()
+    store.promote(promotion.record, promotion.revision, promotion.markdown)
+
+    record = _covered_record(
+        make_record,
+        ArtifactLink(path="gone.md", revision_id="rev-0001", covers_entry_ids=["d-store"]),
+    )
+
+    report = _report(record, tmp_path, store)
+    assert report.covered_entry_ids == ()
+    assert report.failures == (
+        records.CoverageFailure(path="gone.md", reason="artifact is missing"),
+    )
+    assert [entry.entry_id for entry in record.decisions] == ["d-store"]
 
 
 def test_a_link_without_a_coverage_claim_is_not_a_failure(

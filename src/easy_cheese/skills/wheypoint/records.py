@@ -150,13 +150,16 @@ def coverage_report(
     record: WheypointRecord,
     *,
     artifact_digest: Callable[[str], str | None],
-    known_revision_ids: Container[str],
+    ancestor_revision_ids: Container[str],
 ) -> CoverageReport:
     """Re-check every coverage claim the record's artifact links make.
 
     `artifact_digest` returns the artifact's current digest or None when it is
-    gone; `known_revision_ids` holds the revisions that exist immutably. A claim
-    survives only if it is pinned and the pin still resolves.
+    gone; `ancestor_revision_ids` holds the revisions this record descends
+    from. Ancestry, not mere existence, is what a revision pin has to resolve
+    against: an abandoned sibling is still a file on disk, and a claim pinned
+    to one describes work this record never took. A claim survives only if it
+    is pinned, the artifact is still there, and the pin still resolves.
     """
     known_entry_ids = {entry.entry_id for entry in entries(record)}
     covered: list[str] = []
@@ -174,7 +177,7 @@ def coverage_report(
                 )
             )
             continue
-        reason = _pin_failure(link, artifact_digest, known_revision_ids)
+        reason = _pin_failure(link, artifact_digest, ancestor_revision_ids)
         if reason is not None:
             failures.append(CoverageFailure(path=link.path, reason=reason))
             continue
@@ -186,7 +189,7 @@ def coverage_report(
 def _pin_failure(
     link: ArtifactLink,
     artifact_digest: Callable[[str], str | None],
-    known_revision_ids: Container[str],
+    ancestor_revision_ids: Container[str],
 ) -> str | None:
     if link.digest is not None:
         current = artifact_digest(link.path)
@@ -196,7 +199,11 @@ def _pin_failure(
             return "artifact digest mismatch"
         return None
     if link.revision_id is not None:
-        if link.revision_id not in known_revision_ids:
+        # Existence first: a revision pin says "this file was what it was at
+        # that revision", which a deleted file cannot be either way.
+        if artifact_digest(link.path) is None:
+            return "artifact is missing"
+        if link.revision_id not in ancestor_revision_ids:
             return f"coverage pins unknown revision {link.revision_id!r}"
         return None
     return "coverage claim has neither a digest nor a revision to pin it"
