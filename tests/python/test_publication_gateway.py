@@ -186,7 +186,7 @@ def test_publish_rejects_tampered_payload_on_replay(tmp_path: Path) -> None:
     silently accepted as the original."""
     first = _publish(tmp_path, raw_text=json.dumps(DOC), operation_id="op-tamper")
     payload_path = publication._uri_to_path(  # pyright: ignore[reportPrivateUsage]
-        first.pointer.payload.uri
+        first.pointer.payload.uri, tmp_path
     )
     tampered_doc = {
         **DOC,
@@ -196,6 +196,58 @@ def test_publish_rejects_tampered_payload_on_replay(tmp_path: Path) -> None:
     _ = payload_path.write_bytes(other_canonical.canonical_bytes)
     with pytest.raises(publication.PayloadDigestMismatchError):
         _ = _publish(tmp_path, raw_text=json.dumps(DOC), operation_id="op-tamper")
+
+
+def test_publish_race_same_request_rehydrates_identical_artifact(
+    tmp_path: Path,
+) -> None:
+    """A racing reveal for the same operation_id with the same request must
+    surface FileExistsError from _atomic_reveal and rehydrate the winner's
+    PublishedArtifact rather than erroring or overwriting it."""
+    winner_holder: list[PublishedArtifact] = []
+
+    def _race_winner() -> None:
+        winner_holder.append(
+            _publish(tmp_path, raw_text=json.dumps(DOC), operation_id="op-race-same")
+        )
+
+    result = _publish(
+        tmp_path,
+        raw_text=json.dumps(DOC),
+        operation_id="op-race-same",
+        _before_reveal=_race_winner,
+    )
+
+    assert len(winner_holder) == 1
+    winner = winner_holder[0]
+    assert result.pointer == winner.pointer
+    assert result.canonical.value == winner.canonical.value
+    assert list((tmp_path / "pointers").glob(".*")) == []
+
+
+def test_publish_race_conflicting_request_raises_idempotency_conflict(
+    tmp_path: Path,
+) -> None:
+    """A racing reveal for the same operation_id with a different request must
+    surface IdempotencyConflictError from the FileExistsError branch, not a
+    bare FileExistsError, and must leave no temp residue in pointers/."""
+    doc_payload = cast("dict[str, object]", DOC["payload"])
+    other_doc = {**DOC, "payload": {**doc_payload, "objective": "A racing objective"}}
+
+    def _race_conflict() -> None:
+        _ = _publish(
+            tmp_path, raw_text=json.dumps(other_doc), operation_id="op-race-conflict"
+        )
+
+    with pytest.raises(publication.IdempotencyConflictError):
+        _ = _publish(
+            tmp_path,
+            raw_text=json.dumps(DOC),
+            operation_id="op-race-conflict",
+            _before_reveal=_race_conflict,
+        )
+
+    assert list((tmp_path / "pointers").glob(".*")) == []
 
 
 def test_publish_receipt_only_when_syntax_actions_nonempty(tmp_path: Path) -> None:

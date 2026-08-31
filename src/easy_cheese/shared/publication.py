@@ -23,7 +23,7 @@ from urllib.parse import unquote, urlsplit
 
 from easy_cheese_schemas import (
     COMPILED_TRANSITION_REGISTRY,
-    SCHEMA_ROOT,
+    NORMALIZATION_RECEIPT_SCHEMA_URI,
     ArtifactRef,
     HandoffPointer,
     IngressKind,
@@ -39,13 +39,12 @@ from easy_cheese_schemas import (
     validate_transition,
 )
 
-_NORMALIZATION_RECEIPT_SCHEMA_URI = f"{SCHEMA_ROOT}/normalization-receipt"
-
 __all__ = [
     "AmbiguousSyntaxRepairError",
     "IdempotencyConflictError",
     "PayloadDigestMismatchError",
     "UnrecoverableSyntaxError",
+    "UnsafeArtifactUriError",
     "publish",
     "syntax_normalize",
 ]
@@ -65,6 +64,10 @@ class IdempotencyConflictError(ValueError):
 
 class PayloadDigestMismatchError(ValueError):
     """A previously revealed pointer's payload no longer matches its digest."""
+
+
+class UnsafeArtifactUriError(ValueError):
+    """An artifact URI is not a ``file://`` URI contained in the artifact root."""
 
 
 def _trim_whitespace(text: str) -> str:
@@ -269,8 +272,12 @@ def _atomic_reveal(path: Path, content: bytes) -> None:
             handle.flush()
             os.fsync(handle.fileno())
         os.link(temp_name, path)
+        _fsync_dir(path.parent)
     finally:
-        os.unlink(temp_name)
+        try:
+            os.unlink(temp_name)
+        except OSError:
+            pass
 
 
 def _content_path(directory: Path, digest: str) -> Path:
@@ -279,13 +286,26 @@ def _content_path(directory: Path, digest: str) -> Path:
 
 def _retain_content(directory: Path, digest: str, content: bytes) -> Path:
     path = _content_path(directory, digest)
-    if not path.exists():
+    if not path.exists() or _digest_bytes(path.read_bytes()) != digest:
         _atomic_write(path, content)
     return path
 
 
-def _uri_to_path(uri: str) -> Path:
-    return Path(unquote(urlsplit(uri).path))
+def _digest_bytes(content: bytes) -> str:
+    return f"sha256:{hashlib.sha256(content).hexdigest()}"
+
+
+def _uri_to_path(uri: str, artifact_root: Path) -> Path:
+    parts = urlsplit(uri)
+    if parts.scheme != "file":
+        raise UnsafeArtifactUriError(f"artifact uri {uri!r} is not a file:// uri")
+    path = Path(unquote(parts.path)).resolve()
+    root = artifact_root.resolve()
+    if path != root and root not in path.parents:
+        raise UnsafeArtifactUriError(
+            f"artifact uri {uri!r} resolves outside artifact root {root}"
+        )
+    return path
 
 
 def _read_pointer(path: Path) -> HandoffPointer:
@@ -298,17 +318,19 @@ def _read_pointer(path: Path) -> HandoffPointer:
     return value
 
 
-def _rehydrate(pointer: HandoffPointer, payload_schema_uri: str) -> PublishedArtifact:
-    payload_path = _uri_to_path(pointer.payload.uri)
+def _rehydrate(
+    pointer: HandoffPointer, payload_schema_uri: str, artifact_root: Path
+) -> PublishedArtifact:
+    payload_path = _uri_to_path(pointer.payload.uri, artifact_root)
     payload_bytes = payload_path.read_bytes()
-    canonical = validate_contract(
-        payload_bytes, payload_schema_uri, supported_version_for(payload_schema_uri)
-    )
-    actual_digest = canonical_digest(canonical.value)
+    actual_digest = _digest_bytes(payload_bytes)
     if actual_digest != pointer.payload.digest:
         raise PayloadDigestMismatchError(
             f"payload at {pointer.payload.uri!r} has digest {actual_digest!r}, expected {pointer.payload.digest!r}"
         )
+    canonical = validate_contract(
+        payload_bytes, payload_schema_uri, supported_version_for(payload_schema_uri)
+    )
     return PublishedArtifact(
         pointer=pointer,
         canonical=canonical,
@@ -348,7 +370,7 @@ def publish(
             raise IdempotencyConflictError(
                 f"operation {operation_id!r} was already published with a different request"
             )
-        return _rehydrate(existing, payload_schema_uri)
+        return _rehydrate(existing, payload_schema_uri, root)
 
     normalized_text, actions = syntax_normalize(raw_text)
     canonical = normalize_agent_output(normalized_text, invocation)
@@ -394,7 +416,7 @@ def publish(
             digest=receipt_digest,
             size_bytes=len(receipt_bytes),
             media_type="application/json",
-            schema_uri=_NORMALIZATION_RECEIPT_SCHEMA_URI,
+            schema_uri=NORMALIZATION_RECEIPT_SCHEMA_URI,
         )
 
     handoff_version = supported_version_for(HandoffPointer)
@@ -418,7 +440,7 @@ def publish(
             raise IdempotencyConflictError(
                 f"operation {operation_id!r} was already published with a different request"
             ) from None
-        return _rehydrate(existing, payload_schema_uri)
+        return _rehydrate(existing, payload_schema_uri, root)
     return PublishedArtifact(
         pointer=pointer, canonical=validated, normalization_receipt=receipt_ref
     )
