@@ -174,6 +174,113 @@ def test_a_declared_commit_that_no_longer_resolves_blocks(
     assert report.codes == (lint.LintCode.GIT_OBJECT_MISSING,)
 
 
+# ----- same-slug replacement (issue #371) -----------------------------------
+
+
+def decision(entry_id: str, summary: str) -> ProtectedEntry:
+    return ProtectedEntry(
+        entry_id=entry_id,
+        kind=EntryKind.DECISION,
+        summary=summary,
+        state=EntryState.ACTIVE,
+        blocks_continuation=False,
+    )
+
+
+def test_a_narrowed_rewrite_that_drops_a_prior_decision_is_reported(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    """The incident: a full checkpoint is resumed, the topic is narrowed, and
+    the next revision for the same work carries fewer decisions than its own
+    lineage accounts for. Every digest agrees, so only the reconciliation pass
+    against the chain can see the loss."""
+    store = make_store(corpus_root)
+    kept = decision("d-authority", "The record is the authority.")
+    dropped = decision("d-projection", "The note is a projection.")
+    full = make_promotion(
+        1,
+        "rev-0001",
+        record=make_record(decisions=[kept, dropped]),
+        additions=[kept, dropped],
+    )
+    store.promote(full.record, full.revision, full.markdown)
+    narrowed = make_promotion(
+        2,
+        "rev-0002",
+        parent="rev-0001",
+        record=make_record(
+            revision_id="rev-0002", revision_number=2, decisions=[kept]
+        ),
+        preserved=["d-authority"],
+    )
+    store.promote(narrowed.record, narrowed.revision, narrowed.markdown)
+
+    report = check(store)
+
+    assert report.codes == (lint.LintCode.ENTRY_DROPPED,)
+    assert report.findings[0].detail == (
+        "revision 'rev-0001' accounts for entry 'd-projection', which record "
+        "'rev-0002' no longer carries"
+    )
+
+
+def test_a_rewrite_that_carries_every_accounted_entry_lints_clean(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    store = make_store(corpus_root)
+    kept = decision("d-authority", "The record is the authority.")
+    carried = decision("d-projection", "The note is a projection.")
+    full = make_promotion(
+        1,
+        "rev-0001",
+        record=make_record(decisions=[kept, carried]),
+        additions=[kept, carried],
+    )
+    store.promote(full.record, full.revision, full.markdown)
+    later = make_promotion(
+        2,
+        "rev-0002",
+        parent="rev-0001",
+        record=make_record(
+            revision_id="rev-0002", revision_number=2, decisions=[kept, carried]
+        ),
+        preserved=["d-authority", "d-projection"],
+    )
+    store.promote(later.record, later.revision, later.markdown)
+
+    assert check(store).codes == ()
+
+
+def test_an_entry_an_unreachable_sibling_added_is_not_accounted_for(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    """Only the walked chain accounts for entries. A receipt that sits in the
+    work directory without being an ancestor of the current revision never
+    obliges the record to carry what it added."""
+    store = make_store(corpus_root)
+    kept = decision("d-authority", "The record is the authority.")
+    sibling_only = decision("d-sibling", "Written down an abandoned branch.")
+    sibling = make_promotion(
+        1,
+        "rev-0009",
+        record=make_record(revision_id="rev-0009", decisions=[sibling_only]),
+        additions=[sibling_only],
+    )
+    store.promote(sibling.record, sibling.revision, sibling.markdown)
+    current = make_promotion(
+        1, "rev-0001", record=make_record(decisions=[kept]), additions=[kept]
+    )
+    store.promote(current.record, current.revision, current.markdown)
+
+    assert check(store).codes == ()
+
+
 def covered_record(
     make_record: Callable[..., WheypointRecord], digest: str
 ) -> WheypointRecord:

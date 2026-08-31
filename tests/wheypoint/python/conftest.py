@@ -131,6 +131,8 @@ def _promotion(
     parent: str | None = None,
     record: WheypointRecord | None = None,
     gating: bool = False,
+    additions: list[ProtectedEntry] | None = None,
+    preserved: list[str] | None = None,
 ) -> Promotion:
     base = record or _record(
         revision_id=revision_id, revision_number=number, gating=gating
@@ -146,9 +148,9 @@ def _promotion(
         revision_number=base.revision_number,
         request_digest=canonical.digest_text(f"request-{number}"),
         record_digest=records.record_digest(base),
-        applied_additions=[],
+        applied_additions=list(additions or []),
         applied_transitions=[],
-        preserved_entry_ids=[],
+        preserved_entry_ids=list(preserved or []),
         projection_path=f"projections/{base.revision_number}-{base.revision_id}.md",
         projection_digest=projected.projection_digest,
         repository=RepositoryProvenance(branch="claude/wheypoint", commit="abc1234"),

@@ -3,9 +3,10 @@
 Everything a caller would have to trust before acting on a checkpoint is
 re-derived here from the bytes on disk: the projection hashes to the digest it
 carries, the record hashes to the digest its receipt quotes, every parent in
-the chain is present as an immutable local revision, the record belongs to this
-project, the commit it cites still exists, and every artifact coverage claim
-still resolves.
+the chain is present as an immutable local revision, every protected entry that
+chain accounts for is still in the record, the record belongs to this project,
+the commit it cites still exists, and every artifact coverage claim still
+resolves.
 
 A lint finding is a *reason not to dispatch*, never a repair. Nothing in this
 module writes, and nothing removes protected inline state -- an artifact whose
@@ -42,6 +43,7 @@ class LintCode(str, Enum):
     PROJECT_MISMATCH = "project-mismatch"
     GIT_OBJECT_MISSING = "git-object-missing"
     ARTIFACT_COVERAGE_INVALID = "artifact-coverage-invalid"
+    ENTRY_DROPPED = "entry-dropped"
 
 
 # Findings that describe the store's surroundings rather than the authority of
@@ -207,7 +209,9 @@ def lint_work(
         projection_report = _lint_current_projection(store, record, current)
         findings.extend(projection_report.findings)
         projection = projection_report.projection
-        findings.extend(_chain_findings(recovery, current))
+        chain = _walk_chain(recovery, current)
+        findings.extend(chain.findings)
+        findings.extend(_conservation_findings(chain, record))
         findings.extend(_git_findings(current, git_object_exists))
 
     findings.extend(_coverage_findings(recovery, record, artifact_digest))
@@ -261,14 +265,33 @@ def _lint_current_projection(
     )
 
 
-def _chain_findings(
+@define(frozen=True)
+class _Chain:
+    """The ancestry of one revision, and why it stops where it does.
+
+    `revisions` runs current-first and holds only the steps that were actually
+    walked, so a chain that breaks reports the prefix it could prove rather
+    than the whole store: a revision the walk never reached is not an ancestor
+    of the current one, whatever else is on disk.
+    """
+
+    revisions: tuple[WheypointRevision, ...]
+    findings: tuple[LintFinding, ...]
+
+    @property
+    def revision_ids(self) -> frozenset[str]:
+        return frozenset(revision.revision_id for revision in self.revisions)
+
+
+def _walk_chain(
     recovery: storage.RecoveryReport, current: WheypointRevision
-) -> list[LintFinding]:
+) -> _Chain:
     """Walk parents back to genesis; every step must be a local revision."""
     known = {
         file.revision.revision_id: file.revision for file in recovery.complete
     }
     findings: list[LintFinding] = []
+    walked = [current]
     seen = {current.revision_id}
     revision = current
     while revision.parent_revision_id is not None:
@@ -293,8 +316,41 @@ def _chain_findings(
             )
             break
         seen.add(parent_id)
+        walked.append(parent)
         revision = parent
-    return findings
+    return _Chain(revisions=tuple(walked), findings=tuple(findings))
+
+
+def _conservation_findings(
+    chain: _Chain, record: WheypointRecord
+) -> list[LintFinding]:
+    """Reconcile the record against every entry its own lineage accounts for.
+
+    A receipt says what one revision added and what it carried forward
+    untouched; together the chain therefore names every protected entry the
+    work has ever held. An entry that lineage accounts for and the record no
+    longer carries was not transitioned out -- there is no transition that
+    removes one -- so it was replaced away, which is the one loss the
+    carry-forward rules cannot catch from a single revision. It is reported
+    against the record, never repaired: nothing here can know what the dropped
+    entry said.
+    """
+    accounted: dict[str, str] = {}
+    for revision in chain.revisions:
+        for addition in revision.applied_additions:
+            accounted.setdefault(addition.entry_id, revision.revision_id)
+        for entry_id in revision.preserved_entry_ids:
+            accounted.setdefault(entry_id, revision.revision_id)
+    held = {entry.entry_id for entry in records.entries(record)}
+    return [
+        LintFinding(
+            LintCode.ENTRY_DROPPED,
+            f"revision {revision_id!r} accounts for entry {entry_id!r}, which "
+            + f"record {record.revision_id!r} no longer carries",
+        )
+        for entry_id, revision_id in sorted(accounted.items())
+        if entry_id not in held
+    ]
 
 
 def _git_findings(
