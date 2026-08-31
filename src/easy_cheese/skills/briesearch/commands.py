@@ -12,6 +12,7 @@ COMMANDS = (
         "easy_cheese.shared.artifact_path:main",
         "Resolve the durable or transient artifact path for a phase and slug",
     ),
+    Command("budget-check", "easy_cheese.skills.briesearch.budget:main"),
     Command(
         "ground-check",
         "easy_cheese.skills.briesearch.ground_check:main",

@@ -50,6 +50,19 @@ TOP_LEVEL: Final = "top-level"
 SIDECHAIN: Final = "sidechain"
 INVOCATIONS: Final = frozenset({TOP_LEVEL, SIDECHAIN})
 
+# The only reasons `references/budgets.md` accepts for spending past a declared
+# soft budget. An extension naming anything else is a free-text escape hatch,
+# which is exactly the budget-defeating move the check exists to catch.
+EVIDENCE_GAPS: Final = frozenset(
+    {
+        "no-primary-source",
+        "unresolved-contradiction",
+        "missing-freshness",
+        "unanswered-question",
+        "unsupported-claim",
+    }
+)
+
 _DEFAULT_PORTS: Final = {"http": 80, "https": 443}
 
 
@@ -66,14 +79,27 @@ class Call:
     tool: str = ""
     status: str = OK
     query: str = ""
+    # Canonical JSON of the call's filter arguments (date window, domain
+    # include/exclude, depth). Two searches differing only in key order are the
+    # same search, so the sorted encoding — not the dict — is the identity.
+    filters: str = ""
     url: str = ""
     canonical: str = ""
     file: str = ""
     refresh: bool = False
+    cached: bool = False
 
     @property
     def ok(self) -> bool:
         return self.status == OK
+
+
+@dataclass(frozen=True)
+class Extension:
+    """A recorded reason for spending past a declared soft budget."""
+
+    gap: str
+    note: str = ""
 
 
 @dataclass(frozen=True)
@@ -83,6 +109,7 @@ class Ledger:
     invocation: str = TOP_LEVEL
     calls: tuple[Call, ...] = ()
     budget: dict[str, int] = field(default_factory=dict)
+    extensions: tuple[Extension, ...] = ()
 
     def retrieved(self) -> dict[str, Call]:
         """Canonical URL -> the first successful retrieval that named its tool.
@@ -143,6 +170,20 @@ def _flag(entry: dict[str, object], key: str, what: str) -> bool:
     return value
 
 
+def _filters(entry: dict[str, object], what: str) -> str:
+    """Canonical JSON for the call's filters, so key order is not identity."""
+    value = entry.get("filters")
+    if value is None:
+        return ""
+    filters = _as_object(value, f"{what} field 'filters'")
+    if not filters:
+        return ""
+    try:
+        return json.dumps(filters, sort_keys=True, separators=(",", ":"))
+    except TypeError as exc:
+        raise LedgerError(f"{what} field 'filters' is not JSON-encodable: {exc}") from exc
+
+
 def _parse_call(value: object, index: int) -> Call:
     what = f"calls[{index}]"
     entry = _as_object(value, what)
@@ -161,10 +202,23 @@ def _parse_call(value: object, index: int) -> Call:
         tool=_text(entry, "tool", what, required=kind != SPAWN),
         status=_text(entry, "status", what, required=False) or OK,
         query=_text(entry, "query", what, required=kind == SEARCH),
+        filters=_filters(entry, what),
         url=url,
         canonical=canonical_url(url) if url else "",
         file=_text(entry, "file", what, required=False),
         refresh=_flag(entry, "refresh", what),
+        cached=_flag(entry, "cached", what),
+    )
+
+
+def _parse_extension(value: object, index: int) -> Extension:
+    """Parse a budget extension. The gap label is *not* validated here — an
+    unrecognised label is a budget finding to report, not a corrupt manifest."""
+    what = f"extensions[{index}]"
+    entry = _as_object(value, what)
+    return Extension(
+        gap=_text(entry, "gap", what, required=True),
+        note=_text(entry, "note", what, required=False),
     )
 
 
@@ -204,6 +258,10 @@ def parse_ledger(data: object) -> Ledger:
             _parse_call(call, i) for i, call in enumerate(_sequence(document, "calls"))
         ),
         budget=_parse_budget(document.get("budget")),
+        extensions=tuple(
+            _parse_extension(ext, i)
+            for i, ext in enumerate(_sequence(document, "extensions"))
+        ),
     )
 
 

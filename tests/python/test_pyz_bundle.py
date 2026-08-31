@@ -41,7 +41,7 @@ SKILL_SUBCOMMANDS = {
     ],
     "affinage": ["pr-status", "post-reply", "age-route", "review-surface"],
     "mold": ["artifact-path", "curd-count", "gate-graph", "render-html", "taste-test", "validate-spec"],
-    "briesearch": ["artifact-path", "ground-check", "research-layout"],
+    "briesearch": ["artifact-path", "budget-check", "ground-check", "research-layout"],
     "plate": ["stack-tools", "validate-publication"],
     "cook": [
         "artifact-path", "age-route", "baseline", "phase-decision", "milknado", "mode", "worktree",
@@ -1038,6 +1038,74 @@ def test_ground_check_rejects_an_untrustworthy_manifest(
     )
     assert result.returncode == 1, result.stderr
     assert "unknown kind 'crawl'" in result.stderr
+
+
+# briesearch budget-check: the spend gate behind #549. Reads the same manifest
+# and refuses a run that repeated itself or overspent without naming a gap.
+def _budget_check(
+    bundles: Path, tmp_path: Path, document: object
+) -> subprocess.CompletedProcess[str]:
+    _manifest(tmp_path, document)
+    return _run(bundles / "briesearch.pyz", "budget-check", str(tmp_path))
+
+
+def test_budget_check_fails_a_repeated_search(bundles: Path, tmp_path: Path) -> None:
+    search = {
+        "kind": "search",
+        "provider": "tavily",
+        "tool": "tavily_search",
+        "query": "rrf fusion",
+        "filters": {"days": 30},
+    }
+    result = _budget_check(bundles, tmp_path, {"calls": [search, dict(search)]})
+    assert result.returncode == 1, result.stdout
+    assert "DUPLICATE_SEARCH" in result.stderr
+    assert json.loads(result.stdout)["duplicates"]["search"] == 1
+
+
+def test_budget_check_fails_overspend_with_no_extension(
+    bundles: Path, tmp_path: Path
+) -> None:
+    calls = [
+        {
+            "kind": "search",
+            "provider": "tavily",
+            "tool": "tavily_search",
+            "query": f"q{i}",
+        }
+        for i in range(3)
+    ]
+    result = _budget_check(
+        bundles, tmp_path, {"budget": {"search": 2}, "calls": calls}
+    )
+    assert result.returncode == 1, result.stdout
+    assert "3 search call(s) against a declared budget of 2" in result.stderr
+
+
+def test_budget_check_passes_a_run_within_budget(bundles: Path, tmp_path: Path) -> None:
+    result = _budget_check(
+        bundles,
+        tmp_path,
+        {
+            "invocation": "sidechain",
+            "budget": {"extract": 1},
+            "calls": [
+                {
+                    "kind": "extract",
+                    "provider": "tavily",
+                    "tool": "tavily_extract",
+                    "url": "https://example.com/a",
+                    "file": "raw/01-example.md",
+                    "cached": True,
+                }
+            ],
+        },
+    )
+    assert result.returncode == 0, result.stderr
+    assert "budget ok" in result.stderr
+    metrics = cast(dict[str, object], json.loads(result.stdout))
+    assert metrics["invocation"] == "sidechain"
+    assert metrics["cached"] == 1
 
 
 def test_bundle_build_is_byte_deterministic(tmp_path: Path) -> None:
