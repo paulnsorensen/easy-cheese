@@ -29,6 +29,8 @@ __all__ = [
     "resolve_verified_bytes",
 ]
 
+SchemaValidator = Callable[[bytes, str], None]
+
 _READ_CHUNK_BYTES = 64 * 1024
 
 _REDIRECT_CODES = frozenset({301, 302, 303, 307, 308})
@@ -96,6 +98,8 @@ def resolve_artifact(
         detected_type,
         artifact_directory,
     )
+
+
 def resolve_verified_bytes(
     artifact: ArtifactRef,
     content: bytes,
@@ -533,6 +537,7 @@ def _validate_schema(artifact: ArtifactRef, content: bytes) -> None:
         raise ArtifactResolutionError("schema artifact must contain a JSON object")
 
     try:
+        validator = schema_validator or _validate_registered_schema
         _validate_registered_schema(content, artifact.schema_uri)
     except ArtifactResolutionError:
         raise
