@@ -143,6 +143,7 @@ def test_cook_pyz_rejects_tampered_payload(tmp_path: Path) -> None:
     result = _accept(pointer_path)
     assert result.returncode == 1, result.stdout + result.stderr
     assert "digest mismatch" in result.stderr
+    assert "Traceback" not in result.stderr
 
 
 def test_cook_pyz_rejects_wrong_route(tmp_path: Path) -> None:
@@ -152,6 +153,7 @@ def test_cook_pyz_rejects_wrong_route(tmp_path: Path) -> None:
     result = _accept(pointer_path)
     assert result.returncode == 1, result.stdout + result.stderr
     assert "press -> cook is not declared" in result.stderr
+    assert "Traceback" not in result.stderr
 
 
 def test_cook_pyz_rejects_missing_receipt_file(tmp_path: Path) -> None:
@@ -163,6 +165,7 @@ def test_cook_pyz_rejects_missing_receipt_file(tmp_path: Path) -> None:
     result = _accept(pointer_path)
     assert result.returncode == 1, result.stdout + result.stderr
     assert "is missing at" in result.stderr
+    assert "Traceback" not in result.stderr
 
 
 def test_cook_pyz_rejects_receipt_digest_mismatch(tmp_path: Path) -> None:
@@ -174,6 +177,7 @@ def test_cook_pyz_rejects_receipt_digest_mismatch(tmp_path: Path) -> None:
     result = _accept(pointer_path)
     assert result.returncode == 1, result.stdout + result.stderr
     assert "digest mismatch" in result.stderr
+    assert "Traceback" not in result.stderr
 
 
 def test_cook_pyz_rejects_receipt_canonical_digest_mismatch(tmp_path: Path) -> None:
@@ -195,6 +199,7 @@ def test_cook_pyz_rejects_receipt_canonical_digest_mismatch(tmp_path: Path) -> N
     result = _accept(pointer_path)
     assert result.returncode == 1, result.stdout + result.stderr
     assert "does not match the canonical payload" in result.stderr
+    assert "Traceback" not in result.stderr
 
 
 def test_cook_pyz_rejects_bare_payload(tmp_path: Path) -> None:
@@ -204,6 +209,7 @@ def test_cook_pyz_rejects_bare_payload(tmp_path: Path) -> None:
     result = _run(cook_pyz, "accept", str(bare_payload))
     assert result.returncode == 1, result.stdout + result.stderr
     assert "$.contract_version is required" in result.stderr
+    assert "Traceback" not in result.stderr
 
 
 def test_cook_pyz_rejects_missing_payload_file(tmp_path: Path) -> None:
@@ -214,6 +220,7 @@ def test_cook_pyz_rejects_missing_payload_file(tmp_path: Path) -> None:
     result = _accept(pointer_path)
     assert result.returncode == 1, result.stdout + result.stderr
     assert "is missing at" in result.stderr
+    assert "Traceback" not in result.stderr
 
 
 def test_cook_pyz_rejects_missing_pointer_file(tmp_path: Path) -> None:
@@ -221,3 +228,25 @@ def test_cook_pyz_rejects_missing_pointer_file(tmp_path: Path) -> None:
     result = _accept(missing_pointer)
     assert result.returncode == 1, result.stdout + result.stderr
     assert "pointer not found at" in result.stderr
+    assert "Traceback" not in result.stderr
+
+
+def test_cook_pyz_accepts_bare_relative_pointer_from_pointers_dir(
+    tmp_path: Path,
+) -> None:
+    pointer_path, pointer = _publish(tmp_path, "op-relative")
+    cook_pyz = build_pyz.cached_bundle("cook")
+    env = dict(os.environ)
+    _ = env.pop("PYTHONPATH", None)
+    result = subprocess.run(
+        [sys.executable, str(cook_pyz), "accept", pointer_path.name],
+        cwd=str(pointer_path.parent),
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    wrapper = cast(dict[str, object], json.loads(result.stdout))
+    value = cast(dict[str, object], wrapper["value"])
+    assert value["plan_id"] == INVOCATION["plan_id"]
+    assert pointer["destination_phase"] == "cook"

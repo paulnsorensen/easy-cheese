@@ -138,6 +138,7 @@ def test_mold_pyz_migrate_rejects_unsupported_version(
     )
     assert result.returncode == 1, result.stdout + result.stderr
     assert "ERROR:" in result.stderr
+    assert "Traceback" not in result.stderr
     assert not (artifact_root / "pointers" / "op-migrate-unsupported.json").exists()
 
 
@@ -165,4 +166,5 @@ def test_mold_pyz_migrate_rejects_unprovable_route(tmp_path: Path) -> None:
     assert result.returncode == 1, result.stdout + result.stderr
     assert "ERROR:" in result.stderr
     assert "not declared" in result.stderr
+    assert "Traceback" not in result.stderr
     assert not (artifact_root / "pointers" / "op-migrate-unprovable.json").exists()

@@ -147,4 +147,5 @@ def test_mold_pyz_publish_rejects_bad_payload(tmp_path: Path) -> None:
     )
     assert result.returncode == 1, result.stdout + result.stderr
     assert "ERROR:" in result.stderr
+    assert "Traceback" not in result.stderr
     assert not (artifact_root / "pointers" / "op-rejected.json").exists()
