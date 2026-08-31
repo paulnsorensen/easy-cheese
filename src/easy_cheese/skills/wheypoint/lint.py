@@ -354,10 +354,12 @@ def _conservation_findings(
     """
     accounted: dict[str, str] = {}
     for revision in chain.revisions:
-        for addition in revision.applied_additions:
-            accounted.setdefault(addition.entry_id, revision.revision_id)
-        for entry_id in revision.preserved_entry_ids:
-            accounted.setdefault(entry_id, revision.revision_id)
+        for entry_id in (
+            *(addition.entry_id for addition in revision.applied_additions),
+            *revision.preserved_entry_ids,
+        ):
+            if entry_id not in accounted:
+                accounted[entry_id] = revision.revision_id
     held = {entry.entry_id for entry in records.entries(record)}
     return [
         LintFinding(
