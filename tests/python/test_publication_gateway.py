@@ -2,16 +2,18 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
+from typing import cast
 
 import pytest
-from easy_cheese_schemas import ContractValidationError
+from easy_cheese_schemas import ContractValidationError, PublishedArtifact
 
 from easy_cheese.shared import publication
 
 CURD_PLAN_SCHEMA_URI = "https://schemas.easy-cheese.dev/curd-plan"
 
-DOC = {
+DOC: dict[str, object] = {
     "kind": "curd_plan",
     "payload": {
         "objective": "Ship the approved behavior",
@@ -32,7 +34,7 @@ DOC = {
     },
 }
 
-INVOCATION = {
+INVOCATION: dict[str, object] = {
     "plan_id": "curdplan-publication-gateway-1",
     "contract_version": {
         "schema_uri": CURD_PLAN_SCHEMA_URI,
@@ -48,8 +50,8 @@ def _publish(
     raw_text: str,
     invocation: dict[str, object] = INVOCATION,
     operation_id: str = "op-1",
-    **kwargs: object,
-) -> publication.PublishedArtifact:
+    _before_reveal: Callable[[], None] | None = None,
+) -> PublishedArtifact:
     return publication.publish(
         raw_text,
         invocation,
@@ -58,7 +60,7 @@ def _publish(
         payload_schema_uri=CURD_PLAN_SCHEMA_URI,
         operation_id=operation_id,
         artifact_root=tmp_path,
-        **kwargs,
+        _before_reveal=_before_reveal,
     )
 
 
@@ -143,7 +145,8 @@ def test_publish_is_idempotent_on_replay(tmp_path: Path) -> None:
 
 def test_publish_rejects_conflicting_replay(tmp_path: Path) -> None:
     _ = _publish(tmp_path, raw_text=json.dumps(DOC), operation_id="op-conflict")
-    other_doc = {**DOC, "payload": {**DOC["payload"], "objective": "A different objective"}}
+    doc_payload = cast("dict[str, object]", DOC["payload"])
+    other_doc = {**DOC, "payload": {**doc_payload, "objective": "A different objective"}}
     with pytest.raises(publication.IdempotencyConflictError):
         _ = _publish(
             tmp_path, raw_text=json.dumps(other_doc), operation_id="op-conflict"

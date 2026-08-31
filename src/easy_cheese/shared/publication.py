@@ -184,7 +184,7 @@ def _atomic_write(path: Path, content: bytes) -> None:
     )
     try:
         with os.fdopen(descriptor, "wb") as handle:
-            handle.write(content)
+            _ = handle.write(content)
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(temp_name, path)
@@ -314,8 +314,10 @@ def publish(
             media_type="application/json",
         )
 
+    handoff_version = supported_version_for(HandoffPointer)
+    assert handoff_version is not None
     pointer = HandoffPointer(
-        contract_version=supported_version_for(HandoffPointer),
+        contract_version=handoff_version,
         operation_id=operation_id,
         request_digest=request_digest,
         source_phase=source_phase,
