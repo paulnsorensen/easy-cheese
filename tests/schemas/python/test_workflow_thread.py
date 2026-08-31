@@ -1115,7 +1115,7 @@ def test_budget_overrun_retains_completed_repairs_and_next_action(
     assert second.criterion_id == result.expected_criterion_ids[1]
     assert second.reason == (
         "writer stopped at its budget: WriterBudgetExceeded: "
-        "context budget reached after the first repair"
+        + "context budget reached after the first repair"
     )
 
     assert [item.role for item in result.deliverables] == ["repair"]
@@ -1151,7 +1151,7 @@ def test_budget_overrun_without_progress_still_hands_back_next_action(
     assert result.deliverables == ()
     assert result.unresolved_work == (
         "writer stopped at its budget: WriterBudgetExceeded: "
-        "tool budget reached before any repair",
+        + "tool budget reached before any repair",
         "Start with the first repair in src/workflow.py",
     )
 
@@ -1186,8 +1186,8 @@ def test_full_coverage_budget_checkpoint_is_rejected_without_review(
     assert result.deliverables == ()
     assert result.unresolved_work == (
         "budget checkpoint invalid: ValueError: budget checkpoint must leave at "
-        "least one criterion unfinished, not 2 of 2 "
-        "<- WriterBudgetExceeded: budget reached",
+        + "least one criterion unfinished, not 2 of 2 "
+        + "<- WriterBudgetExceeded: budget reached",
     )
 
 
@@ -1213,5 +1213,5 @@ def test_budget_overrun_is_reported_apart_from_a_plain_writer_failure(
     assert branches == ()
     assert results[0].unresolved_work == (
         "writer callback failed: RuntimeError: "
-        "context budget reached after the first repair",
+        + "context budget reached after the first repair",
     )

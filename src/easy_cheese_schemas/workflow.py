@@ -5,10 +5,10 @@ import json
 import os
 import re
 import tempfile
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from enum import Enum
 from pathlib import Path
-from typing import Literal, cast
+from typing import Literal, TypeVar, cast
 from urllib.parse import quote, urlsplit
 
 import attrs
@@ -54,7 +54,6 @@ from .contracts import (
     SourceCurdRef,
     SourcePlanRef,
     WriterViewKind,
-    _tuple_sequence,
 )
 from .planner import materialize_planner_result
 from .schema_runtime import (
@@ -73,6 +72,13 @@ DiagnosisDispatch = Callable[[DiagnosisRequest], object]
 BranchResult = ReviewResult | DiagnosisResult
 ExecutionResults = tuple[tuple[BranchResult, ...], tuple[CurdResult, ...]]
 WorkflowResults = tuple[PlannerResult, tuple[BranchResult, ...], tuple[CurdResult, ...]]
+
+
+_ItemT = TypeVar("_ItemT")
+
+
+def _tuple_sequence(value: Sequence[_ItemT]) -> tuple[_ItemT, ...]:
+    return tuple(value)
 
 
 @attrs.define(frozen=True)
@@ -111,7 +117,7 @@ class WriterBudgetExceeded(Exception):
 
     def __init__(self, checkpoint: WriterCheckpoint) -> None:
         super().__init__(checkpoint.reason)
-        self.checkpoint = checkpoint
+        self.checkpoint: WriterCheckpoint = checkpoint
 
 
 @attrs.define(frozen=True)
