@@ -289,13 +289,50 @@ def _check_lineage(store: storage.WorkStore, current: WheypointRecord) -> None:
 
 
 def _check_rehydration(delta: WheypointDelta, current: WheypointRecord) -> None:
+    """Make a compacted delta prove it re-read the record it is writing over.
+
+    The flag says a compaction happened; the record is the evidence that the
+    durable state was reloaded first. Naming the current revision is the weakest
+    of the three checks -- an id survives in a stale transcript -- so the record
+    also has to quote the digest of the record it re-read and account for every
+    protected entry that record still carries. Only a session that actually
+    reloaded the record can produce all three, and a later reader can re-derive
+    each of them rather than take the claim on faith.
+    """
     if not delta.compacted:
         return
-    if delta.rehydrated_from_revision_id != current.revision_id:
+    compaction = delta.compaction
+    if compaction is None:
+        raise CommitError(
+            "a compacted delta must rehydrate first: it carries no compaction "
+            + f"record naming the current revision {current.revision_id!r}, the "
+            + "digest of the record it re-read, and the entries it reconciled"
+        )
+    if compaction.rehydrated_from_revision_id != current.revision_id:
         raise CommitError(
             "a compacted delta must be rehydrated from the current revision "
             + f"{current.revision_id!r}, not "
-            + f"{delta.rehydrated_from_revision_id!r}"
+            + f"{compaction.rehydrated_from_revision_id!r}"
+        )
+    expected_digest = records.record_digest(current)
+    if compaction.rehydrated_record_digest != expected_digest:
+        raise CommitError(
+            "the compaction record quotes record digest "
+            + f"{compaction.rehydrated_record_digest}, but revision "
+            + f"{current.revision_id!r} hashes to {expected_digest}: the delta "
+            + "did not re-read the record it is writing over"
+        )
+    reconciled = set(compaction.reconciled_entry_ids)
+    unreconciled = [
+        entry.entry_id
+        for entry in records.entries(current)
+        if entry.entry_id not in reconciled
+    ]
+    if unreconciled:
+        raise CommitError(
+            "the compaction record does not reconcile protected entries "
+            + f"{', '.join(repr(entry_id) for entry_id in unreconciled)} held by "
+            + f"revision {current.revision_id!r}"
         )
 
 
@@ -554,7 +591,7 @@ def _finish(
         ),
         projection_digest=projected.projection_digest,
         repository=repository,
-        rehydrated_from_revision_id=delta.rehydrated_from_revision_id,
+        compaction=delta.compaction,
         session_provenance=delta.session_provenance,
     )
     record = evolve(draft, revision_digest=records.revision_digest(revision))

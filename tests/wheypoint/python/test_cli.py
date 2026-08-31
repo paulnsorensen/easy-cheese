@@ -17,6 +17,7 @@ from typing import TypedDict, cast
 import pytest
 from easy_cheese_schemas import (
     ArtifactLink,
+    CompactionRecord,
     DecisionFork,
     EntryKind,
     EntryTransition,
@@ -60,7 +61,7 @@ class _DeltaFields(TypedDict):
     add_artifact_links: list[ArtifactLink] | None
     transitions: list[EntryTransition] | None
     compacted: bool
-    rehydrated_from_revision_id: str | None
+    compaction: CompactionRecord | None
     session_provenance: SessionProvenance | None
 
 

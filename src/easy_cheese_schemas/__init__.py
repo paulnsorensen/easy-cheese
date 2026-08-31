@@ -79,6 +79,7 @@ from easy_cheese_schemas.manifest import (
 from easy_cheese_schemas.pr_plan import PrGroup, PrPlan, PrShape
 from easy_cheese_schemas.wheypoint import (
     ArtifactLink,
+    CompactionRecord,
     DecisionFork,
     DossierOption,
     Durability,
@@ -273,6 +274,7 @@ __all__ = [
     "AttemptResult",
     "Baseline",
     "BaselineGate",
+    "CompactionRecord",
     "CurdBlock",
     "CurdRecord",
     "DecisionFork",

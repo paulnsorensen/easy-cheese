@@ -54,6 +54,7 @@ class _NamedAttribute(Protocol):
 
 __all__ = [
     "ArtifactLink",
+    "CompactionRecord",
     "DecisionFork",
     "DossierOption",
     "Durability",
@@ -416,6 +417,24 @@ class SessionProvenance:
 
 
 @define(frozen=True)
+class CompactionRecord:
+    """What a session did to earn the right to write after a compaction.
+
+    A compacted session has lost the context it was holding, so the revision it
+    remembers is a guess. Naming the revision it re-read is not enough on its
+    own -- an id can be copied out of a stale transcript -- so the record also
+    quotes the *digest* of the record it re-read and lists the protected entries
+    it reconciled against. Together those three are a reconciliation report: a
+    claim that can only be made by a session that actually reloaded the durable
+    state, and one a later reader can re-derive rather than take on faith.
+    """
+
+    rehydrated_from_revision_id: str = field(validator=_identifier)
+    rehydrated_record_digest: str = field(validator=_digest)
+    reconciled_entry_ids: list[str] = field(validator=_identifier_ledger)
+
+
+@define(frozen=True)
 class RepositoryProvenance:
     """Where the repository stood when a revision was written. Absent fields
     mean git could not be inspected, not that the work was clean."""
@@ -557,8 +576,6 @@ def _rehydration_rule(
         raise ValueError(
             f"{attribute.name} must be null unless the delta declares compaction"
         )
-    if value is not None:
-        _identifier(instance, attribute, value)
 
 
 def _one_transition_per_entry(
@@ -629,7 +646,11 @@ class WheypointDelta:
         default=None, validator=_one_transition_per_entry
     )
     compacted: bool = field(default=False, validator=validators.instance_of(bool))
-    rehydrated_from_revision_id: str | None = field(
+    # Declaring compaction is not the same as surviving it: the flag says the
+    # harness detected one, the record is the evidence that durable state was
+    # reloaded and reconciled first. The runtime refuses the flag without the
+    # record, so a compacted session cannot write until it has rehydrated.
+    compaction: CompactionRecord | None = field(
         default=None, validator=_rehydration_rule
     )
     session_provenance: SessionProvenance | None = None
@@ -661,9 +682,7 @@ class WheypointRevision:
     projection_path: str = field(validator=_bounded_text)
     projection_digest: str = field(validator=_digest)
     repository: RepositoryProvenance
-    rehydrated_from_revision_id: str | None = field(
-        default=None, validator=validators.optional(_identifier)
-    )
+    compaction: CompactionRecord | None = None
     session_provenance: SessionProvenance | None = None
 
 
