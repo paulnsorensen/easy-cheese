@@ -9,6 +9,7 @@ distribution floors declared in pyproject.toml.
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import date
 import re
 import tomllib
 from pathlib import Path
@@ -21,14 +22,19 @@ from attrs.exceptions import FrozenInstanceError
 from easy_cheese_schemas import (
     MIN_READABLE,
     SCHEMA_VERSION,
+    AdapterSunsetError,
     EvidenceOrigin,
     GateMode,
     GateProducer,
     GateReceipt,
+    LegacyAdapter,
     Loaded,
     Provenance,
+    check_adapter_sunsets,
     compat,
     load,
+    register_adapter,
+    unregister_adapter,
 )
 from easy_cheese_schemas.compat import STAMP_KEY, classify_stamp
 
@@ -309,3 +315,39 @@ class TestDistributionMetadata:
         import easy_cheese_schemas
 
         assert self._project()["version"] == easy_cheese_schemas.__version__
+
+
+class TestAdapterSunsets:
+    _SOURCE_SCHEMA_URI = "https://schemas.easy-cheese.dev/test-fixtures/sunset-fixture"
+
+    def teardown_method(self) -> None:
+        unregister_adapter(self._SOURCE_SCHEMA_URI, "0", "1")
+
+    def test_expired_adapter_blocks_with_injected_reference_date(self) -> None:
+        register_adapter(
+            LegacyAdapter(
+                source_schema_uri=self._SOURCE_SCHEMA_URI,
+                source_major="0",
+                source_minor="1",
+                target_schema_uri=self._SOURCE_SCHEMA_URI,
+                remove_after="2020-01-01",
+                convert=lambda payload: dict(payload),
+            )
+        )
+
+        with pytest.raises(AdapterSunsetError):
+            check_adapter_sunsets(date(2020, 1, 1))
+
+    def test_unexpired_adapter_does_not_block(self) -> None:
+        register_adapter(
+            LegacyAdapter(
+                source_schema_uri=self._SOURCE_SCHEMA_URI,
+                source_major="0",
+                source_minor="1",
+                target_schema_uri=self._SOURCE_SCHEMA_URI,
+                remove_after="2099-01-01",
+                convert=lambda payload: dict(payload),
+            )
+        )
+
+        check_adapter_sunsets(date(2020, 1, 1))
