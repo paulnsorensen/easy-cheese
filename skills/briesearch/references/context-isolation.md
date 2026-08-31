@@ -31,10 +31,34 @@ Provider examples include Tavily crawl/research, Exa contents over many URLs, an
    └── <slug>.md
    ```
 
-   The manifest records the URL, title, selected provider, and fetch date for each file.
+   The manifest is the run ledger — see `## Capture manifest` below. Write it as calls happen, not from memory at the end.
 
 5. **Filter inside the sub-agent.** Apply the relevance checks the question requires and build the claim-level rows from `synthesis.md`. Bind each Freshness value to the manifest fetch date (or `"live"` for an unstored live check).
 6. **Return auditable pointers.** The sub-agent returns the short-form claim table, confidence, gaps, and report path. Each stored claim cites `raw/NN-<host>.md#Lstart-end`; raw bodies stay on disk.
+
+## Capture manifest
+
+`manifest.json` is machine-read by `ground-check`, so it has a fixed shape:
+
+```json
+{
+  "slug": "hybrid-retrieval-fusion",
+  "invocation": "top-level",
+  "calls": [
+    {"kind": "search", "provider": "tavily", "tool": "tavily_search",
+     "query": "reciprocal rank fusion k", "filters": {"days": 30}, "status": "ok"},
+    {"kind": "extract", "provider": "tavily", "tool": "tavily_extract",
+     "url": "https://example.com/rrf", "file": "raw/01-example.md",
+     "title": "RRF", "fetched": "2026-08-30", "status": "ok"},
+    {"kind": "spawn", "provider": "researcher", "status": "ok"}
+  ]
+}
+```
+
+- `kind` is `search`, `extract`, or `spawn`. `invocation` is `top-level` (the user asked) or `sidechain` (another skill asked).
+- `provider` and `tool` are both required for searches and extractions: which provider tool ran is the evidence that a page was read, not just listed (`routing.md` § Provider tool sets).
+- `status` defaults to `ok`. Record failures with their real status and no `file` — a failed fetch is not evidence, and `ground-check` will not let it ground a citation.
+- Set `"refresh": true` on a deliberate re-extraction of a URL already in the ledger (freshness is now part of the question), and `"cached": true` when a call was served from an earlier entry in this run.
 
 ## Re-extraction in later turns
 

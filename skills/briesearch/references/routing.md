@@ -42,6 +42,26 @@ Is it multi-part, comparative, a "best" question, or a cited report?
 
 Prefer native easy-cheese helpers/backends when present. Otherwise select one equivalent provider per capability. Use multiple providers for one capability only when independent verification or coverage requires it, not because a named service appears in this document.
 
+## Provider tool sets
+
+Selecting a provider selects its **whole** tool set. Evidence-gathering splits into two operations, and a provider that ships both must be used for both: discovery locates candidates, retrieval reads the page you are about to cite. A search snippet is discovery, never inspection — citing a URL you only saw in a result list is the failure `ground-check`'s REMOTE rule exists to catch.
+
+| Provider (example) | Discovery | Retrieval (what you cite from) | Coverage / extras |
+| --- | --- | --- | --- |
+| Context7 | `resolve-library-id` | `query-docs` (version-scoped) | Resolve only when the library id is ambiguous |
+| Tavily | `tavily_search` (topic, day/date filters) | `tavily_extract` | Crawl/map for broad section coverage; research for a public-web report |
+| Exa | `search` | `contents` | `find_similar` widens a thin result set |
+| Native web | web search | web fetch/open | — |
+| Hallouminate | `ground` | `read_markdown` (cite path + lines) | `backlinks`, `list_tree` for neighbouring decisions |
+| Git hosting (`gh`) | `gh search` (code/issues/prs) | `gh api`, `gh <noun> view` | Release/tag metadata for freshness claims |
+| Local code intelligence | shared [routing contract](../../cheese/references/code-intelligence-routing.md) search | bounded read at the cited `file:line` | Dependency inspection for callers |
+
+Rules:
+
+- **Do not degrade to a lowest-common-denominator wrapper.** When the selected provider ships its own retrieval tool, a generic fetcher is a substitution: use the provider's tool, or record the substitution per `unavailable.md`.
+- **Record the provider *and* the tool** for every call in the capture manifest (`context-isolation.md` § Capture manifest). "Tavily" is not evidence that a page was read; `tavily_extract` on that URL is.
+- **A capability marked `YES` whose only execution was discovery is committed-but-skipped** for any claim that needed the page content.
+
 ## Provider-selected methods
 
 ### Library/API documentation
@@ -106,6 +126,8 @@ Use `YES` or `NO` for every capability even when the answer is obvious. The prov
 ## Verify then cite
 
 Confirm that each cited URL covers the claim with the selected provider's extraction/open/fetch operation. Tavily extract, Exa contents, and native web open are examples. If the selected search provider cannot read the page, use one compatible fetcher and record the substitution. The exemptions in `synthesis.md` waive only link-resolution checks for user-supplied URLs and inline `file:line` references; they never waive content inspection.
+
+Record each retrieval in the capture manifest as it happens. `ground-check` reads that manifest and fails any cited `http(s)` URL with no successful retrieval entry naming the tool that opened it — so a deep report's citations are checked against what the run actually fetched, not against the model's memory of fetching.
 
 ## Hard rule
 

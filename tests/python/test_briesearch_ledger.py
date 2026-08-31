@@ -1,0 +1,219 @@
+"""The capture manifest as a machine-read ledger (#493).
+
+`references/context-isolation.md` always told /briesearch to write a
+`manifest.json` beside a deep report, but nothing read it back, so "verify then
+cite" was unauditable: a URL that only appeared in a search result list could be
+cited as though a provider retrieval tool had opened it. These pin the parser's
+trust boundary and the ground-check REMOTE rule built on it.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+
+from easy_cheese.skills.briesearch import ground_check
+from easy_cheese.skills.briesearch.ledger import (
+    LedgerError,
+    canonical_url,
+    find_ledger,
+    load_ledger,
+    parse_ledger,
+)
+
+
+def _extract(url: str, **overrides: object) -> dict[str, object]:
+    call: dict[str, object] = {
+        "kind": "extract",
+        "provider": "tavily",
+        "tool": "tavily_extract",
+        "url": url,
+        "file": "raw/01-example.md",
+        "status": "ok",
+    }
+    call.update(overrides)
+    return call
+
+
+@pytest.mark.parametrize(
+    ("written", "cited"),
+    [
+        ("https://Example.COM/a", "https://example.com/a"),
+        ("https://example.com/a/", "https://example.com/a"),
+        ("https://example.com:443/a", "https://example.com/a"),
+        ("http://example.com:80/a", "http://example.com/a"),
+        ("https://example.com/a#section", "https://example.com/a"),
+    ],
+)
+def test_canonical_url_collapses_spellings_of_one_resource(
+    written: str, cited: str
+) -> None:
+    assert canonical_url(written) == canonical_url(cited)
+
+
+@pytest.mark.parametrize(
+    ("left", "right"),
+    [
+        ("https://example.com/a", "https://example.com/b"),
+        ("https://example.com/a?v=1", "https://example.com/a?v=2"),
+        ("https://example.com/a", "http://example.com/a"),
+        ("https://example.com/a", "https://www.example.com/a"),
+    ],
+)
+def test_canonical_url_keeps_distinct_resources_distinct(left: str, right: str) -> None:
+    # Dedup that merged these would merge distinct evidence — the #549 non-goal.
+    assert canonical_url(left) != canonical_url(right)
+
+
+def test_parse_ledger_rejects_unknown_call_kind() -> None:
+    with pytest.raises(LedgerError, match="unknown kind 'crawl'"):
+        _ = parse_ledger({"calls": [{"kind": "crawl", "provider": "tavily"}]})
+
+
+def test_parse_ledger_requires_url_on_an_extraction() -> None:
+    with pytest.raises(LedgerError, match="calls\\[0\\] is missing required .*'url'"):
+        _ = parse_ledger(
+            {"calls": [{"kind": "extract", "provider": "exa", "tool": "contents"}]}
+        )
+
+
+def test_parse_ledger_requires_the_provider_tool_that_ran() -> None:
+    # #493's core: "Tavily" is not evidence of anything; `tavily_extract` is.
+    with pytest.raises(LedgerError, match="calls\\[0\\] is missing required .*'tool'"):
+        _ = parse_ledger(
+            {"calls": [{"kind": "search", "provider": "tavily", "query": "rrf"}]}
+        )
+
+
+def test_parse_ledger_rejects_unknown_invocation_class() -> None:
+    with pytest.raises(LedgerError, match="must be sidechain or top-level"):
+        _ = parse_ledger({"invocation": "nested", "calls": []})
+
+
+def test_parse_ledger_rejects_non_array_calls() -> None:
+    with pytest.raises(LedgerError, match="'calls' must be a JSON array"):
+        _ = parse_ledger({"calls": {"kind": "search"}})
+
+
+def test_retrieved_excludes_failed_and_search_only_urls() -> None:
+    ledger = parse_ledger(
+        {
+            "calls": [
+                _extract("https://ok.example/a"),
+                _extract("https://dead.example/b", status="error", file=""),
+                {
+                    "kind": "search",
+                    "provider": "tavily",
+                    "tool": "tavily_search",
+                    "query": "rrf fusion",
+                },
+            ]
+        }
+    )
+    assert set(ledger.retrieved()) == {canonical_url("https://ok.example/a")}
+
+
+def test_load_ledger_rejects_malformed_json(tmp_path: Path) -> None:
+    manifest = tmp_path / "manifest.json"
+    _ = manifest.write_text("{not json", encoding="utf-8")
+    with pytest.raises(LedgerError, match="not valid JSON"):
+        _ = load_ledger(manifest)
+
+
+def test_find_ledger_returns_none_without_a_manifest(tmp_path: Path) -> None:
+    assert find_ledger(tmp_path) is None
+
+
+_REPORT = """## Research: q
+
+| Claim | Evidence | Confidence |
+| --- | --- | --- |
+| A holds | [^s1] | certain |
+
+## References
+[^s1]: https://example.com/a (fetched 2026-08-30).
+"""
+
+
+def _kinds(violations: list[ground_check.Violation]) -> list[tuple[str, str]]:
+    return [(v.level, v.kind) for v in violations]
+
+
+def test_cited_url_absent_from_the_ledger_is_an_error(tmp_path: Path) -> None:
+    ledger = parse_ledger({"calls": [_extract("https://example.com/other")]})
+    violations, tables = ground_check.check_report(_REPORT, tmp_path, tmp_path, ledger)
+    assert tables == 1
+    assert _kinds(violations) == [("error", "REMOTE")]
+    assert "https://example.com/a" in violations[0].message
+
+
+def test_cited_url_retrieved_by_a_provider_tool_passes(tmp_path: Path) -> None:
+    # The manifest spelling differs from the citation only in case and slash.
+    ledger = parse_ledger({"calls": [_extract("https://Example.com/a/")]})
+    violations, _ = ground_check.check_report(_REPORT, tmp_path, tmp_path, ledger)
+    assert violations == []
+
+
+def test_url_only_discovered_by_search_does_not_count_as_retrieved(
+    tmp_path: Path,
+) -> None:
+    """A search result list is discovery, not inspection — routing.md § Verify then
+    cite requires the provider's retrieval tool to have opened the page."""
+    ledger = parse_ledger(
+        {
+            "calls": [
+                {
+                    "kind": "search",
+                    "provider": "tavily",
+                    "tool": "tavily_search",
+                    "query": "example a",
+                    "url": "https://example.com/a",
+                }
+            ]
+        }
+    )
+    violations, _ = ground_check.check_report(_REPORT, tmp_path, tmp_path, ledger)
+    assert _kinds(violations) == [("error", "REMOTE")]
+
+
+def test_failed_retrieval_cannot_ground_a_citation(tmp_path: Path) -> None:
+    ledger = parse_ledger(
+        {"calls": [_extract("https://example.com/a", status="timeout", file="")]}
+    )
+    violations, _ = ground_check.check_report(_REPORT, tmp_path, tmp_path, ledger)
+    assert _kinds(violations) == [("error", "REMOTE")]
+
+
+def test_missing_manifest_degrades_to_one_advisory(tmp_path: Path) -> None:
+    """Short-form reports have no capture directory; the gate must stay usable and
+    say plainly that the remote citations went unverified."""
+    violations, _ = ground_check.check_report(_REPORT, tmp_path, tmp_path, None)
+    assert _kinds(violations) == [("advisory", "MANIFEST")]
+    assert "1 remote URL citation(s)" in violations[0].message
+
+
+def test_local_only_report_gets_no_manifest_advisory(tmp_path: Path) -> None:
+    body = (
+        "## Research: q\n\n| Claim | Evidence | Confidence |\n| --- | --- | --- |\n"
+        "| A holds | source.py:12 | certain |\n"
+    )
+    violations, _ = ground_check.check_report(body, tmp_path, tmp_path, None)
+    assert violations == []
+
+
+def test_main_reads_the_manifest_beside_the_report(tmp_path: Path) -> None:
+    report = tmp_path / "slug.md"
+    _ = report.write_text(_REPORT, encoding="utf-8")
+    _ = (tmp_path / "manifest.json").write_text(
+        json.dumps({"calls": [_extract("https://example.com/a")]}), encoding="utf-8"
+    )
+    assert ground_check.main([str(report)]) == 0
+
+
+def test_main_fails_on_an_unreadable_manifest(tmp_path: Path) -> None:
+    report = tmp_path / "slug.md"
+    _ = report.write_text(_REPORT, encoding="utf-8")
+    _ = (tmp_path / "manifest.json").write_text("[]", encoding="utf-8")
+    assert ground_check.main([str(report)]) == 1

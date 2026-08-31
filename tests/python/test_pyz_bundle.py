@@ -784,7 +784,7 @@ def test_ground_check_absence_guard_flags_inferred_absence_without_false_positiv
         bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body))
     )
     assert result.returncode == 0, result.stderr
-    assert result.stderr.count("ADVISORY") == 1
+    assert result.stderr.count("ABSENCE") == 1
 
 
 def test_ground_check_rejects_numeric_ratio_as_citation(
@@ -944,6 +944,100 @@ def test_ground_check_rejects_local_path_traversal(
     )
     assert result.returncode == 1, result.stderr
     assert result.stderr.count("outside allowed root") == 2
+
+
+def _manifest(tmp_path: Path, document: object) -> None:
+    _ = (tmp_path / "manifest.json").write_text(json.dumps(document))
+
+
+_REMOTE_REPORT = (
+    "## Research: q\n\n### Evidence\n\n"
+    "| Claim | Evidence | Confidence |\n| --- | --- | --- |\n"
+    "| A holds | https://example.com/a | certain |\n"
+)
+
+
+def test_ground_check_fails_url_the_manifest_never_retrieved(
+    bundles: Path, tmp_path: Path
+) -> None:
+    """#493: a URL seen only in a search result list is discovery, not inspection.
+    With a capture manifest beside the report, citing it is a hard failure."""
+    _manifest(
+        tmp_path,
+        {
+            "calls": [
+                {
+                    "kind": "search",
+                    "provider": "tavily",
+                    "tool": "tavily_search",
+                    "query": "example a",
+                }
+            ]
+        },
+    )
+    result = _run(
+        bundles / "briesearch.pyz",
+        "ground-check",
+        str(_write(tmp_path, _REMOTE_REPORT)),
+    )
+    assert result.returncode == 1, result.stderr
+    assert "REMOTE" in result.stderr
+    assert "https://example.com/a" in result.stderr
+
+
+def test_ground_check_passes_url_retrieved_by_a_provider_tool(
+    bundles: Path, tmp_path: Path
+) -> None:
+    _manifest(
+        tmp_path,
+        {
+            "calls": [
+                {
+                    "kind": "extract",
+                    "provider": "tavily",
+                    "tool": "tavily_extract",
+                    "url": "https://example.com/a/",
+                    "file": "raw/01-example.md",
+                    "fetched": "2026-08-30",
+                }
+            ]
+        },
+    )
+    result = _run(
+        bundles / "briesearch.pyz",
+        "ground-check",
+        str(_write(tmp_path, _REMOTE_REPORT)),
+    )
+    assert result.returncode == 0, result.stderr
+    assert "grounding ok" in result.stderr
+
+
+def test_ground_check_advises_when_no_manifest_backs_remote_citations(
+    bundles: Path, tmp_path: Path
+) -> None:
+    """Short-form reports have no capture directory. The gate stays usable, but says
+    plainly that the remote citations went unverified."""
+    result = _run(
+        bundles / "briesearch.pyz",
+        "ground-check",
+        str(_write(tmp_path, _REMOTE_REPORT)),
+    )
+    assert result.returncode == 0, result.stderr
+    assert "MANIFEST" in result.stderr
+    assert "1 remote URL citation(s)" in result.stderr
+
+
+def test_ground_check_rejects_an_untrustworthy_manifest(
+    bundles: Path, tmp_path: Path
+) -> None:
+    _manifest(tmp_path, {"calls": [{"kind": "crawl", "provider": "tavily"}]})
+    result = _run(
+        bundles / "briesearch.pyz",
+        "ground-check",
+        str(_write(tmp_path, _REMOTE_REPORT)),
+    )
+    assert result.returncode == 1, result.stderr
+    assert "unknown kind 'crawl'" in result.stderr
 
 
 def test_bundle_build_is_byte_deterministic(tmp_path: Path) -> None:

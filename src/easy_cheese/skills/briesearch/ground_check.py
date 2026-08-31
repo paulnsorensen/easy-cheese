@@ -22,6 +22,14 @@ Reads a markdown report, finds every evidence table (a table whose header has a
     source states it) or *inferred* (synthesised from silence) is not decidable
     from text, so this is surfaced, not failed — it feeds the synthesis-fidelity
     self-check, which downgrades inferred absences to "not found in <sources>".
+  - REMOTE (error): a cited ``http(s)`` URL that the run's capture manifest does
+    not record as retrieved through a provider retrieval tool (#493). Routing
+    tells the agent to open every cited page with the selected provider's own
+    extraction tool; without this the claim "verify then cite" was unauditable,
+    and a URL that only ever appeared in a search result list could be cited as
+    if it had been read. Checked against the ledger, never over the network: the
+    bundle does no I/O beyond the corpus. With no manifest beside the report the
+    check degrades to a single MANIFEST advisory.
 
 Exit: 0 clean (advisories may print), 1 on any error-level violation or when a
 report carries no evidence table, 2 on bad args / unreadable file.
@@ -34,6 +42,14 @@ import re
 import sys
 from pathlib import Path
 from typing import cast
+
+from easy_cheese.skills.briesearch.ledger import (
+    Ledger,
+    LedgerError,
+    canonical_url,
+    find_ledger,
+    load_ledger,
+)
 
 CONFIDENCE_LABELS = {"certain", "speculating", "don't know"}
 
@@ -53,6 +69,7 @@ _DIRECT_CITATION = re.compile(
     re.IGNORECASE,
 )
 _CITATION = re.compile(r"\[\^[^\]]+\]|" + _DIRECT_CITATION.pattern, re.IGNORECASE)
+_REMOTE_URL = re.compile(r"https?://[^\s<>|\"'`)\]}]+", re.IGNORECASE)
 
 # Negation aimed at existence / support / provision — the shape of an absence
 # claim. Whole-word matched so "Cargo" never trips "no".
@@ -215,6 +232,35 @@ def _check_local_paths(
     return violations
 
 
+def _remote_urls(text: str) -> list[str]:
+    """Every http(s) citation in one evidence cell or footnote definition."""
+    return [
+        match.group(0).rstrip("`>.,;:!?)]}'\"*_~")
+        for match in _REMOTE_URL.finditer(text)
+    ]
+
+
+def _check_remote(
+    citations: list[str], ledger: Ledger, row_no: int
+) -> list[Violation]:
+    """Fail any cited URL the ledger does not record as provider-retrieved."""
+    violations: list[Violation] = []
+    retrieved = ledger.retrieved()
+    for url in dict.fromkeys(citations):
+        if canonical_url(url) in retrieved:
+            continue
+        violations.append(
+            Violation(
+                "error",
+                row_no,
+                "REMOTE",
+                "cited URL was never retrieved through a provider retrieval tool: "
+                + f"{url!r} (no successful entry in the capture manifest)",
+            )
+        )
+    return violations
+
+
 def _check_row(
     cells: list[str],
     cols: tuple[int, int, int],
@@ -222,6 +268,8 @@ def _check_row(
     footnotes: dict[str, str],
     report_dir: Path,
     invocation_dir: Path,
+    ledger: Ledger | None,
+    remote_seen: set[str],
 ) -> list[Violation]:
     claim_i, ev_i, conf_i = cols
     width = max(cols) + 1
@@ -232,6 +280,7 @@ def _check_row(
     evidence = cells[ev_i]
     confidence = cells[conf_i].strip().strip("`").strip()
     out: list[Violation] = []
+    citations = _remote_urls(evidence)
 
     if not _CITATION.search(evidence):
         out.append(
@@ -259,10 +308,14 @@ def _check_row(
                 )
             )
         else:
+            citations.extend(_remote_urls(definition))
             out.extend(
                 _check_local_paths(definition, report_dir, invocation_dir, row_no)
             )
     out.extend(_check_local_paths(evidence, report_dir, invocation_dir, row_no))
+    remote_seen.update(citations)
+    if ledger is not None:
+        out.extend(_check_remote(citations, ledger, row_no))
 
     if confidence.lower() not in CONFIDENCE_LABELS:
         out.append(
@@ -295,6 +348,7 @@ def check_report(
     text: str,
     report_dir: Path | None = None,
     invocation_dir: Path | None = None,
+    ledger: Ledger | None = None,
 ) -> tuple[list[Violation], int]:
     """Return (violations, tables_checked). A report with claims but no evidence
     table is itself a grounding failure (caller maps that to a non-zero exit)."""
@@ -312,6 +366,7 @@ def check_report(
         for label in sorted(duplicate_footnotes)
     ]
     tables_checked = 0
+    remote_seen: set[str] = set()
     i = 0
     n = len(lines)
     while i < n:
@@ -334,12 +389,25 @@ def check_report(
                                 footnotes,
                                 report_dir,
                                 invocation_dir,
+                                ledger,
+                                remote_seen,
                             )
                         )
                     j += 1
                 i = j
                 continue
         i += 1
+    if ledger is None and remote_seen:
+        violations.append(
+            Violation(
+                "advisory",
+                0,
+                "MANIFEST",
+                f"{len(remote_seen)} remote URL citation(s) were not machine-verified: "
+                + "no capture manifest beside the report, so no record of which "
+                + "provider retrieval tool opened them",
+            )
+        )
     return violations, tables_checked
 
 
@@ -356,7 +424,19 @@ def main(argv: list[str]) -> int:
         print(f"error: cannot read {report}: {exc}", file=sys.stderr)
         return 2
 
-    violations, tables = check_report(text, path.resolve().parent, Path.cwd())
+    report_dir = path.resolve().parent
+    manifest = find_ledger(report_dir)
+    ledger: Ledger | None = None
+    if manifest is not None:
+        try:
+            ledger = load_ledger(manifest)
+        except LedgerError as exc:
+            # A manifest that cannot be trusted is worse than none: the report
+            # claims a capture record the gate cannot read.
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+
+    violations, tables = check_report(text, report_dir, Path.cwd(), ledger)
 
     if tables == 0:
         print(f"error: no evidence table found in {report}", file=sys.stderr)
