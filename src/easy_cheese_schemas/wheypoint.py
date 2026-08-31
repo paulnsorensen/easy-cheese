@@ -465,18 +465,36 @@ def _protected_entries(
     return rule
 
 
-def _record_dossier(
-    instance: WheypointRecord, attribute: _NamedAttribute, value: list[DecisionFork]
+def _dossier_rule(
+    attribute: _NamedAttribute, value: list[DecisionFork], gating: Sequence[str]
 ) -> None:
-    """A gated record without a dossier is the misfire this kernel exists to
-    stop: the resumed session sees a gate and no way to weigh it."""
-    _bounded_list(instance, attribute, value)
-    gating = instance.gating_entry_ids
+    """A dossier and a gate stand or fall together.
+
+    A gated record without a dossier is one misfire this kernel exists to stop:
+    the resumed session sees a gate and no way to weigh it. A dossier without a
+    gate is the other, and the quieter one -- an open fork nobody has to answer
+    derives `status: ok`, so the resumed session dispatches straight past the
+    decision a human still owes. Closing a fork is a transition on the entry
+    that gated it, so the two always empty together.
+    """
     if gating and not value:
         raise ValueError(
             f"{attribute.name} must describe the open fork for gating entries "
             + f"{', '.join(gating)}"
         )
+    if value and not gating:
+        raise ValueError(
+            f"{attribute.name} describes {len(value)} open fork(s) while nothing "
+            + "blocks continuation: gate the fork with an active blocking "
+            + "question or blocker, or clear the dossier"
+        )
+
+
+def _record_dossier(
+    instance: WheypointRecord, attribute: _NamedAttribute, value: list[DecisionFork]
+) -> None:
+    _bounded_list(instance, attribute, value)
+    _dossier_rule(attribute, value, instance.gating_entry_ids)
 
 
 def _projection_dossier(
@@ -485,11 +503,7 @@ def _projection_dossier(
     value: list[DecisionFork],
 ) -> None:
     _bounded_list(instance, attribute, value)
-    if instance.gating_entry_ids and not value:
-        raise ValueError(
-            f"{attribute.name} must describe the open fork for gating entries "
-            + f"{', '.join(instance.gating_entry_ids)}"
-        )
+    _dossier_rule(attribute, value, instance.gating_entry_ids)
 
 
 @define(frozen=True)

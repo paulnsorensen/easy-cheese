@@ -130,6 +130,33 @@ def test_narrowed_delta_preserves_omitted_protected_state(
     assert result.revision.applied_additions == []
 
 
+def test_resolving_the_last_gate_must_clear_the_dossier_it_carried(
+    store: storage.WorkStore, make_promotion: Callable[..., Promotion]
+) -> None:
+    """Carry-forward keeps the dossier a silent delta did not speak about, and
+    an unanswered fork under `status: ok` is exactly the misfire the schema
+    now refuses -- so closing the last gate has to say so in the same delta."""
+    seed = _seed(store, make_promotion, gating=True)
+    resolve = EntryTransition(
+        entry_id="q-durability",
+        action=TransitionAction.RESOLVE,
+        rationale="canonical-local it is",
+    )
+
+    with pytest.raises(commit.CommitError, match="does not produce a legal record"):
+        _ = commit.commit(
+            _delta(seed.record.revision_id, transitions=[resolve]), store=store
+        )
+
+    result = commit.commit(
+        _delta(seed.record.revision_id, transitions=[resolve], decision_dossier=[]),
+        store=store,
+    )
+
+    assert result.record.decision_dossier == []
+    assert result.record.status is WheypointStatus.OK
+
+
 def test_assigned_entry_ids_are_derived_from_the_request_not_the_clock(
     corpus_root: Path,
     store: storage.WorkStore,

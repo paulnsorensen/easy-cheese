@@ -38,6 +38,7 @@ class LintCode(str, Enum):
     REVISION_INCOMPLETE = "revision-incomplete"
     PROJECTION_UNREADABLE = "projection-unreadable"
     PROJECTION_DIGEST_MISMATCH = "projection-digest-mismatch"
+    PROJECTION_STATUS_MISMATCH = "projection-status-mismatch"
     PROJECTION_RECORD_MISMATCH = "projection-record-mismatch"
     PARENT_UNRESOLVED = "parent-unresolved"
     PROJECT_MISMATCH = "project-mismatch"
@@ -142,6 +143,18 @@ def lint_projection_text(text: str) -> LintReport:
                     LintCode.PROJECTION_DIGEST_MISMATCH,
                     f"document hashes to {actual}, but claims "
                     + f"{parsed.projection_digest}",
+                ),
+            ),
+            projection=parsed,
+        )
+    written = projection_mod.declared_status(text)
+    if written != parsed.status.value:
+        return LintReport(
+            findings=(
+                LintFinding(
+                    LintCode.PROJECTION_STATUS_MISMATCH,
+                    f"document is written {written!r} but its gating entries "
+                    + f"derive {parsed.status.value!r}",
                 ),
             ),
             projection=parsed,

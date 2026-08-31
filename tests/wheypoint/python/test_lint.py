@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 from collections.abc import Callable
@@ -19,7 +20,7 @@ from easy_cheese_schemas import (
     WheypointRevision,
 )
 
-from easy_cheese.skills.wheypoint import canonical, lint, records, storage
+from easy_cheese.skills.wheypoint import canonical, lint, projection, records, storage
 
 PROJECT = "paulnsorensen-easy-cheese"
 
@@ -97,6 +98,56 @@ def test_a_tampered_projection_fails_its_own_digest(
 
     assert lint.LintCode.PROJECTION_DIGEST_MISMATCH in report.codes
     assert not report.ok
+
+
+_DIGEST_LINE = re.compile(r"^projection_digest:.*$", re.MULTILINE)
+
+
+def _repin(text: str) -> str:
+    """Re-hash a hand-edited document so it passes its own digest check."""
+    digest = projection.projection_digest_of_text(text)
+    return _DIGEST_LINE.sub(f"projection_digest: {digest}", text, count=1)
+
+
+def test_a_projection_written_gated_while_nothing_gates_is_reported(
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    """A hand-authored note can hash itself, so the digest cannot catch a
+    header that contradicts the gates the document actually lists."""
+    lying = _repin(make_promotion().markdown.replace("status: ok", "status: gated"))
+
+    report = lint.lint_projection_text(lying)
+
+    assert report.codes == (lint.LintCode.PROJECTION_STATUS_MISMATCH,)
+    assert "'gated'" in report.findings[0].detail
+    assert "'ok'" in report.findings[0].detail
+
+
+def test_a_projection_written_ok_over_a_live_gate_is_reported(
+    corpus_root: Path, make_promotion: Callable[..., _PromotionLike]
+) -> None:
+    store = make_store(corpus_root)
+    promotion = make_promotion(gating=True)
+    store.promote(promotion.record, promotion.revision, promotion.markdown)
+    path = store.projection_path(1, "rev-0001")
+    _ = path.write_text(
+        _repin(promotion.markdown.replace("status: gated", "status: ok")),
+        encoding="utf-8",
+    )
+
+    report = check(store)
+
+    assert lint.LintCode.PROJECTION_STATUS_MISMATCH in report.codes
+    assert lint.LintCode.PROJECTION_DIGEST_MISMATCH not in report.codes
+    assert not report.ok
+
+
+def test_an_honest_projection_status_is_not_reported(
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    for gating in (False, True):
+        report = lint.lint_projection_text(make_promotion(gating=gating).markdown)
+        assert report.codes == (), gating
 
 
 def test_a_tampered_record_fails_the_digest_its_receipt_quotes(
