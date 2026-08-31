@@ -30,6 +30,7 @@ from .contracts import (
     CurdPlan,
     CurdResult,
     CurdResultWriterView,
+    DeliverableWriterView,
     DiagnosisDisposition,
     DiagnosisRequest,
     DiagnosisResult,
@@ -53,6 +54,7 @@ from .contracts import (
     SourceCurdRef,
     SourcePlanRef,
     WriterViewKind,
+    _tuple_sequence,
 )
 from .planner import materialize_planner_result
 from .schema_runtime import (
@@ -71,6 +73,45 @@ DiagnosisDispatch = Callable[[DiagnosisRequest], object]
 BranchResult = ReviewResult | DiagnosisResult
 ExecutionResults = tuple[tuple[BranchResult, ...], tuple[CurdResult, ...]]
 WorkflowResults = tuple[PlannerResult, tuple[BranchResult, ...], tuple[CurdResult, ...]]
+
+
+@attrs.define(frozen=True)
+class WriterCheckpoint:
+    """Progress a writer completed before it stopped at its own budget.
+
+    A coder that runs out of context or tool calls mid-curd holds work the host
+    cannot see: criteria it already verified, files it already wrote, and the
+    exact next action. Without this the host only sees the raised exception and
+    the whole curd is blocked, so a redispatch repeats repairs that already
+    landed.
+    """
+
+    # Why the writer stopped: the budget it hit, plus any environment blocker.
+    reason: str = attrs.field()
+    # Criteria the writer finished, in curd-criteria order. A writer that
+    # completed nothing still checkpoints for its deliverables and next action.
+    completed: tuple[CriterionResultWriterView, ...] = attrs.field(
+        factory=tuple, converter=_tuple_sequence
+    )
+    # Files the writer already wrote — the changed-file ownership a redispatch
+    # must not re-derive.
+    deliverables: tuple[DeliverableWriterView, ...] = attrs.field(
+        factory=tuple, converter=_tuple_sequence
+    )
+    # Unfinished work and the exact next action, in the writer's own words.
+    remaining: tuple[str, ...] = attrs.field(factory=tuple, converter=_tuple_sequence)
+
+
+class WriterBudgetExceeded(Exception):
+    """Raised by a writer dispatch stopping at its context or tool budget.
+
+    Distinct from every other writer failure so a run ledger can tell an
+    overrun apart from a correctness, environment, or tool-call error.
+    """
+
+    def __init__(self, checkpoint: WriterCheckpoint) -> None:
+        super().__init__(checkpoint.reason)
+        self.checkpoint = checkpoint
 
 
 @attrs.define(frozen=True)
@@ -654,6 +695,42 @@ def _blocked_writer_view(
     )
 
 
+def _checkpoint_writer_view(
+    curd: SemanticCurd,
+    reason: str,
+    checkpoint: WriterCheckpoint,
+) -> CurdResultWriterView:
+    """Host-finalize an overrun into a partial result the next dispatch resumes.
+
+    Criteria the writer finished keep their disposition, evidence, and
+    deliverables; every criterion it did not reach is blocked on the overrun
+    reason. A checkpoint may never cover the whole curd: the review branch is
+    skipped on this path, so a full-coverage checkpoint would be a pass no
+    reviewer ever saw.
+    """
+
+    if len(checkpoint.completed) >= len(curd.criteria):
+        raise ValueError(
+            "budget checkpoint must leave at least one criterion unfinished, "
+            + f"not {len(checkpoint.completed)} of {len(curd.criteria)}"
+        )
+    unreached = len(curd.criteria) - len(checkpoint.completed)
+    return CurdResultWriterView(
+        criterion_results=(
+            *checkpoint.completed,
+            *(
+                CriterionResultWriterView(
+                    CriterionDisposition.BLOCKED,
+                    reason=reason,
+                )
+                for _unreached in range(unreached)
+            ),
+        ),
+        deliverables=checkpoint.deliverables,
+        unresolved_work=(reason, *checkpoint.remaining),
+    )
+
+
 def _result_invocation(
     plan: CurdPlan,
     curd: SemanticCurd,
@@ -771,8 +848,23 @@ def _execute_curd(
             provenance_refs=provenance_refs,
         )
 
+    overrun_reason: str | None = None
     try:
         output = dispatch_writer(context)
+    except WriterBudgetExceeded as overrun:
+        overrun_reason = _failure_reason("writer stopped at its budget", overrun)
+        try:
+            writer_view = _checkpoint_writer_view(
+                curd, overrun_reason, overrun.checkpoint
+            )
+        except Exception as error:
+            return None, _blocked_result(
+                plan,
+                curd,
+                index,
+                _failure_reason("budget checkpoint invalid", error),
+                provenance_refs=provenance_refs,
+            )
     except Exception as error:
         return None, _blocked_result(
             plan,
@@ -781,16 +873,17 @@ def _execute_curd(
             _failure_reason("writer callback failed", error),
             provenance_refs=provenance_refs,
         )
-    try:
-        writer_view = _writer_view(output)
-    except Exception as error:
-        return None, _blocked_result(
-            plan,
-            curd,
-            index,
-            _failure_reason("writer output invalid", error),
-            provenance_refs=provenance_refs,
-        )
+    else:
+        try:
+            writer_view = _writer_view(output)
+        except Exception as error:
+            return None, _blocked_result(
+                plan,
+                curd,
+                index,
+                _failure_reason("writer output invalid", error),
+                provenance_refs=provenance_refs,
+            )
 
     result_id = f"{plan.plan_id}/revision/{plan.revision}/result/{index}"
     try:
@@ -818,6 +911,11 @@ def _execute_curd(
             WriterViewKind.CURD_RESULT,
             invocation,
         )
+        if overrun_reason is not None:
+            # The writer stopped mid-curd: there is no finished result to
+            # review or diagnose, only progress to hand the next dispatch.
+            assert isinstance(provisional.value, CurdResult)
+            return None, provisional.value
         subject = _subject_artifact(
             result_id,
             provisional,
@@ -828,7 +926,12 @@ def _execute_curd(
             plan,
             curd,
             index,
-            _failure_reason("writer output invalid", error),
+            _failure_reason(
+                "budget checkpoint invalid"
+                if overrun_reason is not None
+                else "writer output invalid",
+                error,
+            ),
             provenance_refs=provenance_refs,
         )
 
@@ -1188,6 +1291,8 @@ def run_workflow(
 __all__ = [
     "CureDiagnosisBinding",
     "CureDiagnosisBindings",
+    "WriterBudgetExceeded",
+    "WriterCheckpoint",
     "bind_diagnosis",
     "cook",
     "cure",

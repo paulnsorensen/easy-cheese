@@ -238,6 +238,8 @@ from easy_cheese_schemas.schema_runtime import (
 from easy_cheese_schemas.workflow import (
     CureDiagnosisBinding,
     CureDiagnosisBindings,
+    WriterBudgetExceeded,
+    WriterCheckpoint,
     bind_diagnosis,
     cook,
     cure,
@@ -426,6 +428,8 @@ __all__ = [
     "TransitionRegistry",
     "UncertaintyScope",
     "UnsupportedProjection",
+    "WriterBudgetExceeded",
+    "WriterCheckpoint",
     "WriterPayload",
     "WriterViewKind",
     "benchmark_contracts",

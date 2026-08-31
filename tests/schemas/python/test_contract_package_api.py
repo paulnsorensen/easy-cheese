@@ -81,6 +81,8 @@ def test_top_level_package_exposes_stable_contract_api() -> None:
         "SemanticCurd",
         "SourceCurdRef",
         "SourcePlanRef",
+        "WriterBudgetExceeded",
+        "WriterCheckpoint",
         "benchmark_contracts",
         "canonical_bytes",
         "canonical_digest",
