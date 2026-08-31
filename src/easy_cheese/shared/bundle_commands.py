@@ -76,8 +76,8 @@ def derive_command(fn: CommandHandler) -> Command:
 def compiled_commands(module: ModuleType) -> tuple[Command, ...]:
     """Every `@bundle_command`-decorated top-level function defined in `module`."""
     declared = (
-        value
-        for value in vars(module).values()
+        cast("CommandHandler", value)
+        for value in cast("dict[str, object]", vars(module)).values()
         if callable(value)
         and getattr(value, "__module__", None) == module.__name__
         and getattr(value, "__bundle_command_name__", None) is not None

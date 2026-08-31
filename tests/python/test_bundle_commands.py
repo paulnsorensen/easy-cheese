@@ -158,15 +158,17 @@ def _fake_command_module(*, decorated: tuple[str, ...]) -> ModuleType:
 
 def test_validate_command_surface_rejects_unreferenced_declaration() -> None:
     module = _fake_command_module(decorated=("foo", "bar"))
+    bar = cast("bc.CommandHandler", module._bar)
     with pytest.raises(ValueError, match="declares unreferenced bundle command.*foo"):
-        bc.validate_command_surface(module, (bc.derive_command(module._bar),))
+        bc.validate_command_surface(module, (bc.derive_command(bar),))
 
 
 def test_validate_command_surface_rejects_undeclared_reference() -> None:
     module = _fake_command_module(decorated=("foo",))
+    foo = cast("bc.CommandHandler", module._foo)
     stray = command("stray")
     with pytest.raises(ValueError, match="references undeclared bundle command.*stray"):
-        bc.validate_command_surface(module, (bc.derive_command(module._foo), stray))
+        bc.validate_command_surface(module, (bc.derive_command(foo), stray))
 
 
 _SKILLS_ON_THE_DECORATOR_SURFACE = (
@@ -188,7 +190,8 @@ _SKILLS_ON_THE_DECORATOR_SURFACE = (
 def test_validate_command_surface_passes_for_every_skill(skill: str) -> None:
     package = skill.replace("-", "_")
     module = importlib.import_module(f"easy_cheese.skills.{package}.commands")
-    bc.validate_command_surface(module, module.COMMANDS)
+    commands = cast("tuple[bc.Command, ...]", module.COMMANDS)
+    bc.validate_command_surface(module, commands)
 
 
 def test_skill_manifests_are_literal_tuples() -> None:
