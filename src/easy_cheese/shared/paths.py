@@ -17,7 +17,7 @@ import re
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
-from typing import NamedTuple, TypedDict
+from typing import Literal, NamedTuple, TypedDict
 
 from easy_cheese.shared import git_utils
 
@@ -113,12 +113,40 @@ _STOPWORDS = frozenset(
 
 
 def slugify(text: str, *, max_words: int = 5) -> str:
-    """Best-effort kebab-slug from arbitrary text."""
+    """Best-effort kebab-slug from arbitrary text.
+
+    Deliberately NOT ``python-slugify`` (or any general slugifier), and not a
+    candidate for replacement by one. The divergences are the point:
+
+    - **Stopwords are dropped** (``_STOPWORDS``) *before* the word cap, so a
+      title-cased task phrase spends its budget on meaning
+      (``"The quick brown fox jumps"`` -> ``quick-brown-fox-jumps``).
+    - **The result is capped at ``max_words`` words**, because the slug is a
+      human-readable artifact filename, not a URL of the whole title.
+    - **Non-``[a-z0-9]`` characters are deleted, never transliterated** — a
+      general slugifier turns ``"über"`` into ``uber``; here it becomes ``ber``.
+      Deleting keeps the output inside ``KEBAB_SLUG`` for every input without a
+      Unicode table riding along in every ``.pyz`` bundle.
+    - **Hard-truncated to 64 characters** to match ``KEBAB_SLUG``.
+
+    Swapping in a standard slugifier would change the output of all four, and
+    the output is embedded in on-disk artifact paths (``.cheese/<phase>/
+    <slug>.md`` and the XDG corpus): every already-written spec, report, and
+    manifest would stop resolving. The tests in
+    ``tests/shared/python/test_paths.py::TestSlugify`` pin these four
+    behaviours so a future migration fails loudly instead of silently orphaning
+    artifacts.
+
+    The result always satisfies ``validate_slug`` unless it is empty; callers
+    must reject the empty slug themselves (see ``paths_cli._cmd_slugify``).
+    """
     lowered = re.sub(r"[^a-z0-9\s-]+", "", text.lower())
     words = [w for w in lowered.split() if w and w not in _STOPWORDS]
     slug = "-".join(words[:max_words])
     slug = re.sub(r"-+", "-", slug).strip("-")
-    return slug[:64]
+    # Strip again after truncation: a cut landing on a hyphen would otherwise
+    # emit a trailing-hyphen slug that validate_slug rejects.
+    return slug[:64].strip("-")
 
 
 def _xdg_dir(env_var: str, *default: str) -> Path:
@@ -481,33 +509,17 @@ def _existing_domain_model(store_root: Path) -> Path | None:
 
 
 class WikiProbe(NamedTuple):
-    """Result of probing for the consumer's hallouminate wiki corpus.
-
-    ``reachable`` distinguishes "the probe ran and the corpus simply isn't
-    listed" (``reachable=True, corpus=None``) from "the probe couldn't be
-    consulted at all" (``reachable=False``) — no injected hook, or one that
-    raised. Collapsing those two into the same ``None`` would make it
-    impossible for a caller to "degrade to 'not loaded' and say so"
-    (skills/mold/references/modes.md) versus silently treating an empty wiki
-    as equivalent to an unreachable one.
-    """
+    """A corpus match plus whether the listing probe completed."""
 
     corpus: str | None
-    reachable: bool  # noqa: V107
+    reachable: bool
 
 
 def _wiki_corpus(list_corpora: Callable[[], list[str]] | None) -> WikiProbe:
-    """Shape-match the consumer's ``repo:*:wiki`` corpus, or report unreachable.
+    """Return the first ``repo:*:wiki`` corpus from a successful probe.
 
-    Matches by *shape* — the first listed corpus starting with ``repo:`` and
-    ending with ``:wiki`` — exactly like the Ground-phase probe
-    (skills/mold/references/grounding.md): ``first(c for c in corpora if
-    c.startswith("repo:") and c.endswith(":wiki"))``. Never reconstructed from
-    ``repo_root.name``, which drifts from the corpus name whenever the checkout
-    directory doesn't match the repo (worktrees, clones under a different
-    dirname). An absent or unreachable probe (``None`` or one that raises)
-    degrades to the file stores, matching the ADR probe contract
-    (skills/mold/references/adr.md).
+    Corpus names come from hallouminate, not the checkout directory, which may
+    differ in worktrees. Missing or failed probes degrade to file storage.
     """
     if list_corpora is None:
         return WikiProbe(corpus=None, reachable=False)
@@ -538,61 +550,51 @@ def _wiki_has_model(
         return None
 
 
+class DomainModelTarget(NamedTuple):
+    """Resolved domain-model store.
+
+    ``wiki_reachable`` distinguishes a successful listing with no matching
+    corpus from a probe that was unavailable or failed.
+    """
+
+    backend: Literal["file", "hallouminate"]
+    location: str | Path
+    wiki_reachable: bool
+
+
 def domain_model_target(
     *,
     repo_root: Path | str | None = None,
     project: str | None = None,
     list_corpora: Callable[[], list[str]] | None = None,
     wiki_has_model: Callable[[str], bool] | None = None,
-) -> tuple[str, str | Path]:
-    """Resolve where the project domain model lives: ``(backend, location)``.
+) -> DomainModelTarget:
+    """Resolve the existing domain model or the target for its first write.
 
-    Mirrors the ADR resolver (skills/mold/references/adr.md): an existing model
-    always wins, so the full read-probe cascade runs before any create decision:
-
-    1. the consumer's ``repo:*:wiki`` hallouminate corpus, shape-matched from
-       the ``list_corpora`` probe (skills/mold/references/grounding.md) —
-       returned only when ``wiki_has_model`` also confirms a domain-model
-       document already exists there (``("hallouminate", name)``);
-    2. a tracked ``docs/domain-model*`` file store;
-    3. ``<project_corpus_root()>/domain-model*`` — the XDG durable corpus.
-
-    A wiki corpus that is merely *listed* does not win the read-probe on its
-    own — ``list_corpora`` can only confirm the corpus exists, not that a
-    model document lives in it, so an existing file-store model always wins
-    over an empty wiki corpus. When ``wiki_has_model`` is absent or raises,
-    that degrades to "cannot confirm a wiki model": the read-probe falls
-    through to the file stores, but the wiki still wins for *create* below
-    when its corpus is present — an unconfirmed wiki is not the same as a
-    confirmed-absent one.
-
-    When no model exists at any store, the first write is created by
-    precedence: the wiki when its corpus was found (regardless of
-    ``wiki_has_model``), else ``docs/domain-model.md`` when a tracked
-    ``docs/`` directory exists, else ``<project_corpus_root()>/domain-model.md``.
-
-    ``list_corpora`` and ``wiki_has_model`` are injected hooks (the harness
-    passes hallouminate's own probes); when either is ``None`` or raises, that
-    leg degrades gracefully rather than blocking resolution. The wiki corpus
-    name is shape-matched from the probe's listing, never hardcoded or
-    reconstructed from ``repo_root.name``.
+    Existing models win in wiki, tracked docs, then XDG order. A listed wiki
+    wins creation; otherwise tracked ``docs/`` wins over XDG. A missing or
+    failed wiki-model probe cannot confirm presence, so existing file stores
+    still win while a listed corpus remains the creation target.
     """
     repo = _resolve_repo_root(repo_root)
     docs_root = repo / "docs"
     xdg_root = project_corpus_root(project)
 
-    wiki = _wiki_corpus(list_corpora).corpus
+    probe = _wiki_corpus(list_corpora)
+    wiki = probe.corpus
     if wiki is not None and _wiki_has_model(wiki_has_model, wiki) is True:
-        return ("hallouminate", wiki)
+        return DomainModelTarget("hallouminate", wiki, probe.reachable)
 
     # Read-probe the file stores in full: an existing model wins over a create.
     for store_root in (docs_root, xdg_root):
         existing = _existing_domain_model(store_root)
         if existing is not None:
-            return ("file", existing)
+            return DomainModelTarget("file", existing, probe.reachable)
 
     # Create (first write): wiki corpus if present, else tracked docs/, else XDG.
     if wiki is not None:
-        return ("hallouminate", wiki)
+        return DomainModelTarget("hallouminate", wiki, probe.reachable)
     create_root = docs_root if docs_root.is_dir() else xdg_root
-    return ("file", create_root / f"{DOMAIN_MODEL_STEM}.md")
+    return DomainModelTarget(
+        "file", create_root / f"{DOMAIN_MODEL_STEM}.md", probe.reachable
+    )

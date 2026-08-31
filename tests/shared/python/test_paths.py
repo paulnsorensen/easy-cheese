@@ -10,7 +10,7 @@ import pytest
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from easy_cheese.shared.paths import ResolveSlugResult
+    from easy_cheese.shared.paths import DomainModelTarget, ResolveSlugResult
 
 
 class _PathsModule(Protocol):
@@ -41,7 +41,10 @@ class _PathsModule(Protocol):
         project: str | None = None,
         list_corpora: Callable[[], list[str]] | None = None,
         wiki_has_model: Callable[[str], bool] | None = None,
-    ) -> tuple[str, str | Path]: ...
+    ) -> DomainModelTarget:
+        raise NotImplementedError
+    def slugify(self, text: str, *, max_words: int = 5) -> str:
+        raise NotImplementedError
     def resolve_slug(
         self,
         slug: str,
@@ -79,6 +82,44 @@ class TestValidateSlug:
     def test_non_string_rejected(self, paths: _PathsModule) -> None:
         assert paths.validate_slug(None) is not None  # type: ignore[arg-type]
         assert paths.validate_slug(42) is not None  # type: ignore[arg-type]
+
+
+class TestSlugify:
+    @pytest.mark.parametrize(
+        ("text", "max_words", "expected"),
+        [
+            ("The quick brown fox jumps", 5, "quick-brown-fox-jumps"),
+            ("the alpha beta gamma delta epsilon", 5, "alpha-beta-gamma-delta-epsilon"),
+            ("one two three four five six", 2, "one-two"),
+            ("Über naïve café", 5, "ber-nave-caf"),
+            ("Don't Stop, Believin'!", 5, "dont-stop-believin"),
+            ("  multiple   spaces   here  ", 5, "multiple-spaces-here"),
+            ("wired -- dashes", 5, "wired-dashes"),
+            ("the a an of", 5, ""),
+        ],
+    )
+    def test_contract(
+        self, paths: _PathsModule, text: str, max_words: int, expected: str
+    ) -> None:
+        assert paths.slugify(text, max_words=max_words) == expected
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "The quick brown fox jumps",
+            "Don't Stop, Believin'!",
+            "Über naïve café",
+            "a" * 63 + " bbbb",
+            "a" * 200,
+            "x" * 64 + " y",
+        ],
+    )
+    def test_nonempty_output_is_valid(
+        self, paths: _PathsModule, text: str
+    ) -> None:
+        slug = paths.slugify(text)
+        assert slug
+        assert paths.validate_slug(slug) is None
 
 
 @pytest.fixture
@@ -236,6 +277,10 @@ class TestDomainModelTarget:
     Focus: acceptance criterion #3, the create-path resolution. WHY the create
     branch must be gated: an existing model at any store must be returned as-is,
     never forked into a fresh store, or the ubiquitous language fragments.
+
+    Every case also pins `wiki_reachable`: it is the only signal separating "the
+    wiki probe ran and listed no wiki corpus" from "the probe was never
+    consulted", and both otherwise resolve to the same file location.
     """
 
     def test_create_uses_docs_when_tracked_docs_dir_exists(
@@ -244,17 +289,17 @@ class TestDomainModelTarget:
         _ = xdg_corpus
         # No model anywhere yet, but a tracked docs/ dir exists: create there.
         (tmp_path / "docs").mkdir()
-        backend, location = paths.domain_model_target(repo_root=tmp_path)
-        assert backend == "file"
-        assert location == tmp_path / "docs" / "domain-model.md"
+        target = paths.domain_model_target(repo_root=tmp_path)
+        assert target.backend == "file"
+        assert target.location == tmp_path / "docs" / "domain-model.md"
 
     def test_create_uses_xdg_when_no_docs_dir(
         self, paths: _PathsModule, tmp_path: Path, xdg_corpus: Path
     ) -> None:
         # No docs/ dir: the first write lands in the XDG durable corpus.
-        backend, location = paths.domain_model_target(repo_root=tmp_path)
-        assert backend == "file"
-        assert location == xdg_corpus / "domain-model.md"
+        target = paths.domain_model_target(repo_root=tmp_path)
+        assert target.backend == "file"
+        assert target.location == xdg_corpus / "domain-model.md"
 
     def test_existing_docs_model_wins_over_create(
         self, paths: _PathsModule, tmp_path: Path, xdg_corpus: Path
@@ -265,7 +310,11 @@ class TestDomainModelTarget:
         model = tmp_path / "docs" / "domain-model.md"
         model.parent.mkdir()
         _ = model.write_text("**Term** — x.\n", encoding="utf-8")
-        assert paths.domain_model_target(repo_root=tmp_path) == ("file", model)
+        assert paths.domain_model_target(repo_root=tmp_path) == (
+            "file",
+            model,
+            False,
+        )
 
     def test_existing_xdg_model_wins_over_docs_create(
         self, paths: _PathsModule, tmp_path: Path, xdg_corpus: Path
@@ -276,7 +325,11 @@ class TestDomainModelTarget:
         model = xdg_corpus / "domain-model.md"
         model.parent.mkdir(parents=True)
         _ = model.write_text("**Term** — x.\n", encoding="utf-8")
-        assert paths.domain_model_target(repo_root=tmp_path) == ("file", model)
+        assert paths.domain_model_target(repo_root=tmp_path) == (
+            "file",
+            model,
+            False,
+        )
 
     def test_existing_split_directory_is_returned(
         self, paths: _PathsModule, tmp_path: Path, xdg_corpus: Path
@@ -288,7 +341,11 @@ class TestDomainModelTarget:
         split = tmp_path / "docs" / "domain-model"
         (split).mkdir(parents=True)
         _ = (split / "index.md").write_text("# contexts\n", encoding="utf-8")
-        assert paths.domain_model_target(repo_root=tmp_path) == ("file", split)
+        assert paths.domain_model_target(repo_root=tmp_path) == (
+            "file",
+            split,
+            False,
+        )
 
     def test_single_file_wins_over_split_dir_in_same_store(
         self, paths: _PathsModule, tmp_path: Path, xdg_corpus: Path
@@ -305,7 +362,11 @@ class TestDomainModelTarget:
         split = docs / "domain-model"
         split.mkdir()
         _ = (split / "index.md").write_text("# contexts\n", encoding="utf-8")
-        assert paths.domain_model_target(repo_root=tmp_path) == ("file", single)
+        assert paths.domain_model_target(repo_root=tmp_path) == (
+            "file",
+            single,
+            False,
+        )
 
     def test_docs_store_precedes_xdg_store_on_read(
         self, paths: _PathsModule, tmp_path: Path, xdg_corpus: Path
@@ -317,7 +378,11 @@ class TestDomainModelTarget:
         xdg_model = xdg_corpus / "domain-model.md"
         xdg_model.parent.mkdir(parents=True)
         _ = xdg_model.write_text("**B** — y.\n", encoding="utf-8")
-        assert paths.domain_model_target(repo_root=tmp_path) == ("file", docs_model)
+        assert paths.domain_model_target(repo_root=tmp_path) == (
+            "file",
+            docs_model,
+            False,
+        )
 
     def test_wiki_probe_wins_when_corpus_listed_and_has_model_confirmed(
         self, paths: _PathsModule, tmp_path: Path, xdg_corpus: Path
@@ -331,12 +396,12 @@ class TestDomainModelTarget:
         docs_model.parent.mkdir()
         _ = docs_model.write_text("**Term** — x.\n", encoding="utf-8")
         corpus = "repo:easy-cheese:wiki"
-        backend, location = paths.domain_model_target(
+        target = paths.domain_model_target(
             repo_root=tmp_path,
             list_corpora=lambda: ["repo:other:notes", corpus],
             wiki_has_model=lambda c: True,
         )
-        assert (backend, location) == ("hallouminate", corpus)
+        assert target == ("hallouminate", corpus, True)
 
     def test_wiki_corpus_shape_matched_regardless_of_repo_root_name(
         self, paths: _PathsModule, tmp_path: Path, xdg_corpus: Path
@@ -347,11 +412,11 @@ class TestDomainModelTarget:
         # (tmp_path here plays "baghdad") need not match the corpus's embedded
         # repo name ("easy-cheese") for the corpus to resolve.
         corpus = "repo:easy-cheese:wiki"
-        backend, location = paths.domain_model_target(
+        target = paths.domain_model_target(
             repo_root=tmp_path,
             list_corpora=lambda: [corpus],
         )
-        assert (backend, location) == ("hallouminate", corpus)
+        assert target == ("hallouminate", corpus, True)
 
     def test_existing_file_model_wins_over_wiki_corpus_with_no_model(
         self, paths: _PathsModule, tmp_path: Path, xdg_corpus: Path
@@ -364,12 +429,12 @@ class TestDomainModelTarget:
         docs_model.parent.mkdir()
         _ = docs_model.write_text("**Term** — x.\n", encoding="utf-8")
         corpus = "repo:easy-cheese:wiki"
-        backend, location = paths.domain_model_target(
+        target = paths.domain_model_target(
             repo_root=tmp_path,
             list_corpora=lambda: [corpus],
             wiki_has_model=lambda c: False,
         )
-        assert (backend, location) == ("file", docs_model)
+        assert target == ("file", docs_model, True)
 
     def test_existing_file_model_wins_when_wiki_has_model_hook_absent(
         self, paths: _PathsModule, tmp_path: Path, xdg_corpus: Path
@@ -382,11 +447,11 @@ class TestDomainModelTarget:
         docs_model.parent.mkdir()
         _ = docs_model.write_text("**Term** — x.\n", encoding="utf-8")
         corpus = "repo:easy-cheese:wiki"
-        backend, location = paths.domain_model_target(
+        target = paths.domain_model_target(
             repo_root=tmp_path,
             list_corpora=lambda: [corpus],
         )
-        assert (backend, location) == ("file", docs_model)
+        assert target == ("file", docs_model, True)
 
     def test_wiki_still_wins_create_precedence_when_has_model_unconfirmed(
         self, paths: _PathsModule, tmp_path: Path, xdg_corpus: Path
@@ -398,18 +463,19 @@ class TestDomainModelTarget:
         # one.
         (tmp_path / "docs").mkdir()
         corpus = "repo:easy-cheese:wiki"
-        backend, location = paths.domain_model_target(
+        target = paths.domain_model_target(
             repo_root=tmp_path,
             list_corpora=lambda: [corpus],
         )
-        assert (backend, location) == ("hallouminate", corpus)
+        assert target == ("hallouminate", corpus, True)
 
     def test_wiki_has_model_hook_raising_degrades_like_absent(
         self, paths: _PathsModule, tmp_path: Path, xdg_corpus: Path
     ) -> None:
         _ = xdg_corpus
         # A raising wiki_has_model must not block resolution: same "cannot
-        # confirm" degrade as an absent hook.
+        # confirm" degrade as an absent hook. The corpus listing itself still
+        # succeeded, so the probe stays reachable.
         def boom(_corpus: str) -> bool:
             raise RuntimeError("wiki probe unreachable")
 
@@ -417,12 +483,12 @@ class TestDomainModelTarget:
         docs_model.parent.mkdir()
         _ = docs_model.write_text("**Term** — x.\n", encoding="utf-8")
         corpus = "repo:easy-cheese:wiki"
-        backend, location = paths.domain_model_target(
+        target = paths.domain_model_target(
             repo_root=tmp_path,
             list_corpora=lambda: [corpus],
             wiki_has_model=boom,
         )
-        assert (backend, location) == ("file", docs_model)
+        assert target == ("file", docs_model, True)
 
     def test_unreachable_probe_degrades_to_file_stores(
         self, paths: _PathsModule, tmp_path: Path, xdg_corpus: Path
@@ -433,18 +499,47 @@ class TestDomainModelTarget:
             raise RuntimeError("hallouminate unreachable")
 
         (tmp_path / "docs").mkdir()
-        backend, location = paths.domain_model_target(
-            repo_root=tmp_path, list_corpora=boom
+        target = paths.domain_model_target(repo_root=tmp_path, list_corpora=boom)
+        assert target == (
+            "file",
+            tmp_path / "docs" / "domain-model.md",
+            False,
         )
-        assert (backend, location) == ("file", tmp_path / "docs" / "domain-model.md")
 
     def test_none_probe_skips_wiki_leg(
         self, paths: _PathsModule, tmp_path: Path, xdg_corpus: Path
     ) -> None:
         _ = xdg_corpus
-        # The default: no probe injected → wiki leg skipped, file stores only.
-        backend, _ = paths.domain_model_target(repo_root=tmp_path)
-        assert backend == "file"
+        # The default: no probe injected -> wiki leg skipped, file stores only,
+        # and the caller is told the wiki was never consulted.
+        target = paths.domain_model_target(repo_root=tmp_path)
+        assert target.backend == "file"
+        assert target.wiki_reachable is False
+
+    def test_raising_probe_is_distinguishable_from_empty_listing(
+        self, paths: _PathsModule, tmp_path: Path, xdg_corpus: Path
+    ) -> None:
+        _ = xdg_corpus
+        # The regression this pins (#482): a raising list_corpora and a listing
+        # that holds no `repo:*:wiki` corpus both resolve to the SAME file
+        # location. Only `wiki_reachable` separates "the wiki was consulted and
+        # has no corpus here" from "the wiki was never consulted", which is
+        # what the loud-degrade contract (adr.md § Resolution) is keyed on.
+        def boom() -> list[str]:
+            raise RuntimeError("hallouminate unreachable")
+
+        (tmp_path / "docs").mkdir()
+        created = tmp_path / "docs" / "domain-model.md"
+
+        raised = paths.domain_model_target(repo_root=tmp_path, list_corpora=boom)
+        listed_empty = paths.domain_model_target(
+            repo_root=tmp_path, list_corpora=lambda: ["repo:other:notes"]
+        )
+
+        assert raised.location == listed_empty.location == created
+        assert raised.backend == listed_empty.backend == "file"
+        assert raised.wiki_reachable is False
+        assert listed_empty.wiki_reachable is True
 
 
 class TestResolveSlug:
