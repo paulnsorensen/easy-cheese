@@ -833,36 +833,26 @@ def test_unresolved_evidence_must_belong_to_the_planner_request() -> None:
         )
 
 
-def test_replan_rejects_tampered_source_plan_digest() -> None:
-    source = attrs.evolve(source_plan(), digest=DIGEST)
-
-    with pytest.raises(
-        PlannerMaterializationError,
-        match="CurdPlan digest mismatch",
-    ):
-        _ = materialize_planner_result(
-            request(PlannerRequestKind.REPLAN, source_plan=source),
-            complete_view(writer_curd("core", "src/core.py")),
-            plan_id="plan-source",
-            curd_ids={"core": "curd-core"},
-            lineages={
-                "core": IdentityLineage(
-                    IdentityAction.RETAIN,
-                    source_curd_ids=["curd-core"],
-                )
-            },
-            source_plan=source,
-        )
+def test_a_tampered_source_plan_cannot_be_built_to_reach_the_planner() -> None:
+    """A digest swap is refused by the constructor, before any planner call."""
+    with pytest.raises(ValueError, match="CurdPlan digest mismatch"):
+        _ = attrs.evolve(source_plan(), digest=DIGEST)
 
 
 def test_replan_rejects_source_schema_version_mismatch() -> None:
-    source = attrs.evolve(
-        source_plan(),
+    original = source_plan()
+    source = CurdPlan.signed(
         contract_version=ContractVersion(
             f"{SCHEMA_ROOT}/curd-plan",
             "2",
             "0",
         ),
+        plan_id=original.plan_id,
+        revision=original.revision,
+        objective=original.objective,
+        curds=original.curds,
+        context=original.context,
+        parent_plan_ref=original.parent_plan_ref,
     )
 
     with pytest.raises(

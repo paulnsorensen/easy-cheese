@@ -72,12 +72,11 @@ def plan(curd: SemanticCurd | None = None, **changes: object) -> CurdPlan:
         "contract_version": VERSION,
         "plan_id": "plan-widget",
         "revision": 1,
-        "digest": DIGEST,
         "objective": "Ship widget support",
         "curds": (curd or semantic_curd(),),
     }
     values.update(changes)
-    return CurdPlan(**values)  # pyright: ignore[reportArgumentType]
+    return CurdPlan.signed(**values)  # pyright: ignore[reportArgumentType]
 
 def test_curd_block_projects_single_curd_objective_without_loss() -> None:
     curd = semantic_curd(

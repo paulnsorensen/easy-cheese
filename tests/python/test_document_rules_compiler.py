@@ -111,7 +111,7 @@ def test_ac_coverage_validator_rejects_missing_and_duplicate_ids() -> None:
 
 
 def test_document_rules_compiler_collects_the_mold_spec_class_and_keys_by_its_slug() -> None:
-    collected = compiler.collect(cast("compiler._DocumentContractModule", contracts))  # pyright: ignore[reportPrivateUsage]
+    collected = compiler.collect(contracts.MoldSpecDocument)
     assert collected is contracts.MoldSpecDocument
     assert contracts.MoldSpecDocument.slug == "mold-spec"
 
@@ -125,9 +125,8 @@ def test_document_rules_compiler_collects_the_mold_spec_class_and_keys_by_its_sl
 
 
 def test_document_rules_compiler_is_deterministic_and_matches_checked_in_file() -> None:
-    module = cast("compiler._DocumentContractModule", contracts)  # pyright: ignore[reportPrivateUsage]
-    first = compiler.render(compiler.collect(module))
-    second = compiler.render(compiler.collect(module))
+    first = compiler.render(compiler.collect(contracts.MoldSpecDocument))
+    second = compiler.render(compiler.collect(contracts.MoldSpecDocument))
     assert first == second
     assert first == GENERATED.read_text(encoding="utf-8")
 

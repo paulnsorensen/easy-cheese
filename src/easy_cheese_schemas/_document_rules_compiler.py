@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pprint
 from collections.abc import Mapping, Sequence
-from typing import ClassVar, Protocol
+from typing import ClassVar, Protocol, cast
 
 
 class _TableRuleLike(Protocol):
@@ -36,13 +36,14 @@ class _DocumentContractLike(Protocol):
     enums: ClassVar[Mapping[str, Sequence[str]]]
 
 
-class _DocumentContractModule(Protocol):
-    MoldSpecDocument: type[_DocumentContractLike]
+def collect(contract: type) -> type[_DocumentContractLike]:
+    """Adopt a marked document-contract class as the compiler's input.
 
-
-def collect(module: _DocumentContractModule) -> type[_DocumentContractLike]:
-    """Return the module's mold-spec document-contract class."""
-    return module.MoldSpecDocument
+    The class is taken bare: its ``ClassVar`` containers are invariant concrete
+    ``tuple``/``dict`` types that no structural annotation here can match, so
+    the shape ``render`` relies on is asserted at this seam.
+    """
+    return cast("type[_DocumentContractLike]", contract)
 
 
 def _section_data(section: _SectionLike) -> dict[str, object]:

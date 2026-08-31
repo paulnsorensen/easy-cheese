@@ -3,8 +3,6 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import TypeVar
 
-import attrs
-
 from easy_cheese_schemas.contracts import (
     ArtifactRef,
     BoundedContext,
@@ -27,7 +25,6 @@ from easy_cheese_schemas.contracts import (
 )
 from easy_cheese_schemas.schema_runtime import (
     SCHEMA_ROOT,
-    curd_plan_digest,
     supported_version_for,
     validate_curd_plan,
 )
@@ -172,18 +169,16 @@ def _materialize_plan(
                 f"complete replan leaves source curds unaccounted for: {missing!r}"
             )
     context = _materialize_context(writer.plan.context, artifacts)
-    placeholder = CurdPlan(
-        contract_version=_version(CURD_PLAN_SCHEMA),
-        plan_id=plan_id,
-        revision=revision,
-        digest="sha256:" + "0" * 64,
-        objective=writer.plan.objective,
-        curds=curds,
-        context=context,
-        parent_plan_ref=parent,
-    )
     return validate_curd_plan(
-        attrs.evolve(placeholder, digest=curd_plan_digest(placeholder))
+        CurdPlan.signed(
+            contract_version=_version(CURD_PLAN_SCHEMA),
+            plan_id=plan_id,
+            revision=revision,
+            objective=writer.plan.objective,
+            curds=curds,
+            context=context,
+            parent_plan_ref=parent,
+        )
     )
 
 

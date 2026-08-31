@@ -93,19 +93,20 @@ def _compiled_schema_catalog_source() -> str:
 
 
 def _document_rules_compiler() -> tuple[
-    Callable[[ModuleType], type],
+    Callable[[type], type],
     Callable[[type], str],
 ]:
     compiler = _compiler_module("_document_rules_compiler")
     return (
-        cast(Callable[[ModuleType], type], getattr(compiler, "collect")),
+        cast(Callable[[type], type], getattr(compiler, "collect")),
         cast(Callable[[type], str], getattr(compiler, "render")),
     )
 
 
 def _compiled_document_rules_source() -> str:
     collect, render = _document_rules_compiler()
-    return render(collect(_schema_contract_module()))
+    contract = cast(type, getattr(_schema_contract_module(), "MoldSpecDocument"))
+    return render(collect(contract))
 
 
 def _checked_in_generated_file_bytes(

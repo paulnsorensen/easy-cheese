@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from collections.abc import Callable, Mapping
 from enum import Enum
 from collections.abc import Iterable
 from typing import ClassVar, Protocol, TypeVar, cast
 
+import attrs
 from attrs import define, field, validators
 
 _attrs_field = field
@@ -82,6 +85,38 @@ def _registered_contracts() -> tuple[tuple[str, type], ...]:
 def registered_contracts() -> tuple[tuple[str, type], ...]:
     """Public accessor for marked contract classes in deterministic slug order."""
     return _registered_contracts()
+
+
+def _unstructure(value: object) -> object:
+    """Project attrs models, enums, and containers onto JSON-serializable data."""
+    if attrs.has(type(value)):
+        return {
+            attribute.name: _unstructure(cast(object, getattr(value, attribute.name)))
+            for attribute in cast(
+                "tuple[attrs.Attribute[object], ...]", attrs.fields(type(value))
+            )
+        }
+    if isinstance(value, Enum):
+        return cast(object, value.value)
+    if isinstance(value, (tuple, list)):
+        sequence_value = cast("tuple[object, ...] | list[object]", value)
+        return [_unstructure(item) for item in sequence_value]
+    if isinstance(value, Mapping):
+        mapping_value = cast("Mapping[object, object]", value)
+        return {str(key): _unstructure(item) for key, item in mapping_value.items()}
+    return value
+
+
+def canonical_bytes(value: object) -> bytes:
+    """Serialize ``value`` to the canonical, digest-stable JSON encoding."""
+    return (
+        json.dumps(_unstructure(value), sort_keys=True, separators=(",", ":")) + "\n"
+    ).encode()
+
+
+def canonical_digest(value: object) -> str:
+    """Return the ``sha256:``-prefixed digest of ``value``'s canonical bytes."""
+    return f"sha256:{hashlib.sha256(canonical_bytes(value)).hexdigest()}"
 
 
 def schema_constraints(
@@ -821,6 +856,92 @@ class CurdPlan:
             and self.parent_plan_ref.plan_id == self.plan_id
         ):
             raise ValueError("parent_plan_ref must identify a different plan")
+
+    def __attrs_post_init__(self) -> None:
+        """Reject a plan whose digest does not cover its own content."""
+        expected = _curd_plan_digest(self)
+        if self.digest != expected:
+            raise ValueError(
+                f"CurdPlan digest mismatch: expected {expected}, got {self.digest}"
+            )
+
+    @classmethod
+    def signed(
+        cls,
+        *,
+        contract_version: ContractVersion,
+        plan_id: str,
+        revision: int,
+        objective: str,
+        curds: tuple[SemanticCurd, ...],
+        context: BoundedContext | None = None,
+        parent_plan_ref: SourcePlanRef | None = None,
+    ) -> CurdPlan:
+        """Build a plan whose digest is derived from the content it signs."""
+        digest = canonical_digest(
+            _curd_plan_unsigned(
+                contract_version=contract_version,
+                plan_id=plan_id,
+                revision=revision,
+                objective=objective,
+                curds=curds,
+                context=context,
+                parent_plan_ref=parent_plan_ref,
+            )
+        )
+        return cls(
+            contract_version=contract_version,
+            plan_id=plan_id,
+            revision=revision,
+            digest=digest,
+            objective=objective,
+            curds=curds,
+            context=context,
+            parent_plan_ref=parent_plan_ref,
+        )
+
+
+def _curd_plan_unsigned(
+    *,
+    contract_version: ContractVersion,
+    plan_id: str,
+    revision: int,
+    objective: str,
+    curds: tuple[SemanticCurd, ...],
+    context: BoundedContext | None,
+    parent_plan_ref: SourcePlanRef | None,
+) -> dict[str, object]:
+    """Return the digest-covered projection of a plan: every field but ``digest``."""
+    return {
+        "contract_version": contract_version,
+        "plan_id": plan_id,
+        "revision": revision,
+        "objective": objective,
+        "curds": curds,
+        "context": context,
+        "parent_plan_ref": parent_plan_ref,
+    }
+
+
+def _curd_plan_digest(plan: CurdPlan) -> str:
+    return canonical_digest(
+        _curd_plan_unsigned(
+            contract_version=plan.contract_version,
+            plan_id=plan.plan_id,
+            revision=plan.revision,
+            objective=plan.objective,
+            curds=plan.curds,
+            context=plan.context,
+            parent_plan_ref=plan.parent_plan_ref,
+        )
+    )
+
+
+def curd_plan_digest(plan: object) -> str:
+    """Return the digest a ``CurdPlan``'s content signs."""
+    if not isinstance(plan, CurdPlan):
+        raise TypeError(f"curd_plan_digest expects CurdPlan, not {type(plan).__name__}")
+    return _curd_plan_digest(plan)
 
 
 @define(frozen=True)
@@ -2319,6 +2440,9 @@ __all__ = [
     "MAX_CONTRACT_DEPTH",
     "MAX_SCOPE_PATHS",
     "MAX_TEXT_LENGTH",
+    "canonical_bytes",
+    "canonical_digest",
+    "curd_plan_digest",
     "derive_curd_disposition",
     "CurdDisposition",
     "AgentWriterView",
