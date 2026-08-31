@@ -85,8 +85,8 @@ def store(corpus_root: Path) -> storage.WorkStore:
     return storage.WorkStore.open(WORK_ID, corpus_root=corpus_root)
 
 
-@pytest.fixture
-def frozen_clock(monkeypatch: pytest.MonkeyPatch) -> Callable[[], str]:
+@pytest.fixture  # noqa: V103 -- side-effect fixture, injected via usefixtures
+def frozen_clock(monkeypatch: pytest.MonkeyPatch) -> None:
     """A clock that never repeats, so a re-read is visible as a new request."""
     ticks = iter(f"2026-08-30T12:00:{second:02d}Z" for second in range(60))
 
@@ -94,7 +94,6 @@ def frozen_clock(monkeypatch: pytest.MonkeyPatch) -> Callable[[], str]:
         return next(ticks)
 
     monkeypatch.setattr(checkpoint, "_utc_now", _clock)
-    return _clock
 
 
 @pytest.fixture
@@ -107,8 +106,9 @@ def genesis(store: storage.WorkStore) -> Iterator[dict[str, object]]:
     yield payload
 
 
+@pytest.mark.usefixtures("frozen_clock")
 def test_checkpoint_creates_the_first_record_without_a_genesis_sentinel(
-    store: storage.WorkStore, frozen_clock: Callable[[], str]
+    store: storage.WorkStore,
 ) -> None:
     status, payload = _run("checkpoint", stdin=_first())
 
@@ -144,8 +144,9 @@ def test_checkpoint_binds_the_current_revision_on_an_update(
     assert _get(payload, "record", "orientation") == "The kernel is unchanged."
 
 
+@pytest.mark.usefixtures("frozen_clock")
 def test_an_identical_update_replays_because_no_clock_was_read(
-    genesis: dict[str, object], frozen_clock: Callable[[], str]
+    genesis: dict[str, object],
 ) -> None:
     """A pinned base names no session, so its bytes do not move on a resubmit.
 
@@ -169,8 +170,9 @@ def test_an_identical_update_replays_because_no_clock_was_read(
     assert second["revision_number"] == first["revision_number"]
 
 
+@pytest.mark.usefixtures("frozen_clock")
 def test_a_named_session_reads_the_clock_and_so_does_not_replay(
-    genesis: dict[str, object], frozen_clock: Callable[[], str]
+    genesis: dict[str, object],
 ) -> None:
     """Naming a harness makes the request session-specific on purpose."""
     intent = _intent(orientation="Stamped.", session={"harness": "claude"})
@@ -186,8 +188,9 @@ def test_a_named_session_reads_the_clock_and_so_does_not_replay(
     )
 
 
+@pytest.mark.usefixtures("frozen_clock")
 def test_a_genesis_replay_needs_an_explicit_captured_at(
-    store: storage.WorkStore, frozen_clock: Callable[[], str]
+    store: storage.WorkStore,
 ) -> None:
     """The documented cost of deriving genesis' created time from the clock."""
     unstamped = _first(base_revision_id=commit.GENESIS_PARENT)
@@ -200,8 +203,9 @@ def test_a_genesis_replay_needs_an_explicit_captured_at(
     assert _get(conflict, "error", "code") == "genesis-conflict"
 
 
+@pytest.mark.usefixtures("frozen_clock")
 def test_a_genesis_carrying_captured_at_replays(
-    store: storage.WorkStore, frozen_clock: Callable[[], str]
+    store: storage.WorkStore,
 ) -> None:
     stamped = _first(
         session={"captured_at": CAPTURED_AT},

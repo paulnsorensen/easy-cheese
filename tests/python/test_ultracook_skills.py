@@ -411,8 +411,11 @@ class TestCheeseContinueFlag:
 
 
 class TestWheypointParallelHandoff:
+    # The multi-move contract moved to `references/parallel-handoffs.md` when
+    # the common path was routed through `checkpoint`; the corpus is the whole
+    # contract, body plus routed references.
     def test_documents_parallel_continuation_schema(self) -> None:
-        body = _skill("wheypoint")
+        body = _skill_corpus("wheypoint")
         assert "mode: single" in body, (
             "wheypoint must document the default single-dispatch mode"
         )
@@ -424,7 +427,7 @@ class TestWheypointParallelHandoff:
         )
 
     def test_documents_parallel_worktree_strategies(self) -> None:
-        body = _skill("wheypoint")
+        body = _skill_corpus("wheypoint")
         body_lower = body.lower()
         assert "worktree_strategy" in body, (
             "wheypoint must document portable worktree isolation strategy"
@@ -521,7 +524,9 @@ class TestWheypointProvenance:
             )
 
     def test_provenance_documented_optional_and_backward_compatible(self) -> None:
-        body = _skill("wheypoint").lower()
+        # The header schema keeps every provenance key (asserted above); the
+        # prose describing them lives in `references/provenance-fields.md`.
+        body = _skill_corpus("wheypoint").lower()
         # Scope the optionality check to the `### Provenance fields` block so
         # it cannot be satisfied by an unrelated "optional" elsewhere in the
         # file (the word appears many times outside the provenance section).
@@ -540,14 +545,14 @@ class TestWheypointProvenance:
 
 class TestWheypointJoinSplitVerbs:
     def test_join_documented_with_both_parent_slugs(self) -> None:
-        body = _skill("wheypoint")
+        body = _skill_corpus("wheypoint")
         assert "--join" in body, "wheypoint must document the --join verb"
         assert "parents: [<slugA>, <slugB>]" in body or "parents: [A, B]" in body, (
             "--join must write one note whose parents lists both source slugs"
         )
 
     def test_split_documented_with_current_slug_as_parent(self) -> None:
-        body = _skill("wheypoint")
+        body = _skill_corpus("wheypoint")
         assert "--split" in body, "wheypoint must document the --split verb"
         assert (
             "parents: [<current-slug>]" in body or "parents: [<current>]" in body
@@ -1042,8 +1047,10 @@ class TestWheypointNextListForm:
     several read-only follow-ups from one handoff. Restricted to read-only
     skills; parallel writes still need the heavy mode: parallel + tasks:."""
 
+    # The list form moved to `references/parallel-handoffs.md`; the corpus is
+    # the whole contract, body plus routed references.
     def test_list_form_documented(self) -> None:
-        body = _skill("wheypoint")
+        body = _skill_corpus("wheypoint")
         # The bracketed list shape and the required order: key.
         assert "next: [" in body, (
             "wheypoint must document the inline next: list form `next: [<skill> \"<arg>\", ...]`"
@@ -1054,14 +1061,14 @@ class TestWheypointNextListForm:
         )
 
     def test_order_required_for_list(self) -> None:
-        body = _skill("wheypoint")
+        body = _skill_corpus("wheypoint")
         body_lower = body.lower()
         assert "required" in body_lower and "order:" in body, (
             "order: must be documented as required when next: is a list"
         )
 
     def test_list_restricted_to_readonly(self) -> None:
-        body = _skill("wheypoint")
+        body = _skill_corpus("wheypoint")
         body_lower = body.lower()
         # The inline list must be restricted to read-only skills, with the
         # heavy tasks: block named as the path for parallel writes.
