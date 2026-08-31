@@ -487,9 +487,9 @@ def test_legacy_v013_spec_is_accepted_on_read(tmp_path: Path, _run: _RunFn) -> N
     assert not _error_lines(result)
     assert _notice_lines(result) == [
         "NOTICE: legacy-spec-format this spec predates the current format "
-        + "(no mold provenance marker, so Test Contracts and gate_applicability "
-        + "are not required); accepted on read — re-mint it with /mold to adopt "
-        + f"them in {path}"
+        + "(no mold provenance marker, so Test Contracts, Grounding and "
+        + "gate_applicability are not required); accepted on read — re-mint it "
+        + f"with /mold to adopt them in {path}"
     ]
 
 
@@ -507,6 +507,29 @@ def test_legacy_v013_spec_is_rejected_under_strict_mint(
         for line in errors
     )
     assert any("gate-applicability-required" in line for line in errors)
+    assert any(
+        "missing-required-section" in line and "Grounding" in line for line in errors
+    )
+    assert any("grounding-probe-recorded" in line for line in errors)
+
+
+def test_legacy_spec_grounding_content_is_still_validated(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    text = LEGACY_SPEC.replace(
+        "## Approach",
+        "## Grounding\n\n| Probe | Outcome | Evidence |\n| --- | --- | --- |\n"
+        + "| wiki | hit | adr/spec-format-enforcement-001.md |\n"
+        + "| explorer | unavailable | |\n\n## Approach",
+        1,
+    )
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    errors = _error_lines(result)
+    assert result.returncode == 1
+    assert len(errors) == 1
+    assert "delegation-digest-recorded" in errors[0]
+    assert "records no evidence" in errors[0]
 
 
 def test_legacy_spec_still_fails_on_a_section_v013_required(

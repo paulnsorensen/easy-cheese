@@ -402,7 +402,8 @@ def validate(path: Path, *, strict: bool = False) -> tuple[list[str], str | None
             path,
             errors,
         )
-    errors.extend(_grounding_errors(grounding_rows, path))
+    if grounding_lines is not None or policy.requires_section("Grounding"):
+        errors.extend(_grounding_errors(grounding_rows, path))
 
     acceptance_lines = found_sections.get(_canonical_heading("Acceptance"), [])
     declared_ids = (
