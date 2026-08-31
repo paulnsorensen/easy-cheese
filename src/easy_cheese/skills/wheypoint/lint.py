@@ -58,6 +58,7 @@ class LintCode(str, Enum):
     ARTIFACT_COVERAGE_INVALID = "artifact-coverage-invalid"
     ENTRY_DROPPED = "entry-dropped"
     DURABILITY_LOCAL_ONLY = "durability-local-only"
+    COMPACTION_PARENT_UNRESOLVED = "compaction-parent-unresolved"
 
 
 # Findings that describe the store's surroundings rather than the authority of
@@ -248,6 +249,7 @@ def lint_work(
         chain = _walk_chain(recovery, current)
         ancestry = chain.revision_ids
         findings.extend(chain.findings)
+        findings.extend(_compaction_findings(chain))
         findings.extend(_conservation_findings(chain, record))
         findings.extend(_git_findings(current, git_object_exists))
 
@@ -426,6 +428,62 @@ def _parent_digest_finding(
         f"revision {revision.revision_id!r} pins parent {parent.revision_id!r} "
         + f"at {pinned}, but that receipt now hashes to {actual}",
     )
+
+
+def _compaction_findings(chain: _Chain) -> list[LintFinding]:
+    """Re-derive every compaction claim against the chain it was written into.
+
+    A compaction record is a reconciliation report, and both of its links are
+    checkable from the receipts alone. The revision it says it rehydrated from
+    must be the parent it then wrote onto -- a session that re-read one revision
+    and committed against another reconciled against state that is not the state
+    it extended. And the predecessor it chains to must be a compaction that is
+    genuinely behind it: an id outside the walked ancestry names a compaction
+    this lineage never passed through, and an id inside it that carries no
+    compaction of its own names an event that never happened.
+
+    Neither is repairable here -- the lost context is lost -- so both are
+    reported, and both gate continuation: resuming on a checkpoint whose
+    compaction claim does not hold is resuming on state nobody reconciled.
+    """
+    compacted = {
+        revision.revision_id: revision.compaction for revision in chain.revisions
+    }
+    findings: list[LintFinding] = []
+    for revision in chain.revisions:
+        compaction = revision.compaction
+        if compaction is None:
+            continue
+        if compaction.rehydrated_from_revision_id != revision.parent_revision_id:
+            findings.append(
+                LintFinding(
+                    LintCode.COMPACTION_PARENT_UNRESOLVED,
+                    f"revision {revision.revision_id!r} rehydrated from "
+                    + f"{compaction.rehydrated_from_revision_id!r} but was "
+                    + f"written onto parent {revision.parent_revision_id!r}",
+                )
+            )
+        prior_id = compaction.prior_compaction_revision_id
+        if prior_id is None:
+            continue
+        if prior_id not in compacted:
+            findings.append(
+                LintFinding(
+                    LintCode.COMPACTION_PARENT_UNRESOLVED,
+                    f"revision {revision.revision_id!r} chains to prior "
+                    + f"compaction {prior_id!r}, which is not in the proven "
+                    + "ancestry of this revision",
+                )
+            )
+        elif compacted[prior_id] is None:
+            findings.append(
+                LintFinding(
+                    LintCode.COMPACTION_PARENT_UNRESOLVED,
+                    f"revision {revision.revision_id!r} chains to prior "
+                    + f"compaction {prior_id!r}, which records no compaction",
+                )
+            )
+    return findings
 
 
 def _conservation_findings(

@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import Protocol
 
 import pytest
-from easy_cheese_schemas import WheypointRecord, WheypointRevision
+from attrs import evolve
+from easy_cheese_schemas import CompactionRecord, WheypointRecord, WheypointRevision
 
 from easy_cheese.skills.wheypoint import canonical, lint, records, storage
 from easy_cheese.skills.wheypoint import resolve as resolve_mod
@@ -586,6 +587,47 @@ def test_a_real_integrity_failure_still_blocks_continuation(
 
     assert found.dispatchable is False
     assert found.outcome is resolve_mod.ResolutionOutcome.GATED
+
+def test_an_unresolved_compaction_lineage_blocks_continuation(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    """A compaction claim a reader cannot re-derive is not resumable state: the
+    session reconciled against something other than the revision it extended,
+    so what it carried forward was never reconciled at all."""
+    store, first = seed(
+        corpus_root, make_record, make_promotion, work_id="alpha", slug="alpha"
+    )
+    second = make_promotion(
+        2,
+        "rev-0002",
+        parent=first,
+        record=make_record(
+            work_id="alpha", slug="alpha", revision_id="rev-0002", revision_number=2
+        ),
+    )
+    revision = evolve(
+        second.revision,
+        compaction=CompactionRecord(
+            rehydrated_from_revision_id="rev-0000",
+            rehydrated_record_digest=records.record_digest(first.record),
+            reconciled_entry_ids=[],
+        ),
+    )
+    store.promote(
+        evolve(second.record, revision_digest=records.revision_digest(revision)),
+        revision,
+        second.markdown,
+    )
+
+    found = run("alpha", corpus_root)
+
+    codes = tuple(finding.code for finding in found.findings)
+    assert lint.LintCode.COMPACTION_PARENT_UNRESOLVED in codes, codes
+    assert found.dispatchable is False
+    assert found.outcome is resolve_mod.ResolutionOutcome.GATED
+
 
 WRAPPED_NOTE = """## Handoff slug
 
