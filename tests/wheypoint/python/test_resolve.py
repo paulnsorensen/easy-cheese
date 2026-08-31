@@ -396,6 +396,117 @@ def test_a_legacy_note_whose_artifact_resolves_is_returned(tmp_path: Path) -> No
     assert found.outcome is resolve_mod.ResolutionOutcome.LEGACY
 
 
+def write_note_with_parents(root: Path, slug: str, parents: str) -> Path:
+    path = root / ".cheese" / "notes" / f"{slug}.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _ = path.write_text(
+        "status: ok\nnext: cook\nartifact: \n"
+        + f"parents: {parents}\nPick the loop back up.\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_a_legacy_note_whose_parent_names_no_note_gates(tmp_path: Path) -> None:
+    """Lineage is followed off the note, so a dangling parent is a dangling
+    pointer dressed as provenance -- the same failure as a dangling artifact."""
+    start = tmp_path / "start"
+    start.mkdir()
+    _ = write_note_with_parents(start, "child", "[gone-forever]")
+
+    found = resolve_mod.resolve_legacy(
+        "child", start=start, run=fake_runner(porcelain(start))
+    )
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.GATED
+    assert found.detail is not None
+    assert "'gone-forever'" in found.detail
+
+
+def test_a_legacy_parent_in_a_sibling_worktree_resolves(tmp_path: Path) -> None:
+    start, sibling = tmp_path / "start", tmp_path / "sibling"
+    start.mkdir()
+    sibling.mkdir()
+    _ = write_note(sibling, "elder")
+    _ = write_note_with_parents(start, "child", '["elder"]')
+
+    found = resolve_mod.resolve_legacy(
+        "child", start=start, run=fake_runner(porcelain(start, sibling))
+    )
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.LEGACY
+    assert found.legacy_slug is not None
+    assert found.legacy_slug.parents == '["elder"]'
+
+
+@pytest.mark.parametrize(
+    "parents",
+    ["[elder, other]", "elder,other", "['elder', \"other\"]", "[ elder , other ]"],
+)
+def test_parent_lists_are_read_tolerantly(tmp_path: Path, parents: str) -> None:
+    """The field is hand-written Markdown, not JSON: brackets, quotes, and
+    stray whitespace all describe the same lineage."""
+    start = tmp_path / "start"
+    start.mkdir()
+    _ = write_note(start, "elder")
+    _ = write_note(start, "other")
+    _ = write_note_with_parents(start, "child", parents)
+
+    found = resolve_mod.resolve_legacy(
+        "child", start=start, run=fake_runner(porcelain(start))
+    )
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.LEGACY, found.detail
+
+
+def test_a_join_gates_on_the_one_parent_that_is_missing(tmp_path: Path) -> None:
+    start = tmp_path / "start"
+    start.mkdir()
+    _ = write_note(start, "elder")
+    _ = write_note_with_parents(start, "child", "[elder, vanished]")
+
+    found = resolve_mod.resolve_legacy(
+        "child", start=start, run=fake_runner(porcelain(start))
+    )
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.GATED
+    assert found.detail is not None
+    assert "'vanished'" in found.detail
+    assert "'elder'" not in found.detail
+
+
+def test_an_absolute_http_parent_is_accepted_and_a_bare_path_is_not(
+    tmp_path: Path,
+) -> None:
+    start = tmp_path / "start"
+    start.mkdir()
+    _ = write_note_with_parents(
+        start, "child", "[https://github.com/o/r/pull/1]"
+    )
+    linked = resolve_mod.resolve_legacy(
+        "child", start=start, run=fake_runner(porcelain(start))
+    )
+    assert linked.outcome is resolve_mod.ResolutionOutcome.LEGACY
+
+    _ = write_note_with_parents(start, "child", "[.cheese/notes/elder.md]")
+    pathy = resolve_mod.resolve_legacy(
+        "child", start=start, run=fake_runner(porcelain(start))
+    )
+    assert pathy.outcome is resolve_mod.ResolutionOutcome.GATED
+
+
+def test_an_empty_parent_list_is_not_a_gate(tmp_path: Path) -> None:
+    start = tmp_path / "start"
+    start.mkdir()
+    _ = write_note_with_parents(start, "child", "[]")
+
+    found = resolve_mod.resolve_legacy(
+        "child", start=start, run=fake_runner(porcelain(start))
+    )
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.LEGACY
+
+
 def test_an_unparsable_legacy_note_is_an_error(tmp_path: Path) -> None:
     start = tmp_path / "start"
     start.mkdir()
@@ -473,7 +584,7 @@ artifact: .cheese/notes/context.md
 session: codex:test-session
 git: branch@deadbeef
 created: 2026-08-02T00:00:00Z
-parents: [parent]
+parents: [context]
 baseline: none
 Resume the parent protocol.
 ~~~
@@ -500,7 +611,7 @@ def test_real_wrapped_legacy_note_decodes_additive_header(tmp_path: Path) -> Non
     assert found.legacy_slug.next_skill == "mold"
     assert found.legacy_slug.mode == "single"
     assert found.legacy_slug.session == "codex:test-session"
-    assert found.legacy_slug.parents == "[parent]"
+    assert found.legacy_slug.parents == "[context]"
 
 
 def test_normal_resolve_falls_back_to_a_legacy_slug(tmp_path: Path) -> None:
