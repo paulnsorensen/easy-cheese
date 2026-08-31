@@ -6,11 +6,11 @@ Two currency modes, selected with `--against {head,index}` (default head):
 - `head` (CI): run after `build_pyz.py` has rebuilt the working tree from a
   HEAD checkout; compares each rebuilt bundle against the copy committed at
   HEAD.
-- `index` (local/pre-commit): temporarily makes the working tree match the
-  staged index (via `git stash push --keep-index`), rebuilds every bundle
-  itself, compares against the staged blob, then restores the working tree
-  exactly as it was. Catches a staged source change whose regenerated
-  bundle was never staged.
+- `index` (local/pre-commit): materializes the staged index into an
+  isolated detached worktree, rebuilds every bundle there, and compares
+  against the staged blob. The real working tree and index are never
+  touched. Catches a staged source change whose regenerated bundle was
+  never staged.
 
 The comparison uses per-member content signatures rather than raw archive bytes.
 Shiv assembles deterministic wheel members, but ZIP metadata and interpreter
@@ -571,7 +571,7 @@ def _owning_skill(path: Path) -> str | None:
         return parts[1]
     if parts[:3] == ("src", "easy_cheese", "skills"):
         return parts[3].replace("_", "-")
-    if parts[:4] == ("src", "content", "docs", "skills") and len(parts) == 5:
+    if parts[:4] == ("website", "content", "docs", "skills") and len(parts) == 5:
         return path.stem
     return None
 
@@ -585,6 +585,7 @@ def _pyz_reference_roots() -> list[Path]:
             for p in (REPO_ROOT / "src").rglob("*")
             if p.is_file() and "__pycache__" not in p.parts
         ),
+        *REPO_ROOT.glob("website/content/docs/**/*.md"),
         *(p for p in (REPO_ROOT / "scripts").glob("*.py") if p.resolve() != _SELF_PATH),
     ]
 
@@ -638,38 +639,50 @@ def _staged(path: Path) -> bytes | None:
 
 
 @contextlib.contextmanager
-def _staged_index_rebuild(bundle_paths: list[Path]) -> Generator[None]:
-    """Make the working tree match the staged index, rebuild every bundle,
-    yield with the rebuilt bundles on disk, then restore the working tree.
+def _staged_index_rebuild() -> Generator[Path]:
+    """Materialize the staged index into an isolated detached worktree,
+    rebuild every bundle there, and yield the worktree root with the
+    rebuilt bundles on disk.
 
-    `git stash push --keep-index` discards unstaged edits from the working
-    tree while leaving the index untouched, so `build_pyz.py` sees exactly
-    what a commit right now would ship. Every bundle's prior bytes are
-    captured up front and rewritten afterward so this check never leaves a
-    residual, unstaged rebuild artifact behind.
+    `git write-tree` snapshots the index exactly as staged, `git
+    commit-tree` wraps that snapshot as a throwaway parentless commit, and
+    `git worktree add --detach` checks it out into a scratch directory that
+    `build_pyz.py` can rebuild from -- it resolves its own root from its own
+    `__file__`, so running the worktree's copy naturally scopes the rebuild
+    there. The real working tree and index are never touched, so a Shiv
+    rebuild that is not byte-reproducible, or a build failure, can never
+    strand this check mid-mutation.
     """
-    originals = {path: path.read_bytes() for path in bundle_paths}
-    dirty = subprocess.run(["git", "diff", "--quiet"], cwd=REPO_ROOT, check=False).returncode != 0
-    stashed = False
-    try:
-        if dirty:
-            _ = subprocess.run(
-                ["git", "stash", "push", "--keep-index", "--quiet", "-m", "check_bundles: index rebuild"],
-                cwd=REPO_ROOT,
-                check=True,
-            )
-            stashed = True
+    tree = subprocess.run(
+        ["git", "write-tree"], cwd=REPO_ROOT, capture_output=True, check=True, text=True
+    ).stdout.strip()
+    commit = subprocess.run(
+        ["git", "commit-tree", tree, "-m", "check_bundles: staged index snapshot"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    ).stdout.strip()
+    with tempfile.TemporaryDirectory(prefix="easy-cheese-index-rebuild-") as scratch:
+        worktree = Path(scratch) / "worktree"
         _ = subprocess.run(
-            [sys.executable, str(REPO_ROOT / "scripts" / "build_pyz.py")],
+            ["git", "worktree", "add", "--detach", "--quiet", str(worktree), commit],
             cwd=REPO_ROOT,
             check=True,
         )
-        yield
-    finally:
-        if stashed:
-            _ = subprocess.run(["git", "stash", "pop", "--quiet"], cwd=REPO_ROOT, check=True)
-        for path, data in originals.items():
-            _ = path.write_bytes(data)
+        try:
+            _ = subprocess.run(
+                [sys.executable, str(worktree / "scripts" / "build_pyz.py")],
+                cwd=worktree,
+                check=True,
+            )
+            yield worktree
+        finally:
+            _ = subprocess.run(
+                ["git", "worktree", "remove", "--force", str(worktree)],
+                cwd=REPO_ROOT,
+                check=False,
+            )
 
 
 def _describe(
@@ -696,7 +709,7 @@ def _parse_against(argv: Sequence[str]) -> str:
     raise SystemExit("usage: check_bundles.py [--against {head,index}]")
 
 
-def _run_checks(against: str) -> int:
+def _run_checks(against: str, bundle_root: Path) -> int:
     stale: list[str] = []
     for path in sorted(REPO_ROOT.glob("skills/*/scripts/common.pyz")):
         stale.append(f"  {path.relative_to(REPO_ROOT)} (obsolete shared bundle)")
@@ -704,8 +717,8 @@ def _run_checks(against: str) -> int:
         stale.append(f"  {reference_problem}")
     committed_of = _staged if against == "index" else _committed
     checked = 0
-    for path in sorted(REPO_ROOT.glob(BUNDLE_GLOB)):
-        relative = path.relative_to(REPO_ROOT)
+    for path in sorted(bundle_root.glob(BUNDLE_GLOB)):
+        relative = path.relative_to(bundle_root)
         committed = committed_of(relative)
         checked += 1
         data = path.read_bytes()
@@ -743,10 +756,9 @@ def _run_checks(against: str) -> int:
 def main(argv: Sequence[str] = ()) -> int:
     against = _parse_against(argv)
     if against == "index":
-        bundle_paths = sorted(REPO_ROOT.glob(BUNDLE_GLOB))
-        with _staged_index_rebuild(bundle_paths):
-            return _run_checks("index")
-    return _run_checks("head")
+        with _staged_index_rebuild() as worktree:
+            return _run_checks("index", worktree)
+    return _run_checks("head", REPO_ROOT)
 
 
 if __name__ == "__main__":

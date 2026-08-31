@@ -83,25 +83,56 @@ def _init_index_rebuild_fixture(root: Path) -> tuple[Path, Path]:
     return source, bundle
 
 
-def test_staged_index_rebuild_reflects_staged_content_and_restores_working_tree(
+def test_staged_index_rebuild_yields_isolated_worktree_and_leaves_the_real_tree_untouched(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     source, bundle = _init_index_rebuild_fixture(tmp_path)
 
     # source.txt is fully staged; a different tracked file, other.txt, has
-    # an unstaged edit, to prove the rebuild uses the staged content and
-    # the restore never touches an in-progress edit elsewhere in the tree.
+    # an unstaged edit, to prove the rebuild uses the staged content while
+    # never touching the real working tree at all.
     _ = source.write_text("staged\n")
     _ = subprocess.run(["git", "add", "source.txt"], cwd=tmp_path, check=True)
     other = tmp_path / "other.txt"
     _ = other.write_text("work in progress\n")
 
     monkeypatch.setattr(check_bundles, "REPO_ROOT", tmp_path)
-    with check_bundles._staged_index_rebuild([bundle]):  # pyright: ignore[reportPrivateUsage]
-        assert bundle.read_bytes() == b"staged\n"
+    with check_bundles._staged_index_rebuild() as worktree:  # pyright: ignore[reportPrivateUsage]
+        rebuilt_bundle = worktree / "skills" / "demo" / "scripts" / "demo.pyz"
+        assert rebuilt_bundle.read_bytes() == b"staged\n"
+        assert bundle.read_bytes() == b"committed-bytes"
+        assert other.read_text() == "work in progress\n"
 
+    assert not worktree.exists()
     assert bundle.read_bytes() == b"committed-bytes"
     assert other.read_text() == "work in progress\n"
+
+
+def test_check_bundles_against_index_survives_a_bundle_already_rebuilt_unstaged(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A bundle already rebuilt-but-unstaged before the run (exactly what a
+    dev's own `build_pyz.py` invocation leaves behind) must not strand the
+    real tree: the check flags staleness without stashing, and the unstaged
+    bundle edit survives untouched afterward.
+    """
+    source, bundle = _init_index_rebuild_fixture(tmp_path)
+
+    _ = source.write_text("staged-source-change\n")
+    _ = subprocess.run(["git", "add", "source.txt"], cwd=tmp_path, check=True)
+    _ = bundle.write_bytes(b"unstaged-local-rebuild")
+
+    monkeypatch.setattr(check_bundles, "REPO_ROOT", tmp_path)
+
+    assert check_bundles.main(["--against", "index"]) == 1
+    output = capsys.readouterr().out
+    assert ".pyz bundles are invalid or stale" in output
+
+    assert bundle.read_bytes() == b"unstaged-local-rebuild"
+    stash_list = subprocess.run(
+        ["git", "stash", "list"], cwd=tmp_path, capture_output=True, text=True, check=True
+    )
+    assert stash_list.stdout == ""
 
 
 def test_check_bundles_against_index_flags_staged_source_without_restaged_bundle(
@@ -120,3 +151,19 @@ def test_check_bundles_against_index_flags_staged_source_without_restaged_bundle
     assert ".pyz bundles are invalid or stale" in output
     assert "demo.pyz" in output
     assert bundle.read_bytes() == b"committed-bytes"
+
+
+def test_check_pyz_references_flags_a_website_doc_naming_a_foreign_skill_pyz(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    docs_dir = tmp_path / "website" / "content" / "docs" / "skills"
+    docs_dir.mkdir(parents=True)
+    doc = docs_dir / "mold.md"
+    _ = doc.write_text("Mold hands its plan to Cook by running cook.pyz.\n")
+    monkeypatch.setattr(check_bundles, "REPO_ROOT", tmp_path)
+
+    violations = check_bundles.check_pyz_references()
+
+    assert violations == [
+        "website/content/docs/skills/mold.md: references cook.pyz, not its own mold.pyz"
+    ]
