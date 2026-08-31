@@ -7,7 +7,11 @@ from pathlib import Path
 from typing import cast
 
 import pytest
-from easy_cheese_schemas import ContractValidationError, PublishedArtifact
+from easy_cheese_schemas import (
+    ContractValidationError,
+    PublishedArtifact,
+    normalize_agent_output,
+)
 
 from easy_cheese.shared import publication
 
@@ -71,7 +75,8 @@ def test_syntax_normalize_direct_parse_returns_no_actions() -> None:
 
 
 def test_syntax_normalize_trim_whitespace_recovers() -> None:
-    raw = " " + json.dumps(DOC) + " "
+    # NBSP (U+00A0): json.loads rejects it as whitespace, str.strip removes it
+    raw = chr(0xA0) + json.dumps(DOC) + chr(0xA0)
     text, actions = publication.syntax_normalize(raw)
     assert [a.action.value for a in actions] == ["trim_whitespace"]
     assert json.loads(text) == DOC
@@ -91,19 +96,40 @@ def test_syntax_normalize_remove_trailing_comma_recovers() -> None:
     assert json.loads(text) == {"a": 1}
 
 
-def test_select_repair_ambiguous_raises() -> None:
-    """Trailing comma plus a curly-quoted string value: removing the comma alone
-    parses (keeping the curly quotes as string content), and removing the comma
-    while also normalizing quotes also parses, but to different text -- two
-    distinct candidates, so `_select_repair` must reject rather than guess."""
+def test_select_repair_trailing_comma_with_curly_quote_string_content() -> None:
+    """Trailing comma plus a curly-quoted string value: the curly quotes sit
+    inside straight-quote-delimited string content, so quote normalization
+    never touches them and only the trailing-comma repair applies -- a single
+    unambiguous candidate that preserves the curly quotes as prose."""
     raw = '{"a": "‘x’",}'
-    with pytest.raises(publication.AmbiguousSyntaxRepairError):
-        _ = publication._select_repair(raw)  # pyright: ignore[reportPrivateUsage]
+    candidate, subset = publication._select_repair(raw)  # pyright: ignore[reportPrivateUsage]
+    assert subset == (2,)
+    assert json.loads(candidate) == {"a": "‘x’"}
 
 
 def test_select_repair_unrecoverable_raises() -> None:
     with pytest.raises(publication.UnrecoverableSyntaxError):
         _ = publication._select_repair("not json at all")  # pyright: ignore[reportPrivateUsage]
+
+
+def test_normalize_quotes_preserves_curly_quote_inside_string_content() -> None:
+    """A curly apostrophe that is prose content of a straight-quoted string
+    value must survive untouched -- only curly quotes outside string content
+    are structural repair targets."""
+    raw = '{"a": "it’s fine"}'
+    text, actions = publication.syntax_normalize(raw)
+    assert actions == ()
+    assert json.loads(text) == {"a": "it’s fine"}
+
+
+def test_remove_trailing_comma_preserves_comma_inside_string_content() -> None:
+    """A comma immediately followed by a closing bracket character that is
+    prose content of a string value must survive untouched -- only a trailing
+    comma outside string content is a repair target."""
+    raw = '{"a": "x, ]" ,}'
+    text, actions = publication.syntax_normalize(raw)
+    assert [a.action.value for a in actions] == ["remove_trailing_comma"]
+    assert json.loads(text) == {"a": "x, ]"}
 
 
 def test_publish_rejects_semantic_repair_of_wrong_enum_casing(tmp_path: Path) -> None:
@@ -153,12 +179,32 @@ def test_publish_rejects_conflicting_replay(tmp_path: Path) -> None:
         )
 
 
+def test_publish_rejects_tampered_payload_on_replay(tmp_path: Path) -> None:
+    """A replayed operation_id must revalidate that the persisted payload file
+    still matches the digest recorded in the pointer -- a corrupted-but-
+    schema-valid payload swapped in after the first publish must not be
+    silently accepted as the original."""
+    first = _publish(tmp_path, raw_text=json.dumps(DOC), operation_id="op-tamper")
+    payload_path = publication._uri_to_path(  # pyright: ignore[reportPrivateUsage]
+        first.pointer.payload.uri
+    )
+    tampered_doc = {
+        **DOC,
+        "payload": {**cast("dict[str, object]", DOC["payload"]), "objective": "Tampered"},
+    }
+    other_canonical = normalize_agent_output(json.dumps(tampered_doc), INVOCATION)
+    _ = payload_path.write_bytes(other_canonical.canonical_bytes)
+    with pytest.raises(publication.PayloadDigestMismatchError):
+        _ = _publish(tmp_path, raw_text=json.dumps(DOC), operation_id="op-tamper")
+
+
 def test_publish_receipt_only_when_syntax_actions_nonempty(tmp_path: Path) -> None:
     clean = _publish(tmp_path, raw_text=json.dumps(DOC), operation_id="op-clean")
     assert clean.normalization_receipt is None
     assert clean.pointer.normalization_receipt is None
 
-    repaired_raw = " " + json.dumps(DOC) + " "
+    # NBSP (U+00A0): json.loads rejects it as whitespace, str.strip removes it
+    repaired_raw = chr(0xA0) + json.dumps(DOC) + chr(0xA0)
     repaired = _publish(
         tmp_path, raw_text=repaired_raw, operation_id="op-repaired"
     )

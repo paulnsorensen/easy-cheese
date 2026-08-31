@@ -23,6 +23,7 @@ from urllib.parse import unquote, urlsplit
 
 from easy_cheese_schemas import (
     COMPILED_TRANSITION_REGISTRY,
+    SCHEMA_ROOT,
     ArtifactRef,
     HandoffPointer,
     IngressKind,
@@ -38,9 +39,12 @@ from easy_cheese_schemas import (
     validate_transition,
 )
 
+_NORMALIZATION_RECEIPT_SCHEMA_URI = f"{SCHEMA_ROOT}/normalization-receipt"
+
 __all__ = [
     "AmbiguousSyntaxRepairError",
     "IdempotencyConflictError",
+    "PayloadDigestMismatchError",
     "UnrecoverableSyntaxError",
     "publish",
     "syntax_normalize",
@@ -59,27 +63,73 @@ class IdempotencyConflictError(ValueError):
     """``operation_id`` replayed with a request that does not match."""
 
 
+class PayloadDigestMismatchError(ValueError):
+    """A previously revealed pointer's payload no longer matches its digest."""
+
+
 def _trim_whitespace(text: str) -> str:
     return text.strip()
 
 
-_CURLY_QUOTES = str.maketrans({
+_CURLY_QUOTE_MAP = {
     "“": '"',
     "”": '"',
     "‘": "'",
     "’": "'",
-})
+}
+
+
+def _string_content_mask(text: str) -> list[bool]:
+    """Mark which indices of ``text`` fall strictly inside a JSON string.
+
+    Only straight double quotes toggle string state (with backslash-escape
+    tracking); curly quotes never delimit a string for this scan. That makes
+    the mask fully deterministic ahead of repair: content between straight
+    quotes -- including any curly quotes or commas an agent wrote as prose --
+    is never mistaken for structure, and text with no straight quotes at all
+    (e.g. an agent that curly-quoted every string) is treated as entirely
+    structural, matching the prior whole-text behavior for that case.
+    """
+    mask = [False] * len(text)
+    in_string = False
+    escaped = False
+    for index, char in enumerate(text):
+        if in_string:
+            if escaped:
+                escaped = False
+                mask[index] = True
+            elif char == "\\":
+                escaped = True
+                mask[index] = True
+            elif char == '"':
+                in_string = False
+            else:
+                mask[index] = True
+        elif char == '"':
+            in_string = True
+    return mask
 
 
 def _normalize_quotes(text: str) -> str:
-    return text.translate(_CURLY_QUOTES)
+    mask = _string_content_mask(text)
+    return "".join(
+        char if mask[index] else _CURLY_QUOTE_MAP.get(char, char)
+        for index, char in enumerate(text)
+    )
 
 
 _TRAILING_COMMA_RE = re.compile(r",(\s*)([}\]])")
 
 
 def _remove_trailing_comma(text: str) -> str:
-    return _TRAILING_COMMA_RE.sub(r"\1\2", text)
+    mask = _string_content_mask(text)
+
+    def _repair(match: re.Match[str]) -> str:
+        if mask[match.start()]:
+            return match.group(0)
+        return match.group(1) + match.group(2)
+
+    return _TRAILING_COMMA_RE.sub(_repair, text)
 
 
 _ACTIONS: tuple[tuple[NormalizationActionKind, Callable[[str], str]], ...] = (
@@ -177,6 +227,14 @@ def _request_digest(raw_text: str, invocation: Mapping[str, object]) -> str:
     return _digest_text(envelope)
 
 
+def _fsync_dir(directory: Path) -> None:
+    descriptor = os.open(str(directory), os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
 def _atomic_write(path: Path, content: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     descriptor, temp_name = tempfile.mkstemp(
@@ -188,12 +246,31 @@ def _atomic_write(path: Path, content: bytes) -> None:
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(temp_name, path)
+        _fsync_dir(path.parent)
     except BaseException:
         try:
             os.unlink(temp_name)
         except OSError:
             pass
         raise
+
+
+def _atomic_reveal(path: Path, content: bytes) -> None:
+    """Create ``path`` exclusively, raising ``FileExistsError`` if it is
+    already there -- a racing reveal for the same ``operation_id`` can never
+    overwrite a pointer another caller already published."""
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    descriptor, temp_name = tempfile.mkstemp(
+        prefix=f".{path.name}.", suffix=".tmp", dir=str(path.parent)
+    )
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            _ = handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.link(temp_name, path)
+    finally:
+        os.unlink(temp_name)
 
 
 def _content_path(directory: Path, digest: str) -> Path:
@@ -227,6 +304,11 @@ def _rehydrate(pointer: HandoffPointer, payload_schema_uri: str) -> PublishedArt
     canonical = validate_contract(
         payload_bytes, payload_schema_uri, supported_version_for(payload_schema_uri)
     )
+    actual_digest = canonical_digest(canonical.value)
+    if actual_digest != pointer.payload.digest:
+        raise PayloadDigestMismatchError(
+            f"payload at {pointer.payload.uri!r} has digest {actual_digest!r}, expected {pointer.payload.digest!r}"
+        )
     return PublishedArtifact(
         pointer=pointer,
         canonical=canonical,
@@ -312,6 +394,7 @@ def publish(
             digest=receipt_digest,
             size_bytes=len(receipt_bytes),
             media_type="application/json",
+            schema_uri=_NORMALIZATION_RECEIPT_SCHEMA_URI,
         )
 
     handoff_version = supported_version_for(HandoffPointer)
@@ -327,7 +410,15 @@ def publish(
     )
     if _before_reveal is not None:
         _before_reveal()
-    _atomic_write(pointer_path, canonical_bytes(pointer))
+    try:
+        _atomic_reveal(pointer_path, canonical_bytes(pointer))
+    except FileExistsError:
+        existing = _read_pointer(pointer_path)
+        if existing.request_digest != request_digest:
+            raise IdempotencyConflictError(
+                f"operation {operation_id!r} was already published with a different request"
+            ) from None
+        return _rehydrate(existing, payload_schema_uri)
     return PublishedArtifact(
         pointer=pointer, canonical=validated, normalization_receipt=receipt_ref
     )

@@ -107,7 +107,8 @@ def test_mold_pyz_dispatches_publish_end_to_end(tmp_path: Path) -> None:
 
 def test_mold_pyz_publish_recovers_syntax_error(tmp_path: Path) -> None:
     mold_pyz = build_pyz.cached_bundle("mold")
-    raw_text = " " + json.dumps(DOC) + " "
+    # NBSP (U+00A0): json.loads rejects it as whitespace, str.strip removes it
+    raw_text = chr(0xA0) + json.dumps(DOC) + chr(0xA0)
     document, invocation = _write_fixtures(tmp_path, raw_text=raw_text)
     artifact_root = tmp_path / "artifacts"
     result = _run(
