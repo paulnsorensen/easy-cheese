@@ -95,7 +95,7 @@ def _get(container: object, *path: str) -> object:
 
 
 @pytest.fixture(autouse=True)
-def _cwd_outside_a_repository(
+def _cwd_outside_a_repository(  # pyright: ignore[reportUnusedFunction]
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Run every command from a directory that is not a git worktree.
