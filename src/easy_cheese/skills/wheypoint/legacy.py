@@ -6,15 +6,19 @@ is that finding one is a *pure function of which files exist*:
 * Every worktree `git worktree list --porcelain` reports is searched, not just
   the one the caller happens to stand in -- that omission is what let a
   checkpoint written in a sibling worktree disappear on resume.
+* The directories *above* the caller are searched too, up to and including the
+  enclosing repository root. `.cheese/` is repo-local, so standing in a
+  subdirectory -- or standing anywhere at all with git unavailable, which
+  collapses the worktree list to the caller's own directory -- otherwise
+  reports a confident "no note" for a note that is sitting one level up.
 * Two notes for one slug are an ambiguity, full stop. Nothing here compares
   modification times, session ids, or slug recency, because a slug is an alias
   and the newer file is not thereby the right one.
 * A miss reports the exact candidate paths that were probed, so the caller can
   say where it looked instead of guessing that nothing exists anywhere.
 
-When git cannot be listed the scan degrades to the starting worktree alone and
-says so: a partial search that reports itself as complete would turn a missing
-sibling into a confident "no note".
+When git cannot be listed the scan says so: a partial search that reports
+itself as complete would turn a missing sibling into a confident "no note".
 """
 
 from __future__ import annotations
@@ -31,6 +35,9 @@ from easy_cheese_schemas import phase_contracts
 
 NOTES_DIR_PARTS = (".cheese", "notes")
 WORKTREE_LIST_ARGS = ("git", "worktree", "list", "--porcelain")
+# `.git` is a directory in a primary checkout and a file in a linked worktree
+# or a submodule, so its mere existence -- not its type -- marks the root.
+GIT_MARKER = ".git"
 _GIT_TIMEOUT_SECONDS = 5
 # A slug is joined onto a worktree root, so it has to be a single safe segment
 # before it ever touches the filesystem.
@@ -294,6 +301,24 @@ def worktree_roots(start: Path | str, *, run: Runner | None = None) -> WorktreeS
     return WorktreeScan(roots=(base, *siblings))
 
 
+def repository_chain(start: Path | str) -> tuple[Path, ...]:
+    """`start`, then each ancestor up to the enclosing repository root.
+
+    The walk is bounded by the nearest directory holding a `.git` entry, so it
+    can never wander out of the project and into an unrelated `.cheese/` above
+    it. With no repository root anywhere above `start`, there is no project
+    boundary to trust and the chain is `start` alone -- a fruitless walk to the
+    filesystem root contributes nothing but noise to the searched list.
+    """
+    base = Path(start).resolve()
+    chain: list[Path] = []
+    for directory in (base, *base.parents):
+        chain.append(directory)
+        if (directory / GIT_MARKER).exists():
+            return tuple(chain)
+    return (base,)
+
+
 def find_legacy_note(
     slug: str, *, start: Path | str, run: Runner | None = None
 ) -> LegacyLookup:
@@ -333,9 +358,13 @@ def find_legacy_note(
             + f"{_SLUG_RE.pattern}"
         )
     scan = worktree_roots(start, run=run)
+    seen: set[Path] = set()
     searched: list[str] = []
     matches: list[LegacyNote] = []
-    for root in scan.roots:
+    for root in (*repository_chain(start), *scan.roots):
+        if root in seen:
+            continue
+        seen.add(root)
         candidate = root.joinpath(*NOTES_DIR_PARTS, f"{slug}.md")
         searched.append(str(candidate))
         if candidate.is_file():
