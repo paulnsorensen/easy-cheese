@@ -6,6 +6,7 @@ subprocess, proving Cook executes only from a validated canonical pointer.
 """
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import os
@@ -150,7 +151,7 @@ def test_cook_pyz_rejects_wrong_route(tmp_path: Path) -> None:
     _ = pointer_path.write_text(json.dumps(pointer), encoding="utf-8")
     result = _accept(pointer_path)
     assert result.returncode == 1, result.stdout + result.stderr
-    assert "ERROR:" in result.stderr
+    assert "press -> cook is not declared" in result.stderr
 
 
 def test_cook_pyz_rejects_missing_receipt_file(tmp_path: Path) -> None:
@@ -175,13 +176,34 @@ def test_cook_pyz_rejects_receipt_digest_mismatch(tmp_path: Path) -> None:
     assert "digest mismatch" in result.stderr
 
 
+def test_cook_pyz_rejects_receipt_canonical_digest_mismatch(tmp_path: Path) -> None:
+    raw_text = json.dumps(DOC)[:-1] + ",}"
+    pointer_path, pointer = _publish(
+        tmp_path, "op-receipt-canonical-mismatch", raw_text=raw_text
+    )
+    receipt_ref = cast(dict[str, object], pointer["normalization_receipt"])
+    receipt_path = Path(cast(str, receipt_ref["uri"]).removeprefix("file://"))
+    receipt_body = cast(
+        dict[str, object], json.loads(receipt_path.read_text(encoding="utf-8"))
+    )
+    receipt_body["canonical_digest"] = f"sha256:{'0' * 64}"
+    tampered_bytes = json.dumps(receipt_body).encode("utf-8")
+    _ = receipt_path.write_text(json.dumps(receipt_body), encoding="utf-8")
+    receipt_ref["digest"] = f"sha256:{hashlib.sha256(tampered_bytes).hexdigest()}"
+    receipt_ref["size_bytes"] = len(tampered_bytes)
+    _ = pointer_path.write_text(json.dumps(pointer), encoding="utf-8")
+    result = _accept(pointer_path)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "does not match the canonical payload" in result.stderr
+
+
 def test_cook_pyz_rejects_bare_payload(tmp_path: Path) -> None:
     cook_pyz = build_pyz.cached_bundle("cook")
     bare_payload = tmp_path / "bare-payload.json"
     _ = bare_payload.write_text(json.dumps(DOC), encoding="utf-8")
     result = _run(cook_pyz, "accept", str(bare_payload))
     assert result.returncode == 1, result.stdout + result.stderr
-    assert "ERROR:" in result.stderr
+    assert "$.contract_version is required" in result.stderr
 
 
 def test_cook_pyz_rejects_missing_payload_file(tmp_path: Path) -> None:
@@ -192,3 +214,10 @@ def test_cook_pyz_rejects_missing_payload_file(tmp_path: Path) -> None:
     result = _accept(pointer_path)
     assert result.returncode == 1, result.stdout + result.stderr
     assert "is missing at" in result.stderr
+
+
+def test_cook_pyz_rejects_missing_pointer_file(tmp_path: Path) -> None:
+    missing_pointer = tmp_path / "does-not-exist.json"
+    result = _accept(missing_pointer)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "pointer not found at" in result.stderr

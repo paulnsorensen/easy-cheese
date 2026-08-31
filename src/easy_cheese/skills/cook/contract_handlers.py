@@ -28,7 +28,7 @@ from easy_cheese_schemas import (
     validate_contract,
 )
 
-from easy_cheese.shared.publication import accept
+from easy_cheese.shared.publication import PointerNotFoundError, accept
 
 __all__ = ["accept_main", "normalize_main", "validate_main"]
 
@@ -133,7 +133,7 @@ def accept_main(argv: list[str]) -> int:
             destination_phase="cook",
             payload_schema_uri=CURD_PLAN_SCHEMA_URI,
         )
-    except (ContractValidationError, TransitionError) as exc:
+    except (ContractValidationError, TransitionError, PointerNotFoundError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
     wrapper = {

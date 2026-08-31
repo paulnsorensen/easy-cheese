@@ -43,6 +43,7 @@ from easy_cheese_schemas import (
 __all__ = [
     "AmbiguousSyntaxRepairError",
     "IdempotencyConflictError",
+    "PointerNotFoundError",
     "UnrecoverableSyntaxError",
     "accept",
     "publish",
@@ -60,6 +61,10 @@ class AmbiguousSyntaxRepairError(ValueError):
 
 class IdempotencyConflictError(ValueError):
     """``operation_id`` replayed with a request that does not match."""
+
+
+class PointerNotFoundError(ValueError):
+    """``pointer_path`` does not reference an existing pointer file."""
 
 
 def _trim_whitespace(text: str) -> str:
@@ -358,36 +363,29 @@ def _verify_artifact_ref(ref: ArtifactRef) -> bytes:
 
 
 def accept(
-    pointer_source: str,
+    pointer_path: str | Path,
     *,
     destination_phase: str,
     payload_schema_uri: str,
 ) -> AcceptedArtifact:
     """Validate a canonical ``HandoffPointer`` and return its AcceptedArtifact.
 
-    ``pointer_source`` is either a filesystem path to a pointer JSON file or
-    the pointer's raw JSON text; a bare canonical payload handed to this
-    function is rejected because it will not conform to the handoff-pointer
-    schema. Execution may proceed only once this function returns: the
-    pointer's contract version is checked for strict equality, its
+    ``pointer_path`` is a filesystem path to a pointer JSON file; a bare
+    canonical payload handed to this function is rejected because it will
+    not conform to the handoff-pointer schema, and a missing path raises
+    :class:`PointerNotFoundError` rather than a misdiagnosed JSON error.
+    Execution may proceed only once this function returns: the pointer's
+    contract version is checked for strict equality, its
     ``source_phase -> destination_phase`` route is validated against the
     compiled phase registry, every referenced artifact (payload and, when
     present, normalization receipt) is checked for file existence and digest
     match, a present receipt is bound to the canonical payload's digest, and
     the canonical payload itself is validated against ``payload_schema_uri``.
     """
-    path = Path(pointer_source)
-    try:
-        is_file = path.is_file()
-    except OSError:
-        is_file = False
-    raw = path.read_bytes() if is_file else pointer_source.encode("utf-8")
-
-    pointer_artifact = validate_contract(
-        raw, HandoffPointer, supported_version_for(HandoffPointer)
-    )
-    pointer = pointer_artifact.value
-    assert isinstance(pointer, HandoffPointer)
+    path = Path(pointer_path)
+    if not path.is_file():
+        raise PointerNotFoundError(f"pointer not found at {path}")
+    pointer = _read_pointer(path)
 
     if pointer.destination_phase != destination_phase:
         raise ContractValidationError(
