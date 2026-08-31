@@ -29,8 +29,9 @@ __all__ = [
     "resolve_verified_bytes",
 ]
 
-_READ_CHUNK_BYTES = 64 * 1024
 SchemaValidator = Callable[[bytes, str], None]
+
+_READ_CHUNK_BYTES = 64 * 1024
 
 _REDIRECT_CODES = frozenset({301, 302, 303, 307, 308})
 _MAX_REDIRECTS = 5
@@ -99,12 +100,14 @@ def resolve_artifact(
         artifact_directory,
         schema_validator,
     )
+
+
 def resolve_verified_bytes(
     artifact: ArtifactRef,
     content: bytes,
     detected_type: str,
     artifact_directory: str | Path,
-    schema_validator: SchemaValidator | None,
+    schema_validator: SchemaValidator | None = None,
 ) -> ResolvedAgentArtifact:
     _validate_integrity(artifact, content, detected_type)
     _validate_schema(artifact, content, schema_validator)
@@ -540,8 +543,8 @@ def _validate_schema(
     if not isinstance(document, dict):
         raise ArtifactResolutionError("schema artifact must contain a JSON object")
 
-    validator = schema_validator or _validate_registered_schema
     try:
+        validator = schema_validator or _validate_registered_schema
         validator(content, artifact.schema_uri)
     except ArtifactResolutionError:
         raise

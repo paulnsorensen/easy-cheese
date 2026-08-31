@@ -366,7 +366,6 @@ def _deliverables(
             payload,
             detected_type,
             artifact_directory,
-            None,
         )
         artifact = _retained_artifact(source, resolved.path)
         artifacts[item.path] = artifact

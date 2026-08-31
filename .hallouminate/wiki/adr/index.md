@@ -2,6 +2,7 @@
 
 <!-- HALLOUMINATE:INDEX-START -->
 - [agent-resolution](./agent-resolution.md) — ADR: Progressive agent resolution is a shared contract
+- [artifact-schema-validator-compatibility-001](./artifact-schema-validator-compatibility-001.md) — ADR: Preserve artifact schema-validator injection until a major release
 - [baseline-repair-pathway-001](./baseline-repair-pathway-001.md) — ADR: Both frames get the concurrent repair pathway; worktree primitive becomes shared  [status: accepted]
 - [baseline-repair-pathway-002](./baseline-repair-pathway-002.md) — ADR: Repair consent is automatic under --auto, prompted at record time otherwise  [status: accepted]
 - [baseline-repair-pathway-003](./baseline-repair-pathway-003.md) — ADR: Repair merges as an independent PR from main; mechanical intertangle fallback  [status: accepted]
