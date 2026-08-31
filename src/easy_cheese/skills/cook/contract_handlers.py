@@ -1,9 +1,12 @@
-"""Handlers for Cook's normalize and validate contract commands.
+"""Handlers for Cook's normalize, validate, and accept contract commands.
 
 ``normalize`` combines agent-authored JSON with host-owned invocation data,
 then emits a canonical artifact. ``validate`` checks a payload against a named
-schema-catalog contract. Both handlers validate through one shared path so
-their contract handling cannot drift.
+schema-catalog contract. ``accept`` is the canonical execution entry: it
+rejects bare payloads and admits only a route-bound ``HandoffPointer`` whose
+referenced payload (and any normalization receipt) has been verified, then
+emits the resulting ``CurdPlan`` for execution. All three handlers validate
+through shared, non-drifting paths.
 """
 from __future__ import annotations
 
@@ -14,8 +17,10 @@ from pathlib import Path
 from typing import cast
 
 from easy_cheese_schemas import (
+    CURD_PLAN_SCHEMA_URI,
     SCHEMA_ROOT,
     ContractValidationError,
+    TransitionError,
     canonical_bytes,
     canonical_digest,
     normalize_agent_output,
@@ -23,7 +28,9 @@ from easy_cheese_schemas import (
     validate_contract,
 )
 
-__all__ = ["normalize_main", "validate_main"]
+from easy_cheese.shared.publication import accept
+
+__all__ = ["accept_main", "normalize_main", "validate_main"]
 
 
 
@@ -109,3 +116,30 @@ def validate_main(argv: list[str]) -> int:
     return 0
 
 
+
+
+def _parse_accept_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(prog="accept.py")
+    _ = parser.add_argument("pointer")
+    return parser.parse_args(argv)
+
+
+def accept_main(argv: list[str]) -> int:
+    args = _parse_accept_args(argv)
+    pointer_source = cast(str, args.pointer)
+    try:
+        accepted = accept(
+            pointer_source,
+            destination_phase="cook",
+            payload_schema_uri=CURD_PLAN_SCHEMA_URI,
+        )
+    except (ContractValidationError, TransitionError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+    wrapper = {
+        "value": accepted.canonical.value,
+        "digest": canonical_digest(accepted.canonical.value),
+        "normalization_receipt": accepted.normalization_receipt,
+    }
+    _ = sys.stdout.buffer.write(canonical_bytes(wrapper))
+    return 0

@@ -119,6 +119,13 @@ def _validate(argv: list[str]) -> int:
     return validate_main(argv)
 
 
+@bundle_command("accept")
+def _accept(argv: list[str]) -> int:
+    from easy_cheese.skills.cook.contract_handlers import accept_main
+
+    return accept_main(argv)
+
+
 @bundle_command("slugify")
 def _slugify(argv: list[str]) -> int:
     from easy_cheese.shared.slugify import main
@@ -192,6 +199,7 @@ COMMANDS = (
     derive_command(_curd_block),
     derive_command(_normalize),
     derive_command(_validate),
+    derive_command(_accept),
     derive_command(_slugify),
     derive_command(_write_handoff_artifact),
     derive_command(_read_handoff_slug),

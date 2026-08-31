@@ -23,7 +23,9 @@ from urllib.parse import unquote, urlsplit
 
 from easy_cheese_schemas import (
     COMPILED_TRANSITION_REGISTRY,
+    AcceptedArtifact,
     ArtifactRef,
+    ContractValidationError,
     HandoffPointer,
     IngressKind,
     NormalizationAction,
@@ -42,6 +44,7 @@ __all__ = [
     "AmbiguousSyntaxRepairError",
     "IdempotencyConflictError",
     "UnrecoverableSyntaxError",
+    "accept",
     "publish",
     "syntax_normalize",
 ]
@@ -331,3 +334,88 @@ def publish(
     return PublishedArtifact(
         pointer=pointer, canonical=validated, normalization_receipt=receipt_ref
     )
+
+
+def _digest_bytes(data: bytes) -> str:
+    return f"sha256:{hashlib.sha256(data).hexdigest()}"
+
+
+def _verify_artifact_ref(ref: ArtifactRef) -> bytes:
+    path = _uri_to_path(ref.uri)
+    try:
+        data = path.read_bytes()
+    except OSError as exc:
+        raise ContractValidationError(
+            f"artifact {ref.artifact_id!r} is missing at {path}"
+        ) from exc
+    digest = _digest_bytes(data)
+    if digest != ref.digest:
+        raise ContractValidationError(
+            f"artifact {ref.artifact_id!r} digest mismatch: "
+            + f"pointer declares {ref.digest}, file hashes to {digest}"
+        )
+    return data
+
+
+def accept(
+    pointer_source: str,
+    *,
+    destination_phase: str,
+    payload_schema_uri: str,
+) -> AcceptedArtifact:
+    """Validate a canonical ``HandoffPointer`` and return its AcceptedArtifact.
+
+    ``pointer_source`` is either a filesystem path to a pointer JSON file or
+    the pointer's raw JSON text; a bare canonical payload handed to this
+    function is rejected because it will not conform to the handoff-pointer
+    schema. Execution may proceed only once this function returns: the
+    pointer's contract version is checked for strict equality, its
+    ``source_phase -> destination_phase`` route is validated against the
+    compiled phase registry, every referenced artifact (payload and, when
+    present, normalization receipt) is checked for file existence and digest
+    match, a present receipt is bound to the canonical payload's digest, and
+    the canonical payload itself is validated against ``payload_schema_uri``.
+    """
+    path = Path(pointer_source)
+    try:
+        is_file = path.is_file()
+    except OSError:
+        is_file = False
+    raw = path.read_bytes() if is_file else pointer_source.encode("utf-8")
+
+    pointer_artifact = validate_contract(
+        raw, HandoffPointer, supported_version_for(HandoffPointer)
+    )
+    pointer = pointer_artifact.value
+    assert isinstance(pointer, HandoffPointer)
+
+    if pointer.destination_phase != destination_phase:
+        raise ContractValidationError(
+            f"pointer destination {pointer.destination_phase!r} does not match "
+            + f"consumer {destination_phase!r}"
+        )
+    _ = validate_transition(
+        COMPILED_TRANSITION_REGISTRY,
+        pointer.source_phase,
+        pointer.destination_phase,
+        payload_schema_uri,
+    )
+
+    payload_bytes = _verify_artifact_ref(pointer.payload)
+    canonical = validate_contract(
+        payload_bytes, payload_schema_uri, supported_version_for(payload_schema_uri)
+    )
+
+    receipt_ref = pointer.normalization_receipt
+    if receipt_ref is not None:
+        receipt_bytes = _verify_artifact_ref(receipt_ref)
+        receipt_artifact = validate_contract(receipt_bytes, NormalizationReceipt, None)
+        receipt = receipt_artifact.value
+        assert isinstance(receipt, NormalizationReceipt)
+        expected_canonical_digest = canonical_digest(canonical.value)
+        if receipt.canonical_digest != expected_canonical_digest:
+            raise ContractValidationError(
+                "normalization_receipt.canonical_digest does not match the canonical payload"
+            )
+
+    return AcceptedArtifact(canonical=canonical, normalization_receipt=receipt_ref)
