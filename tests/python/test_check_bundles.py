@@ -68,18 +68,18 @@ def _init_index_rebuild_fixture(root: Path) -> tuple[Path, Path]:
     build_script = root / "scripts" / "build_pyz.py"
     _ = build_script.write_text(
         "from pathlib import Path\n"
-        "root = Path(__file__).resolve().parents[1]\n"
-        "text = (root / 'source.txt').read_text()\n"
-        "(root / 'skills' / 'demo' / 'scripts' / 'demo.pyz').write_bytes(text.encode())\n"
+        + "root = Path(__file__).resolve().parents[1]\n"
+        + "text = (root / 'source.txt').read_text()\n"
+        + "(root / 'skills' / 'demo' / 'scripts' / 'demo.pyz').write_bytes(text.encode())\n"
     )
     for command in (
         ["git", "init", "--quiet"],
         ["git", "config", "user.email", "t@t.example"],
         ["git", "config", "user.name", "t"],
     ):
-        subprocess.run(command, cwd=root, check=True)
-    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
-    subprocess.run(["git", "commit", "-q", "-m", "initial"], cwd=root, check=True)
+        _ = subprocess.run(command, cwd=root, check=True)
+    _ = subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    _ = subprocess.run(["git", "commit", "-q", "-m", "initial"], cwd=root, check=True)
     return source, bundle
 
 
@@ -92,7 +92,7 @@ def test_staged_index_rebuild_reflects_staged_content_and_restores_working_tree(
     # an unstaged edit, to prove the rebuild uses the staged content and
     # the restore never touches an in-progress edit elsewhere in the tree.
     _ = source.write_text("staged\n")
-    subprocess.run(["git", "add", "source.txt"], cwd=tmp_path, check=True)
+    _ = subprocess.run(["git", "add", "source.txt"], cwd=tmp_path, check=True)
     other = tmp_path / "other.txt"
     _ = other.write_text("work in progress\n")
 
@@ -110,7 +110,7 @@ def test_check_bundles_against_index_flags_staged_source_without_restaged_bundle
     source, bundle = _init_index_rebuild_fixture(tmp_path)
 
     _ = source.write_text("staged-source-change\n")
-    subprocess.run(["git", "add", "source.txt"], cwd=tmp_path, check=True)
+    _ = subprocess.run(["git", "add", "source.txt"], cwd=tmp_path, check=True)
     # demo.pyz is left stale: never restaged after the source change.
 
     monkeypatch.setattr(check_bundles, "REPO_ROOT", tmp_path)

@@ -33,7 +33,7 @@ import subprocess
 import sys
 import tempfile
 import zipfile
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Generator, Sequence
 from pathlib import Path
 from typing import cast, override
 
@@ -638,7 +638,7 @@ def _staged(path: Path) -> bytes | None:
 
 
 @contextlib.contextmanager
-def _staged_index_rebuild(bundle_paths: list[Path]) -> Iterator[None]:
+def _staged_index_rebuild(bundle_paths: list[Path]) -> Generator[None]:
     """Make the working tree match the staged index, rebuild every bundle,
     yield with the rebuilt bundles on disk, then restore the working tree.
 
@@ -653,13 +653,13 @@ def _staged_index_rebuild(bundle_paths: list[Path]) -> Iterator[None]:
     stashed = False
     try:
         if dirty:
-            subprocess.run(
+            _ = subprocess.run(
                 ["git", "stash", "push", "--keep-index", "--quiet", "-m", "check_bundles: index rebuild"],
                 cwd=REPO_ROOT,
                 check=True,
             )
             stashed = True
-        subprocess.run(
+        _ = subprocess.run(
             [sys.executable, str(REPO_ROOT / "scripts" / "build_pyz.py")],
             cwd=REPO_ROOT,
             check=True,
@@ -667,9 +667,9 @@ def _staged_index_rebuild(bundle_paths: list[Path]) -> Iterator[None]:
         yield
     finally:
         if stashed:
-            subprocess.run(["git", "stash", "pop", "--quiet"], cwd=REPO_ROOT, check=True)
+            _ = subprocess.run(["git", "stash", "pop", "--quiet"], cwd=REPO_ROOT, check=True)
         for path, data in originals.items():
-            path.write_bytes(data)
+            _ = path.write_bytes(data)
 
 
 def _describe(
