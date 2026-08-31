@@ -543,6 +543,6 @@ def test_every_reply_is_one_line_of_sorted_json() -> None:
     assert json.dumps(payload, sort_keys=True) + "\n" == text
 
 
-def test_the_command_surface_is_exactly_four_commands() -> None:
-    assert wheypoint.COMMANDS == ("commit", "resolve", "show", "lint")
+def test_the_command_surface_is_exactly_five_commands() -> None:
+    assert wheypoint.COMMANDS == ("checkpoint", "commit", "resolve", "show", "lint")
     assert "create" not in wheypoint.COMMANDS

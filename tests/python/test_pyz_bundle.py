@@ -55,7 +55,7 @@ SKILL_SUBCOMMANDS = {
         "slugify", "write-handoff-artifact", "read-handoff-slug", "findings-cli",
         "gates-cli", "paths-cli", "handoff-cli", "render-html",
     ],
-    "wheypoint": ["commit", "resolve", "show", "lint"],
+    "wheypoint": ["checkpoint", "commit", "resolve", "show", "lint"],
     "easy-cheese-setup": ["global", "local", "doctor"],
     "age": [
         "artifact-path", "html-report", "age-route", "review-surface", "severity", "slugify",

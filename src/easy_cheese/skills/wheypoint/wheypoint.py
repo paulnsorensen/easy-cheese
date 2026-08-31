@@ -1,4 +1,4 @@
-"""The four commands the bundle exposes: commit, resolve, show, lint.
+"""The five commands the bundle exposes: checkpoint, commit, resolve, show, lint.
 
 This module is a mouth, not a brain. Every decision it reports was made by
 `commit`, `resolve`, or `lint`; nothing here parses a projection, compares a
@@ -22,7 +22,7 @@ corpus, so it exits 0 with `ok: true` and the outcome in the payload; only a
 reference that could not be interpreted at all is a refusal. Lint findings are
 answers by the same rule.
 
-All four commands live in this one module because the bundle dispatcher gives
+All five commands live in this one module because the bundle dispatcher gives
 each subcommand its own entry point and rewrites `sys.argv[0]` to the
 subcommand name -- so the command is read from `argv[0]` first, and from
 `argv[1]` when the module is run directly.
@@ -40,6 +40,7 @@ from easy_cheese_schemas import Durability, WheypointDelta
 
 from easy_cheese.shared import paths
 
+from . import checkpoint as checkpoint_mod
 from . import commit as commit_mod
 from . import legacy as legacy_mod
 from . import lint as lint_mod
@@ -47,7 +48,7 @@ from . import records
 from . import resolve as resolve_mod
 from . import storage
 
-COMMANDS = ("commit", "resolve", "show", "lint")
+COMMANDS = ("checkpoint", "commit", "resolve", "show", "lint")
 
 EXIT_OK = 0
 EXIT_REFUSED = 1
@@ -74,7 +75,7 @@ class _Parser(argparse.ArgumentParser):
 
 def _parser(command: str) -> _Parser:
     parser = _Parser(prog=f"wheypoint.pyz {command}")
-    if command == "commit":
+    if command in ("checkpoint", "commit"):
         _ = parser.add_argument(
             "--note-dir",
             dest="note_dir",
@@ -137,15 +138,68 @@ def _note_dir(args: argparse.Namespace) -> Path | None:
     return toplevel.joinpath(*legacy_mod.NOTES_DIR_PARTS)
 
 
-def _run_commit(args: argparse.Namespace, stdin: TextIO) -> dict[str, object]:
+def _payload(stdin: TextIO) -> object:
     try:
-        payload = cast(object, json.loads(stdin.read()))
+        return cast(object, json.loads(stdin.read()))
     except ValueError as exc:
         raise _Refused("invalid-json", f"stdin is not one JSON value: {exc}") from exc
+
+
+def _open(work_id: str) -> storage.WorkStore:
+    try:
+        return storage.WorkStore.open(work_id)
+    except storage.StorageError as exc:
+        raise _Refused("storage-error", str(exc)) from exc
+
+
+def _run_commit(args: argparse.Namespace, stdin: TextIO) -> dict[str, object]:
+    payload = _payload(stdin)
     try:
         delta = records.structure(payload, WheypointDelta)
     except records.RecordError as exc:
         raise _Refused("invalid-delta", str(exc)) from exc
+    return _promote(delta, _open(delta.work_id), args)
+
+
+def _run_checkpoint(args: argparse.Namespace, stdin: TextIO) -> dict[str, object]:
+    """A semantic intent, bound to the current record and committed.
+
+    The binding is a read outside the lock, so it settles nothing: `commit`
+    re-checks the parent under the lock and refuses a delta whose record has
+    moved on. This command shortens the authoring, not the checking.
+    """
+    payload = _payload(stdin)
+    reserved = checkpoint_mod.commit_only_fields(payload)
+    if reserved:
+        raise _Refused(
+            "commit-only-field",
+            f"checkpoint does not author {', '.join(reserved)}: the parent is "
+            + "bound from the record, and a compaction record is a proof a "
+            + "compacted session has to supply -- author those with commit",
+        )
+    try:
+        intent = records.structure(payload, checkpoint_mod.CheckpointIntent)
+    except records.RecordError as exc:
+        raise _Refused("invalid-intent", str(exc)) from exc
+    store = _open(intent.work_id)
+    try:
+        current = store.read_record()
+    except ValueError as exc:
+        raise _Refused(
+            "record-unreadable",
+            f"work {intent.work_id!r} has a record that cannot be read, so no "
+            + f"checkpoint can be bound to it: {exc}",
+        ) from exc
+    try:
+        delta = checkpoint_mod.build_delta(intent, current)
+    except checkpoint_mod.IntentError as exc:
+        raise _Refused("invalid-intent", str(exc)) from exc
+    return _promote(delta, store, args)
+
+
+def _promote(
+    delta: WheypointDelta, store: storage.WorkStore, args: argparse.Namespace
+) -> dict[str, object]:
     # Whether a mirror will be written is decided *before* the commit: the
     # durability it implies is rendered into the projection text and hashed
     # into its digest, so it cannot be discovered afterwards without making the
@@ -163,7 +217,6 @@ def _run_commit(args: argparse.Namespace, stdin: TextIO) -> dict[str, object]:
         Durability.CANONICAL_LOCAL if note_dir is None else Durability.REPO_SNAPSHOT
     )
     try:
-        store = storage.WorkStore.open(delta.work_id)
         result = commit_mod.commit(delta, store=store, durability=durability)
     except commit_mod.GenesisConflictError as exc:
         raise _Refused("genesis-conflict", str(exc)) from exc
@@ -270,6 +323,7 @@ def _run_lint(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
 
 
 _RUNNERS = {
+    "checkpoint": _run_checkpoint,
     "commit": _run_commit,
     "resolve": _run_resolve,
     "show": _run_show,
@@ -353,6 +407,10 @@ def main(
 
 def _bundle_main(command: str, argv: list[str]) -> int:
     return main([command, *argv])
+
+
+def checkpoint_main(argv: list[str]) -> int:  # noqa: V103
+    return _bundle_main("checkpoint", argv)
 
 
 def commit_main(argv: list[str]) -> int:  # noqa: V103

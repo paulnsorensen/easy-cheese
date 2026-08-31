@@ -7,6 +7,7 @@ import sys
 from easy_cheese.shared.bundle_commands import Command, dispatch
 
 COMMANDS = (
+    Command("checkpoint", "easy_cheese.skills.wheypoint.wheypoint:checkpoint_main"),
     Command(
         "commit",
         "easy_cheese.skills.wheypoint.wheypoint:commit_main",
