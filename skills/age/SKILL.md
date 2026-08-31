@@ -98,7 +98,7 @@ Empty severity sections are omitted entirely. When ten or more `low` findings ex
 
 Per-finding `confidence:` uses the voice-kernel scale (`references/voice.md` § Reasoning posture): `certain` — verified by direct evidence (diff/code read, command output); `speculating` — inferred from indirect signal. A `don't know` grading never ships as a finding row — gather the missing evidence or drop the claim. Suppressed lows feed the cure-selection table only when `--full` is passed.
 
-`status: ok` when the review completed; `status: halt: <reason>` when evidence was unreachable. `next: cure` when any finding meets the **medium+ floor**; `next: done` otherwise. `durable_flags:` mirrors cook's gate: default `none`.
+`status: ok` when the review completed; `status: halt: <reason>` when evidence was unreachable. Grammar: [handback contract](../cheese/references/handback-contract.md). `next: cure` when any finding meets the **medium+ floor**; `next: done` otherwise. `durable_flags:` mirrors cook's gate: default `none`.
 
 Then print `Age report: .cheese/age/<slug>.md`. When `press: skipped` is set, also print: `Warning: no /press report for <slug> — hardening was skipped. Run /press <slug> first, or continue with /cure.` When `--html` is passed, also print the HTML path returned by `html-report` (render command under `--html` in `## Inputs`).
 

@@ -10,7 +10,8 @@ CLI:
 
 Writes ``.cheese/<phase>/<slug>.md`` containing the canonical preamble
 (status / next / artifact / optional ``taste_test:`` and ``durable_flags:``
-keyed lines / orientation) followed by an optional
+keyed lines / orientation).  ``--status`` is validated against the declared
+handback vocabulary before any directory is created followed by an optional
 body separated by a blank line. The write is atomic: contents land in a tmp
 file inside the target directory and are then ``os.replace``'d into place
 (atomic overwrite on POSIX and Windows alike), so readers never observe a
@@ -34,7 +35,9 @@ from easy_cheese.shared import cli, handoff
 
 from easy_cheese_schemas.phase_contracts import (
     COMPILED_TRANSITION_REGISTRY,
+    StatusError,
     TransitionError,
+    parse_status_field,
     validate_transition,
 )
 
@@ -63,13 +66,10 @@ def _render_preamble(
     baseline: str | None = None,
 ) -> str:
     """Render the preamble via handoff.render_handoff_slug (single SSOT)."""
-    # Parse status into (status_kind, halt_reason).
-    if status.startswith("halt:"):
-        halt_reason = status[len("halt:") :].strip()
-        status_kind = "halt"
-    else:
-        halt_reason = None
-        status_kind = status
+    try:
+        status_kind, halt_reason = parse_status_field(status)
+    except StatusError as exc:
+        raise cli.CliError(str(exc)) from exc
 
     slug = handoff.HandoffSlug(
         status=status_kind,
@@ -123,6 +123,15 @@ def write_artifact(
     _reject_traversal("--slug", slug)
     _reject_traversal("--phase", phase)
     _validate_transition(phase, next_skill, payload_schema_uri)
+    preamble = _render_preamble(
+        status=status,
+        next_skill=next_skill,
+        artifact=artifact,
+        orientation=orientation,
+        taste_test=taste_test,
+        durable_flags=durable_flags,
+        baseline=baseline,
+    )
 
     cheese_root = (root / ".cheese").resolve()
     target = cheese_root / phase / f"{slug}.md"
@@ -133,15 +142,6 @@ def write_artifact(
     target_dir = target.parent
     target_dir.mkdir(parents=True, exist_ok=True)
 
-    preamble = _render_preamble(
-        status=status,
-        next_skill=next_skill,
-        artifact=artifact,
-        orientation=orientation,
-        taste_test=taste_test,
-        durable_flags=durable_flags,
-        baseline=baseline,
-    )
     contents = _build_contents(preamble=preamble, body=body)
 
     fd, tmp_name = tempfile.mkstemp(
@@ -211,7 +211,9 @@ def _cmd_write(args: argparse.Namespace) -> None:
 
 def _setup(parser: argparse.ArgumentParser) -> None:
     _ = parser.add_argument("--slug", required=True, help="artifact slug (filename stem)")
-    _ = parser.add_argument("--status", required=True, help="'ok' or 'halt: <reason>'")
+    _ = parser.add_argument(
+        "--status", required=True, help="handback status, e.g. 'ok' or 'halt: <reason>'"
+    )
     _ = parser.add_argument("--next", required=True, help="next skill name or 'done'")
     _ = parser.add_argument(
         "--artifact", required=True, help="path to prior artifact (may be empty)"

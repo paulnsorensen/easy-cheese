@@ -97,6 +97,8 @@ action: continue | dispatch | stop
 <one-line orientation>
 ```
 
+`status:` grammar is canonical in [handback contract](../cheese/references/handback-contract.md); only `next:` and the extra keyed lines are phase-specific.
+
 Project the router action without inventing a runnable phase:
 
 | router action | status | next | action |

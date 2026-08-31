@@ -17,7 +17,9 @@ complete receipt has validated GREEN.
 Inputs:
 
     --phase-index <int>     Which phase just returned (0-indexed into the table).
-    --status <ok|halt:...>  Status field from the handoff slug.
+    --status <value>        Status field from the handoff slug. Parsed through
+                            the declared handback vocabulary: a `proceed`
+                            status walks the table, a `stop` status halts.
     --next <name>           Optional. The `next` field from the handoff slug;
                             terminal age always gates publication, while a
                             nonterminal clean age ends the linear and
@@ -39,6 +41,13 @@ from typing import Literal, Protocol, TextIO, TypedDict
 
 # cli is co-staged in the bundled .pyz alongside this module
 from easy_cheese.shared import cli
+
+from easy_cheese_schemas.phase_contracts import (
+    STOP,
+    StatusError,
+    parse_status_field,
+    status_disposition,
+)
 
 Action = Literal["spawn", "stop", "stop_early", "clean_complete", "halt"]
 
@@ -67,8 +76,18 @@ TABLES: dict[str, list[str]] = {
 }
 
 
-def _is_halt(status: str) -> bool:
-    return status.strip().lower().startswith("halt")
+def _disposition(status: str) -> str:
+    """Route through the declared handback vocabulary, never a prefix guess.
+
+    A prefix test on ``halt`` silently spawned the next phase for every other
+    stopping status (``gated:``), which is the producer/consumer mismatch this
+    lookup removes.
+    """
+    try:
+        name, _reason = parse_status_field(status, require_reason=False)
+    except StatusError as exc:
+        raise cli.CliError(str(exc)) from exc
+    return status_disposition(name)
 
 
 def decide(
@@ -90,13 +109,13 @@ def decide(
     if allow_early_stop is None:
         allow_early_stop = table is LINEAR_TABLE
 
-    if _is_halt(status):
+    disposition = _disposition(status)
+    if disposition == STOP:
         return {
             "action": "halt",
             "next_phase": None,
             "exit_message": f"{current_phase} (phase {phase_index}) halted: {status.strip()}",
         }
-
     # The terminal entry of every table is the final review; it is publishable
     # only when it positively reports done. Missing/next=cure means findings
     # remain and publication must halt.
@@ -185,7 +204,7 @@ def _setup(parser: argparse.ArgumentParser) -> None:
     _ = parser.add_argument(
         "--status",
         required=True,
-        help="`status` field from the handoff slug (ok | halt: <reason>).",
+        help="`status` field from the handoff slug; see the handback vocabulary.",
     )
     _ = parser.add_argument(
         "--next",

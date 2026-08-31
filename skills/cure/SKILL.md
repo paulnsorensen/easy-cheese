@@ -92,6 +92,8 @@ baseline: none | <recorded baseline block copied from the upstream handoff — s
 <one-line orientation: what cure applied or deferred>
 ```
 
+`status:` grammar is canonical in [handback contract](../cheese/references/handback-contract.md); only `next:` and the extra keyed lines are phase-specific.
+
 Write that legacy handoff projection through the canonical writer, carrying the
 typed Cure result schema at the boundary:
 

@@ -69,6 +69,8 @@ These optional fields precede the orientation line and come only from the live s
 
 ### `status:` values
 
+`status:` grammar is canonical in [handback contract](../cheese/references/handback-contract.md); the derivation rule below is wheypoint-specific.
+
 Status is **derived** by the runtime, never asserted by the author: an active human-blocking question or blocker derives `gated:` and requires a decision dossier, and no caller can force `ok`.
 
 - **`ok`** — the next step is unblocked; `/cheese --continue` auto-dispatches `next:`.

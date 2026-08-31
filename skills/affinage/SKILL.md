@@ -90,6 +90,8 @@ artifact: <path-to-prior-cure-or-press-report-if-any>
 <one-line orientation: what the PR does and what was graded>
 ```
 
+`status:` grammar is canonical in [handback contract](../cheese/references/handback-contract.md); only `next:` and the extra keyed lines are phase-specific.
+
 Empty severity sections are omitted; so are `## Needs-investigation`/`## Reviewer-rejected` when empty. `status: ok` when grading completed; `halt: <reason>` when `gh`/`pr-status` failed. `next:` per `## Handoff` § Slug `next:` values.
 
 ## Handoff

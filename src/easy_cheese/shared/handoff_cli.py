@@ -19,16 +19,15 @@ from typing import TextIO, cast
 
 from easy_cheese.shared import cli, handoff
 
+from easy_cheese_schemas.phase_contracts import StatusError, parse_status_field
+
 
 def _parse_status_arg(raw: str) -> tuple[str, str | None]:
-    if raw == "ok":
-        return "ok", None
-    if raw.startswith("halt:"):
-        reason = raw[len("halt:"):].strip()
-        if not reason:
-            raise cli.CliError("halt status requires a reason after 'halt:'")
-        return "halt", reason
-    raise cli.CliError(f"status must be 'ok' or 'halt: <reason>', got {raw!r}")
+    """Split the CLI `--status` value through the one shared grammar."""
+    try:
+        return parse_status_field(raw)
+    except StatusError as exc:
+        raise cli.CliError(str(exc)) from exc
 
 
 def _cmd_render(args: argparse.Namespace) -> None:
@@ -68,6 +67,7 @@ def _cmd_parse(args: argparse.Namespace) -> None:
             "orientation": slug.orientation,
             "taste_test": slug.taste_test,
             "durable_flags": slug.durable_flags,
+            "disposition": slug.disposition,
         },
         stdout=cast("TextIO", args.stdout),
     )
@@ -86,7 +86,9 @@ def _setup(parser: argparse.ArgumentParser) -> None:
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     render = sub.add_parser("render", help="render a 4-line handoff preamble")
-    _ = render.add_argument("--status", required=True, help="'ok' or 'halt: <reason>'")
+    _ = render.add_argument(
+        "--status", required=True, help="handback status, e.g. 'ok' or 'halt: <reason>'"
+    )
     _ = render.add_argument("--next", dest="next_skill", required=True, help="next skill name (or 'done')")
     _ = render.add_argument("--artifact", default="", help="path to prior report; empty if none")
     _ = render.add_argument("--orientation", required=True, help="one-line orientation")

@@ -37,6 +37,7 @@ from easy_cheese_schemas import (
     WheypointProjection,
     WheypointRecord,
     WheypointStatus,
+    phase_contracts,
 )
 
 from easy_cheese.shared import paths
@@ -402,10 +403,7 @@ def resolve_legacy(
                 f"declared artifact {slug_block.artifact!r} must be an existing "
                 + "regular file",
             )
-    if slug_block.is_halt():
-        reason = slug_block.halt_reason or "halt status"
-        return _gate(found, f"legacy note halts: {reason}")
-    if slug_block.is_gated():
-        reason = slug_block.halt_reason or "gated status"
-        return _gate(found, f"legacy note is gated: {reason}")
+    if slug_block.disposition != phase_contracts.PROCEED:
+        reason = slug_block.halt_reason or f"{slug_block.status} status"
+        return _gate(found, f"legacy note {slug_block.status}: {reason}")
     return found

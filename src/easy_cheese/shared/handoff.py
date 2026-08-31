@@ -1,8 +1,8 @@
 """Handoff slug preamble: parse, render, and validate the preamble block.
 
-Schema (see skills/cheese/references/formatting.md § Required preamble):
+Schema (canonical rules: skills/cheese/references/handback-contract.md):
 
-    status: ok | halt: <one-line reason>
+    status: <one of easy_cheese_schemas.phase_contracts.HANDBACK_STATUSES>
     next: <skill-name> | done
     artifact: <path-to-prior-report-if-any>
     taste_test: <verdict>                     (optional keyed line)
@@ -22,6 +22,13 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from easy_cheese_schemas.phase_contracts import (
+    StatusError,
+    parse_status_field,
+    render_status_field,
+    status_disposition,
+)
+
 # Flag propagation rules — see skills/cheese/references/handoff-gate.md § Flag propagation.
 ALWAYS_PROPAGATE: frozenset[str] = frozenset({"--hard"})
 CHAIN_ONLY: frozenset[str] = frozenset({"--auto"})
@@ -29,8 +36,8 @@ CHAIN_ONLY: frozenset[str] = frozenset({"--auto"})
 
 @dataclass(frozen=True)
 class HandoffSlug:
-    status: str  # "ok" or "halt"
-    halt_reason: str | None
+    status: str  # a name from phase_contracts.HANDBACK_STATUSES
+    halt_reason: str | None  # the one-line reason every non-`ok` status carries
     next_skill: str  # bare skill name (no leading slash) or "done"
     artifact: str | None
     orientation: str
@@ -38,8 +45,10 @@ class HandoffSlug:
     durable_flags: str | None = None
     baseline: str | None = None
 
-    def is_halt(self) -> bool:
-        return self.status == "halt"
+    @property
+    def disposition(self) -> str:
+        """What the orchestrator must do next: proceed, retry, or stop."""
+        return status_disposition(self.status)
 
 
 _STATUS_RE = re.compile(r"^status:\s*(?P<rest>.+?)\s*$")
@@ -58,14 +67,10 @@ def _parse_status(line: str) -> tuple[str, str | None]:
     if not match:
         raise HandoffParseError(f"expected 'status:' line, got {line!r}")
     rest = match.group("rest")
-    if rest == "ok":
-        return "ok", None
-    if rest.startswith("halt:"):
-        reason = rest[len("halt:") :].strip()
-        if not reason:
-            raise HandoffParseError("halt status requires a reason after 'halt:'")
-        return "halt", reason
-    raise HandoffParseError(f"status must be 'ok' or 'halt: <reason>', got {rest!r}")
+    try:
+        return parse_status_field(rest)
+    except StatusError as exc:
+        raise HandoffParseError(str(exc)) from exc
 
 
 def parse_handoff_slug(text: str) -> HandoffSlug:
@@ -129,14 +134,7 @@ def parse_handoff_slug(text: str) -> HandoffSlug:
 
 def render_handoff_slug(slug: HandoffSlug) -> str:
     """Render a HandoffSlug back to its canonical preamble."""
-    if slug.status == "halt":
-        if not slug.halt_reason:
-            raise ValueError("halt status requires halt_reason")
-        status_line = f"status: halt: {slug.halt_reason}"
-    elif slug.status == "ok":
-        status_line = "status: ok"
-    else:
-        raise ValueError(f"unknown status {slug.status!r}")
+    status_line = "status: " + render_status_field(slug.status, slug.halt_reason)
     lines = [status_line, f"next: {slug.next_skill}", f"artifact: {slug.artifact or ''}"]
     if slug.taste_test is not None:
         lines.append(f"taste_test: {slug.taste_test}")

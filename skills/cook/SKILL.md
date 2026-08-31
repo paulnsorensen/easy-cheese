@@ -117,6 +117,8 @@ baseline: none | <block — shape in references/quality-gates.md § Baseline blo
 <one-line orientation: what cook changed>
 ```
 
+`status:` grammar is canonical in [handback contract](../cheese/references/handback-contract.md); only `next:` and the extra keyed lines are phase-specific.
+
 When this handoff is emitted for the typed fan result, use the canonical
 boundary writer and carry the result schema explicitly:
 

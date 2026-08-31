@@ -134,6 +134,7 @@ class TestParse:
             "orientation": "Cooked the retry path.",
             "taste_test": None,
             "durable_flags": None,
+            "disposition": "proceed",
         }
 
     def test_round_trip_through_render(self, tmp_path: Path) -> None:
