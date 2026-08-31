@@ -9,7 +9,8 @@ staging, commit, and commit verification.
 2. Resolve trunk and current branch; reject publication from trunk.
 3. Draft a title and body covering purpose, verification, durable artifacts,
    and residual risks.
-4. Write the body to a temporary or transient file and pass `--body-file`.
+4. Write the body to a temporary or transient file and pass `--body-file`;
+   never embed a markdown heredoc in `--body`.
 5. Push the named branch without force.
 6. Create with explicit base and head:
 
@@ -23,6 +24,8 @@ Do not use `--fill` when it would omit artifact or verification details.
 
 ## Existing ordinary PR
 
+Detect the PR with `gh pr view --json number,baseRefName,headRefName,url`, then
+inspect provider metadata; a stacked topology leaves this file for `stacks.md`.
 Do not ask the layout question. Read its base/head with `gh pr view`, commit the
 validated named files, push the exact head branch, then read the PR back. Update
 title/body only when the new work makes existing metadata inaccurate.

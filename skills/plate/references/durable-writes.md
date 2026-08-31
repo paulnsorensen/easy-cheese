@@ -26,6 +26,27 @@ this publication, not after it.
 3. Other promised tracked artifacts go to their contractually named paths.
 4. `.cheese/` reports are transient evidence. Keep them unstaged.
 
+## Canonical write sequence
+
+Every tracked write runs these three calls, in this order, per file:
+
+1. **Fresh tagged read** — read the target immediately before writing and copy
+   its tag and its 1-based line numbers from that read. Never reuse a tag, a
+   line number, or a file body captured earlier in the session.
+2. **One stale-safe write** — send a single write carrying that fresh tag, with
+   every op in the shape its backend defines. A text replacement carries only
+   the exact unique `old` string and its `new` replacement — never `start`/`end`
+   line numbers. Line ops carry only integer `start`/`end` copied from the fresh
+   read. Mixing the two op shapes is a malformed write: a call-shape defect
+   owned by this skill, not a backend outage.
+3. **Diff read-back** — re-read the written range or diff the file, then compare
+   target, essential contents, and expected revision before the row is
+   `verified`.
+
+A rejected write means the file drifted. Re-read for a new tag and retry that
+section; never retry with the stale tag and never fall back to a shell redirect
+or a host editor.
+
 ## Verification
 
 Read back every required write from the same backend after writing. Compare the
