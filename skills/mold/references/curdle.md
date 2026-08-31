@@ -161,6 +161,10 @@ document mold-spec {
   section "Goals"
   section "Non-goals"
   section "Deferred follow-ups"?
+  section "Grounding" {
+    columns: ['Probe', 'Outcome', 'Evidence']
+    per_row: ['Probe and Outcome are drawn from their closed sets', 'Evidence is non-empty, including for unavailable outcomes']
+  }
   section "Approach"
   section "Decisions"
   section "Acceptance"
@@ -180,6 +184,8 @@ document mold-spec {
 rule ac-coverage-exactly-once: "Every Acceptance ID must appear exactly once in the Test Contracts table."
 rule tracer-row-blank-matrix-cells: "Tracer rows must leave Interface version and Matrix rows blank."
 rule contract-matrix-row-requires-both: "Contract-matrix rows require both Interface version and Matrix rows."
+rule grounding-probe-recorded: "The Grounding table must record the wiki probe exactly once with non-empty evidence."
+rule delegation-digest-recorded: "The Grounding table must record the explorer probe exactly once with non-empty evidence."
 rule not-applicable-closed-class: "red-required requires Test Contracts; not-applicable forbids them and requires a reason."
 
 type GateApplicability {
@@ -189,10 +195,17 @@ type GateApplicability {
   reason str | None
 }
 
+type GroundingRow {
+  probe GroundingProbe
+  outcome GroundingOutcome
+  evidence str
+}
+
 type MoldSpecDocument {
   frontmatter MoldSpecFrontmatter
   acceptance_ids tuple[str, ...]
   test_contract_rows tuple[TestContractRow, ...]
+  grounding_rows tuple[GroundingRow, ...]
 }
 
 type MoldSpecFrontmatter {
@@ -218,6 +231,10 @@ type TestContractRow {
 }
 
 enum GateApplicabilityDisposition = "red-required" | "not-applicable"
+
+enum GroundingOutcome = "hit" | "miss" | "unavailable"
+
+enum GroundingProbe = "wiki" | "explorer"
 
 enum SpecConfidence = "low" | "medium" | "high"
 

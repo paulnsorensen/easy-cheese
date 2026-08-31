@@ -298,7 +298,7 @@ def _grounding_errors(rows: list[list[str]], path: Path) -> list[str]:
         if not evidence:
             errors.append(
                 f"ERROR: {PROBE_RULES[probe]} Grounding row '{probe}' records no "
-                + f"evidence; an unavailable probe still records what was attempted "
+                + "evidence; an unavailable probe still records what was attempted "
                 + f"in {path}"
             )
     for probe, rule in PROBE_RULES.items():
