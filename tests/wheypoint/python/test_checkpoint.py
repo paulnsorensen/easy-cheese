@@ -99,6 +99,7 @@ def frozen_clock(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture
 def genesis(store: storage.WorkStore) -> Iterator[dict[str, object]]:
     """One committed first record, and the payload that created it."""
+    _ = store  # the corpus root must exist before the CLI runs
     status, payload = _run(
         "checkpoint", stdin=_first(session={"captured_at": CAPTURED_AT})
     )
@@ -170,10 +171,8 @@ def test_an_identical_update_replays_because_no_clock_was_read(
     assert second["revision_number"] == first["revision_number"]
 
 
-@pytest.mark.usefixtures("frozen_clock")
-def test_a_named_session_reads_the_clock_and_so_does_not_replay(
-    genesis: dict[str, object],
-) -> None:
+@pytest.mark.usefixtures("frozen_clock", "genesis")
+def test_a_named_session_reads_the_clock_and_so_does_not_replay() -> None:
     """Naming a harness makes the request session-specific on purpose."""
     intent = _intent(orientation="Stamped.", session={"harness": "claude"})
 
@@ -188,10 +187,8 @@ def test_a_named_session_reads_the_clock_and_so_does_not_replay(
     )
 
 
-@pytest.mark.usefixtures("frozen_clock")
-def test_a_genesis_replay_needs_an_explicit_captured_at(
-    store: storage.WorkStore,
-) -> None:
+@pytest.mark.usefixtures("frozen_clock", "store")
+def test_a_genesis_replay_needs_an_explicit_captured_at() -> None:
     """The documented cost of deriving genesis' created time from the clock."""
     unstamped = _first(base_revision_id=commit.GENESIS_PARENT)
 
@@ -203,10 +200,8 @@ def test_a_genesis_replay_needs_an_explicit_captured_at(
     assert _get(conflict, "error", "code") == "genesis-conflict"
 
 
-@pytest.mark.usefixtures("frozen_clock")
-def test_a_genesis_carrying_captured_at_replays(
-    store: storage.WorkStore,
-) -> None:
+@pytest.mark.usefixtures("frozen_clock", "store")
+def test_a_genesis_carrying_captured_at_replays() -> None:
     stamped = _first(
         session={"captured_at": CAPTURED_AT},
         base_revision_id=commit.GENESIS_PARENT,
@@ -220,8 +215,9 @@ def test_a_genesis_carrying_captured_at_replays(
     assert second["revision_id"] == first["revision_id"]
 
 
+@pytest.mark.usefixtures("genesis")
 def test_a_concurrent_writer_still_loses_under_the_lock(
-    genesis: dict[str, object], store: storage.WorkStore
+    store: storage.WorkStore,
 ) -> None:
     """Binding a parent outside the lock settles nothing, and must not.
 
@@ -283,9 +279,8 @@ def test_a_base_revision_id_that_is_current_is_accepted(
     assert payload["parent_revision_id"] == genesis["revision_id"]
 
 
-def test_a_base_revision_id_on_work_with_no_record_refuses(
-    store: storage.WorkStore,
-) -> None:
+@pytest.mark.usefixtures("store")
+def test_a_base_revision_id_on_work_with_no_record_refuses() -> None:
     status, payload = _run(
         "checkpoint", stdin=_first(base_revision_id="rev-000000000000")
     )
@@ -312,8 +307,9 @@ def test_a_base_revision_id_on_work_with_no_record_refuses(
         ("expected_revision_id", "rev-000000000000"),
     ],
 )
+@pytest.mark.usefixtures("genesis")
 def test_checkpoint_refuses_the_fields_that_belong_to_commit(
-    genesis: dict[str, object], field: str, value: object
+    field: str, value: object
 ) -> None:
     """Deriving a rehydration proof from the store would prove nothing.
 
@@ -330,7 +326,8 @@ def test_checkpoint_refuses_the_fields_that_belong_to_commit(
     assert "commit" in message
 
 
-def test_omitted_protected_state_carries_forward(store: storage.WorkStore) -> None:
+@pytest.mark.usefixtures("store")
+def test_omitted_protected_state_carries_forward() -> None:
     status, _ = _run(
         "checkpoint",
         stdin=_first(
@@ -362,9 +359,8 @@ def test_omitted_protected_state_carries_forward(store: storage.WorkStore) -> No
     assert cast(list[str], _get(payload, "revision", "preserved_entry_ids"))
 
 
-def test_retirement_still_needs_a_caller_authored_transition(
-    store: storage.WorkStore,
-) -> None:
+@pytest.mark.usefixtures("store")
+def test_retirement_still_needs_a_caller_authored_transition() -> None:
     status, first = _run(
         "checkpoint",
         stdin=_first(
@@ -409,9 +405,8 @@ def test_retirement_still_needs_a_caller_authored_transition(
     assert payload["status"] == "ok"
 
 
-def test_a_transition_without_a_rationale_is_not_a_retirement(
-    genesis: dict[str, object],
-) -> None:
+@pytest.mark.usefixtures("genesis")
+def test_a_transition_without_a_rationale_is_not_a_retirement() -> None:
     status, payload = _run(
         "checkpoint",
         stdin=_intent(
@@ -465,9 +460,8 @@ def test_a_gating_addition_derives_gated_status_and_a_projection(
     ) == generated
 
 
-def test_an_artifact_without_a_next_move_refuses(
-    genesis: dict[str, object],
-) -> None:
+@pytest.mark.usefixtures("genesis")
+def test_an_artifact_without_a_next_move_refuses() -> None:
     status, payload = _run("checkpoint", stdin=_intent(artifact=".cheese/x.md"))
 
     assert status == 1
@@ -475,9 +469,8 @@ def test_an_artifact_without_a_next_move_refuses(
     assert "next" in cast(str, _get(payload, "error", "message"))
 
 
-def test_a_first_checkpoint_must_say_what_comes_next(
-    store: storage.WorkStore,
-) -> None:
+@pytest.mark.usefixtures("store")
+def test_a_first_checkpoint_must_say_what_comes_next() -> None:
     status, payload = _run(
         "checkpoint", stdin=_intent(orientation="No next move.", working_context=[])
     )
@@ -486,9 +479,8 @@ def test_a_first_checkpoint_must_say_what_comes_next(
     assert _get(payload, "error", "code") == "invalid-intent"
 
 
-def test_an_unknown_next_move_is_refused_as_an_intent(
-    genesis: dict[str, object],
-) -> None:
+@pytest.mark.usefixtures("genesis")
+def test_an_unknown_next_move_is_refused_as_an_intent() -> None:
     status, payload = _run("checkpoint", stdin=_intent(next="deploy"))
 
     assert status == 1
@@ -502,9 +494,8 @@ def test_checkpoint_reports_a_work_id_that_is_not_a_path_segment() -> None:
     assert _get(payload, "error", "code") == "storage-error"
 
 
-def test_a_new_next_move_keeps_the_orientation_it_was_given(
-    genesis: dict[str, object],
-) -> None:
+@pytest.mark.usefixtures("genesis")
+def test_a_new_next_move_keeps_the_orientation_it_was_given() -> None:
     status, payload = _run(
         "checkpoint", stdin=_intent(next="age", orientation="Review the binding.")
     )

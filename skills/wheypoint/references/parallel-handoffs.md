@@ -2,7 +2,7 @@
 
 Read this when one handoff has to start more than one next move: several read-only follow-ups through the inline `next:` list, or independent write efforts through `mode: parallel`. A single-move handoff needs none of it.
 
-### `next:` list form
+## `next:` list form
 
 To kick off several read-only follow-ups from one handoff, `next:` may be a list with a required `order:`:
 
@@ -16,7 +16,7 @@ order: parallel | sequential
 - `order: sequential` — items run in listed order.
 - The inline list is restricted to read-only skills (`briesearch | culture`). Parallel *write* efforts still require the heavyweight `mode: parallel` + `tasks:` block with worktree/branch isolation below; sequential *pipeline* chaining stays the job of `--auto` / `/cook`'s fan pathway.
 
-### `mode: parallel` and the `tasks:` block
+## `mode: parallel` and the `tasks:` block
 
 For multiple independent next moves, use `mode: parallel`, set `next: tasks`, add a `parallel:` block, and add a `tasks:` list immediately after the orientation line. Each task must carry its exact `command:`; commands may name different skills. Parallel write tasks must never share a checkout. Choose one portable isolation strategy:
 

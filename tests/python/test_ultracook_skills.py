@@ -527,16 +527,16 @@ class TestWheypointProvenance:
         # The header schema keeps every provenance key (asserted above); the
         # prose describing them lives in `references/provenance-fields.md`.
         body = _skill_corpus("wheypoint").lower()
-        # Scope the optionality check to the `### Provenance fields` block so
+        # Scope the optionality check to the `## Provenance fields` block so
         # it cannot be satisfied by an unrelated "optional" elsewhere in the
         # file (the word appears many times outside the provenance section).
-        start = body.find("### provenance fields")
-        assert start != -1, "wheypoint must carry a `### Provenance fields` section"
-        end = body.find("\n### ", start + 1)
+        start = body.find("## provenance fields")
+        assert start != -1, "wheypoint must carry a `## Provenance fields` section"
+        end = body.find("\n## ", start + 1)
         section = body[start:end] if end != -1 else body[start:]
         assert "optional" in section, (
             "provenance fields must be documented as optional in the "
-            "`### Provenance fields` section"
+            "`## Provenance fields` section"
         )
         assert "pre-provenance" in body, (
             "wheypoint must state pre-provenance notes (none of the new keys) stay valid"
