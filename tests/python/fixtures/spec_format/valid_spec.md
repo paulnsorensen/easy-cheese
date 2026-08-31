@@ -26,6 +26,13 @@ Something is broken and needs mechanical enforcement.
 
 - Nothing else is in scope.
 
+## Grounding
+
+| Probe | Outcome | Evidence |
+| --- | --- | --- |
+| wiki | hit | adr/spec-format-enforcement-001.md — content-schema rules belong in the validator |
+| explorer | unavailable | hallouminate absent in this fixture run; read validate_spec.py directly |
+
 ## Approach
 
 Hand-roll a validator that consumes the generated document rules.

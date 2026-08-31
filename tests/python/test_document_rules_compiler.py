@@ -79,8 +79,18 @@ def test_mold_spec_document_declares_cross_field_rules() -> None:
         "ac-coverage-exactly-once",
         "tracer-row-blank-matrix-cells",
         "contract-matrix-row-requires-both",
+        "grounding-probe-recorded",
+        "delegation-digest-recorded",
         "not-applicable-closed-class",
     }
+
+
+def test_mold_spec_document_declares_three_column_grounding_table() -> None:
+    sections = {section.name: section for section in contracts.MoldSpecDocument.sections}
+    table = sections["Grounding"].table
+    assert table is not None
+    assert table.columns == ("Probe", "Outcome", "Evidence")
+    assert not sections["Grounding"].optional
 
 
 def test_ac_coverage_validator_rejects_missing_and_duplicate_ids() -> None:
@@ -104,7 +114,10 @@ def test_ac_coverage_validator_rejects_missing_and_duplicate_ids() -> None:
         mode=contracts.TestContractMode.TRACER,
     )
     _ = contracts.MoldSpecDocument(
-        frontmatter=frontmatter, acceptance_ids=("AC-1",), test_contract_rows=(row,)
+        frontmatter=frontmatter,
+        acceptance_ids=("AC-1",),
+        test_contract_rows=(row,),
+        grounding_rows=_grounding_rows(),
     )
 
     with pytest.raises(ValueError, match="AC-2"):
@@ -112,6 +125,77 @@ def test_ac_coverage_validator_rejects_missing_and_duplicate_ids() -> None:
             frontmatter=frontmatter,
             acceptance_ids=("AC-1", "AC-2"),
             test_contract_rows=(row,),
+            grounding_rows=_grounding_rows(),
+        )
+
+
+def _grounding_rows(
+    *, drop: contracts.GroundingProbe | None = None, duplicate: contracts.GroundingProbe | None = None
+) -> tuple[contracts.GroundingRow, ...]:
+    rows = [
+        contracts.GroundingRow(
+            probe=probe,
+            outcome=contracts.GroundingOutcome.UNAVAILABLE,
+            evidence=f"{probe.value} backend absent; recorded rather than assumed",
+        )
+        for probe in contracts.GroundingProbe
+        if probe is not drop
+    ]
+    if duplicate is not None:
+        rows.append(
+            contracts.GroundingRow(
+                probe=duplicate,
+                outcome=contracts.GroundingOutcome.HIT,
+                evidence="second record of the same probe",
+            )
+        )
+    return tuple(rows)
+
+
+def _minimal_frontmatter() -> contracts.MoldSpecFrontmatter:
+    return contracts.MoldSpecFrontmatter(
+        slug="example-spec",
+        status="draft",
+        source="mold-handshake",
+        created="2026-08-23",
+        confidence=contracts.SpecConfidence.HIGH,
+        gate_applicability=contracts.GateApplicability(
+            disposition=contracts.GateApplicabilityDisposition.NOT_APPLICABLE,
+            work_class=contracts.WorkClass.DOCS_ONLY,
+            ui_surface=contracts.UiSurface.NOT_APPLICABLE,
+            reason="closed, no behavior change",
+        ),
+    )
+
+
+@pytest.mark.parametrize("probe", list(contracts.GroundingProbe))
+def test_grounding_validator_rejects_a_missing_probe(
+    probe: contracts.GroundingProbe,
+) -> None:
+    with pytest.raises(ValueError, match=f"record the {probe.value} probe exactly once, got 0"):
+        _ = contracts.MoldSpecDocument(
+            frontmatter=_minimal_frontmatter(),
+            grounding_rows=_grounding_rows(drop=probe),
+        )
+
+
+@pytest.mark.parametrize("probe", list(contracts.GroundingProbe))
+def test_grounding_validator_rejects_a_duplicated_probe(
+    probe: contracts.GroundingProbe,
+) -> None:
+    with pytest.raises(ValueError, match=f"record the {probe.value} probe exactly once, got 2"):
+        _ = contracts.MoldSpecDocument(
+            frontmatter=_minimal_frontmatter(),
+            grounding_rows=_grounding_rows(duplicate=probe),
+        )
+
+
+def test_grounding_row_rejects_blank_evidence() -> None:
+    with pytest.raises(ValueError, match="evidence must be a non-empty string"):
+        _ = contracts.GroundingRow(
+            probe=contracts.GroundingProbe.WIKI,
+            outcome=contracts.GroundingOutcome.UNAVAILABLE,
+            evidence="",
         )
 
 
@@ -184,10 +268,14 @@ def test_generated_document_rules_module_imports_only_stdlib_names() -> None:
         "ac-coverage-exactly-once",
         "tracer-row-blank-matrix-cells",
         "contract-matrix-row-requires-both",
+        "grounding-probe-recorded",
+        "delegation-digest-recorded",
         "not-applicable-closed-class",
     }
     assert set(cast(dict[str, object], rules["enums"])) == {
         "mode",
+        "grounding_probe",
+        "grounding_outcome",
         "gate_applicability_disposition",
         "work_class",
         "ui_surface",

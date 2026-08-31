@@ -2258,6 +2258,27 @@ class TestContractMode(str, Enum):
     CONTRACT_MATRIX = "contract-matrix"
 
 
+class GroundingProbe(str, Enum):
+    """The preconditions a spec may not be curdled without having probed.
+
+    ``wiki`` is the durable-knowledge probe; ``explorer`` is the delegated
+    code-evidence probe.  Both are steps mold's prose already mandated and
+    that runs skipped, so they are recorded as spec rows instead.
+    """
+
+    WIKI = "wiki"
+    EXPLORER = "explorer"
+
+
+class GroundingOutcome(str, Enum):
+    """What the probe returned.  ``unavailable`` keeps the degrade path open
+    while forcing it to leave evidence rather than be assumed."""
+
+    HIT = "hit"
+    MISS = "miss"
+    UNAVAILABLE = "unavailable"
+
+
 @define(frozen=True)
 class GateApplicability:
     disposition: GateApplicabilityDisposition = field(
@@ -2323,6 +2344,26 @@ class TestContractRow:
             )
 
 
+@define(frozen=True)
+class GroundingRow:
+    """One recorded precondition probe standing behind the spec."""
+
+    probe: GroundingProbe = field(validator=validators.instance_of(GroundingProbe))
+    outcome: GroundingOutcome = field(validator=validators.instance_of(GroundingOutcome))
+    evidence: str = field(validator=_bounded_string)
+
+
+GROUNDING_COLUMNS: tuple[str, ...] = ("Probe", "Outcome", "Evidence")
+
+GROUNDING_TABLE_RULE = TableRule(
+    columns=GROUNDING_COLUMNS,
+    per_row=(
+        "Probe and Outcome are drawn from their closed sets",
+        "Evidence is non-empty, including for unavailable outcomes",
+    ),
+)
+
+
 TEST_CONTRACT_COLUMNS: tuple[str, ...] = (
     "Acceptance ID",
     "Interface referent",
@@ -2346,6 +2387,7 @@ MOLD_SPEC_SECTIONS: tuple[Section, ...] = (
     Section("Goals"),
     Section("Non-goals"),
     Section("Deferred follow-ups", optional=True),
+    Section("Grounding", table=GROUNDING_TABLE_RULE),
     Section("Approach"),
     Section("Decisions"),
     Section("Acceptance"),
@@ -2361,6 +2403,8 @@ MOLD_SPEC_SECTIONS: tuple[Section, ...] = (
 
 MOLD_SPEC_ENUMS: dict[str, tuple[str, ...]] = {
     "mode": tuple(mode.value for mode in TestContractMode),
+    "grounding_probe": tuple(probe.value for probe in GroundingProbe),
+    "grounding_outcome": tuple(outcome.value for outcome in GroundingOutcome),
     "gate_applicability_disposition": tuple(
         disposition.value for disposition in GateApplicabilityDisposition
     ),
@@ -2380,6 +2424,14 @@ MOLD_SPEC_CROSS_FIELD_RULES: tuple[CrossFieldRule, ...] = (
     CrossFieldRule(
         rule_id="contract-matrix-row-requires-both",
         description="Contract-matrix rows require both Interface version and Matrix rows.",
+    ),
+    CrossFieldRule(
+        rule_id="grounding-probe-recorded",
+        description="The Grounding table must record the wiki probe exactly once with non-empty evidence.",
+    ),
+    CrossFieldRule(
+        rule_id="delegation-digest-recorded",
+        description="The Grounding table must record the explorer probe exactly once with non-empty evidence.",
     ),
     CrossFieldRule(
         rule_id="not-applicable-closed-class",
@@ -2403,6 +2455,9 @@ class MoldSpecDocument:
     )
     test_contract_rows: tuple[TestContractRow, ...] = field(
         factory=tuple, converter=_tuple_sequence, validator=_list_of(TestContractRow)
+    )
+    grounding_rows: tuple[GroundingRow, ...] = field(
+        factory=tuple, converter=_tuple_sequence, validator=_list_of(GroundingRow)
     )
 
     slug: ClassVar[str] = "mold-spec"
@@ -2434,6 +2489,20 @@ class MoldSpecDocument:
             raise ValueError(
                 f"Test Contracts table must cover every Acceptance ID exactly once: missing={missing} duplicated={duplicated} unexpected={unexpected}"
             )
+
+    @grounding_rows.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
+    def _validate_grounding_coverage(self, _attribute: _NamedAttribute, value: object) -> None:  # noqa: V103
+        assert isinstance(value, tuple)
+        rows = cast(tuple[GroundingRow, ...], value)
+        counts: dict[GroundingProbe, int] = {}
+        for row in rows:
+            counts[row.probe] = counts.get(row.probe, 0) + 1
+        for probe in GroundingProbe:
+            count = counts.get(probe, 0)
+            if count != 1:
+                raise ValueError(
+                    f"Grounding table must record the {probe.value} probe exactly once, got {count}"
+                )
 
 
 __all__ = [
@@ -2480,6 +2549,9 @@ __all__ = [
     "EvidenceRef",
     "GateApplicability",
     "GateApplicabilityDisposition",
+    "GroundingOutcome",
+    "GroundingProbe",
+    "GroundingRow",
     "HypothesisDisposition",
     "IdentityAction",
     "IdentityLineage",

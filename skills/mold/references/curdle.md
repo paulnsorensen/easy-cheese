@@ -65,6 +65,17 @@ gate_applicability:
   - State: <prepared | linked | created>
   - Reference: <local draft path | URL | durable roadmap reference>
 
+## Grounding
+
+One row per probe, every probe exactly once. `Outcome` is `hit`, `miss`, or
+`unavailable`; `unavailable` is the degrade path and still records what was
+attempted. `Evidence` is never blank — a probe may be skipped, never assumed.
+
+| Probe | Outcome | Evidence |
+| --- | --- | --- |
+| wiki | <hit \| miss \| unavailable> | <wiki path and one-line finding, or what was attempted> |
+| explorer | <hit \| miss \| unavailable> | <explorer digest path and one-line finding, or what was attempted> |
+
 ## Approach
 <chosen option summary>
 

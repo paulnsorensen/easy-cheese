@@ -11,10 +11,12 @@ tracked heading; Test Contracts table has the seven declared columns and a
 '---' delimiter row, and every row matches the column count; every
 Acceptance ID appears exactly once in the table and vice versa; Mode is
 drawn from its closed enum set; tracer rows leave Interface version/Matrix
-rows blank; contract-matrix rows require both; frontmatter gate_applicability
-must be present and parseable, with disposition/work_class/ui_surface drawn
-from their closed enum sets; not-applicable requires a reason and zero
-Test Contracts rows.
+rows blank; contract-matrix rows require both; the Grounding table records
+each declared probe exactly once with a closed-set outcome and non-empty
+evidence — an unavailable probe still leaves evidence rather than being
+assumed; frontmatter gate_applicability must be present and parseable, with
+disposition/work_class/ui_surface drawn from their closed enum sets;
+not-applicable requires a reason and zero Test Contracts rows.
 
 Legacy acceptance: the default (read) posture accepts v0.13-era specs — those
 without a Mold provenance marker — indefinitely, waiving only the two parts the
@@ -76,6 +78,14 @@ _MODE_COL = TABLE_COLUMNS.index("Mode")
 _INTERFACE_VERSION_COL = TABLE_COLUMNS.index("Interface version")
 _MATRIX_ROWS_COL = TABLE_COLUMNS.index("Matrix rows")
 
+_GROUNDING_SECTION = next(s for s in SECTIONS if s["name"] == "Grounding")
+_GROUNDING_TABLE = _GROUNDING_SECTION["table"]
+assert _GROUNDING_TABLE is not None
+GROUNDING_COLUMNS: tuple[str, ...] = tuple(_GROUNDING_TABLE["columns"])
+_PROBE_COL = GROUNDING_COLUMNS.index("Probe")
+_OUTCOME_COL = GROUNDING_COLUMNS.index("Outcome")
+_EVIDENCE_COL = GROUNDING_COLUMNS.index("Evidence")
+
 _CROSS_FIELD_RULE_IDS: set[str] = {rule["rule_id"] for rule in RULES["cross_field_rules"]}
 
 
@@ -88,6 +98,16 @@ AC_COVERAGE_RULE = _rule_id("ac-coverage-exactly-once")
 TRACER_ROW_RULE = _rule_id("tracer-row-blank-matrix-cells")
 CONTRACT_MATRIX_ROW_RULE = _rule_id("contract-matrix-row-requires-both")
 NOT_APPLICABLE_RULE = _rule_id("not-applicable-closed-class")
+
+# Each declared probe carries its own cross-field rule id so a skipped wiki
+# probe and a skipped explorer delegation fail under distinct identifiers.
+PROBE_RULES: dict[str, str] = {
+    "wiki": _rule_id("grounding-probe-recorded"),
+    "explorer": _rule_id("delegation-digest-recorded"),
+}
+assert set(PROBE_RULES) == set(ENUMS["grounding_probe"]), (
+    "every grounding probe needs a cross-field rule id"
+)
 
 HEADING_RE = re.compile(r"^##(?!#)\s+(.+?)\s*$")
 ACCEPTANCE_ID_RE = re.compile(r"^-\s*(AC-\d+)\s*:")
@@ -206,6 +226,96 @@ def _parse_table(content_lines: list[str]) -> list[list[str]] | None:
     return rows
 
 
+def _declared_table_rows(
+    content_lines: list[str],
+    columns: tuple[str, ...],
+    section: str,
+    error_id: str,
+    path: Path,
+    errors: list[str],
+) -> list[list[str]]:
+    """Parse a declared section table, appending ``error_id`` shape errors.
+
+    Returns only the body rows whose cell count matches ``columns``; a missing
+    table or a header that does not match the declared columns yields no rows.
+    """
+    parsed = _parse_table(content_lines)
+    if parsed is None:
+        errors.append(f"ERROR: {error_id} no table found in {section} section of {path}")
+        return []
+    header = parsed[0]
+    if tuple(header) != columns:
+        errors.append(
+            f"ERROR: {error_id} {section} table columns {header} do not match the "
+            + f"required columns {list(columns)} in {path}"
+        )
+        return []
+    delimiter_row = parsed[1]
+    if not delimiter_row or not all(DELIMITER_CELL_RE.match(cell) for cell in delimiter_row):
+        errors.append(
+            f"ERROR: {error_id} {section} table is missing its '---' delimiter "
+            + f"row in {path}"
+        )
+        candidate_rows = parsed[1:]
+    else:
+        candidate_rows = parsed[2:]
+    rows: list[list[str]] = []
+    for row in candidate_rows:
+        if len(row) != len(columns):
+            errors.append(
+                f"ERROR: {error_id} {section} row {row} has {len(row)} cells, "
+                + f"expected {len(columns)} in {path}"
+            )
+        else:
+            rows.append(row)
+    return rows
+
+
+def _grounding_errors(rows: list[list[str]], path: Path) -> list[str]:
+    """Every declared probe is recorded exactly once with non-empty evidence.
+
+    An ``unavailable`` outcome is an accepted degrade path, but it still has to
+    name what was attempted — the probe may be skipped, never assumed.
+    """
+    errors: list[str] = []
+    recorded: dict[str, int] = {}
+    for row in rows:
+        probe = row[_PROBE_COL]
+        outcome = row[_OUTCOME_COL]
+        evidence = row[_EVIDENCE_COL]
+        if probe not in ENUMS["grounding_probe"]:
+            errors.append(
+                "ERROR: grounding-probe-closed-class Grounding row has unknown "
+                + f"Probe '{probe}' in {path}"
+            )
+            continue
+        recorded[probe] = recorded.get(probe, 0) + 1
+        if outcome not in ENUMS["grounding_outcome"]:
+            errors.append(
+                f"ERROR: grounding-outcome-closed-class Grounding row '{probe}' has "
+                + f"unknown Outcome '{outcome}' in {path}"
+            )
+        if not evidence:
+            errors.append(
+                f"ERROR: {PROBE_RULES[probe]} Grounding row '{probe}' records no "
+                + f"evidence; an unavailable probe still records what was attempted "
+                + f"in {path}"
+            )
+    for probe, rule in PROBE_RULES.items():
+        count = recorded.get(probe, 0)
+        if count == 0:
+            errors.append(
+                f"ERROR: {rule} the Grounding table does not record the '{probe}' "
+                + f"probe in {path}"
+            )
+        elif count > 1:
+            errors.append(
+                f"ERROR: {rule} the Grounding table records the '{probe}' probe "
+                + f"{count} times in {path}"
+            )
+    return errors
+
+
 def _acceptance_ids(content_lines: list[str]) -> list[str]:
     ids: list[str] = []
     for line in content_lines:
@@ -272,41 +382,27 @@ def validate(path: Path, *, strict: bool = False) -> tuple[list[str], str | None
             + f"not-applicable requires no Test Contracts section in {path}"
         )
     elif test_contracts_lines is not None:
-        parsed = _parse_table(test_contracts_lines)
-        if parsed is None:
-            errors.append(
-                "ERROR: test-contracts-table-shape no table found in Test "
-                + f"Contracts section of {path}"
-            )
-        else:
-            header = parsed[0]
-            if tuple(header) != TABLE_COLUMNS:
-                errors.append(
-                    "ERROR: test-contracts-table-shape Test Contracts table columns "
-                    + f"{header} do not match the required seven columns {list(TABLE_COLUMNS)} "
-                    + f"in {path}"
-                )
-            else:
-                delimiter_row = parsed[1]
-                if not delimiter_row or not all(
-                    DELIMITER_CELL_RE.match(cell) for cell in delimiter_row
-                ):
-                    errors.append(
-                        "ERROR: test-contracts-table-shape Test Contracts table is "
-                        + f"missing its '---' delimiter row in {path}"
-                    )
-                    candidate_rows = parsed[1:]
-                else:
-                    candidate_rows = parsed[2:]
-                for row in candidate_rows:
-                    if len(row) != len(TABLE_COLUMNS):
-                        errors.append(
-                            "ERROR: test-contracts-table-shape Test Contracts row "
-                            + f"{row} has {len(row)} cells, expected {len(TABLE_COLUMNS)} "
-                            + f"in {path}"
-                        )
-                    else:
-                        rows.append(row)
+        rows = _declared_table_rows(
+            test_contracts_lines,
+            TABLE_COLUMNS,
+            "Test Contracts",
+            "test-contracts-table-shape",
+            path,
+            errors,
+        )
+
+    grounding_lines = found_sections.get(_canonical_heading("Grounding"))
+    grounding_rows: list[list[str]] = []
+    if grounding_lines is not None:
+        grounding_rows = _declared_table_rows(
+            grounding_lines,
+            GROUNDING_COLUMNS,
+            "Grounding",
+            "grounding-table-shape",
+            path,
+            errors,
+        )
+    errors.extend(_grounding_errors(grounding_rows, path))
 
     acceptance_lines = found_sections.get(_canonical_heading("Acceptance"), [])
     declared_ids = (

@@ -619,3 +619,144 @@ def test_spec_without_frontmatter_is_malformed_not_legacy(
     assert result.returncode == 1
     assert not _notice_lines(result)
     assert any("gate-applicability-required" in line for line in _error_lines(result))
+
+
+# --- grounding gate (#553) ----------------------------------------------
+
+WIKI_ROW = (
+    "| wiki | hit | adr/spec-format-enforcement-001.md — content-schema rules "
+    "belong in the validator |\n"
+)
+EXPLORER_ROW = (
+    "| explorer | unavailable | hallouminate absent in this fixture run; read "
+    "validate_spec.py directly |\n"
+)
+
+
+def test_missing_grounding_section_is_rejected(tmp_path: Path, _run: _RunFn) -> None:
+    start = BASE_SPEC.index("## Grounding")
+    end = BASE_SPEC.index("## Approach")
+    text = BASE_SPEC[:start] + BASE_SPEC[end:]
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    errors = _error_lines(result)
+    assert result.returncode == 1
+    assert len(errors) == 3
+    assert any("missing-required-section" in line and "Grounding" in line for line in errors)
+    assert any("grounding-probe-recorded" in line and "'wiki'" in line for line in errors)
+    assert any("delegation-digest-recorded" in line and "'explorer'" in line for line in errors)
+
+
+@pytest.mark.parametrize(
+    ("row", "rule", "probe"),
+    [
+        (WIKI_ROW, "grounding-probe-recorded", "wiki"),
+        (EXPLORER_ROW, "delegation-digest-recorded", "explorer"),
+    ],
+)
+def test_unrecorded_probe_is_rejected(
+    tmp_path: Path, _run: _RunFn, row: str, rule: str, probe: str
+) -> None:
+    text = BASE_SPEC.replace(row, "", 1)
+    assert row not in text
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    errors = _error_lines(result)
+    assert result.returncode == 1
+    assert len(errors) == 1
+    assert rule in errors[0]
+    assert f"does not record the '{probe}' probe" in errors[0]
+
+
+@pytest.mark.parametrize(
+    ("row", "rule", "probe"),
+    [
+        (WIKI_ROW, "grounding-probe-recorded", "wiki"),
+        (EXPLORER_ROW, "delegation-digest-recorded", "explorer"),
+    ],
+)
+def test_duplicated_probe_is_rejected(
+    tmp_path: Path, _run: _RunFn, row: str, rule: str, probe: str
+) -> None:
+    text = BASE_SPEC.replace(row, row + row, 1)
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    errors = _error_lines(result)
+    assert result.returncode == 1
+    assert len(errors) == 1
+    assert rule in errors[0]
+    assert f"records the '{probe}' probe 2 times" in errors[0]
+
+
+def test_unavailable_probe_without_evidence_is_rejected(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    text = BASE_SPEC.replace(EXPLORER_ROW, "| explorer | unavailable | |\n", 1)
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    errors = _error_lines(result)
+    assert result.returncode == 1
+    assert len(errors) == 1
+    assert "delegation-digest-recorded" in errors[0]
+    assert "records no evidence" in errors[0]
+
+
+def test_unavailable_probe_with_evidence_is_accepted(tmp_path: Path, _run: _RunFn) -> None:
+    text = BASE_SPEC.replace(
+        WIKI_ROW, "| wiki | unavailable | hallouminate MCP not connected |\n", 1
+    )
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    assert result.returncode == 0
+    assert not _error_lines(result)
+
+
+def test_unknown_grounding_probe_is_rejected(tmp_path: Path, _run: _RunFn) -> None:
+    text = BASE_SPEC.replace(WIKI_ROW, WIKI_ROW.replace("| wiki |", "| Wiki |", 1), 1)
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    errors = _error_lines(result)
+    assert result.returncode == 1
+    assert len(errors) == 2
+    assert any("grounding-probe-closed-class" in line and "'Wiki'" in line for line in errors)
+    assert any("grounding-probe-recorded" in line for line in errors)
+
+
+def test_unknown_grounding_outcome_is_rejected(tmp_path: Path, _run: _RunFn) -> None:
+    text = BASE_SPEC.replace(WIKI_ROW, WIKI_ROW.replace("| hit |", "| skipped |", 1), 1)
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    errors = _error_lines(result)
+    assert result.returncode == 1
+    assert len(errors) == 1
+    assert "grounding-outcome-closed-class" in errors[0]
+    assert "'skipped'" in errors[0]
+
+
+def test_grounding_table_column_drift_is_a_shape_error(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    text = BASE_SPEC.replace(
+        "| Probe | Outcome | Evidence |", "| Probe | Outcome | Citation |", 1
+    )
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    errors = _error_lines(result)
+    assert result.returncode == 1
+    assert any("grounding-table-shape" in line for line in errors)
+    assert any("grounding-probe-recorded" in line for line in errors)
+    assert any("delegation-digest-recorded" in line for line in errors)
+
+
+def test_not_applicable_spec_still_requires_grounding(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    text = _isolated_gate_applicability_fixture(
+        reason="closed, no CLI change", rows=False
+    ).replace(WIKI_ROW, "", 1)
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    errors = _error_lines(result)
+    assert result.returncode == 1
+    assert len(errors) == 1
+    assert "grounding-probe-recorded" in errors[0]
