@@ -25,3 +25,45 @@ Read this in full before acting on any `/cheese --continue <slug-or-note-path>` 
    - **When the handoff carries a recorded `baseline:` block** — treat it as settled state, not an open question: never re-ask about or re-halt on the failures it records, whether in this reader or in the dispatched phase. See [`../../cook/references/quality-gates.md`](../../cook/references/quality-gates.md).
 
 Under `--safe`, gate authoritative resumption through the handoff gate in [`handoff-gate.md`](handoff-gate.md); legacy resumption always uses the informed gate above. Without `--safe`, run only the named authoritative phase immediately; a legacy note remains untrusted context. Resolution is the resumability contract: it tells the router where the pipeline is and how to move it forward.
+
+## --reground
+
+A handoff records what was true when it was written. `--reground` is the opt-in check that the tree has not falsified those premises since — the resumed phase otherwise builds on a claim the repository already disproved, and discovers it at the far end of a wasted run.
+
+The flag is meaningful only alongside `--continue`. On any other invocation, say so in one line and classify normally: there is no handoff to re-check, and silently swallowing a flag the user typed teaches them it did something.
+
+It runs after resolution has produced a dispatchable result and immediately before dispatch, so it can only stop a resume that was otherwise about to run. A resolution that already stopped — ambiguity, an integrity finding, `status: gated:`, a `hold` or terminal `next:` — stays stopped; `--reground` never rescues one and never softens one.
+
+### Bound the window before spending anything
+
+Bound the decay window deterministically from the handoff's own recorded commit: `git diff --name-only <recorded-commit>..HEAD` for what has landed since, plus `git status --porcelain` for what is uncommitted. Nothing else is in scope — a claim can only have decayed inside that window.
+
+An empty window means nothing moved under the handoff and there is nothing to falsify: say so in one line and dispatch unchanged. A re-grounding pass that always runs is a flag users learn to leave off. A handoff with no recorded commit has an unbounded window, which is not licence to read the whole tree — report the missing baseline, mark every claim `unverifiable`, and dispatch.
+
+### Attack the claims, and let Culture do the reading
+
+Take the handoff's load-bearing claims — the premises `next:` depends on, not its prose — and attack them, do not confirm them. Delegate the pass to `/culture` in no-write mode, one dispatch for the whole set, with the direction stated as falsification: for each claim, look for the evidence that would make it *false*, inside the window.
+
+- `holds` — the falsifying evidence was looked for in files the pass actually read, and is not there.
+- `stale` — contradicting evidence is in the window.
+- `unverifiable` — the window touches the claim but the pass could not settle it. A claim that merely still sounds plausible is `unverifiable`, never `holds`.
+
+The router does not do this reading itself: it is a router, and its probe budget is three.
+
+### `stale` gates, `unverifiable` does not
+
+Any `stale` claim stops automatic dispatch. Surface it as the user decision it is, with the same research / decide / build choice a `gated:` status gets, and dispatch nothing until the user picks. `unverifiable` verdicts are reported but do not stop dispatch — not having proved a premise is the pre-existing state of every resume run without the flag, so gating on it would punish asking the question.
+
+Report one line per claim, whatever the verdict:
+
+```text
+reground: <holds|stale|unverifiable> — <claim> (<evidence, or the gap>)
+```
+
+A claim checked and cleared is as much of the record as one that failed; reporting only failures leaves the user unable to tell a thorough pass from a lazy one.
+
+### It never writes, and it never propagates
+
+Never repair the handoff. `--reground` does not edit the note, commit a revision, or rewrite a claim it just falsified — authoring durable state is `/wheypoint`'s job, and a router that quietly corrected its own input would destroy the evidence the user needs in order to decide.
+
+The flag is spent at resume time and is never forwarded to the dispatched phase. It changes what the router checks before handing off, never how the phase runs, so it never becomes a durable flag in the handoff or an argument on a downstream skill.

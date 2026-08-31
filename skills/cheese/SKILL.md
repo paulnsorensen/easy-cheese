@@ -24,6 +24,7 @@ Optional flags:
 - `--open-pr` — propagate through the implementation chain to terminal `/plate`; a new PR follows `/plate`'s explicit-choice and review-shape policy.
 - `--continue <slug-or-note-path>` — resume an in-flight pipeline from a handoff slug or note.
 - `--hard` — propagate to `/plate`, which runs the final artifact-writing gate before `/hard-cheese` and publication.
+- `--reground` — with `--continue` only; adversarially re-check the resumed handoff's load-bearing claims against what moved since, before dispatching the phase.
 
 If `$ARGUMENTS` is missing entirely and there is no recent context to lean on, ask one clarifying question through the host routing guide in [`references/handoff-gate.md`](references/handoff-gate.md) before classifying.
 
