@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pprint
 from collections.abc import Mapping, Sequence
-from typing import ClassVar, Protocol
+from typing import ClassVar, Protocol, cast
 
 
 class _TableRuleLike(Protocol):
@@ -30,22 +30,20 @@ class _CrossFieldRuleLike(Protocol):
 
 
 class _DocumentContractLike(Protocol):
+    slug: ClassVar[str]
     sections: ClassVar[Sequence[_SectionLike]]
     cross_field_rules: ClassVar[Sequence[_CrossFieldRuleLike]]
     enums: ClassVar[Mapping[str, Sequence[str]]]
 
 
-class _DocumentContractModule(Protocol):
-    def registered_document_contracts(
-        self,
-    ) -> tuple[tuple[str, type[_DocumentContractLike]], ...]: ...
+def collect(contract: type) -> type[_DocumentContractLike]:
+    """Adopt a marked document-contract class as the compiler's input.
 
-
-def collect(
-    module: _DocumentContractModule,
-) -> tuple[tuple[str, type[_DocumentContractLike]], ...]:
-    """Project marked document-contract classes into ``(slug, class)`` pairs."""
-    return module.registered_document_contracts()
+    The class is taken bare: its ``ClassVar`` containers are invariant concrete
+    ``tuple``/``dict`` types that no structural annotation here can match, so
+    the shape ``render`` relies on is asserted at this seam.
+    """
+    return cast("type[_DocumentContractLike]", contract)
 
 
 def _section_data(section: _SectionLike) -> dict[str, object]:
@@ -71,22 +69,16 @@ def _enum_data(cls: type[_DocumentContractLike]) -> dict[str, list[str]]:
     return {name: list(values) for name, values in cls.enums.items()}
 
 
-def render(pairs: Sequence[tuple[str, type[_DocumentContractLike]]]) -> str:
-    """Render deterministic, dependency-free document-rules source for ``pairs``."""
-    ordered = tuple(sorted(pairs, key=lambda pair: pair[0]))
-    slugs = [slug for slug, _cls in ordered]
-    if len(slugs) != len(set(slugs)):
-        raise ValueError("document contract markers produce duplicate slugs")
-
+def render(cls: type[_DocumentContractLike]) -> str:
+    """Render deterministic, dependency-free document-rules source for ``cls``."""
     document_rules = {
-        slug: {
+        cls.slug: {
             "sections": [_section_data(section) for section in cls.sections],
             "cross_field_rules": [
                 _rule_data(rule) for rule in cls.cross_field_rules
             ],
             "enums": _enum_data(cls),
         }
-        for slug, cls in ordered
     }
 
     return (

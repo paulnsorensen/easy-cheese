@@ -63,6 +63,8 @@ from easy_cheese_schemas.contracts import (
     UncertaintyScope,
     UnsupportedProjection,
     WriterViewKind,
+    canonical_digest,
+    curd_plan_digest,
     derive_curd_disposition,
 )
 
@@ -122,12 +124,11 @@ def curd(
 
 
 def plan(*curds: SemanticCurd) -> CurdPlan:
-    planned = list(curds) or [curd()]
-    return CurdPlan(
+    planned = tuple(curds) or (curd(),)
+    return CurdPlan.signed(
         contract_version=VERSION,
         plan_id="plan-1",
         revision=1,
-        digest=DIGEST,
         objective="Ship the approved behavior",
         curds=planned,
         context=BoundedContext(
@@ -301,6 +302,49 @@ def test_curd_plan_rejects_duplicate_criterion_identity() -> None:
 
     with pytest.raises(ValueError, match="criterion_id 'criterion-1' must be unique"):
         _ = plan(first, second)
+
+
+def test_curd_plan_refuses_a_digest_that_does_not_cover_its_content() -> None:
+    signed = plan()
+
+    with pytest.raises(
+        ValueError,
+        match=f"CurdPlan digest mismatch: expected {signed.digest}, got {DIGEST}",
+    ):
+        _ = attrs.evolve(signed, digest=DIGEST)
+
+
+def test_curd_plan_signed_digest_covers_every_field_but_the_digest() -> None:
+    signed = plan()
+
+    assert signed.digest == curd_plan_digest(signed)
+    assert signed.digest == canonical_digest(
+        {
+            "contract_version": signed.contract_version,
+            "plan_id": signed.plan_id,
+            "revision": signed.revision,
+            "objective": signed.objective,
+            "curds": signed.curds,
+            "context": signed.context,
+            "parent_plan_ref": signed.parent_plan_ref,
+        }
+    )
+    revised = CurdPlan.signed(
+        contract_version=signed.contract_version,
+        plan_id=signed.plan_id,
+        revision=signed.revision + 1,
+        objective=signed.objective,
+        curds=signed.curds,
+        context=signed.context,
+        parent_plan_ref=signed.parent_plan_ref,
+    )
+    assert revised.digest != signed.digest
+    assert revised.digest == curd_plan_digest(revised)
+
+
+def test_curd_plan_digest_refuses_a_value_that_is_not_a_plan() -> None:
+    with pytest.raises(TypeError, match="curd_plan_digest expects CurdPlan, not str"):
+        _ = curd_plan_digest(DIGEST)
 
 
 def test_identity_lineage_enforces_new_retain_and_derive_rules() -> None:

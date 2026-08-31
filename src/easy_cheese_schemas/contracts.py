@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from collections.abc import Callable, Mapping
 from enum import Enum
 from collections.abc import Iterable
 from typing import ClassVar, Protocol, TypeVar, cast
 
+import attrs
 from attrs import define, field, validators
 
 _attrs_field = field
@@ -84,40 +87,36 @@ def registered_contracts() -> tuple[tuple[str, type], ...]:
     return _registered_contracts()
 
 
-_DOCUMENT_CONTRACT_MARKER = "__document_contract_slug__"
+def _unstructure(value: object) -> object:
+    """Project attrs models, enums, and containers onto JSON-serializable data."""
+    if attrs.has(type(value)):
+        return {
+            attribute.name: _unstructure(cast(object, getattr(value, attribute.name)))
+            for attribute in cast(
+                "tuple[attrs.Attribute[object], ...]", attrs.fields(type(value))
+            )
+        }
+    if isinstance(value, Enum):
+        return cast(object, value.value)
+    if isinstance(value, (tuple, list)):
+        sequence_value = cast("tuple[object, ...] | list[object]", value)
+        return [_unstructure(item) for item in sequence_value]
+    if isinstance(value, Mapping):
+        mapping_value = cast("Mapping[object, object]", value)
+        return {str(key): _unstructure(item) for key, item in mapping_value.items()}
+    return value
 
 
-def document_contract(slug: str) -> Callable[[_ClsT], _ClsT]:
-    """Mark a prose document-format contract class with its canonical schema slug."""
-    validated_slug = _validate_contract_slug(slug)
-
-    def decorate(cls: _ClsT) -> _ClsT:
-        setattr(cls, _DOCUMENT_CONTRACT_MARKER, validated_slug)
-        return cls
-
-    return decorate
+def canonical_bytes(value: object) -> bytes:
+    """Serialize ``value`` to the canonical, digest-stable JSON encoding."""
+    return (
+        json.dumps(_unstructure(value), sort_keys=True, separators=(",", ":")) + "\n"
+    ).encode()
 
 
-def _registered_document_contracts() -> tuple[tuple[str, type], ...]:
-    """Return marked document-contract classes in deterministic slug order."""
-    pairs: list[tuple[str, type]] = []
-    for value in cast(Iterable[object], globals().values()):
-        if not isinstance(value, type):
-            continue
-        slug = cast(object, getattr(value, _DOCUMENT_CONTRACT_MARKER, None))
-        if slug is None:
-            continue
-        pairs.append((_validate_contract_slug(slug), value))
-    pairs.sort(key=lambda pair: pair[0])
-    for previous, current in zip(pairs, pairs[1:]):
-        if previous[0] == current[0]:
-            raise ValueError(f"duplicate document contract marker {current[0]!r}")
-    return tuple(pairs)
-
-
-def registered_document_contracts() -> tuple[tuple[str, type], ...]:
-    """Public accessor for marked document-contract classes in deterministic slug order."""
-    return _registered_document_contracts()
+def canonical_digest(value: object) -> str:
+    """Return the ``sha256:``-prefixed digest of ``value``'s canonical bytes."""
+    return f"sha256:{hashlib.sha256(canonical_bytes(value)).hexdigest()}"
 
 
 def schema_constraints(
@@ -857,6 +856,92 @@ class CurdPlan:
             and self.parent_plan_ref.plan_id == self.plan_id
         ):
             raise ValueError("parent_plan_ref must identify a different plan")
+
+    def __attrs_post_init__(self) -> None:
+        """Reject a plan whose digest does not cover its own content."""
+        expected = _curd_plan_digest(self)
+        if self.digest != expected:
+            raise ValueError(
+                f"CurdPlan digest mismatch: expected {expected}, got {self.digest}"
+            )
+
+    @classmethod
+    def signed(
+        cls,
+        *,
+        contract_version: ContractVersion,
+        plan_id: str,
+        revision: int,
+        objective: str,
+        curds: tuple[SemanticCurd, ...],
+        context: BoundedContext | None = None,
+        parent_plan_ref: SourcePlanRef | None = None,
+    ) -> CurdPlan:
+        """Build a plan whose digest is derived from the content it signs."""
+        digest = canonical_digest(
+            _curd_plan_unsigned(
+                contract_version=contract_version,
+                plan_id=plan_id,
+                revision=revision,
+                objective=objective,
+                curds=curds,
+                context=context,
+                parent_plan_ref=parent_plan_ref,
+            )
+        )
+        return cls(
+            contract_version=contract_version,
+            plan_id=plan_id,
+            revision=revision,
+            digest=digest,
+            objective=objective,
+            curds=curds,
+            context=context,
+            parent_plan_ref=parent_plan_ref,
+        )
+
+
+def _curd_plan_unsigned(
+    *,
+    contract_version: ContractVersion,
+    plan_id: str,
+    revision: int,
+    objective: str,
+    curds: tuple[SemanticCurd, ...],
+    context: BoundedContext | None,
+    parent_plan_ref: SourcePlanRef | None,
+) -> dict[str, object]:
+    """Return the digest-covered projection of a plan: every field but ``digest``."""
+    return {
+        "contract_version": contract_version,
+        "plan_id": plan_id,
+        "revision": revision,
+        "objective": objective,
+        "curds": curds,
+        "context": context,
+        "parent_plan_ref": parent_plan_ref,
+    }
+
+
+def _curd_plan_digest(plan: CurdPlan) -> str:
+    return canonical_digest(
+        _curd_plan_unsigned(
+            contract_version=plan.contract_version,
+            plan_id=plan.plan_id,
+            revision=plan.revision,
+            objective=plan.objective,
+            curds=plan.curds,
+            context=plan.context,
+            parent_plan_ref=plan.parent_plan_ref,
+        )
+    )
+
+
+def curd_plan_digest(plan: object) -> str:
+    """Return the digest a ``CurdPlan``'s content signs."""
+    if not isinstance(plan, CurdPlan):
+        raise TypeError(f"curd_plan_digest expects CurdPlan, not {type(plan).__name__}")
+    return _curd_plan_digest(plan)
 
 
 @define(frozen=True)
@@ -2303,9 +2388,10 @@ MOLD_SPEC_CROSS_FIELD_RULES: tuple[CrossFieldRule, ...] = (
 )
 
 
-@document_contract("mold-spec")
 @define(frozen=True)
 class MoldSpecDocument:
+    """The mold-spec prose document contract; ``slug`` is its canonical schema slug."""
+
     frontmatter: MoldSpecFrontmatter = field(
         validator=validators.instance_of(MoldSpecFrontmatter)
     )
@@ -2316,6 +2402,7 @@ class MoldSpecDocument:
         factory=tuple, converter=_tuple_sequence, validator=_list_of(TestContractRow)
     )
 
+    slug: ClassVar[str] = "mold-spec"
     sections: ClassVar[tuple[Section, ...]] = MOLD_SPEC_SECTIONS
     cross_field_rules: ClassVar[tuple[CrossFieldRule, ...]] = MOLD_SPEC_CROSS_FIELD_RULES
     enums: ClassVar[dict[str, tuple[str, ...]]] = MOLD_SPEC_ENUMS
@@ -2353,6 +2440,9 @@ __all__ = [
     "MAX_CONTRACT_DEPTH",
     "MAX_SCOPE_PATHS",
     "MAX_TEXT_LENGTH",
+    "canonical_bytes",
+    "canonical_digest",
+    "curd_plan_digest",
     "derive_curd_disposition",
     "CurdDisposition",
     "AgentWriterView",
@@ -2427,5 +2517,4 @@ __all__ = [
     "WorkClass",
     "WriterPayload",
     "WriterViewKind",
-    "document_contract",
 ]

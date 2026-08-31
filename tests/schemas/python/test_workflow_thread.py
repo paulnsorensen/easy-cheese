@@ -25,6 +25,7 @@ from easy_cheese_schemas.contracts import (
     CriterionWriterView,
     CriterionDisposition,
     CurdDisposition,
+    CurdPlan,
     CurdPlanWriterView,
     CurdResult,
     CurdResultWriterView,
@@ -56,7 +57,6 @@ from easy_cheese_schemas.contracts import (
 )
 from easy_cheese_schemas.schema_runtime import (
     ContractValidationError,
-    curd_plan_digest,
     supported_version_for,
 )
 from easy_cheese_schemas.workflow import (
@@ -883,7 +883,7 @@ def test_cure_without_bindings_raises_before_any_dispatch(
     assert events == []
 
 
-def test_cook_and_cure_reject_stale_or_unsupported_plans_before_executor(
+def test_cook_and_cure_reject_tampered_or_unsupported_plans_before_executor(
     tmp_path: Path,
 ) -> None:
     source = source_artifact(tmp_path)
@@ -893,12 +893,16 @@ def test_cook_and_cure_reject_stale_or_unsupported_plans_before_executor(
         artifacts={"source": source},
     )
     assert planned.plan is not None
-    stale = attrs.evolve(planned.plan, revision=planned.plan.revision + 1)
-    future_version = attrs.evolve(stale.contract_version, minor="99")
-    unsigned_future = attrs.evolve(stale, contract_version=future_version)
-    unsupported = attrs.evolve(
-        unsigned_future,
-        digest=curd_plan_digest(unsigned_future),
+    with pytest.raises(ValueError, match="CurdPlan digest mismatch"):
+        _ = attrs.evolve(planned.plan, revision=planned.plan.revision + 1)
+    unsupported = CurdPlan.signed(
+        contract_version=attrs.evolve(planned.plan.contract_version, minor="99"),
+        plan_id=planned.plan.plan_id,
+        revision=planned.plan.revision + 1,
+        objective=planned.plan.objective,
+        curds=planned.plan.curds,
+        context=planned.plan.context,
+        parent_plan_ref=planned.plan.parent_plan_ref,
     )
     events: list[str] = []
 
@@ -906,26 +910,25 @@ def test_cook_and_cure_reject_stale_or_unsupported_plans_before_executor(
         events.append("executor")
         raise AssertionError("invalid plans must not dispatch executors")
 
-    for invalid in (stale, unsupported):
-        with pytest.raises(ContractValidationError):
-            _ = cook(
-                invalid,
-                repository_root=tmp_path,
-                artifact_directory=tmp_path / "artifacts",
-                dispatch_writer=invoked,
-                dispatch_review=invoked,
-                dispatch_diagnosis=invoked,
-            )
-        with pytest.raises(ContractValidationError):
-            _ = cure(
-                invalid,
-                repository_root=tmp_path,
-                artifact_directory=tmp_path / "artifacts",
-                diagnosis_bindings={},
-                dispatch_writer=invoked,
-                dispatch_review=invoked,
-                dispatch_diagnosis=invoked,
-            )
+    with pytest.raises(ContractValidationError):
+        _ = cook(
+            unsupported,
+            repository_root=tmp_path,
+            artifact_directory=tmp_path / "artifacts",
+            dispatch_writer=invoked,
+            dispatch_review=invoked,
+            dispatch_diagnosis=invoked,
+        )
+    with pytest.raises(ContractValidationError):
+        _ = cure(
+            unsupported,
+            repository_root=tmp_path,
+            artifact_directory=tmp_path / "artifacts",
+            diagnosis_bindings={},
+            dispatch_writer=invoked,
+            dispatch_review=invoked,
+            dispatch_diagnosis=invoked,
+        )
 
     assert events == []
 

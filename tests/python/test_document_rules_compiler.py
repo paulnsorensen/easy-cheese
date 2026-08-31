@@ -5,9 +5,8 @@ from __future__ import annotations
 import ast
 import re
 import sys
-from collections.abc import Sequence
 from pathlib import Path
-from typing import cast
+from typing import ClassVar, cast
 
 import pytest
 
@@ -111,19 +110,23 @@ def test_ac_coverage_validator_rejects_missing_and_duplicate_ids() -> None:
         )
 
 
-def test_document_rules_compiler_render_rejects_duplicate_slugs() -> None:
-    with pytest.raises(ValueError, match="duplicate slugs"):
-        pairs = cast(
-            "Sequence[tuple[str, type[compiler._DocumentContractLike]]]",  # pyright: ignore[reportPrivateUsage]
-            [("mold-spec", contracts.MoldSpecDocument), ("mold-spec", contracts.MoldSpecDocument)],
-        )
-        _ = compiler.render(pairs)
+def test_document_rules_compiler_collects_the_mold_spec_class_and_keys_by_its_slug() -> None:
+    collected = compiler.collect(contracts.MoldSpecDocument)
+    assert collected is contracts.MoldSpecDocument
+    assert contracts.MoldSpecDocument.slug == "mold-spec"
+
+    class _Renamed(contracts.MoldSpecDocument):
+        slug: ClassVar[str] = "other-doc"
+
+    rendered = compiler.render(cast("type[compiler._DocumentContractLike]", _Renamed))  # pyright: ignore[reportPrivateUsage]
+    namespace: dict[str, object] = {}
+    exec(compile(rendered, "<rendered>", "exec"), namespace)
+    assert set(cast(dict[str, object], namespace["DOCUMENT_RULES"])) == {"other-doc"}
 
 
 def test_document_rules_compiler_is_deterministic_and_matches_checked_in_file() -> None:
-    pairs = compiler.collect(contracts)
-    first = compiler.render(pairs)
-    second = compiler.render(compiler.collect(contracts))
+    first = compiler.render(compiler.collect(contracts.MoldSpecDocument))
+    second = compiler.render(compiler.collect(contracts.MoldSpecDocument))
     assert first == second
     assert first == GENERATED.read_text(encoding="utf-8")
 

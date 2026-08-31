@@ -35,6 +35,7 @@ from easy_cheese_schemas import REGISTERED_CONTRACT_SCHEMA_URIS  # noqa: E402
 
 
 class _DocumentContract(Protocol):
+    slug: ClassVar[str]
     sections: ClassVar[tuple[contracts.Section, ...]]
     cross_field_rules: ClassVar[tuple[contracts.CrossFieldRule, ...]]
 
@@ -146,9 +147,9 @@ def render_type_blocks(roots: list[type], module: ModuleType) -> str:
     return "\n".join(lines).rstrip("\n") + "\n"
 
 
-def render_document_contract(slug: str, cls: type[_DocumentContract]) -> str:
+def render_document_contract(cls: type[_DocumentContract]) -> str:
     """Render a document contract's sections and cross-field rules as a compact block."""
-    lines = [f"document {slug} {{"]
+    lines = [f"document {cls.slug} {{"]
     for section in cls.sections:
         optional = "?" if section.optional else ""
         if section.table is not None:
@@ -167,10 +168,9 @@ def render_document_contract(slug: str, cls: type[_DocumentContract]) -> str:
 
 
 def render_mold_spec_region() -> str:
-    document_contracts = dict(contracts.registered_document_contracts())
-    mold_spec = document_contracts["mold-spec"]
+    mold_spec = contracts.MoldSpecDocument
     return (
-        render_document_contract("mold-spec", cast(type[_DocumentContract], mold_spec))
+        render_document_contract(cast(type[_DocumentContract], mold_spec))
         + "\n"
         + render_type_blocks([mold_spec], contracts)
     )

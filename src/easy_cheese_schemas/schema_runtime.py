@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import types
 from collections.abc import Mapping
@@ -54,6 +53,9 @@ from easy_cheese_schemas.contracts import (
     SourceLocationWriterView,
     SourcePlanRef,
     WriterViewKind,
+    canonical_bytes,
+    canonical_digest,
+    curd_plan_digest,
     derive_curd_disposition,
 )
 DRAFT_2020_12 = "https://json-schema.org/draft/2020-12/schema"
@@ -619,52 +621,10 @@ def _structure(value: object, annotation: object, path: str = "$") -> object:
     raise TypeError(f"unsupported structure annotation {annotation!r}")
 
 
-def _unstructure(value: object) -> object:
-    if attrs.has(type(value)):
-        return {
-            attribute.name: _unstructure(cast(object, getattr(value, attribute.name)))
-            for attribute in cast("tuple[Attribute[object], ...]", attrs.fields(type(value)))
-        }
-    if isinstance(value, Enum):
-        return cast(object, value.value)
-    if isinstance(value, tuple):
-        tuple_value = cast("tuple[object, ...]", value)
-        return [_unstructure(item) for item in tuple_value]
-    if isinstance(value, list):
-        list_value = cast("list[object]", value)
-        return [_unstructure(item) for item in list_value]
-    if isinstance(value, Mapping):
-        mapping_value = cast("Mapping[object, object]", value)
-        return {str(key): _unstructure(item) for key, item in mapping_value.items()}
-    return value
-
-def canonical_bytes(value: object) -> bytes:
-    return _json_bytes(_unstructure(value))
-
-
-def canonical_digest(value: object) -> str:
-    return f"sha256:{hashlib.sha256(canonical_bytes(value)).hexdigest()}"
-
-
 def _artifact(
     value: object, source_version: ContractVersion | None
 ) -> CanonicalArtifact:
     return CanonicalArtifact(value, canonical_bytes(value), source_version)
-
-
-def curd_plan_digest(plan: object) -> str:
-    if not isinstance(plan, CurdPlan):
-        raise TypeError(f"curd_plan_digest expects CurdPlan, not {type(plan).__name__}")
-    unsigned = {
-        "contract_version": plan.contract_version,
-        "plan_id": plan.plan_id,
-        "revision": plan.revision,
-        "objective": plan.objective,
-        "curds": plan.curds,
-        "context": plan.context,
-        "parent_plan_ref": plan.parent_plan_ref,
-    }
-    return canonical_digest(unsigned)
 
 
 def _validate_curd_plan_against(
@@ -680,11 +640,6 @@ def _validate_curd_plan_against(
         raise ContractValidationError(
             f"unsupported contract version {source.major}.{source.minor} "
             + f"for {registered.schema_uri}; expected {supported.major}.{supported.minor}"
-        )
-    expected = curd_plan_digest(plan)
-    if plan.digest != expected:
-        raise ContractValidationError(
-            f"CurdPlan digest mismatch: expected {expected}, got {plan.digest}"
         )
     return plan
 
@@ -942,7 +897,7 @@ def _normalize_plan(
         if parent_raw is None
         else _typed_host(parent_raw, SourcePlanRef, "invocation.parent_plan_ref")
     )
-    placeholder = CurdPlan(
+    return CurdPlan.signed(
         contract_version=version,
         plan_id=plan_id,
         revision=revision,
@@ -950,9 +905,7 @@ def _normalize_plan(
         curds=tuple(curds),
         context=context,
         parent_plan_ref=parent,
-        digest="sha256:" + "0" * 64,
     )
-    return attrs.evolve(placeholder, digest=curd_plan_digest(placeholder))
 
 
 
