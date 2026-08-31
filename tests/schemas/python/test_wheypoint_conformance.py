@@ -599,6 +599,7 @@ def test_rehydration_evidence_requires_a_declared_compaction() -> None:
         "rehydrated_from_revision_id": "rev-0002",
         "rehydrated_record_digest": DIGEST,
         "reconciled_entry_ids": ["q1"],
+        "reconciliation_source_session_ids": ["s-42"],
     }
     problems = refused(delta(compacted=False, compaction=evidence), WheypointDelta)
     assert blames(problems, "WheypointDelta.compaction")
@@ -606,6 +607,9 @@ def test_rehydration_evidence_requires_a_declared_compaction() -> None:
     assert value.compaction is not None
     assert value.compaction.rehydrated_from_revision_id == "rev-0002"
     assert value.compaction.reconciled_entry_ids == ["q1"]
+    assert value.compaction.reconciliation_source_session_ids == ["s-42"]
+    # Derived by the runtime from the lineage, never carried by the request.
+    assert value.compaction.prior_compaction_revision_id is None
 
 
 def test_a_compaction_record_must_quote_a_digest_of_the_record_it_re_read() -> None:

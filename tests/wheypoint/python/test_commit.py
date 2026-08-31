@@ -577,6 +577,70 @@ def test_compaction_rehydrated_from_a_superseded_revision_is_rejected(
     assert store.read_record() == second.record
 
 
+def test_a_later_compaction_chains_to_the_one_before_it(
+    store: storage.WorkStore, make_promotion: Callable[..., Promotion]
+) -> None:
+    seed = _seed(store, make_promotion)
+    first = commit.commit(
+        _delta(
+            seed.record.revision_id,
+            orientation="First compaction.",
+            compacted=True,
+            compaction=_compaction(seed.record),
+        ),
+        store=store,
+    )
+    between = commit.commit(
+        _delta(first.record.revision_id, orientation="Ordinary work in between."),
+        store=store,
+    )
+    second = commit.commit(
+        _delta(
+            between.record.revision_id,
+            orientation="Second compaction.",
+            compacted=True,
+            compaction=_compaction(between.record),
+        ),
+        store=store,
+    )
+
+    assert first.revision.compaction is not None
+    assert first.revision.compaction.prior_compaction_revision_id is None
+    assert second.revision.compaction is not None
+    assert (
+        second.revision.compaction.prior_compaction_revision_id
+        == first.revision.revision_id
+    )
+    # Derived from the lineage on disk, so the receipt reads back the same way
+    # a cold reader would re-derive it.
+    stored = store.read_revision(4, second.revision.revision_id)
+    assert stored == second.revision
+
+
+def test_a_delta_may_not_declare_its_own_prior_compaction(
+    store: storage.WorkStore, make_promotion: Callable[..., Promotion]
+) -> None:
+    seed = _seed(store, make_promotion)
+    after_seed = _revision_files(store)
+
+    with pytest.raises(commit.CommitError) as raised:
+        _ = commit.commit(
+            _delta(
+                seed.record.revision_id,
+                orientation="Naming my own past.",
+                compacted=True,
+                compaction=_compaction(
+                    seed.record, prior_compaction_revision_id="rev-000000000001"
+                ),
+            ),
+            store=store,
+        )
+
+    assert "may not declare prior_compaction_revision_id" in str(raised.value)
+    assert _revision_files(store) == after_seed
+    assert store.read_record() == seed.record
+
+
 def test_a_compacted_delta_without_a_compaction_record_is_rejected(
     store: storage.WorkStore, make_promotion: Callable[..., Promotion]
 ) -> None:

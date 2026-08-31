@@ -427,11 +427,26 @@ class CompactionRecord:
     it reconciled against. Together those three are a reconciliation report: a
     claim that can only be made by a session that actually reloaded the durable
     state, and one a later reader can re-derive rather than take on faith.
+
+    `prior_compaction_revision_id` chains one compaction to the one before it,
+    so a lineage that survived several of them reads as a history rather than as
+    a single most-recent event. It is *derived by the runtime*, never accepted
+    from the delta: the compacted session is the one writer whose memory of the
+    lineage is known to be unreliable, and letting it name its own predecessor
+    would let it name none. `reconciliation_source_session_ids` is provenance in
+    the sense the module docstring means -- it says which sessions the reconciled
+    state was gathered from, and nothing selects on it.
     """
 
     rehydrated_from_revision_id: str = field(validator=_identifier)
     rehydrated_record_digest: str = field(validator=_digest)
     reconciled_entry_ids: list[str] = field(validator=_identifier_ledger)
+    prior_compaction_revision_id: str | None = field(
+        default=None, validator=validators.optional(_identifier)
+    )
+    reconciliation_source_session_ids: list[str] = field(
+        factory=list, validator=_identifier_list
+    )
 
 
 @define(frozen=True)
