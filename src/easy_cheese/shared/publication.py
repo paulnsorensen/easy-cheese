@@ -48,6 +48,7 @@ __all__ = [
     "IdempotencyConflictError",
     "PayloadDigestMismatchError",
     "PointerNotFoundError",
+    "PublicationError",
     "UnrecoverableSyntaxError",
     "UnsafeArtifactUriError",
     "accept",
@@ -58,19 +59,28 @@ __all__ = [
 ]
 
 
-class UnrecoverableSyntaxError(ValueError):
+class PublicationError(ValueError):
+    """Base for every error the publication gateway itself raises.
+
+    A caller across the Mold-to-Cook boundary can catch this one type to
+    reject any publication-gateway failure as a diagnosed error, instead of
+    letting an unlisted member of the family escape as a raw traceback.
+    """
+
+
+class UnrecoverableSyntaxError(PublicationError):
     """No closed syntax-repair subset makes the agent writer text parse."""
 
 
-class AmbiguousSyntaxRepairError(ValueError):
+class AmbiguousSyntaxRepairError(PublicationError):
     """More than one distinct syntax-repair candidate parses the text."""
 
 
-class IdempotencyConflictError(ValueError):
+class IdempotencyConflictError(PublicationError):
     """``operation_id`` replayed with a request that does not match."""
 
 
-class CorruptLeftoverError(ValueError):
+class CorruptLeftoverError(PublicationError):
     """A prepared payload or receipt file does not match its content digest.
 
     Raised on retry after an interrupted publication when a leftover file was
@@ -79,15 +89,15 @@ class CorruptLeftoverError(ValueError):
     """
 
 
-class PointerNotFoundError(ValueError):
+class PointerNotFoundError(PublicationError):
     """``pointer_path`` does not reference an existing pointer file."""
 
 
-class PayloadDigestMismatchError(ValueError):
+class PayloadDigestMismatchError(PublicationError):
     """A previously revealed pointer's payload no longer matches its digest."""
 
 
-class UnsafeArtifactUriError(ValueError):
+class UnsafeArtifactUriError(PublicationError):
     """An artifact URI is not a ``file://`` URI contained in the artifact root."""
 
 
@@ -548,6 +558,7 @@ def accept(
     *,
     destination_phase: str,
     payload_schema_uri: str,
+    artifact_root: str | Path | None = None,
 ) -> AcceptedArtifact:
     """Validate a canonical ``HandoffPointer`` and return its AcceptedArtifact.
 
@@ -555,18 +566,22 @@ def accept(
     canonical payload handed to this function is rejected because it will
     not conform to the handoff-pointer schema, and a missing path raises
     :class:`PointerNotFoundError` rather than a misdiagnosed JSON error.
-    Execution may proceed only once this function returns: the pointer's
-    contract version is checked for strict equality, its
-    ``source_phase -> destination_phase`` route is validated against the
-    compiled phase registry, every referenced artifact (payload and, when
-    present, normalization receipt) is checked for file existence and digest
-    match, a present receipt is bound to the canonical payload's digest, and
-    the canonical payload itself is validated against ``payload_schema_uri``.
+    ``artifact_root`` is the caller-declared artifact root; when omitted, it
+    is derived from ``pointer_path``'s resolved (not merely relative) parent
+    directory, so accepting a pointer via a relative path from inside its
+    own ``pointers/`` directory still resolves the correct root. Execution
+    may proceed only once this function returns: the pointer's contract
+    version is checked for strict equality, its ``source_phase ->
+    destination_phase`` route is validated against the compiled phase
+    registry, every referenced artifact (payload and, when present,
+    normalization receipt) is checked for file existence and digest match, a
+    present receipt is bound to the canonical payload's digest, and the
+    canonical payload itself is validated against ``payload_schema_uri``.
     """
     path = Path(pointer_path)
     if not path.is_file():
         raise PointerNotFoundError(f"pointer not found at {path}")
-    artifact_root = path.parent.parent
+    root = Path(artifact_root) if artifact_root is not None else path.resolve().parent.parent
     pointer = _read_pointer(path)
 
     if pointer.destination_phase != destination_phase:
@@ -581,14 +596,14 @@ def accept(
         payload_schema_uri,
     )
 
-    payload_bytes = _verify_artifact_ref(pointer.payload, artifact_root)
+    payload_bytes = _verify_artifact_ref(pointer.payload, root)
     canonical = validate_contract(
         payload_bytes, payload_schema_uri, supported_version_for(payload_schema_uri)
     )
 
     receipt_ref = pointer.normalization_receipt
     if receipt_ref is not None:
-        receipt_bytes = _verify_artifact_ref(receipt_ref, artifact_root)
+        receipt_bytes = _verify_artifact_ref(receipt_ref, root)
         receipt_artifact = validate_contract(receipt_bytes, NormalizationReceipt, None)
         receipt = receipt_artifact.value
         assert isinstance(receipt, NormalizationReceipt)
