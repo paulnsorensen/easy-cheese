@@ -697,6 +697,13 @@ class WheypointRevision:
     projection_path: str = field(validator=_bounded_text)
     projection_digest: str = field(validator=_digest)
     repository: RepositoryProvenance
+    # What the parent receipt hashed to when this one was written. The parent id
+    # names an ancestor; the digest pins *which* ancestor, so a receipt edited
+    # after the fact no longer matches the child that quoted it. Null for the
+    # genesis revision, and for any receipt written before schema version 2.
+    parent_revision_digest: str | None = field(
+        default=None, validator=validators.optional(_digest)
+    )
     compaction: CompactionRecord | None = None
     session_provenance: SessionProvenance | None = None
 

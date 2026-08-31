@@ -388,6 +388,20 @@ def test_revision_accepts_a_genesis_parent_and_bare_repository_provenance() -> N
     assert value.repository.branch is None
 
 
+def test_revision_parent_digest_is_optional_but_must_be_a_digest() -> None:
+    """A receipt written before the pin existed omits the field entirely."""
+    legacy = revision()
+    assert "parent_revision_digest" not in legacy
+    assert structured(legacy, WheypointRevision).parent_revision_digest is None
+
+    pinned = structured(revision(parent_revision_digest=DIGEST), WheypointRevision)
+    assert pinned.parent_revision_digest == DIGEST
+    assert blames(
+        refused(revision(parent_revision_digest="rev-0002"), WheypointRevision),
+        "WheypointRevision.parent_revision_digest",
+    )
+
+
 def test_revision_number_must_be_positive() -> None:
     assert blames(
         refused(revision(revision_number=0), WheypointRevision),

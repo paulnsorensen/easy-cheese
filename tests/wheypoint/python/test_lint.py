@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Protocol
 
 import pytest
+from attrs import evolve
 from easy_cheese_schemas import (
     ArtifactLink,
     EntryKind,
@@ -184,7 +185,7 @@ def test_a_present_parent_chain_lints_clean(
     store = make_store(corpus_root)
     first = make_promotion(1, "rev-0001")
     store.promote(first.record, first.revision, first.markdown)
-    second = make_promotion(2, "rev-0002", parent="rev-0001")
+    second = make_promotion(2, "rev-0002", parent=first)
     store.promote(second.record, second.revision, second.markdown)
 
     report = check(store)
@@ -192,6 +193,84 @@ def test_a_present_parent_chain_lints_clean(
     assert report.codes == ()
     assert report.record is not None
     assert report.record.revision_id == "rev-0002"
+
+
+def test_a_tampered_ancestor_receipt_breaks_the_pin_and_stops_the_walk(
+    corpus_root: Path, make_promotion: Callable[..., _PromotionLike]
+) -> None:
+    """Editing a receipt after the fact is exactly what the pin catches.
+
+    `preserved_entry_ids` is covered by no record digest, so this edit was
+    invisible before the pin. The forged carry-forward is also how the break is
+    observed: had the walk continued past the tampered link, 'q-forged' would
+    have been accounted for by lineage and lost by the record, and a second
+    finding would stand beside this one.
+    """
+    store = make_store(corpus_root)
+    first = make_promotion(1, "rev-0001")
+    store.promote(first.record, first.revision, first.markdown)
+    second = make_promotion(2, "rev-0002", parent=first)
+    store.promote(second.record, second.revision, second.markdown)
+    third = make_promotion(3, "rev-0003", parent=second)
+    store.promote(third.record, third.revision, third.markdown)
+    tampered = evolve(second.revision, preserved_entry_ids=["q-forged"])
+    _ = store.revision_path(2, "rev-0002").write_bytes(
+        records.canonical_payload(tampered)
+    )
+
+    report = check(store)
+
+    assert report.codes == (lint.LintCode.PARENT_DIGEST_MISMATCH,)
+    assert report.findings[0].detail.startswith(
+        "revision 'rev-0003' pins parent 'rev-0002' at "
+    )
+    assert records.revision_digest(tampered) in report.findings[0].detail
+    assert lint.gates_continuation(report.findings[0])
+
+
+def test_a_current_receipt_that_names_a_parent_without_pinning_it_is_flagged(
+    corpus_root: Path, make_promotion: Callable[..., _PromotionLike]
+) -> None:
+    store = make_store(corpus_root)
+    first = make_promotion(1, "rev-0001")
+    store.promote(first.record, first.revision, first.markdown)
+    unpinned = make_promotion(2, "rev-0002", parent="rev-0001")
+    store.promote(unpinned.record, unpinned.revision, unpinned.markdown)
+
+    report = check(store)
+
+    assert report.codes == (lint.LintCode.PARENT_DIGEST_MISMATCH,)
+    assert report.findings[0].detail == (
+        "revision 'rev-0002' is stamped schema version 2 and names parent "
+        "'rev-0001' without pinning its digest"
+    )
+
+
+def test_a_legacy_receipt_without_the_pin_is_left_alone(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    """Schema version 1 predates the field, so its absence proves nothing."""
+    store = make_store(corpus_root)
+    first = make_promotion(1, "rev-0001", record=make_record(schema_version=1))
+    store.promote(first.record, first.revision, first.markdown)
+    second = make_promotion(
+        2,
+        "rev-0002",
+        parent="rev-0001",
+        record=make_record(schema_version=1, revision_id="rev-0002", revision_number=2),
+    )
+    legacy = evolve(second.revision, schema_version=1)
+    store.promote(
+        evolve(second.record, revision_digest=records.revision_digest(legacy)),
+        legacy,
+        second.markdown,
+    )
+
+    report = check(store)
+
+    assert report.codes == ()
 
 
 def test_a_record_from_another_project_never_dispatches_here(
@@ -260,7 +339,7 @@ def test_a_narrowed_rewrite_that_drops_a_prior_decision_is_reported(
     narrowed = make_promotion(
         2,
         "rev-0002",
-        parent="rev-0001",
+        parent=full,
         record=make_record(
             revision_id="rev-0002", revision_number=2, decisions=[kept]
         ),
@@ -295,7 +374,7 @@ def test_a_rewrite_that_carries_every_accounted_entry_lints_clean(
     later = make_promotion(
         2,
         "rev-0002",
-        parent="rev-0001",
+        parent=full,
         record=make_record(
             revision_id="rev-0002", revision_number=2, decisions=[kept, carried]
         ),
@@ -453,7 +532,7 @@ def test_a_revision_pin_on_a_walked_ancestor_lints_clean(
     second = make_promotion(
         2,
         "rev-0002",
-        parent="rev-0001",
+        parent=first,
         record=revision_pinned_record(
             make_record, "rev-0001", revision_id="rev-0002", revision_number=2
         ),

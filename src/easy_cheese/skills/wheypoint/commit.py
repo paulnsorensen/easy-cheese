@@ -502,6 +502,10 @@ def _apply(
         draft,
         compaction=compaction,
         parent_revision_id=current.revision_id,
+        # `_check_lineage` has already proven the record's own pointer against
+        # the receipt on disk, so quoting it here pins the ancestor rather than
+        # re-asserting it.
+        parent_revision_digest=current.revision_digest,
         fingerprint=fingerprint,
         additions=[entry for kind in _ADDITION_FIELDS for entry in additions[kind]],
         transitions=transitions,
@@ -590,6 +594,7 @@ def _genesis(
         draft,
         compaction=None,
         parent_revision_id=None,
+        parent_revision_digest=None,
         fingerprint=fingerprint,
         additions=[entry for kind in _ADDITION_FIELDS for entry in additions[kind]],
         transitions=[],
@@ -611,6 +616,7 @@ def _finish(
     *,
     compaction: CompactionRecord | None,
     parent_revision_id: str | None,
+    parent_revision_digest: str | None,
     fingerprint: str,
     additions: list[ProtectedEntry],
     transitions: list[EntryTransition],
@@ -638,6 +644,7 @@ def _finish(
         ),
         projection_digest=projected.projection_digest,
         repository=repository,
+        parent_revision_digest=parent_revision_digest,
         compaction=compaction,
         session_provenance=delta.session_provenance,
     )

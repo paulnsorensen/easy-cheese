@@ -128,7 +128,7 @@ def _promotion(
     number: int = 1,
     revision_id: str = "rev-0001",
     *,
-    parent: str | None = None,
+    parent: str | Promotion | None = None,
     record: WheypointRecord | None = None,
     gating: bool = False,
     additions: list[ProtectedEntry] | None = None,
@@ -140,10 +140,23 @@ def _promotion(
     projected, markdown = projection.build_projection(
         base, durability=Durability.CANONICAL_LOCAL
     )
+    # A parent given as a Promotion is the real ancestor, so the receipt can pin
+    # its digest the way the commit transaction does; a bare id is the ancestor
+    # a test means to leave unresolvable or unpinned.
+    parent_promotion = parent if isinstance(parent, Promotion) else None
     revision = WheypointRevision(
         schema_version=SCHEMA_VERSION,
         work_id=base.work_id,
-        parent_revision_id=parent,
+        parent_revision_id=(
+            parent_promotion.revision.revision_id
+            if parent_promotion is not None
+            else cast(str | None, parent)
+        ),
+        parent_revision_digest=(
+            None
+            if parent_promotion is None
+            else records.revision_digest(parent_promotion.revision)
+        ),
         revision_id=base.revision_id,
         revision_number=base.revision_number,
         request_digest=canonical.digest_text(f"request-{number}"),

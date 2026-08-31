@@ -29,6 +29,11 @@ from . import records, storage
 
 _GIT_TIMEOUT_SECONDS = 5
 
+# The version that first pinned each receipt to its parent's digest. A receipt
+# stamped at or above it and missing the pin is not merely old: its producer
+# knew the field and did not write it.
+_PARENT_DIGEST_SINCE = 2
+
 
 class LintCode(str, Enum):
     """Why a checkpoint cannot be acted on automatically."""
@@ -41,6 +46,7 @@ class LintCode(str, Enum):
     PROJECTION_STATUS_MISMATCH = "projection-status-mismatch"
     PROJECTION_RECORD_MISMATCH = "projection-record-mismatch"
     PARENT_UNRESOLVED = "parent-unresolved"
+    PARENT_DIGEST_MISMATCH = "parent-digest-mismatch"
     PROJECT_MISMATCH = "project-mismatch"
     GIT_OBJECT_MISSING = "git-object-missing"
     ARTIFACT_COVERAGE_INVALID = "artifact-coverage-invalid"
@@ -332,10 +338,49 @@ def _walk_chain(
                 )
             )
             break
+        mismatch = _parent_digest_finding(revision, parent)
+        if mismatch is not None:
+            # The chain is not walked past an ancestor this receipt does not
+            # actually pin: everything behind it is reached only through a link
+            # that no longer holds, so it cannot be reported as proven ancestry.
+            findings.append(mismatch)
+            break
         seen.add(parent_id)
         walked.append(parent)
         revision = parent
     return _Chain(revisions=tuple(walked), findings=tuple(findings))
+
+
+def _parent_digest_finding(
+    revision: WheypointRevision, parent: WheypointRevision
+) -> LintFinding | None:
+    """Check the pin a receipt puts on the ancestor it was written against.
+
+    The *revision* digest is what is compared, not the parent's
+    `record_digest`: a record digest covers the record, and the tampering this
+    catches is an edit to the receipt itself -- to `preserved_entry_ids`, say,
+    which no record digest is over. A receipt written before schema version 2
+    carries no pin and is left alone; one stamped at or above it and still
+    missing the pin is reported, because its producer knew the field.
+    """
+    pinned = revision.parent_revision_digest
+    if pinned is None:
+        if revision.schema_version < _PARENT_DIGEST_SINCE:
+            return None
+        return LintFinding(
+            LintCode.PARENT_DIGEST_MISMATCH,
+            f"revision {revision.revision_id!r} is stamped schema version "
+            + f"{revision.schema_version} and names parent "
+            + f"{parent.revision_id!r} without pinning its digest",
+        )
+    actual = records.revision_digest(parent)
+    if pinned == actual:
+        return None
+    return LintFinding(
+        LintCode.PARENT_DIGEST_MISMATCH,
+        f"revision {revision.revision_id!r} pins parent {parent.revision_id!r} "
+        + f"at {pinned}, but that receipt now hashes to {actual}",
+    )
 
 
 def _conservation_findings(

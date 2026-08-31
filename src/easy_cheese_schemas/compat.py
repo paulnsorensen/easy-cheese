@@ -35,7 +35,9 @@ from cattrs.cols import list_structure_factory
 from cattrs.errors import AttributeValidationNote, IterableValidationNote
 from cattrs.gen import make_dict_structure_fn
 
-SCHEMA_VERSION = 1
+# 2 adds WheypointRevision.parent_revision_digest, which pins each receipt to
+# the exact ancestor it was written against.
+SCHEMA_VERSION = 2
 MIN_READABLE = 1  # N-1 tolerance; widens as the schema evolves
 STAMP_KEY = "schema_version"
 
