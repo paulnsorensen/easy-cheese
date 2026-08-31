@@ -1,0 +1,107 @@
+{
+  "expect_first_pass_valid": true,
+  "invocation": {
+    "evidence": {
+      "evidence-1": {
+        "artifact": {
+          "artifact_id": "artifact-source",
+          "digest": "sha256:0000000000000000000000000000000000000000000000000000000000000001",
+          "media_type": "text/markdown",
+          "role": "source",
+          "schema_uri": null,
+          "size_bytes": 1025,
+          "uri": "repo://inputs/source.md"
+        },
+        "evidence_id": "evidence-1",
+        "kind": "review",
+        "location": null,
+        "summary": "The planner dispatch boundary is under review."
+      }
+    },
+    "plan": {
+      "artifacts": {
+        "source": {
+          "artifact_id": "artifact-source",
+          "digest": "sha256:0000000000000000000000000000000000000000000000000000000000000001",
+          "media_type": "text/markdown",
+          "role": "source",
+          "schema_uri": null,
+          "size_bytes": 1025,
+          "uri": "repo://inputs/source.md"
+        }
+      },
+      "lineages": {
+        "core": {
+          "identity_action": "new",
+          "source_curd_ids": []
+        }
+      },
+      "plan_id": "planner-benchmark-plan",
+      "versions": {
+        "https://schemas.easy-cheese.dev/curd-plan": {
+          "major": "1",
+          "minor": "0",
+          "schema_uri": "https://schemas.easy-cheese.dev/curd-plan"
+        }
+      }
+    },
+    "request_id": "planner-request-benchmark",
+    "versions": {
+      "https://schemas.easy-cheese.dev/planner-result": {
+        "major": "1",
+        "minor": "0",
+        "schema_uri": "https://schemas.easy-cheese.dev/planner-result"
+      }
+    }
+  },
+  "name": "planner-result-complete",
+  "provenance": "synthetic",
+  "source": "Synthetic seed derived from the four-case representative benchmark recorded in docs/architecture/milknado-semantic-boundary-reassessment.md; not captured agent output.",
+  "writer_view": {
+    "kind": "planner_result",
+    "payload": {
+      "disposition": "complete",
+      "plan": {
+        "context": {
+          "constraints": [
+            "Only the approved planner input is in scope."
+          ],
+          "invariants": [
+            "Host identity is never supplied by the writer."
+          ],
+          "shared_input_keys": [
+            "source"
+          ]
+        },
+        "curds": [
+          {
+            "criteria": [
+              {
+                "check": "The normalized plan has host identity.",
+                "description": "The planner result is canonical."
+              }
+            ],
+            "dependencies": [],
+            "input_keys": [
+              "source"
+            ],
+            "key": "core",
+            "outcome": "Complete the planner benchmark slice.",
+            "outputs": [
+              "The planner slice is materialized."
+            ],
+            "scope": {
+              "excluded_paths": [],
+              "paths": [
+                "src/planner.py"
+              ]
+            }
+          }
+        ],
+        "objective": "Measure planner-result normalization."
+      },
+      "reason": null,
+      "unresolved_work": []
+    }
+  }
+}
