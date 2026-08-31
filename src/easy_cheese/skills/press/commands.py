@@ -12,7 +12,11 @@ COMMANDS = (
         "easy_cheese.shared.fanout.press_route_cli:main",
         "Decide whether Press continues or stops (JSON in, JSON out)",
     ),
-    Command("press-telemetry", "easy_cheese.shared.fanout.press_telemetry_cli:main"),
+    Command(
+        "press-telemetry",
+        "easy_cheese.shared.fanout.press_telemetry_cli:main",
+        "Build the Press attempt telemetry record (JSON in, JSON out)",
+    ),
 )
 
 
