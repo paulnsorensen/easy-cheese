@@ -36,6 +36,29 @@ def test_check_and_ci_depend_on_dead_code() -> None:
         assert "lint-py-dead-code" in dependencies
 
 
+@needs_just
+def test_check_and_ci_depend_on_bundle_currency() -> None:
+    """check runs the index-mode bundle check; ci runs the head-mode one."""
+    result = subprocess.run(
+        ["just", "--dump", "--dump-format", "json"],
+        cwd=ROOT,
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    recipes = cast(dict[str, object], json.loads(result.stdout)["recipes"])
+
+    def dependencies(name: str) -> set[str]:
+        recipe = cast(dict[str, object], recipes[name])
+        deps = cast(list[dict[str, object]], recipe["dependencies"])
+        return {cast(str, dependency["recipe"]) for dependency in deps}
+
+    assert "check-bundles" in dependencies("check")
+    assert "check-bundles-ci" in dependencies("ci")
+    assert "bundle" in dependencies("check-bundles-ci")
+
+
 def test_ci_jobs_pin_tools() -> None:
     """Test and lint jobs pin both uv and just setup actions."""
     jobs = cast(
