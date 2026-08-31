@@ -7,7 +7,11 @@ import sys
 from easy_cheese.shared.bundle_commands import Command, dispatch
 
 COMMANDS = (
-    Command("checkpoint", "easy_cheese.skills.wheypoint.wheypoint:checkpoint_main"),
+    Command(
+        "checkpoint",
+        "easy_cheese.skills.wheypoint.wheypoint:checkpoint_main",
+        "Build a delta from a semantic intent and commit it",
+    ),
     Command(
         "commit",
         "easy_cheese.skills.wheypoint.wheypoint:commit_main",
