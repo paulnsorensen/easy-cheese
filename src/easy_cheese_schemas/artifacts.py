@@ -29,6 +29,8 @@ __all__ = [
     "resolve_verified_bytes",
 ]
 
+SchemaValidator = Callable[[bytes, str], None]
+
 _READ_CHUNK_BYTES = 64 * 1024
 
 _REDIRECT_CODES = frozenset({301, 302, 303, 307, 308})
@@ -58,6 +60,7 @@ def resolve_artifact(
     *,
     repository_root: str | Path = ".",
     artifact_directory: str | Path,
+    schema_validator: SchemaValidator | None = None,
 ) -> ResolvedAgentArtifact:
     if artifact_directory is None:  # pyright: ignore[reportUnnecessaryComparison]
         raise ArtifactResolutionError("artifact_directory is required")  # pyright: ignore[reportUnreachable]
@@ -95,15 +98,19 @@ def resolve_artifact(
         content,
         detected_type,
         artifact_directory,
+        schema_validator,
     )
+
+
 def resolve_verified_bytes(
     artifact: ArtifactRef,
     content: bytes,
     detected_type: str,
     artifact_directory: str | Path,
+    schema_validator: SchemaValidator | None = None,
 ) -> ResolvedAgentArtifact:
     _validate_integrity(artifact, content, detected_type)
-    _validate_schema(artifact, content)
+    _validate_schema(artifact, content, schema_validator)
     path = _retain_verified_bytes(content, artifact_directory)
     return _agent_view(artifact, path)
 
@@ -515,7 +522,11 @@ def _reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]
     return document
 
 
-def _validate_schema(artifact: ArtifactRef, content: bytes) -> None:
+def _validate_schema(
+    artifact: ArtifactRef,
+    content: bytes,
+    schema_validator: SchemaValidator | None,
+) -> None:
     if artifact.schema_uri is None:
         return
     media_type = _base_media_type(artifact.media_type)
@@ -533,7 +544,8 @@ def _validate_schema(artifact: ArtifactRef, content: bytes) -> None:
         raise ArtifactResolutionError("schema artifact must contain a JSON object")
 
     try:
-        _validate_registered_schema(content, artifact.schema_uri)
+        validator = schema_validator or _validate_registered_schema
+        validator(content, artifact.schema_uri)
     except ArtifactResolutionError:
         raise
     except ValueError as exc:

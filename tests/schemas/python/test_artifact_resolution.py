@@ -18,6 +18,7 @@ import easy_cheese_schemas.artifacts as artifacts_module
 from easy_cheese_schemas.artifacts import (
     ArtifactResolutionError,
     resolve_artifact,
+    resolve_verified_bytes,
 )
 from easy_cheese_schemas.contracts import (
     ArtifactRef,
@@ -492,6 +493,59 @@ def test_validates_declared_schema_before_exposure(tmp_path: Path) -> None:
     resolved_path = Path(resolved.path)
     assert resolved_path.read_bytes() == content
     assert resolved_path != source.resolve()
+
+
+def test_resolve_artifact_accepts_custom_schema_validator_before_materialization(
+    tmp_path: Path,
+) -> None:
+    content = b'{"value": 1}'
+    source = tmp_path / "input.json"
+    _ = source.write_bytes(content)
+    artifact_directory = tmp_path / "resolved"
+    schema_uri = "https://example.test/custom-schema"
+    calls: list[tuple[bytes, str]] = []
+
+    def validate(actual_content: bytes, actual_schema_uri: str) -> None:
+        assert not artifact_directory.exists()
+        calls.append((actual_content, actual_schema_uri))
+
+    resolved = resolve_artifact(
+        artifact_ref(
+            source.as_uri(),
+            content,
+            media_type="application/json",
+            schema_uri=schema_uri,
+        ),
+        artifact_directory=artifact_directory,
+        schema_validator=validate,
+    )
+
+    assert calls == [(content, schema_uri)]
+    assert Path(resolved.path).read_bytes() == content
+
+
+def test_resolve_verified_bytes_accepts_custom_schema_validator(tmp_path: Path) -> None:
+    content = b'{"value": 1}'
+    schema_uri = "https://example.test/custom-schema"
+    calls: list[tuple[bytes, str]] = []
+
+    resolved = resolve_verified_bytes(
+        artifact_ref(
+            "file:///unused.json",
+            content,
+            media_type="application/json",
+            schema_uri=schema_uri,
+        ),
+        content,
+        "application/json",
+        tmp_path / "resolved",
+        lambda actual_content, actual_schema_uri: calls.append(
+            (actual_content, actual_schema_uri)
+        ),
+    )
+
+    assert calls == [(content, schema_uri)]
+    assert Path(resolved.path).read_bytes() == content
 
 
 def test_rejects_schema_mismatch_before_exposure(tmp_path: Path) -> None:
