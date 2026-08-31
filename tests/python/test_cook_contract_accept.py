@@ -223,6 +223,18 @@ def test_cook_pyz_rejects_missing_payload_file(tmp_path: Path) -> None:
     assert "Traceback" not in result.stderr
 
 
+def test_cook_pyz_rejects_unsafe_artifact_uri(tmp_path: Path) -> None:
+    pointer_path, pointer = _publish(tmp_path, "op-unsafe-uri")
+    payload = cast(dict[str, object], pointer["payload"])
+    payload["uri"] = "https://example.com/payload.json"
+    _ = pointer_path.write_text(json.dumps(pointer), encoding="utf-8")
+    result = _accept(pointer_path)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert result.stderr.startswith("ERROR:")
+    assert "is not a file:// uri" in result.stderr
+    assert "Traceback" not in result.stderr
+
+
 def test_cook_pyz_rejects_missing_pointer_file(tmp_path: Path) -> None:
     missing_pointer = tmp_path / "does-not-exist.json"
     result = _accept(missing_pointer)
