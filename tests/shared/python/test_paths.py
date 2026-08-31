@@ -41,8 +41,10 @@ class _PathsModule(Protocol):
         project: str | None = None,
         list_corpora: Callable[[], list[str]] | None = None,
         wiki_has_model: Callable[[str], bool] | None = None,
-    ) -> DomainModelTarget: ...
-    def slugify(self, text: str, *, max_words: int = 5) -> str: ...
+    ) -> DomainModelTarget:
+        raise NotImplementedError
+    def slugify(self, text: str, *, max_words: int = 5) -> str:
+        raise NotImplementedError
     def resolve_slug(
         self,
         slug: str,
@@ -83,45 +85,23 @@ class TestValidateSlug:
 
 
 class TestSlugify:
-    """`slugify()` pins the four deliberate divergences from a standard slugifier.
-
-    WHY these are asserted rather than delegated to `python-slugify` (#519): the
-    output is embedded in on-disk artifact paths, so any algorithm swap orphans
-    every already-written spec, report, and manifest. Each test below fails on
-    exactly the change a drop-in replacement would make.
-    """
-
-    def test_stopwords_are_dropped_before_the_word_cap(
-        self, paths: _PathsModule
+    @pytest.mark.parametrize(
+        ("text", "max_words", "expected"),
+        [
+            ("The quick brown fox jumps", 5, "quick-brown-fox-jumps"),
+            ("the alpha beta gamma delta epsilon", 5, "alpha-beta-gamma-delta-epsilon"),
+            ("one two three four five six", 2, "one-two"),
+            ("Über naïve café", 5, "ber-nave-caf"),
+            ("Don't Stop, Believin'!", 5, "dont-stop-believin"),
+            ("  multiple   spaces   here  ", 5, "multiple-spaces-here"),
+            ("wired -- dashes", 5, "wired-dashes"),
+            ("the a an of", 5, ""),
+        ],
+    )
+    def test_contract(
+        self, paths: _PathsModule, text: str, max_words: int, expected: str
     ) -> None:
-        # A standard slugifier keeps stopwords and would burn cap slots on them
-        # ("the-quick-brown-fox-jumps"); here they never reach the cap.
-        assert paths.slugify("The quick brown fox jumps") == "quick-brown-fox-jumps"
-        assert (
-            paths.slugify("the alpha beta gamma delta epsilon")
-            == "alpha-beta-gamma-delta-epsilon"
-        )
-
-    def test_word_cap_truncates_to_max_words(self, paths: _PathsModule) -> None:
-        assert paths.slugify("one two three four five six seven") == (
-            "one-two-three-four-five"
-        )
-        assert paths.slugify("one two three four five six", max_words=2) == "one-two"
-
-    def test_non_ascii_is_deleted_not_transliterated(
-        self, paths: _PathsModule
-    ) -> None:
-        # python-slugify would yield "uber-naive-cafe"; deletion is the contract.
-        assert paths.slugify("Über naïve café") == "ber-nave-caf"
-
-    def test_punctuation_and_whitespace_collapse(self, paths: _PathsModule) -> None:
-        assert paths.slugify("Don't Stop, Believin'!") == "dont-stop-believin"
-        assert paths.slugify("  multiple   spaces   here  ") == "multiple-spaces-here"
-        assert paths.slugify("wired -- dashes") == "wired-dashes"
-
-    def test_all_stopword_input_yields_empty_slug(self, paths: _PathsModule) -> None:
-        # The one output that is NOT a valid slug; callers must reject it.
-        assert paths.slugify("the a an of") == ""
+        assert paths.slugify(text, max_words=max_words) == expected
 
     @pytest.mark.parametrize(
         "text",
@@ -129,20 +109,17 @@ class TestSlugify:
             "The quick brown fox jumps",
             "Don't Stop, Believin'!",
             "Über naïve café",
-            "a" * 63 + " bbbb",  # truncation lands exactly on the hyphen
+            "a" * 63 + " bbbb",
             "a" * 200,
             "x" * 64 + " y",
         ],
     )
-    def test_output_is_always_accepted_by_validate_slug(
+    def test_nonempty_output_is_valid(
         self, paths: _PathsModule, text: str
     ) -> None:
-        # The module docstring promises "a slug accepted by one validator is
-        # accepted by all"; a 64-char cut landing on a hyphen used to emit a
-        # trailing-hyphen slug that validate_slug rejects.
         slug = paths.slugify(text)
         assert slug
-        assert paths.validate_slug(slug) is None, slug
+        assert paths.validate_slug(slug) is None
 
 
 @pytest.fixture
