@@ -31,7 +31,8 @@ import build_pyz  # noqa: E402
 class _RunFn(Protocol):
     def __call__(
         self, path: Path, *flags: str
-    ) -> subprocess.CompletedProcess[str]: ...
+    ) -> subprocess.CompletedProcess[str]:
+        raise NotImplementedError
 
 
 def _run_direct(path: Path, *flags: str) -> subprocess.CompletedProcess[str]:
@@ -455,6 +456,9 @@ def test_multiple_violations_accumulate_in_one_run(tmp_path: Path, _run: _RunFn)
     assert len(errors) == 3
     assert any("Risks" in line for line in errors)
     assert any("AC-1" in line and "tracer" in line for line in errors)
+    assert any(
+        "AC-2" in line and "contract-matrix" in line for line in errors
+    )
 
 
 # --- v0.13 legacy acceptance on read, hardened-only on mint ---------------
