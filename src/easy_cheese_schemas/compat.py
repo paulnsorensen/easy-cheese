@@ -25,6 +25,7 @@ possible.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
+from datetime import date
 from enum import Enum, auto
 from typing import Generic, TypeVar, cast, get_origin
 
@@ -45,10 +46,18 @@ __all__ = [
     "MIN_READABLE",
     "SCHEMA_VERSION",
     "STAMP_KEY",
+    "AdapterSunsetError",
+    "DuplicateAdapterError",
+    "LegacyAdapter",
     "Loaded",
     "Provenance",
+    "adapter_for",
+    "check_adapter_sunsets",
     "classify_stamp",
     "load",
+    "register_adapter",
+    "registered_adapters",
+    "unregister_adapter",
 ]
 
 _StructureHook = Callable[[object, object], object]
@@ -382,3 +391,85 @@ def _house(path: str, name: str | None, message: str) -> str:
     if message.startswith("must be"):
         return f"{path} {message}"
     return f"{path} must be valid: {message}"
+
+
+class DuplicateAdapterError(ValueError):
+    """An exact-version legacy adapter is already registered for this key."""
+
+
+class AdapterSunsetError(ValueError):
+    """An adapter whose declared ``remove_after`` has passed is still registered."""
+
+
+@define(frozen=True)
+class LegacyAdapter:
+    """A deterministic, exact-version transform from a persisted legacy
+    artifact shape to a current canonical payload.
+
+    No adapter applies heuristic or semantic coercion: it recognizes exactly
+    one ``(source_schema_uri, source_major, source_minor)`` and maps it to
+    exactly one ``target_schema_uri``. ``remove_after`` is declared at
+    introduction (an ISO ``YYYY-MM-DD`` date) so :func:`check_adapter_sunsets`
+    can fail a build once the adapter has outlived its planned removal.
+    """
+
+    source_schema_uri: str
+    source_major: str
+    source_minor: str
+    target_schema_uri: str
+    remove_after: str
+    convert: Callable[[Mapping[str, object]], Mapping[str, object]]
+
+
+_ADAPTERS: dict[tuple[str, str, str], LegacyAdapter] = {}
+
+
+def _adapter_key(adapter: LegacyAdapter) -> tuple[str, str, str]:
+    return (adapter.source_schema_uri, adapter.source_major, adapter.source_minor)
+
+
+def register_adapter(adapter: LegacyAdapter) -> None:
+    key = _adapter_key(adapter)
+    if key in _ADAPTERS:
+        raise DuplicateAdapterError(f"adapter already registered for {key}")
+    _ADAPTERS[key] = adapter
+
+
+def unregister_adapter(source_schema_uri: str, source_major: str, source_minor: str) -> None:
+    _ADAPTERS.pop((source_schema_uri, source_major, source_minor), None)
+
+
+def adapter_for(
+    source_schema_uri: str, source_major: str, source_minor: str
+) -> LegacyAdapter | None:
+    """The adapter registered for this exact source schema and version, if any.
+
+    Lookup is exact-match only: an off-by-one minor or an unregistered schema
+    URI returns ``None`` rather than falling back to a nearby version.
+    """
+    return _ADAPTERS.get((source_schema_uri, source_major, source_minor))
+
+
+def registered_adapters() -> tuple[LegacyAdapter, ...]:
+    return tuple(_ADAPTERS.values())
+
+
+def check_adapter_sunsets(reference_date: date) -> None:
+    """Fail when any registered adapter's ``remove_after`` has passed.
+
+    ``reference_date`` is supplied by the caller (a gate script reads today's
+    date from its environment; a test controls it directly) rather than read
+    from an ambient clock here, so this check is deterministic and testable.
+    """
+    expired = tuple(
+        adapter
+        for adapter in _ADAPTERS.values()
+        if date.fromisoformat(adapter.remove_after) <= reference_date
+    )
+    if expired:
+        names = ", ".join(
+            f"{adapter.source_schema_uri}@{adapter.source_major}.{adapter.source_minor}"
+            f" (remove_after {adapter.remove_after})"
+            for adapter in expired
+        )
+        raise AdapterSunsetError(f"expired legacy adapters still registered: {names}")
