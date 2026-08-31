@@ -22,7 +22,13 @@ from enum import Enum
 from pathlib import Path
 
 from attrs import define, field
-from easy_cheese_schemas import WheypointProjection, WheypointRecord, WheypointRevision
+from easy_cheese_schemas import (
+    Durability,
+    WheypointProjection,
+    WheypointRecord,
+    WheypointRevision,
+    WheypointStatus,
+)
 
 from . import projection as projection_mod
 from . import records, storage
@@ -51,6 +57,7 @@ class LintCode(str, Enum):
     GIT_OBJECT_MISSING = "git-object-missing"
     ARTIFACT_COVERAGE_INVALID = "artifact-coverage-invalid"
     ENTRY_DROPPED = "entry-dropped"
+    DURABILITY_LOCAL_ONLY = "durability-local-only"
 
 
 # Findings that describe the store's surroundings rather than the authority of
@@ -60,7 +67,14 @@ class LintCode(str, Enum):
 # spec gates automatic continuation on projection and record digests, the
 # parent chain, project identity, referenced Git objects, and required artifact
 # coverage -- an orphan is none of those, so it is reported, not enforced.
-ADVISORY_CODES = frozenset({LintCode.REVISION_INCOMPLETE})
+#
+# A canonical-local checkpoint over an open gate is likewise not an authority
+# problem: the record is exactly as valid as it says it is. What is at risk is
+# the human-owed state it holds, which no commit or publish has carried
+# anywhere. That is a choice for the operator, so it warns and does not block.
+ADVISORY_CODES = frozenset(
+    {LintCode.REVISION_INCOMPLETE, LintCode.DURABILITY_LOCAL_ONLY}
+)
 
 
 def gates_continuation(finding: LintFinding) -> bool:
@@ -238,7 +252,38 @@ def lint_work(
         findings.extend(_git_findings(current, git_object_exists))
 
     findings.extend(_coverage_findings(ancestry, record, artifact_digest))
+    if projection is not None:
+        findings.extend(_durability_findings(projection, record))
     return LintReport(findings=tuple(findings), record=record, projection=projection)
+
+
+def _durability_findings(
+    projection: WheypointProjection, record: WheypointRecord
+) -> list[LintFinding]:
+    """Warn when human-owed gating state has never left the local corpus.
+
+    `canonical-local` means the projection exists only in this corpus. That is
+    fine for a settled checkpoint -- it can be regenerated from the record. It
+    is not fine for a gated one: the gates are questions and decisions a person
+    still owes an answer to, and losing the corpus loses them. The runtime
+    cannot fix that itself, because it never commits and never publishes, so
+    this hands the operator the choice rather than making it.
+    """
+    if projection.durability is not Durability.CANONICAL_LOCAL:
+        return []
+    if record.status is not WheypointStatus.GATED:
+        return []
+    gates = ", ".join(record.gating_entry_ids)
+    return [
+        LintFinding(
+            LintCode.DURABILITY_LOCAL_ONLY,
+            f"revision {record.revision_id!r} still gates on {gates} and is "
+            + "canonical-local: that state exists nowhere but this corpus. "
+            + "Preserve it (snapshot the corpus into the repository) or "
+            + "publish it -- this runtime never commits and never publishes, "
+            + "so the choice is yours.",
+        )
+    ]
 
 
 def _incomplete_findings(

@@ -118,6 +118,9 @@ def test_commit_creates_the_first_record_from_a_genesis_delta_on_stdin(
     assert payload["revision_number"] == 1
     assert payload["parent_revision_id"] is None
     assert payload["status"] == "ok"
+    # The checkpoint has travelled nowhere; the caller is told so rather than
+    # having to lint the store to find out.
+    assert payload["durability"] == "canonical-local"
     revision_id = payload["revision_id"]
     assert payload["projection_path"] == f"projections/1-{revision_id}.md"
     assert _get(payload, "record", "revision_id") == revision_id

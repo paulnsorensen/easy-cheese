@@ -14,6 +14,7 @@ import pytest
 from attrs import evolve
 from easy_cheese_schemas import (
     ArtifactLink,
+    Durability,
     EntryKind,
     EntryState,
     ProtectedEntry,
@@ -266,6 +267,68 @@ def test_a_legacy_receipt_without_the_pin_is_left_alone(
         evolve(second.record, revision_digest=records.revision_digest(legacy)),
         legacy,
         second.markdown,
+    )
+
+    report = check(store)
+
+    assert report.codes == ()
+
+
+def test_a_gated_canonical_local_checkpoint_warns_without_blocking(
+    corpus_root: Path, make_promotion: Callable[..., _PromotionLike]
+) -> None:
+    """The gates are human-owed state that lives nowhere but this corpus."""
+    store = make_store(corpus_root)
+    promotion = make_promotion(gating=True)
+    store.promote(promotion.record, promotion.revision, promotion.markdown)
+
+    report = check(store)
+
+    assert report.codes == (lint.LintCode.DURABILITY_LOCAL_ONLY,)
+    assert not lint.gates_continuation(report.findings[0])
+    detail = report.findings[0].detail
+    assert "q-durability" in detail
+    assert "canonical-local" in detail
+    assert "Preserve it" in detail and "publish it" in detail
+    assert "never commits and never publishes" in detail
+
+
+def test_a_settled_canonical_local_checkpoint_is_not_warned_about(
+    corpus_root: Path, make_promotion: Callable[..., _PromotionLike]
+) -> None:
+    """Nothing is owed, so a local-only projection loses nothing: the record
+    it was generated from is right there beside it."""
+    store = make_store(corpus_root)
+    promotion = make_promotion(gating=False)
+    store.promote(promotion.record, promotion.revision, promotion.markdown)
+
+    report = check(store)
+
+    assert report.codes == ()
+
+
+@pytest.mark.parametrize(
+    "durability", [Durability.REPO_SNAPSHOT, Durability.PUBLISHED]
+)
+def test_a_gated_checkpoint_that_has_travelled_is_not_warned_about(
+    corpus_root: Path,
+    make_promotion: Callable[..., _PromotionLike],
+    durability: Durability,
+) -> None:
+    store = make_store(corpus_root)
+    promotion = make_promotion(gating=True)
+    # Durability is part of the projection document, so travelling it re-hashes
+    # the projection and the receipt that quotes it.
+    projected, markdown = projection.build_projection(
+        promotion.record, durability=durability
+    )
+    revision = evolve(
+        promotion.revision, projection_digest=projected.projection_digest
+    )
+    store.promote(
+        evolve(promotion.record, revision_digest=records.revision_digest(revision)),
+        revision,
+        markdown,
     )
 
     report = check(store)

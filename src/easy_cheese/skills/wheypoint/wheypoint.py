@@ -127,6 +127,9 @@ def _run_commit(_args: argparse.Namespace, stdin: TextIO) -> dict[str, object]:
         "revision_number": result.revision.revision_number,
         "parent_revision_id": result.revision.parent_revision_id,
         "status": result.record.status.value,
+        # How far this checkpoint has travelled, so a caller can see that a
+        # gated record is local-only without re-linting the store.
+        "durability": result.projection.durability.value,
         "projection_path": result.revision.projection_path,
         "record": records.unstructure(result.record),
         "revision": records.unstructure(result.revision),
