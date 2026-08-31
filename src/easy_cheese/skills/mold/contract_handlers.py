@@ -27,12 +27,7 @@ from easy_cheese_schemas import (
 )
 
 from easy_cheese.shared.migrate import UnsupportedLegacySourceError, migrate
-from easy_cheese.shared.publication import (
-    AmbiguousSyntaxRepairError,
-    IdempotencyConflictError,
-    UnrecoverableSyntaxError,
-    publish,
-)
+from easy_cheese.shared.publication import PublicationError, publish
 
 __all__ = ["migrate_main", "publish_main"]
 
@@ -84,9 +79,7 @@ def publish_main(argv: list[str]) -> int:
     except (
         ContractValidationError,
         TransitionError,
-        AmbiguousSyntaxRepairError,
-        UnrecoverableSyntaxError,
-        IdempotencyConflictError,
+        PublicationError,
     ) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
@@ -146,7 +139,7 @@ def migrate_main(argv: list[str]) -> int:
         ContractValidationError,
         TransitionError,
         UnsupportedLegacySourceError,
-        IdempotencyConflictError,
+        PublicationError,
         AdapterSunsetError,
     ) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
