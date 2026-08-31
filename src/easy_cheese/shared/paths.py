@@ -388,7 +388,7 @@ def existing_artifacts(
     return found
 
 
-def _git_toplevel() -> Path | None:
+def git_toplevel() -> Path | None:
     """Absolute git worktree root, or None outside a repo."""
     try:
         top: subprocess.CompletedProcess[str] = git_utils.run_git(
@@ -405,7 +405,7 @@ def _resolve_repo_root(repo_root: Path | str | None) -> Path:
     """Absolute repo root: the given value, else git toplevel, else cwd."""
     if repo_root is not None:
         return Path(repo_root).resolve()
-    return (_git_toplevel() or Path.cwd()).resolve()
+    return (git_toplevel() or Path.cwd()).resolve()
 
 
 def _phase_dirpath(phase: str, repo_root: Path) -> Path:

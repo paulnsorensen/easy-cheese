@@ -36,9 +36,12 @@ import sys
 from pathlib import Path
 from typing import NoReturn, TextIO, cast, override
 
-from easy_cheese_schemas import WheypointDelta
+from easy_cheese_schemas import Durability, WheypointDelta
+
+from easy_cheese.shared import paths
 
 from . import commit as commit_mod
+from . import legacy as legacy_mod
 from . import lint as lint_mod
 from . import records
 from . import resolve as resolve_mod
@@ -71,7 +74,23 @@ class _Parser(argparse.ArgumentParser):
 
 def _parser(command: str) -> _Parser:
     parser = _Parser(prog=f"wheypoint.pyz {command}")
-    if command == "resolve":
+    if command == "commit":
+        _ = parser.add_argument(
+            "--note-dir",
+            dest="note_dir",
+            default=None,
+            help=(
+                "directory the readable projection is mirrored into "
+                + f"(default: <git toplevel>/{'/'.join(legacy_mod.NOTES_DIR_PARTS)})"
+            ),
+        )
+        _ = parser.add_argument(
+            "--no-note",
+            dest="no_note",
+            action="store_true",
+            help="write no mirror; the checkpoint stays canonical-local",
+        )
+    elif command == "resolve":
         _ = parser.add_argument(
             "--ref",
             required=True,
@@ -100,7 +119,25 @@ def _maybe(obj: object) -> dict[str, object] | None:
     return None if obj is None else records.unstructure(obj)
 
 
-def _run_commit(_args: argparse.Namespace, stdin: TextIO) -> dict[str, object]:
+def _note_dir(args: argparse.Namespace) -> Path | None:
+    """Where the readable mirror goes, or None when none is to be written.
+
+    `--no-note` refuses one outright; an explicit `--note-dir` is taken as
+    given; otherwise the mirror belongs beside the repository the checkpoint
+    describes, and outside a repository there is nowhere for it to belong.
+    """
+    if cast(bool, args.no_note):
+        return None
+    given = cast(str | None, args.note_dir)
+    if given is not None:
+        return Path(given).expanduser()
+    toplevel = paths.git_toplevel()
+    if toplevel is None:
+        return None
+    return toplevel.joinpath(*legacy_mod.NOTES_DIR_PARTS)
+
+
+def _run_commit(args: argparse.Namespace, stdin: TextIO) -> dict[str, object]:
     try:
         payload = cast(object, json.loads(stdin.read()))
     except ValueError as exc:
@@ -109,9 +146,25 @@ def _run_commit(_args: argparse.Namespace, stdin: TextIO) -> dict[str, object]:
         delta = records.structure(payload, WheypointDelta)
     except records.RecordError as exc:
         raise _Refused("invalid-delta", str(exc)) from exc
+    # Whether a mirror will be written is decided *before* the commit: the
+    # durability it implies is rendered into the projection text and hashed
+    # into its digest, so it cannot be discovered afterwards without making the
+    # document disagree with the receipt that quotes it.
+    note_dir = _note_dir(args)
+    if note_dir is not None:
+        try:
+            note_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            raise _Refused(
+                "note-unwritable",
+                f"note directory {note_dir} cannot be created: {exc}",
+            ) from exc
+    durability = (
+        Durability.CANONICAL_LOCAL if note_dir is None else Durability.REPO_SNAPSHOT
+    )
     try:
         store = storage.WorkStore.open(delta.work_id)
-        result = commit_mod.commit(delta, store=store)
+        result = commit_mod.commit(delta, store=store, durability=durability)
     except commit_mod.GenesisConflictError as exc:
         raise _Refused("genesis-conflict", str(exc)) from exc
     except commit_mod.StaleParentError as exc:
@@ -120,7 +173,22 @@ def _run_commit(_args: argparse.Namespace, stdin: TextIO) -> dict[str, object]:
         raise _Refused("commit-refused", str(exc)) from exc
     except storage.StorageError as exc:
         raise _Refused("storage-error", str(exc)) from exc
+    # After the promotion, never before it: the mirror is a copy of a document
+    # the corpus already holds, so a crash between the two leaves the store
+    # authoritative and the mirror merely absent. A replay writes the same
+    # bytes over the same path, which is why re-running a commit is safe.
+    note_path: str | None = None
+    if note_dir is not None:
+        target = note_dir / f"{result.record.slug}.md"
+        try:
+            storage.write_atomic(target, result.markdown.encode("utf-8"))
+        except OSError as exc:
+            raise _Refused(
+                "note-unwritable", f"mirror {target} cannot be written: {exc}"
+            ) from exc
+        note_path = str(target)
     return {
+        "note_path": note_path,
         "replayed": result.replayed,
         "work_id": result.record.work_id,
         "revision_id": result.revision.revision_id,
