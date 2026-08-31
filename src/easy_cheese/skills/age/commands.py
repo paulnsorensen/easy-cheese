@@ -38,9 +38,14 @@ COMMANDS = (
         "Derive a kebab-case slug and durable spec path from task text",
     ),
     Command(
+        "review-lock",
+        "easy_cheese.skills.age.review_lock:main",
+        "Record or verify the production-tree digest that keeps /age review-only",
+    ),
+    Command(
         "write-handoff-artifact",
-        "easy_cheese.shared.write_handoff_artifact:main",
-        "Write a handoff preamble plus optional body atomically",
+        "easy_cheese.skills.age.review_lock:gated_write_handoff_artifact",
+        "Write a handoff preamble plus optional body atomically, behind the review lock",
     ),
     Command(
         "read-handoff-slug",

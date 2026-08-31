@@ -37,7 +37,7 @@ Use the shared handoff gate in [`../../cheese/references/handoff-gate.md`](../..
 
 ## Dispatch
 
-On a non-empty selection — whether auto-selected by default or chosen at the gate — immediately dispatch `/cure <slug> [--safe] [--open-pr] [--hard]` with the selection locked in via context, not a CLI flag:
+On a non-empty selection — whether auto-selected by default or chosen at the gate — immediately dispatch `/cure <slug> [--safe] [--open-pr] [--hard]` with the selection locked in via context, not a CLI flag. Dispatch means invoking `/cure`, never continuing into repair in the review context: the report is age's terminal act, and the step-1 review lock refuses a report written over inline edits.
 
 ```yaml
 handoff_context:

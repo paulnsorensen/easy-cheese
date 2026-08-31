@@ -59,6 +59,7 @@ SKILL_SUBCOMMANDS = {
     "easy-cheese-setup": ["global", "local", "doctor"],
     "age": [
         "artifact-path", "html-report", "age-route", "review-surface", "severity", "slugify",
+        "review-lock",
         "write-handoff-artifact", "read-handoff-slug", "findings-cli", "gates-cli", "paths-cli",
         "handoff-cli", "render-html",
     ],
