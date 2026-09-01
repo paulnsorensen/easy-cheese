@@ -21,7 +21,12 @@ if str(SCHEMAS_ROOT) not in sys.path:
 import contracts  # noqa: E402
 import _document_rules_compiler as compiler  # noqa: E402
 
-_OPTIONAL_SECTIONS = {"Deferred follow-ups", "Reproduction", "References"}
+_OPTIONAL_SECTIONS = {
+    "Deferred follow-ups",
+    "Test Contracts",
+    "Reproduction",
+    "References",
+}
 
 
 def _curdle_template_section_headings() -> list[str]:
@@ -108,6 +113,28 @@ def test_ac_coverage_validator_rejects_missing_and_duplicate_ids() -> None:
             acceptance_ids=("AC-1", "AC-2"),
             test_contract_rows=(row,),
         )
+
+
+def test_not_applicable_document_allows_acceptance_without_test_contracts() -> None:
+    frontmatter = contracts.MoldSpecFrontmatter(
+        slug="docs-only",
+        status="approved",
+        source="mold-handshake",
+        created="2026-08-23",
+        confidence=contracts.SpecConfidence.HIGH,
+        gate_applicability=contracts.GateApplicability(
+            disposition=contracts.GateApplicabilityDisposition.NOT_APPLICABLE,
+            work_class=contracts.WorkClass.DOCS_ONLY,
+            ui_surface=contracts.UiSurface.NOT_APPLICABLE,
+            reason="documentation-only change",
+        ),
+    )
+
+    _ = contracts.MoldSpecDocument(
+        frontmatter=frontmatter,
+        acceptance_ids=("AC-1",),
+        test_contract_rows=(),
+    )
 
 
 def test_document_rules_compiler_collects_the_mold_spec_class_and_keys_by_its_slug() -> None:

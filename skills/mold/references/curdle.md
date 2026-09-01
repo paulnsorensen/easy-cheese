@@ -85,7 +85,8 @@ If the trigger cannot be stated precisely (e.g. pure internal utilities with no 
 
 ## Test Contracts
 
-Every numbered Acceptance ID appears exactly once in this table.
+Include this entire section only when `gate_applicability.disposition` is
+`red-required`. Every numbered Acceptance ID appears exactly once in this table.
 `expected_failure` names a deterministic witness and expected red assertion;
 `mode` is `tracer` or `contract-matrix`. The seam is the outer boundary that
 proves the behavior. A matrix names its ratified interface version and every
@@ -126,9 +127,18 @@ Add one row for each criterion.
 behavior declaration must set `ui_surface` to `browser` or `non-browser`;
 closed non-behavior declarations, including `appearance-only`, set it to
 `not-applicable`. A browser declaration is valid only when every Test Contract
-names an existing browser/E2E interface and outer seam. Specs without this
-provenance marker remain legacy-compatible, including the approved v1
-spec.
+names an existing browser/E2E interface and outer seam.
+
+Specs without this provenance marker are v0.13-era legacy and stay
+**readable forever**: `validate-spec` accepts them, waiving only the two parts
+the hardened format added after v0.13 — the `Test Contracts` section and the
+`gate_applicability` block — and printing a one-line `NOTICE:` rather than an
+error. Everything a v0.13 spec did carry is still validated. Minting is the
+mirror image: Curdle writes only the template above and gates it with
+`validate-spec --strict`, which enforces the hardened format *and* the
+`source:` marker unconditionally. Legacy is a read-side grace, never a
+write-side option. The policy lives once in
+`src/easy_cheese_schemas/spec_format.py` so every release channel inherits it.
 
 ### Current mold-spec schema (generated)
 
@@ -143,7 +153,7 @@ document mold-spec {
   section "Approach"
   section "Decisions"
   section "Acceptance"
-  section "Test Contracts" {
+  section "Test Contracts"? {
     columns: ['Acceptance ID', 'Interface referent', 'Outermost stable seam', 'Expected failure', 'Mode', 'Interface version', 'Matrix rows']
     per_row: ['tracer rows leave Interface version and Matrix rows blank', 'contract-matrix rows require both Interface version and Matrix rows']
   }
@@ -159,7 +169,7 @@ document mold-spec {
 rule ac-coverage-exactly-once: "Every Acceptance ID must appear exactly once in the Test Contracts table."
 rule tracer-row-blank-matrix-cells: "Tracer rows must leave Interface version and Matrix rows blank."
 rule contract-matrix-row-requires-both: "Contract-matrix rows require both Interface version and Matrix rows."
-rule not-applicable-closed-class: "gate_applicability.disposition=not-applicable requires a reason and zero Test Contracts rows."
+rule not-applicable-closed-class: "red-required requires Test Contracts; not-applicable forbids them and requires a reason."
 
 type GateApplicability {
   disposition GateApplicabilityDisposition

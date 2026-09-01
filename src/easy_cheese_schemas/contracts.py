@@ -2349,7 +2349,7 @@ MOLD_SPEC_SECTIONS: tuple[Section, ...] = (
     Section("Approach"),
     Section("Decisions"),
     Section("Acceptance"),
-    Section("Test Contracts", table=TEST_CONTRACT_TABLE_RULE),
+    Section("Test Contracts", optional=True, table=TEST_CONTRACT_TABLE_RULE),
     Section("Interface sketches"),
     Section("Risks"),
     Section("Open questions"),
@@ -2383,7 +2383,10 @@ MOLD_SPEC_CROSS_FIELD_RULES: tuple[CrossFieldRule, ...] = (
     ),
     CrossFieldRule(
         rule_id="not-applicable-closed-class",
-        description="gate_applicability.disposition=not-applicable requires a reason and zero Test Contracts rows.",
+        description=(
+            "red-required requires Test Contracts; not-applicable forbids them "
+            "and requires a reason."
+        ),
     ),
 )
 
@@ -2411,6 +2414,16 @@ class MoldSpecDocument:
     def _validate_ac_coverage(self, _attribute: _NamedAttribute, value: object) -> None:  # noqa: V103
         assert isinstance(value, tuple)
         rows = cast(tuple[TestContractRow, ...], value)
+        if (
+            self.frontmatter.gate_applicability.disposition
+            is GateApplicabilityDisposition.NOT_APPLICABLE
+        ):
+            if rows:
+                raise ValueError(
+                    "gate_applicability.disposition=not-applicable requires no Test Contracts rows"
+                )
+            return
+
         counts: dict[str, int] = {}
         for row in rows:
             counts[row.acceptance_id] = counts.get(row.acceptance_id, 0) + 1
@@ -2420,14 +2433,6 @@ class MoldSpecDocument:
         if missing or duplicated or unexpected:
             raise ValueError(
                 f"Test Contracts table must cover every Acceptance ID exactly once: missing={missing} duplicated={duplicated} unexpected={unexpected}"
-            )
-        if (
-            self.frontmatter.gate_applicability.disposition
-            is GateApplicabilityDisposition.NOT_APPLICABLE
-            and value
-        ):
-            raise ValueError(
-                "gate_applicability.disposition=not-applicable requires zero Test Contracts rows"
             )
 
 
