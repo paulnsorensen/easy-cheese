@@ -112,9 +112,14 @@ def test_each_dispatching_skill_has_local_resolution_contract() -> None:
 
 
 def test_shared_reference_uses_the_manifest_effort_vocabulary() -> None:
-    text = (SKILLS / "cheese" / "references" / "agent-resolution.md").read_text(
+    reference = (
+        SKILLS / "cheese" / "references" / "agent-resolution.md"
+    ).read_text(encoding="utf-8")
+    routing = (SKILLS / "cheese" / "references" / "routing-policy.md").read_text(
         encoding="utf-8"
     )
-    assert "| planner / integrator | powerful | high (at mold) |" in text
-    assert "| mold | planner / integrator | powerful | high |" in text
-    assert "xhigh" not in text
+
+    assert "| planner / integrator | powerful | high (at mold) |" in reference
+    assert "| mold | planner / integrator | powerful | high |" in reference
+    assert "| planner / integrator | orchestrator | orchestrator | plan/default | high at mold |" in routing
+    assert "xhigh" not in reference + routing

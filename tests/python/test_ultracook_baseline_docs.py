@@ -134,7 +134,7 @@ class TestCurdPromptHandoff:
         assert block.strip().splitlines() == [
             "status: <canonical status field>",
             "next: <next phase | done | cure>",
-            "artifact: <phase report path>",
+            "artifact: <path-to-prior-report-if-any>",
             "<one-line orientation>",
             "",
             "agent_resolution: <shared block>",

@@ -65,7 +65,7 @@ Use the canonical `status:` grammar from the [handback contract](../../cheese/re
 ```yaml
 status: <canonical status field>
 next: <next phase | done | cure>
-artifact: <phase report path>
+artifact: <path-to-prior-report-if-any>
 <one-line orientation>
 
 agent_resolution: <shared block>
