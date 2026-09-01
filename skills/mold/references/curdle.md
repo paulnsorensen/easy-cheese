@@ -85,7 +85,8 @@ If the trigger cannot be stated precisely (e.g. pure internal utilities with no 
 
 ## Test Contracts
 
-Every numbered Acceptance ID appears exactly once in this table.
+Include this entire section only when `gate_applicability.disposition` is
+`red-required`. Every numbered Acceptance ID appears exactly once in this table.
 `expected_failure` names a deterministic witness and expected red assertion;
 `mode` is `tracer` or `contract-matrix`. The seam is the outer boundary that
 proves the behavior. A matrix names its ratified interface version and every
@@ -152,7 +153,7 @@ document mold-spec {
   section "Approach"
   section "Decisions"
   section "Acceptance"
-  section "Test Contracts" {
+  section "Test Contracts"? {
     columns: ['Acceptance ID', 'Interface referent', 'Outermost stable seam', 'Expected failure', 'Mode', 'Interface version', 'Matrix rows']
     per_row: ['tracer rows leave Interface version and Matrix rows blank', 'contract-matrix rows require both Interface version and Matrix rows']
   }
@@ -168,7 +169,7 @@ document mold-spec {
 rule ac-coverage-exactly-once: "Every Acceptance ID must appear exactly once in the Test Contracts table."
 rule tracer-row-blank-matrix-cells: "Tracer rows must leave Interface version and Matrix rows blank."
 rule contract-matrix-row-requires-both: "Contract-matrix rows require both Interface version and Matrix rows."
-rule not-applicable-closed-class: "gate_applicability.disposition=not-applicable requires a reason and zero Test Contracts rows."
+rule not-applicable-closed-class: "red-required requires Test Contracts; not-applicable forbids them and requires a reason."
 
 type GateApplicability {
   disposition GateApplicabilityDisposition

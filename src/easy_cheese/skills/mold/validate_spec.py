@@ -222,7 +222,19 @@ def validate(path: Path, *, strict: bool = False) -> tuple[list[str], str | None
     frontmatter, body = _split_frontmatter(text)
     policy = spec_format_policy(frontmatter, strict=strict)
     found_sections, duplicate_headings = _find_sections(body)
+    source = frontmatter.get("source")
+    gate_applicability = frontmatter.get("gate_applicability")
+    disposition = (
+        gate_applicability.get("disposition")
+        if isinstance(gate_applicability, dict)
+        else None
+    )
 
+    if source is not None and not isinstance(source, str):
+        errors.append(
+            "ERROR: spec-provenance-invalid frontmatter source must be a scalar "
+            + f"string in {path}"
+        )
     if strict and not is_hardened_provenance(frontmatter):
         errors.append(
             "ERROR: spec-provenance-required frontmatter source must be a mold "
@@ -235,19 +247,31 @@ def validate(path: Path, *, strict: bool = False) -> tuple[list[str], str | None
             + f"in {path}"
         )
 
-    for section in SECTIONS:
-        if section["optional"] or not policy.requires_section(section["name"]):
+    section_requirements = [
+        (section["name"], not section["optional"]) for section in SECTIONS
+    ]
+    section_requirements.append(("Contract", False))
+    for name, default_required in section_requirements:
+        required = policy.requires_section(name, default_required=default_required)
+        if name == "Test Contracts" and disposition == "not-applicable":
+            required = False
+        if not required:
             continue
-        canonical = _canonical_heading(section["name"])
+        canonical = _canonical_heading(name)
         if canonical not in found_sections:
             errors.append(
-                f"ERROR: missing-required-section '{section['name']}' section not "
+                f"ERROR: missing-required-section '{name}' section not "
                 + f"found in {path}"
             )
 
     test_contracts_lines = found_sections.get(_canonical_heading("Test Contracts"))
     rows: list[list[str]] = []
-    if test_contracts_lines is not None:
+    if disposition == "not-applicable" and test_contracts_lines is not None:
+        errors.append(
+            f"ERROR: {NOT_APPLICABLE_RULE} gate_applicability.disposition="
+            + f"not-applicable requires no Test Contracts section in {path}"
+        )
+    elif test_contracts_lines is not None:
         parsed = _parse_table(test_contracts_lines)
         if parsed is None:
             errors.append(
@@ -285,7 +309,9 @@ def validate(path: Path, *, strict: bool = False) -> tuple[list[str], str | None
                         rows.append(row)
 
     acceptance_lines = found_sections.get(_canonical_heading("Acceptance"), [])
-    declared_ids = _acceptance_ids(acceptance_lines)
+    declared_ids = (
+        [] if disposition == "not-applicable" else _acceptance_ids(acceptance_lines)
+    )
 
     counts: dict[str, int] = {}
     for row in rows:
@@ -336,9 +362,8 @@ def validate(path: Path, *, strict: bool = False) -> tuple[list[str], str | None
                     + f"Interface version and Matrix rows in {path}"
                 )
 
-    gate_applicability = frontmatter.get("gate_applicability")
     if not isinstance(gate_applicability, dict):
-        if policy.requires_gate_applicability():
+        if "gate_applicability" in frontmatter or policy.requires_gate_applicability():
             errors.append(
                 "ERROR: gate-applicability-required frontmatter gate_applicability is "
                 + f"missing or unparseable in {path}"
@@ -369,11 +394,7 @@ def validate(path: Path, *, strict: bool = False) -> tuple[list[str], str | None
                     f"ERROR: {NOT_APPLICABLE_RULE} gate_applicability.reason is "
                     + f"required when disposition is not-applicable in {path}"
                 )
-            if rows:
-                errors.append(
-                    f"ERROR: {NOT_APPLICABLE_RULE} gate_applicability.disposition="
-                    + f"not-applicable requires zero Test Contracts rows in {path}"
-                )
+
 
     return errors, policy.notice
 

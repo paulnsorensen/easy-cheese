@@ -23,6 +23,10 @@ VALIDATOR = (
 SPEC_FIXTURES = REPO_ROOT / "tests" / "python" / "fixtures" / "spec_format"
 BASE_SPEC = (SPEC_FIXTURES / "valid_spec.md").read_text(encoding="utf-8")
 LEGACY_SPEC = (SPEC_FIXTURES / "legacy_v013_spec.md").read_text(encoding="utf-8")
+MINI_SPEC = (SPEC_FIXTURES / "valid_mini_spec.md").read_text(encoding="utf-8")
+RED_MINI_SPEC = (
+    SPEC_FIXTURES / "valid_red_required_mini_spec.md"
+).read_text(encoding="utf-8")
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 import build_pyz  # noqa: E402
@@ -396,20 +400,14 @@ def _isolated_gate_applicability_fixture(reason: str | None, rows: bool) -> str:
         "| no validator exists yet | contract-matrix | v1 | row-a, row-b |\n"
     )
     if rows:
-        text = text.replace(ac2_row, "", 1)
-    else:
-        ac1_row = (
-            "| AC-1 | validate-spec CLI | pytest invoking the CLI as a subprocess " +
-            "| no validator exists yet | tracer | | |\n"
-        )
-        text = text.replace(ac1_row, "", 1).replace(ac2_row, "", 1)
-        text = text.replace(
-            "- AC-1: WHEN the validator runs on a valid tracer spec THE SYSTEM " +
-            "SHALL exit 0.\n",
-            "",
-            1,
-        )
-    return text
+        return text.replace(ac2_row, "", 1)
+    text = text.replace(
+        "- AC-1: WHEN the validator runs on a valid tracer spec THE SYSTEM "
+        + "SHALL exit 0.\n",
+        "",
+        1,
+    )
+    return _strip_test_contracts(text)
 
 
 def test_not_applicable_with_contracts_is_rejected(tmp_path: Path, _run: _RunFn) -> None:
@@ -420,7 +418,20 @@ def test_not_applicable_with_contracts_is_rejected(tmp_path: Path, _run: _RunFn)
     assert result.returncode == 1
     assert len(errors) == 1
     assert "not-applicable" in errors[0]
-    assert "zero Test Contracts rows" in errors[0]
+    assert "requires no Test Contracts section" in errors[0]
+
+
+def test_not_applicable_without_test_contracts_is_accepted(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    text = _isolated_gate_applicability_fixture(
+        reason="closed, no CLI change", rows=False
+    )
+    path = _write(tmp_path, "spec.md", text)
+    for flags in ((), ("--strict",)):
+        result = _run(path, *flags)
+        assert result.returncode == 0, (flags, result.stderr)
+        assert not _error_lines(result), flags
 
 
 def test_not_applicable_without_reason_is_rejected(tmp_path: Path, _run: _RunFn) -> None:
@@ -541,6 +552,24 @@ def test_hardened_spec_missing_test_contracts_is_rejected_on_read(
     )
 
 
+def test_documented_not_applicable_mini_spec_passes_strict_validation(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    result = _run(_write(tmp_path, "mini-spec.md", MINI_SPEC), "--strict")
+    assert result.returncode == 0, result.stderr
+    assert not _error_lines(result)
+    assert not _notice_lines(result)
+
+
+def test_documented_red_required_mini_spec_passes_strict_validation(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    result = _run(_write(tmp_path, "mini-spec.md", RED_MINI_SPEC), "--strict")
+    assert result.returncode == 0, result.stderr
+    assert not _error_lines(result)
+    assert not _notice_lines(result)
+
+
 def test_current_format_spec_reads_and_mints_without_a_legacy_notice(
     tmp_path: Path, _run: _RunFn
 ) -> None:
@@ -550,6 +579,35 @@ def test_current_format_spec_reads_and_mints_without_a_legacy_notice(
         assert result.returncode == 0, flags
         assert not _error_lines(result), flags
         assert not _notice_lines(result), flags
+
+
+@pytest.mark.parametrize("flags", [(), ("--strict",)])
+def test_nested_source_is_reported_without_a_traceback(
+    tmp_path: Path, _run: _RunFn, flags: tuple[str, ...]
+) -> None:
+    text = LEGACY_SPEC.replace(
+        "status: approved\n", "status: approved\nsource:\n  value: mold-handshake\n", 1
+    )
+    result = _run(_write(tmp_path, "spec.md", text), *flags)
+    assert result.returncode == 1
+    assert any("spec-provenance-invalid" in line for line in _error_lines(result))
+    assert "Traceback" not in result.stderr
+
+
+def test_legacy_scalar_gate_applicability_is_rejected(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    text = LEGACY_SPEC.replace(
+        "agent_introduced_scope: []\n",
+        "agent_introduced_scope: []\ngate_applicability: garbage\n",
+        1,
+    )
+    result = _run(_write(tmp_path, "spec.md", text))
+    assert result.returncode == 1
+    assert any(
+        "gate-applicability-required" in line and "unparseable" in line
+        for line in _error_lines(result)
+    )
 
 
 def test_spec_without_frontmatter_is_malformed_not_legacy(

@@ -29,6 +29,10 @@ _HARDENED_SOURCES = frozenset({"agent-mini-spec", "mold-handshake"})
 # happens to carry it, is validated exactly as it is for a hardened one.
 _POST_V013_SECTIONS = frozenset({"Test Contracts"})
 
+_MINI_SPEC_REQUIRED_SECTIONS = frozenset(
+    {"Contract", "Acceptance", "Test Contracts", "Non-goals"}
+)
+
 _LEGACY_NOTICE = (
     "NOTICE: legacy-spec-format this spec predates the current format "
     "(no mold provenance marker, so Test Contracts and gate_applicability are "
@@ -45,10 +49,18 @@ class SpecFormatPolicy:
     """
 
     legacy: bool
+    _source: str | None
 
-    def requires_section(self, section_name: str) -> bool:
+    def requires_section(
+        self, section_name: str, *, default_required: bool
+    ) -> bool:
         """Whether a missing ``section_name`` heading is an error."""
-        return not (self.legacy and section_name in _POST_V013_SECTIONS)
+        if self._source == "agent-mini-spec":
+            return section_name in _MINI_SPEC_REQUIRED_SECTIONS
+        required = default_required or section_name == "Test Contracts"
+        return required and not (
+            self.legacy and section_name in _POST_V013_SECTIONS
+        )
 
     def requires_gate_applicability(self) -> bool:
         """Whether absent ``gate_applicability`` frontmatter is an error."""
@@ -69,10 +81,13 @@ def spec_format_policy(
     unconditionally. ``strict=False`` is the read posture, which accepts a
     v0.13-era spec and reports it through :attr:`SpecFormatPolicy.notice`.
     """
-    if strict or not frontmatter:
-        return SpecFormatPolicy(legacy=False)
     source = frontmatter.get("source")
-    return SpecFormatPolicy(legacy=source not in _HARDENED_SOURCES)
+    normalized_source = source if isinstance(source, str) else None
+    if strict or not frontmatter or source is not None and normalized_source is None:
+        return SpecFormatPolicy(legacy=False, _source=normalized_source)
+    return SpecFormatPolicy(
+        legacy=source not in _HARDENED_SOURCES, _source=normalized_source
+    )
 
 
 def is_hardened_provenance(frontmatter: Mapping[str, object]) -> bool:
@@ -81,4 +96,5 @@ def is_hardened_provenance(frontmatter: Mapping[str, object]) -> bool:
     Mint paths require this: a spec written without the marker would be read
     back as legacy forever, which is exactly the grace the write side refuses.
     """
-    return frontmatter.get("source") in _HARDENED_SOURCES
+    source = frontmatter.get("source")
+    return isinstance(source, str) and source in _HARDENED_SOURCES
