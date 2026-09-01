@@ -64,7 +64,7 @@ Each role's spawn-primitive `minimum_power` and `effort` defaults, harness-agnos
 | coder | default | medium | gains the ESCALATE contract; delegation IS the downgrade |
 | verifier | cheap | low | "verify exactly one claim"; schema-constrained; the cheap severity-filter leg |
 | reviewer | powerful | low \| medium \| high (dial) | pinned to a powerful model; count and effort follow the age router |
-| planner / integrator | powerful | xhigh (at mold) | never delegated; owns the approval loop |
+| planner / integrator | powerful | high (at mold) | never delegated; owns the approval loop |
 
 A local skill table's `Effort` column defaults to this table for the matching role; override only with a stated reason (e.g. a router-driven dial).
 
@@ -74,7 +74,7 @@ Model and effort are selected **per phase**, from the phase's role — not inher
 
 | Phase | Role | Minimum power | Effort |
 |---|---|---|---|
-| mold | planner / integrator | powerful | xhigh |
+| mold | planner / integrator | powerful | high |
 | cook | coder | default | medium |
 | press | coder | default | medium |
 | age (first and final) | reviewer | powerful | dial: low \| medium \| high, set by the age router |

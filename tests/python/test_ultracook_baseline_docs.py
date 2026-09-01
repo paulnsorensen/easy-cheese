@@ -123,3 +123,21 @@ class TestCurdPromptBaselineField:
             "{baseline} field must state a curd never captures its own "
             "baseline — the whole point of threading the value down"
         )
+
+
+class TestCurdPromptHandoff:
+    def test_metadata_follows_the_canonical_preamble_and_orientation(self) -> None:
+        body = _read(SKILLS_DIR / "ultracook" / "references" / "curd-prompt.md")
+        handoff = body.split("Write `.cheese/ultracook/", 1)[1]
+        block = handoff.split("```yaml", 1)[1].split("```", 1)[0]
+
+        assert block.strip().splitlines() == [
+            "status: <canonical status field>",
+            "next: <next phase | done | cure>",
+            "artifact: <phase report path>",
+            "<one-line orientation>",
+            "",
+            "agent_resolution: <shared block>",
+            "review_context: <required for age>",
+        ]
+        assert "../../cheese/references/handback-contract.md" in body

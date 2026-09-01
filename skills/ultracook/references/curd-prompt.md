@@ -60,12 +60,14 @@ agent_resolution: {agent_resolution}
 
 ## Handoff
 
-Write `.cheese/ultracook/{slug}/curds/{N}/{phase}.md` with:
+Use the canonical `status:` grammar from the [handback contract](../../cheese/references/handback-contract.md). Write `.cheese/ultracook/{slug}/curds/{N}/{phase}.md` with:
 
 ```yaml
-status: ok | halt: <one-line reason>
+status: <canonical status field>
 next: <next phase | done | cure>
 artifact: <phase report path>
+<one-line orientation>
+
 agent_resolution: <shared block>
 review_context: <required for age>
 ```

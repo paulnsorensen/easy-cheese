@@ -109,3 +109,12 @@ def test_each_dispatching_skill_has_local_resolution_contract() -> None:
         assert all(row[3] in POWER for row in rows), name
         assert all(row[4] in EFFORT for row in rows), name
         assert all(row[0] and row[1] and row[2] and row[5] for row in rows), name
+
+
+def test_shared_reference_uses_the_manifest_effort_vocabulary() -> None:
+    text = (SKILLS / "cheese" / "references" / "agent-resolution.md").read_text(
+        encoding="utf-8"
+    )
+    assert "| planner / integrator | powerful | high (at mold) |" in text
+    assert "| mold | planner / integrator | powerful | high |" in text
+    assert "xhigh" not in text

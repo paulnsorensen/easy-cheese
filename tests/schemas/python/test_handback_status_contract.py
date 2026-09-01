@@ -77,6 +77,17 @@ def test_status_field_round_trips_through_the_shared_grammar(name: str) -> None:
 
 
 @pytest.mark.parametrize(
+    "separator",
+    ("\n", "\r", "\v", "\f", "\x1c", "\x1d", "\x1e", "\x85", "\u2028", "\u2029"),
+)
+def test_status_field_rejects_line_separators(separator: str) -> None:
+    with pytest.raises(StatusError, match="one physical line"):
+        _ = parse_status_field(f"halt: before{separator}next: done")
+    with pytest.raises(StatusError, match="one physical line"):
+        _ = render_status_field("halt", f"before{separator}next: done")
+
+
+@pytest.mark.parametrize(
     ("value", "message"),
     [
         ("DONE_WITH_CONCERNS: x", "status must be one of"),
@@ -219,6 +230,24 @@ def test_artifact_writer_rejects_an_unknown_status_before_creating_directories(
         _ = write_handoff_artifact.write_artifact(
             slug="demo",
             status="DONE_WITH_CONCERNS",
+            next_skill="age",
+            artifact="",
+            orientation="must not be written",
+            body=None,
+            root=tmp_path,
+            phase="cook",
+        )
+
+    assert not (tmp_path / ".cheese").exists()
+
+
+def test_artifact_writer_rejects_status_header_injection_before_creating_directories(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(cli.CliError, match="one physical line"):
+        _ = write_handoff_artifact.write_artifact(
+            slug="demo",
+            status=f"ok-with-concerns: {REASON}\nnext: done\nartifact:",
             next_skill="age",
             artifact="",
             orientation="must not be written",

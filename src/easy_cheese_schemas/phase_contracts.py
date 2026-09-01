@@ -70,6 +70,14 @@ def _status_vocabulary() -> str:
     )
 
 
+_LINE_SEPARATORS = ("\n", "\r", "\v", "\f", "\x1c", "\x1d", "\x1e", "\x85", "\u2028", "\u2029")
+
+
+def _require_single_line(field: str, value: str) -> None:
+    if any(separator in value for separator in _LINE_SEPARATORS):
+        raise StatusError(f"{field} must fit on one physical line")
+
+
 def parse_status_field(
     value: str, *, require_reason: bool = True
 ) -> tuple[str, str | None]:
@@ -86,6 +94,7 @@ def parse_status_field(
     disposition rather than be rejected into some caller's fallback; the
     vocabulary itself is never forked.
     """
+    _require_single_line("status field", value)
     text = value.strip()
     name, separator, reason_text = text.partition(":")
     name = name.strip().lower()
@@ -108,6 +117,9 @@ def parse_status_field(
 
 def render_status_field(name: str, reason: str | None) -> str:
     """Render `(status name, reason)` back to its canonical field value."""
+    _require_single_line("status name", name)
+    if reason is not None:
+        _require_single_line("status reason", reason)
     status = HANDBACK_STATUSES.get(name)
     if status is None:
         raise StatusError(
