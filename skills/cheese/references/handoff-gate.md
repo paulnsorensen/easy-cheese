@@ -134,10 +134,10 @@ Keep payloads short and factual. If a payload would exceed a compact screenful, 
 
 ## Fan-in envelope fields
 
-Every phase handoff slug (`/cook`, `/press`, `/age`, `/cure`, and equivalents) already carries `status`/`next`/`artifact`/orientation — see each skill's own `## Handoff slug` section for its exact schema. This section documents the additional fields that make the envelope mechanically validatable at fan-in points (a workflow barrier collecting multiple sub-agent handoffs, `/ultracook`'s per-phase resume, or a reconcile pass over fanned-out reviewers): SCOPE, EVIDENCE, ASSUMPTIONS, and RISKS. Extend the existing slug with these fields; do not fork a second handoff shape.
+Every phase handoff slug (`/cook`, `/press`, `/age`, `/cure`, and equivalents) already carries `status`/`next`/`artifact`/orientation — see each skill's own `## Handoff slug` section for its exact schema. This section documents the additional fields that make the envelope mechanically validatable at fan-in points (a workflow barrier collecting multiple sub-agent handoffs, `/ultracook`'s per-phase resume, or a reconcile pass over fanned-out reviewers): SCOPE, EVIDENCE, ASSUMPTIONS, and RISKS. Extend the existing slug with these fields; do not fork a second handoff shape. Use the canonical `status:` grammar from the [handback contract](handback-contract.md).
 
 ```yaml
-status: ok | halt: <one-line reason>
+status: <canonical status field>
 next: <phase-or-skill> | done
 artifact: <path-to-richer-report-if-any>
 <one-line orientation>

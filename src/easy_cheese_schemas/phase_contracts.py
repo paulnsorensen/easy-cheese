@@ -1,3 +1,11 @@
+"""The phase transition registry, plus a re-export of the handback status vocabulary.
+
+The status/disposition names (`HandbackStatus`, `parse_status_field`, ...) live
+in `easy_cheese_schemas.handback_status`; this module re-exports them so
+existing `from easy_cheese_schemas.phase_contracts import ...` callers keep
+working.
+"""
+
 from __future__ import annotations
 
 import json
@@ -14,134 +22,28 @@ from ._schema_catalog import (
     PLANNER_REQUEST_SCHEMA_URI,
     REGISTERED_CONTRACT_SCHEMA_URIS,
 )
+from .handback_status import (
+    DISPOSITIONS,
+    HANDBACK_STATUSES,
+    MAX_REASON_LENGTH,
+    PROCEED,
+    REGISTERED_STATUSES,
+    RETRY,
+    STOP,
+    Disposition,
+    HandbackStatus,
+    StatusError,
+    parse_status_field,
+    render_status_field,
+    status_disposition,
+    status_vocabulary,
+)
 
 REGISTERED_SCHEMA_URIS = REGISTERED_CONTRACT_SCHEMA_URIS
 
 
 class TransitionError(ValueError):
     pass
-
-
-class StatusError(ValueError):
-    """Raised when a handback `status:` field is outside the declared vocabulary."""
-
-
-@dataclass(frozen=True, order=True, slots=True)
-class HandbackStatus:
-    """One `status:` value a phase may hand back.
-
-    `requires_reason` decides the wire grammar: `ok` stands alone, every other
-    status is `"<name>: <one-line reason>"`. `disposition` is what the
-    orchestrator does with it, and is the only field a consumer should branch
-    on -- adding a status must not require editing every consumer.
-    """
-
-    name: str
-    requires_reason: bool
-    disposition: str
-
-
-PROCEED = "proceed"
-RETRY = "retry"
-STOP = "stop"
-DISPOSITIONS = (PROCEED, RETRY, STOP)
-
-HANDBACK_STATUSES: Mapping[str, HandbackStatus] = MappingProxyType(
-    {
-        status.name: status
-        for status in (
-            HandbackStatus("ok", requires_reason=False, disposition=PROCEED),
-            HandbackStatus(
-                "ok-with-concerns", requires_reason=True, disposition=PROCEED
-            ),
-            HandbackStatus("needs-context", requires_reason=True, disposition=RETRY),
-            HandbackStatus("gated", requires_reason=True, disposition=STOP),
-            HandbackStatus("halt", requires_reason=True, disposition=STOP),
-        )
-    }
-)
-REGISTERED_STATUSES = tuple(HANDBACK_STATUSES)
-
-
-def _status_vocabulary() -> str:
-    return " | ".join(
-        status.name if not status.requires_reason else f"{status.name}: <reason>"
-        for status in HANDBACK_STATUSES.values()
-    )
-
-
-_LINE_SEPARATORS = ("\n", "\r", "\v", "\f", "\x1c", "\x1d", "\x1e", "\x85", "\u2028", "\u2029")
-
-
-def _require_single_line(field: str, value: str) -> None:
-    if any(separator in value for separator in _LINE_SEPARATORS):
-        raise StatusError(f"{field} must fit on one physical line")
-
-
-def parse_status_field(
-    value: str, *, require_reason: bool = True
-) -> tuple[str, str | None]:
-    """Split a `status:` field value into `(status name, reason or None)`.
-
-    This is the single grammar for every producer and consumer of the handback
-    preamble; callers translate `StatusError` into their own error type. The
-    name is matched case-insensitively after stripping, because the field is
-    read back out of agent-authored prose.
-
-    `require_reason=False` is for readers of an already-emitted field -- the
-    phase router and the legacy note reader. A reason-carrying status that
-    arrived bare (`halt` with no colon) must still route by its declared
-    disposition rather than be rejected into some caller's fallback; the
-    vocabulary itself is never forked.
-    """
-    _require_single_line("status field", value)
-    text = value.strip()
-    name, separator, reason_text = text.partition(":")
-    name = name.strip().lower()
-    status = HANDBACK_STATUSES.get(name)
-    if status is None:
-        raise StatusError(
-            f"status must be one of {_status_vocabulary()}, got {value!r}"
-        )
-    reason = reason_text.strip()
-    if not status.requires_reason:
-        if separator or reason:
-            raise StatusError(f"{name} status takes no reason")
-        return name, None
-    if not reason:
-        if require_reason:
-            raise StatusError(f"{name} status requires a reason after '{name}:'")
-        return name, None
-    return name, reason
-
-
-def render_status_field(name: str, reason: str | None) -> str:
-    """Render `(status name, reason)` back to its canonical field value."""
-    _require_single_line("status name", name)
-    if reason is not None:
-        _require_single_line("status reason", reason)
-    status = HANDBACK_STATUSES.get(name)
-    if status is None:
-        raise StatusError(
-            f"status must be one of {_status_vocabulary()}, got {name!r}"
-        )
-    if not status.requires_reason:
-        if reason:
-            raise StatusError(f"{name} status takes no reason")
-        return name
-    if not reason:
-        raise StatusError(f"{name} status requires a reason")
-    return f"{name}: {reason}"
-
-
-def status_disposition(name: str) -> str:
-    """Return what an orchestrator must do with `name`: proceed, retry, or stop."""
-    status = HANDBACK_STATUSES.get(name)
-    if status is None:
-        raise StatusError(
-            f"status must be one of {_status_vocabulary()}, got {name!r}"
-        )
-    return status.disposition
 
 
 @dataclass(frozen=True, order=True, slots=True)
@@ -357,6 +259,7 @@ __all__ = [
     "CURD_RESULT_SCHEMA_URI",
     "DISPOSITIONS",
     "HANDBACK_STATUSES",
+    "MAX_REASON_LENGTH",
     "PHASE_CONTRACT_SCHEMA_URI",
     "PLANNER_REQUEST_SCHEMA_URI",
     "PROCEED",
@@ -367,6 +270,7 @@ __all__ = [
     "STOP",
     "CompiledPhase",
     "CompiledTransition",
+    "Disposition",
     "HandbackStatus",
     "StatusError",
     "TransitionError",
@@ -377,5 +281,6 @@ __all__ = [
     "resolve_compiled_transition",
     "resolve_transition",
     "status_disposition",
+    "status_vocabulary",
     "validate_transition",
 ]

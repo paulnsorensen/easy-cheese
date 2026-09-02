@@ -64,7 +64,7 @@ class LegacyHandoffSlug:
     """Decoded legacy handoff metadata, kept separate from the shared parser."""
 
     status: str
-    halt_reason: str | None
+    reason: str | None
     next_skill: str
     artifact: str | None
     orientation: str
@@ -76,6 +76,11 @@ class LegacyHandoffSlug:
     baseline: str | None = None
     taste_test: str | None = None
     durable_flags: str | None = None
+
+    @property
+    def halt_reason(self) -> str | None:
+        """Deprecated read-only alias for `reason`; kept for pre-rename readers."""
+        return self.reason
 
     @property
     def disposition(self) -> str:
@@ -170,7 +175,7 @@ def _parse_legacy_header(text: str) -> LegacyHandoffSlug:
         raise LegacyDecodeError("handoff preamble missing " + ", ".join(missing))
     if orientation is None:
         raise LegacyDecodeError("orientation line missing after keyed preamble lines")
-    status, halt_reason = _parse_legacy_status(values["status"])
+    status, reason = _parse_legacy_status(values["status"])
     next_skill = values["next"].lstrip("/")
     if not next_skill:
         raise LegacyDecodeError("'next:' line requires a value")
@@ -179,7 +184,7 @@ def _parse_legacy_header(text: str) -> LegacyHandoffSlug:
         raise LegacyDecodeError("mode must be 'single' or 'parallel'")
     return LegacyHandoffSlug(
         status=status,
-        halt_reason=halt_reason,
+        reason=reason,
         next_skill=next_skill,
         artifact=values["artifact"] or None,
         orientation=orientation,

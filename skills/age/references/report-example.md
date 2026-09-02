@@ -33,10 +33,10 @@ Auto-fixing the recommended set via `/cure` (or the selection prompt on a reason
 
 ## Full skeleton (with placeholders)
 
-The worked instantiation above renders only the severity sections. This is the complete report shape, handoff slug through `## Next step`, with every placeholder in context:
+The worked instantiation above renders only the severity sections. This is the complete report shape, handoff slug through `## Next step`, with every placeholder in context. Use the canonical `status:` grammar from the [handback contract](../../cheese/references/handback-contract.md):
 
 ```markdown
-status: ok | halt: <one-line reason>
+status: <canonical status field>
 next: cure | done
 artifact: <path-to-press-report-or-prior-cure-if-any>
 durable_flags: none | <one line per flag: what durable knowledge changed -> target wiki page>

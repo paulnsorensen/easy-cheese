@@ -21,8 +21,18 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 CLI_PATH = REPO_ROOT / "src" / "easy_cheese" / "shared" / "cli.py"
 
 
+class _CliError(Exception):
+    """Typing stand-in for `cli.CliError`: an Exception carrying `exit_code`."""
+
+    def __init__(self, message: str, *, exit_code: int = 2) -> None:
+        super().__init__(message)
+        self.exit_code: int = exit_code
+
+
 class _CliModule(Protocol):
-    CliError: type[Exception]
+    CliError: type[_CliError]
+
+    def contract_error(self, exc: Exception, *, context: str) -> _CliError: ...
 
     def _inject_global_flags(self, parser: argparse.ArgumentParser) -> None: ...
 
@@ -62,12 +72,26 @@ class TestLineBudget:
         # spec was approved) forced one-statement-per-line, pushing the file to ~81.
         # Cap bumped to 90, then to 96 for the shared reject_path_segment helper that
         # single-sources a path-traversal denylist previously duplicated in callers.
-        assert sum(1 for _ in CLI_PATH.read_text().splitlines()) <= 96
+        # Cap bumped to 110 for CliError.exit_code + contract_error (r014-phase-contracts #1).
+        assert sum(1 for _ in CLI_PATH.read_text().splitlines()) <= 110
 
 
 class TestCliError:
     def test_is_exception(self, cli: _CliModule) -> None:
         assert issubclass(cli.CliError, Exception)
+
+    def test_default_exit_code_is_two(self, cli: _CliModule) -> None:
+        assert cli.CliError("bad").exit_code == 2
+
+    def test_explicit_exit_code(self, cli: _CliModule) -> None:
+        assert cli.CliError("bad", exit_code=3).exit_code == 3
+
+
+class TestContractError:
+    def test_wraps_message_and_exits_three(self, cli: _CliModule) -> None:
+        wrapped = cli.contract_error(ValueError("nope"), context="--status")
+        assert str(wrapped) == "--status: nope"
+        assert wrapped.exit_code == 3
 
 
 class TestInjectGlobalFlags:

@@ -41,7 +41,7 @@ Direct invocations run, return output, and **STOP** before checkpoint writing. `
 Prepend the standard resumable slug to the top of the file so `/cheese --continue` can route from it without reading the whole document:
 
 ```markdown
-status: ok | gated: <one-line decision> | halt: <one-line reason>
+status: <canonical status field>
 next: mold | cook | press | age | cure | affinage | briesearch | culture | hold | tasks | done
 mode: single | parallel
 artifact: <path-to-richer-report, or PR ref (PR#<n> / URL) when next: affinage, else none>

@@ -148,6 +148,7 @@ class TestWriterToReaderRoundTrip:
             "next": "press",
             "artifact": ".cheese/cook/cook-to-press.md",
             "orientation": "implemented widget",
+            "reason": None,
             "halt_reason": None,
             "taste_test": None,
             "durable_flags": None,
@@ -169,7 +170,9 @@ class TestWriterToReaderRoundTrip:
             orientation="three attempts on same gap",
         )
         assert payload["status"] == "halt"
-        assert payload["halt_reason"] == "spinning: gap-3-flaky-seam"
+        assert payload["reason"] == "spinning: gap-3-flaky-seam"
+        # Deprecated alias stays on the wire for the r014 stack.
+        assert payload["halt_reason"] == payload["reason"]
         assert payload["next"] == "age"
 
     def test_empty_artifact_roundtrips_as_none(self, tmp_path: Path) -> None:

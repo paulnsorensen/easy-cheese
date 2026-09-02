@@ -66,6 +66,20 @@ def _agent_resolution_rows(body: str) -> list[list[str]]:
     return rows
 
 
+def _pipe_rows(text: str) -> list[list[str]]:
+    """Every markdown table row in `text` as stripped cells, header rows included."""
+    return [
+        [cell.strip() for cell in line.strip().strip("|").split("|")]
+        for line in text.splitlines()
+        if line.startswith("|")
+    ]
+
+
+def _has_row(text: str, cells: list[str]) -> bool:
+    """True when some table row in `text` starts with exactly `cells` (padding-insensitive)."""
+    return any(row[: len(cells)] == cells for row in _pipe_rows(text))
+
+
 def test_exact_dispatching_skill_set_is_marked() -> None:
     assert _dispatching_skills() == DISPATCHING
 
@@ -119,7 +133,11 @@ def test_shared_reference_uses_the_manifest_effort_vocabulary() -> None:
         encoding="utf-8"
     )
 
-    assert "| planner / integrator | powerful | high (at mold) |" in reference
-    assert "| mold | planner / integrator | powerful | high |" in reference
-    assert "| planner / integrator | orchestrator | orchestrator | plan/default | high at mold |" in routing
-    assert "xhigh" not in reference + routing
+    assert _has_row(reference, ["planner / integrator", "powerful", "high (at mold)"])
+    assert _has_row(reference, ["mold", "planner / integrator", "powerful", "high"])
+    assert _has_row(
+        routing,
+        ["planner / integrator", "orchestrator", "orchestrator", "plan/default", "high at mold"],
+    )
+    assert "xhigh" not in reference, "agent-resolution.md names the retired xhigh effort"
+    assert "xhigh" not in routing, "routing-policy.md names the retired xhigh effort"

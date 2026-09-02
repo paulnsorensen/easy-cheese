@@ -455,16 +455,16 @@ class TestWheypointParallelHandoff:
 
 def _handoff_schema_fence() -> list[str]:
     """Return the canonical ordered field list — the header-schema block under
-    `## Handoff slug`, from its `status: ok | gated:` line through the
+    `## Handoff slug`, from its `status: <canonical status field>` line through the
     orientation placeholder — as its individual lines. Sliced by anchor rather
     than by fence so it is insensitive to the surrounding code-fence syntax."""
     lines = _skill("wheypoint").splitlines()
     start = next(
-        (i for i, ln in enumerate(lines) if ln.startswith("status: ok | gated:")),
+        (i for i, ln in enumerate(lines) if ln.startswith("status: <canonical status field>")),
         None,
     )
     if start is None:
-        raise AssertionError("wheypoint must carry the `status: ok | gated:` header schema")
+        raise AssertionError("wheypoint must carry the `status: <canonical status field>` header schema")
     end = next(
         (
             i
@@ -902,17 +902,17 @@ class TestMoldHighBlastIsHighOnly:
 
 
 class TestWheypointGatedStatus:
-    """`status:` must gain a third value, `gated:`, distinct from `ok` and
-    `halt:`. It means work is fine but the next step is blocked on a human
-    decision — the value that produces the stop-and-ask-direction path the
-    audit found was missing."""
+    """`status:` carries `gated:` distinct from `ok` and `halt:` — work is fine
+    but the next step is blocked on a human decision. The vocabulary itself is
+    canonical in the handback contract; wheypoint defers to it and still names
+    the gated path in prose."""
 
     def test_status_enum_lists_gated(self) -> None:
         body = _skill("wheypoint")
-        # The header schema line must show all three status values.
-        assert "status: ok | gated:" in body and "halt:" in body, (
-            "wheypoint status: enum must read `ok | gated: <...> | halt: <...>`"
+        assert "status: <canonical status field>" in body and "handback-contract.md" in body, (
+            "wheypoint status: line must defer to the canonical handback contract"
         )
+        assert "gated" in body, "wheypoint must still document the gated stop-and-ask path"
 
     def test_gated_means_decision_not_auto_dispatch(self) -> None:
         body = _skill("wheypoint")

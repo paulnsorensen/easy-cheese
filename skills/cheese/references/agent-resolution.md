@@ -70,7 +70,7 @@ A local skill table's `Effort` column defaults to this table for the matching ro
 
 ## Phases x roles (per-phase model selection)
 
-Model and effort are selected **per phase**, from the phase's role — not inherited from whatever model the dispatching orchestrator happens to be running. A phase spawn that omits the model is underspecified, not "the parent's model by default".
+Model and effort are selected **per phase**, from the phase's role — not inherited from whatever model the dispatching orchestrator happens to be running. `{model}` / `{effort}` are never left unsubstituted — an unsubstituted `{model}` makes the spawn fall through to the parent's model.
 
 | Phase | Role | Minimum power | Effort |
 |---|---|---|---|

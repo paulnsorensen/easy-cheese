@@ -15,6 +15,7 @@ written down, not that they parse into a grammar.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -128,8 +129,14 @@ class TestCurdPromptBaselineField:
 class TestCurdPromptHandoff:
     def test_metadata_follows_the_canonical_preamble_and_orientation(self) -> None:
         body = _read(SKILLS_DIR / "ultracook" / "references" / "curd-prompt.md")
-        handoff = body.split("Write `.cheese/ultracook/", 1)[1]
-        block = handoff.split("```yaml", 1)[1].split("```", 1)[0]
+        match = re.search(
+            r"Write `\.cheese/ultracook/.*?```(?:text|yaml)\n(.*?)```", body, re.DOTALL
+        )
+        assert match, (
+            "curd-prompt.md: no fenced preamble block found after "
+            "the 'Write `.cheese/ultracook/' sentence"
+        )
+        block = match.group(1)
 
         assert block.strip().splitlines() == [
             "status: <canonical status field>",

@@ -127,10 +127,10 @@ A findings report is the output of a review skill — `/age`, `/cure`, `/press`,
   - `/cure` → `.cheese/cure/<slug>.md` (applied fixes + gate results). See `skills/cure/SKILL.md` § Output.
   - `/press` → `.cheese/press/<slug>.md` (test-hardening report). See `skills/press/SKILL.md` § Output.
   - `/cook` → `.cheese/cook/<slug>.md` (implementation report). See `skills/cook/SKILL.md` § Output.
-- **Required preamble.** Every findings report opens with the handoff slug block so downstream skills (`/ultracook`, `/cheese --continue`) can chain without re-parsing:
+- **Required preamble.** Every findings report opens with the handoff slug block so downstream skills (`/ultracook`, `/cheese --continue`) can chain without re-parsing. Use the canonical `status:` grammar from the [handback contract](handback-contract.md):
 
   ```
-  status: ok | halt: <one-line reason>
+  status: <canonical status field>
   next: <skill-name> | done
   artifact: <path-to-prior-report-if-any>
   <one-line orientation: what changed or what was reviewed>

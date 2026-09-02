@@ -1,9 +1,12 @@
 # Handback contract
 
 One contract governs every phase dispatch and every handback in the pipeline.
-There is no second dialect: the in-session handback a worker returns and the
-durable `.cheese/` artifact it writes carry the *same* preamble block, and the
-same status vocabulary routes both.
+The in-session handback a worker returns and the durable `.cheese/` artifact
+it writes carry the *same* preamble block, routed by the *same* status
+vocabulary. `hard-cheese`'s receipt (`skills/hard-cheese/SKILL.md:100`,
+`status: PASS | FAIL | FAILED | LOGGED`) is a distinct artifact vocabulary —
+a grading record, not a handback — and neither extends nor competes with this
+one.
 
 The machine source of truth is `easy_cheese_schemas.phase_contracts` — the
 status vocabulary, its wire grammar, and the phase-transition registry — staged
@@ -57,8 +60,11 @@ Rules that hold at every seam:
 - **Readers of an already-emitted field** (the phase router, the legacy note
   reader) tolerate a reason-carrying status that arrived bare — it still routes
   by its declared disposition. They never widen the vocabulary itself.
-- Status is **derived from the run, not asserted**: an open blocker means
-  `gated:`, and no caller can force `ok` over it.
+- **In `/wheypoint`**, status is derived from the run, not asserted: an open
+  blocker means `gated:`, and no caller can force `ok` over it (see
+  `skills/wheypoint/SKILL.md` § derivation). Elsewhere the writer is trusted
+  to report accurately — this module validates the wire grammar, not the
+  phase's self-assessment.
 
 ## In-session handback vs durable artifact
 
@@ -80,10 +86,48 @@ The two must never tell different stories.
 
 | Boundary | Producer | Consumer | Required fields | Optional fields |
 |---|---|---|---|---|
-| Phase handback | `/cook`, `/press`, `/age`, `/cure`, `/affinage`, `/pasteurize`, `/mold` | the dispatching orchestrator | `status`, `next`, `artifact`, orientation | `taste_test`, `durable_flags`, `baseline` |
+| Phase handback | `/cook`, `/press`, `/age`, `/cure`, `/affinage`, `/pasteurize` | the dispatching orchestrator | `status`, `next`, `artifact`, orientation | `taste_test`, `durable_flags`, `baseline` |
 | Durable report | the same phases, via the artifact writer | the next phase, `/cheese --continue` | same preamble + body | same |
 | Fan phase router | a fan-out phase handback | `/cook`'s fan pathway phase decision | `status` (routed by disposition), `next` | — |
 | Checkpoint note | `/wheypoint` | `/cheese --continue` | `status`, `next`, `artifact`, orientation | decision dossier body |
+| Grading receipt (distinct vocabulary, not a handback) | `/hard-cheese` | the attempt log | `status: PASS \| FAIL \| FAILED \| LOGGED` | `attempts` |
+
+## Wire-format limits
+
+- **Reasons are capped** at `MAX_REASON_LENGTH` (512 characters); a longer
+  reason is rejected on render and on parse, not silently truncated.
+- **Status names are ASCII-only.** A homoglyph (e.g. a Unicode lookalike of a
+  registered name) is rejected before lookup, so the accepted set never
+  widens beyond the vocabulary above.
+- **Every preamble field is single-line** — `status`, `next`, `artifact`,
+  `orientation`, `taste_test`, `durable_flags`, `baseline` — a newline in any
+  of them is a render-time contract violation, not a value that reaches the
+  artifact.
+- **`reason` is the field name**; `halt_reason` is a deprecated read-only
+  alias kept for readers written against the pre-rename shape (`handoff_cli
+  parse` still publishes both JSON keys).
+
+## CLI and router behavior
+
+- **Exit codes.** A CLI (`handoff_cli`, `write_handoff_artifact`,
+  `phase_decision`) exits `3` for a contract violation (a bad status, an
+  illegal transition, a newline in a preamble field) and `2` for any other
+  `CliError` (I/O, a bad path). Contract-violation messages are prefixed with
+  the dispatch context that raised them — `<phase> (phase N)`, `--phase X
+  --slug Y`, or `--file P` — so the operator can attribute the failure.
+- **The fan router's verdict carries the full vocabulary.** `phase_decision`'s
+  `Verdict` reports `status`, `disposition`, and `reason` on every branch, not
+  just an `action`. A `gated` status routes to its own `gated` action, never
+  folded into `halt`; an `ok-with-concerns` concern is appended to the
+  `exit_message` on the spawn branch, not dropped.
+- **`needs-context` requires a reason and is capped.** The router rejects a
+  bare `needs-context` (no gap named); it accepts `--retry-count <int>`
+  (default 0), so a first `needs-context` re-dispatches the same phase and a
+  second one at the same phase halts with "retry cap (1) reached" instead of
+  retrying again.
+- **`next:` is informational under `stop`.** Only a `proceed` disposition
+  walks the transition table on `next:`; under `gated` or `halt` the router
+  ignores whatever `next:` names and ends the run on the reason instead.
 
 ## Dispatch names its contracts
 

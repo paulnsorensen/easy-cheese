@@ -145,20 +145,110 @@ class TestInvalidIndex:
 class TestOutputShape:
     def test_required_keys_present(self) -> None:
         result = phase_decision.decide(0, "ok")
-        assert set(result.keys()) == {"action", "next_phase", "exit_message"}
+        assert set(result.keys()) == {
+            "action",
+            "next_phase",
+            "exit_message",
+            "status",
+            "disposition",
+            "reason",
+        }
         assert isinstance(result["exit_message"], str)
         assert result["exit_message"]
 
-    def test_action_is_one_of_five(self) -> None:
-        valid = {"spawn", "stop", "stop_early", "clean_complete", "halt"}
+    def test_action_is_one_of_seven(self) -> None:
+        valid = {
+            "spawn",
+            "stop",
+            "stop_early",
+            "clean_complete",
+            "halt",
+            "needs_context",
+            "gated",
+        }
         for idx, status, nxt in [
             (0, "ok", None),
             (6, "ok", None),
             (2, "ok", "done"),
             (3, "halt: oops", None),
+            (1, "needs-context: gap", None),
+            (0, "gated: decide", None),
         ]:
             result = phase_decision.decide(idx, status, nxt)
             assert result["action"] in valid
+
+
+class TestVerdictFields:
+    """status/disposition/reason are populated on every routing branch."""
+
+    def test_spawn_branch_carries_parsed_fields(self) -> None:
+        result = phase_decision.decide(0, "ok")
+        assert result["status"] == "ok"
+        assert result["disposition"] == "proceed"
+        assert result["reason"] is None
+
+    def test_ok_with_concerns_appends_concern_to_exit_message(self) -> None:
+        result = phase_decision.decide(0, "ok-with-concerns: DATA LOSS RISK")
+        assert result["action"] == "spawn"
+        assert result["status"] == "ok-with-concerns"
+        assert result["disposition"] == "proceed"
+        assert result["reason"] == "DATA LOSS RISK"
+        assert result["exit_message"].endswith("; concern: DATA LOSS RISK")
+
+    def test_terminal_stop_carries_parsed_fields(self) -> None:
+        result = phase_decision.decide(6, "ok", "done")
+        assert result["status"] == "ok"
+        assert result["disposition"] == "proceed"
+        assert result["reason"] is None
+
+    def test_gated_action_and_message_distinct_from_halt(self) -> None:
+        gated = phase_decision.decide(0, "gated: needs a human call")
+        assert gated["action"] == "gated"
+        assert gated["status"] == "gated"
+        assert gated["disposition"] == "stop"
+        assert gated["reason"] == "needs a human call"
+        assert gated["exit_message"] == "cook (phase 0) gated on: needs a human call"
+
+        halted = phase_decision.decide(0, "halt: cook gate failed")
+        assert halted["action"] == "halt"
+        assert halted["status"] == "halt"
+        assert halted["disposition"] == "stop"
+        assert halted["reason"] == "cook gate failed"
+        assert halted["exit_message"] == "cook (phase 0) halted: cook gate failed"
+
+
+class TestRetryCap:
+    def test_bare_needs_context_is_a_contract_error(self) -> None:
+        with pytest.raises(cli.CliError) as excinfo:
+            _ = phase_decision.decide(1, "needs-context")
+        assert excinfo.value.exit_code == 3
+        assert "press (phase 1)" in str(excinfo.value)
+        assert "needs-context requires a named gap" in str(excinfo.value)
+
+    def test_first_needs_context_retries(self) -> None:
+        result = phase_decision.decide(1, "needs-context: missing fixture", retry_count=0)
+        assert result["action"] == "needs_context"
+        assert result["next_phase"] == "press"
+
+    def test_second_needs_context_halts_at_the_cap(self) -> None:
+        result = phase_decision.decide(1, "needs-context: still missing", retry_count=1)
+        assert result["action"] == "halt"
+        assert result["next_phase"] is None
+        assert "retry cap (1) reached" in result["exit_message"]
+
+    def test_negative_retry_count_is_rejected(self) -> None:
+        with pytest.raises(cli.CliError) as excinfo:
+            _ = phase_decision.decide(1, "needs-context: gap", retry_count=-5)
+        assert excinfo.value.exit_code == 2
+        assert str(excinfo.value) == "retry-count cannot be negative: -5"
+
+
+class TestUnknownStatusStillContractError:
+    def test_unknown_status_raises_contract_error_with_phase_context(self) -> None:
+        with pytest.raises(cli.CliError) as excinfo:
+            _ = phase_decision.decide(2, "haltish")
+        assert excinfo.value.exit_code == 3
+        assert "age (phase 2)" in str(excinfo.value)
 
 
 # ---------------------------------------------------------------------------

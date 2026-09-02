@@ -1,10 +1,14 @@
 """CLI helper for shared/scripts: argparse + --full/--json injection + emit.
 
 Public API:
-    CliError -- one-line message; cli.run reports 'ERROR: <msg>' and returns 2.
-    cli.run  -- dispatch and return integer statuses for normal, missing-handler,
-                and CliError paths; argparse help/errors retain SystemExit.
-    cli.emit -- print scalar/dict/list; truncation footer fires when limit is set.
+    CliError       -- one-line message with `exit_code` (default 2); cli.run
+                      reports 'ERROR: <msg>' and returns that code.
+    contract_error -- wrap a contract-violation exception as a CliError
+                      that exits 3.
+    cli.run        -- dispatch and return integer statuses for normal,
+                      missing-handler, and CliError paths; argparse
+                      help/errors retain SystemExit.
+    cli.emit       -- print scalar/dict/list; truncation footer fires when limit is set.
 """
 from __future__ import annotations
 
@@ -16,7 +20,16 @@ from typing import TextIO, cast
 
 
 class CliError(Exception):
-    """One-line error; cli.run reports it on stderr and returns 2."""
+    """One-line error; cli.run reports it on stderr and returns `exit_code`."""
+
+    def __init__(self, message: str, *, exit_code: int = 2) -> None:
+        super().__init__(message)
+        self.exit_code: int = exit_code
+
+
+def contract_error(exc: Exception, *, context: str) -> CliError:
+    """Wrap a contract-violation exception as a CliError that exits 3."""
+    return CliError(f"{context}: {exc}", exit_code=3)
 
 
 def reject_path_segment(field: str, value: str) -> None:
@@ -61,7 +74,7 @@ def run(
         status = func(args)
     except CliError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
-        return 2
+        return exc.exit_code
     return 0 if status is None else status
 
 

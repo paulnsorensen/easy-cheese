@@ -99,8 +99,9 @@ class TestRender:
             "--artifact", "",
             "--orientation", "x",
         )
-        assert result.returncode == 2
+        assert result.returncode == 3
         assert "halt status requires" in result.stderr
+        assert "--status" in result.stderr
 
     def test_unknown_status_errors(self) -> None:
         result = _run(
@@ -110,8 +111,9 @@ class TestRender:
             "--artifact", "",
             "--orientation", "x",
         )
-        assert result.returncode == 2
+        assert result.returncode == 3
         assert "status must be" in result.stderr
+        assert "--status" in result.stderr
 
 
 class TestParse:
@@ -128,6 +130,7 @@ class TestParse:
         payload = cast("dict[str, object]", json.loads(result.stdout))
         assert payload == {
             "status": "ok",
+            "reason": None,
             "halt_reason": None,
             "next_skill": "press",
             "artifact": ".cheese/cook/demo.md",
@@ -152,6 +155,7 @@ class TestParse:
         assert parsed.returncode == 0, parsed.stderr
         payload = cast("dict[str, object]", json.loads(parsed.stdout))
         assert payload["status"] == "halt"
+        assert payload["reason"] == "stuck"
         assert payload["halt_reason"] == "stuck"
         assert payload["next_skill"] == "done"
         assert payload["artifact"] == ".cheese/age/x.md"
@@ -166,8 +170,14 @@ class TestParse:
         fixture = tmp_path / "bad.md"
         _ = fixture.write_text("status: ok\nnext: age\n")  # missing artifact + orientation
         result = _run("parse", "--file", str(fixture))
-        assert result.returncode == 2
+        assert result.returncode == 3
         assert "ERROR:" in result.stderr
+
+    def test_malformed_preamble_error_carries_file_path(self, tmp_path: Path) -> None:
+        fixture = tmp_path / "bad.md"
+        _ = fixture.write_text("status: ok\nnext: age\n")
+        result = _run("parse", "--file", str(fixture))
+        assert str(fixture) in result.stderr
 
 
 class TestDispatch:

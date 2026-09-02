@@ -22,6 +22,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from easy_cheese_schemas.handback_status import require_single_line
 from easy_cheese_schemas.phase_contracts import (
     StatusError,
     parse_status_field,
@@ -34,16 +35,44 @@ ALWAYS_PROPAGATE: frozenset[str] = frozenset({"--hard"})
 CHAIN_ONLY: frozenset[str] = frozenset({"--auto"})
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class HandoffSlug:
     status: str  # a name from phase_contracts.HANDBACK_STATUSES
-    halt_reason: str | None  # the one-line reason every non-`ok` status carries
+    reason: str | None  # the one-line reason every non-`ok` status carries
     next_skill: str  # bare skill name (no leading slash) or "done"
     artifact: str | None
     orientation: str
     taste_test: str | None = None
     durable_flags: str | None = None
     baseline: str | None = None
+
+    def __init__(
+        self,
+        *,
+        status: str,
+        next_skill: str,
+        artifact: str | None,
+        orientation: str,
+        reason: str | None = None,
+        halt_reason: str | None = None,
+        taste_test: str | None = None,
+        durable_flags: str | None = None,
+        baseline: str | None = None,
+    ) -> None:
+        """Accept `reason=` (current) or `halt_reason=` (deprecated alias)."""
+        object.__setattr__(self, "status", status)
+        object.__setattr__(self, "reason", reason if reason is not None else halt_reason)
+        object.__setattr__(self, "next_skill", next_skill)
+        object.__setattr__(self, "artifact", artifact)
+        object.__setattr__(self, "orientation", orientation)
+        object.__setattr__(self, "taste_test", taste_test)
+        object.__setattr__(self, "durable_flags", durable_flags)
+        object.__setattr__(self, "baseline", baseline)
+
+    @property
+    def halt_reason(self) -> str | None:
+        """Deprecated read-only alias for `reason`; kept for pre-rename readers."""
+        return self.reason
 
     @property
     def disposition(self) -> str:
@@ -87,7 +116,7 @@ def parse_handoff_slug(text: str) -> HandoffSlug:
         raise HandoffParseError(
             f"handoff preamble needs status / next / artifact / orientation; got {len(raw_lines)} lines"
         )
-    status, halt_reason = _parse_status(raw_lines[0])
+    status, reason = _parse_status(raw_lines[0])
 
     next_match = _NEXT_RE.match(raw_lines[1])
     if not next_match:
@@ -122,7 +151,7 @@ def parse_handoff_slug(text: str) -> HandoffSlug:
 
     return HandoffSlug(
         status=status,
-        halt_reason=halt_reason,
+        reason=reason,
         next_skill=next_skill,
         artifact=artifact_value,
         orientation=orientation,
@@ -134,7 +163,16 @@ def parse_handoff_slug(text: str) -> HandoffSlug:
 
 def render_handoff_slug(slug: HandoffSlug) -> str:
     """Render a HandoffSlug back to its canonical preamble."""
-    status_line = "status: " + render_status_field(slug.status, slug.halt_reason)
+    for field_name, value in (
+        ("artifact", slug.artifact),
+        ("orientation", slug.orientation),
+        ("taste_test", slug.taste_test),
+        ("durable_flags", slug.durable_flags),
+        ("baseline", slug.baseline),
+    ):
+        if value is not None:
+            require_single_line(field_name, value)
+    status_line = "status: " + render_status_field(slug.status, slug.reason)
     lines = [status_line, f"next: {slug.next_skill}", f"artifact: {slug.artifact or ''}"]
     if slug.taste_test is not None:
         lines.append(f"taste_test: {slug.taste_test}")

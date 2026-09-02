@@ -554,7 +554,8 @@ class TestAtomicRename:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        # Force the atomic move to fail; assert target is absent and no .tmp lingers.
+        # Force the atomic move to fail; it must surface as a CliError (exit 2)
+        # naming the target path, not a raw traceback, and must not leak a .tmp file.
         import os as _os
 
         def boom(_src: str, _dst: str) -> None:
@@ -562,7 +563,9 @@ class TestAtomicRename:
 
         monkeypatch.setattr(_os, "replace", boom)
 
-        with pytest.raises(OSError, match="simulated rename failure"):
+        target_dir = tmp_path / ".cheese" / "age"
+        target = target_dir / "never.md"
+        with pytest.raises(writer.cli.CliError) as excinfo:
             _ = writer.write_artifact(
                 slug="never",
                 status="ok",
@@ -574,8 +577,91 @@ class TestAtomicRename:
                 root=tmp_path,
             )
 
-        target_dir = tmp_path / ".cheese" / "age"
-        # Directory may exist (we mkdir'd before the write), but no artifact and no .tmp.
-        assert not (target_dir / "never.md").exists()
+        assert excinfo.value.exit_code == 2
+        assert str(target) in str(excinfo.value)
+        assert not target.exists()
         leftovers = list(target_dir.glob("*.tmp")) if target_dir.exists() else []
         assert leftovers == [], f"tmp file leaked: {leftovers}"
+
+    def test_cli_replace_failure_exits_2(self, tmp_path: Path) -> None:
+        # End-to-end: a write that fails after the tmp file lands must exit 2
+        # (I/O), not 3 (contract) and not an unhandled traceback (1).
+        target_dir = tmp_path / ".cheese" / "age"
+        target_dir.mkdir(parents=True)
+        target_dir.chmod(0o500)  # read+execute only: os.replace into it fails
+        try:
+            result = subprocess.run(
+                [
+                    sys.executable, str(WRITER_CLI),
+                    "--slug", "locked", "--status", "ok", "--phase", "age",
+                    "--next", "done", "--artifact", "", "--orientation", "demo",
+                    "--root", str(tmp_path),
+                ],
+                capture_output=True,
+                text=True,
+            )
+        finally:
+            target_dir.chmod(0o700)
+        assert result.returncode == 2, result.stderr
+        assert str(target_dir / "locked.md") in result.stderr
+        leftovers = list(target_dir.glob("*.tmp"))
+        assert leftovers == [], f"tmp file leaked: {leftovers}"
+
+
+class TestContractErrorContext:
+    """A rejected `--status` (or any render-time contract violation) exits 3
+    and names the `--phase`/`--slug` dispatch it came from."""
+
+    def test_bad_status_exits_3_with_phase_and_slug_context(self, tmp_path: Path) -> None:
+        result = subprocess.run(
+            [
+                sys.executable, str(WRITER_CLI),
+                "--slug", "my-task", "--status", "bogus-status", "--phase", "press",
+                "--next", "age", "--artifact", "", "--orientation", "demo",
+                "--root", str(tmp_path),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 3, result.stderr
+        assert "--phase press" in result.stderr
+        assert "--slug my-task" in result.stderr
+
+    def test_render_time_newline_in_artifact_exits_3_before_cheese_dir_created(
+        self, tmp_path: Path
+    ) -> None:
+        # `artifact` is only validated when render_handoff_slug renders the
+        # preamble, which happens before the .cheese/<phase> directory or the
+        # tmp file are created.
+        result = subprocess.run(
+            [
+                sys.executable, str(WRITER_CLI),
+                "--slug", "hurt", "--status", "ok", "--phase", "press",
+                "--next", "age", "--artifact", "line1\nline2", "--orientation", "demo",
+                "--root", str(tmp_path),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 3, result.stderr
+        assert "--phase press" in result.stderr
+        assert "--slug hurt" in result.stderr
+        assert not (tmp_path / ".cheese").exists()
+
+    def test_illegal_transition_exits_3_with_phase_and_slug_context(
+        self, tmp_path: Path
+    ) -> None:
+        result = subprocess.run(
+            [
+                sys.executable, str(WRITER_CLI),
+                "--slug", "hop", "--status", "ok", "--phase", "cook",
+                "--next", "plate", "--artifact", "", "--orientation", "demo",
+                "--root", str(tmp_path),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 3, result.stderr
+        assert "--phase cook" in result.stderr
+        assert "--slug hop" in result.stderr
+        assert not (tmp_path / ".cheese").exists()

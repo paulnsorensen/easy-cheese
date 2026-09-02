@@ -404,6 +404,6 @@ def resolve_legacy(
                 + "regular file",
             )
     if slug_block.disposition != phase_contracts.PROCEED:
-        reason = slug_block.halt_reason or f"{slug_block.status} status"
+        reason = slug_block.reason or f"{slug_block.status} status"
         return _gate(found, f"legacy note {slug_block.status}: {reason}")
     return found

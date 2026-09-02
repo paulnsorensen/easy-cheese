@@ -84,7 +84,7 @@ Call source-code search/read backends per [`code-intelligence-routing.md`](../ch
 Write to `.cheese/affinage/pr-<n>.md`: the four-line handoff slug, then the age-style body plus two extra sections (`## PR status` and the same severity / `## Needs-investigation` / `## Reviewer-rejected` shape `/age` uses). Full annotated template: `references/report-template.md`.
 
 ```markdown
-status: ok | halt: <one-line reason>
+status: <canonical status field>
 next: cure | done
 artifact: <path-to-prior-cure-or-press-report-if-any>
 <one-line orientation: what the PR does and what was graded>

@@ -156,9 +156,11 @@ Only a terminal age with `next: done` is publishable.
 ## Recovery and aggregate gates
 
 - **Worker exhaustion.** A worker that runs out of context or turns writes a
-  partial typed handoff with `status: halt: <reason>`. Retry that curd once
-  with the error folded into context; if it halts again, host-finalize its
-  blocked `CurdResult`, keep harvesting the rest, and report the curd.
+  partial typed handoff with `status: needs-context: <gap>`. The orchestrator
+  re-dispatches that curd once with the gap folded into context and
+  `--retry-count 1`; a second `needs-context` at that phase halts (the router
+  caps the loop itself), and the host finalizes its blocked `CurdResult`,
+  keeps harvesting the rest, and reports the curd.
 - **Aggregate-gate conflict.** After all waves are harvested, run the project
   gates over the merged tree. Distinguish a real cross-curd conflict (curds
   passed individually but collide in aggregate) from harmless generated drift

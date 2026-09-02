@@ -186,7 +186,7 @@ Return a short report covering:
 Write a minimum-shape handoff slug to `.cheese/pasteurize/<slug>.md` so `/cook` (and any orchestrator) can resume without re-reading the full report. Schema:
 
 ```markdown
-status: ok | halt: <one-line reason>
+status: <canonical status field>
 next: cook | mold | done
 artifact: <path-to-richer-report-if-any>
 cause: <one-sentence named cause>

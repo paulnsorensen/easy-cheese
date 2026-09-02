@@ -108,7 +108,7 @@ House style: [`../cheese/references/formatting.md`](../cheese/references/formatt
 Write a minimum-shape handoff slug at the top of `.cheese/cook/<slug>.md` — same file as the report, no second file — so downstream phases (and cook's own fan pathway when orchestrating a wave) can resume or chain without re-reading it. Schema:
 
 ```markdown
-status: ok | halt: <one-line reason>
+status: <canonical status field>
 next: mold | cook | press | age | done
 artifact: <path-to-richer-report-if-any>
 taste_test: inline-pass | dispatched-pass | revised | deferred-to-orchestrator

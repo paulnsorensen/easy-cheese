@@ -85,7 +85,7 @@ Applied requires its proving test green (Iron Law — see `references/cure-disci
 Write the cure report to `.cheese/cure/<slug>.md` with a minimum handoff slug at the top so `/cook`'s fan pathway and `/cheese --continue` can chain without re-parsing the full report:
 
 ```markdown
-status: ok | halt: <one-line reason>
+status: <canonical status field>
 next: age | done
 artifact: <path-if-any>
 baseline: none | <recorded baseline block copied from the upstream handoff — see ../cook/references/quality-gates.md>
