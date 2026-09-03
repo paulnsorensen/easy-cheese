@@ -11,6 +11,9 @@ from types import ModuleType
 from typing import cast
 
 _COMMAND_RE = re.compile(r"[a-z0-9][a-z0-9_-]*")
+# Use one trimmed line without pipes.
+# scripts/render_generated_regions.py inserts the summary into a Markdown table cell.
+_SUMMARY_RE = re.compile(r"[^\s|][^\n|]*")
 CommandHandler = Callable[[list[str]], int]
 
 
@@ -18,6 +21,7 @@ CommandHandler = Callable[[list[str]], int]
 class Command:
     name: str
     target: str
+    summary: str
 
     def __post_init__(self) -> None:
         if not isinstance(self.name, str) or _COMMAND_RE.fullmatch(self.name) is None:  # pyright: ignore[reportUnnecessaryIsInstance]
@@ -27,6 +31,12 @@ class Command:
         module, separator, attribute = self.target.partition(":")
         if not module or separator != ":" or not attribute:
             raise ValueError("invalid command target")
+        if (
+            not isinstance(self.summary, str)  # pyright: ignore[reportUnnecessaryIsInstance]
+            or _SUMMARY_RE.fullmatch(self.summary) is None
+            or self.summary != self.summary.strip()
+        ):
+            raise ValueError("invalid command summary")
 
 
 def command_map(commands: Sequence[Command]) -> dict[str, Command]:
@@ -70,7 +80,7 @@ def derive_command(fn: CommandHandler) -> Command:
     name = cast("str | None", getattr(fn, "__bundle_command_name__", None))
     if name is None:
         raise ValueError(f"{fn!r} is not decorated with @bundle_command")
-    return Command(name, f"{fn.__module__}:{fn.__qualname__}")
+    return Command(name, f"{fn.__module__}:{fn.__qualname__}", name)
 
 
 def compiled_commands(module: ModuleType) -> tuple[Command, ...]:
