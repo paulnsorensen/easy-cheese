@@ -35,13 +35,64 @@ ERROR:-line accumulation and exit codes follow .github/scripts/validate_wiki.py.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import re
 import sys
+from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import TypedDict, cast
+from typing import Protocol, TypedDict, cast
 
 from easy_cheese.shared.document_rules import DOCUMENT_RULES
-from easy_cheese_schemas.spec_format import is_hardened_provenance, spec_format_policy
+
+
+class _SpecFormatPolicy(Protocol):
+    @property
+    def notice(self) -> str | None: ...
+
+    def requires_gate_applicability(self) -> bool: ...
+
+    def requires_section(
+        self, section_name: str, *, default_required: bool
+    ) -> bool: ...
+
+
+class _SpecFormatPolicyFactory(Protocol):
+    def __call__(
+        self, frontmatter: Mapping[str, object], *, strict: bool
+    ) -> _SpecFormatPolicy: ...
+
+
+is_hardened_provenance: Callable[[Mapping[str, object]], bool]
+spec_format_policy: _SpecFormatPolicyFactory
+
+try:
+    from easy_cheese_schemas.spec_format import (
+        is_hardened_provenance as _is_hardened_provenance,
+    )
+    from easy_cheese_schemas.spec_format import (
+        spec_format_policy as _spec_format_policy,
+    )
+
+    is_hardened_provenance = _is_hardened_provenance
+    spec_format_policy = _spec_format_policy
+except ModuleNotFoundError as error:
+    if error.name != "attrs":
+        raise
+    module_path = Path(__file__).parents[3] / "easy_cheese_schemas" / "spec_format.py"
+    module_spec = importlib.util.spec_from_file_location("_mold_spec_format", module_path)
+    if module_spec is None or module_spec.loader is None:
+        raise RuntimeError(f"cannot load specification policy from {module_path}")
+    spec_format = importlib.util.module_from_spec(module_spec)
+    sys.modules[module_spec.name] = spec_format
+    module_spec.loader.exec_module(spec_format)
+    is_hardened_provenance = cast(
+        Callable[[Mapping[str, object]], bool],
+        spec_format.is_hardened_provenance,
+    )
+    spec_format_policy = cast(
+        _SpecFormatPolicyFactory,
+        spec_format.spec_format_policy,
+    )
 
 
 class _CrossFieldRule(TypedDict):
