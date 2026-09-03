@@ -191,8 +191,7 @@ Followed by:
 
 - `references/judge-prompt.md` — SOLO Taxonomy rubric, judge sub-agent system prompt, JSON output shape.
 - `references/composition.md` — the full `--hard` / `--auto` matrix and the single puncture point.
-- `skills/hard-cheese/scripts/hard-cheese.pyz freshness-check` — checks whether a previous PASS is still fresh for the current HEAD and passing score (step 2).
-- `skills/hard-cheese/scripts/hard-cheese.pyz append-attempt` — atomically appends an attempt row to the audit trail (step 6).
+- See [`references/commands.md`](references/commands.md) for the generated bundle commands.
 
 ## Agent resolution
 
