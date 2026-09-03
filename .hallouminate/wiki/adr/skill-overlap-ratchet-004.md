@@ -1,5 +1,7 @@
 # ADR: Ratchet reviewed content-specific overlap findings
 
+Status: superseded (2026-08-30) by [[skill-overlap-ratchet-005]] — the ratchet is retired and `tools/skill-overlap/` is deleted.
+
 The job begins advisory, then blocks only new content-specific exact or high-confidence semantic findings against a reviewed baseline; aggregate duplication totals never decide pass or fail.
 
 ## Decision record

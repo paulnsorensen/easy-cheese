@@ -1,0 +1,18 @@
+# ADR: Retire the skill-overlap ratchet rather than salvage it
+
+Status: accepted (2026-08-30)
+
+The semantic skill-overlap ratchet — `.github/workflows/skill-overlap.yml`, the `tools/skill-overlap/` Rust analyzer, and the `.github/skill-overlap-{calibration,baseline}.yml` contracts — is deleted. ADR-001 through ADR-004 become historical.
+
+## Decision record
+
+### ADR-005: Delete the analyzer; git history is the restore point [status: accepted]
+
+- **Context:** The ratchet was parked on `workflow_dispatch` only while this decision was open (issue #511). Four facts decided it. (1) It could never enforce: the `main-protection` ruleset carries `deletion`, `non_fast_forward`, `pull_request`, and `copilot_code_review` — no `required_status_checks` — and `branches/main/protection` is 404, so no check on `main` is required (issue #340), and there is no merge queue or `merge_group` trigger, so trunk had no invariant either (issue #341). (2) It was never calibrated: both `status: draft`, every detector digest and every labeled sample literally `review-required`. ADR-004's blocking mode was unreachable by construction. (3) It was expensive: every PR touching `skills/**/*.md` paid a full Rust build, a FastEmbed model fetch, and a golden-vector parity check under a 30-minute timeout to produce an advisory report with no consumer — every historical run is a green `calibrate`. (4) It was a maintenance liability: 4,783 lines of Rust plus a `Cargo.lock` that `dependabot.yml` does not cover, pinning FastEmbed 5.17.3 and a model revision that only manual work would ever bump, and `just test-skill-overlap` was the single leg of `just check` requiring a Rust toolchain.
+- **Decision:** Delete the workflow, the analyzer, both contract files, and `tests/python/test_skill_overlap_workflow.py`; drop the `test-skill-overlap` leg from `just check` and the `tools/skill-overlap/target/` ignore. The removal commit is the restore point — `git revert` brings the analyzer back whole, which is strictly more recoverable than the parked-workflow state it replaces.
+- **Alternatives:** *Salvage* — label an overlap corpus, validate thresholds, promote calibration then baseline to `reviewed`, restore the `pull_request` trigger, and add `required_status_checks` to `main-protection`. Rejected: the blocking work is gated on a repo-wide merge-policy change only the owner can make (#340) plus a merge queue (#341), and the corpus labeling is open-ended human research, so the salvage cost lands before any enforcement value. *Keep it parked* — rejected: a dispatch-only workflow nobody runs still carries the Rust build surface, the unmonitored dependency lock, and the doctrine cost of a "ratchet" that ratchets nothing. *Delete the tool, keep the contracts* — rejected: `calibrate`/`report`/`check` semantics have no meaning without the analyzer that reads them.
+- **Consequences:** No automated signal on cross-skill duplication; overlap is caught by review (`/age`'s deslop and NIH dimensions) instead. `just check` is Python, JS, and bash only — contributors no longer need `cargo`. The skill *size* ratchet (`.github/skill-budgets.json`, `validate_skills.py`) is untouched and still enforces per-skill budgets. Reviving semantic overlap detection should start from Hallouminate's index rather than a repository-owned embedding stack, reopening ADR-001's build-versus-borrow question with today's answer.
+
+Related: [[skill-overlap-ratchet-001]], [[skill-overlap-ratchet-004]].
+
+_Source: issue #511 · repository state at bab83ce4 · `repos/paulnsorensen/easy-cheese/rules/branches/main` (checked 2026-08-30) · Supersedes: skill-overlap-ratchet-001 through 004_

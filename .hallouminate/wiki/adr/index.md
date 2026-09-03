@@ -54,6 +54,7 @@
 - [skill-overlap-ratchet-002](./skill-overlap-ratchet-002.md) — ADR: Preserve H2 and H3 identity during semantic chunking
 - [skill-overlap-ratchet-003](./skill-overlap-ratchet-003.md) — ADR: Compare semantic overlap against explicit reference topology
 - [skill-overlap-ratchet-004](./skill-overlap-ratchet-004.md) — ADR: Ratchet reviewed content-specific overlap findings
+- [skill-overlap-ratchet-005](./skill-overlap-ratchet-005.md) — ADR: Retire the skill-overlap ratchet rather than salvage it
 - [skill-size-ratchet-001](./skill-size-ratchet-001.md) — ADR: Measure SKILL.md bodies in estimated tokens, not lines
 - [skill-size-ratchet-002](./skill-size-ratchet-002.md) — ADR: No tokenizer dependency in the skill-size gate
 - [skill-size-ratchet-003](./skill-size-ratchet-003.md) — ADR: Ratchet skill size and reference structure against a recorded baseline
