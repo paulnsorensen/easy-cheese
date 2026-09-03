@@ -39,16 +39,20 @@ class Stop:
 
 
 Action: TypeAlias = Continue | Dispatch | Stop
-_MAX_REPAIR_CYCLES = 2
+
+# Press owns at most three attempts per slug (attempt 3 is the terminal
+# third RED), and `repair_cycles` counts the corrective Cook continuations
+# already completed -- so attempt N always carries N-1 completed cycles.
+MAX_ATTEMPTS = 3
+_MAX_REPAIR_CYCLES = MAX_ATTEMPTS - 1
 
 
-def _coerce_outcome(outcome: object) -> Outcome:
+def coerce_outcome(outcome: object) -> Outcome:
+    """Resolve the single Press outcome vocabulary from an untrusted value."""
     if isinstance(outcome, Outcome):
         return outcome
     if not isinstance(outcome, str):
-        raise TypeError(
-            f"outcome must be an Outcome or string, not {type(outcome).__name__}"
-        )
+        raise ValueError("outcome must be a string")
     try:
         return Outcome(outcome)
     except ValueError as exc:
@@ -63,11 +67,13 @@ def _check_repair_cycles(repair_cycles: int) -> None:
         raise TypeError("repair_cycles must be a non-negative integer")
     if repair_cycles < 0:
         raise ValueError("repair_cycles must be a non-negative integer")
+    if repair_cycles >= MAX_ATTEMPTS:
+        raise ValueError(f"repair_cycles must be less than {MAX_ATTEMPTS}")
 
 
 def press_route(outcome: Outcome | str, repair_cycles: int) -> Action:
     """Return the only action permitted at a Press decision boundary."""
-    resolved = _coerce_outcome(outcome)
+    resolved = coerce_outcome(outcome)
     _check_repair_cycles(repair_cycles)
 
     if resolved is Outcome.GREEN:
@@ -85,7 +91,9 @@ __all__ = [
     "Action",
     "Continue",
     "Dispatch",
+    "MAX_ATTEMPTS",
     "Outcome",
     "Stop",
+    "coerce_outcome",
     "press_route",
 ]

@@ -40,10 +40,21 @@ action is authoritative. Halt if the bundle does not exist.
 
 Each Press attempt has its own append-only artifact names. Use the same
 `<slug>` for all three attempts, but never reuse an attempt number: the attack
-candidate lives at `.cheese/press/candidates/<slug>.attempt-N.json` and the
-route request at `.cheese/press/<slug>.attempt-N.route.json`. A third
+candidate lives at `.cheese/press/candidates/<slug>.attempt-N.json`, the
+route request at `.cheese/press/<slug>.attempt-N.route.json`, the telemetry
+request at `.cheese/press/<slug>.attempt-N.telemetry-request.json`, and the
+telemetry record at `.cheese/press/<slug>.attempt-N.telemetry.json`. A third
 in-contract RED routes to terminal `Stop("third-red")`; do not create
 attempt-4 names or overwrite any earlier path.
+
+## Execution telemetry
+
+After routing, run `python3 skills/press/scripts/press.pyz press-telemetry
+.cheese/press/<slug>.attempt-N.telemetry-request.json` and save the emitted
+record at `.cheese/press/<slug>.attempt-N.telemetry.json`. It records the
+attempt's outcome, retry count, per-phase tool errors, every delegated
+agent's purpose, and the class of each changed file. It never routes. See
+[`references/telemetry.md`](references/telemetry.md).
 
 ## Adversarial loop
 
@@ -79,7 +90,8 @@ Press preserves baseline-aware readiness behavior for project gates. A Cook `bas
 4. **Continue or stop** — invoke packaged `press.pyz press-route` with
    `outcome` and `repair_cycles`. Only its returned `Continue`, `Dispatch`,
    and `Stop` action shapes are public.
-5. **Report** — write `.cheese/press/<slug>.md` with the evidence and action.
+5. **Report** — write `.cheese/press/<slug>.md` with the evidence, action, and
+   the attempt's telemetry record path.
 6. **Hand off** — only a GREEN `Dispatch("/age")` reaches the global Age route.
 
 Compatibility contracts: source changes follow [`code-intelligence-routing.md`](../cheese/references/code-intelligence-routing.md). Portability follows [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md); slash commands are host renderings, not the control model. Readiness `ready for /age` maps to `status: ok` and `next: age`; `follow-up recommended` maps to `status: ok-with-concerns: <concern>` (proceed); `blocked` maps to `status: gated: <decision>` (stop). When invoked from `/ultracook` with its no-chain directive, write the Press handoff and stop; do not chain forward.
@@ -94,6 +106,7 @@ next: age | press | done
 artifact: <evidence-path>
 baseline: none | <Cook baseline block>
 action: continue | dispatch | stop
+telemetry: <telemetry-record-path>
 <one-line orientation>
 ```
 

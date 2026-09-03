@@ -31,10 +31,7 @@ def _route(**payload: object) -> dict[str, object]:
         raise ValueError("outcome must be a string")
     if isinstance(repair_cycles, bool) or not isinstance(repair_cycles, int):
         raise ValueError("repair_cycles must be a non-negative integer")
-    try:
-        action = press_route(outcome, repair_cycles)
-    except TypeError as exc:
-        raise ValueError(str(exc)) from exc
+    action = press_route(outcome, repair_cycles)
     return _action_payload(action)
 
 
