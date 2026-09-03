@@ -69,10 +69,12 @@ jobs:
           version: "0.12.5"
           python-version: "3.12"
 
+      # PyPI install: no GitHub API call, so the repo-wide GITHUB_TOKEN
+      # budget (1,000 requests/hour) is not spent on every job.
       - name: Set up just
-        uses: extractions/setup-just@f8a3cce218d9f83db3a2ecd90e41ac3de6cdfd9b # v3.1.0
-        with:
-          just-version: "1.58.0"
+        run: |
+          uv tool install rust-just==1.58.0
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Install test dependencies
         run: |
@@ -149,10 +151,12 @@ jobs:
           version: "0.12.5"
           python-version: "3.12"
 
+      # PyPI install: no GitHub API call, so the repo-wide GITHUB_TOKEN
+      # budget (1,000 requests/hour) is not spent on every job.
       - name: Set up just
-        uses: extractions/setup-just@f8a3cce218d9f83db3a2ecd90e41ac3de6cdfd9b # v3.1.0
-        with:
-          just-version: "1.58.0"
+        run: |
+          uv tool install rust-just==1.58.0
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: basedpyright
         run: just typecheck
@@ -170,10 +174,12 @@ jobs:
           version: "0.12.5"
           python-version: "3.12"
 
+      # PyPI install: no GitHub API call, so the repo-wide GITHUB_TOKEN
+      # budget (1,000 requests/hour) is not spent on every job.
       - name: Set up just
-        uses: extractions/setup-just@f8a3cce218d9f83db3a2ecd90e41ac3de6cdfd9b # v3.1.0
-        with:
-          just-version: "1.58.0"
+        run: |
+          uv tool install rust-just==1.58.0
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: markdownlint
         uses: DavidAnson/markdownlint-cli2-action@6bf21b07787794f89a243495939cd651942aeabe # v24.1.0
         with:
