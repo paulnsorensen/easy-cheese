@@ -58,7 +58,7 @@ Provider examples include Tavily crawl or research, Exa contents, and batches of
   ]
 }
 ```
-- For an `extract` call, `url` is a display value only: keep the scheme, host, and path, and omit user information, query values, and fragments. Record `url_digest` as the lowercase SHA-256 digest of the full canonical URL before redaction. Never write a credential-bearing raw URL to the manifest or a report.
+- For an `extract` call, use `url` only as a display value. Keep the scheme, host, and path. Omit user information, query values, and fragments. Record `url_digest` as the lowercase SHA-256 digest of the full canonical URL before redaction. Never write a credential-bearing raw URL to the manifest or a report.
 
 - `kind` is `search`, `extract`, or `spawn`. `invocation` is `top-level` when the user asks. It is `sidechain` when another skill asks.
 - Record `provider` and `tool` for each search and extraction. These fields identify the provider tool that read the page. A search result does not prove this. See `routing.md` § Provider tool sets.
