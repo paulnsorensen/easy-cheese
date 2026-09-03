@@ -1,16 +1,16 @@
 # Judge sub-agent — system prompt and output shape
 
-This is the system prompt and contract for the fresh-context judge spawned by `/hard-cheese`. The parent skill loads this file, passes it as the sub-agent's instructions, and parses the returned JSON.
+This file defines the fresh-context judge prompt and contract. The parent skill uses this file and parses the returned JSON.
 
 ## Attribution
 
-The rubric and threshold are taken from:
+The following source defines the rubric and threshold:
 
 > Sankaranarayanan, S. (2026). *Mitigating 'Epistemic Debt' in Generative AI-Scaffolded Novice Programming using Metacognitive Scripts.* Proceedings of the 13th ACM Conference on Learning at Scale. <https://arxiv.org/abs/2602.20206>
 
 Implementation reference: <https://github.com/sreecharansankaranarayanan/vibecheck>
 
-## System prompt (verbatim — pass to the judge sub-agent)
+## System prompt
 
 > You are a fresh-context judge evaluating whether a human author understands the causal logic of an AI-scaffolded code change they are about to share for review.
 >
@@ -46,14 +46,15 @@ Implementation reference: <https://github.com/sreecharansankaranarayanan/vibeche
 
 ## Input shape passed to the judge
 
-The parent skill sends the judge a single user message containing, in order:
+The parent skill sends one user message with this content:
 
-1. The configured `passing_score` integer (`1..5`; default `3`).
-2. The spec excerpt (if `.cheese/specs/<slug>.md` exists) — up to ~30 lines.
-3. The diff summary — files changed and key hunks, capped at ~80 lines.
-4. The author's free-text explanation, delimited as a fenced block.
+1. Give the configured `passing_score` integer. Use `3` by default and accept values from `1` through `5`.
+2. Give up to 30 lines from `.cheese/specs/<slug>.md` when the file exists.
+3. Give up to 80 lines that describe changed files and important diff sections.
+4. Give the author's free-text explanation in a fenced block.
 
-The judge does not request additional context. If the input is insufficient (no diff, no explanation), the judge returns `score: 1, level: "Prestructural"` with a `feedback` line explaining what was missing.
+The judge does not request more context. For insufficient input, the judge returns `score: 1` and `level: "Prestructural"`.
+The `feedback` value identifies the missing input.
 
 ## Output JSON shape
 
@@ -72,10 +73,11 @@ The judge does not request additional context. If the input is insufficient (no 
 
 Constraints:
 
-- `score` is an integer 1–5.
-- `level` matches the score exactly (1=Prestructural, 2=Unistructural, 3=Multistructural, 4=Relational, 5=Extended Abstract).
-- `pass` is `true` iff `score >= passing_score`.
-- `feedback` is a single paragraph, 2–5 sentences. No markdown headers, no lists.
-- `socratic_qs` is an array of 2–4 strings on FAIL, an empty array on PASS. Each question ends with a question mark.
+- Set `score` to an integer from 1 through 5.
+- Set `level` to the exact level for the score.
+- Set `pass` to `true` only when `score >= passing_score`.
+- Write `feedback` as one paragraph with two through five sentences. Do not use headers or lists.
+- On FAIL, put two through four questions in `socratic_qs`. On PASS, use an empty array.
+- End each Socratic question with a question mark.
 
-If the parent cannot parse the JSON, it treats the attempt as `ERROR` and applies the fail-open divergence — see `skills/hard-cheese/SKILL.md` `## Divergence from the paper`.
+If the parent cannot parse the JSON, it records an `ERROR` attempt and fails open. See `## Divergence from the paper` in `skills/hard-cheese/SKILL.md`.
