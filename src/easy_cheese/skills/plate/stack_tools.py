@@ -107,9 +107,9 @@ def detect_stack_tools(cwd: Path) -> dict[str, object]:
         extension_result
         and extension_result.returncode == 0
         and any(
-            columns[1] == "github/gh-stack"
+            columns[1].strip() == "github/gh-stack"
             for line in extension_result.stdout.splitlines()
-            if len(columns := line.split()) > 1
+            if len(columns := line.split("\t")) > 1
         )
     )
 
