@@ -83,7 +83,7 @@ Use the style and citation format in [`../cheese/references/formatting.md`](../c
 - Use `references/routing.md` for the capability matrix, provider selection, and source priority.
 - Use `references/synthesis.md` for claim evidence, confidence limits, and output format.
 - Use `references/context-isolation.md` to keep raw content out of the main context.
-- `references/budgets.md` — soft call budgets, extension gaps, no repeat calls.
+- Use `references/budgets.md` for call budgets, extension gaps, and duplicate-call rules.
 - Use `references/safety.md` for untrusted content and data protection rules.
 - Use `references/unavailable.md` for provider substitutions and uncovered capabilities.
 - Use `references/evals.md` for trigger queries and trace checks.
