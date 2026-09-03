@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from dataclasses import replace
 
 from easy_cheese.shared.bundle_commands import bundle_command, derive_command, dispatch
 
@@ -43,11 +44,26 @@ def _lockfile_resolve(argv: list[str]) -> int:
 
 
 COMMANDS = (
-    derive_command(_batch_resolve),
-    derive_command(_conflict_pick),
-    derive_command(_conflict_summary),
-    derive_command(_detect_squash_residue),
-    derive_command(_lockfile_resolve),
+    replace(
+        derive_command(_batch_resolve),
+        summary="Run mergiraf structural merge over every conflicted file",
+    ),
+    replace(
+        derive_command(_conflict_pick),
+        summary="Take ours or theirs for each conflict hunk",
+    ),
+    replace(
+        derive_command(_conflict_summary),
+        summary="Summarize conflicts with line numbers and framed context",
+    ),
+    replace(
+        derive_command(_detect_squash_residue),
+        summary="Detect squash-merge residue and print both remedies",
+    ),
+    replace(
+        derive_command(_lockfile_resolve),
+        summary="Take one side of a lockfile conflict and regenerate it",
+    ),
 )
 
 
