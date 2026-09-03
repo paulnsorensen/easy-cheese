@@ -8,21 +8,19 @@ from easy_cheese.shared.manifest_io import json_command
 
 from .press_telemetry import telemetry_record
 
-_EXPECTED_KEYS = frozenset(
-    {
-        "slug",
-        "attempt",
-        "outcome",
-        "repair_cycles",
-        "tool_errors",
-        "delegations",
-        "changed_files",
-    }
-)
+_EXPECTED_KEYS = {
+    "slug",
+    "attempt",
+    "outcome",
+    "repair_cycles",
+    "tool_errors",
+    "delegations",
+    "changed_files",
+}
 
 
 def _record(**payload: object) -> dict[str, object]:
-    if set(payload) != set(_EXPECTED_KEYS):
+    if set(payload) != _EXPECTED_KEYS:
         raise ValueError(
             "request must contain exactly "
             + ", ".join(sorted(_EXPECTED_KEYS))

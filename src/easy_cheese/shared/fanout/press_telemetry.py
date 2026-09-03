@@ -71,8 +71,8 @@ _METADATA_NAMES = frozenset(
     {"LICENSE", "NOTICE", "CODEOWNERS", ".gitignore", ".gitattributes"}
 )
 
-_TOOL_ERROR_KEYS = frozenset({"phase", "operation"})
-_DELEGATION_KEYS = frozenset({"role", "purpose"})
+_TOOL_ERROR_KEYS = {"phase", "operation"}
+_DELEGATION_KEYS = {"role", "purpose"}
 
 
 def classify_path(path: str) -> FileClass:
@@ -113,11 +113,11 @@ def _require_list(value: object, field: str) -> list[object]:
     return cast(list[object], value)
 
 
-def _require_entry(value: object, field: str, keys: frozenset[str]) -> dict[str, object]:
+def _require_entry(value: object, field: str, keys: set[str]) -> dict[str, object]:
     if not isinstance(value, dict):
         raise ValueError(f"each {field} entry must be a mapping")
     entry = cast(dict[str, object], value)
-    if set(entry) != set(keys):
+    if set(entry) != keys:
         raise ValueError(
             f"each {field} entry must contain exactly {', '.join(sorted(keys))}"
         )
@@ -220,7 +220,8 @@ def telemetry_record(
     resolved_outcome = coerce_outcome(outcome)
     cycles = _require_repair_cycles(repair_cycles)
     resolved_attempt = _require_attempt(attempt, cycles)
-    operations = _operations(_require_list(tool_errors, "tool_errors"))
+    errors = _require_list(tool_errors, "tool_errors")
+    operations = _operations(errors)
     recorded_delegations = _delegations(_require_list(delegations, "delegations"))
     paths = _changed_paths(_require_list(changed_files, "changed_files"))
 
@@ -245,9 +246,7 @@ def telemetry_record(
         "boundary_consistent": (
             not production_source_files or resolved_outcome is Outcome.PRODUCTION_CHANGED
         ),
-        "tool_error_count": sum(
-            cast(int, operation["errors"]) for operation in operations
-        ),
+        "tool_error_count": len(errors),
         "operations": operations,
         "delegations": recorded_delegations,
     }
