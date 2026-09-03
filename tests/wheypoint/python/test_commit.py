@@ -7,7 +7,7 @@ import re
 import threading
 from collections.abc import Callable
 from pathlib import Path
-from typing import cast
+from typing import Protocol, cast
 
 import attrs
 import pytest
@@ -33,6 +33,10 @@ from easy_cheese_schemas import (
 from easy_cheese.skills.wheypoint import commit, records, storage
 
 from conftest import PLACEHOLDER_DIGEST, WORK_ID, Promotion
+
+
+class _RevisionLineage(Protocol):
+    rehydrated_from_revision_id: str | None
 
 
 def _entry(entry_id: str, kind: EntryKind, *, gates: bool = False) -> ProtectedEntry:
@@ -128,6 +132,33 @@ def test_narrowed_delta_preserves_omitted_protected_state(
     assert result.record.artifact_links == parent.artifact_links
     assert result.revision.preserved_entry_ids == ["d-keep", "q-keep", "b-keep"]
     assert result.revision.applied_additions == []
+
+
+def test_resolving_the_last_gate_must_clear_the_dossier_it_carried(
+    store: storage.WorkStore, make_promotion: Callable[..., Promotion]
+) -> None:
+    """Carry-forward keeps the dossier a silent delta did not speak about, and
+    an unanswered fork under `status: ok` is exactly the misfire the schema
+    now refuses -- so closing the last gate has to say so in the same delta."""
+    seed = _seed(store, make_promotion, gating=True)
+    resolve = EntryTransition(
+        entry_id="q-durability",
+        action=TransitionAction.RESOLVE,
+        rationale="canonical-local it is",
+    )
+
+    with pytest.raises(commit.CommitError, match="does not produce a legal record"):
+        _ = commit.commit(
+            _delta(seed.record.revision_id, transitions=[resolve]), store=store
+        )
+
+    result = commit.commit(
+        _delta(seed.record.revision_id, transitions=[resolve], decision_dossier=[]),
+        store=store,
+    )
+
+    assert result.record.decision_dossier == []
+    assert result.record.status is WheypointStatus.OK
 
 
 def test_assigned_entry_ids_are_derived_from_the_request_not_the_clock(
@@ -498,7 +529,8 @@ def test_compaction_rehydrated_from_the_current_revision_is_accepted(
         store=store,
     )
 
-    assert result.revision.rehydrated_from_revision_id == seed.record.revision_id
+    lineage = cast(_RevisionLineage, cast(object, result.revision))
+    assert lineage.rehydrated_from_revision_id == seed.record.revision_id
     assert result.revision.session_provenance == provenance
     # Evidence only: the authority the record carries has nowhere to put a
     # session, so nothing downstream can select on one.

@@ -8,7 +8,9 @@ Two rules make the file safe to hand back to a human:
 
 * **`status:` is written, never read.** Parsing derives the status from the
   gating entry list, exactly as the schema types do. Editing the word `gated`
-  to `ok` changes nothing except the digest.
+  to `ok` changes nothing except the digest. `declared_status` hands the
+  written word back separately so lint can report the disagreement instead of
+  quietly discarding it.
 * **The digest covers the document.** `projection_digest` is a hash of the
   rendered text with its own value blanked, so every other byte -- preamble,
   orientation, gates, dossier -- is pinned, and the digest line is the only
@@ -174,6 +176,17 @@ def _dossier(lines: list[str]) -> list[DecisionFork]:
         return [records.structure(fork, DecisionFork) for fork in forks]
     except records.RecordError as exc:
         raise ProjectionParseError(str(exc)) from exc
+
+
+def declared_status(text: str) -> str:
+    """The word the document's own `status:` line claims.
+
+    `parse` derives the status instead of reading it, which is what keeps an
+    edited header harmless. Handing the written word back separately lets a
+    caller hold the two against each other and report the lie rather than
+    silently discard it.
+    """
+    return _preamble(text.splitlines())["status"]
 
 
 def parse(text: str) -> WheypointProjection:

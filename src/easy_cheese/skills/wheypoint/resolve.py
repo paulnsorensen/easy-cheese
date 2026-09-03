@@ -46,6 +46,9 @@ from . import legacy as legacy_mod
 from . import lint, records, storage
 
 _IDENTIFIER_RE = re.compile(r"[a-z0-9][a-z0-9._-]{0,63}")
+# A parent may live outside every worktree, but only as a reference someone can
+# actually open: an absolute http(s) URL, never a bare host or a local path.
+_PARENT_URL_RE = re.compile(r"https?://[^\s/]+(?:/\S*)?")
 
 
 class ResolutionOutcome(str, Enum):
@@ -320,6 +323,53 @@ def _gate(resolution: Resolution, detail: str) -> Resolution:
     return evolve(resolution, outcome=ResolutionOutcome.GATED, detail=detail)
 
 
+def _parent_tokens(raw: str) -> tuple[str, ...]:
+    """The slugs a `parents:` line names, read tolerantly.
+
+    The field is hand-written Markdown, not JSON: `[a, b]`, `a, b`, and
+    `["a"]` all mean the same lineage, so the brackets and quotes are stripped
+    rather than being made to parse.
+    """
+    tokens = (
+        token.strip().strip("'\"").strip()
+        for token in raw.strip().strip("[]").split(",")
+    )
+    return tuple(token for token in tokens if token)
+
+
+def _parent_resolves(token: str, roots: tuple[Path, ...]) -> bool:
+    if _PARENT_URL_RE.fullmatch(token) is not None:
+        return True
+    if "/" in token or token in {".", ".."}:
+        return False
+    return any(
+        (root / legacy_mod.NOTES_DIR_PARTS[0] / legacy_mod.NOTES_DIR_PARTS[1]
+         / f"{token}.md").is_file()
+        for root in roots
+    )
+
+
+def _unresolved_parents(
+    raw: str, *, note_worktree: Path, start: Path | str, run: legacy_mod.Runner | None
+) -> tuple[str, ...]:
+    """Every declared parent that names nothing a reader could go and read.
+
+    Lineage is the one part of a legacy note a resumed session follows off the
+    note itself, so a parent that resolves to nothing is a dangling pointer
+    dressed as provenance -- reported here, exactly like a dangling artifact.
+    """
+    tokens = _parent_tokens(raw)
+    if not tokens:
+        return ()
+    # The note's own worktree leads, because that is where a sibling handoff
+    # actually sits; an exact-path reference never scans anything else.
+    scanned = legacy_mod.worktree_roots(start, run=run).roots
+    roots = (note_worktree, *(root for root in scanned if root != note_worktree))
+    return tuple(
+        token for token in tokens if not _parent_resolves(token, roots)
+    )
+
+
 def resolve_legacy(
     slug: str,
     *,
@@ -402,6 +452,20 @@ def resolve_legacy(
                 found,
                 f"declared artifact {slug_block.artifact!r} must be an existing "
                 + "regular file",
+            )
+    if slug_block.parents:
+        unresolved = _unresolved_parents(
+            slug_block.parents,
+            note_worktree=note.worktree.resolve(),
+            start=start,
+            run=run,
+        )
+        if unresolved:
+            return _gate(
+                found,
+                f"declared parent(s) {', '.join(repr(p) for p in unresolved)} "
+                + "name no legacy note in any worktree and are not absolute "
+                + "http(s) URLs",
             )
     if slug_block.disposition != phase_contracts.PROCEED:
         reason = slug_block.reason or f"{slug_block.status} status"

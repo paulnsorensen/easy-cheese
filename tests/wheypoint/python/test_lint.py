@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 from collections.abc import Callable
@@ -19,7 +20,7 @@ from easy_cheese_schemas import (
     WheypointRevision,
 )
 
-from easy_cheese.skills.wheypoint import canonical, lint, records, storage
+from easy_cheese.skills.wheypoint import canonical, lint, projection, records, storage
 
 PROJECT = "paulnsorensen-easy-cheese"
 
@@ -99,6 +100,56 @@ def test_a_tampered_projection_fails_its_own_digest(
     assert not report.ok
 
 
+_DIGEST_LINE = re.compile(r"^projection_digest:.*$", re.MULTILINE)
+
+
+def _repin(text: str) -> str:
+    """Re-hash a hand-edited document so it passes its own digest check."""
+    digest = projection.projection_digest_of_text(text)
+    return _DIGEST_LINE.sub(f"projection_digest: {digest}", text, count=1)
+
+
+def test_a_projection_written_gated_while_nothing_gates_is_reported(
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    """A hand-authored note can hash itself, so the digest cannot catch a
+    header that contradicts the gates the document actually lists."""
+    lying = _repin(make_promotion().markdown.replace("status: ok", "status: gated"))
+
+    report = lint.lint_projection_text(lying)
+
+    assert report.codes == (lint.LintCode.PROJECTION_STATUS_MISMATCH,)
+    assert "'gated'" in report.findings[0].detail
+    assert "'ok'" in report.findings[0].detail
+
+
+def test_a_projection_written_ok_over_a_live_gate_is_reported(
+    corpus_root: Path, make_promotion: Callable[..., _PromotionLike]
+) -> None:
+    store = make_store(corpus_root)
+    promotion = make_promotion(gating=True)
+    store.promote(promotion.record, promotion.revision, promotion.markdown)
+    path = store.projection_path(1, "rev-0001")
+    _ = path.write_text(
+        _repin(promotion.markdown.replace("status: gated", "status: ok")),
+        encoding="utf-8",
+    )
+
+    report = check(store)
+
+    assert lint.LintCode.PROJECTION_STATUS_MISMATCH in report.codes
+    assert lint.LintCode.PROJECTION_DIGEST_MISMATCH not in report.codes
+    assert not report.ok
+
+
+def test_an_honest_projection_status_is_not_reported(
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    for gating in (False, True):
+        report = lint.lint_projection_text(make_promotion(gating=gating).markdown)
+        assert report.codes == (), gating
+
+
 def test_a_tampered_record_fails_the_digest_its_receipt_quotes(
     corpus_root: Path, make_promotion: Callable[..., _PromotionLike]
 ) -> None:
@@ -174,6 +225,113 @@ def test_a_declared_commit_that_no_longer_resolves_blocks(
     assert report.codes == (lint.LintCode.GIT_OBJECT_MISSING,)
 
 
+# ----- same-slug replacement (issue #371) -----------------------------------
+
+
+def decision(entry_id: str, summary: str) -> ProtectedEntry:
+    return ProtectedEntry(
+        entry_id=entry_id,
+        kind=EntryKind.DECISION,
+        summary=summary,
+        state=EntryState.ACTIVE,
+        blocks_continuation=False,
+    )
+
+
+def test_a_narrowed_rewrite_that_drops_a_prior_decision_is_reported(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    """The incident: a full checkpoint is resumed, the topic is narrowed, and
+    the next revision for the same work carries fewer decisions than its own
+    lineage accounts for. Every digest agrees, so only the reconciliation pass
+    against the chain can see the loss."""
+    store = make_store(corpus_root)
+    kept = decision("d-authority", "The record is the authority.")
+    dropped = decision("d-projection", "The note is a projection.")
+    full = make_promotion(
+        1,
+        "rev-0001",
+        record=make_record(decisions=[kept, dropped]),
+        additions=[kept, dropped],
+    )
+    store.promote(full.record, full.revision, full.markdown)
+    narrowed = make_promotion(
+        2,
+        "rev-0002",
+        parent="rev-0001",
+        record=make_record(
+            revision_id="rev-0002", revision_number=2, decisions=[kept]
+        ),
+        preserved=["d-authority"],
+    )
+    store.promote(narrowed.record, narrowed.revision, narrowed.markdown)
+
+    report = check(store)
+
+    assert report.codes == (lint.LintCode.ENTRY_DROPPED,)
+    assert report.findings[0].detail == (
+        "revision 'rev-0001' accounts for entry 'd-projection', which record "
+        "'rev-0002' no longer carries"
+    )
+
+
+def test_a_rewrite_that_carries_every_accounted_entry_lints_clean(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    store = make_store(corpus_root)
+    kept = decision("d-authority", "The record is the authority.")
+    carried = decision("d-projection", "The note is a projection.")
+    full = make_promotion(
+        1,
+        "rev-0001",
+        record=make_record(decisions=[kept, carried]),
+        additions=[kept, carried],
+    )
+    store.promote(full.record, full.revision, full.markdown)
+    later = make_promotion(
+        2,
+        "rev-0002",
+        parent="rev-0001",
+        record=make_record(
+            revision_id="rev-0002", revision_number=2, decisions=[kept, carried]
+        ),
+        preserved=["d-authority", "d-projection"],
+    )
+    store.promote(later.record, later.revision, later.markdown)
+
+    assert check(store).codes == ()
+
+
+def test_an_entry_an_unreachable_sibling_added_is_not_accounted_for(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    """Only the walked chain accounts for entries. A receipt that sits in the
+    work directory without being an ancestor of the current revision never
+    obliges the record to carry what it added."""
+    store = make_store(corpus_root)
+    kept = decision("d-authority", "The record is the authority.")
+    sibling_only = decision("d-sibling", "Written down an abandoned branch.")
+    sibling = make_promotion(
+        1,
+        "rev-0009",
+        record=make_record(revision_id="rev-0009", decisions=[sibling_only]),
+        additions=[sibling_only],
+    )
+    store.promote(sibling.record, sibling.revision, sibling.markdown)
+    current = make_promotion(
+        1, "rev-0001", record=make_record(decisions=[kept]), additions=[kept]
+    )
+    store.promote(current.record, current.revision, current.markdown)
+
+    assert check(store).codes == ()
+
+
 def covered_record(
     make_record: Callable[..., WheypointRecord], digest: str
 ) -> WheypointRecord:
@@ -231,6 +389,97 @@ def test_a_pinned_artifact_that_still_matches_lints_clean(
     report = check(store, artifact_digest=lambda path: pinned)
 
     assert report.codes == ()
+
+
+def revision_pinned_record(
+    make_record: Callable[..., WheypointRecord],
+    pinned_revision_id: str,
+    **overrides: object,
+) -> WheypointRecord:
+    return make_record(
+        decisions=[
+            ProtectedEntry(
+                entry_id="d-shape",
+                kind=EntryKind.DECISION,
+                summary="The record is the authority.",
+                state=EntryState.ACTIVE,
+                blocks_continuation=False,
+            )
+        ],
+        artifact_links=[
+            ArtifactLink(
+                path="cook/report.md",
+                revision_id=pinned_revision_id,
+                covers_entry_ids=["d-shape"],
+            )
+        ],
+        **overrides,
+    )
+
+
+def test_a_revision_pin_resolves_against_the_ancestry_not_the_directory(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    """An abandoned sibling is still a file on disk. A claim pinned to one
+    describes work this record never took, so it must not read as fresh."""
+    store = make_store(corpus_root)
+    sibling = make_promotion(
+        1, "rev-0009", record=make_record(revision_id="rev-0009")
+    )
+    store.promote(sibling.record, sibling.revision, sibling.markdown)
+    current = make_promotion(
+        1, "rev-0001", record=revision_pinned_record(make_record, "rev-0009")
+    )
+    store.promote(current.record, current.revision, current.markdown)
+
+    report = check(store, artifact_digest=lambda path: canonical.digest_text("here"))
+
+    assert report.codes == (lint.LintCode.ARTIFACT_COVERAGE_INVALID,)
+    assert report.findings[0].detail == (
+        "cook/report.md: coverage pins unknown revision 'rev-0009'"
+    )
+
+
+def test_a_revision_pin_on_a_walked_ancestor_lints_clean(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    store = make_store(corpus_root)
+    first = make_promotion(1, "rev-0001")
+    store.promote(first.record, first.revision, first.markdown)
+    second = make_promotion(
+        2,
+        "rev-0002",
+        parent="rev-0001",
+        record=revision_pinned_record(
+            make_record, "rev-0001", revision_id="rev-0002", revision_number=2
+        ),
+    )
+    store.promote(second.record, second.revision, second.markdown)
+
+    report = check(store, artifact_digest=lambda path: canonical.digest_text("here"))
+
+    assert report.codes == ()
+
+
+def test_a_revision_pinned_artifact_that_is_gone_invalidates_its_claim(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    store = make_store(corpus_root)
+    promotion = make_promotion(
+        record=revision_pinned_record(make_record, "rev-0001")
+    )
+    store.promote(promotion.record, promotion.revision, promotion.markdown)
+
+    report = check(store)
+
+    assert report.codes == (lint.LintCode.ARTIFACT_COVERAGE_INVALID,)
+    assert report.findings[0].detail == "cook/report.md: artifact is missing"
 
 
 def test_an_interrupted_promotion_is_named_rather_than_reported_clean(
