@@ -40,3 +40,44 @@ Each of these is a rationalization. Name it and stop.
 | "All findings stem from one root cause; one edit covers all." | This may be true, but it must be verified. Apply the edit, run the gate, then re-check which remaining findings the gate result clears. | Apply once, validate, then re-read each remaining finding to confirm it is resolved. |
 | "The gate is flaky; I'll mark the fix Applied and note the flakiness." | A flaky gate is a blocker, not an excuse. Marking Applied on a red gate means the cure report lies. | Record the flakiness in Checks. Do not mark Applied. Surface the blocker. |
 | "This finding is low severity; I can skip validation to save time." | Low-severity fixes fail tests at the same rate as high-severity ones. Severity is about impact, not about validation cost. | Validate every applied fix regardless of severity. |
+
+---
+
+## Bounded responsibility on dispatch
+
+A dispatched repair agent owns exactly the findings named in its brief — no
+adjacent cleanup, no re-review, no scope it discovered on the way. That bound
+is what makes a redispatch cheap: the orchestrator knows precisely which
+findings a returning agent was accountable for.
+
+**Near-budget checkpoint.** An agent approaching its context or tool budget
+must not die on a bare error. Before it stops it returns, in one structured
+handoff:
+
+- **Completed** — each finding it cured, with the verification it ran and the
+  result (the Iron Law still applies; an unvalidated fix is staged, not cured).
+- **Changed-file ownership** — every file it wrote, so the orchestrator never
+  re-derives the diff.
+- **Remaining** — the unfinished findings and the exact next action, in its own
+  words.
+- **Blockers** — any environment or tool failure that stopped it.
+
+The orchestrator **consumes** that handoff on redispatch: the next agent
+receives the completed set as done and starts at the named next action. It
+never restarts the whole finding set. A budget overrun keeps the `BLOCKED`
+disposition every stopped run carries; it is told apart by the
+`writer stopped at its budget:` prefix on `unresolved_work[0]` (or
+`budget checkpoint invalid:` when the checkpoint failed validation), so a run
+that hit its ceiling is not mistaken for a run that broke.
+
+The typed seam behind this is
+`easy_cheese_schemas.workflow.WriterBudgetExceeded`, which carries a
+`WriterCheckpoint` of those four parts; Blockers ride inside its `reason` text
+next to the budget cause. The host finalizes it into a partial curd result
+whose completed criteria keep their disposition and evidence and whose
+unreached criteria are blocked on the overrun reason. Completed entries may
+only report finished criteria (passed or failed) and are read in criterion
+order, and a checkpoint that fails validation still salvages its readable
+deliverables into the blocked result. A
+checkpoint claiming every criterion is rejected: the review branch is skipped
+on the overrun path, so full coverage would be a pass no reviewer ever saw.

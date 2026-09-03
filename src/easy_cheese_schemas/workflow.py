@@ -5,7 +5,7 @@ import json
 import os
 import re
 import tempfile
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from enum import Enum
 from pathlib import Path
 from typing import Literal, cast
@@ -30,6 +30,7 @@ from .contracts import (
     CurdPlan,
     CurdResult,
     CurdResultWriterView,
+    DeliverableWriterView,
     DiagnosisDisposition,
     DiagnosisRequest,
     DiagnosisResult,
@@ -53,6 +54,10 @@ from .contracts import (
     SourceCurdRef,
     SourcePlanRef,
     WriterViewKind,
+    _bounded_string,  # pyright: ignore[reportPrivateUsage]
+    _list_of,  # pyright: ignore[reportPrivateUsage]
+    _string_list,  # pyright: ignore[reportPrivateUsage]
+    _tuple_sequence,  # pyright: ignore[reportPrivateUsage]
 )
 from .planner import materialize_planner_result
 from .schema_runtime import (
@@ -74,6 +79,51 @@ WorkflowResults = tuple[PlannerResult, tuple[BranchResult, ...], tuple[CurdResul
 
 
 @attrs.define(frozen=True)
+class WriterCheckpoint:
+    """Progress a writer completed before it stopped at its own budget.
+
+    A coder that runs out of context or tool calls mid-curd holds work the host
+    cannot see: criteria it already verified, files it already wrote, and the
+    exact next action. Without this the host only sees the raised exception and
+    the whole curd is blocked, so a redispatch repeats repairs that already
+    landed.
+    """
+
+    # Why the writer stopped: the budget it hit, plus any environment blocker.
+    reason: str = attrs.field(validator=_bounded_string)
+    # Criteria the writer finished, in curd-criteria order. A writer that
+    # completed nothing still checkpoints for its deliverables and next action.
+    completed: tuple[CriterionResultWriterView, ...] = attrs.field(
+        factory=tuple,
+        converter=_tuple_sequence,
+        validator=_list_of(CriterionResultWriterView),
+    )
+    # Files the writer already wrote — the changed-file ownership a redispatch
+    # must not re-derive.
+    deliverables: tuple[DeliverableWriterView, ...] = attrs.field(
+        factory=tuple,
+        converter=_tuple_sequence,
+        validator=_list_of(DeliverableWriterView),
+    )
+    # Unfinished work and the exact next action, in the writer's own words.
+    remaining: tuple[str, ...] = attrs.field(
+        factory=tuple, converter=_tuple_sequence, validator=_string_list()
+    )
+
+
+class WriterBudgetExceeded(Exception):
+    """Raised by a writer dispatch stopping at its context or tool budget.
+
+    Distinct from every other writer failure so a run ledger can tell an
+    overrun apart from a correctness, environment, or tool-call error.
+    """
+
+    def __init__(self, checkpoint: WriterCheckpoint) -> None:
+        super().__init__(checkpoint.reason)
+        self.checkpoint: WriterCheckpoint = checkpoint
+
+
+@attrs.define(frozen=True)
 class CureDiagnosisBinding:
     """Host-owned authorization for one exact plan curd."""
 
@@ -88,9 +138,9 @@ class CureDiagnosisBinding:
     )
 
 
-CureDiagnosisBindings = Mapping[str, CureDiagnosisBinding] | tuple[
-    CureDiagnosisBinding, ...
-]
+CureDiagnosisBindings = (
+    Mapping[str, CureDiagnosisBinding] | tuple[CureDiagnosisBinding, ...]
+)
 
 
 def _canonical_value(value: object) -> object:
@@ -131,8 +181,6 @@ def _version(contract: type) -> ContractVersion:
     if version is None:
         raise TypeError(f"{contract.__name__} does not carry a contract version")
     return version
-
-
 
 
 def _planner_view(output: object) -> PlannerResultWriterView:
@@ -318,8 +366,7 @@ def _writer_context(
         "inputs": resolved_inputs,
         "outputs": curd.outputs,
         "criteria": tuple(
-            CriterionWriterView(item.description, item.check)
-            for item in curd.criteria
+            CriterionWriterView(item.description, item.check) for item in curd.criteria
         ),
         "shared_inputs": shared_inputs,
         "constraints": () if plan.context is None else plan.context.constraints,
@@ -335,14 +382,14 @@ def _artifact_digest(payload: bytes) -> str:
 
 def _deliverables(
     result_id: str,
-    view: CurdResultWriterView,
+    deliverables: tuple[DeliverableWriterView, ...],
     *,
     repository_root: Path,
     artifact_directory: Path,
 ) -> tuple[dict[str, ArtifactRef], dict[str, EvidenceRef]]:
     artifacts: dict[str, ArtifactRef] = {}
     evidence: dict[str, EvidenceRef] = {}
-    for index, item in enumerate(view.deliverables, start=1):
+    for index, item in enumerate(deliverables, start=1):
         if item.path in artifacts:
             raise ValueError(f"duplicate deliverable path: {item.path}")
         source_uri = f"repo://{quote(item.path, safe='/-._~')}"
@@ -423,7 +470,9 @@ def _normalize(
         WriterViewKind.DIAGNOSIS_RESULT: DiagnosisResult,
     }[kind]
     if not isinstance(canonical.value, expected):
-        raise ContractValidationError(f"dispatch returned {canonical.value.__class__.__name__}")
+        raise ContractValidationError(
+            f"dispatch returned {canonical.value.__class__.__name__}"
+        )
     return canonical
 
 
@@ -433,9 +482,7 @@ def _subject_artifact(
     artifact_directory: Path,
 ) -> ArtifactRef:
     if len(canonical.canonical_bytes) > MAX_ARTIFACT_BYTES:
-        raise ValueError(
-            f"artifact exceeds maximum size of {MAX_ARTIFACT_BYTES} bytes"
-        )
+        raise ValueError(f"artifact exceeds maximum size of {MAX_ARTIFACT_BYTES} bytes")
     artifact_directory.mkdir(parents=True, exist_ok=True, mode=0o700)
     descriptor = ArtifactRef(
         artifact_id=f"{result_id}/subject",
@@ -636,21 +683,65 @@ def _writer_view(output: object) -> CurdResultWriterView:
     )
 
 
+def _blocked_rows(count: int, reason: str) -> Iterator[CriterionResultWriterView]:
+    return (
+        CriterionResultWriterView(CriterionDisposition.BLOCKED, reason=reason)
+        for _row in range(count)
+    )
+
+
 def _blocked_writer_view(
     curd: SemanticCurd,
     reason: str,
+    *,
+    deliverables: tuple[DeliverableWriterView, ...] = (),
 ) -> CurdResultWriterView:
-    rows = tuple(
-        CriterionResultWriterView(
-            CriterionDisposition.BLOCKED,
-            reason=reason,
-        )
-        for _criterion in curd.criteria
-    )
     return CurdResultWriterView(
-        criterion_results=rows,
-        deliverables=(),
+        criterion_results=tuple(_blocked_rows(len(curd.criteria), reason)),
+        deliverables=deliverables,
         unresolved_work=(reason,),
+    )
+
+
+def _checkpoint_writer_view(
+    curd: SemanticCurd,
+    reason: str,
+    checkpoint: WriterCheckpoint,
+) -> CurdResultWriterView:
+    """Host-finalize an overrun into a partial result the next dispatch resumes.
+
+    ``checkpoint.completed`` is a prefix of ``curd.criteria`` in curd-definition
+    order: entry ``i`` reports the disposition of ``curd.criteria[i]``. A
+    checkpoint may only report criteria it actually finished — never a
+    criterion it has not reached yet — so every entry must be PASSED or
+    FAILED. Criteria the writer finished keep their disposition, evidence, and
+    deliverables; every criterion it did not reach is blocked on the overrun
+    reason. A checkpoint may never cover the whole curd: the review branch is
+    skipped on this path, so a full-coverage checkpoint would be a pass no
+    reviewer ever saw.
+    """
+
+    for position, item in enumerate(checkpoint.completed, start=1):
+        if item.disposition not in (
+            CriterionDisposition.PASSED,
+            CriterionDisposition.FAILED,
+        ):
+            raise ValueError(
+                f"budget checkpoint completed[{position}] must be finished "
+                + f"(passed or failed), not {item.disposition.value}"
+            )
+    if len(checkpoint.completed) >= len(curd.criteria):
+        raise ValueError(
+            "budget checkpoint must leave at least one criterion unfinished, "
+            + f"not {len(checkpoint.completed)} of {len(curd.criteria)}"
+        )
+    return CurdResultWriterView(
+        criterion_results=(
+            *checkpoint.completed,
+            *_blocked_rows(len(curd.criteria) - len(checkpoint.completed), reason),
+        ),
+        deliverables=checkpoint.deliverables,
+        unresolved_work=(reason, *checkpoint.remaining),
     )
 
 
@@ -682,17 +773,20 @@ def _blocked_result(
     reason: str,
     *,
     provenance_refs: tuple[str, ...],
+    deliverable_views: tuple[DeliverableWriterView, ...] = (),
+    resolved_deliverables: Mapping[str, ArtifactRef] | None = None,
+    resolved_evidence: Mapping[str, EvidenceRef] | None = None,
 ) -> CurdResult:
     invocation = _result_invocation(
         plan,
         curd,
         index,
-        evidence={},
-        deliverables={},
+        evidence=resolved_evidence or {},
+        deliverables=resolved_deliverables or {},
         runtime_refs=provenance_refs,
     )
     canonical = _normalize(
-        _blocked_writer_view(curd, reason),
+        _blocked_writer_view(curd, reason, deliverables=deliverable_views),
         WriterViewKind.CURD_RESULT,
         invocation,
     )
@@ -735,6 +829,115 @@ def _diagnosis_failure(
     )
 
 
+def _finalize_view(
+    plan: CurdPlan,
+    curd: SemanticCurd,
+    index: int,
+    writer_view: CurdResultWriterView,
+    *,
+    result_id: str,
+    repository_root: Path,
+    artifact_directory: Path,
+    host_evidence: dict[str, EvidenceRef],
+    provenance_refs: tuple[str, ...],
+) -> tuple[CanonicalArtifact, Mapping[str, ArtifactRef]]:
+    """Resolve a writer view's deliverables into host evidence and normalize it.
+
+    Returns the normalized artifact with the resolved deliverables so the caller
+    can build a later invocation over the same deliverable set.
+    """
+
+    deliverables, runtime_evidence = _deliverables(
+        result_id,
+        writer_view.deliverables,
+        repository_root=repository_root,
+        artifact_directory=artifact_directory,
+    )
+    collision = set(host_evidence) & set(runtime_evidence)
+    if collision:
+        names = ", ".join(sorted(collision))
+        raise ValueError(f"deliverable evidence keys collide: {names}")
+    host_evidence |= runtime_evidence
+    invocation = _result_invocation(
+        plan,
+        curd,
+        index,
+        evidence=host_evidence,
+        deliverables=deliverables,
+        runtime_refs=provenance_refs,
+    )
+    return _normalize(writer_view, WriterViewKind.CURD_RESULT, invocation), deliverables
+
+
+def _execute_overrun(
+    plan: CurdPlan,
+    curd: SemanticCurd,
+    index: int,
+    overrun: WriterBudgetExceeded,
+    *,
+    repository_root: Path,
+    artifact_directory: Path,
+    host_evidence: dict[str, EvidenceRef],
+    provenance_refs: tuple[str, ...],
+) -> CurdResult:
+    """Finalize a writer's budget overrun without touching the review branch."""
+
+    checkpoint = overrun.checkpoint
+    overrun_reason = _failure_reason("writer stopped at its budget", overrun)
+    result_id = f"{plan.plan_id}/revision/{plan.revision}/result/{index}"
+    try:
+        writer_view = _checkpoint_writer_view(curd, overrun_reason, checkpoint)
+    except Exception as error:
+        reason = _failure_reason("budget checkpoint invalid", error)
+        salvaged_views = checkpoint.deliverables
+        try:
+            salvaged, salvaged_evidence = _deliverables(
+                result_id,
+                salvaged_views,
+                repository_root=repository_root,
+                artifact_directory=artifact_directory,
+            )
+        except Exception as salvage_error:
+            salvaged_views, salvaged, salvaged_evidence = (), {}, {}
+            reason = (
+                f"{reason}; "
+                + _failure_reason("deliverable salvage failed", salvage_error)
+            )[:_MAX_REASON_LENGTH]
+        return _blocked_result(
+            plan,
+            curd,
+            index,
+            reason,
+            provenance_refs=provenance_refs,
+            deliverable_views=salvaged_views,
+            resolved_deliverables=salvaged,
+            resolved_evidence=salvaged_evidence,
+        )
+
+    try:
+        provisional, _ = _finalize_view(
+            plan,
+            curd,
+            index,
+            writer_view,
+            result_id=result_id,
+            repository_root=repository_root,
+            artifact_directory=artifact_directory,
+            host_evidence=host_evidence,
+            provenance_refs=provenance_refs,
+        )
+    except Exception as error:
+        return _blocked_result(
+            plan,
+            curd,
+            index,
+            _failure_reason("budget checkpoint invalid", error),
+            provenance_refs=provenance_refs,
+        )
+    assert isinstance(provisional.value, CurdResult)
+    return provisional.value
+
+
 def _execute_curd(
     plan: CurdPlan,
     curd: SemanticCurd,
@@ -773,6 +976,17 @@ def _execute_curd(
 
     try:
         output = dispatch_writer(context)
+    except WriterBudgetExceeded as overrun:
+        return None, _execute_overrun(
+            plan,
+            curd,
+            index,
+            overrun,
+            repository_root=repository_root,
+            artifact_directory=artifact_directory,
+            host_evidence=host_evidence,
+            provenance_refs=provenance_refs,
+        )
     except Exception as error:
         return None, _blocked_result(
             plan,
@@ -781,6 +995,7 @@ def _execute_curd(
             _failure_reason("writer callback failed", error),
             provenance_refs=provenance_refs,
         )
+
     try:
         writer_view = _writer_view(output)
     except Exception as error:
@@ -794,29 +1009,16 @@ def _execute_curd(
 
     result_id = f"{plan.plan_id}/revision/{plan.revision}/result/{index}"
     try:
-        deliverables, runtime_evidence = _deliverables(
-            result_id,
-            writer_view,
-            repository_root=repository_root,
-            artifact_directory=artifact_directory,
-        )
-        collision = set(host_evidence) & set(runtime_evidence)
-        if collision:
-            names = ", ".join(sorted(collision))
-            raise ValueError(f"deliverable evidence keys collide: {names}")
-        host_evidence |= runtime_evidence
-        invocation = _result_invocation(
+        provisional, deliverables = _finalize_view(
             plan,
             curd,
             index,
-            evidence=host_evidence,
-            deliverables=deliverables,
-            runtime_refs=provenance_refs,
-        )
-        provisional = _normalize(
             writer_view,
-            WriterViewKind.CURD_RESULT,
-            invocation,
+            result_id=result_id,
+            repository_root=repository_root,
+            artifact_directory=artifact_directory,
+            host_evidence=host_evidence,
+            provenance_refs=provenance_refs,
         )
         subject = _subject_artifact(
             result_id,
@@ -951,7 +1153,9 @@ def _coerce_diagnosis_bindings(
     normalized: dict[str, CureDiagnosisBinding] = {}
     for key, binding in entries:
         if not isinstance(binding, CureDiagnosisBinding):  # pyright: ignore[reportUnnecessaryIsInstance]
-            raise TypeError("cure diagnosis bindings must be CureDiagnosisBinding values")
+            raise TypeError(
+                "cure diagnosis bindings must be CureDiagnosisBinding values"
+            )
         curd_id = binding.source_curd_ref.curd_id
         if key is not None and key != curd_id:
             raise ValueError(
@@ -1098,7 +1302,6 @@ def cook(
     )
 
 
-
 def cure(
     curd_plan: CurdPlan,
     diagnosis_bindings: CureDiagnosisBindings,
@@ -1188,6 +1391,8 @@ def run_workflow(
 __all__ = [
     "CureDiagnosisBinding",
     "CureDiagnosisBindings",
+    "WriterBudgetExceeded",
+    "WriterCheckpoint",
     "bind_diagnosis",
     "cook",
     "cure",
