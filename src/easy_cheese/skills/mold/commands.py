@@ -88,7 +88,9 @@ COMMANDS = (
     derive_command(
         _taste_test, "Run the applicability, contract, and fork-coherence taste gate"
     ),
-    derive_command(_validate_spec, "Check a produced spec's curdle-time SAP posture"),
+    derive_command(
+        _validate_spec, "Check a spec against the current Mold specification requirements"
+    ),
 )
 
 

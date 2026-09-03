@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from easy_cheese.shared import artifact_path as ap
+from easy_cheese.skills.briesearch.research_layout import research_layout
 from easy_cheese.shared import paths
 
 
@@ -93,8 +94,9 @@ def test_main_research_prints_corpus_root(
 ) -> None:
     monkeypatch.setenv("EASY_CHEESE_HOME", str(tmp_path))
     monkeypatch.setenv("EASY_CHEESE_PROJECT", "proj")
-    assert ap.main(["research", "ignored-slug"]) == 0
-    assert capsys.readouterr().out.strip() == str(tmp_path / "proj")
+    assert capsys.readouterr().out.strip() == str(
+        tmp_path / "proj" / "research" / "ignored-slug.md"
+    )
 
 
 def test_research_layout_composes_nested_artifact_paths(
@@ -106,7 +108,7 @@ def test_research_layout_composes_nested_artifact_paths(
     monkeypatch.setenv("EASY_CHEESE_PROJECT", "proj")
     slug = "hybrid-retrieval-fusion"
     directory = tmp_path / "proj" / "research" / slug
-    assert paths.research_layout(slug) == {
+    assert research_layout(slug) == {
         "slug": slug,
         "corpus_root": str(tmp_path / "proj"),
         "dir": str(directory),
@@ -121,13 +123,13 @@ def test_research_layout_root_override_ignores_corpus_env(
 ) -> None:
     monkeypatch.setenv("EASY_CHEESE_HOME", "/never/used")
     monkeypatch.setenv("EASY_CHEESE_PROJECT", "proj")
-    layout = paths.research_layout("a-slug", root=tmp_path)
+    layout = research_layout("a-slug", root=tmp_path)
     assert layout["report"] == str(tmp_path / "research" / "a-slug" / "a-slug.md")
 
 
 def test_research_layout_rejects_invalid_slug() -> None:
     with pytest.raises(ValueError, match="kebab-case"):
-        _ = paths.research_layout("Not A Slug")
+        _ = research_layout("Not A Slug")
 
 
 def test_research_layout_report_is_where_the_resolver_looks(
@@ -137,7 +139,7 @@ def test_research_layout_report_is_where_the_resolver_looks(
     # Otherwise, `/cheese --continue` cannot find a report written from the layout.
     monkeypatch.setenv("EASY_CHEESE_HOME", str(tmp_path))
     monkeypatch.setenv("EASY_CHEESE_PROJECT", "proj")
-    report = Path(paths.research_layout("nested-report-slug")["report"])
+    report = Path(research_layout("nested-report-slug")["report"])
     report.parent.mkdir(parents=True)
     _ = report.write_text("body\n")
     resolved = paths.resolve_slug(

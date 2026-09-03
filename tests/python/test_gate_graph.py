@@ -54,7 +54,7 @@ class _GateModel(Protocol):
 class _GateGraphModule(Protocol):
     GATE_MODEL: _GateModel
     HANDSHAKE: _Node
-    DECOMPOSER: _Node
+    TYPED_PLANNER: _Node
     COHERENCE_GATES: tuple[str, ...]
     RenderError: type[Exception]
     subprocess: ModuleType
@@ -217,19 +217,19 @@ class TestGateProseSync:
 
 
 class TestGateTopology:
-    def test_taste_gate_routes_through_decomposer(
+    def test_taste_gate_routes_through_typed_planner(
         self, gate_graph: _GateGraphModule
     ) -> None:
         taste_id = gate_graph.gate_id("Fork taste test passed:")
         outgoing = [
             edge.dst for edge in gate_graph.GATE_MODEL.edges if edge.src == taste_id
         ]
-        assert outgoing == [gate_graph.DECOMPOSER.id]
-        assert gate_graph.DECOMPOSER.id in gate_graph.GATE_MODEL.ids()
+        assert outgoing == [gate_graph.TYPED_PLANNER.id]
+        assert gate_graph.TYPED_PLANNER.id in gate_graph.GATE_MODEL.ids()
         assert [
             edge.dst
             for edge in gate_graph.GATE_MODEL.edges
-            if edge.src == gate_graph.DECOMPOSER.id
+            if edge.src == gate_graph.TYPED_PLANNER.id
         ] == [gate_graph.HANDSHAKE.id]
         assert not any(
             edge.src == taste_id and edge.dst == gate_graph.HANDSHAKE.id

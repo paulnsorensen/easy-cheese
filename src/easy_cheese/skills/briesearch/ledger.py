@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Parse the per-invocation research ledger written beside a report.
 
-`references/context-isolation.md` has always told /briesearch to write a
-`manifest.json` recording the URL, title, selected provider, and fetch date of
-every stored body. That contract was prose only — nothing ever read the file
-back — so a report could cite a URL no provider retrieval tool ever opened
-(#493) and one invocation could extract the same canonical URL repeatedly with
-nothing noticing (#549).
+`references/context-isolation.md` tells /briesearch to write a
+`manifest.json` recording a safe URL display value, its digest, selected
+provider, and fetch date for every stored body. This module parses that file
+back as a trust boundary, so a report cannot cite a URL that no provider
+retrieval tool opened (#493), and one invocation cannot extract the same URL
+repeatedly without being noticed (#549).
 
 This module parses that file into a validated ledger. It is a trust boundary:
 the JSON is written by an agent mid-run, so every field is checked here and
@@ -23,7 +23,8 @@ Ledger shape::
         {"kind": "search",  "provider": "tavily", "tool": "tavily_search",
          "query": "rrf fusion", "filters": {"days": 30}, "status": "ok"},
         {"kind": "extract", "provider": "tavily", "tool": "tavily_extract",
-         "url": "https://example.com/a", "file": "raw/01-example.md",
+         "url": "https://example.com/a",
+         "url_digest": "a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3",
          "title": "A", "fetched": "2026-08-30", "status": "ok"},
         {"kind": "spawn",   "provider": "researcher", "status": "ok"}
       ]
@@ -32,11 +33,13 @@ Ledger shape::
 
 from __future__ import annotations
 
+import hashlib
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Final, cast
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import SplitResult, urlsplit, urlunsplit
 
 MANIFEST_NAME: Final = "manifest.json"
 
@@ -64,6 +67,31 @@ EVIDENCE_GAPS: Final = frozenset(
 )
 
 _DEFAULT_PORTS: Final = {"http": 80, "https": 443}
+_URL_DIGEST: Final = re.compile(r"^[0-9a-fA-F]{64}$")
+_URL_USERINFO_ERROR: Final = "URL user information is not allowed"
+
+
+def _netloc(parts: "SplitResult", scheme: str) -> str:
+    """Return a host and meaningful port without user information."""
+    host = (parts.hostname or "").casefold()
+    if ":" in host and not host.startswith("["):
+        host = f"[{host}]"
+    port = parts.port
+    return host if port in (None, _DEFAULT_PORTS.get(scheme)) else f"{host}:{port}"
+
+
+def render_url(raw: str) -> str:
+    """Render a URL without user information, query values, or fragments."""
+    text = raw.strip()
+    try:
+        parts = urlsplit(text)
+        if not parts.scheme or not parts.netloc:
+            return "<invalid URL>"
+        scheme = parts.scheme.casefold()
+        netloc = _netloc(parts, scheme)
+    except ValueError:
+        return "<invalid URL>"
+    return urlunsplit((scheme, netloc, parts.path or "/", "", ""))
 
 
 class LedgerError(ValueError):
@@ -83,7 +111,12 @@ class Call:
     # include/exclude, depth). Two searches differing only in key order are the
     # same search, so the sorted encoding — not the dict — is the identity.
     filters: str = ""
+    # URL fields are safe to retain in memory and diagnostics. The digest is
+    # the identity used for correlation because it includes the full URL.
     url: str = ""
+    url_digest: str = ""
+    # Kept as a compatibility name for callers that used the old URL identity.
+    # It now contains the non-reversible digest, never the full URL.
     canonical: str = ""
     file: str = ""
     refresh: bool = False
@@ -112,7 +145,7 @@ class Ledger:
     extensions: tuple[Extension, ...] = ()
 
     def retrieved(self) -> dict[str, Call]:
-        """Canonical URL -> the first successful retrieval that named its tool.
+        """URL digest -> the first successful retrieval that named its tool.
 
         A URL that was only *discovered* by a search, or whose retrieval failed,
         is absent: those never satisfy "verify then cite".
@@ -121,30 +154,40 @@ class Ledger:
         for call in self.calls:
             if call.kind != EXTRACT or not call.ok or not call.tool:
                 continue
-            _ = out.setdefault(call.canonical, call)
+            identity = call.url_digest or call.canonical
+            if identity:
+                _ = out.setdefault(identity, call)
         return out
 
 
 def canonical_url(raw: str) -> str:
-    """Collapse the spellings of one URL that name the same resource.
+    """Normalize a URL for correlation without merging distinct resources.
 
-    Scheme and host case, a default port, a trailing slash, and a fragment do
-    not change what was fetched. The query does, and so does the rest of the
-    path — deduplication that merged those would merge distinct evidence.
+    Scheme and host case, a default port, and a fragment do not change what was
+    fetched. The query and path do, including a non-root trailing slash. An
+    empty path is normalized to ``/``. URLs with user information are rejected
+    rather than retained.
     """
     text = raw.strip()
-    parts = urlsplit(text)
+    try:
+        parts = urlsplit(text)
+    except ValueError:
+        return text
+    if parts.username is not None or parts.password is not None:
+        raise ValueError(_URL_USERINFO_ERROR)
     if not parts.scheme or not parts.netloc:
         return text
     try:
-        port = parts.port
+        scheme = parts.scheme.casefold()
+        netloc = _netloc(parts, scheme)
     except ValueError:
         return text
-    host = (parts.hostname or "").casefold()
-    scheme = parts.scheme.casefold()
-    netloc = host if port in (None, _DEFAULT_PORTS.get(scheme)) else f"{host}:{port}"
-    return urlunsplit((scheme, netloc, parts.path.rstrip("/"), parts.query, ""))
+    return urlunsplit((scheme, netloc, parts.path or "/", parts.query, ""))
 
+
+def url_digest(raw: str) -> str:
+    """Return a non-reversible SHA-256 identity for the full canonical URL."""
+    return hashlib.sha256(canonical_url(raw).encode("utf-8")).hexdigest()
 
 def _as_object(value: object, what: str) -> dict[str, object]:
     if not isinstance(value, dict):
@@ -184,6 +227,37 @@ def _filters(entry: dict[str, object], what: str) -> str:
         raise LedgerError(f"{what} field 'filters' is not JSON-encodable: {exc}") from exc
 
 
+def _url_fields(
+    entry: dict[str, object], what: str, raw_url: str
+) -> tuple[str, str, str]:
+    """Return a safe display URL, its digest, and the compatibility identity."""
+    if not raw_url:
+        supplied = _text(entry, "url_digest", what, required=False)
+        if supplied:
+            raise LedgerError(f"{what} field 'url_digest' requires a URL")
+        return "", "", ""
+    try:
+        computed = url_digest(raw_url)
+    except ValueError as exc:
+        raise LedgerError(
+            f"{what} field 'url' contains forbidden user information at "
+            + f"{render_url(raw_url)!r}"
+        ) from exc
+    supplied = _text(entry, "url_digest", what, required=False)
+    if supplied:
+        digest = supplied.removeprefix("sha256:")
+        if _URL_DIGEST.fullmatch(digest) is None:
+            raise LedgerError(
+                f"{what} field 'url_digest' must be a SHA-256 hexadecimal digest"
+            )
+        digest = digest.casefold()
+        if "?" in raw_url and digest != computed:
+            raise LedgerError(f"{what} field 'url_digest' does not match the URL")
+    else:
+        digest = computed
+    return render_url(raw_url), digest, digest
+
+
 def _parse_call(value: object, index: int) -> Call:
     what = f"calls[{index}]"
     entry = _as_object(value, what)
@@ -193,7 +267,8 @@ def _parse_call(value: object, index: int) -> Call:
             f"{what} has unknown kind {kind!r}; expected one of "
             + ", ".join(sorted(CALL_KINDS))
         )
-    url = _text(entry, "url", what, required=kind == EXTRACT)
+    raw_url = _text(entry, "url", what, required=kind == EXTRACT)
+    display_url, digest, canonical = _url_fields(entry, what, raw_url)
     return Call(
         kind=kind,
         provider=_text(entry, "provider", what, required=True),
@@ -203,8 +278,9 @@ def _parse_call(value: object, index: int) -> Call:
         status=_text(entry, "status", what, required=False) or OK,
         query=_text(entry, "query", what, required=kind == SEARCH),
         filters=_filters(entry, what),
-        url=url,
-        canonical=canonical_url(url) if url else "",
+        url=display_url,
+        url_digest=digest,
+        canonical=canonical,
         file=_text(entry, "file", what, required=False),
         refresh=_flag(entry, "refresh", what),
         cached=_flag(entry, "cached", what),

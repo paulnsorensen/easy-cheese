@@ -51,6 +51,68 @@ def _report(repo: Path, slug: str) -> Path:
     return repo / ".cheese" / "age" / f"{slug}.md"
 
 
+def test_different_clean_commits_have_different_lock_digests(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert review_lock.main(["--slug", "before", "--root", str(repo)]) == 0
+    first_payload = cast(
+        "dict[str, object]",
+        json.loads(
+            review_lock.lock_path(root=repo, slug="before").read_text(encoding="utf-8")
+        ),
+    )
+    first_digest = first_payload["digest"]
+    assert isinstance(first_digest, str)
+    _ = capsys.readouterr()
+
+    _ = (repo / "app.py").write_text(
+        "def add(a, b):\n    return a + b + 1\n", encoding="utf-8"
+    )
+    _git(repo, "add", "app.py")
+    _git(repo, "commit", "-m", "change")
+
+    assert review_lock.main(["--slug", "after", "--root", str(repo)]) == 0
+    second_payload = cast(
+        "dict[str, object]",
+        json.loads(
+            review_lock.lock_path(root=repo, slug="after").read_text(encoding="utf-8")
+        ),
+    )
+    second_digest = second_payload["digest"]
+    assert isinstance(second_digest, str)
+    assert first_digest != second_digest
+
+
+def test_mutating_a_review_spec_changes_the_lock_digest(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    spec = repo / ".cheese" / "specs" / "demo.md"
+    spec.parent.mkdir(parents=True)
+    _ = spec.write_text("# Demo\n\nInitial requirements.\n", encoding="utf-8")
+    assert review_lock.main(["--slug", "demo", "--root", str(repo)]) == 0
+    first_payload = cast(
+        "dict[str, object]",
+        json.loads(
+            review_lock.lock_path(root=repo, slug="demo").read_text(encoding="utf-8")
+        ),
+    )
+    first_digest = first_payload["digest"]
+    assert isinstance(first_digest, str)
+    _ = capsys.readouterr()
+
+    _ = spec.write_text("# Demo\n\nRevised requirements.\n", encoding="utf-8")
+    assert review_lock.main(["--slug", "demo", "--root", str(repo)]) == 0
+    second_payload = cast(
+        "dict[str, object]",
+        json.loads(
+            review_lock.lock_path(root=repo, slug="demo").read_text(encoding="utf-8")
+        ),
+    )
+    second_digest = second_payload["digest"]
+    assert isinstance(second_digest, str)
+    assert first_digest != second_digest
+
+
 def test_lock_capture_records_digest_and_write_succeeds_on_an_untouched_tree(
     repo: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

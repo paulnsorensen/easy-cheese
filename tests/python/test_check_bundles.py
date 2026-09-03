@@ -52,6 +52,77 @@ def test_parse_against_rejects_unknown_mode() -> None:
         _ = check_bundles._parse_against(["--against", "bogus"])  # pyright: ignore[reportPrivateUsage]
 
 
+def test_parse_against_accepts_standard_option_form() -> None:
+    assert check_bundles._parse_against(["--against=index"]) == "index"  # pyright: ignore[reportPrivateUsage]
+
+
+def test_parse_against_help_exits_successfully(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit) as raised:
+        _ = check_bundles._parse_against(["--help"])  # pyright: ignore[reportPrivateUsage]
+    assert raised.value.code == 0
+    assert "--against" in capsys.readouterr().out
+
+
+def test_site_packages_hashes_read_each_member_once() -> None:
+    data = BytesIO()
+    with zipfile.ZipFile(data, "w") as archive:
+        archive.writestr("site-packages/bin/demo", b"#!/usr/bin/python\n")
+        archive.writestr("site-packages/easy_cheese/demo.py", b"VALUE = 1\n")
+    _ = data.seek(0)
+    with zipfile.ZipFile(data) as archive:
+        infos = tuple(archive.infolist())
+        reads: list[str] = []
+
+        def read(info: zipfile.ZipInfo) -> bytes:
+            reads.append(info.filename)
+            return archive.read(info)
+
+        _ = check_bundles._site_packages_hashes(infos, read)  # pyright: ignore[reportPrivateUsage]
+
+    assert reads == ["site-packages/bin/demo", "site-packages/easy_cheese/demo.py"]
+
+
+def test_baseline_blobs_use_one_git_batch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths = [
+        Path("skills/demo/scripts/demo.pyz"),
+        Path("skills/other/scripts/other.pyz"),
+    ]
+    calls: list[tuple[list[str], bytes]] = []
+
+    def fake_run(
+        command: list[str],
+        *,
+        cwd: Path,
+        input: bytes,
+        capture_output: bool,
+    ) -> subprocess.CompletedProcess[bytes]:
+        assert cwd == tmp_path
+        assert capture_output
+        calls.append((command, input))
+        body = b"demo"
+        output = b"0" * 40 + b" blob 4\n" + body + b"\n"
+        body = b"other"
+        output += b"1" * 40 + b" blob 5\n" + body + b"\n"
+        return subprocess.CompletedProcess(command, 0, stdout=output)
+
+    monkeypatch.setattr(check_bundles.subprocess, "run", fake_run)
+
+    assert check_bundles._baseline_blobs("head", paths) == {  # pyright: ignore[reportPrivateUsage]
+        paths[0]: b"demo",
+        paths[1]: b"other",
+    }
+    assert calls == [
+        (
+            ["git", "cat-file", "--batch"],
+            b"HEAD:skills/demo/scripts/demo.pyz\nHEAD:skills/other/scripts/other.pyz\n",
+        )
+    ]
+
+
 def _init_index_rebuild_fixture(root: Path) -> tuple[Path, Path]:
     """A tiny committed repo whose fake build_pyz.py stamps source.txt's
     content into demo.pyz, for exercising _staged_index_rebuild end to end.

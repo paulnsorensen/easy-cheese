@@ -10,11 +10,12 @@ Step 1 of the age flow records a digest of the production tree
 Applying a fix inline moves the digest, so the report cannot be written from a
 context that applied one.
 
-Digest scope: tracked-file content (``git diff`` against ``HEAD``) plus
-untracked-file paths and content. Both checks exclude ``.cheese/``, which is the
-phase's own scratch directory. Outside a git work tree, no production tree
-exists for comparison, so both
-capture and verification degrade to a no-op rather than blocking the review.
+Digest scope: the captured ``HEAD`` identity and tracked-file content (the
+working diff against ``HEAD``), plus untracked-file paths and content. Review
+inputs under ``.cheese/`` are included, except for this phase's lock and report
+outputs. Outside a git work tree, no production tree exists for comparison, so
+both capture and verification degrade to a no-op rather than blocking the
+review.
 
 The gate raises the cost of the boundary; it does not make it unbypassable. An
 agent that captures the lock *after* editing still passes. What it removes is
@@ -26,9 +27,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
+import subprocess
 import sys
 from pathlib import Path
-from typing import TextIO, cast
+from typing import Callable, Protocol, TextIO, cast
 
 from easy_cheese.shared import cli, git_utils, write_handoff_artifact
 
@@ -36,6 +39,13 @@ PHASE = "age"
 SCRATCH_DIR = ".cheese"
 LOCK_SUFFIX = ".review-lock.json"
 _LOCK_COMMAND = "python3 skills/age/scripts/age.pyz review-lock --slug"
+_GIT_CHUNK_SIZE = 128 * 1024
+_OUTPUT_PREFIX = f"{SCRATCH_DIR}/{PHASE}/"
+
+
+class _Digest(Protocol):
+    def update(self, data: bytes, /) -> None:
+        ...
 
 
 def _is_git_worktree(root: Path) -> bool:
@@ -43,49 +53,138 @@ def _is_git_worktree(root: Path) -> bool:
     return result.returncode == 0 and result.stdout.strip() == "true"
 
 
-def _git_text(args: list[str], root: Path) -> str:
-    result = git_utils.run_git(args, cwd=root)
-    if result.returncode != 0:
-        raise cli.CliError(f"git {' '.join(args)} failed: {result.stderr.strip()}")
-    return result.stdout
+def _is_review_output(name: str) -> bool:
+    if not name.startswith(_OUTPUT_PREFIX):
+        return False
+    return name.endswith(LOCK_SUFFIX) or name.endswith(".md")
+
+
+def _stream_git(
+    args: list[str], root: Path, consume: Callable[[bytes], None]
+) -> None:
+    try:
+        process = subprocess.Popen(
+            ["git", "-C", str(root), *args],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+    except OSError as exc:
+        raise cli.CliError(f"cannot run git {' '.join(args)}: {exc}") from exc
+
+    assert process.stdout is not None
+    assert process.stderr is not None
+    try:
+        while chunk := process.stdout.read(_GIT_CHUNK_SIZE):
+            consume(chunk)
+        stderr = process.stderr.read()
+        returncode = process.wait()
+    except BaseException:
+        try:
+            process.kill()
+        except OSError:
+            pass
+        _ = process.wait()
+        raise
+    finally:
+        process.stdout.close()
+        process.stderr.close()
+    if returncode != 0:
+        detail = stderr.decode("utf-8", "replace").strip()
+        raise cli.CliError(f"git {' '.join(args)} failed: {detail}")
+
+
+def _hash_untracked_path(raw_name: bytes, root: Path, digest: _Digest) -> None:
+    name = os.fsdecode(raw_name)
+    if _is_review_output(name):
+        return
+    digest.update(b"path\0")
+    digest.update(raw_name)
+    digest.update(b"\0")
+    path = root / name
+    try:
+        if path.is_symlink():
+            digest.update(b"link\0")
+            digest.update(os.fsencode(os.readlink(path)))
+        else:
+            digest.update(b"file\0")
+            with path.open("rb") as stream:
+                while chunk := stream.read(_GIT_CHUNK_SIZE):
+                    digest.update(chunk)
+    except OSError as exc:
+        raise cli.CliError(f"cannot hash untracked path {name!r}: {exc}") from exc
+    digest.update(b"\0")
+
+
+def _hash_untracked_listing(
+    args: list[str], root: Path, digest: _Digest
+) -> None:
+    pending = bytearray()
+
+    def consume(chunk: bytes) -> None:
+        pending.extend(chunk)
+        offset = 0
+        while (end := pending.find(b"\0", offset)) >= 0:
+            raw_name = bytes(pending[offset:end])
+            if raw_name:
+                _hash_untracked_path(raw_name, root, digest)
+            offset = end + 1
+        if offset:
+            del pending[:offset]
+
+    _stream_git(args, root, consume)
+    if pending:
+        _hash_untracked_path(bytes(pending), root, digest)
+
+
+def _hash_untracked(root: Path, digest: _Digest) -> None:
+    digest.update(b"untracked\0")
+    _hash_untracked_listing(
+        [
+            "ls-files",
+            "--others",
+            "--exclude-standard",
+            "--full-name",
+            "-z",
+            "--",
+            ".",
+            f":(exclude,glob){SCRATCH_DIR}/**",
+        ],
+        root,
+        digest,
+    )
+    _hash_untracked_listing(
+        ["ls-files", "--others", "--full-name", "-z", "--", SCRATCH_DIR],
+        root,
+        digest,
+    )
 
 
 def tree_digest(root: Path) -> str | None:
-    """sha256 over the production tree, or None outside a git work tree."""
+    """Hash the captured Git tree and every review input."""
     if not _is_git_worktree(root):
         return None
-    exclude = f":(exclude){SCRATCH_DIR}"
-    head_exists = (
-        git_utils.run_git(["rev-parse", "--verify", "--quiet", "HEAD"], cwd=root).returncode == 0
-    )
-    diff_args = ["diff", "--no-ext-diff", "--no-color"]
-    if head_exists:
-        diff_args.append("HEAD")
-    diff_args += ["--", ".", exclude]
-    tracked = _git_text(diff_args, root)
-    untracked = _git_text(
-        ["ls-files", "--others", "--exclude-standard", "-z", "--", ".", exclude],
-        root,
+    head = git_utils.run_git(
+        ["rev-parse", "--verify", "--quiet", "HEAD"],
+        cwd=root,
     )
     digest = hashlib.sha256()
-    digest.update(tracked.encode("utf-8", "replace"))
-    digest.update(b"\x00")
-    for name in sorted(filter(None, untracked.split("\x00"))):
-        digest.update(name.encode("utf-8", "replace"))
-        digest.update(b"\x00")
-        path = root / name
-        try:
-            if path.is_symlink():
-                digest.update(b"link\x00")
-                digest.update(str(path.readlink()).encode("utf-8", "replace"))
-            else:
-                digest.update(b"file\x00")
-                with path.open("rb") as stream:
-                    while chunk := stream.read(128 * 1024):
-                        digest.update(chunk)
-        except OSError as exc:
-            raise cli.CliError(f"cannot hash untracked path {name!r}: {exc}") from exc
-        digest.update(b"\x00")
+    digest.update(b"age-review-lock-v2\0head\0")
+    if head.returncode == 0:
+        digest.update(head.stdout.strip().encode("ascii", "replace"))
+    else:
+        digest.update(b"<unborn>")
+    digest.update(b"\0diff\0")
+    diff_args = ["diff", "--no-ext-diff", "--no-color"]
+    if head.returncode == 0:
+        diff_args.append("HEAD")
+    diff_args += [
+        "--",
+        ".",
+        f":(exclude,glob){_OUTPUT_PREFIX}*{LOCK_SUFFIX}",
+        f":(exclude,glob){_OUTPUT_PREFIX}*.md",
+    ]
+    _stream_git(diff_args, root, digest.update)
+    _hash_untracked(root, digest)
     return digest.hexdigest()
 
 

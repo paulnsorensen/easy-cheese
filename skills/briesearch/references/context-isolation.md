@@ -18,7 +18,7 @@ Provider examples include Tavily crawl or research, Exa contents, and batches of
 
 1. **Generate a slug.** Use 4-6 kebab-case words derived from the question, matching `synthesis.md`.
 2. **Resolve the layout.** Run `python3 skills/briesearch/scripts/briesearch.pyz research-layout <slug>`. The command prints the `dir`, `report`, `raw_dir`, and `manifest` JSON paths. Use these paths without changes. Do not derive them again.
-3. **Run the heavy provider operation in a separate sub-agent.** Do not run it in the main context. Give the routing block and `$ROOT` to the sub-agent.
+3. **Run the heavy provider operation in a separate sub-agent.** Do not run it in the main context. Give the routing block and the layout's `corpus_root` to the sub-agent.
 4. **Persist raw bodies as files.** One file per result/URL:
 
    ```text
@@ -50,12 +50,15 @@ Provider examples include Tavily crawl or research, Exa contents, and batches of
     {"kind": "search", "provider": "tavily", "tool": "tavily_search",
      "query": "reciprocal rank fusion k", "filters": {"days": 30}, "status": "ok"},
     {"kind": "extract", "provider": "tavily", "tool": "tavily_extract",
-     "url": "https://example.com/rrf", "file": "raw/01-example.md",
-     "title": "RRF", "fetched": "2026-08-30", "status": "ok"},
+     "url": "https://example.com/rrf",
+     "url_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "file": "raw/01-example.md", "title": "RRF",
+     "fetched": "2026-08-30", "status": "ok"},
     {"kind": "spawn", "provider": "researcher", "status": "ok"}
   ]
 }
 ```
+- For an `extract` call, `url` is a display value only: keep the scheme, host, and path, and omit user information, query values, and fragments. Record `url_digest` as the lowercase SHA-256 digest of the full canonical URL before redaction. Never write a credential-bearing raw URL to the manifest or a report.
 
 - `kind` is `search`, `extract`, or `spawn`. `invocation` is `top-level` when the user asks. It is `sidechain` when another skill asks.
 - Record `provider` and `tool` for each search and extraction. These fields identify the provider tool that read the page. A search result does not prove this. See `routing.md` § Provider tool sets.

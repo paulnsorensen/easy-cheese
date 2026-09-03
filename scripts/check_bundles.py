@@ -22,6 +22,7 @@ Every .pyz must carry Shiv's runtime markers; other zipapp formats are rejected.
 
 from __future__ import annotations
 
+import argparse
 import ast
 import contextlib
 import functools
@@ -34,6 +35,7 @@ import sys
 import tempfile
 import zipfile
 from collections.abc import Callable, Generator, Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import cast, override
 
@@ -52,13 +54,31 @@ SHIV_RUNTIME_MEMBERS = frozenset(
 )
 
 
-def _validate_shiv_archive(archive: zipfile.ZipFile) -> None:
-    names = set(archive.namelist())
+def _validate_shiv_names(names: set[str]) -> None:
     missing = sorted(SHIV_RUNTIME_MEMBERS - names)
     if missing:
         raise ValueError(f"not a Shiv archive: missing {', '.join(missing)}")
     if not any(name.startswith("site-packages/") for name in names):
         raise ValueError("not a Shiv archive: missing site-packages/")
+
+
+def _validate_shiv_archive(archive: zipfile.ZipFile) -> None:
+    _validate_shiv_names(set(archive.namelist()))
+
+
+def _site_packages_members(
+    infos: Sequence[zipfile.ZipInfo],
+) -> list[zipfile.ZipInfo]:
+    return sorted(
+        [
+            info
+            for info in infos
+            if info.filename.startswith("site-packages/")
+            and not info.filename.endswith("/")
+            and not info.filename.endswith(".pyc")
+        ],
+        key=lambda info: info.filename,
+    )
 
 
 def _site_packages_hash(
@@ -68,18 +88,9 @@ def _site_packages_hash(
     include_record: bool,
 ) -> str:
     digest = hashlib.sha256()
-    members = sorted(
-        [
-            info
-            for info in archive.infolist()
-            if info.filename.startswith("site-packages/")
-            and not info.filename.endswith("/")
-            and not info.filename.endswith(".pyc")
-            and (include_record or not info.filename.endswith(".dist-info/RECORD"))
-        ],
-        key=lambda info: info.filename,
-    )
-    for info in members:
+    for info in _site_packages_members(tuple(archive.infolist())):
+        if not include_record and info.filename.endswith(".dist-info/RECORD"):
+            continue
         data = archive.read(info)
         if normalize_wrappers and info.filename.startswith("site-packages/bin/"):
             data = _canonical_wrapper(data)
@@ -87,6 +98,27 @@ def _site_packages_hash(
         digest.update(data)
         digest.update(relative.encode())
     return digest.hexdigest()
+
+
+def _site_packages_hashes(
+    infos: Sequence[zipfile.ZipInfo],
+    read: Callable[[zipfile.ZipInfo], bytes],
+) -> tuple[str, str]:
+    """Return raw and canonical site-packages hashes in one traversal."""
+    raw_digest = hashlib.sha256()
+    canonical_digest = hashlib.sha256()
+    for info in _site_packages_members(infos):
+        data = read(info)
+        relative = info.filename.removeprefix("site-packages/")
+        raw_digest.update(data)
+        raw_digest.update(relative.encode())
+        if info.filename.endswith(".dist-info/RECORD"):
+            continue
+        if info.filename.startswith("site-packages/bin/"):
+            data = _canonical_wrapper(data)
+        canonical_digest.update(data)
+        canonical_digest.update(relative.encode())
+    return raw_digest.hexdigest(), canonical_digest.hexdigest()
 
 
 NATIVE_SUFFIXES = frozenset({".so", ".pyd", ".dylib"})
@@ -274,13 +306,13 @@ def _definite_module_bindings(statements: list[ast.stmt]) -> set[str]:
     return sequence(statements)
 
 
-def _archive_module_index(
-    archive: zipfile.ZipFile,
+def _module_index_from_names(
+    names: set[str],
 ) -> tuple[frozenset[str], frozenset[str]]:
     """(file relpaths, directory relpaths) under site-packages/, source only."""
     files: set[str] = set()
     dirs: set[str] = set()
-    for name in archive.namelist():
+    for name in names:
         if not name.startswith("site-packages/") or name.startswith(
             "site-packages/bin/"
         ):
@@ -295,6 +327,12 @@ def _archive_module_index(
         for depth in range(1, len(parts)):
             dirs.add("/".join(parts[:depth]))
     return frozenset(files), frozenset(dirs)
+
+
+def _archive_module_index(
+    archive: zipfile.ZipFile,
+) -> tuple[frozenset[str], frozenset[str]]:
+    return _module_index_from_names(set(archive.namelist()))
 
 
 def _command_module_targets(tree: ast.Module) -> set[str]:
@@ -318,7 +356,7 @@ def _command_module_targets(tree: ast.Module) -> set[str]:
     return targets
 
 
-def check_import_closure(archive: zipfile.ZipFile) -> list[str]:
+def _check_import_closure(analysis: _ArchiveAnalysis) -> list[str]:
     """Every first-party import must resolve inside this archive's own closure.
 
     Catches unresolved deferred/function-body imports, ambient site-package
@@ -327,12 +365,12 @@ def check_import_closure(archive: zipfile.ZipFile) -> list[str]:
     deferred imports named only as a `Command(name, "module:attr")` string in
     the Command-manifest dispatch mechanism.
     """
-    files, dirs = _archive_module_index(archive)
+    files, dirs = analysis.files, analysis.dirs
     stdlib = frozenset(sys.stdlib_module_names)
 
     @functools.cache
     def exports(relpath: str) -> frozenset[str]:
-        tree = ast.parse(archive.read(f"site-packages/{relpath}").decode("utf-8"))
+        tree = analysis.module_tree(relpath)
         return frozenset(_definite_module_bindings(tree.body))
 
     def resolves(name: str, from_import: bool) -> bool:
@@ -380,8 +418,7 @@ def check_import_closure(archive: zipfile.ZipFile) -> list[str]:
             continue
         if not relpath.startswith(FIRST_PARTY_PREFIXES):
             continue
-        source = archive.read(f"site-packages/{relpath}").decode("utf-8")
-        tree = ast.parse(source)
+        tree = analysis.module_tree(relpath)
         visitor = _ImportVisitor(_package_for(relpath))
         visitor.visit(tree)
         for name in sorted(_unresolved_imports(visitor, resolves)):
@@ -392,6 +429,13 @@ def check_import_closure(archive: zipfile.ZipFile) -> list[str]:
                     f"unresolved Command target {name!r} in site-packages/{relpath}"
                 )
     return problems
+
+
+def check_import_closure(archive: zipfile.ZipFile) -> list[str]:
+    """Check first-party imports against one parsed archive analysis."""
+    return _check_import_closure(
+        _ArchiveAnalysis.from_archive(archive, parse_first_party=True)
+    )
 
 
 def _isolated_interpreter() -> str:
@@ -441,16 +485,12 @@ def check_isolated_execution(pyz: Path) -> list[str]:
     return problems
 
 
-def _declared_command_names(archive: zipfile.ZipFile) -> list[str]:
-    """Every `Command("name", ...)` literal declared by this archive's own sources."""
+def _declared_command_names_from_trees(
+    trees: Sequence[ast.Module],
+) -> list[str]:
+    """Every `Command("name", ...)` literal in first-party source trees."""
     names: set[str] = set()
-    for name in archive.namelist():
-        if not name.startswith("site-packages/") or not name.endswith(".py"):
-            continue
-        relpath = name.removeprefix("site-packages/")
-        if not relpath.startswith(FIRST_PARTY_PREFIXES):
-            continue
-        tree = ast.parse(archive.read(name).decode("utf-8"))
+    for tree in trees:
         for node in ast.walk(tree):
             if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)):
                 continue
@@ -462,7 +502,15 @@ def _declared_command_names(archive: zipfile.ZipFile) -> list[str]:
     return sorted(names)
 
 
-def check_command_dispatch(pyz: Path, archive: zipfile.ZipFile) -> list[str]:
+def _declared_command_names(archive: zipfile.ZipFile) -> list[str]:
+    """Every command declared by this archive's own first-party sources."""
+    analysis = _ArchiveAnalysis.from_archive(archive, parse_first_party=True)
+    return list(analysis.command_names)
+
+
+def _check_command_dispatch(
+    pyz: Path, command_names: Sequence[str]
+) -> list[str]:
     """Every declared command must actually import its handler module.
 
     A bare argv only reaches the dispatcher's own usage branch (exit 2), so
@@ -471,7 +519,7 @@ def check_command_dispatch(pyz: Path, archive: zipfile.ZipFile) -> list[str]:
     """
     interpreter = _isolated_interpreter()
     problems: list[str] = []
-    for name in _declared_command_names(archive):
+    for name in command_names:
         with tempfile.TemporaryDirectory(prefix="easy-cheese-isolated-") as scratch:
             result = subprocess.run(
                 [interpreter, "-I", str(pyz), name, "--help"],
@@ -486,12 +534,26 @@ def check_command_dispatch(pyz: Path, archive: zipfile.ZipFile) -> list[str]:
     return problems
 
 
-def _canonical_environment(data: bytes, *, canonical_build_id: str) -> bytes:
+def check_command_dispatch(pyz: Path, archive: zipfile.ZipFile) -> list[str]:
+    """Check every declared command using one parsed archive analysis."""
+    analysis = _ArchiveAnalysis.from_archive(archive, parse_first_party=True)
+    return _check_command_dispatch(pyz, analysis.command_names)
+
+
+def _canonical_environment_values(
+    environment: dict[str, object], *, canonical_build_id: str
+) -> bytes:
     """Normalize Shiv's host timestamp and derive a portable cache ID."""
-    environment = cast(dict[str, object], json.loads(data))
-    _ = environment.pop("built_at", None)
-    environment["build_id"] = canonical_build_id
-    return json.dumps(environment, sort_keys=True, separators=(",", ":")).encode()
+    normalized = dict(environment)
+    _ = normalized.pop("built_at", None)
+    normalized["build_id"] = canonical_build_id
+    return json.dumps(normalized, sort_keys=True, separators=(",", ":")).encode()
+
+
+def _canonical_environment(data: bytes, *, canonical_build_id: str) -> bytes:
+    return _canonical_environment_values(
+        cast(dict[str, object], json.loads(data)), canonical_build_id=canonical_build_id
+    )
 
 
 def _canonical_wrapper(data: bytes) -> bytes:
@@ -512,42 +574,119 @@ def _canonical_wrapper(data: bytes) -> bytes:
     return re.sub(rb"(?m)^#![^\n]*", replace, data, count=1)
 
 
-def _manifest(data: bytes) -> dict[str, tuple[int, int] | bytes]:
-    """Source member name -> (CRC, uncompressed size).
+@dataclass
+class _ArchiveAnalysis:
+    archive: zipfile.ZipFile
+    infos: tuple[zipfile.ZipInfo, ...]
+    names: frozenset[str]
+    files: frozenset[str]
+    dirs: frozenset[str]
+    native_members: tuple[str, ...]
+    info_by_name: dict[str, zipfile.ZipInfo]
+    member_data: dict[int, bytes] = field(default_factory=dict)
+    module_trees: dict[str, ast.Module] = field(default_factory=dict)
+    command_names: tuple[str, ...] = ()
+    manifest: dict[str, tuple[int, int] | bytes] | None = None
 
-    Shiv generates RECORD files and host-specific interpreter paths from the
-    local toolchain. Execution configuration and wrapper bodies remain signals;
-    only those host-dependent fields are canonicalized.
-    """
-    with zipfile.ZipFile(io.BytesIO(data)) as archive:
-        _validate_shiv_archive(archive)
-        environment = cast(
-            dict[str, object], json.loads(archive.read("environment.json"))
-        )
-        stored_build_id = environment.get("build_id")
-        raw_build_id = _site_packages_hash(
-            archive, normalize_wrappers=False, include_record=True
-        )
-        if stored_build_id != raw_build_id:
-            raise ValueError(
-                f"Shiv build_id does not match site-packages contents: stored {stored_build_id!r}, expected {raw_build_id}"
-            )
-        canonical_build_id = _site_packages_hash(
-            archive, normalize_wrappers=True, include_record=False
-        )
-        manifest: dict[str, tuple[int, int] | bytes] = {}
-        for info in archive.infolist():
-            if info.filename.endswith(".dist-info/RECORD"):
-                continue
-            if info.filename == "environment.json":
-                manifest[info.filename] = _canonical_environment(
-                    archive.read(info), canonical_build_id=canonical_build_id
+    @classmethod
+    def from_archive(
+        cls,
+        archive: zipfile.ZipFile,
+        *,
+        validate_shiv: bool = False,
+        parse_first_party: bool = False,
+    ) -> "_ArchiveAnalysis":
+        infos = tuple(archive.infolist())
+        names = frozenset(info.filename for info in infos)
+        if validate_shiv:
+            _validate_shiv_names(set(names))
+        files, dirs = _module_index_from_names(set(names))
+        analysis = cls(
+            archive=archive,
+            infos=infos,
+            names=names,
+            files=files,
+            dirs=dirs,
+            native_members=tuple(
+                sorted(
+                    name
+                    for name in names
+                    if name.startswith("site-packages/")
+                    and Path(name).suffix.lower() in NATIVE_SUFFIXES
                 )
-            elif info.filename.startswith("site-packages/bin/"):
-                manifest[info.filename] = _canonical_wrapper(archive.read(info))
-            else:
-                manifest[info.filename] = (info.CRC, info.file_size)
-        return manifest
+            ),
+            info_by_name={info.filename: info for info in infos},
+        )
+        if validate_shiv:
+            raw_build_id, canonical_build_id = _site_packages_hashes(
+                infos, analysis.read
+            )
+            environment = cast(
+                dict[str, object], json.loads(analysis.read("environment.json"))
+            )
+            stored_build_id = environment.get("build_id")
+            if stored_build_id != raw_build_id:
+                raise ValueError(
+                    f"Shiv build_id does not match site-packages contents: stored {stored_build_id!r}, expected {raw_build_id}"
+                )
+            manifest: dict[str, tuple[int, int] | bytes] = {}
+            for info in infos:
+                if info.filename.endswith(".dist-info/RECORD"):
+                    continue
+                if info.filename == "environment.json":
+                    manifest[info.filename] = _canonical_environment_values(
+                        environment, canonical_build_id=canonical_build_id
+                    )
+                elif info.filename.startswith("site-packages/bin/"):
+                    manifest[info.filename] = _canonical_wrapper(
+                        analysis.read(info)
+                    )
+                else:
+                    manifest[info.filename] = (info.CRC, info.file_size)
+            analysis.manifest = manifest
+        if parse_first_party:
+            analysis._parse_first_party()
+        return analysis
+
+    def read(self, member: str | zipfile.ZipInfo) -> bytes:
+        info = member if isinstance(member, zipfile.ZipInfo) else self.info_by_name.get(member)
+        if info is None:
+            return self.archive.read(member)
+        key = id(info)
+        if key not in self.member_data:
+            self.member_data[key] = self.archive.read(info)
+        return self.member_data[key]
+
+    def module_tree(self, relpath: str) -> ast.Module:
+        if relpath not in self.module_trees:
+            self.module_trees[relpath] = ast.parse(
+                self.read(f"site-packages/{relpath}").decode("utf-8")
+            )
+        return self.module_trees[relpath]
+
+    def _parse_first_party(self) -> None:
+        for info in self.infos:
+            name = info.filename
+            if not name.startswith("site-packages/") or not name.endswith(".py"):
+                continue
+            relpath = name.removeprefix("site-packages/")
+            if not relpath.startswith(FIRST_PARTY_PREFIXES):
+                continue
+            self.module_trees[relpath] = ast.parse(
+                self.read(info).decode("utf-8")
+            )
+        self.command_names = tuple(
+            _declared_command_names_from_trees(tuple(self.module_trees.values()))
+        )
+
+
+def _manifest(data: bytes) -> dict[str, tuple[int, int] | bytes]:
+    """Source member name -> (CRC, uncompressed size)."""
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        analysis = _ArchiveAnalysis.from_archive(archive, validate_shiv=True)
+    if analysis.manifest is None:
+        raise ValueError("Shiv archive manifest was not computed")
+    return analysis.manifest
 
 
 _PYZ_REFERENCE = re.compile(r"[\w-]+\.pyz")
@@ -618,24 +757,44 @@ def check_pyz_references() -> list[str]:
     return violations
 
 
-def _committed(path: Path) -> bytes | None:
-    """The blob at HEAD, or None when the bundle is newly added."""
+def _baseline_blobs(against: str, paths: Sequence[Path]) -> dict[Path, bytes]:
+    """Read every baseline bundle blob through one Git batch process."""
+    if not paths:
+        return {}
+    prefix = ":" if against == "index" else "HEAD:"
+    requests = [f"{prefix}{path.as_posix()}" for path in paths]
     result = subprocess.run(
-        ["git", "show", f"HEAD:{path.as_posix()}"],
+        ["git", "cat-file", "--batch"],
         cwd=REPO_ROOT,
+        input=("\n".join(requests) + "\n").encode(),
         capture_output=True,
     )
-    return result.stdout if result.returncode == 0 else None
+    if result.returncode != 0:
+        return {}
 
-
-def _staged(path: Path) -> bytes | None:
-    """The blob staged in the index, or None when nothing is staged there."""
-    result = subprocess.run(
-        ["git", "show", f":{path.as_posix()}"],
-        cwd=REPO_ROOT,
-        capture_output=True,
-    )
-    return result.stdout if result.returncode == 0 else None
+    blobs: dict[Path, bytes] = {}
+    output = result.stdout
+    offset = 0
+    for path in paths:
+        line_end = output.find(b"\n", offset)
+        if line_end < 0:
+            raise ValueError("git cat-file --batch returned malformed output")
+        header = output[offset:line_end].split()
+        offset = line_end + 1
+        if len(header) >= 2 and header[1] in (b"missing", b"ambiguous"):
+            continue
+        if len(header) != 3 or header[1] != b"blob":
+            raise ValueError("git cat-file --batch returned a non-blob object")
+        try:
+            size = int(header[2])
+        except ValueError as exc:
+            raise ValueError("git cat-file --batch returned an invalid size") from exc
+        end = offset + size
+        if output[end : end + 1] != b"\n":
+            raise ValueError("git cat-file --batch returned truncated data")
+        blobs[path] = output[offset:end]
+        offset = end + 1
+    return blobs
 
 
 @contextlib.contextmanager
@@ -712,12 +871,17 @@ def _describe(
 
 
 def _parse_against(argv: Sequence[str]) -> str:
-    args = list(argv)
-    if not args:
-        return "head"
-    if len(args) == 2 and args[0] == "--against" and args[1] in ("head", "index"):
-        return args[1]
-    raise SystemExit("usage: check_bundles.py [--against {head,index}]")
+    parser = argparse.ArgumentParser(
+        prog="check_bundles.py",
+        description="Check every committed .pyz still matches its sources, by content.",
+    )
+    _ = parser.add_argument(
+        "--against",
+        choices=("head", "index"),
+        default="head",
+        help="compare against HEAD or the staged index (default: head)",
+    )
+    return cast(str, parser.parse_args(argv).against)
 
 
 def _run_checks(against: str, bundle_root: Path) -> int:
@@ -726,27 +890,47 @@ def _run_checks(against: str, bundle_root: Path) -> int:
         stale.append(f"  {path.relative_to(REPO_ROOT)} (obsolete shared bundle)")
     for reference_problem in check_pyz_references():
         stale.append(f"  {reference_problem}")
-    committed_of = _staged if against == "index" else _committed
+    paths = sorted(bundle_root.glob(BUNDLE_GLOB))
+    relatives = [path.relative_to(bundle_root) for path in paths]
+    baseline = _baseline_blobs(against, relatives)
     checked = 0
-    for path in sorted(bundle_root.glob(BUNDLE_GLOB)):
-        relative = path.relative_to(bundle_root)
-        committed = committed_of(relative)
+    for path, relative in zip(paths, relatives, strict=True):
+        committed = baseline.get(relative)
         checked += 1
         data = path.read_bytes()
         problems: list[str] = []
         try:
-            rebuilt_manifest = _manifest(data)
             with zipfile.ZipFile(io.BytesIO(data)) as archive:
-                problems += [f"    ! native member: {name}" for name in _native_members(archive)]
-                problems += [f"    ! {p}" for p in check_import_closure(archive)]
-                problems += [f"    ! {p}" for p in check_command_dispatch(path, archive)]
+                analysis = _ArchiveAnalysis.from_archive(
+                    archive, validate_shiv=True, parse_first_party=True
+                )
+                if analysis.manifest is None:
+                    raise ValueError("Shiv archive manifest was not computed")
+                rebuilt_manifest = analysis.manifest
+                problems += [
+                    f"    ! native member: {name}"
+                    for name in analysis.native_members
+                ]
+                problems += [
+                    f"    ! {p}" for p in _check_import_closure(analysis)
+                ]
+                problems += [
+                    f"    ! {p}"
+                    for p in _check_command_dispatch(path, analysis.command_names)
+                ]
             problems += [f"    ! {p}" for p in check_isolated_execution(path)]
             if committed is None:
                 print(f"new Shiv bundle, nothing to compare: {relative}")
                 if problems:
                     stale.append(f"  {relative}\n" + "\n".join(problems))
                 continue
-            committed_manifest = _manifest(committed)
+            with zipfile.ZipFile(io.BytesIO(committed)) as archive:
+                committed_analysis = _ArchiveAnalysis.from_archive(
+                    archive, validate_shiv=True
+                )
+                if committed_analysis.manifest is None:
+                    raise ValueError("Shiv archive manifest was not computed")
+                committed_manifest = committed_analysis.manifest
             problems += _describe(rebuilt_manifest, committed_manifest)
         except (ValueError, KeyError, json.JSONDecodeError, zipfile.BadZipFile) as exc:
             problems.append(f"    ! bundle metadata invalid: {exc}")

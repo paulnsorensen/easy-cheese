@@ -45,7 +45,7 @@ def main(argv: list[str]) -> int:
     phase = cast(str, args.phase)
     slug = cast(str, args.slug)
     try:
-        resolved = project_corpus_root() if phase == "research" else artifact_path(phase, slug)
+        resolved = artifact_path(phase, slug)
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

@@ -50,6 +50,7 @@ from easy_cheese.skills.briesearch.ledger import (
     LedgerError,
     find_ledger,
     load_ledger,
+    render_url,
 )
 
 
@@ -132,15 +133,16 @@ def check_ledger(ledger: Ledger) -> Report:
                     )
                 )
         elif call.kind == EXTRACT:
-            earlier = first_extract.get(call.canonical)
+            earlier = first_extract.get(call.url_digest)
             if earlier is None:
-                first_extract[call.canonical] = index
+                first_extract[call.url_digest] = index
             elif not call.refresh:
                 duplicates[EXTRACT] += 1
                 findings.append(
                     Finding(
                         "DUPLICATE_EXTRACT",
-                        f"{_describe(call, index)} re-extracts {call.canonical} "
+                        f"{_describe(call, index)} re-extracts "
+                        + f"{render_url(call.url)!r} "
                         + f"already retrieved by call {earlier}; declare a deliberate "
                         + 'refetch with "refresh": true',
                     )

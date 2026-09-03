@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import re
 import shutil
 from collections.abc import Callable
@@ -78,7 +79,6 @@ class _GenDocsModule(Protocol):
         project: "list[_GeneratedPage]",
         install: "_GeneratedPage | None",
     ) -> None: ...
-    def clean_generated_docs(self) -> None: ...
     def main(self) -> None: ...
 
 
@@ -591,22 +591,66 @@ class TestEmitSidebar:
         assert "editUrl: false" in out
         assert "[`/age`](age/)" in out
 
+class TestIncrementalGeneration:
+    def test_repeated_run_preserves_unchanged_output_mtimes(
+        self, gen_docs: _GenDocsModule, isolated_docs: Path
+    ) -> None:
+        _ = (isolated_docs / "README.md").write_text("# README\n\nOverview.\n", encoding="utf-8")
+        skill_dir = isolated_docs / "skills" / "age"
+        skill_dir.mkdir(parents=True)
+        _ = (skill_dir / "SKILL.md").write_text(
+            "---\nname: age\ndescription: Review a diff.\n---\n# /age\n\nOriginal.\n",
+            encoding="utf-8",
+        )
 
-class TestCleanGeneratedDocs:
-    def test_removes_all_content_docs_files(self, gen_docs: _GenDocsModule, isolated_docs: Path) -> None:
-        docs = isolated_docs / "website" / "content" / "docs"
-        (docs / "skills").mkdir(parents=True)
-        _ = (docs / "install.md").write_text("generated", encoding="utf-8")
-        _ = (docs / "skills" / "age.md").write_text("generated", encoding="utf-8")
+        gen_docs.main()
+
+        age_page = isolated_docs / "website" / "content" / "docs" / "skills" / "age.md"
         sidebar = isolated_docs / "website" / "sidebar.mjs"
-        sidebar.parent.mkdir(parents=True, exist_ok=True)
-        _ = sidebar.write_text("generated", encoding="utf-8")
+        sentinel_ns = 1_000_000_000
+        os.utime(age_page, ns=(sentinel_ns, sentinel_ns))
+        os.utime(sidebar, ns=(sentinel_ns, sentinel_ns))
 
-        gen_docs.clean_generated_docs()
+        gen_docs.main()
 
-        assert not (docs / "install.md").exists()
-        assert not (docs / "skills").exists()
-        assert not sidebar.exists()
+        assert age_page.stat().st_mtime_ns == sentinel_ns
+        assert sidebar.stat().st_mtime_ns == sentinel_ns
+
+        _ = (skill_dir / "SKILL.md").write_text(
+            "---\nname: age\ndescription: Review a diff.\n---\n# /age\n\nChanged.\n",
+            encoding="utf-8",
+        )
+        gen_docs.main()
+
+        assert "Changed." in age_page.read_text(encoding="utf-8")
+        assert age_page.stat().st_mtime_ns > sentinel_ns
+
+    def test_removed_source_pages_remove_stale_outputs(
+        self, gen_docs: _GenDocsModule, isolated_docs: Path
+    ) -> None:
+        _ = (isolated_docs / "README.md").write_text("# README\n\nOverview.\n", encoding="utf-8")
+        _ = (isolated_docs / "CONTRIBUTING.md").write_text("# Contributing\n\nContrib.\n", encoding="utf-8")
+        skill_dir = isolated_docs / "skills" / "age"
+        skill_dir.mkdir(parents=True)
+        _ = (skill_dir / "SKILL.md").write_text(
+            "---\nname: age\ndescription: Review a diff.\n---\n# /age\n\nOriginal.\n",
+            encoding="utf-8",
+        )
+
+        gen_docs.main()
+        root = isolated_docs / "website" / "content" / "docs"
+        assert (root / "skills" / "age.md").exists()
+        assert (root / "contributing.md").exists()
+
+        shutil.rmtree(skill_dir)
+        (isolated_docs / "CONTRIBUTING.md").unlink()
+        gen_docs.main()
+
+        assert not (root / "skills" / "age.md").exists()
+        assert not (root / "contributing.md").exists()
+        sidebar = (isolated_docs / "website" / "sidebar.mjs").read_text(encoding="utf-8")
+        assert '"slug": "skills/age"' not in sidebar
+        assert '"slug": "contributing"' not in sidebar
 
 
 class TestMainGeneration:

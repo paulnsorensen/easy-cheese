@@ -29,7 +29,7 @@ Coherence self-check before curdle:
 - [ ] Quality gates specified (≥1 runnable command)
 - [ ] Reproduction loop captured if Diagnose ran (or [BLOCKED] if no loop is possible)
 - [ ] Durable writes: ADR + domain-model targets resolved and the write, read-back, and completion-record protocol committed for the atomic step (or loud fallback noted)
-- [ ] Fork taste test passed: fresh-context verdict covers every settled consequential decision before decomposition
+- [ ] Fork taste test passed: fresh-context verdict covers every settled consequential decision before typed planning
 - [ ] Spec format valid: validate-spec --strict exits 0 on the draft
 ```
 
@@ -37,7 +37,7 @@ If any box is unchecked, name it and propose the smallest move to fill it. The u
 
 The last box — **Durable writes** — is a commitment checked before the handshake. It does not claim that the write already occurred. It confirms that the ADR + domain-model targets are resolved. It also locks in the write → read-back → completion-record protocol for the atomic-write step (`curdle.md` § Atomic write). The read-back verification and visible completion record occur during that step. Note the hallouminate-absent fallback clearly, never silently.
 
-These seventeen checklist items match the gates in Mold's machine-readable gate model. See `gate-graph.md`. A passing `fork_taste_test_passed` verdict opens the decomposition gate. A stale, partial, contradictory, or blocker-bearing verdict keeps decomposition closed. A test compares this checklist with the model nodes. Edit both sources together. Render the flow with `mold.pyz gate-graph`.
+These seventeen checklist items match the gates in Mold's machine-readable gate model. See `gate-graph.md`. A passing `fork_taste_test_passed` verdict opens the typed planner stage. A stale, partial, contradictory, or blocker-bearing verdict keeps typed planning closed. A test compares this checklist with the model nodes. Edit both sources together. Render the flow with `mold.pyz gate-graph`.
 
 ## Mandatory gates
 

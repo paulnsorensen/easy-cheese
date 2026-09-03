@@ -62,14 +62,15 @@ checklist. It makes the most consequential lean — narrowing scope via `Non-goa
 — a first-class, testable gate rather than a prose-only check (ADR-002). The
 audit procedure lives in `handshake.md` § Non-goals audit.
 
-## Fork taste decomposition gate
-
-`fork_taste_test_passed` is the only edge into the curd-block decomposer. Mold hashes the exact draft before it accepts a verdict. The strict `ForkTasteVerdict` must cover each settled consequential decision exactly once.
+## Fork taste planner gate
+`fork_taste_test_passed` is the only edge into the typed planner stage. Mold
+hashes the exact draft before it accepts a verdict. The strict
+`ForkTasteVerdict` must cover each settled consequential decision exactly once.
 
 The verdict fails for a stale digest, missing reflection, contradiction, orphan, unsupported assumption, or acceptance gap. A semantic `pass` with blockers also fails.
 
 The required reflection set depends on the disposition. A `red-required` draft requires Approach, Interface sketches, Acceptance, and Test Contracts. A `not-applicable` draft requires the first three reflections. The applicability gate prohibits Test Contracts in a `not-applicable` draft.
 
-A failure reopens only its named fork IDs. Mold permits one initial verdict and two corrective rounds. A third failure stops decomposition and the two-key handshake.
+A third failure stops typed planning and the two-key handshake.
 
 The automatic handoff is `/cook --auto <durable spec pointer>`. It passes the durable pointer and approved metadata without changes. This metadata includes applicability, contract, and taste data.

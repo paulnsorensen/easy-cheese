@@ -2,7 +2,7 @@
 """Mold's strict applicability, contract, and fork-coherence taste gate.
 
 This module is deliberately stdlib-only: the Mold bundle validates the approved
-spec boundary before any downstream phase is allowed to decompose it.
+spec boundary before the typed planner stage may run.
 """
 
 from __future__ import annotations

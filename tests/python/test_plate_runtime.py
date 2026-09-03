@@ -130,6 +130,7 @@ def install_stack_tool_stubs(
     tmp_path: Path,
     *,
     preflight: subprocess.CompletedProcess[str] | None,
+    extension_output: str = "gh stack\tgithub/gh-stack\tv0.1.1\n",
     tools: frozenset[str] = ALL_TOOLS,
 ) -> None:
     """Stub every process `detect_stack_tools` shells out to.
@@ -153,7 +154,7 @@ def install_stack_tool_stubs(
         if args == ["git", "config", "--get", "git-town.main-branch"]:
             return completed(args, stdout="main\n")
         if args == ["gh", "extension", "list"]:
-            return completed(args, stdout="github/gh-stack\tgh stack\n")
+            return completed(args, stdout=extension_output)
         if args == PREFLIGHT:
             if preflight is None:
                 raise subprocess.TimeoutExpired(args, 10)
@@ -191,6 +192,27 @@ def test_stack_tools_reports_available_providers(
             "repository_signal": True,
             "status": "available",
         },
+    }
+
+def test_unrelated_gh_extension_does_not_match_gh_stack(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    install_stack_tool_stubs(
+        monkeypatch,
+        tmp_path,
+        preflight=completed(PREFLIGHT, stdout=response("HTTP/2.0 200 OK")),
+        extension_output="gh-stack\tgithub/other-extension\tv0.1.1\n",
+        tools=GH_ONLY,
+    )
+
+    result = stack_tools.detect_stack_tools(tmp_path)
+
+    providers = cast(dict[str, dict[str, object]], result["providers"])
+    assert result["recommended"] is None
+    assert providers["gh-stack"] == {
+        "installed": False,
+        "repository_signal": None,
+        "status": "not-installed",
     }
 
 

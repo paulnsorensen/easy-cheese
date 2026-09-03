@@ -491,9 +491,8 @@ def test_artifact_path_specs_matches_paths_module(bundles: Path, skill: str) -> 
     assert result.stdout.strip() == expected
 
 
-def test_artifact_path_research_returns_corpus_root(bundles: Path) -> None:
-    """research resolves to the bare project corpus root; briesearch composes the
-    nested research/<slug>/<slug>.md layout on top of it."""
+def test_artifact_path_research_uses_generic_phase_resolution(bundles: Path) -> None:
+    """The generic artifact path command does not special-case research."""
     result = _run(
         bundles / "briesearch.pyz",
         "artifact-path",
@@ -502,36 +501,9 @@ def test_artifact_path_research_returns_corpus_root(bundles: Path) -> None:
         extra_env=_CORPUS_ENV,
     )
     assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == "/tmp/ec-corpus/demo-project"
+    assert result.stdout.strip() == "/tmp/ec-corpus/demo-project/research/demo-slug.md"
 
 
-def test_artifact_path_research_returns_root_and_ignores_slug(bundles: Path) -> None:
-    """research returns the bare corpus root and does NOT validate or embed the slug:
-    paths.artifact_path deliberately does not own the nested research/<slug>/<slug>.md
-    layout, so the shim hands briesearch the root and lets it compose + validate the
-    slug itself. This pins that contract — if the shim ever starts validating or
-    appending the slug for research, that change must be deliberate, not silent."""
-    # A slug that validate_slug would reject is accepted on the research path because
-    # the shim never validates it; the output is the same bare root either way.
-    bad = _run(
-        bundles / "briesearch.pyz",
-        "artifact-path",
-        "research",
-        "Bad_Slug",
-        extra_env=_CORPUS_ENV,
-    )
-    assert bad.returncode == 0, bad.stderr
-    assert bad.stdout.strip() == "/tmp/ec-corpus/demo-project"
-    # The slug is not appended to the path for research (contrast with specs).
-    assert "Bad_Slug" not in bad.stdout
-    other = _run(
-        bundles / "briesearch.pyz",
-        "artifact-path",
-        "research",
-        "totally-different-slug",
-        extra_env=_CORPUS_ENV,
-    )
-    assert other.stdout.strip() == bad.stdout.strip()
 
 
 def test_artifact_path_rejects_bad_slug(bundles: Path) -> None:
@@ -559,9 +531,7 @@ def test_artifact_path_rejects_unknown_phase(bundles: Path) -> None:
 
 
 def test_research_layout_prints_slug_aware_paths(bundles: Path) -> None:
-    """`artifact-path research <slug>` returns only the corpus root.
-    Each caller derives `research/<slug>/…` from this root.
-    `research-layout` returns the complete nested layout as JSON."""
+    """`research-layout` returns the complete nested layout as JSON."""
     result = _run(
         bundles / "briesearch.pyz",
         "research-layout",
@@ -592,22 +562,18 @@ def test_research_layout_rejects_invalid_slug(bundles: Path) -> None:
     assert "kebab-case" in result.stderr
 
 
-def test_artifact_path_research_root_unchanged_by_layout_command(
-    bundles: Path,
-) -> None:
-    """`research-layout` is additive for #492.
-    `artifact-path research <slug>` still prints the bare corpus root.
-    Existing callers use this root in "$ROOT/research/<slug>/"."""
+def test_research_layout_is_the_nested_layout_interface(bundles: Path) -> None:
+    """The research layout command owns the nested report paths."""
     result = _run(
         bundles / "briesearch.pyz",
-        "artifact-path",
-        "research",
+        "research-layout",
         "demo-slug",
         extra_env=_CORPUS_ENV,
     )
     assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == (
-        f"{_CORPUS_ENV['EASY_CHEESE_HOME']}/{_CORPUS_ENV['EASY_CHEESE_PROJECT']}"
+    layout = cast("dict[str, str]", json.loads(result.stdout))
+    assert layout["report"] == (
+        "/tmp/ec-corpus/demo-project/research/demo-slug/demo-slug.md"
     )
 
 

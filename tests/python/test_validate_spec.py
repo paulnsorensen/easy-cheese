@@ -8,7 +8,7 @@ Covers the committed lenient syntax-repair classes and the strict
 semantic-rejection rules.
 """
 from __future__ import annotations
-
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -81,6 +81,46 @@ def _write(tmp_path: Path, name: str, text: str) -> Path:
 
 # --- lenient syntax-repair classes (AC-1 half) ---------------------------
 
+
+
+def test_standalone_validator_falls_back_when_cattrs_is_missing(
+    tmp_path: Path,
+) -> None:
+    spec_path = _write(tmp_path, "spec.md", BASE_SPEC)
+    probe = """
+import builtins
+import importlib.util
+import sys
+from pathlib import Path
+
+import attrs
+
+real_import = builtins.__import__
+
+def import_without_cattrs(name, *args, **kwargs):
+    if name == "cattrs" or name.startswith("cattrs."):
+        raise ModuleNotFoundError("No module named 'cattrs'", name="cattrs")
+    return real_import(name, *args, **kwargs)
+
+builtins.__import__ = import_without_cattrs
+module_spec = importlib.util.spec_from_file_location("validate_spec", sys.argv[1])
+assert module_spec is not None and module_spec.loader is not None
+module = importlib.util.module_from_spec(module_spec)
+sys.modules[module_spec.name] = module
+module_spec.loader.exec_module(module)
+errors, notice = module.validate(Path(sys.argv[2]), strict=True)
+assert errors == [], errors
+assert notice is None
+"""
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(REPO_ROOT / "src")
+    result = subprocess.run(
+        [sys.executable, "-c", probe, str(VALIDATOR), str(spec_path)],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert result.returncode == 0, result.stderr
 
 def test_valid_spec_fixture_is_accepted(tmp_path: Path, _run: _RunFn) -> None:
     path = _write(tmp_path, "spec.md", BASE_SPEC)

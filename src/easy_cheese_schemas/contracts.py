@@ -2573,12 +2573,13 @@ class MoldSpecDocument:
         counts: dict[GroundingProbe, int] = {}
         for row in rows:
             counts[row.probe] = counts.get(row.probe, 0) + 1
-        for probe in GroundingProbe:
-            count = counts.get(probe, 0)
-            if count != 1:
-                raise ValueError(
-                    f"Grounding table must record the {probe.value} probe exactly once, got {count}"
-                )
+        violations = [
+            f"Grounding table must record the {probe.value} probe exactly once, got {counts.get(probe, 0)}"
+            for probe in GroundingProbe
+            if counts.get(probe, 0) != 1
+        ]
+        if violations:
+            raise ValueError("; ".join(violations))
 
 
 __all__ = [

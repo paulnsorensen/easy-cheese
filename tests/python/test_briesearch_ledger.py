@@ -16,11 +16,15 @@ import pytest
 
 from easy_cheese.skills.briesearch import ground_check
 from easy_cheese.skills.briesearch.ledger import (
+    Call,
+    Ledger,
     LedgerError,
     canonical_url,
     find_ledger,
     load_ledger,
     parse_ledger,
+    render_url,
+    url_digest,
 )
 
 
@@ -41,8 +45,7 @@ def _extract(url: str, **overrides: object) -> dict[str, object]:
     ("written", "cited"),
     [
         ("https://Example.COM/a", "https://example.com/a"),
-        ("https://example.com/a/", "https://example.com/a"),
-        ("https://example.com:443/a", "https://example.com/a"),
+        ("https://example.com", "https://example.com/"),
         ("http://example.com:80/a", "http://example.com/a"),
         ("https://example.com/a#section", "https://example.com/a"),
     ],
@@ -56,6 +59,7 @@ def test_canonical_url_collapses_spellings_of_one_resource(
 @pytest.mark.parametrize(
     ("left", "right"),
     [
+        ("https://example.com/a", "https://example.com/a/"),
         ("https://example.com/a", "https://example.com/b"),
         ("https://example.com/a?v=1", "https://example.com/a?v=2"),
         ("https://example.com/a", "http://example.com/a"),
@@ -77,6 +81,23 @@ def test_parse_ledger_requires_url_on_an_extraction() -> None:
         _ = parse_ledger(
             {"calls": [{"kind": "extract", "provider": "exa", "tool": "contents"}]}
         )
+ 
+def test_parse_ledger_rejects_url_user_information() -> None:
+    with pytest.raises(LedgerError, match="user information"):
+        _ = parse_ledger(
+            {"calls": [_extract("https://alice:secret@example.com/private")]}
+        )
+
+
+def test_ledger_retains_safe_url_display_and_digest() -> None:
+    raw = "https://example.com/private?token=secret#details"
+    ledger = parse_ledger({"calls": [_extract(raw)]})
+    call = ledger.calls[0]
+    assert call.url == "https://example.com/private"
+    assert call.url_digest == url_digest(raw)
+    assert "secret" not in repr(call)
+    assert render_url(raw) == "https://example.com/private"
+
 
 
 def test_parse_ledger_requires_the_provider_tool_that_ran() -> None:
@@ -112,7 +133,7 @@ def test_retrieved_excludes_failed_and_search_only_urls() -> None:
             ]
         }
     )
-    assert set(ledger.retrieved()) == {canonical_url("https://ok.example/a")}
+    assert set(ledger.retrieved()) == {url_digest("https://ok.example/a")}
 
 
 def test_load_ledger_rejects_malformed_json(tmp_path: Path) -> None:
@@ -217,3 +238,73 @@ def test_main_fails_on_an_unreadable_manifest(tmp_path: Path) -> None:
     _ = report.write_text(_REPORT, encoding="utf-8")
     _ = (tmp_path / "manifest.json").write_text("[]", encoding="utf-8")
     assert ground_check.main([str(report)]) == 1
+
+def test_citation_scanner_keeps_balanced_parentheses(tmp_path: Path) -> None:
+    url = "https://example.com/wiki/Foo_(bar)"
+    report = (
+        "## Research: q\n\n| Claim | Evidence | Confidence |\n| --- | --- | --- |\n"
+        f"| A holds | {url} | certain |\n"
+    )
+    ledger = parse_ledger({"calls": [_extract(url)]})
+    violations, tables = ground_check.check_report(report, tmp_path, tmp_path, ledger)
+    assert tables == 1
+    assert violations == []
+
+def test_citation_scanner_rejects_url_user_information(tmp_path: Path) -> None:
+    report = (
+        "## Research: q\n\n| Claim | Evidence | Confidence |\n| --- | --- | --- |\n"
+        "| A holds | https://alice:secret@example.com/private?token=secret | certain |\n"
+    )
+    violations, _ = ground_check.check_report(report, tmp_path, tmp_path, None)
+    assert any(v.kind == "REMOTE" and v.level == "error" for v in violations)
+    rendered = "\n".join(v.render() for v in violations)
+    assert "alice" not in rendered
+    assert "secret" not in rendered
+
+def test_report_builds_retrieved_map_once(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    ledger = parse_ledger({"calls": [_extract("https://example.com/a")]})
+    calls = 0
+    original = Ledger.retrieved
+
+    def counted(current: Ledger) -> dict[str, Call]:
+        nonlocal calls
+        calls += 1
+        return original(current)
+
+    monkeypatch.setattr(Ledger, "retrieved", counted)
+    report = _REPORT.replace(
+        "| A holds | [^s1] | certain |",
+        "| A holds | [^s1] | certain |\n| B holds | [^s1] | certain |",
+    )
+    _ = ground_check.check_report(report, tmp_path, tmp_path, ledger)
+    assert calls == 1
+
+
+def test_main_fails_on_a_mismatched_adjacent_manifest(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    report = tmp_path / "slug.md"
+    _ = report.write_text(_REPORT, encoding="utf-8")
+    _ = (tmp_path / "manifest.json").write_text(
+        json.dumps({"calls": [_extract("https://example.com/other")]}),
+        encoding="utf-8",
+    )
+    assert ground_check.main([str(report)]) == 1
+    assert "REMOTE" in capsys.readouterr().err
+
+
+def test_main_reports_manifest_missing_from_report_directory(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    report_dir = tmp_path / "report"
+    report_dir.mkdir()
+    report = report_dir / "slug.md"
+    _ = report.write_text(_REPORT, encoding="utf-8")
+    _ = (tmp_path / "manifest.json").write_text(
+        json.dumps({"calls": [_extract("https://example.com/a")]}),
+        encoding="utf-8",
+    )
+    assert ground_check.main([str(report)]) == 0
+    assert "MANIFEST" in capsys.readouterr().err

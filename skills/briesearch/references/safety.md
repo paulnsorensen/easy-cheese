@@ -25,3 +25,12 @@ Rules:
 - **Screen URLs before recommending them.** Domain typo-squatting and shadow vendor pages are real.
 
 When unsure, ask the user before sending the query.
+
+## Protect URL credentials
+
+Rules:
+
+- Reject URLs with user information before retrieval or citation.
+- Store only a display URL with user information, query values, and fragments removed.
+- Store a one-way full-URL digest when later correlation is required.
+- Never print a full URL in a diagnostic.

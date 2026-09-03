@@ -40,15 +40,18 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 from typing import cast
 
 from easy_cheese.skills.briesearch.ledger import (
+    Call,
     Ledger,
     LedgerError,
-    canonical_url,
     find_ledger,
     load_ledger,
+    render_url,
+    url_digest,
 )
 
 CONFIDENCE_LABELS = {"certain", "speculating", "don't know"}
@@ -57,9 +60,6 @@ CONFIDENCE_LABELS = {"certain", "speculating", "don't know"}
 # durable-corpus / raw-capture path. A prose source name can describe evidence,
 # but it cannot be re-checked by the gate.
 _FOOTNOTE_REF = re.compile(r"\[\^([^\]]+)\]")
-_FOOTNOTE_DEFINITION = re.compile(r"^\[\^([^\]]+)\]:\s*(.*)$")
-_LOCAL_PATH = re.compile(r"(?<![\w./-])((?:\.cheese|raw)/[^\s|]+)", re.IGNORECASE)
-_LINE_ANCHOR = re.compile(r"#L(\d+)(?:-L?(\d+))?$", re.IGNORECASE)
 _DIRECT_CITATION = re.compile(
     (
         r"https?://\S+"  # URL
@@ -69,7 +69,9 @@ _DIRECT_CITATION = re.compile(
     re.IGNORECASE,
 )
 _CITATION = re.compile(r"\[\^[^\]]+\]|" + _DIRECT_CITATION.pattern, re.IGNORECASE)
-_REMOTE_URL = re.compile(r"https?://[^\s<>|\"'`)\]}]+", re.IGNORECASE)
+_REMOTE_START = re.compile(r"https?://", re.IGNORECASE)
+_URL_OPENERS = frozenset("([{")
+_URL_CLOSERS = {")": "(", "]": "[", "}": "{"}
 
 # Negation aimed at existence / support / provision — the shape of an absence
 # claim. Whole-word matched so "Cargo" never trips "no".
@@ -233,21 +235,48 @@ def _check_local_paths(
 
 
 def _remote_urls(text: str) -> list[str]:
-    """Every http(s) citation in one evidence cell or footnote definition."""
-    return [
-        match.group(0).rstrip("`>.,;:!?)]}'\"*_~")
-        for match in _REMOTE_URL.finditer(text)
-    ]
+    """Find URLs while retaining balanced Markdown parentheses."""
+    urls: list[str] = []
+    for match in _REMOTE_START.finditer(text):
+        cursor = match.end()
+        stack: list[str] = []
+        while cursor < len(text):
+            char = text[cursor]
+            if char.isspace() or char in ("<", ">", "|", '"', "'", "`"):
+                break
+            if char in _URL_OPENERS:
+                stack.append(char)
+            elif char in _URL_CLOSERS:
+                if not stack or stack[-1] != _URL_CLOSERS[char]:
+                    break
+                _ = stack.pop()
+            cursor += 1
+        url = text[match.start() : cursor].rstrip(".,;:!?")
+        if url:
+            urls.append(url)
+    return urls
 
 
 def _check_remote(
-    citations: list[str], ledger: Ledger, row_no: int
+    citations: list[str], retrieved: Mapping[str, Call] | None, row_no: int
 ) -> list[Violation]:
-    """Fail any cited URL the ledger does not record as provider-retrieved."""
+    """Check cited URLs against the one report-level retrieval map."""
     violations: list[Violation] = []
-    retrieved = ledger.retrieved()
     for url in dict.fromkeys(citations):
-        if canonical_url(url) in retrieved:
+        try:
+            identity = url_digest(url)
+        except ValueError:
+            violations.append(
+                Violation(
+                    "error",
+                    row_no,
+                    "REMOTE",
+                    "cited URL contains forbidden user information: "
+                    + f"{render_url(url)!r}",
+                )
+            )
+            continue
+        if retrieved is None or identity in retrieved:
             continue
         violations.append(
             Violation(
@@ -255,7 +284,7 @@ def _check_remote(
                 row_no,
                 "REMOTE",
                 "cited URL was never retrieved through a provider retrieval tool: "
-                + f"{url!r} (no successful entry in the capture manifest)",
+                + f"{render_url(url)!r} (no successful entry in the capture manifest)",
             )
         )
     return violations
@@ -268,7 +297,7 @@ def _check_row(
     footnotes: dict[str, str],
     report_dir: Path,
     invocation_dir: Path,
-    ledger: Ledger | None,
+    retrieved: Mapping[str, Call] | None,
     remote_seen: set[str],
 ) -> list[Violation]:
     claim_i, ev_i, conf_i = cols
@@ -313,9 +342,12 @@ def _check_row(
                 _check_local_paths(definition, report_dir, invocation_dir, row_no)
             )
     out.extend(_check_local_paths(evidence, report_dir, invocation_dir, row_no))
-    remote_seen.update(citations)
-    if ledger is not None:
-        out.extend(_check_remote(citations, ledger, row_no))
+    for url in citations:
+        try:
+            remote_seen.add(url_digest(url))
+        except ValueError:
+            remote_seen.add(render_url(url))
+    out.extend(_check_remote(citations, retrieved, row_no))
 
     if confidence.lower() not in CONFIDENCE_LABELS:
         out.append(
@@ -356,6 +388,7 @@ def check_report(
     footnotes, duplicate_footnotes = _footnote_definitions(lines)
     invocation_dir = (invocation_dir or Path.cwd()).resolve()
     report_dir = (report_dir or invocation_dir).resolve()
+    retrieved = ledger.retrieved() if ledger is not None else None
     violations = [
         Violation(
             "error",
@@ -389,7 +422,7 @@ def check_report(
                                 footnotes,
                                 report_dir,
                                 invocation_dir,
-                                ledger,
+                                retrieved,
                                 remote_seen,
                             )
                         )

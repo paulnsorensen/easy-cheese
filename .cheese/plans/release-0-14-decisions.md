@@ -1,9 +1,9 @@
-# Release 0.14 — open decisions
+# Release 0.14 decision record
 
 Base: `bab83ce4` (main, cut-free, basedpyright 0/0). Prior tag: `v0.13.0`.
 
-The release owner must resolve or defer five decisions before release 0.14.
-Each decision has one recommendation.
+This record captures five release decisions.
+A resolved decision names the PR that superseded an earlier recommendation.
 
 ---
 
@@ -34,42 +34,15 @@ It also has no `gate_applicability` frontmatter key.
 `src/easy_cheese/skills/mold/validate_spec.py:322-327` requires the frontmatter key.
 The `spec-format-valid` gate blocks curdle after either failure.
 
-### Considered options
+### Resolved decision
 
-**Option 1: document a breaking change.**
-
-Update each version 0.13 spec through `/mold`.
-Alternatively, add the frontmatter block and Test Contracts table manually.
-
-**Option 2: add legacy acceptance to the schema package.**
-
-This option requires a permanent branch and another document rule set.
-It also requires a removal date and separate tests.
-
-An exact adapter cannot implement option 2.
-The version 0.13 format has no values for the seven Test Contracts columns.
-It also has no `work_class`, `ui_surface`, or `AC-<n>:` identifiers.
-A legacy path must invent a boundary and a witness.
-It must then approve the invented values.
-ADR `legacy-adapter-lifecycle-004` forbids that behavior.
-
-Issue #401 reported the same failure class from another direction.
-A permissive path would restore that failure class.
-
-### Recommendation: document the breaking change
-
-The affected specs are temporary project files under `.cheese/`.
-They are not part of a published artifact.
-The migration adds two document sections.
-
-Complete these actions:
-
-1. Add a **v0.13 to v0.14 spec migration** section to `skills/mold/references/curdle.md`.
-2. Put it immediately after the Spec template section.
-3. List the two required additions.
-4. Link to `tests/python/fixtures/spec_format/valid_spec.md` as the example.
-5. Add the release note from section (d).
-6. Do not add a `--legacy` or `--lenient` option.
+PR #592 supersedes the original recommendation.
+Release 0.14 accepts version 0.13 specs only on read.
+The read path reports a notice for each legacy spec.
+Mint and rewrite paths require the current format.
+`src/easy_cheese_schemas/spec_format.py` owns this policy.
+No `--legacy` or `--lenient` option exists.
+This decision keeps existing specs readable without weakening new specs.
 
 Do not rename `gate_applicability.disposition` in release 0.14.
 The field still uses `red-required` after #560 removed the RED gate.
@@ -238,14 +211,11 @@ The dedicated CI job already covers this work.
 > Issue #477 tracks enforced skill boundaries.
 > Use the doctrine as a review checklist, not a guarantee.
 >
-> **The spec format has a breaking change.**
-> `/mold` now validates specs during curdle.
-> Version 0.13 specs always fail because they lack two required sections.
-> Add `## Test Contracts` and the `gate_applicability` frontmatter block.
-> Alternatively, run `/mold` again for the spec.
-> See `skills/mold/references/curdle.md` and `tests/python/fixtures/spec_format/valid_spec.md`.
-> No legacy acceptance mode exists.
-> The old format cannot provide the identifiers, boundaries, and witnesses that validation requires.
+> **Spec readers accept version 0.13 files.**
+> `/mold` reports a notice when it reads a legacy spec.
+> The read path does not require the newer sections or `gate_applicability`.
+> Mint and rewrite paths require the current format.
+> Run `/mold` again to update a legacy spec.
 >
 > **Contract versions must match exactly.**
 > `easy-cheese-schemas` accepts only the host contract version.
@@ -272,14 +242,10 @@ The dedicated CI job already covers this work.
 
 The approved Mold spec and four ADRs define the design.
 Canonical `PlannerResult` and `CurdPlan` artifacts also exist.
-The remaining issue is the implementation order.
 
-Triage deferred the work for this reason.
-The release owner must decide how to handle #429, #430, #455, #459, and #460.
+### Resolved decision
 
-See [`.cheese/issues/477-suggestions.md`](../issues/477-suggestions.md) for an independent first wave.
-
-Do not implement #477 in release 0.14.
-Publish the doctrine and the caveat from section (d).
-Start wave A during the first 0.15 cycle.
-Wave A has no open pull request dependency.
+PR #592 supersedes the deferred plan.
+Release 0.14 enforces command boundaries through explicit command manifests.
+The integrated implementation includes the planned command boundary work.
+Do not defer this work to release 0.15.

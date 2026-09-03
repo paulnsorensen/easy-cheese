@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import json
 import re
-import shutil
+import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
 from typing import cast
-from collections.abc import Callable
 
 import yaml
 
@@ -150,6 +150,47 @@ def write_doc(
     if relative_doc_path == "index.md":
         slug = ""
     return GeneratedPage(title=title, slug=slug, source_rel=source_rel)
+
+
+def _replace_if_changed(source: Path, target: Path) -> None:
+    if target.is_file() and source.read_bytes() == target.read_bytes():
+        return
+    target.parent.mkdir(parents=True, exist_ok=True)
+    source.replace(target)
+
+
+def _sync_generated_tree(rendered_root: Path, output_root: Path) -> None:
+    rendered_files = {
+        path.relative_to(rendered_root)
+        for path in rendered_root.rglob("*")
+        if path.is_file()
+    }
+    output_root.mkdir(parents=True, exist_ok=True)
+
+    for relative in sorted(rendered_files):
+        _replace_if_changed(rendered_root / relative, output_root / relative)
+
+    stale_files = (
+        path
+        for path in output_root.rglob("*")
+        if (path.is_file() or path.is_symlink())
+        and path.relative_to(output_root) not in rendered_files
+    )
+    for path in stale_files:
+        path.unlink()
+
+    for directory in sorted(
+        (path for path in output_root.rglob("*") if path.is_dir() and not path.is_symlink()),
+        key=lambda path: len(path.parts),
+        reverse=True,
+    ):
+        if not any(directory.iterdir()):
+            directory.rmdir()
+
+
+def _sync_generated_output(rendered_root: Path, rendered_sidebar: Path) -> None:
+    _sync_generated_tree(rendered_root, CONTENT_ROOT)
+    _replace_if_changed(rendered_sidebar, SIDEBAR_PATH)
 
 
 def convert_mkdocs_admonitions(markdown: str) -> str:
@@ -520,20 +561,7 @@ def emit_sidebar(
     )
 
 
-def clean_generated_docs() -> None:
-    CONTENT_ROOT.mkdir(parents=True, exist_ok=True)
-    for child in CONTENT_ROOT.iterdir():
-        if child.is_dir():
-            shutil.rmtree(child)
-        else:
-            child.unlink()
-    if SIDEBAR_PATH.exists():
-        SIDEBAR_PATH.unlink()
-    _ref_title.cache_clear()
-
-def main() -> None:
-    clean_generated_docs()
-
+def _generate_docs() -> None:
     skills: list[GeneratedPage] = []
     for skill_dir in sorted(p for p in SKILLS_DIR.iterdir() if p.is_dir()):
         page = emit_skill_page(skill_dir)
@@ -554,6 +582,26 @@ def main() -> None:
             project.append(page)
 
     emit_sidebar(skills, project, install)
+
+
+def main() -> None:
+    global CONTENT_ROOT, SIDEBAR_PATH
+
+    output_root = CONTENT_ROOT
+    output_sidebar = SIDEBAR_PATH
+    with tempfile.TemporaryDirectory(prefix="gen-docs-") as temp_dir:
+        rendered_root = Path(temp_dir) / "content" / "docs"
+        rendered_sidebar = Path(temp_dir) / "sidebar.mjs"
+        CONTENT_ROOT = rendered_root
+        SIDEBAR_PATH = rendered_sidebar
+        _ref_title.cache_clear()
+        try:
+            _generate_docs()
+        finally:
+            CONTENT_ROOT = output_root
+            SIDEBAR_PATH = output_sidebar
+
+        _sync_generated_output(rendered_root, rendered_sidebar)
 
 
 if __name__ == "__main__":
