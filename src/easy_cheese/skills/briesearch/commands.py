@@ -35,9 +35,19 @@ COMMANDS = (
         derive_command(_artifact_path),
         "Resolve the durable or transient artifact path for a phase and slug",
     ),
+    Command(
+        "budget-check",
+        "easy_cheese.skills.briesearch.budget:main",
+        "Enforce the search budget and dedup rules from the run ledger",
+    ),
     _with_summary(
         derive_command(_ground_check),
         "Lint a synthesis report for grounding and citation violations",
+    ),
+    Command(
+        "research-layout",
+        "easy_cheese.skills.briesearch.research_layout:main",
+        "Print the slug-aware research corpus layout as JSON",
     ),
 )
 

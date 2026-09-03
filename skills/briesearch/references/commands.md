@@ -5,4 +5,6 @@
 | Command | Purpose |
 | --- | --- |
 | `artifact-path` | Resolve the durable or transient artifact path for a phase and slug |
+| `budget-check` | Enforce the search budget and dedup rules from the run ledger |
 | `ground-check` | Lint a synthesis report for grounding and citation violations |
+| `research-layout` | Print the slug-aware research corpus layout as JSON |

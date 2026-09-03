@@ -12,13 +12,13 @@ Apply context isolation when a selected provider operation is likely to return m
 - Deep-research/report operations whose underlying sources must be retained.
 - Any response likely to crowd out the routing plan and claim table.
 
-Provider examples include Tavily crawl/research, Exa contents over many URLs, and batches of native web opens. Skip isolation for snippet-only triage and a small number of focused page reads.
+Provider examples include Tavily crawl or research, Exa contents, and batches of native web opens. Skip isolation for snippet triage. Also skip it for a small set of focused page reads.
 
 ## The recipe
 
 1. **Generate a slug.** Use 4-6 kebab-case words derived from the question, matching `synthesis.md`.
-2. **Resolve the durable corpus root.** `ROOT=$(python3 skills/briesearch/scripts/briesearch.pyz artifact-path research <slug>)`. Compose paths under `"$ROOT/research/<slug>/"`.
-3. **Run the heavy provider operation from a forked sub-agent**, not the main context. Give it the routing block and `$ROOT`.
+2. **Resolve the layout.** Run `python3 skills/briesearch/scripts/briesearch.pyz research-layout <slug>`. The command prints the `dir`, `report`, `raw_dir`, and `manifest` JSON paths. Use these paths without changes. Do not derive them again.
+3. **Run the heavy provider operation in a separate sub-agent.** Do not run it in the main context. Give the routing block and `$ROOT` to the sub-agent.
 4. **Persist raw bodies as files.** One file per result/URL:
 
    ```text
@@ -31,10 +31,34 @@ Provider examples include Tavily crawl/research, Exa contents over many URLs, an
    └── <slug>.md
    ```
 
-   The manifest records the URL, title, selected provider, and fetch date for each file.
+   The manifest is the run ledger. See `## Capture manifest`. Write each call when it occurs. Do not write calls from memory at the end.
 
-5. **Filter inside the sub-agent.** Apply the relevance checks the question requires and build the claim-level rows from `synthesis.md`. Bind each Freshness value to the manifest fetch date (or `"live"` for an unstored live check).
-6. **Return auditable pointers.** The sub-agent returns the short-form claim table, confidence, gaps, and report path. Each stored claim cites `raw/NN-<host>.md#Lstart-end`; raw bodies stay on disk.
+5. **Filter inside the sub-agent.** Apply the required relevance checks. Build the claim rows from `synthesis.md`. Bind each Freshness value to the manifest fetch date. Use `"live"` for an unstored live check.
+6. **Return auditable pointers.** Return the short claim table, confidence, gaps, and report path. Each stored claim cites `raw/NN-<host>.md#Lstart-end`. Keep raw bodies on disk.
+
+## Capture manifest
+
+`manifest.json` is machine-read by `ground-check`, so it has a fixed shape:
+
+```json
+{
+  "slug": "hybrid-retrieval-fusion",
+  "invocation": "top-level",
+  "calls": [
+    {"kind": "search", "provider": "tavily", "tool": "tavily_search",
+     "query": "reciprocal rank fusion k", "filters": {"days": 30}, "status": "ok"},
+    {"kind": "extract", "provider": "tavily", "tool": "tavily_extract",
+     "url": "https://example.com/rrf", "file": "raw/01-example.md",
+     "title": "RRF", "fetched": "2026-08-30", "status": "ok"},
+    {"kind": "spawn", "provider": "researcher", "status": "ok"}
+  ]
+}
+```
+
+- `kind` is `search`, `extract`, or `spawn`. `invocation` is `top-level` when the user asks. It is `sidechain` when another skill asks.
+- `provider` and `tool` are required for searches and extractions. These fields prove which provider tool read the page. A search result does not prove this. See `routing.md` § Provider tool sets.
+- `status` defaults to `ok`. Record each failure with its actual status. Omit `file` for a failure. A failed fetch is not evidence. `ground-check` rejects citations that use a failed fetch.
+- Set `"refresh": true` when you extract a ledger URL again for freshness. Set `"cached": true` when an earlier run entry supplies the call.
 
 ## Re-extraction in later turns
 
@@ -51,4 +75,4 @@ The durable corpus lives outside the repo checkout (default `~/.local/share/chee
 
 ## Don't mistake this for caching
 
-Do not reuse another slug's raw bodies for a different question without rechecking relevance; the evidence filter is question-specific.
+Do not reuse raw bodies from another slug without a relevance check. The evidence filter is specific to each question.

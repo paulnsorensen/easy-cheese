@@ -23,8 +23,8 @@ Accept the complete user prompt as the research question. Ask one question only 
 1. **Classify.** Identify the required source types and research method.
 2. **Plan.** Use a compact freshness plan for one time-sensitive fact. Use the full plan for comparisons, best practices, reports, or questions with multiple parts. Define decisions, constraints, subqueries, and stop criteria. See `references/query-planning.md`.
 3. **Route.** Select the required capabilities and one provider for each capability. Follow `references/routing.md`. Then emit the routing block. Run each capability marked `YES` through its selected provider or an explicit fallback.
-4. **Gather.** Prefer native easy-cheese helpers and backends when they are available. Otherwise, select one equivalent provider. Load only the selected provider tools when the harness defers schemas. Fetch independent capabilities in parallel when the harness supports parallel work. Send heavy fetches to a research sub-agent. See `## Sub-agent context gate`. Verify cited URLs with the selected provider operation.
-5. **Synthesize.** Build the claim evidence table from `references/synthesis.md`. Verify each link. Apply the confidence cap. Run `ground-check` for a deep report. Compare the conclusion with the raw evidence.
+ 4. **Gather.** Prefer native easy-cheese helpers and backends when they are available. Otherwise, select one equivalent provider. Load only the selected provider tools when the harness defers schemas. Fetch independent capabilities in parallel when the harness supports parallel work. Send heavy fetches to a research sub-agent. See `## Sub-agent context gate`. Verify cited URLs with the selected provider tool. Do not use a generic fetcher. See `references/routing.md` § Provider tool sets. Record each call in the capture manifest immediately. Include the provider, tool, and status. Declare the call budget before the first call. Do not repeat a logged search. Do not extract a logged URL again.
+ 5. **Synthesize.** Build the claim evidence table from `references/synthesis.md`. Verify each link. Apply the confidence cap. Run `ground-check` and `budget-check` for a deep report. Compare the conclusion with the raw evidence.
 6. **Stop.** Hand off the result. Do not implement the result. Do not turn citations into design choices. The next skill uses the report. Treat source alternatives as open questions, not recommendations. See the alternatives section in `references/synthesis.md`. Implement only when the current prompt explicitly requests research-informed implementation.
 
 When a provider is unavailable, select one equivalent fallback. Follow `references/unavailable.md`. Report the substitution once. Lower confidence only when evidence quality decreases or a critical question remains unanswered.
@@ -59,7 +59,7 @@ Do not lower confidence only because you substitute a provider. Lower confidence
 
 ## Output
 
-Use the style and citation format in [`../cheese/references/formatting.md`](../cheese/references/formatting.md). Follow the output contract in `references/synthesis.md`. Return one synthesis paragraph, a claim evidence table, open questions, confidence, and the recommended next step. Give a one-line reason for the confidence value. For deep research, write the long report to `research/<slug>/<slug>.md` in the durable corpus. Resolve the root with `artifact-path research <slug>`. See `references/synthesis.md`. Return the path.
+Use the style and citation format in [`../cheese/references/formatting.md`](../cheese/references/formatting.md). Follow the output contract in `references/synthesis.md`. Return one synthesis paragraph, a claim evidence table, open questions, confidence, and the recommended next step. Give a one-line reason for the confidence value. For deep research, write the long report to `research/<slug>/<slug>.md` in the durable corpus. Resolve each path with `research-layout <slug>`. See `references/synthesis.md`. Return the path.
 
 ## Rules
 
@@ -83,6 +83,7 @@ Use the style and citation format in [`../cheese/references/formatting.md`](../c
 - Use `references/routing.md` for the capability matrix, provider selection, and source priority.
 - Use `references/synthesis.md` for claim evidence, confidence limits, and output format.
 - Use `references/context-isolation.md` to keep raw content out of the main context.
+- `references/budgets.md` — soft call budgets, extension gaps, no repeat calls.
 - Use `references/safety.md` for untrusted content and data protection rules.
 - Use `references/unavailable.md` for provider substitutions and uncovered capabilities.
 - Use `references/evals.md` for trigger queries and trace checks.
