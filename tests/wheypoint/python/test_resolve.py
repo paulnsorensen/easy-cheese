@@ -342,6 +342,25 @@ def write_note(root: Path, slug: str, *, artifact: str = "") -> Path:
     return path
 
 
+def test_legacy_parent_validation_reuses_the_initial_worktree_scan(
+    tmp_path: Path,
+) -> None:
+    start = tmp_path / "start"
+    start.mkdir()
+    _ = write_note(start, "elder")
+    _ = write_note_with_parents(start, "child", "elder")
+    calls: list[tuple[Sequence[str], Path]] = []
+
+    def run_git(args: Sequence[str], cwd: Path) -> str:
+        calls.append((args, cwd))
+        return porcelain(start)
+
+    found = resolve_mod.resolve_legacy("child", start=start, run=run_git)
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.LEGACY
+    assert len(calls) == 1
+
+
 def test_a_unique_sibling_legacy_note_resolves_without_dispatching(
     tmp_path: Path,
 ) -> None:

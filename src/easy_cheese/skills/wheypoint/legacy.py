@@ -222,6 +222,7 @@ class LegacyLookup:
     matches: tuple[LegacyNote, ...] = field(default=())
     searched: tuple[str, ...] = field(default=())
     error: str | None = None
+    roots: tuple[Path, ...] = field(default=())
 
     @property
     def note(self) -> LegacyNote | None:
@@ -374,4 +375,5 @@ def find_legacy_note(
         matches=tuple(matches),
         searched=tuple(searched),
         error=scan.error,
+        roots=scan.roots,
     )

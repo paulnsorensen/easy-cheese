@@ -42,6 +42,7 @@ first: an identical genesis resubmission is a replay, not a conflict.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import cast
 
 from attrs import define, evolve
@@ -65,6 +66,7 @@ from easy_cheese_schemas import (
 from easy_cheese.shared import paths
 
 from . import canonical
+from . import lineage
 from . import projection as projection_mod
 from . import records, storage
 
@@ -134,12 +136,24 @@ class CommitResult:
     replayed: bool
 
 
+@define(frozen=True)
+class PendingRevision:
+    """A typed revision awaiting the one durability finalizer."""
+
+    revision: WheypointRevision
+    record: WheypointRecord
+    projection: WheypointProjection
+    markdown: str
+    replayed: bool = False
+
+
 def commit(
     delta: WheypointDelta,
     *,
     store: storage.WorkStore,
     repository: RepositoryProvenance | None = None,
     durability: Durability = Durability.CANONICAL_LOCAL,
+    finalize: Callable[[PendingRevision], None] | None = None,
 ) -> CommitResult:
     """Apply `delta` to the store's current record under the record lock."""
     repository_value: RepositoryProvenance = (
@@ -163,7 +177,11 @@ def commit(
             replay = _find_replay(store, delta, fingerprint)
             if current is not None:
                 if replay is not None:
-                    return _replayed(store, replay, current)
+                    return _finalize(
+                        store,
+                        _replayed(store, replay, current),
+                        finalize=finalize,
+                    )
                 raise GenesisConflictError(
                     f"work {store.work_id!r} already holds revision "
                     + f"{current.revision_id!r}: a genesis delta creates the first "
@@ -179,12 +197,16 @@ def commit(
             # `replay is not None` here means this genesis already wrote its
             # pair and died before the record swap. `_genesis` re-derives the
             # identical triple and `promote` settles the pointer onto it.
-            return _genesis(
+            return _finalize(
                 store,
-                delta,
-                fingerprint=fingerprint,
-                repository=repository_value,
-                durability=durability,
+                _genesis(
+                    store,
+                    delta,
+                    fingerprint=fingerprint,
+                    repository=repository_value,
+                    durability=durability,
+                ),
+                finalize=finalize,
             )
         if current is None:
             raise CommitError(
@@ -193,7 +215,11 @@ def commit(
             )
         replay = _find_replay(store, delta, fingerprint)
         if replay is not None and replay.parent_revision_id != current.revision_id:
-            return _replayed(store, replay, current)
+            return _finalize(
+                store,
+                _replayed(store, replay, current),
+                finalize=finalize,
+            )
         # A replay whose parent is still the current revision is not a replay:
         # the record never moved onto it, so the promotion that wrote it never
         # finished. Falling through re-derives the same triple and completes it.
@@ -202,15 +228,20 @@ def commit(
                 f"delta expects revision {delta.expected_revision_id!r} but the "
                 + f"current revision is {current.revision_id!r}"
             )
-        _check_lineage(store, current)
+        checked_lineage = _check_lineage(store, current)
         _check_rehydration(delta, current)
-        return _apply(
+        return _finalize(
             store,
-            delta,
-            current,
-            fingerprint=fingerprint,
-            repository=repository_value,
-            durability=durability,
+            _apply(
+                store,
+                delta,
+                current,
+                lineage=checked_lineage,
+                fingerprint=fingerprint,
+                repository=repository_value,
+                durability=durability,
+            ),
+            finalize=finalize,
         )
 
 
@@ -262,11 +293,11 @@ def _find_replay(
 
 def _replayed(
     store: storage.WorkStore, revision: WheypointRevision, current: WheypointRecord
-) -> CommitResult:
+) -> PendingRevision:
     markdown = store.projection_path(
         revision.revision_number, revision.revision_id
     ).read_text(encoding="utf-8")
-    return CommitResult(
+    return PendingRevision(
         revision=revision,
         record=current,
         projection=projection_mod.parse(markdown),
@@ -275,7 +306,56 @@ def _replayed(
     )
 
 
-def _check_lineage(store: storage.WorkStore, current: WheypointRecord) -> None:
+def resume_revision(
+    revision_id: str,
+    *,
+    store: storage.WorkStore,
+    finalize: Callable[[PendingRevision], None] | None = None,
+) -> CommitResult:
+    """Resume finalization for a complete revision already written to disk."""
+    with store.lock():
+        current = store.read_record()
+        if current is None:
+            raise CommitError(
+                f"work {store.work_id!r} has no record while resuming "
+                + f"revision {revision_id!r}"
+            )
+        revision = store.find_complete_revision(revision_id)
+        if revision is None:
+            raise CommitError(
+                f"revision {revision_id!r} is not a complete immutable revision "
+                + f"in work {store.work_id!r}"
+            )
+        return _finalize(
+            store,
+            _replayed(store, revision, current),
+            finalize=finalize,
+        )
+
+
+def _finalize(
+    store: storage.WorkStore,
+    pending: PendingRevision,
+    *,
+    finalize: Callable[[PendingRevision], None] | None,
+) -> CommitResult:
+    """Make one pending revision durable, then collect durability evidence."""
+    if not pending.replayed:
+        store.promote(pending.record, pending.revision, pending.markdown)
+    if finalize is not None:
+        finalize(pending)
+    return CommitResult(
+        revision=pending.revision,
+        record=pending.record,
+        projection=pending.projection,
+        markdown=pending.markdown,
+        replayed=pending.replayed,
+    )
+
+
+def _check_lineage(
+    store: storage.WorkStore, current: WheypointRecord
+) -> lineage.Lineage:
     parent = store.read_revision(current.revision_number, current.revision_id)
     if parent is None:
         raise CommitError(
@@ -287,6 +367,40 @@ def _check_lineage(store: storage.WorkStore, current: WheypointRecord) -> None:
             f"current revision {current.revision_id!r} does not match the digest "
             + "the record quotes"
         )
+    checked = lineage.walk(
+        (file.revision for file in store.recover().complete),
+        parent,
+    )
+    if checked.issues:
+        raise CommitError(_lineage_issue_detail(checked.issues[0]))
+    return checked
+
+
+def _lineage_issue_detail(issue: lineage.LineageIssue) -> str:
+    if issue.kind is lineage.LineageIssueKind.PARENT_UNRESOLVED:
+        if issue.cycle:
+            return (
+                f"revision {issue.revision.revision_id!r} re-enters the chain at "
+                + f"{issue.parent_revision_id!r}"
+            )
+        return (
+            f"revision {issue.revision.revision_id!r} names parent "
+            + f"{issue.parent_revision_id!r}, which is not a complete immutable "
+            + "revision"
+        )
+    if issue.expected_digest is None:
+        return (
+            f"revision {issue.revision.revision_id!r} is stamped schema version "
+            + f"{issue.revision.schema_version} and names parent "
+            + f"{issue.parent_revision_id!r} without pinning its digest"
+        )
+    return (
+        f"revision {issue.revision.revision_id!r} pins parent "
+        + f"{issue.parent_revision_id!r} at {issue.expected_digest}, but that "
+        + f"receipt now hashes to {issue.actual_digest}"
+    )
+
+
 
 
 def _check_rehydration(delta: WheypointDelta, current: WheypointRecord) -> None:
@@ -344,32 +458,6 @@ def _check_rehydration(delta: WheypointDelta, current: WheypointRecord) -> None:
         )
 
 
-def _prior_compaction_revision_id(
-    store: storage.WorkStore, current: WheypointRecord
-) -> str | None:
-    """The nearest receipt at or behind `current` that recorded a compaction.
-
-    Walking the receipts is what makes the answer trustworthy: the delta cannot
-    supply it (see `_check_rehydration`), so a session that compacted twice
-    cannot present the second event as the first. The walk stops at the first
-    parent that is not a complete receipt -- an unwalkable chain proves no
-    earlier compaction, and inventing one from whatever else is on disk would
-    chain this compaction to a revision it does not descend from.
-    """
-    known = {
-        file.revision.revision_id: file.revision for file in store.recover().complete
-    }
-    revision_id: str | None = current.revision_id
-    seen: set[str] = set()
-    while revision_id is not None and revision_id not in seen:
-        seen.add(revision_id)
-        revision = known.get(revision_id)
-        if revision is None:
-            return None
-        if revision.compaction is not None:
-            return revision.revision_id
-        revision_id = revision.parent_revision_id
-    return None
 
 
 def _entry_id(delta: WheypointDelta, proposed: ProposedEntry, index: int) -> str:
@@ -427,6 +515,11 @@ def _additions(delta: WheypointDelta, kind: EntryKind) -> list[ProtectedEntry]:
     ]
 
 
+def revision_id_for(delta: WheypointDelta) -> str:
+    """Return the deterministic receipt id for a request delta."""
+    return _revision_id(delta, records.request_fingerprint(delta))
+
+
 def _existing_entries(
     current: WheypointRecord, kind: EntryKind
 ) -> list[ProtectedEntry]:
@@ -455,10 +548,11 @@ def _apply(
     delta: WheypointDelta,
     current: WheypointRecord,
     *,
+    lineage: lineage.Lineage,
     fingerprint: str,
     repository: RepositoryProvenance,
     durability: Durability,
-) -> CommitResult:
+) -> PendingRevision:
     transitions = list(delta.transitions or [])
     problems = records.validate_transitions(current, transitions)
     if problems:
@@ -479,7 +573,6 @@ def _apply(
     additions = {kind: _additions(delta, kind) for kind in _ADDITION_FIELDS}
     revision_id = _revision_id(delta, fingerprint)
     number = current.revision_number + 1
-
     draft = _draft_record(
         current,
         delta,
@@ -493,7 +586,7 @@ def _apply(
         if delta.compaction is None
         else evolve(
             delta.compaction,
-            prior_compaction_revision_id=_prior_compaction_revision_id(store, current),
+            prior_compaction_revision_id=lineage.prior_compaction_revision_id,
         )
     )
     return _finish(
@@ -522,7 +615,7 @@ def _genesis(
     fingerprint: str,
     repository: RepositoryProvenance,
     durability: Durability,
-) -> CommitResult:
+) -> PendingRevision:
     """The first record for a work id, built from the delta alone.
 
     There is no parent to carry anything forward from, so everything a record
@@ -623,8 +716,8 @@ def _finish(
     preserved: list[str],
     repository: RepositoryProvenance,
     durability: Durability,
-) -> CommitResult:
-    """Render the draft, write its receipt, and promote the triple."""
+) -> PendingRevision:
+    """Render the draft into one typed pending revision."""
     projected, markdown = projection_mod.build_projection(
         draft, durability=durability
     )
@@ -649,13 +742,11 @@ def _finish(
         session_provenance=delta.session_provenance,
     )
     record = evolve(draft, revision_digest=records.revision_digest(revision))
-    store.promote(record, revision, markdown)
-    return CommitResult(
+    return PendingRevision(
         revision=revision,
         record=record,
         projection=projected,
         markdown=markdown,
-        replayed=False,
     )
 
 

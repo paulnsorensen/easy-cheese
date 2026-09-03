@@ -36,10 +36,13 @@ import sys
 from pathlib import Path
 from typing import NoReturn, TextIO, cast, override
 
+from attrs import define
+
 from easy_cheese_schemas import Durability, WheypointDelta
 
 from easy_cheese.shared import paths
 
+from . import canonical
 from . import checkpoint as checkpoint_mod
 from . import commit as commit_mod
 from . import legacy as legacy_mod
@@ -61,6 +64,16 @@ class _Refused(Exception):
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
         self.code: str = code
+
+
+@define(frozen=True)
+class _PendingMirror:
+    """A durable identity for a revision whose mirror still needs finalization."""
+
+    request_identity: str
+    request_digest: str
+    revision_id: str
+    target: str
 
 
 class _BadUsage(Exception):
@@ -158,7 +171,12 @@ def _run_commit(args: argparse.Namespace, stdin: TextIO) -> dict[str, object]:
         delta = records.structure(payload, WheypointDelta)
     except records.RecordError as exc:
         raise _Refused("invalid-delta", str(exc)) from exc
-    return _promote(delta, _open(delta.work_id), args)
+    return _promote(
+        delta,
+        _open(delta.work_id),
+        args,
+        request_identity=records.request_fingerprint(delta),
+    )
 
 
 def _run_checkpoint(args: argparse.Namespace, stdin: TextIO) -> dict[str, object]:
@@ -181,6 +199,7 @@ def _run_checkpoint(args: argparse.Namespace, stdin: TextIO) -> dict[str, object
         intent = records.structure(payload, checkpoint_mod.CheckpointIntent)
     except records.RecordError as exc:
         raise _Refused("invalid-intent", str(exc)) from exc
+    request_identity = canonical.digest_value(records.unstructure(intent))
     store = _open(intent.work_id)
     try:
         current = store.read_record()
@@ -194,52 +213,218 @@ def _run_checkpoint(args: argparse.Namespace, stdin: TextIO) -> dict[str, object
         delta = checkpoint_mod.build_delta(intent, current)
     except checkpoint_mod.IntentError as exc:
         raise _Refused("invalid-intent", str(exc)) from exc
-    return _promote(delta, store, args)
+    return _promote(
+        delta,
+        store,
+        args,
+        request_identity=request_identity,
+    )
 
 
 def _promote(
-    delta: WheypointDelta, store: storage.WorkStore, args: argparse.Namespace
+    delta: WheypointDelta,
+    store: storage.WorkStore,
+    args: argparse.Namespace,
+    *,
+    request_identity: str,
 ) -> dict[str, object]:
-    # Whether a mirror will be written is decided *before* the commit: the
-    # durability it implies is rendered into the projection text and hashed
-    # into its digest, so it cannot be discovered afterwards without making the
-    # document disagree with the receipt that quotes it.
     note_dir = _note_dir(args)
-    if note_dir is not None:
+    if note_dir is None:
         try:
-            note_dir.mkdir(parents=True, exist_ok=True)
+            result = commit_mod.commit(
+                delta,
+                store=store,
+                durability=Durability.CANONICAL_LOCAL,
+            )
+        except commit_mod.GenesisConflictError as exc:
+            raise _Refused("genesis-conflict", str(exc)) from exc
+        except commit_mod.StaleParentError as exc:
+            raise _Refused("stale-parent", str(exc)) from exc
+        except commit_mod.CommitError as exc:
+            raise _Refused("commit-refused", str(exc)) from exc
+        except storage.StorageError as exc:
+            raise _Refused("storage-error", str(exc)) from exc
+        return _result_payload(result, None)
+
+    try:
+        note_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise _Refused(
+            "note-unwritable",
+            f"note directory {note_dir} cannot be created: {exc}",
+        ) from exc
+
+    try:
+        current = store.read_record()
+    except ValueError as exc:
+        raise _Refused(
+            "record-unreadable",
+            f"work {store.work_id!r} has a record that cannot be read: {exc}",
+        ) from exc
+    target = note_dir / (
+        f"{store.work_id if current is None else current.slug}.md"
+    )
+    pending = _read_pending(store, request_identity)
+    if pending is not None:
+        revision = store.find_complete_revision(pending.revision_id)
+        if revision is not None:
+            if revision.request_digest != pending.request_digest:
+                raise _Refused(
+                    "pending-corrupt",
+                    f"request ledger for {request_identity!r} names a different "
+                    + f"request than revision {pending.revision_id!r}",
+                )
+            target = Path(pending.target)
+            result = _resume_mirror(store, revision.revision_id, target, pending)
+            return _result_payload(result, str(target))
+        try:
+            store.remove_pending(request_identity)
         except OSError as exc:
             raise _Refused(
-                "note-unwritable",
-                f"note directory {note_dir} cannot be created: {exc}",
+                "storage-error",
+                f"request ledger {store.pending_path(request_identity)} cannot be "
+                + f"cleared: {exc}",
             ) from exc
-    durability = (
-        Durability.CANONICAL_LOCAL if note_dir is None else Durability.REPO_SNAPSHOT
+
+    request_digest = records.request_fingerprint(delta)
+    pending = _PendingMirror(
+        request_identity=request_identity,
+        request_digest=request_digest,
+        revision_id=commit_mod.revision_id_for(delta),
+        target=str(target.resolve()),
     )
+    _write_pending(store, pending)
+
+    def finalize(pending_revision: commit_mod.PendingRevision) -> None:
+        try:
+            storage.write_atomic(
+                target, pending_revision.markdown.encode("utf-8")
+            )
+            store.remove_pending(request_identity)
+        except OSError as exc:
+            raise _MirrorError(f"mirror {target} cannot be finalized: {exc}") from exc
+
     try:
-        result = commit_mod.commit(delta, store=store, durability=durability)
+        result = commit_mod.commit(
+            delta,
+            store=store,
+            durability=Durability.REPO_SNAPSHOT,
+            finalize=finalize,
+        )
+    except _MirrorError as exc:
+        raise _Refused("note-unwritable", str(exc)) from exc
     except commit_mod.GenesisConflictError as exc:
+        _drop_uncommitted_pending(store, pending)
         raise _Refused("genesis-conflict", str(exc)) from exc
     except commit_mod.StaleParentError as exc:
+        _drop_uncommitted_pending(store, pending)
         raise _Refused("stale-parent", str(exc)) from exc
     except commit_mod.CommitError as exc:
+        _drop_uncommitted_pending(store, pending)
         raise _Refused("commit-refused", str(exc)) from exc
     except storage.StorageError as exc:
+        _drop_uncommitted_pending(store, pending)
         raise _Refused("storage-error", str(exc)) from exc
-    # After the promotion, never before it: the mirror is a copy of a document
-    # the corpus already holds, so a crash between the two leaves the store
-    # authoritative and the mirror merely absent. A replay writes the same
-    # bytes over the same path, which is why re-running a commit is safe.
-    note_path: str | None = None
-    if note_dir is not None:
-        target = note_dir / f"{result.record.slug}.md"
+    return _result_payload(result, str(target))
+
+
+class _MirrorError(OSError):
+    """Raised when the durability finalizer cannot publish the mirror."""
+
+
+def _read_pending(
+    store: storage.WorkStore, request_identity: str
+) -> _PendingMirror | None:
+    path = store.pending_path(request_identity)
+    try:
+        raw = path.read_bytes()
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        raise _Refused(
+            "storage-error", f"request ledger {path} cannot be read: {exc}"
+        ) from exc
+    try:
+        payload = json.loads(raw.decode("utf-8"))
+        if not isinstance(payload, dict):
+            raise ValueError("request ledger is not an object")
+        pending = _PendingMirror(
+            request_identity=cast(str, payload["request_identity"]),
+            request_digest=cast(str, payload["request_digest"]),
+            revision_id=cast(str, payload["revision_id"]),
+            target=cast(str, payload["target"]),
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise _Refused(
+            "pending-corrupt", f"request ledger {path} is invalid: {exc}"
+        ) from exc
+    if pending.request_identity != request_identity or not Path(pending.target).is_absolute():
+        raise _Refused("pending-corrupt", f"request ledger {path} has invalid identity")
+    return pending
+
+
+def _write_pending(store: storage.WorkStore, pending: _PendingMirror) -> None:
+    path = store.pending_path(pending.request_identity)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        storage.write_atomic(
+            path,
+            canonical.canonical_bytes(
+                {
+                    "request_identity": pending.request_identity,
+                    "request_digest": pending.request_digest,
+                    "revision_id": pending.revision_id,
+                    "target": pending.target,
+                }
+            ),
+        )
+    except OSError as exc:
+        raise _Refused(
+            "note-unwritable", f"request ledger {path} cannot be written: {exc}"
+        ) from exc
+
+
+def _drop_uncommitted_pending(
+    store: storage.WorkStore, pending: _PendingMirror
+) -> None:
+    if store.find_complete_revision(pending.revision_id) is not None:
+        return
+    try:
+        store.remove_pending(pending.request_identity)
+    except OSError:
+        pass
+
+
+def _resume_mirror(
+    store: storage.WorkStore,
+    revision_id: str,
+    target: Path,
+    pending: _PendingMirror,
+) -> commit_mod.CommitResult:
+    def finalize(pending_revision: commit_mod.PendingRevision) -> None:
         try:
-            storage.write_atomic(target, result.markdown.encode("utf-8"))
+            storage.write_atomic(
+                target, pending_revision.markdown.encode("utf-8")
+            )
+            store.remove_pending(pending.request_identity)
         except OSError as exc:
-            raise _Refused(
-                "note-unwritable", f"mirror {target} cannot be written: {exc}"
-            ) from exc
-        note_path = str(target)
+            raise _MirrorError(f"mirror {target} cannot be finalized: {exc}") from exc
+
+    try:
+        return commit_mod.resume_revision(
+            revision_id,
+            store=store,
+            finalize=finalize,
+        )
+    except _MirrorError as exc:
+        raise _Refused("note-unwritable", str(exc)) from exc
+    except (commit_mod.CommitError, storage.StorageError) as exc:
+        raise _Refused("storage-error", str(exc)) from exc
+
+
+def _result_payload(
+    result: commit_mod.CommitResult, note_path: str | None
+) -> dict[str, object]:
     return {
         "note_path": note_path,
         "replayed": result.replayed,
@@ -248,8 +433,6 @@ def _promote(
         "revision_number": result.revision.revision_number,
         "parent_revision_id": result.revision.parent_revision_id,
         "status": result.record.status.value,
-        # How far this checkpoint has travelled, so a caller can see that a
-        # gated record is local-only without re-linting the store.
         "durability": result.projection.durability.value,
         "projection_path": result.revision.projection_path,
         "record": records.unstructure(result.record),

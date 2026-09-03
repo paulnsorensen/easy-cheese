@@ -30,15 +30,12 @@ from easy_cheese_schemas import (
     WheypointStatus,
 )
 
+from . import lineage
 from . import projection as projection_mod
 from . import records, storage
 
 _GIT_TIMEOUT_SECONDS = 5
 
-# The version that first pinned each receipt to its parent's digest. A receipt
-# stamped at or above it and missing the pin is not merely old: its producer
-# knew the field and did not write it.
-_PARENT_DIGEST_SINCE = 2
 
 
 class LintCode(str, Enum):
@@ -356,78 +353,47 @@ class _Chain:
 def _walk_chain(
     recovery: storage.RecoveryReport, current: WheypointRevision
 ) -> _Chain:
-    """Walk parents back to genesis; every step must be a local revision."""
-    known = {
-        file.revision.revision_id: file.revision for file in recovery.complete
-    }
-    findings: list[LintFinding] = []
-    walked = [current]
-    seen = {current.revision_id}
-    revision = current
-    while revision.parent_revision_id is not None:
-        parent_id = revision.parent_revision_id
-        if parent_id in seen:
-            findings.append(
-                LintFinding(
-                    LintCode.PARENT_UNRESOLVED,
-                    f"revision {revision.revision_id!r} re-enters the chain at "
-                    + f"{parent_id!r}",
-                )
-            )
-            break
-        parent = known.get(parent_id)
-        if parent is None:
-            findings.append(
-                LintFinding(
-                    LintCode.PARENT_UNRESOLVED,
-                    f"revision {revision.revision_id!r} names parent "
-                    + f"{parent_id!r}, which is not a complete immutable revision",
-                )
-            )
-            break
-        mismatch = _parent_digest_finding(revision, parent)
-        if mismatch is not None:
-            # The chain is not walked past an ancestor this receipt does not
-            # actually pin: everything behind it is reached only through a link
-            # that no longer holds, so it cannot be reported as proven ancestry.
-            findings.append(mismatch)
-            break
-        seen.add(parent_id)
-        walked.append(parent)
-        revision = parent
-    return _Chain(revisions=tuple(walked), findings=tuple(findings))
-
-
-def _parent_digest_finding(
-    revision: WheypointRevision, parent: WheypointRevision
-) -> LintFinding | None:
-    """Check the pin a receipt puts on the ancestor it was written against.
-
-    The *revision* digest is what is compared, not the parent's
-    `record_digest`: a record digest covers the record, and the tampering this
-    catches is an edit to the receipt itself -- to `preserved_entry_ids`, say,
-    which no record digest is over. A receipt written before schema version 2
-    carries no pin and is left alone; one stamped at or above it and still
-    missing the pin is reported, because its producer knew the field.
-    """
-    pinned = revision.parent_revision_digest
-    if pinned is None:
-        if revision.schema_version < _PARENT_DIGEST_SINCE:
-            return None
-        return LintFinding(
-            LintCode.PARENT_DIGEST_MISMATCH,
-            f"revision {revision.revision_id!r} is stamped schema version "
-            + f"{revision.schema_version} and names parent "
-            + f"{parent.revision_id!r} without pinning its digest",
-        )
-    actual = records.revision_digest(parent)
-    if pinned == actual:
-        return None
-    return LintFinding(
-        LintCode.PARENT_DIGEST_MISMATCH,
-        f"revision {revision.revision_id!r} pins parent {parent.revision_id!r} "
-        + f"at {pinned}, but that receipt now hashes to {actual}",
+    """Adapt the shared provenance walk into lint findings."""
+    checked = lineage.walk(
+        (file.revision for file in recovery.complete),
+        current,
     )
+    return _Chain(
+        revisions=checked.revisions,
+        findings=tuple(_lineage_finding(issue) for issue in checked.issues),
+    )
+
+
+def _lineage_finding(issue: lineage.LineageIssue) -> LintFinding:
+    if issue.kind is lineage.LineageIssueKind.PARENT_UNRESOLVED:
+        if issue.cycle:
+            detail = (
+                f"revision {issue.revision.revision_id!r} re-enters the chain at "
+                + f"{issue.parent_revision_id!r}"
+            )
+        else:
+            detail = (
+                f"revision {issue.revision.revision_id!r} names parent "
+                + f"{issue.parent_revision_id!r}, which is not a complete "
+                + "immutable revision"
+            )
+        return LintFinding(LintCode.PARENT_UNRESOLVED, detail)
+    pinned = issue.expected_digest
+    if pinned is None:
+        detail = (
+            f"revision {issue.revision.revision_id!r} is stamped schema version "
+            + f"{issue.revision.schema_version} and names parent "
+            + f"{issue.parent_revision_id!r} without pinning its digest"
+        )
+    else:
+        detail = (
+            f"revision {issue.revision.revision_id!r} pins parent "
+            + f"{issue.parent_revision_id!r} at {pinned}, but that receipt now "
+            + f"hashes to {issue.actual_digest}"
+        )
+    return LintFinding(LintCode.PARENT_DIGEST_MISMATCH, detail)
+
+
 
 
 def _compaction_findings(chain: _Chain) -> list[LintFinding]:

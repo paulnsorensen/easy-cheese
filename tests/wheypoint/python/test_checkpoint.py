@@ -458,7 +458,51 @@ def test_a_gating_addition_derives_gated_status_and_a_projection(
     assert (store.root / cast(str, payload["projection_path"])).read_text(
         encoding="utf-8"
     ) == generated
+@pytest.mark.usefixtures("genesis")
+def test_mirror_failure_then_retry_resumes_the_committed_revision(
+    store: storage.WorkStore, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    notes = tmp_path / "notes"
+    real_write_atomic = storage.write_atomic
+    failed = False
 
+    def fail_mirror_once(path: Path, payload: bytes) -> None:
+        nonlocal failed
+        if path.parent == notes and not failed:
+            failed = True
+            raise OSError("mirror is temporarily unavailable")
+        real_write_atomic(path, payload)
+
+    monkeypatch.setattr(storage, "write_atomic", fail_mirror_once)
+    intent = _intent(
+        add_questions=[
+            {
+                "kind": "question",
+                "summary": "Can the mirror be retried?",
+                "blocks_continuation": False,
+            }
+        ]
+    )
+
+    status, first = _run("checkpoint", "--note-dir", str(notes), stdin=intent)
+
+    assert status == 1
+    assert _get(first, "error", "code") == "note-unwritable"
+    committed = store.read_record()
+    assert committed is not None
+    assert committed.revision_number == 2
+    assert len(committed.questions) == 1
+
+    status, second = _run("checkpoint", "--note-dir", str(notes), stdin=intent)
+
+    assert status == 0, second
+    assert second["revision_number"] == 2
+    assert second["replayed"] is True
+    assert len(cast(list[dict[str, object]], _get(second, "record", "questions"))) == 1
+    assert (notes / f"{WORK_ID}.md").read_text(encoding="utf-8") == second["markdown"]
+    revision_files = sorted(path.name for path in store.revisions_dir.glob("*.json"))
+    assert len(revision_files) == 2
+    assert f"2-{committed.revision_id}.json" in revision_files
 
 @pytest.mark.usefixtures("genesis")
 def test_an_artifact_without_a_next_move_refuses() -> None:

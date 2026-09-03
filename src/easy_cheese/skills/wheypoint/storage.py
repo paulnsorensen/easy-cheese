@@ -53,6 +53,7 @@ RECORD_FILENAME = "record.json"
 REVISIONS_DIRNAME = "revisions"
 PROJECTIONS_DIRNAME = "projections"
 LOCK_FILENAME = "record.lock"
+PENDING_DIRNAME = "pending"
 
 # Mirrors the identifier rule the schema types enforce: a work id is also a
 # path segment here, so anything that could leave the corpus is refused before
@@ -179,6 +180,26 @@ class WorkStore:
     @property
     def lock_path(self) -> Path:
         return self.root / LOCK_FILENAME
+
+    @property
+    def pending_dir(self) -> Path:
+        return self.root / PENDING_DIRNAME
+
+    def pending_path(self, request_identity: str) -> Path:
+        """The durable request ledger entry for one mirror transaction."""
+        stem = request_identity.replace(":", "-")
+        if re.fullmatch(r"[a-zA-Z0-9._-]+", stem) is None:
+            raise StorageError("request identity is not a safe path segment")
+        return self.pending_dir / f"{stem}.json"
+
+    def remove_pending(self, request_identity: str) -> None:
+        """Remove one request ledger entry and sync the directory."""
+        path = self.pending_path(request_identity)
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            return
+        _fsync_dir(path.parent)
 
     def revision_path(self, number: int, revision_id: str) -> Path:
         return self.revisions_dir / f"{number}-{revision_id}.json"

@@ -350,7 +350,7 @@ def _parent_resolves(token: str, roots: tuple[Path, ...]) -> bool:
 
 
 def _unresolved_parents(
-    raw: str, *, note_worktree: Path, start: Path | str, run: legacy_mod.Runner | None
+    raw: str, *, note_worktree: Path, roots: tuple[Path, ...]
 ) -> tuple[str, ...]:
     """Every declared parent that names nothing a reader could go and read.
 
@@ -361,10 +361,7 @@ def _unresolved_parents(
     tokens = _parent_tokens(raw)
     if not tokens:
         return ()
-    # The note's own worktree leads, because that is where a sibling handoff
-    # actually sits; an exact-path reference never scans anything else.
-    scanned = legacy_mod.worktree_roots(start, run=run).roots
-    roots = (note_worktree, *(root for root in scanned if root != note_worktree))
+    roots = (note_worktree, *(root for root in roots if root != note_worktree))
     return tuple(
         token for token in tokens if not _parent_resolves(token, roots)
     )
@@ -457,8 +454,7 @@ def resolve_legacy(
         unresolved = _unresolved_parents(
             slug_block.parents,
             note_worktree=note.worktree.resolve(),
-            start=start,
-            run=run,
+            roots=lookup.roots,
         )
         if unresolved:
             return _gate(

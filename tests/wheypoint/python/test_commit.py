@@ -355,6 +355,50 @@ def test_a_record_quoting_the_wrong_receipt_digest_blocks_the_next_revision(
     assert _revision_files(store) == [
         f"1-{seed.record.revision_id}.json",
     ]
+def test_a_missing_ancestor_receipt_blocks_the_next_revision(
+    store: storage.WorkStore, make_promotion: Callable[..., Promotion]
+) -> None:
+    seed = _seed(store, make_promotion)
+    broken = make_promotion(2, "rev-0002", parent="rev-missing")
+    store.promote(broken.record, broken.revision, broken.markdown)
+
+    with pytest.raises(commit.CommitError, match="names parent 'rev-missing'"):
+        _ = commit.commit(
+            _delta(broken.record.revision_id, orientation="Reject a broken chain."),
+            store=store,
+        )
+
+
+def test_a_cyclic_ancestor_chain_blocks_the_next_revision(
+    store: storage.WorkStore, make_promotion: Callable[..., Promotion]
+) -> None:
+    cyclic = make_promotion(1, "rev-0001", parent="rev-0001")
+    store.promote(cyclic.record, cyclic.revision, cyclic.markdown)
+
+    with pytest.raises(commit.CommitError, match="re-enters the chain"):
+        _ = commit.commit(
+            _delta(cyclic.record.revision_id, orientation="Reject a cyclic chain."),
+            store=store,
+        )
+
+
+def test_a_parent_receipt_digest_mismatch_blocks_the_next_revision(
+    store: storage.WorkStore, make_promotion: Callable[..., Promotion]
+) -> None:
+    seed = _seed(store, make_promotion)
+    second = make_promotion(2, "rev-0002", parent=seed)
+    forged = evolve(second.revision, parent_revision_digest=PLACEHOLDER_DIGEST)
+    forged_record = evolve(
+        second.record, revision_digest=records.revision_digest(forged)
+    )
+    store.promote(forged_record, forged, second.markdown)
+
+    with pytest.raises(commit.CommitError, match="pins parent"):
+        _ = commit.commit(
+            _delta(forged_record.revision_id, orientation="Reject a forged parent."),
+            store=store,
+        )
+
 
 
 def test_identical_replay_against_the_same_parent_returns_the_existing_revision(
