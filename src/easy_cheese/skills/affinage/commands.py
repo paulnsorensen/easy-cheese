@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import sys
 
-from easy_cheese.shared.bundle_commands import bundle_command, derive_command, dispatch
+from easy_cheese.shared.bundle_commands import (
+    Command,
+    bundle_command,
+    derive_command,
+    dispatch,
+)
 
 
 @bundle_command("pr-status")
@@ -35,11 +40,27 @@ def _review_surface(argv: list[str]) -> int:
     return main(argv)
 
 
+def _with_summary(command: Command, summary: str) -> Command:
+    return Command(command.name, command.target, summary)
+
+
 COMMANDS = (
-    derive_command(_pr_status),
-    derive_command(_post_reply),
-    derive_command(_age_route),
-    derive_command(_review_surface),
+    _with_summary(
+        derive_command(_pr_status),
+        "Fetch a PR's build and merge status for grading",
+    ),
+    _with_summary(
+        derive_command(_post_reply),
+        "Post a PR reply carrying the mandatory agent attribution",
+    ),
+    _with_summary(
+        derive_command(_age_route),
+        "Size an /age review into single-pass or fan-out lanes (JSON in, JSON out)",
+    ),
+    _with_summary(
+        derive_command(_review_surface),
+        "Score the reviewable git surface that routing sizes against (JSON out)",
+    ),
 )
 
 
