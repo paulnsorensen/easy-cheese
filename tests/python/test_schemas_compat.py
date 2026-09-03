@@ -22,7 +22,6 @@ from attrs import define, field
 from attrs.exceptions import FrozenInstanceError
 
 from easy_cheese_schemas import (
-    CURD_PLAN_SCHEMA_URI,
     MIN_READABLE,
     SCHEMA_VERSION,
     AdapterSunsetError,
@@ -33,13 +32,10 @@ from easy_cheese_schemas import (
     LegacyAdapter,
     Loaded,
     Provenance,
-    adapter_for,
     check_adapter_sunsets,
     load,
     register_adapter,
-    supported_version_for,
     unregister_adapter,
-    validate_contract,
 )
 from easy_cheese_schemas.compat import STAMP_KEY, classify_stamp
 
@@ -287,14 +283,18 @@ class TestLoadNeverRaises:
 
 class TestLoadedShape:
     def test_loaded_is_frozen(self) -> None:
-        result = Loaded(value=Widget(name="gouda"), provenance=Provenance.CURRENT, problems=[])
+        result = Loaded(
+            value=Widget(name="gouda"), provenance=Provenance.CURRENT, problems=[]
+        )
         with pytest.raises(FrozenInstanceError):
             result.value = None  # pyright: ignore[reportAttributeAccessIssue]
 
 
 class TestDistributionMetadata:
     def _pyproject(self) -> dict[str, object]:
-        return cast(dict[str, object], tomllib.loads((REPO_ROOT / "pyproject.toml").read_text()))
+        return cast(
+            dict[str, object], tomllib.loads((REPO_ROOT / "pyproject.toml").read_text())
+        )
 
     def _project(self) -> dict[str, object]:
         return cast(dict[str, object], self._pyproject()["project"])
@@ -322,7 +322,9 @@ class TestDistributionMetadata:
 
 
 class TestAdapterSunsets:
-    _SOURCE_SCHEMA_URI: str = "https://schemas.easy-cheese.dev/test-fixtures/sunset-fixture"
+    _SOURCE_SCHEMA_URI: str = (
+        "https://schemas.easy-cheese.dev/test-fixtures/sunset-fixture"
+    )
 
     def teardown_method(self) -> None:
         unregister_adapter(self._SOURCE_SCHEMA_URI, "0", "1")
@@ -355,6 +357,7 @@ class TestAdapterSunsets:
         )
 
         check_adapter_sunsets(date(2020, 1, 1))
+
 
 _BUILTIN_MIGRATION_IMPORT_ORDER_PROBE = """
 import sys
