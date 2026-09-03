@@ -7,8 +7,16 @@ import sys
 from easy_cheese.shared.bundle_commands import Command, dispatch
 
 COMMANDS = (
-    Command("press-route", "easy_cheese.shared.fanout.press_route_cli:main"),
-    Command("press-telemetry", "easy_cheese.shared.fanout.press_telemetry_cli:main"),
+    Command(
+        "press-route",
+        "easy_cheese.shared.fanout.press_route_cli:main",
+        "Decide whether Press continues or stops (JSON in, JSON out)",
+    ),
+    Command(
+        "press-telemetry",
+        "easy_cheese.shared.fanout.press_telemetry_cli:main",
+        "Build the Press attempt telemetry record (JSON in, JSON out)",
+    ),
 )
 
 

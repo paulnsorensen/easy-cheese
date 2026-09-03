@@ -1,13 +1,12 @@
 ---
 name: press
-description: Run the tests-only adversarial gate after `/cook`, routing bounded corrective Cook continuations. Use when the user says "press the changes", "harden this", "press before /age", or "/press". Do NOT edit production code or dispatch a global Cook repair from Press.
+description: Run the tests-only adversarial gate after `/cook`. Route bounded corrective Cook continuations. Use this skill when the user says "press the changes", "harden this", "press before /age", or "/press". Do not edit production code. Do not dispatch a global Cook repair from Press.
 license: MIT
 ---
 
 # /press
 
-Press is the tests-only adversarial gate after `/cook`. Its skill-level
-contract is:
+Press is the tests-only adversarial gate after `/cook`. Its skill contract is:
 
 ```text
 press(spec_ref)
@@ -16,15 +15,18 @@ press(spec_ref)
    | Stop(reason)
 ```
 
-Press never owns first coverage and never edits production code. Cook owns the
-implementation; Press only attacks the approved contract and preserves the
-failing evidence for a fresh bounded Cook repair.
+Press never owns first coverage. Press never edits production code. Cook owns the implementation. Press attacks the approved contract and preserves failure evidence for a bounded Cook repair.
 
 ## Packaged commands
 
-For boundary routing, run `python3 skills/press/scripts/press.pyz press-route
-.cheese/press/<slug>.attempt-N.route.json`. The request has exactly `outcome`
-and `repair_cycles`:
+Run this command for boundary routing:
+
+```sh
+python3 skills/press/scripts/press.pyz press-route \
+  .cheese/press/<slug>.attempt-N.route.json
+```
+
+The request contains only `outcome` and `repair_cycles`:
 
 ```json
 {
@@ -33,72 +35,84 @@ and `repair_cycles`:
 }
 ```
 
-`outcome` is one of `green`, `in_contract_red`, `invalid_evidence`, or
-`production_changed`. `repair_cycles` counts the corrective Cook continuations
-already completed for this slug (0 on the first attempt). The command's JSON
-action is authoritative. Halt if the bundle does not exist.
+Set `outcome` to `green`, `in_contract_red`, `invalid_evidence`, or `production_changed`.
 
-Each Press attempt has its own append-only artifact names. Use the same
-`<slug>` for all three attempts, but never reuse an attempt number: the attack
-candidate lives at `.cheese/press/candidates/<slug>.attempt-N.json`, the
-route request at `.cheese/press/<slug>.attempt-N.route.json`, the telemetry
-request at `.cheese/press/<slug>.attempt-N.telemetry-request.json`, and the
-telemetry record at `.cheese/press/<slug>.attempt-N.telemetry.json`. A third
-in-contract RED routes to terminal `Stop("third-red")`; do not create
-attempt-4 names or overwrite any earlier path.
+Set `repair_cycles` to the number of completed corrective Cook continuations. Use 0 for the first attempt.
+
+Use the command JSON action as the authority. Stop if the bundle does not exist.
+
+Use separate append-only artifact names for each Press attempt. Use the same `<slug>` for all three attempts. Never reuse an attempt number.
+
+Use these paths:
+
+- Attack candidate: `.cheese/press/candidates/<slug>.attempt-N.json`
+- Route request: `.cheese/press/<slug>.attempt-N.route.json`
+- Telemetry request: `.cheese/press/<slug>.attempt-N.telemetry-request.json`
+- Telemetry record: `.cheese/press/<slug>.attempt-N.telemetry.json`
+
+A third in-contract RED returns `Stop("third-red")`. Do not create attempt-4 paths. Do not overwrite an earlier path.
 
 ## Execution telemetry
 
-After routing, run `python3 skills/press/scripts/press.pyz press-telemetry
-.cheese/press/<slug>.attempt-N.telemetry-request.json` and save the emitted
-record at `.cheese/press/<slug>.attempt-N.telemetry.json`. It records the
-attempt's outcome, retry count, per-phase tool errors, every delegated
-agent's purpose, and the class of each changed file. It never routes. See
-[`references/telemetry.md`](references/telemetry.md).
+Run this command after routing:
+
+```sh
+python3 skills/press/scripts/press.pyz press-telemetry \
+  .cheese/press/<slug>.attempt-N.telemetry-request.json
+```
+
+Save the output at `.cheese/press/<slug>.attempt-N.telemetry.json`. The record contains these values:
+
+- Attempt outcome
+- Retry count
+- Tool errors for each phase
+- Purpose for each delegated agent
+- Class for each changed file
+
+Telemetry never controls the route. See [`references/telemetry.md`](references/telemetry.md).
 
 ## Adversarial loop
 
-1. **Attack** — add or run only tests, fixtures, and test-only harness support
-   against the same approved seam and witness. Keep the attack identity and
-   failing-test digest stable.
-2. **Classify** — an in-contract failure is `in_contract_red`; a clean pass is
-   `green`; an attack whose interval mutated production paths is
-   `production_changed`; anything unverifiable is `invalid_evidence`.
-3. **Repair** — route `in_contract_red` with the completed corrective count:
-   `repair_cycles` 0 and 1 return `Continue("press-corrective-cook")`;
-   `repair_cycles` 2 returns the terminal `Stop("third-red")`.
-4. **Replay** — after the corrective Cook returns, replay the identical attack
-   with the same attack/test digest before classifying again.
-5. **Terminate** — GREEN returns the only global dispatch, `Dispatch("/age")`.
+1. **Attack** — Add or run only tests, fixtures, and test-only harness support. Use the approved seam and witness. Keep the attack identity and test digest stable.
+2. **Classify** — Use `in_contract_red` for an in-contract failure. Use `green` for a clean pass. Use `production_changed` when the attempt changed production paths. Use `invalid_evidence` when you cannot verify the evidence.
+3. **Repair** — Route `in_contract_red` with the completed corrective count. Counts 0 and 1 return `Continue("press-corrective-cook")`. Count 2 returns `Stop("third-red")`.
+4. **Replay** — Replay the same attack after the corrective Cook returns. Use the same attack and test digest. Then classify the result again.
+5. **Terminate** — Return `Dispatch("/age")` only after GREEN.
 
-Invalid evidence and any production-tree mutation return a stop. They do not
-return a continuation. Press has no global `dispatch: /cook` action; the
-corrective Cook is a Press-owned `Continue` action only.
+Invalid evidence returns a stop. A production tree change also returns a stop. These outcomes never return a continuation.
+
+Press has no global `dispatch: /cook` action. Press owns the corrective Cook `Continue` action.
 
 ## Baseline-aware gates
 
-Press preserves baseline-aware readiness behavior for project gates. A Cook `baseline:` block is settled state: failures with the same test and signature do not re-flag or re-halt; new or changed failures remain blocking. See [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md) and [`references/gap-analysis.md`](references/gap-analysis.md).
+Press preserves baseline-aware readiness for project gates. A Cook `baseline:` block contains the settled state.
+
+Do not report a failure again when its test and signature match the baseline. New or changed failures block the route.
+
+See [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md). Also see [`references/gap-analysis.md`](references/gap-analysis.md).
 
 ## Flow
 
-1. **Read** — load the approved spec, Cook handoff, and any baseline block. If
-   `.cheese/glossary/<slug>.md` exists, use its canonical terms.
-2. **Attack** — add or run adversarial tests only; do not add first-coverage
-   tests or alter production paths.
-3. **Classify** — name the outcome from the adversarial run: `green`,
-   `in_contract_red`, `invalid_evidence`, or `production_changed`.
-4. **Continue or stop** — invoke packaged `press.pyz press-route` with
-   `outcome` and `repair_cycles`. Only its returned `Continue`, `Dispatch`,
-   and `Stop` action shapes are public.
-5. **Report** — write `.cheese/press/<slug>.md` with the evidence, action, and
-   the attempt's telemetry record path.
-6. **Hand off** — only a GREEN `Dispatch("/age")` reaches the global Age route.
+1. **Read** — Load the approved spec, Cook handoff, and baseline block. Use canonical terms from `.cheese/glossary/<slug>.md` when that file exists.
+2. **Attack** — Add or run only adversarial tests. Do not add first-coverage tests. Do not change production paths.
+3. **Classify** — Select `green`, `in_contract_red`, `invalid_evidence`, or `production_changed` from the adversarial run.
+4. **Continue or stop** — Run `press.pyz press-route` with `outcome` and `repair_cycles`. Only `Continue`, `Dispatch`, and `Stop` action shapes are public.
+5. **Report** — Write `.cheese/press/<slug>.md`. Include the evidence, action, and telemetry record path.
+6. **Hand off** — Send only a GREEN `Dispatch("/age")` to the global Age route.
 
-Compatibility contracts: source changes follow [`code-intelligence-routing.md`](../cheese/references/code-intelligence-routing.md). Portability follows [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md); slash commands are host renderings, not the control model. Readiness `ready for /age` maps to `status: ok` and `next: age`; `follow-up recommended` maps to `status: ok-with-concerns: <concern>` (proceed); `blocked` maps to `status: gated: <decision>` (stop). When invoked from `/ultracook` with its no-chain directive, write the Press handoff and stop; do not chain forward.
+Use [`code-intelligence-routing.md`](../cheese/references/code-intelligence-routing.md) for source changes.
+
+Use [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md) for portability. Slash commands are host representations, not the control model.
+
+Map `ready for /age` to `status: ok` and `next: age`. Map `follow-up recommended` to `status: ok-with-concerns: <concern>`. Continue after that status.
+
+Map `blocked` to `status: gated: <decision>`. Stop after that status.
+
+When `/ultracook` sets its no-chain directive, write the Press handoff and stop. Do not continue to another phase.
 
 ## Output
 
-Write `.cheese/press/<slug>.md` with this minimum handoff shape:
+Write `.cheese/press/<slug>.md` with at least this content:
 
 ```markdown
 status: <canonical status field>
@@ -110,9 +124,9 @@ telemetry: <telemetry-record-path>
 <one-line orientation>
 ```
 
-`status:` grammar is canonical in [handback contract](../cheese/references/handback-contract.md); only `next:` and the extra keyed lines are phase-specific.
+The [handback contract](../cheese/references/handback-contract.md) defines the `status:` grammar. Only `next:` and the additional keyed lines are specific to Press.
 
-Project the router action without inventing a runnable phase:
+Map the router action without a new runnable phase:
 
 | router action | status | next | action |
 | --- | --- | --- | --- |
@@ -121,34 +135,35 @@ Project the router action without inventing a runnable phase:
 | `Stop("third-red")` | `ok` | `done` | `stop` |
 | invalid evidence or production change | `halt: <reason>` | `done` | `stop` |
 
-`next: done` is terminal and never auto-dispatches. A valid third-RED stop may
-offer a later user-selected Cook handoff, but it does not encode Cook, Press,
-or Age as its next phase. Invalid evidence and production changes halt.
-`next: age` is reserved for GREEN `Dispatch("/age")`; a corrective `Continue`
-is Press-owned and is not a global phase handoff.
+`next: done` is terminal. It never starts another phase.
+
+A valid third-RED stop can offer a later Cook handoff that the user selects. It does not set Cook, Press, or Age as the next phase.
+
+Invalid evidence and production changes halt. Reserve `next: age` for GREEN `Dispatch("/age")`. A corrective `Continue` belongs to Press. It is not a global phase handoff.
 
 ## Handoff
 
 **Pipeline:** culture → mold → cook → **[press]** → age → cure → plate
 
-After a GREEN Press report, use the shared [handoff gate](../cheese/references/handoff-gate.md) to review with `/age <slug>`. A Press corrective Cook continuation is driven internally by
-the Press owner and is not offered as a second global route. `--hard` remains
-pass-through to `/age` and later phases.
+After a GREEN Press report, use the shared [handoff gate](../cheese/references/handoff-gate.md). Start the review with `/age <slug>`.
+
+The Press owner controls a corrective Cook continuation. Do not offer that continuation as a second global route.
+
+Pass `--hard` to `/age` and later phases.
 
 ## Rules
 
 - Do not edit production code, production fixtures, or production adapters.
 - Do not dispatch a global Cook repair from Press.
-- Do not exceed two corrective continuations or change the attack between
-  retries.
-- Do not treat out-of-contract desired behavior as an implementation request;
-  record it as a follow-up for review.
-- Preserve existing baseline-aware hardening/readiness behavior where it is
-  not superseded by these routing invariants.
+- Do not use more than two corrective continuations.
+- Do not change the attack between retries.
+- Do not treat out-of-contract behavior as an implementation request. Record it as a review follow-up.
+- Preserve baseline-aware readiness unless these route rules replace it.
 
 ## Discipline
 
-Press's discipline is evidence-first: fear is the curd-killer, and an
-unverified failure is not a RED. Before each route decision, name the outcome,
-the attack digest, and the completed `repair_cycles` count. If any one is
-missing, stop rather than guessing.
+Press uses evidence first. Fear is the curd-killer. An unverified failure is not a RED.
+
+Name the outcome before each route decision. Name the attack digest and completed `repair_cycles` count. Stop if one value is missing. Do not guess.
+
+Generated bundle command inventory: [`references/commands.md`](references/commands.md).
