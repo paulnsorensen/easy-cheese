@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -163,7 +164,13 @@ def _replace_if_changed(source: Path, target: Path) -> None:
     if target.is_file() and source.read_bytes() == target.read_bytes():
         return
     target.parent.mkdir(parents=True, exist_ok=True)
-    _ = source.replace(target)
+    with tempfile.NamedTemporaryFile(dir=target.parent, delete=False) as staged:
+        staged_path = Path(staged.name)
+    try:
+        _ = shutil.copyfile(source, staged_path)
+        _ = staged_path.replace(target)
+    finally:
+        staged_path.unlink(missing_ok=True)
 
 
 def _sync_generated_tree(rendered_root: Path, output_root: Path) -> None:
