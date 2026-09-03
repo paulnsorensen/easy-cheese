@@ -147,6 +147,96 @@ def test_unlistable_git_degrades_to_start_and_says_so(tmp_path: Path) -> None:
     )
 
 
+def make_repo(root: Path) -> Path:
+    """Create a checkout marker. The ancestor walk does not run Git."""
+    (root / legacy.GIT_MARKER).mkdir(parents=True)
+    return root
+
+
+def test_ancestor_note_is_found_from_a_subdirectory_without_git(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path / "repo")
+    deep = repo / "src" / "nested"
+    deep.mkdir(parents=True)
+    expected = write_note(repo, "cold-start")
+
+    found = legacy.find_legacy_note(
+        "cold-start", start=deep, run=fake_runner(None)
+    )
+
+    assert found.outcome is legacy.LegacyOutcome.FOUND
+    assert found.note is not None
+    assert found.note.path == expected
+    assert found.note.worktree == repo.resolve()
+    assert found.searched == (
+        str(deep.resolve() / ".cheese" / "notes" / "cold-start.md"),
+        str((repo / "src").resolve() / ".cheese" / "notes" / "cold-start.md"),
+        str(repo.resolve() / ".cheese" / "notes" / "cold-start.md"),
+    )
+
+
+def test_the_walk_stops_at_the_repository_root(tmp_path: Path) -> None:
+    outer = tmp_path / "outer"
+    repo = make_repo(outer / "repo")
+    sub = repo / "sub"
+    sub.mkdir()
+    _ = write_note(outer, "cold-start")
+
+    found = legacy.find_legacy_note(
+        "cold-start", start=sub, run=fake_runner(porcelain(repo))
+    )
+
+    assert found.outcome is legacy.LegacyOutcome.NOT_FOUND
+    assert str(outer.resolve() / ".cheese" / "notes" / "cold-start.md") not in (
+        found.searched
+    )
+
+
+def test_a_repository_root_is_probed_once_when_it_is_also_a_worktree(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path / "repo")
+    sub = repo / "sub"
+    sub.mkdir()
+    expected = write_note(repo, "cold-start")
+
+    found = legacy.find_legacy_note(
+        "cold-start", start=sub, run=fake_runner(porcelain(repo))
+    )
+
+    assert found.outcome is legacy.LegacyOutcome.FOUND
+    assert found.note is not None
+    assert found.note.path == expected
+    assert found.searched == (
+        str(sub.resolve() / ".cheese" / "notes" / "cold-start.md"),
+        str(repo.resolve() / ".cheese" / "notes" / "cold-start.md"),
+    )
+
+
+def test_an_ancestor_note_and_a_local_note_are_ambiguous(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path / "repo")
+    sub = repo / "sub"
+    sub.mkdir()
+    in_repo = write_note(repo, "cold-start", "from repo\n")
+    in_sub = write_note(sub, "cold-start", "from sub\n")
+
+    found = legacy.find_legacy_note(
+        "cold-start", start=sub, run=fake_runner(porcelain(repo))
+    )
+
+    assert found.outcome is legacy.LegacyOutcome.AMBIGUOUS
+    assert found.note is None
+    assert found.match_paths == (str(in_sub), str(in_repo))
+
+
+def test_no_repository_above_start_keeps_the_walk_to_start(tmp_path: Path) -> None:
+    start = tmp_path / "loose"
+    start.mkdir()
+
+    assert legacy.repository_chain(start) == (start.resolve(),)
+
+
 @pytest.mark.parametrize("slug", ["../escape", "a/b", "Upper", ""])
 def test_a_slug_that_is_not_one_path_segment_is_refused(
     tmp_path: Path, slug: str
