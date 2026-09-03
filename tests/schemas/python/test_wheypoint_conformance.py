@@ -728,8 +728,31 @@ def test_a_decision_dossier_fork_needs_options_with_evidence() -> None:
         ),
     ]
     for bad, path in cases:
-        problems = refused(record(decision_dossier=bad), WheypointRecord)
+        problems = refused(
+            record(questions=[entry("q1")], decision_dossier=bad), WheypointRecord
+        )
         assert blames(problems, f"WheypointRecord.decision_dossier[1].{path}"), problems
+
+
+def test_an_ungated_record_cannot_carry_a_decision_dossier() -> None:
+    """An ungated open fork produces `status: ok`.
+
+    The resumed session then skips a decision that requires a human answer.
+    """
+    problems = refused(record(decision_dossier=dossier()), WheypointRecord)
+    assert blames(problems, "WheypointRecord.decision_dossier"), problems
+    resolved = entry("q1", state="resolved", rationale="settled", blocks_continuation=False)
+    assert structured(
+        record(questions=[resolved], decision_dossier=[]), WheypointRecord
+    ).status is WheypointStatus.OK
+
+
+def test_an_ungated_projection_cannot_carry_a_decision_dossier() -> None:
+    problems = refused(
+        projection(gating_entry_ids=[], decision_dossier=dossier()),
+        WheypointProjection,
+    )
+    assert blames(problems, "WheypointProjection.decision_dossier"), problems
 
 
 @pytest.mark.parametrize("level", ["canonical-local", "repo-snapshot", "published"])
