@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { injectToc, isSkillPageHref, ANCHOR_CLASS } from '../../src/components/sidebar-toc.mjs';
+import { injectToc, isSkillPageHref, ANCHOR_CLASS } from '../../website/components/sidebar-toc.mjs';
 
 const isActive = (entry) => entry.isCurrent;
 
@@ -26,7 +26,7 @@ test('active skill link with h2s gains indented sibling anchors excluding the sy
 
 	const entries = result[0].entries;
 	assert.equal(entries.length, 3);
-	// the skill link renders exactly once, still a plain current link
+	// The current skill link remains a plain link and appears once.
 	assert.deepEqual(entries[0], skillLink('/skills/age/', { isCurrent: true, label: '/age' }));
 	assert.equal(entries.filter((e) => e.label === '/age').length, 1);
 	assert.deepEqual(entries[1], {
