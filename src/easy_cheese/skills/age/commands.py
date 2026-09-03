@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import sys
 
+from dataclasses import replace
+
 from easy_cheese.shared.bundle_commands import bundle_command, derive_command, dispatch
 
 
@@ -99,19 +101,58 @@ def _render_html(argv: list[str]) -> int:
 
 
 COMMANDS = (
-    derive_command(_artifact_path),
-    derive_command(_html_report),
-    derive_command(_age_route),
-    derive_command(_review_surface),
-    derive_command(_severity),
-    derive_command(_slugify),
-    derive_command(_write_handoff_artifact),
-    derive_command(_read_handoff_slug),
-    derive_command(_findings_cli),
-    derive_command(_gates_cli),
-    derive_command(_paths_cli),
-    derive_command(_handoff_cli),
-    derive_command(_render_html),
+    replace(
+        derive_command(_artifact_path),
+        summary="Resolve the durable or transient artifact path for a phase and slug",
+    ),
+    replace(
+        derive_command(_html_report),
+        summary="Render an /age markdown report into one offline HTML file",
+    ),
+    replace(
+        derive_command(_age_route),
+        summary="Size an /age review into single-pass or fan-out lanes (JSON in, JSON out)",
+    ),
+    replace(
+        derive_command(_review_surface),
+        summary="Score the reviewable git surface that routing sizes against (JSON out)",
+    ),
+    replace(
+        derive_command(_severity),
+        summary="Compute per-finding severity and fix-cost-now buckets",
+    ),
+    replace(
+        derive_command(_slugify),
+        summary="Derive a kebab-case slug and durable spec path from task text",
+    ),
+    replace(
+        derive_command(_write_handoff_artifact),
+        summary="Write a handoff preamble plus optional body atomically",
+    ),
+    replace(
+        derive_command(_read_handoff_slug),
+        summary="Read the handoff preamble back from a phase artifact",
+    ),
+    replace(
+        derive_command(_findings_cli),
+        summary="Render an /age report's selection table and resolve selection verbs",
+    ),
+    replace(
+        derive_command(_gates_cli),
+        summary="Map a quality-gate scoreboard's booleans to a readiness verdict",
+    ),
+    replace(
+        derive_command(_paths_cli),
+        summary="Slugify, validate, resolve, and list .cheese artifact paths",
+    ),
+    replace(
+        derive_command(_handoff_cli),
+        summary="Render, parse, and dispatch-split handoff preambles",
+    ),
+    replace(
+        derive_command(_render_html),
+        summary="Render a markdown report into one self-contained offline HTML file",
+    ),
 )
 
 
