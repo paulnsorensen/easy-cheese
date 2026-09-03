@@ -5,14 +5,13 @@ staging, commit, and commit verification.
 
 ## New PR
 
-1. Confirm `/plate` resolved the new PR as single: explicitly, by cohesive-shape inference, or after a user question.
-2. Resolve trunk and current branch; reject publication from trunk.
-3. Draft a title and body covering purpose, verification, durable artifacts,
-   and residual risks.
-4. Write the body to a temporary or transient file and pass `--body-file`;
-   never embed a markdown heredoc in `--body`.
+1. Confirm that `/plate` resolved the new PR as single. Accept an explicit choice, cohesive-shape inference, or a user answer.
+2. Resolve the trunk and current branch. Reject publication from the trunk.
+3. Draft a title and body. Include the purpose, verification, durable artifacts, and residual risks.
+4. Write the body to a temporary or transient file. Pass that file through `--body-file`.
+   Do not embed a markdown heredoc in `--body`.
 5. Push the named branch without force.
-6. Create with explicit base and head:
+6. Create the PR with an explicit base and head:
 
 ```bash
 gh pr create --title "<title>" --body-file <body-path> --base <base> --head <head>
@@ -24,17 +23,17 @@ Do not use `--fill` when it would omit artifact or verification details.
 
 ## Existing ordinary PR
 
-Detect the PR with `gh pr view --json number,baseRefName,headRefName,url`, then
-inspect provider metadata; a stacked topology leaves this file for `stacks.md`.
-Do not ask the layout question. Read its base/head with `gh pr view`, commit the
-validated named files, push the exact head branch, then read the PR back. Update
-title/body only when the new work makes existing metadata inaccurate.
+Detect the PR with `gh pr view --json number,baseRefName,headRefName,url`. Then inspect the provider metadata.
+A stacked topology leaves this file for `stacks.md`. Do not ask the layout question.
+Read the base and head with `gh pr view`. Commit the validated named files.
+Push the exact head branch. Then read the PR back.
+Update the title or body only when the new work makes existing metadata inaccurate.
 
 ## Failures
 
-Authentication or permission failures halt publication with the exact command
-and error. A rejected push is not permission to force-push: fetch and explain
-the divergence. Never create a duplicate PR when one already exists.
+Authentication or permission failures halt publication. Report the exact command and error.
+A rejected push does not permit a force-push. Fetch and explain the divergence.
+Never create a duplicate PR when one already exists.
 ## Metadata and lifecycle
 
 Publication-relevant GitHub operations remain here:
@@ -48,15 +47,14 @@ Publication-relevant GitHub operations remain here:
 - `gh pr checks` may verify publication context; CI triage, review, comments,
   and merge remain `/gh`.
 
-Query the current head for an existing PR before creation. If found, switch to
-the existing-PR path rather than relying on a failed create call.
+Query the current head for an existing PR before creation.
+If a PR exists, switch to the existing-PR path. Do not rely on a failed create call.
 
 ## Body contract
 
-Record purpose, user-visible behavior, test/gate results, durable artifact
-completion rows, risks, follow-ups, and any stack relationship. Keep the body
-file transient unless the repo explicitly tracks PR templates or release
-artifacts; leave it unstaged after verification.
+Record the purpose, user-visible behavior, gate results, durable artifact rows, risks, follow-ups, and stack relationships.
+Keep the body file transient unless the repository tracks PR templates or release artifacts.
+Leave a transient body file unstaged after verification.
 
 Write for the reviewer's verification pass:
 
@@ -70,6 +68,6 @@ Write for the reviewer's verification pass:
 
 ## Push verification
 
-Read remote/upstream before pushing. Push the exact named head branch. Verify
-local status and the PR's head/base. A successful CLI exit without a matching PR
-head SHA is incomplete.
+Read the remote and upstream before pushing. Push the exact named head branch.
+Verify local status. Verify the PR head and base.
+A successful CLI exit without a matching PR head SHA is incomplete.

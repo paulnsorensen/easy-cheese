@@ -14,9 +14,9 @@ gh stack init --adopt --base <trunk>
 gh stack init --prefix <prefix> --numbered --base <trunk>
 ```
 
-`--numbered` requires `--prefix`. Add branches with `gh stack add <branch>`
-without combined staging/commit flags, stage named paths, and create normal new
-commits. Inspect with `gh stack view --short` or `gh stack view --json`.
+`--numbered` requires `--prefix`. Add branches with `gh stack add <branch>`.
+Do not use combined staging or commit flags. Stage named paths. Create normal new commits.
+Inspect with `gh stack view --short` or `gh stack view --json`.
 
 Resolve local tracking paths from `GIT_DIR="$(git rev-parse --git-dir)"`.
 Tracking lives at `$GIT_DIR/gh-stack`; rebase recovery state lives at
@@ -67,9 +67,9 @@ gh api --include "repos/{owner}/{repo}/stacks"
 | none | Indeterminate — no resolvable repository, network failure, or timeout | Proceed; exit code 4 stays the fallback |
 
 `python3 skills/plate/scripts/plate.pyz stack-tools` runs this preflight.
-It reports the `gh-stack` `status` as `available`, `not-enabled`, `auth-required`, `service-error`, `remote-check-required`, or `not-installed`. `repository_signal` is `true` only for a 2xx, `false` only for
-a 404, and `null` when the probe could not decide. A `not-enabled` repository
-is never recommended.
+It reports one `gh-stack` status. The status is `available`, `not-enabled`, `auth-required`, `service-error`, `remote-check-required`, or `not-installed`.
+`repository_signal` is `true` only for a 2xx response. It is `false` only for a 404 response.
+It is `null` when the probe cannot decide. The report never recommends a `not-enabled` repository.
 
 ## Command map
 
@@ -106,43 +106,40 @@ relationship without adopting local tracking.
 | 7 | Rebase active | Resume or abort provider operation |
 | 8 | Stack locked | Wait; do not mutate concurrently |
 
-Unknown non-zero exits are failures: preserve the command, code, and stderr,
-then halt rather than treating them as success.
+Unknown non-zero exits are failures. Preserve the command, code, and stderr. Then halt.
 
 ## Conflict recovery
 
-On a rebase conflict, resolve and stage named paths, then use
-`gh stack rebase --continue` or `gh stack rebase --abort`. A bare
-`git rebase --continue` is never correct because `gh stack` must update its
-rebase state. For modify conflicts, use
-`gh stack modify --continue` or `gh stack modify --abort`.
+Resolve each named path after a rebase conflict. Stage each resolved path.
+Then run `gh stack rebase --continue` or `gh stack rebase --abort`.
+Do not run `git rebase --continue`. The `gh stack` command must update its rebase state.
+For modify conflicts, run `gh stack modify --continue` or `gh stack modify --abort`.
 
 ## Plate recipes
 
 ### Create a two-layer stack
 
 1. Initialize the bottom with `gh stack init --base <trunk>`.
-2. Write common artifacts, validate, stage named paths, and commit.
-3. Add the top branch, then repeat the transaction for top-specific work.
+2. Write the common artifacts. Validate the work. Stage named paths. Commit the changes.
+3. Add the top branch. Repeat the transaction for top-specific work.
 4. Inspect with `gh stack view --json`.
-5. Submit with explicit remote and verify the stack map and every PR/base pair.
+5. Submit with an explicit remote. Verify the stack map and every PR/base pair.
 
 ### Update a lower layer
 
-Navigate down, create a new commit, run `gh stack rebase`, inspect, then use
-`push` or `submit` according to whether PR metadata changed.
+Navigate to the lower layer. Create a new commit. Run `gh stack rebase`. Inspect the stack.
+Use `push` or `submit` according to the PR metadata change.
 
 ### Link externally managed branches
 
-Use `gh stack link --base <base> --remote <name> <branches-or-PRs>`. This does
-not adopt local tracking.
+Run `gh stack link --base <base> --remote <name> <branches-or-PRs>`.
+This command does not adopt local tracking.
 
 ### After a bottom PR merges
 
-Run `gh stack sync --remote <name>`, inspect the stack, and submit again only
-when local commits remain unpublished. GitHub enforces bottom-up merges and
-cascades the remaining branches server-side.
+Run `gh stack sync --remote <name>`. Inspect the stack.
+Submit again only when local commits remain unpublished. GitHub enforces bottom-up merges.
+GitHub also updates the remaining branches on the server.
 
-Shared durable writes belong on the bottom/common branch or explicit wiring
-branch before submission. Confirm uncertain syntax with
-`gh stack <command> --help`.
+Put shared durable writes on the bottom branch, common branch, or explicit wiring branch before submission.
+Confirm uncertain syntax with `gh stack <command> --help`.
