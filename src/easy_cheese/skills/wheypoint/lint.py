@@ -22,12 +22,23 @@ from enum import Enum
 from pathlib import Path
 
 from attrs import define, field
-from easy_cheese_schemas import WheypointProjection, WheypointRecord, WheypointRevision
+from easy_cheese_schemas import (
+    Durability,
+    WheypointProjection,
+    WheypointRecord,
+    WheypointRevision,
+    WheypointStatus,
+)
 
 from . import projection as projection_mod
 from . import records, storage
 
 _GIT_TIMEOUT_SECONDS = 5
+
+# The version that first pinned each receipt to its parent's digest. A receipt
+# stamped at or above it and missing the pin is not merely old: its producer
+# knew the field and did not write it.
+_PARENT_DIGEST_SINCE = 2
 
 
 class LintCode(str, Enum):
@@ -41,10 +52,12 @@ class LintCode(str, Enum):
     PROJECTION_STATUS_MISMATCH = "projection-status-mismatch"
     PROJECTION_RECORD_MISMATCH = "projection-record-mismatch"
     PARENT_UNRESOLVED = "parent-unresolved"
+    PARENT_DIGEST_MISMATCH = "parent-digest-mismatch"
     PROJECT_MISMATCH = "project-mismatch"
     GIT_OBJECT_MISSING = "git-object-missing"
     ARTIFACT_COVERAGE_INVALID = "artifact-coverage-invalid"
     ENTRY_DROPPED = "entry-dropped"
+    DURABILITY_LOCAL_ONLY = "durability-local-only"
 
 
 # Findings that describe the store's surroundings rather than the authority of
@@ -54,7 +67,14 @@ class LintCode(str, Enum):
 # spec gates automatic continuation on projection and record digests, the
 # parent chain, project identity, referenced Git objects, and required artifact
 # coverage -- an orphan is none of those, so it is reported, not enforced.
-ADVISORY_CODES = frozenset({LintCode.REVISION_INCOMPLETE})
+#
+# A canonical-local checkpoint over an open gate is likewise not an authority
+# problem: the record is exactly as valid as it says it is. What is at risk is
+# the human-owed state it holds, which no commit or publish has carried
+# anywhere. That is a choice for the operator, so it warns and does not block.
+ADVISORY_CODES = frozenset(
+    {LintCode.REVISION_INCOMPLETE, LintCode.DURABILITY_LOCAL_ONLY}
+)
 
 
 def gates_continuation(finding: LintFinding) -> bool:
@@ -232,7 +252,38 @@ def lint_work(
         findings.extend(_git_findings(current, git_object_exists))
 
     findings.extend(_coverage_findings(ancestry, record, artifact_digest))
+    if projection is not None:
+        findings.extend(_durability_findings(projection, record))
     return LintReport(findings=tuple(findings), record=record, projection=projection)
+
+
+def _durability_findings(
+    projection: WheypointProjection, record: WheypointRecord
+) -> list[LintFinding]:
+    """Warn when human-owed gating state has never left the local corpus.
+
+    `canonical-local` means the projection exists only in this corpus. That is
+    fine for a settled checkpoint -- it can be regenerated from the record. It
+    is not fine for a gated one: the gates are questions and decisions a person
+    still owes an answer to, and losing the corpus loses them. The runtime
+    cannot fix that itself, because it never commits and never publishes, so
+    this hands the operator the choice rather than making it.
+    """
+    if projection.durability is not Durability.CANONICAL_LOCAL:
+        return []
+    if record.status is not WheypointStatus.GATED:
+        return []
+    gates = ", ".join(record.gating_entry_ids)
+    return [
+        LintFinding(
+            LintCode.DURABILITY_LOCAL_ONLY,
+            f"revision {record.revision_id!r} still gates on {gates} and is "
+            + "canonical-local: that state exists nowhere but this corpus. "
+            + "Preserve it (snapshot the corpus into the repository) or "
+            + "publish it -- this runtime never commits and never publishes, "
+            + "so the choice is yours.",
+        )
+    ]
 
 
 def _incomplete_findings(
@@ -332,10 +383,49 @@ def _walk_chain(
                 )
             )
             break
+        mismatch = _parent_digest_finding(revision, parent)
+        if mismatch is not None:
+            # The chain is not walked past an ancestor this receipt does not
+            # actually pin: everything behind it is reached only through a link
+            # that no longer holds, so it cannot be reported as proven ancestry.
+            findings.append(mismatch)
+            break
         seen.add(parent_id)
         walked.append(parent)
         revision = parent
     return _Chain(revisions=tuple(walked), findings=tuple(findings))
+
+
+def _parent_digest_finding(
+    revision: WheypointRevision, parent: WheypointRevision
+) -> LintFinding | None:
+    """Check the pin a receipt puts on the ancestor it was written against.
+
+    The *revision* digest is what is compared, not the parent's
+    `record_digest`: a record digest covers the record, and the tampering this
+    catches is an edit to the receipt itself -- to `preserved_entry_ids`, say,
+    which no record digest is over. A receipt written before schema version 2
+    carries no pin and is left alone; one stamped at or above it and still
+    missing the pin is reported, because its producer knew the field.
+    """
+    pinned = revision.parent_revision_digest
+    if pinned is None:
+        if revision.schema_version < _PARENT_DIGEST_SINCE:
+            return None
+        return LintFinding(
+            LintCode.PARENT_DIGEST_MISMATCH,
+            f"revision {revision.revision_id!r} is stamped schema version "
+            + f"{revision.schema_version} and names parent "
+            + f"{parent.revision_id!r} without pinning its digest",
+        )
+    actual = records.revision_digest(parent)
+    if pinned == actual:
+        return None
+    return LintFinding(
+        LintCode.PARENT_DIGEST_MISMATCH,
+        f"revision {revision.revision_id!r} pins parent {parent.revision_id!r} "
+        + f"at {pinned}, but that receipt now hashes to {actual}",
+    )
 
 
 def _conservation_findings(

@@ -47,6 +47,7 @@ from typing import cast
 from attrs import define, evolve
 from easy_cheese_schemas import (
     SCHEMA_VERSION,
+    CompactionRecord,
     Durability,
     EntryKind,
     EntryState,
@@ -289,14 +290,86 @@ def _check_lineage(store: storage.WorkStore, current: WheypointRecord) -> None:
 
 
 def _check_rehydration(delta: WheypointDelta, current: WheypointRecord) -> None:
+    """Make a compacted delta prove it re-read the record it is writing over.
+
+    The flag says a compaction happened; the record is the evidence that the
+    durable state was reloaded first. Naming the current revision is the weakest
+    of the three checks -- an id survives in a stale transcript -- so the record
+    also has to quote the digest of the record it re-read and account for every
+    protected entry that record still carries. Only a session that actually
+    reloaded the record can produce all three, and a later reader can re-derive
+    each of them rather than take the claim on faith.
+    """
     if not delta.compacted:
         return
-    if delta.rehydrated_from_revision_id != current.revision_id:
+    compaction = delta.compaction
+    if compaction is not None and compaction.prior_compaction_revision_id is not None:
+        raise CommitError(
+            "a delta may not declare prior_compaction_revision_id "
+            + f"{compaction.prior_compaction_revision_id!r}: the runtime derives "
+            + "the previous compaction from the lineage on disk, because a "
+            + "compacted session's memory of that lineage is exactly what was lost"
+        )
+    if compaction is None:
+        raise CommitError(
+            "a compacted delta must rehydrate first: it carries no compaction "
+            + f"record naming the current revision {current.revision_id!r}, the "
+            + "digest of the record it re-read, and the entries it reconciled"
+        )
+    if compaction.rehydrated_from_revision_id != current.revision_id:
         raise CommitError(
             "a compacted delta must be rehydrated from the current revision "
             + f"{current.revision_id!r}, not "
-            + f"{delta.rehydrated_from_revision_id!r}"
+            + f"{compaction.rehydrated_from_revision_id!r}"
         )
+    expected_digest = records.record_digest(current)
+    if compaction.rehydrated_record_digest != expected_digest:
+        raise CommitError(
+            "the compaction record quotes record digest "
+            + f"{compaction.rehydrated_record_digest}, but revision "
+            + f"{current.revision_id!r} hashes to {expected_digest}: the delta "
+            + "did not re-read the record it is writing over"
+        )
+    reconciled = set(compaction.reconciled_entry_ids)
+    unreconciled = [
+        entry.entry_id
+        for entry in records.entries(current)
+        if entry.entry_id not in reconciled
+    ]
+    if unreconciled:
+        raise CommitError(
+            "the compaction record does not reconcile protected entries "
+            + f"{', '.join(repr(entry_id) for entry_id in unreconciled)} held by "
+            + f"revision {current.revision_id!r}"
+        )
+
+
+def _prior_compaction_revision_id(
+    store: storage.WorkStore, current: WheypointRecord
+) -> str | None:
+    """The nearest receipt at or behind `current` that recorded a compaction.
+
+    Walking the receipts is what makes the answer trustworthy: the delta cannot
+    supply it (see `_check_rehydration`), so a session that compacted twice
+    cannot present the second event as the first. The walk stops at the first
+    parent that is not a complete receipt -- an unwalkable chain proves no
+    earlier compaction, and inventing one from whatever else is on disk would
+    chain this compaction to a revision it does not descend from.
+    """
+    known = {
+        file.revision.revision_id: file.revision for file in store.recover().complete
+    }
+    revision_id: str | None = current.revision_id
+    seen: set[str] = set()
+    while revision_id is not None and revision_id not in seen:
+        seen.add(revision_id)
+        revision = known.get(revision_id)
+        if revision is None:
+            return None
+        if revision.compaction is not None:
+            return revision.revision_id
+        revision_id = revision.parent_revision_id
+    return None
 
 
 def _entry_id(delta: WheypointDelta, proposed: ProposedEntry, index: int) -> str:
@@ -415,11 +488,24 @@ def _apply(
         kept=kept,
         additions=additions,
     )
+    compaction = (
+        None
+        if delta.compaction is None
+        else evolve(
+            delta.compaction,
+            prior_compaction_revision_id=_prior_compaction_revision_id(store, current),
+        )
+    )
     return _finish(
         store,
         delta,
         draft,
+        compaction=compaction,
         parent_revision_id=current.revision_id,
+        # `_check_lineage` has already proven the record's own pointer against
+        # the receipt on disk, so quoting it here pins the ancestor rather than
+        # re-asserting it.
+        parent_revision_digest=current.revision_digest,
         fingerprint=fingerprint,
         additions=[entry for kind in _ADDITION_FIELDS for entry in additions[kind]],
         transitions=transitions,
@@ -506,7 +592,9 @@ def _genesis(
         store,
         delta,
         draft,
+        compaction=None,
         parent_revision_id=None,
+        parent_revision_digest=None,
         fingerprint=fingerprint,
         additions=[entry for kind in _ADDITION_FIELDS for entry in additions[kind]],
         transitions=[],
@@ -526,7 +614,9 @@ def _finish(
     delta: WheypointDelta,
     draft: WheypointRecord,
     *,
+    compaction: CompactionRecord | None,
     parent_revision_id: str | None,
+    parent_revision_digest: str | None,
     fingerprint: str,
     additions: list[ProtectedEntry],
     transitions: list[EntryTransition],
@@ -554,7 +644,8 @@ def _finish(
         ),
         projection_digest=projected.projection_digest,
         repository=repository,
-        rehydrated_from_revision_id=delta.rehydrated_from_revision_id,
+        parent_revision_digest=parent_revision_digest,
+        compaction=compaction,
         session_provenance=delta.session_provenance,
     )
     record = evolve(draft, revision_digest=records.revision_digest(revision))

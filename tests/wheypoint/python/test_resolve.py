@@ -32,7 +32,12 @@ def seed(
     gating: bool = False,
     revision_id: str = "rev-0001",
     number: int = 1,
-) -> storage.WorkStore:
+) -> tuple[storage.WorkStore, _PromotionLike]:
+    """Promote one revision and hand back the store plus that first promotion.
+
+    The promotion comes back so a successor can name it as its real parent,
+    which is what pins the ancestor digest into the child's receipt.
+    """
     record = make_record(
         work_id=work_id,
         slug=slug,
@@ -43,7 +48,7 @@ def seed(
     promotion = make_promotion(number, revision_id, record=record)
     store = storage.WorkStore.open(work_id, corpus_root=corpus_root)
     store.promote(promotion.record, promotion.revision, promotion.markdown)
-    return store
+    return store, promotion
 
 
 def run(
@@ -97,7 +102,9 @@ def test_an_explicit_path_beats_the_corpus_lookups(
     make_record: Callable[..., WheypointRecord],
     make_promotion: Callable[..., _PromotionLike],
 ) -> None:
-    store = seed(corpus_root, make_record, make_promotion, work_id="alpha", slug="beta")
+    store, _ = seed(
+        corpus_root, make_record, make_promotion, work_id="alpha", slug="beta"
+    )
     path = store.projection_path(1, "rev-0001")
 
     found = run(str(path), corpus_root)
@@ -154,7 +161,7 @@ def test_one_slug_on_two_records_is_ambiguous_whichever_is_newer(
 ) -> None:
     """A recency tiebreak would pick the newer record; ambiguity must not."""
     for work_id in ("work-0001", "work-0002"):
-        store = seed(
+        store, _ = seed(
             corpus_root, make_record, make_promotion, work_id=work_id, slug="kernel"
         )
         stamp = 2_000_100_000 if work_id == newer else 2_000_000_000
@@ -209,12 +216,14 @@ def test_a_superseded_projection_path_does_not_dispatch(
     make_record: Callable[..., WheypointRecord],
     make_promotion: Callable[..., _PromotionLike],
 ) -> None:
-    store = seed(corpus_root, make_record, make_promotion, work_id="alpha", slug="beta")
+    store, first = seed(
+        corpus_root, make_record, make_promotion, work_id="alpha", slug="beta"
+    )
     stale = store.projection_path(1, "rev-0001")
     second = make_promotion(
         2,
         "rev-0002",
-        parent="rev-0001",
+        parent=first,
         record=make_record(
             work_id="alpha", slug="beta", revision_id="rev-0002", revision_number=2
         ),
@@ -257,7 +266,7 @@ def test_a_tampered_record_gates_instead_of_dispatching(
     make_record: Callable[..., WheypointRecord],
     make_promotion: Callable[..., _PromotionLike],
 ) -> None:
-    store = seed(
+    store, _ = seed(
         corpus_root, make_record, make_promotion, work_id="work-0001", slug="kernel"
     )
     forged = records.unstructure(store.read_record())
@@ -547,7 +556,9 @@ def test_an_orphaned_revision_is_reported_but_does_not_block_continuation(
     reader can have quoted it and the identical retry overwrites it, so it is
     surroundings, not authority: gating on it would strand a valid current
     record in exactly the crash it just survived."""
-    store = seed(corpus_root, make_record, make_promotion, work_id="alpha", slug="alpha")
+    store, _ = seed(
+        corpus_root, make_record, make_promotion, work_id="alpha", slug="alpha"
+    )
     orphan = store.revision_path(2, "rev-0002")
     _ = orphan.write_text(store.revision_path(1, "rev-0001").read_text(), encoding="utf-8")
 
@@ -565,7 +576,9 @@ def test_a_real_integrity_failure_still_blocks_continuation(
     make_promotion: Callable[..., _PromotionLike],
 ) -> None:
     """The advisory carve-out must not leak: tampering still gates."""
-    store = seed(corpus_root, make_record, make_promotion, work_id="alpha", slug="alpha")
+    store, _ = seed(
+        corpus_root, make_record, make_promotion, work_id="alpha", slug="alpha"
+    )
     path = store.projection_path(1, "rev-0001")
     _ = path.write_text(path.read_text(encoding="utf-8").replace("cook", "press"), encoding="utf-8")
 
