@@ -27,6 +27,8 @@ from pathlib import Path
 
 from attrs import define, field
 
+from easy_cheese_schemas import phase_contracts
+
 NOTES_DIR_PARTS = (".cheese", "notes")
 WORKTREE_LIST_ARGS = ("git", "worktree", "list", "--porcelain")
 _GIT_TIMEOUT_SECONDS = 5
@@ -62,7 +64,7 @@ class LegacyHandoffSlug:
     """Decoded legacy handoff metadata, kept separate from the shared parser."""
 
     status: str
-    halt_reason: str | None
+    reason: str | None
     next_skill: str
     artifact: str | None
     orientation: str
@@ -75,11 +77,15 @@ class LegacyHandoffSlug:
     taste_test: str | None = None
     durable_flags: str | None = None
 
-    def is_halt(self) -> bool:
-        return self.status == "halt"
+    @property
+    def halt_reason(self) -> str | None:
+        """Deprecated read-only alias for `reason`; kept for pre-rename readers."""
+        return self.reason
 
-    def is_gated(self) -> bool:
-        return self.status == "gated"
+    @property
+    def disposition(self) -> str:
+        """Route through the shared vocabulary rather than a per-status check."""
+        return phase_contracts.status_disposition(self.status)
 
 
 class LegacyDecodeError(ValueError):
@@ -106,20 +112,16 @@ _ALLOWED_HEADER_KEYS = frozenset(
 
 
 def _parse_legacy_status(value: str) -> tuple[str, str | None]:
-    if value == "ok":
-        return "ok", None
-    for status in ("halt", "gated"):
-        if value == status:
-            return status, None
-        prefix = f"{status}:"
-        if value.startswith(prefix):
-            reason = value[len(prefix) :].strip()
-            if not reason:
-                raise LegacyDecodeError(f"{status} status requires a reason")
-            return status, reason
-    raise LegacyDecodeError(
-        "status must be 'ok', 'halt: <reason>', or 'gated: <reason>'"
-    )
+    """Decode a legacy `status:` value against the shared vocabulary.
+
+    Legacy notes are hand-written, so a bare reason-carrying status (`halt`
+    with no colon) still decodes; the vocabulary itself is not forked, so a
+    name this reader accepts is always one the runtime can route.
+    """
+    try:
+        return phase_contracts.parse_status_field(value, require_reason=False)
+    except phase_contracts.StatusError as exc:
+        raise LegacyDecodeError(str(exc)) from exc
 
 
 def _unwrap_legacy_note(text: str) -> str:
@@ -173,7 +175,7 @@ def _parse_legacy_header(text: str) -> LegacyHandoffSlug:
         raise LegacyDecodeError("handoff preamble missing " + ", ".join(missing))
     if orientation is None:
         raise LegacyDecodeError("orientation line missing after keyed preamble lines")
-    status, halt_reason = _parse_legacy_status(values["status"])
+    status, reason = _parse_legacy_status(values["status"])
     next_skill = values["next"].lstrip("/")
     if not next_skill:
         raise LegacyDecodeError("'next:' line requires a value")
@@ -182,7 +184,7 @@ def _parse_legacy_header(text: str) -> LegacyHandoffSlug:
         raise LegacyDecodeError("mode must be 'single' or 'parallel'")
     return LegacyHandoffSlug(
         status=status,
-        halt_reason=halt_reason,
+        reason=reason,
         next_skill=next_skill,
         artifact=values["artifact"] or None,
         orientation=orientation,

@@ -1,3 +1,11 @@
+"""The phase transition registry, plus a re-export of the handback status vocabulary.
+
+The status/disposition names (`HandbackStatus`, `parse_status_field`, ...) live
+in `easy_cheese_schemas.handback_status`; this module re-exports them so
+existing `from easy_cheese_schemas.phase_contracts import ...` callers keep
+working.
+"""
+
 from __future__ import annotations
 
 import json
@@ -13,6 +21,22 @@ from ._schema_catalog import (
     PHASE_CONTRACT_SCHEMA_URI,
     PLANNER_REQUEST_SCHEMA_URI,
     REGISTERED_CONTRACT_SCHEMA_URIS,
+)
+from .handback_status import (
+    DISPOSITIONS,
+    HANDBACK_STATUSES,
+    MAX_REASON_LENGTH,
+    PROCEED,
+    REGISTERED_STATUSES,
+    RETRY,
+    STOP,
+    Disposition,
+    HandbackStatus,
+    StatusError,
+    parse_status_field,
+    render_status_field,
+    status_disposition,
+    status_vocabulary,
 )
 
 REGISTERED_SCHEMA_URIS = REGISTERED_CONTRACT_SCHEMA_URIS
@@ -233,16 +257,30 @@ __all__ = [
     "COMPILED_TRANSITION_REGISTRY",
     "CURD_PLAN_SCHEMA_URI",
     "CURD_RESULT_SCHEMA_URI",
+    "DISPOSITIONS",
+    "HANDBACK_STATUSES",
+    "MAX_REASON_LENGTH",
     "PHASE_CONTRACT_SCHEMA_URI",
     "PLANNER_REQUEST_SCHEMA_URI",
+    "PROCEED",
     "REGISTERED_PHASES",
     "REGISTERED_SCHEMA_URIS",
+    "REGISTERED_STATUSES",
+    "RETRY",
+    "STOP",
     "CompiledPhase",
     "CompiledTransition",
+    "Disposition",
+    "HandbackStatus",
+    "StatusError",
     "TransitionError",
     "TransitionRegistry",
     "is_registered_phase",
+    "parse_status_field",
+    "render_status_field",
     "resolve_compiled_transition",
     "resolve_transition",
+    "status_disposition",
+    "status_vocabulary",
     "validate_transition",
 ]

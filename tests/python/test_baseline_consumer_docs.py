@@ -59,7 +59,7 @@ def _handoff_schema_fence(rel_path: str) -> str:
     """Return the ```markdown fence carrying the handoff-slug schema.
 
     Searches the skill's whole corpus (SKILL.md + references/*.md) for the
-    fence containing `status: ok` -- the schema itself, not just the first
+    fence containing a `status:` line -- the schema itself, not just the first
     ```markdown fence in SKILL.md, which may be an unrelated worked example
     once the schema has been routed out to a references file.
     """
@@ -78,10 +78,10 @@ def _handoff_schema_fence(rel_path: str) -> str:
             start = idx + len(marker)
             end = body.index("```", start)
             fence = body[start:end]
-            if "status: ok" in fence:
+            if "status: " in fence:
                 return fence
             pos = end + 3
-    raise AssertionError(f"no ```markdown fence containing 'status: ok' found for {rel_path}")
+    raise AssertionError(f"no ```markdown fence containing a 'status:' line found for {rel_path}")
 
 
 @pytest.mark.parametrize("rel_path", SCHEMA_CONSUMERS)

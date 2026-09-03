@@ -28,7 +28,9 @@ def _cmd(args: argparse.Namespace) -> None:
             "next": slug.next_skill,
             "artifact": slug.artifact,
             "orientation": slug.orientation,
-            "halt_reason": slug.halt_reason,
+            "reason": slug.reason,
+            # Deprecated alias, kept for the r014 stack; same value as `reason`.
+            "halt_reason": slug.reason,
             "taste_test": slug.taste_test,
             "durable_flags": slug.durable_flags,
             "baseline": slug.baseline,

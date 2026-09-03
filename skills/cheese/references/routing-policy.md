@@ -26,7 +26,7 @@ Each pipeline entry point sizes its own work at the moment its evidence is free;
 | coder | sonnet | terra | task | medium | gains ESCALATE contract; delegation IS the downgrade |
 | verifier | haiku | luna | tiny | low | "verify exactly one claim"; schema-constrained; the cheap severity-filter leg |
 | reviewer | opus | sol | slow | dial: low/medium fast pass, high thorough | pinned strong; count and effort follow the age router |
-| planner / integrator | orchestrator | orchestrator | plan/default | xhigh at mold | never delegated; owns approval loop |
+| planner / integrator | orchestrator | orchestrator | plan/default | high at mold | never delegated; owns approval loop |
 
 Scoper: deleted everywhere.
 

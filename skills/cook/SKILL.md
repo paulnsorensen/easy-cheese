@@ -108,7 +108,7 @@ House style: [`../cheese/references/formatting.md`](../cheese/references/formatt
 Write a minimum-shape handoff slug at the top of `.cheese/cook/<slug>.md` — same file as the report, no second file — so downstream phases (and cook's own fan pathway when orchestrating a wave) can resume or chain without re-reading it. Schema:
 
 ```markdown
-status: ok | halt: <one-line reason>
+status: <canonical status field>
 next: mold | cook | press | age | done
 artifact: <path-to-richer-report-if-any>
 taste_test: inline-pass | dispatched-pass | revised | deferred-to-orchestrator
@@ -116,6 +116,8 @@ durable_flags: none | <one line per flag: what durable knowledge changed -> targ
 baseline: none | <block — shape in references/quality-gates.md § Baseline block shape>
 <one-line orientation: what cook changed>
 ```
+
+`status:` grammar is canonical in [handback contract](../cheese/references/handback-contract.md); only `next:` and the extra keyed lines are phase-specific.
 
 When this handoff is emitted for the typed fan result, use the canonical
 boundary writer and carry the result schema explicitly:

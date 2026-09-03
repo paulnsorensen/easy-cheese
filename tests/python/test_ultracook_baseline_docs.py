@@ -15,6 +15,7 @@ written down, not that they parse into a grammar.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -123,3 +124,27 @@ class TestCurdPromptBaselineField:
             "{baseline} field must state a curd never captures its own "
             "baseline — the whole point of threading the value down"
         )
+
+
+class TestCurdPromptHandoff:
+    def test_metadata_follows_the_canonical_preamble_and_orientation(self) -> None:
+        body = _read(SKILLS_DIR / "ultracook" / "references" / "curd-prompt.md")
+        match = re.search(
+            r"Write `\.cheese/ultracook/.*?```(?:text|yaml)\n(.*?)```", body, re.DOTALL
+        )
+        assert match, (
+            "curd-prompt.md: no fenced preamble block found after "
+            "the 'Write `.cheese/ultracook/' sentence"
+        )
+        block = match.group(1)
+
+        assert block.strip().splitlines() == [
+            "status: <canonical status field>",
+            "next: <next phase | done | cure>",
+            "artifact: <path-to-prior-report-if-any>",
+            "<one-line orientation>",
+            "",
+            "agent_resolution: <shared block>",
+            "review_context: <required for age>",
+        ]
+        assert "../../cheese/references/handback-contract.md" in body

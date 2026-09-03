@@ -1,12 +1,21 @@
 # Per-wiring task worker prompt template
 
-Loaded by the `/cook` fan pathway at Phase 4. Substitute `{id}`, `{slug}`, `{type}`, `{file}`, `{description}`, `{spec_summary}`, and `{agent_resolution}` before dispatch.
+Loaded by the `/cook` fan pathway at Phase 4. Substitute `{id}`, `{slug}`, `{type}`, `{file}`, `{description}`, `{spec_summary}`, `{model}`, `{effort}`, and `{agent_resolution}` before dispatch.
+
+`{model}` and `{effort}` substitution rules are defined in [`agent-resolution.md`](../../cheese/references/agent-resolution.md) § Phases x roles.
 
 ````text
 You are performing integration wiring task: {id} for spec {slug}
 
 Resolved role: coder
 Agent resolution: {agent_resolution}
+
+## Model
+
+Model: {model}
+Effort: {effort}
+
+See [`agent-resolution.md`](../../cheese/references/agent-resolution.md) § Phases x roles for substitution rules. The resolved model, power, and effort are recorded in `agent_resolution` (`resolved.model`, `resolved.power`, `resolved.effort`) and copied unchanged into the handoff slug below.
 
 ## Task
 
@@ -36,10 +45,10 @@ Description: {description}
 
 ## Handoff slug
 
-Write `.cheese/ultracook/{slug}/wiring/{id}.md` with:
+Use the canonical `status:` grammar from the [handback contract](../../cheese/references/handback-contract.md). Write `.cheese/ultracook/{slug}/wiring/{id}.md` with:
 
 ```
-status: ok | halt: <one-line reason>
+status: <canonical status field>
 next: merge | done
 artifact: <path-to-richer-report-if-any>
 <one-line orientation: what this wiring task did>

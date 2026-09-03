@@ -85,12 +85,14 @@ Applied requires its proving test green (Iron Law — see `references/cure-disci
 Write the cure report to `.cheese/cure/<slug>.md` with a minimum handoff slug at the top so `/cook`'s fan pathway and `/cheese --continue` can chain without re-parsing the full report:
 
 ```markdown
-status: ok | halt: <one-line reason>
+status: <canonical status field>
 next: age | done
 artifact: <path-if-any>
 baseline: none | <recorded baseline block copied from the upstream handoff — see ../cook/references/quality-gates.md>
 <one-line orientation: what cure applied or deferred>
 ```
+
+`status:` grammar is canonical in [handback contract](../cheese/references/handback-contract.md); only `next:` and the extra keyed lines are phase-specific.
 
 Write that legacy handoff projection through the canonical writer, carrying the
 typed Cure result schema at the boundary:

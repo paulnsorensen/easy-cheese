@@ -82,20 +82,22 @@ Press preserves baseline-aware readiness behavior for project gates. A Cook `bas
 5. **Report** — write `.cheese/press/<slug>.md` with the evidence and action.
 6. **Hand off** — only a GREEN `Dispatch("/age")` reaches the global Age route.
 
-Compatibility contracts: source changes follow [`code-intelligence-routing.md`](../cheese/references/code-intelligence-routing.md). Portability follows [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md); slash commands are host renderings, not the control model. Readiness `ready for /age` maps to `status: ok` and `next: age`; `blocked` or `follow-up recommended` maps to `status: halt`. When invoked from `/ultracook` with its no-chain directive, write the Press handoff and stop; do not chain forward.
+Compatibility contracts: source changes follow [`code-intelligence-routing.md`](../cheese/references/code-intelligence-routing.md). Portability follows [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md); slash commands are host renderings, not the control model. Readiness `ready for /age` maps to `status: ok` and `next: age`; `follow-up recommended` maps to `status: ok-with-concerns: <concern>` (proceed); `blocked` maps to `status: gated: <decision>` (stop). When invoked from `/ultracook` with its no-chain directive, write the Press handoff and stop; do not chain forward.
 
 ## Output
 
 Write `.cheese/press/<slug>.md` with this minimum handoff shape:
 
 ```markdown
-status: ok | halt: <one-line reason>
+status: <canonical status field>
 next: age | press | done
 artifact: <evidence-path>
 baseline: none | <Cook baseline block>
 action: continue | dispatch | stop
 <one-line orientation>
 ```
+
+`status:` grammar is canonical in [handback contract](../cheese/references/handback-contract.md); only `next:` and the extra keyed lines are phase-specific.
 
 Project the router action without inventing a runnable phase:
 

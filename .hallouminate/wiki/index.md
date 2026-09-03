@@ -16,6 +16,7 @@ git-tracking axis (`skills/cheese/references/formatting.md:103`).
 - [adr/](./adr/index.md) — adr
 - [analytics/](./analytics/index.md) — analytics
 - [architecture/](./architecture/index.md) — architecture
+- [decisions/](./decisions/index.md) — decisions
 - [gotchas/](./gotchas/index.md) — gotchas
 - [specs/](./specs/index.md) — specs
 - [architecture](./architecture.md) — Architecture of easy-cheese

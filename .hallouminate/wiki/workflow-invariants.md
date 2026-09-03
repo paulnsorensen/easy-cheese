@@ -109,6 +109,48 @@ read a missing Press step in an auto run as a dropped gate; read the
 receipt.
 
 
+
+
+### Handback vs handoff (PR #578, r014)
+
+Two terms, one contract. A **handback** is the in-session `status:` message a
+spawned phase worker returns to its orchestrator; a **handoff** is the durable
+`.cheese/<phase>/<slug>.md` artifact (and its preamble "slug") that carries
+that status plus routing (`next:`, `artifact:`) between phases. They meet at
+the `status:` field. The word "handback" first entered the repo in PR #578
+(closing #350 and #154); it does not exist on `main` before that PR.
+
+The vocabulary is machine-owned by `easy_cheese_schemas.handback_status`
+(re-exported by `phase_contracts` and the package): `ok`, `ok-with-concerns`,
+`needs-context`, `gated`, `halt`, each mapped to a `Disposition` StrEnum
+(`proceed` / `retry` / `stop`). Prose face:
+`skills/cheese/references/handback-contract.md`; every producer doc prints
+`status: <canonical status field>` and links there — a docs test
+(`tests/python/test_handback_grammar_docs.py`) forbids the old
+`status: ok | halt:` literal anywhere else under `skills/`.
+
+Gotchas the r014 cure settled:
+
+- Consumers branch on `disposition`, never on a name or prefix. The pre-#578
+  fan router used `startswith("halt")`, so a `gated:` handback spawned the
+  next phase silently. The router's `Verdict` now also carries `status`,
+  `disposition`, and `reason`; `action` is the router's decision and can
+  differ from `disposition` at the retry cap (second `needs-context` at the
+  same phase → `action: halt`, `disposition: retry`). Branch on `action`.
+- `needs-context` must name a gap; a bare one is a contract error. Retry is
+  once-only via `phase-decision --retry-count`.
+- Every preamble field is single-line; reasons are capped at
+  `MAX_REASON_LENGTH = 512`; status names are ASCII-only.
+- The preamble field is `reason`; `halt_reason` survives as a deprecated
+  alias (constructor kwarg, property, and JSON key from `handoff-cli parse`
+  and `read-handoff-slug`) because the stacked r014 PRs (#579–#589) read it.
+- CLIs exit `3` on a contract violation (bad status, illegal transition,
+  newline in a field — prefixed with the dispatch context) and `2` on I/O.
+- `WheypointStatus` (`ok`/`gated`) is a second, derived vocabulary rendered
+  by `wheypoint/projection.py`; a conformance test pins it to the registered
+  statuses, but its render path does not yet go through
+  `render_status_field` (deferred to the wheypoint stack).
+
 ## Plate is the final writing gate
 
 `/plate` is the only phase that owns the complete transition from finished local work

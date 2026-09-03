@@ -1,6 +1,8 @@
 # Per-curd phase prompt template
 
-Loaded by the `/cook` fan pathway for each top-level phase spawn. Substitute `{N}`, `{slug}`, `{phase}`, `{worktree_path}`, `{file_list}`, `{behaviour}`, `{acceptance_criterion}`, `{test_target}`, `{spec_summary}`, `{baseline}`, `{prior_handoff}`, `{review_context}`, and `{agent_resolution}`.
+Loaded by the `/cook` fan pathway for each top-level phase spawn. Substitute `{N}`, `{slug}`, `{phase}`, `{worktree_path}`, `{file_list}`, `{behaviour}`, `{acceptance_criterion}`, `{test_target}`, `{spec_summary}`, `{baseline}`, `{prior_handoff}`, `{review_context}`, `{model}`, `{effort}`, and `{agent_resolution}`.
+
+`{model}` and `{effort}` substitution rules are defined in [`agent-resolution.md`](../../cheese/references/agent-resolution.md) § Phases x roles.
 
 ````text
 You are executing {phase} for curd #{N} of spec {slug}.
@@ -41,9 +43,16 @@ review_context: {review_context}
 
 `review_context` contains `base_commit` (commit SHA), `reviewed_tree_oid` (tree object ID, including uncommitted state), `diff_hash`, and `scope`. Never call the tree object ID a head commit SHA.
 
+## Model
+
+Model: {model}
+Effort: {effort}
+
+See [`agent-resolution.md`](../../cheese/references/agent-resolution.md) § Phases x roles for substitution rules. Consecutive phases of the same curd routinely resolve differently — coder phases at the coder tier, age phases pinned to a powerful model at the age router's effort dial.
+
 ## Resolution provenance
 
-Copy this resolved record unchanged into the phase output:
+The resolved model, power, and effort are recorded in `agent_resolution` (`resolved.model`, `resolved.power`, `resolved.effort`); that record, not the parent's model, is what makes the phase reproducible. Copy this resolved record unchanged into the phase output:
 
 ```yaml
 agent_resolution: {agent_resolution}
@@ -51,12 +60,14 @@ agent_resolution: {agent_resolution}
 
 ## Handoff
 
-Write `.cheese/ultracook/{slug}/curds/{N}/{phase}.md` with:
+Use the canonical `status:` grammar from the [handback contract](../../cheese/references/handback-contract.md). Write `.cheese/ultracook/{slug}/curds/{N}/{phase}.md` with:
 
-```yaml
-status: ok | halt: <one-line reason>
+```text
+status: <canonical status field>
 next: <next phase | done | cure>
-artifact: <phase report path>
+artifact: <path-to-prior-report-if-any>
+<one-line orientation>
+
 agent_resolution: <shared block>
 review_context: <required for age>
 ```

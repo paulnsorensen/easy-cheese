@@ -41,7 +41,7 @@ Direct invocations run, return output, and **STOP** before checkpoint writing. `
 Prepend the standard resumable slug to the top of the file so `/cheese --continue` can route from it without reading the whole document:
 
 ```markdown
-status: ok | gated: <one-line decision> | halt: <one-line reason>
+status: <canonical status field>
 next: mold | cook | press | age | cure | affinage | briesearch | culture | hold | tasks | done
 mode: single | parallel
 artifact: <path-to-richer-report, or PR ref (PR#<n> / URL) when next: affinage, else none>
@@ -68,6 +68,8 @@ These optional fields precede the orientation line and come only from the live s
 - **`parents: [<slug>, ...]`** — lineage. Legacy `--join` writes `parents: [<slugA>, <slugB>]`; `--split` children write `parents: [<current-slug>]`. Both remain outside this continuity contract: they rewrite `.cheese/notes/` Markdown and commit no delta.
 
 ### `status:` values
+
+`status:` grammar is canonical in [handback contract](../cheese/references/handback-contract.md); the derivation rule below is wheypoint-specific.
 
 Status is **derived** by the runtime, never asserted by the author: an active human-blocking question or blocker derives `gated:` and requires a decision dossier, and no caller can force `ok`.
 

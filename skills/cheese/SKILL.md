@@ -135,5 +135,6 @@ Pre-select only the highest-confidence target. Without `--safe`, surface the tar
 - `references/classification.md` — intent shapes, signals, disambiguation rules.
 - `references/coherence-check.md` — pre-dispatch self-checks that downgrade misroutes.
 - [`references/handoff-gate.md`](references/handoff-gate.md) — cross-harness post-selection dispatch contract (shared across workflow skills).
+- [`references/handback-contract.md`](references/handback-contract.md) — the one preamble, status vocabulary, and dispatch/handback boundary inventory every phase speaks.
 - `references/escalation.md` — full escalation-tier mechanics and the spec-discovery check.
 - `references/continue-resume.md` — the `--continue` resume flow.

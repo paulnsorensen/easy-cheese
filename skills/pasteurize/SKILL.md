@@ -186,7 +186,7 @@ Return a short report covering:
 Write a minimum-shape handoff slug to `.cheese/pasteurize/<slug>.md` so `/cook` (and any orchestrator) can resume without re-reading the full report. Schema:
 
 ```markdown
-status: ok | halt: <one-line reason>
+status: <canonical status field>
 next: cook | mold | done
 artifact: <path-to-richer-report-if-any>
 cause: <one-sentence named cause>
@@ -197,7 +197,7 @@ follow_up: <architectural follow-up note, or "none">
 <one-line orientation: what pasteurize converged on>
 ```
 
-`status: ok` when the regression test is green, the original repro no longer reproduces, and cleanup is done. `status: halt: <reason>` when any early-stop condition fires — see [Early-stop conditions](#early-stop-conditions) below. `next:` is `cook` for the standard chain, `mold` if the diagnosis itself recommends an architectural spec instead of a per-bug fix, or `done` if the bug was caused outside the repo and no follow-up is needed.
+`status: ok` when the regression test is green, the repro is gone, and cleanup is done; `halt: <reason>` on any [early-stop condition](#early-stop-conditions). Grammar: [handback contract](../cheese/references/handback-contract.md). `next:` is `cook` for the standard chain, `mold` if the diagnosis itself recommends an architectural spec instead of a per-bug fix, or `done` if the bug was caused outside the repo and no follow-up is needed.
 
 ## Handoff
 

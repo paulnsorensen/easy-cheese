@@ -42,7 +42,7 @@ def test_happy_path_parse(tmp_path: Path) -> None:
 
     payload = cast(dict[str, object], json.loads(result.stdout))
     assert set(payload.keys()) == {
-        "status", "next", "artifact", "orientation", "halt_reason",
+        "status", "next", "artifact", "orientation", "reason", "halt_reason",
         "taste_test", "durable_flags", "baseline",
     }
     assert payload == {
@@ -50,6 +50,7 @@ def test_happy_path_parse(tmp_path: Path) -> None:
         "next": "cure",
         "artifact": ".cheese/age/foo.md",
         "orientation": "high-stake encapsulation leak in cli.py",
+        "reason": None,
         "halt_reason": None,
         "taste_test": None,
         "durable_flags": None,
@@ -111,7 +112,8 @@ def test_halt_status_extracts_reason(tmp_path: Path) -> None:
 
     payload = cast(dict[str, object], json.loads(result.stdout))
     assert payload["status"] == "halt"
-    assert payload["halt_reason"] == "seed bootstrap failed"
+    assert payload["reason"] == "seed bootstrap failed"
+    assert payload["halt_reason"] == payload["reason"]  # deprecated alias, r014 stack
     assert payload["artifact"] is None
     assert payload["next"] == "done"
     assert payload["orientation"] == "no usable seed found"

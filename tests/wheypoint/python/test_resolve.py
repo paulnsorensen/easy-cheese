@@ -533,6 +533,57 @@ def test_absolute_legacy_path_resolves_exact_note_without_worktree_scan(tmp_path
     assert found.searched == (str(note),)
 
 
+def test_wrapped_needs_context_status_gates_and_carries_the_gap(tmp_path: Path) -> None:
+    """#16: a `needs-context` legacy note gates (retry disposition), and the
+    gap it names survives into the gating detail."""
+    start = tmp_path / "start"
+    start.mkdir()
+    note = start / ".cheese" / "notes" / "needs-context.md"
+    note.parent.mkdir(parents=True)
+    _ = (start / ".cheese" / "notes" / "context.md").write_text("context\n", encoding="utf-8")
+    _ = note.write_text(
+        WRAPPED_NOTE.replace(
+            "status: ok", "status: needs-context: missing the migration plan"
+        ),
+        encoding="utf-8",
+    )
+
+    found = resolve_mod.resolve_legacy(
+        "needs-context", start=start, run=fake_runner(porcelain(start))
+    )
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.GATED
+    assert "missing the migration plan" in (found.detail or "")
+    assert not found.dispatchable
+
+
+def test_wrapped_ok_with_concerns_resolves_without_gating_and_keeps_its_reason(
+    tmp_path: Path,
+) -> None:
+    """#16: a proceed status that still carries a concern must not gate, and
+    the concern must survive onto the resolved legacy slug."""
+    start = tmp_path / "start"
+    start.mkdir()
+    note = start / ".cheese" / "notes" / "ok-with-concerns.md"
+    note.parent.mkdir(parents=True)
+    _ = (start / ".cheese" / "notes" / "context.md").write_text("context\n", encoding="utf-8")
+    _ = note.write_text(
+        WRAPPED_NOTE.replace(
+            "status: ok", "status: ok-with-concerns: double-check the migration"
+        ),
+        encoding="utf-8",
+    )
+
+    found = resolve_mod.resolve_legacy(
+        "ok-with-concerns", start=start, run=fake_runner(porcelain(start))
+    )
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.LEGACY
+    assert found.legacy_slug is not None
+    assert found.legacy_slug.status == "ok-with-concerns"
+    assert found.legacy_slug.reason == "double-check the migration"
+
+
 def test_wrapped_gated_status_blocks_legacy_resume(tmp_path: Path) -> None:
     start = tmp_path / "start"
     start.mkdir()
