@@ -336,7 +336,10 @@ def test_core_cheese_questions_use_the_shared_handoff_gate():
 
 
 def test_wheypoint_git_provenance_is_capability_based_and_optional():
-    body = (REPO_ROOT / "skills/wheypoint/SKILL.md").read_text(encoding="utf-8")
+    # `checkpoint` now routes the common path. The guard follows the provenance prose.
+    body = (REPO_ROOT / "skills/wheypoint/references/provenance-fields.md").read_text(
+        encoding="utf-8"
+    )
 
     assert "callable, read-only git inspection capability" in body
     assert "git status --short --branch" in body
