@@ -37,7 +37,12 @@ def test_check_and_ci_depend_on_dead_code() -> None:
 
 
 def test_ci_jobs_pin_tools() -> None:
-    """Test and lint jobs pin both uv and just setup actions."""
+    """Test and lint jobs pin uv and install a pinned just from PyPI.
+
+    The just install must not use a GitHub-releases action: every such
+    call spends the repo-wide GITHUB_TOKEN budget and fails all jobs once
+    it is exhausted.
+    """
     jobs = cast(
         dict[str, object],
         yaml.safe_load(
@@ -53,4 +58,6 @@ def test_ci_jobs_pin_tools() -> None:
             if "uses" in step
         }
         assert "version" in cast(dict[str, object], uses["astral-sh/setup-uv"])
-        assert "just-version" in cast(dict[str, object], uses["extractions/setup-just"])
+        assert "extractions/setup-just" not in uses
+        runs = [cast(str, step["run"]) for step in steps if "run" in step]
+        assert any("uv tool install rust-just==1.58.0" in run for run in runs)
