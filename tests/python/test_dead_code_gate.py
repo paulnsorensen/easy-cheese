@@ -146,6 +146,65 @@ def test_probe_fails_at_sixty_percent(tmp_path: Path) -> None:
     assert f"{probe}:2: unused variable 'unused_var' (60% confidence)" in output
 
 
+@needs_just
+def test_orphaned_function_fails_the_gate(tmp_path: Path) -> None:
+    """A newly-orphaned top-level function is reported, not silently accepted."""
+    probe = tmp_path / "probe.py"
+    _ = probe.write_text(
+        "def orphaned_function():\n    return 1\n",
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        ["just", "lint-py-dead-code", str(tmp_path)],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    output = result.stdout + result.stderr
+    assert result.returncode == 3
+    assert f"{probe}:1: unused function 'orphaned_function' (60% confidence)" in output
+
+
+@needs_just
+@pytest.mark.parametrize(
+    "decorator",
+    ["bundle_command", "contract", "document_contract"],
+)
+def test_decorator_registered_function_does_not_fail_the_gate(
+    tmp_path: Path, decorator: str
+) -> None:
+    """A function registered through a data-driven `ignore_decorators` entry is
+    invoked only via a compiled dispatcher, so the gate must not report it dead.
+
+    Parametrized over every decorator pinned in pyproject's
+    `[tool.vulture] ignore_decorators`, proving each one actually
+    suppresses the gate.
+    """
+    probe = tmp_path / "probe.py"
+    lines = (
+        f"def {decorator}(func):",
+        "    return func",
+        "",
+        "",
+        f"@{decorator}",
+        "def registered_entry_point():",
+        "    return 1",
+        "",
+    )
+    _ = probe.write_text("\n".join(lines), encoding="utf-8")
+    result = subprocess.run(
+        ["just", "lint-py-dead-code", str(tmp_path)],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    output = result.stdout + result.stderr
+    assert result.returncode == 0, output
+
+
+
 def test_schema_enum_and_attrs_fields_accept_absolute_vulture_filenames() -> None:
     """Schema-owned generated fields are dynamic API, not dead code."""
     checker = _checker_module()

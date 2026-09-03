@@ -94,11 +94,19 @@ lint-py-dead-code *paths="src scripts .github/scripts tests":
 update-skill-budgets:
     python3 .github/scripts/validate_skills.py --write-budgets
 
+# Verify committed .pyz bundles match the staged index (local/pre-commit)
+check-bundles:
+    python3 scripts/check_bundles.py --against index
+
+# Verify committed .pyz bundles match HEAD after a fresh rebuild (CI)
+check-bundles-ci: bundle
+    python3 scripts/check_bundles.py --against head
+
 # Full local check with autofixes
-check: lint-md-fix lint-yaml-fix lint-yaml lint-py-fix lint-sh lint-py-dead-code typecheck test docs-build
+check: lint-md-fix lint-yaml-fix lint-yaml lint-py-fix lint-sh lint-py-dead-code typecheck test docs-build check-bundles
 
 # CI-mode verification (no autofixes)
-ci: lint-md lint-yaml lint-sh lint-py-dead-code typecheck test docs-build
+ci: lint-md lint-yaml lint-sh lint-py-dead-code typecheck test docs-build check-bundles-ci
 
 # Install docs build dependencies
 docs-install:

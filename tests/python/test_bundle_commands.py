@@ -7,11 +7,33 @@ import importlib
 import inspect
 import sys
 from types import ModuleType
-from typing import cast
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Protocol, cast
 
 import pytest
 
 from easy_cheese.shared import bundle_commands as bc
+
+
+_CommandHandler = Callable[[list[str]], int]
+
+
+class _BundleCommandsSurface(Protocol):
+    def bundle_command(
+        self, name: str
+    ) -> Callable[[_CommandHandler], _CommandHandler]: ...
+
+    def derive_command(self, handler: _CommandHandler) -> bc.Command: ...
+
+    def validate_command_surface(
+        self, module: ModuleType, commands: tuple[bc.Command, ...]
+    ) -> None: ...
+
+
+if TYPE_CHECKING:
+    _bundle_commands: _BundleCommandsSurface
+else:
+    _bundle_commands = bc
 
 
 def command(name: str = "go", target: str = "test_bundle_target:handler") -> bc.Command:
@@ -137,6 +159,65 @@ def test_every_skill_declares_a_static_manifest() -> None:
             callable(bc._handler(item.target))  # pyright: ignore[reportPrivateUsage]
             for item in commands
         )
+
+
+def _fake_command_module(*, decorated: tuple[str, ...]) -> ModuleType:
+    module = ModuleType("test_bundle_surface_module")
+
+    def make_handler(name: str) -> _CommandHandler:
+        def handler(argv: list[str]) -> int:
+            del argv
+            return 0
+
+        handler.__module__ = module.__name__
+        handler.__qualname__ = f"_{name.replace('-', '_')}"
+        return _bundle_commands.bundle_command(name)(handler)
+
+    for name in decorated:
+        setattr(module, f"_{name.replace('-', '_')}", make_handler(name))
+    return module
+
+
+def test_validate_command_surface_rejects_unreferenced_declaration() -> None:
+    module = _fake_command_module(decorated=("foo", "bar"))
+    bar = cast(_CommandHandler, module._bar)
+    with pytest.raises(ValueError, match="declares unreferenced bundle command.*foo"):
+        _bundle_commands.validate_command_surface(
+            module, (_bundle_commands.derive_command(bar),)
+        )
+
+
+def test_validate_command_surface_rejects_undeclared_reference() -> None:
+    module = _fake_command_module(decorated=("foo",))
+    foo = cast(_CommandHandler, module._foo)
+    stray = command("stray")
+    with pytest.raises(ValueError, match="references undeclared bundle command.*stray"):
+        _bundle_commands.validate_command_surface(
+            module, (_bundle_commands.derive_command(foo), stray)
+        )
+
+
+_SKILLS_ON_THE_DECORATOR_SURFACE = (
+    "age",
+    "affinage",
+    "briesearch",
+    "cure",
+    "melt",
+    "mold",
+    "pasteurize",
+    "plate",
+    "hard-cheese",
+    "wheypoint",
+    "cook",
+)
+
+
+@pytest.mark.parametrize("skill", _SKILLS_ON_THE_DECORATOR_SURFACE)
+def test_validate_command_surface_passes_for_every_skill(skill: str) -> None:
+    package = skill.replace("-", "_")
+    module = importlib.import_module(f"easy_cheese.skills.{package}.commands")
+    commands = cast("tuple[bc.Command, ...]", module.COMMANDS)
+    _bundle_commands.validate_command_surface(module, commands)
 
 
 def test_skill_manifests_are_literal_tuples() -> None:
