@@ -1,34 +1,46 @@
 # Handoff gate templates
 
-Read this when rendering either handoff gate `SKILL.md` § Handoff describes — the exact option wording for the cure-selection gate and the reply-approval gate.
+Read this when rendering either handoff gate from `SKILL.md`.
+Use the exact option text below.
 
-## Cure-selection gate
+## Cure selection gate
 
-Lead with the recommended composite, then present the four severity-floor options below it, in the same most-inclusive-to-least order, so the gate is predictable across every run:
+Show the recommended composite first.
+Then show all five floor options in this order:
 
-- The five severity-floor options (recommended `all-medium, cheap`, then `all`, `all-medium`, `all-high`, `all-blocker`) are exactly age's — see [`../../age/references/handoff-detail.md`](../../age/references/handoff-detail.md) § Selection gate for their labels and semantics.
+1. `all-medium, cheap`
+2. `all`
+3. `all-medium`
+4. `all-high`
+5. `all-blocker`
 
-Then offer the non-floor options last:
+Use the labels and rules from [`../../age/references/handoff-detail.md`](../../age/references/handoff-detail.md).
+Then show these options:
 
-- **Pick findings to fix** — free-text reply using `/age`/`/cure` verbs (`1,3,5`, `all-blocker`, `all-medium`, `all-high`, `cheap`, `all`, `none`, `skip N`).
-- **Resolve merge conflicts** *(offered only when the PR has conflicts)* — checkout + `/melt` per `merge-conflict.md`, then re-render this gate.
-- **Stop — leave the report for later** — equivalent to `none`.
+- **Pick findings to fix** — Accept `1,3,5`, floor names, `cheap`, `all`, `none`, or `skip N`.
+- **Resolve merge conflicts** — Show this option only when the PR has conflicts.
+  Check out the PR, run `/melt`, and show the gate again.
+- **Stop — leave the report for later** — Treat this option as `none`.
 
-The "present all four severity options on every run, empty-set-resolves-to-`none`" rule is age's — see [`../../age/references/handoff-detail.md`](../../age/references/handoff-detail.md) § Selection gate.
+Show all five floor options on every run.
+Treat an empty selection as `none`.
 
-## Reply-approval gate
+## Reply approval gate
 
-The single gate both Handoff branches use before any `post-reply` call:
+Show this gate before every `post-reply` call:
 
-- **Post pushbacks only** *(recommended)* — post `Reviewer-rejected` drafts; hold `Needs-investigation` items for investigation.
-- **Investigate now, then post** — for each `Needs-investigation` item, run the follow-up investigation (`/pasteurize` for a regression test, `/briesearch` to explore the out-of-diff evidence), then post a reply carrying the actual result.
-- **Post all** — post every drafted push-back and the explicit `Needs-investigation` follow-up notes (naming the needed evidence) without running the investigation first.
-- **Skip posting** — leave the report for later; post nothing.
-- **Per-finding** — free-text pick of which drafts to post or investigate.
+- **Post pushbacks only** *(recommended)* — Post rejected drafts and hold investigation claims.
+- **Investigate now, then post** — Investigate each claim and post its actual result.
+  Use `/pasteurize` for a regression test.
+  Use `/briesearch` for evidence outside the diff.
+- **Post all** — Post all push-back drafts and specific investigation notes without prior investigation.
+- **Skip posting** — Post nothing and leave the report for later.
+- **Per-finding** — Let the user select drafts to post or claims to investigate.
 
 ## Cure dispatch context
 
-On a non-empty cure selection (auto-selected by default or chosen at the gate), immediately dispatch `/cure <slug> [--safe] [--open-pr] [--hard]` with locked context:
+When the selection is not empty, send `/cure <slug> [--safe] [--open-pr] [--hard]` immediately.
+Include this locked context:
 
 ```yaml
 handoff_context:
@@ -38,4 +50,7 @@ handoff_context:
   resolved_ids: [<expanded ids>]
 ```
 
-`/cure` re-confirms cited ids and goes straight to apply. Because the handoff carries `source_skill: /affinage`, `/cure` applies its fixes and runs its `/age --scope` loop but **suppresses its own terminal `/plate`** and returns — affinage owns publication. Propagate `--safe`, `--open-pr`, and `--hard` to `/cure` when in scope.
+`/cure` confirms each selected identifier and applies the fixes.
+It runs its `/age --scope` loop but does not run terminal `/plate`.
+Affinage owns publication because `source_skill` is `/affinage`.
+Pass `--safe`, `--open-pr`, and `--hard` to `/cure` when they apply.

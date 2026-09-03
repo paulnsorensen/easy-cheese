@@ -1,10 +1,20 @@
-# Merge-conflict resolution
+# Merge conflict resolution
 
-When `affinage.pyz pr-status` reports `merge.mergeable: CONFLICTING` or `merge.state: DIRTY`, the PR cannot merge until conflicts are resolved. `/affinage` does not resolve conflicts by hand — it routes to `/melt`, which runs the structural cascade (mergiraf → rerere → kdiff3).
+A PR cannot merge when `pr-status` reports `merge.mergeable: CONFLICTING` or `merge.state: DIRTY`.
+Send conflicts to `/melt`.
+Do not resolve them by hand.
+`/melt` runs mergiraf, rerere, and kdiff3.
 
-1. Materialise the conflicts locally: `gh pr checkout <pr>`, then `git merge origin/<base>`. (`gh pr checkout` neither opens nor updates the PR, so it does not breach the no-`/gh` rule.)
-2. Hand off to `/melt`. It first checks for squash-merge residue and stops with remedies if found — surface those verbatim and do not auto-apply.
-3. After `/melt` resolves cleanly, the resolution commit is owned by `/melt` / `/cure`. `/plate` owns the verified commit and existing-PR update transaction.
+1. Run `gh pr checkout <pr>`.
+2. Run `git merge origin/<base>` to create the local conflicts.
+3. Send the conflicts to `/melt`.
+4. Show any squash residue remedy from `/melt` without changes.
+5. Let `/melt` or `/cure` own the resolution commit.
+6. Let `/plate` own the verified commit and PR update.
 
-- **Default and `--auto` mode**: run the checkout + `/melt` automatically before dispatching `/cure`, then re-run `affinage.pyz pr-status` to confirm `mergeable` cleared. If `/melt` cannot resolve (manual kdiff3 needed, or squash residue), write `status: halt: merge-conflicts-need-human` and stop.
-- **`--safe` mode**: gate the checkout + `/melt` behind the handoff prompt — offer "Resolve merge conflicts" alongside the cure-selection options.
+In default and `--auto` modes, run checkout and `/melt` before `/cure`.
+Then run `affinage.pyz pr-status` again to confirm that conflicts are gone.
+If conflicts remain, write `status: halt: merge-conflicts-need-human` and stop.
+
+In `--safe` mode, require approval before checkout and `/melt`.
+Include `Resolve merge conflicts` in the cure selection options.
