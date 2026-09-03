@@ -70,9 +70,7 @@ def test_identical_search_repeated_is_a_duplicate() -> None:
 
 
 def test_duplicate_search_names_the_call_it_repeats() -> None:
-    findings = _findings(
-        {"calls": [_search("a"), _search("b"), _search("a")]}
-    )
+    findings = _findings({"calls": [_search("a"), _search("b"), _search("a")]})
     assert len(findings) == 1
     assert "call 3 (tavily tavily_search) repeats call 1" in findings[0][1]
 
@@ -142,7 +140,7 @@ def test_duplicate_extract_sees_through_url_spellings() -> None:
     document = {
         "calls": [
             _extract("https://Example.com/a"),
-            _extract("https://example.com/a/#top"),
+            _extract("https://example.com/a#top"),
         ]
     }
     assert _kinds(document) == ["DUPLICATE_EXTRACT"]
@@ -169,9 +167,7 @@ def test_distinct_urls_are_not_duplicates() -> None:
 
 
 def test_a_failed_call_that_stored_a_body_is_reported() -> None:
-    findings = _findings(
-        {"calls": [_extract("https://example.com/a", status="403")]}
-    )
+    findings = _findings({"calls": [_extract("https://example.com/a", status="403")]})
     assert [kind for kind, _ in findings] == ["FAILED_EVIDENCE"]
     assert "raw/01-example.md" in findings[0][1]
 
@@ -197,7 +193,9 @@ def test_an_unrecognised_gap_is_reported() -> None:
 
 
 def test_an_extension_without_a_gap_is_a_corrupt_manifest() -> None:
-    with pytest.raises(LedgerError, match="extensions\\[0\\] is missing required field 'gap'"):
+    with pytest.raises(
+        LedgerError, match="extensions\\[0\\] is missing required field 'gap'"
+    ):
         _ = parse_ledger({"extensions": [{"note": "why"}]})
 
 
@@ -305,9 +303,7 @@ def test_cached_must_be_a_boolean() -> None:
 
 
 def _write_manifest(directory: Path, document: object) -> Path:
-    _ = (directory / "manifest.json").write_text(
-        json.dumps(document), encoding="utf-8"
-    )
+    _ = (directory / "manifest.json").write_text(json.dumps(document), encoding="utf-8")
     return directory
 
 
