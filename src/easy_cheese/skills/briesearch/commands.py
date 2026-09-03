@@ -4,11 +4,26 @@ from __future__ import annotations
 
 import sys
 
-from easy_cheese.shared.bundle_commands import Command, dispatch
+from easy_cheese.shared.bundle_commands import bundle_command, derive_command, dispatch
+
+
+@bundle_command("artifact-path")
+def _artifact_path(argv: list[str]) -> int:
+    from easy_cheese.shared.artifact_path import main
+
+    return main(argv)
+
+
+@bundle_command("ground-check")
+def _ground_check(argv: list[str]) -> int:
+    from easy_cheese.skills.briesearch.ground_check import main
+
+    return main(argv)
+
 
 COMMANDS = (
-    Command("artifact-path", "easy_cheese.shared.artifact_path:main"),
-    Command("ground-check", "easy_cheese.skills.briesearch.ground_check:main"),
+    derive_command(_artifact_path),
+    derive_command(_ground_check),
 )
 
 
