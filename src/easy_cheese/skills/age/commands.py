@@ -51,11 +51,18 @@ def _slugify(argv: list[str]) -> int:
     return main(argv)
 
 
-@bundle_command("write-handoff-artifact")
-def _write_handoff_artifact(argv: list[str]) -> int:
-    from easy_cheese.shared.write_handoff_artifact import main
+@bundle_command("review-lock")
+def _review_lock(argv: list[str]) -> int:
+    from easy_cheese.skills.age.review_lock import main
 
     return main(argv)
+
+
+@bundle_command("write-handoff-artifact")
+def _write_handoff_artifact(argv: list[str]) -> int:
+    from easy_cheese.skills.age.review_lock import gated_write_handoff_artifact
+
+    return gated_write_handoff_artifact(argv)
 
 
 @bundle_command("read-handoff-slug")
@@ -126,8 +133,12 @@ COMMANDS = (
         summary="Derive a kebab-case slug and durable spec path from task text",
     ),
     replace(
+        derive_command(_review_lock),
+        summary="Record or verify the production tree digest that keeps /age review-only",
+    ),
+    replace(
         derive_command(_write_handoff_artifact),
-        summary="Write a handoff preamble plus optional body atomically",
+        summary="Write an age handoff atomically after the review lock verifies the tree",
     ),
     replace(
         derive_command(_read_handoff_slug),

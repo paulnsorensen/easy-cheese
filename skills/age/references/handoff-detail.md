@@ -37,7 +37,7 @@ Use the shared handoff gate in [`../../cheese/references/handoff-gate.md`](../..
 
 ## Dispatch
 
-On a non-empty selection — whether auto-selected by default or chosen at the gate — immediately dispatch `/cure <slug> [--safe] [--open-pr] [--hard]` with the selection locked in via context, not a CLI flag:
+Dispatch `/cure <slug> [--safe] [--open-pr] [--hard]` immediately when the selection is not empty. This rule applies to automatic selections and selections from the gate. Pass the selection through context, not a CLI flag. Invoke `/cure` instead of repairing files in the review context. The report ends `/age`. The step 1 review lock rejects a report after inline edits.
 
 ```yaml
 handoff_context:

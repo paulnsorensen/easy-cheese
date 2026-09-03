@@ -51,7 +51,16 @@ Per-dimension base-severity tables, location-sensitivity, fix-cost-now / fix-cos
 
 ## Flow
 
-1. Identify the diff, scope, and relevant spec or issue. **Mode check:** compute the review range's `review_surface` score and risk flags, then call `age_route.route(score=..., risk_flags=..., entry="age")` (`src/easy_cheese/shared/fanout/age_route.py`). `n=1` — steps 2–4 below, unchanged. Any `n>1` — read `references/fan-out.md` first; its `lenses` list, not a fixed label, sets worker count. Fan-out also requires `/age` not itself be a sub-agent — stay single-parent when it is. Thread the router's `effort` into the reviewer dispatch.
+1. Identify the diff, scope, and relevant specification or issue.
+   Compute the review range's `review_surface` score and risk flags.
+   Call `age_route.route(score=..., risk_flags=..., entry="age")` from `src/easy_cheese/shared/fanout/age_route.py`.
+   For `n=1`, continue with steps 2 through 4.
+   For `n>1`, read `references/fan-out.md` first.
+   Use its `lenses` list to set the worker count.
+   Do not use fan-out when `/age` runs as a sub-agent.
+   Pass the router's `effort` value to the reviewer.
+   Run `python3 skills/age/scripts/age.pyz review-lock --slug <slug>` to lock the production tree.
+   The report write in step 5 fails if a production file changes.
 2. Gather evidence: diff, touched files, tests, callers/imports. If a press report exists for this slug, read it via `python3 skills/age/scripts/age.pyz read-handoff-slug --phase press --slug <slug>` and summarise unresolved items in a `## Press findings` sub-section — `/cure` only reads `.cheese/age/<slug>.md`.
 
    No press report but a cook handoff exists: record `press: skipped` (see `## Output`) and print the warning at handoff. No cook artifact either: skip the marker and continue.
@@ -132,7 +141,7 @@ When invoked with `--auto`:
 ## Rules
 
 - Review is not a verdict; explain where to look and why.
-- Do not edit production files; `/cure` owns application.
+- Do not edit production files. The step 1 review lock enforces this rule. `/cure` applies fixes.
 - Do not raise a finding for a gate failure identical to the diff's recorded `baseline:` block; flag only new/changed failures per [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md).
 - Default to acting: auto-select the recommended set, dispatch `/cure` without a gate. Ask first only on a genuine reason or `--safe`. An empty recommended set is a clean stop, not a question.
 - Do not invent evidence; cite files, diffs, commands, or unavailable-source notes.
