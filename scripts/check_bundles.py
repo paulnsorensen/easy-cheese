@@ -62,7 +62,6 @@ def _validate_shiv_names(names: set[str]) -> None:
         raise ValueError("not a Shiv archive: missing site-packages/")
 
 
-
 def _site_packages_members(
     infos: Sequence[zipfile.ZipInfo],
 ) -> list[zipfile.ZipInfo]:
@@ -76,8 +75,6 @@ def _site_packages_members(
         ],
         key=lambda info: info.filename,
     )
-
-
 
 
 def _site_packages_hashes(
@@ -111,7 +108,7 @@ NATIVE_SUFFIXES = frozenset({".so", ".pyd", ".dylib"})
 FIRST_PARTY_PREFIXES = ("easy_cheese/", "easy_cheese_schemas/")
 
 
-def _native_members(archive: zipfile.ZipFile) -> list[str]:
+def native_members(archive: zipfile.ZipFile) -> list[str]:
     """Native/compiled members (.so/.pyd/.dylib) shipped in the archive."""
     return sorted(
         name
@@ -309,8 +306,6 @@ def _module_index_from_names(
     return frozenset(files), frozenset(dirs)
 
 
-
-
 def _command_module_targets(tree: ast.Module) -> set[str]:
     """Module half of every `Command(name, "module:attr")` call in this tree.
 
@@ -457,7 +452,9 @@ def check_isolated_execution(pyz: Path) -> list[str]:
     combined = result.stdout + result.stderr
     problems = [f"isolated execution {p}" for p in _import_failure_problems(combined)]
     if str(REPO_ROOT) in combined:
-        problems.append(f"isolated execution referenced the repository path: {combined.strip()}")
+        problems.append(
+            f"isolated execution referenced the repository path: {combined.strip()}"
+        )
     return problems
 
 
@@ -478,11 +475,7 @@ def _declared_command_names_from_trees(
     return sorted(names)
 
 
-
-
-def _check_command_dispatch(
-    pyz: Path, command_names: Sequence[str]
-) -> list[str]:
+def _check_command_dispatch(pyz: Path, command_names: Sequence[str]) -> list[str]:
     """Every declared command must actually import its handler module.
 
     A bare argv only reaches the dispatcher's own usage branch (exit 2), so
@@ -506,8 +499,6 @@ def _check_command_dispatch(
     return problems
 
 
-
-
 def _canonical_environment_values(
     environment: dict[str, object], *, canonical_build_id: str
 ) -> bytes:
@@ -516,8 +507,6 @@ def _canonical_environment_values(
     _ = normalized.pop("built_at", None)
     normalized["build_id"] = canonical_build_id
     return json.dumps(normalized, sort_keys=True, separators=(",", ":")).encode()
-
-
 
 
 def _canonical_wrapper(data: bytes) -> bytes:
@@ -602,9 +591,7 @@ class _ArchiveAnalysis:
                         environment, canonical_build_id=canonical_build_id
                     )
                 elif info.filename.startswith("site-packages/bin/"):
-                    manifest[info.filename] = _canonical_wrapper(
-                        analysis.read(info)
-                    )
+                    manifest[info.filename] = _canonical_wrapper(analysis.read(info))
                 else:
                     manifest[info.filename] = (info.CRC, info.file_size)
             analysis.manifest = manifest
@@ -613,7 +600,11 @@ class _ArchiveAnalysis:
         return analysis
 
     def read(self, member: str | zipfile.ZipInfo) -> bytes:
-        info = member if isinstance(member, zipfile.ZipInfo) else self.info_by_name.get(member)
+        info = (
+            member
+            if isinstance(member, zipfile.ZipInfo)
+            else self.info_by_name.get(member)
+        )
         if info is None:
             return self.archive.read(member)
         key = id(info)
@@ -636,15 +627,13 @@ class _ArchiveAnalysis:
             relpath = name.removeprefix("site-packages/")
             if not relpath.startswith(FIRST_PARTY_PREFIXES):
                 continue
-            self.module_trees[relpath] = ast.parse(
-                self.read(info).decode("utf-8")
-            )
+            self.module_trees[relpath] = ast.parse(self.read(info).decode("utf-8"))
         self.command_names = tuple(
             _declared_command_names_from_trees(tuple(self.module_trees.values()))
         )
 
 
-def _manifest(data: bytes) -> dict[str, tuple[int, int] | bytes]:
+def bundle_manifest(data: bytes) -> dict[str, tuple[int, int] | bytes]:
     """Source member name -> (CRC, uncompressed size)."""
     with zipfile.ZipFile(io.BytesIO(data)) as archive:
         analysis = _ArchiveAnalysis.from_archive(archive, validate_shiv=True)
@@ -682,7 +671,11 @@ def _owning_skill(path: Path) -> str | None:
 def _pyz_reference_roots() -> list[Path]:
     return [
         *REPO_ROOT.glob("skills/**/*.md"),
-        *(p for p in REPO_ROOT.glob("skills/*/scripts/*") if p.is_file() and p.suffix != ".pyz"),
+        *(
+            p
+            for p in REPO_ROOT.glob("skills/*/scripts/*")
+            if p.is_file() and p.suffix != ".pyz"
+        ),
         *(
             p
             for p in (REPO_ROOT / "src").rglob("*")
@@ -713,7 +706,9 @@ def check_pyz_references() -> list[str]:
             archive_name = match.group(0).removesuffix(".pyz")
             relative = path.relative_to(REPO_ROOT)
             if archive_name == "common":
-                violations.append(f"{relative}: references obsolete shared bundle common.pyz")
+                violations.append(
+                    f"{relative}: references obsolete shared bundle common.pyz"
+                )
             elif skill is not None and archive_name != skill:
                 violations.append(
                     f"{relative}: references {archive_name}.pyz, not its own {skill}.pyz"
@@ -872,12 +867,9 @@ def _run_checks(against: str, bundle_root: Path) -> int:
                     raise ValueError("Shiv archive manifest was not computed")
                 rebuilt_manifest = analysis.manifest
                 problems += [
-                    f"    ! native member: {name}"
-                    for name in analysis.native_members
+                    f"    ! native member: {name}" for name in analysis.native_members
                 ]
-                problems += [
-                    f"    ! {p}" for p in _check_import_closure(analysis)
-                ]
+                problems += [f"    ! {p}" for p in _check_import_closure(analysis)]
                 problems += [
                     f"    ! {p}"
                     for p in _check_command_dispatch(path, analysis.command_names)

@@ -103,7 +103,7 @@ def _document_rules_compiler() -> tuple[
     )
 
 
-def _compiled_document_rules_source() -> str:
+def compiled_document_rules_source() -> str:
     collect, render = _document_rules_compiler()
     contract = cast(type, getattr(_schema_contract_module(), "MoldSpecDocument"))
     return render(collect(contract))
@@ -151,7 +151,7 @@ def _checked_in_document_rules_bytes(expected_source: str) -> bytes:
 def _validate_generated_runtime() -> None:
     _ = _checked_in_phase_registry_bytes(_compiled_phase_registry_source())
     _ = _checked_in_schema_catalog_bytes(_compiled_schema_catalog_source())
-    _ = _checked_in_document_rules_bytes(_compiled_document_rules_source())
+    _ = _checked_in_document_rules_bytes(compiled_document_rules_source())
 
 
 def _normalize(name: str) -> str:

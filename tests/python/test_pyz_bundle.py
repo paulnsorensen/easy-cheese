@@ -40,28 +40,71 @@ SKILL_SUBCOMMANDS = {
         "lockfile-resolve",
     ],
     "affinage": ["pr-status", "post-reply", "age-route", "review-surface"],
-    "mold": ["artifact-path", "curd-count", "gate-graph", "migrate", "publish", "render-html", "taste-test", "validate-spec"],
+    "mold": [
+        "artifact-path",
+        "curd-count",
+        "gate-graph",
+        "migrate",
+        "publish",
+        "render-html",
+        "taste-test",
+        "validate-spec",
+    ],
     "briesearch": ["artifact-path", "budget-check", "ground-check", "research-layout"],
     "plate": ["stack-tools", "validate-publication"],
     "cook": [
-        "artifact-path", "age-route", "baseline", "phase-decision", "milknado", "mode", "worktree",
-        "validate-decomposition", "validate-manifest", "validate-pr-plan", "manifest-update",
-        "wiring-topo-sort", "pr-plan-to-branches", "curd-block",
-        "normalize", "validate", "slugify", "write-handoff-artifact",
-        "read-handoff-slug", "findings-cli", "gates-cli", "paths-cli",
-        "handoff-cli", "render-html",
+        "artifact-path",
+        "age-route",
+        "baseline",
+        "phase-decision",
+        "milknado",
+        "mode",
+        "worktree",
+        "validate-decomposition",
+        "validate-manifest",
+        "validate-pr-plan",
+        "manifest-update",
+        "wiring-topo-sort",
+        "pr-plan-to-branches",
+        "curd-block",
+        "normalize",
+        "validate",
+        "slugify",
+        "write-handoff-artifact",
+        "read-handoff-slug",
+        "findings-cli",
+        "gates-cli",
+        "paths-cli",
+        "handoff-cli",
+        "render-html",
     ],
     "cure": [
-        "slugify", "write-handoff-artifact", "read-handoff-slug", "findings-cli",
-        "gates-cli", "paths-cli", "handoff-cli", "render-html",
+        "slugify",
+        "write-handoff-artifact",
+        "read-handoff-slug",
+        "findings-cli",
+        "gates-cli",
+        "paths-cli",
+        "handoff-cli",
+        "render-html",
     ],
     "wheypoint": ["checkpoint", "commit", "resolve", "show", "lint"],
     "easy-cheese-setup": ["global", "local", "doctor"],
     "age": [
-        "artifact-path", "html-report", "age-route", "review-surface", "severity", "slugify",
+        "artifact-path",
+        "html-report",
+        "age-route",
+        "review-surface",
+        "severity",
+        "slugify",
         "review-lock",
-        "write-handoff-artifact", "read-handoff-slug", "findings-cli", "gates-cli", "paths-cli",
-        "handoff-cli", "render-html",
+        "write-handoff-artifact",
+        "read-handoff-slug",
+        "findings-cli",
+        "gates-cli",
+        "paths-cli",
+        "handoff-cli",
+        "render-html",
     ],
     "hard-cheese": ["append-attempt", "freshness-check"],
     "pasteurize": ["debug-tag-sweep", "repro-rerun", "pasteurize-route"],
@@ -104,7 +147,9 @@ def test_default_batch_builds_every_registered_skill(tmp_path: Path) -> None:
     expected = set(build_pyz.SKILLS)
     assert len(expected) == 13
     assert {path.stem for path in tmp_path.glob("*.pyz")} == expected
-    assert {path.name for path in tmp_path.glob("*.pyz")} == {f"{skill}.pyz" for skill in expected}
+    assert {path.name for path in tmp_path.glob("*.pyz")} == {
+        f"{skill}.pyz" for skill in expected
+    }
 
 
 def _zip_with_shiv_metadata(
@@ -155,16 +200,16 @@ def _zip_with_shiv_metadata(
             ),
         )
         archive.writestr("site-packages/bin/demo", wrapper)
-        archive.writestr("site-packages/easy_cheese/demo.py", members["easy_cheese/demo.py"])
         archive.writestr(
-            "site-packages/easy_cheese-1.0.dist-info/RECORD", record
+            "site-packages/easy_cheese/demo.py", members["easy_cheese/demo.py"]
         )
+        archive.writestr("site-packages/easy_cheese-1.0.dist-info/RECORD", record)
     return data.getvalue()
 
 
 def test_bundle_manifest_catches_execution_metadata_tampering() -> None:
-    baseline = check_bundles._manifest(_zip_with_shiv_metadata())  # pyright: ignore[reportPrivateUsage]
-    host_variation = check_bundles._manifest(  # pyright: ignore[reportPrivateUsage]
+    baseline = check_bundles.bundle_manifest(_zip_with_shiv_metadata())
+    host_variation = check_bundles.bundle_manifest(
         _zip_with_shiv_metadata(
             built_at="2026-08-26 10:00:00",
             interpreter="/usr/bin/python3",
@@ -173,44 +218,39 @@ def test_bundle_manifest_catches_execution_metadata_tampering() -> None:
     )
     assert baseline == host_variation
 
-    tampered = check_bundles._manifest(  # pyright: ignore[reportPrivateUsage]
+    tampered = check_bundles.bundle_manifest(
         _zip_with_shiv_metadata(entry_point="evil.module:main")
     )
     assert tampered["environment.json"] != baseline["environment.json"]
 
-    wrapper_tampered = _zip_with_shiv_metadata(
-        wrapper_import="from evil import main"
+    wrapper_tampered = _zip_with_shiv_metadata(wrapper_import="from evil import main")
+    assert (
+        check_bundles.bundle_manifest(wrapper_tampered)["site-packages/bin/demo"]
+        != baseline["site-packages/bin/demo"]
     )
-    assert check_bundles._manifest(wrapper_tampered)["site-packages/bin/demo"] != baseline[  # pyright: ignore[reportPrivateUsage]
-        "site-packages/bin/demo"
-    ]
 
     with pytest.raises(ValueError, match="build_id does not match"):
-        _ = check_bundles._manifest(  # pyright: ignore[reportPrivateUsage]
-            _zip_with_shiv_metadata(build_id="tampered")
-        )
+        _ = check_bundles.bundle_manifest(_zip_with_shiv_metadata(build_id="tampered"))
 
 
 def test_bundle_manifest_preserves_wrapper_flags() -> None:
-    baseline = check_bundles._manifest(  # pyright: ignore[reportPrivateUsage]
+    baseline = check_bundles.bundle_manifest(
         _zip_with_shiv_metadata(interpreter="/opt/python/bin/python3 -I")
     )
-    host_variation = check_bundles._manifest(  # pyright: ignore[reportPrivateUsage]
+    host_variation = check_bundles.bundle_manifest(
         _zip_with_shiv_metadata(interpreter="/usr/bin/env python3 -I")
     )
     assert baseline == host_variation
 
-    flag_tampered = check_bundles._manifest(  # pyright: ignore[reportPrivateUsage]
+    flag_tampered = check_bundles.bundle_manifest(
         _zip_with_shiv_metadata(interpreter="/usr/bin/env python3 -X")
     )
-    assert flag_tampered["site-packages/bin/demo"] != baseline[
-        "site-packages/bin/demo"
-    ]
+    assert flag_tampered["site-packages/bin/demo"] != baseline["site-packages/bin/demo"]
 
 
 def test_bundle_manifest_keeps_non_python_shebang_distinct() -> None:
-    python = check_bundles._manifest(_zip_with_shiv_metadata())  # pyright: ignore[reportPrivateUsage]
-    shell = check_bundles._manifest(  # pyright: ignore[reportPrivateUsage]
+    python = check_bundles.bundle_manifest(_zip_with_shiv_metadata())
+    shell = check_bundles.bundle_manifest(
         _zip_with_shiv_metadata(interpreter="/bin/sh")
     )
     assert shell["site-packages/bin/demo"] != python["site-packages/bin/demo"]
@@ -243,7 +283,8 @@ def _bundle_members(pyz: Path) -> set[str]:
         return {
             name.removeprefix("site-packages/")
             for name in archive.namelist()
-            if name.startswith("site-packages/") and not name.startswith("site-packages/bin/")
+            if name.startswith("site-packages/")
+            and not name.startswith("site-packages/bin/")
         }
 
 
@@ -251,7 +292,9 @@ def _extract_site_packages(pyz: Path, root: Path) -> Path:
     package_root = root / "site-packages"
     with zipfile.ZipFile(pyz) as archive:
         for name in archive.namelist():
-            if not name.startswith("site-packages/") or name.startswith("site-packages/bin/"):
+            if not name.startswith("site-packages/") or name.startswith(
+                "site-packages/bin/"
+            ):
                 continue
             relative = Path(name.removeprefix("site-packages/"))
             target = package_root / relative
@@ -284,8 +327,6 @@ def test_subcommand_resolves_inside_bundle(bundles: Path, skill: str, sub: str) 
     assert not dispatcher_fallback, combined
 
 
-
-
 @pytest.mark.parametrize(
     ("skill", "canonical", "legacy"),
     [
@@ -304,6 +345,8 @@ def test_kebab_commands_and_legacy_aliases_dispatch_from_committed_bundles(
         assert "ModuleNotFoundError" not in combined, combined
         assert "Traceback" not in combined, combined
         assert not combined.strip().startswith("usage: <pyz>"), combined
+
+
 @pytest.mark.parametrize("skill", list(SKILL_SUBCOMMANDS))
 def test_unknown_subcommand_is_rejected(bundles: Path, skill: str) -> None:
     result = _run(bundles / f"{skill}.pyz", "no-such-subcommand")
@@ -327,8 +370,6 @@ def test_melt_subcommand_executes_with_forwarded_args(
     assert "THEIRS_LINE" in result.stdout
     assert "OURS_LINE" not in result.stdout
     assert "<<<<<<<" not in result.stdout
-
-
 
 
 def test_plate_bundle_validates_publication_without_source_imports(
@@ -360,7 +401,11 @@ def test_plate_bundle_reports_stack_tools_without_source_imports(
 
     assert result.returncode == 0, result.stderr
     report = cast(dict[str, object], json.loads(result.stdout))
-    assert set(cast(list[object], report["providers"])) == {"graphite", "git-town", "gh-stack"}
+    assert set(cast(list[object], report["providers"])) == {
+        "graphite",
+        "git-town",
+        "gh-stack",
+    }
 
 
 def test_bundle_carries_only_its_own_skill_package(bundles: Path) -> None:
@@ -379,15 +424,14 @@ def test_bundle_carries_only_its_own_skill_package(bundles: Path) -> None:
 
 def test_briesearch_bundle_uses_internal_distributions(bundles: Path) -> None:
     content = {
-        name for name in _bundle_members(bundles / "briesearch.pyz")
+        name
+        for name in _bundle_members(bundles / "briesearch.pyz")
         if ".dist-info/" not in name
     }
     assert "easy_cheese/skills/briesearch/commands.py" in content
     assert "easy_cheese/shared/bundle_commands.py" in content
     assert "easy_cheese_schemas/__init__.py" in content
     assert not any(name.startswith("easy_cheese/skills/mold/") for name in content)
-
-
 
 
 def test_press_bundle_emits_a_telemetry_record(bundles: Path) -> None:
@@ -452,7 +496,9 @@ def test_cook_baseline_rejects_malformed_stdin(bundles: Path) -> None:
 
 
 def test_cook_baseline_rejects_wrong_typed_value(bundles: Path) -> None:
-    result = _run(bundles / "cook.pyz", "baseline", stdin='{"baseline": [], "current": {}}')
+    result = _run(
+        bundles / "cook.pyz", "baseline", stdin='{"baseline": [], "current": {}}'
+    )
     assert result.returncode == 2, result.stderr
     assert result.stderr.startswith("ERROR:")
 
@@ -502,8 +548,6 @@ def test_artifact_path_research_uses_generic_phase_resolution(bundles: Path) -> 
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "/tmp/ec-corpus/demo-project/research/demo-slug.md"
-
-
 
 
 def test_artifact_path_rejects_bad_slug(bundles: Path) -> None:
@@ -1042,9 +1086,7 @@ def test_budget_check_fails_overspend_with_no_extension(
         }
         for i in range(3)
     ]
-    result = _budget_check(
-        bundles, tmp_path, {"budget": {"search": 2}, "calls": calls}
-    )
+    result = _budget_check(bundles, tmp_path, {"budget": {"search": 2}, "calls": calls})
     assert result.returncode == 1, result.stdout
     assert "3 search call(s) against a declared budget of 2" in result.stderr
 
@@ -1096,7 +1138,7 @@ def test_bundle_build_is_byte_deterministic(tmp_path: Path) -> None:
 
 
 def test_skill_bundles_each_ship_shared_slugify(bundles: Path) -> None:
-    for skill in ("cook", "age", "cure"): 
+    for skill in ("cook", "age", "cure"):
         result = _run(
             bundles / f"{skill}.pyz",
             "slugify",
@@ -1110,13 +1152,15 @@ def test_skill_bundles_each_ship_shared_slugify(bundles: Path) -> None:
 
 
 def test_schema_wheel_is_staged_in_each_schema_dependent_bundle(bundles: Path) -> None:
-    expected = (REPO_ROOT / "src" / "easy_cheese_schemas" / "_schema_catalog.py").read_bytes()
+    expected = (
+        REPO_ROOT / "src" / "easy_cheese_schemas" / "_schema_catalog.py"
+    ).read_bytes()
     for skill in TYPED_RUNTIME_BUNDLES:
         with zipfile.ZipFile(bundles / f"{skill}.pyz") as archive:
-            assert archive.read("site-packages/easy_cheese_schemas/_schema_catalog.py") == expected
-
-
-
+            assert (
+                archive.read("site-packages/easy_cheese_schemas/_schema_catalog.py")
+                == expected
+            )
 
 
 @pytest.mark.parametrize("skill", TYPED_RUNTIME_BUNDLES)
@@ -1256,12 +1300,15 @@ def test_no_orphan_committed_bundles():
     assert committed == expected
 
 
-def test_application_metadata_declares_shared_internal_dependency(bundles: Path) -> None:
+def test_application_metadata_declares_shared_internal_dependency(
+    bundles: Path,
+) -> None:
     with zipfile.ZipFile(bundles / "briesearch.pyz") as archive:
         metadata_name = next(
             name
             for name in archive.namelist()
-            if "easy_cheese_briesearch-" in name and name.endswith(".dist-info/METADATA")
+            if "easy_cheese_briesearch-" in name
+            and name.endswith(".dist-info/METADATA")
         )
         metadata = archive.read(metadata_name).decode()
     assert f"Requires-Dist: easy-cheese-shared=={build_pyz.VERSION}" in metadata
@@ -1326,18 +1373,26 @@ def test_age_bundle_carries_html_report_and_findings_imports(bundles: Path) -> N
 
 def test_document_rules_projection_matches_checked_in_source() -> None:
     generated = REPO_ROOT / "src" / "easy_cheese" / "shared" / "document_rules.py"
-    assert build_pyz._compiled_document_rules_source() == generated.read_text(encoding="utf-8")  # pyright: ignore[reportPrivateUsage]
+    assert build_pyz.compiled_document_rules_source() == generated.read_text(
+        encoding="utf-8"
+    )
 
 
-def test_skill_archives_own_shared_commands_and_no_common_archive(bundles: Path) -> None:
+def test_skill_archives_own_shared_commands_and_no_common_archive(
+    bundles: Path,
+) -> None:
     for skill in ("cook", "age", "cure"):
-        assert "easy_cheese/shared/slugify.py" in _bundle_members(bundles / f"{skill}.pyz")
+        assert "easy_cheese/shared/slugify.py" in _bundle_members(
+            bundles / f"{skill}.pyz"
+        )
     assert not any(REPO_ROOT.glob("skills/*/scripts/common.pyz"))
 
 
 def test_mold_pyz_dispatches_validate_spec_end_to_end() -> None:
     mold_pyz = build_pyz.cached_bundle("mold")
-    result = _run(mold_pyz, "validate-spec", str(SPEC_FORMAT_FIXTURES / "valid_spec.md"))
+    result = _run(
+        mold_pyz, "validate-spec", str(SPEC_FORMAT_FIXTURES / "valid_spec.md")
+    )
     assert result.returncode == 0, result.stdout + result.stderr
     assert "ERROR:" not in result.stderr
 
@@ -1363,7 +1418,10 @@ def test_cook_pyz_dispatches_normalize_end_to_end() -> None:
     )
     assert accepted.returncode == 0, accepted.stdout + accepted.stderr
     canonical = cast(dict[str, object], json.loads(accepted.stdout))
-    assert cast(dict[str, object], canonical["value"])["plan_id"] == "curdplan-cook-cli-normalize-1"
+    assert (
+        cast(dict[str, object], canonical["value"])["plan_id"]
+        == "curdplan-cook-cli-normalize-1"
+    )
     assert cast(str, canonical["digest"]).startswith("sha256:")
 
 

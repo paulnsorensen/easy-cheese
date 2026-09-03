@@ -19,7 +19,7 @@ def _non_shiv_zipapp() -> bytes:
 
 def test_bundle_manifest_rejects_non_shiv_zipapp() -> None:
     with pytest.raises(ValueError, match=r"not a Shiv archive: missing _bootstrap/"):
-        _ = check_bundles._manifest(_non_shiv_zipapp())  # pyright: ignore[reportPrivateUsage]
+        _ = check_bundles.bundle_manifest(_non_shiv_zipapp())
 
 
 def test_bundle_checker_rejects_new_non_shiv_archive(
@@ -110,7 +110,7 @@ def test_baseline_blobs_use_one_git_batch(
         output += b"1" * 40 + b" blob 5\n" + body + b"\n"
         return subprocess.CompletedProcess(command, 0, stdout=output)
 
-    monkeypatch.setattr(check_bundles.subprocess, "run", fake_run)
+    monkeypatch.setattr(subprocess, "run", fake_run)
 
     assert check_bundles._baseline_blobs("head", paths) == {  # pyright: ignore[reportPrivateUsage]
         paths[0]: b"demo",

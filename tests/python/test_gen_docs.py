@@ -29,8 +29,8 @@ class _CachedRefTitle(Protocol):
 class _GenDocsModule(Protocol):
     REPO_ROOT: Path
     SKILLS_DIR: Path
-    CONTENT_ROOT: Path
-    SIDEBAR_PATH: Path
+    content_root: Path
+    sidebar_path: Path
     REPO_URL: str
     GeneratedPage: type["_GeneratedPage"]
     _ref_title: _CachedRefTitle
@@ -55,7 +55,7 @@ class _GenDocsModule(Protocol):
         source_rel: str | None = ...,
     ) -> "_GeneratedPage": ...
     def convert_mkdocs_admonitions(self, markdown: str) -> str: ...
-    def _heading_slug(self, text: str) -> str: ...
+    def heading_slug(self, text: str) -> str: ...
     def rewrite_skill_link(self, url: str, skill_name: str) -> str: ...
     def rewrite_ref_link(self, url: str, skill_name: str) -> str: ...
     def rewrite_root_passthrough_link(self, url: str) -> str: ...
@@ -103,9 +103,9 @@ def isolated_docs(
     monkeypatch.setattr(gen_docs, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(gen_docs, "SKILLS_DIR", tmp_path / "skills")
     monkeypatch.setattr(
-        gen_docs, "CONTENT_ROOT", tmp_path / "website" / "content" / "docs"
+        gen_docs, "content_root", tmp_path / "website" / "content" / "docs"
     )
-    monkeypatch.setattr(gen_docs, "SIDEBAR_PATH", tmp_path / "website" / "sidebar.mjs")
+    monkeypatch.setattr(gen_docs, "sidebar_path", tmp_path / "website" / "sidebar.mjs")
     gen_docs._ref_title.cache_clear()  # pyright: ignore[reportPrivateUsage]
     return tmp_path
 
@@ -204,7 +204,7 @@ class TestRewriteSkillLink:
         )
 
         assert result == "../press/#quality-gates--the-bar"
-        stem_fallback = f"#{gen_docs._heading_slug('quality-gates'.replace('-', ' '))}"  # pyright: ignore[reportPrivateUsage]
+        stem_fallback = f"#{gen_docs.heading_slug('quality-gates'.replace('-', ' '))}"
         assert result != f"../press/{stem_fallback}"
 
 
@@ -541,30 +541,30 @@ class TestEmitInstallPage:
 
 class TestHeadingSlug:
     def test_lowercases_and_hyphenates(self, gen_docs: _GenDocsModule) -> None:
-        assert gen_docs._heading_slug("Go De-slop Catalog") == "go-de-slop-catalog"  # pyright: ignore[reportPrivateUsage]
+        assert gen_docs.heading_slug("Go De-slop Catalog") == "go-de-slop-catalog"
 
     def test_strips_punctuation(self, gen_docs: _GenDocsModule) -> None:
-        assert gen_docs._heading_slug("Auto Mode (v2)!") == "auto-mode-v2"  # pyright: ignore[reportPrivateUsage]
+        assert gen_docs.heading_slug("Auto Mode (v2)!") == "auto-mode-v2"
 
     def test_does_not_collapse_separators(self, gen_docs: _GenDocsModule) -> None:
         # github-slugger turns each space into its own hyphen and never collapses
         # repeats, so a run of spaces yields a run of hyphens.
-        assert gen_docs._heading_slug("Quality   Gates") == "quality---gates"  # pyright: ignore[reportPrivateUsage]
+        assert gen_docs.heading_slug("Quality   Gates") == "quality---gates"
 
     def test_keeps_underscores(self, gen_docs: _GenDocsModule) -> None:
         # Regression: a naive slugger strips underscores; github-slugger keeps them.
         assert (
-            gen_docs._heading_slug("tilth_write JSON cookbook")
+            gen_docs.heading_slug("tilth_write JSON cookbook")
             == "tilth_write-json-cookbook"
-        )  # pyright: ignore[reportPrivateUsage]
+        )
 
     def test_em_dash_leaves_double_hyphen(self, gen_docs: _GenDocsModule) -> None:
         # The space-em-dash-space idiom (`A — B`) drops the em-dash but keeps both
         # surrounding spaces, so github-slugger emits a double hyphen.
         assert (
-            gen_docs._heading_slug("Cascade stages — branch-specific steps")
+            gen_docs.heading_slug("Cascade stages — branch-specific steps")
             == "cascade-stages--branch-specific-steps"
-        )  # pyright: ignore[reportPrivateUsage]
+        )
 
 
 class TestFoldReferences:
@@ -1037,7 +1037,7 @@ class TestAnchorResolution:
         ).read_text(encoding="utf-8")
 
         headings: list[str] = re.findall(r"^#{2,6}\s+(.+?)\s*$", body, re.MULTILINE)
-        heading_slugs = {gen_docs._heading_slug(h) for h in headings}  # pyright: ignore[reportPrivateUsage]
+        heading_slugs = {gen_docs.heading_slug(h) for h in headings}
         assert heading_slugs, (
             "expected at least one folded heading in the generated page"
         )

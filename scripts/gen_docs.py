@@ -15,15 +15,17 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SKILLS_DIR = REPO_ROOT / "skills"
-CONTENT_ROOT = REPO_ROOT / "website" / "content" / "docs"
-SIDEBAR_PATH = REPO_ROOT / "website" / "sidebar.mjs"
+content_root = REPO_ROOT / "website" / "content" / "docs"
+sidebar_path = REPO_ROOT / "website" / "sidebar.mjs"
 REPO_URL = "https://github.com/paulnsorensen/easy-cheese"
 EDIT_URL_BASE = f"{REPO_URL}/edit/main/"
 LICENSE_URL = f"{REPO_URL}/blob/main/LICENSE"
 
 LINK_RE = re.compile(r"(?<!\!)\[([^\]]+)\]\(([^)\s]+)(\s+\"[^\"]*\")?\)")
 NESTED_IMAGE_LINK_RE = re.compile(r"(\[!\[[^\]]*\]\([^)]+\)\]\()([^)\s]+)(\))")
-ADMONITION_RE = re.compile(r'^!!!\s+(\w+)(?:\s+"([^"]+)")?\n((?:    .*\n?|\s*\n)+)', re.MULTILINE)
+ADMONITION_RE = re.compile(
+    r'^!!!\s+(\w+)(?:\s+"([^"]+)")?\n((?:    .*\n?|\s*\n)+)', re.MULTILINE
+)
 
 ROOT_DOC_MAP = {
     "README.md": "readme/",
@@ -117,12 +119,16 @@ def starlight_frontmatter(
         data["editUrl"] = edit_url
     if template:
         data["template"] = template
-    return "---\n" + yaml.safe_dump(
-        data,
-        sort_keys=False,
-        allow_unicode=True,
-        default_flow_style=False,
-    ) + "---\n\n"
+    return (
+        "---\n"
+        + yaml.safe_dump(
+            data,
+            sort_keys=False,
+            allow_unicode=True,
+            default_flow_style=False,
+        )
+        + "---\n\n"
+    )
 
 
 def write_doc(
@@ -133,7 +139,7 @@ def write_doc(
     description: str | None = None,
     source_rel: str | None = None,
 ) -> GeneratedPage:
-    target = CONTENT_ROOT / relative_doc_path
+    target = content_root / relative_doc_path
     target.parent.mkdir(parents=True, exist_ok=True)
     # Starlight renders the frontmatter title as the page H1; a literal leading
     # `# …` in the body would show the heading twice.
@@ -143,7 +149,8 @@ def write_doc(
             title=title,
             description=description,
             edit_url=_source_edit_url(source_rel),
-        ) + body,
+        )
+        + body,
         encoding="utf-8",
     )
     slug = _strip_md_suffix(relative_doc_path.removesuffix("/index.md"))
@@ -156,7 +163,7 @@ def _replace_if_changed(source: Path, target: Path) -> None:
     if target.is_file() and source.read_bytes() == target.read_bytes():
         return
     target.parent.mkdir(parents=True, exist_ok=True)
-    source.replace(target)
+    _ = source.replace(target)
 
 
 def _sync_generated_tree(rendered_root: Path, output_root: Path) -> None:
@@ -180,7 +187,11 @@ def _sync_generated_tree(rendered_root: Path, output_root: Path) -> None:
         path.unlink()
 
     for directory in sorted(
-        (path for path in output_root.rglob("*") if path.is_dir() and not path.is_symlink()),
+        (
+            path
+            for path in output_root.rglob("*")
+            if path.is_dir() and not path.is_symlink()
+        ),
         key=lambda path: len(path.parts),
         reverse=True,
     ):
@@ -189,8 +200,8 @@ def _sync_generated_tree(rendered_root: Path, output_root: Path) -> None:
 
 
 def _sync_generated_output(rendered_root: Path, rendered_sidebar: Path) -> None:
-    _sync_generated_tree(rendered_root, CONTENT_ROOT)
-    _replace_if_changed(rendered_sidebar, SIDEBAR_PATH)
+    _sync_generated_tree(rendered_root, content_root)
+    _replace_if_changed(rendered_sidebar, sidebar_path)
 
 
 def convert_mkdocs_admonitions(markdown: str) -> str:
@@ -222,7 +233,7 @@ def convert_mkdocs_admonitions(markdown: str) -> str:
 _HEADING_SLUG_STRIP_RE = re.compile(r"[^\w\- ]", re.UNICODE)
 
 
-def _heading_slug(text: str) -> str:
+def heading_slug(text: str) -> str:
     return _HEADING_SLUG_STRIP_RE.sub("", text.lower()).replace(" ", "-")
 
 
@@ -232,10 +243,14 @@ def _ref_title(skill_name: str, ref_stem: str) -> str:
     try:
         text = ref_path.read_text(encoding="utf-8")
     except OSError:
-        return _heading_slug(ref_stem.replace("-", " "))
+        return heading_slug(ref_stem.replace("-", " "))
     meta, body = parse_frontmatter(text)
-    title = _meta_str(meta, "title") or _first_h1(body) or ref_stem.replace("-", " ").capitalize()
-    return _heading_slug(title)
+    title = (
+        _meta_str(meta, "title")
+        or _first_h1(body)
+        or ref_stem.replace("-", " ").capitalize()
+    )
+    return heading_slug(title)
 
 
 def rewrite_skill_link(url: str, skill_name: str) -> str:
@@ -364,7 +379,11 @@ def fold_references(skill_name: str, refs_dir: Path) -> tuple[str, dict[str, str
         meta, body = parse_frontmatter(ref.read_text(encoding="utf-8"))
         body = apply_link_rewrite(body, lambda url: rewrite_ref_link(url, skill_name))
         body = convert_mkdocs_admonitions(body)
-        title = _meta_str(meta, "title") or _first_h1(body) or stem.replace("-", " ").capitalize()
+        title = (
+            _meta_str(meta, "title")
+            or _first_h1(body)
+            or stem.replace("-", " ").capitalize()
+        )
         titles[stem] = title
         body = re.sub(r"^#\s[^\n]*\n+", "", body.lstrip(), count=1)
         body = _bump_headings(body)
@@ -396,7 +415,9 @@ def emit_skill_page(skill_dir: Path) -> GeneratedPage | None:
     )
 
     body = re.sub(r"^---\s*\n", "", body, count=1)
-    body = re.sub(r"^#\s+/?" + re.escape(name) + r"\s*\n", "", body, count=1, flags=re.MULTILINE)
+    body = re.sub(
+        r"^#\s+/?" + re.escape(name) + r"\s*\n", "", body, count=1, flags=re.MULTILINE
+    )
     body = apply_link_rewrite(body, lambda url: rewrite_skill_link(url, name))
     body = convert_mkdocs_admonitions(body)
 
@@ -422,9 +443,13 @@ def emit_skills_index(skills: list[GeneratedPage]) -> GeneratedPage:
         "| --- | --- |",
     ]
     for skill in skills:
-        meta, _ = parse_frontmatter((CONTENT_ROOT / _doc_path_for_slug(skill.slug)).read_text(encoding="utf-8"))
+        meta, _ = parse_frontmatter(
+            (content_root / _doc_path_for_slug(skill.slug)).read_text(encoding="utf-8")
+        )
         summary = first_sentence(_meta_str(meta, "description")).replace("|", "\\|")
-        lines.append(f"| [`{skill.title}`]({skill.slug.removeprefix('skills/')}/) | {summary} |")
+        lines.append(
+            f"| [`{skill.title}`]({skill.slug.removeprefix('skills/')}/) | {summary} |"
+        )
     lines.append("")
 
     return write_doc(
@@ -473,7 +498,9 @@ def emit_install_page() -> GeneratedPage | None:
     readme = _read_text(src)
 
     sections = {
-        "Install": extract_h2_section(readme, "Install", drop_header=True, bump_headings=True),
+        "Install": extract_h2_section(
+            readme, "Install", drop_header=True, bump_headings=True
+        ),
         "Installing MCP servers": extract_h2_section(readme, "Installing MCP servers"),
         "Optional tools": extract_h2_section(readme, "Optional tools"),
         "Installing CLI tools": extract_h2_section(readme, "Installing CLI tools"),
@@ -486,10 +513,14 @@ def emit_install_page() -> GeneratedPage | None:
         )
 
     body = (
-        sections["Install"].rstrip() + "\n\n"
-        + sections["Installing MCP servers"].rstrip() + "\n\n"
-        + sections["Optional tools"].rstrip() + "\n\n"
-        + sections["Installing CLI tools"].rstrip() + "\n"
+        sections["Install"].rstrip()
+        + "\n\n"
+        + sections["Installing MCP servers"].rstrip()
+        + "\n\n"
+        + sections["Optional tools"].rstrip()
+        + "\n\n"
+        + sections["Installing CLI tools"].rstrip()
+        + "\n"
     )
     body = apply_link_rewrite(body, rewrite_root_passthrough_link)
     body = convert_mkdocs_admonitions(body)
@@ -503,7 +534,9 @@ def emit_install_page() -> GeneratedPage | None:
     )
 
 
-def emit_root_passthrough(filename: str, dest_slug: str, title: str) -> GeneratedPage | None:
+def emit_root_passthrough(
+    filename: str, dest_slug: str, title: str
+) -> GeneratedPage | None:
     src = REPO_ROOT / filename
     if not src.exists():
         return None
@@ -549,10 +582,12 @@ def emit_sidebar(
         {"label": "Skills", "items": skill_items},
     ]
     if project:
-        sidebar.append({"label": "Project", "items": [_sidebar_link(page) for page in project]})
+        sidebar.append(
+            {"label": "Project", "items": [_sidebar_link(page) for page in project]}
+        )
 
-    SIDEBAR_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _ = SIDEBAR_PATH.write_text(
+    sidebar_path.parent.mkdir(parents=True, exist_ok=True)
+    _ = sidebar_path.write_text(
         "// Generated by scripts/gen_docs.py; do not edit by hand.\n"
         + "export const sidebar = "
         + json.dumps(sidebar, indent=2, ensure_ascii=False)
@@ -585,21 +620,21 @@ def _generate_docs() -> None:
 
 
 def main() -> None:
-    global CONTENT_ROOT, SIDEBAR_PATH
+    global content_root, sidebar_path
 
-    output_root = CONTENT_ROOT
-    output_sidebar = SIDEBAR_PATH
+    output_root = content_root
+    output_sidebar = sidebar_path
     with tempfile.TemporaryDirectory(prefix="gen-docs-") as temp_dir:
         rendered_root = Path(temp_dir) / "content" / "docs"
         rendered_sidebar = Path(temp_dir) / "sidebar.mjs"
-        CONTENT_ROOT = rendered_root
-        SIDEBAR_PATH = rendered_sidebar
+        content_root = rendered_root
+        sidebar_path = rendered_sidebar
         _ref_title.cache_clear()
         try:
             _generate_docs()
         finally:
-            CONTENT_ROOT = output_root
-            SIDEBAR_PATH = output_sidebar
+            content_root = output_root
+            sidebar_path = output_sidebar
 
         _sync_generated_output(rendered_root, rendered_sidebar)
 

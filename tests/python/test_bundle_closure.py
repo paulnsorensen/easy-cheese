@@ -34,7 +34,7 @@ def test_native_members_rejects_shared_objects() -> None:
             "site-packages/somepkg/_speedups.cpython-311-darwin.so": b"\x00",
         }
     )
-    assert check_bundles._native_members(archive) == [  # pyright: ignore[reportPrivateUsage]
+    assert check_bundles.native_members(archive) == [
         "site-packages/somepkg/_speedups.cpython-311-darwin.so"
     ]
 
@@ -51,7 +51,9 @@ def test_check_import_closure_flags_unresolved_deferred_import() -> None:
     assert any("totally_missing_module" in p for p in problems), problems
 
 
-def test_check_import_closure_passes_guarded_import_error_with_stdlib_fallback() -> None:
+def test_check_import_closure_passes_guarded_import_error_with_stdlib_fallback() -> (
+    None
+):
     archive = _archive(
         {
             "site-packages/easy_cheese/demo.py": (
@@ -78,9 +80,7 @@ def test_check_import_closure_flags_cross_skill_style_unresolved_import() -> Non
 
 
 def test_check_import_closure_flags_ambient_third_party_import() -> None:
-    archive = _archive(
-        {"site-packages/easy_cheese/demo.py": b"import requests\n"}
-    )
+    archive = _archive({"site-packages/easy_cheese/demo.py": b"import requests\n"})
     problems = check_bundles.check_import_closure(archive)
     assert any("requests" in p for p in problems), problems
 
@@ -140,7 +140,7 @@ def test_all_committed_bundles_pass_closure_and_native_checks() -> None:
         with zipfile.ZipFile(path) as archive:
             problems = [
                 f"native member: {name}"
-                for name in check_bundles._native_members(archive)  # pyright: ignore[reportPrivateUsage]
+                for name in check_bundles.native_members(archive)
             ]
             problems += check_bundles.check_import_closure(archive)
         assert problems == [], f"{path.relative_to(REPO_ROOT)}: {problems}"
