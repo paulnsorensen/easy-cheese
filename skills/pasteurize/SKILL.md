@@ -1,189 +1,251 @@
 ---
 name: pasteurize
-description: "Hard-bug DIAGNOSIS + FIX: reproduce the failure, name the cause, write a regression test, apply the minimal fix. Use whenever the user reports a bug, failure, flaky test, perf regression, error, or visible misbehaviour whose cause is not yet known — even if they only paste a symptom, stack trace, or failing test output, or say \"why is X broken\", \"it stopped working\", \"it got slower\", \"this looks wrong\". Do NOT start debugging inline without this skill: if your next step would be forming hypotheses about an unexplained failure, invoke /pasteurize first. Do NOT use for review-only diffs (/age), feature design (/mold), fixes where the cause is already known (/cook), or when the user opted out of writes (/culture)."
+description: >
+  Diagnose and fix hard bugs. Build a reliable reproduction, name the cause,
+  add a regression test, and apply the minimum fix.
 license: MIT
 ---
 
 # /pasteurize
 
-A discipline for hard bugs. Skip phases only when explicitly justified.
+Use this process for hard bugs.
 
-When exploring the codebase, call the selected source-code backend directly according to [`code-intelligence-routing.md`](../cheese/references/code-intelligence-routing.md), and check `.cheese/specs/` for any spec or design notes that touch the failing seam.
+Follow [`code-intelligence-routing.md`](../cheese/references/code-intelligence-routing.md) when you explore code.
+Check `.cheese/specs/` for notes about the failed seam.
 
-Portability reference: [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
-The handoff blocks below are the portable contract; slash commands are host renderings, not the control model.
+Read [`harness-portability.md`](../cheese/references/harness-portability.md) for portable tool use.
+Use bundled or repository helpers before `${CLAUDE_SKILL_DIR}`.
+Treat `${CLAUDE_SKILL_DIR}` as an optional host fallback.
+Use the handoff blocks as the portable contract.
+Remember that slash commands are host renderings, not the control model.
 
-## Phase 1 — Feedback loop
+## Phase 1: Build the feedback loop
 
-**This is the skill.** Everything else is mechanical. If you have a fast, deterministic, agent-runnable pass/fail signal for the bug, you will find the cause — bisection, hypothesis-testing, and instrumentation all just consume that signal. If you don't have one, no amount of staring at code will save you.
+Build a fast and reliable pass-or-fail signal before you diagnose the bug.
+This signal controls every later phase.
 
-Spend disproportionate effort here.
+Read [`references/feedback-loops.md`](references/feedback-loops.md) for the ordered loop options.
+Select the first option that reaches the failed seam.
 
-### Ways to construct one
+Improve the loop before you continue.
 
-To pick a loop shape, see [`references/feedback-loops.md`](references/feedback-loops.md) for the ten-option ordered menu.
-
-### Iterate on the loop itself
-
-Treat the loop as a product. Once you have _a_ loop, ask:
-
-- Can I make it faster? (Cache setup, skip unrelated init, narrow the test scope.)
-- Can I make the signal sharper? (Assert on the specific symptom, not "didn't crash".)
-- Can I make it more deterministic? (Pin time, seed RNG, isolate filesystem, freeze network.)
+- Reduce setup and unrelated initialization.
+- Check the exact symptom.
+- Control time, random values, files, and network access.
 
 ### Non-deterministic bugs
 
-The goal is not a clean repro but a **higher reproduction rate**. Loop the trigger 100×, parallelise, add stress, narrow timing windows, inject sleeps. A 50%-flake bug is debuggable; 1% is not — keep raising the rate until it's debuggable.
+Increase the reproduction rate above 50 percent.
+Repeat the trigger, add stress, narrow timing windows, or add controlled delays.
 
-### When you genuinely cannot build a loop
+### No usable loop
 
-Stop and say so explicitly. List what you tried. Ask the user for: (a) access to whatever environment reproduces it, (b) a captured artifact (HAR file, log dump, core dump, screen recording with timestamps), or (c) permission to add temporary production instrumentation. Do **not** proceed to hypothesise without a loop. Write a `status: halt` handoff slug (see below) and stop.
+Stop when you cannot build a usable loop.
+List each method that you tried.
+Request access to the reproduction environment.
+Alternatively, request a captured artifact or permission for temporary production instrumentation.
+Write a `status: halt` handoff slug.
+Do not form hypotheses without a loop.
 
-Do not proceed to Phase 2 until the loop passes all four checks:
+Confirm these conditions before Phase 2:
 
-- [ ] **Deterministic** — runs the same way every time (or, for flaky bugs, reproduction rate >50% and rising).
-- [ ] **Agent-runnable** — a single command with no human in the loop.
-- [ ] **Asserts the user’s exact symptom** — the failure message / wrong output / timing the user reported, not a nearby failure.
-- [ ] **Fast** — under 30 seconds end-to-end (aim for under 5).
+- [ ] The loop gives the same result each time.
+- [ ] A flaky loop reproduces the bug more than 50 percent of the time.
+- [ ] One command runs the loop without human action.
+- [ ] The loop checks the exact reported symptom.
+- [ ] The loop completes in less than 30 seconds.
 
-## Phase 2 — Reproduce
+Aim for a loop that completes in less than five seconds.
 
-Run the repro loop N times and verify the failure is consistent:
+## Phase 2: Reproduce the bug
 
-```
+Run the loop five times.
+
+```bash
 python3 skills/pasteurize/scripts/pasteurize.pyz repro-rerun --cmd "<repro-command>" --runs 5
 ```
 
-Confirm the returned `reproduced: true` and check `failures` matches the expected failure mode. If `reproduced: false` at N=5, the bug is flaky — increase `--runs` before proceeding.
+Confirm that the result contains `reproduced: true`.
+Confirm that `failures` matches the expected failure mode.
+Increase `--runs` when five runs do not reproduce a flaky bug.
+Do not continue until the loop reproduces the bug.
 
-Do not proceed until you reproduce the bug.
+## Symptom gate
 
-## Symptom-shape gate
+Classify the symptom before you form hypotheses.
 
-Before forming any hypothesis, classify the symptom shape:
+- Continue at the current model tier for a clean stack trace and a reliable loop.
+- Upgrade the model tier for races, cross-module failures, performance regressions, or Heisenbugs.
 
-- **Clean stack trace + deterministic repro** — stay at current tier, proceed to Phase 3 normally.
-- **Heisenbug, race condition, cross-module failure, or perf regression** — warn to upgrade (harness-detected phrasing: claude `/model opus` + `/effort`; codex/OMP named equivalent; generic fallback) _before_ forming any hypothesis. The extra tier buys the wider context window and reasoning depth these shapes need; do not start Phase 3 at the current tier once this branch fires.
+Use the harness command for the model upgrade.
+For Claude, use `/model opus` and `/effort`.
+Use the named equivalent for Codex or OMP.
+Use a generic model upgrade on other hosts.
 
-## Phase 3 — Hypothesise
+## Phase 3: Form hypotheses
 
-Generate **3–5 ranked hypotheses** before testing any of them. Single-hypothesis generation anchors on the first plausible idea.
+Write three to five ranked hypotheses before you test one.
+State a testable prediction for each hypothesis.
+Discard a hypothesis when you cannot state its prediction.
 
-Each hypothesis must be **falsifiable**: state the prediction it makes.
+Use this format:
 
-> Format: "If `<X>` is the cause, then `<changing Y>` will make the bug disappear / `<changing Z>` will make it worse."
+> If `<X>` causes the bug, then `<changing Y>` removes it or `<changing Z>` makes it worse.
 
-If you cannot state the prediction, the hypothesis is a vibe — discard or sharpen it.
+Show the ranked list through [`handoff-gate.md`](../cheese/references/handoff-gate.md).
+Domain knowledge can change the ranking.
+Continue with your ranking when the user is unavailable or uses `--auto`.
 
-**Show the ranked list to the user through the host routing guide in [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md) before testing.** They often have domain knowledge that re-ranks instantly ("we just deployed a change to #3"), or know hypotheses they've already ruled out. Cheap checkpoint, big time saver. Don't block on it — proceed with your ranking if the user is AFK or running `--auto`.
+## Phase 4: Add instrumentation
 
-## Phase 4 — Instrument
+Map each probe to one Phase 3 prediction.
+Change one variable at a time.
 
-Each probe must map to a specific prediction from Phase 3. **Change one variable at a time.**
+Use tools in this order:
 
-Tool preference:
+1. Use a debugger or REPL when the environment supports it.
+2. Add targeted logs at boundaries that distinguish hypotheses.
+3. Do not log all data and search it later.
 
-1. **Debugger / REPL inspection** if the env supports it. One breakpoint beats ten logs.
-2. **Targeted logs** at the boundaries that distinguish hypotheses.
-3. Never "log everything and search".
+Prefix each temporary log with a unique tag such as `[DEBUG-a4f2]`.
+Use the selected search backend to find every tagged log during cleanup.
 
-**Tag every debug log** with a unique prefix, e.g. `[DEBUG-a4f2]`. Cleanup at the end becomes a single content query through the selected search backend. Untagged logs survive; tagged logs die.
+For performance regressions, measure a baseline before you change code.
+Use a timing harness, profiler, or query plan.
+Then bisect the failed range.
 
-**Perf branch.** For performance regressions, logs are usually wrong. Instead: establish a baseline measurement (timing harness, `performance.now()`, profiler, query plan), then bisect. Measure first, fix second.
+## Phase 5: Fix the bug
 
-## Phase 5 — Fix + regression test
+Add the regression test before the fix.
+Only add the test when a correct test seam exists.
 
-Write the regression test **before the fix** — but only if there is a **correct seam** for it.
+A correct seam exercises the real bug at its actual call site.
+It uses the real data path and failure mode.
+A shallow or mocked seam gives false confidence.
 
-A correct seam is one where the test exercises the **real bug pattern** as it occurs at the call site. If the only available seam is too shallow (single-caller test when the bug needs multiple callers, unit test that can't replicate the chain that triggered the bug), a regression test there gives false confidence.
+Treat a missing seam as an architectural finding.
+Record it in the handoff slug.
+Write the applicable halt string.
+Route the work to `/mold`.
+Do not add a test at an incorrect seam.
 
-**If no correct seam exists, that itself is the finding.** Note it in the handoff slug as an architectural follow-up. The codebase is preventing the bug from being locked down. Skip the test write; do not paper over it. Phase 6's "what would have prevented this bug?" retrospective still applies.
+When a correct seam exists, complete these steps:
 
-**Before writing the test, confirm the seam is correct:** verify that the test you're about to write targets the boundary where the bug actually occurs — the real call site, the real data path, the real failure mode. A test at the wrong seam (too shallow, wrong abstraction level, mocked-away side that hides the failure) will pass after the fix but won't catch a regression. If you discover the seam is wrong at this point, treat it as "no correct seam": write the no-correct-seam halt string from [Early-stop conditions](#early-stop-conditions) and route to `/mold`, per the halt path above.
+1. Convert the minimum reproduction into a failing test at that seam.
+2. Run the test and observe the failure.
+3. Apply the smallest production change that can fix the failure.
+4. Run the test and observe success.
+5. Run the original Phase 1 loop and confirm that the symptom is absent.
 
-If a correct seam exists:
+Revert an unsuccessful fix before the next attempt.
+Stop after three unsuccessful fix attempts.
+Return to Phase 3 and write a new ranked hypothesis list.
+Do not make a fourth attempt without a new hypothesis.
 
-1. Turn the minimised repro into a failing test at that seam.
-2. Watch it fail.
-3. Apply the **smallest** production change that makes the test pass. No scope creep, no "while I'm here" cleanup. If the test still fails, revert and retry — but cap the retries (see **After 3 failed fix attempts** below).
-4. Watch the test pass.
-5. Re-run the Phase 1 feedback loop against the original (un-minimised) scenario to confirm the symptom is gone, not just the test seam.
+Restart at Phase 4 when you find a new hypothesis.
+Otherwise, write the fix-attempts-exhausted halt string.
+Then route the work to `/mold`.
 
-**After 3 failed fix attempts** (3 cycles of "apply change → watch test → revert because test still fails"), stop attempting fixes and re-question the approach: is the hypothesis from Phase 3 actually correct? Is the seam exposing the right failure? Is the bug at a different layer than assumed? Step back to Phase 3 and generate a fresh ranked hypothesis list — do NOT attempt a 4th blind fix. If the re-questioning produces a new hypothesis, restart from Phase 4. If all hypotheses are exhausted, write the fix-attempts-exhausted halt string from [Early-stop conditions](#early-stop-conditions) and route to `/mold`.
+Leave broader changes for `/cook`.
+Record those changes in the handoff slug.
 
-Broader implementation (related cleanup, follow-on changes, anything beyond the minimal fix) is **not** pasteurize's job. Note it in the slug and let `/cook --auto` pick it up in Phase 6's handoff.
+## Phase 6: Clean the worktree
 
-## Phase 6 — Cleanup
+Complete this checklist before you write the handoff slug:
 
-Before writing the handoff slug, confirm:
+- [ ] Run the original loop and confirm that the bug is absent.
+- [ ] Run the regression test and confirm success.
+- [ ] Record the missing test seam when no correct seam exists.
+- [ ] Remove all `[DEBUG-...]` instrumentation.
+- [ ] Delete temporary harnesses and prototypes.
+- [ ] Record any retained debug file in the slug.
+- [ ] Record the confirmed hypothesis in the slug.
 
-- [ ] Original repro no longer reproduces (re-run the Phase 1 loop).
-- [ ] Regression test passes (or absence of seam is documented in the slug).
-- [ ] All `[DEBUG-...]` instrumentation removed:
+Run the instrumentation sweep:
 
-  ```
-  python3 skills/pasteurize/scripts/pasteurize.pyz debug-tag-sweep --root .
-  ```
+```bash
+python3 skills/pasteurize/scripts/pasteurize.pyz debug-tag-sweep --root .
+```
 
-  Exit 0 = clean. Exit 1 = tags found (listed in output). Resolve before continuing.
-- [ ] Throwaway harnesses / prototypes deleted (or moved to a clearly-marked debug location and called out in the slug).
-- [ ] The confirmed hypothesis is captured in the slug so the commit message downstream can reference it.
+Exit status 0 means that the sweep found no tags.
+Exit status 1 means that the sweep found listed tags.
+Remove each listed tag before you continue.
 
-**Then ask: what would have prevented this bug?** If the answer involves architectural change (no good test seam, tangled callers, hidden coupling), note it in the slug under an architectural-follow-up line. The chain still runs; the user can pick up the architectural work via `/mold` after the fix lands. Make the recommendation **after** the fix is in, not before.
+Identify what could prevent this bug.
+Record necessary architectural work in the slug.
+Make this recommendation after you apply the fix.
 
-Once the checklist is green and the slug is on disk, hand off to `/cook <slug> --auto` (default). Cook --auto picks up the post-fix state, runs its taste-test against the applied diff for spec drift / readability / scope creep, produces its package-ready report, and triggers the autonomous `/press → /age → /cure` chain. Pasteurize itself does not commit, open PRs, or drive the chain — cook owns that.
+Hand the completed slug to `/cook <slug> --auto`.
+Cook checks the existing diff and runs the `press -> age -> cure` chain.
+Pasteurize does not commit changes or open pull requests.
 
 ## Fan-out sizing
 
-`/pasteurize` fans zero agents today. Its future sizing policy is `size_pasteurize_fanout()` in `src/easy_cheese/shared/fanout/pasteurize_route.py`.
+`/pasteurize` currently starts no agents.
+`size_pasteurize_fanout()` defines a future policy in `src/easy_cheese/shared/fanout/pasteurize_route.py`.
 
-The signal is inverted relative to review: a reviewer (`age_route.route`) reads a diff that exists — more diff, more agents. `size_pasteurize_fanout` instead reads the `review_surface` score **descending**, over the **suspect range** (last-known-good..HEAD), not over a diff under review — less evidence means more agents, because the search space is what gets fanned over.
+The policy reads `review_surface` descending across the suspect range from the last known good revision to `HEAD`.
+A lower evidence score produces more agents because it represents a larger search space.
 
 | Bug shape | Range | Repro | Agents |
 | --- | --- | --- | --- |
-| regression | tight (score <= 250) | deterministic | 1 (linear, no fan) |
-| regression | tight (score <= 250) | non-deterministic | 2 |
-| regression | wide (score > 250) | deterministic | 2 |
-| regression | wide (score > 250) | non-deterministic | 3 |
-| regression | score is `None` (no diff to anchor to) | deterministic | 3 |
-| regression | score is `None` (no diff to anchor to) | non-deterministic | 5 |
-| heisenbug / race / perf regression | any | any | 3 |
-| cold bug (no diff to anchor to, score is `None`) | -- | deterministic | 3 |
-| cold bug (no diff to anchor to, score is `None`) | -- | non-deterministic | 5 |
+| regression | tight, score < 250 | deterministic | 1 |
+| regression | tight, score < 250 | non-deterministic | 2 |
+| regression | wide, score > 250 | deterministic | 2 |
+| regression | wide, score > 250 | non-deterministic | 3 |
+| regression | no score | deterministic | 3 |
+| regression | no score | non-deterministic | 5 |
+| race, heisenbug, or performance regression | any | any | 3 |
+| cold bug | no score | deterministic | 3 |
+| cold bug | no score | non-deterministic | 5 |
 
-**Boundary:** the code checks `score > 250`, so exactly `250` counts as tight (`score <= 250`), not `score < 250` as a naive reading of "tight" might suggest.
+A score of 250 defines a tight range.
 
-Every constant above (`WIDE_RANGE_THRESHOLD`, `_REGRESSION_TIGHT_DETERMINISTIC_N`, `_REGRESSION_TIGHT_NONDETERMINISTIC_N`, `_REGRESSION_WIDE_DETERMINISTIC_N`, `_REGRESSION_WIDE_NONDETERMINISTIC_N`, `_UNSTABLE_REPRO_N`, `_COLD_BUG_DETERMINISTIC_N`, `_COLD_BUG_NONDETERMINISTIC_N`) is **reasoned, not measured**. Unlike every reviewer threshold in the router -- each validated against 30 commits of real history -- these have no historical validation, because `/pasteurize` fans zero agents today. They are named tunable constants and should be revisited once real runs exist.
+The constants are reasoned and not measured.
+Reviewer thresholds use 30 repository commits, but these constants have no run history.
+Keep the named constants adjustable.
+Review them when real runs exist.
 
-On a bundle-only host, `size_pasteurize_fanout` is also reachable as `python3 skills/pasteurize/scripts/pasteurize.pyz pasteurize-route <request.json>` (JSON in, JSON out -- mirrors `age-route`'s bundle convention).
+Bundle-only hosts can call the policy with this command:
 
-## Preferred tools and fallbacks
+```bash
+python3 skills/pasteurize/scripts/pasteurize.pyz pasteurize-route <request.json>
+```
 
-| Need | Prefer | Fallback |
+The command reads JSON and writes JSON.
+It follows the `age-route` bundle convention.
+
+## Preferred tools
+
+| Need | Preferred tool | Fallback |
 | --- | --- | --- |
-| Code search / blast radius | semantic caller and dependency search | bounded text search with explicit precision loss |
-| Reading code | fresh bounded read from the intended write backend family | native bounded read with snapshot/line anchors |
-| Editing instrumentation | stale-safe anchored edit | LSP or native snapshot edit with stale-write detection |
-| Diff visualization | `delta` | plain `git diff` |
-| GitHub context | `gh` | local git history or user-provided links |
-| External sanity check | `/briesearch` | clearly mark as an assumption |
+| Code search and impact | semantic caller and dependency search | bounded text search with a precision warning |
+| Code read | fresh bounded read from the write backend | bounded read with stable line anchors |
+| Instrumentation edit | stale-safe anchored edit | LSP or snapshot edit with stale-write detection |
+| Diff view | `delta` | plain `git diff` |
+| GitHub context | `gh` | local Git history or user links |
+| External check | `/briesearch` | a clearly marked assumption |
 
-Missing optional tools should not interrupt diagnosis.
+Continue diagnosis when an optional tool is unavailable.
 
 ## Output
 
-Return a short report covering:
+Return a short report with these items:
 
-- The named cause (one sentence, with `<certain>` / `<speculating>` / `<don't know>` calibration).
-- The feedback loop (command, observed vs expected).
-- Hypotheses considered and which one held.
-- The regression test path and the fix's file:line footprint.
-- Cleanup status (`[DEBUG-...]` removed, harnesses deleted or relocated).
-- Suggested next skill — `/cook <slug> --auto` for the autonomous chain forward.
+- The named cause and its confidence.
+- The loop command and the observed result.
+- The considered hypotheses and the confirmed hypothesis.
+- The regression test path.
+- The changed production lines.
+- The instrumentation and temporary file cleanup status.
+- The next command, `/cook <slug> --auto`.
+
+Use `<certain>`, `<speculating>`, or `<don't know>` for confidence.
 
 ## Handoff slug
 
-Write a minimum-shape handoff slug to `.cheese/pasteurize/<slug>.md` so `/cook` (and any orchestrator) can resume without re-reading the full report. Schema:
+Write the handoff slug to `.cheese/pasteurize/<slug>.md`.
+Use this minimum form:
 
 ```markdown
 status: <canonical status field>
@@ -194,48 +256,65 @@ loop: <command or repro path>
 seam: <regression-test path:line, or "none — architectural follow-up">
 fix: <production diff footprint, e.g. "src/foo.ts:42">
 follow_up: <architectural follow-up note, or "none">
-<one-line orientation: what pasteurize converged on>
+<one-line orientation: what pasteurize confirmed>
 ```
 
-`status: ok` when the regression test is green, the repro is gone, and cleanup is done; `halt: <reason>` on any [early-stop condition](#early-stop-conditions). Grammar: [handback contract](../cheese/references/handback-contract.md). `next:` is `cook` for the standard chain, `mold` if the diagnosis itself recommends an architectural spec instead of a per-bug fix, or `done` if the bug was caused outside the repo and no follow-up is needed.
+Use `status: ok` after the test, reproduction, and cleanup checks succeed.
+Use `halt: <reason>` after an early-stop condition.
+Follow the [handback contract](../cheese/references/handback-contract.md).
+
+Set `next: cook` for the standard chain.
+Set `next: mold` when the diagnosis requires an architectural specification.
+Set `next: done` when an external cause needs no repository change.
 
 ## Handoff
 
-**Pipeline:** cheese (debug) → **[pasteurize]** → cook --auto → press → age → cure → plate
+**Pipeline:** cheese -> **pasteurize** -> cook --auto -> press -> age -> cure -> plate
 
-After the report is printed and the handoff slug is on disk, ask through the host routing guide in [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md) which downstream to run. Lead each option with the verb (what the user wants to _do_ next):
+After you write the report and slug, present these options through [`handoff-gate.md`](../cheese/references/handoff-gate.md):
 
-- **Validate and chain forward** _(recommended when `status: ok`)_ — `/cook <slug> --auto`.
-- **Validate without auto chain** — `/cook <slug>` (cook runs taste-test, then the user picks each subsequent step).
-- **Spec the architectural follow-up first** — `/mold <slug>` (when `seam: none — architectural follow-up`).
-- **Stop** — fix is in tree; defer the chain.
+- **Validate and continue:** `/cook <slug> --auto`.
+- **Validate without the automatic chain:** `/cook <slug>`.
+- **Specify the architectural work:** `/mold <slug>`.
+- **Stop:** Leave the fix in the worktree.
 
-Pre-select **Validate and chain forward** when `status: ok`. The chain default is `--auto` because pasteurize already wrote and verified the fix; the work left for cook → press → age → cure is mechanical validation, not new authoring. Never auto-invoke; the user must still select.
-
-When invoked with `--auto`, skip this host-routed question entirely and chain forward per [Auto mode](#auto-mode).
+Recommend the first option for `status: ok`.
+Do not start an option without the user's selection.
+Skip this question in `--auto` mode.
 
 ## Auto mode
 
-`--auto` skips Phase 3's user-ranking gate, skips the Phase 6 handoff gate, and invokes `/cook <slug> --auto` directly. Phase 4–5 still run in full.
+`--auto` skips the Phase 3 ranking question.
+It also skips the Phase 6 handoff question.
+It starts `/cook <slug> --auto` after cleanup.
+It does not skip Phase 4 or Phase 5.
 
 ### Early-stop conditions
 
-- Phase 1 fails (`status: halt` written, no loop achievable).
-- Phase 3 disproves all hypotheses across two rounds (cap at two Phase 3 rounds, then halt).
-- Phase 5's seam check finds no correct seam — write `status: halt: no correct regression-test seam` and route to `/mold` instead of `/cook`.
-- The fix breaks an unrelated test that pasteurize cannot reconcile within scope.
-- Phase 5's fix loop exhausts all hypotheses after 3 failed fix attempts — write `status: halt: fix attempts exhausted — architectural re-examination needed` and route to `/mold` instead of `/cook`.
+Stop for any of these conditions:
 
-In every early-stop case, write the halt slug and surface the report. Do not silently downgrade to "best guess".
+- Phase 1 cannot produce a usable loop.
+- Two Phase 3 rounds disprove all hypotheses.
+- Phase 5 finds no correct regression-test seam.
+- The minimum fix breaks an unrelated test outside the pasteurize scope.
+- Three unsuccessful fixes exhaust all hypotheses.
+
+For a missing seam, write `status: halt: no correct regression-test seam`.
+For exhausted fixes, write `status: halt: fix attempts exhausted — architectural re-examination needed`.
+Route both conditions to `/mold`.
+Always write the halt slug and show the report.
+Do not replace evidence with a best guess.
 
 ## Rules
 
-- Do not skip Phase 1, and do not hypothesise without a reproducing loop.
-- Phase 5 writes only the regression test and the **minimal** production change; broader work belongs in `/cook`.
-- Do not leave `[DEBUG-...]` tags in the tree — clean them before the handoff slug is written.
-- Do not claim "shipped". Pasteurize claims "cause named, regression green, fix in tree, ready for chain". The chain (cook → press → age → cure) claims shipped.
-- If the bug exposes an architectural gap (no correct regression-test seam), say so in the slug. Do not silently paper over it.
+- Do not skip Phase 1.
+- Do not form hypotheses without a reproduction loop.
+- Change only the regression test and the minimum production code in Phase 5.
+- Remove every `[DEBUG-...]` tag before handoff.
+- Do not claim that Pasteurize ships the change.
+- Use this completion claim: "cause named, regression green, fix in tree, ready for chain".
+- Record an architectural gap in the slug.
 
 ## References
 
-- Generated bundle command inventory: [`references/commands.md`](references/commands.md).
+- Generated bundle commands: [`references/commands.md`](references/commands.md).
