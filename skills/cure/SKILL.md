@@ -108,7 +108,16 @@ The `phase=cure` directory and `next=age` transition are storage routing only;
 the live Cure state remains the validated `CurdPlan`, `CurdResult`, and
 `CureDiagnosisBinding` values above.
 
-`status: ok` when at least one finding applied cleanly (or no findings met the severity floor in `--auto` mode); `status: halt: <reason>` when every selected fix failed the revert/keep evaluation or a project-wide gate cannot be made green. `next:` is `age` whenever re-review should follow — that is the autonomous-chain default and the standard interactive recommendation. `next:` is `done` only when invoked interactively without `--auto` *and* the user explicitly opts out of re-review. Cure does not track which pass it is on; the two-cure-pass cap is enforced by `/age --auto`'s third invocation, not by cure.
+Use `status: ok` when at least one finding applies cleanly.
+Also use `status: ok` when no finding meets the `--auto` severity floor.
+Use `status: halt: <reason>` when every selected fix fails the revert or keep evaluation.
+Also use `status: halt: <reason>` when a project-wide gate cannot pass.
+Use `next: age` when re-review follows.
+This value is the default for autonomous chains and interactive runs.
+Use `next: done` only when the run is interactive without `--auto`.
+The user must also explicitly decline re-review.
+Cure does not track the current pass.
+`/age --auto` enforces the two-cure-pass cap on its third invocation.
 
 ## Output
 
@@ -161,8 +170,8 @@ Read `references/auto-mode.md` before running this mode — it defines the empty
 - Do not hide failed or skipped checks. In auto mode, reverted findings go under `### Deferred`, never silently dropped.
 - Publication contract — existing PR authorization, `--open-pr`, `--safe`, and never publishing an unclean cure: see `## Handoff`.
 - If a selected finding rests on a false premise (the `/age` claim is wrong, or the diff already addresses it), stop and surface the premise before applying. Disagreeing with the report is allowed; silently working around it is not.
-- Apply the shared voice kernel (lives at `../age/references/voice.md`): lead the cure report with what was applied, flag residual risk as `certain | speculating | don't know`, agree when the diff is fine without manufacturing follow-ups.
-- **Verification before `status: ok`:** before writing `status: ok` in the handoff slug, (1) identify the gate command, (2) run it fresh in the same turn, (3) read the full output, (4) only then claim. Hedging words (`should`, `probably`, `I think`) are banned in completion claims — state what the gate output showed, not what you expect it to show.
+- Apply the shared voice kernel from `../age/references/voice.md`. Lead with the applied changes. Mark residual risk as `certain | speculating | don't know`. Accept a correct diff without invented follow-up work.
+- **Verification before `status: ok`:** Identify the gate command before you claim `status: ok`. Run it again in the same turn. Read the full output. Then make the claim. Do not use `should`, `probably`, or `I think` in completion claims. State what the gate output shows.
 
 ## Discipline
 
@@ -178,3 +187,5 @@ Resolve fix application through [`../cheese/references/agent-resolution.md`](../
 | Apply selected findings | coder | write, isolated-worktree | default | high | compatible coder, then general |
 
 The canonical cure handoff carries the shared `agent_resolution` block.
+
+Generated bundle command inventory: [`references/commands.md`](references/commands.md).
