@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 from typing import cast
 
@@ -11,35 +12,41 @@ def read(path: str) -> str:
 
 def test_plate_owns_commit_stack_and_review_shape_policy() -> None:
     skill = read("skills/plate/SKILL.md")
+    topology = read("skills/plate/references/topology.md")
+    stacks = read("skills/plate/references/stacks.md")
     credits = read("README.md").split("## Credits", maxsplit=1)[1]
     attribution_url = "https://jeff.sarn.at/blog/structuring-changes-with-the-code-reviewer-in-mind"
-    flat_skill = " ".join(skill.split())
+    flat_topology = " ".join(topology.split())
     assert "name: plate" in skill
     assert "\nmodel:" not in skill
     assert "commit-only" in skill.lower()
-    assert "cohesive review unit" in skill
-    assert "proceed without asking" in skill
-    assert "independently reviewable ordered" in skill
-    assert "Do not use line-count or file-count thresholds" in skill
-    assert "**semantics-altering**" in skill
-    assert "**semantics-preserving**" in skill
+    assert "cohesive review unit" in topology
+    assert "proceed without asking" in topology
+    assert "independently reviewable ordered" in topology
+    assert "Do not use line-count or file-count thresholds" in topology
+    assert "**semantics-altering**" in topology
+    assert "**semantics-preserving**" in topology
     assert attribution_url in credits
     assert attribution_url not in skill
-    assert "worktree-agent-repair-" in skill
-    assert "A diff containing both is never one review unit" in flat_skill
-    assert "changes an externally observable" in flat_skill
-    assert "inherit its layer" in flat_skill
+    assert attribution_url not in topology
+    assert "worktree-agent-repair-" in topology
+    assert "A diff containing both is never one review unit" in flat_topology
+    assert "changes an externally observable" in flat_topology
+    assert "inherit its layer" in " ".join(stacks.split())
     assert "## Attribution" not in skill
     assert "Structuring Changes With The Code Reviewer in Mind" in credits
     assert "project-specific extensions" in " ".join(credits.split())
-    assert "explicit user choice" in skill
-    assert "It is authoritative" in skill
-    assert "genuinely ambiguous" in skill
-    assert "unchanged under `--auto`" in skill
-    assert "before any commit" in skill
-    assert "../cheese/references/ask-user-question.md" in skill
+    assert "explicit user choice" in topology
+    assert "It is authoritative" in topology
+    assert "genuinely ambiguous" in topology
+    assert "unchanged under `--auto`" in topology
+    assert "before any commit" in topology
+    assert "../cheese/references/ask-user-question.md" in topology
     assert "Existing PR" in skill
-    assert "do not ask" in skill
+    assert "do not ask" in topology
+    # The review-shape policy is one hop away, never duplicated in the core body.
+    assert "semantics-altering" not in skill
+    assert "plate-layout" not in skill
 
 
 def test_plate_final_writing_gate_precedes_publication() -> None:
@@ -130,17 +137,171 @@ def test_plate_stack_references_preserve_absorbed_behavior_and_safety() -> None:
         assert behavior in gh_stack
 
 
+def test_gh_stack_enablement_is_preflighted_not_discovered_on_mutation() -> None:
+    gh_stack = read("skills/plate/references/gh-stack.md")
+    stacks = read("skills/plate/references/stacks.md")
+    flat = " ".join(gh_stack.split())
+
+    assert "no documented preflight" not in gh_stack
+    assert 'gh api --include "repos/{owner}/{repo}/stacks"' in gh_stack
+    assert 'gh api --include "repos/{owner}/{repo}/stacks"' in stacks
+    assert "run it before the first stack mutation" in flat
+    for status, verdict in (
+        ("`2xx`", "Stacked PRs enabled"),
+        ("`404`", "Repository enablement requirement"),
+        ("`401`, `403`", "Authentication or authorization failure"),
+    ):
+        assert status in gh_stack
+        assert verdict in gh_stack
+    # Exit code 4 survives as the race/late-failure fallback, not the primary
+    # enablement signal.
+    assert "fallback for races and later remote failures" in flat
+    assert "exit code 4 stays the fallback" in flat
+    assert "| 4 | API/preview unavailable |" in gh_stack
+    assert "`not-enabled` (preflight `404`)" in stacks
+
+
 def test_plate_stack_flow_is_per_layer_and_metadata_is_resolved() -> None:
     skill = read("skills/plate/SKILL.md")
-    provider = skill.index("Select the configured provider")
-    lineage = skill.index("Create or adopt provider lineage")
-    layer_gate = skill.index("Run the final writing gate for that layer")
-    submit = skill.index("Submit the complete chain")
+    stacks = read("skills/plate/references/stacks.md")
+    provider = stacks.index("Select the configured provider")
+    lineage = stacks.index("Create or adopt provider lineage")
+    layer_gate = stacks.index("Run the final writing gate for that layer")
+    submit = stacks.index("Submit the complete chain")
     assert provider < lineage < layer_gate < submit
-    assert "explicit split boundaries" in skill
-    assert "bottom/common layer" in skill
-    assert "git rev-parse --git-dir" in skill
+    assert "explicit split boundaries" in stacks
+    assert "bottom/common layer" in stacks
+    assert "git rev-parse --git-dir" in stacks
+    assert ".git/" not in stacks
     assert ".git/" not in skill
+    # The per-layer transaction lives in the stack reference; the core body only
+    # points at it, so the generic transaction is never mistaken for it.
+    assert "Select the configured provider" not in skill
+    assert "per-layer transaction in `references/stacks.md`" in skill
+
+
+def test_plate_routing_guard_rejects_review_and_read_only_github_work() -> None:
+    skill = read("skills/plate/SKILL.md")
+    guard = skill.split("## Routing guard", maxsplit=1)[1].split("\n## ", maxsplit=1)[0]
+    flat = " ".join(guard.split())
+    # The guard runs before a mode is selected, so it precedes the mode table.
+    assert skill.index("## Routing guard") < skill.index("## Classify, then load one reference")
+    assert "never computes a review surface for its own sake" in flat
+    assert "Review is `/age`" in flat
+    assert "leaves `/plate` before any mode is selected" in flat
+    assert "routing it here is a plate-owned failure" in flat
+    assert "require explicit user authorization" in flat
+
+
+def test_plate_mode_table_maps_each_mode_to_exactly_one_reference() -> None:
+    skill = read("skills/plate/SKILL.md")
+    table = skill.split("## Classify, then load one reference", maxsplit=1)[1]
+    rows = [
+        line
+        for line in table.split("\n## ", maxsplit=1)[0].splitlines()
+        if line.startswith("| ") and not line.startswith("| ---") and "| Mode |" not in line
+    ]
+    loads = {}
+    for row in rows:
+        cells = [cell.strip() for cell in row.strip("|").split("|")]
+        assert len(cells) == 3, row
+        mode, _trigger, load = cells
+        targets: set[str] = set(cast(list[str], re.findall(r"references/([A-Za-z0-9_.\-]+\.md)", load)))
+        assert len(targets) == 1, f"{mode} must name exactly one reference, got {targets}"
+        target = targets.pop()
+        assert (ROOT / "skills/plate/references" / target).is_file()
+        loads[mode] = target
+
+    assert loads == {
+        "Commit-only": "durable-writes.md",
+        "Topology preflight": "topology.md",
+        "New PR": "topology.md",
+        "Existing PR": "ordinary-pr.md",
+        "Stack maintenance": "stacks.md",
+    }
+    assert "Do not read the others." in skill
+    # Provider files are reached from stacks.md, never selected by the table.
+    for provider in ("gt.md", "git-town.md", "gh-stack.md"):
+        assert provider not in "".join(rows)
+
+
+def test_plate_durable_write_sequence_is_canonical_and_op_shaped() -> None:
+    durable = read("skills/plate/references/durable-writes.md")
+    skill = read("skills/plate/SKILL.md")
+    flat = " ".join(durable.split())
+    sequence = durable.split("## Canonical write sequence", maxsplit=1)[1]
+    fresh = sequence.index("Fresh tagged read")
+    write = sequence.index("One stale-safe write")
+    readback = sequence.index("Diff read-back")
+    assert fresh < write < readback
+    assert "Never reuse a tag, a line number, or a file body captured earlier" in flat
+    assert "carries only the exact unique `old` string and its `new` replacement" in flat
+    assert "never `start`/`end` line numbers" in flat
+    assert "Mixing the two op shapes is a malformed write" in flat
+    assert "a call-shape defect owned by this skill, not a backend outage" in flat
+    assert "never retry with the stale tag" in flat
+    assert "never fall back to a shell redirect or a host editor" in flat
+    # The core body points at the sequence instead of restating it.
+    assert "fresh tagged read, one stale-safe write, diff read-back" in " ".join(skill.split())
+    assert "Canonical write sequence" not in skill
+
+
+def test_plate_halt_vocabulary_is_fixed_and_splits_ownership() -> None:
+    skill = read("skills/plate/SKILL.md")
+    halting = skill.split("## Halting", maxsplit=1)[1].split("\n## ", maxsplit=1)[0]
+    flat = " ".join(halting.split())
+    steps = cast(
+        list[str],
+        re.findall(r"`([a-z/ ]+)`", flat.split("Name the step with exactly one of:")[1]),
+    )
+    assert steps[:7] == [
+        "classify",
+        "topology",
+        "durable write",
+        "quality gate",
+        "stage/commit",
+        "publish",
+        "terminal validation",
+    ]
+    assert "Every halt names the mode, the failed step, and who owns the failure" in flat
+    assert "**Plate-owned**" in halting
+    assert "**Environment-owner**" in halting
+    assert "Fix the call shape or the routing, then retry that step" in flat
+    assert "Never retry it as if the call shape were wrong" in flat
+    assert "never weaken a gate, stage unnamed paths, or skip read-back" in flat
+    assert "halt at `quality gate` and fix the work" in flat
+    # Prose and contract assertions only -- no telemetry backend.
+    for backend in ("otel", "OpenTelemetry", "span", "metric", "emit "):
+        assert backend not in halting
+
+
+def test_plate_replay_evals_cover_malformed_writes_and_review_surface() -> None:
+    evals = cast(
+        dict[str, object], json.loads(read("skills/plate/evals/evals.json"))
+    )
+    cases = cast(list[dict[str, object]], evals["evals"])
+    ids = [case["id"] for case in cases]
+    assert len(ids) == len(set(ids))
+    by_id = {case["id"]: case for case in cases}
+
+    malformed = by_id[16]
+    assert malformed["name"] == "malformed-durable-write"
+    assert "replace_text" in cast(str, malformed["prompt"])
+    expected = cast(str, malformed["expected_output"])
+    assert "durable write" in expected
+    assert "plate-owned" in expected
+    assert "never start/end" in expected
+    assert "fresh tagged read" in expected
+    assert "diff read-back" in expected
+    assert "backend outage" in expected
+
+    review = by_id[17]
+    assert review["name"] == "review-surface-request"
+    surface = cast(str, review["expected_output"])
+    assert "classify" in surface
+    assert "plate-owned" in surface
+    assert "/age" in surface
+    assert "never computes a review surface for its own sake" in surface
 
 
 def test_ultracook_preflights_parallel_publication_before_commits() -> None:

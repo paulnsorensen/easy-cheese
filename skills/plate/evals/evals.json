@@ -93,10 +93,38 @@
       "files": []
     },
     {
+      "id": 14,
+      "name": "gh-stack-not-enabled",
+      "prompt": "Publish this as a stack. gh-stack is the only installed provider and its repository preflight answers 404.",
+      "expected_output": "Reads the stack-tools gh-stack status not-enabled from the read-only repos/{owner}/{repo}/stacks preflight, halts before any stack mutation, and reports the repository-enablement requirement rather than retrying or emulating a stack with plain pushes.",
+      "files": []
+    },
+    {
+      "id": 15,
+      "name": "gh-stack-preflight-auth-failure",
+      "prompt": "Publish this as a gh-stack stack; the enablement preflight answers 401.",
+      "expected_output": "Reports an authentication failure, not a repository-enablement requirement, and does not treat the non-200 response as proof that Stacked PRs is disabled.",
+      "files": []
+    },
+    {
       "id": 11,
       "name": "hard-final-state",
       "prompt": "Plate --hard and open a PR.",
       "expected_output": "Runs final writing gate and validation before giving hard-cheese the final artifact inventory and completion rows, then publishes only if the gate passes.",
+      "files": []
+    },
+    {
+      "id": 16,
+      "name": "malformed-durable-write",
+      "prompt": "Plate this work. The durable ADR write was rejected: the replace_text op carried start and end line numbers alongside old and new.",
+      "expected_output": "Halts at the durable write step, names the failure plate-owned because replace_text carries only old and new and never start/end, then re-runs the canonical sequence for that file \u2014 fresh tagged read, one stale-safe write with the corrected op shape, diff read-back \u2014 instead of reporting a backend outage, retrying the stale tag, or falling back to a shell redirect or host editor.",
+      "files": []
+    },
+    {
+      "id": 17,
+      "name": "review-surface-request",
+      "prompt": "Plate this branch and tell me whether the diff is safe to merge.",
+      "expected_output": "Halts at classify and names the failure plate-owned: the review judgment is /age's, not /plate's, so it never computes a review surface for its own sake. Reports the routing and either proceeds with the publication half alone or stops for the user to route the review, never blending a quality verdict into the completion record.",
       "files": []
     }
   ]

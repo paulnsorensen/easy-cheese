@@ -9,7 +9,8 @@ staging, commit, and commit verification.
 2. Resolve trunk and current branch; reject publication from trunk.
 3. Draft a title and body covering purpose, verification, durable artifacts,
    and residual risks.
-4. Write the body to a temporary or transient file and pass `--body-file`.
+4. Write the body to a temporary or transient file and pass `--body-file`;
+   never embed a markdown heredoc in `--body`.
 5. Push the named branch without force.
 6. Create with explicit base and head:
 
@@ -23,6 +24,8 @@ Do not use `--fill` when it would omit artifact or verification details.
 
 ## Existing ordinary PR
 
+Detect the PR with `gh pr view --json number,baseRefName,headRefName,url`, then
+inspect provider metadata; a stacked topology leaves this file for `stacks.md`.
 Do not ask the layout question. Read its base/head with `gh pr view`, commit the
 validated named files, push the exact head branch, then read the PR back. Update
 title/body only when the new work makes existing metadata inaccurate.
@@ -57,18 +60,13 @@ artifacts; leave it unstaged after verification.
 
 Write for the reviewer's verification pass:
 
-- A semantics-preserving change (behavior-preserving refactor, mechanical
-  internal move or rename with no public contract change, formatting-only
-  change) says so in its first line, names the mechanism, and states the
-  invariant to verify: behavior unchanged, plus a mechanism-specific check
-  such as nothing dropped or duplicated during a move. This tells the reviewer
+- A semantics-preserving change says so in its first line. It names the mechanism and states the invariant to verify.
+  Examples include a behavior-preserving refactor, an internal move, an internal rename, or a formatting-only change.
+  Verify unchanged behavior and add a mechanism-specific check. For example, verify that a move drops or duplicates nothing. This tells the reviewer
   to scan for accidental semantic drift rather than infer intent line by line.
-- A semantics-altering change names the behavior or contract that changed and
-  its observable verification, so scrutiny lands on the changed logic rather
-  than on inferring intent line by line.
-- A change that is not self-contained links its context — spike branch, plan,
-  or the stack siblings that show the abstraction in use — instead of leaving
-  the reviewer to ask what it is for.
+- A semantics-altering change names the changed behavior or contract. It also names its observable verification.
+  This information directs scrutiny to the changed logic.
+- A change that is not self-contained links its context. Link the spike branch, plan, or stack siblings that show the abstraction in use.
 
 ## Push verification
 
